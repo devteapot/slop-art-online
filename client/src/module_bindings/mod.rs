@@ -7,14 +7,24 @@
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 pub mod move_player_reducer;
+pub mod npc_table;
+pub mod npc_tick_schedule_type;
+pub mod npc_type;
 pub mod player_table;
 pub mod player_type;
 pub mod position_type;
+pub mod spawn_npc_reducer;
+pub mod start_npc_ticker_reducer;
 
 pub use move_player_reducer::move_player;
+pub use npc_table::*;
+pub use npc_tick_schedule_type::NpcTickSchedule;
+pub use npc_type::Npc;
 pub use player_table::*;
 pub use player_type::Player;
 pub use position_type::Position;
+pub use spawn_npc_reducer::spawn_npc;
+pub use start_npc_ticker_reducer::start_npc_ticker;
 
 #[derive(Clone, PartialEq, Debug)]
 
@@ -25,6 +35,8 @@ pub use position_type::Position;
 
 pub enum Reducer {
     MovePlayer { x: f32, y: f32 },
+    SpawnNpc { x: f32, y: f32 },
+    StartNpcTicker,
 }
 
 impl __sdk::InModule for Reducer {
@@ -35,6 +47,8 @@ impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
             Reducer::MovePlayer { .. } => "move_player",
+            Reducer::SpawnNpc { .. } => "spawn_npc",
+            Reducer::StartNpcTicker => "start_npc_ticker",
             _ => unreachable!(),
         }
     }
@@ -47,6 +61,13 @@ impl __sdk::Reducer for Reducer {
                     y: y.clone(),
                 })
             }
+            Reducer::SpawnNpc { x, y } => __sats::bsatn::to_vec(&spawn_npc_reducer::SpawnNpcArgs {
+                x: x.clone(),
+                y: y.clone(),
+            }),
+            Reducer::StartNpcTicker => {
+                __sats::bsatn::to_vec(&start_npc_ticker_reducer::StartNpcTickerArgs {})
+            }
             _ => unreachable!(),
         }
     }
@@ -56,6 +77,7 @@ impl __sdk::Reducer for Reducer {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct DbUpdate {
+    npc: __sdk::TableUpdate<Npc>,
     player: __sdk::TableUpdate<Player>,
 }
 
@@ -65,6 +87,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_update in __sdk::transaction_update_iter_table_updates(raw) {
             match &table_update.table_name[..] {
+                "npc" => db_update
+                    .npc
+                    .append(npc_table::parse_table_update(table_update)?),
                 "player" => db_update
                     .player
                     .append(player_table::parse_table_update(table_update)?),
@@ -94,6 +119,9 @@ impl __sdk::DbUpdate for DbUpdate {
     ) -> AppliedDiff<'_> {
         let mut diff = AppliedDiff::default();
 
+        diff.npc = cache
+            .apply_diff_to_table::<Npc>("npc", &self.npc)
+            .with_updates_by_pk(|row| &row.id);
         diff.player = cache
             .apply_diff_to_table::<Player>("player", &self.player)
             .with_updates_by_pk(|row| &row.identity);
@@ -104,6 +132,9 @@ impl __sdk::DbUpdate for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_rows in raw.tables {
             match &table_rows.table[..] {
+                "npc" => db_update
+                    .npc
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "player" => db_update
                     .player
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -120,6 +151,9 @@ impl __sdk::DbUpdate for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_rows in raw.tables {
             match &table_rows.table[..] {
+                "npc" => db_update
+                    .npc
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "player" => db_update
                     .player
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -138,6 +172,7 @@ impl __sdk::DbUpdate for DbUpdate {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct AppliedDiff<'r> {
+    npc: __sdk::TableAppliedDiff<'r, Npc>,
     player: __sdk::TableAppliedDiff<'r, Player>,
     __unused: std::marker::PhantomData<&'r ()>,
 }
@@ -152,6 +187,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         event: &EventContext,
         callbacks: &mut __sdk::DbCallbacks<RemoteModule>,
     ) {
+        callbacks.invoke_table_row_callbacks::<Npc>("npc", &self.npc, event);
         callbacks.invoke_table_row_callbacks::<Player>("player", &self.player, event);
     }
 }
@@ -797,7 +833,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
     type QueryBuilder = __sdk::QueryBuilder;
 
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
+        npc_table::register_table(client_cache);
         player_table::register_table(client_cache);
     }
-    const ALL_TABLE_NAMES: &'static [&'static str] = &["player"];
+    const ALL_TABLE_NAMES: &'static [&'static str] = &["npc", "player"];
 }

@@ -1,7 +1,7 @@
 mod module_bindings;
 
 use bevy::prelude::*;
-use module_bindings::{DbConnection, Player, PlayerTableAccess};
+use module_bindings::{DbConnection, Npc, NpcTableAccess, Player, PlayerTableAccess};
 use module_bindings::move_player_reducer::move_player;
 use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
 use std::sync::{Arc, Mutex};
@@ -14,9 +14,10 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .init_resource::<PlayerEventQueue>()
+        .init_resource::<NpcEventQueue>()
         .init_resource::<LocalIdentity>()
         .add_systems(Startup, (setup_camera, connect_spacetimedb))
-        .add_systems(Update, (tick_spacetimedb, sync_players, move_local_player).chain())
+        .add_systems(Update, (tick_spacetimedb, sync_players, sync_npcs, move_local_player).chain())
         .run();
 }
 
@@ -29,6 +30,9 @@ struct SpacetimeDb(DbConnection);
 struct PlayerEventQueue(Arc<Mutex<Vec<PlayerEvent>>>);
 
 #[derive(Resource, Default, Clone)]
+struct NpcEventQueue(Arc<Mutex<Vec<NpcEvent>>>);
+
+#[derive(Resource, Default, Clone)]
 struct LocalIdentity(Arc<Mutex<Option<Identity>>>);
 
 enum PlayerEvent {
@@ -37,14 +41,24 @@ enum PlayerEvent {
     Deleted(Player),
 }
 
+enum NpcEvent {
+    Inserted(Npc),
+    Updated(Npc),
+    Deleted(Npc),
+}
+
 fn connect_spacetimedb(
     mut commands: Commands,
-    queue: Res<PlayerEventQueue>,
+    player_queue: Res<PlayerEventQueue>,
+    npc_queue: Res<NpcEventQueue>,
     local_identity: Res<LocalIdentity>,
 ) {
-    let q_insert = queue.clone();
-    let q_update = queue.clone();
-    let q_delete = queue.clone();
+    let q_insert = player_queue.clone();
+    let q_update = player_queue.clone();
+    let q_delete = player_queue.clone();
+    let nq_insert = npc_queue.clone();
+    let nq_update = npc_queue.clone();
+    let nq_delete = npc_queue.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -53,8 +67,8 @@ fn connect_spacetimedb(
         .on_connect(move |ctx: &DbConnection, identity, _token| {
             *identity_store.0.lock().unwrap() = Some(identity);
             ctx.subscription_builder()
-                .on_applied(|_| info!("Subscribed to player table"))
-                .subscribe(["SELECT * FROM player"]);
+                .on_applied(|_| info!("Subscribed"))
+                .subscribe(["SELECT * FROM player", "SELECT * FROM npc"]);
         })
         .on_connect_error(|_, err| error!("SpacetimeDB connect error: {err}"))
         .on_disconnect(|_, err| {
@@ -73,6 +87,16 @@ fn connect_spacetimedb(
     });
     conn.db.player().on_delete(move |_, row: &Player| {
         q_delete.0.lock().unwrap().push(PlayerEvent::Deleted(row.clone()));
+    });
+
+    conn.db.npc().on_insert(move |_, row: &Npc| {
+        nq_insert.0.lock().unwrap().push(NpcEvent::Inserted(row.clone()));
+    });
+    conn.db.npc().on_update(move |_, _old: &Npc, new: &Npc| {
+        nq_update.0.lock().unwrap().push(NpcEvent::Updated(new.clone()));
+    });
+    conn.db.npc().on_delete(move |_, row: &Npc| {
+        nq_delete.0.lock().unwrap().push(NpcEvent::Deleted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));
@@ -136,6 +160,51 @@ fn sync_players(
         }
     }
 }
+
+// --- NPCs ---
+
+#[derive(Component)]
+struct NpcId(u64);
+
+fn sync_npcs(
+    mut commands: Commands,
+    queue: Res<NpcEventQueue>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut npcs: Query<(Entity, &NpcId, &mut Transform)>,
+) {
+    let mut events = queue.0.lock().unwrap();
+
+    for event in events.drain(..) {
+        match event {
+            NpcEvent::Inserted(npc) => {
+                commands.spawn((
+                    NpcId(npc.id),
+                    Mesh2d(meshes.add(Circle::new(16.0))),
+                    MeshMaterial2d(materials.add(Color::srgb(1.0, 0.5, 0.2))),
+                    Transform::from_xyz(npc.position.x, npc.position.y, 0.0),
+                ));
+            }
+            NpcEvent::Updated(npc) => {
+                for (_, id, mut transform) in npcs.iter_mut() {
+                    if id.0 == npc.id {
+                        transform.translation.x = npc.position.x;
+                        transform.translation.y = npc.position.y;
+                    }
+                }
+            }
+            NpcEvent::Deleted(npc) => {
+                for (entity, id, _) in npcs.iter() {
+                    if id.0 == npc.id {
+                        commands.entity(entity).despawn();
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- Movement ---
 
 fn move_local_player(
     conn: Res<SpacetimeDb>,
