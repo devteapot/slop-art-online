@@ -1,3 +1,11 @@
 [workspace]
 resolver = "2"
-members = ["client"]
+
+members = [
+    "server/module/spacetimedb",
+    "shared",
+    "client"
+]
+
+[workspace.dependencies]
+log = "0.4"
