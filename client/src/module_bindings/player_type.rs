@@ -11,6 +11,7 @@ use super::position_type::Position;
 pub struct Player {
     pub identity: __sdk::Identity,
     pub position: Position,
+    pub health: i32,
 }
 
 impl __sdk::InModule for Player {
@@ -23,6 +24,7 @@ impl __sdk::InModule for Player {
 pub struct PlayerCols {
     pub identity: __sdk::__query_builder::Col<Player, __sdk::Identity>,
     pub position: __sdk::__query_builder::Col<Player, Position>,
+    pub health: __sdk::__query_builder::Col<Player, i32>,
 }
 
 impl __sdk::__query_builder::HasCols for Player {
@@ -31,6 +33,7 @@ impl __sdk::__query_builder::HasCols for Player {
         PlayerCols {
             identity: __sdk::__query_builder::Col::new(table_name, "identity"),
             position: __sdk::__query_builder::Col::new(table_name, "position"),
+            health: __sdk::__query_builder::Col::new(table_name, "health"),
         }
     }
 }

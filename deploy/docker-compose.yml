@@ -2,11 +2,9 @@ services:
   spacetimedb:
     image: clockworklabs/spacetime:latest
     command: start
+    user: spacetime
     ports:
       - "3000:3000"
     volumes:
-      - spacetimedb_data:/var/lib/spacetimedb
+      - ./spacetimedb-data:/home/spacetime/.local/share/spacetime
     restart: unless-stopped
-
-volumes:
-  spacetimedb_data:

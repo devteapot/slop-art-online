@@ -9,4 +9,7 @@ generate:
 publish:
     cd server/module && spacetime publish --server {{server}}
 
+publish-reset:
+    cd server/module && spacetime publish --server {{server}} --delete-data -y {{db}}
+
 publish-generate: publish generate

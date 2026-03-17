@@ -6,6 +6,8 @@
 #![allow(unused, clippy::all)]
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
+pub mod attack_npc_reducer;
+pub mod attack_player_reducer;
 pub mod move_player_reducer;
 pub mod npc_table;
 pub mod npc_tick_schedule_type;
@@ -16,6 +18,8 @@ pub mod position_type;
 pub mod spawn_npc_reducer;
 pub mod start_npc_ticker_reducer;
 
+pub use attack_npc_reducer::attack_npc;
+pub use attack_player_reducer::attack_player;
 pub use move_player_reducer::move_player;
 pub use npc_table::*;
 pub use npc_tick_schedule_type::NpcTickSchedule;
@@ -34,6 +38,8 @@ pub use start_npc_ticker_reducer::start_npc_ticker;
 /// to indicate which reducer caused the event.
 
 pub enum Reducer {
+    AttackNpc { target_id: u64 },
+    AttackPlayer { target: __sdk::Identity },
     MovePlayer { x: f32, y: f32 },
     SpawnNpc { x: f32, y: f32 },
     StartNpcTicker,
@@ -46,6 +52,8 @@ impl __sdk::InModule for Reducer {
 impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
+            Reducer::AttackNpc { .. } => "attack_npc",
+            Reducer::AttackPlayer { .. } => "attack_player",
             Reducer::MovePlayer { .. } => "move_player",
             Reducer::SpawnNpc { .. } => "spawn_npc",
             Reducer::StartNpcTicker => "start_npc_ticker",
@@ -55,6 +63,16 @@ impl __sdk::Reducer for Reducer {
     #[allow(clippy::clone_on_copy)]
     fn args_bsatn(&self) -> Result<Vec<u8>, __sats::bsatn::EncodeError> {
         match self {
+            Reducer::AttackNpc { target_id } => {
+                __sats::bsatn::to_vec(&attack_npc_reducer::AttackNpcArgs {
+                    target_id: target_id.clone(),
+                })
+            }
+            Reducer::AttackPlayer { target } => {
+                __sats::bsatn::to_vec(&attack_player_reducer::AttackPlayerArgs {
+                    target: target.clone(),
+                })
+            }
             Reducer::MovePlayer { x, y } => {
                 __sats::bsatn::to_vec(&move_player_reducer::MovePlayerArgs {
                     x: x.clone(),

@@ -6,6 +6,9 @@ const WORLD_MIN: f32 = -500.0;
 const WORLD_MAX: f32 = 500.0;
 const NPC_MOVE_RANGE: f32 = 50.0;
 const NPC_TICK_MS: u64 = 500;
+const MAX_HEALTH: i32 = 100;
+const ATTACK_DAMAGE: i32 = 10;
+const ATTACK_RANGE: f32 = 100.0;
 
 #[derive(SpacetimeType, Clone, Debug)]
 pub struct Position {
@@ -13,11 +16,20 @@ pub struct Position {
     pub y: f32,
 }
 
+impl Position {
+    fn distance_to(&self, other: &Position) -> f32 {
+        let dx = self.x - other.x;
+        let dy = self.y - other.y;
+        (dx * dx + dy * dy).sqrt()
+    }
+}
+
 #[spacetimedb::table(accessor = player, public)]
 pub struct Player {
     #[primary_key]
     pub identity: Identity,
     pub position: Position,
+    pub health: i32,
 }
 
 #[spacetimedb::table(accessor = npc, public)]
@@ -26,6 +38,7 @@ pub struct Npc {
     #[auto_inc]
     pub id: u64,
     pub position: Position,
+    pub health: i32,
 }
 
 #[spacetimedb::table(accessor = npc_tick_schedule, scheduled(tick_npcs))]
@@ -43,7 +56,6 @@ pub fn init(ctx: &ReducerContext) {
 
 #[spacetimedb::reducer]
 pub fn start_npc_ticker(ctx: &ReducerContext) {
-    // Cancel any existing schedules to avoid duplicates
     for s in ctx.db.npc_tick_schedule().iter() {
         ctx.db.npc_tick_schedule().scheduled_id().delete(&s.scheduled_id);
     }
@@ -78,6 +90,7 @@ pub fn spawn_npc(ctx: &ReducerContext, x: f32, y: f32) {
     ctx.db.npc().insert(Npc {
         id: 0,
         position: Position { x: x.clamp(WORLD_MIN, WORLD_MAX), y: y.clamp(WORLD_MIN, WORLD_MAX) },
+        health: MAX_HEALTH,
     });
 }
 
@@ -86,6 +99,7 @@ pub fn identity_connected(ctx: &ReducerContext) {
     ctx.db.player().insert(Player {
         identity: ctx.sender(),
         position: Position { x: 0.0, y: 0.0 },
+        health: MAX_HEALTH,
     });
 }
 
@@ -105,5 +119,57 @@ pub fn move_player(ctx: &ReducerContext, x: f32, y: f32) -> Result<(), String> {
         },
         ..player
     });
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn attack_player(ctx: &ReducerContext, target: Identity) -> Result<(), String> {
+    let attacker = ctx.db.player().identity().find(&ctx.sender())
+        .ok_or("Attacker not found")?;
+    let mut target_player = ctx.db.player().identity().find(&target)
+        .ok_or("Target not found")?;
+
+    if attacker.position.distance_to(&target_player.position) > ATTACK_RANGE {
+        return Err("Target out of range".to_string());
+    }
+
+    target_player.health -= ATTACK_DAMAGE;
+
+    if target_player.health <= 0 {
+        // Respawn at origin with full health
+        ctx.db.player().identity().update(Player {
+            position: Position { x: 0.0, y: 0.0 },
+            health: MAX_HEALTH,
+            ..target_player
+        });
+    } else {
+        ctx.db.player().identity().update(target_player);
+    }
+
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn attack_npc(ctx: &ReducerContext, target_id: u64) -> Result<(), String> {
+    let attacker = ctx.db.player().identity().find(&ctx.sender())
+        .ok_or("Attacker not found")?;
+    let target_npc = ctx.db.npc().id().find(&target_id)
+        .ok_or("NPC not found")?;
+
+    if attacker.position.distance_to(&target_npc.position) > ATTACK_RANGE {
+        return Err("Target out of range".to_string());
+    }
+
+    let new_health = target_npc.health - ATTACK_DAMAGE;
+
+    if new_health <= 0 {
+        ctx.db.npc().id().delete(&target_id);
+    } else {
+        ctx.db.npc().id().update(Npc {
+            health: new_health,
+            ..target_npc
+        });
+    }
+
     Ok(())
 }

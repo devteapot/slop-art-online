@@ -11,6 +11,7 @@ use super::position_type::Position;
 pub struct Npc {
     pub id: u64,
     pub position: Position,
+    pub health: i32,
 }
 
 impl __sdk::InModule for Npc {
@@ -23,6 +24,7 @@ impl __sdk::InModule for Npc {
 pub struct NpcCols {
     pub id: __sdk::__query_builder::Col<Npc, u64>,
     pub position: __sdk::__query_builder::Col<Npc, Position>,
+    pub health: __sdk::__query_builder::Col<Npc, i32>,
 }
 
 impl __sdk::__query_builder::HasCols for Npc {
@@ -31,6 +33,7 @@ impl __sdk::__query_builder::HasCols for Npc {
         NpcCols {
             id: __sdk::__query_builder::Col::new(table_name, "id"),
             position: __sdk::__query_builder::Col::new(table_name, "position"),
+            health: __sdk::__query_builder::Col::new(table_name, "health"),
         }
     }
 }
