@@ -1,10 +1,9 @@
-mod module_bindings;
-
 use bevy::prelude::*;
-use module_bindings::{DbConnection, Npc, NpcTableAccess, Player, PlayerTableAccess};
-use module_bindings::move_player_reducer::move_player;
-use module_bindings::attack_player_reducer::attack_player;
-use module_bindings::attack_npc_reducer::attack_npc;
+use shared::module_bindings::attack_npc_reducer::attack_npc;
+use shared::module_bindings::attack_player_reducer::attack_player;
+use shared::module_bindings::join_game_reducer::join_game;
+use shared::module_bindings::move_player_reducer::move_player;
+use shared::module_bindings::{DbConnection, Npc, NpcTableAccess, Player, PlayerTableAccess};
 use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
 use std::sync::{Arc, Mutex};
 
@@ -24,14 +23,18 @@ fn main() {
         .init_resource::<NpcEventQueue>()
         .init_resource::<LocalIdentity>()
         .add_systems(Startup, (setup_camera, connect_spacetimedb))
-        .add_systems(Update, (
-            tick_spacetimedb,
-            sync_players,
-            sync_npcs,
-            update_health_bars,
-            move_local_player,
-            attack,
-        ).chain())
+        .add_systems(
+            Update,
+            (
+                tick_spacetimedb,
+                sync_players,
+                sync_npcs,
+                update_health_bars,
+                move_local_player,
+                attack,
+            )
+                .chain(),
+        )
         .run();
 }
 
@@ -80,6 +83,7 @@ fn connect_spacetimedb(
         .with_database_name(DB_NAME)
         .on_connect(move |ctx: &DbConnection, identity, _token| {
             *identity_store.0.lock().unwrap() = Some(identity);
+            let _ = ctx.reducers.join_game();
             ctx.subscription_builder()
                 .on_applied(|_| info!("Subscribed"))
                 .subscribe(["SELECT * FROM player", "SELECT * FROM npc"]);
@@ -94,23 +98,49 @@ fn connect_spacetimedb(
         .expect("Failed to connect to SpacetimeDB");
 
     conn.db.player().on_insert(move |_, row: &Player| {
-        q_insert.0.lock().unwrap().push(PlayerEvent::Inserted(row.clone()));
+        q_insert
+            .0
+            .lock()
+            .unwrap()
+            .push(PlayerEvent::Inserted(row.clone()));
     });
-    conn.db.player().on_update(move |_, _old: &Player, new: &Player| {
-        q_update.0.lock().unwrap().push(PlayerEvent::Updated(new.clone()));
-    });
+    conn.db
+        .player()
+        .on_update(move |_, _old: &Player, new: &Player| {
+            q_update
+                .0
+                .lock()
+                .unwrap()
+                .push(PlayerEvent::Updated(new.clone()));
+        });
     conn.db.player().on_delete(move |_, row: &Player| {
-        q_delete.0.lock().unwrap().push(PlayerEvent::Deleted(row.clone()));
+        q_delete
+            .0
+            .lock()
+            .unwrap()
+            .push(PlayerEvent::Deleted(row.clone()));
     });
 
     conn.db.npc().on_insert(move |_, row: &Npc| {
-        nq_insert.0.lock().unwrap().push(NpcEvent::Inserted(row.clone()));
+        nq_insert
+            .0
+            .lock()
+            .unwrap()
+            .push(NpcEvent::Inserted(row.clone()));
     });
     conn.db.npc().on_update(move |_, _old: &Npc, new: &Npc| {
-        nq_update.0.lock().unwrap().push(NpcEvent::Updated(new.clone()));
+        nq_update
+            .0
+            .lock()
+            .unwrap()
+            .push(NpcEvent::Updated(new.clone()));
     });
     conn.db.npc().on_delete(move |_, row: &Npc| {
-        nq_delete.0.lock().unwrap().push(NpcEvent::Deleted(row.clone()));
+        nq_delete
+            .0
+            .lock()
+            .unwrap()
+            .push(NpcEvent::Deleted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));
@@ -131,23 +161,27 @@ struct Health(i32);
 struct HealthBarFill(Entity);
 
 fn spawn_health_bar(commands: &mut Commands, parent: Entity, offset_y: f32) -> Entity {
-    let fill = commands.spawn((
-        Sprite {
-            color: Color::srgb(0.2, 0.8, 0.2),
-            custom_size: Some(Vec2::new(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)),
-            ..default()
-        },
-        Transform::from_xyz(0.0, offset_y, 1.0),
-    )).id();
+    let fill = commands
+        .spawn((
+            Sprite {
+                color: Color::srgb(0.2, 0.8, 0.2),
+                custom_size: Some(Vec2::new(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)),
+                ..default()
+            },
+            Transform::from_xyz(0.0, offset_y, 1.0),
+        ))
+        .id();
 
-    let background = commands.spawn((
-        Sprite {
-            color: Color::srgb(0.2, 0.2, 0.2),
-            custom_size: Some(Vec2::new(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)),
-            ..default()
-        },
-        Transform::from_xyz(0.0, offset_y, 0.9),
-    )).id();
+    let background = commands
+        .spawn((
+            Sprite {
+                color: Color::srgb(0.2, 0.2, 0.2),
+                custom_size: Some(Vec2::new(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)),
+                ..default()
+            },
+            Transform::from_xyz(0.0, offset_y, 0.9),
+        ))
+        .id();
 
     commands.entity(parent).add_children(&[background, fill]);
     fill
@@ -192,7 +226,11 @@ fn sync_players(
                     PlayerId(player.identity),
                     Health(player.health),
                     Sprite {
-                        color: if is_local { Color::srgb(0.4, 0.8, 1.0) } else { Color::WHITE },
+                        color: if is_local {
+                            Color::srgb(0.4, 0.8, 1.0)
+                        } else {
+                            Color::WHITE
+                        },
                         custom_size: Some(Vec2::splat(32.0)),
                         ..default()
                     },
@@ -242,13 +280,15 @@ fn sync_npcs(
     for event in events.drain(..) {
         match event {
             NpcEvent::Inserted(npc) => {
-                let entity = commands.spawn((
-                    NpcId(npc.id),
-                    Health(npc.health),
-                    Mesh2d(meshes.add(Circle::new(16.0))),
-                    MeshMaterial2d(materials.add(Color::srgb(1.0, 0.5, 0.2))),
-                    Transform::from_xyz(npc.position.x, npc.position.y, 0.0),
-                )).id();
+                let entity = commands
+                    .spawn((
+                        NpcId(npc.id),
+                        Health(npc.health),
+                        Mesh2d(meshes.add(Circle::new(16.0))),
+                        MeshMaterial2d(materials.add(Color::srgb(1.0, 0.5, 0.2))),
+                        Transform::from_xyz(npc.position.x, npc.position.y, 0.0),
+                    ))
+                    .id();
                 let fill = spawn_health_bar(&mut commands, entity, HEALTH_BAR_OFFSET_Y);
                 commands.entity(entity).insert(HealthBarFill(fill));
             }
@@ -280,15 +320,27 @@ fn move_local_player(
     time: Res<Time>,
     player: Query<&Transform, With<LocalPlayer>>,
 ) {
-    let Ok(transform) = player.single() else { return };
+    let Ok(transform) = player.single() else {
+        return;
+    };
 
     let mut dir = Vec2::ZERO;
-    if keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp)    { dir.y += 1.0; }
-    if keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown)  { dir.y -= 1.0; }
-    if keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft)  { dir.x -= 1.0; }
-    if keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight) { dir.x += 1.0; }
+    if keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp) {
+        dir.y += 1.0;
+    }
+    if keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown) {
+        dir.y -= 1.0;
+    }
+    if keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft) {
+        dir.x -= 1.0;
+    }
+    if keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight) {
+        dir.x += 1.0;
+    }
 
-    if dir == Vec2::ZERO { return }
+    if dir == Vec2::ZERO {
+        return;
+    }
 
     let delta = dir.normalize() * MOVE_SPEED * time.delta_secs();
     let new_x = transform.translation.x + delta.x;
@@ -308,18 +360,24 @@ fn attack(
     players: Query<(&Transform, &PlayerId), Without<LocalPlayer>>,
     npcs: Query<(&Transform, &NpcId)>,
 ) {
-    if !keys.just_pressed(KeyCode::Space) { return }
-    let Ok((local_transform, _)) = local_player.single() else { return };
+    if !keys.just_pressed(KeyCode::Space) {
+        return;
+    }
+    let Ok((local_transform, _)) = local_player.single() else {
+        return;
+    };
 
     let local_pos = local_transform.translation.truncate();
 
     // Find nearest target within range across both players and NPCs
-    let nearest_player = players.iter()
+    let nearest_player = players
+        .iter()
         .map(|(t, id)| (t.translation.truncate().distance(local_pos), id.0, true))
         .filter(|(dist, _, _)| *dist <= ATTACK_RANGE)
         .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
-    let nearest_npc = npcs.iter()
+    let nearest_npc = npcs
+        .iter()
         .map(|(t, id)| (t.translation.truncate().distance(local_pos), id.0))
         .filter(|(dist, _)| *dist <= ATTACK_RANGE)
         .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
@@ -332,8 +390,12 @@ fn attack(
                 let _ = conn.0.reducers.attack_npc(nid);
             }
         }
-        (Some((_, pid, _)), None) => { let _ = conn.0.reducers.attack_player(pid); }
-        (None, Some((_, nid))) => { let _ = conn.0.reducers.attack_npc(nid); }
+        (Some((_, pid, _)), None) => {
+            let _ = conn.0.reducers.attack_player(pid);
+        }
+        (None, Some((_, nid))) => {
+            let _ = conn.0.reducers.attack_npc(nid);
+        }
         (None, None) => {}
     }
 }

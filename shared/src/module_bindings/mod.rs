@@ -8,7 +8,12 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 pub mod attack_npc_reducer;
 pub mod attack_player_reducer;
+pub mod join_game_reducer;
 pub mod move_player_reducer;
+pub mod npc_behaviour_graph_table;
+pub mod npc_behaviour_graph_type;
+pub mod npc_pending_decision_table;
+pub mod npc_pending_decision_type;
 pub mod npc_table;
 pub mod npc_tick_schedule_type;
 pub mod npc_type;
@@ -17,10 +22,16 @@ pub mod player_type;
 pub mod position_type;
 pub mod spawn_npc_reducer;
 pub mod start_npc_ticker_reducer;
+pub mod submit_npc_graph_reducer;
 
 pub use attack_npc_reducer::attack_npc;
 pub use attack_player_reducer::attack_player;
+pub use join_game_reducer::join_game;
 pub use move_player_reducer::move_player;
+pub use npc_behaviour_graph_table::*;
+pub use npc_behaviour_graph_type::NpcBehaviourGraph;
+pub use npc_pending_decision_table::*;
+pub use npc_pending_decision_type::NpcPendingDecision;
 pub use npc_table::*;
 pub use npc_tick_schedule_type::NpcTickSchedule;
 pub use npc_type::Npc;
@@ -29,6 +40,7 @@ pub use player_type::Player;
 pub use position_type::Position;
 pub use spawn_npc_reducer::spawn_npc;
 pub use start_npc_ticker_reducer::start_npc_ticker;
+pub use submit_npc_graph_reducer::submit_npc_graph;
 
 #[derive(Clone, PartialEq, Debug)]
 
@@ -40,9 +52,11 @@ pub use start_npc_ticker_reducer::start_npc_ticker;
 pub enum Reducer {
     AttackNpc { target_id: u64 },
     AttackPlayer { target: __sdk::Identity },
+    JoinGame,
     MovePlayer { x: f32, y: f32 },
     SpawnNpc { x: f32, y: f32 },
     StartNpcTicker,
+    SubmitNpcGraph { npc_id: u64, graph_json: String },
 }
 
 impl __sdk::InModule for Reducer {
@@ -54,9 +68,11 @@ impl __sdk::Reducer for Reducer {
         match self {
             Reducer::AttackNpc { .. } => "attack_npc",
             Reducer::AttackPlayer { .. } => "attack_player",
+            Reducer::JoinGame => "join_game",
             Reducer::MovePlayer { .. } => "move_player",
             Reducer::SpawnNpc { .. } => "spawn_npc",
             Reducer::StartNpcTicker => "start_npc_ticker",
+            Reducer::SubmitNpcGraph { .. } => "submit_npc_graph",
             _ => unreachable!(),
         }
     }
@@ -73,6 +89,7 @@ impl __sdk::Reducer for Reducer {
                     target: target.clone(),
                 })
             }
+            Reducer::JoinGame => __sats::bsatn::to_vec(&join_game_reducer::JoinGameArgs {}),
             Reducer::MovePlayer { x, y } => {
                 __sats::bsatn::to_vec(&move_player_reducer::MovePlayerArgs {
                     x: x.clone(),
@@ -86,6 +103,12 @@ impl __sdk::Reducer for Reducer {
             Reducer::StartNpcTicker => {
                 __sats::bsatn::to_vec(&start_npc_ticker_reducer::StartNpcTickerArgs {})
             }
+            Reducer::SubmitNpcGraph { npc_id, graph_json } => {
+                __sats::bsatn::to_vec(&submit_npc_graph_reducer::SubmitNpcGraphArgs {
+                    npc_id: npc_id.clone(),
+                    graph_json: graph_json.clone(),
+                })
+            }
             _ => unreachable!(),
         }
     }
@@ -96,6 +119,8 @@ impl __sdk::Reducer for Reducer {
 #[doc(hidden)]
 pub struct DbUpdate {
     npc: __sdk::TableUpdate<Npc>,
+    npc_behaviour_graph: __sdk::TableUpdate<NpcBehaviourGraph>,
+    npc_pending_decision: __sdk::TableUpdate<NpcPendingDecision>,
     player: __sdk::TableUpdate<Player>,
 }
 
@@ -108,6 +133,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "npc" => db_update
                     .npc
                     .append(npc_table::parse_table_update(table_update)?),
+                "npc_behaviour_graph" => db_update
+                    .npc_behaviour_graph
+                    .append(npc_behaviour_graph_table::parse_table_update(table_update)?),
+                "npc_pending_decision" => db_update.npc_pending_decision.append(
+                    npc_pending_decision_table::parse_table_update(table_update)?,
+                ),
                 "player" => db_update
                     .player
                     .append(player_table::parse_table_update(table_update)?),
@@ -140,6 +171,18 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.npc = cache
             .apply_diff_to_table::<Npc>("npc", &self.npc)
             .with_updates_by_pk(|row| &row.id);
+        diff.npc_behaviour_graph = cache
+            .apply_diff_to_table::<NpcBehaviourGraph>(
+                "npc_behaviour_graph",
+                &self.npc_behaviour_graph,
+            )
+            .with_updates_by_pk(|row| &row.npc_id);
+        diff.npc_pending_decision = cache
+            .apply_diff_to_table::<NpcPendingDecision>(
+                "npc_pending_decision",
+                &self.npc_pending_decision,
+            )
+            .with_updates_by_pk(|row| &row.npc_id);
         diff.player = cache
             .apply_diff_to_table::<Player>("player", &self.player)
             .with_updates_by_pk(|row| &row.identity);
@@ -152,6 +195,12 @@ impl __sdk::DbUpdate for DbUpdate {
             match &table_rows.table[..] {
                 "npc" => db_update
                     .npc
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "npc_behaviour_graph" => db_update
+                    .npc_behaviour_graph
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "npc_pending_decision" => db_update
+                    .npc_pending_decision
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "player" => db_update
                     .player
@@ -172,6 +221,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "npc" => db_update
                     .npc
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "npc_behaviour_graph" => db_update
+                    .npc_behaviour_graph
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "npc_pending_decision" => db_update
+                    .npc_pending_decision
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "player" => db_update
                     .player
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -191,6 +246,8 @@ impl __sdk::DbUpdate for DbUpdate {
 #[doc(hidden)]
 pub struct AppliedDiff<'r> {
     npc: __sdk::TableAppliedDiff<'r, Npc>,
+    npc_behaviour_graph: __sdk::TableAppliedDiff<'r, NpcBehaviourGraph>,
+    npc_pending_decision: __sdk::TableAppliedDiff<'r, NpcPendingDecision>,
     player: __sdk::TableAppliedDiff<'r, Player>,
     __unused: std::marker::PhantomData<&'r ()>,
 }
@@ -206,6 +263,16 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks: &mut __sdk::DbCallbacks<RemoteModule>,
     ) {
         callbacks.invoke_table_row_callbacks::<Npc>("npc", &self.npc, event);
+        callbacks.invoke_table_row_callbacks::<NpcBehaviourGraph>(
+            "npc_behaviour_graph",
+            &self.npc_behaviour_graph,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<NpcPendingDecision>(
+            "npc_pending_decision",
+            &self.npc_pending_decision,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Player>("player", &self.player, event);
     }
 }
@@ -852,7 +919,14 @@ impl __sdk::SpacetimeModule for RemoteModule {
 
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
         npc_table::register_table(client_cache);
+        npc_behaviour_graph_table::register_table(client_cache);
+        npc_pending_decision_table::register_table(client_cache);
         player_table::register_table(client_cache);
     }
-    const ALL_TABLE_NAMES: &'static [&'static str] = &["npc", "player"];
+    const ALL_TABLE_NAMES: &'static [&'static str] = &[
+        "npc",
+        "npc_behaviour_graph",
+        "npc_pending_decision",
+        "player",
+    ];
 }
