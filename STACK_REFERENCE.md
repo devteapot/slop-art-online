@@ -2,6 +2,7 @@
 
 ## Stack Overview
 
+```
 Bevy Client (native + WASM)
     ↕ WebSocket (SpacetimeDB protocol)
 SpacetimeDB (game state + logic + NPC brain)
@@ -9,11 +10,202 @@ SpacetimeDB (game state + logic + NPC brain)
 LLM Bridge Service (thin, stateless, Rust async)
     ↕
 LLM Backend (Cloud API or Local Ollama)
+```
 
 - **Server:** SpacetimeDB (logic + database + NPC orchestration)
 - **Client:** Bevy (Rust, native desktop + optional WASM/browser)
 - **NPC AI:** LLM Bridge (thin external service, stateless)
 - **Language:** Rust across the entire stack
+
+---
+
+## Project Structure
+
+### Why Rust Workspace Monorepo
+- Single `cargo build` builds everything
+- Shared crates (types, utils) referenced locally with zero overhead
+- Single `Cargo.lock` = reproducible builds across all crates
+- Each crate compiles independently for its target
+  (WASM for SpacetimeDB, native/WASM for Bevy, native for bridge)
+
+### Folder Structure
+
+```text
+mmorpg/
+│
+├── Cargo.toml                  ← workspace root
+├── .cargo/
+│   └── config.toml             ← build targets, aliases
+│
+├── shared/                     ← shared code, no game logic
+│   ├── types/                  ← domain types shared across ALL crates
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── entities.rs     ← Player, Npc, Region structs
+│   │       ├── actions.rs      ← NpcDecision, ToolCall, ActionType
+│   │       ├── beliefs.rs      ← Belief, Goal, AllianceStatus
+│   │       └── events.rs       ← WorldEvent, CombatEvent
+│   │
+│   └── math/                   ← game math utils (grid, pathfinding, etc.)
+│       ├── Cargo.toml
+│       └── src/
+│           └── lib.rs
+│
+├── server/
+│   ├── module/                 ← SpacetimeDB reducers (compiles to WASM)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── tables/
+│   │       │   ├── mod.rs
+│   │       │   ├── player.rs
+│   │       │   ├── npc.rs      ← NpcDisposition, NpcGoal, NpcMemory...
+│   │       │   ├── alliance.rs
+│   │       │   └── world.rs    ← RegionState, WorldEvent
+│   │       ├── reducers/
+│   │       │   ├── mod.rs
+│   │       │   ├── player.rs   ← move, attack, interact
+│   │       │   ├── npc.rs      ← npc_tick, submit_npc_decision
+│   │       │   ├── alliance.rs ← propose_alliance, accept, dissolve
+│   │       │   └── world.rs    ← resource_tick, world_balance
+│   │       ├── schedulers/
+│   │       │   ├── mod.rs
+│   │       │   ├── npc_tick.rs
+│   │       │   ├── resource.rs
+│   │       │   └── invisible_hand.rs
+│   │       └── logic/          ← pure deterministic logic, no I/O
+│   │           ├── mod.rs
+│   │           ├── combat.rs
+│   │           ├── belief_propagation.rs
+│   │           ├── goal_evaluation.rs
+│   │           ├── validation.rs
+│   │           └── behavior_tree.rs
+│   │
+│   └── bridge/                 ← LLM bridge service (thin, stateless)
+│       ├── Cargo.toml
+│       └── src/
+│           ├── main.rs
+│           ├── subscriber.rs   ← watches NpcPendingDecision table
+│           ├── prompt/
+│           │   ├── mod.rs
+│           │   ├── assembler.rs ← builds LLM prompt from context snapshot
+│           │   └── templates/   ← prompt template files (.txt or .jinja)
+│           │       ├── merchant.txt
+│           │       ├── guard.txt
+│           │       └── warlord.txt
+│           ├── llm/
+│           │   ├── mod.rs
+│           │   ├── client.rs   ← trait LlmBackend
+│           │   ├── cloud.rs    ← Claude / GPT-4o-mini impl
+│           │   └── local.rs    ← Ollama impl
+│           ├── mcp/
+│           │   ├── mod.rs
+│           │   ├── tools.rs    ← MCP tool definitions
+│           │   └── parser.rs   ← parse LLM output → structured ToolCall
+│           └── moderation.rs   ← output filter / jailbreak guard
+│
+├── client/
+│   ├── Cargo.toml
+│   └── src/
+│       ├── main.rs
+│       ├── lib.rs              ← WASM entry point (wasm target)
+│       ├── network/
+│       │   ├── mod.rs
+│       │   ├── spacetimedb.rs  ← connection, subscriptions
+│       │   └── reconcile.rs   ← server reconciliation logic
+│       ├── prediction/
+│       │   ├── mod.rs
+│       │   └── input_buffer.rs ← stores unacknowledged inputs
+│       ├── systems/
+│       │   ├── mod.rs
+│       │   ├── movement.rs     ← FixedUpdate prediction systems
+│       │   ├── combat.rs
+│       │   ├── npc.rs          ← rendering NPC state + dialogue UI
+│       │   └── world.rs        ← terrain, regions, events
+│       ├── ui/
+│       │   ├── mod.rs
+│       │   ├── hud.rs
+│       │   ├── dialogue.rs     ← NPC conversation interface
+│       │   └── minimap.rs
+│       └── assets.rs           ← asset loading handles
+│
+├── assets/                     ← Bevy assets (loaded at runtime)
+│   ├── models/
+│   ├── textures/
+│   ├── audio/
+│   ├── shaders/
+│   └── ui/
+│
+├── tools/                      ← internal dev tooling
+│   ├── map_editor/             ← optional: custom Bevy editor tool
+│   └── npc_tester/             ← CLI to test NPC decisions in isolation
+│
+├── deploy/
+│   ├── docker-compose.yml      ← local dev: SpacetimeDB + Ollama + bridge
+│   ├── bridge.Dockerfile
+│   └── spacetimedb.Dockerfile
+│
+└── docs/
+    ├── MMORPG_STACK_REFERENCE.md  ← this document!
+    ├── architecture/
+    │   ├── npc_ai.md
+    │   ├── combat.md
+    │   └── emergence.md
+    └── adr/                    ← Architecture Decision Records
+        ├── 001-spacetimedb.md
+        ├── 002-bevy.md
+        └── 003-llm-bridge.md
+```
+
+### Workspace `Cargo.toml`
+
+```toml
+[workspace]
+resolver = "2"
+members = [
+    "shared/types",
+    "shared/math",
+    "server/module",
+    "server/bridge",
+    "client",
+    "tools/npc_tester",
+]
+
+# Shared dependency versions across all crates
+[workspace.dependencies]
+bevy        = "0.15"
+tokio       = { version = "1", features = ["full"] }
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+anyhow      = "1"
+tracing     = "1"
+
+# Your shared crates — referenced locally
+types = { path = "shared/types" }
+math  = { path = "shared/math" }
+```
+
+### `.cargo/config.toml`
+
+```toml
+[alias]
+dev     = "run --package bridge"
+client  = "run --package client"
+test-ai = "run --package npc_tester"
+
+[target.wasm32-unknown-unknown]
+runner = "spacetime publish"
+```
+
+### Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| `shared/types` imported by all crates | Define once, no copy-paste structs across crates |
+| `server/module/logic/` is pure functions | No I/O = easily unit testable, provably deterministic |
+| `tools/npc_tester` | Test NPC/LLM behavior without running the full stack |
+| `docs/adr/` | Record *why* each major decision was made |
 
 ---
 
@@ -445,6 +637,49 @@ Build the NPC system in layers — each is independently shippable:
 
 ---
 
+## Local Dev Environment
+
+```yaml
+# deploy/docker-compose.yml
+services:
+  spacetimedb:
+    image: clockworklabs/spacetimedb:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - spacetimedb_data:/var/lib/spacetimedb
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]  # remove if no GPU
+
+  bridge:
+    build:
+      context: .
+      dockerfile: deploy/bridge.Dockerfile
+    environment:
+      SPACETIMEDB_URL: ws://spacetimedb:3000
+      OLLAMA_URL: http://ollama:11434
+      CLOUD_LLM_API_KEY: ${CLOUD_LLM_API_KEY}
+    depends_on:
+      - spacetimedb
+      - ollama
+
+volumes:
+  spacetimedb_data:
+  ollama_data:
+```
+
+---
+
 ## Full Architecture Diagram
 
 ```
@@ -533,4 +768,3 @@ Build the NPC system in layers — each is independently shippable:
 - [BitCraft Online (SpacetimeDB showcase)](https://bitcraftonline.com)
 - [Ollama (local LLM hosting)](https://ollama.com)
 - [Model Context Protocol](https://modelcontextprotocol.io)
-```
