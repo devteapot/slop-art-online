@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 bevy = "0.18.1"
-spacetimedb-sdk = { version = "2.0.*" }
+spacetimedb-sdk = { version = "=2.0.1" }
