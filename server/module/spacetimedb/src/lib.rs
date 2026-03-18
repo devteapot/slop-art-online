@@ -4,13 +4,13 @@ use std::time::Duration;
 
 const WORLD_MIN: f32 = -500.0;
 const WORLD_MAX: f32 = 500.0;
-const NPC_MOVE_RANGE: f32 = 50.0;
-const NPC_CHASE_STEP: f32 = 60.0;
+const NPC_MOVE_RANGE: f32 = 3.0;
+const NPC_CHASE_STEP: f32 = 3.0;
 const NPC_TICK_MS: u64 = 500;
-const NPC_DETECTION_RANGE: f32 = 350.0;
+const NPC_DETECTION_RANGE: f32 = 30.0;
 const MAX_HEALTH: i32 = 100;
 const ATTACK_DAMAGE: i32 = 10;
-const ATTACK_RANGE: f32 = 100.0;
+const ATTACK_RANGE: f32 = 3.0;
 
 // --- Types ---
 

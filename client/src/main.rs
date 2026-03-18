@@ -1,4 +1,6 @@
+use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
 use bevy::prelude::*;
+use bevy_voxel_world::prelude::*;
 use shared::module_bindings::attack_npc_reducer::attack_npc;
 use shared::module_bindings::attack_player_reducer::attack_player;
 use shared::module_bindings::join_game_reducer::join_game;
@@ -9,33 +11,89 @@ use std::sync::{Arc, Mutex};
 
 const HOST: &str = "http://localhost:3000";
 const DB_NAME: &str = "slop-art-online";
-const MOVE_SPEED: f32 = 200.0;
-const ATTACK_RANGE: f32 = 100.0;
-const MAX_HEALTH: i32 = 100;
-const HEALTH_BAR_WIDTH: f32 = 40.0;
-const HEALTH_BAR_HEIGHT: f32 = 5.0;
-const HEALTH_BAR_OFFSET_Y: f32 = 28.0;
+const MOVE_SPEED: f32 = 20.0;
+const ATTACK_RANGE: f32 = 3.0;
+const PLAYER_HEIGHT: f32 = 1.0; // Y offset above terrain
+const MAX_HEALTH: f32 = 100.0;
+const HEALTH_BAR_WIDTH: f32 = 1.0;
+const HEALTH_BAR_HEIGHT: f32 = 0.1;
+const HEALTH_BAR_Y_OFFSET: f32 = 1.8; // above capsule top
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(FpsOverlayPlugin {
+            config: FpsOverlayConfig {
+                text_config: TextFont { font_size: 14.0, ..default() },
+                ..default()
+            },
+        })
+        .add_plugins(VoxelWorldPlugin::with_config(GameWorld))
         .init_resource::<PlayerEventQueue>()
         .init_resource::<NpcEventQueue>()
         .init_resource::<LocalIdentity>()
-        .add_systems(Startup, (setup_camera, connect_spacetimedb))
-        .add_systems(
-            Update,
-            (
-                tick_spacetimedb,
-                sync_players,
-                sync_npcs,
-                update_health_bars,
-                move_local_player,
-                attack,
-            )
-                .chain(),
-        )
+        .add_systems(Startup, (setup, connect_spacetimedb))
+        .add_systems(Update, (
+            tick_spacetimedb,
+            sync_players,
+            sync_npcs,
+            move_local_player,
+            follow_camera,
+            attack,
+            update_health_bars,
+            billboard_health_bars,
+        ).chain())
         .run();
+}
+
+// --- Voxel World ---
+
+#[derive(Resource, Clone, Default)]
+struct GameWorld;
+
+impl VoxelWorldConfig for GameWorld {
+    type MaterialIndex = u8;
+    type ChunkUserBundle = ();
+
+    fn spawning_distance(&self) -> u32 { 16 }
+
+    fn voxel_lookup_delegate(&self) -> VoxelLookupDelegate<Self::MaterialIndex> {
+        Box::new(move |_chunk_pos, _lod, _previous| {
+            Box::new(move |pos: IVec3, _prev: Option<WorldVoxel>| {
+                if pos.y < 0 {
+                    WorldVoxel::Solid(0)
+                } else {
+                    WorldVoxel::Air
+                }
+            })
+        })
+    }
+}
+
+// --- Setup ---
+
+fn setup(mut commands: Commands) {
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 30.0, 40.0).looking_at(Vec3::ZERO, Vec3::Y),
+        VoxelWorldCamera::<GameWorld>::default(),
+        MainCamera,
+    ));
+
+    commands.spawn((
+        DirectionalLight {
+            illuminance: 10_000.0,
+            shadows_enabled: true,
+            ..default()
+        },
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.0, 0.4, 0.0)),
+    ));
+
+    commands.spawn(AmbientLight {
+        color: Color::WHITE,
+        brightness: 200.0,
+        ..default()
+    });
 }
 
 // --- SpacetimeDB ---
@@ -90,57 +148,28 @@ fn connect_spacetimedb(
         })
         .on_connect_error(|_, err| error!("SpacetimeDB connect error: {err}"))
         .on_disconnect(|_, err| {
-            if let Some(e) = err {
-                error!("SpacetimeDB disconnected: {e}")
-            }
+            if let Some(e) = err { error!("SpacetimeDB disconnected: {e}") }
         })
         .build()
         .expect("Failed to connect to SpacetimeDB");
 
     conn.db.player().on_insert(move |_, row: &Player| {
-        q_insert
-            .0
-            .lock()
-            .unwrap()
-            .push(PlayerEvent::Inserted(row.clone()));
+        q_insert.0.lock().unwrap().push(PlayerEvent::Inserted(row.clone()));
     });
-    conn.db
-        .player()
-        .on_update(move |_, _old: &Player, new: &Player| {
-            q_update
-                .0
-                .lock()
-                .unwrap()
-                .push(PlayerEvent::Updated(new.clone()));
-        });
+    conn.db.player().on_update(move |_, _old: &Player, new: &Player| {
+        q_update.0.lock().unwrap().push(PlayerEvent::Updated(new.clone()));
+    });
     conn.db.player().on_delete(move |_, row: &Player| {
-        q_delete
-            .0
-            .lock()
-            .unwrap()
-            .push(PlayerEvent::Deleted(row.clone()));
+        q_delete.0.lock().unwrap().push(PlayerEvent::Deleted(row.clone()));
     });
-
     conn.db.npc().on_insert(move |_, row: &Npc| {
-        nq_insert
-            .0
-            .lock()
-            .unwrap()
-            .push(NpcEvent::Inserted(row.clone()));
+        nq_insert.0.lock().unwrap().push(NpcEvent::Inserted(row.clone()));
     });
     conn.db.npc().on_update(move |_, _old: &Npc, new: &Npc| {
-        nq_update
-            .0
-            .lock()
-            .unwrap()
-            .push(NpcEvent::Updated(new.clone()));
+        nq_update.0.lock().unwrap().push(NpcEvent::Updated(new.clone()));
     });
     conn.db.npc().on_delete(move |_, row: &Npc| {
-        nq_delete
-            .0
-            .lock()
-            .unwrap()
-            .push(NpcEvent::Deleted(row.clone()));
+        nq_delete.0.lock().unwrap().push(NpcEvent::Deleted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));
@@ -152,53 +181,67 @@ fn tick_spacetimedb(conn: Res<SpacetimeDb>) {
     }
 }
 
-// --- Health bar ---
+// --- Coordinate mapping ---
+// SpacetimeDB (x, y) → 3D world (x, PLAYER_HEIGHT, z)
+// Y axis is up in 3D; SpacetimeDB's Y becomes 3D Z.
+
+fn to_world_pos(x: f32, y: f32) -> Vec3 {
+    Vec3::new(x, PLAYER_HEIGHT, y)
+}
+
+// --- Health bar components ---
 
 #[derive(Component)]
 struct Health(i32);
 
+/// Marker on the fill mesh entity of a health bar.
 #[derive(Component)]
-struct HealthBarFill(Entity);
+struct HealthBarFill;
 
-fn spawn_health_bar(commands: &mut Commands, parent: Entity, offset_y: f32) -> Entity {
-    let fill = commands
-        .spawn((
-            Sprite {
-                color: Color::srgb(0.2, 0.8, 0.2),
-                custom_size: Some(Vec2::new(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)),
-                ..default()
-            },
-            Transform::from_xyz(0.0, offset_y, 1.0),
-        ))
-        .id();
+/// Marker on the root entity of a health bar (the billboard container).
+#[derive(Component)]
+struct HealthBarRoot;
 
-    let background = commands
-        .spawn((
-            Sprite {
-                color: Color::srgb(0.2, 0.2, 0.2),
-                custom_size: Some(Vec2::new(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)),
-                ..default()
-            },
-            Transform::from_xyz(0.0, offset_y, 0.9),
-        ))
-        .id();
+/// Stored on character entities; points to their fill mesh entity.
+#[derive(Component)]
+struct HealthBarFillRef(Entity);
 
-    commands.entity(parent).add_children(&[background, fill]);
-    fill
-}
+fn spawn_health_bar(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) -> (Entity, Entity) {
+    let fill_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.1, 0.85, 0.1),
+        unlit: true,
+        ..default()
+    });
+    let bg_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.15, 0.15, 0.15),
+        unlit: true,
+        ..default()
+    });
 
-fn update_health_bars(
-    query: Query<(&Health, &HealthBarFill), Changed<Health>>,
-    mut fills: Query<&mut Transform>,
-) {
-    for (health, bar) in query.iter() {
-        if let Ok(mut transform) = fills.get_mut(bar.0) {
-            let ratio = (health.0 as f32 / MAX_HEALTH as f32).clamp(0.0, 1.0);
-            // Scale from left: adjust x so the bar shrinks rightward
-            transform.scale.x = ratio;
-            transform.translation.x = -HEALTH_BAR_WIDTH / 2.0 + (HEALTH_BAR_WIDTH * ratio) / 2.0;
-        }
-    }
+    let fill_id = commands.spawn((
+        HealthBarFill,
+        Mesh3d(meshes.add(Rectangle::new(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))),
+        MeshMaterial3d(fill_mat),
+        Transform::default(),
+    )).id();
+
+    let bg_id = commands.spawn((
+        Mesh3d(meshes.add(Rectangle::new(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))),
+        MeshMaterial3d(bg_mat),
+        Transform::from_xyz(0.0, 0.0, -0.001),
+    )).id();
+
+    let root_id = commands.spawn((
+        HealthBarRoot,
+        Transform::from_xyz(0.0, HEALTH_BAR_Y_OFFSET, 0.0),
+        Visibility::default(),
+    )).add_children(&[bg_id, fill_id]).id();
+
+    (root_id, fill_id)
 }
 
 // --- Players ---
@@ -209,10 +252,15 @@ struct PlayerId(Identity);
 #[derive(Component)]
 struct LocalPlayer;
 
+#[derive(Component)]
+struct MainCamera;
+
 fn sync_players(
     mut commands: Commands,
     queue: Res<PlayerEventQueue>,
     local_identity: Res<LocalIdentity>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut players: Query<(Entity, &PlayerId, &mut Transform, &mut Health)>,
 ) {
     let local_id = local_identity.0.lock().unwrap().clone();
@@ -222,32 +270,32 @@ fn sync_players(
         match event {
             PlayerEvent::Inserted(player) => {
                 let is_local = local_id.as_ref() == Some(&player.identity);
+                let color = if is_local {
+                    Color::srgb(0.4, 0.8, 1.0)
+                } else {
+                    Color::WHITE
+                };
+                let (bar_root, fill_id) = spawn_health_bar(&mut commands, &mut meshes, &mut materials);
                 let mut entity_cmd = commands.spawn((
                     PlayerId(player.identity),
-                    Health(player.health),
-                    Sprite {
-                        color: if is_local {
-                            Color::srgb(0.4, 0.8, 1.0)
-                        } else {
-                            Color::WHITE
-                        },
-                        custom_size: Some(Vec2::splat(32.0)),
+                    Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
+                    MeshMaterial3d(materials.add(StandardMaterial {
+                        base_color: color,
                         ..default()
-                    },
-                    Transform::from_xyz(player.position.x, player.position.y, 0.0),
+                    })),
+                    Transform::from_translation(to_world_pos(player.position.x, player.position.y)),
+                    Health(player.health),
+                    HealthBarFillRef(fill_id),
                 ));
+                entity_cmd.add_child(bar_root);
                 if is_local {
                     entity_cmd.insert(LocalPlayer);
                 }
-                let entity = entity_cmd.id();
-                let fill = spawn_health_bar(&mut commands, entity, HEALTH_BAR_OFFSET_Y);
-                commands.entity(entity).insert(HealthBarFill(fill));
             }
             PlayerEvent::Updated(player) => {
                 for (_, id, mut transform, mut health) in players.iter_mut() {
                     if id.0 == player.identity {
-                        transform.translation.x = player.position.x;
-                        transform.translation.y = player.position.y;
+                        transform.translation = to_world_pos(player.position.x, player.position.y);
                         health.0 = player.health;
                     }
                 }
@@ -272,7 +320,7 @@ fn sync_npcs(
     mut commands: Commands,
     queue: Res<NpcEventQueue>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut npcs: Query<(Entity, &NpcId, &mut Transform, &mut Health)>,
 ) {
     let mut events = queue.0.lock().unwrap();
@@ -280,23 +328,24 @@ fn sync_npcs(
     for event in events.drain(..) {
         match event {
             NpcEvent::Inserted(npc) => {
-                let entity = commands
-                    .spawn((
-                        NpcId(npc.id),
-                        Health(npc.health),
-                        Mesh2d(meshes.add(Circle::new(16.0))),
-                        MeshMaterial2d(materials.add(Color::srgb(1.0, 0.5, 0.2))),
-                        Transform::from_xyz(npc.position.x, npc.position.y, 0.0),
-                    ))
-                    .id();
-                let fill = spawn_health_bar(&mut commands, entity, HEALTH_BAR_OFFSET_Y);
-                commands.entity(entity).insert(HealthBarFill(fill));
+                let (bar_root, fill_id) = spawn_health_bar(&mut commands, &mut meshes, &mut materials);
+                let mut entity_cmd = commands.spawn((
+                    NpcId(npc.id),
+                    Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
+                    MeshMaterial3d(materials.add(StandardMaterial {
+                        base_color: Color::srgb(1.0, 0.5, 0.2),
+                        ..default()
+                    })),
+                    Transform::from_translation(to_world_pos(npc.position.x, npc.position.y)),
+                    Health(npc.health),
+                    HealthBarFillRef(fill_id),
+                ));
+                entity_cmd.add_child(bar_root);
             }
             NpcEvent::Updated(npc) => {
                 for (_, id, mut transform, mut health) in npcs.iter_mut() {
                     if id.0 == npc.id {
-                        transform.translation.x = npc.position.x;
-                        transform.translation.y = npc.position.y;
+                        transform.translation = to_world_pos(npc.position.x, npc.position.y);
                         health.0 = npc.health;
                     }
                 }
@@ -312,96 +361,111 @@ fn sync_npcs(
     }
 }
 
+// --- Health bar update ---
+
+fn update_health_bars(
+    characters: Query<(&Health, &HealthBarFillRef)>,
+    mut fills: Query<&mut Transform, With<HealthBarFill>>,
+) {
+    for (health, fill_ref) in &characters {
+        if let Ok(mut transform) = fills.get_mut(fill_ref.0) {
+            let ratio = (health.0 as f32 / MAX_HEALTH).clamp(0.0, 1.0);
+            transform.scale.x = ratio;
+            // Anchor the fill to the left edge so it depletes right-to-left
+            transform.translation.x = -HEALTH_BAR_WIDTH * (1.0 - ratio) / 2.0;
+        }
+    }
+}
+
+// --- Billboard: health bars always face the camera ---
+
+fn billboard_health_bars(
+    camera: Query<&GlobalTransform, With<MainCamera>>,
+    mut bars: Query<&mut Transform, With<HealthBarRoot>>,
+) {
+    let Ok(cam_gt) = camera.single() else { return };
+    let (_, cam_rot, _) = cam_gt.to_scale_rotation_translation();
+
+    for mut bar_lt in &mut bars {
+        bar_lt.rotation = cam_rot;
+    }
+}
+
 // --- Movement ---
 
 fn move_local_player(
-    conn: Res<SpacetimeDb>,
+    conn: Option<Res<SpacetimeDb>>,
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     player: Query<&Transform, With<LocalPlayer>>,
 ) {
-    let Ok(transform) = player.single() else {
-        return;
-    };
+    let Some(conn) = conn else { return };
+    let Ok(transform) = player.single() else { return };
 
     let mut dir = Vec2::ZERO;
-    if keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp) {
-        dir.y += 1.0;
-    }
-    if keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown) {
-        dir.y -= 1.0;
-    }
-    if keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft) {
-        dir.x -= 1.0;
-    }
-    if keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight) {
-        dir.x += 1.0;
-    }
+    if keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp)    { dir.y -= 1.0; }
+    if keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown)  { dir.y += 1.0; }
+    if keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft)  { dir.x -= 1.0; }
+    if keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight) { dir.x += 1.0; }
 
-    if dir == Vec2::ZERO {
-        return;
-    }
+    if dir == Vec2::ZERO { return }
 
     let delta = dir.normalize() * MOVE_SPEED * time.delta_secs();
+    // 3D: X stays X, Z (SpacetimeDB Y) changes with forward/back
     let new_x = transform.translation.x + delta.x;
-    let new_y = transform.translation.y + delta.y;
+    let new_z = transform.translation.z + delta.y;
 
-    if let Err(e) = conn.0.reducers.move_player(new_x, new_y) {
+    if let Err(e) = conn.0.reducers.move_player(new_x, new_z) {
         error!("move_player failed: {e}");
     }
+}
+
+// --- Camera follow ---
+
+fn follow_camera(
+    local_player: Query<&Transform, With<LocalPlayer>>,
+    mut camera: Query<&mut Transform, (With<MainCamera>, Without<LocalPlayer>)>,
+) {
+    let Ok(player) = local_player.single() else { return };
+    let Ok(ref mut cam) = camera.single_mut() else { return };
+
+    let target = player.translation + Vec3::new(0.0, 30.0, 40.0);
+    cam.translation = cam.translation.lerp(target, 0.1);
+    cam.look_at(player.translation, Vec3::Y);
 }
 
 // --- Attack ---
 
 fn attack(
-    conn: Res<SpacetimeDb>,
+    conn: Option<Res<SpacetimeDb>>,
     keys: Res<ButtonInput<KeyCode>>,
     local_player: Query<(&Transform, &PlayerId), With<LocalPlayer>>,
     players: Query<(&Transform, &PlayerId), Without<LocalPlayer>>,
     npcs: Query<(&Transform, &NpcId)>,
 ) {
-    if !keys.just_pressed(KeyCode::Space) {
-        return;
-    }
-    let Ok((local_transform, _)) = local_player.single() else {
-        return;
-    };
+    if !keys.just_pressed(KeyCode::Space) { return }
+    let Some(conn) = conn else { return };
+    let Ok((local_transform, _)) = local_player.single() else { return };
 
-    let local_pos = local_transform.translation.truncate();
+    let local_pos = local_transform.translation;
 
-    // Find nearest target within range across both players and NPCs
-    let nearest_player = players
-        .iter()
-        .map(|(t, id)| (t.translation.truncate().distance(local_pos), id.0, true))
-        .filter(|(dist, _, _)| *dist <= ATTACK_RANGE)
+    let nearest_player = players.iter()
+        .map(|(t, id)| (t.translation.distance(local_pos), id.0))
+        .filter(|(dist, _)| *dist <= ATTACK_RANGE)
         .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
-    let nearest_npc = npcs
-        .iter()
-        .map(|(t, id)| (t.translation.truncate().distance(local_pos), id.0))
+    let nearest_npc = npcs.iter()
+        .map(|(t, id)| (t.translation.distance(local_pos), id.0))
         .filter(|(dist, _)| *dist <= ATTACK_RANGE)
         .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
     match (nearest_player, nearest_npc) {
-        (Some((pd, pid, _)), Some((nd, nid))) => {
-            if pd <= nd {
-                let _ = conn.0.reducers.attack_player(pid);
-            } else {
-                let _ = conn.0.reducers.attack_npc(nid);
-            }
+        (Some((pd, pid)), Some((nd, nid))) => {
+            if pd <= nd { let _ = conn.0.reducers.attack_player(pid); }
+            else        { let _ = conn.0.reducers.attack_npc(nid); }
         }
-        (Some((_, pid, _)), None) => {
-            let _ = conn.0.reducers.attack_player(pid);
-        }
-        (None, Some((_, nid))) => {
-            let _ = conn.0.reducers.attack_npc(nid);
-        }
+        (Some((_, pid)), None) => { let _ = conn.0.reducers.attack_player(pid); }
+        (None, Some((_, nid))) => { let _ = conn.0.reducers.attack_npc(nid); }
         (None, None) => {}
     }
-}
-
-// --- Camera ---
-
-fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2d::default());
 }
