@@ -9,9 +9,10 @@ use shared::module_bindings::allocate_skill_point_reducer::allocate_skill_point;
 use shared::module_bindings::use_skill_reducer::use_skill;
 use shared::module_bindings::{
     DbConnection, Npc, NpcTableAccess, Player, PlayerSkill, PlayerSkillTableAccess,
-    PlayerTableAccess, SkillAttributes, SkillAttributesTableAccess, SkillDef, SkillDefTableAccess,
+    PlayerTableAccess, SkillAttributes, SkillAttributesTableAccess, SkillCooldown,
+    SkillCooldownTableAccess, SkillDef, SkillDefTableAccess,
 };
-use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
+use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey, Timestamp};
 use std::sync::{Arc, Mutex};
 
 const HOST: &str = "http://localhost:3000";
@@ -37,6 +38,9 @@ const MAX_HEALTH: f32 = 100.0;
 const HEALTH_BAR_WIDTH: f32 = 1.0;
 const HEALTH_BAR_HEIGHT: f32 = 0.1;
 const HEALTH_BAR_Y_OFFSET: f32 = 1.8; // above capsule top
+const JUMP_HEIGHT: f32 = 3.0;
+const JUMP_DURATION: f32 = 0.55;
+const DASH_DISTANCE: f32 = 8.0;
 
 fn main() {
     App::new()
@@ -53,11 +57,16 @@ fn main() {
         .init_resource::<PlayerSkillEventQueue>()
         .init_resource::<SkillDefEventQueue>()
         .init_resource::<SkillAttributesEventQueue>()
+        .init_resource::<SkillCooldownEventQueue>()
         .init_resource::<LocalSkills>()
         .init_resource::<LocalPlayerStats>()
         .init_resource::<LocalSkillData>()
+        .init_resource::<LocalCooldowns>()
         .init_resource::<SelectedSkill>()
         .init_resource::<SkillNameMap>()
+        .init_resource::<MobilitySkillIds>()
+        .init_resource::<PlayerFacing>()
+        .init_resource::<JumpState>()
         .init_resource::<LocalIdentity>()
         .add_systems(Startup, (setup, connect_spacetimedb, setup_hud))
         .add_systems(Update, (
@@ -67,8 +76,11 @@ fn main() {
             sync_player_skills,
             sync_skill_defs,
             sync_skill_attrs,
+            sync_skill_cooldowns,
             move_local_player,
             use_skill_input,
+            mobility_input,
+            apply_jump_anim,
             follow_camera,
             attack,
             update_health_bars,
@@ -190,6 +202,28 @@ struct LocalSkills(Vec<u64>);
 
 enum SkillDefEvent { Inserted(SkillDef) }
 
+enum SkillCooldownEvent {
+    Inserted(SkillCooldown),
+    Deleted(SkillCooldown),
+}
+
+#[derive(Resource, Default, Clone)]
+struct SkillCooldownEventQueue(Arc<Mutex<Vec<SkillCooldownEvent>>>);
+
+/// skill_id → ready_at (micros since unix epoch)
+#[derive(Resource, Default)]
+struct LocalCooldowns(std::collections::HashMap<u64, i64>);
+
+#[derive(Resource, Default)]
+struct MobilitySkillIds {
+    jump: Option<u64>,
+    dash: Option<u64>,
+}
+
+/// XZ facing direction from last movement input, used for dash direction.
+#[derive(Resource, Default)]
+struct PlayerFacing(Vec2);
+
 #[derive(Resource, Default, Clone)]
 struct SkillDefEventQueue(Arc<Mutex<Vec<SkillDefEvent>>>);
 
@@ -239,6 +273,15 @@ struct AllocateButton(usize);
 #[derive(Component)]
 struct SkillDetailClose;
 
+#[derive(Component)]
+struct MobilitySlotLabel(usize); // 0 = Jump, 1 = Dash
+
+#[derive(Resource, Default)]
+struct JumpState {
+    elapsed: f32,
+    active: bool,
+}
+
 fn connect_spacetimedb(
     mut commands: Commands,
     player_queue: Res<PlayerEventQueue>,
@@ -246,6 +289,7 @@ fn connect_spacetimedb(
     skill_queue: Res<PlayerSkillEventQueue>,
     skill_def_queue: Res<SkillDefEventQueue>,
     skill_attrs_queue: Res<SkillAttributesEventQueue>,
+    skill_cd_queue: Res<SkillCooldownEventQueue>,
     local_identity: Res<LocalIdentity>,
 ) {
     let q_insert = player_queue.clone();
@@ -260,6 +304,9 @@ fn connect_spacetimedb(
     let sd_insert = skill_def_queue.clone();
     let sa_insert = skill_attrs_queue.clone();
     let sa_update = skill_attrs_queue.clone();
+    let sc_insert = skill_cd_queue.clone();
+    let sc_update = skill_cd_queue.clone();
+    let sc_delete = skill_cd_queue.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -321,6 +368,16 @@ fn connect_spacetimedb(
     });
     conn.db.skill_attributes().on_update(move |_, _old: &SkillAttributes, new: &SkillAttributes| {
         sa_update.0.lock().unwrap().push(SkillAttributesEvent::Updated(new.clone()));
+    });
+    conn.db.skill_cooldown().on_insert(move |_, row: &SkillCooldown| {
+        sc_insert.0.lock().unwrap().push(SkillCooldownEvent::Inserted(row.clone()));
+    });
+    conn.db.skill_cooldown().on_update(move |_, _old: &SkillCooldown, new: &SkillCooldown| {
+        // Server UPDATEs the row on every use after the first, so treat it as Inserted.
+        sc_update.0.lock().unwrap().push(SkillCooldownEvent::Inserted(new.clone()));
+    });
+    conn.db.skill_cooldown().on_delete(move |_, row: &SkillCooldown| {
+        sc_delete.0.lock().unwrap().push(SkillCooldownEvent::Deleted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));
@@ -558,7 +615,7 @@ fn setup_hud(mut commands: Commands) {
         spawn_stat_bar(col, "MP", Color::srgb(0.2, 0.45, 0.9),  StatKind::Mana);
         spawn_stat_bar(col, "SP", Color::srgb(0.2, 0.75, 0.35), StatKind::Stamina);
 
-        // Skill bar
+        // Combat skill bar
         col.spawn(Node {
             flex_direction: FlexDirection::Row,
             column_gap: Val::Px(4.0),
@@ -583,6 +640,34 @@ fn setup_hud(mut commands: Commands) {
                         Text::new(format!("[{}] ---", i + 1)),
                         TextFont { font_size: 11.0, ..default() },
                         TextColor(Color::srgb(0.75, 0.75, 0.75)),
+                    ));
+                });
+            }
+        });
+
+        // Mobility skill bar
+        col.spawn(Node {
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(4.0),
+            margin: UiRect::top(Val::Px(2.0)),
+            ..default()
+        }).with_children(|row| {
+            for (i, key_label) in ["[Space]", "[Shift]"].iter().enumerate() {
+                row.spawn((
+                    Node {
+                        width: Val::Px(90.0),
+                        height: Val::Px(26.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.0, 0.1, 0.2, 0.65)),
+                )).with_children(|slot| {
+                    slot.spawn((
+                        MobilitySlotLabel(i),
+                        Text::new(format!("{key_label} ---")),
+                        TextFont { font_size: 10.0, ..default() },
+                        TextColor(Color::srgb(0.6, 0.85, 1.0)),
                     ));
                 });
             }
@@ -731,21 +816,38 @@ fn spawn_stat_bar(parent: &mut ChildSpawnerCommands, label: &str, color: Color, 
 fn sync_skill_defs(
     queue: Res<SkillDefEventQueue>,
     mut skill_name_map: ResMut<SkillNameMap>,
+    mut mobility_ids: ResMut<MobilitySkillIds>,
 ) {
     let mut events = queue.0.lock().unwrap();
     for event in events.drain(..) {
         match event {
-            SkillDefEvent::Inserted(def) => { skill_name_map.0.insert(def.id, def.name); }
+            SkillDefEvent::Inserted(def) => {
+                match def.name.as_str() {
+                    "Jump" => mobility_ids.jump = Some(def.id),
+                    "Dash" => mobility_ids.dash = Some(def.id),
+                    _ => {}
+                }
+                skill_name_map.0.insert(def.id, def.name);
+            }
         }
     }
+}
+
+fn cooldown_remaining(cooldowns: &LocalCooldowns, skill_id: u64) -> f32 {
+    let Some(&ready_at) = cooldowns.0.get(&skill_id) else { return 0.0 };
+    let now = Timestamp::now().to_micros_since_unix_epoch();
+    ((ready_at - now) as f32 / 1_000_000.0).max(0.0)
 }
 
 fn update_hud(
     local_stats: Res<LocalPlayerStats>,
     local_skills: Res<LocalSkills>,
     skill_name_map: Res<SkillNameMap>,
+    local_cooldowns: Res<LocalCooldowns>,
+    mobility_ids: Res<MobilitySkillIds>,
     mut stat_fills: Query<(&StatBarFill, &mut Node)>,
-    mut skill_labels: Query<(&SkillSlotLabel, &mut Text)>,
+    mut skill_labels: Query<(&SkillSlotLabel, &mut Text), Without<MobilitySlotLabel>>,
+    mut mobility_labels: Query<(&MobilitySlotLabel, &mut Text), Without<SkillSlotLabel>>,
 ) {
     for (fill, mut node) in &mut stat_fills {
         let ratio = match fill.0 {
@@ -757,11 +859,30 @@ fn update_hud(
     }
 
     for (slot, mut text) in &mut skill_labels {
-        let name = local_skills.0.get(slot.0)
-            .and_then(|&id| skill_name_map.0.get(&id))
+        let skill_id = local_skills.0.get(slot.0).copied();
+        let name = skill_id
+            .and_then(|id| skill_name_map.0.get(&id))
             .map(|s| s.as_str())
             .unwrap_or("---");
-        text.0 = format!("[{}] {}", slot.0 + 1, name);
+        let cd = skill_id.map(|id| cooldown_remaining(&local_cooldowns, id)).unwrap_or(0.0);
+        if cd > 0.1 {
+            text.0 = format!("[{}] {:.1}s", slot.0 + 1, cd);
+        } else {
+            text.0 = format!("[{}] {}", slot.0 + 1, name);
+        }
+    }
+
+    let mob_ids = [mobility_ids.jump, mobility_ids.dash];
+    let mob_keys = ["[Space]", "[Shift]"];
+    let mob_names = ["Jump", "Dash"];
+    for (slot, mut text) in &mut mobility_labels {
+        let name = mob_names[slot.0];
+        let cd = mob_ids[slot.0].map(|id| cooldown_remaining(&local_cooldowns, id)).unwrap_or(0.0);
+        if cd > 0.1 {
+            text.0 = format!("{} {:.1}s", mob_keys[slot.0], cd);
+        } else {
+            text.0 = format!("{} {}", mob_keys[slot.0], name);
+        }
     }
 }
 
@@ -833,6 +954,7 @@ fn move_local_player(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     player: Query<&Transform, With<LocalPlayer>>,
+    mut facing: ResMut<PlayerFacing>,
 ) {
     let Some(conn) = conn else { return };
     let Ok(transform) = player.single() else { return };
@@ -845,7 +967,10 @@ fn move_local_player(
 
     if dir == Vec2::ZERO { return }
 
-    let delta = dir.normalize() * MOVE_SPEED * time.delta_secs();
+    let dir_norm = dir.normalize();
+    facing.0 = dir_norm;
+
+    let delta = dir_norm * MOVE_SPEED * time.delta_secs();
     let new_x = transform.translation.x + delta.x;
     let new_z = transform.translation.z + delta.y;
 
@@ -877,7 +1002,7 @@ fn attack(
     players: Query<(&Transform, &PlayerId), Without<LocalPlayer>>,
     npcs: Query<(&Transform, &NpcId)>,
 ) {
-    if !keys.just_pressed(KeyCode::Space) { return }
+    if !keys.just_pressed(KeyCode::KeyE) { return }
     let Some(conn) = conn else { return };
     let Ok((local_transform, _)) = local_player.single() else { return };
 
@@ -1048,5 +1173,92 @@ fn update_skill_detail_panel(
         if let Ok(mut t) = points_text.single_mut() {
             t.0 = format!("Points: {total_pts} total (lv{level})");
         }
+    }
+}
+
+// --- Skill cooldown sync ---
+
+fn sync_skill_cooldowns(
+    queue: Res<SkillCooldownEventQueue>,
+    local_identity: Res<LocalIdentity>,
+    mobility_ids: Res<MobilitySkillIds>,
+    mut local_cooldowns: ResMut<LocalCooldowns>,
+    mut jump_state: ResMut<JumpState>,
+) {
+    let local_id = local_identity.0.lock().unwrap().clone();
+    let Some(ref id) = local_id else { return };
+    let mut events = queue.0.lock().unwrap();
+
+    for event in events.drain(..) {
+        match event {
+            SkillCooldownEvent::Inserted(cd) if &cd.player_identity == id => {
+                if mobility_ids.jump == Some(cd.skill_id) && !jump_state.active {
+                    jump_state.active = true;
+                    jump_state.elapsed = 0.0;
+                }
+                local_cooldowns.0.insert(cd.skill_id, cd.ready_at.to_micros_since_unix_epoch());
+            }
+            SkillCooldownEvent::Deleted(cd) if &cd.player_identity == id => {
+                local_cooldowns.0.remove(&cd.skill_id);
+            }
+            _ => {}
+        }
+    }
+}
+
+// --- Mobility skills ---
+
+fn mobility_input(
+    conn: Option<Res<SpacetimeDb>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    local_player: Query<&Transform, With<LocalPlayer>>,
+    mobility_ids: Res<MobilitySkillIds>,
+    local_cooldowns: Res<LocalCooldowns>,
+    facing: Res<PlayerFacing>,
+    jump_state: Res<JumpState>,
+) {
+    let Some(conn) = conn else { return };
+    let Ok(transform) = local_player.single() else { return };
+    let pos = transform.translation;
+
+    // Jump — Space (animation starts in sync_skill_cooldowns when server confirms)
+    if keys.just_pressed(KeyCode::Space) {
+        if let Some(jump_id) = mobility_ids.jump {
+            if cooldown_remaining(&local_cooldowns, jump_id) <= 0.0 && !jump_state.active {
+                let _ = conn.0.reducers.use_skill(jump_id, pos.x, pos.y, pos.z);
+            }
+        }
+    }
+
+    // Dash — Shift
+    let shift = keys.just_pressed(KeyCode::ShiftLeft) || keys.just_pressed(KeyCode::ShiftRight);
+    if shift {
+        if let Some(dash_id) = mobility_ids.dash {
+            if cooldown_remaining(&local_cooldowns, dash_id) <= 0.0 {
+                let dir = if facing.0 != Vec2::ZERO { facing.0 } else { Vec2::new(0.0, -1.0) };
+                let new_x = pos.x + dir.x * DASH_DISTANCE;
+                let new_z = pos.z + dir.y * DASH_DISTANCE;
+                let _ = conn.0.reducers.use_skill(dash_id, pos.x, pos.y, pos.z);
+                let _ = conn.0.reducers.move_player(new_x, PLAYER_Y, new_z);
+            }
+        }
+    }
+}
+
+fn apply_jump_anim(
+    time: Res<Time>,
+    mut jump_state: ResMut<JumpState>,
+    mut players: Query<&mut Transform, With<LocalPlayer>>,
+) {
+    if !jump_state.active { return }
+    let Ok(mut transform) = players.single_mut() else { return };
+
+    jump_state.elapsed += time.delta_secs();
+    if jump_state.elapsed >= JUMP_DURATION {
+        jump_state.active = false;
+        transform.translation.y = PLAYER_Y;
+    } else {
+        let t = jump_state.elapsed / JUMP_DURATION;
+        transform.translation.y = PLAYER_Y + JUMP_HEIGHT * (t * std::f32::consts::PI).sin();
     }
 }

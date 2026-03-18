@@ -48,6 +48,9 @@ pub enum BehaviorType {
     Projectile,
     GroundAoe,
     Buff,
+    /// Mobility skills (Jump, Dash, etc.). Server only tracks cooldown/resource;
+    /// the client handles the visual effect entirely.
+    Mobility,
 }
 
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
@@ -416,6 +419,8 @@ pub fn init(ctx: &ReducerContext) {
     ctx.db.skill_def().insert(SkillDef { id: 0, name: "Fireball".to_string(),  behavior_type: BehaviorType::Projectile, resource_type: ResourceType::Mana });
     ctx.db.skill_def().insert(SkillDef { id: 0, name: "Shockwave".to_string(), behavior_type: BehaviorType::GroundAoe,  resource_type: ResourceType::Mana });
     ctx.db.skill_def().insert(SkillDef { id: 0, name: "Heal".to_string(),      behavior_type: BehaviorType::Buff,       resource_type: ResourceType::Mana });
+    ctx.db.skill_def().insert(SkillDef { id: 0, name: "Jump".to_string(),      behavior_type: BehaviorType::Mobility,   resource_type: ResourceType::Stamina });
+    ctx.db.skill_def().insert(SkillDef { id: 0, name: "Dash".to_string(),      behavior_type: BehaviorType::Mobility,   resource_type: ResourceType::Stamina });
     schedule_next_npc_tick(ctx);
 }
 
@@ -737,6 +742,10 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             let player = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
             let new_health = (player.health + stats.power).min(MAX_HEALTH);
             ctx.db.player().identity().update(Player { health: new_health, ..player });
+        }
+        BehaviorType::Mobility => {
+            // Cooldown and resource already consumed above.
+            // Client handles the visual effect (jump arc, dash movement, etc.).
         }
     }
 

@@ -15,6 +15,8 @@ pub enum BehaviorType {
     GroundAoe,
 
     Buff,
+
+    Mobility,
 }
 
 impl __sdk::InModule for BehaviorType {
