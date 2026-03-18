@@ -6,7 +6,7 @@ use shared::module_bindings::attack_player_reducer::attack_player;
 use shared::module_bindings::move_player_reducer::move_player;
 
 use crate::constants::{ATTACK_RANGE, MAX_LOOK_AHEAD, MOVE_SPEED, PLAYER_Y};
-use crate::network::{to_world_pos, LocalIdentity, PlayerEvent, PlayerEventQueue, SpacetimeDb};
+use crate::network::{LocalIdentity, PlayerEvent, PlayerEventQueue, SpacetimeDb, to_world_pos};
 use crate::npc::NpcId;
 use crate::world::MainCamera;
 
@@ -28,7 +28,14 @@ pub struct LocalPlayerStats {
 
 impl Default for LocalPlayerStats {
     fn default() -> Self {
-        Self { health: 0, max_health: 100, mana: 0, max_mana: 100, stamina: 0, max_stamina: 100 }
+        Self {
+            health: 0,
+            max_health: 100,
+            mana: 0,
+            max_mana: 100,
+            stamina: 0,
+            max_stamina: 100,
+        }
     }
 }
 
@@ -40,6 +47,7 @@ pub fn sync_players(
     mut commands: Commands,
     queue: Res<PlayerEventQueue>,
     local_identity: Res<LocalIdentity>,
+    asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut players: Query<(Entity, &PlayerId, &mut Transform)>,
@@ -60,19 +68,28 @@ pub fn sync_players(
                     local_stats.stamina = player.stamina;
                     local_stats.max_stamina = player.max_stamina;
                 }
-                let color = if is_local { Color::srgb(0.4, 0.8, 1.0) } else { Color::WHITE };
-                let mut entity_cmd = commands.spawn((
-                    PlayerId(player.identity),
-                    Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
-                    MeshMaterial3d(materials.add(StandardMaterial {
-                        base_color: color,
-                        ..default()
-                    })),
-                    Transform::from_translation(to_world_pos(&player.position)),
-                ));
-                if is_local {
-                    entity_cmd.insert(LocalPlayer);
-                }
+
+                let transform = Transform::from_translation(to_world_pos(&player.position));
+
+                let entity_cmd = if is_local {
+                    commands.spawn((
+                        PlayerId(player.identity),
+                        LocalPlayer,
+                        SceneRoot(asset_server.load("test.glb#Scene0")),
+                        transform,
+                    ))
+                } else {
+                    commands.spawn((
+                        PlayerId(player.identity),
+                        Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
+                        MeshMaterial3d(materials.add(StandardMaterial {
+                            base_color: Color::WHITE,
+                            ..default()
+                        })),
+                        transform,
+                    ))
+                };
+                let _ = entity_cmd;
             }
             PlayerEvent::Updated(player) => {
                 for (_, id, mut transform) in players.iter_mut() {
@@ -105,15 +122,27 @@ pub fn move_local_player(
     mut facing: ResMut<PlayerFacing>,
 ) {
     let Some(conn) = conn else { return };
-    let Ok(transform) = player.single() else { return };
+    let Ok(transform) = player.single() else {
+        return;
+    };
 
     let mut dir = Vec2::ZERO;
-    if keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp)    { dir.y -= 1.0; }
-    if keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown)  { dir.y += 1.0; }
-    if keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft)  { dir.x -= 1.0; }
-    if keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight) { dir.x += 1.0; }
+    if keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp) {
+        dir.y -= 1.0;
+    }
+    if keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown) {
+        dir.y += 1.0;
+    }
+    if keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft) {
+        dir.x -= 1.0;
+    }
+    if keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight) {
+        dir.x += 1.0;
+    }
 
-    if dir == Vec2::ZERO { return }
+    if dir == Vec2::ZERO {
+        return;
+    }
 
     let dir_norm = dir.normalize();
     facing.0 = dir_norm;
@@ -132,8 +161,12 @@ pub fn follow_camera(
     local_player: Query<&Transform, With<LocalPlayer>>,
     mut camera: Query<&mut Transform, (With<MainCamera>, Without<LocalPlayer>)>,
 ) {
-    let Ok(player) = local_player.single() else { return };
-    let Ok(ref mut cam) = camera.single_mut() else { return };
+    let Ok(player) = local_player.single() else {
+        return;
+    };
+    let Ok(ref mut cam) = camera.single_mut() else {
+        return;
+    };
     let Ok(window) = windows.single() else { return };
 
     // Offset camera based on cursor distance from window center.
@@ -152,6 +185,38 @@ pub fn follow_camera(
     cam.translation = cam.translation.lerp(target, 0.1);
 }
 
+pub fn face_cursor(
+    windows: Query<&Window>,
+    camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
+    mut player: Query<&mut Transform, With<LocalPlayer>>,
+) {
+    let Ok(window) = windows.single() else { return };
+    let Ok((cam, cam_transform)) = camera.single() else { return };
+    let Ok(mut player_transform) = player.single_mut() else { return };
+    let Some(cursor) = window.cursor_position() else { return };
+
+    let Ok(ray) = cam.viewport_to_world(cam_transform, cursor) else { return };
+
+    // Intersect ray with the Y = PLAYER_Y plane
+    let plane_y = player_transform.translation.y;
+    let denom = ray.direction.y;
+    if denom.abs() < 1e-5 {
+        return;
+    }
+    let t = (plane_y - ray.origin.y) / denom;
+    if t < 0.0 {
+        return;
+    }
+    let world_pos = ray.origin + ray.direction * t;
+
+    let diff = world_pos - player_transform.translation;
+    if diff.xz().length_squared() < 0.01 {
+        return;
+    }
+
+    player_transform.rotation = Quat::from_rotation_y((-diff.x).atan2(-diff.z));
+}
+
 pub fn attack(
     conn: Option<Res<SpacetimeDb>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -159,29 +224,42 @@ pub fn attack(
     players: Query<(&Transform, &PlayerId), Without<LocalPlayer>>,
     npcs: Query<(&Transform, &NpcId)>,
 ) {
-    if !keys.just_pressed(KeyCode::KeyE) { return }
+    if !keys.just_pressed(KeyCode::KeyE) {
+        return;
+    }
     let Some(conn) = conn else { return };
-    let Ok((local_transform, _)) = local_player.single() else { return };
+    let Ok((local_transform, _)) = local_player.single() else {
+        return;
+    };
 
     let local_pos = local_transform.translation;
 
-    let nearest_player = players.iter()
+    let nearest_player = players
+        .iter()
         .map(|(t, id)| (t.translation.distance(local_pos), id.0))
         .filter(|(dist, _)| *dist <= ATTACK_RANGE)
         .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
-    let nearest_npc = npcs.iter()
+    let nearest_npc = npcs
+        .iter()
         .map(|(t, id)| (t.translation.distance(local_pos), id.0))
         .filter(|(dist, _)| *dist <= ATTACK_RANGE)
         .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
     match (nearest_player, nearest_npc) {
         (Some((pd, pid)), Some((nd, nid))) => {
-            if pd <= nd { let _ = conn.0.reducers.attack_player(pid); }
-            else        { let _ = conn.0.reducers.attack_npc(nid); }
+            if pd <= nd {
+                let _ = conn.0.reducers.attack_player(pid);
+            } else {
+                let _ = conn.0.reducers.attack_npc(nid);
+            }
         }
-        (Some((_, pid)), None) => { let _ = conn.0.reducers.attack_player(pid); }
-        (None, Some((_, nid))) => { let _ = conn.0.reducers.attack_npc(nid); }
+        (Some((_, pid)), None) => {
+            let _ = conn.0.reducers.attack_player(pid);
+        }
+        (None, Some((_, nid))) => {
+            let _ = conn.0.reducers.attack_npc(nid);
+        }
         (None, None) => {}
     }
 }

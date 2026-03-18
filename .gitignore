@@ -2,3 +2,4 @@
 /deploy/spacetimedb-data
 /deploy/ollama-data
 /deploy/open-webui-data
+.DS_Store

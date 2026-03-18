@@ -59,12 +59,15 @@ fn main() {
             mobility_input,
             apply_jump_anim,
             follow_camera,
+            face_cursor,
             attack,
             update_health_bars,
             billboard_health_bars,
             update_hud,
             handle_skill_slot_clicks,
             handle_allocate_clicks,
+        ).chain())
+        .add_systems(Update, (
             handle_close_click,
             update_skill_detail_panel,
         ).chain())
