@@ -59,7 +59,7 @@ pub fn add_chunk_colliders(
     meshes: Res<Assets<Mesh>>,
     new_chunks: Query<
         (Entity, &Mesh3d),
-        (Added<Mesh3d>, With<Chunk<GameWorld>>, Without<Collider>),
+        (With<Chunk<GameWorld>>, Without<Collider>),
     >,
 ) {
     for (entity, mesh3d) in new_chunks.iter() {

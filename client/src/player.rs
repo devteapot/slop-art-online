@@ -7,7 +7,8 @@ use shared::module_bindings::attack_player_reducer::attack_player;
 use shared::module_bindings::move_player_reducer::move_player;
 
 use crate::constants::{
-    ATTACK_RANGE, CAPSULE_HALF_LEN, CAPSULE_RADIUS, MAX_LOOK_AHEAD, MOVE_SPEED, PLAYER_GRAVITY_SCALE,
+    ATTACK_RANGE, CAPSULE_HALF_LEN, CAPSULE_RADIUS, MAX_LOOK_AHEAD, MOVE_SPEED,
+    PLAYER_GRAVITY_SCALE,
 };
 use crate::network::{LocalIdentity, PlayerEvent, PlayerEventQueue, SpacetimeDb, to_world_pos};
 use crate::npc::NpcId;
@@ -84,22 +85,25 @@ pub fn sync_players(
                 let server_pos = to_world_pos(&player.position);
 
                 if is_local {
-                    // Spawn physics body at capsule-center height above the ground.
-                    // The visible model is a child entity offset downward so its feet
-                    // align with the bottom of the capsule.
-                    let spawn_y = 50.0;
-                    let body = commands.spawn((
-                        PlayerId(player.identity),
-                        LocalPlayer,
-                        Transform::from_xyz(server_pos.x, spawn_y, server_pos.z),
-                        Visibility::default(),
-                        RigidBody::Dynamic,
-                        Collider::capsule(CAPSULE_HALF_LEN, CAPSULE_RADIUS),
-                        LockedAxes::ROTATION_LOCKED,
-                        LinearVelocity::default(),
-                        GravityScale(PLAYER_GRAVITY_SCALE),
-                        Grounded::default(),
-                    )).id();
+                    // Spawn a few units above ground so chunks have time to generate
+                    // colliders before the player arrives. Low enough that impact
+                    // velocity stays well under the capsule radius per physics step.
+                    let spawn_y = 5.0;
+                    let body = commands
+                        .spawn((
+                            PlayerId(player.identity),
+                            LocalPlayer,
+                            Transform::from_xyz(server_pos.x, spawn_y, server_pos.z),
+                            Visibility::default(),
+                            RigidBody::Dynamic,
+                            Collider::capsule(CAPSULE_HALF_LEN, CAPSULE_RADIUS),
+                            LockedAxes::ROTATION_LOCKED,
+                            LinearVelocity::default(),
+                            GravityScale(PLAYER_GRAVITY_SCALE),
+                            Grounded::default(),
+                            SpeculativeMargin(0.0),
+                        ))
+                        .id();
 
                     let model_offset_y = -(CAPSULE_HALF_LEN + CAPSULE_RADIUS);
                     commands.entity(body).with_child((
@@ -153,7 +157,9 @@ pub fn move_local_player(
     mut facing: ResMut<PlayerFacing>,
 ) {
     let Some(conn) = conn else { return };
-    let Ok((transform, mut velocity)) = player.single_mut() else { return };
+    let Ok((transform, mut velocity)) = player.single_mut() else {
+        return;
+    };
 
     let mut dir = Vec2::ZERO;
     if keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp) {
@@ -186,12 +192,8 @@ pub fn move_local_player(
 }
 
 /// Update `Grounded` based on vertical velocity: near-zero Y means on the ground.
-pub fn update_grounded(
-    mut query: Query<(&LinearVelocity, &mut Grounded), With<LocalPlayer>>,
-) {
+pub fn update_grounded(mut query: Query<(&LinearVelocity, &mut Grounded), With<LocalPlayer>>) {
     for (velocity, mut grounded) in query.iter_mut() {
-        // Positive Y = jumping, large negative Y = falling.
-        // Small Y (landing or resting) = grounded.
         grounded.0 = velocity.y < 1.0 && velocity.y > -4.0;
     }
 }
@@ -201,8 +203,12 @@ pub fn follow_camera(
     local_player: Query<&Transform, With<LocalPlayer>>,
     mut camera: Query<&mut Transform, (With<MainCamera>, Without<LocalPlayer>)>,
 ) {
-    let Ok(player) = local_player.single() else { return };
-    let Ok(ref mut cam) = camera.single_mut() else { return };
+    let Ok(player) = local_player.single() else {
+        return;
+    };
+    let Ok(ref mut cam) = camera.single_mut() else {
+        return;
+    };
     let Ok(window) = windows.single() else { return };
 
     let look_ahead = if let Some(cursor) = window.cursor_position() {
@@ -226,12 +232,22 @@ pub fn face_cursor(
     mut visual: Query<&mut Transform, With<PlayerVisual>>,
 ) {
     let Ok(window) = windows.single() else { return };
-    let Ok((cam, cam_transform)) = camera.single() else { return };
-    let Ok(player_gtransform) = local_player.single() else { return };
-    let Ok(mut visual_transform) = visual.single_mut() else { return };
-    let Some(cursor) = window.cursor_position() else { return };
+    let Ok((cam, cam_transform)) = camera.single() else {
+        return;
+    };
+    let Ok(player_gtransform) = local_player.single() else {
+        return;
+    };
+    let Ok(mut visual_transform) = visual.single_mut() else {
+        return;
+    };
+    let Some(cursor) = window.cursor_position() else {
+        return;
+    };
 
-    let Ok(ray) = cam.viewport_to_world(cam_transform, cursor) else { return };
+    let Ok(ray) = cam.viewport_to_world(cam_transform, cursor) else {
+        return;
+    };
 
     let plane_y = player_gtransform.translation().y;
     let denom = ray.direction.y;
@@ -252,7 +268,6 @@ pub fn face_cursor(
     visual_transform.rotation = Quat::from_rotation_y((-diff.x).atan2(-diff.z));
 }
 
-
 pub fn attack(
     conn: Option<Res<SpacetimeDb>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -264,7 +279,9 @@ pub fn attack(
         return;
     }
     let Some(conn) = conn else { return };
-    let Ok((local_transform, _)) = local_player.single() else { return };
+    let Ok((local_transform, _)) = local_player.single() else {
+        return;
+    };
 
     let local_pos = local_transform.translation;
 
