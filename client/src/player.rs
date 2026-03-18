@@ -5,7 +5,7 @@ use shared::module_bindings::attack_npc_reducer::attack_npc;
 use shared::module_bindings::attack_player_reducer::attack_player;
 use shared::module_bindings::move_player_reducer::move_player;
 
-use crate::constants::{ATTACK_RANGE, MOVE_SPEED, PLAYER_Y};
+use crate::constants::{ATTACK_RANGE, MAX_LOOK_AHEAD, MOVE_SPEED, PLAYER_Y};
 use crate::network::{to_world_pos, LocalIdentity, PlayerEvent, PlayerEventQueue, SpacetimeDb};
 use crate::npc::NpcId;
 use crate::world::MainCamera;
@@ -128,15 +128,28 @@ pub fn move_local_player(
 }
 
 pub fn follow_camera(
+    windows: Query<&Window>,
     local_player: Query<&Transform, With<LocalPlayer>>,
     mut camera: Query<&mut Transform, (With<MainCamera>, Without<LocalPlayer>)>,
 ) {
     let Ok(player) = local_player.single() else { return };
     let Ok(ref mut cam) = camera.single_mut() else { return };
+    let Ok(window) = windows.single() else { return };
 
-    let target = player.translation + Vec3::new(0.0, 30.0, 40.0);
+    // Offset camera based on cursor distance from window center.
+    // Cursor at center = no offset; cursor at edge = MAX_LOOK_AHEAD offset.
+    let look_ahead = if let Some(cursor) = window.cursor_position() {
+        let half = Vec2::new(window.width(), window.height()) * 0.5;
+        let norm = ((cursor - half) / half).clamp(Vec2::splat(-1.0), Vec2::splat(1.0));
+        // Screen X → world X, screen Y (down=positive) → world Z
+        Vec3::new(norm.x * MAX_LOOK_AHEAD, 0.0, norm.y * MAX_LOOK_AHEAD)
+    } else {
+        Vec3::ZERO
+    };
+
+    // Shift camera position only — rotation stays fixed from setup, preserving the constant angle
+    let target = player.translation + Vec3::new(0.0, 30.0, 40.0) + look_ahead;
     cam.translation = cam.translation.lerp(target, 0.1);
-    cam.look_at(player.translation, Vec3::Y);
 }
 
 pub fn attack(

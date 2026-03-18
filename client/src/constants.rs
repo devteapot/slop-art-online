@@ -25,3 +25,4 @@ pub const HEALTH_BAR_Y_OFFSET: f32 = 1.8;
 pub const JUMP_HEIGHT: f32 = 3.0;
 pub const JUMP_DURATION: f32 = 0.55;
 pub const DASH_DISTANCE: f32 = 8.0;
+pub const MAX_LOOK_AHEAD: f32 = 15.0;
