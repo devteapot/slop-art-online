@@ -25,6 +25,7 @@ pub mod player_table;
 pub mod player_type;
 pub mod position_type;
 pub mod resource_type_type;
+pub mod rotate_player_reducer;
 pub mod skill_attributes_table;
 pub mod skill_attributes_type;
 pub mod skill_cooldown_table;
@@ -55,6 +56,7 @@ pub use player_table::*;
 pub use player_type::Player;
 pub use position_type::Position;
 pub use resource_type_type::ResourceType;
+pub use rotate_player_reducer::rotate_player;
 pub use skill_attributes_table::*;
 pub use skill_attributes_type::SkillAttributes;
 pub use skill_cooldown_table::*;
@@ -90,6 +92,9 @@ pub enum Reducer {
         y: f32,
         z: f32,
     },
+    RotatePlayer {
+        angle: f32,
+    },
     SpawnNpc {
         x: f32,
         z: f32,
@@ -119,6 +124,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::AttackPlayer { .. } => "attack_player",
             Reducer::JoinGame => "join_game",
             Reducer::MovePlayer { .. } => "move_player",
+            Reducer::RotatePlayer { .. } => "rotate_player",
             Reducer::SpawnNpc { .. } => "spawn_npc",
             Reducer::StartNpcTicker => "start_npc_ticker",
             Reducer::SubmitNpcGraph { .. } => "submit_npc_graph",
@@ -152,6 +158,11 @@ impl __sdk::Reducer for Reducer {
                     x: x.clone(),
                     y: y.clone(),
                     z: z.clone(),
+                })
+            }
+            Reducer::RotatePlayer { angle } => {
+                __sats::bsatn::to_vec(&rotate_player_reducer::RotatePlayerArgs {
+                    angle: angle.clone(),
                 })
             }
             Reducer::SpawnNpc { x, z } => __sats::bsatn::to_vec(&spawn_npc_reducer::SpawnNpcArgs {

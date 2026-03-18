@@ -147,6 +147,7 @@ pub fn join_game(ctx: &ReducerContext) {
             max_mana: MAX_MANA,
             stamina: MAX_STAMINA,
             max_stamina: MAX_STAMINA,
+            facing_angle: 0.0,
         });
         give_all_skills(ctx, ctx.sender());
     }
@@ -175,6 +176,17 @@ pub fn move_player(ctx: &ReducerContext, x: f32, y: f32, z: f32) -> Result<(), S
             y,
             z: z.clamp(WORLD_MIN, WORLD_MAX),
         },
+        ..player
+    });
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn rotate_player(ctx: &ReducerContext, angle: f32) -> Result<(), String> {
+    let player = ctx.db.player().identity().find(&ctx.sender())
+        .ok_or("Player not found")?;
+    ctx.db.player().identity().update(Player {
+        facing_angle: angle,
         ..player
     });
     Ok(())

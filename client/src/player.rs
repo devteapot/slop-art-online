@@ -5,6 +5,7 @@ use spacetimedb_sdk::Identity;
 use shared::module_bindings::attack_npc_reducer::attack_npc;
 use shared::module_bindings::attack_player_reducer::attack_player;
 use shared::module_bindings::move_player_reducer::move_player;
+use shared::module_bindings::rotate_player_reducer::rotate_player;
 
 use crate::constants::{
     ATTACK_RANGE, CAPSULE_HALF_LEN, CAPSULE_RADIUS, MAX_LOOK_AHEAD, MOVE_SPEED,
@@ -20,10 +21,21 @@ pub struct PlayerId(pub Identity);
 #[derive(Component)]
 pub struct LocalPlayer;
 
-/// Marks the child entity that holds the visible model for the local player.
-/// avian3d does not control this entity, so we can freely rotate it for cursor facing.
+/// Marks the child entity that holds the visible model for a player.
 #[derive(Component)]
 pub struct PlayerVisual;
+
+/// Marks the local player's visual child specifically, so `face_cursor` can target it uniquely.
+#[derive(Component)]
+pub struct LocalPlayerVisual;
+
+/// Server-authoritative facing angle (Y-axis radians) for remote players.
+#[derive(Component, Default)]
+pub struct FacingAngle(pub f32);
+
+/// Last facing angle sent to the server; avoids spamming `rotate_player` every frame.
+#[derive(Resource, Default)]
+pub struct LastSentFacingAngle(pub f32);
 
 /// Whether the local player is currently on the ground.
 #[derive(Component, Default)]
@@ -61,9 +73,7 @@ pub fn sync_players(
     queue: Res<PlayerEventQueue>,
     local_identity: Res<LocalIdentity>,
     asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut players: Query<(Entity, &PlayerId, &mut Transform)>,
+    mut players: Query<(Entity, &PlayerId, &mut Transform, Option<&mut FacingAngle>)>,
     mut local_stats: ResMut<LocalPlayerStats>,
 ) {
     let local_id = local_identity.0.lock().unwrap().clone();
@@ -108,18 +118,24 @@ pub fn sync_players(
                     let model_offset_y = -(CAPSULE_HALF_LEN + CAPSULE_RADIUS);
                     commands.entity(body).with_child((
                         PlayerVisual,
+                        LocalPlayerVisual,
                         SceneRoot(asset_server.load("test.glb#Scene0")),
                         Transform::from_xyz(0.0, model_offset_y, 0.0),
                     ));
                 } else {
-                    commands.spawn((
-                        PlayerId(player.identity),
-                        Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
-                        MeshMaterial3d(materials.add(StandardMaterial {
-                            base_color: Color::WHITE,
-                            ..default()
-                        })),
-                        Transform::from_translation(server_pos),
+                    let model_offset_y = -(CAPSULE_HALF_LEN + CAPSULE_RADIUS);
+                    let body = commands
+                        .spawn((
+                            PlayerId(player.identity),
+                            FacingAngle(player.facing_angle),
+                            Transform::from_translation(server_pos),
+                            Visibility::default(),
+                        ))
+                        .id();
+                    commands.entity(body).with_child((
+                        PlayerVisual,
+                        SceneRoot(asset_server.load("test.glb#Scene0")),
+                        Transform::from_xyz(0.0, model_offset_y, 0.0),
                     ));
                 }
             }
@@ -127,9 +143,12 @@ pub fn sync_players(
                 let is_local = local_id.as_ref() == Some(&player.identity);
                 // Physics owns the local player's position — only update remote players.
                 if !is_local {
-                    for (_, id, mut transform) in players.iter_mut() {
+                    for (_, id, mut transform, facing) in players.iter_mut() {
                         if id.0 == player.identity {
                             transform.translation = to_world_pos(&player.position);
+                            if let Some(mut f) = facing {
+                                f.0 = player.facing_angle;
+                            }
                         }
                     }
                 }
@@ -140,7 +159,7 @@ pub fn sync_players(
                 }
             }
             PlayerEvent::Deleted(player) => {
-                for (entity, id, _) in players.iter() {
+                for (entity, id, _, _) in players.iter() {
                     if id.0 == player.identity {
                         commands.entity(entity).despawn();
                     }
@@ -223,13 +242,15 @@ pub fn follow_camera(
     cam.translation = cam.translation.lerp(target, 0.1);
 }
 
-/// Rotate the player's visual model to face the cursor.
+/// Rotate the player's visual model to face the cursor and sync the angle to the server.
 /// Targets the `PlayerVisual` child so avian3d's locked-rotation body is unaffected.
 pub fn face_cursor(
+    conn: Option<Res<SpacetimeDb>>,
     windows: Query<&Window>,
     camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     local_player: Query<&GlobalTransform, With<LocalPlayer>>,
-    mut visual: Query<&mut Transform, With<PlayerVisual>>,
+    mut visual: Query<&mut Transform, With<LocalPlayerVisual>>,
+    mut last_sent: ResMut<LastSentFacingAngle>,
 ) {
     let Ok(window) = windows.single() else { return };
     let Ok((cam, cam_transform)) = camera.single() else {
@@ -265,7 +286,31 @@ pub fn face_cursor(
         return;
     }
 
-    visual_transform.rotation = Quat::from_rotation_y((-diff.x).atan2(-diff.z));
+    let angle = (-diff.x).atan2(-diff.z);
+    visual_transform.rotation = Quat::from_rotation_y(angle);
+
+    if (angle - last_sent.0).abs() > 0.05 {
+        last_sent.0 = angle;
+        if let Some(conn) = conn {
+            if let Err(e) = conn.0.reducers.rotate_player(angle) {
+                error!("rotate_player failed: {e}");
+            }
+        }
+    }
+}
+
+/// Apply the server-authoritative facing angle to each remote player's visual child.
+pub fn apply_remote_player_facing(
+    remote_players: Query<(&FacingAngle, &Children), Without<LocalPlayer>>,
+    mut visuals: Query<&mut Transform, With<PlayerVisual>>,
+) {
+    for (facing, children) in remote_players.iter() {
+        for child in children.iter() {
+            if let Ok(mut transform) = visuals.get_mut(child) {
+                transform.rotation = Quat::from_rotation_y(facing.0);
+            }
+        }
+    }
 }
 
 pub fn attack(

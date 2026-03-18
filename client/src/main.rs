@@ -45,6 +45,7 @@ fn main() {
         .init_resource::<SkillNameMap>()
         .init_resource::<MobilitySkillIds>()
         .init_resource::<PlayerFacing>()
+        .init_resource::<LastSentFacingAngle>()
         .init_resource::<DashState>()
         .init_resource::<LocalIdentity>()
         .add_systems(Startup, (setup, connect_spacetimedb, setup_hud))
@@ -74,6 +75,7 @@ fn main() {
             add_chunk_colliders,
             handle_close_click,
             update_skill_detail_panel,
+            apply_remote_player_facing,
         ))
         .run();
 }

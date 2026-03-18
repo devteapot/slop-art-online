@@ -46,6 +46,7 @@ pub struct Player {
     pub max_mana: i32,
     pub stamina: i32,
     pub max_stamina: i32,
+    pub facing_angle: f32,
 }
 
 #[derive(Clone)]
