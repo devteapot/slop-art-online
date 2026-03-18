@@ -5,16 +5,31 @@ use shared::module_bindings::attack_npc_reducer::attack_npc;
 use shared::module_bindings::attack_player_reducer::attack_player;
 use shared::module_bindings::join_game_reducer::join_game;
 use shared::module_bindings::move_player_reducer::move_player;
+use shared::module_bindings::allocate_skill_point_reducer::allocate_skill_point;
 use shared::module_bindings::use_skill_reducer::use_skill;
 use shared::module_bindings::{
     DbConnection, Npc, NpcTableAccess, Player, PlayerSkill, PlayerSkillTableAccess,
-    PlayerTableAccess, SkillDef, SkillDefTableAccess,
+    PlayerTableAccess, SkillAttributes, SkillAttributesTableAccess, SkillDef, SkillDefTableAccess,
 };
 use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
 use std::sync::{Arc, Mutex};
 
 const HOST: &str = "http://localhost:3000";
 const DB_NAME: &str = "slop-art-online";
+const POINTS_PER_LEVEL: i32 = 5;
+
+/// (server_key, display_label)  — server_key must match allocate_skill_point reducer
+const ATTRS: &[(&str, &str)] = &[
+    ("damage",           "Damage"),
+    ("cooldown",         "Cooldown"),
+    ("aoe",              "AOE"),
+    ("range",            "Range"),
+    ("duration",         "Duration"),
+    ("projectile_count", "Projectiles"),
+    ("knockback",        "Knockback"),
+    ("resource_cost",    "Resource Cost"),
+    ("cast_speed",       "Cast Speed"),
+];
 const MOVE_SPEED: f32 = 20.0;
 const ATTACK_RANGE: f32 = 3.0;
 const PLAYER_Y: f32 = 1.0; // height above terrain
@@ -37,8 +52,11 @@ fn main() {
         .init_resource::<NpcEventQueue>()
         .init_resource::<PlayerSkillEventQueue>()
         .init_resource::<SkillDefEventQueue>()
+        .init_resource::<SkillAttributesEventQueue>()
         .init_resource::<LocalSkills>()
         .init_resource::<LocalPlayerStats>()
+        .init_resource::<LocalSkillData>()
+        .init_resource::<SelectedSkill>()
         .init_resource::<SkillNameMap>()
         .init_resource::<LocalIdentity>()
         .add_systems(Startup, (setup, connect_spacetimedb, setup_hud))
@@ -48,6 +66,7 @@ fn main() {
             sync_npcs,
             sync_player_skills,
             sync_skill_defs,
+            sync_skill_attrs,
             move_local_player,
             use_skill_input,
             follow_camera,
@@ -55,6 +74,10 @@ fn main() {
             update_health_bars,
             billboard_health_bars,
             update_hud,
+            handle_skill_slot_clicks,
+            handle_allocate_clicks,
+            handle_close_click,
+            update_skill_detail_panel,
         ).chain())
         .run();
 }
@@ -137,13 +160,31 @@ enum NpcEvent {
 
 enum PlayerSkillEvent {
     Inserted(PlayerSkill),
+    Updated(PlayerSkill),
     Deleted(PlayerSkill),
 }
+
+enum SkillAttributesEvent {
+    Inserted(SkillAttributes),
+    Updated(SkillAttributes),
+}
+
+#[derive(Resource, Default, Clone)]
+struct SkillAttributesEventQueue(Arc<Mutex<Vec<SkillAttributesEvent>>>);
+
+#[derive(Resource, Default)]
+struct LocalSkillData {
+    levels: std::collections::HashMap<u64, i32>,
+    attrs:  std::collections::HashMap<u64, SkillAttributes>,
+}
+
+#[derive(Resource, Default)]
+struct SelectedSkill(Option<u64>);
 
 #[derive(Resource, Default, Clone)]
 struct PlayerSkillEventQueue(Arc<Mutex<Vec<PlayerSkillEvent>>>);
 
-/// Ordered list of skill IDs the local player has (sorted by skill_id → maps to keys 1–4).
+/// Ordered list of skill IDs the local player has (sorted by skill_id -> maps to keys 1–4).
 #[derive(Resource, Default)]
 struct LocalSkills(Vec<u64>);
 
@@ -177,12 +218,34 @@ struct StatBarFill(StatKind);
 #[derive(Component)]
 struct SkillSlotLabel(usize);
 
+#[derive(Component)]
+struct SkillSlotButton(usize);
+
+#[derive(Component)]
+struct SkillDetailPanel;
+
+#[derive(Component)]
+struct SkillDetailTitle;
+
+#[derive(Component)]
+struct SkillDetailPoints;
+
+#[derive(Component)]
+struct SkillAttrRow(usize);
+
+#[derive(Component)]
+struct AllocateButton(usize);
+
+#[derive(Component)]
+struct SkillDetailClose;
+
 fn connect_spacetimedb(
     mut commands: Commands,
     player_queue: Res<PlayerEventQueue>,
     npc_queue: Res<NpcEventQueue>,
     skill_queue: Res<PlayerSkillEventQueue>,
     skill_def_queue: Res<SkillDefEventQueue>,
+    skill_attrs_queue: Res<SkillAttributesEventQueue>,
     local_identity: Res<LocalIdentity>,
 ) {
     let q_insert = player_queue.clone();
@@ -192,8 +255,11 @@ fn connect_spacetimedb(
     let nq_update = npc_queue.clone();
     let nq_delete = npc_queue.clone();
     let sq_insert = skill_queue.clone();
+    let sq_update = skill_queue.clone();
     let sq_delete = skill_queue.clone();
     let sd_insert = skill_def_queue.clone();
+    let sa_insert = skill_attrs_queue.clone();
+    let sa_update = skill_attrs_queue.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -209,6 +275,7 @@ fn connect_spacetimedb(
                     "SELECT * FROM npc",
                     "SELECT * FROM skill_def",
                     "SELECT * FROM player_skill",
+                    "SELECT * FROM skill_attributes",
                     "SELECT * FROM skill_cooldown",
                 ]);
         })
@@ -240,11 +307,20 @@ fn connect_spacetimedb(
     conn.db.player_skill().on_insert(move |_, row: &PlayerSkill| {
         sq_insert.0.lock().unwrap().push(PlayerSkillEvent::Inserted(row.clone()));
     });
+    conn.db.player_skill().on_update(move |_, _old: &PlayerSkill, new: &PlayerSkill| {
+        sq_update.0.lock().unwrap().push(PlayerSkillEvent::Updated(new.clone()));
+    });
     conn.db.player_skill().on_delete(move |_, row: &PlayerSkill| {
         sq_delete.0.lock().unwrap().push(PlayerSkillEvent::Deleted(row.clone()));
     });
     conn.db.skill_def().on_insert(move |_, row: &SkillDef| {
         sd_insert.0.lock().unwrap().push(SkillDefEvent::Inserted(row.clone()));
+    });
+    conn.db.skill_attributes().on_insert(move |_, row: &SkillAttributes| {
+        sa_insert.0.lock().unwrap().push(SkillAttributesEvent::Inserted(row.clone()));
+    });
+    conn.db.skill_attributes().on_update(move |_, _old: &SkillAttributes, new: &SkillAttributes| {
+        sa_update.0.lock().unwrap().push(SkillAttributesEvent::Updated(new.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));
@@ -491,6 +567,8 @@ fn setup_hud(mut commands: Commands) {
         }).with_children(|row| {
             for i in 0..4 {
                 row.spawn((
+                    Button,
+                    SkillSlotButton(i),
                     Node {
                         width: Val::Px(90.0),
                         height: Val::Px(30.0),
@@ -509,6 +587,110 @@ fn setup_hud(mut commands: Commands) {
                 });
             }
         });
+    });
+
+    // --- Skill detail panel (hidden by default) ---
+    commands.spawn((
+        SkillDetailPanel,
+        Visibility::Hidden,
+        Node {
+            position_type: PositionType::Absolute,
+            right: Val::Px(20.0),
+            top: Val::Px(20.0),
+            width: Val::Px(320.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(6.0),
+            padding: UiRect::all(Val::Px(12.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.05, 0.05, 0.08, 0.92)),
+    )).with_children(|panel| {
+        // Header row: title + close
+        panel.spawn(Node {
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
+            ..default()
+        }).with_children(|hdr| {
+            hdr.spawn((
+                SkillDetailTitle,
+                Text::new("Skill"),
+                TextFont { font_size: 16.0, ..default() },
+                TextColor(Color::WHITE),
+            ));
+            hdr.spawn((
+                Button,
+                SkillDetailClose,
+                Node {
+                    width: Val::Px(22.0),
+                    height: Val::Px(22.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.5, 0.1, 0.1, 0.8)),
+            )).with_children(|btn| {
+                btn.spawn((
+                    Text::new("X"),
+                    TextFont { font_size: 13.0, ..default() },
+                    TextColor(Color::WHITE),
+                ));
+            });
+        });
+
+        // Points available
+        panel.spawn((
+            SkillDetailPoints,
+            Text::new("Points: 0 / 0"),
+            TextFont { font_size: 12.0, ..default() },
+            TextColor(Color::srgb(0.8, 0.8, 0.4)),
+        ));
+
+        // Separator
+        panel.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(1.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.15)),
+        ));
+
+        // Attribute rows
+        for (i, &(_, label)) in ATTRS.iter().enumerate() {
+            panel.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+                ..default()
+            }).with_children(|row| {
+                row.spawn((
+                    SkillAttrRow(i),
+                    Text::new(format!("{label}: 0")),
+                    TextFont { font_size: 11.0, ..default() },
+                    TextColor(Color::srgb(0.85, 0.85, 0.85)),
+                    Node { width: Val::Px(240.0), ..default() },
+                ));
+                row.spawn((
+                    Button,
+                    AllocateButton(i),
+                    Node {
+                        width: Val::Px(26.0),
+                        height: Val::Px(20.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.2, 0.5, 0.2, 0.85)),
+                )).with_children(|btn| {
+                    btn.spawn((
+                        Text::new("+"),
+                        TextFont { font_size: 13.0, ..default() },
+                        TextColor(Color::WHITE),
+                    ));
+                });
+            });
+        }
     });
 }
 
@@ -589,6 +771,7 @@ fn sync_player_skills(
     queue: Res<PlayerSkillEventQueue>,
     local_identity: Res<LocalIdentity>,
     mut local_skills: ResMut<LocalSkills>,
+    mut local_skill_data: ResMut<LocalSkillData>,
 ) {
     let local_id = local_identity.0.lock().unwrap().clone();
     let Some(ref id) = local_id else { return };
@@ -598,12 +781,17 @@ fn sync_player_skills(
     for event in events.drain(..) {
         match event {
             PlayerSkillEvent::Inserted(ps) if &ps.player_identity == id => {
+                local_skill_data.levels.insert(ps.skill_id, ps.level);
                 if !local_skills.0.contains(&ps.skill_id) {
                     local_skills.0.push(ps.skill_id);
                     changed = true;
                 }
             }
+            PlayerSkillEvent::Updated(ps) if &ps.player_identity == id => {
+                local_skill_data.levels.insert(ps.skill_id, ps.level);
+            }
             PlayerSkillEvent::Deleted(ps) if &ps.player_identity == id => {
+                local_skill_data.levels.remove(&ps.skill_id);
                 local_skills.0.retain(|&s| s != ps.skill_id);
                 changed = true;
             }
@@ -713,5 +901,152 @@ fn attack(
         (Some((_, pid)), None) => { let _ = conn.0.reducers.attack_player(pid); }
         (None, Some((_, nid))) => { let _ = conn.0.reducers.attack_npc(nid); }
         (None, None) => {}
+    }
+}
+
+// --- Skill attributes sync ---
+
+fn sync_skill_attrs(
+    queue: Res<SkillAttributesEventQueue>,
+    local_identity: Res<LocalIdentity>,
+    mut local_skill_data: ResMut<LocalSkillData>,
+) {
+    let local_id = local_identity.0.lock().unwrap().clone();
+    let Some(ref id) = local_id else { return };
+    let mut events = queue.0.lock().unwrap();
+
+    for event in events.drain(..) {
+        match event {
+            SkillAttributesEvent::Inserted(attrs) if &attrs.player_identity == id => {
+                local_skill_data.attrs.insert(attrs.skill_id, attrs);
+            }
+            SkillAttributesEvent::Updated(attrs) if &attrs.player_identity == id => {
+                local_skill_data.attrs.insert(attrs.skill_id, attrs);
+            }
+            _ => {}
+        }
+    }
+}
+
+// --- Skill detail panel helpers ---
+
+fn get_attr_pts(attrs: &SkillAttributes, idx: usize) -> i32 {
+    match idx {
+        0 => attrs.damage_points,
+        1 => attrs.cooldown_points,
+        2 => attrs.aoe_points,
+        3 => attrs.range_points,
+        4 => attrs.duration_points,
+        5 => attrs.projectile_count_points,
+        6 => attrs.knockback_points,
+        7 => attrs.resource_cost_points,
+        8 => attrs.cast_speed_points,
+        _ => 0,
+    }
+}
+
+fn points_allocated_client(attrs: &SkillAttributes) -> i32 {
+    attrs.damage_points + attrs.cooldown_points + attrs.aoe_points + attrs.range_points
+        + attrs.duration_points + attrs.projectile_count_points + attrs.knockback_points
+        + attrs.resource_cost_points + attrs.cast_speed_points
+}
+
+fn attr_display(attr_idx: usize, pts: i32) -> String {
+    match attr_idx {
+        0 => format!("{} pts -> {} dmg",     pts, 15 + pts * 5),
+        1 => format!("{} pts -> {}ms cd",    pts, (3000 - pts * 150).max(500)),
+        2 => format!("{} pts -> {:.1} aoe",  pts, pts as f32 * 0.8),
+        3 => format!("{} pts -> {:.1} rng",  pts, 5.0 + pts as f32 * 1.5),
+        4 => format!("{} pts -> {:.1}s dur", pts, 2.0 + pts as f32 * 0.5),
+        5 => format!("{} pts -> {} proj",    pts, 1 + pts),
+        6 => format!("{} pts -> {:.1} kb",   pts, pts as f32 * 2.0),
+        7 => format!("{} pts -> {} cost",    pts, (20 - pts * 2).max(5)),
+        8 => format!("{} pts -> {:.1}x spd", pts, 1.0 + pts as f32 * 0.1),
+        _ => String::new(),
+    }
+}
+
+// --- Skill panel interaction systems ---
+
+fn handle_skill_slot_clicks(
+    slots: Query<(&Interaction, &SkillSlotButton), Changed<Interaction>>,
+    local_skills: Res<LocalSkills>,
+    mut selected: ResMut<SelectedSkill>,
+) {
+    for (interaction, slot) in &slots {
+        if *interaction == Interaction::Pressed {
+            selected.0 = local_skills.0.get(slot.0).copied();
+        }
+    }
+}
+
+fn handle_close_click(
+    close_btns: Query<&Interaction, (Changed<Interaction>, With<SkillDetailClose>)>,
+    mut selected: ResMut<SelectedSkill>,
+) {
+    for interaction in &close_btns {
+        if *interaction == Interaction::Pressed {
+            selected.0 = None;
+        }
+    }
+}
+
+fn handle_allocate_clicks(
+    alloc_btns: Query<(&Interaction, &AllocateButton), Changed<Interaction>>,
+    selected: Res<SelectedSkill>,
+    conn: Option<Res<SpacetimeDb>>,
+) {
+    let Some(conn) = conn else { return };
+    let Some(skill_id) = selected.0 else { return };
+
+    for (interaction, btn) in &alloc_btns {
+        if *interaction == Interaction::Pressed {
+            let attr_key = ATTRS[btn.0].0.to_string();
+            let _ = conn.0.reducers.allocate_skill_point(skill_id, attr_key);
+        }
+    }
+}
+
+fn update_skill_detail_panel(
+    selected: Res<SelectedSkill>,
+    local_skill_data: Res<LocalSkillData>,
+    skill_name_map: Res<SkillNameMap>,
+    mut panel: Query<&mut Visibility, With<SkillDetailPanel>>,
+    mut title: Query<&mut Text, (With<SkillDetailTitle>, Without<SkillDetailPoints>, Without<SkillAttrRow>)>,
+    mut points_text: Query<&mut Text, (With<SkillDetailPoints>, Without<SkillDetailTitle>, Without<SkillAttrRow>)>,
+    mut attr_rows: Query<(&SkillAttrRow, &mut Text), (Without<SkillDetailTitle>, Without<SkillDetailPoints>)>,
+) {
+    let Ok(mut vis) = panel.single_mut() else { return };
+
+    let Some(skill_id) = selected.0 else {
+        *vis = Visibility::Hidden;
+        return;
+    };
+
+    *vis = Visibility::Inherited;
+
+    let name = skill_name_map.0.get(&skill_id).map(|s| s.as_str()).unwrap_or("???");
+    if let Ok(mut t) = title.single_mut() { t.0 = name.to_string(); }
+
+    let level = local_skill_data.levels.get(&skill_id).copied().unwrap_or(1);
+    let total_pts = level * POINTS_PER_LEVEL;
+
+    if let Some(attrs) = local_skill_data.attrs.get(&skill_id) {
+        let used = points_allocated_client(attrs);
+        let avail = (total_pts - used).max(0);
+
+        if let Ok(mut t) = points_text.single_mut() {
+            t.0 = format!("Points: {avail} free / {total_pts} total (lv{level})");
+        }
+
+        for (row, mut text) in &mut attr_rows {
+            let pts = get_attr_pts(attrs, row.0);
+            let label = ATTRS[row.0].1;
+            text.0 = format!("{label}: {}", attr_display(row.0, pts));
+        }
+    } else {
+        if let Ok(mut t) = points_text.single_mut() {
+            t.0 = format!("Points: {total_pts} total (lv{level})");
+        }
     }
 }
