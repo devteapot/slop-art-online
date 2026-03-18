@@ -1,3 +1,4 @@
+use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy_voxel_world::prelude::*;
 
@@ -48,4 +49,23 @@ pub fn setup(mut commands: Commands) {
         brightness: 200.0,
         ..default()
     });
+}
+
+/// Attach a trimesh collider to every newly meshed voxel chunk.
+/// `Chunk<GameWorld>` is always present on chunk entities (public bevy_voxel_world component),
+/// so we use it as the filter instead of a custom marker.
+pub fn add_chunk_colliders(
+    mut commands: Commands,
+    meshes: Res<Assets<Mesh>>,
+    new_chunks: Query<
+        (Entity, &Mesh3d),
+        (Added<Mesh3d>, With<Chunk<GameWorld>>, Without<Collider>),
+    >,
+) {
+    for (entity, mesh3d) in new_chunks.iter() {
+        let Some(mesh) = meshes.get(&mesh3d.0) else { continue };
+        // None = air chunk (no triangles) — skip silently
+        let Some(collider) = Collider::trimesh_from_mesh(mesh) else { continue };
+        commands.entity(entity).insert((RigidBody::Static, collider));
+    }
 }

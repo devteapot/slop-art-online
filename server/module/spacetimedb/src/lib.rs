@@ -161,6 +161,14 @@ pub fn identity_disconnected(ctx: &ReducerContext) {
 pub fn move_player(ctx: &ReducerContext, x: f32, y: f32, z: f32) -> Result<(), String> {
     let player = ctx.db.player().identity().find(&ctx.sender())
         .ok_or("Player not found")?;
+
+    // Simple anti-teleport: reject moves beyond MAX_MOVE_DIST on the XZ plane.
+    let dx = x - player.position.x;
+    let dz = z - player.position.z;
+    if (dx * dx + dz * dz).sqrt() > MAX_MOVE_DIST {
+        return Err("Moved too far".to_string());
+    }
+
     ctx.db.player().identity().update(Player {
         position: Position {
             x: x.clamp(WORLD_MIN, WORLD_MAX),

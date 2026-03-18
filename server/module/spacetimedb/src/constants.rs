@@ -13,6 +13,9 @@ pub const STAMINA_REGEN_PER_TICK: i32 = 3;
 pub const ATTACK_DAMAGE: i32 = 10;
 pub const ATTACK_RANGE: f32 = 3.0;
 pub const POINTS_PER_LEVEL: i32 = 5;
+/// Max XZ distance a player may move between consecutive move_player calls.
+/// Generous enough for dashes but blocks teleportation exploits.
+pub const MAX_MOVE_DIST: f32 = 15.0;
 pub const SKILL_XP_PER_USE: i32 = 10;
 pub const SKILL_XP_PER_KILL: i32 = 25;
 pub const PLAYER_XP_PER_NPC_KILL: i32 = 50;

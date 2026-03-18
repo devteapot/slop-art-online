@@ -7,6 +7,7 @@ mod npc;
 mod skills;
 mod hud;
 
+use avian3d::prelude::*;
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
 use bevy::prelude::*;
 use bevy_voxel_world::prelude::*;
@@ -28,6 +29,7 @@ fn main() {
                 ..default()
             },
         })
+        .add_plugins(PhysicsPlugins::default())
         .add_plugins(VoxelWorldPlugin::with_config(GameWorld))
         .init_resource::<PlayerEventQueue>()
         .init_resource::<NpcEventQueue>()
@@ -43,7 +45,7 @@ fn main() {
         .init_resource::<SkillNameMap>()
         .init_resource::<MobilitySkillIds>()
         .init_resource::<PlayerFacing>()
-        .init_resource::<JumpState>()
+        .init_resource::<DashState>()
         .init_resource::<LocalIdentity>()
         .add_systems(Startup, (setup, connect_spacetimedb, setup_hud))
         .add_systems(Update, (
@@ -55,9 +57,10 @@ fn main() {
             sync_skill_attrs,
             sync_skill_cooldowns,
             move_local_player,
+            update_grounded,
             use_skill_input,
             mobility_input,
-            apply_jump_anim,
+            apply_dash,
             follow_camera,
             face_cursor,
             attack,
@@ -68,8 +71,9 @@ fn main() {
             handle_allocate_clicks,
         ).chain())
         .add_systems(Update, (
+            add_chunk_colliders,
             handle_close_click,
             update_skill_detail_panel,
-        ).chain())
+        ))
         .run();
 }

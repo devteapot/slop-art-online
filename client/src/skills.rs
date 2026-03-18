@@ -1,16 +1,16 @@
+use avian3d::prelude::*;
 use bevy::prelude::*;
-use shared::module_bindings::move_player_reducer::move_player;
 use shared::module_bindings::use_skill_reducer::use_skill;
 use shared::module_bindings::SkillAttributes;
 use spacetimedb_sdk::Timestamp;
 
-use crate::constants::{DASH_DISTANCE, JUMP_DURATION, JUMP_HEIGHT, PLAYER_Y};
+use crate::constants::{DASH_DURATION, DASH_SPEED, JUMP_IMPULSE};
 use crate::network::{
     LocalIdentity, PlayerSkillEvent, PlayerSkillEventQueue, SkillAttributesEvent,
     SkillAttributesEventQueue, SkillCooldownEvent, SkillCooldownEventQueue, SkillDefEvent,
     SkillDefEventQueue, SpacetimeDb,
 };
-use crate::player::LocalPlayer;
+use crate::player::{Grounded, LocalPlayer, PlayerFacing};
 
 // --- Resources ---
 
@@ -40,10 +40,12 @@ pub struct MobilitySkillIds {
     pub dash: Option<u64>,
 }
 
-#[derive(Resource, Default, Clone)]
-pub struct JumpState {
-    pub elapsed: f32,
+/// Tracks an active dash so the velocity burst persists for DASH_DURATION.
+#[derive(Resource, Default)]
+pub struct DashState {
     pub active: bool,
+    pub elapsed: f32,
+    pub dir: Vec2,
 }
 
 // --- Helpers ---
@@ -173,9 +175,7 @@ pub fn sync_skill_attrs(
 pub fn sync_skill_cooldowns(
     queue: Res<SkillCooldownEventQueue>,
     local_identity: Res<LocalIdentity>,
-    mobility_ids: Res<MobilitySkillIds>,
     mut local_cooldowns: ResMut<LocalCooldowns>,
-    mut jump_state: ResMut<JumpState>,
 ) {
     let local_id = local_identity.0.lock().unwrap().clone();
     let Some(ref id) = local_id else { return };
@@ -184,10 +184,6 @@ pub fn sync_skill_cooldowns(
     for event in events.drain(..) {
         match event {
             SkillCooldownEvent::Inserted(cd) if &cd.player_identity == id => {
-                if mobility_ids.jump == Some(cd.skill_id) && !jump_state.active {
-                    jump_state.active = true;
-                    jump_state.elapsed = 0.0;
-                }
                 local_cooldowns.0.insert(cd.skill_id, cd.ready_at.to_micros_since_unix_epoch());
             }
             SkillCooldownEvent::Deleted(cd) if &cd.player_identity == id => {
@@ -224,54 +220,55 @@ pub fn use_skill_input(
 pub fn mobility_input(
     conn: Option<Res<SpacetimeDb>>,
     keys: Res<ButtonInput<KeyCode>>,
-    local_player: Query<&Transform, With<LocalPlayer>>,
+    mut player: Query<(&Transform, &mut LinearVelocity, &Grounded), With<LocalPlayer>>,
     mobility_ids: Res<MobilitySkillIds>,
     local_cooldowns: Res<LocalCooldowns>,
-    facing: Res<crate::player::PlayerFacing>,
-    jump_state: Res<JumpState>,
+    facing: Res<PlayerFacing>,
+    mut dash_state: ResMut<DashState>,
 ) {
     let Some(conn) = conn else { return };
-    let Ok(transform) = local_player.single() else { return };
+    let Ok((transform, mut velocity, grounded)) = player.single_mut() else { return };
     let pos = transform.translation;
 
-    // Jump — Space (animation starts in sync_skill_cooldowns when server confirms)
+    // Jump — Space: apply upward impulse when grounded
     if keys.just_pressed(KeyCode::Space) {
         if let Some(jump_id) = mobility_ids.jump {
-            if cooldown_remaining(&local_cooldowns, jump_id) <= 0.0 && !jump_state.active {
+            if cooldown_remaining(&local_cooldowns, jump_id) <= 0.0 && grounded.0 {
+                velocity.y += JUMP_IMPULSE;
                 let _ = conn.0.reducers.use_skill(jump_id, pos.x, pos.y, pos.z);
             }
         }
     }
 
-    // Dash — Shift
+    // Dash — Shift: start a velocity burst in the facing direction
     let shift = keys.just_pressed(KeyCode::ShiftLeft) || keys.just_pressed(KeyCode::ShiftRight);
     if shift {
         if let Some(dash_id) = mobility_ids.dash {
-            if cooldown_remaining(&local_cooldowns, dash_id) <= 0.0 {
+            if cooldown_remaining(&local_cooldowns, dash_id) <= 0.0 && !dash_state.active {
                 let dir = if facing.0 != Vec2::ZERO { facing.0 } else { Vec2::new(0.0, -1.0) };
-                let new_x = pos.x + dir.x * DASH_DISTANCE;
-                let new_z = pos.z + dir.y * DASH_DISTANCE;
+                dash_state.active = true;
+                dash_state.elapsed = 0.0;
+                dash_state.dir = dir;
                 let _ = conn.0.reducers.use_skill(dash_id, pos.x, pos.y, pos.z);
-                let _ = conn.0.reducers.move_player(new_x, PLAYER_Y, new_z);
             }
         }
     }
 }
 
-pub fn apply_jump_anim(
+/// Drive the dash velocity burst for DASH_DURATION seconds.
+pub fn apply_dash(
     time: Res<Time>,
-    mut jump_state: ResMut<JumpState>,
-    mut players: Query<&mut Transform, With<LocalPlayer>>,
+    mut dash_state: ResMut<DashState>,
+    mut player: Query<&mut LinearVelocity, With<LocalPlayer>>,
 ) {
-    if !jump_state.active { return }
-    let Ok(mut transform) = players.single_mut() else { return };
+    if !dash_state.active { return }
+    let Ok(mut velocity) = player.single_mut() else { return };
 
-    jump_state.elapsed += time.delta_secs();
-    if jump_state.elapsed >= JUMP_DURATION {
-        jump_state.active = false;
-        transform.translation.y = PLAYER_Y;
+    dash_state.elapsed += time.delta_secs();
+    if dash_state.elapsed >= DASH_DURATION {
+        dash_state.active = false;
     } else {
-        let t = jump_state.elapsed / JUMP_DURATION;
-        transform.translation.y = PLAYER_Y + JUMP_HEIGHT * (t * std::f32::consts::PI).sin();
+        velocity.x = dash_state.dir.x * DASH_SPEED;
+        velocity.z = dash_state.dir.y * DASH_SPEED;
     }
 }
