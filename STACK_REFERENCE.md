@@ -270,10 +270,82 @@ via WebSockets — no separate server layer needed.
 | `bevy` | Core engine (rendering, ECS, audio, input, etc.) |
 | `wgpu` | WebGPU rendering backend (used by Bevy internally) |
 | `bevy_replicon` | Entity replication, prediction & reconciliation |
+| `bevy_voxel_world` | Chunk management, dynamic editing, LOD, multithreaded meshing |
+| `block-mesh-rs` | Underlying greedy mesh generation (used by bevy_voxel_world) |
+| `avian3d` | Physics + collision (preferred over rapier for voxel worlds) |
+| `noise` | Procedural terrain generation |
 
 ### ⚠️ Warning
 Bevy still has breaking API changes roughly every 3 months. Pin your
 version in `Cargo.toml`.
+
+---
+
+## Voxel World
+
+### Design Goals
+- Fully editable by both players and NPCs in real-time
+- High resolution small voxels — blockiness becomes grain, not a visual problem
+- Performant at world scale via chunking + LOD
+
+### Shape Decision: Cubes
+True 3D hex/oct voxels don't tessellate 3D space (they leave gaps).
+Shapes that do tessellate: cubes, truncated octahedra, rhombic dodecahedra.
+At high resolution the visual difference between these is negligible.
+**Cubes are used** — far simpler mesh generation, better ecosystem support,
+no meaningful visual downside at small voxel sizes.
+
+### Architecture
+
+```
+SpacetimeDB (authority)          Bevy Client (rendering)
+─────────────────────            ───────────────────────
+chunk table                      bevy_voxel_world plugin
+  chunk_pos: (i32, i32, i32)       ↓ set_voxel() on diff
+  data: Vec<u8> (compressed)     chunk remeshes automatically
+  dirty: bool
+
+edit_voxel reducer               Player/NPC edits locally
+  → validates edit               → calls edit_voxel reducer
+  → updates chunk table          → SpacetimeDB broadcasts diff
+  → broadcasts to all clients    → all clients remesh affected chunk
+```
+
+### Chunk Data Flow
+```
+Player/NPC edits voxel
+  → edit_voxel reducer (SpacetimeDB)
+  → chunk table updated
+  → all subscribed clients receive diff
+  → each client: set_voxel() → chunk remesh (multithreaded)
+```
+
+### LOD Strategy
+```
+< 64 units   → full resolution voxels
+64–256 units → merged/simplified chunk mesh
+> 256 units  → impostor mesh or heightmap
+```
+
+### Ecosystem State (March 2026)
+The Bevy voxel ecosystem is not mature — no production-shipped game uses it.
+
+| Crate | Role | Status |
+|---|---|---|
+| `bevy_voxel_world` | World system, LOD, editing | Best available, tracks Bevy 0.18 |
+| `bevy_meshem` | Mesh algorithms only | Pre-release, behind on Bevy versions |
+| `vx_bevy` | Reference architecture | Archived, Bevy 0.13 |
+| `logic_voxels` | Multiplayer reference | Archived, Bevy 0.10 |
+
+**No voxel crate handles networking** — SpacetimeDB fills this gap via
+chunk table subscriptions.
+
+### Build Order
+1. Static 3D world rendering (terrain gen + chunk rendering, no editing)
+2. Single-player editing (local set_voxel, no sync)
+3. Networked editing (edit_voxel reducer + SpacetimeDB broadcast)
+4. NPC world editing (NPCs call edit_voxel reducer)
+5. LOD + performance pass
 
 ---
 
