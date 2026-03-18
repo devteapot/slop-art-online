@@ -3,17 +3,16 @@ mod llm;
 use shared::module_bindings::submit_npc_graph_reducer::submit_npc_graph as SubmitNpcGraph;
 use shared::module_bindings::{DbConnection, NpcPendingDecision, NpcPendingDecisionTableAccess};
 use spacetimedb_sdk::{DbContext, Table};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use tokio::sync::mpsc;
 
 const HOST: &str = "http://localhost:3000";
 const DB_NAME: &str = "slop-art-online";
 
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::init();
 
-    let queue: Arc<Mutex<Vec<NpcPendingDecision>>> = Arc::new(Mutex::new(Vec::new()));
-    let queue_cb = queue.clone();
+    let (tx, mut rx) = mpsc::unbounded_channel::<NpcPendingDecision>();
 
     let conn = DbConnection::builder()
         .with_uri(HOST)
@@ -37,31 +36,23 @@ fn main() {
         .npc_pending_decision()
         .on_insert(move |_, row: &NpcPendingDecision| {
             log::info!("Pending decision for NPC {}", row.npc_id);
-            queue_cb.lock().unwrap().push(row.clone());
+            let _ = tx.send(row.clone());
         });
 
     conn.run_threaded();
 
-    log::info!("Bridge running — processing NPC decisions...");
-    loop {
-        let pending: Vec<NpcPendingDecision> = {
-            let mut q = queue.lock().unwrap();
-            q.drain(..).collect()
-        };
+    log::info!("Bridge running — waiting for NPC decisions...");
 
-        for decision in pending {
-            log::info!(
-                "Generating graph for NPC {} (context: {})",
-                decision.npc_id,
-                decision.context
-            );
-            let graph_json = llm::generate_behaviour_graph(&decision.context);
-            log::info!("Submitting graph for NPC {}: {graph_json}", decision.npc_id);
-            if let Err(e) = conn.reducers.submit_npc_graph(decision.npc_id, graph_json) {
-                log::error!("submit_npc_graph failed for NPC {}: {e}", decision.npc_id);
-            }
+    while let Some(decision) = rx.recv().await {
+        log::info!(
+            "Generating graph for NPC {} context: {}",
+            decision.npc_id,
+            decision.context
+        );
+        let graph_json = llm::generate_behaviour_graph(&decision.context).await;
+        log::info!("Submitting graph for NPC {}:\n{}", decision.npc_id, graph_json);
+        if let Err(e) = conn.reducers.submit_npc_graph(decision.npc_id, graph_json) {
+            log::error!("submit_npc_graph failed for NPC {}: {e}", decision.npc_id);
         }
-
-        std::thread::sleep(Duration::from_millis(100));
     }
 }

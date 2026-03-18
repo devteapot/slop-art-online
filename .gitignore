@@ -1,2 +1,4 @@
 /target
 /deploy/spacetimedb-data
+/deploy/ollama-data
+/deploy/open-webui-data

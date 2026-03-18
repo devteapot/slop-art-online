@@ -8,3 +8,37 @@ services:
     volumes:
       - ./spacetimedb-data:/home/spacetime/.local/share/spacetime
     restart: unless-stopped
+
+  # Ollama web UI — model management, chat, benchmarking
+  # http://localhost:8080
+  # mac profile: connects to native Ollama on host
+  # gpu profile: connects to Ollama container
+  open-webui:
+    profiles: [mac, gpu]
+    image: ghcr.io/open-webui/open-webui:main
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./open-webui-data:/app/backend/data
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    restart: unless-stopped
+
+  # Only used on Linux servers with GPU access.
+  # On macOS run Ollama natively — Docker cannot access Apple Silicon GPU.
+  # Usage: docker compose --profile gpu up
+  ollama:
+    profiles: [gpu]
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama-data:/root/.ollama
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

@@ -7,7 +7,7 @@ const WORLD_MAX: f32 = 500.0;
 const NPC_MOVE_RANGE: f32 = 50.0;
 const NPC_CHASE_STEP: f32 = 60.0;
 const NPC_TICK_MS: u64 = 500;
-const NPC_DETECTION_RANGE: f32 = 200.0;
+const NPC_DETECTION_RANGE: f32 = 350.0;
 const MAX_HEALTH: i32 = 100;
 const ATTACK_DAMAGE: i32 = 10;
 const ATTACK_RANGE: f32 = 100.0;
@@ -232,10 +232,26 @@ fn schedule_next_npc_tick(ctx: &ReducerContext) {
 #[spacetimedb::reducer]
 pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
     for npc in ctx.db.npc().iter() {
-        if ctx.db.npc_pending_decision().npc_id().find(&npc.id).is_some() {
-            continue;
-        }
         if let Some(graph_entry) = ctx.db.npc_behaviour_graph().npc_id().find(&npc.id) {
+            let has_pending = ctx.db.npc_pending_decision().npc_id().find(&npc.id).is_some();
+
+            // When idle and a player enters detection range, request an LLM strategy upgrade
+            if !has_pending && graph_entry.current_node == "idle" {
+                if let Some((player, dist)) = find_nearest_player(ctx, &npc.position) {
+                    if dist <= NPC_DETECTION_RANGE {
+                        let context = format!(
+                            r#"{{"npc_id":{},"npc_position":{{"x":{},"y":{}}},"npc_health":{},"nearby_players":[{{"identity":"{}","position":{{"x":{},"y":{}}},"distance":{}}}],"attack_range":{}}}"#,
+                            npc.id, npc.position.x, npc.position.y, npc.health,
+                            player.identity.to_hex().to_string(),
+                            player.position.x, player.position.y, dist,
+                            ATTACK_RANGE
+                        );
+                        ctx.db.npc_pending_decision().insert(NpcPendingDecision { npc_id: npc.id, context });
+                    }
+                }
+            }
+
+            // Always evaluate the graph — NPC keeps moving even while LLM is thinking
             evaluate_graph(ctx, &npc, &graph_entry);
         }
     }
@@ -248,18 +264,26 @@ pub fn submit_npc_graph(ctx: &ReducerContext, npc_id: u64, graph_json: String) -
 
     let graph: BehaviourGraph = serde_json::from_str(&graph_json)
         .map_err(|e| format!("Invalid graph JSON: {e}"))?;
-    let initial_node = graph.initial_node.clone();
+
+    // Start in the most appropriate node given current world state so we
+    // don't immediately re-trigger a pending decision from the idle node.
+    let npc = ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
+    let start_node = find_nearest_player(ctx, &npc.position)
+        .filter(|(_, d)| *d <= NPC_DETECTION_RANGE)
+        .map(|(_, d)| if d <= ATTACK_RANGE { "attacking" } else { "chasing" })
+        .unwrap_or(&graph.initial_node)
+        .to_string();
 
     if ctx.db.npc_behaviour_graph().npc_id().find(&npc_id).is_some() {
         ctx.db.npc_behaviour_graph().npc_id().update(NpcBehaviourGraph {
             npc_id,
-            current_node: initial_node,
+            current_node: start_node,
             graph: graph_json,
         });
     } else {
         ctx.db.npc_behaviour_graph().insert(NpcBehaviourGraph {
             npc_id,
-            current_node: initial_node,
+            current_node: start_node,
             graph: graph_json,
         });
     }
