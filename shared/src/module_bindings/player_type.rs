@@ -12,6 +12,12 @@ pub struct Player {
     pub identity: __sdk::Identity,
     pub position: Position,
     pub health: i32,
+    pub level: i32,
+    pub xp: i32,
+    pub mana: i32,
+    pub max_mana: i32,
+    pub stamina: i32,
+    pub max_stamina: i32,
 }
 
 impl __sdk::InModule for Player {
@@ -25,6 +31,12 @@ pub struct PlayerCols {
     pub identity: __sdk::__query_builder::Col<Player, __sdk::Identity>,
     pub position: __sdk::__query_builder::Col<Player, Position>,
     pub health: __sdk::__query_builder::Col<Player, i32>,
+    pub level: __sdk::__query_builder::Col<Player, i32>,
+    pub xp: __sdk::__query_builder::Col<Player, i32>,
+    pub mana: __sdk::__query_builder::Col<Player, i32>,
+    pub max_mana: __sdk::__query_builder::Col<Player, i32>,
+    pub stamina: __sdk::__query_builder::Col<Player, i32>,
+    pub max_stamina: __sdk::__query_builder::Col<Player, i32>,
 }
 
 impl __sdk::__query_builder::HasCols for Player {
@@ -34,6 +46,12 @@ impl __sdk::__query_builder::HasCols for Player {
             identity: __sdk::__query_builder::Col::new(table_name, "identity"),
             position: __sdk::__query_builder::Col::new(table_name, "position"),
             health: __sdk::__query_builder::Col::new(table_name, "health"),
+            level: __sdk::__query_builder::Col::new(table_name, "level"),
+            xp: __sdk::__query_builder::Col::new(table_name, "xp"),
+            mana: __sdk::__query_builder::Col::new(table_name, "mana"),
+            max_mana: __sdk::__query_builder::Col::new(table_name, "max_mana"),
+            stamina: __sdk::__query_builder::Col::new(table_name, "stamina"),
+            max_stamina: __sdk::__query_builder::Col::new(table_name, "max_stamina"),
         }
     }
 }

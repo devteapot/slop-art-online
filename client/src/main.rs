@@ -5,7 +5,11 @@ use shared::module_bindings::attack_npc_reducer::attack_npc;
 use shared::module_bindings::attack_player_reducer::attack_player;
 use shared::module_bindings::join_game_reducer::join_game;
 use shared::module_bindings::move_player_reducer::move_player;
-use shared::module_bindings::{DbConnection, Npc, NpcTableAccess, Player, PlayerTableAccess};
+use shared::module_bindings::use_skill_reducer::use_skill;
+use shared::module_bindings::{
+    DbConnection, Npc, NpcTableAccess, Player, PlayerSkill, PlayerSkillTableAccess,
+    PlayerTableAccess,
+};
 use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
 use std::sync::{Arc, Mutex};
 
@@ -31,13 +35,17 @@ fn main() {
         .add_plugins(VoxelWorldPlugin::with_config(GameWorld))
         .init_resource::<PlayerEventQueue>()
         .init_resource::<NpcEventQueue>()
+        .init_resource::<PlayerSkillEventQueue>()
+        .init_resource::<LocalSkills>()
         .init_resource::<LocalIdentity>()
         .add_systems(Startup, (setup, connect_spacetimedb))
         .add_systems(Update, (
             tick_spacetimedb,
             sync_players,
             sync_npcs,
+            sync_player_skills,
             move_local_player,
+            use_skill_input,
             follow_camera,
             attack,
             update_health_bars,
@@ -122,10 +130,23 @@ enum NpcEvent {
     Deleted(Npc),
 }
 
+enum PlayerSkillEvent {
+    Inserted(PlayerSkill),
+    Deleted(PlayerSkill),
+}
+
+#[derive(Resource, Default, Clone)]
+struct PlayerSkillEventQueue(Arc<Mutex<Vec<PlayerSkillEvent>>>);
+
+/// Ordered list of skill IDs the local player has (sorted by skill_id → maps to keys 1–4).
+#[derive(Resource, Default)]
+struct LocalSkills(Vec<u64>);
+
 fn connect_spacetimedb(
     mut commands: Commands,
     player_queue: Res<PlayerEventQueue>,
     npc_queue: Res<NpcEventQueue>,
+    skill_queue: Res<PlayerSkillEventQueue>,
     local_identity: Res<LocalIdentity>,
 ) {
     let q_insert = player_queue.clone();
@@ -134,6 +155,8 @@ fn connect_spacetimedb(
     let nq_insert = npc_queue.clone();
     let nq_update = npc_queue.clone();
     let nq_delete = npc_queue.clone();
+    let sq_insert = skill_queue.clone();
+    let sq_delete = skill_queue.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -144,7 +167,13 @@ fn connect_spacetimedb(
             let _ = ctx.reducers.join_game();
             ctx.subscription_builder()
                 .on_applied(|_| info!("Subscribed"))
-                .subscribe(["SELECT * FROM player", "SELECT * FROM npc"]);
+                .subscribe([
+                    "SELECT * FROM player",
+                    "SELECT * FROM npc",
+                    "SELECT * FROM skill_def",
+                    "SELECT * FROM player_skill",
+                    "SELECT * FROM skill_cooldown",
+                ]);
         })
         .on_connect_error(|_, err| error!("SpacetimeDB connect error: {err}"))
         .on_disconnect(|_, err| {
@@ -170,6 +199,12 @@ fn connect_spacetimedb(
     });
     conn.db.npc().on_delete(move |_, row: &Npc| {
         nq_delete.0.lock().unwrap().push(NpcEvent::Deleted(row.clone()));
+    });
+    conn.db.player_skill().on_insert(move |_, row: &PlayerSkill| {
+        sq_insert.0.lock().unwrap().push(PlayerSkillEvent::Inserted(row.clone()));
+    });
+    conn.db.player_skill().on_delete(move |_, row: &PlayerSkill| {
+        sq_delete.0.lock().unwrap().push(PlayerSkillEvent::Deleted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));
@@ -384,6 +419,61 @@ fn billboard_health_bars(
 
     for mut bar_lt in &mut bars {
         bar_lt.rotation = cam_rot;
+    }
+}
+
+// --- Skills ---
+
+fn sync_player_skills(
+    queue: Res<PlayerSkillEventQueue>,
+    local_identity: Res<LocalIdentity>,
+    mut local_skills: ResMut<LocalSkills>,
+) {
+    let local_id = local_identity.0.lock().unwrap().clone();
+    let Some(ref id) = local_id else { return };
+    let mut events = queue.0.lock().unwrap();
+    let mut changed = false;
+
+    for event in events.drain(..) {
+        match event {
+            PlayerSkillEvent::Inserted(ps) if &ps.player_identity == id => {
+                if !local_skills.0.contains(&ps.skill_id) {
+                    local_skills.0.push(ps.skill_id);
+                    changed = true;
+                }
+            }
+            PlayerSkillEvent::Deleted(ps) if &ps.player_identity == id => {
+                local_skills.0.retain(|&s| s != ps.skill_id);
+                changed = true;
+            }
+            _ => {}
+        }
+    }
+    if changed {
+        local_skills.0.sort();
+    }
+}
+
+fn use_skill_input(
+    conn: Option<Res<SpacetimeDb>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    local_player: Query<&Transform, With<LocalPlayer>>,
+    local_skills: Res<LocalSkills>,
+) {
+    let Some(conn) = conn else { return };
+    let Ok(transform) = local_player.single() else { return };
+
+    let slot = if keys.just_pressed(KeyCode::Digit1) { Some(0) }
+        else if keys.just_pressed(KeyCode::Digit2) { Some(1) }
+        else if keys.just_pressed(KeyCode::Digit3) { Some(2) }
+        else if keys.just_pressed(KeyCode::Digit4) { Some(3) }
+        else { None };
+
+    if let Some(idx) = slot {
+        if let Some(&skill_id) = local_skills.0.get(idx) {
+            let pos = transform.translation;
+            let _ = conn.0.reducers.use_skill(skill_id, pos.x, pos.y, pos.z);
+        }
     }
 }
 

@@ -6,8 +6,10 @@
 #![allow(unused, clippy::all)]
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
+pub mod allocate_skill_point_reducer;
 pub mod attack_npc_reducer;
 pub mod attack_player_reducer;
+pub mod behavior_type_type;
 pub mod join_game_reducer;
 pub mod move_player_reducer;
 pub mod npc_behaviour_graph_table;
@@ -17,15 +19,27 @@ pub mod npc_pending_decision_type;
 pub mod npc_table;
 pub mod npc_tick_schedule_type;
 pub mod npc_type;
+pub mod player_skill_table;
+pub mod player_skill_type;
 pub mod player_table;
 pub mod player_type;
 pub mod position_type;
+pub mod resource_type_type;
+pub mod skill_attributes_table;
+pub mod skill_attributes_type;
+pub mod skill_cooldown_table;
+pub mod skill_cooldown_type;
+pub mod skill_def_table;
+pub mod skill_def_type;
 pub mod spawn_npc_reducer;
 pub mod start_npc_ticker_reducer;
 pub mod submit_npc_graph_reducer;
+pub mod use_skill_reducer;
 
+pub use allocate_skill_point_reducer::allocate_skill_point;
 pub use attack_npc_reducer::attack_npc;
 pub use attack_player_reducer::attack_player;
+pub use behavior_type_type::BehaviorType;
 pub use join_game_reducer::join_game;
 pub use move_player_reducer::move_player;
 pub use npc_behaviour_graph_table::*;
@@ -35,12 +49,22 @@ pub use npc_pending_decision_type::NpcPendingDecision;
 pub use npc_table::*;
 pub use npc_tick_schedule_type::NpcTickSchedule;
 pub use npc_type::Npc;
+pub use player_skill_table::*;
+pub use player_skill_type::PlayerSkill;
 pub use player_table::*;
 pub use player_type::Player;
 pub use position_type::Position;
+pub use resource_type_type::ResourceType;
+pub use skill_attributes_table::*;
+pub use skill_attributes_type::SkillAttributes;
+pub use skill_cooldown_table::*;
+pub use skill_cooldown_type::SkillCooldown;
+pub use skill_def_table::*;
+pub use skill_def_type::SkillDef;
 pub use spawn_npc_reducer::spawn_npc;
 pub use start_npc_ticker_reducer::start_npc_ticker;
 pub use submit_npc_graph_reducer::submit_npc_graph;
+pub use use_skill_reducer::use_skill;
 
 #[derive(Clone, PartialEq, Debug)]
 
@@ -50,13 +74,37 @@ pub use submit_npc_graph_reducer::submit_npc_graph;
 /// to indicate which reducer caused the event.
 
 pub enum Reducer {
-    AttackNpc { target_id: u64 },
-    AttackPlayer { target: __sdk::Identity },
+    AllocateSkillPoint {
+        skill_id: u64,
+        attribute: String,
+    },
+    AttackNpc {
+        target_id: u64,
+    },
+    AttackPlayer {
+        target: __sdk::Identity,
+    },
     JoinGame,
-    MovePlayer { x: f32, y: f32, z: f32 },
-    SpawnNpc { x: f32, z: f32 },
+    MovePlayer {
+        x: f32,
+        y: f32,
+        z: f32,
+    },
+    SpawnNpc {
+        x: f32,
+        z: f32,
+    },
     StartNpcTicker,
-    SubmitNpcGraph { npc_id: u64, graph_json: String },
+    SubmitNpcGraph {
+        npc_id: u64,
+        graph_json: String,
+    },
+    UseSkill {
+        skill_id: u64,
+        target_x: f32,
+        target_y: f32,
+        target_z: f32,
+    },
 }
 
 impl __sdk::InModule for Reducer {
@@ -66,6 +114,7 @@ impl __sdk::InModule for Reducer {
 impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
+            Reducer::AllocateSkillPoint { .. } => "allocate_skill_point",
             Reducer::AttackNpc { .. } => "attack_npc",
             Reducer::AttackPlayer { .. } => "attack_player",
             Reducer::JoinGame => "join_game",
@@ -73,12 +122,20 @@ impl __sdk::Reducer for Reducer {
             Reducer::SpawnNpc { .. } => "spawn_npc",
             Reducer::StartNpcTicker => "start_npc_ticker",
             Reducer::SubmitNpcGraph { .. } => "submit_npc_graph",
+            Reducer::UseSkill { .. } => "use_skill",
             _ => unreachable!(),
         }
     }
     #[allow(clippy::clone_on_copy)]
     fn args_bsatn(&self) -> Result<Vec<u8>, __sats::bsatn::EncodeError> {
         match self {
+            Reducer::AllocateSkillPoint {
+                skill_id,
+                attribute,
+            } => __sats::bsatn::to_vec(&allocate_skill_point_reducer::AllocateSkillPointArgs {
+                skill_id: skill_id.clone(),
+                attribute: attribute.clone(),
+            }),
             Reducer::AttackNpc { target_id } => {
                 __sats::bsatn::to_vec(&attack_npc_reducer::AttackNpcArgs {
                     target_id: target_id.clone(),
@@ -110,6 +167,17 @@ impl __sdk::Reducer for Reducer {
                     graph_json: graph_json.clone(),
                 })
             }
+            Reducer::UseSkill {
+                skill_id,
+                target_x,
+                target_y,
+                target_z,
+            } => __sats::bsatn::to_vec(&use_skill_reducer::UseSkillArgs {
+                skill_id: skill_id.clone(),
+                target_x: target_x.clone(),
+                target_y: target_y.clone(),
+                target_z: target_z.clone(),
+            }),
             _ => unreachable!(),
         }
     }
@@ -123,6 +191,10 @@ pub struct DbUpdate {
     npc_behaviour_graph: __sdk::TableUpdate<NpcBehaviourGraph>,
     npc_pending_decision: __sdk::TableUpdate<NpcPendingDecision>,
     player: __sdk::TableUpdate<Player>,
+    player_skill: __sdk::TableUpdate<PlayerSkill>,
+    skill_attributes: __sdk::TableUpdate<SkillAttributes>,
+    skill_cooldown: __sdk::TableUpdate<SkillCooldown>,
+    skill_def: __sdk::TableUpdate<SkillDef>,
 }
 
 impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
@@ -143,6 +215,18 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "player" => db_update
                     .player
                     .append(player_table::parse_table_update(table_update)?),
+                "player_skill" => db_update
+                    .player_skill
+                    .append(player_skill_table::parse_table_update(table_update)?),
+                "skill_attributes" => db_update
+                    .skill_attributes
+                    .append(skill_attributes_table::parse_table_update(table_update)?),
+                "skill_cooldown" => db_update
+                    .skill_cooldown
+                    .append(skill_cooldown_table::parse_table_update(table_update)?),
+                "skill_def" => db_update
+                    .skill_def
+                    .append(skill_def_table::parse_table_update(table_update)?),
 
                 unknown => {
                     return Err(__sdk::InternalError::unknown_name(
@@ -187,6 +271,18 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.player = cache
             .apply_diff_to_table::<Player>("player", &self.player)
             .with_updates_by_pk(|row| &row.identity);
+        diff.player_skill = cache
+            .apply_diff_to_table::<PlayerSkill>("player_skill", &self.player_skill)
+            .with_updates_by_pk(|row| &row.id);
+        diff.skill_attributes = cache
+            .apply_diff_to_table::<SkillAttributes>("skill_attributes", &self.skill_attributes)
+            .with_updates_by_pk(|row| &row.id);
+        diff.skill_cooldown = cache
+            .apply_diff_to_table::<SkillCooldown>("skill_cooldown", &self.skill_cooldown)
+            .with_updates_by_pk(|row| &row.id);
+        diff.skill_def = cache
+            .apply_diff_to_table::<SkillDef>("skill_def", &self.skill_def)
+            .with_updates_by_pk(|row| &row.id);
 
         diff
     }
@@ -205,6 +301,18 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "player" => db_update
                     .player
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "player_skill" => db_update
+                    .player_skill
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "skill_attributes" => db_update
+                    .skill_attributes
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "skill_cooldown" => db_update
+                    .skill_cooldown
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "skill_def" => db_update
+                    .skill_def
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 unknown => {
                     return Err(
@@ -231,6 +339,18 @@ impl __sdk::DbUpdate for DbUpdate {
                 "player" => db_update
                     .player
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "player_skill" => db_update
+                    .player_skill
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "skill_attributes" => db_update
+                    .skill_attributes
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "skill_cooldown" => db_update
+                    .skill_cooldown
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "skill_def" => db_update
+                    .skill_def
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 unknown => {
                     return Err(
                         __sdk::InternalError::unknown_name("table", unknown, "QueryRows").into(),
@@ -250,6 +370,10 @@ pub struct AppliedDiff<'r> {
     npc_behaviour_graph: __sdk::TableAppliedDiff<'r, NpcBehaviourGraph>,
     npc_pending_decision: __sdk::TableAppliedDiff<'r, NpcPendingDecision>,
     player: __sdk::TableAppliedDiff<'r, Player>,
+    player_skill: __sdk::TableAppliedDiff<'r, PlayerSkill>,
+    skill_attributes: __sdk::TableAppliedDiff<'r, SkillAttributes>,
+    skill_cooldown: __sdk::TableAppliedDiff<'r, SkillCooldown>,
+    skill_def: __sdk::TableAppliedDiff<'r, SkillDef>,
     __unused: std::marker::PhantomData<&'r ()>,
 }
 
@@ -275,6 +399,22 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Player>("player", &self.player, event);
+        callbacks.invoke_table_row_callbacks::<PlayerSkill>(
+            "player_skill",
+            &self.player_skill,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SkillAttributes>(
+            "skill_attributes",
+            &self.skill_attributes,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SkillCooldown>(
+            "skill_cooldown",
+            &self.skill_cooldown,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SkillDef>("skill_def", &self.skill_def, event);
     }
 }
 
@@ -923,11 +1063,19 @@ impl __sdk::SpacetimeModule for RemoteModule {
         npc_behaviour_graph_table::register_table(client_cache);
         npc_pending_decision_table::register_table(client_cache);
         player_table::register_table(client_cache);
+        player_skill_table::register_table(client_cache);
+        skill_attributes_table::register_table(client_cache);
+        skill_cooldown_table::register_table(client_cache);
+        skill_def_table::register_table(client_cache);
     }
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
         "npc",
         "npc_behaviour_graph",
         "npc_pending_decision",
         "player",
+        "player_skill",
+        "skill_attributes",
+        "skill_cooldown",
+        "skill_def",
     ];
 }
