@@ -9,6 +9,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 pub struct Position {
     pub x: f32,
     pub y: f32,
+    pub z: f32,
 }
 
 impl __sdk::InModule for Position {

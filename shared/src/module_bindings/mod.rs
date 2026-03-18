@@ -53,8 +53,8 @@ pub enum Reducer {
     AttackNpc { target_id: u64 },
     AttackPlayer { target: __sdk::Identity },
     JoinGame,
-    MovePlayer { x: f32, y: f32 },
-    SpawnNpc { x: f32, y: f32 },
+    MovePlayer { x: f32, y: f32, z: f32 },
+    SpawnNpc { x: f32, z: f32 },
     StartNpcTicker,
     SubmitNpcGraph { npc_id: u64, graph_json: String },
 }
@@ -90,15 +90,16 @@ impl __sdk::Reducer for Reducer {
                 })
             }
             Reducer::JoinGame => __sats::bsatn::to_vec(&join_game_reducer::JoinGameArgs {}),
-            Reducer::MovePlayer { x, y } => {
+            Reducer::MovePlayer { x, y, z } => {
                 __sats::bsatn::to_vec(&move_player_reducer::MovePlayerArgs {
                     x: x.clone(),
                     y: y.clone(),
+                    z: z.clone(),
                 })
             }
-            Reducer::SpawnNpc { x, y } => __sats::bsatn::to_vec(&spawn_npc_reducer::SpawnNpcArgs {
+            Reducer::SpawnNpc { x, z } => __sats::bsatn::to_vec(&spawn_npc_reducer::SpawnNpcArgs {
                 x: x.clone(),
-                y: y.clone(),
+                z: z.clone(),
             }),
             Reducer::StartNpcTicker => {
                 __sats::bsatn::to_vec(&start_npc_ticker_reducer::StartNpcTickerArgs {})

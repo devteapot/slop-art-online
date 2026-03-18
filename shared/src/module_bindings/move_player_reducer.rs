@@ -9,6 +9,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 pub(super) struct MovePlayerArgs {
     pub x: f32,
     pub y: f32,
+    pub z: f32,
 }
 
 impl From<MovePlayerArgs> for super::Reducer {
@@ -16,6 +17,7 @@ impl From<MovePlayerArgs> for super::Reducer {
         Self::MovePlayer {
             x: args.x,
             y: args.y,
+            z: args.z,
         }
     }
 }
@@ -35,8 +37,8 @@ pub trait move_player {
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
     /// /// Use [`move_player:move_player_then`] to run a callback after the reducer completes.
-    fn move_player(&self, x: f32, y: f32) -> __sdk::Result<()> {
-        self.move_player_then(x, y, |_, _| {})
+    fn move_player(&self, x: f32, y: f32, z: f32) -> __sdk::Result<()> {
+        self.move_player_then(x, y, z, |_, _| {})
     }
 
     /// Request that the remote module invoke the reducer `move_player` to run as soon as possible,
@@ -49,6 +51,7 @@ pub trait move_player {
         &self,
         x: f32,
         y: f32,
+        z: f32,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -61,12 +64,13 @@ impl move_player for super::RemoteReducers {
         &self,
         x: f32,
         y: f32,
+        z: f32,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
             + 'static,
     ) -> __sdk::Result<()> {
         self.imp
-            .invoke_reducer_with_callback(MovePlayerArgs { x, y }, callback)
+            .invoke_reducer_with_callback(MovePlayerArgs { x, y, z }, callback)
     }
 }

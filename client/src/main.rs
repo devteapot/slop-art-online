@@ -13,7 +13,7 @@ const HOST: &str = "http://localhost:3000";
 const DB_NAME: &str = "slop-art-online";
 const MOVE_SPEED: f32 = 20.0;
 const ATTACK_RANGE: f32 = 3.0;
-const PLAYER_HEIGHT: f32 = 1.0; // Y offset above terrain
+const PLAYER_Y: f32 = 1.0; // height above terrain
 const MAX_HEALTH: f32 = 100.0;
 const HEALTH_BAR_WIDTH: f32 = 1.0;
 const HEALTH_BAR_HEIGHT: f32 = 0.1;
@@ -181,12 +181,8 @@ fn tick_spacetimedb(conn: Res<SpacetimeDb>) {
     }
 }
 
-// --- Coordinate mapping ---
-// SpacetimeDB (x, y) → 3D world (x, PLAYER_HEIGHT, z)
-// Y axis is up in 3D; SpacetimeDB's Y becomes 3D Z.
-
-fn to_world_pos(x: f32, y: f32) -> Vec3 {
-    Vec3::new(x, PLAYER_HEIGHT, y)
+fn to_world_pos(pos: &shared::module_bindings::Position) -> Vec3 {
+    Vec3::new(pos.x, pos.y, pos.z)
 }
 
 // --- Health bar components ---
@@ -283,7 +279,7 @@ fn sync_players(
                         base_color: color,
                         ..default()
                     })),
-                    Transform::from_translation(to_world_pos(player.position.x, player.position.y)),
+                    Transform::from_translation(to_world_pos(&player.position)),
                     Health(player.health),
                     HealthBarFillRef(fill_id),
                 ));
@@ -295,7 +291,7 @@ fn sync_players(
             PlayerEvent::Updated(player) => {
                 for (_, id, mut transform, mut health) in players.iter_mut() {
                     if id.0 == player.identity {
-                        transform.translation = to_world_pos(player.position.x, player.position.y);
+                        transform.translation = to_world_pos(&player.position);
                         health.0 = player.health;
                     }
                 }
@@ -336,7 +332,7 @@ fn sync_npcs(
                         base_color: Color::srgb(1.0, 0.5, 0.2),
                         ..default()
                     })),
-                    Transform::from_translation(to_world_pos(npc.position.x, npc.position.y)),
+                    Transform::from_translation(to_world_pos(&npc.position)),
                     Health(npc.health),
                     HealthBarFillRef(fill_id),
                 ));
@@ -345,7 +341,7 @@ fn sync_npcs(
             NpcEvent::Updated(npc) => {
                 for (_, id, mut transform, mut health) in npcs.iter_mut() {
                     if id.0 == npc.id {
-                        transform.translation = to_world_pos(npc.position.x, npc.position.y);
+                        transform.translation = to_world_pos(&npc.position);
                         health.0 = npc.health;
                     }
                 }
@@ -411,11 +407,10 @@ fn move_local_player(
     if dir == Vec2::ZERO { return }
 
     let delta = dir.normalize() * MOVE_SPEED * time.delta_secs();
-    // 3D: X stays X, Z (SpacetimeDB Y) changes with forward/back
     let new_x = transform.translation.x + delta.x;
     let new_z = transform.translation.z + delta.y;
 
-    if let Err(e) = conn.0.reducers.move_player(new_x, new_z) {
+    if let Err(e) = conn.0.reducers.move_player(new_x, PLAYER_Y, new_z) {
         error!("move_player failed: {e}");
     }
 }

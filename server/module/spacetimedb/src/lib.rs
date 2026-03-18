@@ -8,6 +8,7 @@ const NPC_MOVE_RANGE: f32 = 3.0;
 const NPC_CHASE_STEP: f32 = 3.0;
 const NPC_TICK_MS: u64 = 500;
 const NPC_DETECTION_RANGE: f32 = 30.0;
+const NPC_GROUND_Y: f32 = 0.9; // half of capsule total height (radius 0.4 + half-height 0.5)
 const MAX_HEALTH: i32 = 100;
 const ATTACK_DAMAGE: i32 = 10;
 const ATTACK_RANGE: f32 = 3.0;
@@ -17,14 +18,16 @@ const ATTACK_RANGE: f32 = 3.0;
 #[derive(SpacetimeType, Clone, Debug)]
 pub struct Position {
     pub x: f32,
-    pub y: f32,
+    pub y: f32, // height (vertical axis)
+    pub z: f32,
 }
 
 impl Position {
     fn distance_to(&self, other: &Position) -> f32 {
         let dx = self.x - other.x;
         let dy = self.y - other.y;
-        (dx * dx + dy * dy).sqrt()
+        let dz = self.z - other.z;
+        (dx * dx + dy * dy + dz * dz).sqrt()
     }
 }
 
@@ -93,11 +96,12 @@ struct Transition {
     next: String,
 }
 
+// Returns normalised direction on the XZ plane (NPCs move on the ground).
 fn direction_to(from: &Position, to: &Position) -> (f32, f32) {
     let dx = to.x - from.x;
-    let dy = to.y - from.y;
-    let len = (dx * dx + dy * dy).sqrt();
-    if len < 0.001 { (0.0, 0.0) } else { (dx / len, dy / len) }
+    let dz = to.z - from.z;
+    let len = (dx * dx + dz * dz).sqrt();
+    if len < 0.001 { (0.0, 0.0) } else { (dx / len, dz / len) }
 }
 
 fn find_nearest_player(ctx: &ReducerContext, pos: &Position) -> Option<(Player, f32)> {
@@ -119,11 +123,11 @@ fn execute_action(ctx: &ReducerContext, npc: &Npc, action: &str, target: Option<
     match action {
         "move_toward_target" => {
             if let Some(player) = target {
-                let (dx, dy) = direction_to(&npc.position, &player.position);
+                let (dx, dz) = direction_to(&npc.position, &player.position);
                 let new_x = (npc.position.x + dx * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
-                let new_y = (npc.position.y + dy * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
+                let new_z = (npc.position.z + dz * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
                 ctx.db.npc().id().update(Npc {
-                    position: Position { x: new_x, y: new_y },
+                    position: Position { x: new_x, y: NPC_GROUND_Y, z: new_z },
                     ..(*npc).clone()
                 });
             }
@@ -134,7 +138,7 @@ fn execute_action(ctx: &ReducerContext, npc: &Npc, action: &str, target: Option<
                     let new_health = player.health - ATTACK_DAMAGE;
                     if new_health <= 0 {
                         ctx.db.player().identity().update(Player {
-                            position: Position { x: 0.0, y: 0.0 },
+                            position: Position { x: 0.0, y: 1.0, z: 0.0 },
                             health: MAX_HEALTH,
                             ..(*player).clone()
                         });
@@ -149,22 +153,22 @@ fn execute_action(ctx: &ReducerContext, npc: &Npc, action: &str, target: Option<
         }
         "flee_from_target" => {
             if let Some(player) = target {
-                let (dx, dy) = direction_to(&npc.position, &player.position);
+                let (dx, dz) = direction_to(&npc.position, &player.position);
                 let new_x = (npc.position.x - dx * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
-                let new_y = (npc.position.y - dy * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
+                let new_z = (npc.position.z - dz * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
                 ctx.db.npc().id().update(Npc {
-                    position: Position { x: new_x, y: new_y },
+                    position: Position { x: new_x, y: NPC_GROUND_Y, z: new_z },
                     ..(*npc).clone()
                 });
             }
         }
         "wander" => {
             let dx = (ctx.rng().gen::<f32>() * 2.0 - 1.0) * NPC_MOVE_RANGE;
-            let dy = (ctx.rng().gen::<f32>() * 2.0 - 1.0) * NPC_MOVE_RANGE;
+            let dz = (ctx.rng().gen::<f32>() * 2.0 - 1.0) * NPC_MOVE_RANGE;
             let new_x = (npc.position.x + dx).clamp(WORLD_MIN, WORLD_MAX);
-            let new_y = (npc.position.y + dy).clamp(WORLD_MIN, WORLD_MAX);
+            let new_z = (npc.position.z + dz).clamp(WORLD_MIN, WORLD_MAX);
             ctx.db.npc().id().update(Npc {
-                position: Position { x: new_x, y: new_y },
+                position: Position { x: new_x, y: NPC_GROUND_Y, z: new_z },
                 ..(*npc).clone()
             });
         }
@@ -240,10 +244,10 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                 if let Some((player, dist)) = find_nearest_player(ctx, &npc.position) {
                     if dist <= NPC_DETECTION_RANGE {
                         let context = format!(
-                            r#"{{"npc_id":{},"npc_position":{{"x":{},"y":{}}},"npc_health":{},"nearby_players":[{{"identity":"{}","position":{{"x":{},"y":{}}},"distance":{}}}],"attack_range":{}}}"#,
-                            npc.id, npc.position.x, npc.position.y, npc.health,
+                            r#"{{"npc_id":{},"npc_position":{{"x":{},"y":{},"z":{}}},"npc_health":{},"nearby_players":[{{"identity":"{}","position":{{"x":{},"y":{},"z":{}}},"distance":{}}}],"attack_range":{}}}"#,
+                            npc.id, npc.position.x, npc.position.y, npc.position.z, npc.health,
                             player.identity.to_hex().to_string(),
-                            player.position.x, player.position.y, dist,
+                            player.position.x, player.position.y, player.position.z, dist,
                             ATTACK_RANGE
                         );
                         ctx.db.npc_pending_decision().insert(NpcPendingDecision { npc_id: npc.id, context });
@@ -321,10 +325,10 @@ const DEFAULT_GRAPH: &str = r#"{
 }"#;
 
 #[spacetimedb::reducer]
-pub fn spawn_npc(ctx: &ReducerContext, x: f32, y: f32) {
+pub fn spawn_npc(ctx: &ReducerContext, x: f32, z: f32) {
     let npc = ctx.db.npc().insert(Npc {
         id: 0,
-        position: Position { x: x.clamp(WORLD_MIN, WORLD_MAX), y: y.clamp(WORLD_MIN, WORLD_MAX) },
+        position: Position { x: x.clamp(WORLD_MIN, WORLD_MAX), y: NPC_GROUND_Y, z: z.clamp(WORLD_MIN, WORLD_MAX) },
         health: MAX_HEALTH,
     });
     ctx.db.npc_behaviour_graph().insert(NpcBehaviourGraph {
@@ -339,13 +343,13 @@ pub fn join_game(ctx: &ReducerContext) {
     if ctx.db.player().identity().find(&ctx.sender()).is_some() {
         ctx.db.player().identity().update(Player {
             identity: ctx.sender(),
-            position: Position { x: 0.0, y: 0.0 },
+            position: Position { x: 0.0, y: 1.0, z: 0.0 },
             health: MAX_HEALTH,
         });
     } else {
         ctx.db.player().insert(Player {
             identity: ctx.sender(),
-            position: Position { x: 0.0, y: 0.0 },
+            position: Position { x: 0.0, y: 1.0, z: 0.0 },
             health: MAX_HEALTH,
         });
     }
@@ -357,13 +361,14 @@ pub fn identity_disconnected(ctx: &ReducerContext) {
 }
 
 #[spacetimedb::reducer]
-pub fn move_player(ctx: &ReducerContext, x: f32, y: f32) -> Result<(), String> {
+pub fn move_player(ctx: &ReducerContext, x: f32, y: f32, z: f32) -> Result<(), String> {
     let player = ctx.db.player().identity().find(&ctx.sender())
         .ok_or("Player not found")?;
     ctx.db.player().identity().update(Player {
         position: Position {
             x: x.clamp(WORLD_MIN, WORLD_MAX),
-            y: y.clamp(WORLD_MIN, WORLD_MAX),
+            y,
+            z: z.clamp(WORLD_MIN, WORLD_MAX),
         },
         ..player
     });
@@ -384,7 +389,7 @@ pub fn attack_player(ctx: &ReducerContext, target: Identity) -> Result<(), Strin
     let new_health = target_player.health - ATTACK_DAMAGE;
     if new_health <= 0 {
         ctx.db.player().identity().update(Player {
-            position: Position { x: 0.0, y: 0.0 },
+            position: Position { x: 0.0, y: 1.0, z: 0.0 },
             health: MAX_HEALTH,
             ..target_player
         });
