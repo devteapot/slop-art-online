@@ -8,7 +8,7 @@ use shared::module_bindings::move_player_reducer::move_player;
 use shared::module_bindings::use_skill_reducer::use_skill;
 use shared::module_bindings::{
     DbConnection, Npc, NpcTableAccess, Player, PlayerSkill, PlayerSkillTableAccess,
-    PlayerTableAccess,
+    PlayerTableAccess, SkillDef, SkillDefTableAccess,
 };
 use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
 use std::sync::{Arc, Mutex};
@@ -36,20 +36,25 @@ fn main() {
         .init_resource::<PlayerEventQueue>()
         .init_resource::<NpcEventQueue>()
         .init_resource::<PlayerSkillEventQueue>()
+        .init_resource::<SkillDefEventQueue>()
         .init_resource::<LocalSkills>()
+        .init_resource::<LocalPlayerStats>()
+        .init_resource::<SkillNameMap>()
         .init_resource::<LocalIdentity>()
-        .add_systems(Startup, (setup, connect_spacetimedb))
+        .add_systems(Startup, (setup, connect_spacetimedb, setup_hud))
         .add_systems(Update, (
             tick_spacetimedb,
             sync_players,
             sync_npcs,
             sync_player_skills,
+            sync_skill_defs,
             move_local_player,
             use_skill_input,
             follow_camera,
             attack,
             update_health_bars,
             billboard_health_bars,
+            update_hud,
         ).chain())
         .run();
 }
@@ -142,11 +147,42 @@ struct PlayerSkillEventQueue(Arc<Mutex<Vec<PlayerSkillEvent>>>);
 #[derive(Resource, Default)]
 struct LocalSkills(Vec<u64>);
 
+enum SkillDefEvent { Inserted(SkillDef) }
+
+#[derive(Resource, Default, Clone)]
+struct SkillDefEventQueue(Arc<Mutex<Vec<SkillDefEvent>>>);
+
+#[derive(Resource, Default)]
+struct SkillNameMap(std::collections::HashMap<u64, String>);
+
+#[derive(Resource)]
+struct LocalPlayerStats {
+    health: i32, max_health: i32,
+    mana: i32,   max_mana: i32,
+    stamina: i32, max_stamina: i32,
+}
+
+impl Default for LocalPlayerStats {
+    fn default() -> Self {
+        Self { health: 0, max_health: 100, mana: 0, max_mana: 100, stamina: 0, max_stamina: 100 }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum StatKind { Health, Mana, Stamina }
+
+#[derive(Component)]
+struct StatBarFill(StatKind);
+
+#[derive(Component)]
+struct SkillSlotLabel(usize);
+
 fn connect_spacetimedb(
     mut commands: Commands,
     player_queue: Res<PlayerEventQueue>,
     npc_queue: Res<NpcEventQueue>,
     skill_queue: Res<PlayerSkillEventQueue>,
+    skill_def_queue: Res<SkillDefEventQueue>,
     local_identity: Res<LocalIdentity>,
 ) {
     let q_insert = player_queue.clone();
@@ -157,6 +193,7 @@ fn connect_spacetimedb(
     let nq_delete = npc_queue.clone();
     let sq_insert = skill_queue.clone();
     let sq_delete = skill_queue.clone();
+    let sd_insert = skill_def_queue.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -205,6 +242,9 @@ fn connect_spacetimedb(
     });
     conn.db.player_skill().on_delete(move |_, row: &PlayerSkill| {
         sq_delete.0.lock().unwrap().push(PlayerSkillEvent::Deleted(row.clone()));
+    });
+    conn.db.skill_def().on_insert(move |_, row: &SkillDef| {
+        sd_insert.0.lock().unwrap().push(SkillDefEvent::Inserted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));
@@ -292,7 +332,8 @@ fn sync_players(
     local_identity: Res<LocalIdentity>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut players: Query<(Entity, &PlayerId, &mut Transform, &mut Health)>,
+    mut players: Query<(Entity, &PlayerId, &mut Transform)>,
+    mut local_stats: ResMut<LocalPlayerStats>,
 ) {
     let local_id = local_identity.0.lock().unwrap().clone();
     let mut events = queue.0.lock().unwrap();
@@ -301,12 +342,15 @@ fn sync_players(
         match event {
             PlayerEvent::Inserted(player) => {
                 let is_local = local_id.as_ref() == Some(&player.identity);
-                let color = if is_local {
-                    Color::srgb(0.4, 0.8, 1.0)
-                } else {
-                    Color::WHITE
-                };
-                let (bar_root, fill_id) = spawn_health_bar(&mut commands, &mut meshes, &mut materials);
+                if is_local {
+                    local_stats.health = player.health;
+                    local_stats.max_health = 100;
+                    local_stats.mana = player.mana;
+                    local_stats.max_mana = player.max_mana;
+                    local_stats.stamina = player.stamina;
+                    local_stats.max_stamina = player.max_stamina;
+                }
+                let color = if is_local { Color::srgb(0.4, 0.8, 1.0) } else { Color::WHITE };
                 let mut entity_cmd = commands.spawn((
                     PlayerId(player.identity),
                     Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
@@ -315,24 +359,25 @@ fn sync_players(
                         ..default()
                     })),
                     Transform::from_translation(to_world_pos(&player.position)),
-                    Health(player.health),
-                    HealthBarFillRef(fill_id),
                 ));
-                entity_cmd.add_child(bar_root);
                 if is_local {
                     entity_cmd.insert(LocalPlayer);
                 }
             }
             PlayerEvent::Updated(player) => {
-                for (_, id, mut transform, mut health) in players.iter_mut() {
+                for (_, id, mut transform) in players.iter_mut() {
                     if id.0 == player.identity {
                         transform.translation = to_world_pos(&player.position);
-                        health.0 = player.health;
                     }
+                }
+                if local_id.as_ref() == Some(&player.identity) {
+                    local_stats.health = player.health;
+                    local_stats.mana = player.mana;
+                    local_stats.stamina = player.stamina;
                 }
             }
             PlayerEvent::Deleted(player) => {
-                for (entity, id, _, _) in players.iter() {
+                for (entity, id, _) in players.iter() {
                     if id.0 == player.identity {
                         commands.entity(entity).despawn();
                     }
@@ -419,6 +464,122 @@ fn billboard_health_bars(
 
     for mut bar_lt in &mut bars {
         bar_lt.rotation = cam_rot;
+    }
+}
+
+// --- HUD ---
+
+fn setup_hud(mut commands: Commands) {
+    commands.spawn(Node {
+        position_type: PositionType::Absolute,
+        bottom: Val::Px(16.0),
+        left: Val::Px(16.0),
+        flex_direction: FlexDirection::Column,
+        row_gap: Val::Px(4.0),
+        ..default()
+    }).with_children(|col| {
+        spawn_stat_bar(col, "HP", Color::srgb(0.8, 0.15, 0.15), StatKind::Health);
+        spawn_stat_bar(col, "MP", Color::srgb(0.2, 0.45, 0.9),  StatKind::Mana);
+        spawn_stat_bar(col, "SP", Color::srgb(0.2, 0.75, 0.35), StatKind::Stamina);
+
+        // Skill bar
+        col.spawn(Node {
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(4.0),
+            margin: UiRect::top(Val::Px(10.0)),
+            ..default()
+        }).with_children(|row| {
+            for i in 0..4 {
+                row.spawn((
+                    Node {
+                        width: Val::Px(90.0),
+                        height: Val::Px(30.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.65)),
+                )).with_children(|slot| {
+                    slot.spawn((
+                        SkillSlotLabel(i),
+                        Text::new(format!("[{}] ---", i + 1)),
+                        TextFont { font_size: 11.0, ..default() },
+                        TextColor(Color::srgb(0.75, 0.75, 0.75)),
+                    ));
+                });
+            }
+        });
+    });
+}
+
+fn spawn_stat_bar(parent: &mut ChildSpawnerCommands, label: &str, color: Color, kind: StatKind) {
+    parent.spawn(Node {
+        flex_direction: FlexDirection::Row,
+        align_items: AlignItems::Center,
+        column_gap: Val::Px(6.0),
+        ..default()
+    }).with_children(|row: &mut ChildSpawnerCommands| {
+        row.spawn((
+            Text::new(label),
+            TextFont { font_size: 11.0, ..default() },
+            TextColor(Color::WHITE),
+            Node { width: Val::Px(20.0), ..default() },
+        ));
+        row.spawn((
+            Node {
+                width: Val::Px(180.0),
+                height: Val::Px(12.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
+        )).with_children(|bar: &mut ChildSpawnerCommands| {
+            bar.spawn((
+                StatBarFill(kind),
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                BackgroundColor(color),
+            ));
+        });
+    });
+}
+
+fn sync_skill_defs(
+    queue: Res<SkillDefEventQueue>,
+    mut skill_name_map: ResMut<SkillNameMap>,
+) {
+    let mut events = queue.0.lock().unwrap();
+    for event in events.drain(..) {
+        match event {
+            SkillDefEvent::Inserted(def) => { skill_name_map.0.insert(def.id, def.name); }
+        }
+    }
+}
+
+fn update_hud(
+    local_stats: Res<LocalPlayerStats>,
+    local_skills: Res<LocalSkills>,
+    skill_name_map: Res<SkillNameMap>,
+    mut stat_fills: Query<(&StatBarFill, &mut Node)>,
+    mut skill_labels: Query<(&SkillSlotLabel, &mut Text)>,
+) {
+    for (fill, mut node) in &mut stat_fills {
+        let ratio = match fill.0 {
+            StatKind::Health  => local_stats.health  as f32 / local_stats.max_health.max(1)  as f32,
+            StatKind::Mana    => local_stats.mana    as f32 / local_stats.max_mana.max(1)    as f32,
+            StatKind::Stamina => local_stats.stamina as f32 / local_stats.max_stamina.max(1) as f32,
+        };
+        node.width = Val::Percent(ratio.clamp(0.0, 1.0) * 100.0);
+    }
+
+    for (slot, mut text) in &mut skill_labels {
+        let name = local_skills.0.get(slot.0)
+            .and_then(|&id| skill_name_map.0.get(&id))
+            .map(|s| s.as_str())
+            .unwrap_or("---");
+        text.0 = format!("[{}] {}", slot.0 + 1, name);
     }
 }
 
