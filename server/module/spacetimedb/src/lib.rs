@@ -1,106 +1,19 @@
-use spacetimedb::{Identity, ReducerContext, ScheduleAt, SpacetimeType, Table, Timestamp};
-use spacetimedb::rand::Rng;
+mod constants;
+mod tables;
+mod skill;
+mod combat;
+mod npc_ai;
+
+use spacetimedb::{Identity, ReducerContext, ScheduleAt, Table};
 use std::time::Duration;
 
-// --- Constants ---
+use crate::constants::*;
+use crate::tables::*;
+use crate::skill::*;
+use crate::combat::*;
+use crate::npc_ai::*;
 
-const WORLD_MIN: f32 = -500.0;
-const WORLD_MAX: f32 = 500.0;
-const NPC_MOVE_RANGE: f32 = 3.0;
-const NPC_CHASE_STEP: f32 = 3.0;
-const NPC_TICK_MS: u64 = 500;
-const NPC_DETECTION_RANGE: f32 = 30.0;
-const NPC_GROUND_Y: f32 = 0.9;
-const MAX_HEALTH: i32 = 100;
-const MAX_MANA: i32 = 100;
-const MAX_STAMINA: i32 = 100;
-const MANA_REGEN_PER_TICK: i32 = 3;
-const STAMINA_REGEN_PER_TICK: i32 = 3;
-const ATTACK_DAMAGE: i32 = 10;
-const ATTACK_RANGE: f32 = 3.0;
-const POINTS_PER_LEVEL: i32 = 5;
-const SKILL_XP_PER_USE: i32 = 10;
-const SKILL_XP_PER_KILL: i32 = 25;
-const PLAYER_XP_PER_NPC_KILL: i32 = 50;
-const PLAYER_XP_PER_PLAYER_KILL: i32 = 100;
-
-// --- Types ---
-
-#[derive(SpacetimeType, Clone, Debug)]
-pub struct Position {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
-
-impl Position {
-    fn distance_to(&self, other: &Position) -> f32 {
-        let dx = self.x - other.x;
-        let dy = self.y - other.y;
-        let dz = self.z - other.z;
-        (dx * dx + dy * dy + dz * dz).sqrt()
-    }
-}
-
-#[derive(SpacetimeType, Clone, Debug, PartialEq)]
-pub enum BehaviorType {
-    Melee,
-    Projectile,
-    GroundAoe,
-    Buff,
-    /// Mobility skills (Jump, Dash, etc.). Server only tracks cooldown/resource;
-    /// the client handles the visual effect entirely.
-    Mobility,
-}
-
-#[derive(SpacetimeType, Clone, Debug, PartialEq)]
-pub enum ResourceType {
-    Mana,
-    Stamina,
-}
-
-// --- Tables ---
-
-#[derive(Clone)]
-#[spacetimedb::table(accessor = player, public)]
-pub struct Player {
-    #[primary_key]
-    pub identity: Identity,
-    pub position: Position,
-    pub health: i32,
-    pub level: i32,
-    pub xp: i32,
-    pub mana: i32,
-    pub max_mana: i32,
-    pub stamina: i32,
-    pub max_stamina: i32,
-}
-
-#[derive(Clone)]
-#[spacetimedb::table(accessor = npc, public)]
-pub struct Npc {
-    #[primary_key]
-    #[auto_inc]
-    pub id: u64,
-    pub position: Position,
-    pub health: i32,
-}
-
-#[derive(Clone)]
-#[spacetimedb::table(accessor = npc_behaviour_graph, public)]
-pub struct NpcBehaviourGraph {
-    #[primary_key]
-    pub npc_id: u64,
-    pub current_node: String,
-    pub graph: String,
-}
-
-#[spacetimedb::table(accessor = npc_pending_decision, public)]
-pub struct NpcPendingDecision {
-    #[primary_key]
-    pub npc_id: u64,
-    pub context: String,
-}
+// --- NPC tick schedule (must live here alongside tick_npcs reducer) ---
 
 #[spacetimedb::table(accessor = npc_tick_schedule, scheduled(tick_npcs))]
 pub struct NpcTickSchedule {
@@ -110,305 +23,14 @@ pub struct NpcTickSchedule {
     pub scheduled_at: ScheduleAt,
 }
 
-#[derive(Clone)]
-#[spacetimedb::table(accessor = skill_def, public)]
-pub struct SkillDef {
-    #[primary_key]
-    #[auto_inc]
-    pub id: u64,
-    pub name: String,
-    pub behavior_type: BehaviorType,
-    pub resource_type: ResourceType,
-}
+// --- Scheduler helper ---
 
-#[derive(Clone)]
-#[spacetimedb::table(accessor = player_skill, public)]
-pub struct PlayerSkill {
-    #[primary_key]
-    #[auto_inc]
-    pub id: u64,
-    pub player_identity: Identity,
-    pub skill_id: u64,
-    pub level: i32,
-    pub xp: i32,
-}
-
-#[derive(Clone)]
-#[spacetimedb::table(accessor = skill_attributes, public)]
-pub struct SkillAttributes {
-    #[primary_key]
-    #[auto_inc]
-    pub id: u64,
-    pub player_identity: Identity,
-    pub skill_id: u64,
-    pub damage_points: i32,
-    pub cooldown_points: i32,
-    pub aoe_points: i32,
-    pub range_points: i32,
-    pub duration_points: i32,
-    pub projectile_count_points: i32,
-    pub knockback_points: i32,
-    pub resource_cost_points: i32,
-    pub cast_speed_points: i32,
-}
-
-#[derive(Clone)]
-#[spacetimedb::table(accessor = skill_cooldown, public)]
-pub struct SkillCooldown {
-    #[primary_key]
-    #[auto_inc]
-    pub id: u64,
-    pub player_identity: Identity,
-    pub skill_id: u64,
-    pub ready_at: Timestamp,
-}
-
-// --- Behaviour graph (internal) ---
-
-#[derive(serde::Deserialize)]
-struct BehaviourGraph {
-    initial_node: String,
-    nodes: std::collections::HashMap<String, BehaviourNode>,
-}
-
-#[derive(serde::Deserialize)]
-struct BehaviourNode {
-    action: String,
-    transitions: Vec<Transition>,
-}
-
-#[derive(serde::Deserialize)]
-struct Transition {
-    condition: String,
-    next: String,
-}
-
-// --- Skill stats ---
-
-struct SkillStats {
-    power: i32,
-    cooldown_ms: u64,
-    aoe_radius: f32,
-    range: f32,
-    knockback: f32,
-    resource_cost: i32,
-}
-
-fn compute_stats(attrs: &SkillAttributes) -> SkillStats {
-    SkillStats {
-        power: 15 + attrs.damage_points * 5,
-        cooldown_ms: 3000u64.saturating_sub(attrs.cooldown_points as u64 * 150).max(500),
-        aoe_radius: attrs.aoe_points as f32 * 0.8,
-        range: 5.0 + attrs.range_points as f32 * 1.5,
-        knockback: attrs.knockback_points as f32 * 0.5,
-        resource_cost: (25 - attrs.resource_cost_points * 2).max(5),
-    }
-}
-
-fn total_skill_points(level: i32) -> i32 { level * POINTS_PER_LEVEL }
-
-fn points_allocated(attrs: &SkillAttributes) -> i32 {
-    attrs.damage_points + attrs.cooldown_points + attrs.aoe_points +
-    attrs.range_points + attrs.duration_points + attrs.projectile_count_points +
-    attrs.knockback_points + attrs.resource_cost_points + attrs.cast_speed_points
-}
-
-fn skill_xp_threshold(level: i32) -> i32 { level * 50 }
-fn player_xp_threshold(level: i32) -> i32 { level * 100 }
-
-// --- Helpers ---
-
-fn direction_to(from: &Position, to: &Position) -> (f32, f32) {
-    let dx = to.x - from.x;
-    let dz = to.z - from.z;
-    let len = (dx * dx + dz * dz).sqrt();
-    if len < 0.001 { (0.0, 0.0) } else { (dx / len, dz / len) }
-}
-
-fn apply_knockback(pos: &Position, from: &Position, knockback: f32) -> Position {
-    if knockback <= 0.0 { return pos.clone(); }
-    let (dx, dz) = direction_to(from, pos);
-    Position {
-        x: (pos.x + dx * knockback).clamp(WORLD_MIN, WORLD_MAX),
-        y: pos.y,
-        z: (pos.z + dz * knockback).clamp(WORLD_MIN, WORLD_MAX),
-    }
-}
-
-fn respawn_player(ctx: &ReducerContext, player: &Player) {
-    ctx.db.player().identity().update(Player {
-        position: Position { x: 0.0, y: 1.0, z: 0.0 },
-        health: MAX_HEALTH,
-        mana: player.max_mana,
-        stamina: player.max_stamina,
-        ..player.clone()
+fn schedule_next_npc_tick(ctx: &ReducerContext) {
+    let next = ctx.timestamp + Duration::from_millis(NPC_TICK_MS);
+    ctx.db.npc_tick_schedule().insert(NpcTickSchedule {
+        scheduled_id: 0,
+        scheduled_at: ScheduleAt::Time(next),
     });
-}
-
-fn kill_npc(ctx: &ReducerContext, npc: &Npc, attacker: Identity) {
-    ctx.db.npc().id().delete(&npc.id);
-    ctx.db.npc_behaviour_graph().npc_id().delete(&npc.id);
-    ctx.db.npc_pending_decision().npc_id().delete(&npc.id);
-    if let Some(player) = ctx.db.player().identity().find(&attacker) {
-        award_player_xp(ctx, &player, PLAYER_XP_PER_NPC_KILL);
-    }
-}
-
-fn award_player_xp(ctx: &ReducerContext, player: &Player, amount: i32) {
-    let mut new_xp = player.xp + amount;
-    let mut new_level = player.level;
-    loop {
-        let threshold = player_xp_threshold(new_level);
-        if new_xp >= threshold { new_xp -= threshold; new_level += 1; } else { break; }
-    }
-    ctx.db.player().identity().update(Player { xp: new_xp, level: new_level, ..player.clone() });
-}
-
-fn award_skill_xp(ctx: &ReducerContext, player_identity: Identity, skill_id: u64, amount: i32) {
-    let Some(ps) = ctx.db.player_skill().iter()
-        .find(|ps| ps.player_identity == player_identity && ps.skill_id == skill_id)
-    else { return };
-    let mut new_xp = ps.xp + amount;
-    let mut new_level = ps.level;
-    loop {
-        let threshold = skill_xp_threshold(new_level);
-        if new_xp >= threshold { new_xp -= threshold; new_level += 1; } else { break; }
-    }
-    ctx.db.player_skill().id().update(PlayerSkill { xp: new_xp, level: new_level, ..ps });
-}
-
-fn give_all_skills(ctx: &ReducerContext, player_identity: Identity) {
-    for skill in ctx.db.skill_def().iter() {
-        ctx.db.player_skill().insert(PlayerSkill {
-            id: 0, player_identity, skill_id: skill.id, level: 1, xp: 0,
-        });
-        ctx.db.skill_attributes().insert(SkillAttributes {
-            id: 0, player_identity, skill_id: skill.id,
-            damage_points: 0, cooldown_points: 0, aoe_points: 0,
-            range_points: 0, duration_points: 0, projectile_count_points: 0,
-            knockback_points: 0, resource_cost_points: 0, cast_speed_points: 0,
-        });
-    }
-}
-
-fn hit_npc(ctx: &ReducerContext, npc: &Npc, power: i32, knockback: f32, from: &Position, attacker: Identity, skill_id: u64) {
-    let new_pos = apply_knockback(&npc.position, from, knockback);
-    let new_health = npc.health - power;
-    if new_health <= 0 {
-        kill_npc(ctx, npc, attacker);
-        award_skill_xp(ctx, attacker, skill_id, SKILL_XP_PER_KILL);
-    } else {
-        ctx.db.npc().id().update(Npc { position: new_pos, health: new_health, ..npc.clone() });
-    }
-}
-
-fn hit_player(ctx: &ReducerContext, target: &Player, power: i32, knockback: f32, from: &Position, attacker: Identity, skill_id: u64) {
-    let new_pos = apply_knockback(&target.position, from, knockback);
-    let new_health = target.health - power;
-    if new_health <= 0 {
-        respawn_player(ctx, target);
-        if let Some(attacker_player) = ctx.db.player().identity().find(&attacker) {
-            award_player_xp(ctx, &attacker_player, PLAYER_XP_PER_PLAYER_KILL);
-        }
-        award_skill_xp(ctx, attacker, skill_id, SKILL_XP_PER_KILL);
-    } else {
-        ctx.db.player().identity().update(Player { position: new_pos, health: new_health, ..target.clone() });
-    }
-}
-
-fn find_nearest_player(ctx: &ReducerContext, pos: &Position) -> Option<(Player, f32)> {
-    ctx.db.player().iter()
-        .map(|p| { let d = pos.distance_to(&p.position); (p, d) })
-        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
-}
-
-fn check_condition(condition: &str, npc: &Npc, target: Option<&Player>) -> bool {
-    match condition {
-        "in_range"            => target.map_or(false, |p| npc.position.distance_to(&p.position) <= ATTACK_RANGE),
-        "target_out_of_range" => target.map_or(true,  |p| npc.position.distance_to(&p.position) > ATTACK_RANGE),
-        "no_target"           => target.is_none(),
-        _                     => false,
-    }
-}
-
-fn execute_action(ctx: &ReducerContext, npc: &Npc, action: &str, target: Option<&Player>) {
-    match action {
-        "move_toward_target" => {
-            if let Some(player) = target {
-                let (dx, dz) = direction_to(&npc.position, &player.position);
-                let new_x = (npc.position.x + dx * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
-                let new_z = (npc.position.z + dz * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
-                ctx.db.npc().id().update(Npc {
-                    position: Position { x: new_x, y: NPC_GROUND_Y, z: new_z },
-                    ..(*npc).clone()
-                });
-            }
-        }
-        "attack_target" => {
-            if let Some(player) = target {
-                if npc.position.distance_to(&player.position) <= ATTACK_RANGE {
-                    let new_health = player.health - ATTACK_DAMAGE;
-                    if new_health <= 0 {
-                        respawn_player(ctx, player);
-                    } else {
-                        ctx.db.player().identity().update(Player {
-                            health: new_health,
-                            ..(*player).clone()
-                        });
-                    }
-                }
-            }
-        }
-        "flee_from_target" => {
-            if let Some(player) = target {
-                let (dx, dz) = direction_to(&npc.position, &player.position);
-                let new_x = (npc.position.x - dx * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
-                let new_z = (npc.position.z - dz * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
-                ctx.db.npc().id().update(Npc {
-                    position: Position { x: new_x, y: NPC_GROUND_Y, z: new_z },
-                    ..(*npc).clone()
-                });
-            }
-        }
-        "wander" => {
-            let dx = (ctx.rng().gen::<f32>() * 2.0 - 1.0) * NPC_MOVE_RANGE;
-            let dz = (ctx.rng().gen::<f32>() * 2.0 - 1.0) * NPC_MOVE_RANGE;
-            let new_x = (npc.position.x + dx).clamp(WORLD_MIN, WORLD_MAX);
-            let new_z = (npc.position.z + dz).clamp(WORLD_MIN, WORLD_MAX);
-            ctx.db.npc().id().update(Npc {
-                position: Position { x: new_x, y: NPC_GROUND_Y, z: new_z },
-                ..(*npc).clone()
-            });
-        }
-        _ => {}
-    }
-}
-
-fn evaluate_graph(ctx: &ReducerContext, npc: &Npc, entry: &NpcBehaviourGraph) {
-    let graph: BehaviourGraph = match serde_json::from_str(&entry.graph) {
-        Ok(g) => g,
-        Err(e) => { log::error!("Invalid graph for NPC {}: {e}", npc.id); return; }
-    };
-    let node = match graph.nodes.get(&entry.current_node) {
-        Some(n) => n,
-        None => match graph.nodes.get(&graph.initial_node) {
-            Some(n) => n,
-            None => return,
-        }
-    };
-    let target = find_nearest_player(ctx, &npc.position)
-        .filter(|(_, d)| *d <= NPC_DETECTION_RANGE)
-        .map(|(p, _)| p);
-    let next_node = node.transitions.iter()
-        .find(|t| check_condition(&t.condition, npc, target.as_ref()))
-        .map(|t| t.next.clone());
-    execute_action(ctx, npc, &node.action, target.as_ref());
-    if let Some(next) = next_node {
-        ctx.db.npc_behaviour_graph().npc_id().update(NpcBehaviourGraph {
-            current_node: next,
-            ..(*entry).clone()
-        });
-    }
 }
 
 // --- Reducers ---
@@ -430,14 +52,6 @@ pub fn start_npc_ticker(ctx: &ReducerContext) {
         ctx.db.npc_tick_schedule().scheduled_id().delete(&s.scheduled_id);
     }
     schedule_next_npc_tick(ctx);
-}
-
-fn schedule_next_npc_tick(ctx: &ReducerContext) {
-    let next = ctx.timestamp + Duration::from_millis(NPC_TICK_MS);
-    ctx.db.npc_tick_schedule().insert(NpcTickSchedule {
-        scheduled_id: 0,
-        scheduled_at: ScheduleAt::Time(next),
-    });
 }
 
 #[spacetimedb::reducer]
@@ -473,33 +87,6 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
     }
     schedule_next_npc_tick(ctx);
 }
-
-const DEFAULT_GRAPH: &str = r#"{
-    "initial_node": "idle",
-    "nodes": {
-        "idle": {
-            "action": "wander",
-            "transitions": [
-                { "condition": "in_range",            "next": "attacking" },
-                { "condition": "target_out_of_range", "next": "chasing"  }
-            ]
-        },
-        "chasing": {
-            "action": "move_toward_target",
-            "transitions": [
-                { "condition": "in_range",  "next": "attacking" },
-                { "condition": "no_target", "next": "idle"      }
-            ]
-        },
-        "attacking": {
-            "action": "attack_target",
-            "transitions": [
-                { "condition": "target_out_of_range", "next": "chasing" },
-                { "condition": "no_target",           "next": "idle"    }
-            ]
-        }
-    }
-}"#;
 
 #[spacetimedb::reducer]
 pub fn submit_npc_graph(ctx: &ReducerContext, npc_id: u64, graph_json: String) -> Result<(), String> {
@@ -674,7 +261,6 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
 
     match skill_def.behavior_type {
         BehaviorType::Melee => {
-            // Nearest entity to the player within range
             let nearest_npc = ctx.db.npc().iter()
                 .filter(|n| n.position.distance_to(&player.position) <= stats.range)
                 .min_by(|a, b| a.position.distance_to(&player.position)
@@ -698,7 +284,6 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             }
         }
         BehaviorType::Projectile => {
-            // Nearest entity to target_pos within range of player
             let nearest_npc = ctx.db.npc().iter()
                 .filter(|n| n.position.distance_to(&player.position) <= stats.range)
                 .min_by(|a, b| a.position.distance_to(&target_pos)
@@ -738,7 +323,6 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             }
         }
         BehaviorType::Buff => {
-            // Re-fetch player for fresh health after resource deduction
             let player = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
             let new_health = (player.health + stats.power).min(MAX_HEALTH);
             ctx.db.player().identity().update(Player { health: new_health, ..player });
