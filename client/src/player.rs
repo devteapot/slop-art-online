@@ -738,21 +738,39 @@ pub fn smooth_prediction_correction(
 
 /// Drain ActiveSkill insert events from remote players and fire AbilityAnimTrigger.
 pub fn sync_active_skills(
+    mut commands: Commands,
     queue: Res<ActiveSkillEventQueue>,
     local_identity: Res<LocalIdentity>,
     ability_queue: Res<AbilityAnimTriggerQueue>,
+    anim_query: Query<(Entity, &AnimBodyRef, &ActiveAbilityAnim)>,
+    bodies: Query<&PlayerId>,
 ) {
     let local_id = local_identity.0.lock().unwrap().clone();
     let mut events = queue.0.lock().unwrap();
     let mut triggers = ability_queue.0.lock().unwrap();
     for event in events.drain(..) {
-        if let ActiveSkillEvent::Inserted(active) = event {
-            let is_local = local_id.as_ref() == Some(&active.player_identity);
-            if !is_local {
-                triggers.push(AbilityAnimTrigger {
-                    identity: active.player_identity,
-                    skill_id: active.skill_id,
-                });
+        match event {
+            ActiveSkillEvent::Inserted(active) => {
+                let is_local = local_id.as_ref() == Some(&active.player_identity);
+                if !is_local {
+                    triggers.push(AbilityAnimTrigger {
+                        identity: active.player_identity,
+                        skill_id: active.skill_id,
+                    });
+                }
+            }
+            ActiveSkillEvent::Deleted(active) => {
+                // Server cancelled the ability early (e.g. silence) — remove
+                // the animation component so it doesn't play to completion.
+                for (entity, body_ref, anim) in anim_query.iter() {
+                    if anim.skill_id == active.skill_id {
+                        if let Ok(pid) = bodies.get(body_ref.0) {
+                            if pid.0 == active.player_identity {
+                                commands.entity(entity).remove::<ActiveAbilityAnim>();
+                            }
+                        }
+                    }
+                }
             }
         }
     }
