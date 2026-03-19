@@ -43,7 +43,19 @@ pub struct AllocateButton(pub usize);
 pub struct SkillDetailClose;
 
 #[derive(Component)]
+pub struct SkillXpBarFill;
+
+#[derive(Component)]
+pub struct SkillXpLabel;
+
+#[derive(Component)]
 pub struct MobilitySlotLabel(pub usize); // 0 = Jump, 1 = Dash
+
+#[derive(Component)]
+pub struct LevelLabel;
+
+#[derive(Component)]
+pub struct XpBarFill;
 
 // --- Setup ---
 
@@ -56,9 +68,50 @@ pub fn setup_hud(mut commands: Commands) {
         row_gap: Val::Px(4.0),
         ..default()
     }).with_children(|col| {
+        // Level label
+        col.spawn((
+            LevelLabel,
+            Text::new("Lv 1"),
+            TextFont { font_size: 13.0, ..default() },
+            TextColor(Color::srgb(1.0, 0.9, 0.4)),
+        ));
+
         spawn_stat_bar(col, "HP", Color::srgb(0.8, 0.15, 0.15), StatKind::Health);
         spawn_stat_bar(col, "MP", Color::srgb(0.2, 0.45, 0.9),  StatKind::Mana);
         spawn_stat_bar(col, "SP", Color::srgb(0.2, 0.75, 0.35), StatKind::Stamina);
+
+        // XP bar
+        col.spawn(Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(6.0),
+            ..default()
+        }).with_children(|row: &mut ChildSpawnerCommands| {
+            row.spawn((
+                Text::new("XP"),
+                TextFont { font_size: 11.0, ..default() },
+                TextColor(Color::WHITE),
+                Node { width: Val::Px(20.0), ..default() },
+            ));
+            row.spawn((
+                Node {
+                    width: Val::Px(180.0),
+                    height: Val::Px(8.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
+            )).with_children(|bar: &mut ChildSpawnerCommands| {
+                bar.spawn((
+                    XpBarFill,
+                    Node {
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(1.0, 0.85, 0.2)),
+                ));
+            });
+        });
 
         // Combat skill bar
         col.spawn(Node {
@@ -176,6 +229,34 @@ pub fn setup_hud(mut commands: Commands) {
             TextColor(Color::srgb(0.8, 0.8, 0.4)),
         ));
 
+        // Skill XP label
+        panel.spawn((
+            SkillXpLabel,
+            Text::new("XP: 0 / 50"),
+            TextFont { font_size: 11.0, ..default() },
+            TextColor(Color::srgb(0.6, 0.8, 1.0)),
+        ));
+
+        // Skill XP bar
+        panel.spawn((
+            Node {
+                width: Val::Px(220.0),
+                height: Val::Px(8.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
+        )).with_children(|bar| {
+            bar.spawn((
+                SkillXpBarFill,
+                Node {
+                    width: Val::Percent(0.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.3, 0.55, 1.0)),
+            ));
+        });
+
         // Separator
         panel.spawn((
             Node {
@@ -266,9 +347,11 @@ pub fn update_hud(
     skill_name_map: Res<SkillNameMap>,
     local_cooldowns: Res<LocalCooldowns>,
     mobility_ids: Res<MobilitySkillIds>,
-    mut stat_fills: Query<(&StatBarFill, &mut Node)>,
-    mut skill_labels: Query<(&SkillSlotLabel, &mut Text), Without<MobilitySlotLabel>>,
-    mut mobility_labels: Query<(&MobilitySlotLabel, &mut Text), Without<SkillSlotLabel>>,
+    mut stat_fills: Query<(&StatBarFill, &mut Node), (Without<XpBarFill>, Without<SkillSlotLabel>, Without<MobilitySlotLabel>)>,
+    mut skill_labels: Query<(&SkillSlotLabel, &mut Text), (Without<MobilitySlotLabel>, Without<LevelLabel>)>,
+    mut mobility_labels: Query<(&MobilitySlotLabel, &mut Text), (Without<SkillSlotLabel>, Without<LevelLabel>)>,
+    mut level_label: Query<&mut Text, (With<LevelLabel>, Without<SkillSlotLabel>, Without<MobilitySlotLabel>)>,
+    mut xp_fill: Query<&mut Node, (With<XpBarFill>, Without<StatBarFill>)>,
 ) {
     for (fill, mut node) in &mut stat_fills {
         let ratio = match fill.0 {
@@ -304,6 +387,18 @@ pub fn update_hud(
         } else {
             text.0 = format!("{} {}", mob_keys[slot.0], name);
         }
+    }
+
+    // Level label
+    if let Ok(mut text) = level_label.single_mut() {
+        text.0 = format!("Lv {}", local_stats.level);
+    }
+
+    // XP bar
+    let xp_threshold = (local_stats.level * 100).max(1);
+    let xp_ratio = (local_stats.xp as f32 / xp_threshold as f32).clamp(0.0, 1.0);
+    if let Ok(mut node) = xp_fill.single_mut() {
+        node.width = Val::Percent(xp_ratio * 100.0);
     }
 }
 
@@ -351,9 +446,11 @@ pub fn update_skill_detail_panel(
     local_skill_data: Res<LocalSkillData>,
     skill_name_map: Res<SkillNameMap>,
     mut panel: Query<&mut Visibility, With<SkillDetailPanel>>,
-    mut title: Query<&mut Text, (With<SkillDetailTitle>, Without<SkillDetailPoints>, Without<SkillAttrRow>)>,
-    mut points_text: Query<&mut Text, (With<SkillDetailPoints>, Without<SkillDetailTitle>, Without<SkillAttrRow>)>,
-    mut attr_rows: Query<(&SkillAttrRow, &mut Text), (Without<SkillDetailTitle>, Without<SkillDetailPoints>)>,
+    mut title: Query<&mut Text, (With<SkillDetailTitle>, Without<SkillDetailPoints>, Without<SkillAttrRow>, Without<SkillXpLabel>)>,
+    mut points_text: Query<&mut Text, (With<SkillDetailPoints>, Without<SkillDetailTitle>, Without<SkillAttrRow>, Without<SkillXpLabel>)>,
+    mut attr_rows: Query<(&SkillAttrRow, &mut Text), (Without<SkillDetailTitle>, Without<SkillDetailPoints>, Without<SkillXpLabel>)>,
+    mut xp_label: Query<&mut Text, (With<SkillXpLabel>, Without<SkillDetailTitle>, Without<SkillDetailPoints>, Without<SkillAttrRow>)>,
+    mut xp_fill: Query<&mut Node, With<SkillXpBarFill>>,
 ) {
     let Ok(mut vis) = panel.single_mut() else { return };
 
@@ -369,6 +466,16 @@ pub fn update_skill_detail_panel(
 
     let level = local_skill_data.levels.get(&skill_id).copied().unwrap_or(1);
     let total_pts = level * POINTS_PER_LEVEL;
+
+    // Skill XP bar
+    let xp = local_skill_data.xp.get(&skill_id).copied().unwrap_or(0);
+    let threshold = (level * 50).max(1);
+    if let Ok(mut t) = xp_label.single_mut() {
+        t.0 = format!("XP: {xp} / {threshold}");
+    }
+    if let Ok(mut node) = xp_fill.single_mut() {
+        node.width = Val::Percent((xp as f32 / threshold as f32).clamp(0.0, 1.0) * 100.0);
+    }
 
     if let Some(attrs) = local_skill_data.attrs.get(&skill_id) {
         let used = points_allocated_client(attrs);

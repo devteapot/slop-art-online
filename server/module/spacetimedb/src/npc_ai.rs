@@ -74,7 +74,8 @@ pub fn execute_action(ctx: &ReducerContext, npc: &Npc, action: &str, target: Opt
         "attack_target" => {
             if let Some(player) = target {
                 if npc.position.distance_to(&player.position) <= ATTACK_RANGE {
-                    let new_health = player.health - ATTACK_DAMAGE;
+                    let dmg = crate::skill::npc_damage(npc.level);
+                    let new_health = player.health - dmg;
                     if new_health <= 0 {
                         use crate::combat::respawn_player;
                         respawn_player(ctx, player);

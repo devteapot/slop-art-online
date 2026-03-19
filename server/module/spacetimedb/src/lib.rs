@@ -148,8 +148,8 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                 if let Some((player, dist)) = find_nearest_player(ctx, &npc.position) {
                     if dist <= NPC_DETECTION_RANGE {
                         let context = format!(
-                            r#"{{"npc_id":{},"npc_position":{{"x":{},"y":{},"z":{}}},"npc_health":{},"nearby_players":[{{"identity":"{}","position":{{"x":{},"y":{},"z":{}}},"distance":{}}}],"attack_range":{}}}"#,
-                            npc.id, npc.position.x, npc.position.y, npc.position.z, npc.health,
+                            r#"{{"npc_id":{},"npc_level":{},"npc_position":{{"x":{},"y":{},"z":{}}},"npc_health":{},"nearby_players":[{{"identity":"{}","position":{{"x":{},"y":{},"z":{}}},"distance":{}}}],"attack_range":{}}}"#,
+                            npc.id, npc.level, npc.position.x, npc.position.y, npc.position.z, npc.health,
                             player.identity.to_hex().to_string(),
                             player.position.x, player.position.y, player.position.z, dist,
                             ATTACK_RANGE
@@ -189,11 +189,14 @@ pub fn submit_npc_graph(ctx: &ReducerContext, npc_id: u64, graph_json: String) -
 }
 
 #[spacetimedb::reducer]
-pub fn spawn_npc(ctx: &ReducerContext, x: f32, z: f32) {
+pub fn spawn_npc(ctx: &ReducerContext, x: f32, z: f32, level: i32) {
+    let hp = npc_max_health(level);
     let npc = ctx.db.npc().insert(Npc {
         id: 0,
         position: Position { x: x.clamp(WORLD_MIN, WORLD_MAX), y: NPC_GROUND_Y, z: z.clamp(WORLD_MIN, WORLD_MAX) },
-        health: MAX_HEALTH,
+        health: hp,
+        max_health: hp,
+        level,
     });
     ctx.db.npc_behaviour_graph().insert(NpcBehaviourGraph {
         npc_id: npc.id,
@@ -205,24 +208,34 @@ pub fn spawn_npc(ctx: &ReducerContext, x: f32, z: f32) {
 #[spacetimedb::reducer]
 pub fn join_game(ctx: &ReducerContext) {
     if let Some(existing) = ctx.db.player().identity().find(&ctx.sender()) {
+        let mh = player_max_health(existing.level);
+        let mm = player_max_mana(existing.level);
+        let ms = player_max_stamina(existing.level);
         ctx.db.player().identity().update(Player {
             position: Position { x: 0.0, y: 1.0, z: 0.0 },
-            health: MAX_HEALTH,
-            mana: existing.max_mana,
-            stamina: existing.max_stamina,
+            health: mh,
+            max_health: mh,
+            mana: mm,
+            max_mana: mm,
+            stamina: ms,
+            max_stamina: ms,
             ..existing
         });
     } else {
+        let mh = player_max_health(1);
+        let mm = player_max_mana(1);
+        let ms = player_max_stamina(1);
         ctx.db.player().insert(Player {
             identity: ctx.sender(),
             position: Position { x: 0.0, y: 1.0, z: 0.0 },
-            health: MAX_HEALTH,
+            health: mh,
+            max_health: mh,
             level: 1,
             xp: 0,
-            mana: MAX_MANA,
-            max_mana: MAX_MANA,
-            stamina: MAX_STAMINA,
-            max_stamina: MAX_STAMINA,
+            mana: mm,
+            max_mana: mm,
+            stamina: ms,
+            max_stamina: ms,
             facing_angle: 0.0,
             last_seq: 0,
         });
@@ -279,10 +292,10 @@ pub fn attack_player(ctx: &ReducerContext, target: Identity) -> Result<(), Strin
     if attacker.position.distance_to(&target_player.position) > ATTACK_RANGE {
         return Err("Target out of range".to_string());
     }
-    let new_health = target_player.health - ATTACK_DAMAGE;
+    let new_health = target_player.health - PLAYER_BASE_ATTACK;
     if new_health <= 0 {
         respawn_player(ctx, &target_player);
-        award_player_xp(ctx, &attacker, PLAYER_XP_PER_PLAYER_KILL);
+        award_player_xp(ctx, &attacker, xp_for_player_kill(target_player.level));
     } else {
         ctx.db.player().identity().update(Player { health: new_health, ..target_player });
     }
@@ -298,7 +311,7 @@ pub fn attack_npc(ctx: &ReducerContext, target_id: u64) -> Result<(), String> {
     if attacker.position.distance_to(&target_npc.position) > ATTACK_RANGE {
         return Err("Target out of range".to_string());
     }
-    let new_health = target_npc.health - ATTACK_DAMAGE;
+    let new_health = target_npc.health - PLAYER_BASE_ATTACK;
     if new_health <= 0 {
         kill_npc(ctx, &target_npc, ctx.sender());
     } else {
@@ -371,13 +384,13 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             match (nearest_npc, nearest_player) {
                 (Some(n), Some(p)) => {
                     if n.position.distance_to(&player.position) <= p.position.distance_to(&player.position) {
-                        hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id);
+                        hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
                     } else {
-                        hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id);
+                        hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
                     }
                 }
-                (Some(n), None) => hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id),
-                (None, Some(p)) => hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id),
+                (Some(n), None) => hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT),
+                (None, Some(p)) => hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT),
                 (None, None) => {}
             }
         }
@@ -417,12 +430,12 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             // Apply first tick immediately so the skill doesn't feel delayed
             for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
                 if npc.position.distance_to(&target_pos) <= radius {
-                    hit_npc(ctx, &npc, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id);
+                    hit_npc(ctx, &npc, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
                 }
             }
             for p in ctx.db.player().iter().collect::<Vec<_>>() {
                 if p.identity != ctx.sender() && p.position.distance_to(&target_pos) <= radius {
-                    hit_player(ctx, &p, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id);
+                    hit_player(ctx, &p, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
                 }
             }
 
@@ -445,8 +458,12 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
         }
         BehaviorType::Buff => {
             let player = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
-            let new_health = (player.health + stats.power).min(MAX_HEALTH);
+            let new_health = (player.health + stats.power).min(player.max_health);
+            let healed = new_health - player.health;
             ctx.db.player().identity().update(Player { health: new_health, ..player });
+            if healed > 0 {
+                award_skill_xp(ctx, ctx.sender(), skill_id, healed);
+            }
         }
         BehaviorType::Mobility => {
             // Cooldown and resource already consumed above.
@@ -458,7 +475,10 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
         }
     }
 
-    award_skill_xp(ctx, ctx.sender(), skill_id, SKILL_XP_PER_USE);
+    // Mobility skills get XP on cast; damage skills get XP from hit_npc/hit_player; buff XP handled inline
+    if skill_def.behavior_type == BehaviorType::Mobility {
+        award_skill_xp(ctx, ctx.sender(), skill_id, SKILL_XP_PER_USE);
+    }
 
     // Compute direction from player toward target for animations
     let dx = target_pos.x - player.position.x;
@@ -562,8 +582,7 @@ pub fn tick_projectiles(ctx: &ReducerContext, _schedule: ProjectileTickSchedule)
         let mut hit = false;
         for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
             if proj_pos.distance_to(&npc.position) <= proj.hit_radius {
-                hit_npc(ctx, &npc, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id);
-                award_skill_xp(ctx, proj.owner, proj.skill_id, SKILL_XP_PER_USE);
+                hit_npc(ctx, &npc, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id, SKILL_XP_PER_HIT);
                 hit = true;
                 break;
             }
@@ -576,8 +595,7 @@ pub fn tick_projectiles(ctx: &ReducerContext, _schedule: ProjectileTickSchedule)
         // Check collision against players (excluding owner)
         for p in ctx.db.player().iter().collect::<Vec<_>>() {
             if p.identity != proj.owner && proj_pos.distance_to(&p.position) <= proj.hit_radius {
-                hit_player(ctx, &p, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id);
-                award_skill_xp(ctx, proj.owner, proj.skill_id, SKILL_XP_PER_USE);
+                hit_player(ctx, &p, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id, SKILL_XP_PER_HIT);
                 hit = true;
                 break;
             }
@@ -593,12 +611,12 @@ pub fn tick_projectiles(ctx: &ReducerContext, _schedule: ProjectileTickSchedule)
             let center = Position { x: zone.center_x, y: zone.center_y, z: zone.center_z };
             for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
                 if npc.position.distance_to(&center) <= zone.radius {
-                    hit_npc(ctx, &npc, zone.power, zone.knockback, &center, zone.owner, zone.skill_id);
+                    hit_npc(ctx, &npc, zone.power, zone.knockback, &center, zone.owner, zone.skill_id, SKILL_XP_PER_AOE_TICK);
                 }
             }
             for p in ctx.db.player().iter().collect::<Vec<_>>() {
                 if p.identity != zone.owner && p.position.distance_to(&center) <= zone.radius {
-                    hit_player(ctx, &p, zone.power, zone.knockback, &center, zone.owner, zone.skill_id);
+                    hit_player(ctx, &p, zone.power, zone.knockback, &center, zone.owner, zone.skill_id, SKILL_XP_PER_AOE_TICK);
                 }
             }
             ctx.db.aoe_zone().scheduled_id().update(AoeZone { last_tick_at: now_ms, ..zone });
@@ -666,9 +684,13 @@ pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: Stri
 
     let (target_x, target_y, target_z) = match target_kind.as_str() {
         "self" => {
-            let new_health = (player.health + stats.power).min(MAX_HEALTH);
             let current = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
+            let new_health = (player.health + stats.power).min(current.max_health);
+            let healed = new_health - current.health;
             ctx.db.player().identity().update(Player { health: new_health, ..current });
+            if healed > 0 {
+                award_skill_xp(ctx, ctx.sender(), skill_id, healed);
+            }
             (player.position.x, player.position.y, player.position.z)
         }
         "npc" => {
@@ -677,7 +699,7 @@ pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: Stri
                 return Err("Target out of range".to_string());
             }
             let pos = (npc.position.x, npc.position.y, npc.position.z);
-            hit_npc(ctx, &npc, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id);
+            hit_npc(ctx, &npc, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
             pos
         }
         "player" => {
@@ -689,13 +711,11 @@ pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: Stri
                 return Err("Target out of range".to_string());
             }
             let pos = (target_player.position.x, target_player.position.y, target_player.position.z);
-            hit_player(ctx, &target_player, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id);
+            hit_player(ctx, &target_player, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
             pos
         }
         _ => return Err(format!("Unknown target_kind: {target_kind}")),
     };
-
-    award_skill_xp(ctx, ctx.sender(), skill_id, SKILL_XP_PER_USE);
 
     let dx = target_x - player.position.x;
     let dz = target_z - player.position.z;

@@ -2,7 +2,7 @@ use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::constants::*;
 use crate::tables::*;
-use crate::skill::{player_xp_threshold, skill_xp_threshold};
+use crate::skill::*;
 
 pub fn direction_to(from: &Position, to: &Position) -> (f32, f32) {
     let dx = to.x - from.x;
@@ -24,7 +24,7 @@ pub fn apply_knockback(pos: &Position, from: &Position, knockback: f32) -> Posit
 pub fn respawn_player(ctx: &ReducerContext, player: &Player) {
     ctx.db.player().identity().update(Player {
         position: Position { x: 0.0, y: 1.0, z: 0.0 },
-        health: MAX_HEALTH,
+        health: player.max_health,
         mana: player.max_mana,
         stamina: player.max_stamina,
         ..player.clone()
@@ -32,22 +32,38 @@ pub fn respawn_player(ctx: &ReducerContext, player: &Player) {
 }
 
 pub fn kill_npc(ctx: &ReducerContext, npc: &Npc, attacker: Identity) {
+    let xp = xp_for_npc_kill(npc.level);
     ctx.db.npc().id().delete(&npc.id);
     ctx.db.npc_behaviour_graph().npc_id().delete(&npc.id);
     ctx.db.npc_pending_decision().npc_id().delete(&npc.id);
     if let Some(player) = ctx.db.player().identity().find(&attacker) {
-        award_player_xp(ctx, &player, PLAYER_XP_PER_NPC_KILL);
+        award_player_xp(ctx, &player, xp);
     }
 }
 
 pub fn award_player_xp(ctx: &ReducerContext, player: &Player, amount: i32) {
     let mut new_xp = player.xp + amount;
     let mut new_level = player.level;
+    let old_level = player.level;
     loop {
         let threshold = player_xp_threshold(new_level);
         if new_xp >= threshold { new_xp -= threshold; new_level += 1; } else { break; }
     }
-    ctx.db.player().identity().update(Player { xp: new_xp, level: new_level, ..player.clone() });
+    let leveled_up = new_level > old_level;
+    let new_max_health = player_max_health(new_level);
+    let new_max_mana = player_max_mana(new_level);
+    let new_max_stamina = player_max_stamina(new_level);
+    ctx.db.player().identity().update(Player {
+        xp: new_xp,
+        level: new_level,
+        max_health: new_max_health,
+        max_mana: new_max_mana,
+        max_stamina: new_max_stamina,
+        health: if leveled_up { new_max_health } else { player.health },
+        mana: if leveled_up { new_max_mana } else { player.mana },
+        stamina: if leveled_up { new_max_stamina } else { player.stamina },
+        ..player.clone()
+    });
 }
 
 pub fn award_skill_xp(ctx: &ReducerContext, player_identity: Identity, skill_id: u64, amount: i32) {
@@ -77,7 +93,8 @@ pub fn give_all_skills(ctx: &ReducerContext, player_identity: Identity) {
     }
 }
 
-pub fn hit_npc(ctx: &ReducerContext, npc: &Npc, power: i32, knockback: f32, from: &Position, attacker: Identity, skill_id: u64) {
+pub fn hit_npc(ctx: &ReducerContext, npc: &Npc, power: i32, knockback: f32, from: &Position, attacker: Identity, skill_id: u64, hit_xp: i32) {
+    award_skill_xp(ctx, attacker, skill_id, hit_xp);
     let new_pos = apply_knockback(&npc.position, from, knockback);
     let new_health = npc.health - power;
     if new_health <= 0 {
@@ -88,13 +105,14 @@ pub fn hit_npc(ctx: &ReducerContext, npc: &Npc, power: i32, knockback: f32, from
     }
 }
 
-pub fn hit_player(ctx: &ReducerContext, target: &Player, power: i32, knockback: f32, from: &Position, attacker: Identity, skill_id: u64) {
+pub fn hit_player(ctx: &ReducerContext, target: &Player, power: i32, knockback: f32, from: &Position, attacker: Identity, skill_id: u64, hit_xp: i32) {
+    award_skill_xp(ctx, attacker, skill_id, hit_xp);
     let new_pos = apply_knockback(&target.position, from, knockback);
     let new_health = target.health - power;
     if new_health <= 0 {
         respawn_player(ctx, target);
         if let Some(attacker_player) = ctx.db.player().identity().find(&attacker) {
-            award_player_xp(ctx, &attacker_player, PLAYER_XP_PER_PLAYER_KILL);
+            award_player_xp(ctx, &attacker_player, xp_for_player_kill(target.level));
         }
         award_skill_xp(ctx, attacker, skill_id, SKILL_XP_PER_KILL);
     } else {

@@ -1,4 +1,4 @@
-use crate::constants::POINTS_PER_LEVEL;
+use crate::constants::*;
 use crate::tables::SkillAttributes;
 
 pub struct SkillStats {
@@ -31,3 +31,12 @@ pub fn points_allocated(attrs: &SkillAttributes) -> i32 {
 
 pub fn skill_xp_threshold(level: i32) -> i32 { level * 50 }
 pub fn player_xp_threshold(level: i32) -> i32 { level * 100 }
+
+// Stat scaling helpers
+pub fn player_max_health(level: i32) -> i32 { BASE_PLAYER_HP + HP_PER_LEVEL * level }
+pub fn player_max_mana(level: i32) -> i32 { BASE_PLAYER_MANA + MANA_PER_LEVEL * level }
+pub fn player_max_stamina(level: i32) -> i32 { BASE_PLAYER_STAMINA + STAMINA_PER_LEVEL * level }
+pub fn npc_max_health(level: i32) -> i32 { BASE_NPC_HP + NPC_HP_PER_LEVEL * level }
+pub fn npc_damage(level: i32) -> i32 { BASE_NPC_DAMAGE + NPC_DAMAGE_PER_LEVEL * level }
+pub fn xp_for_npc_kill(npc_level: i32) -> i32 { BASE_XP_PER_NPC_KILL + XP_PER_NPC_LEVEL * npc_level }
+pub fn xp_for_player_kill(player_level: i32) -> i32 { BASE_XP_PER_PLAYER_KILL + XP_PER_PLAYER_LEVEL * player_level }

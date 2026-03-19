@@ -99,6 +99,8 @@ pub struct LocalPlayerStats {
     pub max_mana: i32,
     pub stamina: i32,
     pub max_stamina: i32,
+    pub level: i32,
+    pub xp: i32,
 }
 
 impl Default for LocalPlayerStats {
@@ -110,6 +112,8 @@ impl Default for LocalPlayerStats {
             max_mana: 100,
             stamina: 0,
             max_stamina: 100,
+            level: 1,
+            xp: 0,
         }
     }
 }
@@ -186,11 +190,13 @@ pub fn sync_players(
                 let is_local = local_id.as_ref() == Some(&player.identity);
                 if is_local {
                     local_stats.health = player.health;
-                    local_stats.max_health = 100;
+                    local_stats.max_health = player.max_health;
                     local_stats.mana = player.mana;
                     local_stats.max_mana = player.max_mana;
                     local_stats.stamina = player.stamina;
                     local_stats.max_stamina = player.max_stamina;
+                    local_stats.level = player.level;
+                    local_stats.xp = player.xp;
                 }
 
                 let server_pos = to_world_pos(&player.position);
@@ -262,8 +268,13 @@ pub fn sync_players(
                 }
                 if is_local {
                     local_stats.health = player.health;
+                    local_stats.max_health = player.max_health;
                     local_stats.mana = player.mana;
+                    local_stats.max_mana = player.max_mana;
                     local_stats.stamina = player.stamina;
+                    local_stats.max_stamina = player.max_stamina;
+                    local_stats.level = player.level;
+                    local_stats.xp = player.xp;
 
                     // Phase 5: Server reconciliation
                     let server_seq = player.last_seq;

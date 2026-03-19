@@ -17,7 +17,6 @@ pub const ATTRS: &[(&str, &str)] = &[
 
 pub const MOVE_SPEED: f32 = 20.0;
 pub const ATTACK_RANGE: f32 = 3.0;
-pub const MAX_HEALTH: f32 = 100.0;
 pub const HEALTH_BAR_WIDTH: f32 = 1.0;
 pub const HEALTH_BAR_HEIGHT: f32 = 0.1;
 pub const HEALTH_BAR_Y_OFFSET: f32 = 1.8;

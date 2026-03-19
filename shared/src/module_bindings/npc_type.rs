@@ -12,6 +12,8 @@ pub struct Npc {
     pub id: u64,
     pub position: Position,
     pub health: i32,
+    pub max_health: i32,
+    pub level: i32,
 }
 
 impl __sdk::InModule for Npc {
@@ -25,6 +27,8 @@ pub struct NpcCols {
     pub id: __sdk::__query_builder::Col<Npc, u64>,
     pub position: __sdk::__query_builder::Col<Npc, Position>,
     pub health: __sdk::__query_builder::Col<Npc, i32>,
+    pub max_health: __sdk::__query_builder::Col<Npc, i32>,
+    pub level: __sdk::__query_builder::Col<Npc, i32>,
 }
 
 impl __sdk::__query_builder::HasCols for Npc {
@@ -34,6 +38,8 @@ impl __sdk::__query_builder::HasCols for Npc {
             id: __sdk::__query_builder::Col::new(table_name, "id"),
             position: __sdk::__query_builder::Col::new(table_name, "position"),
             health: __sdk::__query_builder::Col::new(table_name, "health"),
+            max_health: __sdk::__query_builder::Col::new(table_name, "max_health"),
+            level: __sdk::__query_builder::Col::new(table_name, "level"),
         }
     }
 }

@@ -9,6 +9,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 pub(super) struct SpawnNpcArgs {
     pub x: f32,
     pub z: f32,
+    pub level: i32,
 }
 
 impl From<SpawnNpcArgs> for super::Reducer {
@@ -16,6 +17,7 @@ impl From<SpawnNpcArgs> for super::Reducer {
         Self::SpawnNpc {
             x: args.x,
             z: args.z,
+            level: args.level,
         }
     }
 }
@@ -35,8 +37,8 @@ pub trait spawn_npc {
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
     /// /// Use [`spawn_npc:spawn_npc_then`] to run a callback after the reducer completes.
-    fn spawn_npc(&self, x: f32, z: f32) -> __sdk::Result<()> {
-        self.spawn_npc_then(x, z, |_, _| {})
+    fn spawn_npc(&self, x: f32, z: f32, level: i32) -> __sdk::Result<()> {
+        self.spawn_npc_then(x, z, level, |_, _| {})
     }
 
     /// Request that the remote module invoke the reducer `spawn_npc` to run as soon as possible,
@@ -49,6 +51,7 @@ pub trait spawn_npc {
         &self,
         x: f32,
         z: f32,
+        level: i32,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -61,12 +64,13 @@ impl spawn_npc for super::RemoteReducers {
         &self,
         x: f32,
         z: f32,
+        level: i32,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
             + 'static,
     ) -> __sdk::Result<()> {
         self.imp
-            .invoke_reducer_with_callback(SpawnNpcArgs { x, z }, callback)
+            .invoke_reducer_with_callback(SpawnNpcArgs { x, z, level }, callback)
     }
 }

@@ -42,6 +42,7 @@ pub struct Player {
     pub identity: Identity,
     pub position: Position,
     pub health: i32,
+    pub max_health: i32,
     pub level: i32,
     pub xp: i32,
     pub mana: i32,
@@ -60,6 +61,8 @@ pub struct Npc {
     pub id: u64,
     pub position: Position,
     pub health: i32,
+    pub max_health: i32,
+    pub level: i32,
 }
 
 #[derive(Clone)]

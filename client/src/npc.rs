@@ -32,7 +32,7 @@ pub fn sync_npcs(
                         ..default()
                     })),
                     Transform::from_translation(pos),
-                    Health(npc.health),
+                    Health { current: npc.health, max: npc.max_health },
                     HealthBarFillRef(fill_id),
                     buffer,
                 ));
@@ -45,7 +45,8 @@ pub fn sync_npcs(
                         if let Some(mut buffer) = interp_buffer {
                             buffer.push(to_world_pos(&npc.position), 0.0, now);
                         }
-                        health.0 = npc.health;
+                        health.current = npc.health;
+                        health.max = npc.max_health;
                     }
                 }
             }

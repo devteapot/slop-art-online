@@ -24,6 +24,7 @@ pub struct LocalSkills(pub Vec<u64>);
 #[derive(Resource, Default)]
 pub struct LocalSkillData {
     pub levels: std::collections::HashMap<u64, i32>,
+    pub xp:     std::collections::HashMap<u64, i32>,
     pub attrs:  std::collections::HashMap<u64, SkillAttributes>,
 }
 
@@ -112,6 +113,7 @@ pub fn sync_player_skills(
         match event {
             PlayerSkillEvent::Inserted(ps) if &ps.player_identity == id => {
                 local_skill_data.levels.insert(ps.skill_id, ps.level);
+                local_skill_data.xp.insert(ps.skill_id, ps.xp);
                 if !local_skills.0.contains(&ps.skill_id) {
                     local_skills.0.push(ps.skill_id);
                     changed = true;
@@ -119,9 +121,11 @@ pub fn sync_player_skills(
             }
             PlayerSkillEvent::Updated(ps) if &ps.player_identity == id => {
                 local_skill_data.levels.insert(ps.skill_id, ps.level);
+                local_skill_data.xp.insert(ps.skill_id, ps.xp);
             }
             PlayerSkillEvent::Deleted(ps) if &ps.player_identity == id => {
                 local_skill_data.levels.remove(&ps.skill_id);
+                local_skill_data.xp.remove(&ps.skill_id);
                 local_skills.0.retain(|&s| s != ps.skill_id);
                 changed = true;
             }

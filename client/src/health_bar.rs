@@ -1,10 +1,13 @@
 use bevy::prelude::*;
 
-use crate::constants::{HEALTH_BAR_HEIGHT, HEALTH_BAR_WIDTH, HEALTH_BAR_Y_OFFSET, MAX_HEALTH};
+use crate::constants::{HEALTH_BAR_HEIGHT, HEALTH_BAR_WIDTH, HEALTH_BAR_Y_OFFSET};
 use crate::world::MainCamera;
 
 #[derive(Component)]
-pub struct Health(pub i32);
+pub struct Health {
+    pub current: i32,
+    pub max: i32,
+}
 
 /// Marker on the fill mesh entity of a health bar.
 #[derive(Component)]
@@ -62,7 +65,7 @@ pub fn update_health_bars(
 ) {
     for (health, fill_ref) in &characters {
         if let Ok(mut transform) = fills.get_mut(fill_ref.0) {
-            let ratio = (health.0 as f32 / MAX_HEALTH).clamp(0.0, 1.0);
+            let ratio = (health.current as f32 / health.max.max(1) as f32).clamp(0.0, 1.0);
             transform.scale.x = ratio;
             transform.translation.x = -HEALTH_BAR_WIDTH * (1.0 - ratio) / 2.0;
         }

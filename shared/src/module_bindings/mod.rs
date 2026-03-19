@@ -117,6 +117,7 @@ pub enum Reducer {
     SpawnNpc {
         x: f32,
         z: f32,
+        level: i32,
     },
     StartNpcTicker,
     StartProjectileTicker,
@@ -194,10 +195,13 @@ impl __sdk::Reducer for Reducer {
                     angle: angle.clone(),
                 })
             }
-            Reducer::SpawnNpc { x, z } => __sats::bsatn::to_vec(&spawn_npc_reducer::SpawnNpcArgs {
-                x: x.clone(),
-                z: z.clone(),
-            }),
+            Reducer::SpawnNpc { x, z, level } => {
+                __sats::bsatn::to_vec(&spawn_npc_reducer::SpawnNpcArgs {
+                    x: x.clone(),
+                    z: z.clone(),
+                    level: level.clone(),
+                })
+            }
             Reducer::StartNpcTicker => {
                 __sats::bsatn::to_vec(&start_npc_ticker_reducer::StartNpcTickerArgs {})
             }
