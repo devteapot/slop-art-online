@@ -35,8 +35,6 @@ pub struct LocalInventory(pub HashMap<i32, (u64, u64, i32)>);
 pub struct InventoryOpen(pub bool);
 
 pub struct EquipmentDefData {
-    pub equip_slot: EquipSlot,
-    pub required_level: i32,
     pub max_durability: i32,
     pub bonus_health: i32,
     pub bonus_mana: i32,
@@ -149,8 +147,6 @@ pub fn sync_equipment_defs(
         match event {
             EquipmentDefEvent::Inserted(def) => {
                 equip_map.0.insert(def.item_def_id, EquipmentDefData {
-                    equip_slot: def.equip_slot,
-                    required_level: def.required_level,
                     max_durability: def.max_durability,
                     bonus_health: def.bonus_health,
                     bonus_mana: def.bonus_mana,
@@ -231,6 +227,16 @@ pub fn sync_equipped_items(
             }
         }
     }
+}
+
+fn equipment_stat_line(data: &EquipmentDefData) -> String {
+    let mut parts = Vec::new();
+    if data.bonus_health != 0 { parts.push(format!("+{} HP", data.bonus_health)); }
+    if data.bonus_mana != 0 { parts.push(format!("+{} MP", data.bonus_mana)); }
+    if data.bonus_stamina != 0 { parts.push(format!("+{} SP", data.bonus_stamina)); }
+    if data.bonus_attack != 0 { parts.push(format!("+{} ATK", data.bonus_attack)); }
+    if data.bonus_defense != 0 { parts.push(format!("+{} DEF", data.bonus_defense)); }
+    parts.join(" ")
 }
 
 fn rarity_color(rarity: &str) -> Color {
@@ -502,6 +508,7 @@ pub fn update_inventory_panel(
     item_map: Res<ItemDefMap>,
     rarity_map: Res<ItemRarityMap>,
     consumable_map: Res<ConsumableDefMap>,
+    equip_def_map: Res<EquipmentDefMap>,
     mut panel: Query<&mut Visibility, With<InventoryPanel>>,
     mut labels: Query<(&InventorySlotLabel, &mut Text), Without<EquipmentSlotLabel>>,
     mut slot_bgs: Query<(&InventorySlotNode, &mut BackgroundColor), Without<EquipmentSlotNode>>,
@@ -528,6 +535,11 @@ pub fn update_inventory_panel(
             }
             if let Some(cdata) = consumable_map.0.get(item_def_id) {
                 parts.push(format!("+{} {}", cdata.power, cdata.effect_label));
+            } else if let Some(edata) = equip_def_map.0.get(item_def_id) {
+                let stats = equipment_stat_line(edata);
+                if !stats.is_empty() {
+                    parts.push(stats);
+                }
             }
             text.0 = parts.join("\n");
         } else {
@@ -555,8 +567,13 @@ pub fn update_inventory_panel(
     for (label, mut text) in equip_labels.iter_mut() {
         if let Some((_, item_def_id, durability, _)) = local_equip.0.get(&label.0) {
             let name = item_map.0.get(item_def_id).map(|s| s.as_str()).unwrap_or("???");
+            let stats = equip_def_map.0.get(item_def_id)
+                .map(|d| equipment_stat_line(d))
+                .unwrap_or_default();
             if *durability <= 0 {
                 text.0 = format!("{name}\n(Broken)");
+            } else if !stats.is_empty() {
+                text.0 = format!("{name}\n{stats}");
             } else {
                 text.0 = name.to_string();
             }
