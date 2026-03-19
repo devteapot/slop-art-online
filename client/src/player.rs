@@ -9,7 +9,7 @@ use shared::module_bindings::move_player_reducer::move_player;
 use shared::module_bindings::rotate_player_reducer::rotate_player;
 
 use crate::constants::{
-    CAPSULE_HALF_LEN, CAPSULE_RADIUS, MAX_LOOK_AHEAD, MOVE_SPEED,
+    CAPSULE_HALF_LEN, CAPSULE_RADIUS, JUMP_IMPULSE, MAX_LOOK_AHEAD, MOVE_SPEED,
     PLAYER_GRAVITY_SCALE,
 };
 use crate::interpolation::InterpolationBuffer;
@@ -220,7 +220,12 @@ pub fn sync_players(
                             LinearVelocity::default(),
                             GravityScale(PLAYER_GRAVITY_SCALE),
                             Grounded::default(),
-                            SpeculativeMargin(0.0),
+                            Friction {
+                                dynamic_coefficient: 0.0,
+                                static_coefficient: 0.0,
+                                combine_rule: CoefficientCombine::Min,
+                            },
+                            SpeculativeMargin(0.1),
                         ))
                         .id();
 
@@ -336,7 +341,7 @@ pub fn move_local_player(
     conn: Option<Res<SpacetimeDb>>,
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    mut player: Query<(&Transform, &mut LinearVelocity), With<LocalPlayer>>,
+    mut player: Query<(&Transform, &mut LinearVelocity, &Grounded), With<LocalPlayer>>,
     mut facing: ResMut<PlayerFacing>,
     mut throttle: ResMut<MoveThrottle>,
     mut move_seq: ResMut<MoveSequence>,
@@ -346,7 +351,7 @@ pub fn move_local_player(
 ) {
     if chat_active.0 { return; }
     let Some(conn) = conn else { return };
-    let Ok((transform, mut velocity)) = player.single_mut() else {
+    let Ok((transform, mut velocity, grounded)) = player.single_mut() else {
         return;
     };
 
@@ -364,16 +369,40 @@ pub fn move_local_player(
         dir.x += 1.0;
     }
 
-    let effective_speed = MOVE_SPEED * speed_multiplier(&local_effects);
-
+    // Update facing even when airborne (so dash direction works)
     if dir != Vec2::ZERO {
-        let dir_norm = dir.normalize();
-        facing.0 = dir_norm;
-        velocity.x = dir_norm.x * effective_speed;
-        velocity.z = dir_norm.y * effective_speed;
+        facing.0 = dir.normalize();
+    }
+
+    // Skip XZ application while Y velocity is high (just jumped) so the player
+    // clears the wall-ground corner before horizontal velocity is re-applied.
+    let rising_from_jump = velocity.y > JUMP_IMPULSE * 0.5;
+
+    if grounded.0 && !rising_from_jump {
+        // Full ground control.
+        let effective_speed = MOVE_SPEED * speed_multiplier(&local_effects);
+        if dir != Vec2::ZERO {
+            let dir_norm = dir.normalize();
+            velocity.x = dir_norm.x * effective_speed;
+            velocity.z = dir_norm.y * effective_speed;
+        } else {
+            velocity.x = 0.0;
+            velocity.z = 0.0;
+        }
     } else {
-        velocity.x = 0.0;
-        velocity.z = 0.0;
+        // Airborne: one-time nudge on key-down if nearly stationary in XZ.
+        let any_just = keys.just_pressed(KeyCode::KeyW) || keys.just_pressed(KeyCode::ArrowUp)
+            || keys.just_pressed(KeyCode::KeyS) || keys.just_pressed(KeyCode::ArrowDown)
+            || keys.just_pressed(KeyCode::KeyA) || keys.just_pressed(KeyCode::ArrowLeft)
+            || keys.just_pressed(KeyCode::KeyD) || keys.just_pressed(KeyCode::ArrowRight);
+        if any_just && dir != Vec2::ZERO {
+            let xz_speed = (velocity.x * velocity.x + velocity.z * velocity.z).sqrt();
+            if xz_speed < 3.0 {
+                let dir_norm = dir.normalize();
+                velocity.x = dir_norm.x * 3.0;
+                velocity.z = dir_norm.y * 3.0;
+            }
+        }
     }
 
     // Send position updates when XZ movement or Y change (jump/fall) exceeds dead zone.
@@ -401,10 +430,23 @@ pub fn move_local_player(
     }
 }
 
-/// Update `Grounded` based on vertical velocity: near-zero Y means on the ground.
-pub fn update_grounded(mut query: Query<(&LinearVelocity, &mut Grounded), With<LocalPlayer>>) {
-    for (velocity, mut grounded) in query.iter_mut() {
-        grounded.0 = velocity.y < 1.0 && velocity.y > -4.0;
+/// Update `Grounded` by casting a short ray downward from the capsule bottom.
+pub fn update_grounded(
+    spatial: SpatialQuery,
+    mut query: Query<(Entity, &Transform, &mut Grounded), With<LocalPlayer>>,
+) {
+    for (entity, transform, mut grounded) in query.iter_mut() {
+        // Cast from capsule centre downward; max distance = half-height + small skin.
+        let capsule_half_height = CAPSULE_HALF_LEN + CAPSULE_RADIUS;
+        let skin = 0.3;
+        let hit = spatial.cast_ray(
+            transform.translation,
+            Dir3::NEG_Y,
+            capsule_half_height + skin,
+            true,
+            &SpatialQueryFilter::default().with_excluded_entities([entity]),
+        );
+        grounded.0 = hit.is_some();
     }
 }
 
