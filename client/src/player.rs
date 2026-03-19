@@ -36,6 +36,10 @@ pub struct LocalPlayerVisual;
 #[derive(Component, Default)]
 pub struct FacingAngle(pub f32);
 
+/// Velocity derived from interpolation position deltas (for remote players).
+#[derive(Component, Default)]
+pub struct RemoteVelocity(pub Vec3);
+
 /// Last facing angle sent to the server; avoids spamming `rotate_player` every frame.
 #[derive(Resource, Default)]
 pub struct LastSentFacingAngle(pub f32);
@@ -195,6 +199,7 @@ pub fn sync_players(
                         .spawn((
                             PlayerId(player.identity),
                             FacingAngle(player.facing_angle),
+                            RemoteVelocity::default(),
                             Transform::from_translation(server_pos),
                             Visibility::default(),
                             buffer,
@@ -525,13 +530,22 @@ pub fn drive_player_animations(
         &AnimBodyRef,
         Option<&AnimVisualRef>,
     )>,
-    bodies: Query<(&LinearVelocity, Option<&Grounded>)>,
+    bodies: Query<(Option<&LinearVelocity>, Option<&Grounded>, Option<&RemoteVelocity>)>,
     visuals: Query<&GlobalTransform, With<PlayerVisual>>,
 ) {
     for (mut player, mut transitions, mut nodes, body_ref, visual_ref) in query.iter_mut() {
         let (velocity, grounded) = bodies
             .get(body_ref.0)
-            .map(|(v, grounded)| (Vec2::new(v.x, v.z), grounded.map(|g| g.0)))
+            .map(|(lin_vel, grounded, remote_vel)| {
+                let vel = if let Some(v) = lin_vel {
+                    Vec2::new(v.x, v.z)
+                } else if let Some(rv) = remote_vel {
+                    Vec2::new(rv.0.x, rv.0.z)
+                } else {
+                    Vec2::ZERO
+                };
+                (vel, grounded.map(|g| g.0))
+            })
             .unwrap_or((Vec2::ZERO, Some(true)));
         let speed = velocity.length();
         let airborne = grounded == Some(false);

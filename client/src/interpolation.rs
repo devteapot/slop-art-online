@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use bevy::prelude::*;
 
-use crate::player::FacingAngle;
+use crate::player::{FacingAngle, RemoteVelocity};
 
 /// How far behind "now" we render remote entities. Must be >= one server update
 /// interval so there are always two snapshots to interpolate between.
@@ -47,11 +47,16 @@ fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
 /// newest known position — no extrapolation, no overshoot.
 pub fn interpolate_remote_entities(
     time: Res<Time>,
-    mut query: Query<(&mut Transform, &InterpolationBuffer, Option<&mut FacingAngle>)>,
+    mut query: Query<(
+        &mut Transform,
+        &InterpolationBuffer,
+        Option<&mut FacingAngle>,
+        Option<&mut RemoteVelocity>,
+    )>,
 ) {
     let render_time = time.elapsed_secs_f64() - INTERP_DELAY;
 
-    for (mut transform, buffer, facing) in query.iter_mut() {
+    for (mut transform, buffer, facing, remote_vel) in query.iter_mut() {
         let snapshots = &buffer.snapshots;
         if snapshots.is_empty() {
             continue;
@@ -96,6 +101,14 @@ pub fn interpolate_remote_entities(
             }
             result
         };
+
+        // Derive velocity from position delta for remote animation driving.
+        if let Some(mut rv) = remote_vel {
+            let dt = time.delta_secs();
+            if dt > 1e-6 {
+                rv.0 = (pos - transform.translation) / dt;
+            }
+        }
 
         transform.translation = pos;
         if let Some(mut f) = facing {
