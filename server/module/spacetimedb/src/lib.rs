@@ -4,6 +4,7 @@ mod skill;
 mod combat;
 mod npc_ai;
 mod loot;
+mod equipment;
 
 use spacetimedb::{Identity, ReducerContext, ScheduleAt, Table};
 use std::time::Duration;
@@ -13,6 +14,7 @@ use crate::tables::*;
 use crate::skill::*;
 use crate::combat::*;
 use crate::npc_ai::*;
+use crate::equipment::*;
 
 // --- NPC tick schedule (must live here alongside tick_npcs reducer) ---
 
@@ -187,6 +189,30 @@ pub fn init(ctx: &ReducerContext) {
     ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 5, min_npc_level: 5, max_npc_level: 99, weight: 5,  min_quantity: 1, max_quantity: 1 });
     ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 6, min_npc_level: 8, max_npc_level: 99, weight: 1,  min_quantity: 1, max_quantity: 1 });
 
+    // Equipment item definitions (item_def_ids 7-12)
+    let iron_sword = ctx.db.item_def().insert(ItemDef { id: 0, name: "Iron Sword".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Common, max_stack: 1 });
+    let leather_cap = ctx.db.item_def().insert(ItemDef { id: 0, name: "Leather Cap".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Common, max_stack: 1 });
+    let iron_chestplate = ctx.db.item_def().insert(ItemDef { id: 0, name: "Iron Chestplate".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Uncommon, max_stack: 1 });
+    let cloth_pants = ctx.db.item_def().insert(ItemDef { id: 0, name: "Cloth Pants".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Common, max_stack: 1 });
+    let traveler_boots = ctx.db.item_def().insert(ItemDef { id: 0, name: "Traveler Boots".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Common, max_stack: 1 });
+    let copper_ring = ctx.db.item_def().insert(ItemDef { id: 0, name: "Copper Ring".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Uncommon, max_stack: 1 });
+
+    // Equipment definitions
+    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: iron_sword.id, equip_slot: EquipSlot::Weapon, required_level: 1, max_durability: 50, bonus_health: 0, bonus_mana: 0, bonus_stamina: 0, bonus_attack: 5, bonus_defense: 0 });
+    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: leather_cap.id, equip_slot: EquipSlot::Helmet, required_level: 1, max_durability: 40, bonus_health: 10, bonus_mana: 0, bonus_stamina: 0, bonus_attack: 0, bonus_defense: 0 });
+    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: iron_chestplate.id, equip_slot: EquipSlot::Chest, required_level: 3, max_durability: 60, bonus_health: 20, bonus_mana: 0, bonus_stamina: 0, bonus_attack: 0, bonus_defense: 3 });
+    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: cloth_pants.id, equip_slot: EquipSlot::Legs, required_level: 1, max_durability: 40, bonus_health: 0, bonus_mana: 5, bonus_stamina: 0, bonus_attack: 0, bonus_defense: 0 });
+    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: traveler_boots.id, equip_slot: EquipSlot::Boots, required_level: 1, max_durability: 40, bonus_health: 0, bonus_mana: 0, bonus_stamina: 5, bonus_attack: 0, bonus_defense: 0 });
+    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: copper_ring.id, equip_slot: EquipSlot::Accessory, required_level: 2, max_durability: 80, bonus_health: 5, bonus_mana: 0, bonus_stamina: 0, bonus_attack: 3, bonus_defense: 0 });
+
+    // Loot table entries for equipment
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: iron_sword.id, min_npc_level: 1, max_npc_level: 99, weight: 8, min_quantity: 1, max_quantity: 1 });
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: leather_cap.id, min_npc_level: 1, max_npc_level: 99, weight: 8, min_quantity: 1, max_quantity: 1 });
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: iron_chestplate.id, min_npc_level: 3, max_npc_level: 99, weight: 5, min_quantity: 1, max_quantity: 1 });
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: cloth_pants.id, min_npc_level: 1, max_npc_level: 99, weight: 8, min_quantity: 1, max_quantity: 1 });
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: traveler_boots.id, min_npc_level: 1, max_npc_level: 99, weight: 8, min_quantity: 1, max_quantity: 1 });
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: copper_ring.id, min_npc_level: 2, max_npc_level: 99, weight: 5, min_quantity: 1, max_quantity: 1 });
+
     schedule_next_npc_tick(ctx);
     schedule_next_projectile_tick(ctx);
 }
@@ -311,9 +337,10 @@ pub fn spawn_npc(ctx: &ReducerContext, x: f32, z: f32, level: i32) {
 #[spacetimedb::reducer]
 pub fn join_game(ctx: &ReducerContext) {
     if let Some(existing) = ctx.db.player().identity().find(&ctx.sender()) {
-        let mh = player_max_health(existing.level);
-        let mm = player_max_mana(existing.level);
-        let ms = player_max_stamina(existing.level);
+        let bonuses = equipment_bonuses(ctx, &ctx.sender());
+        let mh = player_max_health(existing.level) + bonuses.health;
+        let mm = player_max_mana(existing.level) + bonuses.mana;
+        let ms = player_max_stamina(existing.level) + bonuses.stamina;
         ctx.db.player().identity().update(Player {
             position: Position { x: 0.0, y: 1.0, z: 0.0 },
             health: mh,
@@ -407,13 +434,19 @@ pub fn attack_player(ctx: &ReducerContext, target: Identity) -> Result<(), Strin
     if attacker.position.distance_to(&target_player.position) > ATTACK_RANGE {
         return Err("Target out of range".to_string());
     }
-    let new_health = target_player.health - PLAYER_BASE_ATTACK;
+    let atk_bonus = equipment_bonuses(ctx, &ctx.sender()).attack;
+    let damage = PLAYER_BASE_ATTACK + atk_bonus;
+    let defense = equipment_bonuses(ctx, &target).defense;
+    let effective_damage = (damage - defense).max(1);
+    let new_health = target_player.health - effective_damage;
     if new_health <= 0 {
         respawn_player(ctx, &target_player);
         award_player_xp(ctx, &attacker, xp_for_player_kill(target_player.level));
     } else {
         ctx.db.player().identity().update(Player { health: new_health, ..target_player });
+        degrade_armor(ctx, &target);
     }
+    degrade_weapon(ctx, &ctx.sender());
     Ok(())
 }
 
@@ -426,12 +459,15 @@ pub fn attack_npc(ctx: &ReducerContext, target_id: u64) -> Result<(), String> {
     if attacker.position.distance_to(&target_npc.position) > ATTACK_RANGE {
         return Err("Target out of range".to_string());
     }
-    let new_health = target_npc.health - PLAYER_BASE_ATTACK;
+    let atk_bonus = equipment_bonuses(ctx, &ctx.sender()).attack;
+    let damage = PLAYER_BASE_ATTACK + atk_bonus;
+    let new_health = target_npc.health - damage;
     if new_health <= 0 {
         kill_npc(ctx, &target_npc, ctx.sender());
     } else {
         ctx.db.npc().id().update(Npc { health: new_health, ..target_npc });
     }
+    degrade_weapon(ctx, &ctx.sender());
     Ok(())
 }
 
@@ -485,6 +521,8 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
 
     let target_pos = Position { x: target_x, y: target_y, z: target_z };
     let skill_effect = effect_for_skill(&skill_def.name, stats.duration_ms);
+    let atk_bonus = equipment_bonuses(ctx, &ctx.sender()).attack;
+    let skill_power = stats.power + atk_bonus;
 
     match skill_def.behavior_type {
         BehaviorType::Melee => {
@@ -500,13 +538,13 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             match (nearest_npc, nearest_player) {
                 (Some(n), Some(p)) => {
                     if n.position.distance_to(&player.position) <= p.position.distance_to(&player.position) {
-                        hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
+                        hit_npc(ctx, &n, skill_power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
                     } else {
-                        hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
+                        hit_player(ctx, &p, skill_power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
                     }
                 }
-                (Some(n), None) => hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone()),
-                (None, Some(p)) => hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone()),
+                (Some(n), None) => hit_npc(ctx, &n, skill_power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone()),
+                (None, Some(p)) => hit_player(ctx, &p, skill_power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone()),
                 (None, None) => {}
             }
         }
@@ -530,7 +568,7 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
                 dir_z,
                 speed: PROJECTILE_SPEED,
                 max_range: stats.range,
-                power: stats.power,
+                power: skill_power,
                 knockback: stats.knockback,
                 hit_radius: PROJECTILE_HIT_RADIUS,
                 started_at: now_ms,
@@ -546,12 +584,12 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             // Apply first tick immediately so the skill doesn't feel delayed
             for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
                 if npc.position.distance_to(&target_pos) <= radius {
-                    hit_npc(ctx, &npc, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
+                    hit_npc(ctx, &npc, skill_power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
                 }
             }
             for p in ctx.db.player().iter().collect::<Vec<_>>() {
                 if p.identity != ctx.sender() && p.position.distance_to(&target_pos) <= radius {
-                    hit_player(ctx, &p, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
+                    hit_player(ctx, &p, skill_power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
                 }
             }
 
@@ -565,7 +603,7 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
                 center_y: target_pos.y,
                 center_z: target_pos.z,
                 radius,
-                power: stats.power,
+                power: skill_power,
                 knockback: stats.knockback,
                 tick_interval_ms: AOE_TICK_INTERVAL_MS,
                 last_tick_at: now_ms,
@@ -627,6 +665,9 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
         dir_x: anim_dir_x,
         dir_z: anim_dir_z,
     });
+
+    // Degrade weapon after any skill use
+    degrade_weapon(ctx, &ctx.sender());
 
     Ok(())
 }

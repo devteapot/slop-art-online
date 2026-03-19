@@ -67,3 +67,6 @@ pub const GROUND_ITEM_FFA_DELAY_MS: u64 = 30_000;
 pub const PICKUP_RANGE: f32 = 3.0;
 pub const LOOT_ROLLS_PER_KILL: i32 = 2;
 pub const LOOT_DROP_CHANCE_PCT: i32 = 60;
+
+// Equipment
+pub const EQUIPMENT_SLOTS: i32 = 6;

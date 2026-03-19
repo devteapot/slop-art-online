@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use shared::module_bindings::send_chat_message_reducer::send_chat_message;
 
 use crate::constants::CHAT_PROXIMITY_RANGE;
-use crate::network::{ChatMessageEvent, ChatMessageEventQueue, SpacetimeDb};
+use crate::network::{ChatMessageEvent, ExtraEventQueues, SpacetimeDb};
 use crate::player::LocalPlayer;
 
 // --- Resources ---
@@ -37,12 +37,12 @@ pub struct ChatLogLine(pub u64);
 
 pub fn sync_chat_messages(
     mut commands: Commands,
-    queue: Res<ChatMessageEventQueue>,
+    extra_queues: Res<ExtraEventQueues>,
     local_player: Query<&Transform, With<LocalPlayer>>,
     container: Query<Entity, With<ChatLogContainer>>,
     log_lines: Query<(Entity, &ChatLogLine)>,
 ) {
-    let mut events = queue.0.lock().unwrap();
+    let mut events = extra_queues.chat_messages.0.lock().unwrap();
     if events.is_empty() {
         return;
     }

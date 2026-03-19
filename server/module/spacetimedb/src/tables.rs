@@ -198,3 +198,42 @@ pub struct InventoryItem {
     pub item_def_id: u64,
     pub quantity: i32,
 }
+
+// --- Equipment ---
+
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub enum EquipSlot {
+    Weapon,
+    Helmet,
+    Chest,
+    Legs,
+    Boots,
+    Accessory,
+}
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = equipment_def, public)]
+pub struct EquipmentDef {
+    #[primary_key]
+    pub item_def_id: u64,
+    pub equip_slot: EquipSlot,
+    pub required_level: i32,
+    pub max_durability: i32,
+    pub bonus_health: i32,
+    pub bonus_mana: i32,
+    pub bonus_stamina: i32,
+    pub bonus_attack: i32,
+    pub bonus_defense: i32,
+}
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = equipped_item, public)]
+pub struct EquippedItem {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub player_identity: Identity,
+    pub equip_slot: EquipSlot,
+    pub item_def_id: u64,
+    pub durability: i32,
+}

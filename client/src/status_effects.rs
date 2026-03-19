@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use shared::module_bindings::StatusEffectType;
 
-use crate::network::{LocalIdentity, StatusEffectEvent, StatusEffectEventQueue};
+use crate::network::{ExtraEventQueues, LocalIdentity, StatusEffectEvent};
 
 pub struct ActiveEffect {
     pub scheduled_id: u64,
@@ -27,14 +27,14 @@ pub fn speed_multiplier(effects: &LocalStatusEffects) -> f32 {
 }
 
 pub fn sync_status_effects(
-    queue: Res<StatusEffectEventQueue>,
+    extra_queues: Res<ExtraEventQueues>,
     local_identity: Res<LocalIdentity>,
     mut local_effects: ResMut<LocalStatusEffects>,
 ) {
     let local_id = local_identity.0.lock().unwrap().clone();
     let Some(local_id) = local_id else { return };
 
-    let mut events = queue.0.lock().unwrap();
+    let mut events = extra_queues.status_effects.0.lock().unwrap();
     for event in events.drain(..) {
         match event {
             StatusEffectEvent::Inserted(effect) => {

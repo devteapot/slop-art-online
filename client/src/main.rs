@@ -74,10 +74,12 @@ fn main() {
         .init_resource::<ItemRarityMap>()
         .init_resource::<LocalInventory>()
         .init_resource::<InventoryOpen>()
-        .init_resource::<ChatMessageEventQueue>()
+        .init_resource::<EquipmentDefMap>()
+        .init_resource::<LocalEquipment>()
+        .init_resource::<ItemTypeMap>()
+        .init_resource::<ExtraEventQueues>()
         .init_resource::<ChatInputActive>()
         .init_resource::<ChatInputBuffer>()
-        .init_resource::<StatusEffectEventQueue>()
         .init_resource::<LocalStatusEffects>()
         .add_systems(Startup, (setup, connect_spacetimedb, setup_hud, setup_inventory_panel, setup_chat_panel))
         .add_systems(FixedUpdate, (
@@ -110,6 +112,8 @@ fn main() {
         .add_systems(Update, (
             sync_item_defs,
             sync_inventory,
+            sync_equipment_defs,
+            sync_equipped_items,
             sync_ground_items,
             toggle_inventory,
             pickup_nearest_item,
@@ -117,6 +121,7 @@ fn main() {
             update_inventory_panel,
             handle_inventory_close,
             handle_inventory_slot_click,
+            handle_equipment_slot_click,
         ))
         .add_systems(Update, (
             add_chunk_colliders,

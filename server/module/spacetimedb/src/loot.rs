@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use crate::constants::*;
 use crate::tables::*;
-use crate::{ground_item, GroundItem};
+use crate::{ground_item, GroundItem, equipped_item};
 
 /// Drop every inventory item for `player` onto the ground at their current position.
 pub fn drop_all_inventory(ctx: &ReducerContext, player: &Player) {
@@ -36,6 +36,37 @@ pub fn drop_all_inventory(ctx: &ReducerContext, player: &Player) {
         });
 
         ctx.db.inventory_item().id().delete(&inv.id);
+    }
+
+    // Drop all equipped items
+    let equipped: Vec<EquippedItem> = ctx
+        .db
+        .equipped_item()
+        .iter()
+        .filter(|eq| eq.player_identity == player.identity)
+        .collect();
+
+    for eq in equipped {
+        let scatter_x: f32 = (ctx.rng().gen_range(0..100) as f32 / 100.0) - 0.5;
+        let scatter_z: f32 = (ctx.rng().gen_range(0..100) as f32 / 100.0) - 0.5;
+
+        ctx.db.ground_item().insert(GroundItem {
+            scheduled_id: 0,
+            scheduled_at: ScheduleAt::Time(
+                ctx.timestamp + Duration::from_millis(GROUND_ITEM_DESPAWN_MS),
+            ),
+            item_def_id: eq.item_def_id,
+            quantity: 1,
+            position: Position {
+                x: player.position.x + scatter_x,
+                y: player.position.y,
+                z: player.position.z + scatter_z,
+            },
+            owner: player.identity,
+            free_for_all_at: 0,
+        });
+
+        ctx.db.equipped_item().id().delete(&eq.id);
     }
 }
 

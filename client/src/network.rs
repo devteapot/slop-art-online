@@ -2,7 +2,8 @@ use bevy::prelude::*;
 use shared::module_bindings::join_game_reducer::join_game;
 use shared::module_bindings::{
     ActiveSkill, ActiveSkillTableAccess, AoeZone, AoeZoneTableAccess, ChatMessage,
-    ChatMessageTableAccess, DbConnection, GroundItem, GroundItemTableAccess, InventoryItem,
+    ChatMessageTableAccess, DbConnection, EquipmentDef, EquipmentDefTableAccess, EquippedItem,
+    EquippedItemTableAccess, GroundItem, GroundItemTableAccess, InventoryItem,
     InventoryItemTableAccess, ItemDef, ItemDefTableAccess, Npc, NpcTableAccess, Player,
     PlayerSkill, PlayerSkillTableAccess, PlayerTableAccess, Projectile, ProjectileTableAccess,
     SkillAttributes, SkillAttributesTableAccess, SkillCooldown, SkillCooldownTableAccess, SkillDef,
@@ -97,6 +98,16 @@ pub enum StatusEffectEvent {
     Deleted(StatusEffect),
 }
 
+pub enum EquipmentDefEvent {
+    Inserted(EquipmentDef),
+}
+
+pub enum EquippedItemEvent {
+    Inserted(EquippedItem),
+    Updated(EquippedItem),
+    Deleted(EquippedItem),
+}
+
 // --- Event queues ---
 
 #[derive(Resource, Default, Clone)]
@@ -141,6 +152,21 @@ pub struct ChatMessageEventQueue(pub Arc<Mutex<Vec<ChatMessageEvent>>>);
 #[derive(Resource, Default, Clone)]
 pub struct StatusEffectEventQueue(pub Arc<Mutex<Vec<StatusEffectEvent>>>);
 
+#[derive(Resource, Default, Clone)]
+pub struct EquipmentDefEventQueue(pub Arc<Mutex<Vec<EquipmentDefEvent>>>);
+
+#[derive(Resource, Default, Clone)]
+pub struct EquippedItemEventQueue(pub Arc<Mutex<Vec<EquippedItemEvent>>>);
+
+/// Bundles extra event queues to stay within Bevy's system parameter limit.
+#[derive(Resource, Default, Clone)]
+pub struct ExtraEventQueues {
+    pub equipment_defs: EquipmentDefEventQueue,
+    pub equipped_items: EquippedItemEventQueue,
+    pub chat_messages: ChatMessageEventQueue,
+    pub status_effects: StatusEffectEventQueue,
+}
+
 // --- Systems ---
 
 pub fn connect_spacetimedb(
@@ -157,8 +183,7 @@ pub fn connect_spacetimedb(
     item_def_queue: Res<ItemDefEventQueue>,
     ground_item_queue: Res<GroundItemEventQueue>,
     inventory_item_queue: Res<InventoryItemEventQueue>,
-    chat_msg_queue: Res<ChatMessageEventQueue>,
-    status_effect_queue: Res<StatusEffectEventQueue>,
+    extra_queues: Res<ExtraEventQueues>,
     local_identity: Res<LocalIdentity>,
 ) {
     let q_insert = player_queue.clone();
@@ -188,10 +213,14 @@ pub fn connect_spacetimedb(
     let inv_insert = inventory_item_queue.clone();
     let inv_update = inventory_item_queue.clone();
     let inv_delete = inventory_item_queue.clone();
-    let chat_insert = chat_msg_queue.clone();
-    let chat_delete = chat_msg_queue.clone();
-    let se_insert = status_effect_queue.clone();
-    let se_delete = status_effect_queue.clone();
+    let chat_insert = extra_queues.chat_messages.clone();
+    let chat_delete = extra_queues.chat_messages.clone();
+    let se_insert = extra_queues.status_effects.clone();
+    let se_delete = extra_queues.status_effects.clone();
+    let eqdef_insert = extra_queues.equipment_defs.clone();
+    let eqi_insert = extra_queues.equipped_items.clone();
+    let eqi_update = extra_queues.equipped_items.clone();
+    let eqi_delete = extra_queues.equipped_items.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -217,6 +246,8 @@ pub fn connect_spacetimedb(
                     "SELECT * FROM inventory_item",
                     "SELECT * FROM chat_message",
                     "SELECT * FROM status_effect",
+                    "SELECT * FROM equipment_def",
+                    "SELECT * FROM equipped_item",
                 ]);
         })
         .on_connect_error(|_, err| error!("SpacetimeDB connect error: {err}"))
@@ -319,6 +350,18 @@ pub fn connect_spacetimedb(
     });
     conn.db.status_effect().on_delete(move |_, row: &StatusEffect| {
         se_delete.0.lock().unwrap().push(StatusEffectEvent::Deleted(row.clone()));
+    });
+    conn.db.equipment_def().on_insert(move |_, row: &EquipmentDef| {
+        eqdef_insert.0.lock().unwrap().push(EquipmentDefEvent::Inserted(row.clone()));
+    });
+    conn.db.equipped_item().on_insert(move |_, row: &EquippedItem| {
+        eqi_insert.0.lock().unwrap().push(EquippedItemEvent::Inserted(row.clone()));
+    });
+    conn.db.equipped_item().on_update(move |_, _old: &EquippedItem, new: &EquippedItem| {
+        eqi_update.0.lock().unwrap().push(EquippedItemEvent::Updated(new.clone()));
+    });
+    conn.db.equipped_item().on_delete(move |_, row: &EquippedItem| {
+        eqi_delete.0.lock().unwrap().push(EquippedItemEvent::Deleted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));

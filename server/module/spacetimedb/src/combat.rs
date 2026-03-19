@@ -2,6 +2,7 @@ use spacetimedb::{Identity, ReducerContext, ScheduleAt, Table};
 use std::time::Duration;
 
 use crate::constants::*;
+use crate::equipment::{degrade_armor, equipment_bonuses};
 use crate::loot::{drop_all_inventory, generate_loot};
 use crate::tables::*;
 use crate::skill::*;
@@ -171,7 +172,9 @@ pub fn hit_player(
 ) {
     award_skill_xp(ctx, attacker, skill_id, hit_xp);
     let new_pos = apply_knockback(&target.position, from, knockback);
-    let new_health = target.health - power;
+    let defense = equipment_bonuses(ctx, &target.identity).defense;
+    let effective_power = (power - defense).max(1);
+    let new_health = target.health - effective_power;
     if new_health <= 0 {
         respawn_player(ctx, target);
         if let Some(attacker_player) = ctx.db.player().identity().find(&attacker) {
@@ -180,6 +183,7 @@ pub fn hit_player(
         award_skill_xp(ctx, attacker, skill_id, SKILL_XP_PER_KILL);
     } else {
         ctx.db.player().identity().update(Player { position: new_pos, health: new_health, ..target.clone() });
+        degrade_armor(ctx, &target.identity);
         if let Some((etype, epower, edur)) = effect {
             apply_status_effect(ctx, etype, target.identity, 0, epower, edur, attacker);
         }
