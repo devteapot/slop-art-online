@@ -440,52 +440,6 @@ pub fn rotate_player(ctx: &ReducerContext, angle: f32) -> Result<(), String> {
 }
 
 #[spacetimedb::reducer]
-pub fn attack_player(ctx: &ReducerContext, target: Identity) -> Result<(), String> {
-    let attacker = ctx.db.player().identity().find(&ctx.sender())
-        .ok_or("Attacker not found")?;
-    let target_player = ctx.db.player().identity().find(&target)
-        .ok_or("Target not found")?;
-    if attacker.position.distance_to(&target_player.position) > ATTACK_RANGE {
-        return Err("Target out of range".to_string());
-    }
-    let atk_bonus = equipment_bonuses(ctx, &ctx.sender()).attack;
-    let damage = PLAYER_BASE_ATTACK + atk_bonus;
-    let defense = equipment_bonuses(ctx, &target).defense;
-    let effective_damage = (damage - defense).max(1);
-    let new_health = target_player.health - effective_damage;
-    if new_health <= 0 {
-        respawn_player(ctx, &target_player);
-        award_player_xp(ctx, &attacker, xp_for_player_kill(target_player.level));
-    } else {
-        ctx.db.player().identity().update(Player { health: new_health, ..target_player });
-        degrade_armor(ctx, &target);
-    }
-    degrade_weapon(ctx, &ctx.sender());
-    Ok(())
-}
-
-#[spacetimedb::reducer]
-pub fn attack_npc(ctx: &ReducerContext, target_id: u64) -> Result<(), String> {
-    let attacker = ctx.db.player().identity().find(&ctx.sender())
-        .ok_or("Attacker not found")?;
-    let target_npc = ctx.db.npc().id().find(&target_id)
-        .ok_or("NPC not found")?;
-    if attacker.position.distance_to(&target_npc.position) > ATTACK_RANGE {
-        return Err("Target out of range".to_string());
-    }
-    let atk_bonus = equipment_bonuses(ctx, &ctx.sender()).attack;
-    let damage = PLAYER_BASE_ATTACK + atk_bonus;
-    let new_health = target_npc.health - damage;
-    if new_health <= 0 {
-        kill_npc(ctx, &target_npc, ctx.sender());
-    } else {
-        ctx.db.npc().id().update(Npc { health: new_health, ..target_npc });
-    }
-    degrade_weapon(ctx, &ctx.sender());
-    Ok(())
-}
-
-#[spacetimedb::reducer]
 pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f32, target_z: f32) -> Result<(), String> {
     let player = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
     let skill_def = ctx.db.skill_def().id().find(&skill_id).ok_or("Skill not found")?;

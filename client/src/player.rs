@@ -5,13 +5,11 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use shared::module_bindings::attack_npc_reducer::attack_npc;
-use shared::module_bindings::attack_player_reducer::attack_player;
 use shared::module_bindings::move_player_reducer::move_player;
 use shared::module_bindings::rotate_player_reducer::rotate_player;
 
 use crate::constants::{
-    ATTACK_RANGE, CAPSULE_HALF_LEN, CAPSULE_RADIUS, MAX_LOOK_AHEAD, MOVE_SPEED,
+    CAPSULE_HALF_LEN, CAPSULE_RADIUS, MAX_LOOK_AHEAD, MOVE_SPEED,
     PLAYER_GRAVITY_SCALE,
 };
 use crate::interpolation::InterpolationBuffer;
@@ -19,7 +17,7 @@ use crate::network::{ActiveSkillEvent, ActiveSkillEventQueue, LocalIdentity, Pla
 use crate::chat::ChatInputActive;
 use crate::skills::SkillNameMap;
 use crate::status_effects::{speed_multiplier, LocalStatusEffects};
-use crate::npc::NpcId;
+use crate::health_bar::{spawn_health_bar, Health, HealthBarFillRef};
 use crate::world::MainCamera;
 
 #[derive(Component)]
@@ -178,10 +176,12 @@ pub fn sync_players(
     local_identity: Res<LocalIdentity>,
     asset_server: Res<AssetServer>,
     time: Res<Time>,
-    mut players: Query<(Entity, &PlayerId, &mut Transform, Option<&mut FacingAngle>, Option<&mut InterpolationBuffer>)>,
+    mut players: Query<(Entity, &PlayerId, &mut Transform, Option<&mut FacingAngle>, Option<&mut InterpolationBuffer>, Option<&mut Health>)>,
     mut local_stats: ResMut<LocalPlayerStats>,
     mut pred_buffer: ResMut<PredictionBuffer>,
     mut pred_correction: ResMut<PredictionCorrection>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let local_id = local_identity.0.lock().unwrap().clone();
     let mut events = queue.0.lock().unwrap();
@@ -235,6 +235,7 @@ pub fn sync_players(
                     let model_offset_y = -(CAPSULE_HALF_LEN + CAPSULE_RADIUS);
                     let mut buffer = InterpolationBuffer::default();
                     buffer.push(server_pos, player.facing_angle, time.elapsed_secs_f64());
+                    let (bar_root, fill_id) = spawn_health_bar(&mut commands, &mut meshes, &mut materials);
                     let body = commands
                         .spawn((
                             PlayerId(player.identity),
@@ -243,6 +244,8 @@ pub fn sync_players(
                             Transform::from_translation(server_pos),
                             Visibility::default(),
                             buffer,
+                            Health { current: player.health, max: player.max_health },
+                            HealthBarFillRef(fill_id),
                         ))
                         .id();
                     commands.entity(body).with_child((
@@ -250,13 +253,14 @@ pub fn sync_players(
                         SceneRoot(asset_server.load("player.glb#Scene0")),
                         Transform::from_xyz(0.0, model_offset_y, 0.0),
                     ));
+                    commands.entity(body).add_child(bar_root);
                 }
             }
             PlayerEvent::Updated(player) => {
                 let is_local = local_id.as_ref() == Some(&player.identity);
                 if !is_local {
                     let now = time.elapsed_secs_f64();
-                    for (_, id, _, _, interp_buffer) in players.iter_mut() {
+                    for (_, id, _, _, interp_buffer, health) in players.iter_mut() {
                         if id.0 == player.identity {
                             if let Some(mut buffer) = interp_buffer {
                                 buffer.push(
@@ -264,6 +268,10 @@ pub fn sync_players(
                                     player.facing_angle,
                                     now,
                                 );
+                            }
+                            if let Some(mut h) = health {
+                                h.current = player.health;
+                                h.max = player.max_health;
                             }
                         }
                     }
@@ -297,7 +305,7 @@ pub fn sync_players(
                             server_pos.z - predicted.z,
                         );
                         if error.length() > RECONCILIATION_THRESHOLD {
-                            for (_, id, mut transform, _, _) in players.iter_mut() {
+                            for (_, id, mut transform, _, _, _) in players.iter_mut() {
                                 if id.0 == player.identity {
                                     pred_correction.offset =
                                         Vec3::new(
@@ -314,7 +322,7 @@ pub fn sync_players(
                 }
             }
             PlayerEvent::Deleted(player) => {
-                for (entity, id, _, _, _) in players.iter() {
+                for (entity, id, _, _, _, _) in players.iter() {
                     if id.0 == player.identity {
                         commands.entity(entity).despawn();
                     }
@@ -682,55 +690,6 @@ pub fn drive_player_animations(
         if let Some(active) = player.animation_mut(target) {
             active.repeat().set_speed(playback_speed);
         }
-    }
-}
-
-pub fn attack(
-    conn: Option<Res<SpacetimeDb>>,
-    keys: Res<ButtonInput<KeyCode>>,
-    local_player: Query<(&Transform, &PlayerId), With<LocalPlayer>>,
-    players: Query<(&Transform, &PlayerId), Without<LocalPlayer>>,
-    npcs: Query<(&Transform, &NpcId)>,
-    chat_active: Res<ChatInputActive>,
-) {
-    if chat_active.0 { return; }
-    if !keys.just_pressed(KeyCode::KeyE) {
-        return;
-    }
-    let Some(conn) = conn else { return };
-    let Ok((local_transform, _)) = local_player.single() else {
-        return;
-    };
-
-    let local_pos = local_transform.translation;
-
-    let nearest_player = players
-        .iter()
-        .map(|(t, id)| (t.translation.distance(local_pos), id.0))
-        .filter(|(dist, _)| *dist <= ATTACK_RANGE)
-        .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-
-    let nearest_npc = npcs
-        .iter()
-        .map(|(t, id)| (t.translation.distance(local_pos), id.0))
-        .filter(|(dist, _)| *dist <= ATTACK_RANGE)
-        .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-
-    match (nearest_player, nearest_npc) {
-        (Some((pd, pid)), Some((nd, nid))) => {
-            if pd <= nd {
-                let _ = conn.0.reducers.attack_player(pid);
-            } else {
-                let _ = conn.0.reducers.attack_npc(nid);
-            }
-        }
-        (Some((_, pid)), None) => {
-            let _ = conn.0.reducers.attack_player(pid);
-        }
-        (None, Some((_, nid))) => {
-            let _ = conn.0.reducers.attack_npc(nid);
-        }
-        (None, None) => {}
     }
 }
 

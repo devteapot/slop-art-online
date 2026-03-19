@@ -11,6 +11,7 @@ mod projectile;
 mod inventory;
 mod chat;
 mod status_effects;
+mod damage_numbers;
 
 use avian3d::prelude::*;
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
@@ -29,6 +30,7 @@ use projectile::*;
 use inventory::*;
 use chat::*;
 use status_effects::*;
+use damage_numbers::*;
 
 fn main() {
     App::new()
@@ -82,6 +84,7 @@ fn main() {
         .init_resource::<ChatInputActive>()
         .init_resource::<ChatInputBuffer>()
         .init_resource::<LocalStatusEffects>()
+        .init_resource::<PreviousLocalHealth>()
         .add_systems(Startup, (setup, connect_spacetimedb, setup_hud, setup_inventory_panel, setup_chat_panel))
         .add_systems(FixedUpdate, (
             move_local_player,
@@ -103,7 +106,6 @@ fn main() {
             use_skill_input,
             follow_camera,
             face_cursor,
-            attack,
             update_health_bars,
             billboard_health_bars,
             update_hud,
@@ -147,6 +149,12 @@ fn main() {
         .add_systems(Update, (
             sync_status_effects,
             update_status_effects_hud,
+        ))
+        .add_systems(Update, (
+            attach_previous_health,
+            detect_damage,
+            detect_local_damage,
+            animate_damage_numbers,
         ))
         .run();
 }

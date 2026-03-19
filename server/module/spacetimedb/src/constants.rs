@@ -7,7 +7,6 @@ pub const NPC_DETECTION_RANGE: f32 = 30.0;
 pub const NPC_GROUND_Y: f32 = 0.9;
 pub const MANA_REGEN_PER_TICK: i32 = 3;
 pub const STAMINA_REGEN_PER_TICK: i32 = 3;
-pub const PLAYER_BASE_ATTACK: i32 = 10;
 pub const ATTACK_RANGE: f32 = 3.0;
 
 // Player stat scaling

@@ -11,8 +11,6 @@ pub mod active_skill_type;
 pub mod allocate_skill_point_reducer;
 pub mod aoe_zone_table;
 pub mod aoe_zone_type;
-pub mod attack_npc_reducer;
-pub mod attack_player_reducer;
 pub mod behavior_type_type;
 pub mod chat_message_table;
 pub mod chat_message_type;
@@ -81,8 +79,6 @@ pub use active_skill_type::ActiveSkill;
 pub use allocate_skill_point_reducer::allocate_skill_point;
 pub use aoe_zone_table::*;
 pub use aoe_zone_type::AoeZone;
-pub use attack_npc_reducer::attack_npc;
-pub use attack_player_reducer::attack_player;
 pub use behavior_type_type::BehaviorType;
 pub use chat_message_table::*;
 pub use chat_message_type::ChatMessage;
@@ -158,12 +154,6 @@ pub enum Reducer {
         skill_id: u64,
         attribute: String,
     },
-    AttackNpc {
-        target_id: u64,
-    },
-    AttackPlayer {
-        target: __sdk::Identity,
-    },
     DropEquippedItem {
         equipped_item_id: u64,
     },
@@ -228,8 +218,6 @@ impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
             Reducer::AllocateSkillPoint { .. } => "allocate_skill_point",
-            Reducer::AttackNpc { .. } => "attack_npc",
-            Reducer::AttackPlayer { .. } => "attack_player",
             Reducer::DropEquippedItem { .. } => "drop_equipped_item",
             Reducer::DropItem { .. } => "drop_item",
             Reducer::EquipItem { .. } => "equip_item",
@@ -259,16 +247,6 @@ impl __sdk::Reducer for Reducer {
                 skill_id: skill_id.clone(),
                 attribute: attribute.clone(),
             }),
-            Reducer::AttackNpc { target_id } => {
-                __sats::bsatn::to_vec(&attack_npc_reducer::AttackNpcArgs {
-                    target_id: target_id.clone(),
-                })
-            }
-            Reducer::AttackPlayer { target } => {
-                __sats::bsatn::to_vec(&attack_player_reducer::AttackPlayerArgs {
-                    target: target.clone(),
-                })
-            }
             Reducer::DropEquippedItem { equipped_item_id } => {
                 __sats::bsatn::to_vec(&drop_equipped_item_reducer::DropEquippedItemArgs {
                     equipped_item_id: equipped_item_id.clone(),
