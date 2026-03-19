@@ -5,6 +5,7 @@ mod combat;
 mod npc_ai;
 mod loot;
 mod equipment;
+mod consumable;
 
 use spacetimedb::{Identity, ReducerContext, ScheduleAt, Table};
 use std::time::Duration;
@@ -181,6 +182,15 @@ pub fn init(ctx: &ReducerContext) {
     ctx.db.item_def().insert(ItemDef { id: 0, name: "Dragon Scale".into(),  item_type: ItemType::Material,   rarity: ItemRarity::Rare,     max_stack: 5 });
     ctx.db.item_def().insert(ItemDef { id: 0, name: "Crystal Core".into(),  item_type: ItemType::Material,   rarity: ItemRarity::Epic,     max_stack: 1 });
 
+    // New consumable item definitions (item_def_ids 7-8 from auto_inc order)
+    let mana_potion = ctx.db.item_def().insert(ItemDef { id: 0, name: "Mana Potion".into(), item_type: ItemType::Consumable, rarity: ItemRarity::Common, max_stack: 10 });
+    let stamina_tonic = ctx.db.item_def().insert(ItemDef { id: 0, name: "Stamina Tonic".into(), item_type: ItemType::Consumable, rarity: ItemRarity::Uncommon, max_stack: 10 });
+
+    // Consumable definitions
+    ctx.db.consumable_def().insert(ConsumableDef { item_def_id: 3, effect: ConsumableEffect::RestoreHealth, power: 50 });
+    ctx.db.consumable_def().insert(ConsumableDef { item_def_id: mana_potion.id, effect: ConsumableEffect::RestoreMana, power: 40 });
+    ctx.db.consumable_def().insert(ConsumableDef { item_def_id: stamina_tonic.id, effect: ConsumableEffect::RestoreStamina, power: 40 });
+
     // Loot table entries (item_def_ids 1-6 from auto_inc order)
     ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 1, min_npc_level: 1, max_npc_level: 99, weight: 40, min_quantity: 1, max_quantity: 3 });
     ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 2, min_npc_level: 1, max_npc_level: 99, weight: 30, min_quantity: 1, max_quantity: 2 });
@@ -189,7 +199,11 @@ pub fn init(ctx: &ReducerContext) {
     ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 5, min_npc_level: 5, max_npc_level: 99, weight: 5,  min_quantity: 1, max_quantity: 1 });
     ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 6, min_npc_level: 8, max_npc_level: 99, weight: 1,  min_quantity: 1, max_quantity: 1 });
 
-    // Equipment item definitions (item_def_ids 7-12)
+    // Loot table entries for new consumables
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: mana_potion.id, min_npc_level: 1, max_npc_level: 99, weight: 20, min_quantity: 1, max_quantity: 2 });
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: stamina_tonic.id, min_npc_level: 2, max_npc_level: 99, weight: 15, min_quantity: 1, max_quantity: 1 });
+
+    // Equipment item definitions (item_def_ids 9-14 from auto_inc order)
     let iron_sword = ctx.db.item_def().insert(ItemDef { id: 0, name: "Iron Sword".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Common, max_stack: 1 });
     let leather_cap = ctx.db.item_def().insert(ItemDef { id: 0, name: "Leather Cap".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Common, max_stack: 1 });
     let iron_chestplate = ctx.db.item_def().insert(ItemDef { id: 0, name: "Iron Chestplate".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Uncommon, max_stack: 1 });

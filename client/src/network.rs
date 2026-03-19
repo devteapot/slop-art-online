@@ -2,12 +2,13 @@ use bevy::prelude::*;
 use shared::module_bindings::join_game_reducer::join_game;
 use shared::module_bindings::{
     ActiveSkill, ActiveSkillTableAccess, AoeZone, AoeZoneTableAccess, ChatMessage,
-    ChatMessageTableAccess, DbConnection, EquipmentDef, EquipmentDefTableAccess, EquippedItem,
-    EquippedItemTableAccess, GroundItem, GroundItemTableAccess, InventoryItem,
-    InventoryItemTableAccess, ItemDef, ItemDefTableAccess, Npc, NpcTableAccess, Player,
-    PlayerSkill, PlayerSkillTableAccess, PlayerTableAccess, Projectile, ProjectileTableAccess,
-    SkillAttributes, SkillAttributesTableAccess, SkillCooldown, SkillCooldownTableAccess, SkillDef,
-    SkillDefTableAccess, StatusEffect, StatusEffectTableAccess,
+    ChatMessageTableAccess, ConsumableDef, ConsumableDefTableAccess, DbConnection, EquipmentDef,
+    EquipmentDefTableAccess, EquippedItem, EquippedItemTableAccess, GroundItem,
+    GroundItemTableAccess, InventoryItem, InventoryItemTableAccess, ItemDef, ItemDefTableAccess,
+    Npc, NpcTableAccess, Player, PlayerSkill, PlayerSkillTableAccess, PlayerTableAccess,
+    Projectile, ProjectileTableAccess, SkillAttributes, SkillAttributesTableAccess, SkillCooldown,
+    SkillCooldownTableAccess, SkillDef, SkillDefTableAccess, StatusEffect,
+    StatusEffectTableAccess,
 };
 use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
 use std::sync::{Arc, Mutex};
@@ -102,6 +103,10 @@ pub enum EquipmentDefEvent {
     Inserted(EquipmentDef),
 }
 
+pub enum ConsumableDefEvent {
+    Inserted(ConsumableDef),
+}
+
 pub enum EquippedItemEvent {
     Inserted(EquippedItem),
     Updated(EquippedItem),
@@ -158,6 +163,9 @@ pub struct EquipmentDefEventQueue(pub Arc<Mutex<Vec<EquipmentDefEvent>>>);
 #[derive(Resource, Default, Clone)]
 pub struct EquippedItemEventQueue(pub Arc<Mutex<Vec<EquippedItemEvent>>>);
 
+#[derive(Resource, Default, Clone)]
+pub struct ConsumableDefEventQueue(pub Arc<Mutex<Vec<ConsumableDefEvent>>>);
+
 /// Bundles extra event queues to stay within Bevy's system parameter limit.
 #[derive(Resource, Default, Clone)]
 pub struct ExtraEventQueues {
@@ -165,6 +173,7 @@ pub struct ExtraEventQueues {
     pub equipped_items: EquippedItemEventQueue,
     pub chat_messages: ChatMessageEventQueue,
     pub status_effects: StatusEffectEventQueue,
+    pub consumable_defs: ConsumableDefEventQueue,
 }
 
 // --- Systems ---
@@ -221,6 +230,7 @@ pub fn connect_spacetimedb(
     let eqi_insert = extra_queues.equipped_items.clone();
     let eqi_update = extra_queues.equipped_items.clone();
     let eqi_delete = extra_queues.equipped_items.clone();
+    let cdef_insert = extra_queues.consumable_defs.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -248,6 +258,7 @@ pub fn connect_spacetimedb(
                     "SELECT * FROM status_effect",
                     "SELECT * FROM equipment_def",
                     "SELECT * FROM equipped_item",
+                    "SELECT * FROM consumable_def",
                 ]);
         })
         .on_connect_error(|_, err| error!("SpacetimeDB connect error: {err}"))
@@ -362,6 +373,9 @@ pub fn connect_spacetimedb(
     });
     conn.db.equipped_item().on_delete(move |_, row: &EquippedItem| {
         eqi_delete.0.lock().unwrap().push(EquippedItemEvent::Deleted(row.clone()));
+    });
+    conn.db.consumable_def().on_insert(move |_, row: &ConsumableDef| {
+        cdef_insert.0.lock().unwrap().push(ConsumableDefEvent::Inserted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));

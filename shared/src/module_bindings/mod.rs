@@ -16,6 +16,9 @@ pub mod attack_player_reducer;
 pub mod behavior_type_type;
 pub mod chat_message_table;
 pub mod chat_message_type;
+pub mod consumable_def_table;
+pub mod consumable_def_type;
+pub mod consumable_effect_type;
 pub mod drop_equipped_item_reducer;
 pub mod drop_item_reducer;
 pub mod equip_item_reducer;
@@ -69,6 +72,7 @@ pub mod status_effect_type;
 pub mod status_effect_type_type;
 pub mod submit_npc_graph_reducer;
 pub mod unequip_item_reducer;
+pub mod use_item_reducer;
 pub mod use_skill_reducer;
 pub mod use_targeted_skill_reducer;
 
@@ -82,6 +86,9 @@ pub use attack_player_reducer::attack_player;
 pub use behavior_type_type::BehaviorType;
 pub use chat_message_table::*;
 pub use chat_message_type::ChatMessage;
+pub use consumable_def_table::*;
+pub use consumable_def_type::ConsumableDef;
+pub use consumable_effect_type::ConsumableEffect;
 pub use drop_equipped_item_reducer::drop_equipped_item;
 pub use drop_item_reducer::drop_item;
 pub use equip_item_reducer::equip_item;
@@ -135,6 +142,7 @@ pub use status_effect_type::StatusEffect;
 pub use status_effect_type_type::StatusEffectType;
 pub use submit_npc_graph_reducer::submit_npc_graph;
 pub use unequip_item_reducer::unequip_item;
+pub use use_item_reducer::use_item;
 pub use use_skill_reducer::use_skill;
 pub use use_targeted_skill_reducer::use_targeted_skill;
 
@@ -195,6 +203,9 @@ pub enum Reducer {
     UnequipItem {
         equipped_item_id: u64,
     },
+    UseItem {
+        inventory_item_id: u64,
+    },
     UseSkill {
         skill_id: u64,
         target_x: f32,
@@ -232,6 +243,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::StartProjectileTicker => "start_projectile_ticker",
             Reducer::SubmitNpcGraph { .. } => "submit_npc_graph",
             Reducer::UnequipItem { .. } => "unequip_item",
+            Reducer::UseItem { .. } => "use_item",
             Reducer::UseSkill { .. } => "use_skill",
             Reducer::UseTargetedSkill { .. } => "use_targeted_skill",
             _ => unreachable!(),
@@ -320,6 +332,11 @@ impl __sdk::Reducer for Reducer {
                     equipped_item_id: equipped_item_id.clone(),
                 })
             }
+            Reducer::UseItem { inventory_item_id } => {
+                __sats::bsatn::to_vec(&use_item_reducer::UseItemArgs {
+                    inventory_item_id: inventory_item_id.clone(),
+                })
+            }
             Reducer::UseSkill {
                 skill_id,
                 target_x,
@@ -354,6 +371,7 @@ pub struct DbUpdate {
     active_skill: __sdk::TableUpdate<ActiveSkill>,
     aoe_zone: __sdk::TableUpdate<AoeZone>,
     chat_message: __sdk::TableUpdate<ChatMessage>,
+    consumable_def: __sdk::TableUpdate<ConsumableDef>,
     equipment_def: __sdk::TableUpdate<EquipmentDef>,
     equipped_item: __sdk::TableUpdate<EquippedItem>,
     ground_item: __sdk::TableUpdate<GroundItem>,
@@ -387,6 +405,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "chat_message" => db_update
                     .chat_message
                     .append(chat_message_table::parse_table_update(table_update)?),
+                "consumable_def" => db_update
+                    .consumable_def
+                    .append(consumable_def_table::parse_table_update(table_update)?),
                 "equipment_def" => db_update
                     .equipment_def
                     .append(equipment_def_table::parse_table_update(table_update)?),
@@ -470,6 +491,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.chat_message = cache
             .apply_diff_to_table::<ChatMessage>("chat_message", &self.chat_message)
             .with_updates_by_pk(|row| &row.scheduled_id);
+        diff.consumable_def = cache
+            .apply_diff_to_table::<ConsumableDef>("consumable_def", &self.consumable_def)
+            .with_updates_by_pk(|row| &row.item_def_id);
         diff.equipment_def = cache
             .apply_diff_to_table::<EquipmentDef>("equipment_def", &self.equipment_def)
             .with_updates_by_pk(|row| &row.item_def_id);
@@ -539,6 +563,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "chat_message" => db_update
                     .chat_message
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "consumable_def" => db_update
+                    .consumable_def
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "equipment_def" => db_update
                     .equipment_def
@@ -610,6 +637,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "chat_message" => db_update
                     .chat_message
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "consumable_def" => db_update
+                    .consumable_def
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "equipment_def" => db_update
                     .equipment_def
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -676,6 +706,7 @@ pub struct AppliedDiff<'r> {
     active_skill: __sdk::TableAppliedDiff<'r, ActiveSkill>,
     aoe_zone: __sdk::TableAppliedDiff<'r, AoeZone>,
     chat_message: __sdk::TableAppliedDiff<'r, ChatMessage>,
+    consumable_def: __sdk::TableAppliedDiff<'r, ConsumableDef>,
     equipment_def: __sdk::TableAppliedDiff<'r, EquipmentDef>,
     equipped_item: __sdk::TableAppliedDiff<'r, EquippedItem>,
     ground_item: __sdk::TableAppliedDiff<'r, GroundItem>,
@@ -714,6 +745,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<ChatMessage>(
             "chat_message",
             &self.chat_message,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<ConsumableDef>(
+            "consumable_def",
+            &self.consumable_def,
             event,
         );
         callbacks.invoke_table_row_callbacks::<EquipmentDef>(
@@ -1419,6 +1455,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         active_skill_table::register_table(client_cache);
         aoe_zone_table::register_table(client_cache);
         chat_message_table::register_table(client_cache);
+        consumable_def_table::register_table(client_cache);
         equipment_def_table::register_table(client_cache);
         equipped_item_table::register_table(client_cache);
         ground_item_table::register_table(client_cache);
@@ -1440,6 +1477,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "active_skill",
         "aoe_zone",
         "chat_message",
+        "consumable_def",
         "equipment_def",
         "equipped_item",
         "ground_item",

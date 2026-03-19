@@ -7,12 +7,13 @@ use shared::module_bindings::equip_item_reducer::equip_item;
 use shared::module_bindings::unequip_item_reducer::unequip_item;
 use shared::module_bindings::drop_equipped_item_reducer::drop_equipped_item;
 use shared::module_bindings::pickup_item_reducer::pickup_item;
+use shared::module_bindings::use_item_reducer::use_item;
 use shared::module_bindings::EquipSlot;
 
 use crate::constants::PICKUP_RANGE;
 use crate::chat::ChatInputActive;
 use crate::network::{
-    EquipmentDefEvent, EquippedItemEvent, ExtraEventQueues,
+    ConsumableDefEvent, EquipmentDefEvent, EquippedItemEvent, ExtraEventQueues,
     GroundItemEvent, GroundItemEventQueue, InventoryItemEvent, InventoryItemEventQueue,
     ItemDefEvent, ItemDefEventQueue, LocalIdentity, SpacetimeDb,
 };
@@ -54,6 +55,14 @@ pub struct LocalEquipment(pub HashMap<i32, (u64, u64, i32, i32)>);
 /// Maps item_def_id -> item_type name for identifying equipment in inventory
 #[derive(Resource, Default)]
 pub struct ItemTypeMap(pub HashMap<u64, String>);
+
+pub struct ConsumableDefData {
+    pub power: i32,
+    pub effect_label: String,
+}
+
+#[derive(Resource, Default)]
+pub struct ConsumableDefMap(pub HashMap<u64, ConsumableDefData>);
 
 // --- Components ---
 
@@ -148,6 +157,29 @@ pub fn sync_equipment_defs(
                     bonus_stamina: def.bonus_stamina,
                     bonus_attack: def.bonus_attack,
                     bonus_defense: def.bonus_defense,
+                });
+            }
+        }
+    }
+}
+
+pub fn sync_consumable_defs(
+    queues: Res<ExtraEventQueues>,
+    mut consumable_map: ResMut<ConsumableDefMap>,
+) {
+    let mut events = queues.consumable_defs.0.lock().unwrap();
+    for event in events.drain(..) {
+        match event {
+            ConsumableDefEvent::Inserted(def) => {
+                let effect_label = match format!("{:?}", def.effect).as_str() {
+                    "RestoreHealth" => "HP",
+                    "RestoreMana" => "MP",
+                    "RestoreStamina" => "SP",
+                    _ => "?",
+                }.to_string();
+                consumable_map.0.insert(def.item_def_id, ConsumableDefData {
+                    power: def.power,
+                    effect_label,
                 });
             }
         }
@@ -469,6 +501,7 @@ pub fn update_inventory_panel(
     local_equip: Res<LocalEquipment>,
     item_map: Res<ItemDefMap>,
     rarity_map: Res<ItemRarityMap>,
+    consumable_map: Res<ConsumableDefMap>,
     mut panel: Query<&mut Visibility, With<InventoryPanel>>,
     mut labels: Query<(&InventorySlotLabel, &mut Text), Without<EquipmentSlotLabel>>,
     mut slot_bgs: Query<(&InventorySlotNode, &mut BackgroundColor), Without<EquipmentSlotNode>>,
@@ -489,11 +522,14 @@ pub fn update_inventory_panel(
     for (label, mut text) in labels.iter_mut() {
         if let Some((_, item_def_id, qty)) = local_inv.0.get(&label.0) {
             let name = item_map.0.get(item_def_id).map(|s| s.as_str()).unwrap_or("???");
+            let mut parts = vec![name.to_string()];
             if *qty > 1 {
-                text.0 = format!("{name}\nx{qty}");
-            } else {
-                text.0 = name.to_string();
+                parts.push(format!("x{qty}"));
             }
+            if let Some(cdata) = consumable_map.0.get(item_def_id) {
+                parts.push(format!("+{} {}", cdata.power, cdata.effect_label));
+            }
+            text.0 = parts.join("\n");
         } else {
             text.0 = String::new();
         }
@@ -592,12 +628,11 @@ pub fn handle_inventory_slot_click(
         if mouse.pressed(MouseButton::Right) {
             let _ = conn.0.reducers.drop_item(*inv_item_id);
         } else if mouse.pressed(MouseButton::Left) {
-            // Left-click: equip if item is equipment
-            let is_equipment = type_map.0.get(item_def_id)
-                .map(|t| t == "Equipment")
-                .unwrap_or(false);
-            if is_equipment {
-                let _ = conn.0.reducers.equip_item(*inv_item_id);
+            let item_type = type_map.0.get(item_def_id).map(|t| t.as_str()).unwrap_or("");
+            match item_type {
+                "Equipment" => { let _ = conn.0.reducers.equip_item(*inv_item_id); }
+                "Consumable" => { let _ = conn.0.reducers.use_item(*inv_item_id); }
+                _ => {}
             }
         }
     }

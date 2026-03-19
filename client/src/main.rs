@@ -77,6 +77,7 @@ fn main() {
         .init_resource::<EquipmentDefMap>()
         .init_resource::<LocalEquipment>()
         .init_resource::<ItemTypeMap>()
+        .init_resource::<ConsumableDefMap>()
         .init_resource::<ExtraEventQueues>()
         .init_resource::<ChatInputActive>()
         .init_resource::<ChatInputBuffer>()
@@ -114,6 +115,7 @@ fn main() {
             sync_inventory,
             sync_equipment_defs,
             sync_equipped_items,
+            sync_consumable_defs,
             sync_ground_items,
             toggle_inventory,
             pickup_nearest_item,

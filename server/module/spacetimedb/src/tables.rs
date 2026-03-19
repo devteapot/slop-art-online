@@ -199,6 +199,24 @@ pub struct InventoryItem {
     pub quantity: i32,
 }
 
+// --- Consumables ---
+
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub enum ConsumableEffect {
+    RestoreHealth,
+    RestoreMana,
+    RestoreStamina,
+}
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = consumable_def, public)]
+pub struct ConsumableDef {
+    #[primary_key]
+    pub item_def_id: u64,
+    pub effect: ConsumableEffect,
+    pub power: i32,
+}
+
 // --- Equipment ---
 
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
