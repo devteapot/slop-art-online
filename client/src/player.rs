@@ -18,6 +18,7 @@ use crate::interpolation::InterpolationBuffer;
 use crate::network::{ActiveSkillEvent, ActiveSkillEventQueue, LocalIdentity, PlayerEvent, PlayerEventQueue, SpacetimeDb, to_world_pos};
 use crate::chat::ChatInputActive;
 use crate::skills::SkillNameMap;
+use crate::status_effects::{speed_multiplier, LocalStatusEffects};
 use crate::npc::NpcId;
 use crate::world::MainCamera;
 
@@ -333,6 +334,7 @@ pub fn move_local_player(
     mut move_seq: ResMut<MoveSequence>,
     mut pred_buffer: ResMut<PredictionBuffer>,
     chat_active: Res<ChatInputActive>,
+    local_effects: Res<LocalStatusEffects>,
 ) {
     if chat_active.0 { return; }
     let Some(conn) = conn else { return };
@@ -354,11 +356,13 @@ pub fn move_local_player(
         dir.x += 1.0;
     }
 
+    let effective_speed = MOVE_SPEED * speed_multiplier(&local_effects);
+
     if dir != Vec2::ZERO {
         let dir_norm = dir.normalize();
         facing.0 = dir_norm;
-        velocity.x = dir_norm.x * MOVE_SPEED;
-        velocity.z = dir_norm.y * MOVE_SPEED;
+        velocity.x = dir_norm.x * effective_speed;
+        velocity.z = dir_norm.y * effective_speed;
     } else {
         velocity.x = 0.0;
         velocity.z = 0.0;

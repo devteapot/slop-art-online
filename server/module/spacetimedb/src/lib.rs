@@ -98,6 +98,20 @@ pub struct AoeZone {
 }
 
 #[derive(Clone)]
+#[spacetimedb::table(accessor = status_effect, public, scheduled(expire_status_effect))]
+pub struct StatusEffect {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub effect_type: StatusEffectType,
+    pub target_identity: Identity,
+    pub target_npc_id: u64,
+    pub power: i32,
+    pub source: Identity,
+}
+
+#[derive(Clone)]
 #[spacetimedb::table(accessor = chat_message, public, scheduled(expire_chat_message))]
 pub struct ChatMessage {
     #[primary_key]
@@ -116,6 +130,16 @@ pub struct ProjectileTickSchedule {
     #[auto_inc]
     pub scheduled_id: u64,
     pub scheduled_at: ScheduleAt,
+}
+
+// --- Status effect helpers ---
+
+fn effect_for_skill(name: &str, duration_ms: u64) -> Option<(StatusEffectType, i32, u64)> {
+    match name {
+        "Fireball"  => Some((StatusEffectType::Poison, EFFECT_POISON_POWER, duration_ms.max(EFFECT_DEFAULT_DURATION_MS))),
+        "Shockwave" => Some((StatusEffectType::Slow, 0, duration_ms.max(EFFECT_DEFAULT_DURATION_MS))),
+        _ => None,
+    }
 }
 
 // --- Scheduler helper ---
@@ -183,6 +207,40 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
         let new_stamina = (player.stamina + STAMINA_REGEN_PER_TICK).min(player.max_stamina);
         if new_mana != player.mana || new_stamina != player.stamina {
             ctx.db.player().identity().update(Player { mana: new_mana, stamina: new_stamina, ..player });
+        }
+    }
+
+    // Tick status effects (DoT / HoT)
+    for effect in ctx.db.status_effect().iter().collect::<Vec<_>>() {
+        match effect.effect_type {
+            StatusEffectType::Poison => {
+                if effect.target_npc_id > 0 {
+                    if let Some(npc) = ctx.db.npc().id().find(&effect.target_npc_id) {
+                        let new_health = npc.health - effect.power;
+                        if new_health <= 0 {
+                            kill_npc(ctx, &npc, effect.source);
+                        } else {
+                            ctx.db.npc().id().update(Npc { health: new_health, ..npc });
+                        }
+                    }
+                } else if let Some(player) = ctx.db.player().identity().find(&effect.target_identity) {
+                    let new_health = player.health - effect.power;
+                    if new_health <= 0 {
+                        respawn_player(ctx, &player);
+                    } else {
+                        ctx.db.player().identity().update(Player { health: new_health, ..player });
+                    }
+                }
+            }
+            StatusEffectType::Regen => {
+                if let Some(player) = ctx.db.player().identity().find(&effect.target_identity) {
+                    let new_health = (player.health + effect.power).min(player.max_health);
+                    if new_health != player.health {
+                        ctx.db.player().identity().update(Player { health: new_health, ..player });
+                    }
+                }
+            }
+            StatusEffectType::Slow | StatusEffectType::Haste => {} // passive modifiers
         }
     }
 
@@ -298,10 +356,22 @@ pub fn move_player(ctx: &ReducerContext, x: f32, y: f32, z: f32, seq: u32) -> Re
     let player = ctx.db.player().identity().find(&ctx.sender())
         .ok_or("Player not found")?;
 
-    // Simple anti-teleport: reject moves beyond MAX_MOVE_DIST on the XZ plane.
+    // Determine max move distance based on active speed effects
+    let mut max_dist = MAX_MOVE_DIST;
+    for effect in ctx.db.status_effect().iter() {
+        if effect.target_identity == ctx.sender() && effect.target_npc_id == 0 {
+            match effect.effect_type {
+                StatusEffectType::Slow => { max_dist = max_dist.min(MAX_MOVE_DIST_SLOW); }
+                StatusEffectType::Haste => { max_dist = max_dist.max(MAX_MOVE_DIST_HASTE); }
+                _ => {}
+            }
+        }
+    }
+
+    // Simple anti-teleport: reject moves beyond max_dist on the XZ plane.
     let dx = x - player.position.x;
     let dz = z - player.position.z;
-    if (dx * dx + dz * dz).sqrt() > MAX_MOVE_DIST {
+    if (dx * dx + dz * dz).sqrt() > max_dist {
         return Err("Moved too far".to_string());
     }
 
@@ -414,6 +484,7 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
     }
 
     let target_pos = Position { x: target_x, y: target_y, z: target_z };
+    let skill_effect = effect_for_skill(&skill_def.name, stats.duration_ms);
 
     match skill_def.behavior_type {
         BehaviorType::Melee => {
@@ -429,13 +500,13 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             match (nearest_npc, nearest_player) {
                 (Some(n), Some(p)) => {
                     if n.position.distance_to(&player.position) <= p.position.distance_to(&player.position) {
-                        hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
+                        hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
                     } else {
-                        hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
+                        hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
                     }
                 }
-                (Some(n), None) => hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT),
-                (None, Some(p)) => hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT),
+                (Some(n), None) => hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone()),
+                (None, Some(p)) => hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone()),
                 (None, None) => {}
             }
         }
@@ -475,12 +546,12 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             // Apply first tick immediately so the skill doesn't feel delayed
             for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
                 if npc.position.distance_to(&target_pos) <= radius {
-                    hit_npc(ctx, &npc, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
+                    hit_npc(ctx, &npc, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
                 }
             }
             for p in ctx.db.player().iter().collect::<Vec<_>>() {
                 if p.identity != ctx.sender() && p.position.distance_to(&target_pos) <= radius {
-                    hit_player(ctx, &p, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
+                    hit_player(ctx, &p, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
                 }
             }
 
@@ -509,6 +580,10 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             if healed > 0 {
                 award_skill_xp(ctx, ctx.sender(), skill_id, healed);
             }
+            apply_status_effect(
+                ctx, StatusEffectType::Regen, ctx.sender(), 0,
+                EFFECT_REGEN_POWER, stats.duration_ms.max(EFFECT_DEFAULT_DURATION_MS), ctx.sender(),
+            );
         }
         BehaviorType::Mobility => {
             // Cooldown and resource already consumed above.
@@ -608,6 +683,11 @@ pub fn expire_ground_item(_ctx: &ReducerContext, _row: GroundItem) {
 }
 
 #[spacetimedb::reducer]
+pub fn expire_status_effect(_ctx: &ReducerContext, _row: StatusEffect) {
+    // Row auto-deletes after this reducer completes.
+}
+
+#[spacetimedb::reducer]
 pub fn send_chat_message(ctx: &ReducerContext, text: String) -> Result<(), String> {
     let player = ctx.db.player().identity().find(&ctx.sender())
         .ok_or("Player not found")?;
@@ -651,11 +731,22 @@ pub fn tick_projectiles(ctx: &ReducerContext, _schedule: ProjectileTickSchedule)
             continue;
         }
 
+        // Look up skill def to determine status effect at impact
+        let proj_effect = ctx.db.skill_def().id().find(&proj.skill_id)
+            .and_then(|sd| {
+                // We need duration from the attacker's skill attributes
+                let dur = ctx.db.skill_attributes().iter()
+                    .find(|a| a.player_identity == proj.owner && a.skill_id == proj.skill_id)
+                    .map(|a| compute_stats(&a).duration_ms)
+                    .unwrap_or(EFFECT_DEFAULT_DURATION_MS);
+                effect_for_skill(&sd.name, dur)
+            });
+
         // Check collision against NPCs
         let mut hit = false;
         for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
             if proj_pos.distance_to(&npc.position) <= proj.hit_radius {
-                hit_npc(ctx, &npc, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id, SKILL_XP_PER_HIT);
+                hit_npc(ctx, &npc, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id, SKILL_XP_PER_HIT, proj_effect.clone());
                 hit = true;
                 break;
             }
@@ -668,7 +759,7 @@ pub fn tick_projectiles(ctx: &ReducerContext, _schedule: ProjectileTickSchedule)
         // Check collision against players (excluding owner)
         for p in ctx.db.player().iter().collect::<Vec<_>>() {
             if p.identity != proj.owner && proj_pos.distance_to(&p.position) <= proj.hit_radius {
-                hit_player(ctx, &p, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id, SKILL_XP_PER_HIT);
+                hit_player(ctx, &p, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id, SKILL_XP_PER_HIT, proj_effect.clone());
                 hit = true;
                 break;
             }
@@ -682,14 +773,22 @@ pub fn tick_projectiles(ctx: &ReducerContext, _schedule: ProjectileTickSchedule)
     for zone in ctx.db.aoe_zone().iter().collect::<Vec<_>>() {
         if now_ms.saturating_sub(zone.last_tick_at) >= zone.tick_interval_ms {
             let center = Position { x: zone.center_x, y: zone.center_y, z: zone.center_z };
+            let zone_effect = ctx.db.skill_def().id().find(&zone.skill_id)
+                .and_then(|sd| {
+                    let dur = ctx.db.skill_attributes().iter()
+                        .find(|a| a.player_identity == zone.owner && a.skill_id == zone.skill_id)
+                        .map(|a| compute_stats(&a).duration_ms)
+                        .unwrap_or(EFFECT_DEFAULT_DURATION_MS);
+                    effect_for_skill(&sd.name, dur)
+                });
             for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
                 if npc.position.distance_to(&center) <= zone.radius {
-                    hit_npc(ctx, &npc, zone.power, zone.knockback, &center, zone.owner, zone.skill_id, SKILL_XP_PER_AOE_TICK);
+                    hit_npc(ctx, &npc, zone.power, zone.knockback, &center, zone.owner, zone.skill_id, SKILL_XP_PER_AOE_TICK, zone_effect.clone());
                 }
             }
             for p in ctx.db.player().iter().collect::<Vec<_>>() {
                 if p.identity != zone.owner && p.position.distance_to(&center) <= zone.radius {
-                    hit_player(ctx, &p, zone.power, zone.knockback, &center, zone.owner, zone.skill_id, SKILL_XP_PER_AOE_TICK);
+                    hit_player(ctx, &p, zone.power, zone.knockback, &center, zone.owner, zone.skill_id, SKILL_XP_PER_AOE_TICK, zone_effect.clone());
                 }
             }
             ctx.db.aoe_zone().scheduled_id().update(AoeZone { last_tick_at: now_ms, ..zone });
@@ -755,6 +854,8 @@ pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: Stri
         ctx.db.skill_cooldown().insert(SkillCooldown { id: 0, player_identity: ctx.sender(), skill_id, ready_at });
     }
 
+    let targeted_effect = effect_for_skill(&skill_def.name, stats.duration_ms);
+
     let (target_x, target_y, target_z) = match target_kind.as_str() {
         "self" => {
             let current = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
@@ -772,7 +873,7 @@ pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: Stri
                 return Err("Target out of range".to_string());
             }
             let pos = (npc.position.x, npc.position.y, npc.position.z);
-            hit_npc(ctx, &npc, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
+            hit_npc(ctx, &npc, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, targeted_effect.clone());
             pos
         }
         "player" => {
@@ -784,7 +885,7 @@ pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: Stri
                 return Err("Target out of range".to_string());
             }
             let pos = (target_player.position.x, target_player.position.y, target_player.position.z);
-            hit_player(ctx, &target_player, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT);
+            hit_player(ctx, &target_player, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, targeted_effect.clone());
             pos
         }
         _ => return Err(format!("Unknown target_kind: {target_kind}")),

@@ -8,6 +8,7 @@ pub struct SkillStats {
     pub range: f32,
     pub knockback: f32,
     pub resource_cost: i32,
+    pub duration_ms: u64,
 }
 
 pub fn compute_stats(attrs: &SkillAttributes) -> SkillStats {
@@ -18,6 +19,7 @@ pub fn compute_stats(attrs: &SkillAttributes) -> SkillStats {
         range: 5.0 + attrs.range_points as f32 * 1.5,
         knockback: attrs.knockback_points as f32 * 0.5,
         resource_cost: (25 - attrs.resource_cost_points * 2).max(5),
+        duration_ms: ((2.0 + attrs.duration_points as f32 * 0.5) * 1000.0) as u64,
     }
 }
 

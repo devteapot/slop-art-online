@@ -35,6 +35,14 @@ pub enum ResourceType {
     Stamina,
 }
 
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub enum StatusEffectType {
+    Poison,  // DoT
+    Regen,   // HoT
+    Slow,    // 50% move speed
+    Haste,   // 150% move speed
+}
+
 #[derive(Clone)]
 #[spacetimedb::table(accessor = player, public)]
 pub struct Player {

@@ -48,6 +48,13 @@ pub const PROJECTILE_MAX_LIFETIME_MS: u64 = 5000;
 pub const AOE_TICK_INTERVAL_MS: u64 = 500;
 pub const AOE_DEFAULT_DURATION_MS: u64 = 3000;
 
+// Status effects
+pub const EFFECT_POISON_POWER: i32 = 3;
+pub const EFFECT_REGEN_POWER: i32 = 5;
+pub const EFFECT_DEFAULT_DURATION_MS: u64 = 5000;
+pub const MAX_MOVE_DIST_SLOW: f32 = 8.0;
+pub const MAX_MOVE_DIST_HASTE: f32 = 22.0;
+
 // Chat
 pub const CHAT_MESSAGE_EXPIRE_MS: u64 = 30_000;
 pub const CHAT_MAX_LENGTH: usize = 200;

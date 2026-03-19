@@ -6,7 +6,7 @@ use shared::module_bindings::{
     InventoryItemTableAccess, ItemDef, ItemDefTableAccess, Npc, NpcTableAccess, Player,
     PlayerSkill, PlayerSkillTableAccess, PlayerTableAccess, Projectile, ProjectileTableAccess,
     SkillAttributes, SkillAttributesTableAccess, SkillCooldown, SkillCooldownTableAccess, SkillDef,
-    SkillDefTableAccess,
+    SkillDefTableAccess, StatusEffect, StatusEffectTableAccess,
 };
 use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
 use std::sync::{Arc, Mutex};
@@ -92,6 +92,11 @@ pub enum ChatMessageEvent {
     Deleted(u64),
 }
 
+pub enum StatusEffectEvent {
+    Inserted(StatusEffect),
+    Deleted(StatusEffect),
+}
+
 // --- Event queues ---
 
 #[derive(Resource, Default, Clone)]
@@ -133,6 +138,9 @@ pub struct InventoryItemEventQueue(pub Arc<Mutex<Vec<InventoryItemEvent>>>);
 #[derive(Resource, Default, Clone)]
 pub struct ChatMessageEventQueue(pub Arc<Mutex<Vec<ChatMessageEvent>>>);
 
+#[derive(Resource, Default, Clone)]
+pub struct StatusEffectEventQueue(pub Arc<Mutex<Vec<StatusEffectEvent>>>);
+
 // --- Systems ---
 
 pub fn connect_spacetimedb(
@@ -150,6 +158,7 @@ pub fn connect_spacetimedb(
     ground_item_queue: Res<GroundItemEventQueue>,
     inventory_item_queue: Res<InventoryItemEventQueue>,
     chat_msg_queue: Res<ChatMessageEventQueue>,
+    status_effect_queue: Res<StatusEffectEventQueue>,
     local_identity: Res<LocalIdentity>,
 ) {
     let q_insert = player_queue.clone();
@@ -181,6 +190,8 @@ pub fn connect_spacetimedb(
     let inv_delete = inventory_item_queue.clone();
     let chat_insert = chat_msg_queue.clone();
     let chat_delete = chat_msg_queue.clone();
+    let se_insert = status_effect_queue.clone();
+    let se_delete = status_effect_queue.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -205,6 +216,7 @@ pub fn connect_spacetimedb(
                     "SELECT * FROM ground_item",
                     "SELECT * FROM inventory_item",
                     "SELECT * FROM chat_message",
+                    "SELECT * FROM status_effect",
                 ]);
         })
         .on_connect_error(|_, err| error!("SpacetimeDB connect error: {err}"))
@@ -301,6 +313,12 @@ pub fn connect_spacetimedb(
     });
     conn.db.chat_message().on_delete(move |_, row: &ChatMessage| {
         chat_delete.0.lock().unwrap().push(ChatMessageEvent::Deleted(row.scheduled_id));
+    });
+    conn.db.status_effect().on_insert(move |_, row: &StatusEffect| {
+        se_insert.0.lock().unwrap().push(StatusEffectEvent::Inserted(row.clone()));
+    });
+    conn.db.status_effect().on_delete(move |_, row: &StatusEffect| {
+        se_delete.0.lock().unwrap().push(StatusEffectEvent::Deleted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));

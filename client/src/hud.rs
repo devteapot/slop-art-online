@@ -2,9 +2,12 @@ use bevy::prelude::*;
 
 use shared::module_bindings::allocate_skill_point_reducer::allocate_skill_point;
 
+use shared::module_bindings::StatusEffectType;
+
 use crate::constants::{ATTRS, POINTS_PER_LEVEL};
 use crate::network::SpacetimeDb;
 use crate::player::LocalPlayerStats;
+use crate::status_effects::LocalStatusEffects;
 use crate::skills::{
     attr_display, cooldown_remaining, get_attr_pts, points_allocated_client,
     LocalCooldowns, LocalSkillData, LocalSkills, MobilitySkillIds, SelectedSkill, SkillNameMap,
@@ -57,6 +60,9 @@ pub struct LevelLabel;
 #[derive(Component)]
 pub struct XpBarFill;
 
+#[derive(Component)]
+pub struct StatusEffectSlot(pub usize);
+
 // --- Setup ---
 
 pub fn setup_hud(mut commands: Commands) {
@@ -68,6 +74,23 @@ pub fn setup_hud(mut commands: Commands) {
         row_gap: Val::Px(4.0),
         ..default()
     }).with_children(|col| {
+        // Status effect indicators
+        col.spawn(Node {
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(4.0),
+            ..default()
+        }).with_children(|row| {
+            for i in 0..4 {
+                row.spawn((
+                    StatusEffectSlot(i),
+                    Text::new(""),
+                    TextFont { font_size: 11.0, ..default() },
+                    TextColor(Color::WHITE),
+                    Visibility::Hidden,
+                ));
+            }
+        });
+
         // Level label
         col.spawn((
             LevelLabel,
@@ -437,6 +460,28 @@ pub fn handle_allocate_clicks(
         if *interaction == Interaction::Pressed {
             let attr_key = ATTRS[btn.0].0.to_string();
             let _ = conn.0.reducers.allocate_skill_point(skill_id, attr_key);
+        }
+    }
+}
+
+pub fn update_status_effects_hud(
+    local_effects: Res<LocalStatusEffects>,
+    mut slots: Query<(&StatusEffectSlot, &mut Text, &mut TextColor, &mut Visibility)>,
+) {
+    for (slot, mut text, mut color, mut vis) in &mut slots {
+        if let Some(effect) = local_effects.0.get(slot.0) {
+            *vis = Visibility::Inherited;
+            let (label, c) = match effect.effect_type {
+                StatusEffectType::Poison => ("PSN", Color::srgb(0.2, 0.9, 0.2)),
+                StatusEffectType::Regen  => ("RGN", Color::srgb(0.2, 0.9, 0.9)),
+                StatusEffectType::Slow   => ("SLO", Color::srgb(0.7, 0.3, 0.9)),
+                StatusEffectType::Haste  => ("HST", Color::srgb(1.0, 0.9, 0.2)),
+            };
+            text.0 = label.to_string();
+            *color = TextColor(c);
+        } else {
+            *vis = Visibility::Hidden;
+            text.0.clear();
         }
     }
 }

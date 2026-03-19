@@ -57,6 +57,9 @@ pub mod skill_def_type;
 pub mod spawn_npc_reducer;
 pub mod start_npc_ticker_reducer;
 pub mod start_projectile_ticker_reducer;
+pub mod status_effect_table;
+pub mod status_effect_type;
+pub mod status_effect_type_type;
 pub mod submit_npc_graph_reducer;
 pub mod use_skill_reducer;
 pub mod use_targeted_skill_reducer;
@@ -112,6 +115,9 @@ pub use skill_def_type::SkillDef;
 pub use spawn_npc_reducer::spawn_npc;
 pub use start_npc_ticker_reducer::start_npc_ticker;
 pub use start_projectile_ticker_reducer::start_projectile_ticker;
+pub use status_effect_table::*;
+pub use status_effect_type::StatusEffect;
+pub use status_effect_type_type::StatusEffectType;
 pub use submit_npc_graph_reducer::submit_npc_graph;
 pub use use_skill_reducer::use_skill;
 pub use use_targeted_skill_reducer::use_targeted_skill;
@@ -318,6 +324,7 @@ pub struct DbUpdate {
     skill_attributes: __sdk::TableUpdate<SkillAttributes>,
     skill_cooldown: __sdk::TableUpdate<SkillCooldown>,
     skill_def: __sdk::TableUpdate<SkillDef>,
+    status_effect: __sdk::TableUpdate<StatusEffect>,
 }
 
 impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
@@ -374,6 +381,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "skill_def" => db_update
                     .skill_def
                     .append(skill_def_table::parse_table_update(table_update)?),
+                "status_effect" => db_update
+                    .status_effect
+                    .append(status_effect_table::parse_table_update(table_update)?),
 
                 unknown => {
                     return Err(__sdk::InternalError::unknown_name(
@@ -454,6 +464,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.skill_def = cache
             .apply_diff_to_table::<SkillDef>("skill_def", &self.skill_def)
             .with_updates_by_pk(|row| &row.id);
+        diff.status_effect = cache
+            .apply_diff_to_table::<StatusEffect>("status_effect", &self.status_effect)
+            .with_updates_by_pk(|row| &row.scheduled_id);
 
         diff
     }
@@ -508,6 +521,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "skill_def" => db_update
                     .skill_def
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "status_effect" => db_update
+                    .status_effect
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 unknown => {
                     return Err(
@@ -570,6 +586,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "skill_def" => db_update
                     .skill_def
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "status_effect" => db_update
+                    .status_effect
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 unknown => {
                     return Err(
                         __sdk::InternalError::unknown_name("table", unknown, "QueryRows").into(),
@@ -601,6 +620,7 @@ pub struct AppliedDiff<'r> {
     skill_attributes: __sdk::TableAppliedDiff<'r, SkillAttributes>,
     skill_cooldown: __sdk::TableAppliedDiff<'r, SkillCooldown>,
     skill_def: __sdk::TableAppliedDiff<'r, SkillDef>,
+    status_effect: __sdk::TableAppliedDiff<'r, StatusEffect>,
     __unused: std::marker::PhantomData<&'r ()>,
 }
 
@@ -666,6 +686,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<SkillDef>("skill_def", &self.skill_def, event);
+        callbacks.invoke_table_row_callbacks::<StatusEffect>(
+            "status_effect",
+            &self.status_effect,
+            event,
+        );
     }
 }
 
@@ -1326,6 +1351,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         skill_attributes_table::register_table(client_cache);
         skill_cooldown_table::register_table(client_cache);
         skill_def_table::register_table(client_cache);
+        status_effect_table::register_table(client_cache);
     }
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
         "active_skill",
@@ -1344,5 +1370,6 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "skill_attributes",
         "skill_cooldown",
         "skill_def",
+        "status_effect",
     ];
 }
