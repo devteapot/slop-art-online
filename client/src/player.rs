@@ -1,6 +1,7 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use spacetimedb_sdk::Identity;
+use std::time::Duration;
 
 use shared::module_bindings::attack_npc_reducer::attack_npc;
 use shared::module_bindings::attack_player_reducer::attack_player;
@@ -68,6 +69,24 @@ impl Default for LocalPlayerStats {
 #[derive(Resource, Default)]
 pub struct PlayerFacing(pub Vec2);
 
+#[derive(Component)]
+pub(crate) struct PlayerAnimNodes {
+    idle: AnimationNodeIndex,
+    walk: AnimationNodeIndex,
+    walk_back: AnimationNodeIndex,
+    run: AnimationNodeIndex,
+    jump: AnimationNodeIndex,
+    strafe_left: AnimationNodeIndex,
+    strafe_right: AnimationNodeIndex,
+    current: Option<AnimationNodeIndex>,
+}
+
+#[derive(Component)]
+pub(crate) struct AnimBodyRef(Entity);
+
+#[derive(Component)]
+pub(crate) struct AnimVisualRef(Entity);
+
 pub fn sync_players(
     mut commands: Commands,
     queue: Res<PlayerEventQueue>,
@@ -119,7 +138,7 @@ pub fn sync_players(
                     commands.entity(body).with_child((
                         PlayerVisual,
                         LocalPlayerVisual,
-                        SceneRoot(asset_server.load("test.glb#Scene0")),
+                        SceneRoot(asset_server.load("player.glb#Scene0")),
                         Transform::from_xyz(0.0, model_offset_y, 0.0),
                     ));
                 } else {
@@ -134,7 +153,7 @@ pub fn sync_players(
                         .id();
                     commands.entity(body).with_child((
                         PlayerVisual,
-                        SceneRoot(asset_server.load("test.glb#Scene0")),
+                        SceneRoot(asset_server.load("player.glb#Scene0")),
                         Transform::from_xyz(0.0, model_offset_y, 0.0),
                     ));
                 }
@@ -309,6 +328,146 @@ pub fn apply_remote_player_facing(
             if let Ok(mut transform) = visuals.get_mut(child) {
                 transform.rotation = Quat::from_rotation_y(facing.0);
             }
+        }
+    }
+}
+
+/// When a player scene loads, find the `AnimationPlayer` entity and wire up the animation graph.
+/// Animations in player.glb (by index): 0=jump, 1=run, 2=strafe_left, 3=strafe_right, 4=walk, 5=idle
+pub fn setup_player_animations(
+    mut commands: Commands,
+    mut new_players: Query<(Entity, &mut AnimationPlayer), Added<AnimationPlayer>>,
+    parents: Query<&ChildOf>,
+    player_visuals: Query<(), With<PlayerVisual>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+    asset_server: Res<AssetServer>,
+) {
+    for (entity, _player) in new_players.iter_mut() {
+        // Walk up the hierarchy to find the PlayerVisual ancestor.
+        let mut is_player = false;
+        let mut body_entity = None;
+        let mut visual_entity = None;
+        let mut current = entity;
+
+        for _ in 0..8 {
+            let Ok(child_of) = parents.get(current) else {
+                break;
+            };
+            current = child_of.0;
+            if player_visuals.contains(current) {
+                is_player = true;
+                visual_entity = Some(current);
+                if let Ok(body_child_of) = parents.get(current) {
+                    body_entity = Some(body_child_of.0);
+                }
+                break;
+            }
+        }
+
+        if !is_player {
+            continue;
+        }
+
+        let mut graph = AnimationGraph::new();
+        let jump = graph.add_clip(asset_server.load("player.glb#Animation0"), 1.0, graph.root);
+        let run = graph.add_clip(asset_server.load("player.glb#Animation1"), 1.0, graph.root);
+        let strafe_left = graph.add_clip(asset_server.load("player.glb#Animation2"), 1.0, graph.root);
+        let strafe_right = graph.add_clip(asset_server.load("player.glb#Animation3"), 1.0, graph.root);
+        let walk = graph.add_clip(asset_server.load("player.glb#Animation4"), 1.0, graph.root);
+        let walk_back = graph.add_clip(asset_server.load("player.glb#Animation4"), 1.0, graph.root);
+        let idle = graph.add_clip(asset_server.load("player.glb#Animation5"), 1.0, graph.root);
+        let graph_handle = graphs.add(graph);
+
+        let mut entity_cmds = commands.entity(entity);
+        entity_cmds.insert((
+            AnimationGraphHandle(graph_handle),
+            AnimationTransitions::new(),
+            PlayerAnimNodes {
+                idle,
+                walk,
+                walk_back,
+                run,
+                jump,
+                strafe_left,
+                strafe_right,
+                current: None,
+            },
+        ));
+        if let Some(body) = body_entity {
+            entity_cmds.insert(AnimBodyRef(body));
+        }
+        if let Some(visual) = visual_entity {
+            entity_cmds.insert(AnimVisualRef(visual));
+        }
+    }
+}
+
+/// Switch the playing animation based on the player body's horizontal speed.
+pub fn drive_player_animations(
+    mut query: Query<(
+        &mut AnimationPlayer,
+        &mut AnimationTransitions,
+        &mut PlayerAnimNodes,
+        &AnimBodyRef,
+        Option<&AnimVisualRef>,
+    )>,
+    bodies: Query<(&LinearVelocity, Option<&Grounded>)>,
+    visuals: Query<&GlobalTransform, With<PlayerVisual>>,
+) {
+    for (mut player, mut transitions, mut nodes, body_ref, visual_ref) in query.iter_mut() {
+        let (velocity, grounded) = bodies
+            .get(body_ref.0)
+            .map(|(v, grounded)| (Vec2::new(v.x, v.z), grounded.map(|g| g.0)))
+            .unwrap_or((Vec2::ZERO, Some(true)));
+        let speed = velocity.length();
+        let airborne = grounded == Some(false);
+
+        let facing_dir = visual_ref
+            .and_then(|visual_ref| visuals.get(visual_ref.0).ok())
+            .map(|gt| {
+                let forward = gt.compute_transform().forward().as_vec3();
+                Vec2::new(forward.x, forward.z)
+            })
+            .unwrap_or(Vec2::new(0.0, -1.0));
+        let facing_dir = if facing_dir.length_squared() > 1e-4 {
+            facing_dir.normalize()
+        } else {
+            Vec2::new(0.0, -1.0)
+        };
+        let move_dir = if speed > 1e-4 {
+            velocity / speed
+        } else {
+            Vec2::ZERO
+        };
+        let forwardness = facing_dir.dot(move_dir);
+        let rightness = facing_dir.perp_dot(move_dir);
+
+        let target = if airborne {
+            nodes.jump
+        } else if speed <= 0.5 {
+            nodes.idle
+        } else if forwardness > 0.5 {
+            if speed > 5.0 { nodes.run } else { nodes.walk }
+        } else if forwardness < -0.5 {
+            nodes.walk_back
+        } else if rightness >= 0.0 {
+            nodes.strafe_right
+        } else {
+            nodes.strafe_left
+        };
+
+        let playback_speed = if target == nodes.walk_back { -1.0 } else { 1.0 };
+
+        if Some(target) != nodes.current {
+            nodes.current = Some(target);
+            transitions
+                .play(&mut player, target, Duration::from_millis(200))
+                .set_speed(playback_speed);
+        }
+        // Re-enforce repeat and speed every frame — repeat() can be dropped
+        // after a transition completes, which causes the animation to freeze.
+        if let Some(active) = player.animation_mut(target) {
+            active.repeat().set_speed(playback_speed);
         }
     }
 }

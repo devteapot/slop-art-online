@@ -4,15 +4,15 @@ pub const POINTS_PER_LEVEL: i32 = 5;
 
 /// (server_key, display_label) — server_key must match allocate_skill_point reducer
 pub const ATTRS: &[(&str, &str)] = &[
-    ("damage",           "Damage"),
-    ("cooldown",         "Cooldown"),
-    ("aoe",              "AOE"),
-    ("range",            "Range"),
-    ("duration",         "Duration"),
+    ("damage", "Damage"),
+    ("cooldown", "Cooldown"),
+    ("aoe", "AOE"),
+    ("range", "Range"),
+    ("duration", "Duration"),
     ("projectile_count", "Projectiles"),
-    ("knockback",        "Knockback"),
-    ("resource_cost",    "Resource Cost"),
-    ("cast_speed",       "Cast Speed"),
+    ("knockback", "Knockback"),
+    ("resource_cost", "Resource Cost"),
+    ("cast_speed", "Cast Speed"),
 ];
 
 pub const MOVE_SPEED: f32 = 20.0;

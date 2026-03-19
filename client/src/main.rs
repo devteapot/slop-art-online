@@ -76,6 +76,8 @@ fn main() {
             handle_close_click,
             update_skill_detail_panel,
             apply_remote_player_facing,
+            setup_player_animations,
+            drive_player_animations,
         ))
         .run();
 }
