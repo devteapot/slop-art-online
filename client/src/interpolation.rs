@@ -73,15 +73,15 @@ pub fn interpolate_remote_entities(
         let oldest = &snapshots[0];
         let newest = &snapshots[snapshots.len() - 1];
 
-        let (pos, rot) = if render_time <= oldest.timestamp {
+        let (pos, rot, snap_vel) = if render_time <= oldest.timestamp {
             // Before all snapshots — use oldest
-            (oldest.position, oldest.rotation)
+            (oldest.position, oldest.rotation, Vec3::ZERO)
         } else if render_time >= newest.timestamp {
             // Past all snapshots (player stopped or updates stalled) — hold at newest, no extrapolation
-            (newest.position, newest.rotation)
+            (newest.position, newest.rotation, Vec3::ZERO)
         } else {
             // Between two snapshots — interpolate
-            let mut result = (newest.position, newest.rotation);
+            let mut result = (newest.position, newest.rotation, Vec3::ZERO);
             for i in 0..snapshots.len() - 1 {
                 let a = &snapshots[i];
                 let b = &snapshots[i + 1];
@@ -92,9 +92,15 @@ pub fn interpolate_remote_entities(
                     } else {
                         1.0
                     };
+                    let vel = if dt > 1e-6 {
+                        (b.position - a.position) / dt as f32
+                    } else {
+                        Vec3::ZERO
+                    };
                     result = (
                         a.position.lerp(b.position, t),
                         lerp_angle(a.rotation, b.rotation, t),
+                        vel,
                     );
                     break;
                 }
@@ -102,12 +108,9 @@ pub fn interpolate_remote_entities(
             result
         };
 
-        // Derive velocity from position delta for remote animation driving.
+        // Write snapshot-derived velocity for remote animation driving.
         if let Some(mut rv) = remote_vel {
-            let dt = time.delta_secs();
-            if dt > 1e-6 {
-                rv.0 = (pos - transform.translation) / dt;
-            }
+            rv.0 = snap_vel;
         }
 
         transform.translation = pos;

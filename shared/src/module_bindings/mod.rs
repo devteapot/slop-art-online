@@ -6,6 +6,8 @@
 #![allow(unused, clippy::all)]
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
+pub mod active_skill_table;
+pub mod active_skill_type;
 pub mod allocate_skill_point_reducer;
 pub mod attack_npc_reducer;
 pub mod attack_player_reducer;
@@ -37,6 +39,8 @@ pub mod start_npc_ticker_reducer;
 pub mod submit_npc_graph_reducer;
 pub mod use_skill_reducer;
 
+pub use active_skill_table::*;
+pub use active_skill_type::ActiveSkill;
 pub use allocate_skill_point_reducer::allocate_skill_point;
 pub use attack_npc_reducer::attack_npc;
 pub use attack_player_reducer::attack_player;
@@ -200,6 +204,7 @@ impl __sdk::Reducer for Reducer {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct DbUpdate {
+    active_skill: __sdk::TableUpdate<ActiveSkill>,
     npc: __sdk::TableUpdate<Npc>,
     npc_behaviour_graph: __sdk::TableUpdate<NpcBehaviourGraph>,
     npc_pending_decision: __sdk::TableUpdate<NpcPendingDecision>,
@@ -216,6 +221,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_update in __sdk::transaction_update_iter_table_updates(raw) {
             match &table_update.table_name[..] {
+                "active_skill" => db_update
+                    .active_skill
+                    .append(active_skill_table::parse_table_update(table_update)?),
                 "npc" => db_update
                     .npc
                     .append(npc_table::parse_table_update(table_update)?),
@@ -266,6 +274,9 @@ impl __sdk::DbUpdate for DbUpdate {
     ) -> AppliedDiff<'_> {
         let mut diff = AppliedDiff::default();
 
+        diff.active_skill = cache
+            .apply_diff_to_table::<ActiveSkill>("active_skill", &self.active_skill)
+            .with_updates_by_pk(|row| &row.scheduled_id);
         diff.npc = cache
             .apply_diff_to_table::<Npc>("npc", &self.npc)
             .with_updates_by_pk(|row| &row.id);
@@ -303,6 +314,9 @@ impl __sdk::DbUpdate for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_rows in raw.tables {
             match &table_rows.table[..] {
+                "active_skill" => db_update
+                    .active_skill
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "npc" => db_update
                     .npc
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -340,6 +354,9 @@ impl __sdk::DbUpdate for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_rows in raw.tables {
             match &table_rows.table[..] {
+                "active_skill" => db_update
+                    .active_skill
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "npc" => db_update
                     .npc
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -379,6 +396,7 @@ impl __sdk::DbUpdate for DbUpdate {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct AppliedDiff<'r> {
+    active_skill: __sdk::TableAppliedDiff<'r, ActiveSkill>,
     npc: __sdk::TableAppliedDiff<'r, Npc>,
     npc_behaviour_graph: __sdk::TableAppliedDiff<'r, NpcBehaviourGraph>,
     npc_pending_decision: __sdk::TableAppliedDiff<'r, NpcPendingDecision>,
@@ -400,6 +418,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         event: &EventContext,
         callbacks: &mut __sdk::DbCallbacks<RemoteModule>,
     ) {
+        callbacks.invoke_table_row_callbacks::<ActiveSkill>(
+            "active_skill",
+            &self.active_skill,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Npc>("npc", &self.npc, event);
         callbacks.invoke_table_row_callbacks::<NpcBehaviourGraph>(
             "npc_behaviour_graph",
@@ -1072,6 +1095,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
     type QueryBuilder = __sdk::QueryBuilder;
 
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
+        active_skill_table::register_table(client_cache);
         npc_table::register_table(client_cache);
         npc_behaviour_graph_table::register_table(client_cache);
         npc_pending_decision_table::register_table(client_cache);
@@ -1082,6 +1106,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         skill_def_table::register_table(client_cache);
     }
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
+        "active_skill",
         "npc",
         "npc_behaviour_graph",
         "npc_pending_decision",

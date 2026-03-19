@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use shared::module_bindings::join_game_reducer::join_game;
 use shared::module_bindings::{
-    DbConnection, Npc, NpcTableAccess, Player, PlayerSkill, PlayerSkillTableAccess,
-    PlayerTableAccess, SkillAttributes, SkillAttributesTableAccess, SkillCooldown,
-    SkillCooldownTableAccess, SkillDef, SkillDefTableAccess,
+    ActiveSkill, ActiveSkillTableAccess, DbConnection, Npc, NpcTableAccess, Player, PlayerSkill,
+    PlayerSkillTableAccess, PlayerTableAccess, SkillAttributes, SkillAttributesTableAccess,
+    SkillCooldown, SkillCooldownTableAccess, SkillDef, SkillDefTableAccess,
 };
 use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
 use std::sync::{Arc, Mutex};
@@ -54,6 +54,11 @@ pub enum SkillCooldownEvent {
     Deleted(SkillCooldown),
 }
 
+pub enum ActiveSkillEvent {
+    Inserted(ActiveSkill),
+    Deleted(ActiveSkill),
+}
+
 // --- Event queues ---
 
 #[derive(Resource, Default, Clone)]
@@ -74,6 +79,9 @@ pub struct SkillAttributesEventQueue(pub Arc<Mutex<Vec<SkillAttributesEvent>>>);
 #[derive(Resource, Default, Clone)]
 pub struct SkillCooldownEventQueue(pub Arc<Mutex<Vec<SkillCooldownEvent>>>);
 
+#[derive(Resource, Default, Clone)]
+pub struct ActiveSkillEventQueue(pub Arc<Mutex<Vec<ActiveSkillEvent>>>);
+
 // --- Systems ---
 
 pub fn connect_spacetimedb(
@@ -84,6 +92,7 @@ pub fn connect_spacetimedb(
     skill_def_queue: Res<SkillDefEventQueue>,
     skill_attrs_queue: Res<SkillAttributesEventQueue>,
     skill_cd_queue: Res<SkillCooldownEventQueue>,
+    active_skill_queue: Res<ActiveSkillEventQueue>,
     local_identity: Res<LocalIdentity>,
 ) {
     let q_insert = player_queue.clone();
@@ -101,6 +110,8 @@ pub fn connect_spacetimedb(
     let sc_insert = skill_cd_queue.clone();
     let sc_update = skill_cd_queue.clone();
     let sc_delete = skill_cd_queue.clone();
+    let as_insert = active_skill_queue.clone();
+    let as_delete = active_skill_queue.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -118,6 +129,7 @@ pub fn connect_spacetimedb(
                     "SELECT * FROM player_skill",
                     "SELECT * FROM skill_attributes",
                     "SELECT * FROM skill_cooldown",
+                    "SELECT * FROM active_skill",
                 ]);
         })
         .on_connect_error(|_, err| error!("SpacetimeDB connect error: {err}"))
@@ -172,6 +184,12 @@ pub fn connect_spacetimedb(
     });
     conn.db.skill_cooldown().on_delete(move |_, row: &SkillCooldown| {
         sc_delete.0.lock().unwrap().push(SkillCooldownEvent::Deleted(row.clone()));
+    });
+    conn.db.active_skill().on_insert(move |_, row: &ActiveSkill| {
+        as_insert.0.lock().unwrap().push(ActiveSkillEvent::Inserted(row.clone()));
+    });
+    conn.db.active_skill().on_delete(move |_, row: &ActiveSkill| {
+        as_delete.0.lock().unwrap().push(ActiveSkillEvent::Deleted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));

@@ -23,6 +23,18 @@ pub struct NpcTickSchedule {
     pub scheduled_at: ScheduleAt,
 }
 
+#[derive(Clone)]
+#[spacetimedb::table(accessor = active_skill, public, scheduled(expire_active_skill))]
+pub struct ActiveSkill {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub player_identity: Identity,
+    pub skill_id: u64,
+    pub started_at: u64,
+}
+
 // --- Scheduler helper ---
 
 fn schedule_next_npc_tick(ctx: &ReducerContext) {
@@ -356,6 +368,23 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
     }
 
     award_skill_xp(ctx, ctx.sender(), skill_id, SKILL_XP_PER_USE);
+
+    // Broadcast ability usage to all clients via ActiveSkill table.
+    let anim_duration_ms: u64 = match skill_def.behavior_type {
+        BehaviorType::Mobility => 800,
+        BehaviorType::Melee => 500,
+        BehaviorType::Projectile => 600,
+        BehaviorType::GroundAoe => 700,
+        BehaviorType::Buff => 500,
+    };
+    ctx.db.active_skill().insert(ActiveSkill {
+        scheduled_id: 0,
+        scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(anim_duration_ms)),
+        player_identity: ctx.sender(),
+        skill_id,
+        started_at: now_us as u64,
+    });
+
     Ok(())
 }
 
@@ -388,4 +417,9 @@ pub fn allocate_skill_point(ctx: &ReducerContext, skill_id: u64, attribute: Stri
     }
     ctx.db.skill_attributes().id().update(new_attrs);
     Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn expire_active_skill(_ctx: &ReducerContext, _row: ActiveSkill) {
+    // Row auto-deletes after this reducer completes.
 }

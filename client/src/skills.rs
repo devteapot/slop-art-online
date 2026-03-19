@@ -10,7 +10,7 @@ use crate::network::{
     SkillAttributesEventQueue, SkillCooldownEvent, SkillCooldownEventQueue, SkillDefEvent,
     SkillDefEventQueue, SpacetimeDb,
 };
-use crate::player::{Grounded, LocalPlayer, PlayerFacing};
+use crate::player::{AbilityAnimTrigger, AbilityAnimTriggerQueue, Grounded, LocalPlayer, PlayerFacing};
 
 // --- Resources ---
 
@@ -199,6 +199,9 @@ pub fn use_skill_input(
     keys: Res<ButtonInput<KeyCode>>,
     local_player: Query<&Transform, With<LocalPlayer>>,
     local_skills: Res<LocalSkills>,
+    local_cooldowns: Res<LocalCooldowns>,
+    local_identity: Res<LocalIdentity>,
+    ability_queue: Res<AbilityAnimTriggerQueue>,
 ) {
     let Some(conn) = conn else { return };
     let Ok(transform) = local_player.single() else { return };
@@ -211,8 +214,13 @@ pub fn use_skill_input(
 
     if let Some(idx) = slot {
         if let Some(&skill_id) = local_skills.0.get(idx) {
-            let pos = transform.translation;
-            let _ = conn.0.reducers.use_skill(skill_id, pos.x, pos.y, pos.z);
+            if cooldown_remaining(&local_cooldowns, skill_id) <= 0.0 {
+                let pos = transform.translation;
+                let _ = conn.0.reducers.use_skill(skill_id, pos.x, pos.y, pos.z);
+                if let Some(id) = local_identity.0.lock().unwrap().clone() {
+                    ability_queue.0.lock().unwrap().push(AbilityAnimTrigger { identity: id, skill_id });
+                }
+            }
         }
     }
 }
@@ -223,8 +231,10 @@ pub fn mobility_input(
     mut player: Query<(&Transform, &mut LinearVelocity, &Grounded), With<LocalPlayer>>,
     mobility_ids: Res<MobilitySkillIds>,
     local_cooldowns: Res<LocalCooldowns>,
+    local_identity: Res<LocalIdentity>,
     facing: Res<PlayerFacing>,
     mut dash_state: ResMut<DashState>,
+    ability_queue: Res<AbilityAnimTriggerQueue>,
 ) {
     let Some(conn) = conn else { return };
     let Ok((transform, mut velocity, grounded)) = player.single_mut() else { return };
@@ -236,6 +246,9 @@ pub fn mobility_input(
             if cooldown_remaining(&local_cooldowns, jump_id) <= 0.0 && grounded.0 {
                 velocity.y += JUMP_IMPULSE;
                 let _ = conn.0.reducers.use_skill(jump_id, pos.x, pos.y, pos.z);
+                if let Some(id) = local_identity.0.lock().unwrap().clone() {
+                    ability_queue.0.lock().unwrap().push(AbilityAnimTrigger { identity: id, skill_id: jump_id });
+                }
             }
         }
     }
@@ -250,6 +263,9 @@ pub fn mobility_input(
                 dash_state.elapsed = 0.0;
                 dash_state.dir = dir;
                 let _ = conn.0.reducers.use_skill(dash_id, pos.x, pos.y, pos.z);
+                if let Some(id) = local_identity.0.lock().unwrap().clone() {
+                    ability_queue.0.lock().unwrap().push(AbilityAnimTrigger { identity: id, skill_id: dash_id });
+                }
             }
         }
     }

@@ -2,6 +2,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use spacetimedb_sdk::Identity;
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use shared::module_bindings::attack_npc_reducer::attack_npc;
@@ -14,7 +15,8 @@ use crate::constants::{
     PLAYER_GRAVITY_SCALE,
 };
 use crate::interpolation::InterpolationBuffer;
-use crate::network::{LocalIdentity, PlayerEvent, PlayerEventQueue, SpacetimeDb, to_world_pos};
+use crate::network::{ActiveSkillEvent, ActiveSkillEventQueue, LocalIdentity, PlayerEvent, PlayerEventQueue, SpacetimeDb, to_world_pos};
+use crate::skills::SkillNameMap;
 use crate::npc::NpcId;
 use crate::world::MainCamera;
 
@@ -133,6 +135,32 @@ pub(crate) struct AnimBodyRef(Entity);
 
 #[derive(Component)]
 pub(crate) struct AnimVisualRef(Entity);
+
+/// Fired when a skill animation should begin (local or remote).
+pub struct AbilityAnimTrigger {
+    pub identity: Identity,
+    pub skill_id: u64,
+}
+
+#[derive(Resource, Default, Clone)]
+pub struct AbilityAnimTriggerQueue(pub Arc<Mutex<Vec<AbilityAnimTrigger>>>);
+
+/// Active ability animation on a player's AnimationPlayer entity.
+#[derive(Component)]
+pub struct ActiveAbilityAnim {
+    pub skill_id: u64,
+    pub started_at: f64,
+    pub duration: f32,
+    pub anim_node: AnimationNodeIndex,
+}
+
+fn ability_anim_for_skill(skill_name: &str, nodes: &PlayerAnimNodes) -> (AnimationNodeIndex, f32) {
+    match skill_name {
+        "Jump" => (nodes.jump, 0.8),
+        "Dash" => (nodes.run, 0.2),
+        _ => (nodes.jump, 0.5),
+    }
+}
 
 pub fn sync_players(
     mut commands: Commands,
@@ -313,32 +341,33 @@ pub fn move_local_player(
         facing.0 = dir_norm;
         velocity.x = dir_norm.x * MOVE_SPEED;
         velocity.z = dir_norm.y * MOVE_SPEED;
-
-        let pos = transform.translation;
-        let now = time.elapsed_secs_f64();
-        if now - throttle.last_pos_time >= MOVE_SEND_INTERVAL
-            && (pos - throttle.last_sent_pos).length() > MOVE_DEAD_ZONE
-        {
-            move_seq.0 = move_seq.0.wrapping_add(1);
-            let seq = move_seq.0;
-
-            throttle.last_sent_pos = pos;
-            throttle.last_pos_time = now;
-            if let Err(e) = conn.0.reducers.move_player(pos.x, pos.y, pos.z, seq) {
-                error!("move_player failed: {e}");
-            }
-
-            pred_buffer.moves.push_back(PredictedMove {
-                seq,
-                position_after: pos,
-            });
-            if pred_buffer.moves.len() > 128 {
-                pred_buffer.moves.pop_front();
-            }
-        }
     } else {
         velocity.x = 0.0;
         velocity.z = 0.0;
+    }
+
+    // Send position updates when XZ movement or Y change (jump/fall) exceeds dead zone.
+    let pos = transform.translation;
+    let now = time.elapsed_secs_f64();
+    if now - throttle.last_pos_time >= MOVE_SEND_INTERVAL
+        && (pos - throttle.last_sent_pos).length() > MOVE_DEAD_ZONE
+    {
+        move_seq.0 = move_seq.0.wrapping_add(1);
+        let seq = move_seq.0;
+
+        throttle.last_sent_pos = pos;
+        throttle.last_pos_time = now;
+        if let Err(e) = conn.0.reducers.move_player(pos.x, pos.y, pos.z, seq) {
+            error!("move_player failed: {e}");
+        }
+
+        pred_buffer.moves.push_back(PredictedMove {
+            seq,
+            position_after: pos,
+        });
+        if pred_buffer.moves.len() > 128 {
+            pred_buffer.moves.pop_front();
+        }
     }
 }
 
@@ -529,11 +558,27 @@ pub fn drive_player_animations(
         &mut PlayerAnimNodes,
         &AnimBodyRef,
         Option<&AnimVisualRef>,
+        Option<&ActiveAbilityAnim>,
     )>,
     bodies: Query<(Option<&LinearVelocity>, Option<&Grounded>, Option<&RemoteVelocity>)>,
     visuals: Query<&GlobalTransform, With<PlayerVisual>>,
 ) {
-    for (mut player, mut transitions, mut nodes, body_ref, visual_ref) in query.iter_mut() {
+    const IDLE_ENTER_SPEED: f32 = 0.3;
+    const IDLE_EXIT_SPEED: f32 = 0.7;
+
+    for (mut player, mut transitions, mut nodes, body_ref, visual_ref, active_ability) in query.iter_mut() {
+        // Highest priority: active ability animation overrides everything.
+        if let Some(ability) = active_ability {
+            let target = ability.anim_node;
+            if Some(target) != nodes.current {
+                nodes.current = Some(target);
+                transitions
+                    .play(&mut player, target, Duration::from_millis(100))
+                    .set_speed(1.0);
+            }
+            continue;
+        }
+
         let (velocity, grounded) = bodies
             .get(body_ref.0)
             .map(|(lin_vel, grounded, remote_vel)| {
@@ -544,11 +589,24 @@ pub fn drive_player_animations(
                 } else {
                     Vec2::ZERO
                 };
-                (vel, grounded.map(|g| g.0))
+                // Derive grounded for remote players from vertical velocity.
+                // Local player uses physics Grounded component.
+                // Remote player: derive from snapshot Y velocity. Thresholds
+                // are wider than the local physics check because snapshot
+                // velocity is averaged over ~50ms and slope movement adds a
+                // large Y component (speed 20 on a 20° slope ≈ ±6.8).
+                let grounded_val = if let Some(g) = grounded {
+                    g.0
+                } else if let Some(rv) = remote_vel {
+                    rv.0.y < 8.0 && rv.0.y > -8.0
+                } else {
+                    true
+                };
+                (vel, grounded_val)
             })
-            .unwrap_or((Vec2::ZERO, Some(true)));
+            .unwrap_or((Vec2::ZERO, true));
         let speed = velocity.length();
-        let airborne = grounded == Some(false);
+        let airborne = !grounded;
 
         let facing_dir = visual_ref
             .and_then(|visual_ref| visuals.get(visual_ref.0).ok())
@@ -570,9 +628,12 @@ pub fn drive_player_animations(
         let forwardness = facing_dir.dot(move_dir);
         let rightness = facing_dir.perp_dot(move_dir);
 
+        let is_idle = nodes.current == Some(nodes.idle) || nodes.current.is_none();
+        let idle_threshold = if is_idle { IDLE_EXIT_SPEED } else { IDLE_ENTER_SPEED };
+
         let target = if airborne {
             nodes.jump
-        } else if speed <= 0.5 {
+        } else if speed <= idle_threshold {
             nodes.idle
         } else if forwardness > 0.5 {
             if speed > 5.0 { nodes.run } else { nodes.walk }
@@ -671,6 +732,71 @@ pub fn smooth_prediction_correction(
                 model_offset_y,
                 correction.offset.z,
             );
+        }
+    }
+}
+
+/// Drain ActiveSkill insert events from remote players and fire AbilityAnimTrigger.
+pub fn sync_active_skills(
+    queue: Res<ActiveSkillEventQueue>,
+    local_identity: Res<LocalIdentity>,
+    ability_queue: Res<AbilityAnimTriggerQueue>,
+) {
+    let local_id = local_identity.0.lock().unwrap().clone();
+    let mut events = queue.0.lock().unwrap();
+    let mut triggers = ability_queue.0.lock().unwrap();
+    for event in events.drain(..) {
+        if let ActiveSkillEvent::Inserted(active) = event {
+            let is_local = local_id.as_ref() == Some(&active.player_identity);
+            if !is_local {
+                triggers.push(AbilityAnimTrigger {
+                    identity: active.player_identity,
+                    skill_id: active.skill_id,
+                });
+            }
+        }
+    }
+}
+
+/// Read AbilityAnimTrigger events, find the matching player's animation entity,
+/// and insert an ActiveAbilityAnim component.
+pub fn trigger_ability_animations(
+    mut commands: Commands,
+    ability_queue: Res<AbilityAnimTriggerQueue>,
+    skill_names: Res<SkillNameMap>,
+    time: Res<Time>,
+    anim_query: Query<(Entity, &AnimBodyRef, &PlayerAnimNodes)>,
+    bodies: Query<&PlayerId>,
+) {
+    let mut triggers = ability_queue.0.lock().unwrap();
+    for trigger in triggers.drain(..) {
+        let skill_name = skill_names.0.get(&trigger.skill_id).map(|s| s.as_str()).unwrap_or("");
+        for (entity, body_ref, nodes) in anim_query.iter() {
+            if let Ok(pid) = bodies.get(body_ref.0) {
+                if pid.0 == trigger.identity {
+                    let (anim_node, duration) = ability_anim_for_skill(skill_name, nodes);
+                    commands.entity(entity).insert(ActiveAbilityAnim {
+                        skill_id: trigger.skill_id,
+                        started_at: time.elapsed_secs_f64(),
+                        duration,
+                        anim_node,
+                    });
+                }
+            }
+        }
+    }
+}
+
+/// Remove ActiveAbilityAnim when its duration has elapsed.
+pub fn expire_ability_animations(
+    mut commands: Commands,
+    time: Res<Time>,
+    query: Query<(Entity, &ActiveAbilityAnim)>,
+) {
+    let now = time.elapsed_secs_f64();
+    for (entity, anim) in query.iter() {
+        if now - anim.started_at >= anim.duration as f64 {
+            commands.entity(entity).remove::<ActiveAbilityAnim>();
         }
     }
 }

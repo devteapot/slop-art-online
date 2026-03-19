@@ -39,6 +39,7 @@ fn main() {
         .init_resource::<SkillDefEventQueue>()
         .init_resource::<SkillAttributesEventQueue>()
         .init_resource::<SkillCooldownEventQueue>()
+        .init_resource::<ActiveSkillEventQueue>()
         .init_resource::<LocalSkills>()
         .init_resource::<LocalPlayerStats>()
         .init_resource::<LocalSkillData>()
@@ -54,6 +55,7 @@ fn main() {
         .init_resource::<MoveSequence>()
         .init_resource::<PredictionBuffer>()
         .init_resource::<PredictionCorrection>()
+        .init_resource::<AbilityAnimTriggerQueue>()
         .add_systems(Startup, (setup, connect_spacetimedb, setup_hud))
         .add_systems(FixedUpdate, (
             move_local_player,
@@ -70,6 +72,8 @@ fn main() {
             sync_skill_defs,
             sync_skill_attrs,
             sync_skill_cooldowns,
+            sync_active_skills,
+            trigger_ability_animations,
             use_skill_input,
             follow_camera,
             face_cursor,
@@ -86,6 +90,7 @@ fn main() {
             update_skill_detail_panel,
             apply_remote_player_facing,
             setup_player_animations,
+            expire_ability_animations,
             drive_player_animations,
             smooth_prediction_correction,
         ))
