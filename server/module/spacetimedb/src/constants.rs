@@ -48,6 +48,11 @@ pub const PROJECTILE_MAX_LIFETIME_MS: u64 = 5000;
 pub const AOE_TICK_INTERVAL_MS: u64 = 500;
 pub const AOE_DEFAULT_DURATION_MS: u64 = 3000;
 
+// Chat
+pub const CHAT_MESSAGE_EXPIRE_MS: u64 = 30_000;
+pub const CHAT_MAX_LENGTH: usize = 200;
+pub const CHAT_PROXIMITY_RANGE: f32 = 50.0;
+
 // Inventory & Loot
 pub const INVENTORY_SLOTS: i32 = 20;
 pub const GROUND_ITEM_DESPAWN_MS: u64 = 300_000;

@@ -32,3 +32,4 @@ pub const DASH_DURATION: f32 = 0.2;
 pub const CAPSULE_HALF_LEN: f32 = 0.5;
 pub const CAPSULE_RADIUS: f32 = 0.4;
 pub const PICKUP_RANGE: f32 = 3.0;
+pub const CHAT_PROXIMITY_RANGE: f32 = 50.0;

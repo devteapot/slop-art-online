@@ -5,6 +5,7 @@ use shared::module_bindings::use_targeted_skill_reducer::use_targeted_skill;
 use shared::module_bindings::SkillAttributes;
 use spacetimedb_sdk::Timestamp;
 
+use crate::chat::ChatInputActive;
 use crate::constants::{DASH_DURATION, DASH_SPEED, JUMP_IMPULSE};
 use crate::network::{
     LocalIdentity, PlayerSkillEvent, PlayerSkillEventQueue, SkillAttributesEvent,
@@ -210,7 +211,9 @@ pub fn use_skill_input(
     local_identity: Res<LocalIdentity>,
     ability_queue: Res<AbilityAnimTriggerQueue>,
     cursor_ground: Res<CursorGroundPos>,
+    chat_active: Res<ChatInputActive>,
 ) {
+    if chat_active.0 { return; }
     let Some(conn) = conn else { return };
     let Ok(transform) = local_player.single() else { return };
 
@@ -244,7 +247,9 @@ pub fn mobility_input(
     facing: Res<PlayerFacing>,
     mut dash_state: ResMut<DashState>,
     ability_queue: Res<AbilityAnimTriggerQueue>,
+    chat_active: Res<ChatInputActive>,
 ) {
+    if chat_active.0 { return; }
     let Some(conn) = conn else { return };
     let Ok((transform, mut velocity, grounded)) = player.single_mut() else { return };
     let pos = transform.translation;
@@ -295,7 +300,9 @@ pub fn use_targeted_skill_input(
     local_identity: Res<LocalIdentity>,
     ability_queue: Res<AbilityAnimTriggerQueue>,
     selected_skill: Res<SelectedSkill>,
+    chat_active: Res<ChatInputActive>,
 ) {
+    if chat_active.0 { return; }
     if !buttons.just_pressed(MouseButton::Right) { return }
     let Some(conn) = conn else { return };
     let Ok(local_entity) = local_player.single() else { return };

@@ -97,6 +97,19 @@ pub struct AoeZone {
     pub started_at: u64,
 }
 
+#[derive(Clone)]
+#[spacetimedb::table(accessor = chat_message, public, scheduled(expire_chat_message))]
+pub struct ChatMessage {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub sender: Identity,
+    pub sender_name: String,
+    pub text: String,
+    pub position: Position,
+}
+
 #[spacetimedb::table(accessor = projectile_tick_schedule, scheduled(tick_projectiles))]
 pub struct ProjectileTickSchedule {
     #[primary_key]
@@ -591,6 +604,29 @@ pub fn expire_aoe_zone(_ctx: &ReducerContext, _row: AoeZone) {
 
 #[spacetimedb::reducer]
 pub fn expire_ground_item(_ctx: &ReducerContext, _row: GroundItem) {
+    // Row auto-deletes after this reducer completes.
+}
+
+#[spacetimedb::reducer]
+pub fn send_chat_message(ctx: &ReducerContext, text: String) -> Result<(), String> {
+    let player = ctx.db.player().identity().find(&ctx.sender())
+        .ok_or("Player not found")?;
+    let text = text.trim().to_string();
+    if text.is_empty() { return Err("Empty message".into()); }
+    if text.len() > CHAT_MAX_LENGTH { return Err("Message too long".into()); }
+    ctx.db.chat_message().insert(ChatMessage {
+        scheduled_id: 0,
+        scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(CHAT_MESSAGE_EXPIRE_MS)),
+        sender: ctx.sender(),
+        sender_name: String::new(),
+        text,
+        position: player.position.clone(),
+    });
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn expire_chat_message(_ctx: &ReducerContext, _row: ChatMessage) {
     // Row auto-deletes after this reducer completes.
 }
 

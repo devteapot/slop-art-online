@@ -1,11 +1,12 @@
 use bevy::prelude::*;
 use shared::module_bindings::join_game_reducer::join_game;
 use shared::module_bindings::{
-    ActiveSkill, ActiveSkillTableAccess, AoeZone, AoeZoneTableAccess, DbConnection, GroundItem,
-    GroundItemTableAccess, InventoryItem, InventoryItemTableAccess, ItemDef, ItemDefTableAccess,
-    Npc, NpcTableAccess, Player, PlayerSkill, PlayerSkillTableAccess, PlayerTableAccess,
-    Projectile, ProjectileTableAccess, SkillAttributes, SkillAttributesTableAccess, SkillCooldown,
-    SkillCooldownTableAccess, SkillDef, SkillDefTableAccess,
+    ActiveSkill, ActiveSkillTableAccess, AoeZone, AoeZoneTableAccess, ChatMessage,
+    ChatMessageTableAccess, DbConnection, GroundItem, GroundItemTableAccess, InventoryItem,
+    InventoryItemTableAccess, ItemDef, ItemDefTableAccess, Npc, NpcTableAccess, Player,
+    PlayerSkill, PlayerSkillTableAccess, PlayerTableAccess, Projectile, ProjectileTableAccess,
+    SkillAttributes, SkillAttributesTableAccess, SkillCooldown, SkillCooldownTableAccess, SkillDef,
+    SkillDefTableAccess,
 };
 use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
 use std::sync::{Arc, Mutex};
@@ -86,6 +87,11 @@ pub enum InventoryItemEvent {
     Deleted(InventoryItem),
 }
 
+pub enum ChatMessageEvent {
+    Inserted(ChatMessage),
+    Deleted(u64),
+}
+
 // --- Event queues ---
 
 #[derive(Resource, Default, Clone)]
@@ -124,6 +130,9 @@ pub struct GroundItemEventQueue(pub Arc<Mutex<Vec<GroundItemEvent>>>);
 #[derive(Resource, Default, Clone)]
 pub struct InventoryItemEventQueue(pub Arc<Mutex<Vec<InventoryItemEvent>>>);
 
+#[derive(Resource, Default, Clone)]
+pub struct ChatMessageEventQueue(pub Arc<Mutex<Vec<ChatMessageEvent>>>);
+
 // --- Systems ---
 
 pub fn connect_spacetimedb(
@@ -140,6 +149,7 @@ pub fn connect_spacetimedb(
     item_def_queue: Res<ItemDefEventQueue>,
     ground_item_queue: Res<GroundItemEventQueue>,
     inventory_item_queue: Res<InventoryItemEventQueue>,
+    chat_msg_queue: Res<ChatMessageEventQueue>,
     local_identity: Res<LocalIdentity>,
 ) {
     let q_insert = player_queue.clone();
@@ -169,6 +179,8 @@ pub fn connect_spacetimedb(
     let inv_insert = inventory_item_queue.clone();
     let inv_update = inventory_item_queue.clone();
     let inv_delete = inventory_item_queue.clone();
+    let chat_insert = chat_msg_queue.clone();
+    let chat_delete = chat_msg_queue.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -192,6 +204,7 @@ pub fn connect_spacetimedb(
                     "SELECT * FROM item_def",
                     "SELECT * FROM ground_item",
                     "SELECT * FROM inventory_item",
+                    "SELECT * FROM chat_message",
                 ]);
         })
         .on_connect_error(|_, err| error!("SpacetimeDB connect error: {err}"))
@@ -282,6 +295,12 @@ pub fn connect_spacetimedb(
     });
     conn.db.inventory_item().on_delete(move |_, row: &InventoryItem| {
         inv_delete.0.lock().unwrap().push(InventoryItemEvent::Deleted(row.clone()));
+    });
+    conn.db.chat_message().on_insert(move |_, row: &ChatMessage| {
+        chat_insert.0.lock().unwrap().push(ChatMessageEvent::Inserted(row.clone()));
+    });
+    conn.db.chat_message().on_delete(move |_, row: &ChatMessage| {
+        chat_delete.0.lock().unwrap().push(ChatMessageEvent::Deleted(row.scheduled_id));
     });
 
     commands.insert_resource(SpacetimeDb(conn));

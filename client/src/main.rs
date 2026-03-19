@@ -9,6 +9,7 @@ mod hud;
 mod interpolation;
 mod projectile;
 mod inventory;
+mod chat;
 
 use avian3d::prelude::*;
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
@@ -25,6 +26,7 @@ use hud::*;
 use interpolation::*;
 use projectile::*;
 use inventory::*;
+use chat::*;
 
 fn main() {
     App::new()
@@ -70,7 +72,10 @@ fn main() {
         .init_resource::<ItemRarityMap>()
         .init_resource::<LocalInventory>()
         .init_resource::<InventoryOpen>()
-        .add_systems(Startup, (setup, connect_spacetimedb, setup_hud, setup_inventory_panel))
+        .init_resource::<ChatMessageEventQueue>()
+        .init_resource::<ChatInputActive>()
+        .init_resource::<ChatInputBuffer>()
+        .add_systems(Startup, (setup, connect_spacetimedb, setup_hud, setup_inventory_panel, setup_chat_panel))
         .add_systems(FixedUpdate, (
             move_local_player,
             update_grounded,
@@ -122,6 +127,11 @@ fn main() {
             move_projectiles,
             sync_aoe_zones,
             use_targeted_skill_input,
+        ))
+        .add_systems(Update, (
+            sync_chat_messages,
+            chat_input,
+            update_chat_panel,
         ))
         .run();
 }

@@ -14,6 +14,8 @@ pub mod aoe_zone_type;
 pub mod attack_npc_reducer;
 pub mod attack_player_reducer;
 pub mod behavior_type_type;
+pub mod chat_message_table;
+pub mod chat_message_type;
 pub mod drop_item_reducer;
 pub mod ground_item_table;
 pub mod ground_item_type;
@@ -45,6 +47,7 @@ pub mod projectile_tick_schedule_type;
 pub mod projectile_type;
 pub mod resource_type_type;
 pub mod rotate_player_reducer;
+pub mod send_chat_message_reducer;
 pub mod skill_attributes_table;
 pub mod skill_attributes_type;
 pub mod skill_cooldown_table;
@@ -66,6 +69,8 @@ pub use aoe_zone_type::AoeZone;
 pub use attack_npc_reducer::attack_npc;
 pub use attack_player_reducer::attack_player;
 pub use behavior_type_type::BehaviorType;
+pub use chat_message_table::*;
+pub use chat_message_type::ChatMessage;
 pub use drop_item_reducer::drop_item;
 pub use ground_item_table::*;
 pub use ground_item_type::GroundItem;
@@ -97,6 +102,7 @@ pub use projectile_tick_schedule_type::ProjectileTickSchedule;
 pub use projectile_type::Projectile;
 pub use resource_type_type::ResourceType;
 pub use rotate_player_reducer::rotate_player;
+pub use send_chat_message_reducer::send_chat_message;
 pub use skill_attributes_table::*;
 pub use skill_attributes_type::SkillAttributes;
 pub use skill_cooldown_table::*;
@@ -144,6 +150,9 @@ pub enum Reducer {
     RotatePlayer {
         angle: f32,
     },
+    SendChatMessage {
+        text: String,
+    },
     SpawnNpc {
         x: f32,
         z: f32,
@@ -184,6 +193,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::MovePlayer { .. } => "move_player",
             Reducer::PickupItem { .. } => "pickup_item",
             Reducer::RotatePlayer { .. } => "rotate_player",
+            Reducer::SendChatMessage { .. } => "send_chat_message",
             Reducer::SpawnNpc { .. } => "spawn_npc",
             Reducer::StartNpcTicker => "start_npc_ticker",
             Reducer::StartProjectileTicker => "start_projectile_ticker",
@@ -235,6 +245,11 @@ impl __sdk::Reducer for Reducer {
             Reducer::RotatePlayer { angle } => {
                 __sats::bsatn::to_vec(&rotate_player_reducer::RotatePlayerArgs {
                     angle: angle.clone(),
+                })
+            }
+            Reducer::SendChatMessage { text } => {
+                __sats::bsatn::to_vec(&send_chat_message_reducer::SendChatMessageArgs {
+                    text: text.clone(),
                 })
             }
             Reducer::SpawnNpc { x, z, level } => {
@@ -289,6 +304,7 @@ impl __sdk::Reducer for Reducer {
 pub struct DbUpdate {
     active_skill: __sdk::TableUpdate<ActiveSkill>,
     aoe_zone: __sdk::TableUpdate<AoeZone>,
+    chat_message: __sdk::TableUpdate<ChatMessage>,
     ground_item: __sdk::TableUpdate<GroundItem>,
     inventory_item: __sdk::TableUpdate<InventoryItem>,
     item_def: __sdk::TableUpdate<ItemDef>,
@@ -316,6 +332,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "aoe_zone" => db_update
                     .aoe_zone
                     .append(aoe_zone_table::parse_table_update(table_update)?),
+                "chat_message" => db_update
+                    .chat_message
+                    .append(chat_message_table::parse_table_update(table_update)?),
                 "ground_item" => db_update
                     .ground_item
                     .append(ground_item_table::parse_table_update(table_update)?),
@@ -387,6 +406,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.aoe_zone = cache
             .apply_diff_to_table::<AoeZone>("aoe_zone", &self.aoe_zone)
             .with_updates_by_pk(|row| &row.scheduled_id);
+        diff.chat_message = cache
+            .apply_diff_to_table::<ChatMessage>("chat_message", &self.chat_message)
+            .with_updates_by_pk(|row| &row.scheduled_id);
         diff.ground_item = cache
             .apply_diff_to_table::<GroundItem>("ground_item", &self.ground_item)
             .with_updates_by_pk(|row| &row.scheduled_id);
@@ -444,6 +466,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "aoe_zone" => db_update
                     .aoe_zone
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "chat_message" => db_update
+                    .chat_message
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "ground_item" => db_update
                     .ground_item
@@ -503,6 +528,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "aoe_zone" => db_update
                     .aoe_zone
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "chat_message" => db_update
+                    .chat_message
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "ground_item" => db_update
                     .ground_item
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -559,6 +587,7 @@ impl __sdk::DbUpdate for DbUpdate {
 pub struct AppliedDiff<'r> {
     active_skill: __sdk::TableAppliedDiff<'r, ActiveSkill>,
     aoe_zone: __sdk::TableAppliedDiff<'r, AoeZone>,
+    chat_message: __sdk::TableAppliedDiff<'r, ChatMessage>,
     ground_item: __sdk::TableAppliedDiff<'r, GroundItem>,
     inventory_item: __sdk::TableAppliedDiff<'r, InventoryItem>,
     item_def: __sdk::TableAppliedDiff<'r, ItemDef>,
@@ -591,6 +620,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<AoeZone>("aoe_zone", &self.aoe_zone, event);
+        callbacks.invoke_table_row_callbacks::<ChatMessage>(
+            "chat_message",
+            &self.chat_message,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<GroundItem>("ground_item", &self.ground_item, event);
         callbacks.invoke_table_row_callbacks::<InventoryItem>(
             "inventory_item",
@@ -1278,6 +1312,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
         active_skill_table::register_table(client_cache);
         aoe_zone_table::register_table(client_cache);
+        chat_message_table::register_table(client_cache);
         ground_item_table::register_table(client_cache);
         inventory_item_table::register_table(client_cache);
         item_def_table::register_table(client_cache);
@@ -1295,6 +1330,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
         "active_skill",
         "aoe_zone",
+        "chat_message",
         "ground_item",
         "inventory_item",
         "item_def",

@@ -16,6 +16,7 @@ use crate::constants::{
 };
 use crate::interpolation::InterpolationBuffer;
 use crate::network::{ActiveSkillEvent, ActiveSkillEventQueue, LocalIdentity, PlayerEvent, PlayerEventQueue, SpacetimeDb, to_world_pos};
+use crate::chat::ChatInputActive;
 use crate::skills::SkillNameMap;
 use crate::npc::NpcId;
 use crate::world::MainCamera;
@@ -331,7 +332,9 @@ pub fn move_local_player(
     mut throttle: ResMut<MoveThrottle>,
     mut move_seq: ResMut<MoveSequence>,
     mut pred_buffer: ResMut<PredictionBuffer>,
+    chat_active: Res<ChatInputActive>,
 ) {
+    if chat_active.0 { return; }
     let Some(conn) = conn else { return };
     let Ok((transform, mut velocity)) = player.single_mut() else {
         return;
@@ -684,7 +687,9 @@ pub fn attack(
     local_player: Query<(&Transform, &PlayerId), With<LocalPlayer>>,
     players: Query<(&Transform, &PlayerId), Without<LocalPlayer>>,
     npcs: Query<(&Transform, &NpcId)>,
+    chat_active: Res<ChatInputActive>,
 ) {
+    if chat_active.0 { return; }
     if !keys.just_pressed(KeyCode::KeyE) {
         return;
     }

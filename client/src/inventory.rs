@@ -6,6 +6,7 @@ use shared::module_bindings::drop_item_reducer::drop_item;
 use shared::module_bindings::pickup_item_reducer::pickup_item;
 
 use crate::constants::PICKUP_RANGE;
+use crate::chat::ChatInputActive;
 use crate::network::{
     GroundItemEvent, GroundItemEventQueue, InventoryItemEvent, InventoryItemEventQueue,
     ItemDefEvent, ItemDefEventQueue, LocalIdentity, SpacetimeDb,
@@ -161,7 +162,8 @@ pub fn animate_ground_items(time: Res<Time>, mut query: Query<&mut Transform, Wi
 
 // --- Input systems ---
 
-pub fn toggle_inventory(keys: Res<ButtonInput<KeyCode>>, mut open: ResMut<InventoryOpen>) {
+pub fn toggle_inventory(keys: Res<ButtonInput<KeyCode>>, mut open: ResMut<InventoryOpen>, chat_active: Res<ChatInputActive>) {
+    if chat_active.0 { return; }
     if keys.just_pressed(KeyCode::Tab) {
         open.0 = !open.0;
     }
@@ -172,7 +174,9 @@ pub fn pickup_nearest_item(
     conn: Option<Res<SpacetimeDb>>,
     local_player: Query<&Transform, With<LocalPlayer>>,
     ground_items: Query<(&Transform, &GroundItemMarker), Without<LocalPlayer>>,
+    chat_active: Res<ChatInputActive>,
 ) {
+    if chat_active.0 { return; }
     if !keys.just_pressed(KeyCode::KeyF) {
         return;
     }
