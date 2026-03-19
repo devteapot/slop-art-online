@@ -14,7 +14,18 @@ pub mod aoe_zone_type;
 pub mod attack_npc_reducer;
 pub mod attack_player_reducer;
 pub mod behavior_type_type;
+pub mod drop_item_reducer;
+pub mod ground_item_table;
+pub mod ground_item_type;
+pub mod inventory_item_table;
+pub mod inventory_item_type;
+pub mod item_def_table;
+pub mod item_def_type;
+pub mod item_rarity_type;
+pub mod item_type_type;
 pub mod join_game_reducer;
+pub mod loot_table_entry_table;
+pub mod loot_table_entry_type;
 pub mod move_player_reducer;
 pub mod npc_behaviour_graph_table;
 pub mod npc_behaviour_graph_type;
@@ -23,6 +34,7 @@ pub mod npc_pending_decision_type;
 pub mod npc_table;
 pub mod npc_tick_schedule_type;
 pub mod npc_type;
+pub mod pickup_item_reducer;
 pub mod player_skill_table;
 pub mod player_skill_type;
 pub mod player_table;
@@ -54,7 +66,18 @@ pub use aoe_zone_type::AoeZone;
 pub use attack_npc_reducer::attack_npc;
 pub use attack_player_reducer::attack_player;
 pub use behavior_type_type::BehaviorType;
+pub use drop_item_reducer::drop_item;
+pub use ground_item_table::*;
+pub use ground_item_type::GroundItem;
+pub use inventory_item_table::*;
+pub use inventory_item_type::InventoryItem;
+pub use item_def_table::*;
+pub use item_def_type::ItemDef;
+pub use item_rarity_type::ItemRarity;
+pub use item_type_type::ItemType;
 pub use join_game_reducer::join_game;
+pub use loot_table_entry_table::*;
+pub use loot_table_entry_type::LootTableEntry;
 pub use move_player_reducer::move_player;
 pub use npc_behaviour_graph_table::*;
 pub use npc_behaviour_graph_type::NpcBehaviourGraph;
@@ -63,6 +86,7 @@ pub use npc_pending_decision_type::NpcPendingDecision;
 pub use npc_table::*;
 pub use npc_tick_schedule_type::NpcTickSchedule;
 pub use npc_type::Npc;
+pub use pickup_item_reducer::pickup_item;
 pub use player_skill_table::*;
 pub use player_skill_type::PlayerSkill;
 pub use player_table::*;
@@ -104,12 +128,18 @@ pub enum Reducer {
     AttackPlayer {
         target: __sdk::Identity,
     },
+    DropItem {
+        inventory_item_id: u64,
+    },
     JoinGame,
     MovePlayer {
         x: f32,
         y: f32,
         z: f32,
         seq: u32,
+    },
+    PickupItem {
+        ground_item_id: u64,
     },
     RotatePlayer {
         angle: f32,
@@ -149,8 +179,10 @@ impl __sdk::Reducer for Reducer {
             Reducer::AllocateSkillPoint { .. } => "allocate_skill_point",
             Reducer::AttackNpc { .. } => "attack_npc",
             Reducer::AttackPlayer { .. } => "attack_player",
+            Reducer::DropItem { .. } => "drop_item",
             Reducer::JoinGame => "join_game",
             Reducer::MovePlayer { .. } => "move_player",
+            Reducer::PickupItem { .. } => "pickup_item",
             Reducer::RotatePlayer { .. } => "rotate_player",
             Reducer::SpawnNpc { .. } => "spawn_npc",
             Reducer::StartNpcTicker => "start_npc_ticker",
@@ -181,6 +213,11 @@ impl __sdk::Reducer for Reducer {
                     target: target.clone(),
                 })
             }
+            Reducer::DropItem { inventory_item_id } => {
+                __sats::bsatn::to_vec(&drop_item_reducer::DropItemArgs {
+                    inventory_item_id: inventory_item_id.clone(),
+                })
+            }
             Reducer::JoinGame => __sats::bsatn::to_vec(&join_game_reducer::JoinGameArgs {}),
             Reducer::MovePlayer { x, y, z, seq } => {
                 __sats::bsatn::to_vec(&move_player_reducer::MovePlayerArgs {
@@ -188,6 +225,11 @@ impl __sdk::Reducer for Reducer {
                     y: y.clone(),
                     z: z.clone(),
                     seq: seq.clone(),
+                })
+            }
+            Reducer::PickupItem { ground_item_id } => {
+                __sats::bsatn::to_vec(&pickup_item_reducer::PickupItemArgs {
+                    ground_item_id: ground_item_id.clone(),
                 })
             }
             Reducer::RotatePlayer { angle } => {
@@ -247,6 +289,10 @@ impl __sdk::Reducer for Reducer {
 pub struct DbUpdate {
     active_skill: __sdk::TableUpdate<ActiveSkill>,
     aoe_zone: __sdk::TableUpdate<AoeZone>,
+    ground_item: __sdk::TableUpdate<GroundItem>,
+    inventory_item: __sdk::TableUpdate<InventoryItem>,
+    item_def: __sdk::TableUpdate<ItemDef>,
+    loot_table_entry: __sdk::TableUpdate<LootTableEntry>,
     npc: __sdk::TableUpdate<Npc>,
     npc_behaviour_graph: __sdk::TableUpdate<NpcBehaviourGraph>,
     npc_pending_decision: __sdk::TableUpdate<NpcPendingDecision>,
@@ -270,6 +316,18 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "aoe_zone" => db_update
                     .aoe_zone
                     .append(aoe_zone_table::parse_table_update(table_update)?),
+                "ground_item" => db_update
+                    .ground_item
+                    .append(ground_item_table::parse_table_update(table_update)?),
+                "inventory_item" => db_update
+                    .inventory_item
+                    .append(inventory_item_table::parse_table_update(table_update)?),
+                "item_def" => db_update
+                    .item_def
+                    .append(item_def_table::parse_table_update(table_update)?),
+                "loot_table_entry" => db_update
+                    .loot_table_entry
+                    .append(loot_table_entry_table::parse_table_update(table_update)?),
                 "npc" => db_update
                     .npc
                     .append(npc_table::parse_table_update(table_update)?),
@@ -329,6 +387,18 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.aoe_zone = cache
             .apply_diff_to_table::<AoeZone>("aoe_zone", &self.aoe_zone)
             .with_updates_by_pk(|row| &row.scheduled_id);
+        diff.ground_item = cache
+            .apply_diff_to_table::<GroundItem>("ground_item", &self.ground_item)
+            .with_updates_by_pk(|row| &row.scheduled_id);
+        diff.inventory_item = cache
+            .apply_diff_to_table::<InventoryItem>("inventory_item", &self.inventory_item)
+            .with_updates_by_pk(|row| &row.id);
+        diff.item_def = cache
+            .apply_diff_to_table::<ItemDef>("item_def", &self.item_def)
+            .with_updates_by_pk(|row| &row.id);
+        diff.loot_table_entry = cache
+            .apply_diff_to_table::<LootTableEntry>("loot_table_entry", &self.loot_table_entry)
+            .with_updates_by_pk(|row| &row.id);
         diff.npc = cache
             .apply_diff_to_table::<Npc>("npc", &self.npc)
             .with_updates_by_pk(|row| &row.id);
@@ -374,6 +444,18 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "aoe_zone" => db_update
                     .aoe_zone
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "ground_item" => db_update
+                    .ground_item
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "inventory_item" => db_update
+                    .inventory_item
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "item_def" => db_update
+                    .item_def
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "loot_table_entry" => db_update
+                    .loot_table_entry
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "npc" => db_update
                     .npc
@@ -421,6 +503,18 @@ impl __sdk::DbUpdate for DbUpdate {
                 "aoe_zone" => db_update
                     .aoe_zone
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "ground_item" => db_update
+                    .ground_item
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "inventory_item" => db_update
+                    .inventory_item
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "item_def" => db_update
+                    .item_def
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "loot_table_entry" => db_update
+                    .loot_table_entry
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "npc" => db_update
                     .npc
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -465,6 +559,10 @@ impl __sdk::DbUpdate for DbUpdate {
 pub struct AppliedDiff<'r> {
     active_skill: __sdk::TableAppliedDiff<'r, ActiveSkill>,
     aoe_zone: __sdk::TableAppliedDiff<'r, AoeZone>,
+    ground_item: __sdk::TableAppliedDiff<'r, GroundItem>,
+    inventory_item: __sdk::TableAppliedDiff<'r, InventoryItem>,
+    item_def: __sdk::TableAppliedDiff<'r, ItemDef>,
+    loot_table_entry: __sdk::TableAppliedDiff<'r, LootTableEntry>,
     npc: __sdk::TableAppliedDiff<'r, Npc>,
     npc_behaviour_graph: __sdk::TableAppliedDiff<'r, NpcBehaviourGraph>,
     npc_pending_decision: __sdk::TableAppliedDiff<'r, NpcPendingDecision>,
@@ -493,6 +591,18 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<AoeZone>("aoe_zone", &self.aoe_zone, event);
+        callbacks.invoke_table_row_callbacks::<GroundItem>("ground_item", &self.ground_item, event);
+        callbacks.invoke_table_row_callbacks::<InventoryItem>(
+            "inventory_item",
+            &self.inventory_item,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<ItemDef>("item_def", &self.item_def, event);
+        callbacks.invoke_table_row_callbacks::<LootTableEntry>(
+            "loot_table_entry",
+            &self.loot_table_entry,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Npc>("npc", &self.npc, event);
         callbacks.invoke_table_row_callbacks::<NpcBehaviourGraph>(
             "npc_behaviour_graph",
@@ -1168,6 +1278,10 @@ impl __sdk::SpacetimeModule for RemoteModule {
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
         active_skill_table::register_table(client_cache);
         aoe_zone_table::register_table(client_cache);
+        ground_item_table::register_table(client_cache);
+        inventory_item_table::register_table(client_cache);
+        item_def_table::register_table(client_cache);
+        loot_table_entry_table::register_table(client_cache);
         npc_table::register_table(client_cache);
         npc_behaviour_graph_table::register_table(client_cache);
         npc_pending_decision_table::register_table(client_cache);
@@ -1181,6 +1295,10 @@ impl __sdk::SpacetimeModule for RemoteModule {
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
         "active_skill",
         "aoe_zone",
+        "ground_item",
+        "inventory_item",
+        "item_def",
+        "loot_table_entry",
         "npc",
         "npc_behaviour_graph",
         "npc_pending_decision",

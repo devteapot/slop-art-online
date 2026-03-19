@@ -31,3 +31,4 @@ pub const DASH_SPEED: f32 = 40.0;
 pub const DASH_DURATION: f32 = 0.2;
 pub const CAPSULE_HALF_LEN: f32 = 0.5;
 pub const CAPSULE_RADIUS: f32 = 0.4;
+pub const PICKUP_RANGE: f32 = 3.0;

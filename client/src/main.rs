@@ -8,6 +8,7 @@ mod skills;
 mod hud;
 mod interpolation;
 mod projectile;
+mod inventory;
 
 use avian3d::prelude::*;
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
@@ -23,6 +24,7 @@ use skills::*;
 use hud::*;
 use interpolation::*;
 use projectile::*;
+use inventory::*;
 
 fn main() {
     App::new()
@@ -61,7 +63,14 @@ fn main() {
         .init_resource::<CursorGroundPos>()
         .init_resource::<ProjectileEventQueue>()
         .init_resource::<AoeZoneEventQueue>()
-        .add_systems(Startup, (setup, connect_spacetimedb, setup_hud))
+        .init_resource::<ItemDefEventQueue>()
+        .init_resource::<GroundItemEventQueue>()
+        .init_resource::<InventoryItemEventQueue>()
+        .init_resource::<ItemDefMap>()
+        .init_resource::<ItemRarityMap>()
+        .init_resource::<LocalInventory>()
+        .init_resource::<InventoryOpen>()
+        .add_systems(Startup, (setup, connect_spacetimedb, setup_hud, setup_inventory_panel))
         .add_systems(FixedUpdate, (
             move_local_player,
             update_grounded,
@@ -89,6 +98,17 @@ fn main() {
             handle_skill_slot_clicks,
             handle_allocate_clicks,
         ).chain())
+        .add_systems(Update, (
+            sync_item_defs,
+            sync_inventory,
+            sync_ground_items,
+            toggle_inventory,
+            pickup_nearest_item,
+            animate_ground_items,
+            update_inventory_panel,
+            handle_inventory_close,
+            handle_inventory_slot_click,
+        ))
         .add_systems(Update, (
             add_chunk_colliders,
             handle_close_click,

@@ -1,9 +1,10 @@
 use bevy::prelude::*;
 use shared::module_bindings::join_game_reducer::join_game;
 use shared::module_bindings::{
-    ActiveSkill, ActiveSkillTableAccess, AoeZone, AoeZoneTableAccess, DbConnection, Npc,
-    NpcTableAccess, Player, PlayerSkill, PlayerSkillTableAccess, PlayerTableAccess, Projectile,
-    ProjectileTableAccess, SkillAttributes, SkillAttributesTableAccess, SkillCooldown,
+    ActiveSkill, ActiveSkillTableAccess, AoeZone, AoeZoneTableAccess, DbConnection, GroundItem,
+    GroundItemTableAccess, InventoryItem, InventoryItemTableAccess, ItemDef, ItemDefTableAccess,
+    Npc, NpcTableAccess, Player, PlayerSkill, PlayerSkillTableAccess, PlayerTableAccess,
+    Projectile, ProjectileTableAccess, SkillAttributes, SkillAttributesTableAccess, SkillCooldown,
     SkillCooldownTableAccess, SkillDef, SkillDefTableAccess,
 };
 use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
@@ -70,6 +71,21 @@ pub enum AoeZoneEvent {
     Deleted(AoeZone),
 }
 
+pub enum ItemDefEvent {
+    Inserted(ItemDef),
+}
+
+pub enum GroundItemEvent {
+    Inserted(GroundItem),
+    Deleted(GroundItem),
+}
+
+pub enum InventoryItemEvent {
+    Inserted(InventoryItem),
+    Updated(InventoryItem),
+    Deleted(InventoryItem),
+}
+
 // --- Event queues ---
 
 #[derive(Resource, Default, Clone)]
@@ -99,6 +115,15 @@ pub struct ProjectileEventQueue(pub Arc<Mutex<Vec<ProjectileEvent>>>);
 #[derive(Resource, Default, Clone)]
 pub struct AoeZoneEventQueue(pub Arc<Mutex<Vec<AoeZoneEvent>>>);
 
+#[derive(Resource, Default, Clone)]
+pub struct ItemDefEventQueue(pub Arc<Mutex<Vec<ItemDefEvent>>>);
+
+#[derive(Resource, Default, Clone)]
+pub struct GroundItemEventQueue(pub Arc<Mutex<Vec<GroundItemEvent>>>);
+
+#[derive(Resource, Default, Clone)]
+pub struct InventoryItemEventQueue(pub Arc<Mutex<Vec<InventoryItemEvent>>>);
+
 // --- Systems ---
 
 pub fn connect_spacetimedb(
@@ -112,6 +137,9 @@ pub fn connect_spacetimedb(
     active_skill_queue: Res<ActiveSkillEventQueue>,
     projectile_queue: Res<ProjectileEventQueue>,
     aoe_zone_queue: Res<AoeZoneEventQueue>,
+    item_def_queue: Res<ItemDefEventQueue>,
+    ground_item_queue: Res<GroundItemEventQueue>,
+    inventory_item_queue: Res<InventoryItemEventQueue>,
     local_identity: Res<LocalIdentity>,
 ) {
     let q_insert = player_queue.clone();
@@ -135,6 +163,12 @@ pub fn connect_spacetimedb(
     let proj_delete = projectile_queue.clone();
     let aoe_insert = aoe_zone_queue.clone();
     let aoe_delete = aoe_zone_queue.clone();
+    let idef_insert = item_def_queue.clone();
+    let gi_insert = ground_item_queue.clone();
+    let gi_delete = ground_item_queue.clone();
+    let inv_insert = inventory_item_queue.clone();
+    let inv_update = inventory_item_queue.clone();
+    let inv_delete = inventory_item_queue.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -155,6 +189,9 @@ pub fn connect_spacetimedb(
                     "SELECT * FROM active_skill",
                     "SELECT * FROM projectile",
                     "SELECT * FROM aoe_zone",
+                    "SELECT * FROM item_def",
+                    "SELECT * FROM ground_item",
+                    "SELECT * FROM inventory_item",
                 ]);
         })
         .on_connect_error(|_, err| error!("SpacetimeDB connect error: {err}"))
@@ -227,6 +264,24 @@ pub fn connect_spacetimedb(
     });
     conn.db.aoe_zone().on_delete(move |_, row: &AoeZone| {
         aoe_delete.0.lock().unwrap().push(AoeZoneEvent::Deleted(row.clone()));
+    });
+    conn.db.item_def().on_insert(move |_, row: &ItemDef| {
+        idef_insert.0.lock().unwrap().push(ItemDefEvent::Inserted(row.clone()));
+    });
+    conn.db.ground_item().on_insert(move |_, row: &GroundItem| {
+        gi_insert.0.lock().unwrap().push(GroundItemEvent::Inserted(row.clone()));
+    });
+    conn.db.ground_item().on_delete(move |_, row: &GroundItem| {
+        gi_delete.0.lock().unwrap().push(GroundItemEvent::Deleted(row.clone()));
+    });
+    conn.db.inventory_item().on_insert(move |_, row: &InventoryItem| {
+        inv_insert.0.lock().unwrap().push(InventoryItemEvent::Inserted(row.clone()));
+    });
+    conn.db.inventory_item().on_update(move |_, _old: &InventoryItem, new: &InventoryItem| {
+        inv_update.0.lock().unwrap().push(InventoryItemEvent::Updated(new.clone()));
+    });
+    conn.db.inventory_item().on_delete(move |_, row: &InventoryItem| {
+        inv_delete.0.lock().unwrap().push(InventoryItemEvent::Deleted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));

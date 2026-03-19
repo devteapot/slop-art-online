@@ -47,3 +47,11 @@ pub const PROJECTILE_MAX_LIFETIME_MS: u64 = 5000;
 // AoE zones
 pub const AOE_TICK_INTERVAL_MS: u64 = 500;
 pub const AOE_DEFAULT_DURATION_MS: u64 = 3000;
+
+// Inventory & Loot
+pub const INVENTORY_SLOTS: i32 = 20;
+pub const GROUND_ITEM_DESPAWN_MS: u64 = 300_000;
+pub const GROUND_ITEM_FFA_DELAY_MS: u64 = 30_000;
+pub const PICKUP_RANGE: f32 = 3.0;
+pub const LOOT_ROLLS_PER_KILL: i32 = 2;
+pub const LOOT_DROP_CHANCE_PCT: i32 = 60;

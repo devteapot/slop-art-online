@@ -134,3 +134,59 @@ pub struct SkillCooldown {
     pub skill_id: u64,
     pub ready_at: Timestamp,
 }
+
+// --- Item & Inventory ---
+
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub enum ItemRarity {
+    Common,
+    Uncommon,
+    Rare,
+    Epic,
+}
+
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub enum ItemType {
+    Material,
+    Consumable,
+    Equipment,
+    Quest,
+}
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = item_def, public)]
+pub struct ItemDef {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub name: String,
+    pub item_type: ItemType,
+    pub rarity: ItemRarity,
+    pub max_stack: i32,
+}
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = loot_table_entry, public)]
+pub struct LootTableEntry {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub item_def_id: u64,
+    pub min_npc_level: i32,
+    pub max_npc_level: i32,
+    pub weight: i32,
+    pub min_quantity: i32,
+    pub max_quantity: i32,
+}
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = inventory_item, public)]
+pub struct InventoryItem {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub player_identity: Identity,
+    pub slot: i32,
+    pub item_def_id: u64,
+    pub quantity: i32,
+}

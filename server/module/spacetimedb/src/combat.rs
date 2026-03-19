@@ -1,6 +1,7 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::constants::*;
+use crate::loot::{drop_all_inventory, generate_loot};
 use crate::tables::*;
 use crate::skill::*;
 
@@ -22,6 +23,7 @@ pub fn apply_knockback(pos: &Position, from: &Position, knockback: f32) -> Posit
 }
 
 pub fn respawn_player(ctx: &ReducerContext, player: &Player) {
+    drop_all_inventory(ctx, player);
     ctx.db.player().identity().update(Player {
         position: Position { x: 0.0, y: 1.0, z: 0.0 },
         health: player.max_health,
@@ -33,6 +35,7 @@ pub fn respawn_player(ctx: &ReducerContext, player: &Player) {
 
 pub fn kill_npc(ctx: &ReducerContext, npc: &Npc, attacker: Identity) {
     let xp = xp_for_npc_kill(npc.level);
+    generate_loot(ctx, npc, attacker);
     ctx.db.npc().id().delete(&npc.id);
     ctx.db.npc_behaviour_graph().npc_id().delete(&npc.id);
     ctx.db.npc_pending_decision().npc_id().delete(&npc.id);

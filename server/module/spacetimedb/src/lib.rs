@@ -3,6 +3,7 @@ mod tables;
 mod skill;
 mod combat;
 mod npc_ai;
+mod loot;
 
 use spacetimedb::{Identity, ReducerContext, ScheduleAt, Table};
 use std::time::Duration;
@@ -63,6 +64,20 @@ pub struct Projectile {
 }
 
 #[derive(Clone)]
+#[spacetimedb::table(accessor = ground_item, public, scheduled(expire_ground_item))]
+pub struct GroundItem {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub item_def_id: u64,
+    pub quantity: i32,
+    pub position: Position,
+    pub owner: Identity,
+    pub free_for_all_at: u64,
+}
+
+#[derive(Clone)]
 #[spacetimedb::table(accessor = aoe_zone, public, scheduled(expire_aoe_zone))]
 pub struct AoeZone {
     #[primary_key]
@@ -118,6 +133,23 @@ pub fn init(ctx: &ReducerContext) {
     ctx.db.skill_def().insert(SkillDef { id: 0, name: "Heal".to_string(),      behavior_type: BehaviorType::Buff,       resource_type: ResourceType::Mana });
     ctx.db.skill_def().insert(SkillDef { id: 0, name: "Jump".to_string(),      behavior_type: BehaviorType::Mobility,   resource_type: ResourceType::Stamina });
     ctx.db.skill_def().insert(SkillDef { id: 0, name: "Dash".to_string(),      behavior_type: BehaviorType::Mobility,   resource_type: ResourceType::Stamina });
+
+    // Item definitions
+    ctx.db.item_def().insert(ItemDef { id: 0, name: "Bone Fragment".into(),  item_type: ItemType::Material,   rarity: ItemRarity::Common,   max_stack: 20 });
+    ctx.db.item_def().insert(ItemDef { id: 0, name: "Iron Ore".into(),      item_type: ItemType::Material,   rarity: ItemRarity::Common,   max_stack: 20 });
+    ctx.db.item_def().insert(ItemDef { id: 0, name: "Health Potion".into(), item_type: ItemType::Consumable, rarity: ItemRarity::Common,   max_stack: 10 });
+    ctx.db.item_def().insert(ItemDef { id: 0, name: "Enchanted Dust".into(),item_type: ItemType::Material,   rarity: ItemRarity::Uncommon, max_stack: 10 });
+    ctx.db.item_def().insert(ItemDef { id: 0, name: "Dragon Scale".into(),  item_type: ItemType::Material,   rarity: ItemRarity::Rare,     max_stack: 5 });
+    ctx.db.item_def().insert(ItemDef { id: 0, name: "Crystal Core".into(),  item_type: ItemType::Material,   rarity: ItemRarity::Epic,     max_stack: 1 });
+
+    // Loot table entries (item_def_ids 1-6 from auto_inc order)
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 1, min_npc_level: 1, max_npc_level: 99, weight: 40, min_quantity: 1, max_quantity: 3 });
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 2, min_npc_level: 1, max_npc_level: 99, weight: 30, min_quantity: 1, max_quantity: 2 });
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 3, min_npc_level: 1, max_npc_level: 99, weight: 25, min_quantity: 1, max_quantity: 2 });
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 4, min_npc_level: 3, max_npc_level: 99, weight: 15, min_quantity: 1, max_quantity: 1 });
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 5, min_npc_level: 5, max_npc_level: 99, weight: 5,  min_quantity: 1, max_quantity: 1 });
+    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 6, min_npc_level: 8, max_npc_level: 99, weight: 1,  min_quantity: 1, max_quantity: 1 });
+
     schedule_next_npc_tick(ctx);
     schedule_next_projectile_tick(ctx);
 }
@@ -554,6 +586,11 @@ pub fn expire_projectile(_ctx: &ReducerContext, _row: Projectile) {
 
 #[spacetimedb::reducer]
 pub fn expire_aoe_zone(_ctx: &ReducerContext, _row: AoeZone) {
+    // Row auto-deletes after this reducer completes.
+}
+
+#[spacetimedb::reducer]
+pub fn expire_ground_item(_ctx: &ReducerContext, _row: GroundItem) {
     // Row auto-deletes after this reducer completes.
 }
 
