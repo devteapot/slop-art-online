@@ -10,6 +10,7 @@ pub(super) struct MovePlayerArgs {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+    pub seq: u32,
 }
 
 impl From<MovePlayerArgs> for super::Reducer {
@@ -18,6 +19,7 @@ impl From<MovePlayerArgs> for super::Reducer {
             x: args.x,
             y: args.y,
             z: args.z,
+            seq: args.seq,
         }
     }
 }
@@ -37,8 +39,8 @@ pub trait move_player {
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
     /// /// Use [`move_player:move_player_then`] to run a callback after the reducer completes.
-    fn move_player(&self, x: f32, y: f32, z: f32) -> __sdk::Result<()> {
-        self.move_player_then(x, y, z, |_, _| {})
+    fn move_player(&self, x: f32, y: f32, z: f32, seq: u32) -> __sdk::Result<()> {
+        self.move_player_then(x, y, z, seq, |_, _| {})
     }
 
     /// Request that the remote module invoke the reducer `move_player` to run as soon as possible,
@@ -52,6 +54,7 @@ pub trait move_player {
         x: f32,
         y: f32,
         z: f32,
+        seq: u32,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -65,12 +68,13 @@ impl move_player for super::RemoteReducers {
         x: f32,
         y: f32,
         z: f32,
+        seq: u32,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
             + 'static,
     ) -> __sdk::Result<()> {
         self.imp
-            .invoke_reducer_with_callback(MovePlayerArgs { x, y, z }, callback)
+            .invoke_reducer_with_callback(MovePlayerArgs { x, y, z, seq }, callback)
     }
 }

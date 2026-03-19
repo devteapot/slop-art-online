@@ -6,6 +6,7 @@ mod player;
 mod npc;
 mod skills;
 mod hud;
+mod interpolation;
 
 use avian3d::prelude::*;
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
@@ -19,6 +20,7 @@ use player::*;
 use npc::*;
 use skills::*;
 use hud::*;
+use interpolation::*;
 
 fn main() {
     App::new()
@@ -48,20 +50,27 @@ fn main() {
         .init_resource::<LastSentFacingAngle>()
         .init_resource::<DashState>()
         .init_resource::<LocalIdentity>()
+        .init_resource::<MoveThrottle>()
+        .init_resource::<MoveSequence>()
+        .init_resource::<PredictionBuffer>()
+        .init_resource::<PredictionCorrection>()
         .add_systems(Startup, (setup, connect_spacetimedb, setup_hud))
+        .add_systems(FixedUpdate, (
+            move_local_player,
+            update_grounded,
+            mobility_input,
+            apply_dash,
+        ).chain())
         .add_systems(Update, (
             tick_spacetimedb,
             sync_players,
             sync_npcs,
+            interpolate_remote_entities,
             sync_player_skills,
             sync_skill_defs,
             sync_skill_attrs,
             sync_skill_cooldowns,
-            move_local_player,
-            update_grounded,
             use_skill_input,
-            mobility_input,
-            apply_dash,
             follow_camera,
             face_cursor,
             attack,
@@ -78,6 +87,7 @@ fn main() {
             apply_remote_player_facing,
             setup_player_animations,
             drive_player_animations,
+            smooth_prediction_correction,
         ))
         .run();
 }

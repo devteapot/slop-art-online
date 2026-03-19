@@ -19,6 +19,7 @@ pub struct Player {
     pub stamina: i32,
     pub max_stamina: i32,
     pub facing_angle: f32,
+    pub last_seq: u32,
 }
 
 impl __sdk::InModule for Player {
@@ -39,6 +40,7 @@ pub struct PlayerCols {
     pub stamina: __sdk::__query_builder::Col<Player, i32>,
     pub max_stamina: __sdk::__query_builder::Col<Player, i32>,
     pub facing_angle: __sdk::__query_builder::Col<Player, f32>,
+    pub last_seq: __sdk::__query_builder::Col<Player, u32>,
 }
 
 impl __sdk::__query_builder::HasCols for Player {
@@ -55,6 +57,7 @@ impl __sdk::__query_builder::HasCols for Player {
             stamina: __sdk::__query_builder::Col::new(table_name, "stamina"),
             max_stamina: __sdk::__query_builder::Col::new(table_name, "max_stamina"),
             facing_angle: __sdk::__query_builder::Col::new(table_name, "facing_angle"),
+            last_seq: __sdk::__query_builder::Col::new(table_name, "last_seq"),
         }
     }
 }

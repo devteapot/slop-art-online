@@ -148,6 +148,7 @@ pub fn join_game(ctx: &ReducerContext) {
             stamina: MAX_STAMINA,
             max_stamina: MAX_STAMINA,
             facing_angle: 0.0,
+            last_seq: 0,
         });
         give_all_skills(ctx, ctx.sender());
     }
@@ -159,7 +160,7 @@ pub fn identity_disconnected(ctx: &ReducerContext) {
 }
 
 #[spacetimedb::reducer]
-pub fn move_player(ctx: &ReducerContext, x: f32, y: f32, z: f32) -> Result<(), String> {
+pub fn move_player(ctx: &ReducerContext, x: f32, y: f32, z: f32, seq: u32) -> Result<(), String> {
     let player = ctx.db.player().identity().find(&ctx.sender())
         .ok_or("Player not found")?;
 
@@ -176,6 +177,7 @@ pub fn move_player(ctx: &ReducerContext, x: f32, y: f32, z: f32) -> Result<(), S
             y,
             z: z.clamp(WORLD_MIN, WORLD_MAX),
         },
+        last_seq: seq,
         ..player
     });
     Ok(())

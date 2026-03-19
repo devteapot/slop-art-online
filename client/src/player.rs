@@ -1,6 +1,7 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use spacetimedb_sdk::Identity;
+use std::collections::VecDeque;
 use std::time::Duration;
 
 use shared::module_bindings::attack_npc_reducer::attack_npc;
@@ -12,6 +13,7 @@ use crate::constants::{
     ATTACK_RANGE, CAPSULE_HALF_LEN, CAPSULE_RADIUS, MAX_LOOK_AHEAD, MOVE_SPEED,
     PLAYER_GRAVITY_SCALE,
 };
+use crate::interpolation::InterpolationBuffer;
 use crate::network::{LocalIdentity, PlayerEvent, PlayerEventQueue, SpacetimeDb, to_world_pos};
 use crate::npc::NpcId;
 use crate::world::MainCamera;
@@ -37,6 +39,47 @@ pub struct FacingAngle(pub f32);
 /// Last facing angle sent to the server; avoids spamming `rotate_player` every frame.
 #[derive(Resource, Default)]
 pub struct LastSentFacingAngle(pub f32);
+
+#[derive(Resource)]
+pub struct MoveThrottle {
+    pub last_sent_pos: Vec3,
+    pub last_pos_time: f64,
+    pub last_rot_time: f64,
+}
+
+impl Default for MoveThrottle {
+    fn default() -> Self {
+        Self {
+            last_sent_pos: Vec3::ZERO,
+            last_pos_time: 0.0,
+            last_rot_time: 0.0,
+        }
+    }
+}
+
+const MOVE_SEND_INTERVAL: f64 = 1.0 / 20.0;
+const ROTATION_SEND_INTERVAL: f64 = 1.0 / 10.0;
+const MOVE_DEAD_ZONE: f32 = 0.01;
+const RECONCILIATION_THRESHOLD: f32 = 2.0;
+const CORRECTION_DECAY_RATE: f32 = 10.0;
+
+#[derive(Resource, Default)]
+pub struct MoveSequence(pub u32);
+
+pub struct PredictedMove {
+    pub seq: u32,
+    pub position_after: Vec3,
+}
+
+#[derive(Resource, Default)]
+pub struct PredictionBuffer {
+    pub moves: VecDeque<PredictedMove>,
+}
+
+#[derive(Resource, Default)]
+pub struct PredictionCorrection {
+    pub offset: Vec3,
+}
 
 /// Whether the local player is currently on the ground.
 #[derive(Component, Default)]
@@ -92,8 +135,11 @@ pub fn sync_players(
     queue: Res<PlayerEventQueue>,
     local_identity: Res<LocalIdentity>,
     asset_server: Res<AssetServer>,
-    mut players: Query<(Entity, &PlayerId, &mut Transform, Option<&mut FacingAngle>)>,
+    time: Res<Time>,
+    mut players: Query<(Entity, &PlayerId, &mut Transform, Option<&mut FacingAngle>, Option<&mut InterpolationBuffer>)>,
     mut local_stats: ResMut<LocalPlayerStats>,
+    mut pred_buffer: ResMut<PredictionBuffer>,
+    mut pred_correction: ResMut<PredictionCorrection>,
 ) {
     let local_id = local_identity.0.lock().unwrap().clone();
     let mut events = queue.0.lock().unwrap();
@@ -143,12 +189,15 @@ pub fn sync_players(
                     ));
                 } else {
                     let model_offset_y = -(CAPSULE_HALF_LEN + CAPSULE_RADIUS);
+                    let mut buffer = InterpolationBuffer::default();
+                    buffer.push(server_pos, player.facing_angle, time.elapsed_secs_f64());
                     let body = commands
                         .spawn((
                             PlayerId(player.identity),
                             FacingAngle(player.facing_angle),
                             Transform::from_translation(server_pos),
                             Visibility::default(),
+                            buffer,
                         ))
                         .id();
                     commands.entity(body).with_child((
@@ -160,13 +209,16 @@ pub fn sync_players(
             }
             PlayerEvent::Updated(player) => {
                 let is_local = local_id.as_ref() == Some(&player.identity);
-                // Physics owns the local player's position — only update remote players.
                 if !is_local {
-                    for (_, id, mut transform, facing) in players.iter_mut() {
+                    let now = time.elapsed_secs_f64();
+                    for (_, id, _, _, interp_buffer) in players.iter_mut() {
                         if id.0 == player.identity {
-                            transform.translation = to_world_pos(&player.position);
-                            if let Some(mut f) = facing {
-                                f.0 = player.facing_angle;
+                            if let Some(mut buffer) = interp_buffer {
+                                buffer.push(
+                                    to_world_pos(&player.position),
+                                    player.facing_angle,
+                                    now,
+                                );
                             }
                         }
                     }
@@ -175,10 +227,44 @@ pub fn sync_players(
                     local_stats.health = player.health;
                     local_stats.mana = player.mana;
                     local_stats.stamina = player.stamina;
+
+                    // Phase 5: Server reconciliation
+                    let server_seq = player.last_seq;
+                    let server_pos = to_world_pos(&player.position);
+
+                    let predicted_pos = pred_buffer
+                        .moves
+                        .iter()
+                        .find(|m| m.seq == server_seq)
+                        .map(|m| m.position_after);
+
+                    pred_buffer.moves.retain(|m| m.seq > server_seq);
+
+                    if let Some(predicted) = predicted_pos {
+                        let error = Vec3::new(
+                            server_pos.x - predicted.x,
+                            0.0,
+                            server_pos.z - predicted.z,
+                        );
+                        if error.length() > RECONCILIATION_THRESHOLD {
+                            for (_, id, mut transform, _, _) in players.iter_mut() {
+                                if id.0 == player.identity {
+                                    pred_correction.offset =
+                                        Vec3::new(
+                                            transform.translation.x - server_pos.x,
+                                            0.0,
+                                            transform.translation.z - server_pos.z,
+                                        );
+                                    transform.translation.x = server_pos.x;
+                                    transform.translation.z = server_pos.z;
+                                }
+                            }
+                        }
+                    }
                 }
             }
             PlayerEvent::Deleted(player) => {
-                for (entity, id, _, _) in players.iter() {
+                for (entity, id, _, _, _) in players.iter() {
                     if id.0 == player.identity {
                         commands.entity(entity).despawn();
                     }
@@ -191,8 +277,12 @@ pub fn sync_players(
 pub fn move_local_player(
     conn: Option<Res<SpacetimeDb>>,
     keys: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
     mut player: Query<(&Transform, &mut LinearVelocity), With<LocalPlayer>>,
     mut facing: ResMut<PlayerFacing>,
+    mut throttle: ResMut<MoveThrottle>,
+    mut move_seq: ResMut<MoveSequence>,
+    mut pred_buffer: ResMut<PredictionBuffer>,
 ) {
     let Some(conn) = conn else { return };
     let Ok((transform, mut velocity)) = player.single_mut() else {
@@ -220,8 +310,26 @@ pub fn move_local_player(
         velocity.z = dir_norm.y * MOVE_SPEED;
 
         let pos = transform.translation;
-        if let Err(e) = conn.0.reducers.move_player(pos.x, pos.y, pos.z) {
-            error!("move_player failed: {e}");
+        let now = time.elapsed_secs_f64();
+        if now - throttle.last_pos_time >= MOVE_SEND_INTERVAL
+            && (pos - throttle.last_sent_pos).length() > MOVE_DEAD_ZONE
+        {
+            move_seq.0 = move_seq.0.wrapping_add(1);
+            let seq = move_seq.0;
+
+            throttle.last_sent_pos = pos;
+            throttle.last_pos_time = now;
+            if let Err(e) = conn.0.reducers.move_player(pos.x, pos.y, pos.z, seq) {
+                error!("move_player failed: {e}");
+            }
+
+            pred_buffer.moves.push_back(PredictedMove {
+                seq,
+                position_after: pos,
+            });
+            if pred_buffer.moves.len() > 128 {
+                pred_buffer.moves.pop_front();
+            }
         }
     } else {
         velocity.x = 0.0;
@@ -270,6 +378,8 @@ pub fn face_cursor(
     local_player: Query<&GlobalTransform, With<LocalPlayer>>,
     mut visual: Query<&mut Transform, With<LocalPlayerVisual>>,
     mut last_sent: ResMut<LastSentFacingAngle>,
+    time: Res<Time>,
+    mut throttle: ResMut<MoveThrottle>,
 ) {
     let Ok(window) = windows.single() else { return };
     let Ok((cam, cam_transform)) = camera.single() else {
@@ -309,10 +419,14 @@ pub fn face_cursor(
     visual_transform.rotation = Quat::from_rotation_y(angle);
 
     if (angle - last_sent.0).abs() > 0.05 {
-        last_sent.0 = angle;
-        if let Some(conn) = conn {
-            if let Err(e) = conn.0.reducers.rotate_player(angle) {
-                error!("rotate_player failed: {e}");
+        let now = time.elapsed_secs_f64();
+        if now - throttle.last_rot_time >= ROTATION_SEND_INTERVAL {
+            last_sent.0 = angle;
+            throttle.last_rot_time = now;
+            if let Some(conn) = conn {
+                if let Err(e) = conn.0.reducers.rotate_player(angle) {
+                    error!("rotate_player failed: {e}");
+                }
             }
         }
     }
@@ -516,5 +630,33 @@ pub fn attack(
             let _ = conn.0.reducers.attack_npc(nid);
         }
         (None, None) => {}
+    }
+}
+
+/// Decay the visual correction offset so server reconciliation snaps are hidden.
+/// Shifts the visual child by the remaining offset; as offset → 0 the visual
+/// returns to being centered on the physics body.
+pub fn smooth_prediction_correction(
+    time: Res<Time>,
+    mut correction: ResMut<PredictionCorrection>,
+    player: Query<&Children, With<LocalPlayer>>,
+    mut visuals: Query<&mut Transform, With<LocalPlayerVisual>>,
+) {
+    let decay = (-CORRECTION_DECAY_RATE * time.delta_secs()).exp();
+    correction.offset *= decay;
+    if correction.offset.length_squared() < 0.0001 {
+        correction.offset = Vec3::ZERO;
+    }
+
+    let Ok(children) = player.single() else { return };
+    for child in children.iter() {
+        if let Ok(mut transform) = visuals.get_mut(child) {
+            let model_offset_y = -(CAPSULE_HALF_LEN + CAPSULE_RADIUS);
+            transform.translation = Vec3::new(
+                correction.offset.x,
+                model_offset_y,
+                correction.offset.z,
+            );
+        }
     }
 }

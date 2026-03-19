@@ -91,6 +91,7 @@ pub enum Reducer {
         x: f32,
         y: f32,
         z: f32,
+        seq: u32,
     },
     RotatePlayer {
         angle: f32,
@@ -153,11 +154,12 @@ impl __sdk::Reducer for Reducer {
                 })
             }
             Reducer::JoinGame => __sats::bsatn::to_vec(&join_game_reducer::JoinGameArgs {}),
-            Reducer::MovePlayer { x, y, z } => {
+            Reducer::MovePlayer { x, y, z, seq } => {
                 __sats::bsatn::to_vec(&move_player_reducer::MovePlayerArgs {
                     x: x.clone(),
                     y: y.clone(),
                     z: z.clone(),
+                    seq: seq.clone(),
                 })
             }
             Reducer::RotatePlayer { angle } => {
