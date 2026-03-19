@@ -1,9 +1,10 @@
 use bevy::prelude::*;
 use shared::module_bindings::join_game_reducer::join_game;
 use shared::module_bindings::{
-    ActiveSkill, ActiveSkillTableAccess, DbConnection, Npc, NpcTableAccess, Player, PlayerSkill,
-    PlayerSkillTableAccess, PlayerTableAccess, SkillAttributes, SkillAttributesTableAccess,
-    SkillCooldown, SkillCooldownTableAccess, SkillDef, SkillDefTableAccess,
+    ActiveSkill, ActiveSkillTableAccess, AoeZone, AoeZoneTableAccess, DbConnection, Npc,
+    NpcTableAccess, Player, PlayerSkill, PlayerSkillTableAccess, PlayerTableAccess, Projectile,
+    ProjectileTableAccess, SkillAttributes, SkillAttributesTableAccess, SkillCooldown,
+    SkillCooldownTableAccess, SkillDef, SkillDefTableAccess,
 };
 use spacetimedb_sdk::{DbContext, Identity, Table, TableWithPrimaryKey};
 use std::sync::{Arc, Mutex};
@@ -59,6 +60,16 @@ pub enum ActiveSkillEvent {
     Deleted(ActiveSkill),
 }
 
+pub enum ProjectileEvent {
+    Inserted(Projectile),
+    Deleted(Projectile),
+}
+
+pub enum AoeZoneEvent {
+    Inserted(AoeZone),
+    Deleted(AoeZone),
+}
+
 // --- Event queues ---
 
 #[derive(Resource, Default, Clone)]
@@ -82,6 +93,12 @@ pub struct SkillCooldownEventQueue(pub Arc<Mutex<Vec<SkillCooldownEvent>>>);
 #[derive(Resource, Default, Clone)]
 pub struct ActiveSkillEventQueue(pub Arc<Mutex<Vec<ActiveSkillEvent>>>);
 
+#[derive(Resource, Default, Clone)]
+pub struct ProjectileEventQueue(pub Arc<Mutex<Vec<ProjectileEvent>>>);
+
+#[derive(Resource, Default, Clone)]
+pub struct AoeZoneEventQueue(pub Arc<Mutex<Vec<AoeZoneEvent>>>);
+
 // --- Systems ---
 
 pub fn connect_spacetimedb(
@@ -93,6 +110,8 @@ pub fn connect_spacetimedb(
     skill_attrs_queue: Res<SkillAttributesEventQueue>,
     skill_cd_queue: Res<SkillCooldownEventQueue>,
     active_skill_queue: Res<ActiveSkillEventQueue>,
+    projectile_queue: Res<ProjectileEventQueue>,
+    aoe_zone_queue: Res<AoeZoneEventQueue>,
     local_identity: Res<LocalIdentity>,
 ) {
     let q_insert = player_queue.clone();
@@ -112,6 +131,10 @@ pub fn connect_spacetimedb(
     let sc_delete = skill_cd_queue.clone();
     let as_insert = active_skill_queue.clone();
     let as_delete = active_skill_queue.clone();
+    let proj_insert = projectile_queue.clone();
+    let proj_delete = projectile_queue.clone();
+    let aoe_insert = aoe_zone_queue.clone();
+    let aoe_delete = aoe_zone_queue.clone();
     let identity_store = local_identity.clone();
 
     let conn = DbConnection::builder()
@@ -130,6 +153,8 @@ pub fn connect_spacetimedb(
                     "SELECT * FROM skill_attributes",
                     "SELECT * FROM skill_cooldown",
                     "SELECT * FROM active_skill",
+                    "SELECT * FROM projectile",
+                    "SELECT * FROM aoe_zone",
                 ]);
         })
         .on_connect_error(|_, err| error!("SpacetimeDB connect error: {err}"))
@@ -190,6 +215,18 @@ pub fn connect_spacetimedb(
     });
     conn.db.active_skill().on_delete(move |_, row: &ActiveSkill| {
         as_delete.0.lock().unwrap().push(ActiveSkillEvent::Deleted(row.clone()));
+    });
+    conn.db.projectile().on_insert(move |_, row: &Projectile| {
+        proj_insert.0.lock().unwrap().push(ProjectileEvent::Inserted(row.clone()));
+    });
+    conn.db.projectile().on_delete(move |_, row: &Projectile| {
+        proj_delete.0.lock().unwrap().push(ProjectileEvent::Deleted(row.clone()));
+    });
+    conn.db.aoe_zone().on_insert(move |_, row: &AoeZone| {
+        aoe_insert.0.lock().unwrap().push(AoeZoneEvent::Inserted(row.clone()));
+    });
+    conn.db.aoe_zone().on_delete(move |_, row: &AoeZone| {
+        aoe_delete.0.lock().unwrap().push(AoeZoneEvent::Deleted(row.clone()));
     });
 
     commands.insert_resource(SpacetimeDb(conn));

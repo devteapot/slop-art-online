@@ -1,6 +1,7 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use shared::module_bindings::use_skill_reducer::use_skill;
+use shared::module_bindings::use_targeted_skill_reducer::use_targeted_skill;
 use shared::module_bindings::SkillAttributes;
 use spacetimedb_sdk::Timestamp;
 
@@ -10,7 +11,9 @@ use crate::network::{
     SkillAttributesEventQueue, SkillCooldownEvent, SkillCooldownEventQueue, SkillDefEvent,
     SkillDefEventQueue, SpacetimeDb,
 };
-use crate::player::{AbilityAnimTrigger, AbilityAnimTriggerQueue, Grounded, LocalPlayer, PlayerFacing};
+use crate::npc::NpcId;
+use crate::player::{AbilityAnimTrigger, AbilityAnimTriggerQueue, CursorGroundPos, Grounded, LocalPlayer, PlayerId, PlayerFacing};
+use crate::world::MainCamera;
 
 // --- Resources ---
 
@@ -202,6 +205,7 @@ pub fn use_skill_input(
     local_cooldowns: Res<LocalCooldowns>,
     local_identity: Res<LocalIdentity>,
     ability_queue: Res<AbilityAnimTriggerQueue>,
+    cursor_ground: Res<CursorGroundPos>,
 ) {
     let Some(conn) = conn else { return };
     let Ok(transform) = local_player.single() else { return };
@@ -216,7 +220,8 @@ pub fn use_skill_input(
         if let Some(&skill_id) = local_skills.0.get(idx) {
             if cooldown_remaining(&local_cooldowns, skill_id) <= 0.0 {
                 let pos = transform.translation;
-                let _ = conn.0.reducers.use_skill(skill_id, pos.x, pos.y, pos.z);
+                let target = cursor_ground.0.unwrap_or(pos);
+                let _ = conn.0.reducers.use_skill(skill_id, target.x, target.y, target.z);
                 if let Some(id) = local_identity.0.lock().unwrap().clone() {
                     ability_queue.0.lock().unwrap().push(AbilityAnimTrigger { identity: id, skill_id });
                 }
@@ -267,6 +272,76 @@ pub fn mobility_input(
                     ability_queue.0.lock().unwrap().push(AbilityAnimTrigger { identity: id, skill_id: dash_id });
                 }
             }
+        }
+    }
+}
+
+/// Right-click an entity to use a targeted skill on it.
+pub fn use_targeted_skill_input(
+    conn: Option<Res<SpacetimeDb>>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window>,
+    camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
+    spatial_query: SpatialQuery,
+    local_player: Query<Entity, With<LocalPlayer>>,
+    npc_query: Query<&NpcId>,
+    player_query: Query<&PlayerId>,
+    local_skills: Res<LocalSkills>,
+    local_cooldowns: Res<LocalCooldowns>,
+    local_identity: Res<LocalIdentity>,
+    ability_queue: Res<AbilityAnimTriggerQueue>,
+    selected_skill: Res<SelectedSkill>,
+) {
+    if !buttons.just_pressed(MouseButton::Right) { return }
+    let Some(conn) = conn else { return };
+    let Ok(local_entity) = local_player.single() else { return };
+    let Ok(window) = windows.single() else { return };
+    let Some(cursor) = window.cursor_position() else { return };
+    let Ok((cam, cam_gt)) = camera.single() else { return };
+    let Ok(ray) = cam.viewport_to_world(cam_gt, cursor) else { return };
+
+    // Pick the first skill that is targeted (or fall back to selected skill)
+    let skill_id = selected_skill.0.or_else(|| local_skills.0.first().copied());
+    let Some(skill_id) = skill_id else { return };
+    if cooldown_remaining(&local_cooldowns, skill_id) > 0.0 { return }
+
+    // Raycast against physics colliders
+    let hits = spatial_query.ray_hits(
+        ray.origin,
+        Dir3::new(ray.direction.as_vec3()).unwrap_or(Dir3::NEG_Z),
+        200.0,
+        10,
+        false,
+        &SpatialQueryFilter::default(),
+    );
+
+    for hit in hits {
+        if hit.entity == local_entity { continue }
+
+        if let Ok(npc_id) = npc_query.get(hit.entity) {
+            let _ = conn.0.reducers.use_targeted_skill(
+                skill_id,
+                "npc".to_string(),
+                npc_id.0,
+                String::new(),
+            );
+            if let Some(id) = local_identity.0.lock().unwrap().clone() {
+                ability_queue.0.lock().unwrap().push(AbilityAnimTrigger { identity: id, skill_id });
+            }
+            return;
+        }
+        if let Ok(pid) = player_query.get(hit.entity) {
+            let hex = pid.0.to_hex().to_string();
+            let _ = conn.0.reducers.use_targeted_skill(
+                skill_id,
+                "player".to_string(),
+                0,
+                hex,
+            );
+            if let Some(id) = local_identity.0.lock().unwrap().clone() {
+                ability_queue.0.lock().unwrap().push(AbilityAnimTrigger { identity: id, skill_id });
+            }
+            return;
         }
     }
 }

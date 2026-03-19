@@ -7,6 +7,7 @@ mod npc;
 mod skills;
 mod hud;
 mod interpolation;
+mod projectile;
 
 use avian3d::prelude::*;
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
@@ -21,6 +22,7 @@ use npc::*;
 use skills::*;
 use hud::*;
 use interpolation::*;
+use projectile::*;
 
 fn main() {
     App::new()
@@ -56,6 +58,9 @@ fn main() {
         .init_resource::<PredictionBuffer>()
         .init_resource::<PredictionCorrection>()
         .init_resource::<AbilityAnimTriggerQueue>()
+        .init_resource::<CursorGroundPos>()
+        .init_resource::<ProjectileEventQueue>()
+        .init_resource::<AoeZoneEventQueue>()
         .add_systems(Startup, (setup, connect_spacetimedb, setup_hud))
         .add_systems(FixedUpdate, (
             move_local_player,
@@ -93,6 +98,10 @@ fn main() {
             expire_ability_animations,
             drive_player_animations,
             smooth_prediction_correction,
+            sync_projectiles,
+            move_projectiles,
+            sync_aoe_zones,
+            use_targeted_skill_input,
         ))
         .run();
 }

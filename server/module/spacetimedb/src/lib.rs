@@ -33,6 +33,61 @@ pub struct ActiveSkill {
     pub player_identity: Identity,
     pub skill_id: u64,
     pub started_at: u64,
+    pub target_x: f32,
+    pub target_y: f32,
+    pub target_z: f32,
+    pub dir_x: f32,
+    pub dir_z: f32,
+}
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = projectile, public, scheduled(expire_projectile))]
+pub struct Projectile {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub owner: Identity,
+    pub skill_id: u64,
+    pub start_x: f32,
+    pub start_y: f32,
+    pub start_z: f32,
+    pub dir_x: f32,
+    pub dir_z: f32,
+    pub speed: f32,
+    pub max_range: f32,
+    pub power: i32,
+    pub knockback: f32,
+    pub hit_radius: f32,
+    pub started_at: u64,
+}
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = aoe_zone, public, scheduled(expire_aoe_zone))]
+pub struct AoeZone {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub owner: Identity,
+    pub skill_id: u64,
+    pub center_x: f32,
+    pub center_y: f32,
+    pub center_z: f32,
+    pub radius: f32,
+    pub power: i32,
+    pub knockback: f32,
+    pub tick_interval_ms: u64,
+    pub last_tick_at: u64,
+    pub started_at: u64,
+}
+
+#[spacetimedb::table(accessor = projectile_tick_schedule, scheduled(tick_projectiles))]
+pub struct ProjectileTickSchedule {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
 }
 
 // --- Scheduler helper ---
@@ -40,6 +95,14 @@ pub struct ActiveSkill {
 fn schedule_next_npc_tick(ctx: &ReducerContext) {
     let next = ctx.timestamp + Duration::from_millis(NPC_TICK_MS);
     ctx.db.npc_tick_schedule().insert(NpcTickSchedule {
+        scheduled_id: 0,
+        scheduled_at: ScheduleAt::Time(next),
+    });
+}
+
+fn schedule_next_projectile_tick(ctx: &ReducerContext) {
+    let next = ctx.timestamp + Duration::from_millis(PROJECTILE_TICK_MS);
+    ctx.db.projectile_tick_schedule().insert(ProjectileTickSchedule {
         scheduled_id: 0,
         scheduled_at: ScheduleAt::Time(next),
     });
@@ -56,6 +119,7 @@ pub fn init(ctx: &ReducerContext) {
     ctx.db.skill_def().insert(SkillDef { id: 0, name: "Jump".to_string(),      behavior_type: BehaviorType::Mobility,   resource_type: ResourceType::Stamina });
     ctx.db.skill_def().insert(SkillDef { id: 0, name: "Dash".to_string(),      behavior_type: BehaviorType::Mobility,   resource_type: ResourceType::Stamina });
     schedule_next_npc_tick(ctx);
+    schedule_next_projectile_tick(ctx);
 }
 
 #[spacetimedb::reducer]
@@ -318,33 +382,39 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             }
         }
         BehaviorType::Projectile => {
-            let nearest_npc = ctx.db.npc().iter()
-                .filter(|n| n.position.distance_to(&player.position) <= stats.range)
-                .min_by(|a, b| a.position.distance_to(&target_pos)
-                    .partial_cmp(&b.position.distance_to(&target_pos)).unwrap());
-            let nearest_player = ctx.db.player().iter()
-                .filter(|p| p.identity != ctx.sender())
-                .filter(|p| p.position.distance_to(&player.position) <= stats.range)
-                .min_by(|a, b| a.position.distance_to(&target_pos)
-                    .partial_cmp(&b.position.distance_to(&target_pos)).unwrap());
-            match (nearest_npc, nearest_player) {
-                (Some(n), Some(p)) => {
-                    if n.position.distance_to(&target_pos) <= p.position.distance_to(&target_pos) {
-                        hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id);
-                    } else {
-                        hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id);
-                    }
-                }
-                (Some(n), None) => hit_npc(ctx, &n, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id),
-                (None, Some(p)) => hit_player(ctx, &p, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id),
-                (None, None) => {}
-            }
+            // Compute direction from player toward cursor target on XZ plane
+            let dx = target_pos.x - player.position.x;
+            let dz = target_pos.z - player.position.z;
+            let len = (dx * dx + dz * dz).sqrt();
+            let (dir_x, dir_z) = if len > 0.001 { (dx / len, dz / len) } else { (0.0, -1.0) };
+
+            let now_ms = (now_us / 1000) as u64;
+            ctx.db.projectile().insert(Projectile {
+                scheduled_id: 0,
+                scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(PROJECTILE_MAX_LIFETIME_MS)),
+                owner: ctx.sender(),
+                skill_id,
+                start_x: player.position.x,
+                start_y: player.position.y,
+                start_z: player.position.z,
+                dir_x,
+                dir_z,
+                speed: PROJECTILE_SPEED,
+                max_range: stats.range,
+                power: stats.power,
+                knockback: stats.knockback,
+                hit_radius: PROJECTILE_HIT_RADIUS,
+                started_at: now_ms,
+            });
         }
         BehaviorType::GroundAoe => {
             if player.position.distance_to(&target_pos) > stats.range {
                 return Err("Target out of range".to_string());
             }
-            let radius = if stats.aoe_radius > 0.0 { stats.aoe_radius } else { stats.range };
+            let radius = if stats.aoe_radius > 0.0 { stats.aoe_radius } else { 5.0 };
+            let now_ms = (now_us / 1000) as u64;
+
+            // Apply first tick immediately so the skill doesn't feel delayed
             for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
                 if npc.position.distance_to(&target_pos) <= radius {
                     hit_npc(ctx, &npc, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id);
@@ -355,6 +425,23 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
                     hit_player(ctx, &p, stats.power, stats.knockback, &target_pos, ctx.sender(), skill_id);
                 }
             }
+
+            // Insert lingering zone for periodic damage
+            ctx.db.aoe_zone().insert(AoeZone {
+                scheduled_id: 0,
+                scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(AOE_DEFAULT_DURATION_MS)),
+                owner: ctx.sender(),
+                skill_id,
+                center_x: target_pos.x,
+                center_y: target_pos.y,
+                center_z: target_pos.z,
+                radius,
+                power: stats.power,
+                knockback: stats.knockback,
+                tick_interval_ms: AOE_TICK_INTERVAL_MS,
+                last_tick_at: now_ms,
+                started_at: now_ms,
+            });
         }
         BehaviorType::Buff => {
             let player = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
@@ -365,9 +452,19 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             // Cooldown and resource already consumed above.
             // Client handles the visual effect (jump arc, dash movement, etc.).
         }
+        BehaviorType::Targeted => {
+            // Targeted skills use use_targeted_skill reducer instead.
+            return Err("Targeted skills must use use_targeted_skill".to_string());
+        }
     }
 
     award_skill_xp(ctx, ctx.sender(), skill_id, SKILL_XP_PER_USE);
+
+    // Compute direction from player toward target for animations
+    let dx = target_pos.x - player.position.x;
+    let dz = target_pos.z - player.position.z;
+    let len = (dx * dx + dz * dz).sqrt();
+    let (anim_dir_x, anim_dir_z) = if len > 0.001 { (dx / len, dz / len) } else { (0.0, -1.0) };
 
     // Broadcast ability usage to all clients via ActiveSkill table.
     let anim_duration_ms: u64 = match skill_def.behavior_type {
@@ -376,6 +473,7 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
         BehaviorType::Projectile => 600,
         BehaviorType::GroundAoe => 700,
         BehaviorType::Buff => 500,
+        BehaviorType::Targeted => 500,
     };
     ctx.db.active_skill().insert(ActiveSkill {
         scheduled_id: 0,
@@ -383,6 +481,11 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
         player_identity: ctx.sender(),
         skill_id,
         started_at: now_us as u64,
+        target_x: target_pos.x,
+        target_y: target_pos.y,
+        target_z: target_pos.z,
+        dir_x: anim_dir_x,
+        dir_z: anim_dir_z,
     });
 
     Ok(())
@@ -422,4 +525,195 @@ pub fn allocate_skill_point(ctx: &ReducerContext, skill_id: u64, attribute: Stri
 #[spacetimedb::reducer]
 pub fn expire_active_skill(_ctx: &ReducerContext, _row: ActiveSkill) {
     // Row auto-deletes after this reducer completes.
+}
+
+#[spacetimedb::reducer]
+pub fn expire_projectile(_ctx: &ReducerContext, _row: Projectile) {
+    // Row auto-deletes after this reducer completes.
+}
+
+#[spacetimedb::reducer]
+pub fn expire_aoe_zone(_ctx: &ReducerContext, _row: AoeZone) {
+    // Row auto-deletes after this reducer completes.
+}
+
+#[spacetimedb::reducer]
+pub fn tick_projectiles(ctx: &ReducerContext, _schedule: ProjectileTickSchedule) {
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros();
+    let now_ms = (now_us / 1000) as u64;
+
+    // Tick projectiles
+    for proj in ctx.db.projectile().iter().collect::<Vec<_>>() {
+        let elapsed_s = (now_ms.saturating_sub(proj.started_at)) as f32 / 1000.0;
+        let dist = proj.speed * elapsed_s;
+
+        // Current position
+        let px = proj.start_x + proj.dir_x * dist;
+        let pz = proj.start_z + proj.dir_z * dist;
+        let proj_pos = Position { x: px, y: proj.start_y, z: pz };
+
+        // Check if exceeded max range
+        if dist > proj.max_range {
+            ctx.db.projectile().scheduled_id().delete(&proj.scheduled_id);
+            continue;
+        }
+
+        // Check collision against NPCs
+        let mut hit = false;
+        for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
+            if proj_pos.distance_to(&npc.position) <= proj.hit_radius {
+                hit_npc(ctx, &npc, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id);
+                award_skill_xp(ctx, proj.owner, proj.skill_id, SKILL_XP_PER_USE);
+                hit = true;
+                break;
+            }
+        }
+        if hit {
+            ctx.db.projectile().scheduled_id().delete(&proj.scheduled_id);
+            continue;
+        }
+
+        // Check collision against players (excluding owner)
+        for p in ctx.db.player().iter().collect::<Vec<_>>() {
+            if p.identity != proj.owner && proj_pos.distance_to(&p.position) <= proj.hit_radius {
+                hit_player(ctx, &p, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id);
+                award_skill_xp(ctx, proj.owner, proj.skill_id, SKILL_XP_PER_USE);
+                hit = true;
+                break;
+            }
+        }
+        if hit {
+            ctx.db.projectile().scheduled_id().delete(&proj.scheduled_id);
+        }
+    }
+
+    // Tick AoE zones
+    for zone in ctx.db.aoe_zone().iter().collect::<Vec<_>>() {
+        if now_ms.saturating_sub(zone.last_tick_at) >= zone.tick_interval_ms {
+            let center = Position { x: zone.center_x, y: zone.center_y, z: zone.center_z };
+            for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
+                if npc.position.distance_to(&center) <= zone.radius {
+                    hit_npc(ctx, &npc, zone.power, zone.knockback, &center, zone.owner, zone.skill_id);
+                }
+            }
+            for p in ctx.db.player().iter().collect::<Vec<_>>() {
+                if p.identity != zone.owner && p.position.distance_to(&center) <= zone.radius {
+                    hit_player(ctx, &p, zone.power, zone.knockback, &center, zone.owner, zone.skill_id);
+                }
+            }
+            ctx.db.aoe_zone().scheduled_id().update(AoeZone { last_tick_at: now_ms, ..zone });
+        }
+    }
+
+    schedule_next_projectile_tick(ctx);
+}
+
+#[spacetimedb::reducer]
+pub fn start_projectile_ticker(ctx: &ReducerContext) {
+    for s in ctx.db.projectile_tick_schedule().iter() {
+        ctx.db.projectile_tick_schedule().scheduled_id().delete(&s.scheduled_id);
+    }
+    schedule_next_projectile_tick(ctx);
+}
+
+#[spacetimedb::reducer]
+pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: String, target_npc_id: u64, target_player_hex: String) -> Result<(), String> {
+    let player = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
+    let skill_def = ctx.db.skill_def().id().find(&skill_id).ok_or("Skill not found")?;
+
+    let _ = ctx.db.player_skill().iter()
+        .find(|ps| ps.player_identity == ctx.sender() && ps.skill_id == skill_id)
+        .ok_or("Skill not available")?;
+
+    let attrs = ctx.db.skill_attributes().iter()
+        .find(|a| a.player_identity == ctx.sender() && a.skill_id == skill_id)
+        .ok_or("Skill attributes not found")?;
+
+    let stats = compute_stats(&attrs);
+
+    // Check cooldown
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros();
+    if let Some(cd) = ctx.db.skill_cooldown().iter()
+        .find(|cd| cd.player_identity == ctx.sender() && cd.skill_id == skill_id)
+    {
+        let ready_us = cd.ready_at.to_duration_since_unix_epoch().unwrap_or_default().as_micros();
+        if now_us < ready_us {
+            return Err("Skill on cooldown".to_string());
+        }
+    }
+
+    // Check and deduct resource
+    match skill_def.resource_type {
+        ResourceType::Mana => {
+            if player.mana < stats.resource_cost { return Err("Not enough mana".to_string()); }
+            ctx.db.player().identity().update(Player { mana: player.mana - stats.resource_cost, ..player.clone() });
+        }
+        ResourceType::Stamina => {
+            if player.stamina < stats.resource_cost { return Err("Not enough stamina".to_string()); }
+            ctx.db.player().identity().update(Player { stamina: player.stamina - stats.resource_cost, ..player.clone() });
+        }
+    }
+
+    // Set cooldown
+    let ready_at = ctx.timestamp + Duration::from_millis(stats.cooldown_ms);
+    if let Some(cd) = ctx.db.skill_cooldown().iter()
+        .find(|cd| cd.player_identity == ctx.sender() && cd.skill_id == skill_id)
+    {
+        ctx.db.skill_cooldown().id().update(SkillCooldown { ready_at, ..cd });
+    } else {
+        ctx.db.skill_cooldown().insert(SkillCooldown { id: 0, player_identity: ctx.sender(), skill_id, ready_at });
+    }
+
+    let (target_x, target_y, target_z) = match target_kind.as_str() {
+        "self" => {
+            let new_health = (player.health + stats.power).min(MAX_HEALTH);
+            let current = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
+            ctx.db.player().identity().update(Player { health: new_health, ..current });
+            (player.position.x, player.position.y, player.position.z)
+        }
+        "npc" => {
+            let npc = ctx.db.npc().id().find(&target_npc_id).ok_or("NPC not found")?;
+            if player.position.distance_to(&npc.position) > stats.range {
+                return Err("Target out of range".to_string());
+            }
+            let pos = (npc.position.x, npc.position.y, npc.position.z);
+            hit_npc(ctx, &npc, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id);
+            pos
+        }
+        "player" => {
+            let target_identity = Identity::from_hex(&target_player_hex)
+                .map_err(|_| "Invalid player identity".to_string())?;
+            let target_player = ctx.db.player().identity().find(&target_identity)
+                .ok_or("Target player not found")?;
+            if player.position.distance_to(&target_player.position) > stats.range {
+                return Err("Target out of range".to_string());
+            }
+            let pos = (target_player.position.x, target_player.position.y, target_player.position.z);
+            hit_player(ctx, &target_player, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id);
+            pos
+        }
+        _ => return Err(format!("Unknown target_kind: {target_kind}")),
+    };
+
+    award_skill_xp(ctx, ctx.sender(), skill_id, SKILL_XP_PER_USE);
+
+    let dx = target_x - player.position.x;
+    let dz = target_z - player.position.z;
+    let len = (dx * dx + dz * dz).sqrt();
+    let (dir_x, dir_z) = if len > 0.001 { (dx / len, dz / len) } else { (0.0, -1.0) };
+
+    ctx.db.active_skill().insert(ActiveSkill {
+        scheduled_id: 0,
+        scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(500)),
+        player_identity: ctx.sender(),
+        skill_id,
+        started_at: now_us as u64,
+        target_x,
+        target_y,
+        target_z,
+        dir_x,
+        dir_z,
+    });
+
+    Ok(())
 }

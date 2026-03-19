@@ -12,6 +12,11 @@ pub struct ActiveSkill {
     pub player_identity: __sdk::Identity,
     pub skill_id: u64,
     pub started_at: u64,
+    pub target_x: f32,
+    pub target_y: f32,
+    pub target_z: f32,
+    pub dir_x: f32,
+    pub dir_z: f32,
 }
 
 impl __sdk::InModule for ActiveSkill {
@@ -27,6 +32,11 @@ pub struct ActiveSkillCols {
     pub player_identity: __sdk::__query_builder::Col<ActiveSkill, __sdk::Identity>,
     pub skill_id: __sdk::__query_builder::Col<ActiveSkill, u64>,
     pub started_at: __sdk::__query_builder::Col<ActiveSkill, u64>,
+    pub target_x: __sdk::__query_builder::Col<ActiveSkill, f32>,
+    pub target_y: __sdk::__query_builder::Col<ActiveSkill, f32>,
+    pub target_z: __sdk::__query_builder::Col<ActiveSkill, f32>,
+    pub dir_x: __sdk::__query_builder::Col<ActiveSkill, f32>,
+    pub dir_z: __sdk::__query_builder::Col<ActiveSkill, f32>,
 }
 
 impl __sdk::__query_builder::HasCols for ActiveSkill {
@@ -38,6 +48,11 @@ impl __sdk::__query_builder::HasCols for ActiveSkill {
             player_identity: __sdk::__query_builder::Col::new(table_name, "player_identity"),
             skill_id: __sdk::__query_builder::Col::new(table_name, "skill_id"),
             started_at: __sdk::__query_builder::Col::new(table_name, "started_at"),
+            target_x: __sdk::__query_builder::Col::new(table_name, "target_x"),
+            target_y: __sdk::__query_builder::Col::new(table_name, "target_y"),
+            target_z: __sdk::__query_builder::Col::new(table_name, "target_z"),
+            dir_x: __sdk::__query_builder::Col::new(table_name, "dir_x"),
+            dir_z: __sdk::__query_builder::Col::new(table_name, "dir_z"),
         }
     }
 }

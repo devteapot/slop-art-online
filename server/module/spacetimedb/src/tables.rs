@@ -25,6 +25,8 @@ pub enum BehaviorType {
     /// Mobility skills (Jump, Dash, etc.). Server only tracks cooldown/resource;
     /// the client handles the visual effect entirely.
     Mobility,
+    /// Point-and-click targeting (select entity, apply effect).
+    Targeted,
 }
 
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]

@@ -9,6 +9,8 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 pub mod active_skill_table;
 pub mod active_skill_type;
 pub mod allocate_skill_point_reducer;
+pub mod aoe_zone_table;
+pub mod aoe_zone_type;
 pub mod attack_npc_reducer;
 pub mod attack_player_reducer;
 pub mod behavior_type_type;
@@ -26,6 +28,9 @@ pub mod player_skill_type;
 pub mod player_table;
 pub mod player_type;
 pub mod position_type;
+pub mod projectile_table;
+pub mod projectile_tick_schedule_type;
+pub mod projectile_type;
 pub mod resource_type_type;
 pub mod rotate_player_reducer;
 pub mod skill_attributes_table;
@@ -36,12 +41,16 @@ pub mod skill_def_table;
 pub mod skill_def_type;
 pub mod spawn_npc_reducer;
 pub mod start_npc_ticker_reducer;
+pub mod start_projectile_ticker_reducer;
 pub mod submit_npc_graph_reducer;
 pub mod use_skill_reducer;
+pub mod use_targeted_skill_reducer;
 
 pub use active_skill_table::*;
 pub use active_skill_type::ActiveSkill;
 pub use allocate_skill_point_reducer::allocate_skill_point;
+pub use aoe_zone_table::*;
+pub use aoe_zone_type::AoeZone;
 pub use attack_npc_reducer::attack_npc;
 pub use attack_player_reducer::attack_player;
 pub use behavior_type_type::BehaviorType;
@@ -59,6 +68,9 @@ pub use player_skill_type::PlayerSkill;
 pub use player_table::*;
 pub use player_type::Player;
 pub use position_type::Position;
+pub use projectile_table::*;
+pub use projectile_tick_schedule_type::ProjectileTickSchedule;
+pub use projectile_type::Projectile;
 pub use resource_type_type::ResourceType;
 pub use rotate_player_reducer::rotate_player;
 pub use skill_attributes_table::*;
@@ -69,8 +81,10 @@ pub use skill_def_table::*;
 pub use skill_def_type::SkillDef;
 pub use spawn_npc_reducer::spawn_npc;
 pub use start_npc_ticker_reducer::start_npc_ticker;
+pub use start_projectile_ticker_reducer::start_projectile_ticker;
 pub use submit_npc_graph_reducer::submit_npc_graph;
 pub use use_skill_reducer::use_skill;
+pub use use_targeted_skill_reducer::use_targeted_skill;
 
 #[derive(Clone, PartialEq, Debug)]
 
@@ -105,6 +119,7 @@ pub enum Reducer {
         z: f32,
     },
     StartNpcTicker,
+    StartProjectileTicker,
     SubmitNpcGraph {
         npc_id: u64,
         graph_json: String,
@@ -114,6 +129,12 @@ pub enum Reducer {
         target_x: f32,
         target_y: f32,
         target_z: f32,
+    },
+    UseTargetedSkill {
+        skill_id: u64,
+        target_kind: String,
+        target_npc_id: u64,
+        target_player_hex: String,
     },
 }
 
@@ -132,8 +153,10 @@ impl __sdk::Reducer for Reducer {
             Reducer::RotatePlayer { .. } => "rotate_player",
             Reducer::SpawnNpc { .. } => "spawn_npc",
             Reducer::StartNpcTicker => "start_npc_ticker",
+            Reducer::StartProjectileTicker => "start_projectile_ticker",
             Reducer::SubmitNpcGraph { .. } => "submit_npc_graph",
             Reducer::UseSkill { .. } => "use_skill",
+            Reducer::UseTargetedSkill { .. } => "use_targeted_skill",
             _ => unreachable!(),
         }
     }
@@ -178,6 +201,9 @@ impl __sdk::Reducer for Reducer {
             Reducer::StartNpcTicker => {
                 __sats::bsatn::to_vec(&start_npc_ticker_reducer::StartNpcTickerArgs {})
             }
+            Reducer::StartProjectileTicker => __sats::bsatn::to_vec(
+                &start_projectile_ticker_reducer::StartProjectileTickerArgs {},
+            ),
             Reducer::SubmitNpcGraph { npc_id, graph_json } => {
                 __sats::bsatn::to_vec(&submit_npc_graph_reducer::SubmitNpcGraphArgs {
                     npc_id: npc_id.clone(),
@@ -195,6 +221,17 @@ impl __sdk::Reducer for Reducer {
                 target_y: target_y.clone(),
                 target_z: target_z.clone(),
             }),
+            Reducer::UseTargetedSkill {
+                skill_id,
+                target_kind,
+                target_npc_id,
+                target_player_hex,
+            } => __sats::bsatn::to_vec(&use_targeted_skill_reducer::UseTargetedSkillArgs {
+                skill_id: skill_id.clone(),
+                target_kind: target_kind.clone(),
+                target_npc_id: target_npc_id.clone(),
+                target_player_hex: target_player_hex.clone(),
+            }),
             _ => unreachable!(),
         }
     }
@@ -205,11 +242,13 @@ impl __sdk::Reducer for Reducer {
 #[doc(hidden)]
 pub struct DbUpdate {
     active_skill: __sdk::TableUpdate<ActiveSkill>,
+    aoe_zone: __sdk::TableUpdate<AoeZone>,
     npc: __sdk::TableUpdate<Npc>,
     npc_behaviour_graph: __sdk::TableUpdate<NpcBehaviourGraph>,
     npc_pending_decision: __sdk::TableUpdate<NpcPendingDecision>,
     player: __sdk::TableUpdate<Player>,
     player_skill: __sdk::TableUpdate<PlayerSkill>,
+    projectile: __sdk::TableUpdate<Projectile>,
     skill_attributes: __sdk::TableUpdate<SkillAttributes>,
     skill_cooldown: __sdk::TableUpdate<SkillCooldown>,
     skill_def: __sdk::TableUpdate<SkillDef>,
@@ -224,6 +263,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "active_skill" => db_update
                     .active_skill
                     .append(active_skill_table::parse_table_update(table_update)?),
+                "aoe_zone" => db_update
+                    .aoe_zone
+                    .append(aoe_zone_table::parse_table_update(table_update)?),
                 "npc" => db_update
                     .npc
                     .append(npc_table::parse_table_update(table_update)?),
@@ -239,6 +281,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "player_skill" => db_update
                     .player_skill
                     .append(player_skill_table::parse_table_update(table_update)?),
+                "projectile" => db_update
+                    .projectile
+                    .append(projectile_table::parse_table_update(table_update)?),
                 "skill_attributes" => db_update
                     .skill_attributes
                     .append(skill_attributes_table::parse_table_update(table_update)?),
@@ -277,6 +322,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.active_skill = cache
             .apply_diff_to_table::<ActiveSkill>("active_skill", &self.active_skill)
             .with_updates_by_pk(|row| &row.scheduled_id);
+        diff.aoe_zone = cache
+            .apply_diff_to_table::<AoeZone>("aoe_zone", &self.aoe_zone)
+            .with_updates_by_pk(|row| &row.scheduled_id);
         diff.npc = cache
             .apply_diff_to_table::<Npc>("npc", &self.npc)
             .with_updates_by_pk(|row| &row.id);
@@ -298,6 +346,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.player_skill = cache
             .apply_diff_to_table::<PlayerSkill>("player_skill", &self.player_skill)
             .with_updates_by_pk(|row| &row.id);
+        diff.projectile = cache
+            .apply_diff_to_table::<Projectile>("projectile", &self.projectile)
+            .with_updates_by_pk(|row| &row.scheduled_id);
         diff.skill_attributes = cache
             .apply_diff_to_table::<SkillAttributes>("skill_attributes", &self.skill_attributes)
             .with_updates_by_pk(|row| &row.id);
@@ -317,6 +368,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "active_skill" => db_update
                     .active_skill
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "aoe_zone" => db_update
+                    .aoe_zone
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "npc" => db_update
                     .npc
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -331,6 +385,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "player_skill" => db_update
                     .player_skill
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "projectile" => db_update
+                    .projectile
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "skill_attributes" => db_update
                     .skill_attributes
@@ -357,6 +414,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "active_skill" => db_update
                     .active_skill
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "aoe_zone" => db_update
+                    .aoe_zone
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "npc" => db_update
                     .npc
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -371,6 +431,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "player_skill" => db_update
                     .player_skill
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "projectile" => db_update
+                    .projectile
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "skill_attributes" => db_update
                     .skill_attributes
@@ -397,11 +460,13 @@ impl __sdk::DbUpdate for DbUpdate {
 #[doc(hidden)]
 pub struct AppliedDiff<'r> {
     active_skill: __sdk::TableAppliedDiff<'r, ActiveSkill>,
+    aoe_zone: __sdk::TableAppliedDiff<'r, AoeZone>,
     npc: __sdk::TableAppliedDiff<'r, Npc>,
     npc_behaviour_graph: __sdk::TableAppliedDiff<'r, NpcBehaviourGraph>,
     npc_pending_decision: __sdk::TableAppliedDiff<'r, NpcPendingDecision>,
     player: __sdk::TableAppliedDiff<'r, Player>,
     player_skill: __sdk::TableAppliedDiff<'r, PlayerSkill>,
+    projectile: __sdk::TableAppliedDiff<'r, Projectile>,
     skill_attributes: __sdk::TableAppliedDiff<'r, SkillAttributes>,
     skill_cooldown: __sdk::TableAppliedDiff<'r, SkillCooldown>,
     skill_def: __sdk::TableAppliedDiff<'r, SkillDef>,
@@ -423,6 +488,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.active_skill,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<AoeZone>("aoe_zone", &self.aoe_zone, event);
         callbacks.invoke_table_row_callbacks::<Npc>("npc", &self.npc, event);
         callbacks.invoke_table_row_callbacks::<NpcBehaviourGraph>(
             "npc_behaviour_graph",
@@ -440,6 +506,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.player_skill,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<Projectile>("projectile", &self.projectile, event);
         callbacks.invoke_table_row_callbacks::<SkillAttributes>(
             "skill_attributes",
             &self.skill_attributes,
@@ -1096,22 +1163,26 @@ impl __sdk::SpacetimeModule for RemoteModule {
 
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
         active_skill_table::register_table(client_cache);
+        aoe_zone_table::register_table(client_cache);
         npc_table::register_table(client_cache);
         npc_behaviour_graph_table::register_table(client_cache);
         npc_pending_decision_table::register_table(client_cache);
         player_table::register_table(client_cache);
         player_skill_table::register_table(client_cache);
+        projectile_table::register_table(client_cache);
         skill_attributes_table::register_table(client_cache);
         skill_cooldown_table::register_table(client_cache);
         skill_def_table::register_table(client_cache);
     }
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
         "active_skill",
+        "aoe_zone",
         "npc",
         "npc_behaviour_graph",
         "npc_pending_decision",
         "player",
         "player_skill",
+        "projectile",
         "skill_attributes",
         "skill_cooldown",
         "skill_def",

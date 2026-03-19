@@ -118,6 +118,10 @@ impl Default for LocalPlayerStats {
 #[derive(Resource, Default)]
 pub struct PlayerFacing(pub Vec2);
 
+/// World-space position where the cursor ray hits the player's Y plane.
+#[derive(Resource, Default)]
+pub struct CursorGroundPos(pub Option<Vec3>);
+
 #[derive(Component)]
 pub(crate) struct PlayerAnimNodes {
     idle: AnimationNodeIndex,
@@ -414,6 +418,7 @@ pub fn face_cursor(
     mut last_sent: ResMut<LastSentFacingAngle>,
     time: Res<Time>,
     mut throttle: ResMut<MoveThrottle>,
+    mut cursor_ground: ResMut<CursorGroundPos>,
 ) {
     let Ok(window) = windows.single() else { return };
     let Ok((cam, cam_transform)) = camera.single() else {
@@ -443,6 +448,7 @@ pub fn face_cursor(
         return;
     }
     let world_pos = ray.origin + ray.direction * t;
+    cursor_ground.0 = Some(world_pos);
 
     let diff = world_pos - player_gtransform.translation();
     if diff.xz().length_squared() < 0.01 {

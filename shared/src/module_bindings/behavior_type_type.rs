@@ -17,6 +17,8 @@ pub enum BehaviorType {
     Buff,
 
     Mobility,
+
+    Targeted,
 }
 
 impl __sdk::InModule for BehaviorType {
