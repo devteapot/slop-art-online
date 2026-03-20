@@ -9,8 +9,8 @@ use shared::module_bindings::move_player_reducer::move_player;
 use shared::module_bindings::rotate_player_reducer::rotate_player;
 
 use crate::constants::{
-    CAPSULE_HALF_LEN, CAPSULE_RADIUS, JUMP_IMPULSE, MAX_LOOK_AHEAD, MOVE_SPEED,
-    PLAYER_GRAVITY_SCALE,
+    AIR_CONTROL_FACTOR, CAM_SMOOTH_SPEED, CAPSULE_HALF_LEN, CAPSULE_RADIUS, GROUND_ACCEL,
+    GROUND_DECEL, JUMP_IMPULSE, MAX_LOOK_AHEAD, MOVE_SPEED, PLAYER_GRAVITY_SCALE,
 };
 use crate::interpolation::InterpolationBuffer;
 use crate::network::{ActiveSkillEvent, ActiveSkillEventQueue, LocalIdentity, PlayerEvent, PlayerEventQueue, SpacetimeDb, to_world_pos};
@@ -389,30 +389,31 @@ pub fn move_local_player(
     // clears the wall-ground corner before horizontal velocity is re-applied.
     let rising_from_jump = velocity.y > JUMP_IMPULSE * 0.5;
 
+    let dt = time.delta_secs();
+
     if grounded.0 && !rising_from_jump {
-        // Full ground control.
+        // Full ground control with acceleration ramp.
         let effective_speed = MOVE_SPEED * speed_multiplier(&local_effects);
         if dir != Vec2::ZERO {
             let dir_norm = dir.normalize();
-            velocity.x = dir_norm.x * effective_speed;
-            velocity.z = dir_norm.y * effective_speed;
+            let target_x = dir_norm.x * effective_speed;
+            let target_z = dir_norm.y * effective_speed;
+            velocity.x = move_toward(velocity.x, target_x, GROUND_ACCEL * dt);
+            velocity.z = move_toward(velocity.z, target_z, GROUND_ACCEL * dt);
         } else {
-            velocity.x = 0.0;
-            velocity.z = 0.0;
+            velocity.x = move_toward(velocity.x, 0.0, GROUND_DECEL * dt);
+            velocity.z = move_toward(velocity.z, 0.0, GROUND_DECEL * dt);
         }
     } else {
-        // Airborne: one-time nudge on key-down if nearly stationary in XZ.
-        let any_just = keys.just_pressed(KeyCode::KeyW) || keys.just_pressed(KeyCode::ArrowUp)
-            || keys.just_pressed(KeyCode::KeyS) || keys.just_pressed(KeyCode::ArrowDown)
-            || keys.just_pressed(KeyCode::KeyA) || keys.just_pressed(KeyCode::ArrowLeft)
-            || keys.just_pressed(KeyCode::KeyD) || keys.just_pressed(KeyCode::ArrowRight);
-        if any_just && dir != Vec2::ZERO {
-            let xz_speed = (velocity.x * velocity.x + velocity.z * velocity.z).sqrt();
-            if xz_speed < 3.0 {
-                let dir_norm = dir.normalize();
-                velocity.x = dir_norm.x * 3.0;
-                velocity.z = dir_norm.y * 3.0;
-            }
+        // Airborne: reduced continuous control.
+        if dir != Vec2::ZERO {
+            let dir_norm = dir.normalize();
+            let air_speed = MOVE_SPEED * AIR_CONTROL_FACTOR;
+            let target_x = dir_norm.x * air_speed;
+            let target_z = dir_norm.y * air_speed;
+            let accel = GROUND_ACCEL * AIR_CONTROL_FACTOR * dt;
+            velocity.x = move_toward(velocity.x, target_x, accel);
+            velocity.z = move_toward(velocity.z, target_z, accel);
         }
     }
 
@@ -475,6 +476,7 @@ pub fn follow_camera(
     local_player: Query<&Transform, With<LocalPlayer>>,
     mut camera: Query<&mut Transform, (With<MainCamera>, Without<LocalPlayer>)>,
     locked: Res<CameraLocked>,
+    time: Res<Time>,
 ) {
     let Ok(player) = local_player.single() else {
         return;
@@ -499,7 +501,8 @@ pub fn follow_camera(
     };
 
     let target = player.translation + Vec3::new(0.0, 30.0, 40.0) + look_ahead;
-    cam.translation = cam.translation.lerp(target, 0.1);
+    let t = 1.0 - (-CAM_SMOOTH_SPEED * time.delta_secs()).exp();
+    cam.translation = cam.translation.lerp(target, t);
 }
 
 /// Rotate the player's visual model to face the cursor and sync the angle to the server.
@@ -759,6 +762,14 @@ pub fn drive_player_animations(
         if let Some(active) = player.animation_mut(target) {
             active.repeat().set_speed(playback_speed);
         }
+    }
+}
+
+fn move_toward(current: f32, target: f32, max_delta: f32) -> f32 {
+    if (target - current).abs() <= max_delta {
+        target
+    } else {
+        current + (target - current).signum() * max_delta
     }
 }
 

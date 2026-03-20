@@ -21,6 +21,12 @@ pub const HEALTH_BAR_HEIGHT: f32 = 0.1;
 pub const HEALTH_BAR_Y_OFFSET: f32 = 1.8;
 pub const MAX_LOOK_AHEAD: f32 = 15.0;
 
+// Movement feel
+pub const AIR_CONTROL_FACTOR: f32 = 0.3; // 30% of ground speed while airborne
+pub const GROUND_ACCEL: f32 = 200.0; // units/s² toward target velocity
+pub const GROUND_DECEL: f32 = 200.0; // units/s² when no input (quick stop)
+pub const CAM_SMOOTH_SPEED: f32 = 8.0; // exponential smoothing rate for camera
+
 // Physics / movement
 /// Multiplier on top of avian3d's default gravity (9.81 m/s²).
 /// 3.0 → ~29 m/s² — snappy game-feel fall without floatiness.
