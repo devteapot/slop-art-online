@@ -407,15 +407,21 @@ pub fn move_local_player(
             velocity.z = move_toward(velocity.z, 0.0, GROUND_DECEL * dt);
         }
     } else {
-        // Airborne: reduced continuous control.
+        // Airborne: add a small steering impulse without reducing existing momentum.
         if dir != Vec2::ZERO {
             let dir_norm = dir.normalize();
-            let air_speed = MOVE_SPEED * AIR_CONTROL_FACTOR;
-            let target_x = dir_norm.x * air_speed;
-            let target_z = dir_norm.y * air_speed;
             let accel = GROUND_ACCEL * AIR_CONTROL_FACTOR * dt;
-            velocity.x = move_toward(velocity.x, target_x, accel);
-            velocity.z = move_toward(velocity.z, target_z, accel);
+            velocity.x += dir_norm.x * accel;
+            velocity.z += dir_norm.y * accel;
+
+            // Cap XZ speed so air control can't exceed ground speed.
+            let xz_speed = (velocity.x * velocity.x + velocity.z * velocity.z).sqrt();
+            let max_speed = MOVE_SPEED * speed_multiplier(&local_effects);
+            if xz_speed > max_speed {
+                let scale = max_speed / xz_speed;
+                velocity.x *= scale;
+                velocity.z *= scale;
+            }
         }
     }
 
