@@ -140,9 +140,10 @@ async fn main() {
             "social" => {
                 match llm::generate_social(decision.npc_id, &decision.context).await {
                     Some(raw) => {
+                        log::info!("Raw LLM response for NPC {}: {}", decision.npc_id, &raw[..raw.len().min(500)]);
                         let parsed = llm::parse_response_with_memories(&raw);
                         let steps = parsed.as_ref().map(|p| p.steps_json.clone()).unwrap_or(raw);
-                        log::info!("Submitting social plan for NPC {}", decision.npc_id);
+                        log::info!("Submitting social plan for NPC {} with steps: {}", decision.npc_id, &steps[..steps.len().min(500)]);
                         if let Err(e) = conn.reducers.submit_npc_plan(decision.npc_id, steps) {
                             log::error!("submit_npc_plan failed for NPC {}: {e}", decision.npc_id);
                         }

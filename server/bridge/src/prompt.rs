@@ -54,16 +54,20 @@ Return ONLY a valid JSON array, no explanation."#;
 
 pub const SOCIAL_SYSTEM_PROMPT: &str = r#"You are an NPC in a fantasy MMORPG. A player is nearby.
 Decide how to interact based on your role and personality.
+
+IMPORTANT: If "player_said" is present in the context, the player just spoke to you.
+You MUST respond directly to what they said. This is a conversation — reply naturally.
+
 Return a JSON object with "steps" (array) and optionally "memories" (array of strings worth remembering).
 
 Available steps:
+- {"say": "message"} — say something (use this to reply to the player!)
 - {"travel_to": {"x": 10, "z": 20}} — walk to a location
-- {"say": "message"} — say something
 - "wander" — wander in current area
 - {"wait": 5.0} — pause for N seconds
 
-Example:
-{"steps": [{"say": "Welcome, traveler! Care to browse my wares?"}, {"wait": 3.0}], "memories": ["A traveler passed by heading north."]}"#;
+Example (player said "Do you sell potions?"):
+{"steps": [{"say": "Indeed I do! I have health potions for 10 gold and mana potions for 15. Interested?"}, {"wait": 3.0}], "memories": ["Player asked about potions."]}"#;
 
 pub const REFLECTION_SYSTEM_PROMPT: &str = r#"You are an NPC in a fantasy MMORPG. It is nighttime and you are reflecting on your day.
 Based on your persona, goals, beliefs, relationships, and recent events, generate a reflection.
@@ -148,7 +152,12 @@ pub fn build_post_combat_user_prompt(context: &str) -> String {
 
 pub fn build_social_user_prompt(context: &str) -> String {
     let (name, role) = parse_npc_identity(context);
-    format!("You are {name}, a {role}. A player is nearby.\n\nDecide how to interact.\nCurrent situation:\n{context}")
+    let player_said = parse_player_said(context);
+    if let Some(msg) = player_said {
+        format!("You are {name}, a {role}. A player just said: \"{msg}\"\n\nRespond to what they said, staying in character.\nCurrent situation:\n{context}")
+    } else {
+        format!("You are {name}, a {role}. A player is nearby.\n\nDecide how to interact.\nCurrent situation:\n{context}")
+    }
 }
 
 pub fn build_reflection_user_prompt(context: &str) -> String {
@@ -172,4 +181,9 @@ pub fn build_significant_user_prompt(context: &str) -> String {
 fn parse_persona(context: &str) -> String {
     let v: serde_json::Value = serde_json::from_str(context).unwrap_or_default();
     v.get("persona").and_then(|p| p.as_str()).unwrap_or("An NPC.").to_string()
+}
+
+fn parse_player_said(context: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(context).ok()?;
+    v.get("player_said").and_then(|p| p.as_str()).map(String::from)
 }

@@ -1082,9 +1082,27 @@ pub fn trigger_decision_enriched(
         }
     }
 
+    // Extract the most recent player chat message for prominent placement
+    let mut player_said = String::new();
+    for evt in ctx.db.npc_event_log().iter() {
+        if evt.npc_id == npc.id && evt.event == "heard_chat" {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&evt.detail) {
+                if let Some(text) = v.get("text").and_then(|t| t.as_str()) {
+                    player_said = text.to_string();
+                }
+            }
+        }
+    }
+    let player_said_field = if player_said.is_empty() {
+        String::new()
+    } else {
+        format!(r#""player_said":"{}","#, player_said.replace('"', "\\\""))
+    };
+
     let context = format!(
         concat!(
             r#"{{"npc_id":{},"npc_name":"{}","npc_role":"{}","persona":"{}","#,
+            r#"{}"#,
             r#""npc_level":{},"npc_health":{},"npc_max_health":{},"#,
             r#""gold":{},"mana":{},"max_mana":{},"stamina":{},"max_stamina":{},"#,
             r#""npc_position":{{"x":{},"y":{},"z":{}}},"#,
@@ -1095,6 +1113,7 @@ pub fn trigger_decision_enriched(
             r#""attack_range":{},"recent_events":[{}],"memories":[{}]}}"#
         ),
         npc.id, npc.name.replace('"', "\\\""), npc.role, npc.persona.replace('"', "\\\""),
+        player_said_field,
         npc.level, npc.health, npc.max_health,
         npc.gold, npc.mana, npc.max_mana, npc.stamina, npc.max_stamina,
         npc.position.x, npc.position.y, npc.position.z,

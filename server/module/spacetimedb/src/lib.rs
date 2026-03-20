@@ -266,21 +266,21 @@ pub fn init(ctx: &ReducerContext) {
     ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Chapel".into(), poi_type: "inn".into(), x: 40.0, z: 40.0, radius: 10.0 });
     ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Dark Forest".into(), poi_type: "wilderness".into(), x: 10.0, z: 10.0, radius: 20.0 });
 
-    // Spawn diverse NPCs with personas and starting gold
-    spawn_npc(ctx, 10.0, 10.0, 3, "hostile".into(), "Skeleton Warrior".into(), 0,
-        "A restless undead warrior bound to guard the dark forest.".into());
+    // Spawn only the trader for debugging conversation flow
     spawn_npc(ctx, 50.0, 0.0, 1, "trader".into(), "Merchant Ava".into(), 100,
         "A merchant seeking profit through fair trade.".into());
-    spawn_npc(ctx, -20.0, 30.0, 2, "guard".into(), "Town Guard".into(), 10,
-        "A dutiful guard protecting the town gate.".into());
-    spawn_npc(ctx, 0.0, -40.0, 1, "historian".into(), "Elder Tome".into(), 5,
-        "A wise scholar preserving the town's history.".into());
-    spawn_npc(ctx, 30.0, -20.0, 2, "traveller".into(), "Wandering Bard".into(), 20,
-        "A traveling bard collecting stories and songs.".into());
-    spawn_npc(ctx, -10.0, 50.0, 3, "adventurer".into(), "Kira the Bold".into(), 30,
-        "A fearless adventurer seeking glory and treasure.".into());
-    spawn_npc(ctx, 40.0, 40.0, 1, "healer".into(), "Sister Mercy".into(), 15,
-        "A devoted healer offering aid to all who need it.".into());
+    // spawn_npc(ctx, 10.0, 10.0, 3, "hostile".into(), "Skeleton Warrior".into(), 0,
+    //     "A restless undead warrior bound to guard the dark forest.".into());
+    // spawn_npc(ctx, -20.0, 30.0, 2, "guard".into(), "Town Guard".into(), 10,
+    //     "A dutiful guard protecting the town gate.".into());
+    // spawn_npc(ctx, 0.0, -40.0, 1, "historian".into(), "Elder Tome".into(), 5,
+    //     "A wise scholar preserving the town's history.".into());
+    // spawn_npc(ctx, 30.0, -20.0, 2, "traveller".into(), "Wandering Bard".into(), 20,
+    //     "A traveling bard collecting stories and songs.".into());
+    // spawn_npc(ctx, -10.0, 50.0, 3, "adventurer".into(), "Kira the Bold".into(), 30,
+    //     "A fearless adventurer seeking glory and treasure.".into());
+    // spawn_npc(ctx, 40.0, 40.0, 1, "healer".into(), "Sister Mercy".into(), 15,
+    //     "A devoted healer offering aid to all who need it.".into());
 
     // Give trader starting inventory (health potions to sell)
     // item_def_id 3 = Health Potion from the auto_inc order above
@@ -461,18 +461,35 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                     check_goal_conditions(ctx, &npc);
                 }
 
-                // Trigger social if player nearby, no pending decision, no active plan, and not on cooldown
+                // Trigger social if player nearby and not on cooldown
                 if let Some(ref player) = target {
-                    if !config.auto_aggro && !has_pending_decision(ctx, npc.id)
-                        && ctx.db.npc_plan().npc_id().find(&npc.id).is_none()
-                    {
+                    if !config.auto_aggro && !has_pending_decision(ctx, npc.id) {
+                        let has_plan = ctx.db.npc_plan().npc_id().find(&npc.id).is_some();
                         let on_cooldown = has_recent_event(ctx, npc.id, "saw_player", SOCIAL_COOLDOWN_MS);
-                        let player_chatted = has_recent_event(ctx, npc.id, "heard_chat", SOCIAL_COOLDOWN_MS);
-                        if !on_cooldown || player_chatted {
+                        let player_chatted = has_recent_event(ctx, npc.id, "heard_chat", SOCIAL_COOLDOWN_MS)
+                            && !has_recent_event(ctx, npc.id, "responded_to_chat", SOCIAL_COOLDOWN_MS);
+                        // Chat overrides both plan and cooldown; otherwise need no plan + not on cooldown
+                        if player_chatted || (!has_plan && !on_cooldown) {
+                            if player_chatted && has_plan {
+                                log::info!("[NPC {}] player chatted — interrupting current plan", npc.id);
+                                ctx.db.npc_plan().npc_id().delete(&npc.id);
+                            }
+                            if player_chatted {
+                                log_npc_event(ctx, npc.id, "responded_to_chat", "{}");
+                            }
                             log_npc_event(ctx, npc.id, "saw_player",
                                 &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
                             trigger_decision_enriched(ctx, &npc, "social", target.as_ref(), is_night);
                         }
+                    }
+                }
+
+                // Execute plan steps even while in life_tree mode (social responses)
+                if let Some(plan) = ctx.db.npc_plan().npc_id().find(&npc.id) {
+                    if (plan.current_step as usize) < plan_step_count(&plan) {
+                        execute_plan_step(ctx, &npc, &plan);
+                    } else {
+                        ctx.db.npc_plan().npc_id().delete(&npc.id);
                     }
                 }
                 continue;
@@ -500,17 +517,32 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
             } else {
                 // Non-hostile NPC: trigger social decision (with cooldown)
                 if !has_pending_decision(ctx, npc.id) {
-                    let plan = ctx.db.npc_plan().npc_id().find(&npc.id);
-                    if plan.is_none() {
-                        let on_cooldown = has_recent_event(ctx, npc.id, "saw_player", SOCIAL_COOLDOWN_MS);
-                        let player_chatted = has_recent_event(ctx, npc.id, "heard_chat", SOCIAL_COOLDOWN_MS);
-                        // Trigger if: not on cooldown, OR player chatted nearby (override cooldown)
-                        if !on_cooldown || player_chatted {
-                            log_npc_event(ctx, npc.id, "saw_player",
-                                &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
-                            trigger_decision_enriched(ctx, &npc, "social", target.as_ref(), is_night);
+                    let has_plan = ctx.db.npc_plan().npc_id().find(&npc.id).is_some();
+                    let on_cooldown = has_recent_event(ctx, npc.id, "saw_player", SOCIAL_COOLDOWN_MS);
+                    let player_chatted = has_recent_event(ctx, npc.id, "heard_chat", SOCIAL_COOLDOWN_MS)
+                        && !has_recent_event(ctx, npc.id, "responded_to_chat", SOCIAL_COOLDOWN_MS);
+                    // Chat overrides both plan and cooldown; otherwise need no plan + not on cooldown
+                    if player_chatted || (!has_plan && !on_cooldown) {
+                        if player_chatted && has_plan {
+                            log::info!("[NPC {}] player chatted — interrupting current plan", npc.id);
+                            ctx.db.npc_plan().npc_id().delete(&npc.id);
                         }
+                        if player_chatted {
+                            log_npc_event(ctx, npc.id, "responded_to_chat", "{}");
+                        }
+                        log_npc_event(ctx, npc.id, "saw_player",
+                            &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
+                        trigger_decision_enriched(ctx, &npc, "social", target.as_ref(), is_night);
                     }
+                }
+            }
+
+            // Execute plan steps while player is nearby (social responses)
+            if let Some(plan) = ctx.db.npc_plan().npc_id().find(&npc.id) {
+                if (plan.current_step as usize) < plan_step_count(&plan) {
+                    execute_plan_step(ctx, &npc, &plan);
+                } else {
+                    ctx.db.npc_plan().npc_id().delete(&npc.id);
                 }
             }
             continue;
@@ -1031,14 +1063,24 @@ pub fn send_chat_message(ctx: &ReducerContext, text: String) -> Result<(), Strin
     });
 
     // Notify nearby NPCs that a player said something
+    log::info!("[CHAT] Player said: \"{}\" at ({:.1}, {:.1}, {:.1})", text, player.position.x, player.position.y, player.position.z);
+    let mut notified = 0u32;
     for npc in ctx.db.npc().iter() {
-        if npc.position.distance_to(&player.position) <= NPC_DETECTION_RANGE {
+        let dist = npc.position.distance_to(&player.position);
+        if dist <= NPC_DETECTION_RANGE {
+            log::info!("[CHAT] NPC {} ({}) heard chat (dist={:.1})", npc.id, npc.name, dist);
+            notified += 1;
             log_npc_event(ctx, npc.id, "heard_chat",
                 &format!(r#"{{"player":"{}","text":"{}"}}"#,
                     ctx.sender().to_hex().to_string(),
                     text.replace('\\', "\\\\").replace('"', "\\\""),
                 ));
+        } else {
+            log::info!("[CHAT] NPC {} ({}) too far (dist={:.1}, range={})", npc.id, npc.name, dist, NPC_DETECTION_RANGE);
         }
+    }
+    if notified == 0 {
+        log::info!("[CHAT] No NPCs in range to hear the message");
     }
     Ok(())
 }
