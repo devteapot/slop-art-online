@@ -88,10 +88,11 @@ fn main() {
         .init_resource::<PreviousLocalHealth>()
         .add_systems(Startup, (setup, connect_spacetimedb, setup_hud, setup_inventory_panel, setup_chat_panel))
         .add_systems(FixedUpdate, (
-            move_local_player,
             update_grounded,
+            move_local_player,
             mobility_input,
             apply_dash,
+            apply_movement,
         ).chain())
         .add_systems(Update, (
             tick_spacetimedb,

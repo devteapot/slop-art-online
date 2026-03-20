@@ -10,7 +10,8 @@ use shared::module_bindings::rotate_player_reducer::rotate_player;
 
 use crate::constants::{
     AIR_CONTROL_FACTOR, CAM_SMOOTH_SPEED, CAPSULE_HALF_LEN, CAPSULE_RADIUS, GROUND_ACCEL,
-    GROUND_DECEL, JUMP_IMPULSE, MAX_LOOK_AHEAD, MOVE_SPEED, PLAYER_GRAVITY_SCALE,
+    GROUND_DECEL, JUMP_IMPULSE, MAX_GROUND_ANGLE, MAX_LOOK_AHEAD, MOVE_SPEED, PLAYER_GRAVITY,
+    TERMINAL_VELOCITY,
 };
 use crate::interpolation::InterpolationBuffer;
 use crate::network::{ActiveSkillEvent, ActiveSkillEventQueue, LocalIdentity, PlayerEvent, PlayerEventQueue, SpacetimeDb, to_world_pos};
@@ -225,18 +226,13 @@ pub fn sync_players(
                             LocalPlayer,
                             Transform::from_xyz(server_pos.x, spawn_y, server_pos.z),
                             Visibility::default(),
-                            RigidBody::Dynamic,
+                            RigidBody::Kinematic,
                             Collider::capsule(CAPSULE_HALF_LEN, CAPSULE_RADIUS),
                             LockedAxes::ROTATION_LOCKED,
                             LinearVelocity::default(),
-                            GravityScale(PLAYER_GRAVITY_SCALE),
+                            CustomPositionIntegration,
                             Grounded::default(),
-                            Friction {
-                                dynamic_coefficient: 0.0,
-                                static_coefficient: 0.0,
-                                combine_rule: CoefficientCombine::Min,
-                            },
-                            SpeculativeMargin(0.1),
+                            SpeculativeMargin(0.0),
                         ))
                         .id();
 
@@ -366,6 +362,14 @@ pub fn move_local_player(
         return;
     };
 
+    let dt = time.delta_secs();
+
+    // --- Gravity (manual, kinematic body) ---
+    if !grounded.0 {
+        velocity.y = (velocity.y - PLAYER_GRAVITY * dt).max(-TERMINAL_VELOCITY);
+    }
+
+    // --- Input direction ---
     let mut dir = Vec2::ZERO;
     if keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp) {
         dir.y -= 1.0;
@@ -388,8 +392,6 @@ pub fn move_local_player(
     // Skip XZ application while Y velocity is high (just jumped) so the player
     // clears the wall-ground corner before horizontal velocity is re-applied.
     let rising_from_jump = velocity.y > JUMP_IMPULSE * 0.5;
-
-    let dt = time.delta_secs();
 
     if grounded.0 && !rising_from_jump {
         // Full ground control with acceleration ramp.
@@ -442,23 +444,26 @@ pub fn move_local_player(
     }
 }
 
-/// Update `Grounded` by casting a short ray downward from the capsule bottom.
+/// Update `Grounded` by shape-casting a slightly smaller capsule downward.
+/// Uses slope angle check to only count walkable surfaces as ground.
 pub fn update_grounded(
     spatial: SpatialQuery,
     mut query: Query<(Entity, &Transform, &mut Grounded), With<LocalPlayer>>,
 ) {
     for (entity, transform, mut grounded) in query.iter_mut() {
-        // Cast from capsule centre downward; max distance = half-height + small skin.
-        let capsule_half_height = CAPSULE_HALF_LEN + CAPSULE_RADIUS;
-        let skin = 0.3;
-        let hit = spatial.cast_ray(
+        let ground_shape = Collider::capsule(CAPSULE_HALF_LEN * 0.99, CAPSULE_RADIUS * 0.99);
+        let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
+        let hit = spatial.cast_shape(
+            &ground_shape,
             transform.translation,
+            Quat::IDENTITY,
             Dir3::NEG_Y,
-            capsule_half_height + skin,
-            true,
-            &SpatialQueryFilter::default().with_excluded_entities([entity]),
+            &ShapeCastConfig::from_max_distance(0.2),
+            &filter,
         );
-        grounded.0 = hit.is_some();
+        grounded.0 = hit.is_some_and(|h| {
+            h.normal1.angle_between(Vec3::Y) <= MAX_GROUND_ANGLE
+        });
     }
 }
 
@@ -761,6 +766,55 @@ pub fn drive_player_animations(
         // after a transition completes, which causes the animation to freeze.
         if let Some(active) = player.animation_mut(target) {
             active.repeat().set_speed(playback_speed);
+        }
+    }
+}
+
+/// Move the kinematic character using move-and-slide.
+/// Velocity is projected onto contact surfaces so the character slides instead of bouncing.
+pub fn apply_movement(
+    mut query: Query<
+        (Entity, &mut Transform, &mut LinearVelocity, &mut Grounded),
+        With<LocalPlayer>,
+    >,
+    move_and_slide: MoveAndSlide,
+    time: Res<Time>,
+) {
+    for (entity, mut transform, mut velocity, mut grounded) in &mut query {
+        let collider = Collider::capsule(CAPSULE_HALF_LEN, CAPSULE_RADIUS);
+        let up = Vec3::Y;
+        let mut hit_ground = false;
+
+        let MoveAndSlideOutput {
+            position: new_position,
+            projected_velocity,
+        } = move_and_slide.move_and_slide(
+            &collider,
+            transform.translation,
+            transform.rotation,
+            velocity.0,
+            time.delta(),
+            &MoveAndSlideConfig::default(),
+            &SpatialQueryFilter::from_excluded_entities([entity]),
+            |hit| {
+                let normal: Vec3 = (*hit.normal).into();
+                let angle = up.angle_between(normal);
+                if angle <= MAX_GROUND_ANGLE {
+                    hit_ground = true;
+                }
+                MoveAndSlideHitResponse::Accept
+            },
+        );
+
+        transform.translation = new_position;
+
+        // When hitting ground/ceiling, update Y velocity from the projected result
+        // to prevent accumulating gravity velocity into the ground.
+        if hit_ground {
+            let vel_along_up = velocity.dot(up);
+            let new_vel_along_up = projected_velocity.dot(up);
+            velocity.0 += (new_vel_along_up - vel_along_up) * up;
+            grounded.0 = true;
         }
     }
 }

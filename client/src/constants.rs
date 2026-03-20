@@ -28,9 +28,12 @@ pub const GROUND_DECEL: f32 = 200.0; // units/s² when no input (quick stop)
 pub const CAM_SMOOTH_SPEED: f32 = 8.0; // exponential smoothing rate for camera
 
 // Physics / movement
-/// Multiplier on top of avian3d's default gravity (9.81 m/s²).
-/// 3.0 → ~29 m/s² — snappy game-feel fall without floatiness.
-pub const PLAYER_GRAVITY_SCALE: f32 = 3.0;
+/// Gravity applied manually (kinematic body, no GravityScale).
+/// ~29 m/s² — snappy game-feel fall without floatiness.
+pub const PLAYER_GRAVITY: f32 = 9.81 * 3.0;
+pub const TERMINAL_VELOCITY: f32 = 50.0;
+/// Maximum slope angle (radians) considered walkable ground.
+pub const MAX_GROUND_ANGLE: f32 = 0.7854; // ~45 degrees
 pub const JUMP_IMPULSE: f32 = 12.0;
 pub const DASH_SPEED: f32 = 40.0;
 pub const DASH_DURATION: f32 = 0.2;
