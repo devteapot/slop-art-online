@@ -73,6 +73,15 @@ pub struct Npc {
     pub level: i32,
     pub role: String,
     pub name: String,
+    pub gold: i32,
+    pub mana: i32,
+    pub max_mana: i32,
+    pub stamina: i32,
+    pub max_stamina: i32,
+    pub xp: i32,
+    pub home_x: f32,
+    pub home_z: f32,
+    pub persona: String,
 }
 
 #[derive(Clone)]
@@ -80,8 +89,9 @@ pub struct Npc {
 pub struct NpcBehavior {
     #[primary_key]
     pub npc_id: u64,
-    pub mode: String,        // "idle" | "combat" | "plan"
+    pub mode: String,        // "idle" | "combat" | "plan" | "life_tree" | "sleeping"
     pub combat_tree: String, // Behavior<NpcBtAction> JSON, empty when not in combat
+    pub life_tree: String,   // Daily routine behavior tree JSON
 }
 
 #[derive(Clone)]
@@ -287,4 +297,137 @@ pub struct NpcMemory {
     pub npc_id: u64,
     pub text: String,
     pub created_at: u64,
+}
+
+// --- World State ---
+
+#[spacetimedb::table(accessor = world_state, public)]
+pub struct WorldState {
+    #[primary_key]
+    pub id: u64,              // always 0
+    pub cycle_start_us: u64,  // when current cycle started (microseconds since epoch)
+    pub is_night: bool,
+}
+
+// --- Points of Interest ---
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = point_of_interest, public)]
+pub struct PointOfInterest {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub name: String,
+    pub poi_type: String,   // "market", "gate", "wilderness", "inn"
+    pub x: f32,
+    pub z: f32,
+    pub radius: f32,
+}
+
+// --- NPC Goals (BDI Desires) ---
+
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub enum GoalStatus {
+    Active,
+    Completed,
+    Failed,
+    Suspended,
+}
+
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub enum GoalPriority {
+    Survival,
+    Duty,
+    Ambition,
+    Social,
+    Leisure,
+}
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = npc_goal, public)]
+pub struct NpcGoal {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub npc_id: u64,
+    pub parent_goal_id: u64,     // 0 = top-level
+    pub priority: GoalPriority,
+    pub status: GoalStatus,
+    pub description: String,
+    pub success_condition: String, // JSON: {"type":"gold_above","amount":100}
+    pub created_at: u64,
+    pub completed_at: u64,
+}
+
+// --- NPC Beliefs (BDI Beliefs) ---
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = npc_belief, public)]
+pub struct NpcBelief {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub npc_id: u64,
+    pub subject: String,     // "market", "player:abc", "npc:5", "self"
+    pub predicate: String,   // "location_is", "is_dangerous", "sells_potions"
+    pub object: String,      // "50,0,80", "true", "health_potions"
+    pub confidence: f32,     // 0.0-1.0
+    pub updated_at: u64,
+}
+
+// --- NPC Relationships ---
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = npc_relationship, public)]
+pub struct NpcRelationship {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub npc_id: u64,
+    pub target_type: String,  // "player" | "npc"
+    pub target_id: String,
+    pub disposition: i32,     // -100 to +100
+    pub context: String,
+    pub updated_at: u64,
+}
+
+// --- NPC Inventory ---
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = npc_inventory_item, public)]
+pub struct NpcInventoryItem {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub npc_id: u64,
+    pub slot: i32,
+    pub item_def_id: u64,
+    pub quantity: i32,
+}
+
+// --- NPC Equipment ---
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = npc_equipped_item, public)]
+pub struct NpcEquippedItem {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub npc_id: u64,
+    pub equip_slot: EquipSlot,
+    pub item_def_id: u64,
+    pub durability: i32,
+}
+
+// --- NPC Skills ---
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = npc_skill, public)]
+pub struct NpcSkill {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub npc_id: u64,
+    pub skill_id: u64,
+    pub level: i32,
 }

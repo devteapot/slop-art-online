@@ -12,6 +12,7 @@ use crate::npc_chat_message;
 use crate::npc_event_log;
 use crate::NpcEventLog;
 use crate::npc_memory;
+use crate::ground_item;
 
 // ── Role configuration ──
 
@@ -92,6 +93,18 @@ pub enum NpcBtAction {
     EnemyDetected,
     HealthBelow(f32),
     NoTarget,
+    IsNightTime,
+    IsDayTime,
+    GoldAbove(i32),
+    GoldBelow(i32),
+    HasItem(String),
+    NpcNearby,
+    NpcNearbyWithRole(String),
+    PlayerNearby,
+    AtPoi(String),
+    GoalActive(String),
+    ManaAbove(f32),
+    StaminaAbove(f32),
 
     // Combat actions
     Attack,
@@ -105,6 +118,15 @@ pub enum NpcBtAction {
     // Plan-only actions
     TravelTo { x: f32, z: f32 },
     Wait(f32),
+
+    // Life tree actions
+    TravelToPoi(String),
+    GoHome,
+    PickUpNearby,
+    Rest,
+    SayToNpc { npc_id: u64, message: String },
+    SetBelief { subject: String, predicate: String, object: String },
+    RequestLlmDecision(String),
 }
 
 // ── Default combat tree builder ──
@@ -184,12 +206,35 @@ pub fn build_default_combat_tree(style: &TreeStyle) -> Behavior<NpcBtAction> {
     }
 }
 
-// ── Stateless combat tree evaluator ──
+// ── Context for tree evaluation ──
+
+pub struct TreeEvalContext<'a> {
+    pub is_night: bool,
+    pub nearby_npcs: &'a [Npc],
+    pub nearby_pois: &'a [(PointOfInterest, f32)], // (poi, distance)
+}
+
+impl<'a> Default for TreeEvalContext<'a> {
+    fn default() -> Self {
+        Self { is_night: false, nearby_npcs: &[], nearby_pois: &[] }
+    }
+}
+
+// ── Stateless behavior tree evaluator ──
 
 pub fn evaluate_combat_tree(
     tree: &Behavior<NpcBtAction>,
     npc: &Npc,
     target: Option<&Player>,
+) -> Option<NpcBtAction> {
+    evaluate_tree(tree, npc, target, &TreeEvalContext::default())
+}
+
+pub fn evaluate_tree(
+    tree: &Behavior<NpcBtAction>,
+    npc: &Npc,
+    target: Option<&Player>,
+    eval_ctx: &TreeEvalContext,
 ) -> Option<NpcBtAction> {
     match tree {
         Behavior::Action(action) => {
@@ -209,17 +254,62 @@ pub fn evaluate_combat_tree(
                 NpcBtAction::NoTarget => {
                     if target.is_none() { Some(action.clone()) } else { None }
                 }
+                NpcBtAction::IsNightTime => {
+                    if eval_ctx.is_night { Some(action.clone()) } else { None }
+                }
+                NpcBtAction::IsDayTime => {
+                    if !eval_ctx.is_night { Some(action.clone()) } else { None }
+                }
+                NpcBtAction::GoldAbove(amount) => {
+                    if npc.gold > *amount { Some(action.clone()) } else { None }
+                }
+                NpcBtAction::GoldBelow(amount) => {
+                    if npc.gold < *amount { Some(action.clone()) } else { None }
+                }
+                NpcBtAction::HasItem(_item_name) => {
+                    // Checked externally via NPC inventory; always fail in pure tree eval
+                    // (handled by enriched eval in tick_npcs)
+                    None
+                }
+                NpcBtAction::NpcNearby => {
+                    if !eval_ctx.nearby_npcs.is_empty() { Some(action.clone()) } else { None }
+                }
+                NpcBtAction::NpcNearbyWithRole(role) => {
+                    if eval_ctx.nearby_npcs.iter().any(|n| n.role == *role) { Some(action.clone()) } else { None }
+                }
+                NpcBtAction::PlayerNearby => {
+                    if target.is_some() { Some(action.clone()) } else { None }
+                }
+                NpcBtAction::AtPoi(poi_name) => {
+                    if eval_ctx.nearby_pois.iter().any(|(p, d)| p.name == *poi_name && *d <= p.radius) {
+                        Some(action.clone())
+                    } else { None }
+                }
+                NpcBtAction::GoalActive(_) => {
+                    // Requires DB access; checked externally. Fail in pure eval.
+                    None
+                }
+                NpcBtAction::ManaAbove(pct) => {
+                    if npc.max_mana > 0 && (npc.mana as f32 / npc.max_mana as f32) > *pct {
+                        Some(action.clone())
+                    } else { None }
+                }
+                NpcBtAction::StaminaAbove(pct) => {
+                    if npc.max_stamina > 0 && (npc.stamina as f32 / npc.max_stamina as f32) > *pct {
+                        Some(action.clone())
+                    } else { None }
+                }
                 // Actions — always succeed, return themselves for execution
                 _ => Some(action.clone()),
             }
         }
         Behavior::Select(children) => {
-            children.iter().find_map(|child| evaluate_combat_tree(child, npc, target))
+            children.iter().find_map(|child| evaluate_tree(child, npc, target, eval_ctx))
         }
         Behavior::Sequence(children) => {
             let mut last = None;
             for child in children {
-                match evaluate_combat_tree(child, npc, target) {
+                match evaluate_tree(child, npc, target, eval_ctx) {
                     Some(action) => last = Some(action),
                     None => return None,
                 }
@@ -227,20 +317,20 @@ pub fn evaluate_combat_tree(
             last
         }
         Behavior::If(cond, if_true, if_false) => {
-            if evaluate_combat_tree(cond, npc, target).is_some() {
-                evaluate_combat_tree(if_true, npc, target)
+            if evaluate_tree(cond, npc, target, eval_ctx).is_some() {
+                evaluate_tree(if_true, npc, target, eval_ctx)
             } else {
-                evaluate_combat_tree(if_false, npc, target)
+                evaluate_tree(if_false, npc, target, eval_ctx)
             }
         }
         Behavior::Invert(child) => {
-            match evaluate_combat_tree(child, npc, target) {
+            match evaluate_tree(child, npc, target, eval_ctx) {
                 Some(_) => None,
                 None => Some(NpcBtAction::Wander),
             }
         }
         Behavior::AlwaysSucceed(child) => {
-            evaluate_combat_tree(child, npc, target);
+            evaluate_tree(child, npc, target, eval_ctx);
             Some(NpcBtAction::Wander)
         }
         _ => None, // Wait, WaitForever, While, etc — not used in combat trees
@@ -338,11 +428,107 @@ pub fn execute_bt_action(
         NpcBtAction::Wait(_seconds) => {
             // Wait is a no-op each tick; plan step advancement handles the timer
         }
+        NpcBtAction::TravelToPoi(poi_name) => {
+            // Look up POI coordinates by name
+            for poi in ctx.db.point_of_interest().iter() {
+                if poi.name == *poi_name {
+                    execute_bt_action(ctx, npc, &NpcBtAction::TravelTo { x: poi.x, z: poi.z }, None);
+                    return;
+                }
+            }
+            log::warn!("[NPC {}] POI '{}' not found", npc.id, poi_name);
+        }
+        NpcBtAction::GoHome => {
+            execute_bt_action(ctx, npc, &NpcBtAction::TravelTo { x: npc.home_x, z: npc.home_z }, None);
+        }
+        NpcBtAction::PickUpNearby => {
+            // Find nearest ground item and pick it up into NPC inventory
+            let mut nearest: Option<(crate::GroundItem, f32)> = None;
+            for item in ctx.db.ground_item().iter() {
+                let d = npc.position.distance_to(&item.position);
+                if d <= PICKUP_RANGE {
+                    if nearest.as_ref().map_or(true, |(_, nd)| d < *nd) {
+                        nearest = Some((item, d));
+                    }
+                }
+            }
+            if let Some((item, _)) = nearest {
+                // Find empty slot
+                let occupied: Vec<i32> = ctx.db.npc_inventory_item().iter()
+                    .filter(|inv| inv.npc_id == npc.id)
+                    .map(|inv| inv.slot)
+                    .collect();
+                for slot in 0..NPC_INVENTORY_SLOTS {
+                    if !occupied.contains(&slot) {
+                        ctx.db.npc_inventory_item().insert(NpcInventoryItem {
+                            id: 0, npc_id: npc.id, slot,
+                            item_def_id: item.item_def_id, quantity: item.quantity,
+                        });
+                        ctx.db.ground_item().scheduled_id().delete(&item.scheduled_id);
+                        log::info!("[NPC {}] picked up item def {}", npc.id, item.item_def_id);
+                        break;
+                    }
+                }
+            }
+        }
+        NpcBtAction::Rest => {
+            // Stand still, boosted regen handled in tick_npcs
+        }
+        NpcBtAction::SayToNpc { npc_id: target_npc_id, message } => {
+            let text = message.chars().take(NPC_CHAT_MAX_LENGTH).collect::<String>();
+            if !text.is_empty() {
+                log::info!("[NPC {}] say to NPC {}: \"{}\"", npc.id, target_npc_id, text);
+                ctx.db.npc_chat_message().insert(crate::NpcChatMessage {
+                    scheduled_id: 0,
+                    scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(NPC_CHAT_MESSAGE_EXPIRE_MS)),
+                    npc_id: npc.id,
+                    text: text.clone(),
+                    position: npc.position.clone(),
+                });
+                // Log event on target NPC
+                log_npc_event(ctx, *target_npc_id, "heard_npc_chat",
+                    &format!(r#"{{"from_npc":{},"text":"{}"}}"#, npc.id, text.replace('"', "\\\"")));
+            }
+        }
+        NpcBtAction::SetBelief { subject, predicate, object } => {
+            let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+            let existing = ctx.db.npc_belief().iter()
+                .find(|b| b.npc_id == npc.id && b.subject == *subject && b.predicate == *predicate);
+            if let Some(existing) = existing {
+                ctx.db.npc_belief().id().update(NpcBelief {
+                    object: object.clone(), confidence: 1.0, updated_at: now_us, ..existing
+                });
+            } else {
+                ctx.db.npc_belief().insert(NpcBelief {
+                    id: 0, npc_id: npc.id,
+                    subject: subject.clone(), predicate: predicate.clone(), object: object.clone(),
+                    confidence: 1.0, updated_at: now_us,
+                });
+            }
+        }
+        NpcBtAction::RequestLlmDecision(reason) => {
+            if !has_pending_decision(ctx, npc.id) {
+                log_npc_event(ctx, npc.id, "self_request", &format!(r#"{{"reason":"{}"}}"#, reason.replace('"', "\\\"")) );
+                trigger_decision(ctx, npc, "significant", None);
+            }
+        }
         // Conditions are not executed as actions
         NpcBtAction::EnemyInRange
         | NpcBtAction::EnemyDetected
         | NpcBtAction::HealthBelow(_)
-        | NpcBtAction::NoTarget => {}
+        | NpcBtAction::NoTarget
+        | NpcBtAction::IsNightTime
+        | NpcBtAction::IsDayTime
+        | NpcBtAction::GoldAbove(_)
+        | NpcBtAction::GoldBelow(_)
+        | NpcBtAction::HasItem(_)
+        | NpcBtAction::NpcNearby
+        | NpcBtAction::NpcNearbyWithRole(_)
+        | NpcBtAction::PlayerNearby
+        | NpcBtAction::AtPoi(_)
+        | NpcBtAction::GoalActive(_)
+        | NpcBtAction::ManaAbove(_)
+        | NpcBtAction::StaminaAbove(_) => {}
     }
 }
 
@@ -431,17 +617,37 @@ pub fn execute_plan_step(ctx: &ReducerContext, npc: &Npc, plan: &NpcPlan) {
 // ── Helper: upsert NpcBehavior ──
 
 pub fn upsert_npc_behavior(ctx: &ReducerContext, npc_id: u64, mode: &str, combat_tree: &str) {
-    if let Some(_existing) = ctx.db.npc_behavior().npc_id().find(&npc_id) {
+    if let Some(existing) = ctx.db.npc_behavior().npc_id().find(&npc_id) {
         ctx.db.npc_behavior().npc_id().update(NpcBehavior {
             npc_id,
             mode: mode.to_string(),
             combat_tree: combat_tree.to_string(),
+            life_tree: existing.life_tree,
         });
     } else {
         ctx.db.npc_behavior().insert(NpcBehavior {
             npc_id,
             mode: mode.to_string(),
             combat_tree: combat_tree.to_string(),
+            life_tree: String::new(),
+        });
+    }
+}
+
+pub fn upsert_npc_behavior_life_tree(ctx: &ReducerContext, npc_id: u64, mode: &str, life_tree: &str) {
+    if let Some(existing) = ctx.db.npc_behavior().npc_id().find(&npc_id) {
+        ctx.db.npc_behavior().npc_id().update(NpcBehavior {
+            npc_id,
+            mode: mode.to_string(),
+            combat_tree: existing.combat_tree,
+            life_tree: life_tree.to_string(),
+        });
+    } else {
+        ctx.db.npc_behavior().insert(NpcBehavior {
+            npc_id,
+            mode: mode.to_string(),
+            combat_tree: String::new(),
+            life_tree: life_tree.to_string(),
         });
     }
 }
@@ -556,5 +762,353 @@ pub fn log_npc_event(ctx: &ReducerContext, npc_id: u64, event: &str, detail: &st
         npc_id,
         event: event.to_string(),
         detail: detail.to_string(),
+    });
+}
+
+// ── Sleep/wake helpers ──
+
+pub fn trigger_sleep(ctx: &ReducerContext, npc: &Npc) {
+    // Clear plan and destination
+    ctx.db.npc_plan().npc_id().delete(&npc.id);
+    ctx.db.npc_destination().npc_id().delete(&npc.id);
+    // Set mode to sleeping, set destination to home
+    upsert_npc_behavior(ctx, npc.id, "sleeping", "");
+    if ctx.db.npc_destination().npc_id().find(&npc.id).is_some() {
+        ctx.db.npc_destination().npc_id().update(NpcDestination {
+            npc_id: npc.id, target_x: npc.home_x, target_z: npc.home_z,
+        });
+    } else {
+        ctx.db.npc_destination().insert(NpcDestination {
+            npc_id: npc.id, target_x: npc.home_x, target_z: npc.home_z,
+        });
+    }
+    // Trigger reflection decision
+    trigger_decision(ctx, npc, "reflection", None);
+}
+
+pub fn trigger_wake(ctx: &ReducerContext, npc: &Npc) {
+    // Set default life tree immediately so NPC has something while waiting for LLM
+    let fallback = default_life_tree(&npc.role);
+    let tree_json = serde_json::to_string(&fallback).unwrap_or_default();
+    upsert_npc_behavior_life_tree(ctx, npc.id, "life_tree", &tree_json);
+    ctx.db.npc_destination().npc_id().delete(&npc.id);
+    // Trigger dawn decision for LLM to generate a better life tree
+    trigger_decision(ctx, npc, "dawn", None);
+}
+
+// ── Goal completion checking ──
+
+pub fn check_goal_conditions(ctx: &ReducerContext, npc: &Npc) {
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+    for goal in ctx.db.npc_goal().iter().collect::<Vec<_>>() {
+        if goal.npc_id != npc.id || goal.status != GoalStatus::Active { continue; }
+        if goal.success_condition.is_empty() { continue; }
+
+        let v: serde_json::Value = match serde_json::from_str(&goal.success_condition) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let completed = match v.get("type").and_then(|t| t.as_str()) {
+            Some("gold_above") => {
+                let amount = v.get("amount").and_then(|a| a.as_i64()).unwrap_or(0) as i32;
+                npc.gold >= amount
+            }
+            Some("level_above") => {
+                let lvl = v.get("level").and_then(|l| l.as_i64()).unwrap_or(0) as i32;
+                npc.level >= lvl
+            }
+            Some("reach") => {
+                let tx = v.get("x").and_then(|x| x.as_f64()).unwrap_or(0.0) as f32;
+                let tz = v.get("z").and_then(|z| z.as_f64()).unwrap_or(0.0) as f32;
+                let dx = npc.position.x - tx;
+                let dz = npc.position.z - tz;
+                (dx * dx + dz * dz).sqrt() <= 5.0
+            }
+            _ => false,
+        };
+
+        if completed {
+            ctx.db.npc_goal().id().update(NpcGoal {
+                status: GoalStatus::Completed,
+                completed_at: now_us,
+                ..goal
+            });
+            log_npc_event(ctx, npc.id, "goal_completed", "{}");
+        }
+    }
+}
+
+// ── Find nearby NPCs ──
+
+pub fn find_nearby_npcs(ctx: &ReducerContext, npc: &Npc) -> Vec<Npc> {
+    ctx.db.npc().iter()
+        .filter(|n| n.id != npc.id && npc.position.distance_to(&n.position) <= NPC_DETECTION_RANGE)
+        .collect()
+}
+
+// ── Find nearby POIs ──
+
+pub fn find_nearby_pois(ctx: &ReducerContext, npc: &Npc) -> Vec<(PointOfInterest, f32)> {
+    ctx.db.point_of_interest().iter()
+        .map(|poi| {
+            let dx = npc.position.x - poi.x;
+            let dz = npc.position.z - poi.z;
+            let d = (dx * dx + dz * dz).sqrt();
+            (poi, d)
+        })
+        .filter(|(_, d)| *d <= NPC_DETECTION_RANGE)
+        .collect()
+}
+
+// ── World time helpers ──
+
+#[allow(dead_code)]
+pub fn get_world_time(ctx: &ReducerContext) -> (bool, u64) {
+    if let Some(ws) = ctx.db.world_state().id().find(&0) {
+        let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+        let elapsed_ms = (now_us.saturating_sub(ws.cycle_start_us)) / 1000;
+        let cycle_pos = elapsed_ms % WORLD_CYCLE_MS;
+        let is_night = cycle_pos >= DAY_DURATION_MS;
+        (is_night, cycle_pos)
+    } else {
+        (false, 0)
+    }
+}
+
+/// Check and handle day/night transitions. Returns the current is_night state.
+pub fn update_day_night_cycle(ctx: &ReducerContext) -> bool {
+    let Some(ws) = ctx.db.world_state().id().find(&0) else { return false };
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+    let elapsed_ms = (now_us.saturating_sub(ws.cycle_start_us)) / 1000;
+    let cycle_pos = elapsed_ms % WORLD_CYCLE_MS;
+    let is_night = cycle_pos >= DAY_DURATION_MS;
+
+    // Detect transition
+    if is_night != ws.is_night {
+        log::info!("Day/night transition: {} → {}", if ws.is_night { "night" } else { "day" }, if is_night { "night" } else { "day" });
+
+        // Reset cycle start on full cycle rollover
+        let new_cycle_start = if elapsed_ms >= WORLD_CYCLE_MS {
+            now_us - (cycle_pos * 1000)
+        } else {
+            ws.cycle_start_us
+        };
+
+        ctx.db.world_state().id().update(WorldState {
+            id: 0, cycle_start_us: new_cycle_start, is_night,
+        });
+
+        if is_night {
+            // Day → Night: put all NPCs to sleep
+            for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
+                trigger_sleep(ctx, &npc);
+            }
+        } else {
+            // Night → Day: wake all NPCs
+            for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
+                trigger_wake(ctx, &npc);
+            }
+        }
+    }
+
+    is_night
+}
+
+// ── Default life trees by role ──
+
+pub fn default_life_tree(role: &str) -> Behavior<NpcBtAction> {
+    use Behavior::{Action, If, Select, Sequence};
+
+    match role {
+        "trader" => {
+            Select(vec![
+                If(
+                    Box::new(Action(NpcBtAction::PlayerNearby)),
+                    Box::new(Sequence(vec![
+                        Action(NpcBtAction::Say("Welcome! Care to browse my wares?".into())),
+                        Action(NpcBtAction::Wait(5.0)),
+                    ])),
+                    Box::new(If(
+                        Box::new(Action(NpcBtAction::AtPoi("Market Square".into()))),
+                        Box::new(Action(NpcBtAction::Wait(10.0))),
+                        Box::new(Action(NpcBtAction::TravelToPoi("Market Square".into()))),
+                    )),
+                ),
+            ])
+        }
+        "guard" => {
+            Select(vec![
+                If(
+                    Box::new(Action(NpcBtAction::EnemyDetected)),
+                    Box::new(Action(NpcBtAction::Chase)),
+                    Box::new(If(
+                        Box::new(Action(NpcBtAction::AtPoi("North Gate".into()))),
+                        Box::new(Action(NpcBtAction::Wait(5.0))),
+                        Box::new(Action(NpcBtAction::TravelToPoi("North Gate".into()))),
+                    )),
+                ),
+            ])
+        }
+        "historian" => {
+            Select(vec![
+                If(
+                    Box::new(Action(NpcBtAction::PlayerNearby)),
+                    Box::new(Sequence(vec![
+                        Action(NpcBtAction::Say("Greetings, seeker of knowledge.".into())),
+                        Action(NpcBtAction::Wait(5.0)),
+                    ])),
+                    Box::new(Action(NpcBtAction::Wait(10.0))),
+                ),
+            ])
+        }
+        "healer" => {
+            Select(vec![
+                If(
+                    Box::new(Action(NpcBtAction::PlayerNearby)),
+                    Box::new(Sequence(vec![
+                        Action(NpcBtAction::Say("Do you need healing?".into())),
+                        Action(NpcBtAction::Wait(5.0)),
+                    ])),
+                    Box::new(Action(NpcBtAction::Rest)),
+                ),
+            ])
+        }
+        // Hostile NPCs, adventurers, travellers — use existing wander/aggro behavior
+        _ => {
+            Action(NpcBtAction::Wander)
+        }
+    }
+}
+
+// ── Enriched trigger_decision with BDI context ──
+
+pub fn trigger_decision_enriched(
+    ctx: &ReducerContext, npc: &Npc, decision_type: &str,
+    target: Option<&Player>, is_night: bool,
+) {
+    if ctx.db.npc_pending_decision().npc_id().find(&npc.id).is_some() {
+        return; // Already has a pending decision
+    }
+
+    // Nearby players
+    let nearby_players: Vec<String> = if let Some(player) = target {
+        let dist = npc.position.distance_to(&player.position);
+        vec![format!(
+            r#"{{"identity":"{}","position":{{"x":{},"y":{},"z":{}}},"distance":{:.1}}}"#,
+            player.identity.to_hex().to_string(),
+            player.position.x, player.position.y, player.position.z, dist,
+        )]
+    } else {
+        Vec::new()
+    };
+
+    // Nearby NPCs
+    let nearby_npcs: Vec<String> = find_nearby_npcs(ctx, npc).iter().map(|n| {
+        let d = npc.position.distance_to(&n.position);
+        format!(r#"{{"id":{},"name":"{}","role":"{}","distance":{:.1}}}"#,
+            n.id, n.name.replace('"', "\\\""), n.role, d)
+    }).collect();
+
+    // Nearby POIs
+    let nearby_pois: Vec<String> = find_nearby_pois(ctx, npc).iter().map(|(poi, d)| {
+        format!(r#"{{"name":"{}","type":"{}","distance":{:.1}}}"#,
+            poi.name.replace('"', "\\\""), poi.poi_type, d)
+    }).collect();
+
+    // Goals
+    let goals: Vec<String> = ctx.db.npc_goal().iter()
+        .filter(|g| g.npc_id == npc.id && g.status == GoalStatus::Active)
+        .map(|g| {
+            format!(r#"{{"description":"{}","priority":"{:?}","status":"{:?}"}}"#,
+                g.description.replace('"', "\\\""), g.priority, g.status)
+        }).collect();
+
+    // Beliefs
+    let beliefs: Vec<String> = ctx.db.npc_belief().iter()
+        .filter(|b| b.npc_id == npc.id)
+        .map(|b| {
+            format!(r#"{{"subject":"{}","predicate":"{}","object":"{}","confidence":{:.1}}}"#,
+                b.subject, b.predicate, b.object, b.confidence)
+        }).collect();
+
+    // Relationships
+    let relationships: Vec<String> = ctx.db.npc_relationship().iter()
+        .filter(|r| r.npc_id == npc.id)
+        .map(|r| {
+            format!(r#"{{"target_type":"{}","target_id":"{}","disposition":{},"context":"{}"}}"#,
+                r.target_type, r.target_id, r.disposition, r.context.replace('"', "\\\""))
+        }).collect();
+
+    // Inventory
+    let inventory: Vec<String> = ctx.db.npc_inventory_item().iter()
+        .filter(|inv| inv.npc_id == npc.id)
+        .filter_map(|inv| {
+            ctx.db.item_def().id().find(&inv.item_def_id).map(|item| {
+                format!(r#"{{"item":"{}","quantity":{},"slot":{}}}"#, item.name, inv.quantity, inv.slot)
+            })
+        }).collect();
+
+    // Equipment
+    let equipment: Vec<String> = ctx.db.npc_equipped_item().iter()
+        .filter(|eq| eq.npc_id == npc.id)
+        .filter_map(|eq| {
+            ctx.db.item_def().id().find(&eq.item_def_id).map(|item| {
+                format!(r#"{{"slot":"{:?}","item":"{}"}}"#, eq.equip_slot, item.name)
+            })
+        }).collect();
+
+    // Recent events & memories (same as original trigger_decision)
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+    let mut recent_events = Vec::new();
+    for evt in ctx.db.npc_event_log().iter() {
+        if evt.npc_id == npc.id {
+            let expiry_us = match &evt.scheduled_at {
+                ScheduleAt::Time(t) => t.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64,
+                _ => 0,
+            };
+            let remaining_ms = expiry_us.saturating_sub(now_us) / 1000;
+            let age_seconds = (NPC_EVENT_EXPIRE_MS.saturating_sub(remaining_ms)) / 1000;
+            recent_events.push(format!(
+                r#"{{"event":"{}","detail":{},"age_seconds":{}}}"#,
+                evt.event, evt.detail, age_seconds,
+            ));
+        }
+    }
+    let mut memories = Vec::new();
+    for mem in ctx.db.npc_memory().iter() {
+        if mem.npc_id == npc.id {
+            memories.push(format!("\"{}\"", mem.text.replace('"', "\\\"")));
+        }
+    }
+
+    let context = format!(
+        concat!(
+            r#"{{"npc_id":{},"npc_name":"{}","npc_role":"{}","persona":"{}","#,
+            r#""npc_level":{},"npc_health":{},"npc_max_health":{},"#,
+            r#""gold":{},"mana":{},"max_mana":{},"stamina":{},"max_stamina":{},"#,
+            r#""npc_position":{{"x":{},"y":{},"z":{}}},"#,
+            r#""world_time":"{}","#,
+            r#""goals":[{}],"beliefs":[{}],"relationships":[{}],"#,
+            r#""inventory":[{}],"equipment":[{}],"#,
+            r#""nearby_players":[{}],"nearby_npcs":[{}],"nearby_pois":[{}],"#,
+            r#""attack_range":{},"recent_events":[{}],"memories":[{}]}}"#
+        ),
+        npc.id, npc.name.replace('"', "\\\""), npc.role, npc.persona.replace('"', "\\\""),
+        npc.level, npc.health, npc.max_health,
+        npc.gold, npc.mana, npc.max_mana, npc.stamina, npc.max_stamina,
+        npc.position.x, npc.position.y, npc.position.z,
+        if is_night { "night" } else { "day" },
+        goals.join(","), beliefs.join(","), relationships.join(","),
+        inventory.join(","), equipment.join(","),
+        nearby_players.join(","), nearby_npcs.join(","), nearby_pois.join(","),
+        ATTACK_RANGE, recent_events.join(","), memories.join(","),
+    );
+
+    log::info!("[NPC {}] triggering {} decision (enriched)", npc.id, decision_type);
+    ctx.db.npc_pending_decision().insert(NpcPendingDecision {
+        npc_id: npc.id,
+        decision_type: decision_type.to_string(),
+        context,
     });
 }

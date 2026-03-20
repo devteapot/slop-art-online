@@ -42,3 +42,5 @@ pub fn npc_max_health(level: i32) -> i32 { BASE_NPC_HP + NPC_HP_PER_LEVEL * leve
 pub fn npc_damage(level: i32) -> i32 { BASE_NPC_DAMAGE + NPC_DAMAGE_PER_LEVEL * level }
 pub fn xp_for_npc_kill(npc_level: i32) -> i32 { BASE_XP_PER_NPC_KILL + XP_PER_NPC_LEVEL * npc_level }
 pub fn xp_for_player_kill(player_level: i32) -> i32 { BASE_XP_PER_PLAYER_KILL + XP_PER_PLAYER_LEVEL * player_level }
+pub fn npc_max_mana(level: i32) -> i32 { BASE_NPC_MANA + NPC_MANA_PER_LEVEL * level }
+pub fn npc_max_stamina(level: i32) -> i32 { BASE_NPC_STAMINA + NPC_STAMINA_PER_LEVEL * level }

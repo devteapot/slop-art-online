@@ -10,6 +10,7 @@ pub struct NpcBehavior {
     pub npc_id: u64,
     pub mode: String,
     pub combat_tree: String,
+    pub life_tree: String,
 }
 
 impl __sdk::InModule for NpcBehavior {
@@ -23,6 +24,7 @@ pub struct NpcBehaviorCols {
     pub npc_id: __sdk::__query_builder::Col<NpcBehavior, u64>,
     pub mode: __sdk::__query_builder::Col<NpcBehavior, String>,
     pub combat_tree: __sdk::__query_builder::Col<NpcBehavior, String>,
+    pub life_tree: __sdk::__query_builder::Col<NpcBehavior, String>,
 }
 
 impl __sdk::__query_builder::HasCols for NpcBehavior {
@@ -32,6 +34,7 @@ impl __sdk::__query_builder::HasCols for NpcBehavior {
             npc_id: __sdk::__query_builder::Col::new(table_name, "npc_id"),
             mode: __sdk::__query_builder::Col::new(table_name, "mode"),
             combat_tree: __sdk::__query_builder::Col::new(table_name, "combat_tree"),
+            life_tree: __sdk::__query_builder::Col::new(table_name, "life_tree"),
         }
     }
 }

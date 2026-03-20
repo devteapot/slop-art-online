@@ -16,6 +16,15 @@ pub struct Npc {
     pub level: i32,
     pub role: String,
     pub name: String,
+    pub gold: i32,
+    pub mana: i32,
+    pub max_mana: i32,
+    pub stamina: i32,
+    pub max_stamina: i32,
+    pub xp: i32,
+    pub home_x: f32,
+    pub home_z: f32,
+    pub persona: String,
 }
 
 impl __sdk::InModule for Npc {
@@ -33,6 +42,15 @@ pub struct NpcCols {
     pub level: __sdk::__query_builder::Col<Npc, i32>,
     pub role: __sdk::__query_builder::Col<Npc, String>,
     pub name: __sdk::__query_builder::Col<Npc, String>,
+    pub gold: __sdk::__query_builder::Col<Npc, i32>,
+    pub mana: __sdk::__query_builder::Col<Npc, i32>,
+    pub max_mana: __sdk::__query_builder::Col<Npc, i32>,
+    pub stamina: __sdk::__query_builder::Col<Npc, i32>,
+    pub max_stamina: __sdk::__query_builder::Col<Npc, i32>,
+    pub xp: __sdk::__query_builder::Col<Npc, i32>,
+    pub home_x: __sdk::__query_builder::Col<Npc, f32>,
+    pub home_z: __sdk::__query_builder::Col<Npc, f32>,
+    pub persona: __sdk::__query_builder::Col<Npc, String>,
 }
 
 impl __sdk::__query_builder::HasCols for Npc {
@@ -46,6 +64,15 @@ impl __sdk::__query_builder::HasCols for Npc {
             level: __sdk::__query_builder::Col::new(table_name, "level"),
             role: __sdk::__query_builder::Col::new(table_name, "role"),
             name: __sdk::__query_builder::Col::new(table_name, "name"),
+            gold: __sdk::__query_builder::Col::new(table_name, "gold"),
+            mana: __sdk::__query_builder::Col::new(table_name, "mana"),
+            max_mana: __sdk::__query_builder::Col::new(table_name, "max_mana"),
+            stamina: __sdk::__query_builder::Col::new(table_name, "stamina"),
+            max_stamina: __sdk::__query_builder::Col::new(table_name, "max_stamina"),
+            xp: __sdk::__query_builder::Col::new(table_name, "xp"),
+            home_x: __sdk::__query_builder::Col::new(table_name, "home_x"),
+            home_z: __sdk::__query_builder::Col::new(table_name, "home_z"),
+            persona: __sdk::__query_builder::Col::new(table_name, "persona"),
         }
     }
 }

@@ -12,6 +12,8 @@ pub(super) struct SpawnNpcArgs {
     pub level: i32,
     pub role: String,
     pub name: String,
+    pub gold: i32,
+    pub persona: String,
 }
 
 impl From<SpawnNpcArgs> for super::Reducer {
@@ -22,6 +24,8 @@ impl From<SpawnNpcArgs> for super::Reducer {
             level: args.level,
             role: args.role,
             name: args.name,
+            gold: args.gold,
+            persona: args.persona,
         }
     }
 }
@@ -48,8 +52,10 @@ pub trait spawn_npc {
         level: i32,
         role: String,
         name: String,
+        gold: i32,
+        persona: String,
     ) -> __sdk::Result<()> {
-        self.spawn_npc_then(x, z, level, role, name, |_, _| {})
+        self.spawn_npc_then(x, z, level, role, name, gold, persona, |_, _| {})
     }
 
     /// Request that the remote module invoke the reducer `spawn_npc` to run as soon as possible,
@@ -65,6 +71,8 @@ pub trait spawn_npc {
         level: i32,
         role: String,
         name: String,
+        gold: i32,
+        persona: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -80,6 +88,8 @@ impl spawn_npc for super::RemoteReducers {
         level: i32,
         role: String,
         name: String,
+        gold: i32,
+        persona: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -92,6 +102,8 @@ impl spawn_npc for super::RemoteReducers {
                 level,
                 role,
                 name,
+                gold,
+                persona,
             },
             callback,
         )

@@ -113,6 +113,27 @@ pub async fn generate_social(npc_id: u64, context: &str) -> Option<String> {
     call_ollama(prompt::SOCIAL_SYSTEM_PROMPT, &user_prompt, &label).await
 }
 
+/// Generate a nightly reflection (goals, beliefs, memories, persona).
+pub async fn generate_reflection(npc_id: u64, context: &str) -> Option<String> {
+    let label = format!("NPC {npc_id} reflection");
+    let user_prompt = prompt::build_reflection_user_prompt(context);
+    call_ollama(prompt::REFLECTION_SYSTEM_PROMPT, &user_prompt, &label).await
+}
+
+/// Generate a dawn life tree (daily routine behavior tree).
+pub async fn generate_dawn(npc_id: u64, context: &str) -> Option<String> {
+    let label = format!("NPC {npc_id} dawn");
+    let user_prompt = prompt::build_dawn_user_prompt(context);
+    call_ollama(prompt::DAWN_SYSTEM_PROMPT, &user_prompt, &label).await
+}
+
+/// Generate a significant event response.
+pub async fn generate_significant(npc_id: u64, context: &str) -> Option<String> {
+    let label = format!("NPC {npc_id} significant");
+    let user_prompt = prompt::build_significant_user_prompt(context);
+    call_ollama(prompt::SIGNIFICANT_SYSTEM_PROMPT, &user_prompt, &label).await
+}
+
 /// Response with steps and optional memories.
 pub struct LlmResponse {
     pub steps_json: String,

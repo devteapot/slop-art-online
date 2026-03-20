@@ -1,3 +1,4 @@
+use spacetimedb::rand::Rng;
 use spacetimedb::{Identity, ReducerContext, ScheduleAt, Table};
 use std::time::Duration;
 
@@ -7,7 +8,8 @@ use crate::loot::{drop_all_inventory, generate_loot};
 use crate::npc_ai::{build_default_combat_tree, log_npc_event, role_config, trigger_decision, upsert_npc_behavior};
 use crate::tables::*;
 use crate::skill::*;
-use crate::{StatusEffect, status_effect, npc_event_log, npc_memory};
+use crate::{StatusEffect, status_effect, npc_event_log, npc_memory, GroundItem, ground_item,
+    npc_inventory_item, npc_equipped_item, npc_goal, npc_belief, npc_relationship, npc_skill};
 
 pub fn direction_to(from: &Position, to: &Position) -> (f32, f32) {
     let dx = to.x - from.x;
@@ -85,7 +87,60 @@ pub fn respawn_player(ctx: &ReducerContext, player: &Player) {
 
 pub fn kill_npc(ctx: &ReducerContext, npc: &Npc, attacker: Identity) {
     let xp = xp_for_npc_kill(npc.level);
-    generate_loot(ctx, npc, attacker);
+
+    // Drop NPC inventory as ground items (replaces loot table generation)
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+    let ffa_at = now_us + GROUND_ITEM_FFA_DELAY_MS * 1000;
+    let mut dropped_anything = false;
+
+    for inv in ctx.db.npc_inventory_item().iter().collect::<Vec<_>>() {
+        if inv.npc_id == npc.id {
+            let scatter_x: f32 = (ctx.rng().gen_range(0..100) as f32 / 100.0) - 0.5;
+            let scatter_z: f32 = (ctx.rng().gen_range(0..100) as f32 / 100.0) - 0.5;
+            ctx.db.ground_item().insert(GroundItem {
+                scheduled_id: 0,
+                scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(GROUND_ITEM_DESPAWN_MS)),
+                item_def_id: inv.item_def_id,
+                quantity: inv.quantity,
+                position: Position {
+                    x: npc.position.x + scatter_x,
+                    y: npc.position.y,
+                    z: npc.position.z + scatter_z,
+                },
+                owner: attacker,
+                free_for_all_at: ffa_at,
+            });
+            ctx.db.npc_inventory_item().id().delete(&inv.id);
+            dropped_anything = true;
+        }
+    }
+    for eq in ctx.db.npc_equipped_item().iter().collect::<Vec<_>>() {
+        if eq.npc_id == npc.id {
+            let scatter_x: f32 = (ctx.rng().gen_range(0..100) as f32 / 100.0) - 0.5;
+            let scatter_z: f32 = (ctx.rng().gen_range(0..100) as f32 / 100.0) - 0.5;
+            ctx.db.ground_item().insert(GroundItem {
+                scheduled_id: 0,
+                scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(GROUND_ITEM_DESPAWN_MS)),
+                item_def_id: eq.item_def_id,
+                quantity: 1,
+                position: Position {
+                    x: npc.position.x + scatter_x,
+                    y: npc.position.y,
+                    z: npc.position.z + scatter_z,
+                },
+                owner: attacker,
+                free_for_all_at: ffa_at,
+            });
+            ctx.db.npc_equipped_item().id().delete(&eq.id);
+            dropped_anything = true;
+        }
+    }
+
+    // Fall back to loot table if NPC had no inventory
+    if !dropped_anything {
+        generate_loot(ctx, npc, attacker);
+    }
+
     clear_effects_for_npc(ctx, npc.id);
     ctx.db.npc().id().delete(&npc.id);
     ctx.db.npc_behavior().npc_id().delete(&npc.id);
@@ -101,6 +156,27 @@ pub fn kill_npc(ctx: &ReducerContext, npc: &Npc, attacker: Identity) {
     for mem in ctx.db.npc_memory().iter().collect::<Vec<_>>() {
         if mem.npc_id == npc.id {
             ctx.db.npc_memory().id().delete(&mem.id);
+        }
+    }
+    // Clean up BDI tables
+    for goal in ctx.db.npc_goal().iter().collect::<Vec<_>>() {
+        if goal.npc_id == npc.id {
+            ctx.db.npc_goal().id().delete(&goal.id);
+        }
+    }
+    for belief in ctx.db.npc_belief().iter().collect::<Vec<_>>() {
+        if belief.npc_id == npc.id {
+            ctx.db.npc_belief().id().delete(&belief.id);
+        }
+    }
+    for rel in ctx.db.npc_relationship().iter().collect::<Vec<_>>() {
+        if rel.npc_id == npc.id {
+            ctx.db.npc_relationship().id().delete(&rel.id);
+        }
+    }
+    for skill in ctx.db.npc_skill().iter().collect::<Vec<_>>() {
+        if skill.npc_id == npc.id {
+            ctx.db.npc_skill().id().delete(&skill.id);
         }
     }
     if let Some(player) = ctx.db.player().identity().find(&attacker) {

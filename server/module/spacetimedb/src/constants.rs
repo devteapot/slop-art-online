@@ -71,3 +71,19 @@ pub const LOOT_DROP_CHANCE_PCT: i32 = 60;
 
 // Equipment
 pub const EQUIPMENT_SLOTS: i32 = 6;
+
+// Day/night cycle
+pub const WORLD_CYCLE_MS: u64 = 2_400_000;    // 40 min total
+pub const DAY_DURATION_MS: u64 = 1_200_000;   // 20 min day
+pub const NIGHT_DURATION_MS: u64 = 1_200_000;  // 20 min night
+
+// NPC BDI system
+pub const NPC_INVENTORY_SLOTS: i32 = 10;
+pub const BASE_NPC_MANA: i32 = 50;
+pub const NPC_MANA_PER_LEVEL: i32 = 10;
+pub const BASE_NPC_STAMINA: i32 = 50;
+pub const NPC_STAMINA_PER_LEVEL: i32 = 10;
+pub const DAYTIME_LLM_COOLDOWN_MS: u64 = 60_000;
+pub const MAX_NPC_BELIEFS: usize = 30;
+pub const MAX_NPC_GOALS: usize = 10;
+pub const NPC_SLEEP_REGEN_PCT: i32 = 5;

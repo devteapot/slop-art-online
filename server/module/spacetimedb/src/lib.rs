@@ -250,14 +250,50 @@ pub fn init(ctx: &ReducerContext) {
     ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: traveler_boots.id, min_npc_level: 1, max_npc_level: 99, weight: 8, min_quantity: 1, max_quantity: 1 });
     ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: copper_ring.id, min_npc_level: 2, max_npc_level: 99, weight: 5, min_quantity: 1, max_quantity: 1 });
 
-    // Spawn diverse NPCs
-    spawn_npc(ctx, 10.0, 10.0, 3, "hostile".into(), "Skeleton Warrior".into());
-    spawn_npc(ctx, 50.0, 0.0, 1, "trader".into(), "Merchant Ava".into());
-    spawn_npc(ctx, -20.0, 30.0, 2, "guard".into(), "Town Guard".into());
-    spawn_npc(ctx, 0.0, -40.0, 1, "historian".into(), "Elder Tome".into());
-    spawn_npc(ctx, 30.0, -20.0, 2, "traveller".into(), "Wandering Bard".into());
-    spawn_npc(ctx, -10.0, 50.0, 3, "adventurer".into(), "Kira the Bold".into());
-    spawn_npc(ctx, 40.0, 40.0, 1, "healer".into(), "Sister Mercy".into());
+    // Seed WorldState singleton
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+    ctx.db.world_state().insert(WorldState {
+        id: 0,
+        cycle_start_us: now_us,
+        is_night: false,
+    });
+
+    // Seed Points of Interest
+    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Market Square".into(), poi_type: "market".into(), x: 50.0, z: 0.0, radius: 15.0 });
+    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "North Gate".into(), poi_type: "gate".into(), x: -20.0, z: 30.0, radius: 10.0 });
+    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Town Library".into(), poi_type: "inn".into(), x: 0.0, z: -40.0, radius: 10.0 });
+    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Wilderness Trail".into(), poi_type: "wilderness".into(), x: 30.0, z: -20.0, radius: 20.0 });
+    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Chapel".into(), poi_type: "inn".into(), x: 40.0, z: 40.0, radius: 10.0 });
+    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Dark Forest".into(), poi_type: "wilderness".into(), x: 10.0, z: 10.0, radius: 20.0 });
+
+    // Spawn diverse NPCs with personas and starting gold
+    spawn_npc(ctx, 10.0, 10.0, 3, "hostile".into(), "Skeleton Warrior".into(), 0,
+        "A restless undead warrior bound to guard the dark forest.".into());
+    spawn_npc(ctx, 50.0, 0.0, 1, "trader".into(), "Merchant Ava".into(), 100,
+        "A merchant seeking profit through fair trade.".into());
+    spawn_npc(ctx, -20.0, 30.0, 2, "guard".into(), "Town Guard".into(), 10,
+        "A dutiful guard protecting the town gate.".into());
+    spawn_npc(ctx, 0.0, -40.0, 1, "historian".into(), "Elder Tome".into(), 5,
+        "A wise scholar preserving the town's history.".into());
+    spawn_npc(ctx, 30.0, -20.0, 2, "traveller".into(), "Wandering Bard".into(), 20,
+        "A traveling bard collecting stories and songs.".into());
+    spawn_npc(ctx, -10.0, 50.0, 3, "adventurer".into(), "Kira the Bold".into(), 30,
+        "A fearless adventurer seeking glory and treasure.".into());
+    spawn_npc(ctx, 40.0, 40.0, 1, "healer".into(), "Sister Mercy".into(), 15,
+        "A devoted healer offering aid to all who need it.".into());
+
+    // Give trader starting inventory (health potions to sell)
+    // item_def_id 3 = Health Potion from the auto_inc order above
+    for npc in ctx.db.npc().iter() {
+        if npc.role == "trader" {
+            ctx.db.npc_inventory_item().insert(NpcInventoryItem {
+                id: 0, npc_id: npc.id, slot: 0, item_def_id: 3, quantity: 5,
+            });
+            ctx.db.npc_inventory_item().insert(NpcInventoryItem {
+                id: 0, npc_id: npc.id, slot: 1, item_def_id: mana_potion.id, quantity: 3,
+            });
+        }
+    }
 
     schedule_next_npc_tick(ctx);
     schedule_next_projectile_tick(ctx);
@@ -316,6 +352,12 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
         }
     }
 
+    // Day/night cycle
+    let is_night = update_day_night_cycle(ctx);
+    // Track tick count for periodic checks
+    static TICK_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let tick_num = TICK_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
     for npc in ctx.db.npc().iter() {
         let config = role_config(&npc.role);
         let target = find_nearest_player(ctx, &npc.position)
@@ -323,6 +365,50 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
             .map(|(p, _)| p);
 
         let behavior = ctx.db.npc_behavior().npc_id().find(&npc.id);
+
+        // ── Sleeping NPCs: walk home + regen, no combat ──
+        if let Some(ref beh) = behavior {
+            if beh.mode == "sleeping" {
+                // Follow destination (walk home)
+                if let Some(dest) = ctx.db.npc_destination().npc_id().find(&npc.id) {
+                    let dx = dest.target_x - npc.position.x;
+                    let dz = dest.target_z - npc.position.z;
+                    let dist = (dx * dx + dz * dz).sqrt();
+                    if dist <= NPC_CHASE_STEP {
+                        ctx.db.npc().id().update(Npc {
+                            position: Position { x: dest.target_x, y: NPC_GROUND_Y, z: dest.target_z },
+                            ..npc.clone()
+                        });
+                        ctx.db.npc_destination().npc_id().delete(&npc.id);
+                    } else {
+                        let dir_x = dx / dist;
+                        let dir_z = dz / dist;
+                        let new_x = (npc.position.x + dir_x * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
+                        let new_z = (npc.position.z + dir_z * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
+                        ctx.db.npc().id().update(Npc {
+                            position: Position { x: new_x, y: NPC_GROUND_Y, z: new_z },
+                            ..npc.clone()
+                        });
+                    }
+                }
+                // Regen health/mana/stamina at 5% per tick
+                let regen_hp = (npc.max_health * NPC_SLEEP_REGEN_PCT / 100).max(1);
+                let regen_mp = (npc.max_mana * NPC_SLEEP_REGEN_PCT / 100).max(1);
+                let regen_sp = (npc.max_stamina * NPC_SLEEP_REGEN_PCT / 100).max(1);
+                let new_hp = (npc.health + regen_hp).min(npc.max_health);
+                let new_mp = (npc.mana + regen_mp).min(npc.max_mana);
+                let new_sp = (npc.stamina + regen_sp).min(npc.max_stamina);
+                if new_hp != npc.health || new_mp != npc.mana || new_sp != npc.stamina {
+                    // Re-fetch since we may have updated position above
+                    if let Some(cur) = ctx.db.npc().id().find(&npc.id) {
+                        ctx.db.npc().id().update(Npc {
+                            health: new_hp, mana: new_mp, stamina: new_sp, ..cur
+                        });
+                    }
+                }
+                continue;
+            }
+        }
 
         // ── Already in combat → continue combat or exit ──
         if let Some(ref beh) = behavior {
@@ -338,7 +424,56 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                     // Target gone — exit combat, trigger post_combat
                     upsert_npc_behavior(ctx, npc.id, "idle", "");
                     log_npc_event(ctx, npc.id, "combat_end", r#"{"result":"target_lost"}"#);
-                    trigger_decision(ctx, &npc, "post_combat", None);
+                    trigger_decision_enriched(ctx, &npc, "post_combat", None, is_night);
+                }
+                continue;
+            }
+        }
+
+        // ── Life tree evaluation (before combat check for non-hostile) ──
+        if let Some(ref beh) = behavior {
+            if beh.mode == "life_tree" && !beh.life_tree.is_empty() {
+                // Check for combat interrupts first
+                if let Some(ref player) = target {
+                    if config.auto_aggro {
+                        let default = build_default_combat_tree(&config.default_tree_style);
+                        let tree_json = serde_json::to_string(&default).unwrap();
+                        upsert_npc_behavior(ctx, npc.id, "combat", &tree_json);
+                        log_npc_event(ctx, npc.id, "combat_start",
+                            &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
+                        trigger_decision_enriched(ctx, &npc, "combat_start", target.as_ref(), is_night);
+                        continue;
+                    }
+                }
+
+                // Evaluate life tree
+                if let Ok(tree) = serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.life_tree) {
+                    let nearby_npcs = find_nearby_npcs(ctx, &npc);
+                    let nearby_pois = find_nearby_pois(ctx, &npc);
+                    let eval_ctx = TreeEvalContext { is_night, nearby_npcs: &nearby_npcs, nearby_pois: &nearby_pois };
+                    if let Some(action) = evaluate_tree(&tree, &npc, target.as_ref(), &eval_ctx) {
+                        execute_bt_action(ctx, &npc, &action, target.as_ref());
+                    }
+                }
+
+                // Check goal conditions every 5 ticks (~2.5s)
+                if tick_num % 5 == 0 {
+                    check_goal_conditions(ctx, &npc);
+                }
+
+                // Trigger social if player nearby, no pending decision, no active plan, and not on cooldown
+                if let Some(ref player) = target {
+                    if !config.auto_aggro && !has_pending_decision(ctx, npc.id)
+                        && ctx.db.npc_plan().npc_id().find(&npc.id).is_none()
+                    {
+                        let on_cooldown = has_recent_event(ctx, npc.id, "saw_player", SOCIAL_COOLDOWN_MS);
+                        let player_chatted = has_recent_event(ctx, npc.id, "heard_chat", SOCIAL_COOLDOWN_MS);
+                        if !on_cooldown || player_chatted {
+                            log_npc_event(ctx, npc.id, "saw_player",
+                                &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
+                            trigger_decision_enriched(ctx, &npc, "social", target.as_ref(), is_night);
+                        }
+                    }
                 }
                 continue;
             }
@@ -353,7 +488,7 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                 upsert_npc_behavior(ctx, npc.id, "combat", &tree_json);
                 log_npc_event(ctx, npc.id, "combat_start",
                     &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
-                trigger_decision(ctx, &npc, "combat_start", target.as_ref());
+                trigger_decision_enriched(ctx, &npc, "combat_start", target.as_ref(), is_night);
 
                 // Evaluate combat tree this tick
                 let beh = ctx.db.npc_behavior().npc_id().find(&npc.id).unwrap();
@@ -373,7 +508,7 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                         if !on_cooldown || player_chatted {
                             log_npc_event(ctx, npc.id, "saw_player",
                                 &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
-                            trigger_decision(ctx, &npc, "social", target.as_ref());
+                            trigger_decision_enriched(ctx, &npc, "social", target.as_ref(), is_night);
                         }
                     }
                 }
@@ -420,6 +555,11 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
             }
         }
 
+        // Check goal conditions periodically
+        if tick_num % 5 == 0 {
+            check_goal_conditions(ctx, &npc);
+        }
+
         // Idle behavior based on role
         match config.idle_behavior {
             IdleBehavior::StayPut => {
@@ -431,7 +571,7 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
             IdleBehavior::Roam => {
                 // Trigger idle decision for LLM plan
                 if !has_pending_decision(ctx, npc.id) {
-                    trigger_decision(ctx, &npc, "idle", None);
+                    trigger_decision_enriched(ctx, &npc, "idle", None, is_night);
                 }
                 // Wander while waiting for plan
                 execute_bt_action(ctx, &npc, &NpcBtAction::Wander, None);
@@ -451,10 +591,7 @@ pub fn submit_npc_combat_tree(ctx: &ReducerContext, npc_id: u64, tree_json: Stri
     if let Some(beh) = ctx.db.npc_behavior().npc_id().find(&npc_id) {
         if beh.mode == "combat" {
             log::info!("[NPC {}] hot-swapping combat tree from LLM", npc_id);
-            ctx.db.npc_behavior().npc_id().update(NpcBehavior {
-                combat_tree: tree_json,
-                ..beh
-            });
+            upsert_npc_behavior(ctx, npc_id, "combat", &tree_json);
         }
     }
     ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
@@ -464,21 +601,30 @@ pub fn submit_npc_combat_tree(ctx: &ReducerContext, npc_id: u64, tree_json: Stri
 #[spacetimedb::reducer]
 pub fn submit_npc_plan(ctx: &ReducerContext, npc_id: u64, steps_json: String) -> Result<(), String> {
     ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
-    // Validate the steps JSON parses correctly
-    let steps: Vec<NpcBtAction> = serde_json::from_str(&steps_json)
-        .map_err(|e| format!("Invalid plan steps JSON: {e}"))?;
+    // Try parsing as array first; if that fails, try as single action and wrap in array
+    let (steps, final_json) = match serde_json::from_str::<Vec<NpcBtAction>>(&steps_json) {
+        Ok(s) => (s, steps_json.clone()),
+        Err(_) => {
+            // LLM sometimes returns a single object instead of an array — wrap it
+            let single: NpcBtAction = serde_json::from_str(&steps_json)
+                .map_err(|e| format!("Invalid plan steps JSON: {e}"))?;
+            let wrapped = vec![single];
+            let json = serde_json::to_string(&wrapped).unwrap();
+            (wrapped, json)
+        }
+    };
     log::info!("[NPC {}] received plan with {} steps", npc_id, steps.len());
     // Replace any existing plan
     if ctx.db.npc_plan().npc_id().find(&npc_id).is_some() {
         ctx.db.npc_plan().npc_id().update(NpcPlan {
             npc_id,
-            steps: steps_json,
+            steps: final_json,
             current_step: 0,
         });
     } else {
         ctx.db.npc_plan().insert(NpcPlan {
             npc_id,
-            steps: steps_json,
+            steps: final_json,
             current_step: 0,
         });
     }
@@ -487,8 +633,13 @@ pub fn submit_npc_plan(ctx: &ReducerContext, npc_id: u64, steps_json: String) ->
 }
 
 #[spacetimedb::reducer]
-pub fn spawn_npc(ctx: &ReducerContext, x: f32, z: f32, level: i32, role: String, name: String) {
+pub fn spawn_npc(
+    ctx: &ReducerContext, x: f32, z: f32, level: i32, role: String, name: String,
+    gold: i32, persona: String,
+) {
     let hp = npc_max_health(level);
+    let mp = npc_max_mana(level);
+    let sp = npc_max_stamina(level);
     let npc = ctx.db.npc().insert(Npc {
         id: 0,
         position: Position { x: x.clamp(WORLD_MIN, WORLD_MAX), y: NPC_GROUND_Y, z: z.clamp(WORLD_MIN, WORLD_MAX) },
@@ -497,11 +648,21 @@ pub fn spawn_npc(ctx: &ReducerContext, x: f32, z: f32, level: i32, role: String,
         level,
         role,
         name,
+        gold,
+        mana: mp,
+        max_mana: mp,
+        stamina: sp,
+        max_stamina: sp,
+        xp: 0,
+        home_x: x.clamp(WORLD_MIN, WORLD_MAX),
+        home_z: z.clamp(WORLD_MIN, WORLD_MAX),
+        persona,
     });
     ctx.db.npc_behavior().insert(NpcBehavior {
         npc_id: npc.id,
         mode: "idle".to_string(),
         combat_tree: String::new(),
+        life_tree: String::new(),
     });
 }
 
@@ -1256,5 +1417,196 @@ pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: Stri
         dir_z,
     });
 
+    Ok(())
+}
+
+// --- BDI Reducers ---
+
+#[spacetimedb::reducer]
+pub fn submit_npc_reflection(ctx: &ReducerContext, npc_id: u64, json: String) -> Result<(), String> {
+    let npc = ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
+    let v: serde_json::Value = serde_json::from_str(&json)
+        .map_err(|e| format!("Invalid reflection JSON: {e}"))?;
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+
+    // Store memories
+    if let Some(memories) = v.get("memories").and_then(|m| m.as_array()) {
+        for mem in memories {
+            if let Some(text) = mem.as_str() {
+                let _ = submit_npc_memory(ctx, npc_id, text.to_string());
+            }
+        }
+    }
+
+    // Upsert goals (capped at MAX_NPC_GOALS)
+    if let Some(goals) = v.get("goals").and_then(|g| g.as_array()) {
+        let existing_count = ctx.db.npc_goal().iter().filter(|g| g.npc_id == npc_id).count();
+        for (i, goal) in goals.iter().enumerate() {
+            if existing_count + i >= MAX_NPC_GOALS { break; }
+            let desc = goal.get("description").and_then(|d| d.as_str()).unwrap_or("").to_string();
+            if desc.is_empty() { continue; }
+            let priority_str = goal.get("priority").and_then(|p| p.as_str()).unwrap_or("ambition");
+            let priority = match priority_str {
+                "survival" => GoalPriority::Survival,
+                "duty" => GoalPriority::Duty,
+                "social" => GoalPriority::Social,
+                "leisure" => GoalPriority::Leisure,
+                _ => GoalPriority::Ambition,
+            };
+            let condition = goal.get("success_condition")
+                .map(|c| serde_json::to_string(c).unwrap_or_default())
+                .unwrap_or_default();
+            ctx.db.npc_goal().insert(NpcGoal {
+                id: 0, npc_id, parent_goal_id: 0, priority,
+                status: GoalStatus::Active, description: desc,
+                success_condition: condition, created_at: now_us, completed_at: 0,
+            });
+        }
+    }
+
+    // Upsert beliefs (by subject+predicate, capped at MAX_NPC_BELIEFS)
+    if let Some(beliefs) = v.get("beliefs").and_then(|b| b.as_array()) {
+        for belief in beliefs {
+            let subject = belief.get("subject").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let predicate = belief.get("predicate").and_then(|p| p.as_str()).unwrap_or("").to_string();
+            let object = belief.get("object").and_then(|o| o.as_str()).unwrap_or("").to_string();
+            let confidence = belief.get("confidence").and_then(|c| c.as_f64()).unwrap_or(0.8) as f32;
+            if subject.is_empty() || predicate.is_empty() { continue; }
+
+            // Find existing belief with same subject+predicate
+            let existing = ctx.db.npc_belief().iter()
+                .find(|b| b.npc_id == npc_id && b.subject == subject && b.predicate == predicate);
+
+            if let Some(existing) = existing {
+                ctx.db.npc_belief().id().update(NpcBelief {
+                    object, confidence, updated_at: now_us, ..existing
+                });
+            } else {
+                let count = ctx.db.npc_belief().iter().filter(|b| b.npc_id == npc_id).count();
+                if count < MAX_NPC_BELIEFS {
+                    ctx.db.npc_belief().insert(NpcBelief {
+                        id: 0, npc_id, subject, predicate, object, confidence, updated_at: now_us,
+                    });
+                }
+            }
+        }
+    }
+
+    // Apply relationship deltas
+    if let Some(rel_updates) = v.get("relationship_updates").and_then(|r| r.as_array()) {
+        for update in rel_updates {
+            let target_type = update.get("target_type").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            let target_id = update.get("target_id").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            let delta = update.get("delta").and_then(|d| d.as_i64()).unwrap_or(0) as i32;
+            let context = update.get("context").and_then(|c| c.as_str()).unwrap_or("").to_string();
+            if target_type.is_empty() || target_id.is_empty() { continue; }
+
+            let existing = ctx.db.npc_relationship().iter()
+                .find(|r| r.npc_id == npc_id && r.target_type == target_type && r.target_id == target_id);
+
+            if let Some(existing) = existing {
+                let new_disp = (existing.disposition + delta).clamp(-100, 100);
+                ctx.db.npc_relationship().id().update(NpcRelationship {
+                    disposition: new_disp, context, updated_at: now_us, ..existing
+                });
+            } else {
+                ctx.db.npc_relationship().insert(NpcRelationship {
+                    id: 0, npc_id, target_type, target_id,
+                    disposition: delta.clamp(-100, 100), context, updated_at: now_us,
+                });
+            }
+        }
+    }
+
+    // Update persona if LLM expanded it
+    if let Some(persona) = v.get("persona").and_then(|p| p.as_str()) {
+        if !persona.is_empty() {
+            ctx.db.npc().id().update(Npc { persona: persona.to_string(), ..npc });
+        }
+    }
+
+    ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
+    log::info!("[NPC {}] reflection processed", npc_id);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn submit_npc_life_tree(ctx: &ReducerContext, npc_id: u64, tree_json: String) -> Result<(), String> {
+    ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
+    // Validate the tree JSON parses correctly
+    let _tree: bonsai_bt::Behavior<NpcBtAction> = serde_json::from_str(&tree_json)
+        .map_err(|e| format!("Invalid life tree JSON: {e}"))?;
+    log::info!("[NPC {}] received life tree from LLM", npc_id);
+    upsert_npc_behavior_life_tree(ctx, npc_id, "life_tree", &tree_json);
+
+    // Also store any memories from the response
+    ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn submit_npc_goals(ctx: &ReducerContext, npc_id: u64, goals_json: String) -> Result<(), String> {
+    ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
+    let goals: Vec<serde_json::Value> = serde_json::from_str(&goals_json)
+        .map_err(|e| format!("Invalid goals JSON: {e}"))?;
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+    let existing_count = ctx.db.npc_goal().iter().filter(|g| g.npc_id == npc_id).count();
+
+    for (i, goal) in goals.iter().enumerate() {
+        if existing_count + i >= MAX_NPC_GOALS { break; }
+        let desc = goal.get("description").and_then(|d| d.as_str()).unwrap_or("").to_string();
+        if desc.is_empty() { continue; }
+        let priority_str = goal.get("priority").and_then(|p| p.as_str()).unwrap_or("ambition");
+        let priority = match priority_str {
+            "survival" => GoalPriority::Survival,
+            "duty" => GoalPriority::Duty,
+            "social" => GoalPriority::Social,
+            "leisure" => GoalPriority::Leisure,
+            _ => GoalPriority::Ambition,
+        };
+        let condition = goal.get("success_condition")
+            .map(|c| serde_json::to_string(c).unwrap_or_default())
+            .unwrap_or_default();
+        ctx.db.npc_goal().insert(NpcGoal {
+            id: 0, npc_id, parent_goal_id: 0, priority,
+            status: GoalStatus::Active, description: desc,
+            success_condition: condition, created_at: now_us, completed_at: 0,
+        });
+    }
+    log::info!("[NPC {}] {} goals submitted", npc_id, goals.len());
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn submit_npc_beliefs(ctx: &ReducerContext, npc_id: u64, beliefs_json: String) -> Result<(), String> {
+    ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
+    let beliefs: Vec<serde_json::Value> = serde_json::from_str(&beliefs_json)
+        .map_err(|e| format!("Invalid beliefs JSON: {e}"))?;
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+
+    for belief in &beliefs {
+        let subject = belief.get("subject").and_then(|s| s.as_str()).unwrap_or("").to_string();
+        let predicate = belief.get("predicate").and_then(|p| p.as_str()).unwrap_or("").to_string();
+        let object = belief.get("object").and_then(|o| o.as_str()).unwrap_or("").to_string();
+        let confidence = belief.get("confidence").and_then(|c| c.as_f64()).unwrap_or(0.8) as f32;
+        if subject.is_empty() || predicate.is_empty() { continue; }
+
+        let existing = ctx.db.npc_belief().iter()
+            .find(|b| b.npc_id == npc_id && b.subject == subject && b.predicate == predicate);
+
+        if let Some(existing) = existing {
+            ctx.db.npc_belief().id().update(NpcBelief {
+                object, confidence, updated_at: now_us, ..existing
+            });
+        } else {
+            let count = ctx.db.npc_belief().iter().filter(|b| b.npc_id == npc_id).count();
+            if count < MAX_NPC_BELIEFS {
+                ctx.db.npc_belief().insert(NpcBelief {
+                    id: 0, npc_id, subject, predicate, object, confidence, updated_at: now_us,
+                });
+            }
+        }
+    }
+    log::info!("[NPC {}] {} beliefs submitted", npc_id, beliefs.len());
     Ok(())
 }

@@ -65,6 +65,64 @@ Available steps:
 Example:
 {"steps": [{"say": "Welcome, traveler! Care to browse my wares?"}, {"wait": 3.0}], "memories": ["A traveler passed by heading north."]}"#;
 
+pub const REFLECTION_SYSTEM_PROMPT: &str = r#"You are an NPC in a fantasy MMORPG. It is nighttime and you are reflecting on your day.
+Based on your persona, goals, beliefs, relationships, and recent events, generate a reflection.
+Return a JSON object with:
+- "memories": array of strings summarizing important events from today
+- "goals": array of goal objects with "description", "priority" (survival/duty/ambition/social/leisure), "success_condition" (JSON object like {"type":"gold_above","amount":100})
+- "beliefs": array of belief objects with "subject", "predicate", "object", "confidence" (0.0-1.0)
+- "relationship_updates": array of {"target_type":"player"|"npc", "target_id":"...", "delta":-10 to 10, "context":"reason"}
+- "persona": optionally expand or refine your persona description (especially on first reflection)
+
+Only include fields that changed. Keep memories concise. Keep goals achievable.
+Return ONLY valid JSON."#;
+
+pub const DAWN_SYSTEM_PROMPT: &str = r#"You are an NPC in a fantasy MMORPG. A new day is starting.
+Based on your persona, goals, beliefs, and role, generate a daily routine as a behavior tree.
+Return a JSON object with:
+- "life_tree": a behavior tree for your daily routine (see node types below)
+- "memories": optionally, array of strings like "Starting a new day. Plan: ..."
+
+Behavior tree node types:
+- {"Select": [...]} — try children in order, return first success
+- {"Sequence": [...]} — run all children, fail on first failure
+- {"If": [condition, success, failure]} — branch on condition
+
+Conditions:
+- "player_nearby", "npc_nearby", {"npc_nearby_with_role": "guard"}
+- "is_day_time", "is_night_time"
+- {"gold_above": 100}, {"gold_below": 10}
+- {"at_poi": "Market Square"}, {"health_below": 0.3}
+- {"mana_above": 0.5}, {"stamina_above": 0.5}
+
+Actions:
+- {"travel_to_poi": "Market Square"}, "go_home", "rest", "wander"
+- {"say": "Hello!"}, {"wait": 5.0}
+- {"say_to_npc": {"npc_id": 3, "message": "Good morning!"}}
+- {"pick_up_nearby": null}
+- {"set_belief": {"subject": "market", "predicate": "is_open", "object": "true"}}
+
+Example for a trader:
+{"life_tree": {"Select": [{"If": [{"Action": "player_nearby"}, {"Sequence": [{"Action": {"say": "Welcome!"}}, {"Action": {"wait": 5.0}}]}, {"If": [{"Action": {"at_poi": "Market Square"}}, {"Action": {"wait": 10.0}}, {"Action": {"travel_to_poi": "Market Square"}}]}]}]}}
+
+Return ONLY valid JSON."#;
+
+pub const SIGNIFICANT_SYSTEM_PROMPT: &str = r#"You are an NPC in a fantasy MMORPG. Something significant just happened.
+Based on the event and your persona/goals/beliefs, decide how to react.
+Return a JSON object with "steps" (array) and optionally:
+- "memories": array of strings worth remembering
+- "goals": new goals to add
+- "beliefs": beliefs to update
+- "relationship_updates": relationship changes
+
+Available steps:
+- {"travel_to": {"x": 10, "z": 20}} — walk to a location
+- {"say": "message"} — say something
+- "wander" — wander in current area
+- {"wait": 5.0} — pause for N seconds
+
+Return ONLY valid JSON."#;
+
 /// Parse NPC identity from context JSON, returning (name, role) if present.
 fn parse_npc_identity(context: &str) -> (String, String) {
     let v: serde_json::Value = serde_json::from_str(context).unwrap_or_default();
@@ -91,4 +149,27 @@ pub fn build_post_combat_user_prompt(context: &str) -> String {
 pub fn build_social_user_prompt(context: &str) -> String {
     let (name, role) = parse_npc_identity(context);
     format!("You are {name}, a {role}. A player is nearby.\n\nDecide how to interact.\nCurrent situation:\n{context}")
+}
+
+pub fn build_reflection_user_prompt(context: &str) -> String {
+    let (name, role) = parse_npc_identity(context);
+    let persona = parse_persona(context);
+    format!("You are {name}, a {role}.\nPersona: {persona}\n\nReflect on your day and plan for tomorrow.\nCurrent state:\n{context}")
+}
+
+pub fn build_dawn_user_prompt(context: &str) -> String {
+    let (name, role) = parse_npc_identity(context);
+    let persona = parse_persona(context);
+    format!("You are {name}, a {role}.\nPersona: {persona}\n\nA new day begins. Generate your daily routine behavior tree.\nCurrent state:\n{context}")
+}
+
+pub fn build_significant_user_prompt(context: &str) -> String {
+    let (name, role) = parse_npc_identity(context);
+    let persona = parse_persona(context);
+    format!("You are {name}, a {role}.\nPersona: {persona}\n\nSomething significant happened. Decide how to react.\nCurrent situation:\n{context}")
+}
+
+fn parse_persona(context: &str) -> String {
+    let v: serde_json::Value = serde_json::from_str(context).unwrap_or_default();
+    v.get("persona").and_then(|p| p.as_str()).unwrap_or("An NPC.").to_string()
 }
