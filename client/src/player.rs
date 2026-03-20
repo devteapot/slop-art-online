@@ -20,6 +20,17 @@ use crate::status_effects::{speed_multiplier, LocalStatusEffects};
 use crate::health_bar::{spawn_health_bar, Health, HealthBarFillRef};
 use crate::world::MainCamera;
 
+/// When true, camera stays centered on the player (no cursor look-ahead).
+/// Toggle with Y key.
+#[derive(Resource)]
+pub struct CameraLocked(pub bool);
+
+impl Default for CameraLocked {
+    fn default() -> Self {
+        Self(true)
+    }
+}
+
 #[derive(Component)]
 pub struct PlayerId(pub Identity);
 
@@ -450,10 +461,20 @@ pub fn update_grounded(
     }
 }
 
+pub fn toggle_camera_lock(
+    input: Res<ButtonInput<KeyCode>>,
+    mut locked: ResMut<CameraLocked>,
+) {
+    if input.just_pressed(KeyCode::KeyY) {
+        locked.0 = !locked.0;
+    }
+}
+
 pub fn follow_camera(
     windows: Query<&Window>,
     local_player: Query<&Transform, With<LocalPlayer>>,
     mut camera: Query<&mut Transform, (With<MainCamera>, Without<LocalPlayer>)>,
+    locked: Res<CameraLocked>,
 ) {
     let Ok(player) = local_player.single() else {
         return;
@@ -461,14 +482,20 @@ pub fn follow_camera(
     let Ok(ref mut cam) = camera.single_mut() else {
         return;
     };
-    let Ok(window) = windows.single() else { return };
 
-    let look_ahead = if let Some(cursor) = window.cursor_position() {
-        let half = Vec2::new(window.width(), window.height()) * 0.5;
-        let norm = ((cursor - half) / half).clamp(Vec2::splat(-1.0), Vec2::splat(1.0));
-        Vec3::new(norm.x * MAX_LOOK_AHEAD, 0.0, norm.y * MAX_LOOK_AHEAD)
-    } else {
+    let look_ahead = if locked.0 {
         Vec3::ZERO
+    } else {
+        let Ok(window) = windows.single() else {
+            return;
+        };
+        if let Some(cursor) = window.cursor_position() {
+            let half = Vec2::new(window.width(), window.height()) * 0.5;
+            let norm = ((cursor - half) / half).clamp(Vec2::splat(-1.0), Vec2::splat(1.0));
+            Vec3::new(norm.x * MAX_LOOK_AHEAD, 0.0, norm.y * MAX_LOOK_AHEAD)
+        } else {
+            Vec3::ZERO
+        }
     };
 
     let target = player.translation + Vec3::new(0.0, 30.0, 40.0) + look_ahead;

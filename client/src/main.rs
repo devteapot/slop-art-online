@@ -67,6 +67,7 @@ fn main() {
         .init_resource::<PredictionCorrection>()
         .init_resource::<AbilityAnimTriggerQueue>()
         .init_resource::<CursorGroundPos>()
+        .init_resource::<CameraLocked>()
         .init_resource::<ProjectileEventQueue>()
         .init_resource::<AoeZoneEventQueue>()
         .init_resource::<ItemDefEventQueue>()
@@ -104,6 +105,7 @@ fn main() {
             sync_active_skills,
             trigger_ability_animations,
             use_skill_input,
+            toggle_camera_lock,
             follow_camera,
             face_cursor,
             update_health_bars,
