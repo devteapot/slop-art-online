@@ -12,6 +12,7 @@ mod inventory;
 mod chat;
 mod status_effects;
 mod damage_numbers;
+mod nameplate;
 
 use avian3d::prelude::*;
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
@@ -31,6 +32,7 @@ use inventory::*;
 use chat::*;
 use status_effects::*;
 use damage_numbers::*;
+use nameplate::*;
 
 fn main() {
     App::new()
@@ -158,6 +160,11 @@ fn main() {
             detect_damage,
             detect_local_damage,
             animate_damage_numbers,
+        ))
+        .add_systems(Update, (
+            spawn_nameplates,
+            update_nameplates,
+            cleanup_nameplates,
         ))
         .run();
 }

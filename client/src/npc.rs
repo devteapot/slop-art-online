@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::health_bar::{spawn_health_bar, Health, HealthBarFillRef};
 use crate::interpolation::InterpolationBuffer;
+use crate::nameplate::NpcInfo;
 use crate::network::{to_world_pos, NpcEvent, NpcEventQueue};
 
 #[derive(Component)]
@@ -24,11 +25,22 @@ pub fn sync_npcs(
                 let mut buffer = InterpolationBuffer::default();
                 buffer.push(pos, 0.0, time.elapsed_secs_f64());
                 let (bar_root, fill_id) = spawn_health_bar(&mut commands, &mut meshes, &mut materials);
+                let npc_color = match npc.role.as_str() {
+                    "hostile" | "hostile_defensive" => Color::srgb(1.0, 0.3, 0.2),
+                    "trader" => Color::srgb(0.2, 0.8, 0.3),
+                    "guard" => Color::srgb(0.3, 0.5, 1.0),
+                    "historian" => Color::srgb(0.8, 0.6, 1.0),
+                    "healer" => Color::srgb(1.0, 1.0, 0.4),
+                    "adventurer" => Color::srgb(1.0, 0.7, 0.2),
+                    "traveller" => Color::srgb(0.6, 0.9, 0.9),
+                    _ => Color::srgb(1.0, 0.5, 0.2),
+                };
                 let mut entity_cmd = commands.spawn((
                     NpcId(npc.id),
+                    NpcInfo { name: npc.name.clone(), level: npc.level },
                     Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
                     MeshMaterial3d(materials.add(StandardMaterial {
-                        base_color: Color::srgb(1.0, 0.5, 0.2),
+                        base_color: npc_color,
                         ..default()
                     })),
                     Transform::from_translation(pos),

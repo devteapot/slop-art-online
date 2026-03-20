@@ -4,9 +4,10 @@ use std::time::Duration;
 use crate::constants::*;
 use crate::equipment::{degrade_armor, equipment_bonuses};
 use crate::loot::{drop_all_inventory, generate_loot};
+use crate::npc_ai::{build_default_combat_tree, log_npc_event, role_config, trigger_decision, upsert_npc_behavior};
 use crate::tables::*;
 use crate::skill::*;
-use crate::{StatusEffect, status_effect};
+use crate::{StatusEffect, status_effect, npc_event_log, npc_memory};
 
 pub fn direction_to(from: &Position, to: &Position) -> (f32, f32) {
     let dx = to.x - from.x;
@@ -91,6 +92,17 @@ pub fn kill_npc(ctx: &ReducerContext, npc: &Npc, attacker: Identity) {
     ctx.db.npc_plan().npc_id().delete(&npc.id);
     ctx.db.npc_pending_decision().npc_id().delete(&npc.id);
     ctx.db.npc_destination().npc_id().delete(&npc.id);
+    // Clean up NPC event logs and memories
+    for evt in ctx.db.npc_event_log().iter().collect::<Vec<_>>() {
+        if evt.npc_id == npc.id {
+            ctx.db.npc_event_log().scheduled_id().delete(&evt.scheduled_id);
+        }
+    }
+    for mem in ctx.db.npc_memory().iter().collect::<Vec<_>>() {
+        if mem.npc_id == npc.id {
+            ctx.db.npc_memory().id().delete(&mem.id);
+        }
+    }
     if let Some(player) = ctx.db.player().identity().find(&attacker) {
         award_player_xp(ctx, &player, xp);
     }
@@ -163,6 +175,25 @@ pub fn hit_npc(
         ctx.db.npc().id().update(Npc { position: new_pos, health: new_health, ..npc.clone() });
         if let Some((etype, epower, edur)) = effect {
             apply_status_effect(ctx, etype, attacker, npc.id, epower, edur, attacker);
+        }
+
+        // Log damage event
+        log_npc_event(ctx, npc.id, "took_damage",
+            &format!(r#"{{"player":"{}","damage":{}}}"#, attacker.to_hex().to_string(), power));
+
+        // Non-hostile NPCs enter combat when hit (if aggro_on_hit)
+        let config = role_config(&npc.role);
+        if config.aggro_on_hit {
+            if let Some(beh) = ctx.db.npc_behavior().npc_id().find(&npc.id) {
+                if beh.mode != "combat" {
+                    let default = build_default_combat_tree(&config.default_tree_style);
+                    let tree_json = serde_json::to_string(&default).unwrap();
+                    upsert_npc_behavior(ctx, npc.id, "combat", &tree_json);
+                    // Look up attacker as target for decision context
+                    let attacker_player = ctx.db.player().identity().find(&attacker);
+                    trigger_decision(ctx, npc, "combat_start", attacker_player.as_ref());
+                }
+            }
         }
     }
 }

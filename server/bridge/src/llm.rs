@@ -104,3 +104,50 @@ pub async fn generate_post_combat(npc_id: u64, context: &str) -> Option<String> 
     let user_prompt = prompt::build_post_combat_user_prompt(context);
     call_ollama(prompt::POST_COMBAT_SYSTEM_PROMPT, &user_prompt, &label).await
 }
+
+/// Generate a social interaction plan.
+/// Returns None on failure.
+pub async fn generate_social(npc_id: u64, context: &str) -> Option<String> {
+    let label = format!("NPC {npc_id} social");
+    let user_prompt = prompt::build_social_user_prompt(context);
+    call_ollama(prompt::SOCIAL_SYSTEM_PROMPT, &user_prompt, &label).await
+}
+
+/// Response with steps and optional memories.
+pub struct LlmResponse {
+    pub steps_json: String,
+    pub memories: Vec<String>,
+}
+
+/// Parse an LLM response that may contain either:
+/// - A plain JSON array of steps: [...]
+/// - A JSON object with "steps" and optional "memories": {"steps": [...], "memories": [...]}
+/// Also checks combat tree responses for a "memories" field.
+pub fn parse_response_with_memories(raw: &str) -> Option<LlmResponse> {
+    let v: Value = serde_json::from_str(raw).ok()?;
+    if let Some(obj) = v.as_object() {
+        // Object format: {"steps": [...], "memories": [...]}
+        // Also handle combat tree format: {"tree": {...}, "memories": [...]}
+        let memories = obj.get("memories")
+            .and_then(|m| m.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+
+        if let Some(steps) = obj.get("steps") {
+            return Some(LlmResponse {
+                steps_json: serde_json::to_string(steps).ok()?,
+                memories,
+            });
+        }
+        // If it's a combat tree or other object, return as-is
+        return Some(LlmResponse {
+            steps_json: raw.to_string(),
+            memories,
+        });
+    }
+    // Plain array
+    Some(LlmResponse {
+        steps_json: raw.to_string(),
+        memories: Vec::new(),
+    })
+}

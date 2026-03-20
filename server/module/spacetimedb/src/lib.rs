@@ -126,6 +126,17 @@ pub struct NpcChatMessage {
     pub position: Position,
 }
 
+#[spacetimedb::table(accessor = npc_event_log, public, scheduled(expire_npc_event))]
+pub struct NpcEventLog {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub npc_id: u64,
+    pub event: String,
+    pub detail: String,
+}
+
 #[derive(Clone)]
 #[spacetimedb::table(accessor = chat_message, public, scheduled(expire_chat_message))]
 pub struct ChatMessage {
@@ -239,6 +250,15 @@ pub fn init(ctx: &ReducerContext) {
     ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: traveler_boots.id, min_npc_level: 1, max_npc_level: 99, weight: 8, min_quantity: 1, max_quantity: 1 });
     ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: copper_ring.id, min_npc_level: 2, max_npc_level: 99, weight: 5, min_quantity: 1, max_quantity: 1 });
 
+    // Spawn diverse NPCs
+    spawn_npc(ctx, 10.0, 10.0, 3, "hostile".into(), "Skeleton Warrior".into());
+    spawn_npc(ctx, 50.0, 0.0, 1, "trader".into(), "Merchant Ava".into());
+    spawn_npc(ctx, -20.0, 30.0, 2, "guard".into(), "Town Guard".into());
+    spawn_npc(ctx, 0.0, -40.0, 1, "historian".into(), "Elder Tome".into());
+    spawn_npc(ctx, 30.0, -20.0, 2, "traveller".into(), "Wandering Bard".into());
+    spawn_npc(ctx, -10.0, 50.0, 3, "adventurer".into(), "Kira the Bold".into());
+    spawn_npc(ctx, 40.0, 40.0, 1, "healer".into(), "Sister Mercy".into());
+
     schedule_next_npc_tick(ctx);
     schedule_next_projectile_tick(ctx);
 }
@@ -297,48 +317,73 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
     }
 
     for npc in ctx.db.npc().iter() {
+        let config = role_config(&npc.role);
         let target = find_nearest_player(ctx, &npc.position)
             .filter(|(_, d)| *d <= NPC_DETECTION_RANGE)
             .map(|(p, _)| p);
 
         let behavior = ctx.db.npc_behavior().npc_id().find(&npc.id);
 
-        // ── Enemy detected: activate combat ──
-        if target.is_some() {
-            let needs_combat_tree = match &behavior {
-                Some(beh) => beh.mode != "combat" || beh.combat_tree.is_empty(),
-                None => true,
-            };
+        // ── Already in combat → continue combat or exit ──
+        if let Some(ref beh) = behavior {
+            if beh.mode == "combat" {
+                if target.is_some() {
+                    // Evaluate combat tree
+                    if let Ok(tree) = serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.combat_tree) {
+                        if let Some(action) = evaluate_combat_tree(&tree, &npc, target.as_ref()) {
+                            execute_bt_action(ctx, &npc, &action, target.as_ref());
+                        }
+                    }
+                } else {
+                    // Target gone — exit combat, trigger post_combat
+                    upsert_npc_behavior(ctx, npc.id, "idle", "");
+                    log_npc_event(ctx, npc.id, "combat_end", r#"{"result":"target_lost"}"#);
+                    trigger_decision(ctx, &npc, "post_combat", None);
+                }
+                continue;
+            }
+        }
 
-            if needs_combat_tree {
-                // Combat just started — load default tree instantly
-                let default = build_default_combat_tree(npc.id);
+        // ── Not in combat, target found ──
+        if let Some(ref player) = target {
+            if config.auto_aggro {
+                // Enter combat (existing hostile behavior)
+                let default = build_default_combat_tree(&config.default_tree_style);
                 let tree_json = serde_json::to_string(&default).unwrap();
                 upsert_npc_behavior(ctx, npc.id, "combat", &tree_json);
-                // Ask LLM for a better tree (async — will hot-swap when ready)
+                log_npc_event(ctx, npc.id, "combat_start",
+                    &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
                 trigger_decision(ctx, &npc, "combat_start", target.as_ref());
-            }
 
-            // Evaluate whatever combat tree we have
-            let beh = ctx.db.npc_behavior().npc_id().find(&npc.id).unwrap();
-            if let Ok(tree) = serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.combat_tree) {
-                if let Some(action) = evaluate_combat_tree(&tree, &npc, target.as_ref()) {
-                    execute_bt_action(ctx, &npc, &action, target.as_ref());
+                // Evaluate combat tree this tick
+                let beh = ctx.db.npc_behavior().npc_id().find(&npc.id).unwrap();
+                if let Ok(tree) = serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.combat_tree) {
+                    if let Some(action) = evaluate_combat_tree(&tree, &npc, target.as_ref()) {
+                        execute_bt_action(ctx, &npc, &action, target.as_ref());
+                    }
+                }
+            } else {
+                // Non-hostile NPC: trigger social decision (with cooldown)
+                if !has_pending_decision(ctx, npc.id) {
+                    let plan = ctx.db.npc_plan().npc_id().find(&npc.id);
+                    if plan.is_none() {
+                        let on_cooldown = has_recent_event(ctx, npc.id, "saw_player", SOCIAL_COOLDOWN_MS);
+                        let player_chatted = has_recent_event(ctx, npc.id, "heard_chat", SOCIAL_COOLDOWN_MS);
+                        // Trigger if: not on cooldown, OR player chatted nearby (override cooldown)
+                        if !on_cooldown || player_chatted {
+                            log_npc_event(ctx, npc.id, "saw_player",
+                                &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
+                            trigger_decision(ctx, &npc, "social", target.as_ref());
+                        }
+                    }
                 }
             }
             continue;
         }
 
-        // ── No enemy: was in combat? → post-combat ──
-        if let Some(ref beh) = behavior {
-            if beh.mode == "combat" {
-                upsert_npc_behavior(ctx, npc.id, "idle", "");
-                trigger_decision(ctx, &npc, "post_combat", None);
-                continue;
-            }
-        }
+        // ── No target: follow destination / execute plan / idle behavior ──
 
-        // ── Destination-following (from plan's travel_to) ──
+        // Destination-following (from plan's travel_to)
         if let Some(dest) = ctx.db.npc_destination().npc_id().find(&npc.id) {
             let dx = dest.target_x - npc.position.x;
             let dz = dest.target_z - npc.position.z;
@@ -363,22 +408,35 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
             continue;
         }
 
-        // ── Plan execution ──
+        // Plan execution
         if let Some(plan) = ctx.db.npc_plan().npc_id().find(&npc.id) {
             if (plan.current_step as usize) < plan_step_count(&plan) {
                 execute_plan_step(ctx, &npc, &plan);
                 continue;
             } else {
-                // Plan complete — delete it
+                // Plan complete
                 ctx.db.npc_plan().npc_id().delete(&npc.id);
+                log_npc_event(ctx, npc.id, "plan_completed", "{}");
             }
         }
 
-        // ── Idle: wander ──
-        if !has_pending_decision(ctx, npc.id) {
-            // Phase 2: trigger_decision(ctx, &npc, "idle", None);
+        // Idle behavior based on role
+        match config.idle_behavior {
+            IdleBehavior::StayPut => {
+                // Do nothing
+            }
+            IdleBehavior::Wander | IdleBehavior::Patrol => {
+                execute_bt_action(ctx, &npc, &NpcBtAction::Wander, None);
+            }
+            IdleBehavior::Roam => {
+                // Trigger idle decision for LLM plan
+                if !has_pending_decision(ctx, npc.id) {
+                    trigger_decision(ctx, &npc, "idle", None);
+                }
+                // Wander while waiting for plan
+                execute_bt_action(ctx, &npc, &NpcBtAction::Wander, None);
+            }
         }
-        execute_bt_action(ctx, &npc, &NpcBtAction::Wander, None);
     }
     schedule_next_npc_tick(ctx);
 }
@@ -429,7 +487,7 @@ pub fn submit_npc_plan(ctx: &ReducerContext, npc_id: u64, steps_json: String) ->
 }
 
 #[spacetimedb::reducer]
-pub fn spawn_npc(ctx: &ReducerContext, x: f32, z: f32, level: i32) {
+pub fn spawn_npc(ctx: &ReducerContext, x: f32, z: f32, level: i32, role: String, name: String) {
     let hp = npc_max_health(level);
     let npc = ctx.db.npc().insert(Npc {
         id: 0,
@@ -437,6 +495,8 @@ pub fn spawn_npc(ctx: &ReducerContext, x: f32, z: f32, level: i32) {
         health: hp,
         max_health: hp,
         level,
+        role,
+        name,
     });
     ctx.db.npc_behavior().insert(NpcBehavior {
         npc_id: npc.id,
@@ -805,9 +865,20 @@ pub fn send_chat_message(ctx: &ReducerContext, text: String) -> Result<(), Strin
         scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(CHAT_MESSAGE_EXPIRE_MS)),
         sender: ctx.sender(),
         sender_name: String::new(),
-        text,
+        text: text.clone(),
         position: player.position.clone(),
     });
+
+    // Notify nearby NPCs that a player said something
+    for npc in ctx.db.npc().iter() {
+        if npc.position.distance_to(&player.position) <= NPC_DETECTION_RANGE {
+            log_npc_event(ctx, npc.id, "heard_chat",
+                &format!(r#"{{"player":"{}","text":"{}"}}"#,
+                    ctx.sender().to_hex().to_string(),
+                    text.replace('\\', "\\\\").replace('"', "\\\""),
+                ));
+        }
+    }
     Ok(())
 }
 
@@ -819,6 +890,39 @@ pub fn expire_chat_message(_ctx: &ReducerContext, _row: ChatMessage) {
 #[spacetimedb::reducer]
 pub fn expire_npc_chat_message(_ctx: &ReducerContext, _row: NpcChatMessage) {
     // Row auto-deletes after this reducer completes.
+}
+
+#[spacetimedb::reducer]
+pub fn expire_npc_event(_ctx: &ReducerContext, _row: NpcEventLog) {
+    // Row auto-deletes after this reducer completes.
+}
+
+const MAX_NPC_MEMORIES: usize = 10;
+
+#[spacetimedb::reducer]
+pub fn submit_npc_memory(ctx: &ReducerContext, npc_id: u64, text: String) -> Result<(), String> {
+    ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+
+    // Prune oldest memories if at limit
+    let mut existing: Vec<_> = ctx.db.npc_memory().iter()
+        .filter(|m| m.npc_id == npc_id)
+        .collect();
+    existing.sort_by_key(|m| m.created_at);
+    while existing.len() >= MAX_NPC_MEMORIES {
+        if let Some(oldest) = existing.first() {
+            ctx.db.npc_memory().id().delete(&oldest.id);
+            existing.remove(0);
+        }
+    }
+
+    ctx.db.npc_memory().insert(NpcMemory {
+        id: 0,
+        npc_id,
+        text,
+        created_at: now_us,
+    });
+    Ok(())
 }
 
 #[spacetimedb::reducer]

@@ -10,6 +10,8 @@ pub(super) struct SpawnNpcArgs {
     pub x: f32,
     pub z: f32,
     pub level: i32,
+    pub role: String,
+    pub name: String,
 }
 
 impl From<SpawnNpcArgs> for super::Reducer {
@@ -18,6 +20,8 @@ impl From<SpawnNpcArgs> for super::Reducer {
             x: args.x,
             z: args.z,
             level: args.level,
+            role: args.role,
+            name: args.name,
         }
     }
 }
@@ -37,8 +41,15 @@ pub trait spawn_npc {
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
     /// /// Use [`spawn_npc:spawn_npc_then`] to run a callback after the reducer completes.
-    fn spawn_npc(&self, x: f32, z: f32, level: i32) -> __sdk::Result<()> {
-        self.spawn_npc_then(x, z, level, |_, _| {})
+    fn spawn_npc(
+        &self,
+        x: f32,
+        z: f32,
+        level: i32,
+        role: String,
+        name: String,
+    ) -> __sdk::Result<()> {
+        self.spawn_npc_then(x, z, level, role, name, |_, _| {})
     }
 
     /// Request that the remote module invoke the reducer `spawn_npc` to run as soon as possible,
@@ -52,6 +63,8 @@ pub trait spawn_npc {
         x: f32,
         z: f32,
         level: i32,
+        role: String,
+        name: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -65,12 +78,22 @@ impl spawn_npc for super::RemoteReducers {
         x: f32,
         z: f32,
         level: i32,
+        role: String,
+        name: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
             + 'static,
     ) -> __sdk::Result<()> {
-        self.imp
-            .invoke_reducer_with_callback(SpawnNpcArgs { x, z, level }, callback)
+        self.imp.invoke_reducer_with_callback(
+            SpawnNpcArgs {
+                x,
+                z,
+                level,
+                role,
+                name,
+            },
+            callback,
+        )
     }
 }

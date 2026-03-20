@@ -52,14 +52,43 @@ Available steps:
 
 Return ONLY a valid JSON array, no explanation."#;
 
+pub const SOCIAL_SYSTEM_PROMPT: &str = r#"You are an NPC in a fantasy MMORPG. A player is nearby.
+Decide how to interact based on your role and personality.
+Return a JSON object with "steps" (array) and optionally "memories" (array of strings worth remembering).
+
+Available steps:
+- {"travel_to": {"x": 10, "z": 20}} — walk to a location
+- {"say": "message"} — say something
+- "wander" — wander in current area
+- {"wait": 5.0} — pause for N seconds
+
+Example:
+{"steps": [{"say": "Welcome, traveler! Care to browse my wares?"}, {"wait": 3.0}], "memories": ["A traveler passed by heading north."]}"#;
+
+/// Parse NPC identity from context JSON, returning (name, role) if present.
+fn parse_npc_identity(context: &str) -> (String, String) {
+    let v: serde_json::Value = serde_json::from_str(context).unwrap_or_default();
+    let name = v.get("npc_name").and_then(|n| n.as_str()).unwrap_or("an NPC").to_string();
+    let role = v.get("npc_role").and_then(|r| r.as_str()).unwrap_or("unknown").to_string();
+    (name, role)
+}
+
 pub fn build_combat_user_prompt(context: &str) -> String {
-    format!("Design a combat behavior tree for this NPC.\nCurrent situation:\n{context}")
+    let (name, role) = parse_npc_identity(context);
+    format!("You are {name}, a {role}.\n\nDesign a combat behavior tree for this NPC.\nCurrent situation:\n{context}")
 }
 
 pub fn build_plan_user_prompt(context: &str) -> String {
-    format!("Plan actions for this NPC.\nCurrent situation:\n{context}")
+    let (name, role) = parse_npc_identity(context);
+    format!("You are {name}, a {role}.\n\nPlan actions for this NPC.\nCurrent situation:\n{context}")
 }
 
 pub fn build_post_combat_user_prompt(context: &str) -> String {
-    format!("Combat has ended. Decide what this NPC should do next.\nContext:\n{context}")
+    let (name, role) = parse_npc_identity(context);
+    format!("You are {name}, a {role}.\n\nCombat has ended. Decide what this NPC should do next.\nContext:\n{context}")
+}
+
+pub fn build_social_user_prompt(context: &str) -> String {
+    let (name, role) = parse_npc_identity(context);
+    format!("You are {name}, a {role}. A player is nearby.\n\nDecide how to interact.\nCurrent situation:\n{context}")
 }

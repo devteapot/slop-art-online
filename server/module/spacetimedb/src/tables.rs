@@ -71,6 +71,8 @@ pub struct Npc {
     pub health: i32,
     pub max_health: i32,
     pub level: i32,
+    pub role: String,
+    pub name: String,
 }
 
 #[derive(Clone)]
@@ -272,4 +274,17 @@ pub struct EquippedItem {
     pub equip_slot: EquipSlot,
     pub item_def_id: u64,
     pub durability: i32,
+}
+
+// --- NPC Memory ---
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = npc_memory, public)]
+pub struct NpcMemory {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub npc_id: u64,
+    pub text: String,
+    pub created_at: u64,
 }

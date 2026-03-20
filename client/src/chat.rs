@@ -4,7 +4,9 @@ use bevy::prelude::*;
 use shared::module_bindings::send_chat_message_reducer::send_chat_message;
 
 use crate::constants::CHAT_PROXIMITY_RANGE;
-use crate::network::{ChatMessageEvent, ExtraEventQueues, SpacetimeDb};
+use crate::nameplate::NpcInfo;
+use crate::network::{ChatMessageEvent, ExtraEventQueues, NpcChatEvent, SpacetimeDb};
+use crate::npc::NpcId;
 use crate::player::LocalPlayer;
 
 // --- Resources ---
@@ -41,15 +43,13 @@ pub fn sync_chat_messages(
     local_player: Query<&Transform, With<LocalPlayer>>,
     container: Query<Entity, With<ChatLogContainer>>,
     log_lines: Query<(Entity, &ChatLogLine)>,
+    npcs: Query<(&NpcId, &NpcInfo)>,
 ) {
-    let mut events = extra_queues.chat_messages.0.lock().unwrap();
-    if events.is_empty() {
-        return;
-    }
-
     let local_pos = local_player.single().ok().map(|t| t.translation);
 
-    for event in events.drain(..) {
+    // Player chat messages
+    let mut player_events = extra_queues.chat_messages.0.lock().unwrap();
+    for event in player_events.drain(..) {
         match event {
             ChatMessageEvent::Inserted(msg) => {
                 let msg_pos = Vec3::new(msg.position.x, msg.position.y, msg.position.z);
@@ -76,6 +76,46 @@ pub fn sync_chat_messages(
                 }
             }
             ChatMessageEvent::Deleted(scheduled_id) => {
+                for (entity, line) in log_lines.iter() {
+                    if line.0 == scheduled_id {
+                        commands.entity(entity).despawn();
+                    }
+                }
+            }
+        }
+    }
+    drop(player_events);
+
+    // NPC chat messages (same UI, proximity filtered)
+    let mut npc_events = extra_queues.npc_chat_messages.0.lock().unwrap();
+    for event in npc_events.drain(..) {
+        match event {
+            NpcChatEvent::Inserted(msg) => {
+                let msg_pos = Vec3::new(msg.position.x, msg.position.y, msg.position.z);
+
+                let in_range = local_pos
+                    .map(|lp| lp.distance(msg_pos) <= CHAT_PROXIMITY_RANGE)
+                    .unwrap_or(false);
+
+                if in_range {
+                    // Look up NPC name from entities
+                    let npc_name = npcs.iter()
+                        .find(|(id, _)| id.0 == msg.npc_id)
+                        .map(|(_, info)| info.name.as_str())
+                        .unwrap_or("NPC");
+
+                    if let Ok(container_entity) = container.single() {
+                        let child = commands.spawn((
+                            ChatLogLine(msg.scheduled_id),
+                            Text::new(format!("{}: {}", npc_name, msg.text)),
+                            TextFont { font_size: 13.0, ..default() },
+                            TextColor(Color::srgba(0.7, 0.9, 1.0, 0.9)),
+                        )).id();
+                        commands.entity(container_entity).add_child(child);
+                    }
+                }
+            }
+            NpcChatEvent::Deleted(scheduled_id) => {
                 for (entity, line) in log_lines.iter() {
                     if line.0 == scheduled_id {
                         commands.entity(entity).despawn();
