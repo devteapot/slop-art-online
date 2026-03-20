@@ -1,120 +1,106 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-const DEFAULT_GRAPH: &str = r#"{
-    "initial_node": "idle",
-    "nodes": {
-        "idle":      { "action": "wander",             "transitions": [{ "condition": "in_range",            "next": "attacking" }, { "condition": "target_out_of_range", "next": "chasing"   }] },
-        "chasing":   { "action": "move_toward_target",  "transitions": [{ "condition": "in_range",            "next": "attacking" }, { "condition": "no_target",           "next": "idle"      }] },
-        "attacking": { "action": "attack_target",        "transitions": [{ "condition": "target_out_of_range", "next": "chasing"   }, { "condition": "no_target",           "next": "idle"      }] }
-    }
-}"#;
-
-const SYSTEM_PROMPT: &str = r#"You are an NPC behaviour designer for an MMORPG.
-Given a JSON context describing the NPC's situation, return a behaviour graph as JSON.
-
-The graph must follow this exact schema:
-{
-  "initial_node": "<node_name>",
-  "nodes": {
-    "<node_name>": {
-      "action": "<action>",
-      "transitions": [
-        { "condition": "<condition>", "next": "<node_name>" }
-      ]
-    }
-  }
-}
-
-Available actions:
-- "wander"              — move randomly (use when no player is detected)
-- "move_toward_target"  — chase the nearest player (use when player is detected but out of attack range)
-- "attack_target"       — attack the nearest player (use when player is within attack range)
-- "flee_from_target"    — run away from the nearest player
-
-Available conditions (mutually exclusive, evaluated in order):
-- "in_range"            — a player is detected AND within attack range
-- "target_out_of_range" — a player is detected BUT out of attack range
-- "no_target"           — no player is detected at all
-
-Condition logic rules — follow these exactly:
-- "no_target" means NO player is visible — never transition to attack or chase on "no_target"
-- "in_range" means a player IS close — this is when attacking makes sense
-- "target_out_of_range" means a player IS visible but far — this is when chasing makes sense
-- A wander node should only leave wander when a player is detected: use "in_range" or "target_out_of_range"
-- A wander node should NOT transition on "no_target" — that means nothing changed
-
-Example of a correct aggressive graph:
-{
-  "initial_node": "idle",
-  "nodes": {
-    "idle":      { "action": "wander",            "transitions": [{ "condition": "in_range",            "next": "attacking" }, { "condition": "target_out_of_range", "next": "chasing"  }] },
-    "chasing":   { "action": "move_toward_target", "transitions": [{ "condition": "in_range",            "next": "attacking" }, { "condition": "no_target",           "next": "idle"     }] },
-    "attacking": { "action": "attack_target",      "transitions": [{ "condition": "target_out_of_range", "next": "chasing"  }, { "condition": "no_target",           "next": "idle"     }] }
-  }
-}
-
-Design a strategy appropriate for the NPC's situation. Return only valid JSON, no explanation."#;
+use crate::prompt;
 
 #[derive(Serialize)]
 struct ChatRequest {
     model: String,
-    messages: Vec<Message>,
+    messages: Vec<ChatMessage>,
     stream: bool,
     format: String,
 }
 
-#[derive(Serialize, Deserialize)]
-struct Message {
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct ChatMessage {
     role: String,
     content: String,
 }
 
 #[derive(Deserialize)]
 struct ChatResponse {
-    message: Message,
+    message: ChatMessage,
 }
 
-pub async fn generate_behaviour_graph(context: &str) -> String {
-    let ollama_url = std::env::var("OLLAMA_URL")
+fn ollama_config() -> (String, String) {
+    let url = std::env::var("OLLAMA_URL")
         .unwrap_or_else(|_| "http://localhost:11434".to_string());
     let model = std::env::var("OLLAMA_MODEL")
         .unwrap_or_else(|_| "qwen2.5:7b".to_string());
+    (url, model)
+}
+
+async fn call_ollama(system_prompt: &str, user_prompt: &str, label: &str) -> Option<String> {
+    let (ollama_url, model) = ollama_config();
+    let client = reqwest::Client::new();
+
+    log::info!("[{label}] sending Ollama request (model={model})");
+    log::debug!("[{label}] user_prompt: {user_prompt}");
 
     let request = ChatRequest {
         model,
         messages: vec![
-            Message { role: "system".to_string(), content: SYSTEM_PROMPT.to_string() },
-            Message { role: "user".to_string(),   content: context.to_string() },
+            ChatMessage { role: "system".into(), content: system_prompt.into() },
+            ChatMessage { role: "user".into(), content: user_prompt.into() },
         ],
         stream: false,
         format: "json".to_string(),
     };
 
-    let client = reqwest::Client::new();
+    let start = std::time::Instant::now();
     let result = client
         .post(format!("{ollama_url}/api/chat"))
         .json(&request)
         .send()
         .await;
+    let elapsed = start.elapsed();
 
     match result {
         Err(e) => {
-            log::error!("Ollama request failed: {e} — using default graph");
-            DEFAULT_GRAPH.to_string()
+            log::error!("[{label}] Ollama request failed ({:.1}s): {e}", elapsed.as_secs_f64());
+            None
         }
-        Ok(resp) => match resp.json::<ChatResponse>().await {
-            Err(e) => {
-                log::error!("Failed to parse Ollama response: {e} — using default graph");
-                DEFAULT_GRAPH.to_string()
-            }
-            Ok(chat) => {
-                // Validate it's parseable JSON before sending to the reducer
-                if serde_json::from_str::<serde_json::Value>(&chat.message.content).is_err() {
-                    log::error!("Ollama returned invalid JSON — using default graph");
-                    return DEFAULT_GRAPH.to_string();
+        Ok(resp) => {
+            log::info!("[{label}] Ollama responded in {:.1}s (status={})", elapsed.as_secs_f64(), resp.status());
+            match resp.json::<ChatResponse>().await {
+                Err(e) => {
+                    log::error!("[{label}] failed to parse response: {e}");
+                    None
                 }
-                chat.message.content
+                Ok(chat) => {
+                    // Validate it's valid JSON
+                    if serde_json::from_str::<Value>(&chat.message.content).is_err() {
+                        log::error!("[{label}] Ollama returned invalid JSON");
+                        return None;
+                    }
+                    log::info!("[{label}] response: {}", &chat.message.content[..chat.message.content.len().min(200)]);
+                    Some(chat.message.content)
+                }
             }
-        },
+        }
     }
+}
+
+/// Generate a combat behavior tree JSON string.
+/// Returns None on failure (caller should keep the default tree).
+pub async fn generate_combat_tree(npc_id: u64, context: &str) -> Option<String> {
+    let label = format!("NPC {npc_id} combat_tree");
+    let user_prompt = prompt::build_combat_user_prompt(context);
+    call_ollama(prompt::COMBAT_TREE_SYSTEM_PROMPT, &user_prompt, &label).await
+}
+
+/// Generate a plan (JSON array of NpcBtAction steps).
+/// Returns None on failure.
+pub async fn generate_plan(npc_id: u64, context: &str) -> Option<String> {
+    let label = format!("NPC {npc_id} plan");
+    let user_prompt = prompt::build_plan_user_prompt(context);
+    call_ollama(prompt::PLAN_SYSTEM_PROMPT, &user_prompt, &label).await
+}
+
+/// Generate a post-combat plan.
+/// Returns None on failure.
+pub async fn generate_post_combat(npc_id: u64, context: &str) -> Option<String> {
+    let label = format!("NPC {npc_id} post_combat");
+    let user_prompt = prompt::build_post_combat_user_prompt(context);
+    call_ollama(prompt::POST_COMBAT_SYSTEM_PROMPT, &user_prompt, &label).await
 }

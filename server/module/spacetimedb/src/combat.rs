@@ -87,8 +87,10 @@ pub fn kill_npc(ctx: &ReducerContext, npc: &Npc, attacker: Identity) {
     generate_loot(ctx, npc, attacker);
     clear_effects_for_npc(ctx, npc.id);
     ctx.db.npc().id().delete(&npc.id);
-    ctx.db.npc_behaviour_graph().npc_id().delete(&npc.id);
+    ctx.db.npc_behavior().npc_id().delete(&npc.id);
+    ctx.db.npc_plan().npc_id().delete(&npc.id);
     ctx.db.npc_pending_decision().npc_id().delete(&npc.id);
+    ctx.db.npc_destination().npc_id().delete(&npc.id);
     if let Some(player) = ctx.db.player().identity().find(&attacker) {
         award_player_xp(ctx, &player, xp);
     }

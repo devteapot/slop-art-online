@@ -1961,6 +1961,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bonsai-bt"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f5c93c1e48f7493424d3bde0cdc1d6e03e761500c436e75adc17dd9fee8ad48"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bridge"
 version = "0.1.0"
 dependencies = [
@@ -6145,6 +6154,7 @@ dependencies = [
 name = "server_module"
 version = "0.1.0"
 dependencies = [
+ "bonsai-bt",
  "log",
  "serde",
  "serde_json",

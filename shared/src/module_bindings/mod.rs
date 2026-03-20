@@ -37,10 +37,16 @@ pub mod join_game_reducer;
 pub mod loot_table_entry_table;
 pub mod loot_table_entry_type;
 pub mod move_player_reducer;
-pub mod npc_behaviour_graph_table;
-pub mod npc_behaviour_graph_type;
+pub mod npc_behavior_table;
+pub mod npc_behavior_type;
+pub mod npc_chat_message_table;
+pub mod npc_chat_message_type;
+pub mod npc_destination_table;
+pub mod npc_destination_type;
 pub mod npc_pending_decision_table;
 pub mod npc_pending_decision_type;
+pub mod npc_plan_table;
+pub mod npc_plan_type;
 pub mod npc_table;
 pub mod npc_tick_schedule_type;
 pub mod npc_type;
@@ -68,7 +74,9 @@ pub mod start_projectile_ticker_reducer;
 pub mod status_effect_table;
 pub mod status_effect_type;
 pub mod status_effect_type_type;
-pub mod submit_npc_graph_reducer;
+pub mod submit_npc_actions_reducer;
+pub mod submit_npc_combat_tree_reducer;
+pub mod submit_npc_plan_reducer;
 pub mod unequip_item_reducer;
 pub mod use_item_reducer;
 pub mod use_skill_reducer;
@@ -105,10 +113,16 @@ pub use join_game_reducer::join_game;
 pub use loot_table_entry_table::*;
 pub use loot_table_entry_type::LootTableEntry;
 pub use move_player_reducer::move_player;
-pub use npc_behaviour_graph_table::*;
-pub use npc_behaviour_graph_type::NpcBehaviourGraph;
+pub use npc_behavior_table::*;
+pub use npc_behavior_type::NpcBehavior;
+pub use npc_chat_message_table::*;
+pub use npc_chat_message_type::NpcChatMessage;
+pub use npc_destination_table::*;
+pub use npc_destination_type::NpcDestination;
 pub use npc_pending_decision_table::*;
 pub use npc_pending_decision_type::NpcPendingDecision;
+pub use npc_plan_table::*;
+pub use npc_plan_type::NpcPlan;
 pub use npc_table::*;
 pub use npc_tick_schedule_type::NpcTickSchedule;
 pub use npc_type::Npc;
@@ -136,7 +150,9 @@ pub use start_projectile_ticker_reducer::start_projectile_ticker;
 pub use status_effect_table::*;
 pub use status_effect_type::StatusEffect;
 pub use status_effect_type_type::StatusEffectType;
-pub use submit_npc_graph_reducer::submit_npc_graph;
+pub use submit_npc_actions_reducer::submit_npc_actions;
+pub use submit_npc_combat_tree_reducer::submit_npc_combat_tree;
+pub use submit_npc_plan_reducer::submit_npc_plan;
 pub use unequip_item_reducer::unequip_item;
 pub use use_item_reducer::use_item;
 pub use use_skill_reducer::use_skill;
@@ -186,9 +202,17 @@ pub enum Reducer {
     },
     StartNpcTicker,
     StartProjectileTicker,
-    SubmitNpcGraph {
+    SubmitNpcActions {
         npc_id: u64,
-        graph_json: String,
+        actions_json: String,
+    },
+    SubmitNpcCombatTree {
+        npc_id: u64,
+        tree_json: String,
+    },
+    SubmitNpcPlan {
+        npc_id: u64,
+        steps_json: String,
     },
     UnequipItem {
         equipped_item_id: u64,
@@ -229,7 +253,9 @@ impl __sdk::Reducer for Reducer {
             Reducer::SpawnNpc { .. } => "spawn_npc",
             Reducer::StartNpcTicker => "start_npc_ticker",
             Reducer::StartProjectileTicker => "start_projectile_ticker",
-            Reducer::SubmitNpcGraph { .. } => "submit_npc_graph",
+            Reducer::SubmitNpcActions { .. } => "submit_npc_actions",
+            Reducer::SubmitNpcCombatTree { .. } => "submit_npc_combat_tree",
+            Reducer::SubmitNpcPlan { .. } => "submit_npc_plan",
             Reducer::UnequipItem { .. } => "unequip_item",
             Reducer::UseItem { .. } => "use_item",
             Reducer::UseSkill { .. } => "use_skill",
@@ -299,10 +325,23 @@ impl __sdk::Reducer for Reducer {
             Reducer::StartProjectileTicker => __sats::bsatn::to_vec(
                 &start_projectile_ticker_reducer::StartProjectileTickerArgs {},
             ),
-            Reducer::SubmitNpcGraph { npc_id, graph_json } => {
-                __sats::bsatn::to_vec(&submit_npc_graph_reducer::SubmitNpcGraphArgs {
+            Reducer::SubmitNpcActions {
+                npc_id,
+                actions_json,
+            } => __sats::bsatn::to_vec(&submit_npc_actions_reducer::SubmitNpcActionsArgs {
+                npc_id: npc_id.clone(),
+                actions_json: actions_json.clone(),
+            }),
+            Reducer::SubmitNpcCombatTree { npc_id, tree_json } => {
+                __sats::bsatn::to_vec(&submit_npc_combat_tree_reducer::SubmitNpcCombatTreeArgs {
                     npc_id: npc_id.clone(),
-                    graph_json: graph_json.clone(),
+                    tree_json: tree_json.clone(),
+                })
+            }
+            Reducer::SubmitNpcPlan { npc_id, steps_json } => {
+                __sats::bsatn::to_vec(&submit_npc_plan_reducer::SubmitNpcPlanArgs {
+                    npc_id: npc_id.clone(),
+                    steps_json: steps_json.clone(),
                 })
             }
             Reducer::UnequipItem { equipped_item_id } => {
@@ -357,8 +396,11 @@ pub struct DbUpdate {
     item_def: __sdk::TableUpdate<ItemDef>,
     loot_table_entry: __sdk::TableUpdate<LootTableEntry>,
     npc: __sdk::TableUpdate<Npc>,
-    npc_behaviour_graph: __sdk::TableUpdate<NpcBehaviourGraph>,
+    npc_behavior: __sdk::TableUpdate<NpcBehavior>,
+    npc_chat_message: __sdk::TableUpdate<NpcChatMessage>,
+    npc_destination: __sdk::TableUpdate<NpcDestination>,
     npc_pending_decision: __sdk::TableUpdate<NpcPendingDecision>,
+    npc_plan: __sdk::TableUpdate<NpcPlan>,
     player: __sdk::TableUpdate<Player>,
     player_skill: __sdk::TableUpdate<PlayerSkill>,
     projectile: __sdk::TableUpdate<Projectile>,
@@ -407,12 +449,21 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "npc" => db_update
                     .npc
                     .append(npc_table::parse_table_update(table_update)?),
-                "npc_behaviour_graph" => db_update
-                    .npc_behaviour_graph
-                    .append(npc_behaviour_graph_table::parse_table_update(table_update)?),
+                "npc_behavior" => db_update
+                    .npc_behavior
+                    .append(npc_behavior_table::parse_table_update(table_update)?),
+                "npc_chat_message" => db_update
+                    .npc_chat_message
+                    .append(npc_chat_message_table::parse_table_update(table_update)?),
+                "npc_destination" => db_update
+                    .npc_destination
+                    .append(npc_destination_table::parse_table_update(table_update)?),
                 "npc_pending_decision" => db_update.npc_pending_decision.append(
                     npc_pending_decision_table::parse_table_update(table_update)?,
                 ),
+                "npc_plan" => db_update
+                    .npc_plan
+                    .append(npc_plan_table::parse_table_update(table_update)?),
                 "player" => db_update
                     .player
                     .append(player_table::parse_table_update(table_update)?),
@@ -493,17 +544,23 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.npc = cache
             .apply_diff_to_table::<Npc>("npc", &self.npc)
             .with_updates_by_pk(|row| &row.id);
-        diff.npc_behaviour_graph = cache
-            .apply_diff_to_table::<NpcBehaviourGraph>(
-                "npc_behaviour_graph",
-                &self.npc_behaviour_graph,
-            )
+        diff.npc_behavior = cache
+            .apply_diff_to_table::<NpcBehavior>("npc_behavior", &self.npc_behavior)
+            .with_updates_by_pk(|row| &row.npc_id);
+        diff.npc_chat_message = cache
+            .apply_diff_to_table::<NpcChatMessage>("npc_chat_message", &self.npc_chat_message)
+            .with_updates_by_pk(|row| &row.scheduled_id);
+        diff.npc_destination = cache
+            .apply_diff_to_table::<NpcDestination>("npc_destination", &self.npc_destination)
             .with_updates_by_pk(|row| &row.npc_id);
         diff.npc_pending_decision = cache
             .apply_diff_to_table::<NpcPendingDecision>(
                 "npc_pending_decision",
                 &self.npc_pending_decision,
             )
+            .with_updates_by_pk(|row| &row.npc_id);
+        diff.npc_plan = cache
+            .apply_diff_to_table::<NpcPlan>("npc_plan", &self.npc_plan)
             .with_updates_by_pk(|row| &row.npc_id);
         diff.player = cache
             .apply_diff_to_table::<Player>("player", &self.player)
@@ -566,11 +623,20 @@ impl __sdk::DbUpdate for DbUpdate {
                 "npc" => db_update
                     .npc
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
-                "npc_behaviour_graph" => db_update
-                    .npc_behaviour_graph
+                "npc_behavior" => db_update
+                    .npc_behavior
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "npc_chat_message" => db_update
+                    .npc_chat_message
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "npc_destination" => db_update
+                    .npc_destination
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "npc_pending_decision" => db_update
                     .npc_pending_decision
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "npc_plan" => db_update
+                    .npc_plan
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "player" => db_update
                     .player
@@ -639,11 +705,20 @@ impl __sdk::DbUpdate for DbUpdate {
                 "npc" => db_update
                     .npc
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
-                "npc_behaviour_graph" => db_update
-                    .npc_behaviour_graph
+                "npc_behavior" => db_update
+                    .npc_behavior
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "npc_chat_message" => db_update
+                    .npc_chat_message
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "npc_destination" => db_update
+                    .npc_destination
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "npc_pending_decision" => db_update
                     .npc_pending_decision
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "npc_plan" => db_update
+                    .npc_plan
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "player" => db_update
                     .player
@@ -692,8 +767,11 @@ pub struct AppliedDiff<'r> {
     item_def: __sdk::TableAppliedDiff<'r, ItemDef>,
     loot_table_entry: __sdk::TableAppliedDiff<'r, LootTableEntry>,
     npc: __sdk::TableAppliedDiff<'r, Npc>,
-    npc_behaviour_graph: __sdk::TableAppliedDiff<'r, NpcBehaviourGraph>,
+    npc_behavior: __sdk::TableAppliedDiff<'r, NpcBehavior>,
+    npc_chat_message: __sdk::TableAppliedDiff<'r, NpcChatMessage>,
+    npc_destination: __sdk::TableAppliedDiff<'r, NpcDestination>,
     npc_pending_decision: __sdk::TableAppliedDiff<'r, NpcPendingDecision>,
+    npc_plan: __sdk::TableAppliedDiff<'r, NpcPlan>,
     player: __sdk::TableAppliedDiff<'r, Player>,
     player_skill: __sdk::TableAppliedDiff<'r, PlayerSkill>,
     projectile: __sdk::TableAppliedDiff<'r, Projectile>,
@@ -753,9 +831,19 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Npc>("npc", &self.npc, event);
-        callbacks.invoke_table_row_callbacks::<NpcBehaviourGraph>(
-            "npc_behaviour_graph",
-            &self.npc_behaviour_graph,
+        callbacks.invoke_table_row_callbacks::<NpcBehavior>(
+            "npc_behavior",
+            &self.npc_behavior,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<NpcChatMessage>(
+            "npc_chat_message",
+            &self.npc_chat_message,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<NpcDestination>(
+            "npc_destination",
+            &self.npc_destination,
             event,
         );
         callbacks.invoke_table_row_callbacks::<NpcPendingDecision>(
@@ -763,6 +851,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.npc_pending_decision,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<NpcPlan>("npc_plan", &self.npc_plan, event);
         callbacks.invoke_table_row_callbacks::<Player>("player", &self.player, event);
         callbacks.invoke_table_row_callbacks::<PlayerSkill>(
             "player_skill",
@@ -1441,8 +1530,11 @@ impl __sdk::SpacetimeModule for RemoteModule {
         item_def_table::register_table(client_cache);
         loot_table_entry_table::register_table(client_cache);
         npc_table::register_table(client_cache);
-        npc_behaviour_graph_table::register_table(client_cache);
+        npc_behavior_table::register_table(client_cache);
+        npc_chat_message_table::register_table(client_cache);
+        npc_destination_table::register_table(client_cache);
         npc_pending_decision_table::register_table(client_cache);
+        npc_plan_table::register_table(client_cache);
         player_table::register_table(client_cache);
         player_skill_table::register_table(client_cache);
         projectile_table::register_table(client_cache);
@@ -1463,8 +1555,11 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "item_def",
         "loot_table_entry",
         "npc",
-        "npc_behaviour_graph",
+        "npc_behavior",
+        "npc_chat_message",
+        "npc_destination",
         "npc_pending_decision",
+        "npc_plan",
         "player",
         "player_skill",
         "projectile",

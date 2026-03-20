@@ -8,6 +8,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 #[sats(crate = __lib)]
 pub struct NpcPendingDecision {
     pub npc_id: u64,
+    pub decision_type: String,
     pub context: String,
 }
 
@@ -20,6 +21,7 @@ impl __sdk::InModule for NpcPendingDecision {
 /// Provides typed access to columns for query building.
 pub struct NpcPendingDecisionCols {
     pub npc_id: __sdk::__query_builder::Col<NpcPendingDecision, u64>,
+    pub decision_type: __sdk::__query_builder::Col<NpcPendingDecision, String>,
     pub context: __sdk::__query_builder::Col<NpcPendingDecision, String>,
 }
 
@@ -28,6 +30,7 @@ impl __sdk::__query_builder::HasCols for NpcPendingDecision {
     fn cols(table_name: &'static str) -> Self::Cols {
         NpcPendingDecisionCols {
             npc_id: __sdk::__query_builder::Col::new(table_name, "npc_id"),
+            decision_type: __sdk::__query_builder::Col::new(table_name, "decision_type"),
             context: __sdk::__query_builder::Col::new(table_name, "context"),
         }
     }

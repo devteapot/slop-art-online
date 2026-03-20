@@ -6,49 +6,49 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
-pub(super) struct SubmitNpcGraphArgs {
+pub(super) struct SubmitNpcActionsArgs {
     pub npc_id: u64,
-    pub graph_json: String,
+    pub actions_json: String,
 }
 
-impl From<SubmitNpcGraphArgs> for super::Reducer {
-    fn from(args: SubmitNpcGraphArgs) -> Self {
-        Self::SubmitNpcGraph {
+impl From<SubmitNpcActionsArgs> for super::Reducer {
+    fn from(args: SubmitNpcActionsArgs) -> Self {
+        Self::SubmitNpcActions {
             npc_id: args.npc_id,
-            graph_json: args.graph_json,
+            actions_json: args.actions_json,
         }
     }
 }
 
-impl __sdk::InModule for SubmitNpcGraphArgs {
+impl __sdk::InModule for SubmitNpcActionsArgs {
     type Module = super::RemoteModule;
 }
 
 #[allow(non_camel_case_types)]
-/// Extension trait for access to the reducer `submit_npc_graph`.
+/// Extension trait for access to the reducer `submit_npc_actions`.
 ///
 /// Implemented for [`super::RemoteReducers`].
-pub trait submit_npc_graph {
-    /// Request that the remote module invoke the reducer `submit_npc_graph` to run as soon as possible.
+pub trait submit_npc_actions {
+    /// Request that the remote module invoke the reducer `submit_npc_actions` to run as soon as possible.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
-    /// /// Use [`submit_npc_graph:submit_npc_graph_then`] to run a callback after the reducer completes.
-    fn submit_npc_graph(&self, npc_id: u64, graph_json: String) -> __sdk::Result<()> {
-        self.submit_npc_graph_then(npc_id, graph_json, |_, _| {})
+    /// /// Use [`submit_npc_actions:submit_npc_actions_then`] to run a callback after the reducer completes.
+    fn submit_npc_actions(&self, npc_id: u64, actions_json: String) -> __sdk::Result<()> {
+        self.submit_npc_actions_then(npc_id, actions_json, |_, _| {})
     }
 
-    /// Request that the remote module invoke the reducer `submit_npc_graph` to run as soon as possible,
+    /// Request that the remote module invoke the reducer `submit_npc_actions` to run as soon as possible,
     /// registering `callback` to run when we are notified that the reducer completed.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and its status can be observed with the `callback`.
-    fn submit_npc_graph_then(
+    fn submit_npc_actions_then(
         &self,
         npc_id: u64,
-        graph_json: String,
+        actions_json: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -56,17 +56,22 @@ pub trait submit_npc_graph {
     ) -> __sdk::Result<()>;
 }
 
-impl submit_npc_graph for super::RemoteReducers {
-    fn submit_npc_graph_then(
+impl submit_npc_actions for super::RemoteReducers {
+    fn submit_npc_actions_then(
         &self,
         npc_id: u64,
-        graph_json: String,
+        actions_json: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
             + 'static,
     ) -> __sdk::Result<()> {
-        self.imp
-            .invoke_reducer_with_callback(SubmitNpcGraphArgs { npc_id, graph_json }, callback)
+        self.imp.invoke_reducer_with_callback(
+            SubmitNpcActionsArgs {
+                npc_id,
+                actions_json,
+            },
+            callback,
+        )
     }
 }

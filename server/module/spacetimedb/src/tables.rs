@@ -74,19 +74,37 @@ pub struct Npc {
 }
 
 #[derive(Clone)]
-#[spacetimedb::table(accessor = npc_behaviour_graph, public)]
-pub struct NpcBehaviourGraph {
+#[spacetimedb::table(accessor = npc_behavior, public)]
+pub struct NpcBehavior {
     #[primary_key]
     pub npc_id: u64,
-    pub current_node: String,
-    pub graph: String,
+    pub mode: String,        // "idle" | "combat" | "plan"
+    pub combat_tree: String, // Behavior<NpcBtAction> JSON, empty when not in combat
+}
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = npc_plan, public)]
+pub struct NpcPlan {
+    #[primary_key]
+    pub npc_id: u64,
+    pub steps: String,       // JSON array of plan steps
+    pub current_step: i32,   // 0-indexed into steps array
 }
 
 #[spacetimedb::table(accessor = npc_pending_decision, public)]
 pub struct NpcPendingDecision {
     #[primary_key]
     pub npc_id: u64,
+    pub decision_type: String, // "combat_start" | "combat_update" | "post_combat" | "idle"
     pub context: String,
+}
+
+#[spacetimedb::table(accessor = npc_destination, public)]
+pub struct NpcDestination {
+    #[primary_key]
+    pub npc_id: u64,
+    pub target_x: f32,
+    pub target_z: f32,
 }
 
 

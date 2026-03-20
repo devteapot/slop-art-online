@@ -115,6 +115,18 @@ pub struct StatusEffect {
 }
 
 #[derive(Clone)]
+#[spacetimedb::table(accessor = npc_chat_message, public, scheduled(expire_npc_chat_message))]
+pub struct NpcChatMessage {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub npc_id: u64,
+    pub text: String,
+    pub position: Position,
+}
+
+#[derive(Clone)]
 #[spacetimedb::table(accessor = chat_message, public, scheduled(expire_chat_message))]
 pub struct ChatMessage {
     #[primary_key]
@@ -285,46 +297,131 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
     }
 
     for npc in ctx.db.npc().iter() {
-        if let Some(graph_entry) = ctx.db.npc_behaviour_graph().npc_id().find(&npc.id) {
-            let has_pending = ctx.db.npc_pending_decision().npc_id().find(&npc.id).is_some();
-            if !has_pending && graph_entry.current_node == "idle" {
-                if let Some((player, dist)) = find_nearest_player(ctx, &npc.position) {
-                    if dist <= NPC_DETECTION_RANGE {
-                        let context = format!(
-                            r#"{{"npc_id":{},"npc_level":{},"npc_position":{{"x":{},"y":{},"z":{}}},"npc_health":{},"nearby_players":[{{"identity":"{}","position":{{"x":{},"y":{},"z":{}}},"distance":{}}}],"attack_range":{}}}"#,
-                            npc.id, npc.level, npc.position.x, npc.position.y, npc.position.z, npc.health,
-                            player.identity.to_hex().to_string(),
-                            player.position.x, player.position.y, player.position.z, dist,
-                            ATTACK_RANGE
-                        );
-                        ctx.db.npc_pending_decision().insert(NpcPendingDecision { npc_id: npc.id, context });
-                    }
+        let target = find_nearest_player(ctx, &npc.position)
+            .filter(|(_, d)| *d <= NPC_DETECTION_RANGE)
+            .map(|(p, _)| p);
+
+        let behavior = ctx.db.npc_behavior().npc_id().find(&npc.id);
+
+        // ── Enemy detected: activate combat ──
+        if target.is_some() {
+            let needs_combat_tree = match &behavior {
+                Some(beh) => beh.mode != "combat" || beh.combat_tree.is_empty(),
+                None => true,
+            };
+
+            if needs_combat_tree {
+                // Combat just started — load default tree instantly
+                let default = build_default_combat_tree(npc.id);
+                let tree_json = serde_json::to_string(&default).unwrap();
+                upsert_npc_behavior(ctx, npc.id, "combat", &tree_json);
+                // Ask LLM for a better tree (async — will hot-swap when ready)
+                trigger_decision(ctx, &npc, "combat_start", target.as_ref());
+            }
+
+            // Evaluate whatever combat tree we have
+            let beh = ctx.db.npc_behavior().npc_id().find(&npc.id).unwrap();
+            if let Ok(tree) = serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.combat_tree) {
+                if let Some(action) = evaluate_combat_tree(&tree, &npc, target.as_ref()) {
+                    execute_bt_action(ctx, &npc, &action, target.as_ref());
                 }
             }
-            evaluate_graph(ctx, &npc, &graph_entry);
+            continue;
         }
+
+        // ── No enemy: was in combat? → post-combat ──
+        if let Some(ref beh) = behavior {
+            if beh.mode == "combat" {
+                upsert_npc_behavior(ctx, npc.id, "idle", "");
+                trigger_decision(ctx, &npc, "post_combat", None);
+                continue;
+            }
+        }
+
+        // ── Destination-following (from plan's travel_to) ──
+        if let Some(dest) = ctx.db.npc_destination().npc_id().find(&npc.id) {
+            let dx = dest.target_x - npc.position.x;
+            let dz = dest.target_z - npc.position.z;
+            let dist = (dx * dx + dz * dz).sqrt();
+            if dist <= NPC_CHASE_STEP {
+                log::info!("[NPC {}] arrived at destination ({:.1}, {:.1})", npc.id, dest.target_x, dest.target_z);
+                ctx.db.npc().id().update(Npc {
+                    position: Position { x: dest.target_x, y: NPC_GROUND_Y, z: dest.target_z },
+                    ..npc.clone()
+                });
+                ctx.db.npc_destination().npc_id().delete(&npc.id);
+            } else {
+                let dir_x = dx / dist;
+                let dir_z = dz / dist;
+                let new_x = (npc.position.x + dir_x * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
+                let new_z = (npc.position.z + dir_z * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
+                ctx.db.npc().id().update(Npc {
+                    position: Position { x: new_x, y: NPC_GROUND_Y, z: new_z },
+                    ..npc.clone()
+                });
+            }
+            continue;
+        }
+
+        // ── Plan execution ──
+        if let Some(plan) = ctx.db.npc_plan().npc_id().find(&npc.id) {
+            if (plan.current_step as usize) < plan_step_count(&plan) {
+                execute_plan_step(ctx, &npc, &plan);
+                continue;
+            } else {
+                // Plan complete — delete it
+                ctx.db.npc_plan().npc_id().delete(&npc.id);
+            }
+        }
+
+        // ── Idle: wander ──
+        if !has_pending_decision(ctx, npc.id) {
+            // Phase 2: trigger_decision(ctx, &npc, "idle", None);
+        }
+        execute_bt_action(ctx, &npc, &NpcBtAction::Wander, None);
     }
     schedule_next_npc_tick(ctx);
 }
 
 #[spacetimedb::reducer]
-pub fn submit_npc_graph(ctx: &ReducerContext, npc_id: u64, graph_json: String) -> Result<(), String> {
+pub fn submit_npc_combat_tree(ctx: &ReducerContext, npc_id: u64, tree_json: String) -> Result<(), String> {
     ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
-    let graph: BehaviourGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| format!("Invalid graph JSON: {e}"))?;
-    let npc = ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
-    let start_node = find_nearest_player(ctx, &npc.position)
-        .filter(|(_, d)| *d <= NPC_DETECTION_RANGE)
-        .map(|(_, d)| if d <= ATTACK_RANGE { "attacking" } else { "chasing" })
-        .unwrap_or(&graph.initial_node)
-        .to_string();
-    if ctx.db.npc_behaviour_graph().npc_id().find(&npc_id).is_some() {
-        ctx.db.npc_behaviour_graph().npc_id().update(NpcBehaviourGraph {
-            npc_id, current_node: start_node, graph: graph_json,
+    // Validate the tree JSON parses correctly
+    let _tree: bonsai_bt::Behavior<NpcBtAction> = serde_json::from_str(&tree_json)
+        .map_err(|e| format!("Invalid combat tree JSON: {e}"))?;
+    // Hot-swap the combat tree (only if NPC is still in combat)
+    if let Some(beh) = ctx.db.npc_behavior().npc_id().find(&npc_id) {
+        if beh.mode == "combat" {
+            log::info!("[NPC {}] hot-swapping combat tree from LLM", npc_id);
+            ctx.db.npc_behavior().npc_id().update(NpcBehavior {
+                combat_tree: tree_json,
+                ..beh
+            });
+        }
+    }
+    ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn submit_npc_plan(ctx: &ReducerContext, npc_id: u64, steps_json: String) -> Result<(), String> {
+    ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
+    // Validate the steps JSON parses correctly
+    let steps: Vec<NpcBtAction> = serde_json::from_str(&steps_json)
+        .map_err(|e| format!("Invalid plan steps JSON: {e}"))?;
+    log::info!("[NPC {}] received plan with {} steps", npc_id, steps.len());
+    // Replace any existing plan
+    if ctx.db.npc_plan().npc_id().find(&npc_id).is_some() {
+        ctx.db.npc_plan().npc_id().update(NpcPlan {
+            npc_id,
+            steps: steps_json,
+            current_step: 0,
         });
     } else {
-        ctx.db.npc_behaviour_graph().insert(NpcBehaviourGraph {
-            npc_id, current_node: start_node, graph: graph_json,
+        ctx.db.npc_plan().insert(NpcPlan {
+            npc_id,
+            steps: steps_json,
+            current_step: 0,
         });
     }
     ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
@@ -341,10 +438,10 @@ pub fn spawn_npc(ctx: &ReducerContext, x: f32, z: f32, level: i32) {
         max_health: hp,
         level,
     });
-    ctx.db.npc_behaviour_graph().insert(NpcBehaviourGraph {
+    ctx.db.npc_behavior().insert(NpcBehavior {
         npc_id: npc.id,
-        current_node: "idle".to_string(),
-        graph: DEFAULT_GRAPH.to_string(),
+        mode: "idle".to_string(),
+        combat_tree: String::new(),
     });
 }
 
@@ -717,6 +814,143 @@ pub fn send_chat_message(ctx: &ReducerContext, text: String) -> Result<(), Strin
 #[spacetimedb::reducer]
 pub fn expire_chat_message(_ctx: &ReducerContext, _row: ChatMessage) {
     // Row auto-deletes after this reducer completes.
+}
+
+#[spacetimedb::reducer]
+pub fn expire_npc_chat_message(_ctx: &ReducerContext, _row: NpcChatMessage) {
+    // Row auto-deletes after this reducer completes.
+}
+
+#[spacetimedb::reducer]
+pub fn submit_npc_actions(ctx: &ReducerContext, npc_id: u64, actions_json: String) -> Result<(), String> {
+    log::info!("[NPC {}] submit_npc_actions called with: {}", npc_id, actions_json);
+
+    let _npc = match ctx.db.npc().id().find(&npc_id) {
+        Some(n) => n,
+        None => {
+            log::warn!("[NPC {}] not found, clearing pending decision", npc_id);
+            ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
+            return Err("NPC not found".to_string());
+        }
+    };
+
+    let actions: Vec<npc_ai::NpcAction> = serde_json::from_str(&actions_json)
+        .map_err(|e| {
+            log::error!("[NPC {}] failed to parse actions: {}", npc_id, e);
+            format!("Invalid actions JSON: {e}")
+        })?;
+
+    log::info!("[NPC {}] executing {} action(s)", npc_id, actions.len());
+
+    for action in actions {
+        // Re-fetch NPC each iteration in case it died from a previous action
+        let Some(npc) = ctx.db.npc().id().find(&npc_id) else {
+            log::warn!("[NPC {}] died mid-execution, stopping", npc_id);
+            break;
+        };
+
+        match action {
+            npc_ai::NpcAction::MoveTo { x, z } => {
+                let clamped_x = x.clamp(WORLD_MIN, WORLD_MAX);
+                let clamped_z = z.clamp(WORLD_MIN, WORLD_MAX);
+                log::info!("[NPC {}] move_to ({:.1}, {:.1}) from ({:.1}, {:.1})", npc_id, clamped_x, clamped_z, npc.position.x, npc.position.z);
+                if ctx.db.npc_destination().npc_id().find(&npc_id).is_some() {
+                    ctx.db.npc_destination().npc_id().update(NpcDestination {
+                        npc_id, target_x: clamped_x, target_z: clamped_z,
+                    });
+                } else {
+                    ctx.db.npc_destination().insert(NpcDestination {
+                        npc_id, target_x: clamped_x, target_z: clamped_z,
+                    });
+                }
+            }
+            npc_ai::NpcAction::Attack { target_type, target_id } => {
+                let dmg = crate::skill::npc_damage(npc.level);
+                log::info!("[NPC {}] attack {} {} (dmg={})", npc_id, target_type, target_id, dmg);
+                match target_type.as_str() {
+                    "player" => {
+                        if let Ok(identity) = spacetimedb::Identity::from_hex(&target_id) {
+                            if let Some(player) = ctx.db.player().identity().find(&identity) {
+                                let dist = npc.position.distance_to(&player.position);
+                                if dist <= ATTACK_RANGE {
+                                    let new_health = player.health - dmg;
+                                    log::info!("[NPC {}] hit player {} for {} dmg (hp: {} → {})", npc_id, target_id, dmg, player.health, new_health);
+                                    if new_health <= 0 {
+                                        log::info!("[NPC {}] killed player {}", npc_id, target_id);
+                                        respawn_player(ctx, &player);
+                                    } else {
+                                        ctx.db.player().identity().update(Player {
+                                            health: new_health,
+                                            ..player
+                                        });
+                                    }
+                                } else {
+                                    log::warn!("[NPC {}] attack out of range: dist={:.1} > range={:.1}", npc_id, dist, ATTACK_RANGE);
+                                }
+                            } else {
+                                log::warn!("[NPC {}] attack target player {} not found", npc_id, target_id);
+                            }
+                        } else {
+                            log::warn!("[NPC {}] invalid player identity hex: {}", npc_id, target_id);
+                        }
+                    }
+                    "npc" => {
+                        if let Ok(target_npc_id) = target_id.parse::<u64>() {
+                            if target_npc_id != npc_id {
+                                if let Some(target_npc) = ctx.db.npc().id().find(&target_npc_id) {
+                                    let dist = npc.position.distance_to(&target_npc.position);
+                                    if dist <= ATTACK_RANGE {
+                                        let new_health = target_npc.health - dmg;
+                                        log::info!("[NPC {}] hit NPC {} for {} dmg (hp: {} → {})", npc_id, target_npc_id, dmg, target_npc.health, new_health);
+                                        if new_health <= 0 {
+                                            log::info!("[NPC {}] killed NPC {}", npc_id, target_npc_id);
+                                            kill_npc(ctx, &target_npc, ctx.sender());
+                                        } else {
+                                            ctx.db.npc().id().update(Npc {
+                                                health: new_health,
+                                                ..target_npc
+                                            });
+                                        }
+                                    } else {
+                                        log::warn!("[NPC {}] attack NPC {} out of range: dist={:.1}", npc_id, target_npc_id, dist);
+                                    }
+                                } else {
+                                    log::warn!("[NPC {}] attack target NPC {} not found", npc_id, target_npc_id);
+                                }
+                            } else {
+                                log::warn!("[NPC {}] tried to attack self", npc_id);
+                            }
+                        }
+                    }
+                    other => {
+                        log::warn!("[NPC {}] unknown attack target_type: {}", npc_id, other);
+                    }
+                }
+            }
+            npc_ai::NpcAction::Say { message } => {
+                let text = message.chars().take(NPC_CHAT_MAX_LENGTH).collect::<String>();
+                log::info!("[NPC {}] say: \"{}\"", npc_id, text);
+                if !text.is_empty() {
+                    ctx.db.npc_chat_message().insert(NpcChatMessage {
+                        scheduled_id: 0,
+                        scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(NPC_CHAT_MESSAGE_EXPIRE_MS)),
+                        npc_id,
+                        text,
+                        position: npc.position.clone(),
+                    });
+                }
+            }
+            npc_ai::NpcAction::Wander => {
+                log::info!("[NPC {}] wander (clearing destination)", npc_id);
+                ctx.db.npc_destination().npc_id().delete(&npc_id);
+            }
+        }
+    }
+
+    // Always clear pending decision to prevent infinite retry
+    ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
+    log::info!("[NPC {}] pending decision cleared", npc_id);
+    Ok(())
 }
 
 #[spacetimedb::reducer]
