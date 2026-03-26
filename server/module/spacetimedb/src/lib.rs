@@ -885,10 +885,16 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
             trigger_decision_enriched(ctx, &npc, "experience", target.as_ref(), is_night);
         }
     }
+
+    // Belief/knowledge propagation between nearby NPCs (every 10 ticks ~5s)
+    if tick_num % 10 == 0 {
+        propagate_beliefs_and_knowledge(ctx);
+    }
+
     schedule_next_npc_tick(ctx);
 }
 
-/// v2: Submit a unified behavior tree for an NPC (replaces combat_tree + life_tree + plan)
+/// v2: Submit a unified behavior tree for an NPC
 #[spacetimedb::reducer]
 pub fn submit_npc_tree(ctx: &ReducerContext, npc_id: u64, tree_json: String) {
     if ctx.db.npc().id().find(&npc_id).is_none() {
@@ -1650,47 +1656,89 @@ pub fn send_chat_message(ctx: &ReducerContext, text: String) -> Result<(), Strin
         position: player.position.clone(),
     });
 
-    // Notify nearby NPCs that a player said something
+    // Notify nearby NPCs with engagement-based confidence
     log::info!(
         "[CHAT] Player said: \"{}\" at ({:.1}, {:.1}, {:.1})",
-        text,
-        player.position.x,
-        player.position.y,
-        player.position.z
+        text, player.position.x, player.position.y, player.position.z
     );
-    let mut notified = 0u32;
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch()
+        .unwrap_or_default().as_micros() as u64;
+    let player_hex = ctx.sender().to_hex().to_string();
+
     for npc in ctx.db.npc().iter() {
         let dist = npc.position.distance_to(&player.position);
-        if dist <= NPC_DETECTION_RANGE {
-            log::info!(
-                "[CHAT] NPC {} ({}) heard chat (dist={:.1})",
-                npc.id,
-                npc.name,
-                dist
-            );
-            notified += 1;
-            log_npc_event(
-                ctx,
-                npc.id,
-                "heard_chat",
-                &format!(
-                    r#"{{"player":"{}","text":"{}"}}"#,
-                    ctx.sender().to_hex().to_string(),
-                    text.replace('\\', "\\\\").replace('"', "\\\""),
-                ),
-            );
+        if dist > NPC_DETECTION_RANGE { continue; }
+
+        // Calculate engagement level based on distance and NPC state
+        let engagement = if dist <= ATTACK_RANGE {
+            // Very close — focused
+            1.0_f32
+        } else if dist <= NPC_DETECTION_RANGE * 0.5 {
+            // Mid-range — attentive
+            0.5
         } else {
-            log::info!(
-                "[CHAT] NPC {} ({}) too far (dist={:.1}, range={})",
-                npc.id,
-                npc.name,
-                dist,
-                NPC_DETECTION_RANGE
-            );
+            // Far — overhearing
+            0.2
+        };
+
+        // Topic relevance: check if any word in the message matches NPC's role or active goals
+        let text_lower = text.to_lowercase();
+        let role_relevant = match npc.role.as_str() {
+            "guard" => text_lower.contains("danger") || text_lower.contains("bandit")
+                || text_lower.contains("attack") || text_lower.contains("threat")
+                || text_lower.contains("help") || text_lower.contains("guard"),
+            "trader" | "merchant" => text_lower.contains("buy") || text_lower.contains("sell")
+                || text_lower.contains("price") || text_lower.contains("trade")
+                || text_lower.contains("potion") || text_lower.contains("item"),
+            "healer" => text_lower.contains("heal") || text_lower.contains("hurt")
+                || text_lower.contains("potion") || text_lower.contains("health"),
+            _ => false,
+        };
+        let topic_relevance: f32 = if role_relevant { 1.0 } else { 0.5 };
+        let confidence = engagement * topic_relevance;
+
+        // Log detailed heard_speech event
+        let escaped_text = text.replace('\\', "\\\\").replace('"', "\\\"");
+        let engagement_label = if engagement >= 1.0 { "focused" }
+            else if engagement >= 0.5 { "attentive" }
+            else { "overhearing" };
+
+        log_npc_event(ctx, npc.id, "heard_chat", &format!(
+            r#"{{"player":"{}","text":"{}","distance":{:.1},"engagement":"{}","confidence":{:.2},"topic_relevance":{:.1}}}"#,
+            player_hex, escaped_text, dist, engagement_label, confidence, topic_relevance
+        ));
+
+        // Auto-create belief from overheard speech (at scaled confidence)
+        if confidence >= 0.3 && !text.is_empty() {
+            let existing = ctx.db.npc_belief().iter()
+                .find(|b| b.npc_id == npc.id && b.subject == format!("player:{}", player_hex)
+                    && b.predicate == "said");
+            if let Some(existing) = existing {
+                ctx.db.npc_belief().id().update(NpcBelief {
+                    object: text.chars().take(100).collect(),
+                    confidence,
+                    updated_at: now_us,
+                    ..existing
+                });
+            } else {
+                let count = ctx.db.npc_belief().iter().filter(|b| b.npc_id == npc.id).count();
+                if count < MAX_NPC_BELIEFS {
+                    ctx.db.npc_belief().insert(NpcBelief {
+                        id: 0, npc_id: npc.id,
+                        subject: format!("player:{}", player_hex),
+                        predicate: "said".to_string(),
+                        object: text.chars().take(100).collect(),
+                        confidence,
+                        updated_at: now_us,
+                    });
+                }
+            }
         }
-    }
-    if notified == 0 {
-        log::info!("[CHAT] No NPCs in range to hear the message");
+
+        log::info!(
+            "[CHAT] NPC {} ({}) heard chat (dist={:.1}, engagement={}, confidence={:.2})",
+            npc.id, npc.name, dist, engagement_label, confidence
+        );
     }
     Ok(())
 }

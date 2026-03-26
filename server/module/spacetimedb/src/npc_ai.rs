@@ -220,6 +220,12 @@ pub enum NpcBtAction {
     SetBelief { subject: String, predicate: String, object: String },
     RequestLlmDecision(String),
 
+    // v2: Conversation tier conditions
+    MatchesGreeting,                               // player said a greeting-like phrase
+    TopicMatchesKnowledge,                         // player's topic matches NPC's knowledge
+    TopicMatchesBelief,                            // player's topic matches NPC's beliefs
+    IsImportantConversation,                       // high-relationship or long conversation or key NPC
+
     // v2: Entity-targeting actions (knowledge-gated)
     TravelToEntity { entity_type: String, entity_id: u64 },
     AttackEntity { entity_type: String, entity_id: u64 },
@@ -237,6 +243,9 @@ pub enum NpcBtAction {
     SayTemplate(String),
     SayFromKnowledge(String),
     SayFromBelief(String),
+
+    // v2: Conversation actions
+    RequestLlmResponse,                            // trigger "conversation" decision for LLM
 
     // v2: Tree lifecycle
     RequestNewTree,
@@ -378,6 +387,49 @@ pub fn evaluate_tree(
                 }
                 NpcBtAction::BeingAddressedInConversation => {
                     if has_unhandled_chat(ctx, npc.id) { ok() } else { None }
+                }
+
+                // ── v2 Conversation tier conditions ──
+                NpcBtAction::MatchesGreeting => {
+                    let text = get_latest_heard_text(ctx, npc.id).unwrap_or_default().to_lowercase();
+                    let greetings = ["hello", "hi", "hey", "greetings", "good morning", "good evening", "howdy"];
+                    if greetings.iter().any(|g| text.contains(g)) { ok() } else { None }
+                }
+                NpcBtAction::TopicMatchesKnowledge => {
+                    let text = get_latest_heard_text(ctx, npc.id).unwrap_or_default().to_lowercase();
+                    if text.is_empty() { return None; }
+                    let matches = ctx.db.npc_knowledge().iter().any(|k| {
+                        k.npc_id == npc.id && (
+                            text.contains(&k.category.to_lowercase()) ||
+                            k.fact.to_lowercase().split_whitespace()
+                                .any(|word| word.len() > 3 && text.contains(word))
+                        )
+                    });
+                    if matches { ok() } else { None }
+                }
+                NpcBtAction::TopicMatchesBelief => {
+                    let text = get_latest_heard_text(ctx, npc.id).unwrap_or_default().to_lowercase();
+                    if text.is_empty() { return None; }
+                    let matches = ctx.db.npc_belief().iter().any(|b| {
+                        b.npc_id == npc.id && b.predicate != "said" && (
+                            text.contains(&b.subject.to_lowercase()) ||
+                            text.contains(&b.predicate.to_lowercase())
+                        )
+                    });
+                    if matches { ok() } else { None }
+                }
+                NpcBtAction::IsImportantConversation => {
+                    // Important if: player has high relationship, or NPC is a key role
+                    let key_roles = ["historian", "healer", "trader", "guard"];
+                    let is_key = key_roles.contains(&npc.role.as_str());
+                    let has_relationship = target.map_or(false, |p| {
+                        let pid = p.identity.to_hex().to_string();
+                        ctx.db.npc_relationship().iter().any(|r| {
+                            r.npc_id == npc.id && r.target_id == pid
+                                && (r.disposition > 30 || r.disposition < -30)
+                        })
+                    });
+                    if is_key || has_relationship { ok() } else { None }
                 }
 
                 // ── Actions — always succeed, return themselves for execution ──
@@ -649,9 +701,86 @@ pub fn execute_bt_action(
         }
 
         // ── v2: Exploration ──
-        NpcBtAction::SearchFor(_category) => {
-            // Wander randomly; actual discovery logic added in Step 8
+        NpcBtAction::SearchFor(category) => {
+            // Wander + check nearby items/POIs for matches
             execute_bt_action(ctx, npc, &NpcBtAction::Wander, None);
+
+            let now_us = ctx.timestamp.to_duration_since_unix_epoch()
+                .unwrap_or_default().as_micros() as u64;
+            let cat_lower = category.to_lowercase();
+
+            // Check nearby ground items
+            for item in ctx.db.ground_item().iter() {
+                if npc.position.distance_to(&item.position) <= NPC_DETECTION_RANGE {
+                    if let Some(item_def) = ctx.db.item_def().id().find(&item.item_def_id) {
+                        let name_lower = item_def.name.to_lowercase();
+                        let matches = match cat_lower.as_str() {
+                            "healing" => name_lower.contains("health") || name_lower.contains("potion") || name_lower.contains("heal"),
+                            "weapon" => name_lower.contains("sword") || name_lower.contains("axe") || name_lower.contains("bow"),
+                            "food" => name_lower.contains("food") || name_lower.contains("bread") || name_lower.contains("meat"),
+                            _ => name_lower.contains(&cat_lower),
+                        };
+                        if matches {
+                            // Discover: add knowledge about this item
+                            let fact = format!("{} (item_def:{}) found near position ({:.0}, {:.0})",
+                                item_def.name, item.item_def_id, item.position.x, item.position.z);
+                            let existing = ctx.db.npc_knowledge().iter()
+                                .find(|k| k.npc_id == npc.id && k.fact == fact);
+                            if existing.is_none() {
+                                let count = ctx.db.npc_knowledge().iter().filter(|k| k.npc_id == npc.id).count();
+                                if count < MAX_NPC_KNOWLEDGE {
+                                    ctx.db.npc_knowledge().insert(NpcKnowledge {
+                                        id: 0, npc_id: npc.id,
+                                        category: "items".to_string(),
+                                        fact,
+                                        learned_from: "experience".to_string(),
+                                        confidence: 0.9,
+                                        created_at: now_us,
+                                    });
+                                    log::info!("[NPC {}] discovered {} while searching for '{}'", npc.id, item_def.name, category);
+                                }
+                            }
+                            break; // one discovery per tick
+                        }
+                    }
+                }
+            }
+
+            // Check nearby POIs
+            for poi in ctx.db.point_of_interest().iter() {
+                let dx = npc.position.x - poi.x;
+                let dz = npc.position.z - poi.z;
+                let dist = (dx * dx + dz * dz).sqrt();
+                if dist <= NPC_DETECTION_RANGE {
+                    let type_lower = poi.poi_type.to_lowercase();
+                    let matches = match cat_lower.as_str() {
+                        "trading" | "market" => type_lower == "market",
+                        "rest" | "inn" => type_lower == "inn",
+                        _ => type_lower.contains(&cat_lower) || poi.name.to_lowercase().contains(&cat_lower),
+                    };
+                    if matches {
+                        let fact = format!("{} (poi:{}) is a {} at ({:.0}, {:.0})",
+                            poi.name, poi.id, poi.poi_type, poi.x, poi.z);
+                        let existing = ctx.db.npc_knowledge().iter()
+                            .find(|k| k.npc_id == npc.id && k.category == "navigation"
+                                && k.fact.contains(&poi.name));
+                        if existing.is_none() {
+                            let count = ctx.db.npc_knowledge().iter().filter(|k| k.npc_id == npc.id).count();
+                            if count < MAX_NPC_KNOWLEDGE {
+                                ctx.db.npc_knowledge().insert(NpcKnowledge {
+                                    id: 0, npc_id: npc.id,
+                                    category: "navigation".to_string(),
+                                    fact,
+                                    learned_from: "experience".to_string(),
+                                    confidence: 0.9,
+                                    created_at: now_us,
+                                });
+                                log::info!("[NPC {}] discovered {} while searching for '{}'", npc.id, poi.name, category);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // ── v2: Inline identity updates ──
@@ -708,18 +837,46 @@ pub fn execute_bt_action(
             }
         }
         NpcBtAction::SayFromKnowledge(topic) => {
+            // If topic is empty, use latest heard text as search
+            let search = if topic.is_empty() {
+                get_latest_heard_text(ctx, npc.id).unwrap_or_default().to_lowercase()
+            } else {
+                topic.to_lowercase()
+            };
             let knowledge = ctx.db.npc_knowledge().iter()
-                .find(|k| k.npc_id == npc.id && (k.category.contains(topic.as_str()) || k.fact.contains(topic.as_str())));
+                .find(|k| k.npc_id == npc.id && (
+                    search.contains(&k.category.to_lowercase()) ||
+                    k.fact.to_lowercase().split_whitespace()
+                        .any(|word| word.len() > 3 && search.contains(word))
+                ));
             if let Some(k) = knowledge {
                 execute_bt_action(ctx, npc, &NpcBtAction::Say(k.fact.clone()), None);
+                log_npc_event(ctx, npc.id, "responded_to_chat", "{}");
             }
         }
         NpcBtAction::SayFromBelief(topic) => {
+            let search = if topic.is_empty() {
+                get_latest_heard_text(ctx, npc.id).unwrap_or_default().to_lowercase()
+            } else {
+                topic.to_lowercase()
+            };
             let belief = ctx.db.npc_belief().iter()
-                .find(|b| b.npc_id == npc.id && (b.subject.contains(topic.as_str()) || b.predicate.contains(topic.as_str())));
+                .find(|b| b.npc_id == npc.id && b.predicate != "said" && (
+                    search.contains(&b.subject.to_lowercase()) ||
+                    search.contains(&b.predicate.to_lowercase())
+                ));
             if let Some(b) = belief {
                 let text = format!("I believe {} {} {}.", b.subject, b.predicate, b.object);
                 execute_bt_action(ctx, npc, &NpcBtAction::Say(text), None);
+                log_npc_event(ctx, npc.id, "responded_to_chat", "{}");
+            }
+        }
+
+        // ── v2: Conversation — trigger LLM for novel response ──
+        NpcBtAction::RequestLlmResponse => {
+            if !has_pending_decision(ctx, npc.id) {
+                log_npc_event(ctx, npc.id, "responded_to_chat", "{}");
+                trigger_decision(ctx, npc, "conversation", target);
             }
         }
 
@@ -759,7 +916,9 @@ pub fn execute_bt_action(
         | NpcBtAction::EmotionAbove(_, _) | NpcBtAction::EmotionBelow(_, _)
         | NpcBtAction::EmotionDominant(_) | NpcBtAction::HasKnowledge(_)
         | NpcBtAction::StrengthAdvantage(_) | NpcBtAction::IsBeingAttacked
-        | NpcBtAction::BeingAddressedInConversation => {}
+        | NpcBtAction::BeingAddressedInConversation
+        | NpcBtAction::MatchesGreeting | NpcBtAction::TopicMatchesKnowledge
+        | NpcBtAction::TopicMatchesBelief | NpcBtAction::IsImportantConversation => {}
     }
 }
 
@@ -894,6 +1053,28 @@ pub fn has_unhandled_chat(ctx: &ReducerContext, npc_id: u64) -> bool {
     latest_heard > 0 && latest_heard > latest_responded
 }
 
+/// Extract the text from the most recent "heard_chat" event for an NPC.
+pub fn get_latest_heard_text(ctx: &ReducerContext, npc_id: u64) -> Option<String> {
+    let mut latest_created: u64 = 0;
+    let mut latest_text: Option<String> = None;
+    for evt in ctx.db.npc_event_log().iter() {
+        if evt.npc_id != npc_id || evt.event != "heard_chat" { continue; }
+        let expiry_us = match &evt.scheduled_at {
+            ScheduleAt::Time(t) => t.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64,
+            _ => 0,
+        };
+        let created_us = expiry_us.saturating_sub(NPC_EVENT_EXPIRE_MS * 1000);
+        if created_us > latest_created {
+            latest_created = created_us;
+            // Parse text from event detail JSON
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&evt.detail) {
+                latest_text = v.get("text").and_then(|t| t.as_str()).map(String::from);
+            }
+        }
+    }
+    latest_text
+}
+
 // ── Helper: log an NPC event (short-term memory, auto-expires) ──
 
 pub const NPC_EVENT_EXPIRE_MS: u64 = 300_000; // 5 minutes
@@ -951,6 +1132,115 @@ pub fn check_goal_conditions(ctx: &ReducerContext, npc: &Npc) {
             log_npc_event(ctx, npc.id, "goal_completed", "{}");
             // Emotion: achieving a goal brings joy
             trigger_emotion(ctx, npc.id, "joy", 0.4);
+        }
+    }
+}
+
+// ── Belief/knowledge propagation ──
+
+/// Share beliefs and knowledge between nearby NPCs based on trust level.
+/// Called every N ticks from tick_npcs. Confidence degrades through the chain.
+pub fn propagate_beliefs_and_knowledge(ctx: &ReducerContext) {
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch()
+        .unwrap_or_default().as_micros() as u64;
+    let npcs: Vec<Npc> = ctx.db.npc().iter().collect();
+
+    for i in 0..npcs.len() {
+        for j in (i + 1)..npcs.len() {
+            let a = &npcs[i];
+            let b = &npcs[j];
+            let dist = a.position.distance_to(&b.position);
+            if dist > NPC_DETECTION_RANGE { continue; }
+
+            // Check both directions of relationship
+            propagate_from_to(ctx, a.id, b.id, now_us);
+            propagate_from_to(ctx, b.id, a.id, now_us);
+        }
+    }
+}
+
+fn propagate_from_to(ctx: &ReducerContext, from_id: u64, to_id: u64, now_us: u64) {
+    // Find relationship disposition
+    let disposition = ctx.db.npc_relationship().iter()
+        .find(|r| r.npc_id == from_id && r.target_type == "npc"
+            && r.target_id == to_id.to_string())
+        .map(|r| r.disposition)
+        .unwrap_or(0);
+
+    // Only share if disposition > 30 (friendly)
+    if disposition <= 30 { return; }
+    let trust_factor = disposition as f32 / 100.0;
+
+    // Propagate beliefs
+    let beliefs: Vec<NpcBelief> = ctx.db.npc_belief().iter()
+        .filter(|b| b.npc_id == from_id && b.confidence > 0.7 && b.predicate != "said")
+        .collect();
+
+    for belief in &beliefs {
+        let received_confidence = belief.confidence * trust_factor;
+        if received_confidence < 0.1 { continue; }
+
+        let existing = ctx.db.npc_belief().iter()
+            .find(|b| b.npc_id == to_id && b.subject == belief.subject
+                && b.predicate == belief.predicate);
+
+        if let Some(existing) = existing {
+            // Only update if received confidence is higher
+            if received_confidence > existing.confidence {
+                ctx.db.npc_belief().id().update(NpcBelief {
+                    confidence: received_confidence,
+                    object: belief.object.clone(),
+                    updated_at: now_us,
+                    ..existing
+                });
+            }
+        } else {
+            let count = ctx.db.npc_belief().iter().filter(|b| b.npc_id == to_id).count();
+            if count < MAX_NPC_BELIEFS {
+                ctx.db.npc_belief().insert(NpcBelief {
+                    id: 0, npc_id: to_id,
+                    subject: belief.subject.clone(),
+                    predicate: belief.predicate.clone(),
+                    object: belief.object.clone(),
+                    confidence: received_confidence,
+                    updated_at: now_us,
+                });
+            }
+        }
+    }
+
+    // Propagate knowledge
+    let knowledge: Vec<NpcKnowledge> = ctx.db.npc_knowledge().iter()
+        .filter(|k| k.npc_id == from_id && k.confidence > 0.7)
+        .collect();
+
+    for k in &knowledge {
+        let received_confidence = k.confidence * trust_factor;
+        if received_confidence < 0.1 { continue; }
+
+        let existing = ctx.db.npc_knowledge().iter()
+            .find(|e| e.npc_id == to_id && e.category == k.category && e.fact == k.fact);
+
+        if let Some(existing) = existing {
+            if received_confidence > existing.confidence {
+                ctx.db.npc_knowledge().id().update(NpcKnowledge {
+                    confidence: received_confidence,
+                    created_at: now_us,
+                    ..existing
+                });
+            }
+        } else {
+            let count = ctx.db.npc_knowledge().iter().filter(|e| e.npc_id == to_id).count();
+            if count < MAX_NPC_KNOWLEDGE {
+                ctx.db.npc_knowledge().insert(NpcKnowledge {
+                    id: 0, npc_id: to_id,
+                    category: k.category.clone(),
+                    fact: k.fact.clone(),
+                    learned_from: format!("told_by:npc:{}", from_id),
+                    confidence: received_confidence,
+                    created_at: now_us,
+                });
+            }
         }
     }
 }
@@ -1049,9 +1339,43 @@ pub fn default_unified_tree(role: &str) -> Behavior<NpcBtAction> {
             Action(NpcBtAction::Attack),
         ]),
     ]);
+    // Full conversation protocol: listen (handled by send_chat_message),
+    // respond via tiers: greeting → knowledge → belief → emotion → LLM → fallback
     let reactive_conversation = Sequence(vec![
         Action(NpcBtAction::BeingAddressedInConversation),
-        Action(NpcBtAction::SayTemplate("generic_acknowledgment".into())),
+        Select(vec![
+            // Tier 1: Greeting template
+            Sequence(vec![
+                Action(NpcBtAction::MatchesGreeting),
+                Action(NpcBtAction::SayTemplate("greeting_response".into())),
+            ]),
+            // Tier 2: Knowledge-based response
+            Sequence(vec![
+                Action(NpcBtAction::TopicMatchesKnowledge),
+                Action(NpcBtAction::SayFromKnowledge("".into())), // empty = match from latest heard
+            ]),
+            // Tier 3: Belief-based response
+            Sequence(vec![
+                Action(NpcBtAction::TopicMatchesBelief),
+                Action(NpcBtAction::SayFromBelief("".into())),
+            ]),
+            // Tier 4: Emotion-colored template
+            Sequence(vec![
+                Action(NpcBtAction::EmotionDominant("fear".into())),
+                Action(NpcBtAction::SayTemplate("nervous_deflection".into())),
+            ]),
+            Sequence(vec![
+                Action(NpcBtAction::EmotionDominant("joy".into())),
+                Action(NpcBtAction::SayTemplate("cheerful_ignorance".into())),
+            ]),
+            // Tier 5: LLM generation (important conversations only)
+            Sequence(vec![
+                Action(NpcBtAction::IsImportantConversation),
+                Action(NpcBtAction::RequestLlmResponse),
+            ]),
+            // Tier 6: Fallback
+            Action(NpcBtAction::SayTemplate("generic_acknowledgment".into())),
+        ]),
     ]);
 
     match role {
