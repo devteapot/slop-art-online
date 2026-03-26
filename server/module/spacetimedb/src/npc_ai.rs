@@ -593,7 +593,7 @@ pub fn execute_bt_action(
         NpcBtAction::RequestLlmDecision(reason) => {
             if !has_pending_decision(ctx, npc.id) {
                 log_npc_event(ctx, npc.id, "self_request", &format!(r#"{{"reason":"{}"}}"#, reason.replace('"', "\\\"")) );
-                trigger_decision(ctx, npc, "significant", None);
+                trigger_decision(ctx, npc, "experience", None);
             }
         }
 
