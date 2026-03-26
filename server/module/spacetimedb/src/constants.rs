@@ -89,3 +89,4 @@ pub const MAX_NPC_GOALS: usize = 10;
 pub const NPC_SLEEP_REGEN_PCT: i32 = 5;
 pub const MAX_NPC_KNOWLEDGE: usize = 50;
 pub const MAX_NPC_MEMORIES: usize = 10;
+pub const TREE_EXHAUSTION_THRESHOLD: u32 = 10; // ticks with no action before requesting new tree

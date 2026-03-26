@@ -14,61 +14,18 @@ use crate::NpcEventLog;
 use crate::npc_memory;
 use crate::ground_item;
 
-// ── Role configuration ──
-
-#[derive(Clone, Debug)]
-pub enum TreeStyle { Aggressive, Defensive, FleeFirst, Passive }
-
-#[derive(Clone, Debug)]
-pub enum IdleBehavior { Wander, StayPut, Patrol, Roam }
+// ── Role configuration (v2: simplified, combat behavior lives in unified tree) ──
 
 #[derive(Clone, Debug)]
 pub struct RoleConfig {
-    pub auto_aggro: bool,
-    pub aggro_on_hit: bool,
-    pub default_tree_style: TreeStyle,
-    pub idle_behavior: IdleBehavior,
+    pub aggro_on_hit: bool,  // does this NPC fight back when attacked?
 }
 
 pub fn role_config(role: &str) -> RoleConfig {
     match role {
-        "hostile" => RoleConfig {
-            auto_aggro: true, aggro_on_hit: true,
-            default_tree_style: TreeStyle::Aggressive, idle_behavior: IdleBehavior::Wander,
-        },
-        "hostile_defensive" => RoleConfig {
-            auto_aggro: true, aggro_on_hit: true,
-            default_tree_style: TreeStyle::Defensive, idle_behavior: IdleBehavior::Wander,
-        },
-        "trader" => RoleConfig {
-            auto_aggro: false, aggro_on_hit: true,
-            default_tree_style: TreeStyle::FleeFirst, idle_behavior: IdleBehavior::StayPut,
-        },
-        "traveller" => RoleConfig {
-            auto_aggro: false, aggro_on_hit: true,
-            default_tree_style: TreeStyle::FleeFirst, idle_behavior: IdleBehavior::Roam,
-        },
-        "historian" => RoleConfig {
-            auto_aggro: false, aggro_on_hit: false,
-            default_tree_style: TreeStyle::Passive, idle_behavior: IdleBehavior::StayPut,
-        },
-        "adventurer" => RoleConfig {
-            auto_aggro: false, aggro_on_hit: true,
-            default_tree_style: TreeStyle::Aggressive, idle_behavior: IdleBehavior::Roam,
-        },
-        "guard" => RoleConfig {
-            auto_aggro: false, aggro_on_hit: true,
-            default_tree_style: TreeStyle::Defensive, idle_behavior: IdleBehavior::Patrol,
-        },
-        "healer" => RoleConfig {
-            auto_aggro: false, aggro_on_hit: true,
-            default_tree_style: TreeStyle::FleeFirst, idle_behavior: IdleBehavior::StayPut,
-        },
-        // Unknown roles default to hostile
-        _ => RoleConfig {
-            auto_aggro: true, aggro_on_hit: true,
-            default_tree_style: TreeStyle::Aggressive, idle_behavior: IdleBehavior::Wander,
-        },
+        "historian" => RoleConfig { aggro_on_hit: false },
+        // All other roles fight back when hit (tree's reactive layer handles the rest)
+        _ => RoleConfig { aggro_on_hit: true },
     }
 }
 
@@ -212,7 +169,9 @@ pub enum NpcAction {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NpcBtAction {
-    // Conditions (return Success/Failure, no side effects)
+    // ── Conditions (return Success/Failure, no side effects) ──
+
+    // World state
     EnemyInRange,
     EnemyDetected,
     HealthBelow(f32),
@@ -230,20 +189,29 @@ pub enum NpcBtAction {
     ManaAbove(f32),
     StaminaAbove(f32),
 
-    // Combat actions
+    // v2: Emotion gates
+    EmotionAbove(String, f32),
+    EmotionBelow(String, f32),
+    EmotionDominant(String),
+
+    // v2: Identity/knowledge conditions
+    HasKnowledge(String),                      // has any knowledge in this category
+    StrengthAdvantage(f32),                    // NPC stronger than target by this ratio
+    IsBeingAttacked,                           // recent "took_damage" event
+    BeingAddressedInConversation,              // recent unhandled "heard_chat"
+
+    // ── Combat actions ──
     Attack,
     Chase,
     Flee,
     Wander,
 
-    // Shared actions (both layers)
+    // ── Shared actions ──
     Say(String),
-
-    // Plan-only actions
     TravelTo { x: f32, z: f32 },
     Wait(f32),
 
-    // Life tree actions
+    // ── Life/unified tree actions ──
     TravelToPoi(String),
     GoHome,
     PickUpNearby,
@@ -251,82 +219,48 @@ pub enum NpcBtAction {
     SayToNpc { npc_id: u64, message: String },
     SetBelief { subject: String, predicate: String, object: String },
     RequestLlmDecision(String),
+
+    // v2: Entity-targeting actions (knowledge-gated)
+    TravelToEntity { entity_type: String, entity_id: u64 },
+    AttackEntity { entity_type: String, entity_id: u64 },
+    SayToEntity { entity_type: String, entity_id: u64, message: String },
+
+    // v2: Exploration (vague, no knowledge required)
+    SearchFor(String),
+
+    // v2: Inline identity updates (no LLM cost)
+    AddKnowledge { category: String, fact: String },
+    AdjustRelationship { target: String, delta: i32 },
+    TriggerEmotionAction { emotion: String, delta: f32 },
+
+    // v2: Conversation protocol
+    SayTemplate(String),
+    SayFromKnowledge(String),
+    SayFromBelief(String),
+
+    // v2: Tree lifecycle
+    RequestNewTree,
+    KeepDistance(f32),
+    Follow { distance: f32 },
 }
 
-// ── Default combat tree builder ──
+// ── Speech templates ──
 
-pub fn build_default_combat_tree(style: &TreeStyle) -> Behavior<NpcBtAction> {
-    use Behavior::{Action, If, Select, Sequence};
-
-    match style {
-        TreeStyle::Aggressive => {
-            // Flee at 25% hp, else attack if in range, else chase, else wander
-            Select(vec![
-                If(
-                    Box::new(Action(NpcBtAction::HealthBelow(0.25))),
-                    Box::new(Sequence(vec![
-                        Action(NpcBtAction::Say("I must retreat!".into())),
-                        Action(NpcBtAction::Flee),
-                    ])),
-                    Box::new(Select(vec![
-                        If(
-                            Box::new(Action(NpcBtAction::EnemyInRange)),
-                            Box::new(Action(NpcBtAction::Attack)),
-                            Box::new(If(
-                                Box::new(Action(NpcBtAction::EnemyDetected)),
-                                Box::new(Action(NpcBtAction::Chase)),
-                                Box::new(Action(NpcBtAction::Wander)),
-                            )),
-                        ),
-                    ])),
-                ),
-            ])
-        }
-        TreeStyle::Defensive => {
-            // Flee at 40% hp, attack if in range, NO chase (hold position), else wander
-            Select(vec![
-                If(
-                    Box::new(Action(NpcBtAction::HealthBelow(0.4))),
-                    Box::new(Sequence(vec![
-                        Action(NpcBtAction::Say("I must retreat!".into())),
-                        Action(NpcBtAction::Flee),
-                    ])),
-                    Box::new(If(
-                        Box::new(Action(NpcBtAction::EnemyInRange)),
-                        Box::new(Action(NpcBtAction::Attack)),
-                        Box::new(Action(NpcBtAction::Wander)),
-                    )),
-                ),
-            ])
-        }
-        TreeStyle::FleeFirst => {
-            // Always flee if enemy detected, only attack if in range AND hp > 50%
-            Select(vec![
-                If(
-                    Box::new(Action(NpcBtAction::EnemyInRange)),
-                    Box::new(If(
-                        Box::new(Action(NpcBtAction::HealthBelow(0.5))),
-                        Box::new(Action(NpcBtAction::Flee)),
-                        Box::new(Action(NpcBtAction::Attack)),
-                    )),
-                    Box::new(If(
-                        Box::new(Action(NpcBtAction::EnemyDetected)),
-                        Box::new(Action(NpcBtAction::Flee)),
-                        Box::new(Action(NpcBtAction::Wander)),
-                    )),
-                ),
-            ])
-        }
-        TreeStyle::Passive => {
-            // Always flee, never attack
-            Select(vec![
-                If(
-                    Box::new(Action(NpcBtAction::EnemyDetected)),
-                    Box::new(Action(NpcBtAction::Flee)),
-                    Box::new(Action(NpcBtAction::Wander)),
-                ),
-            ])
-        }
+pub fn get_template_text(template_id: &str) -> String {
+    match template_id {
+        "guard_greeting" => "Halt! State your business.".to_string(),
+        "trader_greeting" => "Welcome! Browse my wares.".to_string(),
+        "healer_greeting" => "Are you in need of healing?".to_string(),
+        "historian_greeting" => "Ah, a curious soul! What would you like to know?".to_string(),
+        "hostile_dismissal" => "Get away from me.".to_string(),
+        "nervous_deflection" => "I... I don't want to talk about that.".to_string(),
+        "cheerful_ignorance" => "Ha! I wouldn't know, but isn't it a lovely day?".to_string(),
+        "generic_acknowledgment" => "Hmm, I see.".to_string(),
+        "busy_response" => "Not now, I'm busy.".to_string(),
+        "farewell" => "Safe travels.".to_string(),
+        "greeting_response" => "Hello, traveler!".to_string(),
+        "confused" => "I'm not sure about that.".to_string(),
+        _ => String::new(),
     }
 }
 
@@ -346,15 +280,8 @@ impl<'a> Default for TreeEvalContext<'a> {
 
 // ── Stateless behavior tree evaluator ──
 
-pub fn evaluate_combat_tree(
-    tree: &Behavior<NpcBtAction>,
-    npc: &Npc,
-    target: Option<&Player>,
-) -> Option<NpcBtAction> {
-    evaluate_tree(tree, npc, target, &TreeEvalContext::default())
-}
-
 pub fn evaluate_tree(
+    ctx: &ReducerContext,
     tree: &Behavior<NpcBtAction>,
     npc: &Npc,
     target: Option<&Player>,
@@ -362,78 +289,108 @@ pub fn evaluate_tree(
 ) -> Option<NpcBtAction> {
     match tree {
         Behavior::Action(action) => {
+            let ok = || Some(action.clone());
             match action {
-                // Conditions — return the action (success) or None (failure)
+                // ── Conditions ──
                 NpcBtAction::EnemyInRange => {
                     target.filter(|p| npc.position.distance_to(&p.position) <= ATTACK_RANGE)
                         .map(|_| action.clone())
                 }
-                NpcBtAction::EnemyDetected => {
-                    target.map(|_| action.clone())
-                }
+                NpcBtAction::EnemyDetected => target.map(|_| action.clone()),
                 NpcBtAction::HealthBelow(threshold) => {
                     let pct = npc.health as f32 / npc.max_health as f32;
-                    if pct < *threshold { Some(action.clone()) } else { None }
+                    if pct < *threshold { ok() } else { None }
                 }
-                NpcBtAction::NoTarget => {
-                    if target.is_none() { Some(action.clone()) } else { None }
+                NpcBtAction::NoTarget => if target.is_none() { ok() } else { None },
+                NpcBtAction::IsNightTime => if eval_ctx.is_night { ok() } else { None },
+                NpcBtAction::IsDayTime => if !eval_ctx.is_night { ok() } else { None },
+                NpcBtAction::GoldAbove(amount) => if npc.gold > *amount { ok() } else { None },
+                NpcBtAction::GoldBelow(amount) => if npc.gold < *amount { ok() } else { None },
+                NpcBtAction::HasItem(item_name) => {
+                    let has = ctx.db.npc_inventory_item().iter()
+                        .any(|inv| inv.npc_id == npc.id && {
+                            ctx.db.item_def().id().find(&inv.item_def_id)
+                                .map_or(false, |d| d.name == *item_name)
+                        });
+                    if has { ok() } else { None }
                 }
-                NpcBtAction::IsNightTime => {
-                    if eval_ctx.is_night { Some(action.clone()) } else { None }
-                }
-                NpcBtAction::IsDayTime => {
-                    if !eval_ctx.is_night { Some(action.clone()) } else { None }
-                }
-                NpcBtAction::GoldAbove(amount) => {
-                    if npc.gold > *amount { Some(action.clone()) } else { None }
-                }
-                NpcBtAction::GoldBelow(amount) => {
-                    if npc.gold < *amount { Some(action.clone()) } else { None }
-                }
-                NpcBtAction::HasItem(_item_name) => {
-                    // Checked externally via NPC inventory; always fail in pure tree eval
-                    // (handled by enriched eval in tick_npcs)
-                    None
-                }
-                NpcBtAction::NpcNearby => {
-                    if !eval_ctx.nearby_npcs.is_empty() { Some(action.clone()) } else { None }
-                }
+                NpcBtAction::NpcNearby => if !eval_ctx.nearby_npcs.is_empty() { ok() } else { None },
                 NpcBtAction::NpcNearbyWithRole(role) => {
-                    if eval_ctx.nearby_npcs.iter().any(|n| n.role == *role) { Some(action.clone()) } else { None }
+                    if eval_ctx.nearby_npcs.iter().any(|n| n.role == *role) { ok() } else { None }
                 }
-                NpcBtAction::PlayerNearby => {
-                    if target.is_some() { Some(action.clone()) } else { None }
-                }
+                NpcBtAction::PlayerNearby => if target.is_some() { ok() } else { None },
                 NpcBtAction::AtPoi(poi_name) => {
                     if eval_ctx.nearby_pois.iter().any(|(p, d)| p.name == *poi_name && *d <= p.radius) {
-                        Some(action.clone())
+                        ok()
                     } else { None }
                 }
-                NpcBtAction::GoalActive(_) => {
-                    // Requires DB access; checked externally. Fail in pure eval.
-                    None
+                NpcBtAction::GoalActive(desc) => {
+                    let active = ctx.db.npc_goal().iter()
+                        .any(|g| g.npc_id == npc.id && g.status == GoalStatus::Active
+                            && g.description.contains(desc.as_str()));
+                    if active { ok() } else { None }
                 }
                 NpcBtAction::ManaAbove(pct) => {
-                    if npc.max_mana > 0 && (npc.mana as f32 / npc.max_mana as f32) > *pct {
-                        Some(action.clone())
-                    } else { None }
+                    if npc.max_mana > 0 && (npc.mana as f32 / npc.max_mana as f32) > *pct { ok() } else { None }
                 }
                 NpcBtAction::StaminaAbove(pct) => {
-                    if npc.max_stamina > 0 && (npc.stamina as f32 / npc.max_stamina as f32) > *pct {
-                        Some(action.clone())
+                    if npc.max_stamina > 0 && (npc.stamina as f32 / npc.max_stamina as f32) > *pct { ok() } else { None }
+                }
+
+                // ── v2 Emotion conditions ──
+                NpcBtAction::EmotionAbove(emotion, threshold) => {
+                    let emo = ctx.db.npc_emotion().npc_id().find(&npc.id);
+                    let val = emo.map_or(0.0, |e| get_emotion_value(&e, emotion));
+                    if val > *threshold { ok() } else { None }
+                }
+                NpcBtAction::EmotionBelow(emotion, threshold) => {
+                    let emo = ctx.db.npc_emotion().npc_id().find(&npc.id);
+                    let val = emo.map_or(0.0, |e| get_emotion_value(&e, emotion));
+                    if val < *threshold { ok() } else { None }
+                }
+                NpcBtAction::EmotionDominant(emotion) => {
+                    if let Some(emo) = ctx.db.npc_emotion().npc_id().find(&npc.id) {
+                        let vals = [
+                            ("anger", emo.anger), ("fear", emo.fear), ("joy", emo.joy),
+                            ("sadness", emo.sadness), ("surprise", emo.surprise), ("disgust", emo.disgust),
+                        ];
+                        let max = vals.iter().max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+                        if max.map_or(false, |(name, _)| *name == emotion.as_str()) { ok() } else { None }
                     } else { None }
                 }
-                // Actions — always succeed, return themselves for execution
-                _ => Some(action.clone()),
+
+                // ── v2 Identity/knowledge conditions ──
+                NpcBtAction::HasKnowledge(category) => {
+                    let has = ctx.db.npc_knowledge().iter()
+                        .any(|k| k.npc_id == npc.id && k.category == *category);
+                    if has { ok() } else { None }
+                }
+                NpcBtAction::StrengthAdvantage(threshold) => {
+                    if let Some(player) = target {
+                        let npc_power = npc.level as f32 * (npc.health as f32 / npc.max_health as f32);
+                        let player_power = player.level as f32 * (player.health as f32 / player.max_health as f32);
+                        let advantage = if player_power > 0.0 { (npc_power - player_power) / player_power } else { 1.0 };
+                        if advantage >= *threshold { ok() } else { None }
+                    } else { None }
+                }
+                NpcBtAction::IsBeingAttacked => {
+                    if has_recent_event(ctx, npc.id, "took_damage", 5000) { ok() } else { None }
+                }
+                NpcBtAction::BeingAddressedInConversation => {
+                    if has_unhandled_chat(ctx, npc.id) { ok() } else { None }
+                }
+
+                // ── Actions — always succeed, return themselves for execution ──
+                _ => ok(),
             }
         }
         Behavior::Select(children) => {
-            children.iter().find_map(|child| evaluate_tree(child, npc, target, eval_ctx))
+            children.iter().find_map(|child| evaluate_tree(ctx, child, npc, target, eval_ctx))
         }
         Behavior::Sequence(children) => {
             let mut last = None;
             for child in children {
-                match evaluate_tree(child, npc, target, eval_ctx) {
+                match evaluate_tree(ctx, child, npc, target, eval_ctx) {
                     Some(action) => last = Some(action),
                     None => return None,
                 }
@@ -441,23 +398,23 @@ pub fn evaluate_tree(
             last
         }
         Behavior::If(cond, if_true, if_false) => {
-            if evaluate_tree(cond, npc, target, eval_ctx).is_some() {
-                evaluate_tree(if_true, npc, target, eval_ctx)
+            if evaluate_tree(ctx, cond, npc, target, eval_ctx).is_some() {
+                evaluate_tree(ctx, if_true, npc, target, eval_ctx)
             } else {
-                evaluate_tree(if_false, npc, target, eval_ctx)
+                evaluate_tree(ctx, if_false, npc, target, eval_ctx)
             }
         }
         Behavior::Invert(child) => {
-            match evaluate_tree(child, npc, target, eval_ctx) {
+            match evaluate_tree(ctx, child, npc, target, eval_ctx) {
                 Some(_) => None,
                 None => Some(NpcBtAction::Wander),
             }
         }
         Behavior::AlwaysSucceed(child) => {
-            evaluate_tree(child, npc, target, eval_ctx);
+            evaluate_tree(ctx, child, npc, target, eval_ctx);
             Some(NpcBtAction::Wander)
         }
-        _ => None, // Wait, WaitForever, While, etc — not used in combat trees
+        _ => None,
     }
 }
 
@@ -639,142 +596,185 @@ pub fn execute_bt_action(
                 trigger_decision(ctx, npc, "significant", None);
             }
         }
-        // Conditions are not executed as actions
-        NpcBtAction::EnemyInRange
-        | NpcBtAction::EnemyDetected
-        | NpcBtAction::HealthBelow(_)
-        | NpcBtAction::NoTarget
-        | NpcBtAction::IsNightTime
-        | NpcBtAction::IsDayTime
-        | NpcBtAction::GoldAbove(_)
-        | NpcBtAction::GoldBelow(_)
-        | NpcBtAction::HasItem(_)
-        | NpcBtAction::NpcNearby
-        | NpcBtAction::NpcNearbyWithRole(_)
-        | NpcBtAction::PlayerNearby
-        | NpcBtAction::AtPoi(_)
-        | NpcBtAction::GoalActive(_)
-        | NpcBtAction::ManaAbove(_)
-        | NpcBtAction::StaminaAbove(_) => {}
-    }
-}
 
-// ── Plan step execution ──
-
-pub fn plan_step_count(plan: &NpcPlan) -> usize {
-    serde_json::from_str::<Vec<NpcBtAction>>(&plan.steps)
-        .map(|v| v.len())
-        .unwrap_or(0)
-}
-
-pub fn execute_plan_step(ctx: &ReducerContext, npc: &Npc, plan: &NpcPlan) {
-    let steps: Vec<NpcBtAction> = match serde_json::from_str(&plan.steps) {
-        Ok(s) => s,
-        Err(e) => {
-            log::error!("[NPC {}] invalid plan steps JSON: {e}", npc.id);
-            ctx.db.npc_plan().npc_id().delete(&npc.id);
-            return;
-        }
-    };
-
-    let idx = plan.current_step as usize;
-    if idx >= steps.len() {
-        ctx.db.npc_plan().npc_id().delete(&npc.id);
-        return;
-    }
-
-    let step = &steps[idx];
-    match step {
-        NpcBtAction::TravelTo { x, z } => {
-            let clamped_x = x.clamp(WORLD_MIN, WORLD_MAX);
-            let clamped_z = z.clamp(WORLD_MIN, WORLD_MAX);
-            // Check if NPC is already close to the target (destination-following may have completed)
-            let dx = clamped_x - npc.position.x;
-            let dz = clamped_z - npc.position.z;
-            let dist = (dx * dx + dz * dz).sqrt();
-            if dist <= NPC_CHASE_STEP {
-                // Already there — advance step
-                log::info!("[NPC {}] plan step {} complete: at ({:.1}, {:.1})", npc.id, idx, clamped_x, clamped_z);
-                ctx.db.npc_plan().npc_id().update(NpcPlan {
-                    current_step: plan.current_step + 1,
-                    ..plan.clone()
-                });
-            } else if ctx.db.npc_destination().npc_id().find(&npc.id).is_none() {
-                // Not there yet and no destination set — set it
-                execute_bt_action(ctx, npc, step, None);
+        // ── v2: Entity-targeting actions ──
+        NpcBtAction::TravelToEntity { entity_type, entity_id } => {
+            let pos = match entity_type.as_str() {
+                "npc" => ctx.db.npc().id().find(entity_id).map(|n| (n.position.x, n.position.z)),
+                "poi" => ctx.db.point_of_interest().id().find(entity_id).map(|p| (p.x, p.z)),
+                _ => None,
+            };
+            if let Some((x, z)) = pos {
+                execute_bt_action(ctx, npc, &NpcBtAction::TravelTo { x, z }, None);
+            } else {
+                log::warn!("[NPC {}] TravelToEntity: {} {} not found", npc.id, entity_type, entity_id);
             }
-            // Otherwise destination-following in tick_npcs handles movement
         }
-        NpcBtAction::Say(_) => {
-            execute_bt_action(ctx, npc, step, None);
-            // Say is instant — advance immediately
-            ctx.db.npc_plan().npc_id().update(NpcPlan {
-                current_step: plan.current_step + 1,
-                ..plan.clone()
-            });
+        NpcBtAction::AttackEntity { entity_type, entity_id } => {
+            match entity_type.as_str() {
+                "player" => {
+                    // Find player by identity hex stored in entity_id — for now just attack nearest
+                    if let Some(player) = target {
+                        execute_bt_action(ctx, npc, &NpcBtAction::Attack, Some(player));
+                    }
+                }
+                "npc" => {
+                    if let Some(target_npc) = ctx.db.npc().id().find(entity_id) {
+                        if npc.position.distance_to(&target_npc.position) <= ATTACK_RANGE {
+                            let dmg = crate::skill::npc_damage(npc.level);
+                            let new_health = target_npc.health - dmg;
+                            if new_health <= 0 {
+                                crate::combat::kill_npc(ctx, &target_npc, spacetimedb::Identity::__dummy());
+                            } else {
+                                ctx.db.npc().id().update(Npc { health: new_health, ..target_npc });
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
-        NpcBtAction::Wander => {
-            execute_bt_action(ctx, npc, step, None);
-            // Wander once then advance
-            ctx.db.npc_plan().npc_id().update(NpcPlan {
-                current_step: plan.current_step + 1,
-                ..plan.clone()
-            });
+        NpcBtAction::SayToEntity { entity_type, entity_id, message } => {
+            match entity_type.as_str() {
+                "npc" => {
+                    execute_bt_action(ctx, npc, &NpcBtAction::SayToNpc {
+                        npc_id: *entity_id, message: message.clone(),
+                    }, None);
+                }
+                _ => {
+                    // For players and others, just broadcast as regular say
+                    execute_bt_action(ctx, npc, &NpcBtAction::Say(message.clone()), None);
+                }
+            }
         }
-        NpcBtAction::Wait(_seconds) => {
-            // For now, wait = skip (no timer infrastructure in plan steps yet)
-            // Each tick that hits Wait advances to the next step
-            log::info!("[NPC {}] plan step {} complete: wait", npc.id, idx);
-            ctx.db.npc_plan().npc_id().update(NpcPlan {
-                current_step: plan.current_step + 1,
-                ..plan.clone()
-            });
+
+        // ── v2: Exploration ──
+        NpcBtAction::SearchFor(_category) => {
+            // Wander randomly; actual discovery logic added in Step 8
+            execute_bt_action(ctx, npc, &NpcBtAction::Wander, None);
         }
-        _ => {
-            // Unknown plan step — skip it
-            log::warn!("[NPC {}] plan step {} unknown action: {:?}", npc.id, idx, step);
-            ctx.db.npc_plan().npc_id().update(NpcPlan {
-                current_step: plan.current_step + 1,
-                ..plan.clone()
-            });
+
+        // ── v2: Inline identity updates ──
+        NpcBtAction::AddKnowledge { category, fact } => {
+            let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+            let existing = ctx.db.npc_knowledge().iter()
+                .find(|k| k.npc_id == npc.id && k.category == *category && k.fact == *fact);
+            if existing.is_none() {
+                let count = ctx.db.npc_knowledge().iter().filter(|k| k.npc_id == npc.id).count();
+                if count < MAX_NPC_KNOWLEDGE {
+                    ctx.db.npc_knowledge().insert(NpcKnowledge {
+                        id: 0, npc_id: npc.id,
+                        category: category.clone(), fact: fact.clone(),
+                        learned_from: "experience".to_string(), confidence: 1.0,
+                        created_at: now_us,
+                    });
+                    log::info!("[NPC {}] learned: [{}] {}", npc.id, category, fact);
+                }
+            }
         }
+        NpcBtAction::AdjustRelationship { target: rel_target, delta } => {
+            let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+            let (target_type, target_id) = if rel_target.starts_with("player:") {
+                ("player".to_string(), rel_target.trim_start_matches("player:").to_string())
+            } else if rel_target.starts_with("npc:") {
+                ("npc".to_string(), rel_target.trim_start_matches("npc:").to_string())
+            } else {
+                ("unknown".to_string(), rel_target.clone())
+            };
+            let existing = ctx.db.npc_relationship().iter()
+                .find(|r| r.npc_id == npc.id && r.target_type == target_type && r.target_id == target_id);
+            if let Some(existing) = existing {
+                let new_disp = (existing.disposition + delta).clamp(-100, 100);
+                ctx.db.npc_relationship().id().update(NpcRelationship {
+                    disposition: new_disp, updated_at: now_us, ..existing
+                });
+            } else {
+                ctx.db.npc_relationship().insert(NpcRelationship {
+                    id: 0, npc_id: npc.id, target_type, target_id,
+                    disposition: (*delta).clamp(-100, 100),
+                    context: String::new(), updated_at: now_us,
+                });
+            }
+        }
+        NpcBtAction::TriggerEmotionAction { emotion, delta } => {
+            trigger_emotion(ctx, npc.id, emotion, *delta);
+        }
+
+        // ── v2: Conversation protocol ──
+        NpcBtAction::SayTemplate(template_id) => {
+            let text = get_template_text(template_id);
+            if !text.is_empty() {
+                execute_bt_action(ctx, npc, &NpcBtAction::Say(text), None);
+            }
+        }
+        NpcBtAction::SayFromKnowledge(topic) => {
+            let knowledge = ctx.db.npc_knowledge().iter()
+                .find(|k| k.npc_id == npc.id && (k.category.contains(topic.as_str()) || k.fact.contains(topic.as_str())));
+            if let Some(k) = knowledge {
+                execute_bt_action(ctx, npc, &NpcBtAction::Say(k.fact.clone()), None);
+            }
+        }
+        NpcBtAction::SayFromBelief(topic) => {
+            let belief = ctx.db.npc_belief().iter()
+                .find(|b| b.npc_id == npc.id && (b.subject.contains(topic.as_str()) || b.predicate.contains(topic.as_str())));
+            if let Some(b) = belief {
+                let text = format!("I believe {} {} {}.", b.subject, b.predicate, b.object);
+                execute_bt_action(ctx, npc, &NpcBtAction::Say(text), None);
+            }
+        }
+
+        // ── v2: Tree lifecycle ──
+        NpcBtAction::RequestNewTree => {
+            if !has_pending_decision(ctx, npc.id) {
+                log_npc_event(ctx, npc.id, "self_request", r#"{"reason":"tree_exhaustion"}"#);
+                trigger_decision(ctx, npc, "tree_generation", None);
+            }
+        }
+        NpcBtAction::KeepDistance(min_distance) => {
+            if let Some(player) = target {
+                let dist = npc.position.distance_to(&player.position);
+                if dist < *min_distance {
+                    // Move away
+                    execute_bt_action(ctx, npc, &NpcBtAction::Flee, target);
+                }
+            }
+        }
+        NpcBtAction::Follow { distance } => {
+            if let Some(player) = target {
+                let dist = npc.position.distance_to(&player.position);
+                if dist > *distance {
+                    execute_bt_action(ctx, npc, &NpcBtAction::Chase, target);
+                }
+                // else: already close enough, stand still
+            }
+        }
+
+        // ── Conditions are not executed as actions ──
+        NpcBtAction::EnemyInRange | NpcBtAction::EnemyDetected | NpcBtAction::HealthBelow(_)
+        | NpcBtAction::NoTarget | NpcBtAction::IsNightTime | NpcBtAction::IsDayTime
+        | NpcBtAction::GoldAbove(_) | NpcBtAction::GoldBelow(_) | NpcBtAction::HasItem(_)
+        | NpcBtAction::NpcNearby | NpcBtAction::NpcNearbyWithRole(_) | NpcBtAction::PlayerNearby
+        | NpcBtAction::AtPoi(_) | NpcBtAction::GoalActive(_) | NpcBtAction::ManaAbove(_)
+        | NpcBtAction::StaminaAbove(_)
+        | NpcBtAction::EmotionAbove(_, _) | NpcBtAction::EmotionBelow(_, _)
+        | NpcBtAction::EmotionDominant(_) | NpcBtAction::HasKnowledge(_)
+        | NpcBtAction::StrengthAdvantage(_) | NpcBtAction::IsBeingAttacked
+        | NpcBtAction::BeingAddressedInConversation => {}
     }
 }
 
-// ── Helper: upsert NpcBehavior ──
+// ── Helper: upsert NpcBehavior (v2 unified tree) ──
 
-pub fn upsert_npc_behavior(ctx: &ReducerContext, npc_id: u64, mode: &str, combat_tree: &str) {
-    if let Some(existing) = ctx.db.npc_behavior().npc_id().find(&npc_id) {
+pub fn upsert_npc_tree(ctx: &ReducerContext, npc_id: u64, tree_json: &str) {
+    if ctx.db.npc_behavior().npc_id().find(&npc_id).is_some() {
         ctx.db.npc_behavior().npc_id().update(NpcBehavior {
             npc_id,
-            mode: mode.to_string(),
-            combat_tree: combat_tree.to_string(),
-            life_tree: existing.life_tree,
+            current_tree: tree_json.to_string(),
         });
     } else {
         ctx.db.npc_behavior().insert(NpcBehavior {
             npc_id,
-            mode: mode.to_string(),
-            combat_tree: combat_tree.to_string(),
-            life_tree: String::new(),
-        });
-    }
-}
-
-pub fn upsert_npc_behavior_life_tree(ctx: &ReducerContext, npc_id: u64, mode: &str, life_tree: &str) {
-    if let Some(existing) = ctx.db.npc_behavior().npc_id().find(&npc_id) {
-        ctx.db.npc_behavior().npc_id().update(NpcBehavior {
-            npc_id,
-            mode: mode.to_string(),
-            combat_tree: existing.combat_tree,
-            life_tree: life_tree.to_string(),
-        });
-    } else {
-        ctx.db.npc_behavior().insert(NpcBehavior {
-            npc_id,
-            mode: mode.to_string(),
-            combat_tree: String::new(),
-            life_tree: life_tree.to_string(),
+            current_tree: tree_json.to_string(),
         });
     }
 }
@@ -797,15 +797,7 @@ pub fn trigger_decision(ctx: &ReducerContext, npc: &Npc, decision_type: &str, ta
         "[]".to_string()
     };
 
-    let plan_context = if decision_type == "post_combat" {
-        if let Some(plan) = ctx.db.npc_plan().npc_id().find(&npc.id) {
-            format!(r#","previous_plan":{{"steps":{},"current_step":{}}}"#, plan.steps, plan.current_step)
-        } else {
-            String::new()
-        }
-    } else {
-        String::new()
-    };
+    let plan_context = "";
 
     // Collect recent events (short-term memory)
     let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
@@ -918,35 +910,6 @@ pub fn log_npc_event(ctx: &ReducerContext, npc_id: u64, event: &str, detail: &st
 
 // ── Sleep/wake helpers ──
 
-pub fn trigger_sleep(ctx: &ReducerContext, npc: &Npc) {
-    // Clear plan and destination
-    ctx.db.npc_plan().npc_id().delete(&npc.id);
-    ctx.db.npc_destination().npc_id().delete(&npc.id);
-    // Set mode to sleeping, set destination to home
-    upsert_npc_behavior(ctx, npc.id, "sleeping", "");
-    if ctx.db.npc_destination().npc_id().find(&npc.id).is_some() {
-        ctx.db.npc_destination().npc_id().update(NpcDestination {
-            npc_id: npc.id, target_x: npc.home_x, target_z: npc.home_z,
-        });
-    } else {
-        ctx.db.npc_destination().insert(NpcDestination {
-            npc_id: npc.id, target_x: npc.home_x, target_z: npc.home_z,
-        });
-    }
-    // Trigger reflection decision
-    trigger_decision(ctx, npc, "reflection", None);
-}
-
-pub fn trigger_wake(ctx: &ReducerContext, npc: &Npc) {
-    // Set default life tree immediately so NPC has something while waiting for LLM
-    let fallback = default_life_tree(&npc.role);
-    let tree_json = serde_json::to_string(&fallback).unwrap_or_default();
-    upsert_npc_behavior_life_tree(ctx, npc.id, "life_tree", &tree_json);
-    ctx.db.npc_destination().npc_id().delete(&npc.id);
-    // Trigger dawn decision for LLM to generate a better life tree
-    trigger_decision(ctx, npc, "dawn", None);
-}
-
 // ── Goal completion checking ──
 
 pub fn check_goal_conditions(ctx: &ReducerContext, npc: &Npc) {
@@ -1052,15 +1015,13 @@ pub fn update_day_night_cycle(ctx: &ReducerContext) -> bool {
             id: 0, cycle_start_us: new_cycle_start, is_night,
         });
 
-        if is_night {
-            // Day → Night: put all NPCs to sleep
+        // Trigger tree regeneration for all NPCs at dawn
+        // (night behavior is handled by IsNightTime conditions in the unified tree)
+        if !is_night {
             for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
-                trigger_sleep(ctx, &npc);
-            }
-        } else {
-            // Night → Day: wake all NPCs
-            for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
-                trigger_wake(ctx, &npc);
+                if !has_pending_decision(ctx, npc.id) {
+                    trigger_decision_enriched(ctx, &npc, "tree_generation", None, is_night);
+                }
             }
         }
     }
@@ -1068,68 +1029,204 @@ pub fn update_day_night_cycle(ctx: &ReducerContext) -> bool {
     is_night
 }
 
-// ── Default life trees by role ──
+// ── Default unified trees ──
 
-pub fn default_life_tree(role: &str) -> Behavior<NpcBtAction> {
-    use Behavior::{Action, If, Select, Sequence};
+/// Build a complete unified behavior tree for an NPC role.
+/// Contains all four priority layers: reactive, awareness, daily life, fallback.
+/// Used as the default tree when no LLM-generated tree exists.
+pub fn default_unified_tree(role: &str) -> Behavior<NpcBtAction> {
+    use Behavior::{Action, Select, Sequence};
+
+    // Reactive layer (shared across most roles)
+    let reactive_combat = Sequence(vec![
+        Action(NpcBtAction::IsBeingAttacked),
+        Select(vec![
+            Sequence(vec![
+                Action(NpcBtAction::HealthBelow(0.25)),
+                Action(NpcBtAction::Say("I must retreat!".into())),
+                Action(NpcBtAction::Flee),
+            ]),
+            Action(NpcBtAction::Attack),
+        ]),
+    ]);
+    let reactive_conversation = Sequence(vec![
+        Action(NpcBtAction::BeingAddressedInConversation),
+        Action(NpcBtAction::SayTemplate("generic_acknowledgment".into())),
+    ]);
 
     match role {
-        "trader" => {
+        "hostile" | "hostile_defensive" => {
+            // Hostile: attack on sight, flee when low
             Select(vec![
-                If(
-                    Box::new(Action(NpcBtAction::PlayerNearby)),
-                    Box::new(Sequence(vec![
-                        Action(NpcBtAction::Say("Welcome! Care to browse my wares?".into())),
-                        Action(NpcBtAction::Wait(5.0)),
-                    ])),
-                    Box::new(If(
-                        Box::new(Action(NpcBtAction::AtPoi("Market Square".into()))),
-                        Box::new(Action(NpcBtAction::Wait(10.0))),
-                        Box::new(Action(NpcBtAction::TravelToPoi("Market Square".into()))),
-                    )),
-                ),
+                reactive_combat,
+                // Awareness: attack if enemy detected and strong enough
+                Sequence(vec![
+                    Action(NpcBtAction::EnemyDetected),
+                    Action(NpcBtAction::StrengthAdvantage(-0.3)),
+                    Action(NpcBtAction::EmotionBelow("fear".into(), 0.7)),
+                    Action(NpcBtAction::Attack),
+                ]),
+                // Flee if outmatched
+                Sequence(vec![
+                    Action(NpcBtAction::EnemyDetected),
+                    Action(NpcBtAction::Flee),
+                ]),
+                // Night: go home and rest
+                Sequence(vec![
+                    Action(NpcBtAction::IsNightTime),
+                    Action(NpcBtAction::GoHome),
+                    Action(NpcBtAction::Rest),
+                ]),
+                Action(NpcBtAction::Wander),
             ])
         }
         "guard" => {
             Select(vec![
-                If(
-                    Box::new(Action(NpcBtAction::EnemyDetected)),
-                    Box::new(Action(NpcBtAction::Chase)),
-                    Box::new(If(
-                        Box::new(Action(NpcBtAction::AtPoi("North Gate".into()))),
-                        Box::new(Action(NpcBtAction::Wait(5.0))),
-                        Box::new(Action(NpcBtAction::TravelToPoi("North Gate".into()))),
-                    )),
-                ),
+                reactive_combat,
+                reactive_conversation.clone(),
+                // Awareness: chase enemies if brave enough
+                Sequence(vec![
+                    Action(NpcBtAction::EnemyDetected),
+                    Action(NpcBtAction::EmotionBelow("fear".into(), 0.6)),
+                    Action(NpcBtAction::StrengthAdvantage(-0.2)),
+                    Action(NpcBtAction::Chase),
+                ]),
+                // Keep distance if outmatched
+                Sequence(vec![
+                    Action(NpcBtAction::EnemyDetected),
+                    Action(NpcBtAction::KeepDistance(12.0)),
+                ]),
+                // Night: patrol station
+                Sequence(vec![
+                    Action(NpcBtAction::IsNightTime),
+                    Action(NpcBtAction::TravelToPoi("North Gate".into())),
+                    Action(NpcBtAction::Rest),
+                ]),
+                // Day: patrol
+                Sequence(vec![
+                    Action(NpcBtAction::IsDayTime),
+                    Action(NpcBtAction::TravelToPoi("North Gate".into())),
+                    Action(NpcBtAction::Wait(5.0)),
+                ]),
+                Action(NpcBtAction::Wander),
             ])
         }
-        "historian" => {
+        "trader" => {
             Select(vec![
-                If(
-                    Box::new(Action(NpcBtAction::PlayerNearby)),
-                    Box::new(Sequence(vec![
-                        Action(NpcBtAction::Say("Greetings, seeker of knowledge.".into())),
-                        Action(NpcBtAction::Wait(5.0)),
-                    ])),
-                    Box::new(Action(NpcBtAction::Wait(10.0))),
-                ),
+                // Traders flee from combat instead of fighting
+                Sequence(vec![
+                    Action(NpcBtAction::IsBeingAttacked),
+                    Action(NpcBtAction::Flee),
+                ]),
+                reactive_conversation.clone(),
+                // Flee if enemy spotted and scared
+                Sequence(vec![
+                    Action(NpcBtAction::EnemyDetected),
+                    Action(NpcBtAction::EmotionAbove("fear".into(), 0.3)),
+                    Action(NpcBtAction::Flee),
+                ]),
+                // Night: go home
+                Sequence(vec![
+                    Action(NpcBtAction::IsNightTime),
+                    Action(NpcBtAction::GoHome),
+                    Action(NpcBtAction::Rest),
+                ]),
+                // Day: go to market
+                Sequence(vec![
+                    Action(NpcBtAction::IsDayTime),
+                    Action(NpcBtAction::TravelToPoi("Market Square".into())),
+                    Action(NpcBtAction::Wait(10.0)),
+                ]),
+                Action(NpcBtAction::Wander),
             ])
         }
         "healer" => {
             Select(vec![
-                If(
-                    Box::new(Action(NpcBtAction::PlayerNearby)),
-                    Box::new(Sequence(vec![
-                        Action(NpcBtAction::Say("Do you need healing?".into())),
-                        Action(NpcBtAction::Wait(5.0)),
-                    ])),
-                    Box::new(Action(NpcBtAction::Rest)),
-                ),
+                Sequence(vec![
+                    Action(NpcBtAction::IsBeingAttacked),
+                    Action(NpcBtAction::Flee),
+                ]),
+                reactive_conversation.clone(),
+                Sequence(vec![
+                    Action(NpcBtAction::IsNightTime),
+                    Action(NpcBtAction::GoHome),
+                    Action(NpcBtAction::Rest),
+                ]),
+                Action(NpcBtAction::Rest),
             ])
         }
-        // Hostile NPCs, adventurers, travellers — use existing wander/aggro behavior
+        "historian" => {
+            Select(vec![
+                Sequence(vec![
+                    Action(NpcBtAction::IsBeingAttacked),
+                    Action(NpcBtAction::Flee),
+                ]),
+                reactive_conversation.clone(),
+                Sequence(vec![
+                    Action(NpcBtAction::IsNightTime),
+                    Action(NpcBtAction::GoHome),
+                    Action(NpcBtAction::Rest),
+                ]),
+                Action(NpcBtAction::Wait(10.0)),
+            ])
+        }
+        "adventurer" => {
+            Select(vec![
+                reactive_combat.clone(),
+                reactive_conversation,
+                // Adventurers attack if they can win
+                Sequence(vec![
+                    Action(NpcBtAction::EnemyDetected),
+                    Action(NpcBtAction::StrengthAdvantage(-0.1)),
+                    Action(NpcBtAction::EmotionBelow("fear".into(), 0.5)),
+                    Action(NpcBtAction::Attack),
+                ]),
+                Sequence(vec![
+                    Action(NpcBtAction::EnemyDetected),
+                    Action(NpcBtAction::KeepDistance(10.0)),
+                ]),
+                Sequence(vec![
+                    Action(NpcBtAction::IsNightTime),
+                    Action(NpcBtAction::GoHome),
+                    Action(NpcBtAction::Rest),
+                ]),
+                Action(NpcBtAction::Wander),
+            ])
+        }
+        "traveller" => {
+            Select(vec![
+                Sequence(vec![
+                    Action(NpcBtAction::IsBeingAttacked),
+                    Action(NpcBtAction::Flee),
+                ]),
+                Sequence(vec![
+                    Action(NpcBtAction::EnemyDetected),
+                    Action(NpcBtAction::Flee),
+                ]),
+                Sequence(vec![
+                    Action(NpcBtAction::IsNightTime),
+                    Action(NpcBtAction::GoHome),
+                    Action(NpcBtAction::Rest),
+                ]),
+                Action(NpcBtAction::Wander),
+            ])
+        }
+        // Unknown: simple mob behavior
         _ => {
-            Action(NpcBtAction::Wander)
+            Select(vec![
+                Sequence(vec![
+                    Action(NpcBtAction::IsBeingAttacked),
+                    Select(vec![
+                        Sequence(vec![Action(NpcBtAction::HealthBelow(0.25)), Action(NpcBtAction::Flee)]),
+                        Action(NpcBtAction::Attack),
+                    ]),
+                ]),
+                Sequence(vec![
+                    Action(NpcBtAction::IsNightTime),
+                    Action(NpcBtAction::Rest),
+                ]),
+                Action(NpcBtAction::Wander),
+            ])
         }
     }
 }

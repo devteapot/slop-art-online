@@ -89,18 +89,7 @@ pub struct Npc {
 pub struct NpcBehavior {
     #[primary_key]
     pub npc_id: u64,
-    pub mode: String,        // "idle" | "combat" | "plan" | "life_tree" | "sleeping"
-    pub combat_tree: String, // Behavior<NpcBtAction> JSON, empty when not in combat
-    pub life_tree: String,   // Daily routine behavior tree JSON
-}
-
-#[derive(Clone)]
-#[spacetimedb::table(accessor = npc_plan, public)]
-pub struct NpcPlan {
-    #[primary_key]
-    pub npc_id: u64,
-    pub steps: String,       // JSON array of plan steps
-    pub current_step: i32,   // 0-indexed into steps array
+    pub current_tree: String, // Behavior<NpcBtAction> JSON — unified tree, no mode switching
 }
 
 #[spacetimedb::table(accessor = npc_pending_decision, public)]

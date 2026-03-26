@@ -794,53 +794,18 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
     static TICK_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let tick_num = TICK_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
+    // Track tree exhaustion — use tick counter + event log instead of static state
+    // (WASM reducers are stateless; we use the event log to detect exhaustion)
+
     for npc in ctx.db.npc().iter() {
-        // ── Emotion decay (runs every tick before any behavior) ──
+        // 1. Emotion decay
         apply_emotion_decay(ctx, npc.id);
 
-        let config = role_config(&npc.role);
-        let target = find_nearest_player(ctx, &npc.position)
-            .filter(|(_, d)| *d <= NPC_DETECTION_RANGE)
-            .map(|(p, _)| p);
-
-        let behavior = ctx.db.npc_behavior().npc_id().find(&npc.id);
-
-        // ── Sleeping NPCs: walk home + regen, no combat ──
-        if let Some(ref beh) = behavior {
-            if beh.mode == "sleeping" {
-                // Follow destination (walk home)
-                if let Some(dest) = ctx.db.npc_destination().npc_id().find(&npc.id) {
-                    let dx = dest.target_x - npc.position.x;
-                    let dz = dest.target_z - npc.position.z;
-                    let dist = (dx * dx + dz * dz).sqrt();
-                    if dist <= NPC_CHASE_STEP {
-                        ctx.db.npc().id().update(Npc {
-                            position: Position {
-                                x: dest.target_x,
-                                y: NPC_GROUND_Y,
-                                z: dest.target_z,
-                            },
-                            ..npc.clone()
-                        });
-                        ctx.db.npc_destination().npc_id().delete(&npc.id);
-                    } else {
-                        let dir_x = dx / dist;
-                        let dir_z = dz / dist;
-                        let new_x =
-                            (npc.position.x + dir_x * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
-                        let new_z =
-                            (npc.position.z + dir_z * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
-                        ctx.db.npc().id().update(Npc {
-                            position: Position {
-                                x: new_x,
-                                y: NPC_GROUND_Y,
-                                z: new_z,
-                            },
-                            ..npc.clone()
-                        });
-                    }
-                }
-                // Regen health/mana/stamina at 5% per tick
+        // 2. Night regen: if nighttime and NPC is at home, apply 5% regen
+        if is_night {
+            let dx = npc.position.x - npc.home_x;
+            let dz = npc.position.z - npc.home_z;
+            if (dx * dx + dz * dz).sqrt() <= 5.0 {
                 let regen_hp = (npc.max_health * NPC_SLEEP_REGEN_PCT / 100).max(1);
                 let regen_mp = (npc.max_mana * NPC_SLEEP_REGEN_PCT / 100).max(1);
                 let regen_sp = (npc.max_stamina * NPC_SLEEP_REGEN_PCT / 100).max(1);
@@ -848,364 +813,221 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                 let new_mp = (npc.mana + regen_mp).min(npc.max_mana);
                 let new_sp = (npc.stamina + regen_sp).min(npc.max_stamina);
                 if new_hp != npc.health || new_mp != npc.mana || new_sp != npc.stamina {
-                    // Re-fetch since we may have updated position above
-                    if let Some(cur) = ctx.db.npc().id().find(&npc.id) {
-                        ctx.db.npc().id().update(Npc {
-                            health: new_hp,
-                            mana: new_mp,
-                            stamina: new_sp,
-                            ..cur
-                        });
-                    }
+                    ctx.db.npc().id().update(Npc {
+                        health: new_hp, mana: new_mp, stamina: new_sp, ..npc.clone()
+                    });
                 }
-                continue;
             }
         }
 
-        // ── Already in combat → continue combat or exit ──
-        if let Some(ref beh) = behavior {
-            if beh.mode == "combat" {
-                if target.is_some() {
-                    // Evaluate combat tree
-                    if let Ok(tree) =
-                        serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.combat_tree)
-                    {
-                        if let Some(action) = evaluate_combat_tree(&tree, &npc, target.as_ref()) {
-                            execute_bt_action(ctx, &npc, &action, target.as_ref());
-                        }
-                    }
-                } else {
-                    // Target gone — exit combat, trigger post_combat
-                    upsert_npc_behavior(ctx, npc.id, "idle", "");
-                    log_npc_event(ctx, npc.id, "combat_end", r#"{"result":"target_lost"}"#);
-                    trigger_decision_enriched(ctx, &npc, "post_combat", None, is_night);
-                }
+        // 3. Load and evaluate unified tree
+        let target = find_nearest_player(ctx, &npc.position)
+            .filter(|(_, d)| *d <= NPC_DETECTION_RANGE)
+            .map(|(p, _)| p);
 
-                // Allow chat during combat (e.g. surrender negotiation)
-                let player_chatted = has_unhandled_chat(ctx, npc.id);
-                if player_chatted && !has_pending_decision(ctx, npc.id) {
-                    log_npc_event(ctx, npc.id, "responded_to_chat", "{}");
-                    trigger_decision_enriched(ctx, &npc, "social", target.as_ref(), is_night);
-                }
+        let tree = ctx.db.npc_behavior().npc_id().find(&npc.id)
+            .and_then(|b| serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&b.current_tree).ok())
+            .unwrap_or_else(|| default_unified_tree(&npc.role));
 
-                // Execute plan steps (chat responses) during combat
-                if let Some(plan) = ctx.db.npc_plan().npc_id().find(&npc.id) {
-                    if (plan.current_step as usize) < plan_step_count(&plan) {
-                        execute_plan_step(ctx, &npc, &plan);
-                    } else {
-                        ctx.db.npc_plan().npc_id().delete(&npc.id);
-                    }
-                }
-                continue;
-            }
+        let nearby_npcs = find_nearby_npcs(ctx, &npc);
+        let nearby_pois = find_nearby_pois(ctx, &npc);
+        let eval_ctx = TreeEvalContext { is_night, nearby_npcs: &nearby_npcs, nearby_pois: &nearby_pois };
+
+        let action = evaluate_tree(ctx, &tree, &npc, target.as_ref(), &eval_ctx);
+
+        // 4. Execute action
+        if let Some(ref action) = action {
+            execute_bt_action(ctx, &npc, action, target.as_ref());
         }
 
-        // ── Life tree evaluation (before combat check for non-hostile) ──
-        if let Some(ref beh) = behavior {
-            if beh.mode == "life_tree" && !beh.life_tree.is_empty() {
-                // Check for combat interrupts first
-                if let Some(ref player) = target {
-                    if config.auto_aggro {
-                        let default = build_default_combat_tree(&config.default_tree_style);
-                        let tree_json = serde_json::to_string(&default).unwrap();
-                        upsert_npc_behavior(ctx, npc.id, "combat", &tree_json);
-                        log_npc_event(
-                            ctx,
-                            npc.id,
-                            "combat_start",
-                            &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()),
-                        );
-                        trigger_decision_enriched(
-                            ctx,
-                            &npc,
-                            "combat_start",
-                            target.as_ref(),
-                            is_night,
-                        );
-                        continue;
-                    }
-                }
-
-                // Evaluate life tree
-                if let Ok(tree) =
-                    serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.life_tree)
-                {
-                    let nearby_npcs = find_nearby_npcs(ctx, &npc);
-                    let nearby_pois = find_nearby_pois(ctx, &npc);
-                    let eval_ctx = TreeEvalContext {
-                        is_night,
-                        nearby_npcs: &nearby_npcs,
-                        nearby_pois: &nearby_pois,
-                    };
-                    if let Some(action) = evaluate_tree(&tree, &npc, target.as_ref(), &eval_ctx) {
-                        execute_bt_action(ctx, &npc, &action, target.as_ref());
-                    }
-                }
-
-                // Check goal conditions every 5 ticks (~2.5s)
-                if tick_num % 5 == 0 {
-                    check_goal_conditions(ctx, &npc);
-                }
-
-                // Trigger social if player nearby and not on cooldown
-                if let Some(ref player) = target {
-                    if !config.auto_aggro && !has_pending_decision(ctx, npc.id) {
-                        let has_plan = ctx.db.npc_plan().npc_id().find(&npc.id).is_some();
-                        let on_cooldown =
-                            has_recent_event(ctx, npc.id, "saw_player", SOCIAL_COOLDOWN_MS);
-                        let player_chatted = has_unhandled_chat(ctx, npc.id);
-                        // Chat overrides both plan and cooldown; otherwise need no plan + not on cooldown
-                        if player_chatted || (!has_plan && !on_cooldown) {
-                            if player_chatted && has_plan {
-                                log::info!(
-                                    "[NPC {}] player chatted — interrupting current plan",
-                                    npc.id
-                                );
-                                ctx.db.npc_plan().npc_id().delete(&npc.id);
-                            }
-                            if player_chatted {
-                                log_npc_event(ctx, npc.id, "responded_to_chat", "{}");
-                            }
-                            log_npc_event(
-                                ctx,
-                                npc.id,
-                                "saw_player",
-                                &format!(
-                                    r#"{{"player":"{}"}}"#,
-                                    player.identity.to_hex().to_string()
-                                ),
-                            );
-                            trigger_decision_enriched(
-                                ctx,
-                                &npc,
-                                "social",
-                                target.as_ref(),
-                                is_night,
-                            );
-                        }
-                    }
-                }
-
-                // Execute plan steps even while in life_tree mode (social responses)
-                if let Some(plan) = ctx.db.npc_plan().npc_id().find(&npc.id) {
-                    if (plan.current_step as usize) < plan_step_count(&plan) {
-                        execute_plan_step(ctx, &npc, &plan);
-                    } else {
-                        ctx.db.npc_plan().npc_id().delete(&npc.id);
-                    }
-                }
-                continue;
-            }
-        }
-
-        // ── Not in combat, target found ──
-        if let Some(ref player) = target {
-            if config.auto_aggro {
-                // Enter combat (existing hostile behavior)
-                let default = build_default_combat_tree(&config.default_tree_style);
-                let tree_json = serde_json::to_string(&default).unwrap();
-                upsert_npc_behavior(ctx, npc.id, "combat", &tree_json);
-                log_npc_event(
-                    ctx,
-                    npc.id,
-                    "combat_start",
-                    &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()),
-                );
-                trigger_decision_enriched(ctx, &npc, "combat_start", target.as_ref(), is_night);
-
-                // Evaluate combat tree this tick
-                let beh = ctx.db.npc_behavior().npc_id().find(&npc.id).unwrap();
-                if let Ok(tree) =
-                    serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.combat_tree)
-                {
-                    if let Some(action) = evaluate_combat_tree(&tree, &npc, target.as_ref()) {
-                        execute_bt_action(ctx, &npc, &action, target.as_ref());
-                    }
-                }
-            } else {
-                // Non-hostile NPC: trigger social decision (with cooldown)
-                if !has_pending_decision(ctx, npc.id) {
-                    let has_plan = ctx.db.npc_plan().npc_id().find(&npc.id).is_some();
-                    let on_cooldown =
-                        has_recent_event(ctx, npc.id, "saw_player", SOCIAL_COOLDOWN_MS);
-                    let player_chatted = has_unhandled_chat(ctx, npc.id);
-                    // Chat overrides both plan and cooldown; otherwise need no plan + not on cooldown
-                    if player_chatted || (!has_plan && !on_cooldown) {
-                        if player_chatted && has_plan {
-                            log::info!(
-                                "[NPC {}] player chatted — interrupting current plan",
-                                npc.id
-                            );
-                            ctx.db.npc_plan().npc_id().delete(&npc.id);
-                        }
-                        if player_chatted {
-                            log_npc_event(ctx, npc.id, "responded_to_chat", "{}");
-                        }
-                        log_npc_event(
-                            ctx,
-                            npc.id,
-                            "saw_player",
-                            &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()),
-                        );
-                        trigger_decision_enriched(ctx, &npc, "social", target.as_ref(), is_night);
-                    }
-                }
-            }
-
-            // Execute plan steps while player is nearby (social responses)
-            if let Some(plan) = ctx.db.npc_plan().npc_id().find(&npc.id) {
-                if (plan.current_step as usize) < plan_step_count(&plan) {
-                    execute_plan_step(ctx, &npc, &plan);
-                } else {
-                    ctx.db.npc_plan().npc_id().delete(&npc.id);
-                }
-            }
-            continue;
-        }
-
-        // ── No target: follow destination / execute plan / idle behavior ──
-
-        // Destination-following (from plan's travel_to)
+        // 5. Follow destination (if set by TravelTo/TravelToPoi/GoHome actions)
         if let Some(dest) = ctx.db.npc_destination().npc_id().find(&npc.id) {
-            let dx = dest.target_x - npc.position.x;
-            let dz = dest.target_z - npc.position.z;
-            let dist = (dx * dx + dz * dz).sqrt();
-            if dist <= NPC_CHASE_STEP {
-                log::info!(
-                    "[NPC {}] arrived at destination ({:.1}, {:.1})",
-                    npc.id,
-                    dest.target_x,
-                    dest.target_z
-                );
-                ctx.db.npc().id().update(Npc {
-                    position: Position {
-                        x: dest.target_x,
-                        y: NPC_GROUND_Y,
-                        z: dest.target_z,
-                    },
-                    ..npc.clone()
-                });
-                ctx.db.npc_destination().npc_id().delete(&npc.id);
-            } else {
-                let dir_x = dx / dist;
-                let dir_z = dz / dist;
-                let new_x = (npc.position.x + dir_x * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
-                let new_z = (npc.position.z + dir_z * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
-                ctx.db.npc().id().update(Npc {
-                    position: Position {
-                        x: new_x,
-                        y: NPC_GROUND_Y,
-                        z: new_z,
-                    },
-                    ..npc.clone()
-                });
-            }
-            continue;
-        }
-
-        // Plan execution
-        if let Some(plan) = ctx.db.npc_plan().npc_id().find(&npc.id) {
-            if (plan.current_step as usize) < plan_step_count(&plan) {
-                execute_plan_step(ctx, &npc, &plan);
-                continue;
-            } else {
-                // Plan complete
-                ctx.db.npc_plan().npc_id().delete(&npc.id);
-                log_npc_event(ctx, npc.id, "plan_completed", "{}");
+            // Re-fetch NPC in case position changed from action execution
+            if let Some(cur_npc) = ctx.db.npc().id().find(&npc.id) {
+                let dx = dest.target_x - cur_npc.position.x;
+                let dz = dest.target_z - cur_npc.position.z;
+                let dist = (dx * dx + dz * dz).sqrt();
+                if dist <= NPC_CHASE_STEP {
+                    ctx.db.npc().id().update(Npc {
+                        position: Position { x: dest.target_x, y: NPC_GROUND_Y, z: dest.target_z },
+                        ..cur_npc
+                    });
+                    ctx.db.npc_destination().npc_id().delete(&npc.id);
+                } else {
+                    let dir_x = dx / dist;
+                    let dir_z = dz / dist;
+                    let new_x = (cur_npc.position.x + dir_x * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
+                    let new_z = (cur_npc.position.z + dir_z * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
+                    ctx.db.npc().id().update(Npc {
+                        position: Position { x: new_x, y: NPC_GROUND_Y, z: new_z },
+                        ..cur_npc
+                    });
+                }
             }
         }
 
-        // Check goal conditions periodically
+        // 6. Periodic checks (every 5 ticks ~2.5s)
         if tick_num % 5 == 0 {
             check_goal_conditions(ctx, &npc);
         }
 
-        // Idle behavior based on role
-        match config.idle_behavior {
-            IdleBehavior::StayPut => {
-                // Do nothing
-            }
-            IdleBehavior::Wander | IdleBehavior::Patrol => {
-                execute_bt_action(ctx, &npc, &NpcBtAction::Wander, None);
-            }
-            IdleBehavior::Roam => {
-                // Trigger idle decision for LLM plan
-                if !has_pending_decision(ctx, npc.id) {
-                    trigger_decision_enriched(ctx, &npc, "idle", None, is_night);
-                }
-                // Wander while waiting for plan
-                execute_bt_action(ctx, &npc, &NpcBtAction::Wander, None);
-            }
+        // 7. Tree regen on goal completion (detected in check_goal_conditions via event log)
+        if has_recent_event(ctx, npc.id, "goal_completed", 2000) && !has_pending_decision(ctx, npc.id) {
+            trigger_decision_enriched(ctx, &npc, "tree_generation", target.as_ref(), is_night);
+        }
+
+        // 8. Near-death experience trigger
+        if npc.health > 0 && npc.health < npc.max_health / 10
+            && has_recent_event(ctx, npc.id, "took_damage", 5000)
+            && !has_pending_decision(ctx, npc.id)
+        {
+            log::info!("[NPC {}] near-death experience, triggering evaluation", npc.id);
+            trigger_decision_enriched(ctx, &npc, "experience", target.as_ref(), is_night);
         }
     }
     schedule_next_npc_tick(ctx);
 }
 
+/// v2: Submit a unified behavior tree for an NPC (replaces combat_tree + life_tree + plan)
 #[spacetimedb::reducer]
-pub fn submit_npc_combat_tree(ctx: &ReducerContext, npc_id: u64, tree_json: String) {
+pub fn submit_npc_tree(ctx: &ReducerContext, npc_id: u64, tree_json: String) {
     if ctx.db.npc().id().find(&npc_id).is_none() {
-        log::warn!("[NPC {}] submit_npc_combat_tree: NPC not found", npc_id);
+        log::warn!("[NPC {}] submit_npc_tree: NPC not found", npc_id);
         ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
         return;
     }
-    // Validate and hot-swap; on failure, just keep the default tree
     match serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&tree_json) {
         Ok(_) => {
-            if let Some(beh) = ctx.db.npc_behavior().npc_id().find(&npc_id) {
-                if beh.mode == "combat" {
-                    log::info!("[NPC {}] hot-swapping combat tree from LLM", npc_id);
-                    upsert_npc_behavior(ctx, npc_id, "combat", &tree_json);
-                }
+            log::info!("[NPC {}] received new unified tree from LLM", npc_id);
+            if ctx.db.npc_behavior().npc_id().find(&npc_id).is_some() {
+                ctx.db.npc_behavior().npc_id().update(NpcBehavior {
+                    npc_id, current_tree: tree_json,
+                });
+            } else {
+                ctx.db.npc_behavior().insert(NpcBehavior {
+                    npc_id, current_tree: tree_json,
+                });
             }
         }
         Err(e) => {
-            log::warn!(
-                "[NPC {}] invalid combat tree from LLM, keeping default: {e}",
-                npc_id
-            );
+            log::warn!("[NPC {}] invalid tree from LLM, keeping current: {e}", npc_id);
         }
     }
-    // Always clear pending decision
     ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
 }
 
+/// v2: Submit identity deltas from experience evaluation
 #[spacetimedb::reducer]
-pub fn submit_npc_plan(ctx: &ReducerContext, npc_id: u64, steps_json: String) {
-    if ctx.db.npc().id().find(&npc_id).is_none() {
-        log::warn!("[NPC {}] submit_npc_plan: NPC not found", npc_id);
-        ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
-        return;
+pub fn submit_npc_identity_update(
+    ctx: &ReducerContext, npc_id: u64, json: String,
+) -> Result<(), String> {
+    ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
+    let v: serde_json::Value = serde_json::from_str(&json)
+        .map_err(|e| format!("Invalid JSON: {e}"))?;
+
+    // Apply personality deltas
+    if let Some(deltas) = v.get("personality_deltas").and_then(|d| d.as_object()) {
+        if let Some(mut personality) = ctx.db.npc_personality().npc_id().find(&npc_id) {
+            for (trait_name, delta) in deltas {
+                let d = delta.as_f64().unwrap_or(0.0) as f32;
+                match trait_name.as_str() {
+                    "aggression" => personality.aggression = (personality.aggression + d).clamp(0.0, 1.0),
+                    "sociability" => personality.sociability = (personality.sociability + d).clamp(0.0, 1.0),
+                    "curiosity" => personality.curiosity = (personality.curiosity + d).clamp(0.0, 1.0),
+                    "courage" => personality.courage = (personality.courage + d).clamp(0.0, 1.0),
+                    "empathy" => personality.empathy = (personality.empathy + d).clamp(0.0, 1.0),
+                    "discipline" => personality.discipline = (personality.discipline + d).clamp(0.0, 1.0),
+                    _ => {}
+                }
+            }
+            ctx.db.npc_personality().npc_id().update(personality);
+        }
     }
-    // Try parsing as array first; if that fails, try as single action and wrap in array
-    let (steps, final_json) = match serde_json::from_str::<Vec<NpcBtAction>>(&steps_json) {
-        Ok(s) => (s, steps_json.clone()),
-        Err(_) => match serde_json::from_str::<NpcBtAction>(&steps_json) {
-            Ok(single) => {
-                let wrapped = vec![single];
-                let json = serde_json::to_string(&wrapped).unwrap();
-                (wrapped, json)
+
+    // Apply emotion adjustments
+    if let Some(emotions) = v.get("emotion_adjustments").and_then(|e| e.as_object()) {
+        for (emotion, delta) in emotions {
+            let d = delta.as_f64().unwrap_or(0.0) as f32;
+            trigger_emotion(ctx, npc_id, emotion, d);
+        }
+    }
+
+    // Apply beliefs
+    if let Some(beliefs) = v.get("beliefs").and_then(|b| b.as_array()) {
+        let beliefs_json = serde_json::to_string(beliefs).unwrap_or_default();
+        let _ = submit_npc_beliefs(ctx, npc_id, beliefs_json);
+    }
+
+    // Apply knowledge
+    if let Some(knowledge) = v.get("knowledge").and_then(|k| k.as_array()) {
+        for k in knowledge {
+            let category = k.get("category").and_then(|c| c.as_str()).unwrap_or("").to_string();
+            let fact = k.get("fact").and_then(|f| f.as_str()).unwrap_or("").to_string();
+            let confidence = k.get("confidence").and_then(|c| c.as_f64()).unwrap_or(0.8) as f32;
+            if !category.is_empty() && !fact.is_empty() {
+                let _ = submit_npc_knowledge(ctx, npc_id, category, fact, "llm_evaluation".to_string(), confidence);
             }
-            Err(e) => {
-                log::warn!("[NPC {}] invalid plan from LLM, ignoring: {e}", npc_id);
-                ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
-                return;
+        }
+    }
+
+    // Apply relationship updates
+    if let Some(rels) = v.get("relationship_updates").and_then(|r| r.as_array()) {
+        let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+        for r in rels {
+            let target_type = r.get("target_type").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            let target_id = r.get("target_id").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            let delta = r.get("delta").and_then(|d| d.as_i64()).unwrap_or(0) as i32;
+            if !target_type.is_empty() && !target_id.is_empty() && delta != 0 {
+                let existing = ctx.db.npc_relationship().iter()
+                    .find(|rel| rel.npc_id == npc_id && rel.target_type == target_type && rel.target_id == target_id);
+                if let Some(existing) = existing {
+                    ctx.db.npc_relationship().id().update(NpcRelationship {
+                        disposition: (existing.disposition + delta).clamp(-100, 100),
+                        updated_at: now_us,
+                        ..existing
+                    });
+                } else {
+                    ctx.db.npc_relationship().insert(NpcRelationship {
+                        id: 0, npc_id, target_type, target_id,
+                        disposition: delta.clamp(-100, 100),
+                        context: String::new(), updated_at: now_us,
+                    });
+                }
             }
-        },
-    };
-    log::info!("[NPC {}] received plan with {} steps", npc_id, steps.len());
-    // Replace any existing plan
-    if ctx.db.npc_plan().npc_id().find(&npc_id).is_some() {
-        ctx.db.npc_plan().npc_id().update(NpcPlan {
-            npc_id,
-            steps: final_json,
-            current_step: 0,
-        });
-    } else {
-        ctx.db.npc_plan().insert(NpcPlan {
-            npc_id,
-            steps: final_json,
-            current_step: 0,
-        });
+        }
+    }
+
+    // Apply memories
+    if let Some(memories) = v.get("memories").and_then(|m| m.as_array()) {
+        for m in memories {
+            if let Some(text) = m.as_str() {
+                if !text.is_empty() {
+                    let _ = submit_npc_memory(ctx, npc_id, text.to_string());
+                }
+            }
+        }
+    }
+
+    log::info!("[NPC {}] identity update applied", npc_id);
+    ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
+    Ok(())
+}
+
+/// v2: Submit a speech response for a conversation
+#[spacetimedb::reducer]
+pub fn submit_npc_speech(ctx: &ReducerContext, npc_id: u64, message: String) {
+    if let Some(npc) = ctx.db.npc().id().find(&npc_id) {
+        let text = message.chars().take(NPC_CHAT_MAX_LENGTH).collect::<String>();
+        if !text.is_empty() {
+            ctx.db.npc_chat_message().insert(NpcChatMessage {
+                scheduled_id: 0,
+                scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(NPC_CHAT_MESSAGE_EXPIRE_MS)),
+                npc_id,
+                text,
+                position: npc.position.clone(),
+            });
+            log_npc_event(ctx, npc_id, "responded_to_chat", "{}");
+        }
     }
     ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
 }
@@ -1246,11 +1068,11 @@ pub fn spawn_npc(
         home_z: z.clamp(WORLD_MIN, WORLD_MAX),
         persona,
     });
+    let tree = default_unified_tree(&npc.role);
+    let tree_json = serde_json::to_string(&tree).unwrap_or_default();
     ctx.db.npc_behavior().insert(NpcBehavior {
         npc_id: npc.id,
-        mode: "idle".to_string(),
-        combat_tree: String::new(),
-        life_tree: String::new(),
+        current_tree: tree_json,
     });
     let mut personality = default_personality_for_role(&npc.role);
     personality.npc_id = npc.id;
@@ -2696,24 +2518,6 @@ pub fn submit_npc_reflection(
 
     ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
     log::info!("[NPC {}] reflection processed", npc_id);
-    Ok(())
-}
-
-#[spacetimedb::reducer]
-pub fn submit_npc_life_tree(
-    ctx: &ReducerContext,
-    npc_id: u64,
-    tree_json: String,
-) -> Result<(), String> {
-    ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
-    // Validate the tree JSON parses correctly
-    let _tree: bonsai_bt::Behavior<NpcBtAction> =
-        serde_json::from_str(&tree_json).map_err(|e| format!("Invalid life tree JSON: {e}"))?;
-    log::info!("[NPC {}] received life tree from LLM", npc_id);
-    upsert_npc_behavior_life_tree(ctx, npc_id, "life_tree", &tree_json);
-
-    // Also store any memories from the response
-    ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
     Ok(())
 }
 

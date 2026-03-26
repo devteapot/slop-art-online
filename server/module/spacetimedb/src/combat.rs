@@ -5,7 +5,7 @@ use std::time::Duration;
 use crate::constants::*;
 use crate::equipment::{degrade_armor, equipment_bonuses};
 use crate::loot::{drop_all_inventory, generate_loot};
-use crate::npc_ai::{build_default_combat_tree, log_npc_event, role_config, trigger_decision, trigger_emotion, upsert_npc_behavior};
+use crate::npc_ai::{log_npc_event, role_config, trigger_decision, trigger_emotion};
 use crate::tables::*;
 use crate::skill::*;
 use crate::{StatusEffect, status_effect, npc_event_log, npc_memory, GroundItem, ground_item,
@@ -144,7 +144,6 @@ pub fn kill_npc(ctx: &ReducerContext, npc: &Npc, attacker: Identity) {
     clear_effects_for_npc(ctx, npc.id);
     ctx.db.npc().id().delete(&npc.id);
     ctx.db.npc_behavior().npc_id().delete(&npc.id);
-    ctx.db.npc_plan().npc_id().delete(&npc.id);
     ctx.db.npc_pending_decision().npc_id().delete(&npc.id);
     ctx.db.npc_destination().npc_id().delete(&npc.id);
     // Clean up NPC event logs and memories
@@ -261,18 +260,14 @@ pub fn hit_npc(
         trigger_emotion(ctx, npc.id, "anger", 0.3);
         trigger_emotion(ctx, npc.id, "fear", 0.2);
 
-        // Non-hostile NPCs enter combat when hit (if aggro_on_hit)
+        // In v2, the unified tree handles combat via IsBeingAttacked reactive layer.
+        // Trigger tree_generation so LLM can customize for the combat situation.
         let config = role_config(&npc.role);
         if config.aggro_on_hit {
-            if let Some(beh) = ctx.db.npc_behavior().npc_id().find(&npc.id) {
-                if beh.mode != "combat" {
-                    let default = build_default_combat_tree(&config.default_tree_style);
-                    let tree_json = serde_json::to_string(&default).unwrap();
-                    upsert_npc_behavior(ctx, npc.id, "combat", &tree_json);
-                    // Look up attacker as target for decision context
-                    let attacker_player = ctx.db.player().identity().find(&attacker);
-                    trigger_decision(ctx, npc, "combat_start", attacker_player.as_ref());
-                }
+            use crate::npc_ai::has_pending_decision;
+            if !has_pending_decision(ctx, npc.id) {
+                let attacker_player = ctx.db.player().identity().find(&attacker);
+                trigger_decision(ctx, npc, "tree_generation", attacker_player.as_ref());
             }
         }
     }
