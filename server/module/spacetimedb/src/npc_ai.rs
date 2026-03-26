@@ -72,6 +72,130 @@ pub fn role_config(role: &str) -> RoleConfig {
     }
 }
 
+// ── Default personality per role ──
+
+pub fn default_personality_for_role(role: &str) -> NpcPersonality {
+    match role {
+        "hostile" => NpcPersonality {
+            npc_id: 0, aggression: 0.8, sociability: 0.1, curiosity: 0.2,
+            courage: 0.7, empathy: 0.1, discipline: 0.3,
+        },
+        "hostile_defensive" => NpcPersonality {
+            npc_id: 0, aggression: 0.6, sociability: 0.1, curiosity: 0.2,
+            courage: 0.5, empathy: 0.1, discipline: 0.5,
+        },
+        "trader" => NpcPersonality {
+            npc_id: 0, aggression: 0.1, sociability: 0.8, curiosity: 0.5,
+            courage: 0.3, empathy: 0.6, discipline: 0.6,
+        },
+        "traveller" => NpcPersonality {
+            npc_id: 0, aggression: 0.2, sociability: 0.6, curiosity: 0.8,
+            courage: 0.5, empathy: 0.5, discipline: 0.4,
+        },
+        "historian" => NpcPersonality {
+            npc_id: 0, aggression: 0.0, sociability: 0.7, curiosity: 0.9,
+            courage: 0.3, empathy: 0.7, discipline: 0.8,
+        },
+        "adventurer" => NpcPersonality {
+            npc_id: 0, aggression: 0.5, sociability: 0.5, curiosity: 0.7,
+            courage: 0.8, empathy: 0.4, discipline: 0.5,
+        },
+        "guard" => NpcPersonality {
+            npc_id: 0, aggression: 0.4, sociability: 0.4, curiosity: 0.3,
+            courage: 0.7, empathy: 0.5, discipline: 0.7,
+        },
+        "healer" => NpcPersonality {
+            npc_id: 0, aggression: 0.0, sociability: 0.7, curiosity: 0.5,
+            courage: 0.4, empathy: 0.9, discipline: 0.7,
+        },
+        // Unknown roles: moderate across the board
+        _ => NpcPersonality {
+            npc_id: 0, aggression: 0.5, sociability: 0.3, curiosity: 0.3,
+            courage: 0.5, empathy: 0.3, discipline: 0.4,
+        },
+    }
+}
+
+// ── Emotion system ──
+
+/// Get a named emotion value from an NpcEmotion row.
+pub fn get_emotion_value(emotion: &NpcEmotion, name: &str) -> f32 {
+    match name {
+        "anger" => emotion.anger,
+        "fear" => emotion.fear,
+        "joy" => emotion.joy,
+        "sadness" => emotion.sadness,
+        "surprise" => emotion.surprise,
+        "disgust" => emotion.disgust,
+        _ => 0.0,
+    }
+}
+
+/// Set a named emotion value on an NpcEmotion row.
+fn set_emotion_value(emotion: &mut NpcEmotion, name: &str, value: f32) {
+    match name {
+        "anger" => emotion.anger = value,
+        "fear" => emotion.fear = value,
+        "joy" => emotion.joy = value,
+        "sadness" => emotion.sadness = value,
+        "surprise" => emotion.surprise = value,
+        "disgust" => emotion.disgust = value,
+        _ => {}
+    }
+}
+
+/// Trigger an emotion change on an NPC. Clamps to 0.0-1.0. Creates row if missing.
+pub fn trigger_emotion(ctx: &ReducerContext, npc_id: u64, emotion: &str, delta: f32) {
+    let mut emo = ctx.db.npc_emotion().npc_id().find(&npc_id).unwrap_or(NpcEmotion {
+        npc_id, anger: 0.0, fear: 0.0, joy: 0.0, sadness: 0.0, surprise: 0.0, disgust: 0.0,
+    });
+    let current = get_emotion_value(&emo, emotion);
+    let new_val = (current + delta).clamp(0.0, 1.0);
+    set_emotion_value(&mut emo, emotion, new_val);
+
+    if ctx.db.npc_emotion().npc_id().find(&npc_id).is_some() {
+        ctx.db.npc_emotion().npc_id().update(emo);
+    } else {
+        ctx.db.npc_emotion().insert(emo);
+    }
+}
+
+/// Apply emotion decay toward personality baseline each tick.
+/// decay_rate = 0.02 + discipline * 0.13
+/// Baselines: anger=aggression, fear=1-courage, joy=sociability, sadness/surprise/disgust=0
+pub fn apply_emotion_decay(ctx: &ReducerContext, npc_id: u64) {
+    let emo = match ctx.db.npc_emotion().npc_id().find(&npc_id) {
+        Some(e) => e,
+        None => return, // no emotion row = nothing to decay
+    };
+    let personality = ctx.db.npc_personality().npc_id().find(&npc_id);
+    let (anger_base, fear_base, joy_base, decay_rate) = match &personality {
+        Some(p) => (
+            p.aggression,
+            (1.0 - p.courage).max(0.0),
+            p.sociability,
+            0.02 + p.discipline * 0.13,
+        ),
+        None => (0.0, 0.0, 0.0, 0.05), // fallback if no personality
+    };
+
+    let lerp = |current: f32, baseline: f32, rate: f32| -> f32 {
+        current + (baseline - current) * rate
+    };
+
+    let updated = NpcEmotion {
+        npc_id,
+        anger: lerp(emo.anger, anger_base, decay_rate),
+        fear: lerp(emo.fear, fear_base, decay_rate),
+        joy: lerp(emo.joy, joy_base, decay_rate),
+        sadness: lerp(emo.sadness, 0.0, decay_rate),
+        surprise: lerp(emo.surprise, 0.0, decay_rate),
+        disgust: lerp(emo.disgust, 0.0, decay_rate),
+    };
+
+    ctx.db.npc_emotion().npc_id().update(updated);
+}
+
 // ── Legacy NpcAction for submit_npc_actions reducer ──
 
 #[derive(serde::Deserialize)]
@@ -354,6 +478,9 @@ pub fn execute_bt_action(
                     log::info!("[NPC {}] attack player (dmg={}, hp: {} → {})", npc.id, dmg, player.health, new_health);
                     if new_health <= 0 {
                         respawn_player(ctx, player);
+                        // Emotion: NPC won the fight
+                        trigger_emotion(ctx, npc.id, "joy", 0.3);
+                        trigger_emotion(ctx, npc.id, "fear", -0.2);
                     } else {
                         ctx.db.player().identity().update(Player {
                             health: new_health,
@@ -859,6 +986,8 @@ pub fn check_goal_conditions(ctx: &ReducerContext, npc: &Npc) {
                 ..goal
             });
             log_npc_event(ctx, npc.id, "goal_completed", "{}");
+            // Emotion: achieving a goal brings joy
+            trigger_emotion(ctx, npc.id, "joy", 0.4);
         }
     }
 }

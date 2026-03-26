@@ -795,6 +795,9 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
     let tick_num = TICK_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     for npc in ctx.db.npc().iter() {
+        // ── Emotion decay (runs every tick before any behavior) ──
+        apply_emotion_decay(ctx, npc.id);
+
         let config = role_config(&npc.role);
         let target = find_nearest_player(ctx, &npc.position)
             .filter(|(_, d)| *d <= NPC_DETECTION_RANGE)
@@ -1248,6 +1251,13 @@ pub fn spawn_npc(
         mode: "idle".to_string(),
         combat_tree: String::new(),
         life_tree: String::new(),
+    });
+    let mut personality = default_personality_for_role(&npc.role);
+    personality.npc_id = npc.id;
+    ctx.db.npc_personality().insert(personality);
+    ctx.db.npc_emotion().insert(NpcEmotion {
+        npc_id: npc.id,
+        anger: 0.0, fear: 0.0, joy: 0.0, sadness: 0.0, surprise: 0.0, disgust: 0.0,
     });
 }
 
@@ -2844,5 +2854,54 @@ pub fn submit_npc_beliefs(
         }
     }
     log::info!("[NPC {}] {} beliefs submitted", npc_id, beliefs.len());
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn submit_npc_knowledge(
+    ctx: &ReducerContext,
+    npc_id: u64,
+    category: String,
+    fact: String,
+    learned_from: String,
+    confidence: f32,
+) -> Result<(), String> {
+    ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
+    let confidence = confidence.clamp(0.0, 1.0);
+    if category.is_empty() || fact.is_empty() {
+        return Err("Category and fact must not be empty".to_string());
+    }
+
+    // Check for existing knowledge with same category+fact — update if higher confidence
+    let existing = ctx.db.npc_knowledge().iter().find(|k| {
+        k.npc_id == npc_id && k.category == category && k.fact == fact
+    });
+
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch()
+        .unwrap_or_default().as_micros() as u64;
+
+    if let Some(existing) = existing {
+        if confidence > existing.confidence {
+            ctx.db.npc_knowledge().id().update(NpcKnowledge {
+                confidence,
+                created_at: now_us,
+                ..existing
+            });
+        }
+    } else {
+        let count = ctx.db.npc_knowledge().iter()
+            .filter(|k| k.npc_id == npc_id).count();
+        if count < MAX_NPC_KNOWLEDGE {
+            ctx.db.npc_knowledge().insert(NpcKnowledge {
+                id: 0,
+                npc_id,
+                category,
+                fact,
+                learned_from,
+                confidence,
+                created_at: now_us,
+            });
+        }
+    }
     Ok(())
 }

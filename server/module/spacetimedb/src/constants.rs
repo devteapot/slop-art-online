@@ -87,3 +87,5 @@ pub const DAYTIME_LLM_COOLDOWN_MS: u64 = 60_000;
 pub const MAX_NPC_BELIEFS: usize = 30;
 pub const MAX_NPC_GOALS: usize = 10;
 pub const NPC_SLEEP_REGEN_PCT: i32 = 5;
+pub const MAX_NPC_KNOWLEDGE: usize = 50;
+pub const MAX_NPC_MEMORIES: usize = 10;

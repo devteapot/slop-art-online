@@ -286,6 +286,52 @@ pub struct EquippedItem {
     pub durability: i32,
 }
 
+// --- NPC Personality (structured traits) ---
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = npc_personality, public)]
+pub struct NpcPersonality {
+    #[primary_key]
+    pub npc_id: u64,
+    pub aggression: f32,   // 0.0-1.0: anger baseline, combat willingness
+    pub sociability: f32,  // 0.0-1.0: joy baseline, conversation willingness
+    pub curiosity: f32,    // 0.0-1.0: exploration behavior, knowledge seeking
+    pub courage: f32,      // 0.0-1.0: fear baseline (inverted), fight-or-flight
+    pub empathy: f32,      // 0.0-1.0: relationship delta magnitude, helping behavior
+    pub discipline: f32,   // 0.0-1.0: emotion decay rate (high = stoic)
+}
+
+// --- NPC Emotions (runtime state, changes every tick) ---
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = npc_emotion, public)]
+pub struct NpcEmotion {
+    #[primary_key]
+    pub npc_id: u64,
+    pub anger: f32,     // 0.0-1.0
+    pub fear: f32,
+    pub joy: f32,
+    pub sadness: f32,
+    pub surprise: f32,
+    pub disgust: f32,
+}
+
+// --- NPC Knowledge (learned world mechanics) ---
+
+#[derive(Clone)]
+#[spacetimedb::table(accessor = npc_knowledge, public)]
+pub struct NpcKnowledge {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub npc_id: u64,
+    pub category: String,     // "combat"|"trading"|"crafting"|"navigation"|"social"|"world"
+    pub fact: String,         // "health potions cost ~10g at market"
+    pub learned_from: String, // "experience"|"told_by:npc:5"|"told_by:player:abc"|"observed"
+    pub confidence: f32,      // 0.0-1.0 (inherited from engagement when learned)
+    pub created_at: u64,
+}
+
 // --- NPC Memory ---
 
 #[derive(Clone)]

@@ -5,7 +5,7 @@ use std::time::Duration;
 use crate::constants::*;
 use crate::equipment::{degrade_armor, equipment_bonuses};
 use crate::loot::{drop_all_inventory, generate_loot};
-use crate::npc_ai::{build_default_combat_tree, log_npc_event, role_config, trigger_decision, upsert_npc_behavior};
+use crate::npc_ai::{build_default_combat_tree, log_npc_event, role_config, trigger_decision, trigger_emotion, upsert_npc_behavior};
 use crate::tables::*;
 use crate::skill::*;
 use crate::{StatusEffect, status_effect, npc_event_log, npc_memory, GroundItem, ground_item,
@@ -256,6 +256,10 @@ pub fn hit_npc(
         // Log damage event
         log_npc_event(ctx, npc.id, "took_damage",
             &format!(r#"{{"player":"{}","damage":{}}}"#, attacker.to_hex().to_string(), power));
+
+        // Emotion: taking damage causes anger + fear
+        trigger_emotion(ctx, npc.id, "anger", 0.3);
+        trigger_emotion(ctx, npc.id, "fear", 0.2);
 
         // Non-hostile NPCs enter combat when hit (if aggro_on_hit)
         let config = role_config(&npc.role);
