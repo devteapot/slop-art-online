@@ -1,7 +1,9 @@
 # ADR 002 — NPC Behaviour Trees
 
 ## Status
-Planned
+Superseded by ADR 003 → ADR 005
+
+This ADR proposed a custom evaluator and ruled out `bonsai-bt`. In practice, `bonsai-bt` works fine in WASM (ADR 003) and is used with a custom stateless evaluator. The unified tree architecture (ADR 005) supersedes the two-layer approach.
 
 ## Context
 

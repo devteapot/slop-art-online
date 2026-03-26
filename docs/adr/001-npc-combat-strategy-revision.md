@@ -1,7 +1,9 @@
 # ADR 001 — NPC Combat Strategy Revision Loop
 
 ## Status
-Planned
+Superseded by ADR 005 (NPC Architecture v2)
+
+The condition-driven revision loop concept has been replaced by the unified behavior tree with emotion-gated combat responses. Combat strategy changes are now handled by tree regeneration triggers rather than periodic LLM revision calls.
 
 ## Context
 

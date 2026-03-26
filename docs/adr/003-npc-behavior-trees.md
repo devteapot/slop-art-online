@@ -1,6 +1,6 @@
-# ADR 004: NPC Behavior Trees + Plans — Replacing FSM + Raw Tool Calls
+# ADR 003: NPC Behavior Trees + Plans — Replacing FSM + Raw Tool Calls
 
-**Status:** Implemented (server module compiles, bridge awaits binding regeneration)
+**Status:** Implemented, partially superseded by ADR 005 (unified tree replaces the two-layer combat/plan split)
 **Date:** 2026-03-20
 
 ## Context

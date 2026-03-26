@@ -1,21 +1,21 @@
-mod constants;
-mod tables;
-mod skill;
 mod combat;
-mod npc_ai;
-mod loot;
-mod equipment;
+mod constants;
 mod consumable;
+mod equipment;
+mod loot;
+mod npc_ai;
+mod skill;
+mod tables;
 
 use spacetimedb::{Identity, ReducerContext, ScheduleAt, Table};
 use std::time::Duration;
 
-use crate::constants::*;
-use crate::tables::*;
-use crate::skill::*;
 use crate::combat::*;
-use crate::npc_ai::*;
+use crate::constants::*;
 use crate::equipment::*;
+use crate::npc_ai::*;
+use crate::skill::*;
+use crate::tables::*;
 
 // --- NPC tick schedule (must live here alongside tick_npcs reducer) ---
 
@@ -162,8 +162,16 @@ pub struct ProjectileTickSchedule {
 
 fn effect_for_skill(name: &str, duration_ms: u64) -> Option<(StatusEffectType, i32, u64)> {
     match name {
-        "Fireball"  => Some((StatusEffectType::Poison, EFFECT_POISON_POWER, duration_ms.max(EFFECT_DEFAULT_DURATION_MS))),
-        "Shockwave" => Some((StatusEffectType::Slow, 0, duration_ms.max(EFFECT_DEFAULT_DURATION_MS))),
+        "Fireball" => Some((
+            StatusEffectType::Poison,
+            EFFECT_POISON_POWER,
+            duration_ms.max(EFFECT_DEFAULT_DURATION_MS),
+        )),
+        "Shockwave" => Some((
+            StatusEffectType::Slow,
+            0,
+            duration_ms.max(EFFECT_DEFAULT_DURATION_MS),
+        )),
         _ => None,
     }
 }
@@ -180,78 +188,382 @@ fn schedule_next_npc_tick(ctx: &ReducerContext) {
 
 fn schedule_next_projectile_tick(ctx: &ReducerContext) {
     let next = ctx.timestamp + Duration::from_millis(PROJECTILE_TICK_MS);
-    ctx.db.projectile_tick_schedule().insert(ProjectileTickSchedule {
-        scheduled_id: 0,
-        scheduled_at: ScheduleAt::Time(next),
-    });
+    ctx.db
+        .projectile_tick_schedule()
+        .insert(ProjectileTickSchedule {
+            scheduled_id: 0,
+            scheduled_at: ScheduleAt::Time(next),
+        });
 }
 
 // --- Reducers ---
 
 #[spacetimedb::reducer(init)]
 pub fn init(ctx: &ReducerContext) {
-    ctx.db.skill_def().insert(SkillDef { id: 0, name: "Strike".to_string(),    behavior_type: BehaviorType::Melee,      resource_type: ResourceType::Stamina });
-    ctx.db.skill_def().insert(SkillDef { id: 0, name: "Fireball".to_string(),  behavior_type: BehaviorType::Projectile, resource_type: ResourceType::Mana });
-    ctx.db.skill_def().insert(SkillDef { id: 0, name: "Shockwave".to_string(), behavior_type: BehaviorType::GroundAoe,  resource_type: ResourceType::Mana });
-    ctx.db.skill_def().insert(SkillDef { id: 0, name: "Heal".to_string(),      behavior_type: BehaviorType::Buff,       resource_type: ResourceType::Mana });
-    ctx.db.skill_def().insert(SkillDef { id: 0, name: "Jump".to_string(),      behavior_type: BehaviorType::Mobility,   resource_type: ResourceType::Stamina });
-    ctx.db.skill_def().insert(SkillDef { id: 0, name: "Dash".to_string(),      behavior_type: BehaviorType::Mobility,   resource_type: ResourceType::Stamina });
+    ctx.db.skill_def().insert(SkillDef {
+        id: 0,
+        name: "Strike".to_string(),
+        behavior_type: BehaviorType::Melee,
+        resource_type: ResourceType::Stamina,
+    });
+    ctx.db.skill_def().insert(SkillDef {
+        id: 0,
+        name: "Fireball".to_string(),
+        behavior_type: BehaviorType::Projectile,
+        resource_type: ResourceType::Mana,
+    });
+    ctx.db.skill_def().insert(SkillDef {
+        id: 0,
+        name: "Shockwave".to_string(),
+        behavior_type: BehaviorType::GroundAoe,
+        resource_type: ResourceType::Mana,
+    });
+    ctx.db.skill_def().insert(SkillDef {
+        id: 0,
+        name: "Heal".to_string(),
+        behavior_type: BehaviorType::Buff,
+        resource_type: ResourceType::Mana,
+    });
+    ctx.db.skill_def().insert(SkillDef {
+        id: 0,
+        name: "Jump".to_string(),
+        behavior_type: BehaviorType::Mobility,
+        resource_type: ResourceType::Stamina,
+    });
+    ctx.db.skill_def().insert(SkillDef {
+        id: 0,
+        name: "Dash".to_string(),
+        behavior_type: BehaviorType::Mobility,
+        resource_type: ResourceType::Stamina,
+    });
 
     // Item definitions
-    ctx.db.item_def().insert(ItemDef { id: 0, name: "Bone Fragment".into(),  item_type: ItemType::Material,   rarity: ItemRarity::Common,   max_stack: 20 });
-    ctx.db.item_def().insert(ItemDef { id: 0, name: "Iron Ore".into(),      item_type: ItemType::Material,   rarity: ItemRarity::Common,   max_stack: 20 });
-    ctx.db.item_def().insert(ItemDef { id: 0, name: "Health Potion".into(), item_type: ItemType::Consumable, rarity: ItemRarity::Common,   max_stack: 10 });
-    ctx.db.item_def().insert(ItemDef { id: 0, name: "Enchanted Dust".into(),item_type: ItemType::Material,   rarity: ItemRarity::Uncommon, max_stack: 10 });
-    ctx.db.item_def().insert(ItemDef { id: 0, name: "Dragon Scale".into(),  item_type: ItemType::Material,   rarity: ItemRarity::Rare,     max_stack: 5 });
-    ctx.db.item_def().insert(ItemDef { id: 0, name: "Crystal Core".into(),  item_type: ItemType::Material,   rarity: ItemRarity::Epic,     max_stack: 1 });
+    ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Bone Fragment".into(),
+        item_type: ItemType::Material,
+        rarity: ItemRarity::Common,
+        max_stack: 20,
+    });
+    ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Iron Ore".into(),
+        item_type: ItemType::Material,
+        rarity: ItemRarity::Common,
+        max_stack: 20,
+    });
+    ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Health Potion".into(),
+        item_type: ItemType::Consumable,
+        rarity: ItemRarity::Common,
+        max_stack: 10,
+    });
+    ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Enchanted Dust".into(),
+        item_type: ItemType::Material,
+        rarity: ItemRarity::Uncommon,
+        max_stack: 10,
+    });
+    ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Dragon Scale".into(),
+        item_type: ItemType::Material,
+        rarity: ItemRarity::Rare,
+        max_stack: 5,
+    });
+    ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Crystal Core".into(),
+        item_type: ItemType::Material,
+        rarity: ItemRarity::Epic,
+        max_stack: 1,
+    });
 
     // New consumable item definitions (item_def_ids 7-8 from auto_inc order)
-    let mana_potion = ctx.db.item_def().insert(ItemDef { id: 0, name: "Mana Potion".into(), item_type: ItemType::Consumable, rarity: ItemRarity::Common, max_stack: 10 });
-    let stamina_tonic = ctx.db.item_def().insert(ItemDef { id: 0, name: "Stamina Tonic".into(), item_type: ItemType::Consumable, rarity: ItemRarity::Uncommon, max_stack: 10 });
+    let mana_potion = ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Mana Potion".into(),
+        item_type: ItemType::Consumable,
+        rarity: ItemRarity::Common,
+        max_stack: 10,
+    });
+    let stamina_tonic = ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Stamina Tonic".into(),
+        item_type: ItemType::Consumable,
+        rarity: ItemRarity::Uncommon,
+        max_stack: 10,
+    });
 
     // Consumable definitions
-    ctx.db.consumable_def().insert(ConsumableDef { item_def_id: 3, effect: ConsumableEffect::RestoreHealth, power: 50 });
-    ctx.db.consumable_def().insert(ConsumableDef { item_def_id: mana_potion.id, effect: ConsumableEffect::RestoreMana, power: 40 });
-    ctx.db.consumable_def().insert(ConsumableDef { item_def_id: stamina_tonic.id, effect: ConsumableEffect::RestoreStamina, power: 40 });
+    ctx.db.consumable_def().insert(ConsumableDef {
+        item_def_id: 3,
+        effect: ConsumableEffect::RestoreHealth,
+        power: 50,
+    });
+    ctx.db.consumable_def().insert(ConsumableDef {
+        item_def_id: mana_potion.id,
+        effect: ConsumableEffect::RestoreMana,
+        power: 40,
+    });
+    ctx.db.consumable_def().insert(ConsumableDef {
+        item_def_id: stamina_tonic.id,
+        effect: ConsumableEffect::RestoreStamina,
+        power: 40,
+    });
 
     // Loot table entries (item_def_ids 1-6 from auto_inc order)
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 1, min_npc_level: 1, max_npc_level: 99, weight: 40, min_quantity: 1, max_quantity: 3 });
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 2, min_npc_level: 1, max_npc_level: 99, weight: 30, min_quantity: 1, max_quantity: 2 });
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 3, min_npc_level: 1, max_npc_level: 99, weight: 25, min_quantity: 1, max_quantity: 2 });
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 4, min_npc_level: 3, max_npc_level: 99, weight: 15, min_quantity: 1, max_quantity: 1 });
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 5, min_npc_level: 5, max_npc_level: 99, weight: 5,  min_quantity: 1, max_quantity: 1 });
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: 6, min_npc_level: 8, max_npc_level: 99, weight: 1,  min_quantity: 1, max_quantity: 1 });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: 1,
+        min_npc_level: 1,
+        max_npc_level: 99,
+        weight: 40,
+        min_quantity: 1,
+        max_quantity: 3,
+    });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: 2,
+        min_npc_level: 1,
+        max_npc_level: 99,
+        weight: 30,
+        min_quantity: 1,
+        max_quantity: 2,
+    });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: 3,
+        min_npc_level: 1,
+        max_npc_level: 99,
+        weight: 25,
+        min_quantity: 1,
+        max_quantity: 2,
+    });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: 4,
+        min_npc_level: 3,
+        max_npc_level: 99,
+        weight: 15,
+        min_quantity: 1,
+        max_quantity: 1,
+    });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: 5,
+        min_npc_level: 5,
+        max_npc_level: 99,
+        weight: 5,
+        min_quantity: 1,
+        max_quantity: 1,
+    });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: 6,
+        min_npc_level: 8,
+        max_npc_level: 99,
+        weight: 1,
+        min_quantity: 1,
+        max_quantity: 1,
+    });
 
     // Loot table entries for new consumables
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: mana_potion.id, min_npc_level: 1, max_npc_level: 99, weight: 20, min_quantity: 1, max_quantity: 2 });
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: stamina_tonic.id, min_npc_level: 2, max_npc_level: 99, weight: 15, min_quantity: 1, max_quantity: 1 });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: mana_potion.id,
+        min_npc_level: 1,
+        max_npc_level: 99,
+        weight: 20,
+        min_quantity: 1,
+        max_quantity: 2,
+    });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: stamina_tonic.id,
+        min_npc_level: 2,
+        max_npc_level: 99,
+        weight: 15,
+        min_quantity: 1,
+        max_quantity: 1,
+    });
 
     // Equipment item definitions (item_def_ids 9-14 from auto_inc order)
-    let iron_sword = ctx.db.item_def().insert(ItemDef { id: 0, name: "Iron Sword".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Common, max_stack: 1 });
-    let leather_cap = ctx.db.item_def().insert(ItemDef { id: 0, name: "Leather Cap".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Common, max_stack: 1 });
-    let iron_chestplate = ctx.db.item_def().insert(ItemDef { id: 0, name: "Iron Chestplate".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Uncommon, max_stack: 1 });
-    let cloth_pants = ctx.db.item_def().insert(ItemDef { id: 0, name: "Cloth Pants".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Common, max_stack: 1 });
-    let traveler_boots = ctx.db.item_def().insert(ItemDef { id: 0, name: "Traveler Boots".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Common, max_stack: 1 });
-    let copper_ring = ctx.db.item_def().insert(ItemDef { id: 0, name: "Copper Ring".into(), item_type: ItemType::Equipment, rarity: ItemRarity::Uncommon, max_stack: 1 });
+    let iron_sword = ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Iron Sword".into(),
+        item_type: ItemType::Equipment,
+        rarity: ItemRarity::Common,
+        max_stack: 1,
+    });
+    let leather_cap = ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Leather Cap".into(),
+        item_type: ItemType::Equipment,
+        rarity: ItemRarity::Common,
+        max_stack: 1,
+    });
+    let iron_chestplate = ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Iron Chestplate".into(),
+        item_type: ItemType::Equipment,
+        rarity: ItemRarity::Uncommon,
+        max_stack: 1,
+    });
+    let cloth_pants = ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Cloth Pants".into(),
+        item_type: ItemType::Equipment,
+        rarity: ItemRarity::Common,
+        max_stack: 1,
+    });
+    let traveler_boots = ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Traveler Boots".into(),
+        item_type: ItemType::Equipment,
+        rarity: ItemRarity::Common,
+        max_stack: 1,
+    });
+    let copper_ring = ctx.db.item_def().insert(ItemDef {
+        id: 0,
+        name: "Copper Ring".into(),
+        item_type: ItemType::Equipment,
+        rarity: ItemRarity::Uncommon,
+        max_stack: 1,
+    });
 
     // Equipment definitions
-    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: iron_sword.id, equip_slot: EquipSlot::Weapon, required_level: 1, max_durability: 50, bonus_health: 0, bonus_mana: 0, bonus_stamina: 0, bonus_attack: 5, bonus_defense: 0 });
-    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: leather_cap.id, equip_slot: EquipSlot::Helmet, required_level: 1, max_durability: 40, bonus_health: 10, bonus_mana: 0, bonus_stamina: 0, bonus_attack: 0, bonus_defense: 0 });
-    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: iron_chestplate.id, equip_slot: EquipSlot::Chest, required_level: 3, max_durability: 60, bonus_health: 20, bonus_mana: 0, bonus_stamina: 0, bonus_attack: 0, bonus_defense: 3 });
-    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: cloth_pants.id, equip_slot: EquipSlot::Legs, required_level: 1, max_durability: 40, bonus_health: 0, bonus_mana: 5, bonus_stamina: 0, bonus_attack: 0, bonus_defense: 0 });
-    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: traveler_boots.id, equip_slot: EquipSlot::Boots, required_level: 1, max_durability: 40, bonus_health: 0, bonus_mana: 0, bonus_stamina: 5, bonus_attack: 0, bonus_defense: 0 });
-    ctx.db.equipment_def().insert(EquipmentDef { item_def_id: copper_ring.id, equip_slot: EquipSlot::Accessory, required_level: 2, max_durability: 80, bonus_health: 5, bonus_mana: 0, bonus_stamina: 0, bonus_attack: 3, bonus_defense: 0 });
+    ctx.db.equipment_def().insert(EquipmentDef {
+        item_def_id: iron_sword.id,
+        equip_slot: EquipSlot::Weapon,
+        required_level: 1,
+        max_durability: 50,
+        bonus_health: 0,
+        bonus_mana: 0,
+        bonus_stamina: 0,
+        bonus_attack: 5,
+        bonus_defense: 0,
+    });
+    ctx.db.equipment_def().insert(EquipmentDef {
+        item_def_id: leather_cap.id,
+        equip_slot: EquipSlot::Helmet,
+        required_level: 1,
+        max_durability: 40,
+        bonus_health: 10,
+        bonus_mana: 0,
+        bonus_stamina: 0,
+        bonus_attack: 0,
+        bonus_defense: 0,
+    });
+    ctx.db.equipment_def().insert(EquipmentDef {
+        item_def_id: iron_chestplate.id,
+        equip_slot: EquipSlot::Chest,
+        required_level: 3,
+        max_durability: 60,
+        bonus_health: 20,
+        bonus_mana: 0,
+        bonus_stamina: 0,
+        bonus_attack: 0,
+        bonus_defense: 3,
+    });
+    ctx.db.equipment_def().insert(EquipmentDef {
+        item_def_id: cloth_pants.id,
+        equip_slot: EquipSlot::Legs,
+        required_level: 1,
+        max_durability: 40,
+        bonus_health: 0,
+        bonus_mana: 5,
+        bonus_stamina: 0,
+        bonus_attack: 0,
+        bonus_defense: 0,
+    });
+    ctx.db.equipment_def().insert(EquipmentDef {
+        item_def_id: traveler_boots.id,
+        equip_slot: EquipSlot::Boots,
+        required_level: 1,
+        max_durability: 40,
+        bonus_health: 0,
+        bonus_mana: 0,
+        bonus_stamina: 5,
+        bonus_attack: 0,
+        bonus_defense: 0,
+    });
+    ctx.db.equipment_def().insert(EquipmentDef {
+        item_def_id: copper_ring.id,
+        equip_slot: EquipSlot::Accessory,
+        required_level: 2,
+        max_durability: 80,
+        bonus_health: 5,
+        bonus_mana: 0,
+        bonus_stamina: 0,
+        bonus_attack: 3,
+        bonus_defense: 0,
+    });
 
     // Loot table entries for equipment
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: iron_sword.id, min_npc_level: 1, max_npc_level: 99, weight: 8, min_quantity: 1, max_quantity: 1 });
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: leather_cap.id, min_npc_level: 1, max_npc_level: 99, weight: 8, min_quantity: 1, max_quantity: 1 });
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: iron_chestplate.id, min_npc_level: 3, max_npc_level: 99, weight: 5, min_quantity: 1, max_quantity: 1 });
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: cloth_pants.id, min_npc_level: 1, max_npc_level: 99, weight: 8, min_quantity: 1, max_quantity: 1 });
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: traveler_boots.id, min_npc_level: 1, max_npc_level: 99, weight: 8, min_quantity: 1, max_quantity: 1 });
-    ctx.db.loot_table_entry().insert(LootTableEntry { id: 0, item_def_id: copper_ring.id, min_npc_level: 2, max_npc_level: 99, weight: 5, min_quantity: 1, max_quantity: 1 });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: iron_sword.id,
+        min_npc_level: 1,
+        max_npc_level: 99,
+        weight: 8,
+        min_quantity: 1,
+        max_quantity: 1,
+    });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: leather_cap.id,
+        min_npc_level: 1,
+        max_npc_level: 99,
+        weight: 8,
+        min_quantity: 1,
+        max_quantity: 1,
+    });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: iron_chestplate.id,
+        min_npc_level: 3,
+        max_npc_level: 99,
+        weight: 5,
+        min_quantity: 1,
+        max_quantity: 1,
+    });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: cloth_pants.id,
+        min_npc_level: 1,
+        max_npc_level: 99,
+        weight: 8,
+        min_quantity: 1,
+        max_quantity: 1,
+    });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: traveler_boots.id,
+        min_npc_level: 1,
+        max_npc_level: 99,
+        weight: 8,
+        min_quantity: 1,
+        max_quantity: 1,
+    });
+    ctx.db.loot_table_entry().insert(LootTableEntry {
+        id: 0,
+        item_def_id: copper_ring.id,
+        min_npc_level: 2,
+        max_npc_level: 99,
+        weight: 5,
+        min_quantity: 1,
+        max_quantity: 1,
+    });
 
     // Seed WorldState singleton
-    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+    let now_us = ctx
+        .timestamp
+        .to_duration_since_unix_epoch()
+        .unwrap_or_default()
+        .as_micros() as u64;
     ctx.db.world_state().insert(WorldState {
         id: 0,
         cycle_start_us: now_us,
@@ -259,38 +571,144 @@ pub fn init(ctx: &ReducerContext) {
     });
 
     // Seed Points of Interest
-    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Market Square".into(), poi_type: "market".into(), x: 50.0, z: 0.0, radius: 15.0 });
-    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "North Gate".into(), poi_type: "gate".into(), x: -20.0, z: 30.0, radius: 10.0 });
-    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Town Library".into(), poi_type: "inn".into(), x: 0.0, z: -40.0, radius: 10.0 });
-    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Wilderness Trail".into(), poi_type: "wilderness".into(), x: 30.0, z: -20.0, radius: 20.0 });
-    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Chapel".into(), poi_type: "inn".into(), x: 40.0, z: 40.0, radius: 10.0 });
-    ctx.db.point_of_interest().insert(PointOfInterest { id: 0, name: "Dark Forest".into(), poi_type: "wilderness".into(), x: 10.0, z: 10.0, radius: 20.0 });
+    ctx.db.point_of_interest().insert(PointOfInterest {
+        id: 0,
+        name: "Market Square".into(),
+        poi_type: "market".into(),
+        x: 50.0,
+        z: 0.0,
+        radius: 15.0,
+    });
+    ctx.db.point_of_interest().insert(PointOfInterest {
+        id: 0,
+        name: "North Gate".into(),
+        poi_type: "gate".into(),
+        x: -20.0,
+        z: 30.0,
+        radius: 10.0,
+    });
+    ctx.db.point_of_interest().insert(PointOfInterest {
+        id: 0,
+        name: "Town Library".into(),
+        poi_type: "inn".into(),
+        x: 0.0,
+        z: -40.0,
+        radius: 10.0,
+    });
+    ctx.db.point_of_interest().insert(PointOfInterest {
+        id: 0,
+        name: "Wilderness Trail".into(),
+        poi_type: "wilderness".into(),
+        x: 30.0,
+        z: -20.0,
+        radius: 20.0,
+    });
+    ctx.db.point_of_interest().insert(PointOfInterest {
+        id: 0,
+        name: "Chapel".into(),
+        poi_type: "inn".into(),
+        x: 40.0,
+        z: 40.0,
+        radius: 10.0,
+    });
+    ctx.db.point_of_interest().insert(PointOfInterest {
+        id: 0,
+        name: "Dark Forest".into(),
+        poi_type: "wilderness".into(),
+        x: 10.0,
+        z: 10.0,
+        radius: 20.0,
+    });
 
     // Spawn only the trader for debugging conversation flow
-    spawn_npc(ctx, 50.0, 0.0, 1, "trader".into(), "Merchant Ava".into(), 100,
-        "A merchant seeking profit through fair trade.".into());
-    // spawn_npc(ctx, 10.0, 10.0, 3, "hostile".into(), "Skeleton Warrior".into(), 0,
-    //     "A restless undead warrior bound to guard the dark forest.".into());
-    // spawn_npc(ctx, -20.0, 30.0, 2, "guard".into(), "Town Guard".into(), 10,
-    //     "A dutiful guard protecting the town gate.".into());
-    // spawn_npc(ctx, 0.0, -40.0, 1, "historian".into(), "Elder Tome".into(), 5,
-    //     "A wise scholar preserving the town's history.".into());
-    // spawn_npc(ctx, 30.0, -20.0, 2, "traveller".into(), "Wandering Bard".into(), 20,
-    //     "A traveling bard collecting stories and songs.".into());
-    // spawn_npc(ctx, -10.0, 50.0, 3, "adventurer".into(), "Kira the Bold".into(), 30,
-    //     "A fearless adventurer seeking glory and treasure.".into());
-    // spawn_npc(ctx, 40.0, 40.0, 1, "healer".into(), "Sister Mercy".into(), 15,
-    //     "A devoted healer offering aid to all who need it.".into());
+    spawn_npc(
+        ctx,
+        50.0,
+        0.0,
+        1,
+        "trader".into(),
+        "Merchant Ava".into(),
+        100,
+        "A merchant seeking profit through fair trade.".into(),
+    );
+    spawn_npc(
+        ctx,
+        10.0,
+        10.0,
+        3,
+        "hostile".into(),
+        "Skeleton Warrior".into(),
+        0,
+        "A restless undead warrior bound to guard the dark forest.".into(),
+    );
+    spawn_npc(
+        ctx,
+        -20.0,
+        30.0,
+        2,
+        "guard".into(),
+        "Town Guard".into(),
+        10,
+        "A dutiful guard protecting the town gate.".into(),
+    );
+    spawn_npc(
+        ctx,
+        0.0,
+        -40.0,
+        1,
+        "historian".into(),
+        "Elder Tome".into(),
+        5,
+        "A wise scholar preserving the town's history.".into(),
+    );
+    spawn_npc(
+        ctx,
+        30.0,
+        -20.0,
+        2,
+        "traveller".into(),
+        "Wandering Bard".into(),
+        20,
+        "A traveling bard collecting stories and songs.".into(),
+    );
+    spawn_npc(
+        ctx,
+        -10.0,
+        50.0,
+        3,
+        "adventurer".into(),
+        "Kira the Bold".into(),
+        30,
+        "A fearless adventurer seeking glory and treasure.".into(),
+    );
+    spawn_npc(
+        ctx,
+        40.0,
+        40.0,
+        1,
+        "healer".into(),
+        "Sister Mercy".into(),
+        15,
+        "A devoted healer offering aid to all who need it.".into(),
+    );
 
     // Give trader starting inventory (health potions to sell)
     // item_def_id 3 = Health Potion from the auto_inc order above
     for npc in ctx.db.npc().iter() {
         if npc.role == "trader" {
             ctx.db.npc_inventory_item().insert(NpcInventoryItem {
-                id: 0, npc_id: npc.id, slot: 0, item_def_id: 3, quantity: 5,
+                id: 0,
+                npc_id: npc.id,
+                slot: 0,
+                item_def_id: 3,
+                quantity: 5,
             });
             ctx.db.npc_inventory_item().insert(NpcInventoryItem {
-                id: 0, npc_id: npc.id, slot: 1, item_def_id: mana_potion.id, quantity: 3,
+                id: 0,
+                npc_id: npc.id,
+                slot: 1,
+                item_def_id: mana_potion.id,
+                quantity: 3,
             });
         }
     }
@@ -302,7 +720,10 @@ pub fn init(ctx: &ReducerContext) {
 #[spacetimedb::reducer]
 pub fn start_npc_ticker(ctx: &ReducerContext) {
     for s in ctx.db.npc_tick_schedule().iter() {
-        ctx.db.npc_tick_schedule().scheduled_id().delete(&s.scheduled_id);
+        ctx.db
+            .npc_tick_schedule()
+            .scheduled_id()
+            .delete(&s.scheduled_id);
     }
     schedule_next_npc_tick(ctx);
 }
@@ -314,7 +735,11 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
         let new_mana = (player.mana + MANA_REGEN_PER_TICK).min(player.max_mana);
         let new_stamina = (player.stamina + STAMINA_REGEN_PER_TICK).min(player.max_stamina);
         if new_mana != player.mana || new_stamina != player.stamina {
-            ctx.db.player().identity().update(Player { mana: new_mana, stamina: new_stamina, ..player });
+            ctx.db.player().identity().update(Player {
+                mana: new_mana,
+                stamina: new_stamina,
+                ..player
+            });
         }
     }
 
@@ -328,15 +753,23 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                         if new_health <= 0 {
                             kill_npc(ctx, &npc, effect.source);
                         } else {
-                            ctx.db.npc().id().update(Npc { health: new_health, ..npc });
+                            ctx.db.npc().id().update(Npc {
+                                health: new_health,
+                                ..npc
+                            });
                         }
                     }
-                } else if let Some(player) = ctx.db.player().identity().find(&effect.target_identity) {
+                } else if let Some(player) =
+                    ctx.db.player().identity().find(&effect.target_identity)
+                {
                     let new_health = player.health - effect.power;
                     if new_health <= 0 {
                         respawn_player(ctx, &player);
                     } else {
-                        ctx.db.player().identity().update(Player { health: new_health, ..player });
+                        ctx.db.player().identity().update(Player {
+                            health: new_health,
+                            ..player
+                        });
                     }
                 }
             }
@@ -344,7 +777,10 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                 if let Some(player) = ctx.db.player().identity().find(&effect.target_identity) {
                     let new_health = (player.health + effect.power).min(player.max_health);
                     if new_health != player.health {
-                        ctx.db.player().identity().update(Player { health: new_health, ..player });
+                        ctx.db.player().identity().update(Player {
+                            health: new_health,
+                            ..player
+                        });
                     }
                 }
             }
@@ -376,17 +812,27 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                     let dist = (dx * dx + dz * dz).sqrt();
                     if dist <= NPC_CHASE_STEP {
                         ctx.db.npc().id().update(Npc {
-                            position: Position { x: dest.target_x, y: NPC_GROUND_Y, z: dest.target_z },
+                            position: Position {
+                                x: dest.target_x,
+                                y: NPC_GROUND_Y,
+                                z: dest.target_z,
+                            },
                             ..npc.clone()
                         });
                         ctx.db.npc_destination().npc_id().delete(&npc.id);
                     } else {
                         let dir_x = dx / dist;
                         let dir_z = dz / dist;
-                        let new_x = (npc.position.x + dir_x * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
-                        let new_z = (npc.position.z + dir_z * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
+                        let new_x =
+                            (npc.position.x + dir_x * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
+                        let new_z =
+                            (npc.position.z + dir_z * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
                         ctx.db.npc().id().update(Npc {
-                            position: Position { x: new_x, y: NPC_GROUND_Y, z: new_z },
+                            position: Position {
+                                x: new_x,
+                                y: NPC_GROUND_Y,
+                                z: new_z,
+                            },
                             ..npc.clone()
                         });
                     }
@@ -402,7 +848,10 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                     // Re-fetch since we may have updated position above
                     if let Some(cur) = ctx.db.npc().id().find(&npc.id) {
                         ctx.db.npc().id().update(Npc {
-                            health: new_hp, mana: new_mp, stamina: new_sp, ..cur
+                            health: new_hp,
+                            mana: new_mp,
+                            stamina: new_sp,
+                            ..cur
                         });
                     }
                 }
@@ -415,7 +864,9 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
             if beh.mode == "combat" {
                 if target.is_some() {
                     // Evaluate combat tree
-                    if let Ok(tree) = serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.combat_tree) {
+                    if let Ok(tree) =
+                        serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.combat_tree)
+                    {
                         if let Some(action) = evaluate_combat_tree(&tree, &npc, target.as_ref()) {
                             execute_bt_action(ctx, &npc, &action, target.as_ref());
                         }
@@ -425,6 +876,22 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                     upsert_npc_behavior(ctx, npc.id, "idle", "");
                     log_npc_event(ctx, npc.id, "combat_end", r#"{"result":"target_lost"}"#);
                     trigger_decision_enriched(ctx, &npc, "post_combat", None, is_night);
+                }
+
+                // Allow chat during combat (e.g. surrender negotiation)
+                let player_chatted = has_unhandled_chat(ctx, npc.id);
+                if player_chatted && !has_pending_decision(ctx, npc.id) {
+                    log_npc_event(ctx, npc.id, "responded_to_chat", "{}");
+                    trigger_decision_enriched(ctx, &npc, "social", target.as_ref(), is_night);
+                }
+
+                // Execute plan steps (chat responses) during combat
+                if let Some(plan) = ctx.db.npc_plan().npc_id().find(&npc.id) {
+                    if (plan.current_step as usize) < plan_step_count(&plan) {
+                        execute_plan_step(ctx, &npc, &plan);
+                    } else {
+                        ctx.db.npc_plan().npc_id().delete(&npc.id);
+                    }
                 }
                 continue;
             }
@@ -439,18 +906,34 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                         let default = build_default_combat_tree(&config.default_tree_style);
                         let tree_json = serde_json::to_string(&default).unwrap();
                         upsert_npc_behavior(ctx, npc.id, "combat", &tree_json);
-                        log_npc_event(ctx, npc.id, "combat_start",
-                            &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
-                        trigger_decision_enriched(ctx, &npc, "combat_start", target.as_ref(), is_night);
+                        log_npc_event(
+                            ctx,
+                            npc.id,
+                            "combat_start",
+                            &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()),
+                        );
+                        trigger_decision_enriched(
+                            ctx,
+                            &npc,
+                            "combat_start",
+                            target.as_ref(),
+                            is_night,
+                        );
                         continue;
                     }
                 }
 
                 // Evaluate life tree
-                if let Ok(tree) = serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.life_tree) {
+                if let Ok(tree) =
+                    serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.life_tree)
+                {
                     let nearby_npcs = find_nearby_npcs(ctx, &npc);
                     let nearby_pois = find_nearby_pois(ctx, &npc);
-                    let eval_ctx = TreeEvalContext { is_night, nearby_npcs: &nearby_npcs, nearby_pois: &nearby_pois };
+                    let eval_ctx = TreeEvalContext {
+                        is_night,
+                        nearby_npcs: &nearby_npcs,
+                        nearby_pois: &nearby_pois,
+                    };
                     if let Some(action) = evaluate_tree(&tree, &npc, target.as_ref(), &eval_ctx) {
                         execute_bt_action(ctx, &npc, &action, target.as_ref());
                     }
@@ -465,21 +948,37 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                 if let Some(ref player) = target {
                     if !config.auto_aggro && !has_pending_decision(ctx, npc.id) {
                         let has_plan = ctx.db.npc_plan().npc_id().find(&npc.id).is_some();
-                        let on_cooldown = has_recent_event(ctx, npc.id, "saw_player", SOCIAL_COOLDOWN_MS);
-                        let player_chatted = has_recent_event(ctx, npc.id, "heard_chat", SOCIAL_COOLDOWN_MS)
-                            && !has_recent_event(ctx, npc.id, "responded_to_chat", SOCIAL_COOLDOWN_MS);
+                        let on_cooldown =
+                            has_recent_event(ctx, npc.id, "saw_player", SOCIAL_COOLDOWN_MS);
+                        let player_chatted = has_unhandled_chat(ctx, npc.id);
                         // Chat overrides both plan and cooldown; otherwise need no plan + not on cooldown
                         if player_chatted || (!has_plan && !on_cooldown) {
                             if player_chatted && has_plan {
-                                log::info!("[NPC {}] player chatted — interrupting current plan", npc.id);
+                                log::info!(
+                                    "[NPC {}] player chatted — interrupting current plan",
+                                    npc.id
+                                );
                                 ctx.db.npc_plan().npc_id().delete(&npc.id);
                             }
                             if player_chatted {
                                 log_npc_event(ctx, npc.id, "responded_to_chat", "{}");
                             }
-                            log_npc_event(ctx, npc.id, "saw_player",
-                                &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
-                            trigger_decision_enriched(ctx, &npc, "social", target.as_ref(), is_night);
+                            log_npc_event(
+                                ctx,
+                                npc.id,
+                                "saw_player",
+                                &format!(
+                                    r#"{{"player":"{}"}}"#,
+                                    player.identity.to_hex().to_string()
+                                ),
+                            );
+                            trigger_decision_enriched(
+                                ctx,
+                                &npc,
+                                "social",
+                                target.as_ref(),
+                                is_night,
+                            );
                         }
                     }
                 }
@@ -503,13 +1002,19 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                 let default = build_default_combat_tree(&config.default_tree_style);
                 let tree_json = serde_json::to_string(&default).unwrap();
                 upsert_npc_behavior(ctx, npc.id, "combat", &tree_json);
-                log_npc_event(ctx, npc.id, "combat_start",
-                    &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
+                log_npc_event(
+                    ctx,
+                    npc.id,
+                    "combat_start",
+                    &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()),
+                );
                 trigger_decision_enriched(ctx, &npc, "combat_start", target.as_ref(), is_night);
 
                 // Evaluate combat tree this tick
                 let beh = ctx.db.npc_behavior().npc_id().find(&npc.id).unwrap();
-                if let Ok(tree) = serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.combat_tree) {
+                if let Ok(tree) =
+                    serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&beh.combat_tree)
+                {
                     if let Some(action) = evaluate_combat_tree(&tree, &npc, target.as_ref()) {
                         execute_bt_action(ctx, &npc, &action, target.as_ref());
                     }
@@ -518,20 +1023,27 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                 // Non-hostile NPC: trigger social decision (with cooldown)
                 if !has_pending_decision(ctx, npc.id) {
                     let has_plan = ctx.db.npc_plan().npc_id().find(&npc.id).is_some();
-                    let on_cooldown = has_recent_event(ctx, npc.id, "saw_player", SOCIAL_COOLDOWN_MS);
-                    let player_chatted = has_recent_event(ctx, npc.id, "heard_chat", SOCIAL_COOLDOWN_MS)
-                        && !has_recent_event(ctx, npc.id, "responded_to_chat", SOCIAL_COOLDOWN_MS);
+                    let on_cooldown =
+                        has_recent_event(ctx, npc.id, "saw_player", SOCIAL_COOLDOWN_MS);
+                    let player_chatted = has_unhandled_chat(ctx, npc.id);
                     // Chat overrides both plan and cooldown; otherwise need no plan + not on cooldown
                     if player_chatted || (!has_plan && !on_cooldown) {
                         if player_chatted && has_plan {
-                            log::info!("[NPC {}] player chatted — interrupting current plan", npc.id);
+                            log::info!(
+                                "[NPC {}] player chatted — interrupting current plan",
+                                npc.id
+                            );
                             ctx.db.npc_plan().npc_id().delete(&npc.id);
                         }
                         if player_chatted {
                             log_npc_event(ctx, npc.id, "responded_to_chat", "{}");
                         }
-                        log_npc_event(ctx, npc.id, "saw_player",
-                            &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()));
+                        log_npc_event(
+                            ctx,
+                            npc.id,
+                            "saw_player",
+                            &format!(r#"{{"player":"{}"}}"#, player.identity.to_hex().to_string()),
+                        );
                         trigger_decision_enriched(ctx, &npc, "social", target.as_ref(), is_night);
                     }
                 }
@@ -556,9 +1068,18 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
             let dz = dest.target_z - npc.position.z;
             let dist = (dx * dx + dz * dz).sqrt();
             if dist <= NPC_CHASE_STEP {
-                log::info!("[NPC {}] arrived at destination ({:.1}, {:.1})", npc.id, dest.target_x, dest.target_z);
+                log::info!(
+                    "[NPC {}] arrived at destination ({:.1}, {:.1})",
+                    npc.id,
+                    dest.target_x,
+                    dest.target_z
+                );
                 ctx.db.npc().id().update(Npc {
-                    position: Position { x: dest.target_x, y: NPC_GROUND_Y, z: dest.target_z },
+                    position: Position {
+                        x: dest.target_x,
+                        y: NPC_GROUND_Y,
+                        z: dest.target_z,
+                    },
                     ..npc.clone()
                 });
                 ctx.db.npc_destination().npc_id().delete(&npc.id);
@@ -568,7 +1089,11 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
                 let new_x = (npc.position.x + dir_x * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
                 let new_z = (npc.position.z + dir_z * NPC_CHASE_STEP).clamp(WORLD_MIN, WORLD_MAX);
                 ctx.db.npc().id().update(Npc {
-                    position: Position { x: new_x, y: NPC_GROUND_Y, z: new_z },
+                    position: Position {
+                        x: new_x,
+                        y: NPC_GROUND_Y,
+                        z: new_z,
+                    },
                     ..npc.clone()
                 });
             }
@@ -614,36 +1139,55 @@ pub fn tick_npcs(ctx: &ReducerContext, _schedule: NpcTickSchedule) {
 }
 
 #[spacetimedb::reducer]
-pub fn submit_npc_combat_tree(ctx: &ReducerContext, npc_id: u64, tree_json: String) -> Result<(), String> {
-    ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
-    // Validate the tree JSON parses correctly
-    let _tree: bonsai_bt::Behavior<NpcBtAction> = serde_json::from_str(&tree_json)
-        .map_err(|e| format!("Invalid combat tree JSON: {e}"))?;
-    // Hot-swap the combat tree (only if NPC is still in combat)
-    if let Some(beh) = ctx.db.npc_behavior().npc_id().find(&npc_id) {
-        if beh.mode == "combat" {
-            log::info!("[NPC {}] hot-swapping combat tree from LLM", npc_id);
-            upsert_npc_behavior(ctx, npc_id, "combat", &tree_json);
+pub fn submit_npc_combat_tree(ctx: &ReducerContext, npc_id: u64, tree_json: String) {
+    if ctx.db.npc().id().find(&npc_id).is_none() {
+        log::warn!("[NPC {}] submit_npc_combat_tree: NPC not found", npc_id);
+        ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
+        return;
+    }
+    // Validate and hot-swap; on failure, just keep the default tree
+    match serde_json::from_str::<bonsai_bt::Behavior<NpcBtAction>>(&tree_json) {
+        Ok(_) => {
+            if let Some(beh) = ctx.db.npc_behavior().npc_id().find(&npc_id) {
+                if beh.mode == "combat" {
+                    log::info!("[NPC {}] hot-swapping combat tree from LLM", npc_id);
+                    upsert_npc_behavior(ctx, npc_id, "combat", &tree_json);
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!(
+                "[NPC {}] invalid combat tree from LLM, keeping default: {e}",
+                npc_id
+            );
         }
     }
+    // Always clear pending decision
     ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
-    Ok(())
 }
 
 #[spacetimedb::reducer]
-pub fn submit_npc_plan(ctx: &ReducerContext, npc_id: u64, steps_json: String) -> Result<(), String> {
-    ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
+pub fn submit_npc_plan(ctx: &ReducerContext, npc_id: u64, steps_json: String) {
+    if ctx.db.npc().id().find(&npc_id).is_none() {
+        log::warn!("[NPC {}] submit_npc_plan: NPC not found", npc_id);
+        ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
+        return;
+    }
     // Try parsing as array first; if that fails, try as single action and wrap in array
     let (steps, final_json) = match serde_json::from_str::<Vec<NpcBtAction>>(&steps_json) {
         Ok(s) => (s, steps_json.clone()),
-        Err(_) => {
-            // LLM sometimes returns a single object instead of an array — wrap it
-            let single: NpcBtAction = serde_json::from_str(&steps_json)
-                .map_err(|e| format!("Invalid plan steps JSON: {e}"))?;
-            let wrapped = vec![single];
-            let json = serde_json::to_string(&wrapped).unwrap();
-            (wrapped, json)
-        }
+        Err(_) => match serde_json::from_str::<NpcBtAction>(&steps_json) {
+            Ok(single) => {
+                let wrapped = vec![single];
+                let json = serde_json::to_string(&wrapped).unwrap();
+                (wrapped, json)
+            }
+            Err(e) => {
+                log::warn!("[NPC {}] invalid plan from LLM, ignoring: {e}", npc_id);
+                ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
+                return;
+            }
+        },
     };
     log::info!("[NPC {}] received plan with {} steps", npc_id, steps.len());
     // Replace any existing plan
@@ -661,20 +1205,29 @@ pub fn submit_npc_plan(ctx: &ReducerContext, npc_id: u64, steps_json: String) ->
         });
     }
     ctx.db.npc_pending_decision().npc_id().delete(&npc_id);
-    Ok(())
 }
 
 #[spacetimedb::reducer]
 pub fn spawn_npc(
-    ctx: &ReducerContext, x: f32, z: f32, level: i32, role: String, name: String,
-    gold: i32, persona: String,
+    ctx: &ReducerContext,
+    x: f32,
+    z: f32,
+    level: i32,
+    role: String,
+    name: String,
+    gold: i32,
+    persona: String,
 ) {
     let hp = npc_max_health(level);
     let mp = npc_max_mana(level);
     let sp = npc_max_stamina(level);
     let npc = ctx.db.npc().insert(Npc {
         id: 0,
-        position: Position { x: x.clamp(WORLD_MIN, WORLD_MAX), y: NPC_GROUND_Y, z: z.clamp(WORLD_MIN, WORLD_MAX) },
+        position: Position {
+            x: x.clamp(WORLD_MIN, WORLD_MAX),
+            y: NPC_GROUND_Y,
+            z: z.clamp(WORLD_MIN, WORLD_MAX),
+        },
         health: hp,
         max_health: hp,
         level,
@@ -706,7 +1259,11 @@ pub fn join_game(ctx: &ReducerContext) {
         let mm = player_max_mana(existing.level) + bonuses.mana;
         let ms = player_max_stamina(existing.level) + bonuses.stamina;
         ctx.db.player().identity().update(Player {
-            position: Position { x: 0.0, y: 1.0, z: 0.0 },
+            position: Position {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+            },
             health: mh,
             max_health: mh,
             mana: mm,
@@ -721,7 +1278,11 @@ pub fn join_game(ctx: &ReducerContext) {
         let ms = player_max_stamina(1);
         ctx.db.player().insert(Player {
             identity: ctx.sender(),
-            position: Position { x: 0.0, y: 1.0, z: 0.0 },
+            position: Position {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+            },
             health: mh,
             max_health: mh,
             level: 1,
@@ -744,7 +1305,11 @@ pub fn identity_disconnected(ctx: &ReducerContext) {
 
 #[spacetimedb::reducer]
 pub fn move_player(ctx: &ReducerContext, x: f32, y: f32, z: f32, seq: u32) -> Result<(), String> {
-    let player = ctx.db.player().identity().find(&ctx.sender())
+    let player = ctx
+        .db
+        .player()
+        .identity()
+        .find(&ctx.sender())
         .ok_or("Player not found")?;
 
     // Determine max move distance based on active speed effects
@@ -752,8 +1317,12 @@ pub fn move_player(ctx: &ReducerContext, x: f32, y: f32, z: f32, seq: u32) -> Re
     for effect in ctx.db.status_effect().iter() {
         if effect.target_identity == ctx.sender() && effect.target_npc_id == 0 {
             match effect.effect_type {
-                StatusEffectType::Slow => { max_dist = max_dist.min(MAX_MOVE_DIST_SLOW); }
-                StatusEffectType::Haste => { max_dist = max_dist.max(MAX_MOVE_DIST_HASTE); }
+                StatusEffectType::Slow => {
+                    max_dist = max_dist.min(MAX_MOVE_DIST_SLOW);
+                }
+                StatusEffectType::Haste => {
+                    max_dist = max_dist.max(MAX_MOVE_DIST_HASTE);
+                }
                 _ => {}
             }
         }
@@ -780,7 +1349,11 @@ pub fn move_player(ctx: &ReducerContext, x: f32, y: f32, z: f32, seq: u32) -> Re
 
 #[spacetimedb::reducer]
 pub fn rotate_player(ctx: &ReducerContext, angle: f32) -> Result<(), String> {
-    let player = ctx.db.player().identity().find(&ctx.sender())
+    let player = ctx
+        .db
+        .player()
+        .identity()
+        .find(&ctx.sender())
         .ok_or("Player not found")?;
     ctx.db.player().identity().update(Player {
         facing_angle: angle,
@@ -790,26 +1363,59 @@ pub fn rotate_player(ctx: &ReducerContext, angle: f32) -> Result<(), String> {
 }
 
 #[spacetimedb::reducer]
-pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f32, target_z: f32) -> Result<(), String> {
-    let player = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
-    let skill_def = ctx.db.skill_def().id().find(&skill_id).ok_or("Skill not found")?;
+pub fn use_skill(
+    ctx: &ReducerContext,
+    skill_id: u64,
+    target_x: f32,
+    target_y: f32,
+    target_z: f32,
+) -> Result<(), String> {
+    let player = ctx
+        .db
+        .player()
+        .identity()
+        .find(&ctx.sender())
+        .ok_or("Player not found")?;
+    let skill_def = ctx
+        .db
+        .skill_def()
+        .id()
+        .find(&skill_id)
+        .ok_or("Skill not found")?;
 
-    let _ = ctx.db.player_skill().iter()
+    let _ = ctx
+        .db
+        .player_skill()
+        .iter()
         .find(|ps| ps.player_identity == ctx.sender() && ps.skill_id == skill_id)
         .ok_or("Skill not available")?;
 
-    let attrs = ctx.db.skill_attributes().iter()
+    let attrs = ctx
+        .db
+        .skill_attributes()
+        .iter()
         .find(|a| a.player_identity == ctx.sender() && a.skill_id == skill_id)
         .ok_or("Skill attributes not found")?;
 
     let stats = compute_stats(&attrs);
 
     // Check cooldown
-    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros();
-    if let Some(cd) = ctx.db.skill_cooldown().iter()
+    let now_us = ctx
+        .timestamp
+        .to_duration_since_unix_epoch()
+        .unwrap_or_default()
+        .as_micros();
+    if let Some(cd) = ctx
+        .db
+        .skill_cooldown()
+        .iter()
         .find(|cd| cd.player_identity == ctx.sender() && cd.skill_id == skill_id)
     {
-        let ready_us = cd.ready_at.to_duration_since_unix_epoch().unwrap_or_default().as_micros();
+        let ready_us = cd
+            .ready_at
+            .to_duration_since_unix_epoch()
+            .unwrap_or_default()
+            .as_micros();
         if now_us < ready_us {
             return Err("Skill on cooldown".to_string());
         }
@@ -818,51 +1424,132 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
     // Check and deduct resource
     match skill_def.resource_type {
         ResourceType::Mana => {
-            if player.mana < stats.resource_cost { return Err("Not enough mana".to_string()); }
-            ctx.db.player().identity().update(Player { mana: player.mana - stats.resource_cost, ..player.clone() });
+            if player.mana < stats.resource_cost {
+                return Err("Not enough mana".to_string());
+            }
+            ctx.db.player().identity().update(Player {
+                mana: player.mana - stats.resource_cost,
+                ..player.clone()
+            });
         }
         ResourceType::Stamina => {
-            if player.stamina < stats.resource_cost { return Err("Not enough stamina".to_string()); }
-            ctx.db.player().identity().update(Player { stamina: player.stamina - stats.resource_cost, ..player.clone() });
+            if player.stamina < stats.resource_cost {
+                return Err("Not enough stamina".to_string());
+            }
+            ctx.db.player().identity().update(Player {
+                stamina: player.stamina - stats.resource_cost,
+                ..player.clone()
+            });
         }
     }
 
     // Set cooldown
     let ready_at = ctx.timestamp + Duration::from_millis(stats.cooldown_ms);
-    if let Some(cd) = ctx.db.skill_cooldown().iter()
+    if let Some(cd) = ctx
+        .db
+        .skill_cooldown()
+        .iter()
         .find(|cd| cd.player_identity == ctx.sender() && cd.skill_id == skill_id)
     {
-        ctx.db.skill_cooldown().id().update(SkillCooldown { ready_at, ..cd });
+        ctx.db
+            .skill_cooldown()
+            .id()
+            .update(SkillCooldown { ready_at, ..cd });
     } else {
-        ctx.db.skill_cooldown().insert(SkillCooldown { id: 0, player_identity: ctx.sender(), skill_id, ready_at });
+        ctx.db.skill_cooldown().insert(SkillCooldown {
+            id: 0,
+            player_identity: ctx.sender(),
+            skill_id,
+            ready_at,
+        });
     }
 
-    let target_pos = Position { x: target_x, y: target_y, z: target_z };
+    let target_pos = Position {
+        x: target_x,
+        y: target_y,
+        z: target_z,
+    };
     let skill_effect = effect_for_skill(&skill_def.name, stats.duration_ms);
     let atk_bonus = equipment_bonuses(ctx, &ctx.sender()).attack;
     let skill_power = stats.power + atk_bonus;
 
     match skill_def.behavior_type {
         BehaviorType::Melee => {
-            let nearest_npc = ctx.db.npc().iter()
+            let nearest_npc = ctx
+                .db
+                .npc()
+                .iter()
                 .filter(|n| n.position.distance_to(&player.position) <= stats.range)
-                .min_by(|a, b| a.position.distance_to(&player.position)
-                    .partial_cmp(&b.position.distance_to(&player.position)).unwrap());
-            let nearest_player = ctx.db.player().iter()
+                .min_by(|a, b| {
+                    a.position
+                        .distance_to(&player.position)
+                        .partial_cmp(&b.position.distance_to(&player.position))
+                        .unwrap()
+                });
+            let nearest_player = ctx
+                .db
+                .player()
+                .iter()
                 .filter(|p| p.identity != ctx.sender())
                 .filter(|p| p.position.distance_to(&player.position) <= stats.range)
-                .min_by(|a, b| a.position.distance_to(&player.position)
-                    .partial_cmp(&b.position.distance_to(&player.position)).unwrap());
+                .min_by(|a, b| {
+                    a.position
+                        .distance_to(&player.position)
+                        .partial_cmp(&b.position.distance_to(&player.position))
+                        .unwrap()
+                });
             match (nearest_npc, nearest_player) {
                 (Some(n), Some(p)) => {
-                    if n.position.distance_to(&player.position) <= p.position.distance_to(&player.position) {
-                        hit_npc(ctx, &n, skill_power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
+                    if n.position.distance_to(&player.position)
+                        <= p.position.distance_to(&player.position)
+                    {
+                        hit_npc(
+                            ctx,
+                            &n,
+                            skill_power,
+                            stats.knockback,
+                            &player.position,
+                            ctx.sender(),
+                            skill_id,
+                            SKILL_XP_PER_HIT,
+                            skill_effect.clone(),
+                        );
                     } else {
-                        hit_player(ctx, &p, skill_power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
+                        hit_player(
+                            ctx,
+                            &p,
+                            skill_power,
+                            stats.knockback,
+                            &player.position,
+                            ctx.sender(),
+                            skill_id,
+                            SKILL_XP_PER_HIT,
+                            skill_effect.clone(),
+                        );
                     }
                 }
-                (Some(n), None) => hit_npc(ctx, &n, skill_power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone()),
-                (None, Some(p)) => hit_player(ctx, &p, skill_power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone()),
+                (Some(n), None) => hit_npc(
+                    ctx,
+                    &n,
+                    skill_power,
+                    stats.knockback,
+                    &player.position,
+                    ctx.sender(),
+                    skill_id,
+                    SKILL_XP_PER_HIT,
+                    skill_effect.clone(),
+                ),
+                (None, Some(p)) => hit_player(
+                    ctx,
+                    &p,
+                    skill_power,
+                    stats.knockback,
+                    &player.position,
+                    ctx.sender(),
+                    skill_id,
+                    SKILL_XP_PER_HIT,
+                    skill_effect.clone(),
+                ),
                 (None, None) => {}
             }
         }
@@ -871,12 +1558,18 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             let dx = target_pos.x - player.position.x;
             let dz = target_pos.z - player.position.z;
             let len = (dx * dx + dz * dz).sqrt();
-            let (dir_x, dir_z) = if len > 0.001 { (dx / len, dz / len) } else { (0.0, -1.0) };
+            let (dir_x, dir_z) = if len > 0.001 {
+                (dx / len, dz / len)
+            } else {
+                (0.0, -1.0)
+            };
 
             let now_ms = (now_us / 1000) as u64;
             ctx.db.projectile().insert(Projectile {
                 scheduled_id: 0,
-                scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(PROJECTILE_MAX_LIFETIME_MS)),
+                scheduled_at: ScheduleAt::Time(
+                    ctx.timestamp + Duration::from_millis(PROJECTILE_MAX_LIFETIME_MS),
+                ),
                 owner: ctx.sender(),
                 skill_id,
                 start_x: player.position.x,
@@ -896,25 +1589,51 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             if player.position.distance_to(&target_pos) > stats.range {
                 return Err("Target out of range".to_string());
             }
-            let radius = if stats.aoe_radius > 0.0 { stats.aoe_radius } else { 5.0 };
+            let radius = if stats.aoe_radius > 0.0 {
+                stats.aoe_radius
+            } else {
+                5.0
+            };
             let now_ms = (now_us / 1000) as u64;
 
             // Apply first tick immediately so the skill doesn't feel delayed
             for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
                 if npc.position.distance_to(&target_pos) <= radius {
-                    hit_npc(ctx, &npc, skill_power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
+                    hit_npc(
+                        ctx,
+                        &npc,
+                        skill_power,
+                        stats.knockback,
+                        &target_pos,
+                        ctx.sender(),
+                        skill_id,
+                        SKILL_XP_PER_HIT,
+                        skill_effect.clone(),
+                    );
                 }
             }
             for p in ctx.db.player().iter().collect::<Vec<_>>() {
                 if p.identity != ctx.sender() && p.position.distance_to(&target_pos) <= radius {
-                    hit_player(ctx, &p, skill_power, stats.knockback, &target_pos, ctx.sender(), skill_id, SKILL_XP_PER_HIT, skill_effect.clone());
+                    hit_player(
+                        ctx,
+                        &p,
+                        skill_power,
+                        stats.knockback,
+                        &target_pos,
+                        ctx.sender(),
+                        skill_id,
+                        SKILL_XP_PER_HIT,
+                        skill_effect.clone(),
+                    );
                 }
             }
 
             // Insert lingering zone for periodic damage
             ctx.db.aoe_zone().insert(AoeZone {
                 scheduled_id: 0,
-                scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(AOE_DEFAULT_DURATION_MS)),
+                scheduled_at: ScheduleAt::Time(
+                    ctx.timestamp + Duration::from_millis(AOE_DEFAULT_DURATION_MS),
+                ),
                 owner: ctx.sender(),
                 skill_id,
                 center_x: target_pos.x,
@@ -929,16 +1648,29 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
             });
         }
         BehaviorType::Buff => {
-            let player = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
+            let player = ctx
+                .db
+                .player()
+                .identity()
+                .find(&ctx.sender())
+                .ok_or("Player not found")?;
             let new_health = (player.health + stats.power).min(player.max_health);
             let healed = new_health - player.health;
-            ctx.db.player().identity().update(Player { health: new_health, ..player });
+            ctx.db.player().identity().update(Player {
+                health: new_health,
+                ..player
+            });
             if healed > 0 {
                 award_skill_xp(ctx, ctx.sender(), skill_id, healed);
             }
             apply_status_effect(
-                ctx, StatusEffectType::Regen, ctx.sender(), 0,
-                EFFECT_REGEN_POWER, stats.duration_ms.max(EFFECT_DEFAULT_DURATION_MS), ctx.sender(),
+                ctx,
+                StatusEffectType::Regen,
+                ctx.sender(),
+                0,
+                EFFECT_REGEN_POWER,
+                stats.duration_ms.max(EFFECT_DEFAULT_DURATION_MS),
+                ctx.sender(),
             );
         }
         BehaviorType::Mobility => {
@@ -960,7 +1692,11 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
     let dx = target_pos.x - player.position.x;
     let dz = target_pos.z - player.position.z;
     let len = (dx * dx + dz * dz).sqrt();
-    let (anim_dir_x, anim_dir_z) = if len > 0.001 { (dx / len, dz / len) } else { (0.0, -1.0) };
+    let (anim_dir_x, anim_dir_z) = if len > 0.001 {
+        (dx / len, dz / len)
+    } else {
+        (0.0, -1.0)
+    };
 
     // Broadcast ability usage to all clients via ActiveSkill table.
     let anim_duration_ms: u64 = match skill_def.behavior_type {
@@ -991,12 +1727,22 @@ pub fn use_skill(ctx: &ReducerContext, skill_id: u64, target_x: f32, target_y: f
 }
 
 #[spacetimedb::reducer]
-pub fn allocate_skill_point(ctx: &ReducerContext, skill_id: u64, attribute: String) -> Result<(), String> {
-    let ps = ctx.db.player_skill().iter()
+pub fn allocate_skill_point(
+    ctx: &ReducerContext,
+    skill_id: u64,
+    attribute: String,
+) -> Result<(), String> {
+    let ps = ctx
+        .db
+        .player_skill()
+        .iter()
         .find(|ps| ps.player_identity == ctx.sender() && ps.skill_id == skill_id)
         .ok_or("Skill not found")?;
 
-    let attrs = ctx.db.skill_attributes().iter()
+    let attrs = ctx
+        .db
+        .skill_attributes()
+        .iter()
         .find(|a| a.player_identity == ctx.sender() && a.skill_id == skill_id)
         .ok_or("Skill attributes not found")?;
 
@@ -1006,15 +1752,15 @@ pub fn allocate_skill_point(ctx: &ReducerContext, skill_id: u64, attribute: Stri
 
     let mut new_attrs = attrs.clone();
     match attribute.as_str() {
-        "damage"           => new_attrs.damage_points += 1,
-        "cooldown"         => new_attrs.cooldown_points += 1,
-        "aoe"              => new_attrs.aoe_points += 1,
-        "range"            => new_attrs.range_points += 1,
-        "duration"         => new_attrs.duration_points += 1,
+        "damage" => new_attrs.damage_points += 1,
+        "cooldown" => new_attrs.cooldown_points += 1,
+        "aoe" => new_attrs.aoe_points += 1,
+        "range" => new_attrs.range_points += 1,
+        "duration" => new_attrs.duration_points += 1,
         "projectile_count" => new_attrs.projectile_count_points += 1,
-        "knockback"        => new_attrs.knockback_points += 1,
-        "resource_cost"    => new_attrs.resource_cost_points += 1,
-        "cast_speed"       => new_attrs.cast_speed_points += 1,
+        "knockback" => new_attrs.knockback_points += 1,
+        "resource_cost" => new_attrs.resource_cost_points += 1,
+        "cast_speed" => new_attrs.cast_speed_points += 1,
         _ => return Err(format!("Unknown attribute: {attribute}")),
     }
     ctx.db.skill_attributes().id().update(new_attrs);
@@ -1048,14 +1794,24 @@ pub fn expire_status_effect(_ctx: &ReducerContext, _row: StatusEffect) {
 
 #[spacetimedb::reducer]
 pub fn send_chat_message(ctx: &ReducerContext, text: String) -> Result<(), String> {
-    let player = ctx.db.player().identity().find(&ctx.sender())
+    let player = ctx
+        .db
+        .player()
+        .identity()
+        .find(&ctx.sender())
         .ok_or("Player not found")?;
     let text = text.trim().to_string();
-    if text.is_empty() { return Err("Empty message".into()); }
-    if text.len() > CHAT_MAX_LENGTH { return Err("Message too long".into()); }
+    if text.is_empty() {
+        return Err("Empty message".into());
+    }
+    if text.len() > CHAT_MAX_LENGTH {
+        return Err("Message too long".into());
+    }
     ctx.db.chat_message().insert(ChatMessage {
         scheduled_id: 0,
-        scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(CHAT_MESSAGE_EXPIRE_MS)),
+        scheduled_at: ScheduleAt::Time(
+            ctx.timestamp + Duration::from_millis(CHAT_MESSAGE_EXPIRE_MS),
+        ),
         sender: ctx.sender(),
         sender_name: String::new(),
         text: text.clone(),
@@ -1063,20 +1819,42 @@ pub fn send_chat_message(ctx: &ReducerContext, text: String) -> Result<(), Strin
     });
 
     // Notify nearby NPCs that a player said something
-    log::info!("[CHAT] Player said: \"{}\" at ({:.1}, {:.1}, {:.1})", text, player.position.x, player.position.y, player.position.z);
+    log::info!(
+        "[CHAT] Player said: \"{}\" at ({:.1}, {:.1}, {:.1})",
+        text,
+        player.position.x,
+        player.position.y,
+        player.position.z
+    );
     let mut notified = 0u32;
     for npc in ctx.db.npc().iter() {
         let dist = npc.position.distance_to(&player.position);
         if dist <= NPC_DETECTION_RANGE {
-            log::info!("[CHAT] NPC {} ({}) heard chat (dist={:.1})", npc.id, npc.name, dist);
+            log::info!(
+                "[CHAT] NPC {} ({}) heard chat (dist={:.1})",
+                npc.id,
+                npc.name,
+                dist
+            );
             notified += 1;
-            log_npc_event(ctx, npc.id, "heard_chat",
-                &format!(r#"{{"player":"{}","text":"{}"}}"#,
+            log_npc_event(
+                ctx,
+                npc.id,
+                "heard_chat",
+                &format!(
+                    r#"{{"player":"{}","text":"{}"}}"#,
                     ctx.sender().to_hex().to_string(),
                     text.replace('\\', "\\\\").replace('"', "\\\""),
-                ));
+                ),
+            );
         } else {
-            log::info!("[CHAT] NPC {} ({}) too far (dist={:.1}, range={})", npc.id, npc.name, dist, NPC_DETECTION_RANGE);
+            log::info!(
+                "[CHAT] NPC {} ({}) too far (dist={:.1}, range={})",
+                npc.id,
+                npc.name,
+                dist,
+                NPC_DETECTION_RANGE
+            );
         }
     }
     if notified == 0 {
@@ -1105,10 +1883,17 @@ const MAX_NPC_MEMORIES: usize = 10;
 #[spacetimedb::reducer]
 pub fn submit_npc_memory(ctx: &ReducerContext, npc_id: u64, text: String) -> Result<(), String> {
     ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
-    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+    let now_us = ctx
+        .timestamp
+        .to_duration_since_unix_epoch()
+        .unwrap_or_default()
+        .as_micros() as u64;
 
     // Prune oldest memories if at limit
-    let mut existing: Vec<_> = ctx.db.npc_memory().iter()
+    let mut existing: Vec<_> = ctx
+        .db
+        .npc_memory()
+        .iter()
         .filter(|m| m.npc_id == npc_id)
         .collect();
     existing.sort_by_key(|m| m.created_at);
@@ -1129,8 +1914,16 @@ pub fn submit_npc_memory(ctx: &ReducerContext, npc_id: u64, text: String) -> Res
 }
 
 #[spacetimedb::reducer]
-pub fn submit_npc_actions(ctx: &ReducerContext, npc_id: u64, actions_json: String) -> Result<(), String> {
-    log::info!("[NPC {}] submit_npc_actions called with: {}", npc_id, actions_json);
+pub fn submit_npc_actions(
+    ctx: &ReducerContext,
+    npc_id: u64,
+    actions_json: String,
+) -> Result<(), String> {
+    log::info!(
+        "[NPC {}] submit_npc_actions called with: {}",
+        npc_id,
+        actions_json
+    );
 
     let _npc = match ctx.db.npc().id().find(&npc_id) {
         Some(n) => n,
@@ -1141,11 +1934,10 @@ pub fn submit_npc_actions(ctx: &ReducerContext, npc_id: u64, actions_json: Strin
         }
     };
 
-    let actions: Vec<npc_ai::NpcAction> = serde_json::from_str(&actions_json)
-        .map_err(|e| {
-            log::error!("[NPC {}] failed to parse actions: {}", npc_id, e);
-            format!("Invalid actions JSON: {e}")
-        })?;
+    let actions: Vec<npc_ai::NpcAction> = serde_json::from_str(&actions_json).map_err(|e| {
+        log::error!("[NPC {}] failed to parse actions: {}", npc_id, e);
+        format!("Invalid actions JSON: {e}")
+    })?;
 
     log::info!("[NPC {}] executing {} action(s)", npc_id, actions.len());
 
@@ -1160,20 +1952,40 @@ pub fn submit_npc_actions(ctx: &ReducerContext, npc_id: u64, actions_json: Strin
             npc_ai::NpcAction::MoveTo { x, z } => {
                 let clamped_x = x.clamp(WORLD_MIN, WORLD_MAX);
                 let clamped_z = z.clamp(WORLD_MIN, WORLD_MAX);
-                log::info!("[NPC {}] move_to ({:.1}, {:.1}) from ({:.1}, {:.1})", npc_id, clamped_x, clamped_z, npc.position.x, npc.position.z);
+                log::info!(
+                    "[NPC {}] move_to ({:.1}, {:.1}) from ({:.1}, {:.1})",
+                    npc_id,
+                    clamped_x,
+                    clamped_z,
+                    npc.position.x,
+                    npc.position.z
+                );
                 if ctx.db.npc_destination().npc_id().find(&npc_id).is_some() {
                     ctx.db.npc_destination().npc_id().update(NpcDestination {
-                        npc_id, target_x: clamped_x, target_z: clamped_z,
+                        npc_id,
+                        target_x: clamped_x,
+                        target_z: clamped_z,
                     });
                 } else {
                     ctx.db.npc_destination().insert(NpcDestination {
-                        npc_id, target_x: clamped_x, target_z: clamped_z,
+                        npc_id,
+                        target_x: clamped_x,
+                        target_z: clamped_z,
                     });
                 }
             }
-            npc_ai::NpcAction::Attack { target_type, target_id } => {
+            npc_ai::NpcAction::Attack {
+                target_type,
+                target_id,
+            } => {
                 let dmg = crate::skill::npc_damage(npc.level);
-                log::info!("[NPC {}] attack {} {} (dmg={})", npc_id, target_type, target_id, dmg);
+                log::info!(
+                    "[NPC {}] attack {} {} (dmg={})",
+                    npc_id,
+                    target_type,
+                    target_id,
+                    dmg
+                );
                 match target_type.as_str() {
                     "player" => {
                         if let Ok(identity) = spacetimedb::Identity::from_hex(&target_id) {
@@ -1181,7 +1993,14 @@ pub fn submit_npc_actions(ctx: &ReducerContext, npc_id: u64, actions_json: Strin
                                 let dist = npc.position.distance_to(&player.position);
                                 if dist <= ATTACK_RANGE {
                                     let new_health = player.health - dmg;
-                                    log::info!("[NPC {}] hit player {} for {} dmg (hp: {} → {})", npc_id, target_id, dmg, player.health, new_health);
+                                    log::info!(
+                                        "[NPC {}] hit player {} for {} dmg (hp: {} → {})",
+                                        npc_id,
+                                        target_id,
+                                        dmg,
+                                        player.health,
+                                        new_health
+                                    );
                                     if new_health <= 0 {
                                         log::info!("[NPC {}] killed player {}", npc_id, target_id);
                                         respawn_player(ctx, &player);
@@ -1192,13 +2011,26 @@ pub fn submit_npc_actions(ctx: &ReducerContext, npc_id: u64, actions_json: Strin
                                         });
                                     }
                                 } else {
-                                    log::warn!("[NPC {}] attack out of range: dist={:.1} > range={:.1}", npc_id, dist, ATTACK_RANGE);
+                                    log::warn!(
+                                        "[NPC {}] attack out of range: dist={:.1} > range={:.1}",
+                                        npc_id,
+                                        dist,
+                                        ATTACK_RANGE
+                                    );
                                 }
                             } else {
-                                log::warn!("[NPC {}] attack target player {} not found", npc_id, target_id);
+                                log::warn!(
+                                    "[NPC {}] attack target player {} not found",
+                                    npc_id,
+                                    target_id
+                                );
                             }
                         } else {
-                            log::warn!("[NPC {}] invalid player identity hex: {}", npc_id, target_id);
+                            log::warn!(
+                                "[NPC {}] invalid player identity hex: {}",
+                                npc_id,
+                                target_id
+                            );
                         }
                     }
                     "npc" => {
@@ -1208,9 +2040,20 @@ pub fn submit_npc_actions(ctx: &ReducerContext, npc_id: u64, actions_json: Strin
                                     let dist = npc.position.distance_to(&target_npc.position);
                                     if dist <= ATTACK_RANGE {
                                         let new_health = target_npc.health - dmg;
-                                        log::info!("[NPC {}] hit NPC {} for {} dmg (hp: {} → {})", npc_id, target_npc_id, dmg, target_npc.health, new_health);
+                                        log::info!(
+                                            "[NPC {}] hit NPC {} for {} dmg (hp: {} → {})",
+                                            npc_id,
+                                            target_npc_id,
+                                            dmg,
+                                            target_npc.health,
+                                            new_health
+                                        );
                                         if new_health <= 0 {
-                                            log::info!("[NPC {}] killed NPC {}", npc_id, target_npc_id);
+                                            log::info!(
+                                                "[NPC {}] killed NPC {}",
+                                                npc_id,
+                                                target_npc_id
+                                            );
                                             kill_npc(ctx, &target_npc, ctx.sender());
                                         } else {
                                             ctx.db.npc().id().update(Npc {
@@ -1219,10 +2062,19 @@ pub fn submit_npc_actions(ctx: &ReducerContext, npc_id: u64, actions_json: Strin
                                             });
                                         }
                                     } else {
-                                        log::warn!("[NPC {}] attack NPC {} out of range: dist={:.1}", npc_id, target_npc_id, dist);
+                                        log::warn!(
+                                            "[NPC {}] attack NPC {} out of range: dist={:.1}",
+                                            npc_id,
+                                            target_npc_id,
+                                            dist
+                                        );
                                     }
                                 } else {
-                                    log::warn!("[NPC {}] attack target NPC {} not found", npc_id, target_npc_id);
+                                    log::warn!(
+                                        "[NPC {}] attack target NPC {} not found",
+                                        npc_id,
+                                        target_npc_id
+                                    );
                                 }
                             } else {
                                 log::warn!("[NPC {}] tried to attack self", npc_id);
@@ -1235,12 +2087,17 @@ pub fn submit_npc_actions(ctx: &ReducerContext, npc_id: u64, actions_json: Strin
                 }
             }
             npc_ai::NpcAction::Say { message } => {
-                let text = message.chars().take(NPC_CHAT_MAX_LENGTH).collect::<String>();
+                let text = message
+                    .chars()
+                    .take(NPC_CHAT_MAX_LENGTH)
+                    .collect::<String>();
                 log::info!("[NPC {}] say: \"{}\"", npc_id, text);
                 if !text.is_empty() {
                     ctx.db.npc_chat_message().insert(NpcChatMessage {
                         scheduled_id: 0,
-                        scheduled_at: ScheduleAt::Time(ctx.timestamp + Duration::from_millis(NPC_CHAT_MESSAGE_EXPIRE_MS)),
+                        scheduled_at: ScheduleAt::Time(
+                            ctx.timestamp + Duration::from_millis(NPC_CHAT_MESSAGE_EXPIRE_MS),
+                        ),
                         npc_id,
                         text,
                         position: npc.position.clone(),
@@ -1262,7 +2119,11 @@ pub fn submit_npc_actions(ctx: &ReducerContext, npc_id: u64, actions_json: Strin
 
 #[spacetimedb::reducer]
 pub fn tick_projectiles(ctx: &ReducerContext, _schedule: ProjectileTickSchedule) {
-    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros();
+    let now_us = ctx
+        .timestamp
+        .to_duration_since_unix_epoch()
+        .unwrap_or_default()
+        .as_micros();
     let now_ms = (now_us / 1000) as u64;
 
     // Tick projectiles
@@ -1273,75 +2134,139 @@ pub fn tick_projectiles(ctx: &ReducerContext, _schedule: ProjectileTickSchedule)
         // Current position
         let px = proj.start_x + proj.dir_x * dist;
         let pz = proj.start_z + proj.dir_z * dist;
-        let proj_pos = Position { x: px, y: proj.start_y, z: pz };
+        let proj_pos = Position {
+            x: px,
+            y: proj.start_y,
+            z: pz,
+        };
 
         // Check if exceeded max range
         if dist > proj.max_range {
-            ctx.db.projectile().scheduled_id().delete(&proj.scheduled_id);
+            ctx.db
+                .projectile()
+                .scheduled_id()
+                .delete(&proj.scheduled_id);
             continue;
         }
 
         // Look up skill def to determine status effect at impact
-        let proj_effect = ctx.db.skill_def().id().find(&proj.skill_id)
-            .and_then(|sd| {
-                // We need duration from the attacker's skill attributes
-                let dur = ctx.db.skill_attributes().iter()
-                    .find(|a| a.player_identity == proj.owner && a.skill_id == proj.skill_id)
-                    .map(|a| compute_stats(&a).duration_ms)
-                    .unwrap_or(EFFECT_DEFAULT_DURATION_MS);
-                effect_for_skill(&sd.name, dur)
-            });
+        let proj_effect = ctx.db.skill_def().id().find(&proj.skill_id).and_then(|sd| {
+            // We need duration from the attacker's skill attributes
+            let dur = ctx
+                .db
+                .skill_attributes()
+                .iter()
+                .find(|a| a.player_identity == proj.owner && a.skill_id == proj.skill_id)
+                .map(|a| compute_stats(&a).duration_ms)
+                .unwrap_or(EFFECT_DEFAULT_DURATION_MS);
+            effect_for_skill(&sd.name, dur)
+        });
 
         // Check collision against NPCs
         let mut hit = false;
         for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
             if proj_pos.distance_to(&npc.position) <= proj.hit_radius {
-                hit_npc(ctx, &npc, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id, SKILL_XP_PER_HIT, proj_effect.clone());
+                hit_npc(
+                    ctx,
+                    &npc,
+                    proj.power,
+                    proj.knockback,
+                    &proj_pos,
+                    proj.owner,
+                    proj.skill_id,
+                    SKILL_XP_PER_HIT,
+                    proj_effect.clone(),
+                );
                 hit = true;
                 break;
             }
         }
         if hit {
-            ctx.db.projectile().scheduled_id().delete(&proj.scheduled_id);
+            ctx.db
+                .projectile()
+                .scheduled_id()
+                .delete(&proj.scheduled_id);
             continue;
         }
 
         // Check collision against players (excluding owner)
         for p in ctx.db.player().iter().collect::<Vec<_>>() {
             if p.identity != proj.owner && proj_pos.distance_to(&p.position) <= proj.hit_radius {
-                hit_player(ctx, &p, proj.power, proj.knockback, &proj_pos, proj.owner, proj.skill_id, SKILL_XP_PER_HIT, proj_effect.clone());
+                hit_player(
+                    ctx,
+                    &p,
+                    proj.power,
+                    proj.knockback,
+                    &proj_pos,
+                    proj.owner,
+                    proj.skill_id,
+                    SKILL_XP_PER_HIT,
+                    proj_effect.clone(),
+                );
                 hit = true;
                 break;
             }
         }
         if hit {
-            ctx.db.projectile().scheduled_id().delete(&proj.scheduled_id);
+            ctx.db
+                .projectile()
+                .scheduled_id()
+                .delete(&proj.scheduled_id);
         }
     }
 
     // Tick AoE zones
     for zone in ctx.db.aoe_zone().iter().collect::<Vec<_>>() {
         if now_ms.saturating_sub(zone.last_tick_at) >= zone.tick_interval_ms {
-            let center = Position { x: zone.center_x, y: zone.center_y, z: zone.center_z };
-            let zone_effect = ctx.db.skill_def().id().find(&zone.skill_id)
-                .and_then(|sd| {
-                    let dur = ctx.db.skill_attributes().iter()
-                        .find(|a| a.player_identity == zone.owner && a.skill_id == zone.skill_id)
-                        .map(|a| compute_stats(&a).duration_ms)
-                        .unwrap_or(EFFECT_DEFAULT_DURATION_MS);
-                    effect_for_skill(&sd.name, dur)
-                });
+            let center = Position {
+                x: zone.center_x,
+                y: zone.center_y,
+                z: zone.center_z,
+            };
+            let zone_effect = ctx.db.skill_def().id().find(&zone.skill_id).and_then(|sd| {
+                let dur = ctx
+                    .db
+                    .skill_attributes()
+                    .iter()
+                    .find(|a| a.player_identity == zone.owner && a.skill_id == zone.skill_id)
+                    .map(|a| compute_stats(&a).duration_ms)
+                    .unwrap_or(EFFECT_DEFAULT_DURATION_MS);
+                effect_for_skill(&sd.name, dur)
+            });
             for npc in ctx.db.npc().iter().collect::<Vec<_>>() {
                 if npc.position.distance_to(&center) <= zone.radius {
-                    hit_npc(ctx, &npc, zone.power, zone.knockback, &center, zone.owner, zone.skill_id, SKILL_XP_PER_AOE_TICK, zone_effect.clone());
+                    hit_npc(
+                        ctx,
+                        &npc,
+                        zone.power,
+                        zone.knockback,
+                        &center,
+                        zone.owner,
+                        zone.skill_id,
+                        SKILL_XP_PER_AOE_TICK,
+                        zone_effect.clone(),
+                    );
                 }
             }
             for p in ctx.db.player().iter().collect::<Vec<_>>() {
                 if p.identity != zone.owner && p.position.distance_to(&center) <= zone.radius {
-                    hit_player(ctx, &p, zone.power, zone.knockback, &center, zone.owner, zone.skill_id, SKILL_XP_PER_AOE_TICK, zone_effect.clone());
+                    hit_player(
+                        ctx,
+                        &p,
+                        zone.power,
+                        zone.knockback,
+                        &center,
+                        zone.owner,
+                        zone.skill_id,
+                        SKILL_XP_PER_AOE_TICK,
+                        zone_effect.clone(),
+                    );
                 }
             }
-            ctx.db.aoe_zone().scheduled_id().update(AoeZone { last_tick_at: now_ms, ..zone });
+            ctx.db.aoe_zone().scheduled_id().update(AoeZone {
+                last_tick_at: now_ms,
+                ..zone
+            });
         }
     }
 
@@ -1351,32 +2276,68 @@ pub fn tick_projectiles(ctx: &ReducerContext, _schedule: ProjectileTickSchedule)
 #[spacetimedb::reducer]
 pub fn start_projectile_ticker(ctx: &ReducerContext) {
     for s in ctx.db.projectile_tick_schedule().iter() {
-        ctx.db.projectile_tick_schedule().scheduled_id().delete(&s.scheduled_id);
+        ctx.db
+            .projectile_tick_schedule()
+            .scheduled_id()
+            .delete(&s.scheduled_id);
     }
     schedule_next_projectile_tick(ctx);
 }
 
 #[spacetimedb::reducer]
-pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: String, target_npc_id: u64, target_player_hex: String) -> Result<(), String> {
-    let player = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
-    let skill_def = ctx.db.skill_def().id().find(&skill_id).ok_or("Skill not found")?;
+pub fn use_targeted_skill(
+    ctx: &ReducerContext,
+    skill_id: u64,
+    target_kind: String,
+    target_npc_id: u64,
+    target_player_hex: String,
+) -> Result<(), String> {
+    let player = ctx
+        .db
+        .player()
+        .identity()
+        .find(&ctx.sender())
+        .ok_or("Player not found")?;
+    let skill_def = ctx
+        .db
+        .skill_def()
+        .id()
+        .find(&skill_id)
+        .ok_or("Skill not found")?;
 
-    let _ = ctx.db.player_skill().iter()
+    let _ = ctx
+        .db
+        .player_skill()
+        .iter()
         .find(|ps| ps.player_identity == ctx.sender() && ps.skill_id == skill_id)
         .ok_or("Skill not available")?;
 
-    let attrs = ctx.db.skill_attributes().iter()
+    let attrs = ctx
+        .db
+        .skill_attributes()
+        .iter()
         .find(|a| a.player_identity == ctx.sender() && a.skill_id == skill_id)
         .ok_or("Skill attributes not found")?;
 
     let stats = compute_stats(&attrs);
 
     // Check cooldown
-    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros();
-    if let Some(cd) = ctx.db.skill_cooldown().iter()
+    let now_us = ctx
+        .timestamp
+        .to_duration_since_unix_epoch()
+        .unwrap_or_default()
+        .as_micros();
+    if let Some(cd) = ctx
+        .db
+        .skill_cooldown()
+        .iter()
         .find(|cd| cd.player_identity == ctx.sender() && cd.skill_id == skill_id)
     {
-        let ready_us = cd.ready_at.to_duration_since_unix_epoch().unwrap_or_default().as_micros();
+        let ready_us = cd
+            .ready_at
+            .to_duration_since_unix_epoch()
+            .unwrap_or_default()
+            .as_micros();
         if now_us < ready_us {
             return Err("Skill on cooldown".to_string());
         }
@@ -1385,57 +2346,119 @@ pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: Stri
     // Check and deduct resource
     match skill_def.resource_type {
         ResourceType::Mana => {
-            if player.mana < stats.resource_cost { return Err("Not enough mana".to_string()); }
-            ctx.db.player().identity().update(Player { mana: player.mana - stats.resource_cost, ..player.clone() });
+            if player.mana < stats.resource_cost {
+                return Err("Not enough mana".to_string());
+            }
+            ctx.db.player().identity().update(Player {
+                mana: player.mana - stats.resource_cost,
+                ..player.clone()
+            });
         }
         ResourceType::Stamina => {
-            if player.stamina < stats.resource_cost { return Err("Not enough stamina".to_string()); }
-            ctx.db.player().identity().update(Player { stamina: player.stamina - stats.resource_cost, ..player.clone() });
+            if player.stamina < stats.resource_cost {
+                return Err("Not enough stamina".to_string());
+            }
+            ctx.db.player().identity().update(Player {
+                stamina: player.stamina - stats.resource_cost,
+                ..player.clone()
+            });
         }
     }
 
     // Set cooldown
     let ready_at = ctx.timestamp + Duration::from_millis(stats.cooldown_ms);
-    if let Some(cd) = ctx.db.skill_cooldown().iter()
+    if let Some(cd) = ctx
+        .db
+        .skill_cooldown()
+        .iter()
         .find(|cd| cd.player_identity == ctx.sender() && cd.skill_id == skill_id)
     {
-        ctx.db.skill_cooldown().id().update(SkillCooldown { ready_at, ..cd });
+        ctx.db
+            .skill_cooldown()
+            .id()
+            .update(SkillCooldown { ready_at, ..cd });
     } else {
-        ctx.db.skill_cooldown().insert(SkillCooldown { id: 0, player_identity: ctx.sender(), skill_id, ready_at });
+        ctx.db.skill_cooldown().insert(SkillCooldown {
+            id: 0,
+            player_identity: ctx.sender(),
+            skill_id,
+            ready_at,
+        });
     }
 
     let targeted_effect = effect_for_skill(&skill_def.name, stats.duration_ms);
 
     let (target_x, target_y, target_z) = match target_kind.as_str() {
         "self" => {
-            let current = ctx.db.player().identity().find(&ctx.sender()).ok_or("Player not found")?;
+            let current = ctx
+                .db
+                .player()
+                .identity()
+                .find(&ctx.sender())
+                .ok_or("Player not found")?;
             let new_health = (player.health + stats.power).min(current.max_health);
             let healed = new_health - current.health;
-            ctx.db.player().identity().update(Player { health: new_health, ..current });
+            ctx.db.player().identity().update(Player {
+                health: new_health,
+                ..current
+            });
             if healed > 0 {
                 award_skill_xp(ctx, ctx.sender(), skill_id, healed);
             }
             (player.position.x, player.position.y, player.position.z)
         }
         "npc" => {
-            let npc = ctx.db.npc().id().find(&target_npc_id).ok_or("NPC not found")?;
+            let npc = ctx
+                .db
+                .npc()
+                .id()
+                .find(&target_npc_id)
+                .ok_or("NPC not found")?;
             if player.position.distance_to(&npc.position) > stats.range {
                 return Err("Target out of range".to_string());
             }
             let pos = (npc.position.x, npc.position.y, npc.position.z);
-            hit_npc(ctx, &npc, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, targeted_effect.clone());
+            hit_npc(
+                ctx,
+                &npc,
+                stats.power,
+                stats.knockback,
+                &player.position,
+                ctx.sender(),
+                skill_id,
+                SKILL_XP_PER_HIT,
+                targeted_effect.clone(),
+            );
             pos
         }
         "player" => {
             let target_identity = Identity::from_hex(&target_player_hex)
                 .map_err(|_| "Invalid player identity".to_string())?;
-            let target_player = ctx.db.player().identity().find(&target_identity)
+            let target_player = ctx
+                .db
+                .player()
+                .identity()
+                .find(&target_identity)
                 .ok_or("Target player not found")?;
             if player.position.distance_to(&target_player.position) > stats.range {
                 return Err("Target out of range".to_string());
             }
-            let pos = (target_player.position.x, target_player.position.y, target_player.position.z);
-            hit_player(ctx, &target_player, stats.power, stats.knockback, &player.position, ctx.sender(), skill_id, SKILL_XP_PER_HIT, targeted_effect.clone());
+            let pos = (
+                target_player.position.x,
+                target_player.position.y,
+                target_player.position.z,
+            );
+            hit_player(
+                ctx,
+                &target_player,
+                stats.power,
+                stats.knockback,
+                &player.position,
+                ctx.sender(),
+                skill_id,
+                SKILL_XP_PER_HIT,
+                targeted_effect.clone(),
+            );
             pos
         }
         _ => return Err(format!("Unknown target_kind: {target_kind}")),
@@ -1444,7 +2467,11 @@ pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: Stri
     let dx = target_x - player.position.x;
     let dz = target_z - player.position.z;
     let len = (dx * dx + dz * dz).sqrt();
-    let (dir_x, dir_z) = if len > 0.001 { (dx / len, dz / len) } else { (0.0, -1.0) };
+    let (dir_x, dir_z) = if len > 0.001 {
+        (dx / len, dz / len)
+    } else {
+        (0.0, -1.0)
+    };
 
     ctx.db.active_skill().insert(ActiveSkill {
         scheduled_id: 0,
@@ -1465,11 +2492,19 @@ pub fn use_targeted_skill(ctx: &ReducerContext, skill_id: u64, target_kind: Stri
 // --- BDI Reducers ---
 
 #[spacetimedb::reducer]
-pub fn submit_npc_reflection(ctx: &ReducerContext, npc_id: u64, json: String) -> Result<(), String> {
+pub fn submit_npc_reflection(
+    ctx: &ReducerContext,
+    npc_id: u64,
+    json: String,
+) -> Result<(), String> {
     let npc = ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
-    let v: serde_json::Value = serde_json::from_str(&json)
-        .map_err(|e| format!("Invalid reflection JSON: {e}"))?;
-    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+    let v: serde_json::Value =
+        serde_json::from_str(&json).map_err(|e| format!("Invalid reflection JSON: {e}"))?;
+    let now_us = ctx
+        .timestamp
+        .to_duration_since_unix_epoch()
+        .unwrap_or_default()
+        .as_micros() as u64;
 
     // Store memories
     if let Some(memories) = v.get("memories").and_then(|m| m.as_array()) {
@@ -1482,12 +2517,28 @@ pub fn submit_npc_reflection(ctx: &ReducerContext, npc_id: u64, json: String) ->
 
     // Upsert goals (capped at MAX_NPC_GOALS)
     if let Some(goals) = v.get("goals").and_then(|g| g.as_array()) {
-        let existing_count = ctx.db.npc_goal().iter().filter(|g| g.npc_id == npc_id).count();
+        let existing_count = ctx
+            .db
+            .npc_goal()
+            .iter()
+            .filter(|g| g.npc_id == npc_id)
+            .count();
         for (i, goal) in goals.iter().enumerate() {
-            if existing_count + i >= MAX_NPC_GOALS { break; }
-            let desc = goal.get("description").and_then(|d| d.as_str()).unwrap_or("").to_string();
-            if desc.is_empty() { continue; }
-            let priority_str = goal.get("priority").and_then(|p| p.as_str()).unwrap_or("ambition");
+            if existing_count + i >= MAX_NPC_GOALS {
+                break;
+            }
+            let desc = goal
+                .get("description")
+                .and_then(|d| d.as_str())
+                .unwrap_or("")
+                .to_string();
+            if desc.is_empty() {
+                continue;
+            }
+            let priority_str = goal
+                .get("priority")
+                .and_then(|p| p.as_str())
+                .unwrap_or("ambition");
             let priority = match priority_str {
                 "survival" => GoalPriority::Survival,
                 "duty" => GoalPriority::Duty,
@@ -1495,13 +2546,20 @@ pub fn submit_npc_reflection(ctx: &ReducerContext, npc_id: u64, json: String) ->
                 "leisure" => GoalPriority::Leisure,
                 _ => GoalPriority::Ambition,
             };
-            let condition = goal.get("success_condition")
+            let condition = goal
+                .get("success_condition")
                 .map(|c| serde_json::to_string(c).unwrap_or_default())
                 .unwrap_or_default();
             ctx.db.npc_goal().insert(NpcGoal {
-                id: 0, npc_id, parent_goal_id: 0, priority,
-                status: GoalStatus::Active, description: desc,
-                success_condition: condition, created_at: now_us, completed_at: 0,
+                id: 0,
+                npc_id,
+                parent_goal_id: 0,
+                priority,
+                status: GoalStatus::Active,
+                description: desc,
+                success_condition: condition,
+                created_at: now_us,
+                completed_at: 0,
             });
         }
     }
@@ -1509,25 +2567,58 @@ pub fn submit_npc_reflection(ctx: &ReducerContext, npc_id: u64, json: String) ->
     // Upsert beliefs (by subject+predicate, capped at MAX_NPC_BELIEFS)
     if let Some(beliefs) = v.get("beliefs").and_then(|b| b.as_array()) {
         for belief in beliefs {
-            let subject = belief.get("subject").and_then(|s| s.as_str()).unwrap_or("").to_string();
-            let predicate = belief.get("predicate").and_then(|p| p.as_str()).unwrap_or("").to_string();
-            let object = belief.get("object").and_then(|o| o.as_str()).unwrap_or("").to_string();
-            let confidence = belief.get("confidence").and_then(|c| c.as_f64()).unwrap_or(0.8) as f32;
-            if subject.is_empty() || predicate.is_empty() { continue; }
+            let subject = belief
+                .get("subject")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
+            let predicate = belief
+                .get("predicate")
+                .and_then(|p| p.as_str())
+                .unwrap_or("")
+                .to_string();
+            let object = belief
+                .get("object")
+                .and_then(|o| o.as_str())
+                .unwrap_or("")
+                .to_string();
+            let confidence = belief
+                .get("confidence")
+                .and_then(|c| c.as_f64())
+                .unwrap_or(0.8) as f32;
+            if subject.is_empty() || predicate.is_empty() {
+                continue;
+            }
 
             // Find existing belief with same subject+predicate
-            let existing = ctx.db.npc_belief().iter()
-                .find(|b| b.npc_id == npc_id && b.subject == subject && b.predicate == predicate);
+            let existing =
+                ctx.db.npc_belief().iter().find(|b| {
+                    b.npc_id == npc_id && b.subject == subject && b.predicate == predicate
+                });
 
             if let Some(existing) = existing {
                 ctx.db.npc_belief().id().update(NpcBelief {
-                    object, confidence, updated_at: now_us, ..existing
+                    object,
+                    confidence,
+                    updated_at: now_us,
+                    ..existing
                 });
             } else {
-                let count = ctx.db.npc_belief().iter().filter(|b| b.npc_id == npc_id).count();
+                let count = ctx
+                    .db
+                    .npc_belief()
+                    .iter()
+                    .filter(|b| b.npc_id == npc_id)
+                    .count();
                 if count < MAX_NPC_BELIEFS {
                     ctx.db.npc_belief().insert(NpcBelief {
-                        id: 0, npc_id, subject, predicate, object, confidence, updated_at: now_us,
+                        id: 0,
+                        npc_id,
+                        subject,
+                        predicate,
+                        object,
+                        confidence,
+                        updated_at: now_us,
                     });
                 }
             }
@@ -1537,24 +2628,47 @@ pub fn submit_npc_reflection(ctx: &ReducerContext, npc_id: u64, json: String) ->
     // Apply relationship deltas
     if let Some(rel_updates) = v.get("relationship_updates").and_then(|r| r.as_array()) {
         for update in rel_updates {
-            let target_type = update.get("target_type").and_then(|t| t.as_str()).unwrap_or("").to_string();
-            let target_id = update.get("target_id").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            let target_type = update
+                .get("target_type")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let target_id = update
+                .get("target_id")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
             let delta = update.get("delta").and_then(|d| d.as_i64()).unwrap_or(0) as i32;
-            let context = update.get("context").and_then(|c| c.as_str()).unwrap_or("").to_string();
-            if target_type.is_empty() || target_id.is_empty() { continue; }
+            let context = update
+                .get("context")
+                .and_then(|c| c.as_str())
+                .unwrap_or("")
+                .to_string();
+            if target_type.is_empty() || target_id.is_empty() {
+                continue;
+            }
 
-            let existing = ctx.db.npc_relationship().iter()
-                .find(|r| r.npc_id == npc_id && r.target_type == target_type && r.target_id == target_id);
+            let existing = ctx.db.npc_relationship().iter().find(|r| {
+                r.npc_id == npc_id && r.target_type == target_type && r.target_id == target_id
+            });
 
             if let Some(existing) = existing {
                 let new_disp = (existing.disposition + delta).clamp(-100, 100);
                 ctx.db.npc_relationship().id().update(NpcRelationship {
-                    disposition: new_disp, context, updated_at: now_us, ..existing
+                    disposition: new_disp,
+                    context,
+                    updated_at: now_us,
+                    ..existing
                 });
             } else {
                 ctx.db.npc_relationship().insert(NpcRelationship {
-                    id: 0, npc_id, target_type, target_id,
-                    disposition: delta.clamp(-100, 100), context, updated_at: now_us,
+                    id: 0,
+                    npc_id,
+                    target_type,
+                    target_id,
+                    disposition: delta.clamp(-100, 100),
+                    context,
+                    updated_at: now_us,
                 });
             }
         }
@@ -1563,7 +2677,10 @@ pub fn submit_npc_reflection(ctx: &ReducerContext, npc_id: u64, json: String) ->
     // Update persona if LLM expanded it
     if let Some(persona) = v.get("persona").and_then(|p| p.as_str()) {
         if !persona.is_empty() {
-            ctx.db.npc().id().update(Npc { persona: persona.to_string(), ..npc });
+            ctx.db.npc().id().update(Npc {
+                persona: persona.to_string(),
+                ..npc
+            });
         }
     }
 
@@ -1573,11 +2690,15 @@ pub fn submit_npc_reflection(ctx: &ReducerContext, npc_id: u64, json: String) ->
 }
 
 #[spacetimedb::reducer]
-pub fn submit_npc_life_tree(ctx: &ReducerContext, npc_id: u64, tree_json: String) -> Result<(), String> {
+pub fn submit_npc_life_tree(
+    ctx: &ReducerContext,
+    npc_id: u64,
+    tree_json: String,
+) -> Result<(), String> {
     ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
     // Validate the tree JSON parses correctly
-    let _tree: bonsai_bt::Behavior<NpcBtAction> = serde_json::from_str(&tree_json)
-        .map_err(|e| format!("Invalid life tree JSON: {e}"))?;
+    let _tree: bonsai_bt::Behavior<NpcBtAction> =
+        serde_json::from_str(&tree_json).map_err(|e| format!("Invalid life tree JSON: {e}"))?;
     log::info!("[NPC {}] received life tree from LLM", npc_id);
     upsert_npc_behavior_life_tree(ctx, npc_id, "life_tree", &tree_json);
 
@@ -1587,18 +2708,42 @@ pub fn submit_npc_life_tree(ctx: &ReducerContext, npc_id: u64, tree_json: String
 }
 
 #[spacetimedb::reducer]
-pub fn submit_npc_goals(ctx: &ReducerContext, npc_id: u64, goals_json: String) -> Result<(), String> {
+pub fn submit_npc_goals(
+    ctx: &ReducerContext,
+    npc_id: u64,
+    goals_json: String,
+) -> Result<(), String> {
     ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
-    let goals: Vec<serde_json::Value> = serde_json::from_str(&goals_json)
-        .map_err(|e| format!("Invalid goals JSON: {e}"))?;
-    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
-    let existing_count = ctx.db.npc_goal().iter().filter(|g| g.npc_id == npc_id).count();
+    let goals: Vec<serde_json::Value> =
+        serde_json::from_str(&goals_json).map_err(|e| format!("Invalid goals JSON: {e}"))?;
+    let now_us = ctx
+        .timestamp
+        .to_duration_since_unix_epoch()
+        .unwrap_or_default()
+        .as_micros() as u64;
+    let existing_count = ctx
+        .db
+        .npc_goal()
+        .iter()
+        .filter(|g| g.npc_id == npc_id)
+        .count();
 
     for (i, goal) in goals.iter().enumerate() {
-        if existing_count + i >= MAX_NPC_GOALS { break; }
-        let desc = goal.get("description").and_then(|d| d.as_str()).unwrap_or("").to_string();
-        if desc.is_empty() { continue; }
-        let priority_str = goal.get("priority").and_then(|p| p.as_str()).unwrap_or("ambition");
+        if existing_count + i >= MAX_NPC_GOALS {
+            break;
+        }
+        let desc = goal
+            .get("description")
+            .and_then(|d| d.as_str())
+            .unwrap_or("")
+            .to_string();
+        if desc.is_empty() {
+            continue;
+        }
+        let priority_str = goal
+            .get("priority")
+            .and_then(|p| p.as_str())
+            .unwrap_or("ambition");
         let priority = match priority_str {
             "survival" => GoalPriority::Survival,
             "duty" => GoalPriority::Duty,
@@ -1606,13 +2751,20 @@ pub fn submit_npc_goals(ctx: &ReducerContext, npc_id: u64, goals_json: String) -
             "leisure" => GoalPriority::Leisure,
             _ => GoalPriority::Ambition,
         };
-        let condition = goal.get("success_condition")
+        let condition = goal
+            .get("success_condition")
             .map(|c| serde_json::to_string(c).unwrap_or_default())
             .unwrap_or_default();
         ctx.db.npc_goal().insert(NpcGoal {
-            id: 0, npc_id, parent_goal_id: 0, priority,
-            status: GoalStatus::Active, description: desc,
-            success_condition: condition, created_at: now_us, completed_at: 0,
+            id: 0,
+            npc_id,
+            parent_goal_id: 0,
+            priority,
+            status: GoalStatus::Active,
+            description: desc,
+            success_condition: condition,
+            created_at: now_us,
+            completed_at: 0,
         });
     }
     log::info!("[NPC {}] {} goals submitted", npc_id, goals.len());
@@ -1620,31 +2772,73 @@ pub fn submit_npc_goals(ctx: &ReducerContext, npc_id: u64, goals_json: String) -
 }
 
 #[spacetimedb::reducer]
-pub fn submit_npc_beliefs(ctx: &ReducerContext, npc_id: u64, beliefs_json: String) -> Result<(), String> {
+pub fn submit_npc_beliefs(
+    ctx: &ReducerContext,
+    npc_id: u64,
+    beliefs_json: String,
+) -> Result<(), String> {
     ctx.db.npc().id().find(&npc_id).ok_or("NPC not found")?;
-    let beliefs: Vec<serde_json::Value> = serde_json::from_str(&beliefs_json)
-        .map_err(|e| format!("Invalid beliefs JSON: {e}"))?;
-    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+    let beliefs: Vec<serde_json::Value> =
+        serde_json::from_str(&beliefs_json).map_err(|e| format!("Invalid beliefs JSON: {e}"))?;
+    let now_us = ctx
+        .timestamp
+        .to_duration_since_unix_epoch()
+        .unwrap_or_default()
+        .as_micros() as u64;
 
     for belief in &beliefs {
-        let subject = belief.get("subject").and_then(|s| s.as_str()).unwrap_or("").to_string();
-        let predicate = belief.get("predicate").and_then(|p| p.as_str()).unwrap_or("").to_string();
-        let object = belief.get("object").and_then(|o| o.as_str()).unwrap_or("").to_string();
-        let confidence = belief.get("confidence").and_then(|c| c.as_f64()).unwrap_or(0.8) as f32;
-        if subject.is_empty() || predicate.is_empty() { continue; }
+        let subject = belief
+            .get("subject")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
+        let predicate = belief
+            .get("predicate")
+            .and_then(|p| p.as_str())
+            .unwrap_or("")
+            .to_string();
+        let object = belief
+            .get("object")
+            .and_then(|o| o.as_str())
+            .unwrap_or("")
+            .to_string();
+        let confidence = belief
+            .get("confidence")
+            .and_then(|c| c.as_f64())
+            .unwrap_or(0.8) as f32;
+        if subject.is_empty() || predicate.is_empty() {
+            continue;
+        }
 
-        let existing = ctx.db.npc_belief().iter()
+        let existing = ctx
+            .db
+            .npc_belief()
+            .iter()
             .find(|b| b.npc_id == npc_id && b.subject == subject && b.predicate == predicate);
 
         if let Some(existing) = existing {
             ctx.db.npc_belief().id().update(NpcBelief {
-                object, confidence, updated_at: now_us, ..existing
+                object,
+                confidence,
+                updated_at: now_us,
+                ..existing
             });
         } else {
-            let count = ctx.db.npc_belief().iter().filter(|b| b.npc_id == npc_id).count();
+            let count = ctx
+                .db
+                .npc_belief()
+                .iter()
+                .filter(|b| b.npc_id == npc_id)
+                .count();
             if count < MAX_NPC_BELIEFS {
                 ctx.db.npc_belief().insert(NpcBelief {
-                    id: 0, npc_id, subject, predicate, object, confidence, updated_at: now_us,
+                    id: 0,
+                    npc_id,
+                    subject,
+                    predicate,
+                    object,
+                    confidence,
+                    updated_at: now_us,
                 });
             }
         }

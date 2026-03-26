@@ -751,6 +751,30 @@ pub fn has_recent_event(ctx: &ReducerContext, npc_id: u64, event_type: &str, max
     false
 }
 
+/// Check if there's an unhandled player chat: heard_chat exists and is newer than responded_to_chat.
+pub fn has_unhandled_chat(ctx: &ReducerContext, npc_id: u64) -> bool {
+    let now_us = ctx.timestamp.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64;
+    let mut latest_heard: u64 = 0;
+    let mut latest_responded: u64 = 0;
+    for evt in ctx.db.npc_event_log().iter() {
+        if evt.npc_id != npc_id { continue; }
+        let expiry_us = match &evt.scheduled_at {
+            ScheduleAt::Time(t) => t.to_duration_since_unix_epoch().unwrap_or_default().as_micros() as u64,
+            _ => 0,
+        };
+        let created_us = expiry_us.saturating_sub(NPC_EVENT_EXPIRE_MS * 1000);
+        let age_ms = now_us.saturating_sub(created_us) / 1000;
+        if age_ms > SOCIAL_COOLDOWN_MS { continue; }
+        if evt.event == "heard_chat" && created_us > latest_heard {
+            latest_heard = created_us;
+        }
+        if evt.event == "responded_to_chat" && created_us > latest_responded {
+            latest_responded = created_us;
+        }
+    }
+    latest_heard > 0 && latest_heard > latest_responded
+}
+
 // ── Helper: log an NPC event (short-term memory, auto-expires) ──
 
 pub const NPC_EVENT_EXPIRE_MS: u64 = 300_000; // 5 minutes
