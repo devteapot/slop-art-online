@@ -149,13 +149,107 @@ slop-art-online architecture:
 
 ---
 
-## Related Projects & Alternatives
+## Comparative Analysis: HY-World 2.0 vs. Lyra 2.0
 
-| Project | What it does | Relevance |
-|---|---|---|
-| [HunyuanWorld 1.0](https://github.com/Tencent-Hunyuan/HunyuanWorld-1.0) | Previous version of HY-World | Interim for panorama gen |
-| [WorldStereo](https://github.com/FuchengSu/WorldStereo) | Panorama → 3DGS (v1) | Interim for WorldStereo 2.0 |
-| [WorldMirror](https://github.com/Tencent-Hunyuan/HunyuanWorld-Mirror) | Multi-view → 3D reconstruction | Predecessor to WorldMirror 2.0 |
+### Lyra 2.0 — Overview
+
+**NVIDIA** research project, released April 14, 2026 (2 days before HY-World 2.0).
+
+- **Model:** 14B-parameter CNN/Transformer, built on WAN-14B architecture
+- **Input:** Single image
+- **Output:** Explorable 3D worlds (video → 3DGS/mesh)
+- **Paper:** [arXiv:2604.13036](https://arxiv.org/abs/2604.13036)
+- **License:** **NVIDIA Internal Research License** — NOT open source. Cannot be used in production, sale, or distribution.
+- **GitHub:** [github.com/nv-tlabs/lyra](https://github.com/nv-tlabs/lyra)
+
+**Architecture:** Two-stage "generative reconstruction" approach:
+1. Generates a long-range camera-controlled walkthrough video with 3D consistency
+2. Lifts the video sequence into explicit 3D (3DGS + meshes) via feed-forward reconstruction
+
+Key innovation: addresses **spatial forgetting** (per-frame geometry as information routing) and **temporal drifting** (self-augmented training with degraded outputs) for long-horizon scene generation.
+
+---
+
+### Head-to-Head Comparison
+
+|| Feature | **HY-World 2.0** (Tencent) | **Lyra 2.0** (NVIDIA) |
+||---|---|---|
+|| **Source** | Tencent HY Team | NVIDIA SIL Lab |
+|| **Release Date** | April 16, 2026 | April 14, 2026 |
+|| **License** | Open (permissive) | NVIDIA Internal Research Only — not for production or commercial use |
+|| **Code** | Partially open (WorldMirror 2.0 released; full gen pipeline coming soon) | Open source code available on GitHub |
+|| **Model Size** | ~1.2B params (WorldMirror) | 14B params |
+|| **Input** | Text, single image, multi-view images, video | Single image only |
+|| **Output** | Meshes, 3DGS, point clouds, depth, normals, camera params | 3DGS, meshes (lifted from generated video) |
+|| **Generation Pipeline** | 4-stage: HY-Pano → WorldNav → WorldStereo → WorldMirror | 2-stage: video gen → 3D reconstruction |
+|| **3D World Gen** | Full pipeline (text/image → 3D world) | Single image → walkthrough → 3D world |
+|| **World Reconstruction** | Yes (multi-view/video → 3D) | N/A (generative only) |
+|| **Game Engine Export** | Unity, Unreal Engine, Blender, Isaac | Isaac Sim (robotics focus) |
+|| **Character Mode** | Physics-aware character exploration | Camera-controlled video + point cloud GUI |
+|| **Embodied AI** | General purpose | Robotics/simulation focused |
+|| **Real-Time Rendering** | Yes | Yes |
+|| **Current Availability** | Inference code + weights (WorldMirror 2.0) | HF weights; code on GitHub |
+
+---
+
+### Key Differences
+
+**1. Licensing — The Dealbreaker**
+
+HY-World 2.0 is open-source and usable in a commercial project like slop-art-online. Lyra 2.0 carries an **NVIDIA Internal Research License** that explicitly prohibits:
+- Production use
+- Generation of works for sale or distribution
+- Distribution, deployment, or sublicensing of the model
+
+Lyra is strictly for academic research. For a game project, it's not a viable option.
+
+**2. Scale and Capability**
+
+| | HY-World 2.0 | Lyra 2.0 |
+||---|---|
+| Model size | 1.2B params | 14B params (12x larger) |
+| Text input | Yes (world generation) | No |
+| Reconstruction | Yes (real scenes) | No |
+| 3D consistency | Native 3D output | Video-first, then lifted to 3D |
+
+Lyra 2.0 is significantly more powerful as a generative model. Its 14B parameters and two-stage video-then-3D approach gives it superior visual fidelity and longer-horizon consistency. HY-World 2.0's 1.2B WorldMirror is the currently released part — the full 4-stage generation pipeline is "coming soon."
+
+**3. Architecture Philosophy**
+
+| | HY-World 2.0 | Lyra 2.0 |
+||---|---|
+| Approach | Direct 3D synthesis (feed-forward to meshes/3DGS) | Generative reconstruction (video → 3D) |
+| 3D first or video first? | 3D first — outputs are persistent 3D assets from the start | Video first — generates camera-controlled video, lifts to 3D after |
+| Physics support | Physics-aware collision, character mode | Isaac Sim for robotics simulation |
+
+HY-World produces persistent 3D assets directly, which is more natural for game engines. Lyra generates walkthroughs first (like a video) and extracts 3D after — a different paradigm that trades some directness for potentially higher visual quality from the video model.
+
+**4. Maturity**
+
+Both are extremely recent (released ~2 weeks apart). Neither has a fully open, production-ready codebase:
+- HY-World 2.0 has partial release (WorldMirror 2.0 only; full generation code coming soon)
+- Lyra 2.0 has HF weights + GitHub code, but the license blocks any real use
+
+---
+
+### Verdict for slop-art-online
+
+**HY-World 2.0 is the practical choice** — it's open, supports text prompts (critical for NPC/player-driven generation), and outputs directly into game engines. The 1.2B model is lighter weight too.
+
+**Lyra 2.0 is more academically interesting** — the 14B model and video-first approach may produce higher quality visuals. Its "spatial memory" technique (per-frame geometry routing) and drift-correction training are clever research contributions worth studying. The license makes it unusable for your project, but the paper is worth reading for techniques that could be adapted.
+
+If HY-World's full generation pipeline (coming soon) matches Lyra's quality, HY-World would be the clear winner. The key thing to watch: does the "coming soon" generation pipeline deliver?
+
+---
+
+### Related Projects & Alternatives
+
+|| Project | What it does | Relevance |
+||---|---|---|
+|| [HunyuanWorld 1.0](https://github.com/Tencent-Hunyuan/HunyuanWorld-1.0) | Previous version of HY-World | Interim for panorama gen |
+|| [WorldStereo](https://github.com/FuchengSu/WorldStereo) | Panorama → 3DGS (v1) | Interim for WorldStereo 2.0 |
+|| [WorldMirror](https://github.com/Tencent-Hunyuan/HunyuanWorld-Mirror) | Multi-view → 3D reconstruction | Predecessor to WorldMirror 2.0 |
+|| [LYRA (NVIDIA)](https://github.com/nv-tlabs/lyra) | 14B single-image → explorable 3D worlds (video-first) | Research only — license prohibits production use |
 
 ---
 
