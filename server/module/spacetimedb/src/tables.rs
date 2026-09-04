@@ -62,6 +62,16 @@ pub struct Player {
 }
 
 #[derive(Clone)]
+#[spacetimedb::table(accessor = player_profile, public)]
+pub struct PlayerProfile {
+    #[primary_key]
+    pub identity: Identity,
+    pub display_name: String,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Clone)]
 #[spacetimedb::table(accessor = npc, public)]
 pub struct Npc {
     #[primary_key]
@@ -308,7 +318,11 @@ pub struct NpcEmotion {
 // --- NPC Knowledge (learned world mechanics) ---
 
 #[derive(Clone)]
-#[spacetimedb::table(accessor = npc_knowledge, public)]
+#[spacetimedb::table(
+    accessor = npc_knowledge,
+    public,
+    index(accessor = npc_knowledge_by_npc_id, btree(columns = [npc_id]))
+)]
 pub struct NpcKnowledge {
     #[primary_key]
     #[auto_inc]
@@ -324,7 +338,11 @@ pub struct NpcKnowledge {
 // --- NPC Memory ---
 
 #[derive(Clone)]
-#[spacetimedb::table(accessor = npc_memory, public)]
+#[spacetimedb::table(
+    accessor = npc_memory,
+    public,
+    index(accessor = npc_memory_by_npc_id, btree(columns = [npc_id]))
+)]
 pub struct NpcMemory {
     #[primary_key]
     #[auto_inc]
@@ -379,7 +397,11 @@ pub enum GoalPriority {
 }
 
 #[derive(Clone)]
-#[spacetimedb::table(accessor = npc_goal, public)]
+#[spacetimedb::table(
+    accessor = npc_goal,
+    public,
+    index(accessor = npc_goal_by_npc_id, btree(columns = [npc_id]))
+)]
 pub struct NpcGoal {
     #[primary_key]
     #[auto_inc]
@@ -397,7 +419,11 @@ pub struct NpcGoal {
 // --- NPC Beliefs (BDI Beliefs) ---
 
 #[derive(Clone)]
-#[spacetimedb::table(accessor = npc_belief, public)]
+#[spacetimedb::table(
+    accessor = npc_belief,
+    public,
+    index(accessor = npc_belief_by_npc_id, btree(columns = [npc_id]))
+)]
 pub struct NpcBelief {
     #[primary_key]
     #[auto_inc]
@@ -413,7 +439,11 @@ pub struct NpcBelief {
 // --- NPC Relationships ---
 
 #[derive(Clone)]
-#[spacetimedb::table(accessor = npc_relationship, public)]
+#[spacetimedb::table(
+    accessor = npc_relationship,
+    public,
+    index(accessor = npc_relationship_by_npc_id, btree(columns = [npc_id]))
+)]
 pub struct NpcRelationship {
     #[primary_key]
     #[auto_inc]

@@ -126,7 +126,12 @@ pub struct NpcChatMessage {
     pub position: Position,
 }
 
-#[spacetimedb::table(accessor = npc_event_log, public, scheduled(expire_npc_event))]
+#[spacetimedb::table(
+    accessor = npc_event_log,
+    public,
+    scheduled(expire_npc_event),
+    index(accessor = npc_event_log_by_npc_id, btree(columns = [npc_id]))
+)]
 pub struct NpcEventLog {
     #[primary_key]
     #[auto_inc]
@@ -156,6 +161,41 @@ pub struct ProjectileTickSchedule {
     #[auto_inc]
     pub scheduled_id: u64,
     pub scheduled_at: ScheduleAt,
+}
+
+fn timestamp_us(ctx: &ReducerContext) -> u64 {
+    ctx.timestamp
+        .to_duration_since_unix_epoch()
+        .unwrap_or_default()
+        .as_micros() as u64
+}
+
+fn short_identity(identity: &Identity) -> String {
+    let hex = identity.to_hex().to_string();
+    format!("Player {}", &hex[..hex.len().min(8)])
+}
+
+fn display_name_for(ctx: &ReducerContext, identity: &Identity) -> String {
+    ctx.db
+        .player_profile()
+        .identity()
+        .find(identity)
+        .map(|profile| profile.display_name)
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| short_identity(identity))
+}
+
+fn ensure_player_profile(ctx: &ReducerContext) {
+    if ctx.db.player_profile().identity().find(&ctx.sender()).is_some() {
+        return;
+    }
+    let now_us = timestamp_us(ctx);
+    ctx.db.player_profile().insert(PlayerProfile {
+        identity: ctx.sender(),
+        display_name: short_identity(&ctx.sender()),
+        created_at: now_us,
+        updated_at: now_us,
+    });
 }
 
 // --- Status effect helpers ---
@@ -1091,6 +1131,8 @@ pub fn spawn_npc(
 
 #[spacetimedb::reducer]
 pub fn join_game(ctx: &ReducerContext) {
+    ensure_player_profile(ctx);
+
     if let Some(existing) = ctx.db.player().identity().find(&ctx.sender()) {
         let bonuses = equipment_bonuses(ctx, &ctx.sender());
         let mh = player_max_health(existing.level) + bonuses.health;
@@ -1134,6 +1176,40 @@ pub fn join_game(ctx: &ReducerContext) {
         });
         give_all_skills(ctx, ctx.sender());
     }
+}
+
+#[spacetimedb::reducer]
+pub fn set_display_name(ctx: &ReducerContext, display_name: String) -> Result<(), String> {
+    let display_name = display_name.trim().to_string();
+    if display_name.is_empty() {
+        return Err("Display name required".to_string());
+    }
+    if display_name.chars().count() > PLAYER_DISPLAY_NAME_MAX_LENGTH {
+        return Err(format!(
+            "Display name must be at most {} characters",
+            PLAYER_DISPLAY_NAME_MAX_LENGTH
+        ));
+    }
+    if display_name.chars().any(|c| c.is_control()) {
+        return Err("Display name cannot contain control characters".to_string());
+    }
+
+    let now_us = timestamp_us(ctx);
+    if let Some(existing) = ctx.db.player_profile().identity().find(&ctx.sender()) {
+        ctx.db.player_profile().identity().update(PlayerProfile {
+            display_name,
+            updated_at: now_us,
+            ..existing
+        });
+    } else {
+        ctx.db.player_profile().insert(PlayerProfile {
+            identity: ctx.sender(),
+            display_name,
+            created_at: now_us,
+            updated_at: now_us,
+        });
+    }
+    Ok(())
 }
 
 #[spacetimedb::reducer(client_disconnected)]
@@ -1651,7 +1727,7 @@ pub fn send_chat_message(ctx: &ReducerContext, text: String) -> Result<(), Strin
             ctx.timestamp + Duration::from_millis(CHAT_MESSAGE_EXPIRE_MS),
         ),
         sender: ctx.sender(),
-        sender_name: String::new(),
+        sender_name: display_name_for(ctx, &ctx.sender()),
         text: text.clone(),
         position: player.position.clone(),
     });

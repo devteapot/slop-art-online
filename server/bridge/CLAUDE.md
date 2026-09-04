@@ -10,27 +10,13 @@ The LLM is expensive. The architecture minimizes calls through two principles:
 1. **Behavior trees handle most situations** — combat, movement, routine tasks
 2. **Conversation uses templates/knowledge first** — LLM only for novel content
 
-### Current Decision Types (v1)
+### Decision Types (v2 — current)
 
-| Decision Type | LLM Function | Returns | Reducer |
-|---|---|---|---|
-| `combat_start`, `combat_update` | `generate_combat_tree()` | JSON tree | `submit_npc_combat_tree` |
-| `post_combat` | `generate_post_combat()` | JSON plan | `submit_npc_plan` |
-| `idle` | `generate_plan()` | JSON plan | `submit_npc_plan` |
-| `social` | `generate_social()` | JSON plan | `submit_npc_plan` |
-| `reflection` | `generate_reflection()` | JSON (goals/beliefs/memories) | `submit_npc_reflection` |
-| `dawn` | `generate_dawn()` | JSON life tree | `submit_npc_life_tree` |
-| `significant` | `generate_significant()` | JSON plan + goals/beliefs | `submit_npc_plan` + extras |
-
-### Target Decision Types (v2)
-
-After migration to unified trees, the bridge will handle:
-
-| Decision Type | When | Returns | Reducer |
-|---|---|---|---|
-| `tree_generation` | Dawn, tree exhaustion, goal change, near-death, self-request | Unified behavior tree JSON | `submit_npc_tree` |
-| `experience` | After significant events (near-death, betrayal, discovery) | Identity deltas JSON | `submit_npc_identity_update` |
-| `conversation` | Novel topic, important speaker, no template match | Message text | `submit_npc_speech` |
+| Decision Type | When | LLM Function | Returns | Reducer |
+|---|---|---|---|---|
+| `tree_generation` | Dawn, tree exhaustion, goal change, near-death, self-request | `generate_tree()` | Unified behavior tree JSON | `submit_npc_tree` |
+| `experience` | After significant events (near-death, betrayal, discovery) | `generate_experience_eval()` | Identity deltas JSON | `submit_npc_identity_update` |
+| `conversation` | Novel topic, important speaker, no template match | `generate_conversation()` | Message text | `submit_npc_speech` |
 
 ## Cost Model
 
@@ -69,11 +55,9 @@ NpcPendingDecision row  ──→  on_insert callback
 
 ### Fallback Behavior
 Every decision type has a fallback if the LLM fails:
-- Combat: default aggressive tree
-- Plans: `["wander"]`
-- Social: `"Greetings, traveler."`
-- Reflection: empty `{}`
-- Dawn: simple wander tree
+- Tree generation: submit empty string (clears pending decision, NPC keeps default tree)
+- Experience: submit empty `{}` (no identity changes)
+- Conversation: submit `"Hmm..."` (minimal acknowledgment)
 
 ## Files
 
@@ -92,11 +76,9 @@ Every decision type has a fallback if the LLM fails:
 
 ## Response Format
 
-All LLM responses must be JSON. The bridge extracts:
-- `steps_json` — behavior tree or plan steps
-- `memories` — array of memory text strings
-- `goals` — goal definitions (for significant events)
-- `beliefs` — belief definitions (for significant events)
-- `life_tree` — daily routine tree (for dawn)
+Each decision type expects a different response format:
+- `tree_generation` — JSON behavior tree (`Behavior<NpcBtAction>`)
+- `experience` — JSON with `personality_deltas`, `beliefs`, `knowledge`, `relationship_updates`, `emotion_adjustments`
+- `conversation` — plain text message (parsed via `parse_conversation_response()`)
 
 Malformed responses trigger the fallback path.

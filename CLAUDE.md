@@ -16,7 +16,7 @@ For deep architectural context, see:
 
 ```bash
 cargo build                # build all crates
-cargo run                  # run the current entry point
+just client                # run the Bevy client (cargo run -p client)
 cargo test                 # run all tests
 cargo test <name>          # run a single test by name
 just publish-reset         # clear DB and republish SpacetimeDB module
@@ -36,6 +36,8 @@ Three independent tiers, all Rust:
 - Single source of truth for all game state; clients subscribe to table diffs via WebSocket
 
 ### 2. Bevy Client (frontend) — `client/`
+- Sole supported game client; use Bevy for rendering, input, physics, audio, and UI
+- Keep custom NPC simulation and authoritative world rules in the Rust SpacetimeDB module
 - Same codebase targets native desktop and WASM/browser
 - ECS architecture: `FixedUpdate` (60 Hz) for deterministic logic, `Update` (uncapped) for rendering
 - Implements client-side prediction + server reconciliation

@@ -53,6 +53,7 @@ impl __sdk::__query_builder::HasCols for NpcBelief {
 /// Provides typed access to indexed columns for query building.
 pub struct NpcBeliefIxCols {
     pub id: __sdk::__query_builder::IxCol<NpcBelief, u64>,
+    pub npc_id: __sdk::__query_builder::IxCol<NpcBelief, u64>,
 }
 
 impl __sdk::__query_builder::HasIxCols for NpcBelief {
@@ -60,6 +61,7 @@ impl __sdk::__query_builder::HasIxCols for NpcBelief {
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         NpcBeliefIxCols {
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+            npc_id: __sdk::__query_builder::IxCol::new(table_name, "npc_id"),
         }
     }
 }

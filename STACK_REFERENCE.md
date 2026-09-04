@@ -13,9 +13,11 @@ LLM Backend (Cloud API or Local Ollama)
 ```
 
 - **Server:** SpacetimeDB (logic + database + NPC orchestration)
-- **Client:** Bevy (Rust, native desktop + optional WASM/browser)
+- **Client:** Bevy — sole supported game client (Rust, native desktop + optional WASM/browser)
 - **NPC AI:** LLM Bridge (thin external service, stateless)
 - **Language:** Rust across the entire stack
+
+Bevy handles rendering, input, physics, audio, and UI. Custom NPC simulation and authoritative world rules remain in the SpacetimeDB module; the Rust LLM bridge supports the AI experience. The experimental Unity client has been retired.
 
 ---
 
@@ -113,20 +115,11 @@ via WebSockets — no separate server layer needed.
 - One module = your entire backend
 - Single source of truth for ALL state (game, NPC, world, alliances)
 
-### Server Logic Options
-| Language | Notes |
-|---|---|
-| Rust | Best performance |
-| C# | Easier for Unity-background devs |
+### Project Language and SDK
 
-### Client SDKs
-| Platform | SDK |
-|---|---|
-| Bevy / Native Rust | Rust SDK ✅ |
-| Unity | C# ✅ (most mature) |
-| Unreal Engine | C++ + Blueprint ✅ |
-| Web | TypeScript ✅ |
-| Godot | ❌ No official SDK |
+Server logic is written in Rust. The Bevy client and LLM bridge use the
+SpacetimeDB Rust SDK and share the generated bindings in `shared/`.
+Run `just generate` after changing the module schema or reducers.
 
 ### Hosting
 - **Maincloud** (managed): free tier ~3M reducer calls/month,
@@ -675,9 +668,11 @@ volumes:
 
 ## Quick Reference: Alternatives Considered
 
+Historical alternatives only; Bevy is the supported client for this project.
+
 | Option | Verdict |
 |---|---|
-| Unity + SpacetimeDB | ✅ Best for small teams / Unity experience |
+| Unity + SpacetimeDB | Retired to focus on the Rust stack and NPC AI |
 | Unreal + SpacetimeDB | ✅ Best for high-end 3D visuals |
 | Web (TypeScript + Phaser/Three.js) | ✅ Best for browser accessibility |
 | Godot + SpacetimeDB | ❌ No official SDK |

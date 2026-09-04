@@ -6,49 +6,49 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
-pub(super) struct SubmitNpcPlanArgs {
+pub(super) struct SubmitNpcIdentityUpdateArgs {
     pub npc_id: u64,
-    pub steps_json: String,
+    pub json: String,
 }
 
-impl From<SubmitNpcPlanArgs> for super::Reducer {
-    fn from(args: SubmitNpcPlanArgs) -> Self {
-        Self::SubmitNpcPlan {
+impl From<SubmitNpcIdentityUpdateArgs> for super::Reducer {
+    fn from(args: SubmitNpcIdentityUpdateArgs) -> Self {
+        Self::SubmitNpcIdentityUpdate {
             npc_id: args.npc_id,
-            steps_json: args.steps_json,
+            json: args.json,
         }
     }
 }
 
-impl __sdk::InModule for SubmitNpcPlanArgs {
+impl __sdk::InModule for SubmitNpcIdentityUpdateArgs {
     type Module = super::RemoteModule;
 }
 
 #[allow(non_camel_case_types)]
-/// Extension trait for access to the reducer `submit_npc_plan`.
+/// Extension trait for access to the reducer `submit_npc_identity_update`.
 ///
 /// Implemented for [`super::RemoteReducers`].
-pub trait submit_npc_plan {
-    /// Request that the remote module invoke the reducer `submit_npc_plan` to run as soon as possible.
+pub trait submit_npc_identity_update {
+    /// Request that the remote module invoke the reducer `submit_npc_identity_update` to run as soon as possible.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
-    /// /// Use [`submit_npc_plan:submit_npc_plan_then`] to run a callback after the reducer completes.
-    fn submit_npc_plan(&self, npc_id: u64, steps_json: String) -> __sdk::Result<()> {
-        self.submit_npc_plan_then(npc_id, steps_json, |_, _| {})
+    /// /// Use [`submit_npc_identity_update:submit_npc_identity_update_then`] to run a callback after the reducer completes.
+    fn submit_npc_identity_update(&self, npc_id: u64, json: String) -> __sdk::Result<()> {
+        self.submit_npc_identity_update_then(npc_id, json, |_, _| {})
     }
 
-    /// Request that the remote module invoke the reducer `submit_npc_plan` to run as soon as possible,
+    /// Request that the remote module invoke the reducer `submit_npc_identity_update` to run as soon as possible,
     /// registering `callback` to run when we are notified that the reducer completed.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and its status can be observed with the `callback`.
-    fn submit_npc_plan_then(
+    fn submit_npc_identity_update_then(
         &self,
         npc_id: u64,
-        steps_json: String,
+        json: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -56,17 +56,17 @@ pub trait submit_npc_plan {
     ) -> __sdk::Result<()>;
 }
 
-impl submit_npc_plan for super::RemoteReducers {
-    fn submit_npc_plan_then(
+impl submit_npc_identity_update for super::RemoteReducers {
+    fn submit_npc_identity_update_then(
         &self,
         npc_id: u64,
-        steps_json: String,
+        json: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
             + 'static,
     ) -> __sdk::Result<()> {
         self.imp
-            .invoke_reducer_with_callback(SubmitNpcPlanArgs { npc_id, steps_json }, callback)
+            .invoke_reducer_with_callback(SubmitNpcIdentityUpdateArgs { npc_id, json }, callback)
     }
 }

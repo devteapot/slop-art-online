@@ -6,49 +6,49 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
-pub(super) struct SubmitNpcLifeTreeArgs {
+pub(super) struct SubmitNpcSpeechArgs {
     pub npc_id: u64,
-    pub tree_json: String,
+    pub message: String,
 }
 
-impl From<SubmitNpcLifeTreeArgs> for super::Reducer {
-    fn from(args: SubmitNpcLifeTreeArgs) -> Self {
-        Self::SubmitNpcLifeTree {
+impl From<SubmitNpcSpeechArgs> for super::Reducer {
+    fn from(args: SubmitNpcSpeechArgs) -> Self {
+        Self::SubmitNpcSpeech {
             npc_id: args.npc_id,
-            tree_json: args.tree_json,
+            message: args.message,
         }
     }
 }
 
-impl __sdk::InModule for SubmitNpcLifeTreeArgs {
+impl __sdk::InModule for SubmitNpcSpeechArgs {
     type Module = super::RemoteModule;
 }
 
 #[allow(non_camel_case_types)]
-/// Extension trait for access to the reducer `submit_npc_life_tree`.
+/// Extension trait for access to the reducer `submit_npc_speech`.
 ///
 /// Implemented for [`super::RemoteReducers`].
-pub trait submit_npc_life_tree {
-    /// Request that the remote module invoke the reducer `submit_npc_life_tree` to run as soon as possible.
+pub trait submit_npc_speech {
+    /// Request that the remote module invoke the reducer `submit_npc_speech` to run as soon as possible.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
-    /// /// Use [`submit_npc_life_tree:submit_npc_life_tree_then`] to run a callback after the reducer completes.
-    fn submit_npc_life_tree(&self, npc_id: u64, tree_json: String) -> __sdk::Result<()> {
-        self.submit_npc_life_tree_then(npc_id, tree_json, |_, _| {})
+    /// /// Use [`submit_npc_speech:submit_npc_speech_then`] to run a callback after the reducer completes.
+    fn submit_npc_speech(&self, npc_id: u64, message: String) -> __sdk::Result<()> {
+        self.submit_npc_speech_then(npc_id, message, |_, _| {})
     }
 
-    /// Request that the remote module invoke the reducer `submit_npc_life_tree` to run as soon as possible,
+    /// Request that the remote module invoke the reducer `submit_npc_speech` to run as soon as possible,
     /// registering `callback` to run when we are notified that the reducer completed.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and its status can be observed with the `callback`.
-    fn submit_npc_life_tree_then(
+    fn submit_npc_speech_then(
         &self,
         npc_id: u64,
-        tree_json: String,
+        message: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -56,17 +56,17 @@ pub trait submit_npc_life_tree {
     ) -> __sdk::Result<()>;
 }
 
-impl submit_npc_life_tree for super::RemoteReducers {
-    fn submit_npc_life_tree_then(
+impl submit_npc_speech for super::RemoteReducers {
+    fn submit_npc_speech_then(
         &self,
         npc_id: u64,
-        tree_json: String,
+        message: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
             + 'static,
     ) -> __sdk::Result<()> {
         self.imp
-            .invoke_reducer_with_callback(SubmitNpcLifeTreeArgs { npc_id, tree_json }, callback)
+            .invoke_reducer_with_callback(SubmitNpcSpeechArgs { npc_id, message }, callback)
     }
 }

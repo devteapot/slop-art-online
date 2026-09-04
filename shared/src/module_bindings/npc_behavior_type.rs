@@ -8,9 +8,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 #[sats(crate = __lib)]
 pub struct NpcBehavior {
     pub npc_id: u64,
-    pub mode: String,
-    pub combat_tree: String,
-    pub life_tree: String,
+    pub current_tree: String,
 }
 
 impl __sdk::InModule for NpcBehavior {
@@ -22,9 +20,7 @@ impl __sdk::InModule for NpcBehavior {
 /// Provides typed access to columns for query building.
 pub struct NpcBehaviorCols {
     pub npc_id: __sdk::__query_builder::Col<NpcBehavior, u64>,
-    pub mode: __sdk::__query_builder::Col<NpcBehavior, String>,
-    pub combat_tree: __sdk::__query_builder::Col<NpcBehavior, String>,
-    pub life_tree: __sdk::__query_builder::Col<NpcBehavior, String>,
+    pub current_tree: __sdk::__query_builder::Col<NpcBehavior, String>,
 }
 
 impl __sdk::__query_builder::HasCols for NpcBehavior {
@@ -32,9 +28,7 @@ impl __sdk::__query_builder::HasCols for NpcBehavior {
     fn cols(table_name: &'static str) -> Self::Cols {
         NpcBehaviorCols {
             npc_id: __sdk::__query_builder::Col::new(table_name, "npc_id"),
-            mode: __sdk::__query_builder::Col::new(table_name, "mode"),
-            combat_tree: __sdk::__query_builder::Col::new(table_name, "combat_tree"),
-            life_tree: __sdk::__query_builder::Col::new(table_name, "life_tree"),
+            current_tree: __sdk::__query_builder::Col::new(table_name, "current_tree"),
         }
     }
 }

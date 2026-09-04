@@ -1,4 +1,8 @@
 /target
+/web/node_modules
+/web/dist
+/web/playwright-report
+/web/test-results
 /deploy/spacetimedb-data
 /deploy/ollama-data
 /deploy/open-webui-data

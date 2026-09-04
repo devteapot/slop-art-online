@@ -1,39 +1,39 @@
 # Technical Debt & Deferred Work
 
-## Architecture Migration: v1 → v2 (ADR 005)
+## Architecture Migration: v1 → v2 (ADR 005) — COMPLETE
 
-The NPC architecture is being migrated from a mode-switching two-layer system to a unified behavior tree with structured identity. See `docs/adr/005-npc-architecture-v2.md` and `server/module/spacetimedb/CLAUDE.md` for the target design.
+The NPC architecture has been migrated from a mode-switching two-layer system to a unified behavior tree with structured identity. See `docs/adr/005-npc-architecture-v2.md` and `server/module/spacetimedb/CLAUDE.md` for the design.
 
 ### Data Model Changes
 
-- [ ] **`NpcEmotion` table** — Six emotions (anger, fear, joy, sadness, surprise, disgust). Event-triggered changes, tick-driven decay toward personality baseline.
-- [ ] **`NpcKnowledge` table** — Learned world mechanics/facts, separate from beliefs. Categories: combat, trading, crafting, navigation, social, world. Expands behavior tree action space.
-- [ ] **`NpcPersonality` table** — Structured traits (aggression, sociability, curiosity, courage, empathy, discipline) replacing the `persona: String` field. Defines emotion baselines and decay rates.
-- [ ] **Unified `NpcBehavior`** — Replace `{ mode, combat_tree, life_tree }` with `{ current_tree }`. Remove `NpcPlan` table (plans become Sequence nodes in the tree).
+- [x] **`NpcEmotion` table** — Six emotions (anger, fear, joy, sadness, surprise, disgust). Event-triggered changes, tick-driven decay toward personality baseline.
+- [x] **`NpcKnowledge` table** — Learned world mechanics/facts, separate from beliefs. Categories: combat, trading, crafting, navigation, social, world. Expands behavior tree action space.
+- [x] **`NpcPersonality` table** — Structured traits (aggression, sociability, curiosity, courage, empathy, discipline) replacing the `persona: String` field. Defines emotion baselines and decay rates.
+- [x] **Unified `NpcBehavior`** — Replaced `{ mode, combat_tree, life_tree }` with `{ current_tree }`. NpcPlan removed (plans are Sequence nodes in the tree).
 
 ### Tick Loop
 
-- [ ] **Remove mode switching** — Currently `tick_npcs` has if/else chains on `beh.mode` (sleeping/combat/plan/life_tree/idle). Replace with single `evaluate_tree(current_tree)` call.
-- [ ] **Emotion decay** — Apply `lerp(emotion, baseline, decay_rate)` each tick before tree evaluation.
-- [ ] **Tree regeneration detection** — Detect exhaustion (N ticks with no action), goal completion, near-death, and trigger `NpcPendingDecision` with new type.
+- [x] **Remove mode switching** — Single `evaluate_tree(current_tree)` call per NPC per tick.
+- [x] **Emotion decay** — `apply_emotion_decay()` runs each tick before tree evaluation, lerps toward personality baseline.
+- [x] **Tree regeneration detection** — Detects goal completion, near-death, and triggers `NpcPendingDecision("tree_generation")`.
 
 ### Behavior Tree
 
-- [ ] **Knowledge-gated entity references** — Two action forms: vague (`SearchFor("healing")`) when NPC lacks knowledge, concrete (`TravelToEntity(Poi, 3)`) when NPC knows. LLM prompt constrains references to NPC's knowledge.
-- [ ] **Emotion conditions** — `EmotionAbove(emotion, threshold)`, `EmotionBelow`, `EmotionDominant` as BT condition nodes.
-- [ ] **Inline identity actions** — `SetBelief`, `AddKnowledge`, `AdjustRelationship`, `TriggerEmotion` as BT action nodes that execute as side effects during normal tree evaluation.
-- [ ] **Conversation protocol** — BT subtree in reactive layer: Listen (always, log with engagement-based confidence) → Respond (templates/knowledge/personality/LLM tiered).
+- [x] **Knowledge-gated entity references** — Vague (`SearchFor("healing")`) and concrete (`TravelToEntity`, `AttackEntity`, `SayToEntity`) action forms.
+- [x] **Emotion conditions** — `EmotionAbove(emotion, threshold)`, `EmotionBelow`, `EmotionDominant` as BT condition nodes.
+- [x] **Inline identity actions** — `SetBelief`, `AddKnowledge`, `AdjustRelationship`, `TriggerEmotionAction` as BT action nodes.
+- [x] **Conversation protocol** — `MatchesGreeting`, `TopicMatchesKnowledge`, `TopicMatchesBelief`, `IsImportantConversation`, `RequestLlmResponse`. Engagement-based confidence in `send_chat_message`.
 
 ### Bridge
 
-- [ ] **Unified tree generation** — Replace separate `generate_combat_tree()`, `generate_plan()`, etc. with single tree generation that covers all situations via priority layers.
-- [ ] **Experience evaluation** — New decision type for significant events. LLM returns identity deltas (personality, beliefs, knowledge, goals, emotions).
-- [ ] **Conversation content** — New decision type for novel conversations only (~5% of exchanges).
+- [x] **Unified tree generation** — Single `tree_generation` decision type replaces all previous combat/plan/dawn types.
+- [x] **Experience evaluation** — `experience` decision type for significant events. LLM returns identity deltas.
+- [x] **Conversation content** — `conversation` decision type for novel conversations only.
 
 ### Propagation
 
-- [ ] **Belief/knowledge propagation reducer** — NPCs near each other share beliefs/knowledge scaled by trust level. Confidence degrades through chain. Pure reducer logic, no LLM.
-- [ ] **Engagement-based confidence** — Overheard speech gets reduced confidence (focused=1.0, overhearing=0.2). Topic relevance modifier (1.0 if matches role/goals, 0.5 otherwise).
+- [x] **Belief/knowledge propagation reducer** — `propagate_beliefs_and_knowledge()` runs every 10 ticks (~5s). Confidence degrades through chain.
+- [x] **Engagement-based confidence** — Implemented in `send_chat_message`. Overheard speech gets reduced confidence.
 
 ## Database Performance
 

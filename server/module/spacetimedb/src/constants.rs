@@ -55,6 +55,7 @@ pub const MAX_MOVE_DIST_SLOW: f32 = 8.0;
 pub const MAX_MOVE_DIST_HASTE: f32 = 22.0;
 
 // Chat
+pub const PLAYER_DISPLAY_NAME_MAX_LENGTH: usize = 24;
 pub const NPC_CHAT_MESSAGE_EXPIRE_MS: u64 = 10_000;
 pub const NPC_CHAT_MAX_LENGTH: usize = 200;
 pub const CHAT_MESSAGE_EXPIRE_MS: u64 = 30_000;

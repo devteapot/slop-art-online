@@ -2,6 +2,8 @@
 
 A greenfield MMORPG built entirely in **Rust**. NPCs are living entities with structured identity — personality, beliefs, knowledge, goals, emotions, and relations — that evolve through experience. The LLM is used sparingly; most behavior is driven by deterministic behavior trees and rule-based systems.
 
+**Bevy is the sole supported game client.** It handles rendering, input, physics, audio, and UI. Custom NPC simulation and authoritative world rules live in the Rust SpacetimeDB module, with the Rust LLM bridge supporting the AI experience.
+
 ```
 Bevy Client (native + WASM)
     ↕ WebSocket (SpacetimeDB protocol)
@@ -42,7 +44,7 @@ For diagrams and deep dives, see [docs/diagrams/](docs/diagrams/) and [docs/adr/
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) (stable toolchain)
-- [SpacetimeDB CLI](https://spacetimedb.com/docs) (`spacetime`)
+- [SpacetimeDB CLI](https://spacetimedb.com/docs) (`spacetime`, version **2.0.1** to match the pinned Rust SDK and generated bindings)
 - [Docker](https://docs.docker.com/get-docker/) (for local SpacetimeDB / optional Ollama UI)
 - [just](https://github.com/casey/just) (command runner)
 - [Ollama](https://ollama.com/) (optional — local LLM for the bridge; on macOS run natively, not in Docker)
@@ -51,6 +53,13 @@ WASM target for publishing the server module:
 
 ```bash
 rustup target add wasm32-unknown-unknown
+```
+
+Use the matching CLI version before regenerating bindings:
+
+```bash
+spacetime version install 2.0.1
+spacetime version use 2.0.1
 ```
 
 ## Quick start
@@ -80,10 +89,10 @@ export OLLAMA_MODEL=llama3.2   # or whatever you have pulled
 cargo run -p bridge
 ```
 
-### 4. Run the client
+### 4. Run the Bevy client
 
 ```bash
-cargo run -p client
+just client      # cargo run -p client
 ```
 
 ### Useful commands
@@ -92,6 +101,7 @@ cargo run -p client
 |---------|-------------|
 | `cargo build` | Build all workspace crates |
 | `cargo test` | Run all tests |
+| `just client` | Run the Bevy game client |
 | `just up` / `just down` | Start / stop docker-compose services |
 | `just logs` | Tail SpacetimeDB / compose logs |
 | `just publish` | Publish the SpacetimeDB module |
@@ -115,11 +125,10 @@ slop-art-online/
 │   └── bridge/                # LLM bridge service
 ├── deploy/
 │   └── docker-compose.yml     # SpacetimeDB, Open WebUI, optional Ollama
-├── docs/
-│   ├── adr/                   # Architecture Decision Records
-│   ├── diagrams/              # Mermaid system diagrams
-│   └── TODO.md                # technical debt tracker
-└── unity-client/              # experimental Unity client (optional)
+└── docs/
+    ├── adr/                   # Architecture Decision Records
+    ├── diagrams/              # Mermaid system diagrams
+    └── TODO.md                # technical debt tracker
 ```
 
 ## NPC AI (summary)

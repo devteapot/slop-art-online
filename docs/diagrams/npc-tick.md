@@ -2,40 +2,49 @@
 
 What happens every 500ms for each NPC.
 
-## Target (v2)
+## Current Implementation (v2)
 
 ```mermaid
 flowchart TD
-    Start([Tick fires every 500ms]) --> Decay[Apply emotion decay<br/>lerp toward personality baseline]
-    Decay --> Eval[Evaluate current_tree<br/>with runtime state]
+    Start([Tick fires every 500ms]) --> Decay[1. Apply emotion decay<br/>lerp toward personality baseline]
+    Decay --> NightRegen{Night + at home?}
+    NightRegen -->|Yes| Regen2[2. Night regen<br/>5% HP/MP/SP]
+    NightRegen -->|No| Eval
+    Regen2 --> Eval[3. Evaluate unified current_tree<br/>with runtime state]
     Eval --> Action{Action<br/>produced?}
 
-    Action -->|Yes| Exec[Execute action<br/>deterministic side effects]
-    Action -->|No| Exhaust[Increment exhaustion counter]
+    Action -->|Yes| Exec[4. Execute action<br/>deterministic side effects]
+    Action -->|No| FollowDest
 
     Exec --> InlineID{Inline identity<br/>action?}
     InlineID -->|SetBelief, AddKnowledge<br/>AdjustRelationship, TriggerEmotion| UpdateID[Write to identity tables<br/>zero LLM cost]
-    InlineID -->|No| RegenCheck
+    InlineID -->|No| FollowDest
 
-    UpdateID --> RegenCheck{Check regen<br/>triggers}
-    Exhaust --> RegenCheck
+    UpdateID --> FollowDest[5. Follow NpcDestination<br/>move toward target]
+    FollowDest --> GoalCheck{6. Every 5 ticks:<br/>check_goal_conditions}
 
-    RegenCheck -->|Tree exhausted?<br/>Goal completed?<br/>Near-death?| Regen[Create NpcPendingDecision<br/>type: tree_generation]
-    RegenCheck -->|No trigger| SigCheck
+    GoalCheck --> RegenCheck{7. Goal just<br/>completed?}
+    RegenCheck -->|Yes| TreeRegen[Create NpcPendingDecision<br/>type: tree_generation]
+    RegenCheck -->|No| NearDeath
 
-    Regen --> SigCheck{Significant<br/>event?}
-    SigCheck -->|Near-death, betrayal<br/>major discovery| ExpEval[Create NpcPendingDecision<br/>type: experience]
-    SigCheck -->|No| Done([Next NPC])
-    ExpEval --> Done
+    TreeRegen --> NearDeath{8. Near-death<br/>+ recent damage?}
+    NearDeath -->|Yes| ExpEval[Create NpcPendingDecision<br/>type: experience]
+    NearDeath -->|No| Propagate
+
+    ExpEval --> Propagate[9. Every 10 ticks:<br/>propagate_beliefs_and_knowledge]
+    Propagate --> Done([Next NPC])
 
     style Start fill:#3498db,stroke:#fff,color:#fff
     style Done fill:#3498db,stroke:#fff,color:#fff
-    style Regen fill:#9b59b6,stroke:#fff,color:#fff
+    style TreeRegen fill:#9b59b6,stroke:#fff,color:#fff
     style ExpEval fill:#9b59b6,stroke:#fff,color:#fff
     style UpdateID fill:#27ae60,stroke:#fff,color:#fff
 ```
 
-## Current (v1)
+## Previous Implementation (v1 — replaced)
+
+<details>
+<summary>Click to expand v1 diagram (historical reference)</summary>
 
 ```mermaid
 flowchart TD
@@ -62,4 +71,4 @@ flowchart TD
     style Done fill:#e74c3c,stroke:#fff,color:#fff
 ```
 
-**Status:** Currently using v1 (mode switching). Migration to v2 (unified tree + emotion decay) is the primary next step.
+</details>

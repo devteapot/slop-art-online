@@ -6,49 +6,46 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
-pub(super) struct SubmitNpcCombatTreeArgs {
-    pub npc_id: u64,
-    pub tree_json: String,
+pub(super) struct SetDisplayNameArgs {
+    pub display_name: String,
 }
 
-impl From<SubmitNpcCombatTreeArgs> for super::Reducer {
-    fn from(args: SubmitNpcCombatTreeArgs) -> Self {
-        Self::SubmitNpcCombatTree {
-            npc_id: args.npc_id,
-            tree_json: args.tree_json,
+impl From<SetDisplayNameArgs> for super::Reducer {
+    fn from(args: SetDisplayNameArgs) -> Self {
+        Self::SetDisplayName {
+            display_name: args.display_name,
         }
     }
 }
 
-impl __sdk::InModule for SubmitNpcCombatTreeArgs {
+impl __sdk::InModule for SetDisplayNameArgs {
     type Module = super::RemoteModule;
 }
 
 #[allow(non_camel_case_types)]
-/// Extension trait for access to the reducer `submit_npc_combat_tree`.
+/// Extension trait for access to the reducer `set_display_name`.
 ///
 /// Implemented for [`super::RemoteReducers`].
-pub trait submit_npc_combat_tree {
-    /// Request that the remote module invoke the reducer `submit_npc_combat_tree` to run as soon as possible.
+pub trait set_display_name {
+    /// Request that the remote module invoke the reducer `set_display_name` to run as soon as possible.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
-    /// /// Use [`submit_npc_combat_tree:submit_npc_combat_tree_then`] to run a callback after the reducer completes.
-    fn submit_npc_combat_tree(&self, npc_id: u64, tree_json: String) -> __sdk::Result<()> {
-        self.submit_npc_combat_tree_then(npc_id, tree_json, |_, _| {})
+    /// /// Use [`set_display_name:set_display_name_then`] to run a callback after the reducer completes.
+    fn set_display_name(&self, display_name: String) -> __sdk::Result<()> {
+        self.set_display_name_then(display_name, |_, _| {})
     }
 
-    /// Request that the remote module invoke the reducer `submit_npc_combat_tree` to run as soon as possible,
+    /// Request that the remote module invoke the reducer `set_display_name` to run as soon as possible,
     /// registering `callback` to run when we are notified that the reducer completed.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and its status can be observed with the `callback`.
-    fn submit_npc_combat_tree_then(
+    fn set_display_name_then(
         &self,
-        npc_id: u64,
-        tree_json: String,
+        display_name: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -56,17 +53,16 @@ pub trait submit_npc_combat_tree {
     ) -> __sdk::Result<()>;
 }
 
-impl submit_npc_combat_tree for super::RemoteReducers {
-    fn submit_npc_combat_tree_then(
+impl set_display_name for super::RemoteReducers {
+    fn set_display_name_then(
         &self,
-        npc_id: u64,
-        tree_json: String,
+        display_name: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
             + 'static,
     ) -> __sdk::Result<()> {
         self.imp
-            .invoke_reducer_with_callback(SubmitNpcCombatTreeArgs { npc_id, tree_json }, callback)
+            .invoke_reducer_with_callback(SetDisplayNameArgs { display_name }, callback)
     }
 }

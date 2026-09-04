@@ -434,25 +434,24 @@ for each npc:
 
 ## Current Implementation Status
 
-**Implemented (v1):**
-- Behavior trees with `bonsai-bt` (combat_tree + life_tree + NpcPlan — separate trees)
-- Mode-switching tick loop (sleeping/combat/plan/life_tree/idle)
-- NpcPendingDecision flow with 8 decision types
+**Implemented (v2 — migration complete):**
+- Unified behavior tree (`NpcBehavior.current_tree`, no mode switching, no NpcPlan)
+- Behavior trees with `bonsai-bt` (single unified tree per NPC)
+- NpcEmotion table + event triggers + tick-driven decay toward personality baseline
+- NpcKnowledge table (separate from beliefs, category/fact/learned_from/confidence)
+- NpcPersonality table (structured traits: aggression, sociability, curiosity, courage, empathy, discipline)
+- Knowledge-gated entity references (TravelToEntity, AttackEntity, SayToEntity, SearchFor)
+- Emotion conditions in BT (EmotionAbove, EmotionBelow, EmotionDominant)
+- Conversation protocol (MatchesGreeting, TopicMatchesKnowledge, TopicMatchesBelief, IsImportantConversation, RequestLlmResponse, engagement-based confidence in send_chat_message)
+- Belief/knowledge propagation reducer (`propagate_beliefs_and_knowledge`, runs every 10 ticks)
+- SearchFor runtime resolution (discovers items and POIs, adds NpcKnowledge)
+- Bridge v2 with 3 decision types (tree_generation, experience, conversation)
+- NpcPendingDecision flow with enriched context
 - NpcBelief, NpcGoal, NpcRelationship, NpcMemory tables
 - NpcEventLog with 5min TTL
-- Day/night cycle (40min period) triggering sleep/wake/reflection
+- Day/night cycle (40min period) with night regen at home
 - Chat system (player→NPC heard_chat events, NPC→NPC via SayToNpc)
 - NpcInventory, NpcEquipment, NpcSkill tables
-- Combat trees generated per-role (aggressive, defensive, flee-first, passive)
-- Life trees generated at dawn by LLM
-
-**Needs migration to v2 (see docs/TODO.md):**
-- [ ] Unified tree (replace mode switching + combat_tree/life_tree/NpcPlan)
-- [ ] NpcEmotion table + event triggers + tick-driven decay
-- [ ] NpcKnowledge table (separate from beliefs)
-- [ ] NpcPersonality table (structured traits replacing persona string)
-- [ ] Knowledge-gated entity references (vague/concrete action forms)
-- [ ] Emotion conditions in BT (EmotionAbove, EmotionBelow, EmotionDominant)
-- [ ] Conversation protocol in BT (listen with engagement confidence, respond tiered)
-- [ ] Belief/knowledge propagation reducer
-- [ ] SearchFor runtime resolution (discover items → AddKnowledge)
+- Default personality per role (hostile, trader, traveller, historian, adventurer, guard, healer)
+- Inline identity actions (SetBelief, AddKnowledge, AdjustRelationship, TriggerEmotionAction)
+- Tree regeneration triggers (goal completion, near-death, exhaustion, RequestNewTree)

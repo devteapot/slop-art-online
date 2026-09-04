@@ -47,6 +47,8 @@ pub mod npc_chat_message_table;
 pub mod npc_chat_message_type;
 pub mod npc_destination_table;
 pub mod npc_destination_type;
+pub mod npc_emotion_table;
+pub mod npc_emotion_type;
 pub mod npc_equipped_item_table;
 pub mod npc_equipped_item_type;
 pub mod npc_event_log_table;
@@ -55,12 +57,14 @@ pub mod npc_goal_table;
 pub mod npc_goal_type;
 pub mod npc_inventory_item_table;
 pub mod npc_inventory_item_type;
+pub mod npc_knowledge_table;
+pub mod npc_knowledge_type;
 pub mod npc_memory_table;
 pub mod npc_memory_type;
 pub mod npc_pending_decision_table;
 pub mod npc_pending_decision_type;
-pub mod npc_plan_table;
-pub mod npc_plan_type;
+pub mod npc_personality_table;
+pub mod npc_personality_type;
 pub mod npc_relationship_table;
 pub mod npc_relationship_type;
 pub mod npc_skill_table;
@@ -69,6 +73,8 @@ pub mod npc_table;
 pub mod npc_tick_schedule_type;
 pub mod npc_type;
 pub mod pickup_item_reducer;
+pub mod player_profile_table;
+pub mod player_profile_type;
 pub mod player_skill_table;
 pub mod player_skill_type;
 pub mod player_table;
@@ -82,6 +88,7 @@ pub mod projectile_type;
 pub mod resource_type_type;
 pub mod rotate_player_reducer;
 pub mod send_chat_message_reducer;
+pub mod set_display_name_reducer;
 pub mod skill_attributes_table;
 pub mod skill_attributes_type;
 pub mod skill_cooldown_table;
@@ -96,12 +103,13 @@ pub mod status_effect_type;
 pub mod status_effect_type_type;
 pub mod submit_npc_actions_reducer;
 pub mod submit_npc_beliefs_reducer;
-pub mod submit_npc_combat_tree_reducer;
 pub mod submit_npc_goals_reducer;
-pub mod submit_npc_life_tree_reducer;
+pub mod submit_npc_identity_update_reducer;
+pub mod submit_npc_knowledge_reducer;
 pub mod submit_npc_memory_reducer;
-pub mod submit_npc_plan_reducer;
 pub mod submit_npc_reflection_reducer;
+pub mod submit_npc_speech_reducer;
+pub mod submit_npc_tree_reducer;
 pub mod unequip_item_reducer;
 pub mod use_item_reducer;
 pub mod use_skill_reducer;
@@ -150,6 +158,8 @@ pub use npc_chat_message_table::*;
 pub use npc_chat_message_type::NpcChatMessage;
 pub use npc_destination_table::*;
 pub use npc_destination_type::NpcDestination;
+pub use npc_emotion_table::*;
+pub use npc_emotion_type::NpcEmotion;
 pub use npc_equipped_item_table::*;
 pub use npc_equipped_item_type::NpcEquippedItem;
 pub use npc_event_log_table::*;
@@ -158,12 +168,14 @@ pub use npc_goal_table::*;
 pub use npc_goal_type::NpcGoal;
 pub use npc_inventory_item_table::*;
 pub use npc_inventory_item_type::NpcInventoryItem;
+pub use npc_knowledge_table::*;
+pub use npc_knowledge_type::NpcKnowledge;
 pub use npc_memory_table::*;
 pub use npc_memory_type::NpcMemory;
 pub use npc_pending_decision_table::*;
 pub use npc_pending_decision_type::NpcPendingDecision;
-pub use npc_plan_table::*;
-pub use npc_plan_type::NpcPlan;
+pub use npc_personality_table::*;
+pub use npc_personality_type::NpcPersonality;
 pub use npc_relationship_table::*;
 pub use npc_relationship_type::NpcRelationship;
 pub use npc_skill_table::*;
@@ -172,6 +184,8 @@ pub use npc_table::*;
 pub use npc_tick_schedule_type::NpcTickSchedule;
 pub use npc_type::Npc;
 pub use pickup_item_reducer::pickup_item;
+pub use player_profile_table::*;
+pub use player_profile_type::PlayerProfile;
 pub use player_skill_table::*;
 pub use player_skill_type::PlayerSkill;
 pub use player_table::*;
@@ -185,6 +199,7 @@ pub use projectile_type::Projectile;
 pub use resource_type_type::ResourceType;
 pub use rotate_player_reducer::rotate_player;
 pub use send_chat_message_reducer::send_chat_message;
+pub use set_display_name_reducer::set_display_name;
 pub use skill_attributes_table::*;
 pub use skill_attributes_type::SkillAttributes;
 pub use skill_cooldown_table::*;
@@ -199,12 +214,13 @@ pub use status_effect_type::StatusEffect;
 pub use status_effect_type_type::StatusEffectType;
 pub use submit_npc_actions_reducer::submit_npc_actions;
 pub use submit_npc_beliefs_reducer::submit_npc_beliefs;
-pub use submit_npc_combat_tree_reducer::submit_npc_combat_tree;
 pub use submit_npc_goals_reducer::submit_npc_goals;
-pub use submit_npc_life_tree_reducer::submit_npc_life_tree;
+pub use submit_npc_identity_update_reducer::submit_npc_identity_update;
+pub use submit_npc_knowledge_reducer::submit_npc_knowledge;
 pub use submit_npc_memory_reducer::submit_npc_memory;
-pub use submit_npc_plan_reducer::submit_npc_plan;
 pub use submit_npc_reflection_reducer::submit_npc_reflection;
+pub use submit_npc_speech_reducer::submit_npc_speech;
+pub use submit_npc_tree_reducer::submit_npc_tree;
 pub use unequip_item_reducer::unequip_item;
 pub use use_item_reducer::use_item;
 pub use use_skill_reducer::use_skill;
@@ -249,6 +265,9 @@ pub enum Reducer {
     SendChatMessage {
         text: String,
     },
+    SetDisplayName {
+        display_name: String,
+    },
     SpawnNpc {
         x: f32,
         z: f32,
@@ -268,29 +287,36 @@ pub enum Reducer {
         npc_id: u64,
         beliefs_json: String,
     },
-    SubmitNpcCombatTree {
-        npc_id: u64,
-        tree_json: String,
-    },
     SubmitNpcGoals {
         npc_id: u64,
         goals_json: String,
     },
-    SubmitNpcLifeTree {
+    SubmitNpcIdentityUpdate {
         npc_id: u64,
-        tree_json: String,
+        json: String,
+    },
+    SubmitNpcKnowledge {
+        npc_id: u64,
+        category: String,
+        fact: String,
+        learned_from: String,
+        confidence: f32,
     },
     SubmitNpcMemory {
         npc_id: u64,
         text: String,
     },
-    SubmitNpcPlan {
-        npc_id: u64,
-        steps_json: String,
-    },
     SubmitNpcReflection {
         npc_id: u64,
         json: String,
+    },
+    SubmitNpcSpeech {
+        npc_id: u64,
+        message: String,
+    },
+    SubmitNpcTree {
+        npc_id: u64,
+        tree_json: String,
     },
     UnequipItem {
         equipped_item_id: u64,
@@ -328,17 +354,19 @@ impl __sdk::Reducer for Reducer {
             Reducer::PickupItem { .. } => "pickup_item",
             Reducer::RotatePlayer { .. } => "rotate_player",
             Reducer::SendChatMessage { .. } => "send_chat_message",
+            Reducer::SetDisplayName { .. } => "set_display_name",
             Reducer::SpawnNpc { .. } => "spawn_npc",
             Reducer::StartNpcTicker => "start_npc_ticker",
             Reducer::StartProjectileTicker => "start_projectile_ticker",
             Reducer::SubmitNpcActions { .. } => "submit_npc_actions",
             Reducer::SubmitNpcBeliefs { .. } => "submit_npc_beliefs",
-            Reducer::SubmitNpcCombatTree { .. } => "submit_npc_combat_tree",
             Reducer::SubmitNpcGoals { .. } => "submit_npc_goals",
-            Reducer::SubmitNpcLifeTree { .. } => "submit_npc_life_tree",
+            Reducer::SubmitNpcIdentityUpdate { .. } => "submit_npc_identity_update",
+            Reducer::SubmitNpcKnowledge { .. } => "submit_npc_knowledge",
             Reducer::SubmitNpcMemory { .. } => "submit_npc_memory",
-            Reducer::SubmitNpcPlan { .. } => "submit_npc_plan",
             Reducer::SubmitNpcReflection { .. } => "submit_npc_reflection",
+            Reducer::SubmitNpcSpeech { .. } => "submit_npc_speech",
+            Reducer::SubmitNpcTree { .. } => "submit_npc_tree",
             Reducer::UnequipItem { .. } => "unequip_item",
             Reducer::UseItem { .. } => "use_item",
             Reducer::UseSkill { .. } => "use_skill",
@@ -395,6 +423,11 @@ impl __sdk::Reducer for Reducer {
                     text: text.clone(),
                 })
             }
+            Reducer::SetDisplayName { display_name } => {
+                __sats::bsatn::to_vec(&set_display_name_reducer::SetDisplayNameArgs {
+                    display_name: display_name.clone(),
+                })
+            }
             Reducer::SpawnNpc {
                 x,
                 z,
@@ -432,40 +465,53 @@ impl __sdk::Reducer for Reducer {
                 npc_id: npc_id.clone(),
                 beliefs_json: beliefs_json.clone(),
             }),
-            Reducer::SubmitNpcCombatTree { npc_id, tree_json } => {
-                __sats::bsatn::to_vec(&submit_npc_combat_tree_reducer::SubmitNpcCombatTreeArgs {
-                    npc_id: npc_id.clone(),
-                    tree_json: tree_json.clone(),
-                })
-            }
             Reducer::SubmitNpcGoals { npc_id, goals_json } => {
                 __sats::bsatn::to_vec(&submit_npc_goals_reducer::SubmitNpcGoalsArgs {
                     npc_id: npc_id.clone(),
                     goals_json: goals_json.clone(),
                 })
             }
-            Reducer::SubmitNpcLifeTree { npc_id, tree_json } => {
-                __sats::bsatn::to_vec(&submit_npc_life_tree_reducer::SubmitNpcLifeTreeArgs {
+            Reducer::SubmitNpcIdentityUpdate { npc_id, json } => __sats::bsatn::to_vec(
+                &submit_npc_identity_update_reducer::SubmitNpcIdentityUpdateArgs {
                     npc_id: npc_id.clone(),
-                    tree_json: tree_json.clone(),
-                })
-            }
+                    json: json.clone(),
+                },
+            ),
+            Reducer::SubmitNpcKnowledge {
+                npc_id,
+                category,
+                fact,
+                learned_from,
+                confidence,
+            } => __sats::bsatn::to_vec(&submit_npc_knowledge_reducer::SubmitNpcKnowledgeArgs {
+                npc_id: npc_id.clone(),
+                category: category.clone(),
+                fact: fact.clone(),
+                learned_from: learned_from.clone(),
+                confidence: confidence.clone(),
+            }),
             Reducer::SubmitNpcMemory { npc_id, text } => {
                 __sats::bsatn::to_vec(&submit_npc_memory_reducer::SubmitNpcMemoryArgs {
                     npc_id: npc_id.clone(),
                     text: text.clone(),
                 })
             }
-            Reducer::SubmitNpcPlan { npc_id, steps_json } => {
-                __sats::bsatn::to_vec(&submit_npc_plan_reducer::SubmitNpcPlanArgs {
-                    npc_id: npc_id.clone(),
-                    steps_json: steps_json.clone(),
-                })
-            }
             Reducer::SubmitNpcReflection { npc_id, json } => {
                 __sats::bsatn::to_vec(&submit_npc_reflection_reducer::SubmitNpcReflectionArgs {
                     npc_id: npc_id.clone(),
                     json: json.clone(),
+                })
+            }
+            Reducer::SubmitNpcSpeech { npc_id, message } => {
+                __sats::bsatn::to_vec(&submit_npc_speech_reducer::SubmitNpcSpeechArgs {
+                    npc_id: npc_id.clone(),
+                    message: message.clone(),
+                })
+            }
+            Reducer::SubmitNpcTree { npc_id, tree_json } => {
+                __sats::bsatn::to_vec(&submit_npc_tree_reducer::SubmitNpcTreeArgs {
+                    npc_id: npc_id.clone(),
+                    tree_json: tree_json.clone(),
                 })
             }
             Reducer::UnequipItem { equipped_item_id } => {
@@ -524,16 +570,19 @@ pub struct DbUpdate {
     npc_belief: __sdk::TableUpdate<NpcBelief>,
     npc_chat_message: __sdk::TableUpdate<NpcChatMessage>,
     npc_destination: __sdk::TableUpdate<NpcDestination>,
+    npc_emotion: __sdk::TableUpdate<NpcEmotion>,
     npc_equipped_item: __sdk::TableUpdate<NpcEquippedItem>,
     npc_event_log: __sdk::TableUpdate<NpcEventLog>,
     npc_goal: __sdk::TableUpdate<NpcGoal>,
     npc_inventory_item: __sdk::TableUpdate<NpcInventoryItem>,
+    npc_knowledge: __sdk::TableUpdate<NpcKnowledge>,
     npc_memory: __sdk::TableUpdate<NpcMemory>,
     npc_pending_decision: __sdk::TableUpdate<NpcPendingDecision>,
-    npc_plan: __sdk::TableUpdate<NpcPlan>,
+    npc_personality: __sdk::TableUpdate<NpcPersonality>,
     npc_relationship: __sdk::TableUpdate<NpcRelationship>,
     npc_skill: __sdk::TableUpdate<NpcSkill>,
     player: __sdk::TableUpdate<Player>,
+    player_profile: __sdk::TableUpdate<PlayerProfile>,
     player_skill: __sdk::TableUpdate<PlayerSkill>,
     point_of_interest: __sdk::TableUpdate<PointOfInterest>,
     projectile: __sdk::TableUpdate<Projectile>,
@@ -595,6 +644,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "npc_destination" => db_update
                     .npc_destination
                     .append(npc_destination_table::parse_table_update(table_update)?),
+                "npc_emotion" => db_update
+                    .npc_emotion
+                    .append(npc_emotion_table::parse_table_update(table_update)?),
                 "npc_equipped_item" => db_update
                     .npc_equipped_item
                     .append(npc_equipped_item_table::parse_table_update(table_update)?),
@@ -607,15 +659,18 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "npc_inventory_item" => db_update
                     .npc_inventory_item
                     .append(npc_inventory_item_table::parse_table_update(table_update)?),
+                "npc_knowledge" => db_update
+                    .npc_knowledge
+                    .append(npc_knowledge_table::parse_table_update(table_update)?),
                 "npc_memory" => db_update
                     .npc_memory
                     .append(npc_memory_table::parse_table_update(table_update)?),
                 "npc_pending_decision" => db_update.npc_pending_decision.append(
                     npc_pending_decision_table::parse_table_update(table_update)?,
                 ),
-                "npc_plan" => db_update
-                    .npc_plan
-                    .append(npc_plan_table::parse_table_update(table_update)?),
+                "npc_personality" => db_update
+                    .npc_personality
+                    .append(npc_personality_table::parse_table_update(table_update)?),
                 "npc_relationship" => db_update
                     .npc_relationship
                     .append(npc_relationship_table::parse_table_update(table_update)?),
@@ -625,6 +680,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "player" => db_update
                     .player
                     .append(player_table::parse_table_update(table_update)?),
+                "player_profile" => db_update
+                    .player_profile
+                    .append(player_profile_table::parse_table_update(table_update)?),
                 "player_skill" => db_update
                     .player_skill
                     .append(player_skill_table::parse_table_update(table_update)?),
@@ -720,6 +778,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.npc_destination = cache
             .apply_diff_to_table::<NpcDestination>("npc_destination", &self.npc_destination)
             .with_updates_by_pk(|row| &row.npc_id);
+        diff.npc_emotion = cache
+            .apply_diff_to_table::<NpcEmotion>("npc_emotion", &self.npc_emotion)
+            .with_updates_by_pk(|row| &row.npc_id);
         diff.npc_equipped_item = cache
             .apply_diff_to_table::<NpcEquippedItem>("npc_equipped_item", &self.npc_equipped_item)
             .with_updates_by_pk(|row| &row.id);
@@ -732,6 +793,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.npc_inventory_item = cache
             .apply_diff_to_table::<NpcInventoryItem>("npc_inventory_item", &self.npc_inventory_item)
             .with_updates_by_pk(|row| &row.id);
+        diff.npc_knowledge = cache
+            .apply_diff_to_table::<NpcKnowledge>("npc_knowledge", &self.npc_knowledge)
+            .with_updates_by_pk(|row| &row.id);
         diff.npc_memory = cache
             .apply_diff_to_table::<NpcMemory>("npc_memory", &self.npc_memory)
             .with_updates_by_pk(|row| &row.id);
@@ -741,8 +805,8 @@ impl __sdk::DbUpdate for DbUpdate {
                 &self.npc_pending_decision,
             )
             .with_updates_by_pk(|row| &row.npc_id);
-        diff.npc_plan = cache
-            .apply_diff_to_table::<NpcPlan>("npc_plan", &self.npc_plan)
+        diff.npc_personality = cache
+            .apply_diff_to_table::<NpcPersonality>("npc_personality", &self.npc_personality)
             .with_updates_by_pk(|row| &row.npc_id);
         diff.npc_relationship = cache
             .apply_diff_to_table::<NpcRelationship>("npc_relationship", &self.npc_relationship)
@@ -752,6 +816,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.player = cache
             .apply_diff_to_table::<Player>("player", &self.player)
+            .with_updates_by_pk(|row| &row.identity);
+        diff.player_profile = cache
+            .apply_diff_to_table::<PlayerProfile>("player_profile", &self.player_profile)
             .with_updates_by_pk(|row| &row.identity);
         diff.player_skill = cache
             .apply_diff_to_table::<PlayerSkill>("player_skill", &self.player_skill)
@@ -829,6 +896,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "npc_destination" => db_update
                     .npc_destination
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "npc_emotion" => db_update
+                    .npc_emotion
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "npc_equipped_item" => db_update
                     .npc_equipped_item
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -841,14 +911,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "npc_inventory_item" => db_update
                     .npc_inventory_item
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "npc_knowledge" => db_update
+                    .npc_knowledge
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "npc_memory" => db_update
                     .npc_memory
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "npc_pending_decision" => db_update
                     .npc_pending_decision
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
-                "npc_plan" => db_update
-                    .npc_plan
+                "npc_personality" => db_update
+                    .npc_personality
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "npc_relationship" => db_update
                     .npc_relationship
@@ -858,6 +931,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "player" => db_update
                     .player
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "player_profile" => db_update
+                    .player_profile
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "player_skill" => db_update
                     .player_skill
@@ -941,6 +1017,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "npc_destination" => db_update
                     .npc_destination
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "npc_emotion" => db_update
+                    .npc_emotion
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "npc_equipped_item" => db_update
                     .npc_equipped_item
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -953,14 +1032,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "npc_inventory_item" => db_update
                     .npc_inventory_item
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "npc_knowledge" => db_update
+                    .npc_knowledge
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "npc_memory" => db_update
                     .npc_memory
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "npc_pending_decision" => db_update
                     .npc_pending_decision
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
-                "npc_plan" => db_update
-                    .npc_plan
+                "npc_personality" => db_update
+                    .npc_personality
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "npc_relationship" => db_update
                     .npc_relationship
@@ -970,6 +1052,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "player" => db_update
                     .player
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "player_profile" => db_update
+                    .player_profile
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "player_skill" => db_update
                     .player_skill
@@ -1025,16 +1110,19 @@ pub struct AppliedDiff<'r> {
     npc_belief: __sdk::TableAppliedDiff<'r, NpcBelief>,
     npc_chat_message: __sdk::TableAppliedDiff<'r, NpcChatMessage>,
     npc_destination: __sdk::TableAppliedDiff<'r, NpcDestination>,
+    npc_emotion: __sdk::TableAppliedDiff<'r, NpcEmotion>,
     npc_equipped_item: __sdk::TableAppliedDiff<'r, NpcEquippedItem>,
     npc_event_log: __sdk::TableAppliedDiff<'r, NpcEventLog>,
     npc_goal: __sdk::TableAppliedDiff<'r, NpcGoal>,
     npc_inventory_item: __sdk::TableAppliedDiff<'r, NpcInventoryItem>,
+    npc_knowledge: __sdk::TableAppliedDiff<'r, NpcKnowledge>,
     npc_memory: __sdk::TableAppliedDiff<'r, NpcMemory>,
     npc_pending_decision: __sdk::TableAppliedDiff<'r, NpcPendingDecision>,
-    npc_plan: __sdk::TableAppliedDiff<'r, NpcPlan>,
+    npc_personality: __sdk::TableAppliedDiff<'r, NpcPersonality>,
     npc_relationship: __sdk::TableAppliedDiff<'r, NpcRelationship>,
     npc_skill: __sdk::TableAppliedDiff<'r, NpcSkill>,
     player: __sdk::TableAppliedDiff<'r, Player>,
+    player_profile: __sdk::TableAppliedDiff<'r, PlayerProfile>,
     player_skill: __sdk::TableAppliedDiff<'r, PlayerSkill>,
     point_of_interest: __sdk::TableAppliedDiff<'r, PointOfInterest>,
     projectile: __sdk::TableAppliedDiff<'r, Projectile>,
@@ -1111,6 +1199,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.npc_destination,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<NpcEmotion>("npc_emotion", &self.npc_emotion, event);
         callbacks.invoke_table_row_callbacks::<NpcEquippedItem>(
             "npc_equipped_item",
             &self.npc_equipped_item,
@@ -1127,13 +1216,22 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.npc_inventory_item,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<NpcKnowledge>(
+            "npc_knowledge",
+            &self.npc_knowledge,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<NpcMemory>("npc_memory", &self.npc_memory, event);
         callbacks.invoke_table_row_callbacks::<NpcPendingDecision>(
             "npc_pending_decision",
             &self.npc_pending_decision,
             event,
         );
-        callbacks.invoke_table_row_callbacks::<NpcPlan>("npc_plan", &self.npc_plan, event);
+        callbacks.invoke_table_row_callbacks::<NpcPersonality>(
+            "npc_personality",
+            &self.npc_personality,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<NpcRelationship>(
             "npc_relationship",
             &self.npc_relationship,
@@ -1141,6 +1239,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<NpcSkill>("npc_skill", &self.npc_skill, event);
         callbacks.invoke_table_row_callbacks::<Player>("player", &self.player, event);
+        callbacks.invoke_table_row_callbacks::<PlayerProfile>(
+            "player_profile",
+            &self.player_profile,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<PlayerSkill>(
             "player_skill",
             &self.player_skill,
@@ -1828,16 +1931,19 @@ impl __sdk::SpacetimeModule for RemoteModule {
         npc_belief_table::register_table(client_cache);
         npc_chat_message_table::register_table(client_cache);
         npc_destination_table::register_table(client_cache);
+        npc_emotion_table::register_table(client_cache);
         npc_equipped_item_table::register_table(client_cache);
         npc_event_log_table::register_table(client_cache);
         npc_goal_table::register_table(client_cache);
         npc_inventory_item_table::register_table(client_cache);
+        npc_knowledge_table::register_table(client_cache);
         npc_memory_table::register_table(client_cache);
         npc_pending_decision_table::register_table(client_cache);
-        npc_plan_table::register_table(client_cache);
+        npc_personality_table::register_table(client_cache);
         npc_relationship_table::register_table(client_cache);
         npc_skill_table::register_table(client_cache);
         player_table::register_table(client_cache);
+        player_profile_table::register_table(client_cache);
         player_skill_table::register_table(client_cache);
         point_of_interest_table::register_table(client_cache);
         projectile_table::register_table(client_cache);
@@ -1863,16 +1969,19 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "npc_belief",
         "npc_chat_message",
         "npc_destination",
+        "npc_emotion",
         "npc_equipped_item",
         "npc_event_log",
         "npc_goal",
         "npc_inventory_item",
+        "npc_knowledge",
         "npc_memory",
         "npc_pending_decision",
-        "npc_plan",
+        "npc_personality",
         "npc_relationship",
         "npc_skill",
         "player",
+        "player_profile",
         "player_skill",
         "point_of_interest",
         "projectile",

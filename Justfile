@@ -1,4 +1,5 @@
 bindings_dir  := "shared/src/module_bindings"
+web_bindings_dir := "web/src/module_bindings"
 module_path   := "server/module/spacetimedb"
 server        := "http://localhost:3000"
 db            := "slop-art-online"
@@ -6,6 +7,14 @@ compose       := "docker compose -f deploy/docker-compose.yml"
 
 generate:
     spacetime generate --lang rust --out-dir {{bindings_dir}} --module-path {{module_path}}
+
+generate-web:
+    spacetime generate --lang typescript --out-dir {{web_bindings_dir}} --module-path {{module_path}}
+
+generate-all: generate generate-web
+
+client:
+    cargo run -p client
 
 publish:
     cd server/module && spacetime publish --server {{server}}

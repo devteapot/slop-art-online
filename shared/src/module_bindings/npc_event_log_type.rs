@@ -46,6 +46,7 @@ impl __sdk::__query_builder::HasCols for NpcEventLog {
 ///
 /// Provides typed access to indexed columns for query building.
 pub struct NpcEventLogIxCols {
+    pub npc_id: __sdk::__query_builder::IxCol<NpcEventLog, u64>,
     pub scheduled_id: __sdk::__query_builder::IxCol<NpcEventLog, u64>,
 }
 
@@ -53,6 +54,7 @@ impl __sdk::__query_builder::HasIxCols for NpcEventLog {
     type IxCols = NpcEventLogIxCols;
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         NpcEventLogIxCols {
+            npc_id: __sdk::__query_builder::IxCol::new(table_name, "npc_id"),
             scheduled_id: __sdk::__query_builder::IxCol::new(table_name, "scheduled_id"),
         }
     }

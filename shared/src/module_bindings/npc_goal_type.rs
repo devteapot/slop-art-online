@@ -62,6 +62,7 @@ impl __sdk::__query_builder::HasCols for NpcGoal {
 /// Provides typed access to indexed columns for query building.
 pub struct NpcGoalIxCols {
     pub id: __sdk::__query_builder::IxCol<NpcGoal, u64>,
+    pub npc_id: __sdk::__query_builder::IxCol<NpcGoal, u64>,
 }
 
 impl __sdk::__query_builder::HasIxCols for NpcGoal {
@@ -69,6 +70,7 @@ impl __sdk::__query_builder::HasIxCols for NpcGoal {
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         NpcGoalIxCols {
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+            npc_id: __sdk::__query_builder::IxCol::new(table_name, "npc_id"),
         }
     }
 }
