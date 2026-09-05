@@ -33,7 +33,7 @@ just sim-inspect output/my-run 18877
 
 - [Rust](https://rustup.rs/) (stable toolchain)
 - [SpacetimeDB CLI](https://spacetimedb.com/docs) (`spacetime`, version **2.1.0** to match the pinned Rust SDK and generated bindings)
-- [Docker](https://docs.docker.com/get-docker/) (for local SpacetimeDB / optional Ollama UI)
+- [Docker](https://docs.docker.com/get-docker/) with Compose, **or** [Podman](https://podman.io/) with a Compose provider (`docker-compose` or `podman-compose`)
 - [just](https://github.com/casey/just) (command runner)
 - [Ollama](https://ollama.com/) (optional — local LLM for the bridge; on macOS run natively, not in Docker)
 
@@ -43,7 +43,7 @@ WASM target for publishing the server module:
 rustup target add wasm32-unknown-unknown
 ```
 
-Use the matching CLI version before regenerating bindings:
+Use the matching CLI version before publishing or regenerating bindings:
 
 ```bash
 spacetime version install 2.1.0
@@ -54,22 +54,47 @@ NPC model backends are configurable per run: see [Ollama, OpenRouter, and compat
 
 ## Quick start
 
-### 1. Start local services
+### 1. Start and initialize the database
 
 ```bash
-just up          # SpacetimeDB (:3000) + Open WebUI (:8080) on mac profile
+# Docker (default)
+just dev
+
+# Or Podman
+just runtime=podman dev
 ```
 
-On Linux with an NVIDIA GPU you can use the `gpu` profile (includes containerized Ollama). See `deploy/docker-compose.yml`.
+`just dev` starts SpacetimeDB **2.1.0** in a container, waits for its HTTP endpoint, then builds and publishes `slop-art-online`. It works on Intel/AMD and ARM machines. The database is available at `http://localhost:3000`; the Bevy client and bridge already use that address. Rust compilation and the SpacetimeDB CLI run on the host.
 
-### 2. Publish the game module
+On macOS or Windows, start Docker Desktop or a Podman machine first. For a new Podman installation:
 
 ```bash
-just publish-reset   # clear DB and publish (first time / hard reset)
-# or
-just publish         # incremental publish
+podman machine init     # once; skip if a machine already exists
+podman machine start
+podman compose version # verify a Compose provider is installed
+```
+
+On Linux, Podman runs directly on the host. [`podman compose` delegates to an installed Compose provider](https://docs.podman.io/en/latest/markdown/podman-compose.1.html).
+
+To use Podman for all subsequent commands in your terminal:
+
+```bash
+export CONTAINER_RUNTIME=podman
+just up
+just status
+```
+
+Use the same runtime for `dev`, `up`, `down`, `status`, and `logs`. Docker and Podman keep separate database volumes; run only one on port 3000 at a time. `just up` starts only the database and waits for readiness; `just dev` also publishes the module. No cloud account is needed for local publishing.
+
+### 2. Update the game module during development
+
+```bash
+just publish         # create or incrementally update the database
 just generate        # regenerate Rust client bindings into shared/
+just publish-reset   # destructive: clear game data and republish
 ```
+
+Ordinary `publish` / `dev` preserves data and fails if a schema change requires deleting it. Use `publish-reset` only when you want to discard local game state.
 
 ### 3. Run the LLM bridge (needed for model-backed decisions)
 
@@ -94,12 +119,36 @@ just client      # cargo run -p client
 | `cargo build` | Build all workspace crates |
 | `cargo test` | Run all tests |
 | `just client` | Run the Bevy game client |
-| `just up` / `just down` | Start / stop docker-compose services |
-| `just logs` | Tail SpacetimeDB / compose logs |
+| `just dev` | Start the container, wait for readiness, and publish the module |
+| `just up` / `just down` | Start the database / remove containers while retaining data |
+| `just status` | Show container status and health |
+| `just logs` | Tail SpacetimeDB logs |
 | `just publish` | Publish the SpacetimeDB module |
 | `just publish-reset` | Delete DB data and republish |
 | `just generate` | Regenerate `shared` module bindings |
 | `just call <reducer> [args...]` | Call a reducer against the local DB |
+
+All container commands accept `runtime=podman`, e.g. `just runtime=podman down`.
+
+### Storage and optional services
+
+SpacetimeDB stores its data and local keys in the Compose-managed `spacetimedb-home` named volume. `just down` retains this volume, so stopping and starting the environment preserves the world. Avoid `compose down --volumes` unless you intend to erase it. The port is bound to loopback for local development.
+
+The old `deploy/spacetimedb-data/` bind mount is no longer used and is left untouched. The new volume starts with a fresh database. Existing worlds are not automatically imported; retain that directory if you need the old state. Do not copy data from a newer SpacetimeDB server into the pinned 2.1.0 server.
+
+Open WebUI and Ollama are optional and are not started by `just dev`. For Open WebUI with native Ollama on macOS (substitute `podman` for `docker` as needed):
+
+```bash
+docker compose -f deploy/docker-compose.yml --profile mac up -d open-webui
+```
+
+The existing NVIDIA GPU profile is available with Docker on Linux after configuring its NVIDIA container runtime:
+
+```bash
+OLLAMA_BASE_URL=http://ollama:11434 docker compose -f deploy/docker-compose.yml --profile gpu up -d
+```
+
+SpacetimeDB itself does not need a GPU or either optional profile.
 
 ## Project structure
 

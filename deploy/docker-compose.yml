@@ -1,12 +1,21 @@
 services:
   spacetimedb:
-    image: clockworklabs/spacetime:latest
-    command: start
+    # Match the Rust SDK and generated bindings; supports amd64 and arm64.
+    image: docker.io/clockworklabs/spacetime:v2.1.0
+    command: [start, --listen-addr, "0.0.0.0:3000"]
     user: spacetime
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
-      - ./spacetimedb-data:/home/spacetime/.local/share/spacetime
+      # Mount the existing, user-owned home so a fresh volume is writable
+      # by the image's non-root user on Docker and rootless Podman.
+      - spacetimedb-home:/home/spacetime
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --max-time, "2", "http://127.0.0.1:3000/v1/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped
 
   # Ollama web UI — model management, chat, benchmarking
@@ -29,7 +38,7 @@ services:
   # Usage: docker compose --profile gpu up
   ollama:
     profiles: [gpu]
-    image: ollama/ollama:latest
+    image: docker.io/ollama/ollama:latest
     ports:
       - "11434:11434"
     volumes:
@@ -42,3 +51,6 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+volumes:
+  spacetimedb-home:

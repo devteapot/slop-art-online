@@ -3,38 +3,59 @@ web_bindings_dir := "web/src/module_bindings"
 module_path   := "server/module/spacetimedb"
 server        := "http://localhost:3000"
 db            := "slop-art-online"
-compose       := "docker compose -f deploy/docker-compose.yml"
+runtime       := env("CONTAINER_RUNTIME", "docker")
+compose       := runtime + " compose -f deploy/docker-compose.yml"
+spacetime     := "spacetime"
 
-generate:
-    spacetime generate --lang rust --out-dir {{bindings_dir}} --module-path {{module_path}}
+generate: check-cli
+    {{spacetime}} generate --lang rust --out-dir {{bindings_dir}} --module-path {{module_path}}
 
-generate-web:
-    spacetime generate --lang typescript --out-dir {{web_bindings_dir}} --module-path {{module_path}}
+generate-web: check-cli
+    {{spacetime}} generate --lang typescript --out-dir {{web_bindings_dir}} --module-path {{module_path}}
 
 generate-all: generate generate-web
 
 client:
     cargo run -p client
 
-publish:
-    cd server/module && spacetime publish --server {{server}}
+# Start the database, wait for it, and create/update the game module.
+dev: check-cli up publish
 
-publish-reset:
-    cd server/module && spacetime publish --server {{server}} --delete-data -y {{db}}
+publish: check-cli
+    {{spacetime}} publish --no-config --server {{server}} --module-path {{module_path}} --delete-data=never -y {{db}}
+
+publish-reset: check-cli
+    {{spacetime}} publish --no-config --server {{server}} --module-path {{module_path}} --delete-data -y {{db}}
 
 publish-generate: publish generate
 
 up:
-    {{compose}} --profile mac up -d
+    {{compose}} up -d spacetimedb
+    {{compose}} exec -T spacetimedb sh -s < deploy/wait-for-spacetimedb.sh
 
 down:
-    {{compose}} --profile mac down
+    {{compose}} --profile mac --profile gpu down
 
 logs:
-    {{compose}} logs -f
+    {{compose}} logs -f spacetimedb
+
+status:
+    {{compose}} ps
 
 call reducer *args:
-    spacetime call --server {{server}} {{db}} {{reducer}} {{args}}
+    {{spacetime}} call --server {{server}} {{db}} {{reducer}} {{args}}
+
+[private]
+check-cli:
+    #!/bin/sh
+    set -eu
+    case "$({{spacetime}} --version)" in
+        *"spacetimedb tool version 2.1.0;"*) ;;
+        *)
+            echo "Use SpacetimeDB CLI 2.1.0: spacetime version install 2.1.0 && spacetime version use 2.1.0" >&2
+            exit 1
+            ;;
+    esac
 
 # M1 experiments use isolated databases, never the ordinary development DB.
 sim-build:
