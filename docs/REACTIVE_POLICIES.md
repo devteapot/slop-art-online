@@ -1,5 +1,9 @@
 # Persistent reactive NPC policies
 
+Latest live evidence: [mixed internal/external agent verification](LIVE_MIXED_AGENT_VERIFICATION.md) records ten genuine Luna calls, accepted behavior/dialogue/learning through both routes, preserved failures and corrections, and 66 passing regressions. Earlier no-fresh-inference statements below describe the preceding implementation milestone.
+
+Current participant iteration: [participant agent runtimes](PARTICIPANT_AGENTS.md) and [ADR 013](adr/013-participant-agent-runtimes.md). Rules `m1-5` use one scoped API for the built-in harness and external MCP runtimes, with independent tree, speech and learning operations. Earlier evidence and legacy runner descriptions below retain their historical scope.
+
 Rules `m1-4` accept model-generated `survivor-policy-v2` proposals. The LLM generates each individual's actual tree, conditions, priorities, actions and reflections. The simulation owns the vocabulary, validation, subjective condition evaluation, skill effects and durable runtime. No authored hazard/retreat tree is inserted into a generated proposal. Before the first valid policy, `authored_bootstrap` only eats carried food, rests when low on energy, or waits; it does not explore or navigate for the model.
 
 The implementation is in [policy.rs](../simulation/src/policy.rs) and the shared [authoritative core](../simulation/src/lib.rs). The legacy Bevy/gameplay path is unchanged. `bonsai-bt` remains the legacy sequence representation; the foundation's new tagged policy vocabulary is simulation-owned and shares the same skill executor.

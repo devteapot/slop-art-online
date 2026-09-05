@@ -1,5 +1,7 @@
 # Simulation roadmap and work queue
 
+Current participant iteration: [participant agent runtimes](PARTICIPANT_AGENTS.md) and [ADR 013](adr/013-participant-agent-runtimes.md). Rules `m1-5` use one scoped API for the built-in harness and external MCP runtimes, with independent tree, speech and learning operations. Earlier evidence and legacy runner descriptions below retain their historical scope.
+
 Read the [authoritative vision](SIMULATION_VISION.md) first, then [source-backed gaps](CURRENT_STATE.md) and the [audit/experiment contract](AUDIT_AND_EXPERIMENTS.md). This replaces the former v1 → v2 “COMPLETE” checklist as the active roadmap. Historical migration rationale remains in [ADR 005](adr/005-npc-architecture-v2.md); existing tables and routes are reusable scaffolding, not completion of this milestone.
 
 Reactive-policy follow-up: [runtime contract](REACTIVE_POLICIES.md), [ADR 011](adr/011-persistent-reactive-policies.md), and [current verification](REACTIVE_POLICY_VERIFICATION.md) distinguish implemented persistent trees from live-generation evidence.

@@ -5,33 +5,7 @@ pub fn decision_schema() -> Value {
     let mut schema = serde_json::to_value(schemars::schema_for!(policy::PolicyProposal)).unwrap();
     // Strict-output endpoints require every property, using null for Option values.
     // Serde defaults remain supported by the authority for existing human/archive inputs.
-    fn strict(v: &mut Value) {
-        match v {
-            Value::Object(obj) => {
-                obj.remove("default");
-                obj.remove("$schema");
-                // Tagged variants remain disjoint; anyOf is accepted by strict chat APIs.
-                if let Some(variants) = obj.remove("oneOf") {
-                    obj.insert("anyOf".into(), variants);
-                }
-                if let Some(properties) = obj.get("properties").and_then(Value::as_object) {
-                    let required: Vec<_> = properties.keys().cloned().collect();
-                    obj.insert("required".into(), json!(required));
-                    obj.insert("additionalProperties".into(), json!(false));
-                }
-                for child in obj.values_mut() {
-                    strict(child);
-                }
-            }
-            Value::Array(a) => {
-                for child in a {
-                    strict(child);
-                }
-            }
-            _ => (),
-        }
-    }
-    strict(&mut schema);
+    strict_schema(&mut schema);
 
     // Reconsider is a control leaf inside a policy, never an executable root.
     // Keep the recursive Node definition intact so nested control nodes remain legal.
@@ -71,4 +45,31 @@ pub fn skill_contract() -> Value {
             json!({"skill":name,"requirements_and_effects":skill.description()})
         })
         .collect::<Vec<_>>())
+}
+
+pub fn strict_schema(v: &mut Value) {
+    match v {
+        Value::Object(obj) => {
+            obj.remove("default");
+            obj.remove("$schema");
+            // Tagged variants remain disjoint; anyOf is accepted by strict chat APIs.
+            if let Some(variants) = obj.remove("oneOf") {
+                obj.insert("anyOf".into(), variants);
+            }
+            if let Some(properties) = obj.get("properties").and_then(Value::as_object) {
+                let required: Vec<_> = properties.keys().cloned().collect();
+                obj.insert("required".into(), json!(required));
+                obj.insert("additionalProperties".into(), json!(false));
+            }
+            for child in obj.values_mut() {
+                strict_schema(child);
+            }
+        }
+        Value::Array(a) => {
+            for child in a {
+                strict_schema(child);
+            }
+        }
+        _ => (),
+    }
 }

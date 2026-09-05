@@ -95,12 +95,15 @@ pub mod sim_client_clock_type;
 pub mod sim_client_control_reducer;
 pub mod sim_client_intent_reducer;
 pub mod sim_client_snapshot_type;
+pub mod sim_create_participant_reducer;
 pub mod sim_create_reducer;
 pub mod sim_grant_client_reducer;
 pub mod sim_intent_reducer;
 pub mod sim_model_result_reducer;
 pub mod sim_my_snapshot_table;
 pub mod sim_operator_pause_reducer;
+pub mod sim_participant_command_reducer;
+pub mod sim_participant_state_table;
 pub mod sim_revoke_client_reducer;
 pub mod sim_run_type;
 pub mod sim_setup_client_clock_reducer;
@@ -222,12 +225,15 @@ pub use sim_client_clock_type::SimClientClock;
 pub use sim_client_control_reducer::sim_client_control;
 pub use sim_client_intent_reducer::sim_client_intent;
 pub use sim_client_snapshot_type::SimClientSnapshot;
+pub use sim_create_participant_reducer::sim_create_participant;
 pub use sim_create_reducer::sim_create;
 pub use sim_grant_client_reducer::sim_grant_client;
 pub use sim_intent_reducer::sim_intent;
 pub use sim_model_result_reducer::sim_model_result;
 pub use sim_my_snapshot_table::*;
 pub use sim_operator_pause_reducer::sim_operator_pause;
+pub use sim_participant_command_reducer::sim_participant_command;
+pub use sim_participant_state_table::*;
 pub use sim_revoke_client_reducer::sim_revoke_client;
 pub use sim_run_type::SimRun;
 pub use sim_setup_client_clock_reducer::sim_setup_client_clock;
@@ -310,6 +316,10 @@ pub enum Reducer {
         run: String,
         scenario: String,
     },
+    SimCreateParticipant {
+        run: String,
+        scenario: String,
+    },
     SimGrantClient {
         run: String,
         identity: __sdk::Identity,
@@ -329,6 +339,9 @@ pub enum Reducer {
     },
     SimOperatorPause {
         run: String,
+    },
+    SimParticipantCommand {
+        request: String,
     },
     SimRevokeClient {
         identity: __sdk::Identity,
@@ -430,10 +443,12 @@ impl __sdk::Reducer for Reducer {
             Reducer::SimClientControl { .. } => "sim_client_control",
             Reducer::SimClientIntent { .. } => "sim_client_intent",
             Reducer::SimCreate { .. } => "sim_create",
+            Reducer::SimCreateParticipant { .. } => "sim_create_participant",
             Reducer::SimGrantClient { .. } => "sim_grant_client",
             Reducer::SimIntent { .. } => "sim_intent",
             Reducer::SimModelResult { .. } => "sim_model_result",
             Reducer::SimOperatorPause { .. } => "sim_operator_pause",
+            Reducer::SimParticipantCommand { .. } => "sim_participant_command",
             Reducer::SimRevokeClient { .. } => "sim_revoke_client",
             Reducer::SimSetupClientClock { .. } => "sim_setup_client_clock",
             Reducer::SimStep { .. } => "sim_step",
@@ -526,6 +541,12 @@ impl __sdk::Reducer for Reducer {
                     scenario: scenario.clone(),
                 })
             }
+            Reducer::SimCreateParticipant { run, scenario } => {
+                __sats::bsatn::to_vec(&sim_create_participant_reducer::SimCreateParticipantArgs {
+                    run: run.clone(),
+                    scenario: scenario.clone(),
+                })
+            }
             Reducer::SimGrantClient {
                 run,
                 identity,
@@ -562,6 +583,11 @@ impl __sdk::Reducer for Reducer {
                     run: run.clone(),
                 })
             }
+            Reducer::SimParticipantCommand { request } => __sats::bsatn::to_vec(
+                &sim_participant_command_reducer::SimParticipantCommandArgs {
+                    request: request.clone(),
+                },
+            ),
             Reducer::SimRevokeClient { identity } => {
                 __sats::bsatn::to_vec(&sim_revoke_client_reducer::SimRevokeClientArgs {
                     identity: identity.clone(),
@@ -735,6 +761,7 @@ pub struct DbUpdate {
     point_of_interest: __sdk::TableUpdate<PointOfInterest>,
     projectile: __sdk::TableUpdate<Projectile>,
     sim_my_snapshot: __sdk::TableUpdate<SimClientSnapshot>,
+    sim_participant_state: __sdk::TableUpdate<SimClientSnapshot>,
     skill_attributes: __sdk::TableUpdate<SkillAttributes>,
     skill_cooldown: __sdk::TableUpdate<SkillCooldown>,
     skill_def: __sdk::TableUpdate<SkillDef>,
@@ -844,6 +871,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
                     .append(sim_my_snapshot_table::parse_table_update(table_update)?),
+                "sim_participant_state" => db_update.sim_participant_state.append(
+                    sim_participant_state_table::parse_table_update(table_update)?,
+                ),
                 "skill_attributes" => db_update
                     .skill_attributes
                     .append(skill_attributes_table::parse_table_update(table_update)?),
@@ -998,6 +1028,10 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.sim_my_snapshot = cache
             .apply_diff_to_table::<SimClientSnapshot>("sim_my_snapshot", &self.sim_my_snapshot);
+        diff.sim_participant_state = cache.apply_diff_to_table::<SimClientSnapshot>(
+            "sim_participant_state",
+            &self.sim_participant_state,
+        );
 
         diff
     }
@@ -1100,6 +1134,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_participant_state" => db_update
+                    .sim_participant_state
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "skill_attributes" => db_update
                     .skill_attributes
@@ -1225,6 +1262,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_participant_state" => db_update
+                    .sim_participant_state
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "skill_attributes" => db_update
                     .skill_attributes
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1287,6 +1327,7 @@ pub struct AppliedDiff<'r> {
     point_of_interest: __sdk::TableAppliedDiff<'r, PointOfInterest>,
     projectile: __sdk::TableAppliedDiff<'r, Projectile>,
     sim_my_snapshot: __sdk::TableAppliedDiff<'r, SimClientSnapshot>,
+    sim_participant_state: __sdk::TableAppliedDiff<'r, SimClientSnapshot>,
     skill_attributes: __sdk::TableAppliedDiff<'r, SkillAttributes>,
     skill_cooldown: __sdk::TableAppliedDiff<'r, SkillCooldown>,
     skill_def: __sdk::TableAppliedDiff<'r, SkillDef>,
@@ -1419,6 +1460,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<SimClientSnapshot>(
             "sim_my_snapshot",
             &self.sim_my_snapshot,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimClientSnapshot>(
+            "sim_participant_state",
+            &self.sim_participant_state,
             event,
         );
         callbacks.invoke_table_row_callbacks::<SkillAttributes>(
@@ -2130,6 +2176,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         point_of_interest_table::register_table(client_cache);
         projectile_table::register_table(client_cache);
         sim_my_snapshot_table::register_table(client_cache);
+        sim_participant_state_table::register_table(client_cache);
         skill_attributes_table::register_table(client_cache);
         skill_cooldown_table::register_table(client_cache);
         skill_def_table::register_table(client_cache);
@@ -2169,6 +2216,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "point_of_interest",
         "projectile",
         "sim_my_snapshot",
+        "sim_participant_state",
         "skill_attributes",
         "skill_cooldown",
         "skill_def",

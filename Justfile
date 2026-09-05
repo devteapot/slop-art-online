@@ -78,7 +78,7 @@ sim-run-config scenario output config port='18878':
 
 # Actual Bevy WASM game client; no model calls during build or default host startup.
 bevy-web-build:
-    cd client && env -u NO_COLOR trunk build --cargo-profile wasm-dev
+    cd client && env -u NO_COLOR trunk build --cargo-profile wasm-dev --dist dist-participant
 
 bevy-dev:
     env -u NPC_REASONING_CONFIG cargo run -p bridge --bin sao-dev-client
