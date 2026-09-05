@@ -13,6 +13,14 @@ pub struct StartingBehavior {
 impl World {
     pub(super) fn install_starting_behaviors(&mut self, initialization: u64) -> Result<(), String> {
         for (actor, habit) in self.initial.starting_behaviors.clone() {
+            self.install_starting_behavior(actor, &habit, initialization, "authored world seed")?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn install_starting_behavior(
+        &mut self, actor: u32, habit: &StartingBehavior, cause: u64, source: &str,
+    ) -> Result<(), String> {
             let i = self.idx(actor)?;
             if habit.id.is_empty()
                 || habit.id.len() > 80
@@ -29,9 +37,9 @@ impl World {
             let origin = self.event(
                 Some(actor),
                 "starting_behavior_installed",
-                vec![initialization],
+                vec![cause],
                 json!({"id":habit.id,"revision":habit.revision,"description":habit.description,
-                    "source":"authored world seed","revisable":true}),
+                    "source":source,"revisable":true}),
             );
             self.apply_decision(
                 actor,
@@ -42,13 +50,12 @@ impl World {
                         habit.id, habit.revision, habit.description
                     ),
                     actions: vec![],
-                    policy: Some(habit.tree),
+                    policy: Some(habit.tree.clone()),
                     reflections: vec![],
                 },
                 Some(origin),
                 None,
             )?;
-        }
         Ok(())
     }
 }

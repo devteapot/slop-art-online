@@ -46,15 +46,18 @@ fn sessions(lab:&Lab)->Vec<Session> {
         let label=dir.file_name().unwrap_or_default().to_string_lossy().to_string();
         let batch_label=if batch.is_object(){parent.file_name().unwrap_or_default().to_string_lossy().to_string()}else{"Previous experiments".into()};
         let implementation=pilot["implementation_manifest"]["label"].as_str().unwrap_or("recorded working tree");
-        let actors=metrics["players"].as_array().or_else(||scenario["players"].as_array());
-        let alive=actors.map_or(0,|p|p.iter().filter(|p|p["health"].as_i64().unwrap_or(0)>0).count());
+        let actors:Vec<&Value>=aggregate["arenas"].as_array().map(|arenas|arenas.iter()
+            .flat_map(|arena|arena["players"].as_array().into_iter().flatten()).collect())
+            .unwrap_or_else(||metrics["players"].as_array().or_else(||scenario["players"].as_array())
+                .into_iter().flatten().collect());
+        let alive=actors.iter().filter(|p|p["health"].as_i64().unwrap_or(0)>0).count();
         let phase=pilot["phase"].as_str().unwrap_or("unknown");
         let time=aggregate["seconds"].as_f64().unwrap_or(metrics["time_ms"].as_f64().unwrap_or(0.)/1000.);
         let calls=aggregate["total_calls"].as_u64().map(|n|n as usize).unwrap_or_else(||
             file_count(&dir.join(run).join("reasoning"))+file_count(&dir.join(run).join("live-inference")));
         let view=json!({"id":id,"label":label,"batch":batch_label,"hypothesis":batch["hypothesis"],"implementation":implementation,
             "run":run,"phase":phase,"seconds":time,"duration_seconds":pilot["minutes"].as_u64().unwrap_or(5)*60,
-            "population":scenario["players"].as_array().map_or(0,Vec::len),"alive":alive,"calls":calls,
+            "population":actors.len(),"alive":alive,"calls":calls,
             "arenas":scenario["arenas"],"url":format!("/session/{id}/#{id}"),"started_at":pilot["started_at"],
             "engine_errors":aggregate["engine_errors"].as_array().map(Vec::len),"scope_violations":aggregate["scope_violations"].as_array().map(Vec::len)});
         result.push(Session{id,port,db:db.into(),view});

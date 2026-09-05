@@ -60,6 +60,17 @@ def analyze(world, events):
         kind, data, actor = event['kind'], event['data'], event.get('actor')
         before = availability() if kind in ('death', 'archive_destroyed') else None
         changed = False
+        if kind == 'actor_created':
+            if actor in personal:
+                violations.append(f"Event {event['id']} reuses an existing actor identity")
+            else:
+                personal[actor] = set()
+                resources = data.get('initial_resources', {})
+                if resources.get('health', 0) > 0:
+                    alive.add(actor)
+                else:
+                    violations.append(f"Event {event['id']} lacks a live creation resource baseline")
+                changed = True
         if kind in KNOWLEDGE_EVENTS:
             operation_counts[kind] += 1
             if kind in ('knowledge_taught', 'knowledge_recorded', 'knowledge_consulted'):
@@ -233,6 +244,7 @@ def analyze(world, events):
                 acquisitions=acquisitions, distinct_personal_acquisitions=sum(a["first_observed_copy"] for a in acquisitions),
                 repeat_reports=sum(not a["first_observed_copy"] for a in acquisitions),
                 copy_timeline=timeline, deaths=deaths, archive_destructions=destructions,
+                creation_events=[dict(**reference(e), data=e['data']) for e in events if e['kind']=='actor_created'],
                 authored_disturbances=interventions, accepted_citations=citations, later_action_candidates=later,
                 record_location_evidence=location_evidence, record_location_summary=location_summary,
                 operations_after_author_death=post_author_death,

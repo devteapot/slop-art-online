@@ -220,6 +220,7 @@ pub fn sync(
             run,
             game.world_visible,
             game.snapshot["map"],
+            game.snapshot["workshops"],
             game.snapshot["archives"].as_array().map(|a|a.iter().map(|v|json!([v["id"],v["position"],v["destroyed"]])).collect::<Vec<_>>()),
             game.snapshot["sites"].as_array().map(|sites| sites
                 .iter()
@@ -321,6 +322,11 @@ pub fn sync(
             }
         }
         if terrain_changed && game.world_visible {
+            for workshop in game.snapshot["workshops"].as_array().into_iter().flatten() {
+                let at=cell_position(&game.snapshot,workshop.as_i64().unwrap_or(0) as i32)+Vec3::new(13.,-4.,3.);
+                tile(&mut commands,Color::srgb(0.48,0.70,0.74),at,Vec2::new(11.,10.));
+                tile(&mut commands,Color::srgb(0.81,0.91,0.88),at+Vec3::new(0.,4.,1.),Vec2::new(15.,3.));
+            }
             for archive in game.snapshot["archives"].as_array().into_iter().flatten() {
                 let at=cell_position(&game.snapshot,archive["position"].as_i64().unwrap_or(0) as i32)+Vec3::new(-12.,0.,3.);
                 let intact=archive["destroyed"]!=true;
@@ -402,6 +408,7 @@ pub fn sync(
                 } else {
                     Color::srgb(0.87, 0.57, 0.28)
                 };
+                let scale=Vec3::splat(if p["development"]["dependent"]==true {0.75} else {1.});
                 let rotation = if dead {
                     Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)
                 } else {
@@ -415,12 +422,13 @@ pub fn sync(
                         transform.translation = target;
                     }
                     transform.rotation = rotation;
+                    transform.scale = scale;
                     sprite.color = color;
                 } else {
                     commands
                         .spawn((
                             Sprite::from_color(color, Vec2::new(18., 20.)),
-                            Transform::from_translation(target).with_rotation(rotation),
+                            Transform::from_translation(target).with_rotation(rotation).with_scale(scale),
                             WorldEntity,
                             Character { id, target },
                         ))

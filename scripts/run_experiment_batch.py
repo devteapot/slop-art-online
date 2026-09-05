@@ -16,6 +16,7 @@ from pathlib import Path
 
 from experiment_artifacts import ROOT, digest, verify, write
 from summarize_arena_matrix import summarize
+from run_living_clearing import actor_limit, validate_newcomer_controller
 
 READINESS_SECONDS = 100
 CLEANUP_SECONDS = 40
@@ -62,6 +63,10 @@ def resolve_spec(spec):
         for key in ('scenario', 'controllers'):
             v[key] = str(Path(v[key]).resolve())
             inputs[key] = json.loads(Path(v[key]).read_text())
+        if v.get('newcomer_controller') is not None:
+            v['newcomer_controller'] = str(Path(v['newcomer_controller']).resolve())
+            inputs['newcomer_controller'] = validate_newcomer_controller(json.loads(Path(v['newcomer_controller']).read_text()))
+            actor_limit(inputs['scenario'], True)
         controllers = inputs['controllers']
         actor_ids = [p['id'] for p in inputs['scenario']['players']]
         if (not controllers or len(set(actor_ids)) != len(actor_ids)
@@ -98,6 +103,8 @@ def prepare(spec, resolved, out):
                    '--serial-ms', str(v['serial_ms']), '--scenario', str(inputs / 'scenario.json'),
                    '--controllers', str(inputs / 'controllers.json'), '--implementation', v['implementation'],
                    '--start-gate', str(gate), '--start-gate-timeout', str(gate_timeout)]
+        if 'newcomer_controller' in values:
+            command.extend(['--newcomer-controller', str(inputs / 'newcomer_controller.json')])
         if v.get('recovery', False):
             command.append('--recovery')
         plan.append(dict(id=v['id'], group=group + 1, url=f"http://127.0.0.1:{v['port']}",

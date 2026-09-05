@@ -109,6 +109,12 @@ impl Default for Registry {
             ("record", include_str!("../scripts/record.rhai"), "copy one of your held knowledge record IDs into an intact archive at your cell; record and archive IDs required; takes 2500 ms and 4 energy. Capacity limited; your own copy remains."),
             ("consult", include_str!("../scripts/consult.rhai"), "read a selected record ID from an intact archive at your cell into your own durable knowledge; archive and record IDs required; takes 1500 ms and 1 energy. Local site observations list archive catalogs but do not reveal record contents. Reading does not automatically establish truth or grant skill mastery."),
             ("destroy_archive", include_str!("../scripts/destroy_archive.rhai"), "destroy a physical archive at your cell and all its stored records; archive ID required; takes 5000 ms and 8 energy. Copies held by living people or other archives remain; audit history is never an in-world recovery source."),
+            ("offer_reproduction", include_str!("../scripts/offer_reproduction.rhai"), "explicitly offer paired reproduction to a living independent biological target at your cell; duration 1. Offer lasts 90000 ms and quotes your commitment of 2 food and 10 energy, paid only upon completed reproduction. The partner must independently offer to you. Repeating the same live offer retains its source; withdrawal or replacement invalidates work begun under it."),
+            ("withdraw_reproduction", include_str!("../scripts/withdraw_reproduction.rhai"), "withdraw your own reproduction offer; duration 1, no target. Invalidates unfinished attempts using it; does not erase an already created individual."),
+            ("reproduce", include_str!("../scripts/reproduce.rhai"), "with a target who mutually offered reproduction, remain together for 30000 ms; duration 1. Both exact offers must remain valid and both pay their quoted costs atomically. Creates one distinct dependent biological individual, consuming both offers; no possessions, private knowledge or mastery are inherited. Population renewal must be configured; finite retained-identity capacity applies."),
+            ("fabricate", include_str!("../scripts/fabricate.rhai"), "at a local workshop, an independent character can spend 45000 ms, 6 carried food as nutrient material and 30 energy to create a distinct dependent artificial individual; duration 1. This representative artificial body still uses food; no charging or compute infrastructure is implied. Care and learning are still required; creation gives no obedience or inherited mastery."),
+            ("care", include_str!("../scripts/care.rhai"), "provide one actual carried meal to a living dependent target at your cell; caregiver must be independent. Takes 3000 ms and 2 energy; recipient hunger must be at least 35 and falls by 35. Meal is consumed, not put in the recipient inventory. needs_care {target} checks your retained local observation; duration 1. This records support but does not alone grant self-support."),
+            ("practice", include_str!("../scripts/practice.rhai"), "a dependent learner performs guided gathering with a living local target who previously cared for them; record selects a personally interpreted report whose typed location matches this cell. Takes 5000 ms and 4 energy; transfers one actual site food into the learner inventory. Default self-support requires age 60000 ms, two care meals and one successful practice. Independent characters use ordinary gather; duration 1."),
             (
                 "attack",
                 include_str!("../scripts/attack.rhai"),
@@ -167,6 +173,12 @@ pub enum Effect {
     RecordKnowledge { archive: u32, record: String },
     ConsultKnowledge { archive: u32, record: String },
     DestroyArchive { archive: u32 },
+    OfferReproduction { partner: u32, expires_ms: u64, food: i32, energy: i32 },
+    WithdrawReproduction,
+    Reproduce { partner: u32, own_offer: u64, partner_offer: u64 },
+    Fabricate { food: i32, energy: i32 },
+    Care { target: u32, energy: i32, nutrition: i32 },
+    Practice { guide: u32, record: String, energy: i32 },
 }
 
 struct Compiled {
@@ -496,6 +508,9 @@ impl Registry {
 }
 
 const LAW_FUNCTIONS: &[&str] = &[
+    "needs_care",
+    "development",
+    "population_costs",
     "authorize_update",
     "cost",
     "validate_common",
@@ -532,12 +547,24 @@ pub fn subjective(p: &Player) -> Value {
         if m.kind == "knowledge_report" {
             v["content"] = json!({"record":{"id":m.content["record"]["id"]}});
         } else if m.kind == "site" {
-            if let Some(content) = v["content"].as_object_mut() { content.remove("archives"); }
+            if let Some(content) = v["content"].as_object_mut() { content.remove("archives"); content.remove("lifecycle"); }
         }
         v
     };
     value["memories"] = json!(p.memories.iter().map(guard_percept).collect::<Vec<_>>());
     value["site_observations"] = json!(p.site_observations.iter().map(guard_percept).collect::<Vec<_>>());
+    let mut care_observations: BTreeMap<u64, Value> = BTreeMap::new();
+    for memory in &p.site_observations {
+        for person in memory.content["lifecycle"]["people"].as_array().into_iter().flatten() {
+            if let Some(id) = person["id"].as_u64() {
+                if care_observations.get(&id).is_none_or(|old|old["source"].as_u64().unwrap_or(0) < memory.source) {
+                    care_observations.insert(id,json!({"id":id,"location":memory.location,"source":memory.source,
+                        "dependent":person["dependent"],"needs_care":person["needs_care"]}));
+                }
+            }
+        }
+    }
+    value["care_observations"] = json!(care_observations.into_values().collect::<Vec<_>>());
     value["knowledge"] = json!(p.knowledge.iter().map(|h| json!({"record":{"id":h.record.id},"source":h.source})).collect::<Vec<_>>());
     value
 }

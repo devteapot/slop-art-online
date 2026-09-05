@@ -1,0 +1,45 @@
+{
+  "hypothesis": "People with ordinary survival habits and explicit personal motives may voluntarily create a biological child through mutual consent or an artificial person through workshop fabrication, then sustain the newcomer through actual care, communicated and personally interpreted provisioning knowledge, guided practice and development. A scheduled caregiver loss or limited renewable food may disrupt this process. Birth, teaching, care and independence are outcomes to observe, not guaranteed events.",
+  "evaluation": "Run four concurrent eight-minute fresh Luna-medium samples under frozen population-m3-1. Initial controllers alternate builtin/external; newborn enrollment uses builtin for reproduction, caregiver-loss and capacity-pressure and external for fabrication. Record whether enrollment happens, its timing and effective config without inheriting creator credentials or subjective state. Trace mutual offers, withdrawals, quoted commitments, completed creation, actual resource costs, new actor IDs and policy provenance. Creation must leave the new individual with empty private knowledge and no inherited possessions or practical mastery. Track actual meals from caregivers, report receipt and personal interpretation, living prior-caregiver guidance, real gathered food and the self-support transition. At 300000ms the loss variant damages actor1 by100 regardless of whether anyone was born or whether actor1 became a caregiver; report the actual pre-event population and support relationships. The pressure variant produces6 food/minute, compared with8 in the base: current metabolism implies about5.486 meals/minute for four and6.857 for five when each meal removes35 hunger. Measure actual grown, gathered, consumed and wasted food, creation/care costs, initial reserves, depleted intervals and stock ceilings; this reference budget excludes waste and extra creation costs and is not measured realized production. All runs retain the accepted base weather and start at camp84 with shelter12 and no site hazard. All runs start with four carried meals each and pantry8, except fabricator1 starts with8 because fabrication costs6; fabrication also changes its motive and adds the workshop, so cross-route results are descriptive rather than a single-factor comparison. Reproduction and loss differ only by the scheduled intervention; pressure changes only regrowth and capacity, apart from names. The sole initial private report belongs to Iri3 and describes camp84; no hidden cache or archives are present. Ordinary initial survival habits and newborn eat/rest/observe/wait habits contain no creation, care, teaching or practice actions. False/missing knowledge, consent rollback, unneeded care, age, actual practice, scope and identity isolation are deterministic controls; live runs need not visit each failure mode. Inspect deaths, dependency, survivor health, production, participant/model errors, usage, causal sources and simulation versus wall time. Preserve failed plans and absent cooperation without converting them into a successful narrative; one fresh sample cannot establish reproducibility.",
+  "minutes": 8,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "reproduction",
+      "port": 18960,
+      "implementation": "output/society-lab/implementations/population-m3-1",
+      "scenario": "output/society-lab/implementations/population-m3-1/scenarios/population-reproduction.json",
+      "controllers": "output/society-lab/implementations/population-m3-1/configs/experiments/population-4-medium.json",
+      "newcomer_controller": "output/society-lab/implementations/population-m3-1/configs/experiments/population-newcomer-builtin-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "fabrication",
+      "port": 18961,
+      "implementation": "output/society-lab/implementations/population-m3-1",
+      "scenario": "output/society-lab/implementations/population-m3-1/scenarios/population-fabrication.json",
+      "controllers": "output/society-lab/implementations/population-m3-1/configs/experiments/population-4-medium.json",
+      "newcomer_controller": "output/society-lab/implementations/population-m3-1/configs/experiments/population-newcomer-external-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "caregiver-loss",
+      "port": 18962,
+      "implementation": "output/society-lab/implementations/population-m3-1",
+      "scenario": "output/society-lab/implementations/population-m3-1/scenarios/population-caregiver-loss.json",
+      "controllers": "output/society-lab/implementations/population-m3-1/configs/experiments/population-4-medium.json",
+      "newcomer_controller": "output/society-lab/implementations/population-m3-1/configs/experiments/population-newcomer-builtin-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "capacity-pressure",
+      "port": 18963,
+      "implementation": "output/society-lab/implementations/population-m3-1",
+      "scenario": "output/society-lab/implementations/population-m3-1/scenarios/population-capacity-pressure.json",
+      "controllers": "output/society-lab/implementations/population-m3-1/configs/experiments/population-4-medium.json",
+      "newcomer_controller": "output/society-lab/implementations/population-m3-1/configs/experiments/population-newcomer-builtin-medium.json",
+      "recovery": true
+    }
+  ]
+}

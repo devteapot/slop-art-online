@@ -1,6 +1,6 @@
 # Simulation roadmap and work queue
 
-Long-horizon development order: [from first society to living world](WORLD_ROADMAP.md), based on the [world vision](WORLD_VISION.md). Its seven stages refine the broad later-stage headings below without resetting accepted M1 work. The [small-society iteration plan](SOCIETY_ITERATION_PLAN.md) remains the immediate experiment scope; [Stage 1 settlement](STAGE_1_EVIDENCE.md) and [Stage 2 teaching/archives](STAGE_2_EVIDENCE.md) have bounded acceptance evidence. Reproduction and faction-world expansion remain staged future work.
+Long-horizon development order: [from first society to living world](WORLD_ROADMAP.md), based on the [world vision](WORLD_VISION.md). Its seven stages refine the broad later-stage headings below without resetting accepted M1 work. The [small-society iteration plan](SOCIETY_ITERATION_PLAN.md) remains the immediate experiment scope; [Stage 1 settlement](STAGE_1_EVIDENCE.md), [Stage 2 teaching/archives](STAGE_2_EVIDENCE.md) and [Stage 3 creation/care/capability](STAGE_3_EVIDENCE.md) have bounded acceptance evidence with explicit live limitations. Multiple societies and faction-world integration follow.
 
 Current participant iteration: [participant agent runtimes](PARTICIPANT_AGENTS.md) and [ADR 013](adr/013-participant-agent-runtimes.md). Rules `m1-5` use one scoped API for the built-in harness and external MCP runtimes, with independent tree, speech and learning operations. Earlier evidence and legacy runner descriptions below retain their historical scope.
 

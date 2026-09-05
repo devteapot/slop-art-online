@@ -207,8 +207,8 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
                 text(panel,p["name"].as_str().unwrap_or("Select a character in the world"),24.,INK);
                 if let Some(arena)=p["arena"].as_str() {text(panel,format!("{arena} · {}",p["runtime"].as_str().unwrap_or("")),12.,MUTED);}
                 text(panel,if game.observer(){"Observer truth / individual understanding"}else{"Your perceptions / private understanding"},12.,MUTED);
-                panel.spawn(row()).with_children(|p| {button(p,"Mind",Click::Tab(0),game.tab==0);button(p,"Policy",Click::Tab(1),game.tab==1);button(p,"History",Click::Tab(2),game.tab==2);button(p,"Knowledge",Click::Tab(3),game.tab==3);});
-                match game.tab {0=>mind(panel,&p),1=>tree(panel,&p,&game),3=>knowledge(panel,&p,&game),_=>history(panel,&game)}
+                panel.spawn(row()).with_children(|p| {button(p,"Mind",Click::Tab(0),game.tab==0);button(p,"Policy",Click::Tab(1),game.tab==1);button(p,"History",Click::Tab(2),game.tab==2);button(p,"Knowledge",Click::Tab(3),game.tab==3);button(p,"Life",Click::Tab(4),game.tab==4);});
+                match game.tab {0=>mind(panel,&p),1=>tree(panel,&p,&game),3=>knowledge(panel,&p,&game),4=>life(panel,&p,&game),_=>history(panel,&game)}
             });
         }
         if !game.world_visible {
@@ -333,6 +333,60 @@ fn mind(panel: &mut ChildSpawnerCommands, p: &Value) {
         }
     }
 }
+fn life(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
+    let development=&p["development"];
+    let local=&p["local_lifecycle"];
+    let own=!game.observer() && !game.archive && game.snapshot["actor"]==p["id"];
+    let dependent=development["dependent"]==true;
+    title(panel,"BODY AND DEVELOPMENT");
+    text(panel,format!("{} · {}",development["body"].as_str().unwrap_or("unobserved body"),
+        if dependent {"dependent"} else {"self-supporting"}),14.,INK);
+    if dependent {
+        let age=game.snapshot["time_ms"].as_u64().unwrap_or(0).saturating_sub(development["born_ms"].as_u64().unwrap_or(0));
+        text(panel,format!("Age {}s · {} care meals · {} guided practices",age/1000,
+            number(&development["care_meals"]),number(&development["practice"])),12.,MUTED);
+        text(panel,"Food, actual care and learning support development. Receiving a report alone does not grant independent provisioning.",12.,MUTED);
+    }
+    if local.is_null() {
+        text(panel,"No local population facilities or observations are available.",13.,MUTED);
+        return;
+    }
+    title(panel,"LOCAL PEOPLE");
+    for person in local["people"].as_array().into_iter().flatten() {
+        if person["id"]==p["id"] {continue;}
+        let name=person["name"].as_str().unwrap_or("neighbor");
+        text(panel,format!("{} · {}",name,if person["dependent"]==true {
+            if person["needs_care"]==true {"dependent, needs a meal"} else {"dependent, fed for now"}
+        } else {"self-supporting"}),13.,INK);
+        if own && !dependent && person["dependent"]==true && person["needs_care"]==true {
+            button(panel,format!("Care for {name}"),Click::Intent(json!({"skill":"care","target":person["id"],"duration":1})),false);
+        }
+        if own && !dependent && development["body"]=="biological" && person["body"]=="biological" && person["dependent"]!=true {
+            button(panel,format!("Offer reproduction to {name}"),Click::Intent(json!({"skill":"offer_reproduction","target":person["id"],"duration":1})),false);
+            let mutual=local["own_offer"]["partner"]==person["id"] && local["offers_to_you"].as_array().into_iter().flatten().any(|o|o["actor"]==person["id"]);
+            if mutual {button(panel,format!("Reproduce with {name}"),Click::Intent(json!({"skill":"reproduce","target":person["id"],"duration":1})),false);}
+        }
+    }
+    if own && local["own_offer"].is_object() {
+        button(panel,"Withdraw my reproduction offer",Click::Intent(json!({"skill":"withdraw_reproduction","duration":1})),false);
+    }
+    if local["workshop"]==true {
+        title(panel,"WORKSHOP");
+        text(panel,"Create a dependent artificial body: 6 carried food as material, 30 energy, 45 seconds. This body still needs food, support and learning.",12.,MUTED);
+        if own && !dependent {button(panel,"Fabricate a new individual",Click::Intent(json!({"skill":"fabricate","duration":1})),false);}
+    }
+    if own && dependent {
+        title(panel,"GUIDED PRACTICE");
+        for holding in p["knowledge"].as_array().into_iter().flatten().filter(|h|h["interpretation"].is_string() && h["record"]["location"]==p["position"]) {
+            for care in development["care"].as_array().into_iter().flatten() {
+                if local["people"].as_array().into_iter().flatten().any(|q|q["id"]==care["caregiver"] && q["dependent"]!=true) {
+                    button(panel,format!("Practice {} with #{}",holding["record"]["topic"].as_str().unwrap_or("gathering"),number(&care["caregiver"])),
+                        Click::Intent(json!({"skill":"practice","target":care["caregiver"],"record":holding["record"]["id"],"duration":1})),false);
+                }
+            }
+        }
+    }
+}
 fn knowledge(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
     let own = !game.observer() && !game.archive && game.snapshot["actor"] == p["id"];
     title(panel, "PERSONAL RECORDS");
@@ -416,6 +470,7 @@ fn condition(c: &Value) -> String {
         ),
         "at" => format!("at {}", number(&c["location"])),
         "has_knowledge" => format!("holds {}", c["record"].as_str().unwrap_or("record")),
+        "needs_care" => format!("observed care need for #{}", number(&c["target"])),
         "food_at" => format!("remembered food at {}", number(&c["location"])),
         "not" => format!("not ({})", condition(&c["condition"])),
         "all" | "any" => {

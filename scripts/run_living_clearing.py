@@ -27,9 +27,76 @@ def write(path, value):
 
 def fresh_environment():
     env = os.environ.copy()
-    for key in ("BEVY_DEV_RESUME_ACTIVE", "BEVY_DEV_ARCHIVE_ONLY"):
+    for key in ("BEVY_DEV_RESUME_ACTIVE", "BEVY_DEV_ARCHIVE_ONLY",
+                "BEVY_DEV_NEWCOMER_CONTROLLER", "BEVY_DEV_ENROLLMENT_STOP_FILE"):
         env.pop(key, None)
     return env
+
+
+def validate_newcomer_controller(value):
+    if not isinstance(value, dict) or set(value) != {"role", "config"}:
+        raise ValueError("newcomer controller requires exactly role and config")
+    if value["role"] not in ("builtin", "external") or not isinstance(value["config"], dict):
+        raise ValueError("newcomer controller requires a builtin/external role and model config")
+    backend = value["config"].get("backend")
+    if not isinstance(backend, dict) or backend.get("model") != "gpt-5.6-luna":
+        raise ValueError("This iteration campaign is Luna-only")
+    return value
+
+
+def actor_limit(scenario, newcomers=False):
+    initial = len(scenario["players"])
+    lifecycle = scenario.get("lifecycle")
+    if lifecycle is not None and not isinstance(lifecycle, dict):
+        raise ValueError("lifecycle seed must be an object")
+    limit = (lifecycle or {}).get("max_total", 64) if newcomers else initial
+    if type(limit) is not int or not initial <= limit <= 256:
+        raise ValueError("lifecycle max_total must cover the initial population and be at most 256")
+    return limit
+
+
+def supplied_config_matches(supplied, effective):
+    # The Rust config serializer makes defaults explicit. Every authored value must
+    # still match; additional effective defaults are retained in the host artifact.
+    if isinstance(supplied, dict):
+        return isinstance(effective, dict) and all(key in effective and supplied_config_matches(value, effective[key])
+                                                 for key, value in supplied.items())
+    return supplied == effective
+
+
+def read_participants(path, maximum):
+    participants = json.loads(path.read_text())
+    if not isinstance(participants, list) or len(participants) > maximum:
+        raise ValueError("participant descriptors exceed the configured identity bound")
+    ids, identities = set(), set()
+    for participant in participants:
+        actor, identity = participant.get("actor"), participant.get("identity")
+        if (type(actor) is not int or actor < 1 or actor in ids or not isinstance(identity, str)
+                or identity in identities or participant.get("role") not in ("builtin", "external")
+                or not isinstance(participant.get("session_file"), str)):
+            raise ValueError("invalid or duplicate participant descriptor")
+        ids.add(actor)
+        identities.add(identity)
+    return participants
+
+
+def pending_participants(known, latest, initial_ids, newcomer):
+    current_ids = {p["actor"] for p in latest}
+    if not set(known).issubset(current_ids):
+        raise RuntimeError("participant descriptor history lost an enrolled identity")
+    pending = []
+    for participant in latest:
+        actor = participant["actor"]
+        old = known.get(actor)
+        if old is not None:
+            if old["identity"] != participant["identity"] or old["role"] != participant["role"]:
+                raise RuntimeError("an enrolled actor's identity or runtime changed")
+            continue
+        if actor not in initial_ids and (newcomer is None or participant["role"] != newcomer["role"]
+                                         or participant.get("enrollment") != "newcomer"):
+            raise RuntimeError("new actor lacks the explicitly configured newcomer enrollment")
+        pending.append(participant)
+    return pending
 
 
 def main():
@@ -42,12 +109,13 @@ def main():
     parser.add_argument("--npc-runtime", choices=("host", "pilot"), default="host",
                         help="host runs the normal NPC harness; pilot reproduces the older shared schedule")
     parser.add_argument("--controllers", type=Path, help="per-actor config manifest; enables matched serial matrix schedules")
+    parser.add_argument("--newcomer-controller", type=Path, help="explicit frozen role/config template for authority-created AI actors")
     parser.add_argument("--implementation", type=Path, help="verified frozen implementation bundle")
     parser.add_argument("--start-gate", type=Path, help="wait for the batch coordinator to release all ready variants")
     parser.add_argument("--start-gate-timeout", type=int, default=180,
                         help="positive seconds to wait for a batch start gate; coordinator derives this from planned initialization")
     parser.add_argument("--serial-ms", type=int, default=15000)
-    parser.add_argument("--recovery", action="store_true", help="enable explicit model feedback and priority retry after failed behavior proposals")
+    parser.add_argument("--recovery", action="store_true", help="enable explicit controller feedback; fresh recovery keeps each responsibility's scheduled slots")
     args = parser.parse_args()
     os.chdir(ROOT)
     implementation=args.implementation.resolve() if args.implementation else ROOT
@@ -62,6 +130,10 @@ def main():
         raise SystemExit("Pilot requires runtime actor 1 and external actor 2.")
     controllers = json.loads(args.controllers.resolve().read_text()) if args.controllers else []
     actor_ids = [p["id"] for p in scenario_data["players"]]
+    newcomer = validate_newcomer_controller(json.loads(args.newcomer_controller.read_text())) if args.newcomer_controller else None
+    if newcomer and (not controllers or args.npc_runtime != "host"):
+        raise SystemExit("newcomer enrollment requires --controllers and the host runtime")
+    maximum_actors = actor_limit(scenario_data, newcomer is not None)
     if controllers and (set(c["actor"] for c in controllers) != set(actor_ids) or len(controllers) != len(actor_ids)):
         raise SystemExit("Controller manifest must cover each actor exactly once.")
     if controllers and args.npc_runtime != "host":
@@ -98,6 +170,9 @@ def main():
         env["SAO_HARNESS_MAX_CALLS"]=str(args.calls_per_actor)
     else:
         env.pop("SAO_HARNESS_MAX_CALLS",None)
+    if newcomer:
+        env.update(BEVY_DEV_NEWCOMER_CONTROLLER=str(args.newcomer_controller.resolve()),
+                   BEVY_DEV_ENROLLMENT_STOP_FILE=str(out / "stop-enrollment"))
     if controllers:
         env.update(BEVY_DEV_CONTROLLERS=str(args.controllers.resolve()),SAO_HARNESS_SERIAL_MS=str(args.serial_ms),
                    SAO_HARNESS_START_FILE=str(out / "start-harness"))
@@ -117,7 +192,10 @@ def main():
         write(path,c["config"])
         actor_configs[c["actor"]] = path
     report = dict(recovery=args.recovery, phase="starting", url=env["BEVY_DEV_PUBLIC_URL"], minutes=args.minutes,
-                  tick_ms=50, max_model_calls=args.calls_per_actor * len(actor_ids) if args.calls_per_actor else None,
+                  tick_ms=50, max_model_calls=args.calls_per_actor * maximum_actors if args.calls_per_actor else None,
+                  initial_actors=actor_ids, maximum_actors=maximum_actors,
+                  newcomer_controller=str(args.newcomer_controller.resolve()) if newcomer else None,
+                  enrolled_actors=[],
                   implementation=str(implementation),
                   scenario=str(scenario), npc_runtime=args.npc_runtime,
                   controller_schedules={"builtin":"host independent behavior/communication/learning loops" if args.npc_runtime == "host" else "pilot serial rotation", "external":"separate MCP process; pilot serial rotation"},
@@ -127,6 +205,9 @@ def main():
                              for p in [*binaries, ROOT / "Cargo.lock", config,
                                        ROOT / env["BEVY_DEV_MODULE"],
                                        scenario]})
+    if newcomer:
+        report["artifacts"][str(args.newcomer_controller.resolve())] = hashlib.sha256(args.newcomer_controller.read_bytes()).hexdigest()
+        write(out / "newcomer-controller.json", newcomer)
     if args.implementation:
         report["implementation_manifest"]=json.loads((implementation / "implementation.json").read_text())
     if controllers:
@@ -145,6 +226,7 @@ def main():
     write(out / "pilot.json", report)
     active = None
     participants = []
+    participant_by_actor = {}
 
     def control(verb, *values):
         result = subprocess.run([env["SPACETIME_CONTROL_CLI"], "--config-path", env["SPACETIME_CONFIG_PATH"],
@@ -170,8 +252,14 @@ def main():
 
     def alive(actor):
         current = snapshot()
-        return current is None or (not current["world"]["stopped"] and
-                                   next(p for p in current["world"]["players"] if p["id"] == actor)["health"] > 0)
+        if current is None:
+            return True
+        if current["world"]["stopped"]:
+            return False
+        player = next((p for p in current["world"]["players"] if p["id"] == actor), None)
+        # Descriptor publication may precede the next observer snapshot. The
+        # participant service still validates the actual character on every call.
+        return player is None or player["health"] > 0
 
     def terminate(job):
         if job.poll() is None:
@@ -214,6 +302,30 @@ def main():
                               exit_code=job.returncode, interruption=interrupted)
                 jobs.pop(actor, None)
 
+    def refresh_participants():
+        nonlocal participants
+        latest = read_participants(out / active["run"] / "participants.json", maximum_actors)
+        additions = []
+        for participant in pending_participants(participant_by_actor, latest, actor_ids, newcomer):
+            actor = participant["actor"]
+            if actor not in actor_ids:
+                effective_path = Path(participant["config_file"]).resolve()
+                if not effective_path.is_relative_to((out / active["run"]).resolve()):
+                    raise RuntimeError("newcomer config artifact is outside its run")
+                effective = json.loads(effective_path.read_text())
+                if not supplied_config_matches(newcomer["config"], effective):
+                    raise RuntimeError("newcomer effective config differs from the frozen template")
+                path = out / f"actor-{actor}-config.json"
+                write(path, effective)
+                actor_configs[actor] = path
+                report["artifacts"].update({str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in [path, effective_path]})
+            participant_by_actor[actor] = participant
+            counters[actor] = 0
+            additions.append(actor)
+        participants = latest
+        report["enrolled_actors"] = sorted(participant_by_actor)
+        return additions
+
     def worker(actor):
         # Separate participant schedules. Failed outputs remain evidence; later calls
         # receive fresh observations and receipts, never silently repaired proposals.
@@ -234,8 +346,11 @@ def main():
                 raise RuntimeError("Host did not become ready; inspect host.log")
         active = json.loads((out / "active.json").read_text())
         report.update(active, phase="ready")
-        participants = json.loads((out / active["run"] / "participants.json").read_text())
-        participant_by_actor = {p["actor"]: p for p in participants}
+        if newcomer and (active.get("enrollment_protocol") != "sao-enrollment-v1" or not active.get("newcomer_enrollment")):
+            raise RuntimeError("frozen host does not support explicit newcomer enrollment")
+        refresh_participants()
+        if not set(actor_ids).issubset(participant_by_actor):
+            raise RuntimeError("initial participant enrollment is incomplete")
         write(out / "pilot.json", report)
         write(out / "ready.json",dict(run=active["run"],ready_at=time.time()))
         if args.start_gate:
@@ -253,12 +368,19 @@ def main():
         print(f"Live pilot running for {args.minutes} minutes; model-call cap: {report['max_model_calls'] or 'none'}", flush=True)
         deadline = time.monotonic() + args.minutes * 60
         last_tick = None
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(actor_ids)) as pool:
-            workers = [pool.submit(worker, actor) for actor in actor_ids if args.npc_runtime == "pilot" or participant_by_actor[actor]["role"] == "external"]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=maximum_actors) as pool:
+            workers = {actor: pool.submit(worker, actor) for actor in participant_by_actor
+                       if args.npc_runtime == "pilot" or participant_by_actor[actor]["role"] == "external"}
             try:
                 while not stop.wait(2) and time.monotonic() < deadline:
                     if host.poll() is not None:
                         raise RuntimeError("Observation host exited")
+                    if newcomer:
+                        if (out / "enrollment-errors.json").exists():
+                            raise RuntimeError("host reported newcomer enrollment failure; inspect enrollment-errors.json")
+                        for actor in refresh_participants():
+                            if participant_by_actor[actor]["role"] == "external":
+                                workers[actor] = pool.submit(worker, actor)
                     current = snapshot()
                     if current:
                         w, events = current["world"], current["events"]
@@ -279,11 +401,13 @@ def main():
                     with lock:
                         report["last_observed_tick"] = last_tick
                         write(out / "pilot.json", report)
-                    for worker_job in workers:
+                    for worker_job in workers.values():
                         if worker_job.done():
                             worker_job.result()
             finally:
                 stop.set()
+                if newcomer:
+                    (out / "stop-enrollment").touch()
         report["phase"] = "completed"
     except Exception as error:
         report.update(phase="failed", error=str(error))
@@ -296,12 +420,29 @@ def main():
             terminate(job)
         if active:
             try:
+                if newcomer:
+                    (out / "stop-enrollment").touch()
                 call("sim_operator_pause", active["run"])
                 report["final_tick"] = state()["tick"]
+                if newcomer:
+                    stop_deadline = time.monotonic() + 30
+                    acknowledgement = out / "enrollment-stopped.json"
+                    while not acknowledgement.exists():
+                        if host.poll() is not None or time.monotonic() > stop_deadline:
+                            raise RuntimeError("host did not acknowledge stopped newcomer enrollment")
+                        time.sleep(.1)
+                    ack = json.loads(acknowledgement.read_text())
+                    if ack.get("protocol") != "sao-enrollment-v1" or ack.get("phase") != "stopped":
+                        raise RuntimeError("invalid enrollment shutdown acknowledgement")
+                    refresh_participants()
+                    report["enrollment_stopped"] = ack
                 if args.npc_runtime == "host":
-                    for participant in participants:
-                        if participant["role"] == "builtin":
-                            call("sim_revoke_client", participant["identity"])
+                    # Final descriptors include any enrollment that completed before
+                    # the stop acknowledgement. Revoke all grants, with finite CLI deadlines.
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, max(1, len(participants)))) as revokers:
+                        futures = [revokers.submit(call, "sim_revoke_client", p["identity"]) for p in participants]
+                        for future in futures:
+                            future.result()
                 final_world = state()
                 rows = json.loads(control("sql", f"SELECT json FROM sim_audit WHERE run = '{active['run']}'", "--format", "json"))
                 final_events = sorted((json.loads(row[0]) for row in rows[0]["rows"]), key=lambda e: e["id"])
@@ -311,14 +452,16 @@ def main():
                 reasoning = list((out / active["run"] / "reasoning").rglob("harness-*.json"))
                 report["builtin_model_calls"] = len(reasoning)
                 report["builtin_journal"] = str(out / active["run"] / "reasoning")
-            except Exception:
-                report["pause_error"] = "Could not confirm final pause; inspect authority"
+            except Exception as error:
+                report.update(phase="failed", pause_error=f"Final pause/enrollment cleanup was not confirmed: {error}")
         else:
             terminate(host)
         report["finished_at"] = time.time()
         write(out / "pilot.json", report)
         host_log.close()
         print(f"Pilot {report['phase']}; evidence: {out}. Observer host remains available if started.", flush=True)
+    if report["phase"] != "completed":
+        raise SystemExit(report.get("pause_error", report.get("error", "Pilot failed")))
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ fn world() -> World {
     World::new(
         "test".into(),
         Scenario {
+        lifecycle: None,
             disturbances: vec![],
             knowledge: BTreeMap::new(),
             archives: vec![],            starting_behaviors: BTreeMap::new(),

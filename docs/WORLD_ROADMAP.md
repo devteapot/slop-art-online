@@ -48,6 +48,8 @@ The active foundation is `simulation/` with SpacetimeDB foundation integration, 
 
 ### 3. A society that renews itself
 
+**Status:** [bounded Stage 3 creation/care/capability slice accepted](STAGE_3_EVIDENCE.md#acceptance-decision-bounded-stage-3-slice): material fabrication, explicit biological consent controls, actual newcomer inference and supported learning through guided harvest. Autonomous biological completion and sustained independent provisioning remain unproven.
+
 **Scope:** reproduction and fabrication with time/resource costs, new identities, simple dependence, support and knowledge transfer. Start with minimal representative body pathways rather than detailed species biology.
 
 **Evidence:** newcomers become capable through actual support and learning; creating them consumes resources; population continuity can survive the loss of experienced individuals. No replacement of the same dead identity or automatic inheritance of possessions/mastery.
@@ -109,6 +111,6 @@ A single survivor or cooperative conversation does not establish a sustainable s
 - [x] [Establish a resource budget and renewable provisioning for four inhabitants, with a separate scarcity control](STAGE_1_EVIDENCE.md#acceptance-decision-bounded-stage-1-slice).
 - [ ] Define body-specific eating/charging only as far as the first representative inhabitants need.
 - [x] [Implement and validate personal knowledge records, teaching, recording, consultation and physical loss for Stage 2](STAGE_2_EVIDENCE.md).
-- [ ] Plan reproduction/fabrication and care around measured surplus and knowledge transfer, then test Stage 3.
+- [x] [Implement and test material reproduction/fabrication, care and acquired newcomer capability](STAGE_3_EVIDENCE.md), retaining the live stability and caregiver-loss limitations.
 
 Stages may overlap in design and tooling. Character access to advanced tools waits for the relevant capability and execution evidence. Keep reincarnation, detailed species development, large-scale presentation and full-world population targets deferred rather than quietly adding them to the first society experiment.

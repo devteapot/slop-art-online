@@ -13,7 +13,8 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import run_experiment_batch as batch
-from run_living_clearing import fresh_environment
+from run_living_clearing import (fresh_environment, actor_limit, pending_participants,
+                                 read_participants, supplied_config_matches, validate_newcomer_controller)
 from experiment_artifacts import EXECUTABLES, digest, write
 
 
@@ -131,13 +132,70 @@ class ScalingChecks(unittest.TestCase):
 
     def test_fresh_run_cannot_inherit_resume_or_archive(self):
         inherited = dict(BEVY_DEV_RESUME_ACTIVE='/unrelated/active.json',
-                         BEVY_DEV_ARCHIVE_ONLY='1', CARLID_NPC_API_KEY='fixture-token')
+                         BEVY_DEV_ARCHIVE_ONLY='1', BEVY_DEV_NEWCOMER_CONTROLLER='/unrelated/template.json',
+                         BEVY_DEV_ENROLLMENT_STOP_FILE='/unrelated/stop', CARLID_NPC_API_KEY='fixture-token')
         with patch.dict(os.environ, inherited, clear=True):
             fresh = fresh_environment()
             self.assertNotIn('BEVY_DEV_RESUME_ACTIVE', fresh)
             self.assertNotIn('BEVY_DEV_ARCHIVE_ONLY', fresh)
+            self.assertNotIn('BEVY_DEV_NEWCOMER_CONTROLLER', fresh)
+            self.assertNotIn('BEVY_DEV_ENROLLMENT_STOP_FILE', fresh)
             self.assertEqual(fresh['CARLID_NPC_API_KEY'], 'fixture-token')
             self.assertIn('BEVY_DEV_RESUME_ACTIVE', os.environ)
+
+    def test_newcomer_template_is_explicit_frozen_input(self):
+        path = self.root / 'newcomer.json'
+        template = dict(role='external', config=dict(backend=dict(model='gpt-5.6-luna', reasoning_effort='medium')))
+        write(path, template)
+        self.spec['variants'][0]['newcomer_controller'] = str(path)
+        spec, resolved = batch.resolve_spec(self.spec)
+        write(path, dict(role='builtin', config=template['config']))
+        plan = batch.prepare(spec, resolved, self.root / 'frozen-newcomer')
+        frozen = self.root / 'frozen-newcomer/.inputs/candidate-0/newcomer_controller.json'
+        self.assertEqual(json.loads(frozen.read_text()), template)
+        self.assertEqual(plan[0]['inputs']['newcomer_controller'], digest(frozen))
+        self.assertIn('--newcomer-controller', plan[0]['command'])
+        self.assertNotIn('--newcomer-controller', plan[1]['command'])
+
+    def test_newcomer_bounds_and_template_reject_implicit_configuration(self):
+        scenario = dict(players=[dict(id=1), dict(id=2)])
+        self.assertEqual(actor_limit(scenario), 2)
+        self.assertEqual(actor_limit(scenario, True), 64)
+        self.assertEqual(actor_limit(dict(scenario, lifecycle=dict(max_total=12)), True), 12)
+        for maximum in [True, 0, 1, 257]:
+            with self.assertRaises(ValueError):
+                actor_limit(dict(scenario, lifecycle=dict(max_total=maximum)), True)
+        for template in [dict(role='invented', config={}), dict(role='builtin', config={}, tree={}),
+                         dict(role='builtin', config=dict(backend=dict(model='unconfigured-model')))]:
+            with self.assertRaises(ValueError):
+                validate_newcomer_controller(template)
+        self.assertTrue(supplied_config_matches(dict(backend=dict(model='gpt-5.6-luna')),
+                                                dict(backend=dict(model='gpt-5.6-luna'), retry_backoff_ms=500)))
+        self.assertFalse(supplied_config_matches(dict(backend=dict(model='gpt-5.6-luna')),
+                                                 dict(backend=dict(model='another-model'))))
+
+    def test_dynamic_admission_preserves_identity_and_is_disabled_without_template(self):
+        initial = dict(actor=1, role='builtin', identity='a' * 64, session_file='/fixture/1.json')
+        child = dict(actor=7, role='external', identity='b' * 64, session_file='/fixture/7.json', enrollment='newcomer')
+        known = {1: initial}
+        with self.assertRaises(RuntimeError):
+            pending_participants(known, [initial, child], [1], None)
+        template = dict(role='external')
+        self.assertEqual(pending_participants(known, [initial, child], [1], template), [child])
+        known[7] = child
+        self.assertEqual(pending_participants(known, [initial, child], [1], template), [])
+        with self.assertRaises(RuntimeError):
+            pending_participants(known, [initial], [1], template)
+        with self.assertRaises(RuntimeError):
+            pending_participants(known, [initial, dict(child, identity='c' * 64)], [1], template)
+        path = self.root / 'participants.json'
+        write(path, [initial, child])
+        self.assertEqual(read_participants(path, 8), [initial, child])
+        with self.assertRaises(ValueError):
+            read_participants(path, 1)
+        write(path, [initial, dict(child, identity=initial['identity'])])
+        with self.assertRaises(ValueError):
+            read_participants(path, 8)
 
     def test_frozen_input_read_once(self):
         spec, resolved = batch.resolve_spec(self.spec)

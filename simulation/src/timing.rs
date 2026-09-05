@@ -16,6 +16,10 @@ pub struct Timing {
     pub needs_remainder_ms: u64,
     pub hazard_remainder_ms: u64,
     #[serde(default)]
+    pub actor_needs_remainder_ms: BTreeMap<u32, u64>,
+    #[serde(default)]
+    pub actor_hazard_remainder_ms: BTreeMap<u32, u64>,
+    #[serde(default)]
     pub food_remainder_ms: BTreeMap<i32, u64>,
     pub action_ready_ms: BTreeMap<u32, u64>,
     pub dialogue_ready_ms: BTreeMap<u32, u64>,

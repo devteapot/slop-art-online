@@ -23,13 +23,25 @@ fn done(effects) { outcome("success", "", 0, (), effects, #{}) }
 fn failed(reason) { outcome("failure", reason, 0, (), [], #{}) }
 fn metabolism(p) { #{hunger:bounded(p.hunger+2*p.pulses,0,100), fear:bounded(p.fear-p.pulses,0,100)} }
 fn food_renewal(c) { bounded(c.source.amount*c.pulses,0,if c.food < c.source.capacity { c.source.capacity-c.food } else { 0 }) }
+fn needs_care(c) { c.health > 0 && c.dependent && c.hunger >= 35 }
+fn development(c) { c.age_ms >= 60000 && c.care_meals >= 2 && c.practice >= 1 }
+fn population_costs(c) {
+    #{offer_ms:90000, reproduction_ms:30000, parent_food:2, parent_energy:10,
+      fabrication_ms:45000, fabrication_food:6, fabrication_energy:30,
+      care_ms:3000, care_energy:2, nutrition:35, practice_ms:5000, practice_energy:4}
+}
 fn aftermath(c) {
     let cold=0;
     if c.weather != () && c.time_ms >= c.weather.cold_after_ms {
         let shelter=if c.site == () { 0 } else { c.site.shelter };
         let boundary=if c.weather.cold_after_ms > 0 { c.weather.cold_after_ms-1 } else { 0 };
         let period=c.elapsed_ms/c.pulses;
-        let cold_pulses=bounded(c.time_ms/period-boundary/period,0,c.pulses);
+        // Newborn hazard clocks start at birth. Count their actual due pulse
+        // timestamps, including when an update batches pulses across cold onset.
+        let cold_pulses=if c.last_hazard_pulse_ms == () {
+            bounded(c.time_ms/period-boundary/period,0,c.pulses)
+        } else if c.last_hazard_pulse_ms < c.weather.cold_after_ms { 0 }
+        else { bounded((c.last_hazard_pulse_ms-c.weather.cold_after_ms)/period+1,0,c.pulses) };
         if shelter < c.weather.shelter_required { cold=c.weather.damage_per_pulse*cold_pulses; }
     }
     #{starvation:if c.actor.hunger >= 100 { 8*c.pulses } else { 0 },
@@ -76,6 +88,14 @@ fn guard(c) {
         "at" => [p.position == cond.location,[]],
         "has_knowledge" => {
             for holding in p.knowledge { if holding.record.id == cond.record { return [true,[holding.source]]; } }
+            [false,[]]
+        },
+        "needs_care" => {
+            for seen in p.care_observations {
+                if seen.id == cond.target {
+                    return [seen.location == p.position && seen.dependent && seen.needs_care,[seen.source]];
+                }
+            }
             [false,[]]
         },
         "danger" => {

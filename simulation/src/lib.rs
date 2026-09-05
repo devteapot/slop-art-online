@@ -3,6 +3,8 @@
 pub mod client_view;
 pub mod ecology;
 pub mod knowledge;
+pub mod lifecycle;
+mod lifecycle_view;
 pub mod participant;
 pub mod perturbations;
 mod scripted_world;
@@ -15,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "m2-3-catalog-bounds.1";
+pub const VERSION: &str = "m3-2-perceived-care.1";
 pub const DECISION_FORMAT_VERSION: &str = "survivor-policy-v2";
 pub const LEGACY_DECISION_FORMAT: &str = "survivor-sequence-v1";
 pub mod policy;
@@ -50,6 +52,12 @@ pub enum Skill {
     Record,
     Consult,
     DestroyArchive,
+    OfferReproduction,
+    WithdrawReproduction,
+    Reproduce,
+    Fabricate,
+    Care,
+    Practice,
     Script(String),
 }
 impl Skill {
@@ -70,6 +78,12 @@ impl Skill {
             Self::Record => "record",
             Self::Consult => "consult",
             Self::DestroyArchive => "destroy_archive",
+            Self::OfferReproduction => "offer_reproduction",
+            Self::WithdrawReproduction => "withdraw_reproduction",
+            Self::Reproduce => "reproduce",
+            Self::Fabricate => "fabricate",
+            Self::Care => "care",
+            Self::Practice => "practice",
             Self::Script(id) => id,
         }
     }
@@ -241,6 +255,8 @@ pub struct Weather {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Scenario {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle: Option<lifecycle::LifecycleSeed>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub disturbances: Vec<perturbations::Disturbance>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -295,6 +311,14 @@ pub struct World {
     pub sites: Vec<Site>,
     #[serde(default)]
     pub archives: Vec<knowledge::Archive>,
+    #[serde(default)]
+    pub lifecycle: BTreeMap<u32, lifecycle::Lifecycle>,
+    #[serde(default)]
+    pub reproduction_offers: BTreeMap<u32, lifecycle::ReproductionOffer>,
+    #[serde(default)]
+    pub next_actor: u32,
+    #[serde(default)]
+    pub actor_arenas: BTreeMap<u32, String>,
     pub pending: Vec<Pending>,
     pub next_event: u64,
     pub stopped: bool,
@@ -369,6 +393,10 @@ impl World {
                 id:s.id,position:s.position,label:s.label.clone(),capacity:s.capacity,
                 records:vec![],destroyed:false,revision:0,
             }).collect(),
+            lifecycle: BTreeMap::new(),
+            reproduction_offers: BTreeMap::new(),
+            next_actor: 0,
+            actor_arenas: scenario.arenas.iter().flat_map(|a| a.actors.iter().map(|id| (*id, a.id.clone()))).collect(),
             initial: scenario,
             tick: 0,
             timing: timing::Timing::default(),
@@ -381,6 +409,7 @@ impl World {
             events: vec![],
         };
         let id=w.event(None,"initialization",vec![],json!({"scenario":w.initial,"rules":VERSION,"scripts":w.scripts,"prompt":PROMPT,"seed_usage":"reserved; current world rules use no random draws"}));
+        w.initialize_lifecycle(id)?;
         for i in 0..w.players.len() {
             w.players[i].last_cause = Some(id);
             // Authored starting knowledge is a remembered prior report, not a
@@ -486,6 +515,7 @@ impl World {
         )?;
         observation["food_source"] = json!(self.initial.food_sources.iter().find(|s| s.position == pos));
         observation["archives"] = self.local_archive_catalog(i);
+        observation["lifecycle"] = self.local_lifecycle_catalog(i);
         let food = observation["food"].as_i64().unwrap_or(0);
         let parents = self.players[i]
             .execution
@@ -523,8 +553,11 @@ impl World {
     pub fn context(&self, i: usize) -> Value {
         // Deliberate allowlist. Never serialize World, sites, other minds or audit into a prompt.
         let p = &self.players[i];
+        let starter = self.initial.starting_behaviors.get(&p.id).map(|b|(b,"authored world seed; revisable starting habit"))
+            .or_else(||self.lifecycle.get(&p.id).is_some_and(|l| !matches!(l.origin, lifecycle::Origin::Initial)).then(|| self.initial.lifecycle.as_ref()
+                .map(|l|(&l.newcomer.starting_behavior,"newborn seed; revisable starting habit"))).flatten());
         let approach = p.execution.as_ref().map(|e| if let Some(policy)=&e.policy {json!({"decision":e.decision,"policy":policy,"state":e.state,"active_attempt":e.attempt})} else {json!(e)});
-        json!({"starting_behavior":self.initial.starting_behaviors.get(&p.id).map(|b|json!({"id":b.id,"revision":b.revision,"description":b.description,"source":"authored world seed; revisable starting habit"})),"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"knowledge":p.knowledge,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
+        json!({"starting_behavior":starter.map(|(b,source)|json!({"id":b.id,"revision":b.revision,"description":b.description,"source":source,"revisable":true})),"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","lifecycle":self.local_lifecycle_catalog(i),"player":{"development":self.lifecycle.get(&p.id),"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"knowledge":p.knowledge,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
     }
     pub fn request(&mut self, i: usize, trigger: &str) {
         if self.participant_mode {
@@ -637,6 +670,17 @@ impl World {
         }
         self.apply_decision(actor, controller, d, parent, None)
     }
+    fn target_perceived(&self, i: usize, target: u32, evidence: &[Percept]) -> bool {
+        evidence.iter().any(|memory| memory.from == Some(target))
+            || self.players[i].site_observations.iter().any(|observation| {
+                observation.kind == "site"
+                    && observation.content["lifecycle"]["people"]
+                        .as_array()
+                        .is_some_and(|people| {
+                            people.iter().any(|person| person["id"].as_u64() == Some(u64::from(target)))
+                        })
+            })
+    }
     fn apply_decision_inner(
         &mut self,
         actor: u32,
@@ -654,7 +698,8 @@ impl World {
         }
         let evidence = remembered.unwrap_or_else(|| self.players[i].memories.clone());
         self.validate(i, &d, &evidence)?;
-        // AI targets must be perceived, not guessed from observer IDs.
+        // Targets must be known through the actor's own evidence, including
+        // retained local catalogs after their short arrival memories expire.
         {
             let policy_actions = d
                 .policy
@@ -664,7 +709,7 @@ impl World {
                 .unwrap_or_default();
             for a in d.actions.iter().chain(policy_actions.iter().copied()) {
                 if let Some(target) = a.target {
-                    if !evidence.iter().any(|m| m.from == Some(target)) {
+                    if !self.target_perceived(i, target, &evidence) {
                         return Err("target not perceived".into());
                     }
                 }
@@ -889,6 +934,14 @@ impl World {
             e.remaining = 0;
             return Ok(self.fail(i, attempt, &reason, e.dialogue));
         }
+        if self.lifecycle.get(&actor).is_some_and(|l| l.dependent)
+            && matches!(a.skill.id(), "gather" | "build" | "offer_reproduction" | "reproduce" | "fabricate")
+        {
+            e.attempt = None;
+            e.script = None;
+            e.remaining = 0;
+            return Ok(self.fail(i, attempt, "independent provisioning requires care, development and demonstrated guided practice", e.dialogue));
+        }
         let result: scripting::StepResult = self.scripts.call(
             &invocation.definition,
             "step",
@@ -1070,6 +1123,16 @@ impl World {
             if self.players[i].health <= 0 {
                 continue;
             }
+            // A newborn's physiological clock starts at its birth, rather than
+            // inheriting a partial global pulse accumulated before it existed.
+            let (needs_pulses, hazard_pulses) = if let Some(life) = self.lifecycle.get(&self.players[i].id).filter(|l| !matches!(l.origin, lifecycle::Origin::Initial)) {
+                let actor = self.players[i].id;
+                let lived = delta_ms.min(self.timing.time_ms.saturating_sub(life.born_ms));
+                (
+                    timing::pulses(self.timing.actor_needs_remainder_ms.entry(actor).or_default(), lived, periods.needs_ms)?,
+                    timing::pulses(self.timing.actor_hazard_remainder_ms.entry(actor).or_default(), lived, periods.hazard_ms)?,
+                )
+            } else { (needs_pulses, hazard_pulses) };
             let before = self.players[i].hunger;
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -1135,7 +1198,7 @@ impl World {
                 #[serde(default)]
                 cold: i32,
             }
-            let after:Aftermath=self.scripts.law("aftermath",json!({"time_ms":self.timing.time_ms,"weather":self.initial.weather,"pulses":hazard_pulses,"elapsed_ms":hazard_pulses*periods.hazard_ms,"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
+            let after:Aftermath=self.scripts.law("aftermath",json!({"time_ms":self.timing.time_ms,"weather":self.initial.weather,"pulses":hazard_pulses,"last_hazard_pulse_ms":self.timing.actor_hazard_remainder_ms.get(&actor).map(|remainder|self.timing.time_ms.saturating_sub(*remainder)),"elapsed_ms":hazard_pulses*periods.hazard_ms,"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
             if after.starvation < 0 || after.hazard < 0 || after.cold < 0 {
                 return Err("negative damage policy".into());
             }
@@ -1160,6 +1223,8 @@ impl World {
                 self.damage(i, hazard, None, event, "environment")?;
             }
         }
+        self.advance_lifecycle()?;
+        self.refresh_lifecycle_observations()?;
         self.deliver_queued_speech()?;
         let invalid: Vec<_> = self
             .pending
@@ -1233,6 +1298,8 @@ mod policy_tests;
 mod starting_behavior_tests;
 #[cfg(test)]
 mod knowledge_tests;
+#[cfg(test)]
+mod lifecycle_tests;
 #[cfg(test)]
 mod tests;
 

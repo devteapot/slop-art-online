@@ -1,0 +1,884 @@
+{
+  "name": "Population renewal beyond renewable food capacity",
+  "seed": 4242,
+  "max_ticks": 192,
+  "map": {
+    "width": 16,
+    "height": 12,
+    "blocked": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      31,
+      32,
+      47,
+      48,
+      63,
+      64,
+      79,
+      80,
+      95,
+      96,
+      111,
+      112,
+      127,
+      128,
+      143,
+      144,
+      159,
+      160,
+      175,
+      176,
+      177,
+      178,
+      179,
+      180,
+      181,
+      182,
+      183,
+      184,
+      185,
+      186,
+      187,
+      188,
+      189,
+      190,
+      191
+    ]
+  },
+  "arenas": [
+    {
+      "id": "clearing",
+      "label": "Four initial people / population renewal",
+      "environment": "population-settlement",
+      "variant": "luna-medium",
+      "bounds": {
+        "x": 1,
+        "y": 1,
+        "width": 14,
+        "height": 10
+      },
+      "actors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "controllers": {
+        "1": "builtin",
+        "2": "external",
+        "3": "builtin",
+        "4": "external"
+      }
+    }
+  ],
+  "players": [
+    {
+      "id": 1,
+      "name": "Mira",
+      "controller": "ai",
+      "motive": "I want to build a family with Tovan if we both freely agree, and help any new person become independent. I want to discuss the commitment and make sure we can provide real food, care, useful teaching and guidance. My own survival and his wishes matter.",
+      "role": "craftsperson",
+      "position": 84,
+      "health": 100,
+      "hunger": 20,
+      "energy": 80,
+      "food": 4,
+      "caution": 65,
+      "empathy": 80,
+      "introspection": 85,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 84,
+            "danger": false,
+            "text": "This is the clearing where we met; no one has exclusive ownership of its supplies or shelter."
+          },
+          "source": 0,
+          "confidence": 60
+        }
+      ],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    },
+    {
+      "id": 2,
+      "name": "Tovan",
+      "controller": "ai",
+      "motive": "I would like to build a family with Mira if we both freely agree. I want any new person to receive care and learn to support themselves. I need to consider the food reserve and our ability to follow through, discuss the commitment, and make my own choice.",
+      "role": "forager",
+      "position": 84,
+      "health": 100,
+      "hunger": 20,
+      "energy": 80,
+      "food": 4,
+      "caution": 40,
+      "empathy": 45,
+      "introspection": 70,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 84,
+            "danger": false,
+            "text": "This is the clearing where we met; no one has exclusive ownership of its supplies or shelter."
+          },
+          "source": 0,
+          "confidence": 60
+        }
+      ],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    },
+    {
+      "id": 3,
+      "name": "Iri",
+      "controller": "ai",
+      "motive": "I want to help teach and raise independent people who can understand local provisioning and help others. I have a private practical report about our camp. I value explanations that learners assess and try themselves, and real care rather than promises. I also need to keep myself capable and supplied.",
+      "role": "caretaker",
+      "position": 84,
+      "health": 100,
+      "hunger": 20,
+      "energy": 80,
+      "food": 4,
+      "caution": 65,
+      "empathy": 90,
+      "introspection": 85,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 84,
+            "danger": false,
+            "text": "This is the clearing where we met; no one has exclusive ownership of its supplies or shelter."
+          },
+          "source": 0,
+          "confidence": 60
+        }
+      ],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    },
+    {
+      "id": 4,
+      "name": "Renn",
+      "controller": "ai",
+      "motive": "I want a dependable food reserve and a lasting home. I am cautious about adding people before we can support them. I am willing to help vulnerable neighbors when it is sustainable, while checking actual stocks and keeping myself fed and rested.",
+      "role": "wanderer",
+      "position": 84,
+      "health": 100,
+      "hunger": 45,
+      "energy": 80,
+      "food": 4,
+      "caution": 70,
+      "empathy": 55,
+      "introspection": 70,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 84,
+            "danger": false,
+            "text": "This is the clearing where we met; no one has exclusive ownership of its supplies or shelter."
+          },
+          "source": 0,
+          "confidence": 60
+        }
+      ],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    }
+  ],
+  "sites": [
+    {
+      "position": 84,
+      "food": 8,
+      "hazard": 0,
+      "shelter": 12
+    }
+  ],
+  "weather": {
+    "cold_after_ms": 180000,
+    "damage_per_pulse": 2,
+    "shelter_required": 12
+  },
+  "food_sources": [
+    {
+      "position": 84,
+      "interval_ms": 10000,
+      "amount": 1,
+      "capacity": 12
+    }
+  ],
+  "starting_behaviors": {
+    "1": {
+      "id": "settlement.builder",
+      "revision": 1,
+      "description": "Keep two carried meals and recover energy; return home and contribute to its shared shelter until it reaches 12. Observe and wait when supplied and sheltered. This is a starting habit that can be revised through experience.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "resource",
+                  "resource": "hunger",
+                  "comparison": "at_least",
+                  "value": 60
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "eat"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 24
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "below",
+                  "value": 2
+                },
+                {
+                  "kind": "food_at",
+                  "location": 84,
+                  "minimum": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "gather"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "shelter_at",
+                    "location": 84,
+                    "minimum": 12
+                  }
+                },
+                {
+                  "kind": "resource",
+                  "resource": "energy",
+                  "comparison": "at_least",
+                  "value": 8
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "build"
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "2": {
+      "id": "settlement.reserve-keeper",
+      "revision": 1,
+      "description": "Keep up to four carried meals from observed local supplies, recover energy, and return home when away. Observe and wait once the reserve is met; no default sharing obligation. This starting habit can be revised through experience.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "resource",
+                  "resource": "hunger",
+                  "comparison": "at_least",
+                  "value": 60
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "eat"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 35
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "below",
+                  "value": 4
+                },
+                {
+                  "kind": "food_at",
+                  "location": 84,
+                  "minimum": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "gather"
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "3": {
+      "id": "settlement.shared-provider",
+      "revision": 1,
+      "description": "Keep two carried meals and recover energy at home. Deposit carried surplus only with at least four meals and observed public stock below four; gathering stops at two, so it cannot replenish that surplus for a gather/deposit cycle. Observe and wait when no contribution is needed. This habit is revisable.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "resource",
+                  "resource": "hunger",
+                  "comparison": "at_least",
+                  "value": 60
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "eat"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 35
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "below",
+                  "value": 2
+                },
+                {
+                  "kind": "food_at",
+                  "location": 84,
+                  "minimum": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "gather"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 4
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "food_at",
+                    "location": 84,
+                    "minimum": 4
+                  }
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "deposit"
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "4": {
+      "id": "settlement.cautious-observer",
+      "revision": 1,
+      "description": "Keep one carried meal, recover energy early, and return home when away. Observe nearby changes and wait rather than undertake an unverified foraging journey or assume cooperation. This starting habit can be revised through experience.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "resource",
+                  "resource": "hunger",
+                  "comparison": "at_least",
+                  "value": 60
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "eat"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 50
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "below",
+                  "value": 1
+                },
+                {
+                  "kind": "food_at",
+                  "location": 84,
+                  "minimum": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "gather"
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "archives": [],
+  "disturbances": [],
+  "knowledge": {
+    "3": [
+      {
+        "id": "camp-provisioning",
+        "topic": "Basic provisioning",
+        "location": 84,
+        "confidence": 90,
+        "text": "At camp cell 84 I have observed renewable food and shared shelter. Check the current local food stock before gathering and the shelter before relying on it. Gather only available food, retain meals for hunger, and rest to recover energy. Supplies can run out when demand exceeds regrowth; observe again and compare what you find with this report."
+      }
+    ]
+  },
+  "lifecycle": {
+    "workshops": [],
+    "max_total": 8,
+    "newcomer": {
+      "name_prefix": "Newcomer",
+      "motive": "I want to learn how to support myself, understand what others teach me through my own experience, and help other people when I am able. I need food, care and guidance while I learn.",
+      "caution": 40,
+      "empathy": 60,
+      "introspection": 70,
+      "starting_behavior": {
+        "id": "population.dependent-survival",
+        "revision": 1,
+        "description": "Eat an available carried meal when hungry, rest when tired, then observe and wait. This modest starting habit is revisable and supplies no knowledge, gathered food, caregiving or practical mastery.",
+        "tree": {
+          "kind": "priority",
+          "children": [
+            {
+              "kind": "guard",
+              "condition": {
+                "kind": "all",
+                "conditions": [
+                  {
+                    "kind": "resource",
+                    "resource": "hunger",
+                    "comparison": "at_least",
+                    "value": 60
+                  },
+                  {
+                    "kind": "resource",
+                    "resource": "food",
+                    "comparison": "at_least",
+                    "value": 1
+                  }
+                ]
+              },
+              "child": {
+                "kind": "action",
+                "action": {
+                  "skill": "eat"
+                }
+              }
+            },
+            {
+              "kind": "guard",
+              "condition": {
+                "kind": "resource",
+                "resource": "energy",
+                "comparison": "below",
+                "value": 35
+              },
+              "child": {
+                "kind": "action",
+                "action": {
+                  "skill": "rest",
+                  "duration": 2
+                }
+              }
+            },
+            {
+              "kind": "sequence",
+              "children": [
+                {
+                  "kind": "action",
+                  "action": {
+                    "skill": "observe"
+                  }
+                },
+                {
+                  "kind": "action",
+                  "action": {
+                    "skill": "wait",
+                    "duration": 2
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

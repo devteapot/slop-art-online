@@ -296,7 +296,7 @@ impl World {
                 json!({"request_id":l.request_id,"observation":observation})
             }).collect::<Vec<_>>(),"capabilities":["replace_tree","patch_subtree","speak","reflect","pin_observation","read_observation"],
             "limits":{"tree_nodes":64,"tree_depth":8,"children":8,"speech_queue":8,"trace_retention":TRACE_LIMIT,"evidence_lease_ms":EVIDENCE_LEASE_MS,"evidence_leases":4,"reflections":8},
-            "patch_semantics":"replace one node at canonical root/n/guard/when path. /guard and /when descend into the CHILD, not its condition; replace the enclosing guard node to change its condition. Repeating a condition inside the child keeps the old outer condition active. Reset cursors at/under patch; retain ancestor/sibling progress; interrupt active leaf only if inside patch; next update rechecks current guards"}),
+            "patch_semantics":"Replace one node at a canonical path with NO leading slash. The whole tree is root; zero-based children are root/0, root/1, root/2. A guarded child is root/2/guard and a when child is root/2/when. Paths such as /2, /root/0 and root/children/0 are invalid. /guard and /when descend into the CHILD, not its condition; replace the enclosing guard node to change its condition. Repeating a condition inside the child keeps the old outer condition active. Reset cursors at/under patch; retain ancestor/sibling progress; interrupt active leaf only if inside patch; next update rechecks current guards"}),
         )
     }
     pub fn change_control(&mut self, actor: u32) -> Result<(), String> {
@@ -497,11 +497,7 @@ impl World {
                 self.validate(i, &d, &self.players[i].memories)?;
                 for action in tree.validate_with_map(&self.scripts, self.map_for_actor(actor).as_ref())? {
                     if let Some(target) = action.target {
-                        if !self.players[i]
-                            .memories
-                            .iter()
-                            .any(|m| m.from == Some(target))
-                        {
+                        if !self.target_perceived(i, target, &self.players[i].memories) {
                             return Err("target not perceived".into());
                         }
                     }
@@ -801,6 +797,7 @@ pub fn state_contract() -> Value {
         },
         "weather":"If weather_forecast is present, cold begins at cold_after_ms and causes damage_per_pulse each exposure pulse (2500 ms in the bundled law) at cells with less than shelter_required. Shelter belongs to the site and protects every occupant; food and shelter remain independent resources.",
         "food_supply":"Site food is finite unless your direct site observation includes a food_source. That source produces amount units per interval_ms up to capacity under the bundled law; full sites discard production opportunities rather than banking them. A source does not fill carried inventory: gathering is still required. Production and deposits are distinct. Site observations may become stale; locations without an observed source must not be assumed to replenish. Shared shelter and food are usable by every occupant. Safe, supplied waiting can serve an intent; physical movement is not progress by itself.",
+        "population":"Population actions require configured lifecycle facilities. Each new person has a distinct identity, empty inventory and private knowledge, a revisable newborn starter and ordinary independent controller enrollment. Biological reproduction requires two explicit matching offers; both pay quoted costs and the exact offers are consumed only at completion. Fabrication creates a nutrient-supported artificial body at a workshop, not an obedient copy. A dependent can move, observe, speak, rest, eat supplied food, learn and perform guided practice, but cannot gather/build/create independently. Care consumes a real caregiver meal and records support. Guided practice requires a personally interpreted report about the current cell and a local prior caregiver, and actually gathers food. Default self-support requires 60000ms age, two care meals and one practice. Receiving a report or waiting alone grants no practical capability. Lifecycle site observations expose local body needs and offers addressed to you, never others’ private knowledge; needs_care uses retained observations. Inspect current skill definitions and your own development rather than assuming that a child is already capable. Artificial bodies in this representative slice use food; charging and compute are separate mechanics.",
         "social_skills":"Giving transfers carried food to a colocated perceived person. Deposits transfer it to a site anyone can gather from. Building permanently raises local shared shelter. These operations do not compel another character to cooperate or create agreements automatically.",
         "perception":"Terrain is surveyed. site_observations retains the latest direct observation at up to 64 visited cells, independently of the short recent-memory list. Observations may become stale; food_at reads this retained observation, false if unknown. Atomic reads capture up to 128 experiences and their context together, then retain that evidence for 330000 simulation ms (at most four concurrent reads); learning still checks control and learning revisions. A remembered resource at another cell does not make it available at your current position. Speech is a report, not a world-state change."
     })

@@ -189,6 +189,9 @@ pub fn validate_arenas(scenario: &crate::Scenario) -> Result<(), String> {
 }
 impl crate::World {
     pub fn arena_for_actor(&self, actor: u32) -> Option<&Arena> {
+        if let Some(id) = self.actor_arenas.get(&actor) {
+            return self.initial.arenas.iter().find(|a| &a.id == id);
+        }
         self.initial.arenas.iter().find(|a| a.actors.contains(&actor))
     }
     pub fn same_arena(&self, a: u32, b: u32) -> bool {

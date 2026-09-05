@@ -41,7 +41,7 @@ impl World {
         } else {
             None
         };
-        json!({"map":self.map_for_actor(p.id),"navigation":navigation,"actor":facts(p),"action":a,"target":target,"knowledge":self.knowledge_script_context(i,a),
+        json!({"map":self.map_for_actor(p.id),"navigation":navigation,"actor":facts(p),"action":a,"target":target,"knowledge":self.knowledge_script_context(i,a),"lifecycle":self.lifecycle_script_context(i,a),
             "site":self.sites.iter().find(|s| s.position==p.position).map(|s| json!({"position":s.position,"food":s.food,"shelter":s.shelter})),
             "time_ms":self.timing.time_ms,"delta_ms":self.timing.time_ms.saturating_sub(e.script.as_ref().map_or(self.timing.time_ms, |s| s.evaluated_ms)),
             "ready_at_ms":self.execution_ready_at(p.id,e),
@@ -79,6 +79,8 @@ impl World {
         effect: &Effect,
     ) -> Result<(), String> {
         match effect {
+            Effect::OfferReproduction { .. } | Effect::WithdrawReproduction | Effect::Reproduce { .. }
+            | Effect::Fabricate { .. } | Effect::Care { .. } | Effect::Practice { .. } => self.validate_lifecycle_effect(i,a,effect)?,
             Effect::Teach { .. } | Effect::RecordKnowledge { .. } | Effect::ConsultKnowledge { .. } | Effect::DestroyArchive { .. } => self.validate_knowledge_effect(i,a,effect)?,
             Effect::TransferFood { target, amount } => {
                 let actor = &self.players[i];
@@ -158,6 +160,8 @@ impl World {
         effect: Effect,
     ) -> Result<(), String> {
         match effect {
+            Effect::OfferReproduction { .. } | Effect::WithdrawReproduction | Effect::Reproduce { .. }
+            | Effect::Fabricate { .. } | Effect::Care { .. } | Effect::Practice { .. } => self.apply_lifecycle_effect(i,cause,&effect)?,
             Effect::Teach { .. } | Effect::RecordKnowledge { .. } | Effect::ConsultKnowledge { .. } | Effect::DestroyArchive { .. } => self.apply_knowledge_effect(i,cause,&effect)?,
             Effect::TransferFood { target, amount } => {
                 let actor = self.players[i].id;

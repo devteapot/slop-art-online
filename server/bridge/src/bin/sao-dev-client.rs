@@ -20,6 +20,8 @@ use std::{
 use tokio::process::Command;
 #[path = "sao-dev-client/transport.rs"]
 mod transport;
+#[path = "sao-dev-client/enrollment.rs"]
+mod enrollment;
 
 #[derive(Clone)]
 struct Session {
@@ -48,6 +50,8 @@ struct App {
     mutation: tokio::sync::Mutex<()>,
     config: Option<Config>,
     controllers: Vec<ActorConfig>,
+    newcomer: Option<enrollment::NewcomerController>,
+    enrollments: tokio::sync::Mutex<enrollment::Registry>,
     harness_cancellations: Mutex<Vec<tokio::sync::watch::Sender<Option<String>>>>,
 }
 type Shared = Arc<App>;
@@ -80,10 +84,9 @@ async fn cli(args: Vec<String>) -> Result<String, String> {
     if let Ok(config_path) = std::env::var("SPACETIME_CONFIG_PATH") {
         command.args(["--config-path", &config_path]);
     }
-    let output = command
-        .args(args)
-        .output()
-        .await
+    let output = tokio::time::timeout(std::time::Duration::from_secs(30),
+        command.args(args).kill_on_drop(true).output())
+        .await.map_err(|_| "SpacetimeDB CLI exceeded its 30-second deadline")?
         .map_err(|_| "SpacetimeDB CLI unavailable")?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).into());
@@ -394,69 +397,14 @@ async fn create_run(app: &App) -> Result<String, String> {
     }
 
     std::fs::write(dir.join("mode.json"),json!({"run":run,"db":app.db,"server":app.server,"evidence_mode":if app.config.is_some() || !app.controllers.is_empty(){"live_model"}else{"live_fixture"},"note":"actual authoritative run; fixture explicitly test-authored; no model substitution"}).to_string()).map_err(|_|"mode write failed")?;
-    let private = std::env::var("BEVY_DEV_CREDENTIAL_DIR").map(PathBuf::from).unwrap_or_else(|_| app.root.join(".local/credentials"));
-    std::fs::create_dir_all(&private).map_err(|_| "private session directory unavailable")?;
-    let mut links = vec![];
     let entries: Vec<(u32, &str, Option<&Config>)> = if app.controllers.is_empty() {
         vec![(1, "builtin", app.config.as_ref()), (2, "external", app.config.as_ref())]
     } else {
         app.controllers.iter().map(|c| (c.actor, c.role.as_str(), Some(&c.config))).collect()
     };
     for (actor, role, config) in entries {
-        let path = private.join(format!("{run}-actor-{actor}-{role}.json"));
-        let (service, identity) = new_session(app.server.clone(), app.db.clone(), &path).await?;
-        call(
-            app,
-            "sim_grant_client",
-            vec![json!(run), json!(identity), json!(false), json!(actor)],
-        )
-        .await?;
-        let view = service.observe(0, 256).await?;
-        links.push(json!({"actor":actor,"role":role,"identity":identity,"session_file":path}));
-        if role == "builtin" {
-            if let Some(config) = config {
-                if std::env::var("SAO_HARNESS_MANUAL").as_deref() == Ok("1") {
-                    let _ = service.connection.disconnect();
-                    continue;
-                }
-                let (tx, rx) = tokio::sync::watch::channel(None);
-                app.harness_cancellations.lock().unwrap().push(tx);
-                tokio::spawn(agent_harness::run(
-                    service,
-                    config.clone(),
-                    if app.controllers.is_empty() {dir.join("reasoning")} else {dir.join("reasoning").join(format!("actor-{actor}"))},
-                    rx,
-                ));
-            } else {
-                let fixture: simulation::Decision = serde_json::from_slice(
-                    &std::fs::read(app.root.join("scenarios/reactive-client-fixture.json"))
-                        .map_err(|_| "fixture missing")?,
-                )
-                .map_err(|_| "fixture invalid")?;
-                let receipt = service
-                    .command(simulation::participant::Request {
-                        api_version: simulation::participant::API_VERSION.into(),
-                        request_id: format!("fixture-{run}"),
-                        control_epoch: view["control_epoch"].as_u64().unwrap(),
-                        command: simulation::participant::Command::ReplaceTree {
-                            expected_revision: view["policy_revision"].as_u64().unwrap(),
-                            reason: "explicit test-authored developer fixture; no model inference"
-                                .into(),
-                            tree: fixture.policy.ok_or("fixture tree missing")?,
-                        },
-                    })
-                    .await?;
-                if !receipt.ok {
-                    return Err(format!("fixture rejected: {:?}", receipt.error));
-                }
-                let _ = service.connection.disconnect();
-            }
-        } else {
-            let _ = service.connection.disconnect();
-        }
+        enrollment::enroll_initial(app, &run, actor, role, config).await?;
     }
-    std::fs::write(dir.join("participants.json"), json!(links).to_string())
-        .map_err(|_| "participant descriptors failed")?;
 
     app.runs.lock().unwrap().push(run.clone());
     Ok(run)
@@ -538,7 +486,8 @@ async fn runs(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
     Ok(Json(json!({"runs":entries})).into_response())
 }
 fn write_active(app: &App) -> std::io::Result<()> {
-    std::fs::write(app.out.join("active.json"), json!({"db":app.db,"server":app.server,"run":app.run.lock().unwrap().clone(),"url":app.origin}).to_string())
+    std::fs::write(app.out.join("active.json"), json!({"db":app.db,"server":app.server,"run":app.run.lock().unwrap().clone(),"url":app.origin,
+        "enrollment_protocol":enrollment::PROTOCOL,"newcomer_enrollment":app.newcomer.is_some()}).to_string())
 }
 async fn archive(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
     let (_, s) = session(&app, &headers)?;
@@ -597,11 +546,21 @@ async fn background(app: Shared) {
     let mut recorded = HashMap::new();
     loop {
         tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        if let Err(error) = enrollment::acknowledge_stop(&app).await {
+            eprintln!("enrollment shutdown: {error}");
+        }
         let runs = app.runs.lock().unwrap().clone();
         for run in runs {
             let Ok(w) = state(&app, &run).await else {
                 continue;
             };
+            if let Err(error) = enrollment::discover(&app, &run, &w).await {
+                eprintln!("newcomer enrollment: {error}");
+                let path = app.out.join("enrollment-errors.json");
+                if !path.exists() {
+                    let _ = enrollment::atomic_json(&path, &json!({"errors":[{"run":run,"error":error,"at_ms":now()}]}));
+                }
+            }
             let revision = (w.next_event, w.timing.updates, w.stopped);
             if recorded.get(&run) == Some(&revision) { continue; }
             if let Ok(events) = audit(&app, &run).await {
@@ -656,6 +615,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(serde_json::from_slice(&std::fs::read(path)?)?)
         }).transpose()?.unwrap_or_default();
     for c in &controllers { Reasoner::new(c.config.clone())?; }
+    let newcomer: Option<enrollment::NewcomerController> = std::env::var("BEVY_DEV_NEWCOMER_CONTROLLER").ok()
+        .map(|path| -> Result<_, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(serde_json::from_slice(&std::fs::read(path)?)?)
+        }).transpose()?;
+    if let Some(template) = &newcomer { template.validate()?; }
     let app = Arc::new(App {
         root,
         out,
@@ -670,6 +634,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         mutation: tokio::sync::Mutex::new(()),
         config,
         controllers,
+        newcomer,
+        enrollments: tokio::sync::Mutex::new(enrollment::Registry::default()),
         harness_cancellations: Mutex::new(vec![]),
     });
     if let Some(active) = resume {

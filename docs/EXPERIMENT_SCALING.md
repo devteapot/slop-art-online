@@ -48,6 +48,14 @@ Optional top-level `concurrency` limits the number of active experimental runs t
 
 `minutes` (1–60), `calls_per_actor` (0–100) and `serial_ms` (at least 1000) accept per-variant overrides of the top-level defaults (5, 0 and 15000). A call cap of zero retains the existing uncapped-call behavior within the wall-time deadline. `recovery` is a per-variant boolean. Different populations and durations are explicit experimental factors, not automatically matched comparisons. Population and map limits remain properties of the selected engine version; removing the batch limit does not remove those limits.
 
+## Newcomer controllers
+
+Population runs may add a per-variant `newcomer_controller` path. Its JSON contains `role` (`builtin` or `external`) and the ordinary model `config`; it has no actor ID or credential grant. The batch freezes this input with the scenario and initial controller manifest. Omitting it leaves dynamic enrollment disabled. A configured profile requires a host advertising `sao-enrollment-v1` and a valid lifecycle actor bound; it fails explicitly against older hosts.
+
+The authority creates each body and identity through gameplay. The host discovers living new AI individuals, enrolls each once and persists its effective controller configuration and normal participant descriptor. External workers start as new descriptors arrive. This does not copy a creator's mind or spawn substitute inhabitants. The bound counts retained identities, including dead people, and currently cannot exceed 256.
+
+Shutdown stops enrollment, waits for acknowledgement, refreshes the final descriptors and revokes all grants, including arrivals near the deadline. Tests cover a late descriptor appearing while stopping. `summarize_population.py <variant-directory>` adds creation, care, learning, practice, self-support, actual newcomer model calls and support after caregiver loss to the ordinary food and knowledge audits.
+
 ## Isolation and finite scheduling
 
 Fresh-run supervisors discard inherited `BEVY_DEV_RESUME_ACTIVE` and `BEVY_DEV_ARCHIVE_ONLY` settings so the experiment cannot accidentally resume another session or enter archive mode. Host process IDs are persisted immediately after launch for cleanup before readiness.
@@ -81,4 +89,4 @@ python3 -m unittest discover -s scripts -p 'test_experiment_batch.py' -v
 python3 -m py_compile scripts/run_experiment_batch.py scripts/run_living_clearing.py
 ```
 
-Nine deterministic orchestration checks passed: seven simultaneous candidates, explicit groups of three, process-free dry-run, fresh-run environment isolation, frozen input integrity, invalid configuration rejection, startup-failure peer cleanup, duplicate-authority rejection before gate release, and retained failure state when evidence checks raise `SystemExit`. These tests use inert hashed bundles and mocked subprocesses; they test scheduling and evidence contracts, not engine behavior, live scalability or provider capacity. No live worlds or model calls were launched to validate this change.
+Twelve deterministic orchestration checks passed, adding explicit frozen newcomer profiles, invalid lifecycle/profile rejection and idempotent dynamic admission to the earlier checks: seven simultaneous candidates, explicit groups of three, process-free dry-run, fresh-run environment isolation, frozen input integrity, invalid configuration rejection, startup-failure peer cleanup, duplicate-authority rejection before gate release, and retained failure state when evidence checks raise `SystemExit`. These tests use inert hashed bundles and mocked subprocesses; they test scheduling and evidence contracts, not engine behavior, live scalability or provider capacity. The scheduling tests launch no live worlds or model calls. Live population evidence is recorded separately in the Stage 3 campaign.
