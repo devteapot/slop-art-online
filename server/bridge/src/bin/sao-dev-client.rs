@@ -1,4 +1,4 @@
-//! Loopback development host and scoped browser enrollment. World execution remains in reducers.
+//! Development host and scoped browser enrollment. World execution remains in reducers.
 use axum::{
     Json, Router,
     body::Body,
@@ -30,6 +30,8 @@ struct App {
     db: String,
     server: String,
     origin: String,
+    local_origin: String,
+    browser_server: String,
     run: Mutex<String>,
     sessions: Mutex<HashMap<String, Session>>,
     config: Option<Config>,
@@ -57,8 +59,11 @@ async fn cli(args: Vec<String>) -> Result<String, String> {
             )
         })
     };
-    let output = Command::new(binary)
-        .args(args)
+    let mut command = Command::new(binary);
+    if let Ok(config_path) = std::env::var("SPACETIME_CONFIG_PATH") {
+        command.args(["--config-path", &config_path]);
+    }
+    let output = command.args(args)
         .output()
         .await
         .map_err(|_| "SpacetimeDB CLI unavailable")?;
@@ -118,9 +123,26 @@ async fn audit(app: &App, run: &str) -> Result<Vec<simulation::Event>, String> {
     events.sort_by_key(|e| e.id);
     Ok(events)
 }
+fn allowed_origin(origin: &str, local_origin: &str, headers: &HeaderMap) -> bool {
+    let supplied = headers.get("origin").and_then(|v| v.to_str().ok());
+    (supplied == Some(origin) || supplied == Some(local_origin))
+        && headers.get("x-sao-client").and_then(|v| v.to_str().ok()) == Some("1")
+}
+fn browser_addresses(public_url: &str) -> Result<(String, String), String> {
+    let mut url = reqwest::Url::parse(public_url).map_err(|_| "invalid BEVY_DEV_PUBLIC_URL")?;
+    if url.scheme() != "http" || url.host_str().is_none()
+        || matches!(url.host_str(), Some("0.0.0.0" | "[::]"))
+        || !url.username().is_empty() || url.password().is_some()
+        || url.path() != "/" || url.query().is_some() || url.fragment().is_some()
+    {
+        return Err("BEVY_DEV_PUBLIC_URL must be an http:// browser address with a reachable hostname or IP and no credentials, path, query or fragment".into());
+    }
+    let origin = url.origin().ascii_serialization();
+    url.set_port(Some(3101)).map_err(|_| "invalid database port")?;
+    Ok((origin, url.origin().ascii_serialization()))
+}
 fn same_origin(app: &App, headers: &HeaderMap) -> Result<(), (StatusCode, String)> {
-    if headers.get("origin").and_then(|v| v.to_str().ok()) != Some(&app.origin)
-        || headers.get("x-sao-client").and_then(|v| v.to_str().ok()) != Some("1")
+    if !allowed_origin(&app.origin, &app.local_origin, headers)
     {
         return Err((
             StatusCode::FORBIDDEN,
@@ -147,8 +169,13 @@ fn session(app: &App, headers: &HeaderMap) -> Result<(String, Session), (StatusC
 }
 async fn bootstrap(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
     same_origin(&app, &headers)?;
+    let browser_server = if headers.get("origin").and_then(|v| v.to_str().ok()) == Some(&app.origin) {
+        &app.browser_server
+    } else {
+        &app.server
+    };
     if session(&app, &headers).is_ok() {
-        return Ok(Json(json!({"db":app.db,"server":app.server,"run":app.run.lock().unwrap().clone(),"actor":3})).into_response());
+        return Ok(Json(json!({"db":app.db,"server":browser_server,"run":app.run.lock().unwrap().clone(),"actor":3})).into_response());
     }
     let id = format!(
         "{:032x}{:032x}",
@@ -162,7 +189,7 @@ async fn bootstrap(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
             observer: true,
         },
     );
-    let mut response=Json(json!({"db":app.db,"server":app.server,"run":app.run.lock().unwrap().clone(),"mode":"local development","actor":3})).into_response();
+    let mut response=Json(json!({"db":app.db,"server":browser_server,"run":app.run.lock().unwrap().clone(),"mode":"local development","actor":3})).into_response();
     response.headers_mut().insert(
         header::SET_COOKIE,
         format!("sao_dev={id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400")
@@ -392,6 +419,10 @@ async fn background(app: Shared) {
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let root = std::env::current_dir()?;
     let port = std::env::var("BEVY_DEV_PORT").unwrap_or("18891".into());
+    let bind_addr = std::env::var("BEVY_DEV_BIND").unwrap_or("127.0.0.1".into());
+    let local_origin = format!("http://127.0.0.1:{port}");
+    let public_url = std::env::var("BEVY_DEV_PUBLIC_URL").unwrap_or(local_origin.clone());
+    let (origin, browser_server) = browser_addresses(&public_url)?;
     let db = format!("sim-bevy-db-{}", now());
     let server = "http://127.0.0.1:3101".to_string();
     let out = root.join(std::env::var("BEVY_DEV_OUTPUT").unwrap_or("output/participant-agent-dev".into()));
@@ -411,7 +442,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         out,
         db,
         server,
-        origin: format!("http://127.0.0.1:{port}"),
+        origin,
+        local_origin,
+        browser_server,
         run: Mutex::new(String::new()),
         sessions: Mutex::new(HashMap::new()),
         config,
@@ -441,7 +474,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/api/archive", post(archive))
         .route("/{*path}", get(files))
         .with_state(app.clone());
-    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await?;
+    let listener = tokio::net::TcpListener::bind(format!("{bind_addr}:{port}")).await?;
     println!(
         "Bevy game client: {} — live authoritative {}, initially paused",
         app.origin,
@@ -453,4 +486,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     );
     axum::serve(listener, router).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod network_tests {
+    use super::*;
+
+    #[test]
+    fn browser_database_uses_advertised_host_including_ipv6() {
+        for (url, origin, database) in [
+            ("http://192.168.1.117:18891/", "http://192.168.1.117:18891", "http://192.168.1.117:3101"),
+            ("http://game.local:19999", "http://game.local:19999", "http://game.local:3101"),
+            ("http://[::1]:18891", "http://[::1]:18891", "http://[::1]:3101"),
+        ] {
+            assert_eq!(browser_addresses(url).unwrap(), (origin.into(), database.into()));
+        }
+    }
+
+    #[test]
+    fn browser_address_rejects_bind_addresses_and_non_origins() {
+        for url in ["http://0.0.0.0:18891", "http://[::]:18891", "https://game.local", "http://user:password@game.local", "http://game.local/path", "http://game.local?x=1", "http://game.local#x", "garbage"] {
+            assert!(browser_addresses(url).is_err(), "{url}");
+        }
+    }
+
+    #[test]
+    fn lan_enrollment_requires_exact_configured_origin_and_client_header() {
+        let public = "http://192.168.1.117:18891";
+        let local = "http://127.0.0.1:18891";
+        let mut headers = HeaderMap::new();
+        headers.insert("x-sao-client", "1".parse().unwrap());
+        assert!(!allowed_origin(public, local, &headers));
+        for origin in [public, local] {
+            headers.insert("origin", origin.parse().unwrap());
+            assert!(allowed_origin(public, local, &headers));
+        }
+        for origin in ["null", "https://untrusted.example", "http://192.168.1.117:18892", "http://192.168.1.117.evil.example:18891"] {
+            headers.insert("origin", origin.parse().unwrap());
+            headers.insert("host", origin.strip_prefix("http://").unwrap_or(origin).parse().unwrap());
+            assert!(!allowed_origin(public, local, &headers));
+        }
+        headers.insert("origin", public.parse().unwrap());
+        headers.remove("x-sao-client");
+        assert!(!allowed_origin(public, local, &headers));
+    }
 }

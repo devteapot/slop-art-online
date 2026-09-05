@@ -6,16 +6,18 @@ Rules `m1-5` add `sao-participant-v1`: an external runtime owns its model, memor
 
 ## Run the development world
 
-Follow the authority/server prerequisites in [the Bevy runbook](BEVY_BROWSER_CLIENT.md), then build and run from the repository root:
+Follow the tool prerequisites and CLI exports in [the Bevy runbook](BEVY_BROWSER_CLIENT.md), then start the database container, build and run from the repository root:
 
 ```sh
-cargo build -p server_module --target wasm32-unknown-unknown
-cargo build -p bridge --bin sao-dev-client --bin sao-agent-mcp
+just bevy-db-up # or: just runtime=podman bevy-db-up
+just bevy-db-login # first time for this database volume
+cargo build --locked -p server_module --target wasm32-unknown-unknown
+cargo build --locked -p bridge --bin sao-dev-client --bin sao-agent-mcp
 just bevy-web-build
 just bevy-dev
 ```
 
-Open http://127.0.0.1:18891. This iteration uses `client/dist-participant` and `output/participant-agent-dev`; the previous host on 18890, its bundle, databases and archives remain separate. Each startup publishes to a fresh database on the existing isolated SpacetimeDB 2.1.0 server on 3101. The clock starts paused. Resume or Step as observer; human input uses Participate as You. Human movement is finite, while agent trees repeat. Human speech uses the independent queue and does not replace movement.
+Open http://127.0.0.1:18891. This iteration uses `client/dist-participant` and `output/participant-agent-dev`; the previous host on 18890, its bundle, databases and archives remain separate. Each startup publishes to a fresh database in the SpacetimeDB 2.1.0 container on port 3101 (Compose project `sao-bevy`, persistent volume `sao-bevy_spacetimedb-home`). Stop it with `just bevy-db-down`, using the same runtime override; this retains database data. The clock starts paused. Resume or Step as observer; human input uses Participate as You. Human movement is finite, while agent trees repeat. Human speech uses the independent queue and does not replace movement.
 
 Mira (actor 1) gets a scoped built-in identity. Default startup installs one explicitly authored tree through the participant API, without inference. Tovan (actor 2) gets a separately scoped external identity and no hidden bootstrap. You (actor 3) remains available to Bevy. Missing agent decisions leave the character without new intent; the authority does not invent a survival policy.
 

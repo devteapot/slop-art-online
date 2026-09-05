@@ -54,6 +54,24 @@ NPC model backends are configurable per run: see [Ollama, OpenRouter, and compat
 
 ## Quick start
 
+### Browser simulation (primary development interface)
+
+Follow the [Bevy browser runbook](docs/BEVY_BROWSER_CLIENT.md) for first-time tool installation and explicit CLI paths. The current foundation uses a containerized database on port **3101** and the browser client on **18891**:
+
+```bash
+export SPACETIME_CLI="$HOME/.local/share/spacetime/bin/2.1.0/spacetimedb-cli"
+export SPACETIME_CONTROL_CLI="$HOME/.local/share/spacetime/bin/2.7.1/spacetimedb-cli"
+just bevy-db-up                      # or: just runtime=podman bevy-db-up
+just bevy-db-login                   # first time; keeps the global CLI login separate
+cargo build --locked -p server_module --target wasm32-unknown-unknown
+just bevy-web-build
+just bevy-dev
+```
+
+Open [127.0.0.1:18891](http://127.0.0.1:18891), then **Step** or **Resume**. Default startup uses an authored NPC fixture without model calls. `just bevy-db-down` stops the database while preserving its named volume; use the same `runtime=podman` override if you started with Podman. `bevy-db-status` and `bevy-db-logs` inspect this stack. The following steps describe the separate legacy gameplay stack on port 3000.
+
+To share the browser simulation on your LAN, stop the browser host and run `just runtime=podman bevy-lan <your-lan-ip>` (omit the runtime override for Docker). This binds both services to `0.0.0.0` and advertises the LAN database address to browsers. Open `http://<your-lan-ip>:18891` from another device. See [LAN setup and firewall commands](docs/BEVY_BROWSER_CLIENT.md#share-on-a-trusted-local-network).
+
 ### 1. Start and initialize the database
 
 ```bash
@@ -106,7 +124,7 @@ cargo run -p bridge
 
 ### 4. Run the Bevy client
 
-For the primary foundation development interface, use the [Bevy browser runbook](docs/BEVY_BROWSER_CLIENT.md) and open [127.0.0.1:18890](http://127.0.0.1:18890). The command below starts the preserved legacy gameplay mode.
+For the primary foundation development interface, use the [Bevy browser runbook](docs/BEVY_BROWSER_CLIENT.md) and open [127.0.0.1:18891](http://127.0.0.1:18891). The command below starts the preserved legacy gameplay mode.
 
 ```bash
 just client      # cargo run -p client
