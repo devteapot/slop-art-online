@@ -17,6 +17,7 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
                 let context = world.context(i);
                 let mut value = context["player"].clone();
                 value["recent_activity"] = context["recent_activity"].clone();
+                value["starting_behavior"] = context["starting_behavior"].clone();
                 value["controller"] = json!(p.controller);
                 if let Some(arena)=world.arena_for_actor(p.id) {
                     value["arena"]=json!(arena.label);
@@ -31,6 +32,7 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
         let context = world.context(index);
         let mut own = context["player"].clone();
         own["recent_activity"] = context["recent_activity"].clone();
+        own["starting_behavior"] = context["starting_behavior"].clone();
         own["controller"] = json!(me.controller);
         let mut visible = BTreeMap::new();
         for memory in &me.memories {

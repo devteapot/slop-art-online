@@ -6,13 +6,14 @@ pub mod participant;
 mod scripted_world;
 pub mod scripting;
 pub mod spatial;
+pub mod starting_behaviors;
 pub mod timing;
 use bonsai_bt::Behavior;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "m1-17-renewal.1";
+pub const VERSION: &str = "m1-18-starting-habits.1";
 pub const DECISION_FORMAT_VERSION: &str = "survivor-policy-v2";
 pub const LEGACY_DECISION_FORMAT: &str = "survivor-sequence-v1";
 pub mod policy;
@@ -220,6 +221,8 @@ pub struct Weather {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Scenario {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub starting_behaviors: BTreeMap<u32, starting_behaviors::StartingBehavior>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub food_sources: Vec<ecology::FoodSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -362,6 +365,7 @@ impl World {
             }
             w.observe_site(i)?;
         }
+        w.install_starting_behaviors(id)?;
         Ok(w)
     }
     pub fn event(
@@ -484,7 +488,7 @@ impl World {
         // Deliberate allowlist. Never serialize World, sites, other minds or audit into a prompt.
         let p = &self.players[i];
         let approach = p.execution.as_ref().map(|e| if let Some(policy)=&e.policy {json!({"decision":e.decision,"policy":policy,"state":e.state,"active_attempt":e.attempt})} else {json!(e)});
-        json!({"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
+        json!({"starting_behavior":self.initial.starting_behaviors.get(&p.id).map(|b|json!({"id":b.id,"revision":b.revision,"description":b.description,"source":"authored world seed; revisable starting habit"})),"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
     }
     pub fn request(&mut self, i: usize, trigger: &str) {
         if self.participant_mode {
@@ -1183,6 +1187,8 @@ impl World {
 
 #[cfg(test)]
 mod policy_tests;
+#[cfg(test)]
+mod starting_behavior_tests;
 #[cfg(test)]
 mod tests;
 

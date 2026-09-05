@@ -11,6 +11,19 @@ def summarize(out):
     if pilot['phase']!='completed':raise ValueError('Social conservation analysis requires a completed experiment')
     source=run/('final-snapshot.json' if (run/'final-snapshot.json').exists() else 'snapshot.json')
     record=json.loads(source.read_text());w,events=record['world'],record['events'];index={e['id']:e for e in events}
+    observations=[]
+    if (out/'observations.jsonl').exists():
+        observations=[json.loads(line) for line in (out/'observations.jsonl').read_text().splitlines() if line.strip()]
+    low_pressure=collections.Counter();sampled=collections.Counter()
+    for before,after in zip(observations,observations[1:]):
+        dt=(after['time_ms']-before['time_ms'])/1000
+        if not 0<dt<=10 or 'sites' not in before:continue
+        sites={s['position']:s for s in before['sites']};weather=w['initial'].get('weather')
+        for p in before['players']:
+            sampled[p['id']]+=dt
+            exposed=weather and before['time_ms']>=weather['cold_after_ms'] and sites.get(p['position'],{}).get('shelter',0)<weather['shelter_required']
+            if p['health']>=50 and p['hunger']<70 and p['energy']>=20 and not exposed and p.get('policy_status')!='failure':
+                low_pressure[p['id']]+=dt
     counts=lambda xs:dict(collections.Counter(xs))
     rows=[]
     for p in w['players']:
@@ -34,12 +47,15 @@ def summarize(out):
             learning_from_speech=[dict(event=e['id'],source=r['source'],interpretation=r['interpretation']) for e in learning for r in e['data']['reflections'] if r['source'] in {h['id'] for h in heard}],
             damage_by_nature=counts(e['data'].get('cause_kind','unknown') for e in damage),
             death_seconds=deaths[0]['data']['time_ms']/1000 if deaths else None,
+            sampled_seconds=round(sampled[aid],3),low_pressure_seconds=round(low_pressure[aid],3),
             completed_skills=counts(str(e['data']['skill']) for e in completed)))
     initial_food=sum(a['food'] for a in w['initial']['players'])+sum(s['food'] for s in w['initial']['sites'])
     final_food=sum(a['food'] for a in w['players'])+sum(s['food'] for s in w['sites'])
     meals=sum(p['eaten'] for p in rows)
     production=[e for e in events if e['kind']=='resource_produced']
     produced=sum(e['data']['food_delta'] for e in production)
+    all_meals=[e for e in events if e['kind']=='skill_result' and e['data'].get('status')=='completed' and e['data'].get('skill')=='eat']
+    beyond_initial=all_meals[initial_food]['data']['time_ms']/1000 if len(all_meals)>initial_food else None
     site_flows=[]
     for site in w['sites']:
         location=site['position']
@@ -85,11 +101,12 @@ def summarize(out):
             supplied_feedback='controller_feedback' in context,execution_failure_notice='execution_feedback' in context,
             journal=str(file.relative_to(out))))
     result=dict(run=pilot['run'],phase=pilot['phase'],seconds=w['timing']['time_ms']/1000,updates=w['timing']['updates'],players=rows,
-        sites=w['sites'],site_flows=site_flows,food_sources=w['initial'].get('food_sources',[]),weather=w['initial'].get('weather'),initial_food=initial_food,produced=produced,final_food=final_food,eaten=meals,
+        sites=w['sites'],site_flows=site_flows,food_sources=w['initial'].get('food_sources',[]),weather=w['initial'].get('weather'),initial_food=initial_food,produced=produced,final_food=final_food,eaten=meals,initial_stock_exceeded_seconds=beyond_initial,
         conservation_violations=violations,model_calls=len(calls),reported_tokens=sum(c['total_tokens'] for c in calls),calls=calls,
         rejections=counts(e['data'].get('error','unknown') for e in events if e['kind']=='participant_rejected'),
         social_events=[dict(id=e['id'],actor=e.get('actor'),kind=e['kind'],data=e['data']) for e in events if e['kind'] in ('food_transfer','shelter_contribution') or e['kind']=='resource_change' and e['data'].get('nature')=='deposit'],
         source=str(source.relative_to(out)),source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+        low_pressure_definition='Sampled opportunity proxy, not proved leisure: health >=50, hunger <70, energy >=20, sheltered when cold, policy not failed. Integrates preceding observation over gaps <=10s; older runs without site samples have zero coverage.',
         note='No automatic society pass: inspect actual speech-to-choice links, who benefits, sustained provision and fresh-repeat outcomes. Food held by dead actors remains conserved but unavailable.')
     (out/'SOCIETY_RESULT.json').write_text(json.dumps(result,indent=2)+'\n')
     print(json.dumps({k:result[k] for k in ['run','seconds','model_calls','reported_tokens','conservation_violations','rejections']},indent=2))

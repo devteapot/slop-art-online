@@ -1,6 +1,6 @@
 # From a first society to the living world
 
-Agreed development direction, 2026-09-05. Read the [world vision](WORLD_VISION.md) for the target and status of its design choices. These are development evidence gates, never milestones, compulsory narratives or quests imposed on inhabitants. No new runtime feature is marked complete by this document.
+Agreed development direction, 2026-09-05. Read the [world vision](WORLD_VISION.md) for the target and status of its design choices. These are development evidence gates, never milestones, compulsory narratives or quests imposed on inhabitants. Runtime status below is grounded in linked implementation and experiment evidence.
 
 The [work queue](TODO.md) retains accepted implementation history and technical prerequisites. The existing [small-society iteration plan](SOCIETY_ITERATION_PLAN.md) remains the near-term experiment plan; this roadmap gives it a longer horizon. Preserve the [audit contract](AUDIT_AND_EXPERIMENTS.md), shared authoritative core and existing Rhai boundary.
 
@@ -25,6 +25,8 @@ The active foundation is `simulation/` with SpacetimeDB foundation integration, 
 ## Stages and evidence
 
 ### 1. A viable settlement
+
+**Status:** the bounded four-person renewable settlement slice is [accepted with evidence and limitations](STAGE_1_EVIDENCE.md#acceptance-decision-bounded-stage-1-slice), following batches 009–010 and retained earlier tests. This does not establish arbitrary-world viability or later stages.
 
 **Scope:** a small mixed group, shared capabilities, modest survival needs, renewable food/charging as body support is introduced, shelter, permanent death and simple shared work. Use the active 4–6 character integration plan, with smaller diagnostic cases where useful. Introduce only attributes that have a concrete tested effect.
 
@@ -100,9 +102,9 @@ A single survivor or cooperative conversation does not establish a sustainable s
 ## Immediate actionable queue
 
 - [x] [Identify current rules/balance versus seed-owned fields](STAGE_1_EVIDENCE.md#mechanics-balance-and-seed-ownership); continue enforcing that separation as mechanics are introduced.
-- [x] [Map retained small-society evidence and open failures to Stage 1](STAGE_1_EVIDENCE.md#what-the-retained-trials-establish). Stage 1 itself remains open.
+- [x] [Map retained small-society evidence and open failures to Stage 1](STAGE_1_EVIDENCE.md#what-the-retained-trials-establish). The bounded Stage 1 acceptance is recorded in the linked evidence.
 - [x] Decide the next minimal state change: accounted food production; retain the existing attributes for this trial, as explained in the [evidence mapping](STAGE_1_EVIDENCE.md).
-- [ ] Establish a resource budget and renewable provisioning adequate for the chosen population; test scarcity separately.
+- [x] [Establish a resource budget and renewable provisioning for four inhabitants, with a separate scarcity control](STAGE_1_EVIDENCE.md#acceptance-decision-bounded-stage-1-slice).
 - [ ] Define body-specific eating/charging only as far as the first representative inhabitants need.
 - [ ] After Stage 1 evidence, define knowledge records and teach/record/consult operations for Stage 2.
 - [ ] Plan reproduction/fabrication and care around measured surplus and knowledge transfer, then test Stage 3.

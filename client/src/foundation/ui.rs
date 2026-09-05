@@ -170,11 +170,9 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
         if game.sessions_open && !game.compact {
             root.spawn((Node{position_type:PositionType::Absolute,left:px(12),top:px(92),bottom:px(112),width:px(234),padding:UiRect::all(px(14)),overflow:Overflow::scroll_y(),..column()},BackgroundColor(PANEL),Panel(0),ScrollPosition(Vec2::new(0.,game.scroll[0])))).with_children(|left| {
                 if let Some(arenas)=game.snapshot["arenas"].as_array().filter(|a| !a.is_empty()) {
-                    title(left,"EXPERIMENT MATRIX");
-                    text(left,"One clock · isolated pairs
-Top: open / bottom: corridors
-Left to right: low, medium, high",12.,MUTED);
-                    button(left,"Whole matrix",Click::Arena(None),game.arena.is_none());
+                    title(left,"WORLD AREAS");
+                    text(left,"Areas share this session's clock. Select an area to focus the map.",12.,MUTED);
+                    button(left,"Whole world",Click::Arena(None),game.arena.is_none());
                     for arena in arenas {
                         let id=arena["id"].as_str().unwrap_or("");
                         button(left,arena["label"].as_str().unwrap_or(id),Click::Arena(Some(id.into())),game.arena.as_deref()==Some(id));
@@ -270,6 +268,11 @@ fn mind(panel: &mut ChildSpawnerCommands, p: &Value) {
             });
     }
     title(panel, "CURRENT APPROACH");
+    if let Some(habit) = p.get("starting_behavior").filter(|v| v.is_object()) {
+        text(panel, format!("Started with {} · revision {}\n{}",
+            habit["id"].as_str().unwrap_or("a seed habit"), number(&habit["revision"]),
+            habit["description"].as_str().unwrap_or("This initial habit can change through experience.")), 12., MUTED);
+    }
     text(
         panel,
         if p["current_approach"].is_null() {

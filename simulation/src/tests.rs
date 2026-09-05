@@ -31,6 +31,7 @@ fn world() -> World {
     World::new(
         "test".into(),
         Scenario {
+            starting_behaviors: BTreeMap::new(),
             food_sources: vec![],
             weather: None,
             arenas: vec![],

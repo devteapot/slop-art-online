@@ -254,8 +254,10 @@ def main():
                         if w["tick"] != last_tick:
                             last_tick = w["tick"]
                             metrics = dict(observed_at=time.time(), time_ms=w["timing"]["time_ms"], updates=w["timing"]["updates"], tick=w["tick"], stopped=w["stopped"], players=[
-                                {k: p[k] for k in ("id", "name", "health", "hunger", "energy", "food", "position", "caution", "beliefs", "relationships")}
+                                dict({k: p[k] for k in ("id", "name", "health", "hunger", "energy", "food", "position", "caution", "beliefs", "relationships")},
+                                     policy_status=((p.get("execution") or {}).get("state") or {}).get("status"))
                                 for p in w["players"]],
+                                sites=w['sites'],
                                 event_counts={kind: sum(e["kind"] == kind for e in events) for kind in
                                               ("skill_result", "speech", "identity_change", "participant_rejected", "script_error", "script_tick_failed", "death")})
                             write(out / "metrics.json", metrics)

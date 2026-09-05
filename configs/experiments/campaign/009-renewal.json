@@ -1,0 +1,25 @@
+{
+  "hypothesis": "A configured renewable necessity can sustain the settlement after all initial food has been exceeded, while matched disabled production exposes finite-stock failure.",
+  "evaluation": "Roadmap Stage 1: compare twelve minutes with 22 total initial food, unchanged cold and Luna medium/15-second cadence. Renewable clearing produces at most 8 food/minute against approximately 5.486/minute four-person upkeep; control disables only production. Verify initial + produced = final + eaten, actual consumption beyond initial stock, at least a surviving small group, local perception, shared work, low-pressure sampled intervals and causes of death. Do not equate generated food or speech with society acceptance; repeat promising outcomes before Stage 1 completion.",
+  "minutes": 12,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "renewable",
+      "port": 18950,
+      "implementation": "output/society-lab/implementations/renewal-m1-17",
+      "scenario": "output/society-lab/implementations/renewal-m1-17/scenarios/settlement-renewable.json",
+      "controllers": "output/society-lab/implementations/renewal-m1-17/configs/experiments/society-four-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "finite-control",
+      "port": 18951,
+      "implementation": "output/society-lab/implementations/renewal-m1-17",
+      "scenario": "output/society-lab/implementations/renewal-m1-17/scenarios/settlement-finite.json",
+      "controllers": "output/society-lab/implementations/renewal-m1-17/configs/experiments/society-four-medium.json",
+      "recovery": true
+    }
+  ]
+}

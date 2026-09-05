@@ -195,7 +195,7 @@ impl World {
         }
     }
     pub fn record_initial_participant_event(&mut self, event: &Event) {
-        if self.tick == 0 && event.kind == "perception" {
+        if self.tick == 0 && matches!(event.kind.as_str(),"perception"|"starting_behavior_installed"|"policy_installed") {
             self.record_experience(event);
         }
     }
@@ -221,6 +221,7 @@ impl World {
                 | "speech_cancelled"
                 | "identity_change"
                 | "policy_installed"
+                | "starting_behavior_installed"
                 | "policy_patched"
                 | "branch_selected"
                 | "participant_rejected"

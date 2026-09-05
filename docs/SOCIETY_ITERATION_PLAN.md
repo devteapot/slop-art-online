@@ -14,7 +14,9 @@ Preserve the core decisions: one entity shared by human/LLM controllers, includi
 
 For the next planning pass, map retained batch evidence and open failures to Stage 1, identify the smallest missing mechanism, and record how each new experiment advances or challenges a roadmap gate. Preserve existing runtime/model choices and experiment controls. Do not expand the immediate run into all world features; stage knowledge continuity and population renewal after viable provision is demonstrated. Track roadmap progress with evidence links rather than marking future stages complete from scaffolding alone.
 
-Current planning pass: [Stage 1 evidence mapping, mechanics/seed ownership and renewable budget](STAGE_1_EVIDENCE.md). Batches 001–008 remain retained evidence; renewable provision is the next mechanism under test, and later roadmap stages remain open.
+Starting-habit direction, 2026-09-05: normal settlement seeds provide visible, versioned initial behavior trees so people act before the first model response. Profiles can differ, but remain ordinary policies that the individual may keep, patch or replace. Preserve empty-start controls and distinguish authored habits from later learned behavior; never silently restore them after failure.
+
+Current planning pass: [Stage 1 evidence mapping, mechanics/seed ownership and renewable budget](STAGE_1_EVIDENCE.md). Batches 001–010 remain retained evidence. The [bounded Stage 1 settlement is accepted](STAGE_1_EVIDENCE.md#acceptance-decision-bounded-stage-1-slice); knowledge continuity and later roadmap stages remain open.
 
 ## Loop and controls
 
@@ -24,7 +26,7 @@ Current planning pass: [Stage 1 evidence mapping, mechanics/seed ownership and r
 4. Analyze causal traces and invariant checks. Separate model validity, execution correctness, useful progress and social consequences. Record what supports or contradicts the hypothesis.
 5. Keep useful changes, revise failed approaches, and replicate promising outcomes with swapped personas or changed resource conditions before claiming general improvement.
 
-The user selected Luna throughout with no model-call/spending cap. Every batch still has a wall-time deadline and records actual call/token usage. A finite call allocation is available for controlled tests, but is disabled for the main iterative runs. Starting another batch requires a concrete reason recorded by the operator/agent; there is no blind endless launcher. Fresh model results are stochastic. Saving a build and seed enables inspection and controlled reruns, not exact model reproducibility.
+The user selected Luna throughout with no model-call/spending cap. Every batch still has a wall-time deadline and records actual call/token usage. A finite call allocation is available for controlled tests, but is disabled for the main iterative runs. Starting another batch requires a concrete reason recorded by the operator/agent; there is no blind endless launcher. Several candidates may run concurrently when their comparisons are interpretable; reconcile their findings before choosing the next change. Fresh model results are stochastic. Saving a build and seed enables inspection and controlled reruns, not exact model reproducibility.
 
 ## Milestone gates
 

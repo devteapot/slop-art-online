@@ -1,0 +1,25 @@
+{
+  "hypothesis": "Visible, revisable seed habits remove model-latency inactivity and retain a viable renewable settlement while models remain free to change behavior; an empty-start repeat checks whether prior renewable success repeats without them.",
+  "evaluation": "Run matched twelve-minute renewable settlements on m1-18 with the same four Luna medium controllers and fifteen-second cadence. Only starting_behaviors differs. Verify first skill occurs before first accepted model policy, validate later starter retention/patch/replacement, measure production and meals beyond 22 initial food, survival, shared shelter and material interaction, speech-grounded learning, sampled safe intervals, failed loops and usage. Seeded work is authored execution, not emergent specialization. Compare with completed batch009 before deciding Stage1 acceptance; all scope, conservation and execution invariants remain mandatory.",
+  "minutes": 12,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "seeded",
+      "port": 18952,
+      "implementation": "output/society-lab/implementations/starters-m1-18",
+      "scenario": "output/society-lab/implementations/starters-m1-18/scenarios/settlement-renewable.json",
+      "controllers": "output/society-lab/implementations/starters-m1-18/configs/experiments/society-four-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "empty-repeat",
+      "port": 18953,
+      "implementation": "output/society-lab/implementations/starters-m1-18",
+      "scenario": "output/society-lab/implementations/starters-m1-18/scenarios/settlement-renewable-empty.json",
+      "controllers": "output/society-lab/implementations/starters-m1-18/configs/experiments/society-four-medium.json",
+      "recovery": true
+    }
+  ]
+}
