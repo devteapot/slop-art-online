@@ -1,0 +1,89 @@
+//! Server-side presentation projection. No observer information is sent to participant clients.
+use crate::{Event, World};
+use serde_json::{Value, json};
+use std::collections::BTreeMap;
+
+pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> Value {
+    let Some(index) = world.players.iter().position(|p| p.id == actor) else {
+        return Value::Null;
+    };
+    let me = &world.players[index];
+    let players: Vec<Value> = if observer {
+        world
+            .players
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let mut value = world.context(i)["player"].clone();
+                value["controller"] = json!(p.controller);
+                value
+            })
+            .collect()
+    } else {
+        let mut own = world.context(index)["player"].clone();
+        own["controller"] = json!(me.controller);
+        let mut visible = BTreeMap::new();
+        for memory in &me.memories {
+            if memory.kind == "seen_player" && memory.tick == world.tick {
+                if let Some(id) = memory.from {
+                    visible.insert(id, json!({"id":id,"name":memory.content["name"],"position":memory.location,"controller":"other"}));
+                }
+            }
+        }
+        std::iter::once(own).chain(visible.into_values()).collect()
+    };
+    let sites = if observer {
+        json!(world.sites)
+    } else {
+        let mut known = BTreeMap::new();
+        for memory in &me.memories {
+            if memory.kind == "site" {
+                known.insert(memory.location, json!({"position":memory.location,"food":memory.content["food"],"observed_tick":memory.tick}));
+            }
+        }
+        json!(known.into_values().collect::<Vec<_>>())
+    };
+    let history: Vec<Value> = if observer {
+        events.iter().rev().take(180).rev().map(|e| {
+            let mut v = json!(e);
+            // Full provider exchanges remain in operator journals, not the rendering payload.
+            if e.kind == "model_result" { v["data"] = json!({"request_id":e.data["request_id"],"outcome":e.data["metadata"]["outcome"],"error":e.data["metadata"]["error"]}); }
+            if e.kind == "model_request" { v["data"].as_object_mut().map(|o|o.remove("context")); v["data"].as_object_mut().map(|o|o.remove("base_system_prompt")); }
+            v
+        }).collect()
+    } else {
+        me.memories.iter().map(|m|json!({"id":m.source,"tick":m.tick,"actor":actor,"kind":m.kind,"parents":[],"data":m.content})).collect()
+    };
+    json!({"run":world.run,"tick":world.tick,"stopped":world.stopped,"max_ticks":world.initial.max_ticks,
+        "rules":world.version,"actor":actor,"observer":observer,"players":players,"sites":sites,"events":history,
+        "pending":if observer {json!(world.pending.iter().map(|p|json!({"id":p.id,"actor":p.actor,"tick":p.tick})).collect::<Vec<_>>())} else {Value::Null}})
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn participant_projection_excludes_other_minds_hidden_sites_audit_and_requests() {
+        let scenario = serde_json::from_str(include_str!("../../scenarios/survival.json")).unwrap();
+        let mut world = World::new("sim-view-test".into(), scenario).unwrap();
+        world.step();
+        let participant = snapshot(&world, false, 3, &world.events);
+        assert!(!participant["observer"].as_bool().unwrap());
+        for p in participant["players"].as_array().unwrap() {
+            if p["id"] != 3 {
+                assert!(p.get("beliefs").is_none());
+                assert!(p.get("health").is_none());
+            }
+        }
+        for site in participant["sites"].as_array().unwrap() {
+            assert!(site.get("hazard").is_none());
+        }
+        assert!(participant["pending"].is_null());
+        assert!(!participant.to_string().contains("model_request"));
+        assert!(
+            snapshot(&world, true, 3, &world.events)["sites"][2]
+                .get("hazard")
+                .is_some()
+        );
+        assert!(snapshot(&world, false, 999, &world.events).is_null());
+    }
+}

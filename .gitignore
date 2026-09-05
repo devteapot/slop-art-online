@@ -7,3 +7,16 @@
 /deploy/ollama-data
 /deploy/open-webui-data
 .DS_Store
+
+# Local simulation evidence and browser verification artifacts
+/output/
+
+# Local NPC endpoint credentials; never part of run evidence
+/.local/credentials/
+
+# Generated Bevy WASM bundle
+/client/dist/
+
+# Python verification-script caches
+__pycache__/
+*.py[cod]

@@ -1,3 +1,4 @@
+mod foundation;
 mod combat;
 mod constants;
 mod consumable;

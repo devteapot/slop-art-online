@@ -1,0 +1,15 @@
+{
+  "backend": {
+    "kind": "ollama",
+    "model": "qwen2.5:7b",
+    "endpoint": "http://127.0.0.1:11434",
+    "num_ctx": 16384,
+    "keep_alive": "5m"
+  },
+  "structured_output": "json_schema",
+  "deadline_ms": 240000,
+  "max_attempts": 1,
+  "max_output_tokens": 6000,
+  "temperature": 0.6,
+  "seed": 42
+}

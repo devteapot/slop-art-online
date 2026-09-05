@@ -1,5 +1,7 @@
 # HY-World 2.0 — Integration Assessment for slop-art-online
 
+> **Reading status:** Deferred research under [ADR 007](007-simulation-first-foundation.md), outside the first simulation milestone. The dated external product, license, price, availability, and performance claims below have not been revalidated by this documentation review. “Verdict” and “Next Steps” preserve the original assessment, not a current recommendation or selected dependency. Follow the [roadmap](../TODO.md) for active work.
+
 > **Date:** 2026-04-17
 > **Source:** [github.com/Tencent-Hunyuan/HY-World-2.0](https://github.com/Tencent-Hunyuan/HY-World-2.0)
 > **License:** Open-source (permissive)

@@ -1,5 +1,7 @@
 # ADR 003: NPC Behavior Trees + Plans — Replacing FSM + Raw Tool Calls
 
+> **Reading status:** Historical implementation record, also partially superseded by [ADR 007](007-simulation-first-foundation.md). “Implemented” below refers to that migration, not acceptance of the simulation foundation. Consult [current-state gaps](../CURRENT_STATE.md), especially sequence execution, before relying on plan examples.
+
 **Status:** Implemented, partially superseded by ADR 005 (unified tree replaces the two-layer combat/plan split)
 **Date:** 2026-03-20
 

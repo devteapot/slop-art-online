@@ -1,0 +1,68 @@
+{
+  "reason": "deterministic reactive fixture, not live intelligence",
+  "policy": {
+    "kind": "priority",
+    "children": [
+      {
+        "kind": "guard",
+        "condition": {
+          "kind": "danger",
+          "location": null
+        },
+        "child": {
+          "kind": "action",
+          "action": {
+            "skill": "move",
+            "destination": 0
+          }
+        }
+      },
+      {
+        "kind": "guard",
+        "condition": {
+          "kind": "not",
+          "condition": {
+            "kind": "danger",
+            "location": 1
+          }
+        },
+        "child": {
+          "kind": "sequence",
+          "children": [
+            {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 3
+              }
+            },
+            {
+              "kind": "action",
+              "action": {
+                "skill": "speak",
+                "text": "arrived"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "sequence",
+        "children": [
+          {
+            "kind": "reconsider",
+            "reason": "Reconsider the perceived dangerous route"
+          },
+          {
+            "kind": "action",
+            "action": {
+              "skill": "rest",
+              "duration": 3
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "reflections": []
+}

@@ -1,0 +1,24 @@
+{
+  "backend": {
+    "kind": "openai_compatible",
+    "model": "gpt-5.6-luna",
+    "base_url": "https://codex.carlid.dev/v1",
+    "auth": {
+      "kind": "bearer_env",
+      "credential_env": "CARLID_NPC_API_KEY"
+    },
+    "capabilities": {
+      "response_modes": [
+        "prompt_json"
+      ],
+      "token_limit_field": "unsupported",
+      "temperature": false,
+      "seed": false
+    },
+    "stream": true
+  },
+  "structured_output": "prompt_json",
+  "deadline_ms": 300000,
+  "max_attempts": 1,
+  "max_output_tokens": null
+}

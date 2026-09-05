@@ -1,0 +1,14 @@
+{
+  "backend": {
+    "kind": "openrouter",
+    "model": "openai/gpt-4.1-mini",
+    "provider": "openai",
+    "credential_env": "OPENROUTER_API_KEY"
+  },
+  "structured_output": "json_schema",
+  "deadline_ms": 90000,
+  "max_attempts": 1,
+  "max_output_tokens": 6000,
+  "temperature": 0.6,
+  "seed": 42
+}

@@ -1,5 +1,7 @@
 # ADR 005: NPC Architecture v2 — Identity, Emotion, Unified Trees
 
+> **Reading status:** Partially superseded on 2026-09-04 by [ADR 007](007-simulation-first-foundation.md). The [simulation vision](../SIMULATION_VISION.md) is authoritative. Retain the identity/unified-tree/bridge rationale; population targets, fixed LLM quotas, template-first communication, silent belief propagation, exhaustive triggers, and settled monster taxonomy below are historical assumptions. Free-form speech, individual development, introspection, durable audit, and scenario tooling belong in the first slice. Multi-action sequences below are design examples, not verified execution; see [current gaps](../CURRENT_STATE.md). The original text is preserved for rationale.
+
 ## Status: Accepted (2026-03-26)
 
 ## Context

@@ -1,0 +1,59 @@
+# Implementation state and legacy baseline
+
+## Current M1 path
+
+The foundation is implemented through [simulation/src/lib.rs](../simulation/src/lib.rs), [foundation reducers](../server/module/spacetimedb/src/foundation.rs), and the [Rust scenario/model runner](../server/bridge/src/bin/sao-sim.rs). It uses shared skills across controllers, persistent LLM-generated reactive policies and legacy sequence progress, subjective model context, durable causal records, permanent mortality and isolated real-database experiments. Read [M1_VERIFICATION.md](M1_VERIFICATION.md) for executed checks/live trace evidence and [M1_RUNBOOK.md](M1_RUNBOOK.md) to run it. [ADR 008](adr/008-m1-authoritative-survival-slice.md) records bounded defaults and limitations.
+
+The inventory below is the **legacy prototype baseline**, preserved for migration work. Those source paths still exist; they are not the M1 execution path. M1 does not claim to have silently changed legacy Bevy combat, respawn, or every old tree handler.
+
+The M1 runner now supports typed native Ollama, OpenRouter, and generic OpenAI-compatible Chat Completions adapters through a separate NPC reasoning service. [Provider verification](NPC_REASONING_VERIFICATION.md) distinguishes local live evidence from mocked OpenRouter contracts; live OpenRouter inference still requires a configured credential. [Generic endpoint verification](OPENAI_COMPATIBLE_VERIFICATION.md) records the additional compatibility tests and live local check.
+
+Current rules `m1-4` implement [reactive policies](REACTIVE_POLICIES.md). The model chooses actual branches; the runtime supplies bounded node semantics and subjective conditions. All 45 core/provider/archive tests pass. One real local generated tree was accepted and executed, but its first unguarded branch prevented adaptation and the character died; successful generated reactive branch switching remains unverified. Historical hosted Luna policy attempts failed at the gateway. The [streaming repair](CARLID_STREAMING_VERIFICATION.md) has 54 passing tests and a completed public Luna stream through the actual adapter/authority. The model returned 11 root branches against the maximum 8, so the authority rejected it unchanged; transport works, generated policy compliance remains a separate gap. An earlier failed framing-limit check is preserved as historical evidence. See [reactive verification](REACTIVE_POLICY_VERIFICATION.md) for complete evidence and limits.
+
+## Browser-hosted Bevy foundation client
+
+The primary visual development client now runs actual Bevy WASM in a browser, with shared Rust rendering/input available on native targets. [The browser client runbook](BEVY_BROWSER_CLIENT.md) documents the local URL, build steps, scoped identity/ownership boundary, real browser checks and limitations. The in-game client has observer selection, minds, reactive policy paths and causal history, plus owned human movement, skill actions and free-form speech through the same authoritative reducers. Pause/resume/step and fresh bounded runs remain server operations; inference remains asynchronous and server-side.
+
+Default live mode is an explicitly authored fixture with no inference. A separate read-only mode displays the preserved actual Qwen-generated policy and its failed outcome. SpacetimeDB module/SDK/bindings moved to 2.1.0 for released Rust browser support; a separate 2.1.0 service/data directory preserves the older 2.0.1 experiments. Bevy stays 0.18.1. The local broker is developer enrollment, not public production authentication. The legacy voxel/combat mode remains separate and compiles; no migration of its simulation rules is claimed.
+
+Current regression count is 55 passing core/provider/archive tests. Successful fresh model-generated adaptive behavior remains an open model-quality gap. Broader daily-life mechanics, richer presentation and production access provisioning follow this bounded integration.
+
+## Legacy baseline assessment
+
+Static source review at baseline commit `1736fc1`, 2026-09-04. No runtime checks or simulation experiments were performed for this documentation overhaul. A table, enum variant, comment, or handler is evidence of code structure, not proof of a complete working behavior. Revalidate this inventory as implementation changes.
+
+The [vision](SIMULATION_VISION.md) defines the target; the [roadmap](TODO.md) sequences work. Existing `Player` and `Npc` names below are code identifiers, not the product distinction between human-controlled and AI-controlled players.
+
+## Reusable foundation
+
+| Source | Verified structure |
+|---|---|
+| [Workspace manifest](../Cargo.toml), [module manifest](../server/module/spacetimedb/Cargo.toml), [client manifest](../client/Cargo.toml) | Rust workspace with SpacetimeDB module, Bevy client, shared bindings, and bridge; module uses `bonsai-bt`. |
+| [tables.rs](../server/module/spacetimedb/src/tables.rs) | Separate player/NPC state; `NpcBehavior.current_tree`; personality, emotion, belief, knowledge, goal, relationship, memory, and NPC skill tables. Legacy `persona` also remains in use. |
+| [npc_ai.rs](../server/module/spacetimedb/src/npc_ai.rs) | Custom tree evaluation, action dispatch, role defaults, emotion decay, identity mutation helpers, goal checks, and model context construction. |
+| [lib.rs](../server/module/spacetimedb/src/lib.rs) | Scheduled NPC tick, chat, human skill reducer, and tree/identity/speech submission reducers. Tree submission parses `Behavior<NpcBtAction>` JSON. |
+| [bridge main.rs](../server/bridge/src/main.rs), [llm.rs](../server/bridge/src/llm.rs) | Pending-decision subscription and three routes: `tree_generation`, `experience`, `conversation`; Ollama HTTP client. Cloud backend routing is not implemented in these files. |
+
+The v2-shaped tables and routes exist. Earlier “migration complete” checklists did not establish correct execution, shared skills, personality-driven decisions, or auditable development. Those claims must not be used as acceptance evidence for the new milestone.
+
+## Gaps to close
+
+| ID | Static observation and source | Consequence for the foundation |
+|---|---|---|
+| G1 — Shared skill execution | `use_skill` in [lib.rs](../server/module/spacetimedb/src/lib.rs) checks the authenticated human character, skill availability, attributes, cooldown and resources. `execute_bt_action` → `Attack` in [npc_ai.rs](../server/module/spacetimedb/src/npc_ai.rs) directly computes level-based damage and updates the human target. [skill.rs](../server/module/spacetimedb/src/skill.rs) is combat oriented. | Same capabilities/rules across controllers and all-actions-as-skills are not realized. Establish a common authoritative lifecycle without assuming today's combat attributes fit every action. |
+| G2 — Sequential execution | `evaluate_tree` → `Behavior::Sequence` in [npc_ai.rs](../server/module/spacetimedb/src/npc_ai.rs) returns only the last selected child action. `tick_npcs` in [lib.rs](../server/module/spacetimedb/src/lib.rs) executes that returned action once. There is no persisted sequence-completion state in this path. | Multi-action plans and “attack then update identity” examples are not supported as claimed: earlier selected actions are not executed by evaluation. Correct progress, failure, and interruption before relying on them. This is a static finding, not a reproduced runtime test. |
+| G3 — Communication and transmission | Human `send_chat_message` records nearby hearing with distance/role-keyword confidence and a truncated `said` belief. Default trees prefer greetings/knowledge/belief responses; model speech also exists. `propagate_beliefs_and_knowledge` in [npc_ai.rs](../server/module/spacetimedb/src/npc_ai.rs) copies qualifying records between nearby friendly NPCs without chosen speech. | Text support alone is not the full free-form intent/perception/interpretation/decision loop. Automatic copying bypasses it; remove that shortcut from the target communication model. |
+| G4 — Mortality | `respawn_player` in [combat.rs](../server/module/spacetimedb/src/combat.rs) restores human resources/position. `kill_npc` deletes live NPC state plus event logs, memories, goals, beliefs, relationships, and skills. | Death paths differ; they do not implement shared permanent mortality with lasting history. This does not establish that every identity table is cleaned up. |
+| G5 — Audit lifetime | `NPC_EVENT_EXPIRE_MS = 300_000` and `log_npc_event` in [npc_ai.rs](../server/module/spacetimedb/src/npc_ai.rs) schedule event expiry after five minutes. [tables.rs](../server/module/spacetimedb/src/tables.rs) also holds separate memory and identity state. | The short-term event buffer is insufficient historical audit storage. It does not mean all identity disappears after five minutes. Add durable causal records independent of memory/live-state deletion. |
+| G6 — Meaningful activity and introspection | Role defaults and evaluator fallbacks include random `Wander`. Tick code checks goal completion and near-death; dawn and explicit request actions also trigger decisions. Comments mention exhaustion without a corresponding implemented detector in `tick_npcs`. | Random fallback is not evidence of intentional activity. Add observable approach progress/failure and individually varying self-reconsideration; do not label an exhaustive trigger list implemented from comments. |
+| G7 — Subjective/model context | `trigger_decision_enriched` constructs context from nearby world rows, goals, beliefs, relationships, inventory, events and memory; it still includes `persona` but does not serialize the structured personality/emotion/knowledge tables. `NpcBelief` has no per-record source-event field. | A structured identity table alone does not prove it informs model decisions. Establish explicit perception/context contracts and provenance, and verify all intended state reaches decisions without observer truth leakage. |
+| G8 — Output validation and history | `submit_npc_tree` parses tree JSON and replaces the current tree, then deletes the pending row. Identity submission applies deltas; bridge logs truncate some output/context. | Parsing is not full authorization, capability, reference, version, or lifecycle validation. Do not claim “all LLM actions validated” or durable input/output history exists. Add request correlation, stale-result handling, validated changes, and full audit evidence. |
+| G9 — Experiment tooling | Reviewed tick and bridge paths use live DB state; bridge `HOST` and `DB_NAME` are fixed constants. This review establishes no reusable scenario/run manifest, run isolation, durable comparison, or recorded-decision replay. | Implement and demonstrate a modest headless runner against the real core; define controllable timing and isolation before promising reproducibility. |
+
+## Reading cautions
+
+The old module guide included pseudocode fields absent from actual tables, aspirational visual emotion feedback, and complete plan/conversation claims. The current guides now point here instead of maintaining a second implementation inventory. [Historical ADRs](adr/README.md) retain those proposals as history.
+
+Existing indexes on `NpcMemory` and `NpcEventLog` mean the earlier TODO to “add an index” was misleading; hot paths still use full `.iter()` scans. Optimize actual access patterns when measured or needed for the slice, rather than pursuing a population target first.
+
+The documentation-only baseline did not certify [audit acceptance checks](AUDIT_AND_EXPERIMENTS.md#acceptance-checks). Subsequent foundation checks are recorded separately in [M1_VERIFICATION.md](M1_VERIFICATION.md); they do not certify the legacy gameplay path.

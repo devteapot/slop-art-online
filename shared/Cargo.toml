@@ -4,4 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-spacetimedb-sdk = { version = "=2.0.1" }
+spacetimedb-sdk = { version = "=2.1.0" }
+
+[features]
+browser = ["spacetimedb-sdk/browser"]

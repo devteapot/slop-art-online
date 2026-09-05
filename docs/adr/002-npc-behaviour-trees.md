@@ -1,5 +1,7 @@
 # ADR 002 — NPC Behaviour Trees
 
+> **Reading status:** Historical, superseded proposal. [ADR 007](007-simulation-first-foundation.md) and the [simulation vision](../SIMULATION_VISION.md) govern current work. Existing code uses `bonsai-bt` data with a custom evaluator; this record does not mandate a new graph engine.
+
 ## Status
 Superseded by ADR 003 → ADR 005
 

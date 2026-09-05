@@ -35,3 +35,32 @@ logs:
 
 call reducer *args:
     spacetime call --server {{server}} {{db}} {{reducer}} {{args}}
+
+# M1 experiments use isolated databases, never the ordinary development DB.
+sim-build:
+    cargo build -p server_module --target wasm32-unknown-unknown
+    cargo build -p bridge --bin sao-sim
+
+sim-run scenario output model='qwen2.5:7b' port='18877':
+    cargo run -p bridge --bin sao-sim -- run "{{scenario}}" "{{output}}" "{{model}}" "{{port}}"
+
+sim-inspect output port='18877':
+    cargo run -p bridge --bin sao-sim -- inspect "{{output}}" "{{port}}"
+
+sim-verify:
+    cargo test -p simulation --lib
+    python3 scripts/verify_m1.py
+
+# Explicit per-run NPC provider configuration; credentials stay in the environment.
+sim-run-config scenario output config port='18878':
+    NPC_REASONING_CONFIG="{{config}}" cargo run -p bridge --bin sao-sim -- run "{{scenario}}" "{{output}}" configured "{{port}}"
+
+# Actual Bevy WASM game client; no model calls during build or default host startup.
+bevy-web-build:
+    cd client && env -u NO_COLOR trunk build --cargo-profile wasm-dev
+
+bevy-dev:
+    env -u NPC_REASONING_CONFIG cargo run -p bridge --bin sao-dev-client
+
+bevy-native:
+    cargo run -p client --no-default-features --features foundation

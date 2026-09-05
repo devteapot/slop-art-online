@@ -1,5 +1,7 @@
 # ADR 001 — NPC Combat Strategy Revision Loop
 
+> **Reading status:** Historical record. Its descriptions of “current” behavior refer to the original design period. [ADR 007](007-simulation-first-foundation.md) and the [simulation vision](../SIMULATION_VISION.md) now govern direction, including reconsideration when an approach fails. Earlier trigger policies are not an exhaustive current requirement.
+
 ## Status
 Superseded by ADR 005 (NPC Architecture v2)
 

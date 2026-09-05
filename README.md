@@ -1,50 +1,38 @@
 # Slop Art Online
 
-A greenfield MMORPG built entirely in **Rust**. NPCs are living entities with structured identity — personality, beliefs, knowledge, goals, emotions, and relations — that evolve through experience. The LLM is used sparingly; most behavior is driven by deterministic behavior trees and rule-based systems.
+A Rust game about individuals who pursue goals, form imperfect beliefs, communicate, and become different through experience. We are building the **simulation foundation first**, then richer UI and gameplay around it. “Players” includes human-controlled and AI-controlled characters with shared capabilities and authoritative world rules.
 
-**Bevy is the sole supported game client.** It handles rendering, input, physics, audio, and UI. Custom NPC simulation and authoritative world rules live in the Rust SpacetimeDB module, with the Rust LLM bridge supporting the AI experience.
+Start with the [simulation vision and design](docs/SIMULATION_VISION.md). The next milestone is a small, inspectable survival simulation with free-form communication, evolving individuals, shared skills, permanent death, and scenario tooling. These are target capabilities, not claims that the current prototype already provides them.
 
+## Architecture and current status
+
+The existing Rust stack stays: **SpacetimeDB** owns world state and rules, **Bevy** is the supported game client, and the **Rust LLM bridge** supports reasoning above real-time behavior execution. Experiments should run the same authoritative core without the visual client.
+
+```text
+Bevy game client / M1 observer and scenario tools
+    ↕ SpacetimeDB protocol
+SpacetimeDB (authoritative state, reducers, NPC behavior execution)
+    ↕ NpcPendingDecision subscription and submission reducers
+Rust LLM bridge
+    ↕ HTTP
+Ollama (current backend; cloud integration remains an option)
 ```
-Bevy Client (native + WASM)
-    ↕ WebSocket (SpacetimeDB protocol)
-SpacetimeDB (game state + logic + NPC brain)
-    ↕ subscription (NpcPendingDecision)
-LLM Bridge (thin, stateless Rust async service)
-    ↕
-LLM Backend (Cloud API or local Ollama)
+
+M1 now has an executable survival foundation with shared skills, persistent behavior sequences, free-form model speech, subjective perception, individual change, permanent death, durable evidence, and isolated scenario runs. The legacy Bevy gameplay path remains separate while the foundation is proved. The [browser-hosted Bevy game client](docs/BEVY_BROWSER_CLIENT.md) now provides in-game observer and owned human participant modes, using the same authoritative foundation. The external HTML inspector remains developer audit tooling. See the [M1 runbook](docs/M1_RUNBOOK.md) and [verification report](docs/M1_VERIFICATION.md) for exact scope and model limitations.
+
+With the isolated local SpacetimeDB server and Ollama running:
+
+```bash
+just sim-build
+just sim-run scenarios/survival.json output/my-run qwen2.5:7b 18877
+# Later, reopen the retained evidence without advancing the simulation:
+just sim-inspect output/my-run 18877
 ```
-
-## Features
-
-- **Living NPCs** — unified behavior trees with priority layers (reactive → awareness → daily life → fallback); identity evolves via cheap inline BT actions and rare LLM experience evaluation
-- **LLM-sparing AI** — trees handle combat, movement, and routines; the bridge is called mainly for tree generation (~1–3×/NPC/day) and novel conversation (~5% of exchanges)
-- **SpacetimeDB backend** — game state and logic co-located as WASM reducers; clients subscribe to table diffs over WebSocket
-- **Bevy client** — same codebase for native desktop and browser (WASM); ECS with client-side prediction
-- **Voxel world** — editable terrain with chunked meshing (work in progress)
-
-## Architecture
-
-Three independent Rust tiers:
-
-| Tier | Path | Role |
-|------|------|------|
-| **SpacetimeDB module** | `server/module/spacetimedb/` | Authoritative game state, reducers, NPC tick (500 ms), behavior trees |
-| **Bevy client** | `client/` | Rendering, input, prediction, world presentation |
-| **LLM bridge** | `server/bridge/` | Subscribes to pending decisions, calls Ollama/cloud, submits validated results |
-
-**Design constraints:**
-
-- Reducers are **deterministic** — no HTTP, no external randomness, no LLM inside WASM
-- Shared types live in `shared/` (generated SpacetimeDB bindings)
-- If the bridge crashes, NPCs keep running on behavior trees — no game outage
-- LLM output is untrusted; every action is validated by a reducer before execution
-
-For diagrams and deep dives, see [docs/diagrams/](docs/diagrams/) and [docs/adr/](docs/adr/).
 
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) (stable toolchain)
-- [SpacetimeDB CLI](https://spacetimedb.com/docs) (`spacetime`, version **2.0.1** to match the pinned Rust SDK and generated bindings)
+- [SpacetimeDB CLI](https://spacetimedb.com/docs) (`spacetime`, version **2.1.0** to match the pinned Rust SDK and generated bindings)
 - [Docker](https://docs.docker.com/get-docker/) (for local SpacetimeDB / optional Ollama UI)
 - [just](https://github.com/casey/just) (command runner)
 - [Ollama](https://ollama.com/) (optional — local LLM for the bridge; on macOS run natively, not in Docker)
@@ -58,9 +46,11 @@ rustup target add wasm32-unknown-unknown
 Use the matching CLI version before regenerating bindings:
 
 ```bash
-spacetime version install 2.0.1
-spacetime version use 2.0.1
+spacetime version install 2.1.0
+spacetime version use 2.1.0
 ```
+
+NPC model backends are configurable per run: see [Ollama, OpenRouter, and compatible endpoint reasoning](docs/NPC_REASONING.md).
 
 ## Quick start
 
@@ -81,7 +71,7 @@ just publish         # incremental publish
 just generate        # regenerate Rust client bindings into shared/
 ```
 
-### 3. Run the LLM bridge (optional but needed for smart NPCs)
+### 3. Run the LLM bridge (needed for model-backed decisions)
 
 ```bash
 # Defaults: SpacetimeDB at http://localhost:3000, Ollama at http://localhost:11434
@@ -90,6 +80,8 @@ cargo run -p bridge
 ```
 
 ### 4. Run the Bevy client
+
+For the primary foundation development interface, use the [Bevy browser runbook](docs/BEVY_BROWSER_CLIENT.md) and open [127.0.0.1:18890](http://127.0.0.1:18890). The command below starts the preserved legacy gameplay mode.
 
 ```bash
 just client      # cargo run -p client
@@ -111,50 +103,15 @@ just client      # cargo run -p client
 
 ## Project structure
 
-```text
-slop-art-online/
-├── Cargo.toml                 # workspace root
-├── Justfile                   # publish, generate, compose helpers
-├── STACK_REFERENCE.md         # tech stack rationale
-├── CLAUDE.md                  # project guidance for AI assistants
-│
-├── shared/                    # SpacetimeDB SDK bindings (shared types)
-├── client/                    # Bevy game client
-├── server/
-│   ├── module/spacetimedb/    # WASM game module (reducers, tables, NPC AI)
-│   └── bridge/                # LLM bridge service
-├── deploy/
-│   └── docker-compose.yml     # SpacetimeDB, Open WebUI, optional Ollama
-└── docs/
-    ├── adr/                   # Architecture Decision Records
-    ├── diagrams/              # Mermaid system diagrams
-    └── TODO.md                # technical debt tracker
-```
-
-## NPC AI (summary)
-
-NPCs use a **unified behavior tree** (no mode switching) with priority layers:
-
-1. **Reactive** — combat response, conversation protocol  
-2. **Awareness** — threat evaluation, social cues  
-3. **Daily life** — goal pursuit, tasks, exploration  
-4. **Fallback** — wander, rest  
-
-Identity evolves through experience:
-
-- Inline BT actions (`SetBelief`, `AddKnowledge`, `AdjustRelationship`) — cheap, no LLM  
-- Async experience evaluation after significant events — LLM returns identity deltas  
-- Emotion system (anger, fear, joy, sadness, surprise, disgust) — event-triggered, decays toward personality baseline  
-
-Cost model (rough):
-
-| Tier | LLM usage |
-|------|-----------|
-| Mobs (thousands) | None — static default trees |
-| Common NPCs (hundreds) | Tree at dawn + rare events |
-| Key NPCs (dozens) | Trees + novel conversations |
-
-See [`server/module/spacetimedb/CLAUDE.md`](server/module/spacetimedb/CLAUDE.md) for the full NPC architecture and [`docs/adr/005-npc-architecture-v2.md`](docs/adr/005-npc-architecture-v2.md) for the design rationale.
+| Path | Purpose |
+|---|---|
+| `server/module/spacetimedb/` | Authoritative Rust/WASM simulation, tables, reducers, NPC AI |
+| `server/bridge/` | Rust service routing pending decisions to Ollama |
+| `client/` | Bevy rendering, input, prediction, and game UI |
+| `simulation/` | Shared authoritative M1 Rust rules invoked by SpacetimeDB |
+| `shared/` | Generated SpacetimeDB Rust bindings |
+| `deploy/` | Local service configuration |
+| `docs/` | Canonical design, implementation gaps, roadmap, diagrams, historical ADRs |
 
 ## Local services
 
@@ -167,14 +124,17 @@ See [`server/module/spacetimedb/CLAUDE.md`](server/module/spacetimedb/CLAUDE.md)
 
 ## Documentation
 
-| Doc | Contents |
-|-----|----------|
-| [STACK_REFERENCE.md](STACK_REFERENCE.md) | Stack overview, Bevy/voxel notes, hosting |
-| [docs/adr/](docs/adr/) | Why major decisions were made (start with ADR 005) |
-| [docs/diagrams/](docs/diagrams/) | System overview, tick loop, behavior trees, LLM usage |
-| [docs/TODO.md](docs/TODO.md) | Migration checklist and tech debt |
-| [server/module/spacetimedb/CLAUDE.md](server/module/spacetimedb/CLAUDE.md) | NPC identity, trees, tick loop |
-| [server/bridge/CLAUDE.md](server/bridge/CLAUDE.md) | When/how the LLM is called |
+| Document | Purpose |
+|---|---|
+| [Simulation vision](docs/SIMULATION_VISION.md) | Authoritative direction, vocabulary, architecture boundaries, open questions |
+| [Audit and experiments](docs/AUDIT_AND_EXPERIMENTS.md) | Common evidence, live/historical inspection, isolated runs, replay limits, acceptance checks |
+| [Current state](docs/CURRENT_STATE.md) | Static implementation assessment and foundation gaps |
+| [Roadmap](docs/TODO.md) | First milestone, dependencies, later stages, technical debt |
+| [Stack reference](STACK_REFERENCE.md) | Retained technology and source/configuration pointers |
+| [Diagrams](docs/diagrams/README.md) | Labeled target flows and current tick reference |
+| [ADR index](docs/adr/README.md) | Decision history and supersession boundaries |
+| [Root guidance](CLAUDE.md) | Working rules for coding agents |
+| [Module guidance](server/module/spacetimedb/CLAUDE.md) / [bridge guidance](server/bridge/CLAUDE.md) | Local source maps and implementation constraints |
 
 ## License
 

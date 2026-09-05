@@ -1,107 +1,55 @@
-# CLAUDE.md
+# Project guidance
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+SAO / Slop Art Online retains its living-world game vision and Rust stack. Build the inspectable simulation foundation before expanding gameplay, visuals, or population scale.
 
-## Project Overview
+The implemented M1 path is documented in the [runbook](docs/M1_RUNBOOK.md) and [verification report](docs/M1_VERIFICATION.md). Use `simulation/` and `foundation.rs` for foundation rules; the old gameplay reducers remain a separate legacy prototype.
 
-**slop-art-online** is a greenfield MMORPG built entirely in Rust. NPCs are living entities with structured identity (personality, beliefs, knowledge, goals, emotions, relations) that evolve through experience. The LLM is used sparingly — most behavior is driven by deterministic behavior trees and rule-based systems.
+## Read first
 
-For deep architectural context, see:
-- `STACK_REFERENCE.md` — High-level tech stack and design rationale
-- `docs/adr/` — Architecture Decision Records (start with ADR 005 for the current NPC architecture)
-- `server/module/spacetimedb/CLAUDE.md` — NPC identity, behavior trees, tick loop
-- `server/bridge/CLAUDE.md` — LLM bridge, when/how the LLM is called
+- [Simulation vision](docs/SIMULATION_VISION.md) is the authoritative design entry point, including vocabulary and open questions.
+- [Current state](docs/CURRENT_STATE.md) distinguishes verified source structure from target behavior and concrete gaps.
+- [Roadmap](docs/TODO.md) defines work order and milestone completion.
+- [Audit and experiments](docs/AUDIT_AND_EXPERIMENTS.md) defines evidence, tooling, and acceptance requirements.
+- [Stack reference](STACK_REFERENCE.md), [module guidance](server/module/spacetimedb/CLAUDE.md), and [bridge guidance](server/bridge/CLAUDE.md) provide implementation context.
 
-## Build & Run
+Historical [ADRs](docs/adr/README.md) explain earlier choices; their old call quotas, template-first communication, population targets, and migration checkmarks do not override the current design.
+
+## Working principles
+
+“Players” includes human-controlled and AI-controlled characters. Existing `Player`/`Npc` identifiers do not imply different intended capabilities or world rules. Keep observer truth outside character perception; shared controllers do not require simulated human psychology or possession features.
+
+All kinds of action are intended to be modular skills. Extend shared requirements/execution/consequences across controllers; do not add parallel NPC-only effects and call that parity. Distinguish intention, attempt, interruption/failure, validated result, and later identity change.
+
+Preserve the real-time behavior layer with LLM interpretation/revision above it. The current implementation uses behavior trees and a custom evaluator; inspect sequence semantics before relying on multi-action plans. Do not assume an arbitrary graph engine or a specific redesign is required.
+
+Free-form communication, experience-driven individual change, and individually varying reconsideration belong in the first integrated slice. Templates, roles, fixed schedules, and silent belief copying must not replace those requirements. Death is initially permanent; reincarnation is deferred.
+
+Make mechanics inspectable through common visual/structured evidence and reusable headless scenarios. Keep audit history distinct from character memory. Retain actual model exchanges and reported explanations, not hidden chain-of-thought claims. A seed alone does not guarantee repeatable model outputs.
+
+## Architecture constraints
+
+- Rust SpacetimeDB module owns authoritative rules and state. Bevy owns game rendering/input/UI and presentation/prediction.
+- Reducers must use supported deterministic inputs and SpacetimeDB RNG; no HTTP or external LLM calls inside WASM reducers.
+- The Rust bridge handles external model calls. Outputs are untrusted; parsing alone is not complete authorization or effect validation.
+- Shared client/bridge types come from generated bindings in `shared/`; regenerate only when schema/reducer changes require it.
+- Run experiments using the actual authoritative core without Bevy. Do not implement a second approximate simulator or change stacks for tooling.
+- Prefer focused modules for new logic rather than extending the `lib.rs` monolith. Preserve useful existing architecture.
+
+## Build and run
+
+See [README setup](README.md#prerequisites) and the [Justfile](Justfile). Common commands:
 
 ```bash
-cargo build                # build all crates
-just client                # run the Bevy client (cargo run -p client)
-cargo test                 # run all tests
-cargo test <name>          # run a single test by name
-just publish-reset         # clear DB and republish SpacetimeDB module
-just generate              # regenerate client bindings
-just up                    # start local dev services (docker-compose)
-just logs                  # view SpacetimeDB logs
+cargo build              # workspace build
+cargo test               # workspace tests
+cargo test <name>        # focused test
+just up                  # local SpacetimeDB + Open WebUI, mac profile
+just client              # Bevy client
+cargo run -p bridge      # model bridge
+just publish             # incremental local module publish
+just publish-reset       # deletes DB data and republishes
+just generate            # regenerate Rust bindings
+just logs                # compose logs
 ```
 
-## Architecture
-
-Three independent tiers, all Rust:
-
-### 1. SpacetimeDB (backend) — `server/module/spacetimedb/`
-- Database + game logic co-located as WASM modules inside the DB
-- **Reducers** = atomic, deterministic transactions (player actions, NPC tick, LLM response validation)
-- **Schedulers** = timed events (NPC tick every 500ms, day/night cycle)
-- Single source of truth for all game state; clients subscribe to table diffs via WebSocket
-
-### 2. Bevy Client (frontend) — `client/`
-- Sole supported game client; use Bevy for rendering, input, physics, audio, and UI
-- Keep custom NPC simulation and authoritative world rules in the Rust SpacetimeDB module
-- Same codebase targets native desktop and WASM/browser
-- ECS architecture: `FixedUpdate` (60 Hz) for deterministic logic, `Update` (uncapped) for rendering
-- Implements client-side prediction + server reconciliation
-
-### 3. LLM Bridge (separate service) — `server/bridge/`
-- Thin, stateless Rust async service
-- Subscribes to `NpcPendingDecision` table in SpacetimeDB
-- Called only for: **tree generation** (~1-3 times/NPC/day) and **novel conversation content** (~5% of exchanges)
-- **LLM output is untrusted**: the reducer validates every action before execution
-- If the bridge crashes, NPCs fall back to behavior trees — no game outage
-
-## NPC AI — How It Works
-
-NPCs use a **unified behavior tree** (no mode switching) with priority layers:
-1. **Reactive** — combat response, conversation protocol
-2. **Awareness** — threat evaluation, social cues
-3. **Daily Life** — goal pursuit, tasks, exploration
-4. **Fallback** — wander, rest
-
-The tree handles most situations through runtime conditions (emotions, beliefs, knowledge). The LLM regenerates the tree only at dawn, after major events, or when the tree is exhausted.
-
-**Identity** evolves through experience:
-- Inline BT actions (SetBelief, AddKnowledge, AdjustRelationship) — cheap, no LLM
-- Async experience evaluation after significant events — LLM returns identity deltas
-- Emotion system (anger, fear, joy, sadness, surprise, disgust) — event-triggered, decays toward personality baseline
-
-See `server/module/spacetimedb/CLAUDE.md` for the full NPC architecture.
-
-## Key Design Constraints
-
-- **Reducers must be deterministic** — no HTTP, no randomness outside `ctx.rng`, no LLM inside WASM
-- **Shared types live in `shared/`** — SpacetimeDB SDK bindings used by both server and client
-- **Build target for SpacetimeDB modules is WASM** (`wasm32-unknown-unknown`)
-- **The LLM bridge is the only tier that touches external APIs**
-- **New code goes into existing modules** — never back into the monolith `lib.rs`
-
-## Workspace Structure
-
-```
-Cargo.toml                      (workspace root)
-shared/                         (SpacetimeDB SDK bindings, shared types)
-server/
-  module/
-    spacetimedb/                (SpacetimeDB reducers — WASM target)
-      src/
-        lib.rs                  (reducers, tick_npcs, main game loop)
-        tables.rs               (all table definitions)
-        npc_ai.rs               (behavior trees, BT evaluation, actions)
-        constants.rs            (tuning parameters)
-        combat.rs               (combat logic)
-  bridge/                       (LLM bridge service)
-    src/
-      main.rs                   (decision routing, LLM calls)
-client/                         (Bevy game client)
-deploy/                         (docker-compose)
-docs/
-  adr/                          (Architecture Decision Records)
-  TODO.md                       (technical debt tracker)
-```
-
-## Local Dev Services (docker-compose)
-
-| Service      | Port  | Notes                    |
-|-------------|-------|--------------------------|
-| SpacetimeDB | 3000  |                          |
-| Ollama      | 11434 | optional GPU passthrough |
-| LLM Bridge  | —     | connects to both above   |
+For documentation-only changes, review links, terminology, current/target labels, and `git diff --check`; do not install dependencies, regenerate bindings, or run heavyweight builds. For runtime changes, verify the affected behavior and relevant scenario/audit acceptance checks. Do not mark a feature complete merely because its table or handler exists.

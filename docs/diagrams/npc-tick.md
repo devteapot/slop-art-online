@@ -1,74 +1,28 @@
-# NPC Tick Loop
+# Legacy NPC tick: static source reference
 
-What happens every 500ms for each NPC.
+The implemented M1 path has its own authoritative step reducer; see [ADR 008](../adr/008-m1-authoritative-survival-slice.md). This diagram preserves the legacy gameplay path.
 
-## Current Implementation (v2)
-
-```mermaid
-flowchart TD
-    Start([Tick fires every 500ms]) --> Decay[1. Apply emotion decay<br/>lerp toward personality baseline]
-    Decay --> NightRegen{Night + at home?}
-    NightRegen -->|Yes| Regen2[2. Night regen<br/>5% HP/MP/SP]
-    NightRegen -->|No| Eval
-    Regen2 --> Eval[3. Evaluate unified current_tree<br/>with runtime state]
-    Eval --> Action{Action<br/>produced?}
-
-    Action -->|Yes| Exec[4. Execute action<br/>deterministic side effects]
-    Action -->|No| FollowDest
-
-    Exec --> InlineID{Inline identity<br/>action?}
-    InlineID -->|SetBelief, AddKnowledge<br/>AdjustRelationship, TriggerEmotion| UpdateID[Write to identity tables<br/>zero LLM cost]
-    InlineID -->|No| FollowDest
-
-    UpdateID --> FollowDest[5. Follow NpcDestination<br/>move toward target]
-    FollowDest --> GoalCheck{6. Every 5 ticks:<br/>check_goal_conditions}
-
-    GoalCheck --> RegenCheck{7. Goal just<br/>completed?}
-    RegenCheck -->|Yes| TreeRegen[Create NpcPendingDecision<br/>type: tree_generation]
-    RegenCheck -->|No| NearDeath
-
-    TreeRegen --> NearDeath{8. Near-death<br/>+ recent damage?}
-    NearDeath -->|Yes| ExpEval[Create NpcPendingDecision<br/>type: experience]
-    NearDeath -->|No| Propagate
-
-    ExpEval --> Propagate[9. Every 10 ticks:<br/>propagate_beliefs_and_knowledge]
-    Propagate --> Done([Next NPC])
-
-    style Start fill:#3498db,stroke:#fff,color:#fff
-    style Done fill:#3498db,stroke:#fff,color:#fff
-    style TreeRegen fill:#9b59b6,stroke:#fff,color:#fff
-    style ExpEval fill:#9b59b6,stroke:#fff,color:#fff
-    style UpdateID fill:#27ae60,stroke:#fff,color:#fff
-```
-
-## Previous Implementation (v1 — replaced)
-
-<details>
-<summary>Click to expand v1 diagram (historical reference)</summary>
+**Legacy source flow at `1736fc1` (2026-09-04), not runtime verification.** Based on `tick_npcs` in [lib.rs](../../server/module/spacetimedb/src/lib.rs) and helpers in [npc_ai.rs](../../server/module/spacetimedb/src/npc_ai.rs). Current scheduling targets 500 ms; this is a code setting, not a fixed product requirement.
 
 ```mermaid
 flowchart TD
-    Start([Tick fires]) --> Mode{Check mode}
-
-    Mode -->|sleeping| Sleep[Walk home + regen 5%/tick]
-    Mode -->|combat| Combat[Evaluate combat_tree<br/>against nearest player]
-    Mode -->|plan| Plan[Execute current plan step<br/>advance step counter]
-    Mode -->|life_tree| Life[Evaluate life_tree]
-    Mode -->|idle| Idle[Default wander]
-
-    Combat -->|target gone| PostCombat[trigger post_combat decision]
-    Combat -->|target present| ExecCombat[Execute combat action]
-
-    Sleep --> Done([Next NPC])
-    ExecCombat --> Done
-    PostCombat --> Done
-    Plan --> Done
-    Life --> Done
-    Idle --> Done
-
-    style Start fill:#e74c3c,stroke:#fff,color:#fff
-    style Mode fill:#e74c3c,stroke:#fff,color:#fff
-    style Done fill:#e74c3c,stroke:#fff,color:#fff
+    Start[Scheduled tick] --> Resources[Human resources and status effects]
+    Resources --> Day[Update day/night and tick counter]
+    Day --> Each[For each NPC]
+    Each --> Emotion[Emotion decay and night-at-home regeneration]
+    Emotion --> Tree[Load current_tree or role default]
+    Tree --> Context[Nearest human target and nearby NPC/POI context]
+    Context --> Eval[Evaluate tree and return one selected action]
+    Eval --> Execute[Execute returned action if present]
+    Execute --> Destination[Follow destination if set]
+    Destination --> Goals[Periodic goal checks]
+    Goals --> Pending[Goal-completion tree request or near-death experience request]
+    Pending --> More{More NPCs?}
+    More -->|Yes| Each
+    More -->|No| Copy[Periodic proximity belief/knowledge copying]
+    Copy --> Next[Schedule next NPC tick]
 ```
 
-</details>
+The propagation check is after the NPC loop. Dawn and explicit action requests provide other decision paths; comments mentioning exhaustion are not a completed detector in this tick.
+
+This flow does not implement the full target [behavior/skill lifecycle](behavior-tree.md). In particular, `Sequence` returns its last selected action without executing earlier ones; NPC combat has a separate effect path; copying records is not chosen conversation; human death respawns while NPC death removes live/history records. The [current-state assessment](../CURRENT_STATE.md) details these gaps and the [roadmap](../TODO.md) orders their resolution.

@@ -1,0 +1,23 @@
+{
+  "backend": {
+    "kind": "openai_compatible",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "base_url": "https://example.invalid/tenant/api/v1",
+    "auth": {
+      "kind": "bearer_env",
+      "credential_env": "NPC_LLM_API_KEY"
+    },
+    "capabilities": {
+      "response_modes": [
+        "json_schema"
+      ],
+      "token_limit_field": "max_tokens",
+      "temperature": false,
+      "seed": false
+    }
+  },
+  "structured_output": "json_schema",
+  "deadline_ms": 90000,
+  "max_attempts": 1,
+  "max_output_tokens": 6000
+}

@@ -1,87 +1,27 @@
-# Unified Behavior Tree Structure
+# Behavior execution and shared skills
 
-Priority layers and how emotions/knowledge gate branches.
-
-```mermaid
-graph TD
-    Root[Select - Priority Root]
-
-    subgraph Reactive["⚡ Reactive Layer (highest priority)"]
-        R1[Sequence]
-        R1A[IsBeingAttacked]
-        R1B[CombatResponse subtree]
-        R2[Sequence]
-        R2A[BeingAddressedInConversation]
-        R2B[ConversationProtocol subtree]
-    end
-
-    subgraph Awareness["👁️ Awareness Layer"]
-        A1[Sequence]
-        A1A[EnemyDetected]
-        A1B["NOT(IsBeingAttacked)"]
-        A1C[EvaluateStrength]
-        A1D[Select - Response]
-        A1D1["Sequence: GoalRequires + EmotionBelow(fear) → Attack"]
-        A1D2["Sequence: StrengthAdvantage + EmotionAbove(anger) → Intimidate"]
-        A1D3["Sequence: SetBelief(spotted) + KeepDistance → Continue"]
-    end
-
-    subgraph Daily["🏠 Daily Life Layer"]
-        D1["Sequence: GoalActive(trade) → TravelTo(Market) → Trade"]
-        D2["Sequence: HasKnowledge(nav) → Explore"]
-        D3["Sequence: IsNightTime → GoHome → Rest"]
-    end
-
-    subgraph Fallback["🔄 Fallback Layer"]
-        F1[Wander]
-    end
-
-    Root --> R1
-    Root --> R2
-    Root --> A1
-    Root --> D1
-    Root --> D2
-    Root --> D3
-    Root --> F1
-
-    R1 --> R1A
-    R1 --> R1B
-    R2 --> R2A
-    R2 --> R2B
-    A1 --> A1A
-    A1 --> A1B
-    A1 --> A1C
-    A1 --> A1D
-    A1D --> A1D1
-    A1D --> A1D2
-    A1D --> A1D3
-
-    style Reactive fill:#e74c3c,stroke:#fff,color:#fff
-    style Awareness fill:#f39c12,stroke:#fff,color:#fff
-    style Daily fill:#27ae60,stroke:#fff,color:#fff
-    style Fallback fill:#95a5a6,stroke:#fff,color:#fff
-```
-
-## How personality shapes the tree
-
-The LLM generates different trees for different NPCs. The **structure itself** embodies personality:
+**Current foundation flow (`m1-4`).** The LLM generates the actual policy. A bounded simulation-owned vocabulary supports reactive guards/priorities and persisted sequences, while shared skills execute below asynchronous reasoning. Legacy sequence data retains `bonsai-bt`. See [vision](../SIMULATION_VISION.md#behavior-execution-and-llm-reasoning).
 
 ```mermaid
-graph LR
-    subgraph Guard["Guard NPC (cautious)"]
-        G1["EnemyDetected → Observe + KeepDistance (default)"]
-        G2["Only attack if: mission requires OR anger > 0.7"]
-    end
-
-    subgraph Bandit["Bandit NPC (aggressive)"]
-        B1["EnemyDetected → Attack if can win (default)"]
-        B2["Only flee if: outmatched AND fear > 0.8"]
-    end
-
-    style Guard fill:#3498db,stroke:#fff,color:#fff
-    style Bandit fill:#e74c3c,stroke:#fff,color:#fff
+flowchart TD
+    State[Subjective state, needs, goals, and circumstances] --> Approach[Choose or revise approach]
+    Approach --> Behavior[Real-time behavior execution]
+    Perception[New perception or interruption] --> Behavior
+    Behavior --> Intent[Intentional action: move, wait, rest, speak, fight]
+    Intent --> Attempt[Shared skill attempt]
+    Attempt --> Check{Authoritative prerequisites hold?}
+    Check -->|No| Failure[Rejected attempt with reason]
+    Check -->|Yes| Progress[Execution progress]
+    Progress --> Result[Completion or interruption and actual effects]
+    Result --> Experience[Perceived consequences and interpretation]
+    Failure --> Experience
+    Experience --> State
+    Experience --> Reconsider[Reconsider if approach is failing]
+    Reconsider --> Approach
 ```
 
-**Key insight:** Personality is baked into tree structure at generation time. Emotions add runtime variation via condition gates.
+Priority layers for reactivity, awareness, and goal pursuit remain useful. Waiting should carry a purpose and reconsideration conditions; random wandering is not proof of an intentional fallback. Human-controlled requests use the same skill lifecycle, without requiring the simulation to choose the human's intentions.
 
-**Status:** Planned (v2). Currently using separate combat_tree + life_tree with mode switching.
+The [reactive runtime](../REACTIVE_POLICIES.md) retains the installed policy across damage and pending requests. Damage interrupts the active skill; next-tick guards read the new subjective experience. Policy replacement changes its generation. See [ADR 011](../adr/011-persistent-reactive-policies.md) and [verification](../REACTIVE_POLICY_VERIFICATION.md).
+
+**Legacy prototype gap:** `evaluate_tree` returns only the last selected child action for `Sequence`; the tick executes that one action. A sequence such as travel → gather → eat does not currently demonstrate completed sequential actions. Correct persistent progress, completion/failure, and interruption semantics before using multi-action diagrams as implementation evidence. See [G2](../CURRENT_STATE.md#gaps-to-close).

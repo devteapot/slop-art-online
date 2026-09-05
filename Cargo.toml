@@ -5,8 +5,14 @@ members = [
     "server/module/spacetimedb",
     "shared",
     "client",
-    "server/bridge"
+    "server/bridge",
+    "simulation"
 ]
 
 [workspace.dependencies]
 log = "0.4"
+
+[profile.wasm-dev]
+inherits = "dev"
+opt-level = 1
+debug = 0

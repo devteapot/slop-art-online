@@ -1,84 +1,44 @@
-# LLM Bridge Service
+# LLM bridge guidance
 
-The bridge is a thin, stateless Rust async service that connects SpacetimeDB NPCs to LLM backends. It watches for `NpcPendingDecision` rows and routes them to the appropriate LLM handler.
+The Rust bridge connects pending SpacetimeDB decisions to model reasoning above real-time behavior execution. Read the [simulation vision](../../docs/SIMULATION_VISION.md), [audit/experiment contract](../../docs/AUDIT_AND_EXPERIMENTS.md), and [verified gaps](../../docs/CURRENT_STATE.md). [ADR 005](../../docs/adr/005-npc-architecture-v2.md) retains the old design rationale; its template-first conversation and fixed call quotas are superseded.
 
-For the full NPC architecture, see `server/module/spacetimedb/CLAUDE.md`.
+## M1 operator and model runner
 
-## When the LLM Is Called
+[sao-sim.rs](src/bin/sao-sim.rs) drives isolated SpacetimeDB foundation runs and async NPC reasoning through [reasoning/mod.rs](src/reasoning/mod.rs). Typed native Ollama, OpenRouter, and generic Chat Completions adapters own provider protocols; the simulation remains authoritative. See [backend configuration and evidence](../../docs/NPC_REASONING.md). It never runs a second local world. [inspector.html](inspector.html) renders exported common evidence and supports the run operator’s human input. Follow the [runbook](../../docs/M1_RUNBOOK.md) for commands and [verification](../../docs/M1_VERIFICATION.md) for results. `cargo run -p bridge` still selects the original bridge by default.
 
-The LLM is expensive. The architecture minimizes calls through two principles:
-1. **Behavior trees handle most situations** — combat, movement, routine tasks
-2. **Conversation uses templates/knowledge first** — LLM only for novel content
+## Legacy bridge source structure
 
-### Decision Types (v2 — current)
-
-| Decision Type | When | LLM Function | Returns | Reducer |
-|---|---|---|---|---|
-| `tree_generation` | Dawn, tree exhaustion, goal change, near-death, self-request | `generate_tree()` | Unified behavior tree JSON | `submit_npc_tree` |
-| `experience` | After significant events (near-death, betrayal, discovery) | `generate_experience_eval()` | Identity deltas JSON | `submit_npc_identity_update` |
-| `conversation` | Novel topic, important speaker, no template match | `generate_conversation()` | Message text | `submit_npc_speech` |
-
-## Cost Model
-
-| NPC Tier | Count | LLM Usage | Cost |
-|---|---|---|---|
-| Mobs | Thousands | No LLM, static default trees | Zero |
-| Common NPCs | Hundreds | Tree at dawn + rare events | ~2-5 calls/day each |
-| Key NPCs | Dozens | Trees + novel conversations | ~10-30 calls/day each |
-
-## LLM Backend Strategy
-
-| NPC Type | Backend | Latency |
-|---|---|---|
-| Key NPCs | Cloud API (Claude, GPT-4o-mini) | 500ms–2s |
-| Common NPCs | Local Ollama (Llama 3 8B) | 100–300ms |
-| Mobs | No LLM | 0ms |
-
-## Architecture
-
-```
-SpacetimeDB                    Bridge                         LLM
-─────────────                  ──────                         ───
-NpcPendingDecision row  ──→  on_insert callback
-                              routes by decision_type
-                              assembles prompt (prompt.rs)  ──→  Ollama / Cloud API
-                              parses JSON response          ←──  structured JSON
-                              calls submit_* reducer        ──→  validates + applies
-                              (fallback on failure)
-```
-
-### Key Properties
-- **Stateless** — holds zero game state, all context comes from the decision row
-- **Fault tolerant** — if bridge crashes, NPCs run behavior trees, game continues
-- **Hot-reloadable** — swap models or prompt templates without redeploying the DB module
-- **Independently scalable** — add more bridge workers for more concurrent LLM calls
-
-### Fallback Behavior
-Every decision type has a fallback if the LLM fails:
-- Tree generation: submit empty string (clears pending decision, NPC keeps default tree)
-- Experience: submit empty `{}` (no identity changes)
-- Conversation: submit `"Hmm..."` (minimal acknowledgment)
-
-## Files
-
-| File | Purpose |
+| Source | Responsibility |
 |---|---|
-| `main.rs` | Connection setup, decision routing, reducer calls |
-| `llm.rs` | LLM client (Ollama HTTP), response parsing |
-| `prompt.rs` | Prompt templates per decision type |
-| `tools.rs` | MCP tool definitions (unused, reserved for future) |
+| [main.rs](src/main.rs) | Subscribes to `NpcPendingDecision`; queues and handles requests, calls submission reducers |
+| [llm.rs](src/llm.rs) | Ollama HTTP requests and response parsing |
+| [prompt.rs](src/prompt.rs) | Prompt construction |
+| [tools.rs](src/tools.rs) | Tool definitions, currently unused/reserved |
 
-## Configuration
+| Routed type | Handler | Submission reducer |
+|---|---|---|
+| `tree_generation` | `generate_tree` | `submit_npc_tree` |
+| `experience` | `generate_experience_eval` | `submit_npc_identity_update` |
+| `conversation` | `generate_conversation` | `submit_npc_speech` |
 
-- `HOST` — SpacetimeDB URL (default: `http://localhost:3000`)
-- `DB_NAME` — Database name (default: `slop-art-online`)
-- LLM endpoint configured in `llm.rs` (default: Ollama at `http://localhost:11434`)
+These routes exist; they do not certify every trigger or resulting behavior. Today's bridge processes its queue sequentially. Multi-worker claim/lease coordination and cloud backend routing are not implemented by these files.
 
-## Response Format
+Current failure submissions are an empty tree string, `{}` for identity, or “Hmm...” for speech. An invalid tree keeps the current tree and clears the pending row; the tick uses a role default if no parseable tree is available. This is source behavior, not evidence of complete retry/recovery or meaningful conversation during outages.
 
-Each decision type expects a different response format:
-- `tree_generation` — JSON behavior tree (`Behavior<NpcBtAction>`)
-- `experience` — JSON with `personality_deltas`, `beliefs`, `knowledge`, `relationship_updates`, `emotion_adjustments`
-- `conversation` — plain text message (parsed via `parse_conversation_response()`)
+## Configuration and local use
 
-Malformed responses trigger the fallback path.
+`HOST` (`http://localhost:3000`) and `DB_NAME` (`slop-art-online`) are constants in `main.rs`, not environment overrides. `llm.rs` reads `OLLAMA_URL` (default `http://localhost:11434`) and `OLLAMA_MODEL` (default `qwen2.5:7b`). Run `cargo run -p bridge` after publishing a matching module. See [README](../../README.md#quick-start) for setup.
+
+Scenario tooling needs configurable isolated destinations and request/output routing before concurrent runs are accepted. Do not assume multiple bridge processes pointed at the same pending table are safely coordinated.
+
+## Target reasoning and evidence contract
+
+Free-form communication is required from the first slice. Preserve full expressive text within validated speech actions; do not gate novel phrasing behind template failure, “important NPC” tiers, or a fixed percentage of exchanges. The behavior layer can manage timing/reactivity while model reasoning interprets experiences and revises approaches.
+
+Support reconsideration driven by lack of progress and individual introspection as well as external experiences. The exact trait/scheduling link remains open. Fixed call budgets are tuning choices to evaluate after the small proof, not substitutes for required behavior.
+
+Build model context from authorized character perceptions and relevant subjective state. Observer world truth and external audit history are not unrestricted character memory. Retain the actual supplied prompt/context, returned output, parsed decision, concise reported explanation where provided, model/config/prompt/behavior versions, and request/result links. Explanations are not hidden chain-of-thought or proof of world causation.
+
+The authority owns accepted state changes. Parsing is not enough: correlate requests and versions, reject stale/unauthorized responses, validate skills and references, and record errors/fallbacks distinctly. Replaying recorded decisions is different from fresh model calls; the same seed does not guarantee identical output.
+
+Keep game state in SpacetimeDB and the bridge focused on model transport/routing. Add durable evidence and run isolation with the core/tooling contract rather than embedding a separate simulator in this service.

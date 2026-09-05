@@ -1,0 +1,105 @@
+{
+  "name": "Survivors at the clearing",
+  "seed": 42,
+  "max_ticks": 45,
+  "players": [
+    {
+      "id": 1,
+      "name": "Mira",
+      "controller": "ai",
+      "motive": "Stay alive and find a safe place for my companions",
+      "role": "forager",
+      "position": 0,
+      "health": 100,
+      "hunger": 42,
+      "energy": 65,
+      "food": 1,
+      "caution": 65,
+      "empathy": 75,
+      "introspection": 80,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 2,
+            "danger": false,
+            "text": "A traveller told me there is food at the eastern clearing"
+          },
+          "source": 0,
+          "confidence": 55
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Tovan",
+      "controller": "ai",
+      "motive": "Stay alive and find a safe place for my companions",
+      "role": "scout",
+      "position": 1,
+      "health": 100,
+      "hunger": 42,
+      "energy": 65,
+      "food": 1,
+      "caution": 25,
+      "empathy": 30,
+      "introspection": 35,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 2,
+            "danger": false,
+            "text": "A traveller told me there is food at the eastern clearing"
+          },
+          "source": 0,
+          "confidence": 55
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "You",
+      "controller": "human",
+      "motive": "Stay alive and find a safe place for my companions",
+      "role": "traveller",
+      "position": 0,
+      "health": 100,
+      "hunger": 42,
+      "energy": 65,
+      "food": 1,
+      "caution": 45,
+      "empathy": 50,
+      "introspection": 50,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 2,
+            "danger": false,
+            "text": "A traveller told me there is food at the eastern clearing"
+          },
+          "source": 0,
+          "confidence": 55
+        }
+      ]
+    }
+  ],
+  "sites": [
+    {
+      "position": 0,
+      "food": 3,
+      "hazard": 0
+    },
+    {
+      "position": 2,
+      "food": 8,
+      "hazard": 12
+    },
+    {
+      "position": -2,
+      "food": 6,
+      "hazard": 0
+    }
+  ]
+}

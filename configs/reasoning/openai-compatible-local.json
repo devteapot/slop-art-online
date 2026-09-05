@@ -1,0 +1,26 @@
+{
+  "backend": {
+    "kind": "openai_compatible",
+    "model": "qwen2.5:7b",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "auth": {
+      "kind": "none"
+    },
+    "capabilities": {
+      "response_modes": [
+        "json_schema",
+        "json_object",
+        "prompt_json"
+      ],
+      "token_limit_field": "max_tokens",
+      "temperature": true,
+      "seed": true
+    }
+  },
+  "structured_output": "json_schema",
+  "deadline_ms": 90000,
+  "max_attempts": 1,
+  "max_output_tokens": 6000,
+  "temperature": 0.6,
+  "seed": 42
+}

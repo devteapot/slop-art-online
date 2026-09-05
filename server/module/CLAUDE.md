@@ -1,5 +1,7 @@
 # SpacetimeDB Rules (All Languages)
 
+Project direction comes from the [simulation vision](../../docs/SIMULATION_VISION.md), [roadmap](../../docs/TODO.md), and [module guidance](spacetimedb/CLAUDE.md). This file contains general SDK guidance; verify examples against the pinned SDK and current source. Simulation scenarios run the authoritative core without requiring the visual client.
+
 ## Migrating from 1.0 to 2.0?
 
 **If you are migrating existing SpacetimeDB 1.0 code to 2.0, apply `spacetimedb-migration-2.0.mdc` first.** It documents breaking changes (reducer callbacks → event tables, `name`→`accessor`, `sender()` method, etc.) and should be considered before other rules.
@@ -20,7 +22,7 @@
 ## Core Concepts
 
 1. **Reducers are transactional** — they do not return data to callers
-2. **Reducers must be deterministic** — no filesystem, network, timers, or random
+2. **Reducers must be deterministic** — no external filesystem/network/timers; use supported SpacetimeDB scheduling and RNG
 3. **Read data via tables/subscriptions** — not reducer return values
 4. **Auto-increment IDs are not sequential** — gaps are normal, don't use for ordering
 5. **`ctx.sender` is the authenticated principal** — never trust identity args
