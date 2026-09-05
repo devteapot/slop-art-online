@@ -4,7 +4,8 @@ fn validate(c) {
     if c.action.destination == () || c.action.destination < -10 || c.action.destination > 10 { return "invalid destination"; }
     ""
 }
-fn step(c) {
+fn perform(c) {
+    if c.actor.position == c.action.destination { return law::done([]); }
     let cost=law::cost("move");
     if c.actor.energy < cost { return law::failed("exhausted"); }
     let position=c.actor.position;
@@ -13,3 +14,5 @@ fn step(c) {
     if position != c.action.destination { return law::outcome("running","",c.remaining,c.state,effects,#{position:position}); }
     law::done(effects)
 }
+
+fn step(c) { law::paced(perform(c), c, law::action_interval_ms("move")) }

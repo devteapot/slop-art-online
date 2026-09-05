@@ -4,9 +4,11 @@ fn validate(c) {
     if c.action.target == () || c.action.target == c.actor.id { return "attack requires another target"; }
     ""
 }
-fn step(c) {
+fn perform(c) {
     let cost=law::cost("attack");
     if c.target == () || c.actor.energy < cost { return law::failed("target unavailable or insufficient energy"); }
     if c.target.health <= 0 || c.target.position != c.actor.position { return law::failed("target dead or out of range"); }
     law::done([#{kind:"actor",fields:#{energy:c.actor.energy-cost}},#{kind:"damage",target:c.target.id,amount:20}])
 }
+
+fn step(c) { law::paced(perform(c), c, law::action_interval_ms("attack")) }

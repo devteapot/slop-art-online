@@ -1,0 +1,95 @@
+{
+  "name": "The shared clearing \u2014 live foundation pilot",
+  "seed": 73,
+  "max_ticks": 120,
+  "players": [
+    {
+      "id": 1,
+      "name": "Mira",
+      "controller": "ai",
+      "motive": "Build a reliable food supply and a safe meeting place. I care about companions surviving, but I need evidence before trusting a route.",
+      "role": "careful forager",
+      "position": 0,
+      "health": 100,
+      "hunger": 20,
+      "energy": 70,
+      "food": 2,
+      "caution": 65,
+      "empathy": 75,
+      "introspection": 80,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": -2,
+            "danger": false,
+            "text": "A traveller reported berries two steps west; I have not checked whether any remain."
+          },
+          "source": 0,
+          "confidence": 60
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Tovan",
+      "controller": "ai",
+      "motive": "Find useful food sources and learn which routes are worth the risk. I value independence and want others to recognize what I discover.",
+      "role": "curious scout",
+      "position": 0,
+      "health": 100,
+      "hunger": 20,
+      "energy": 70,
+      "food": 2,
+      "caution": 25,
+      "empathy": 30,
+      "introspection": 35,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 2,
+            "danger": false,
+            "text": "I heard the eastern clearing has abundant food and is safe. This is only a report."
+          },
+          "source": 0,
+          "confidence": 75
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "You",
+      "controller": "human",
+      "motive": "Explore the clearing and decide whom to trust.",
+      "role": "visitor",
+      "position": 0,
+      "health": 100,
+      "hunger": 0,
+      "energy": 70,
+      "food": 2,
+      "caution": 45,
+      "empathy": 50,
+      "introspection": 50,
+      "fear": 0,
+      "beliefs": []
+    }
+  ],
+  "sites": [
+    {
+      "position": -2,
+      "food": 30,
+      "hazard": 0
+    },
+    {
+      "position": 0,
+      "food": 6,
+      "hazard": 0
+    },
+    {
+      "position": 2,
+      "food": 40,
+      "hazard": 3
+    }
+  ]
+}

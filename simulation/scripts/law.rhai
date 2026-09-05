@@ -19,8 +19,8 @@ fn outcome(status, reason, remaining, state, effects, progress) {
 }
 fn done(effects) { outcome("success", "", 0, (), effects, #{}) }
 fn failed(reason) { outcome("failure", reason, 0, (), [], #{}) }
-fn metabolism(p) { #{hunger:bounded(p.hunger+2,0,100), fear:bounded(p.fear-1,0,100)} }
-fn aftermath(c) { #{starvation:if c.actor.hunger >= 100 { 8 } else { 0 }, hazard:if c.site == () { 0 } else { c.site.hazard }} }
+fn metabolism(p) { #{hunger:bounded(p.hunger+2*p.pulses,0,100), fear:bounded(p.fear-p.pulses,0,100)} }
+fn aftermath(c) { #{starvation:if c.actor.hunger >= 100 { 8*c.pulses } else { 0 }, hazard:if c.site == () { 0 } else { c.site.hazard*c.pulses }} }
 fn on_damage(c) {
     let p=c.actor;
     let health=bounded(p.health-c.amount,0,100);
@@ -93,4 +93,17 @@ fn validate_condition(c) {
     if c.kind == "resource" && (c.value < 0 || c.value > 100) { return "resource threshold must be 0..100"; }
     if c.kind == "food_at" && (c.minimum < 1 || c.minimum > 100) { return "food minimum must be 1..100"; }
     ""
+}
+
+// Periods are game content, independent of how frequently the authority wakes.
+fn system_periods_ms(c) { #{needs_ms:2500, hazard_ms:2500} }
+fn action_interval_ms(skill) {
+    switch skill { "move" => 250, "gather" | "eat" | "speak" => 1000, "attack" => 750, _ => 2500 }
+}
+fn retry_delay_ms(c) { 250 }
+fn paced(result, c, interval) {
+    let base=if c.ready_at_ms > c.time_ms-c.delta_ms { c.ready_at_ms } else { c.time_ms-c.delta_ms };
+    result.wake_at_ms=if base+interval < c.time_ms { c.time_ms } else { base+interval };
+    result.cooldown_until_ms=result.wake_at_ms;
+    result
 }

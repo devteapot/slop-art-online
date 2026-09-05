@@ -10,6 +10,7 @@ pub struct SimRun {
     pub id: String,
     pub owner: Identity,
     pub state: String,
+    pub last_advanced_at: spacetimedb::Timestamp,
 }
 #[spacetimedb::table(accessor = sim_audit)]
 pub struct SimAudit {
@@ -77,6 +78,7 @@ pub fn sim_create(ctx: &ReducerContext, run: String, scenario: String) -> Result
         id: run,
         owner: ctx.sender(),
         state: String::new(),
+        last_advanced_at: ctx.timestamp,
     });
     save(ctx, row, world);
     Ok(())

@@ -4,7 +4,9 @@ fn validate(c) {
     if c.action.text == () || c.action.text.trim() == "" || c.action.text.len() > 1000 { return "speech must contain 1..1000 characters"; }
     ""
 }
-fn step(c) {
+fn perform(c) {
     if c.spoke { return law::outcome("running","",c.remaining,c.state,[],#{}); }
     law::done([#{kind:"speech",text:c.action.text}])
 }
+
+fn step(c) { law::paced(perform(c), c, law::action_interval_ms("speak")) }

@@ -18,12 +18,12 @@ impl World {
     }
     /// Host must authenticate the world operator before calling this installation boundary.
     pub fn stage_scripts_by_operator(&mut self, update: scripting::Update) -> Result<(), String> {
-        self.scripts.stage(update.clone(), self.tick)?;
+        self.scripts.stage(update.clone(), self.timing.updates)?;
         self.event(
             None,
             "script_update_staged",
             vec![],
-            json!({"activate_tick":self.tick+1,"update":update}),
+            json!({"activate_update":self.timing.updates+1,"update":update}),
         );
         Ok(())
     }
@@ -36,11 +36,16 @@ impl World {
             .map(|p| json!({"id":p.id,"position":p.position,"health":p.health}));
         json!({"actor":facts(p),"action":a,"target":target,
             "site":self.sites.iter().find(|s| s.position==p.position).map(|s| json!({"position":s.position,"food":s.food})),
+            "time_ms":self.timing.time_ms,"delta_ms":self.timing.time_ms.saturating_sub(e.script.as_ref().map_or(self.timing.time_ms, |s| s.evaluated_ms)),
+            "ready_at_ms":self.execution_ready_at(p.id,e),
             "remaining":e.remaining,"state":e.script.as_ref().map(|s| &s.state),
-            "spoke":self.participants.get(&p.id).is_some_and(|s| s.last_speech_tick==Some(self.tick))})
+            "spoke":self.participants.get(&p.id).is_some_and(|s| s.last_speech_tick==Some(self.timing.updates))})
     }
 
     pub(super) fn execute_action(&mut self, i: usize, e: &mut Execution, a: Action) -> Status {
+        if self.timing.time_ms < self.execution_ready_at(self.players[i].id, e) {
+            return Status::Running;
+        }
         let mut candidate = self.clone();
         let mut execution = e.clone();
         match candidate.execute_action_inner(i, &mut execution, a.clone()) {
@@ -55,7 +60,7 @@ impl World {
                 e.attempt = None;
                 e.script = None;
                 e.remaining = 0;
-                self.fail(i, cause, &error)
+                self.fail(i, cause, &error, e.dialogue)
             }
         }
     }
@@ -188,8 +193,12 @@ impl World {
         Ok(())
     }
 
-    pub fn step(&mut self) {
-        if self.stopped {
+    pub fn advance_ms(&mut self, delta_ms: u64) {
+        if self.stopped || delta_ms == 0 {
+            return;
+        }
+        if delta_ms > 60_000 {
+            self.event(None,"script_tick_failed",vec![],json!({"error":"elapsed update exceeds 60000 ms; explicit recovery required","effects_committed":false}));
             return;
         }
         if self.version != VERSION {
@@ -197,10 +206,13 @@ impl World {
             return;
         }
         let mut candidate = self.clone();
-        if candidate.scripts.activate(candidate.tick + 1) {
-            candidate.event(None,"script_update_activated",vec![],json!({"effective_tick":candidate.tick+1,"revision":candidate.scripts.revision,"active":candidate.scripts.active}));
+        if candidate.scripts.activate(candidate.timing.updates + 1) {
+            for p in &candidate.players {
+                candidate.timing.dirty.insert(p.id, true);
+            }
+            candidate.event(None,"script_update_activated",vec![],json!({"effective_update":candidate.timing.updates+1,"revision":candidate.scripts.revision,"active":candidate.scripts.active}));
         }
-        match candidate.step_inner() {
+        match candidate.step_inner(delta_ms) {
             Ok(()) => *self = candidate,
             Err(error) => {
                 let rejected = self.scripts.pending.take();

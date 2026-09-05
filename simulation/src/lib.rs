@@ -4,12 +4,13 @@ pub mod client_view;
 pub mod participant;
 mod scripted_world;
 pub mod scripting;
+pub mod timing;
 use bonsai_bt::Behavior;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "m1-6-rhai";
+pub const VERSION: &str = "m1-7-time.1";
 pub const DECISION_FORMAT_VERSION: &str = "survivor-policy-v2";
 pub const LEGACY_DECISION_FORMAT: &str = "survivor-sequence-v1";
 pub mod policy;
@@ -141,6 +142,8 @@ pub struct Decision {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Execution {
+    #[serde(default)]
+    pub dialogue: bool,
     pub decision: u64,
     pub tree: Behavior<Action>,
     pub cursor: usize,
@@ -226,6 +229,8 @@ pub struct World {
     pub scripts: scripting::Registry,
     pub initial: Scenario,
     pub tick: u64,
+    #[serde(default)]
+    pub timing: timing::Timing,
     pub players: Vec<Player>,
     pub sites: Vec<Site>,
     pub pending: Vec<Pending>,
@@ -287,6 +292,7 @@ impl World {
             sites: scenario.sites.clone(),
             initial: scenario,
             tick: 0,
+            timing: timing::Timing::default(),
             pending: vec![],
             next_event: 1,
             stopped: false,
@@ -325,6 +331,8 @@ impl World {
     ) -> u64 {
         if let Some(object) = data.as_object_mut() {
             object.insert("rules_revision".into(), json!(self.scripts.revision));
+            object.insert("time_ms".into(), json!(self.timing.time_ms));
+            object.insert("update".into(), json!(self.timing.updates));
         }
         let id = self.next_event;
         self.next_event += 1;
@@ -355,6 +363,7 @@ impl World {
         location: i32,
         content: Value,
     ) -> Result<u64, String> {
+        self.wake(self.players[i].id);
         let limit: usize = self.scripts.law("memory_limit", json!({}))?;
         if limit > 256 {
             return Err("memory policy exceeds storage budget".into());
@@ -426,7 +435,7 @@ impl World {
         // Deliberate allowlist. Never serialize World, sites, other minds or audit into a prompt.
         let p = &self.players[i];
         let approach = p.execution.as_ref().map(|e| if let Some(policy)=&e.policy {json!({"decision":e.decision,"policy":policy,"state":e.state,"active_attempt":e.attempt})} else {json!(e)});
-        json!({"player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
+        json!({"player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
     }
     pub fn request(&mut self, i: usize, trigger: &str) {
         if self.participant_mode {
@@ -594,7 +603,9 @@ impl World {
             self.event(Some(actor),"identity_change",vec![id,r.source],json!({"interpretation":r.interpretation,"before":{"caution":before.caution,"beliefs":before.beliefs,"relationships":before.relationships},"after":{"caution":self.players[i].caution,"beliefs":self.players[i].beliefs,"relationships":self.players[i].relationships}}));
         }
         self.players[i].generation += 1;
+        self.wake(actor);
         self.players[i].execution = Some(Execution {
+            dialogue: false,
             decision: id,
             tree: Behavior::Sequence(d.actions.into_iter().map(Behavior::Action).collect()),
             cursor: 0,
@@ -670,6 +681,7 @@ impl World {
         let action = Action::new(skill);
         let id=self.event(Some(p.id),"decision",p.last_cause.into_iter().collect(),json!({"controller":"authored_bootstrap","reported_explanation":"Minimal eat/rest/wait while awaiting an installed policy","context":self.context(i),"actions":[action],"behavior_version":VERSION}));
         self.players[i].execution = Some(Execution {
+            dialogue: false,
             decision: id,
             tree: Behavior::Sequence(vec![Behavior::Action(action)]),
             cursor: 0,
@@ -681,7 +693,7 @@ impl World {
         });
         Ok(())
     }
-    fn fail(&mut self, i: usize, attempt: u64, reason: &str) -> Status {
+    fn fail(&mut self, i: usize, attempt: u64, reason: &str, dialogue: bool) -> Status {
         let id = self.event(
             Some(self.players[i].id),
             "skill_result",
@@ -704,6 +716,12 @@ impl World {
             );
         }
         self.players[i].failures += 1;
+        let delay: u64 = self.scripts.law("retry_delay_ms", json!({})).unwrap_or(250);
+        self.set_ready_at(
+            self.players[i].id,
+            dialogue,
+            self.timing.time_ms.saturating_add(delay.clamp(1, 60_000)),
+        );
         Status::Failure
     }
     fn execute(&mut self, i: usize) {
@@ -755,6 +773,8 @@ impl World {
             e.script = Some(scripting::Invocation {
                 definition: self.scripts.resolve(a.skill.id())?,
                 state: Value::Null,
+                evaluated_ms: self.timing.time_ms.saturating_sub(self.timing.delta_ms),
+                wake_at_ms: 0,
             });
             let id=self.event(Some(actor),"skill_attempt",std::iter::once(e.decision).chain(e.state.last_guard).collect(),json!({"action":a,"step":e.cursor,"node_path":e.state.active_path,"skill_version":VERSION,"definition":e.script.as_ref().map(|s| &s.definition),"law_revision":self.scripts.active["law"],"before":{"position":self.players[i].position,"food":self.players[i].food,"energy":self.players[i].energy,"hunger":self.players[i].hunger}}));
             e.attempt = Some(id);
@@ -772,7 +792,7 @@ impl World {
             e.attempt = None;
             e.script = None;
             e.remaining = 0;
-            return Ok(self.fail(i, attempt, &reason));
+            return Ok(self.fail(i, attempt, &reason, e.dialogue));
         }
         let result: scripting::StepResult = self.scripts.call(
             &invocation.definition,
@@ -791,7 +811,7 @@ impl World {
             }
             e.attempt = None;
             e.script = None;
-            return Ok(self.fail(i, attempt, &result.reason));
+            return Ok(self.fail(i, attempt, &result.reason, e.dialogue));
         }
         for effect in result.effects {
             // Validate against preceding staged effects; the enclosing transaction rolls
@@ -799,9 +819,24 @@ impl World {
             self.validate_script_effect(i, &a, &effect)?;
             self.apply_script_effect(i, attempt, effect)?;
         }
+        for deadline in [result.wake_at_ms, result.cooldown_until_ms]
+            .into_iter()
+            .flatten()
+        {
+            if deadline < self.timing.time_ms
+                || deadline > self.timing.time_ms.saturating_add(3_600_000)
+            {
+                return Err("script deadline outside next hour".into());
+            }
+        }
+        if let Some(deadline) = result.cooldown_until_ms {
+            self.set_ready_at(actor, e.dialogue, deadline);
+        }
         e.remaining = result.remaining;
         if let Some(invocation) = &mut e.script {
             invocation.state = result.state;
+            invocation.evaluated_ms = self.timing.time_ms;
+            invocation.wake_at_ms = result.wake_at_ms.unwrap_or(self.timing.time_ms);
         }
         if result.status == Status::Running {
             if result.progress.as_object().is_some_and(|p| !p.is_empty()) {
@@ -911,11 +946,29 @@ impl World {
         }
         Ok(())
     }
-    fn step_inner(&mut self) -> Result<(), String> {
+    fn step_inner(&mut self, delta_ms: u64) -> Result<(), String> {
         if self.stopped {
             return Ok(());
         }
-        self.tick += 1;
+        self.timing.time_ms = self
+            .timing
+            .time_ms
+            .checked_add(delta_ms)
+            .ok_or("time overflow")?;
+        self.timing.delta_ms = delta_ms;
+        self.timing.updates += 1;
+        self.tick = self.timing.time_ms / timing::LEGACY_UNIT_MS;
+        let periods: timing::Periods = self.scripts.law("system_periods_ms", json!({}))?;
+        let needs_pulses = timing::pulses(
+            &mut self.timing.needs_remainder_ms,
+            delta_ms,
+            periods.needs_ms,
+        )?;
+        let hazard_pulses = timing::pulses(
+            &mut self.timing.hazard_remainder_ms,
+            delta_ms,
+            periods.hazard_ms,
+        )?;
         for i in 0..self.players.len() {
             if self.players[i].health <= 0 {
                 continue;
@@ -927,12 +980,17 @@ impl World {
                 hunger: i32,
                 fear: i32,
             }
-            let needs: Needs = self
-                .scripts
-                .law("metabolism", scripting::facts(&self.players[i]))?;
-            self.players[i].hunger = needs.hunger;
-            self.players[i].fear = needs.fear;
-            let metabolism=self.event(Some(self.players[i].id),"needs_change",vec![],json!({"hunger_before":before,"hunger_after":self.players[i].hunger,"fear":self.players[i].fear}));
+            let mut metabolism = self.players[i].last_cause.unwrap_or(1);
+            if needs_pulses > 0 {
+                let mut facts = scripting::facts(&self.players[i]);
+                facts["pulses"] = json!(needs_pulses);
+                facts["elapsed_ms"] = json!(needs_pulses * periods.needs_ms);
+                let needs: Needs = self.scripts.law("metabolism", facts)?;
+                self.players[i].hunger = needs.hunger;
+                self.players[i].fear = needs.fear;
+                self.wake(self.players[i].id);
+                metabolism=self.event(Some(self.players[i].id),"needs_change",vec![],json!({"hunger_before":before,"hunger_after":self.players[i].hunger,"fear":self.players[i].fear,"elapsed_ms":needs_pulses*periods.needs_ms}));
+            }
 
             if self.players[i].health <= 0 {
                 continue;
@@ -940,7 +998,9 @@ impl World {
             let interval: u64 = self
                 .scripts
                 .law("reconsider_interval", scripting::facts(&self.players[i]))?;
-            if self.tick == 1 || (self.tick - self.players[i].last_reflection >= interval) {
+            if self.timing.updates == 1
+                || (self.tick.saturating_sub(self.players[i].last_reflection) >= interval)
+            {
                 self.request(
                     i,
                     if self.players[i].failures > 0 {
@@ -956,14 +1016,27 @@ impl World {
             {
                 self.fallback(i)?;
             }
-            self.execute(i);
+            let actor = self.players[i].id;
+            if self.timing.time_ms
+                >= self.players[i]
+                    .execution
+                    .as_ref()
+                    .map_or(0, |e| self.execution_ready_at(actor, e))
+                || self.timing.dirty.get(&actor) == Some(&true)
+            {
+                self.timing.dirty.insert(actor, false);
+                self.execute(i);
+            }
+            if hazard_pulses == 0 {
+                continue;
+            }
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
             struct Aftermath {
                 starvation: i32,
                 hazard: i32,
             }
-            let after:Aftermath=self.scripts.law("aftermath",json!({"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
+            let after:Aftermath=self.scripts.law("aftermath",json!({"pulses":hazard_pulses,"elapsed_ms":hazard_pulses*periods.hazard_ms,"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
             if after.starvation < 0 || after.hazard < 0 {
                 return Err("negative damage policy".into());
             }
@@ -1063,3 +1136,6 @@ pub mod contract;
 mod participant_tests;
 #[cfg(test)]
 mod scripting_tests;
+
+#[cfg(test)]
+mod timing_tests;

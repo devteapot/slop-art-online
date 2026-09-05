@@ -101,6 +101,7 @@ pub mod sim_grant_client_reducer;
 pub mod sim_intent_reducer;
 pub mod sim_model_result_reducer;
 pub mod sim_my_snapshot_table;
+pub mod sim_operator_clock_reducer;
 pub mod sim_operator_pause_reducer;
 pub mod sim_participant_command_reducer;
 pub mod sim_participant_state_table;
@@ -232,6 +233,7 @@ pub use sim_grant_client_reducer::sim_grant_client;
 pub use sim_intent_reducer::sim_intent;
 pub use sim_model_result_reducer::sim_model_result;
 pub use sim_my_snapshot_table::*;
+pub use sim_operator_clock_reducer::sim_operator_clock;
 pub use sim_operator_pause_reducer::sim_operator_pause;
 pub use sim_participant_command_reducer::sim_participant_command;
 pub use sim_participant_state_table::*;
@@ -338,6 +340,11 @@ pub enum Reducer {
         request: u64,
         raw: String,
         metadata: String,
+    },
+    SimOperatorClock {
+        run: String,
+        tick_ms: u64,
+        paused: bool,
     },
     SimOperatorPause {
         run: String,
@@ -453,6 +460,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SimGrantClient { .. } => "sim_grant_client",
             Reducer::SimIntent { .. } => "sim_intent",
             Reducer::SimModelResult { .. } => "sim_model_result",
+            Reducer::SimOperatorClock { .. } => "sim_operator_clock",
             Reducer::SimOperatorPause { .. } => "sim_operator_pause",
             Reducer::SimParticipantCommand { .. } => "sim_participant_command",
             Reducer::SimRevokeClient { .. } => "sim_revoke_client",
@@ -584,6 +592,15 @@ impl __sdk::Reducer for Reducer {
                 request: request.clone(),
                 raw: raw.clone(),
                 metadata: metadata.clone(),
+            }),
+            Reducer::SimOperatorClock {
+                run,
+                tick_ms,
+                paused,
+            } => __sats::bsatn::to_vec(&sim_operator_clock_reducer::SimOperatorClockArgs {
+                run: run.clone(),
+                tick_ms: tick_ms.clone(),
+                paused: paused.clone(),
             }),
             Reducer::SimOperatorPause { run } => {
                 __sats::bsatn::to_vec(&sim_operator_pause_reducer::SimOperatorPauseArgs {

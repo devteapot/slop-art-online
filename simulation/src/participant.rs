@@ -206,12 +206,12 @@ impl World {
         let next = experiences.last().map(|e| e.cursor).unwrap_or(after);
         let oldest = s.experiences.first().map(|e| e.cursor).unwrap_or(1);
         Ok(
-            json!({"api_version":API_VERSION,"run":self.run,"actor":actor,"tick":self.tick,"stopped":self.stopped,
+            json!({"api_version":API_VERSION,"run":self.run,"actor":actor,"tick":self.tick,"time_ms":self.timing.time_ms,"updates":self.timing.updates,"clock_unit_ms":crate::timing::LEGACY_UNIT_MS,"stopped":self.stopped,
             "control_epoch":s.control_epoch,"policy_revision":self.players[i].generation,"learning_revision":s.learning_revision,
             "context":self.context(i),"experiences":experiences,"next_cursor":next,"latest_cursor":s.cursor,"oldest_cursor":oldest,"gap":after.saturating_add(1)<oldest,
             "receipts":s.receipts,"queued_speech":s.speech,"capabilities":["replace_tree","patch_subtree","speak","reflect"],
             "limits":{"tree_nodes":64,"tree_depth":8,"children":8,"speech_queue":8,"trace_retention":TRACE_LIMIT,"reflections":8},
-            "patch_semantics":"replace one node at canonical root/n/guard path; reset cursors at/under patch; retain ancestor/sibling progress; interrupt active leaf only if inside patch; next tick rechecks current guards"}),
+            "patch_semantics":"replace one node at canonical root/n/guard path; reset cursors at/under patch; retain ancestor/sibling progress; interrupt active leaf only if inside patch; next update rechecks current guards"}),
         )
     }
     pub fn change_control(&mut self, actor: u32) -> Result<(), String> {
@@ -281,6 +281,7 @@ impl World {
         let result = candidate.apply_participant_inner(actor, &request);
         let (event, error) = match result {
             Ok(id) => {
+                candidate.wake(actor);
                 *self = candidate;
                 (id, None)
             }
@@ -589,13 +590,14 @@ impl World {
                     json!({"reason":"expired before delivery"}),
                 );
             }
-            if self.participants[&actor].last_speech_tick == Some(self.tick) {
+            if self.participants[&actor].last_speech_tick == Some(self.timing.updates) {
                 continue;
             }
             if !self.participants[&actor].speech.is_empty() {
                 let mut q = self.participants.get_mut(&actor).unwrap().speech.remove(0);
                 let action = Action::say(&q.text);
                 let mut execution = q.execution.take().unwrap_or_else(|| Execution {
+                    dialogue: true,
                     decision: q.cause,
                     tree: Behavior::Action(action.clone()),
                     cursor: 0,
@@ -625,7 +627,7 @@ impl World {
         let pos = self.players[i].position;
         let actor = self.players[i].id;
         if self.participant_mode {
-            self.participants.get_mut(&actor).unwrap().last_speech_tick = Some(self.tick);
+            self.participants.get_mut(&actor).unwrap().last_speech_tick = Some(self.timing.updates);
         }
         let event = self.event(
             Some(actor),

@@ -69,32 +69,32 @@ impl Default for Registry {
             (
                 "law",
                 include_str!("../scripts/law.rhai"),
-                "Default laws: action duration 1..5 ticks; movement and condition locations -10..10; resource thresholds 0..100; food minimum 1..100; speech expiry within 30 ticks. Skill descriptions describe their authored defaults; current law validation is authoritative.",
+                "Default laws: action duration 1..5 units of 2500 ms; legacy simulation_tick/expiry units are 2500 ms regardless of update frequency; movement and condition locations -10..10; resource thresholds 0..100; food minimum 1..100; speech expiry within 30 ticks. Skill descriptions describe their authored defaults; current law validation is authoritative.",
             ),
             (
                 "move",
                 include_str!("../scripts/move.rhai"),
-                "destination -10..10; costs 1 energy per cell; continues to destination",
+                "destination -10..10; costs 1 energy per cell, one cell per 250 ms; continues to destination",
             ),
             (
                 "gather",
                 include_str!("../scripts/gather.rhai"),
-                "gather one food at own position; costs 4 energy",
+                "gather one food at own position; costs 4 energy, 1000 ms cooldown",
             ),
             (
                 "eat",
                 include_str!("../scripts/eat.rhai"),
-                "consume one carried food; reduce hunger by 35",
+                "consume one carried food; reduce hunger by 35, 1000 ms cooldown",
             ),
             (
                 "rest",
                 include_str!("../scripts/rest.rhai"),
-                "restore 12 energy per tick; duration 1..5",
+                "restore 12 energy per 2500 ms; duration 1..5 of those units",
             ),
             (
                 "wait",
                 include_str!("../scripts/wait.rhai"),
-                "intentional inactivity; duration 1..5",
+                "intentional inactivity; duration 1..5 units of 2500 ms",
             ),
             (
                 "speak",
@@ -123,12 +123,20 @@ impl Default for Registry {
 pub struct Invocation {
     pub definition: DefinitionRef,
     #[serde(default)]
+    pub evaluated_ms: u64,
+    #[serde(default)]
+    pub wake_at_ms: u64,
+    #[serde(default)]
     pub state: Value,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StepResult {
+    #[serde(default)]
+    pub wake_at_ms: Option<u64>,
+    #[serde(default)]
+    pub cooldown_until_ms: Option<u64>,
     pub status: crate::Status,
     pub reason: String,
     pub remaining: u32,
@@ -483,6 +491,8 @@ const LAW_FUNCTIONS: &[&str] = &[
     "authorize_effect",
     "validate_dialogue",
     "validate_condition",
+    "system_periods_ms",
+    "retry_delay_ms",
 ];
 
 pub fn facts(p: &Player) -> Value {

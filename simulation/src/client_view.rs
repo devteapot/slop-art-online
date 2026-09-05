@@ -54,7 +54,7 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
     } else {
         me.memories.iter().map(|m|json!({"id":m.source,"tick":m.tick,"actor":actor,"kind":m.kind,"parents":[],"data":m.content})).collect()
     };
-    json!({"run":world.run,"tick":world.tick,"stopped":world.stopped,"max_ticks":world.initial.max_ticks,
+    json!({"run":world.run,"tick":world.tick,"time_ms":world.timing.time_ms,"updates":world.timing.updates,"clock_unit_ms":crate::timing::LEGACY_UNIT_MS,"stopped":world.stopped,"max_ticks":world.initial.max_ticks,
         "rules":world.version,"actor":actor,"observer":observer,"players":players,"sites":sites,"events":history,
         "pending":if observer {json!(world.pending.iter().map(|p|json!({"id":p.id,"actor":p.actor,"tick":p.tick})).collect::<Vec<_>>())} else {Value::Null}})
 }

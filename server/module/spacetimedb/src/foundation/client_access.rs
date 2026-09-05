@@ -150,6 +150,7 @@ pub fn sim_my_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
             .sim_audit()
             .run()
             .filter(&access.run)
+            .filter(|e| e.event_id >= w.next_event.saturating_sub(180))
             .filter_map(|e| serde_json::from_str(&e.json).ok())
             .collect();
         events.sort_by_key(|e| e.id);
@@ -276,7 +277,7 @@ pub fn sim_setup_client_clock(
     ctx.db.sim_client_clock().insert(SimClientClock {
         id: 0,
         run,
-        scheduled_at: std::time::Duration::from_millis(2500).into(),
+        scheduled_at: std::time::Duration::from_millis(simulation::timing::UPDATE_MS).into(),
         paused: true,
         evidence_mode,
     });
@@ -302,11 +303,14 @@ pub fn sim_client_control(ctx: &ReducerContext, command: String) -> Result<(), S
                 return Err("pause before stepping".into());
             }
             let (row, mut w) = world(ctx, &access.run)?;
-            w.step();
+            w.advance_ms(simulation::timing::UPDATE_MS);
             save(ctx, row, w);
         }
         _ => return Err("unknown clock command".into()),
     }
+    let (mut row, w) = world(ctx, &clock.run)?;
+    row.last_advanced_at = ctx.timestamp;
+    save(ctx, row, w);
     ctx.db.sim_client_clock().id().update(clock);
     Ok(())
 }
@@ -315,19 +319,71 @@ pub fn sim_client_pulse(ctx: &ReducerContext, clock: SimClientClock) -> Result<(
     if ctx.sender() != ctx.identity() {
         return Err("scheduled clock only".into());
     }
-    let current = ctx
+    let mut current = ctx
         .db
         .sim_client_clock()
         .run()
         .find(&clock.run)
         .ok_or("clock missing")?;
     if !current.paused {
-        let (row, mut w) = world(ctx, &clock.run)?;
+        let (mut row, mut w) = world(ctx, &clock.run)?;
         if !w.stopped {
-            w.step();
+            let elapsed = ctx
+                .timestamp
+                .duration_since(row.last_advanced_at)
+                .ok_or("clock moved backwards")?;
+            let delta_ms = elapsed.as_millis() as u64;
+            if delta_ms > 60_000 {
+                // An outage requires explicit recovery; never silently discard elapsed time.
+                current.paused = true;
+                ctx.db.sim_client_clock().id().update(current);
+                w.event(
+                    None,
+                    "clock_recovery_required",
+                    vec![],
+                    serde_json::json!({"elapsed_ms":delta_ms}),
+                );
+            } else {
+                w.advance_ms(delta_ms);
+                row.last_advanced_at += std::time::Duration::from_millis(delta_ms);
+            }
             save(ctx, row, w);
         }
     }
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn sim_operator_clock(
+    ctx: &ReducerContext,
+    run: String,
+    tick_ms: u64,
+    paused: bool,
+) -> Result<(), String> {
+    let (mut row, mut w) = world(ctx, &run)?;
+    if row.owner != ctx.sender() {
+        return Err("operator only".into());
+    }
+    if !(50..=60_000).contains(&tick_ms) {
+        return Err("clock interval must be 50..60000 milliseconds".into());
+    }
+    let mut clock = ctx
+        .db
+        .sim_client_clock()
+        .run()
+        .find(&run)
+        .ok_or("clock missing")?;
+    clock.scheduled_at = std::time::Duration::from_millis(tick_ms).into();
+    clock.paused = paused;
+    row.last_advanced_at = ctx.timestamp;
+    ctx.db.sim_client_clock().id().update(clock);
+    w.event(
+        None,
+        "clock_configured",
+        vec![],
+        serde_json::json!({"tick_ms":tick_ms,"paused":paused}),
+    );
+    save(ctx, row, w);
     Ok(())
 }
 

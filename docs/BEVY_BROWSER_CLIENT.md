@@ -86,7 +86,20 @@ cargo run -p client --no-default-features --features foundation
 
 The same `client/src/foundation` Rust systems are used on native and WASM targets. The foundation is now the default native client; the previous voxel/3D mode has been removed. Native window interaction was not tested in this slice. Development and optimized browser builds use the same rendering/input code; build with Trunk `--release` for optimization. The shipped local build uses `wasm-dev` (optimization 1, no debug info), about 69 MB before transport compression. `cargo run -p client` now opens the 2D behavior lab against the same development host.
 
-## Share on a trusted local network
+## Forwarded browsers and trusted LAN access
+
+The browser now uses the game host's origin for both enrollment and the SpacetimeDB WebSocket connection. Only the client port needs forwarding; the database remains reachable by the host on loopback port 3101. This fixes pages stuck connecting when an app maps the client to a different localhost port.
+
+For LAN access with the database already running, use `BEVY_DEV_BIND=0.0.0.0 BEVY_DEV_PUBLIC_URL=http://<LAN-IP>:18891 just bevy-dev` and allow the client port from the trusted subnet. The configured LAN origin remains exact. Forwarded loopback origins are accepted only on a loopback Host, with the custom client header still required for enrollment. Browser WebSockets reject untrusted origins, proxy only this host's database, and retain SpacetimeDB authentication and grants. No operator credentials are sent through the proxy.
+
+Startup failures now show their reason and retry. `BEVY_DEV_RESUME_ACTIVE=/absolute/path/to/active.json` reattaches a host to an existing run without publishing a module or creating/resetting a world. Use its existing output directory and provider configuration when applicable; this restores the client, not completed model jobs.
+
+Verified with five host tests, a Bevy WASM build, the enrollment boundary checker, and Chromium connected through an actual TCP forward from `localhost:62271` to the client host. The native database port was not used by the browser. Evidence: `output/living-clearing-20260905-second/browser-forwarded-fixed.png` and `output/living-clearing-20260905-connected/browser-forwarded-live.png`.
+
+## Historical LAN setup before same-origin transport
+
+The following records the earlier two-port arrangement; use the single client-port setup above for current code.
+
 
 After the initial login and builds above, stop the existing browser host with Ctrl-C and run:
 

@@ -198,7 +198,7 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
         }
         root.spawn((Node{position_type:PositionType::Absolute,left:px(12),right:px(12),bottom:px(12),height:px(88),padding:UiRect::axes(px(16),px(8)),..column()},BackgroundColor(PANEL))).with_children(|bottom| {
             bottom.spawn(row()).with_children(|p| {
-                text(p,format!("t{} / {} · {}",number(&game.snapshot["tick"]),number(&game.snapshot["max_ticks"]),if game.snapshot["stopped"]==true{"FINISHED"}else if game.snapshot["paused"]==true{"PAUSED"}else{"RUNNING"}),15.,INK);
+                text(p,format!("{:.1}s / {:.0}s · {}",game.snapshot["time_ms"].as_u64().unwrap_or(game.snapshot["tick"].as_u64().unwrap_or(0) * 2500) as f64 / 1000.,game.snapshot["max_ticks"].as_u64().unwrap_or(0) as f64 * 2.5,if game.snapshot["stopped"]==true{"FINISHED"}else if game.snapshot["paused"]==true{"PAUSED"}else{"RUNNING"}),15.,INK);
                 if game.observer() && !game.archive {button(p,"Step",Click::Step,false);button(p,if game.snapshot["paused"]==true{"Resume"}else{"Pause"},Click::Play,false);}
                 if !game.observer() && !game.archive && !game.snapshot.is_null() {
                     button(p,"Gather",Click::Gather,false);button(p,"Eat",Click::Eat,false);button(p,"Rest",Click::Rest,false);button(p,"Speak",Click::Speak,game.typing);

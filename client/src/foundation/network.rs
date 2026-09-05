@@ -1,6 +1,6 @@
 use super::*;
 use shared::module_bindings::{
-    DbConnection, SimMySnapshotTableAccess, sim_client_control, sim_client_intent,
+    sim_client_control, sim_client_intent, DbConnection, SimMySnapshotTableAccess,
 };
 use spacetimedb_sdk::{DbContext, Table};
 use std::sync::{Arc, Mutex};
@@ -333,7 +333,18 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
                     game.status = "Connected · state and effects come from SpacetimeDB".into();
                 }
             },
-            Signal::Http(_, Err(error)) | Signal::Status(error) => {
+            Signal::Http(tag, Err(error)) => {
+                if tag == "boot" || tag == "bind" {
+                    if let Some(conn) = net.connection.take() {
+                        let _ = conn.disconnect();
+                    }
+                    net.connecting = false;
+                    net.retry_at = time.elapsed_secs_f64() + 2.;
+                }
+                game.status = error;
+                game.dirty = true;
+            }
+            Signal::Status(error) => {
                 game.status = error;
                 game.dirty = true;
             }

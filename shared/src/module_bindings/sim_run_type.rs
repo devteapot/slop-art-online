@@ -10,6 +10,7 @@ pub struct SimRun {
     pub id: String,
     pub owner: __sdk::Identity,
     pub state: String,
+    pub last_advanced_at: __sdk::Timestamp,
 }
 
 impl __sdk::InModule for SimRun {
@@ -23,6 +24,7 @@ pub struct SimRunCols {
     pub id: __sdk::__query_builder::Col<SimRun, String>,
     pub owner: __sdk::__query_builder::Col<SimRun, __sdk::Identity>,
     pub state: __sdk::__query_builder::Col<SimRun, String>,
+    pub last_advanced_at: __sdk::__query_builder::Col<SimRun, __sdk::Timestamp>,
 }
 
 impl __sdk::__query_builder::HasCols for SimRun {
@@ -32,6 +34,7 @@ impl __sdk::__query_builder::HasCols for SimRun {
             id: __sdk::__query_builder::Col::new(table_name, "id"),
             owner: __sdk::__query_builder::Col::new(table_name, "owner"),
             state: __sdk::__query_builder::Col::new(table_name, "state"),
+            last_advanced_at: __sdk::__query_builder::Col::new(table_name, "last_advanced_at"),
         }
     }
 }

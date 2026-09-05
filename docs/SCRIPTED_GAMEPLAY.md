@@ -1,6 +1,8 @@
 # Scripted gameplay foundation
 
-Rules version `m1-6-rhai`, implemented 2026-09-05 under [ADR 016](adr/016-scripted-gameplay-rhai.md). The current foundation game executes Rhai inside the authoritative SpacetimeDB module. This migrates the active survival/participant game, not the retired server prototype.
+Rules version `m1-7-time.1`; scripting originally implemented as `m1-6-rhai`, 2026-09-05 under [ADR 016](adr/016-scripted-gameplay-rhai.md). The current foundation game executes Rhai inside the authoritative SpacetimeDB module. This migrates the active survival/participant game, not the retired server prototype.
+
+See [authoritative timing](SIMULATION_TIMING.md) for native 50 ms scheduling, elapsed-time script inputs, action deadlines and compatibility time units.
 
 ## Ownership
 
@@ -31,6 +33,8 @@ remaining: unsigned integer
 state: serializable data
 effects: array
 progress: serializable data
+wake_at_ms: optional absolute continuation deadline
+cooldown_until_ms: optional absolute lane cooldown deadline
 ```
 
 Effects currently support actor `position`/`energy`/`food`/`hunger` patches, current-site food, observation, speech, and damage to the requested target. Engine checks prevent writes to another actor's private state or outside the granted target capability. Active `authorize_effect` runs before each effect against the preceding staged changes. A later rejection discards the entire invocation, including earlier changes and their tentative events. Failed results cannot carry effects. The engine records a failure the character can perceive.
@@ -71,7 +75,7 @@ subprocess.run([
 
 Validation uses the currently active law's edit policy; proposed rules cannot authorize themselves. Unknown APIs, stale revisions, concurrent pending updates, invalid entry points, missing/conflicting dependencies, cycles and storage limits reject the proposal. Authenticated content rejection is recorded as `script_update_rejected`; the reducer commits that receipt, so CLI success alone does not mean the definition was accepted. Check the audit and `scripts.pending`. Unauthorized callers receive a reducer error before any mutation.
 
-Accepted changes activate together at the next tick. Every action pins its skill and dependency revisions at its first attempt, and reevaluates its next step under active laws. Explicit `state` and `remaining` survive database reloads; queued dialogue has independent continuation without replacing movement or its behavior policy. Completed consequences stay historical facts. A periodic-law exception rolls back the whole tick and clears the failed pending activation, retaining the old active registry. Action exceptions roll back their individual invocation and produce failure evidence.
+Accepted changes activate together at the next update. Every action pins its skill and dependency revisions at its first attempt, and reevaluates its next step under active laws. Explicit `state` and `remaining` survive database reloads; queued dialogue has independent continuation without replacing movement or its behavior policy. Completed consequences stay historical facts. A periodic-law exception rolls back the whole update and clears the failed pending activation, retaining the old active registry. Action exceptions roll back their individual invocation and produce failure evidence.
 
 Changing bundled files changes **new worlds** after rebuilding the module. Existing worlds retain their stored source; use the reducer to update them. Prior definitions are retained, not silently replaced or garbage-collected. Compiled ASTs are caches only. The existing whole-world row remains the storage adapter. Old rules versions are rejected for execution and remain inspectable as archives; no implicit `m1-5` migration is performed.
 
@@ -83,7 +87,7 @@ These limits support the current operator-authored slice. Aggregate interpreter 
 
 Player editors, authoring progression, divine authority, territorial rule composition and learning a new technique through communication remain future gameplay. This integration establishes the execution foundation they can use.
 
-## Executed verification
+## Historical m1-6-rhai verification
 
 - `cargo test -p simulation -p bridge -- --test-threads=1`: 45 simulation tests, 30 bridge tests, one archive test and four developer-host tests passed. The ten added scripting tests cover revised laws, pinned actions/dependencies, serializable composition state, active condition ranges, queued dialogue, private context, stale/cyclic edits and atomic failures/budgets.
 - Actual `server_module` built for `wasm32-unknown-unknown`; Rust bindings regenerated for the new reducer. Native client check and Bevy WASM/Trunk build passed.
