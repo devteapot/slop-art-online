@@ -8,6 +8,16 @@ Provide Bevy in-game visual observation (primarily browser WASM, with shared nat
 
 The observer can compare world truth with each player's subjective understanding. This privileged view is not an input to the player's controller. Query permissions and context construction must preserve that boundary, including when a human observer also participates as a character.
 
+## Component experiments
+
+Support independent, deep inspection of a component as well as integrated runs. A focused experiment should invoke the production implementation through its normal contract, with explicit supplied dependencies and state. It should need only the surrounding systems relevant to the question. A skill evaluator can be exercised with selected facts and law definitions; a belief update can be exercised with selected prior beliefs, perceptions and interpretations. Database commit semantics and interactions between components still require integration checks against the real authority.
+
+Build reusable experiment tooling around concrete questions: what changes when a law changes, which evidence caused a belief revision, or where an invocation spends its time. Cases and variants may be authored or generated for the use case. Each experiment should record its question, resolved inputs, component and definition versions, supplied versus live dependencies, relevant before/after state, intermediate decisions or effects, failures and applicable measurements. Use compatible trace identifiers so a case encountered in an integrated run can be isolated and its component findings connected back to that run.
+
+Separate exploration from pass/fail assertions. Generated cases need a stated property or comparison when used as tests; generated expected answers alone do not establish correctness. Keep focused deterministic checks for contracts such as scope, provenance and atomicity, and for reproduced bugs. Avoid accumulating fixed narrative expectations merely to increase test count. Preserve useful generated inputs and failures for later reproduction, and distinguish recorded inputs from fresh model calls using the replay rules below.
+
+This is a tooling direction, not a requirement to build a new framework now. Independent inspection must reuse the actual game components rather than introduce an approximate second simulator.
+
 ## Causal record contract
 
 Concrete storage schemas are open. The following information and links are required; records can be multiple linked types rather than one large row.

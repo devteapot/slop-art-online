@@ -96,6 +96,7 @@ Reincarnation/souls are explicitly deferred, with no implementation commitment. 
 
 ## Supporting technical debt
 
+- [ ] As mechanics evolve, provide reusable component experiment tooling for use-case-generated skill, belief and other mechanic investigations, using production implementations and traceable inputs/outputs. Preserve end-to-end verification and focused contract regressions; see [component experiments](AUDIT_AND_EXPERIMENTS.md#component-experiments). Deferred tooling direction, not an immediate framework build.
 - [ ] Use existing NPC event/memory indexes in hot queries where appropriate; do not duplicate existing schema indexes.
 - [ ] Measure spatial query cost before choosing an index/partitioning strategy. Population scale is not the current success criterion.
 - [ ] Extract tick/action/controller responsibilities from large `lib.rs` and `npc_ai.rs` as the relevant contracts are implemented; avoid unrelated rewrites.

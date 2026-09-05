@@ -8,6 +8,14 @@ This is the authoritative design entry point for SAO / Slop Art Online. The long
 
 Read next: [current implementation and gaps](CURRENT_STATE.md), [audit and experiment contract](AUDIT_AND_EXPERIMENTS.md), and [milestones and work queue](TODO.md). [ADR 007](adr/007-simulation-first-foundation.md) records this change in direction; older ADRs preserve historical rationale. [Stack reference](../STACK_REFERENCE.md) documents the retained Rust architecture.
 
+## Modularity and independent inspection
+
+Components should fit together through explicit contracts while remaining independently understandable, executable and deeply inspectable. This applies across the project: skill evaluation, world policies, perception, belief and identity updates, behavior, persistence, controllers and presentation. Each component should expose its relevant inputs, owned state, outputs, dependencies and failure evidence. Boundaries should make it possible to exercise a mechanic without starting unrelated systems; they do not require a separate service or runtime for every component.
+
+For example, inspect a skill against supplied actor facts and law revisions, including its proposed effects and continuation state. Separately, inspect how a supplied perception and interpretation change a character's beliefs, confidence and provenance. These experiments must invoke the same implementation used by the integrated game. End-to-end runs remain necessary to establish that the components' contracts compose correctly and that the player experience works.
+
+Prefer reusable tooling that can generate and execute focused experiments for a concrete use case or question. Retain targeted deterministic checks for important contracts and known regressions, without making a large collection of fixed expected narratives the main way to investigate an evolving world. The [component experiment contract](AUDIT_AND_EXPERIMENTS.md#component-experiments) describes this direction. Dedicated tooling and further decomposition are future work, not an implementation requirement for this design clarification.
+
 ## Players and controllers
 
 A **player** is an in-world character, whether human-controlled or AI-controlled. Qualify the controller when it matters. Both have the same character capabilities and authoritative world rules; different controllers choose intentions. Existing code names such as `Player`, `Npc`, and `NpcSkill` describe today's separate implementation, not the final product taxonomy.
