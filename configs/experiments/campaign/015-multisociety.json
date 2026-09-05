@@ -1,0 +1,41 @@
+{
+  "hypothesis": "Existing inhabitants of three connected settlements with uneven food and knowledge may choose travel, actual food transfers, deliberate teaching, shared archive use or relocation. Removing the eastern source increases local pressure while keeping total renewable support viable. A mistaken contrary report can influence choices only through the private holder or actual communication; proximity never copies reports or establishes agreement.",
+  "evaluation": "Run four concurrent eight-minute fresh Luna-medium variants on frozen multisociety-m4-1, with fifteen-second post-completion cadence and no call cap. All camps share one arena: A82, B93 and C152 on the16x12 survey, with camp trips11/10/9 cells (roughly2.75/2.5/2.25 seconds and the same number of movement energy units before interruptions). Each camp has shelter12, zero site hazard and the retained base weather; travel incurs ordinary movement and exposure costs. Baseline production A6+B2+C3=11 food/minute exceeds six-person reference demand8.229. Pressure removes only B production, leaving9 globally sufficient but B locally dependent on carried reserves, imports or relocation. Disputed matches pressure except for actor4 holding a distinct mistaken western-provisioning-denial report. Its claim that A never regrows food is false under the retained physical inputs, but its transmission and assessment are not guaranteed. Scale doubles residents per camp, source amounts/capacities and initial pantries, giving22 food/minute versus twelve-person reference demand16.457. Per-person starting food, body needs and travel costs stay fixed; the original positive author5 and one empty archive of capacity16 are not multiplied, so this is a communication-load challenge rather than a single-factor estimate of population effects. Measure actual production, ceilings, food gathered/transferred/deposited/eaten, waste, health, deaths and food stranded on bodies; the nominal budget assumes room for growth and full35-hunger meals. All initial actors carry2 food, with pantries A6/B0/C4 (doubled in scale). Everyone holds a separate uniquely identified personal copy of a public geometry-only survey; these authored priors are not live transmission events and disclose no remote resources. Only C5 starts with the typed western-provisioning report describing A actual renewable food/shelter. A residents can observe their own source without acquiring that exact report. Trace first inter-settlement report acquisition, source and authorship, accepted personal interpretation, chosen journey and observed outcome; distinguish an arrival at empty stock or independent discovery from useful transmitted knowledge. Record actual cross-origin food transfers and subsequent consumption or provisioning; speech alone is not material exchange, and gifts or informal reciprocity are not enforced trade contracts. Classify origin from initial camp, then describe repeated provisioning, rest, residence and expressed intentions to distinguish relocation from a visit; a final coordinate alone is insufficient migration evidence. Lifecycle is null, no newcomers are enrolled, and no disturbance spawns actors: all movement preserves existing IDs. Ordinary revisable home habits contain no inter-camp itinerary, speech, teaching or exchange sequence. Shared beliefs, cooperation, specialization, isolation or dispute require actual choices and communication. Keep rejected operations, absent contact and resource failures in the result; do not infer formal ownership, binding agreements or alliances. Record elapsed simulation/wall time, model calls/usage/errors, engine/scope/conservation checks, remaining knowledge copies and archive contents. One fresh run per condition is descriptive evidence, not reproducibility.",
+  "minutes": 8,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "baseline",
+      "port": 18968,
+      "implementation": "output/society-lab/implementations/multisociety-m4-1",
+      "scenario": "output/society-lab/implementations/multisociety-m4-1/scenarios/multisociety-baseline.json",
+      "controllers": "output/society-lab/implementations/multisociety-m4-1/configs/experiments/multisociety-6-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "pressure",
+      "port": 18969,
+      "implementation": "output/society-lab/implementations/multisociety-m4-1",
+      "scenario": "output/society-lab/implementations/multisociety-m4-1/scenarios/multisociety-pressure.json",
+      "controllers": "output/society-lab/implementations/multisociety-m4-1/configs/experiments/multisociety-6-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "scale",
+      "port": 18970,
+      "implementation": "output/society-lab/implementations/multisociety-m4-1",
+      "scenario": "output/society-lab/implementations/multisociety-m4-1/scenarios/multisociety-scale.json",
+      "controllers": "output/society-lab/implementations/multisociety-m4-1/configs/experiments/multisociety-12-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "disputed",
+      "port": 18971,
+      "implementation": "output/society-lab/implementations/multisociety-m4-1",
+      "scenario": "output/society-lab/implementations/multisociety-m4-1/scenarios/multisociety-disputed.json",
+      "controllers": "output/society-lab/implementations/multisociety-m4-1/configs/experiments/multisociety-6-medium.json",
+      "recovery": true
+    }
+  ]
+}

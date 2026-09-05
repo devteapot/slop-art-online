@@ -58,6 +58,8 @@ The active foundation is `simulation/` with SpacetimeDB foundation integration, 
 
 ### 4. Multiple societies
 
+**Status:** [bounded Stage 4 contact/travel/resource-access slice accepted](STAGE_4_EVIDENCE.md#bounded-stage-4-decision), with measured residence, real provisioning away from home, interpreted inter-camp speech and clean audits. Delivered aid, reciprocal trade, stable migration and sustainable multi-settlement cooperation remain unproven.
+
 **Scope:** several settlements with uneven resources and knowledge; travel, exchange, mixed communities and opportunities for migration. Migration among existing populations is distinct from conjuring external replacement inhabitants.
 
 **Evidence:** interactions have material and informational consequences; cooperation, specialization, isolation or conflict can arise from different circumstances. Shared beliefs and alliances require communication and choices, not proximity-based copying.
