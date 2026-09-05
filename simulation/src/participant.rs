@@ -296,7 +296,7 @@ impl World {
                 json!({"request_id":l.request_id,"observation":observation})
             }).collect::<Vec<_>>(),"capabilities":["replace_tree","patch_subtree","speak","reflect","pin_observation","read_observation"],
             "limits":{"tree_nodes":64,"tree_depth":8,"children":8,"speech_queue":8,"trace_retention":TRACE_LIMIT,"evidence_lease_ms":EVIDENCE_LEASE_MS,"evidence_leases":4,"reflections":8},
-            "patch_semantics":"replace one node at canonical root/n/guard/when path; reset cursors at/under patch; retain ancestor/sibling progress; interrupt active leaf only if inside patch; next update rechecks current guards"}),
+            "patch_semantics":"replace one node at canonical root/n/guard/when path. /guard and /when descend into the CHILD, not its condition; replace the enclosing guard node to change its condition. Repeating a condition inside the child keeps the old outer condition active. Reset cursors at/under patch; retain ancestor/sibling progress; interrupt active leaf only if inside patch; next update rechecks current guards"}),
         )
     }
     pub fn change_control(&mut self, actor: u32) -> Result<(), String> {
@@ -645,13 +645,13 @@ impl World {
                     reflections: reflections.clone(),
                 };
                 self.validate(i, &d, &evidence)?;
-                let before = json!({"caution":self.players[i].caution,"relationships":self.players[i].relationships,"beliefs":self.players[i].beliefs,"goal":self.players[i].current_goal});
+                let before = json!({"caution":self.players[i].caution,"relationships":self.players[i].relationships,"beliefs":self.players[i].beliefs,"knowledge":self.players[i].knowledge,"goal":self.players[i].current_goal});
                 for r in reflections {
-                    let from = evidence
+                    let source = evidence
                         .iter()
                         .find(|e| e.source == r.source)
-                        .and_then(|e| e.from);
-                    self.reflect_identity(i, r, from)?;
+                        .ok_or("validated reflection source missing")?;
+                    self.reflect_identity(i, r, source)?;
                     self.participants
                         .get_mut(&actor)
                         .unwrap()
@@ -673,7 +673,7 @@ impl World {
                     .unwrap()
                     .learned_sources
                     .retain(|id| valid.contains(id));
-                self.event(Some(actor),"identity_change",std::iter::once(cause).chain(sources).collect(),json!({"reflections":reflections,"before":before,"after":{"caution":self.players[i].caution,"relationships":self.players[i].relationships,"beliefs":self.players[i].beliefs,"goal":self.players[i].current_goal}}));
+                self.event(Some(actor),"identity_change",std::iter::once(cause).chain(sources).collect(),json!({"reflections":reflections,"before":before,"after":{"caution":self.players[i].caution,"relationships":self.players[i].relationships,"beliefs":self.players[i].beliefs,"knowledge":self.players[i].knowledge,"goal":self.players[i].current_goal}}));
             }
         }
         Ok(cause)
@@ -796,6 +796,7 @@ pub fn state_contract() -> Value {
             "sequence":"Runs children in order. Progress persists while the branch remains active. Failure or a false enclosing continuous guard clears its progress. Switching to a higher-priority branch suspends this sequence and retains its cursor; when selected again it resumes the unfinished child.",
             "priority":"Checks higher-priority branches again on each evaluation. A newly eligible higher branch can interrupt the current skill in a lower branch. Lower sequence cursors and when commitments remain suspended for later resumption; they are not silently restarted.",
             "repetition":"The root repeats. A successful action may execute again on later cycles. Completing move while already at its destination makes no displacement.",
+            "knowledge":"Your knowledge holds attributed reports, not global truth or automatic skill mastery. has_knowledge checks your own record ID. Teach/record/consult/destroy_archive are ordinary timed physical skills using target/record/archive arguments from their contracts. Site observations list local archive catalogs only; consult to read contents. reflect may include knowledge:{topic,text,location,confidence} to create a new assertion citing the selected own evidence; null knowledge interprets an acquired report without making a new assertion. Preserve uncertainty and conflicting reports. A reported location can support a later locational belief. Copy lineage points to evidence but cannot recover destroyed content from audit history.",
             "independent_operations":"Speech and reflection do not replace the running behavior tree. A reflection alone does not alter the tree; later behavior authoring can apply the lesson."
         },
         "weather":"If weather_forecast is present, cold begins at cold_after_ms and causes damage_per_pulse each exposure pulse (2500 ms in the bundled law) at cells with less than shelter_required. Shelter belongs to the site and protects every occupant; food and shelter remain independent resources.",

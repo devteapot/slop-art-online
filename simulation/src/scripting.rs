@@ -105,6 +105,10 @@ impl Default for Registry {
             ("deposit", include_str!("../scripts/deposit.rhai"), "place one carried food in the existing site at your position, available for anyone to gather; 1000 ms cooldown"),
             ("build", include_str!("../scripts/build.rhai"), "contribute one shelter unit at the existing site at your position; costs 8 energy; shelter maximum 12, remains shared; 2500 ms cooldown"),
             ("observe", include_str!("../scripts/observe.rhai"), "refresh direct local site and nearby-character observations; 1000 ms cooldown"),
+            ("teach", include_str!("../scripts/teach.rhai"), "teach one of your held knowledge record IDs to a living target at your cell; record and target required; takes 2000 ms and 2 energy. Transfers an unassessed report, not practical skill mastery. Does not consume your copy."),
+            ("record", include_str!("../scripts/record.rhai"), "copy one of your held knowledge record IDs into an intact archive at your cell; record and archive IDs required; takes 2500 ms and 4 energy. Capacity limited; your own copy remains."),
+            ("consult", include_str!("../scripts/consult.rhai"), "read a selected record ID from an intact archive at your cell into your own durable knowledge; archive and record IDs required; takes 1500 ms and 1 energy. Local site observations list archive catalogs but do not reveal record contents. Reading does not automatically establish truth or grant skill mastery."),
+            ("destroy_archive", include_str!("../scripts/destroy_archive.rhai"), "destroy a physical archive at your cell and all its stored records; archive ID required; takes 5000 ms and 8 energy. Copies held by living people or other archives remain; audit history is never an in-world recovery source."),
             (
                 "attack",
                 include_str!("../scripts/attack.rhai"),
@@ -159,6 +163,10 @@ pub enum Effect {
     Observe,
     Speech { text: String },
     Damage { target: u32, amount: i32 },
+    Teach { target: u32, record: String },
+    RecordKnowledge { archive: u32, record: String },
+    ConsultKnowledge { archive: u32, record: String },
+    DestroyArchive { archive: u32 },
 }
 
 struct Compiled {
@@ -516,7 +524,20 @@ pub fn facts(p: &Player) -> Value {
 pub fn subjective(p: &Player) -> Value {
     let mut value = facts(p);
     value["beliefs"] = json!(p.beliefs);
-    value["memories"] = json!(p.memories);
-    value["site_observations"] = json!(p.site_observations);
+    // Policy guards need personal record IDs and observed resource quantities.
+    // Full reports/catalogs remain in private model and human context, but cannot
+    // expand this bounded interpreter input with every physical archive copy.
+    let guard_percept = |m: &crate::Percept| {
+        let mut v = json!(m);
+        if m.kind == "knowledge_report" {
+            v["content"] = json!({"record":{"id":m.content["record"]["id"]}});
+        } else if m.kind == "site" {
+            if let Some(content) = v["content"].as_object_mut() { content.remove("archives"); }
+        }
+        v
+    };
+    value["memories"] = json!(p.memories.iter().map(guard_percept).collect::<Vec<_>>());
+    value["site_observations"] = json!(p.site_observations.iter().map(guard_percept).collect::<Vec<_>>());
+    value["knowledge"] = json!(p.knowledge.iter().map(|h| json!({"record":{"id":h.record.id},"source":h.source})).collect::<Vec<_>>());
     value
 }

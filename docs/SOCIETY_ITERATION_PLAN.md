@@ -16,7 +16,7 @@ For the next planning pass, map retained batch evidence and open failures to Sta
 
 Starting-habit direction, 2026-09-05: normal settlement seeds provide visible, versioned initial behavior trees so people act before the first model response. Profiles can differ, but remain ordinary policies that the individual may keep, patch or replace. Preserve empty-start controls and distinguish authored habits from later learned behavior; never silently restore them after failure.
 
-Current planning pass: [Stage 1 evidence mapping, mechanics/seed ownership and renewable budget](STAGE_1_EVIDENCE.md). Batches 001–010 remain retained evidence. The [bounded Stage 1 settlement is accepted](STAGE_1_EVIDENCE.md#acceptance-decision-bounded-stage-1-slice); knowledge continuity and later roadmap stages remain open.
+Current planning pass: [Stage 1 evidence mapping, mechanics/seed ownership and renewable budget](STAGE_1_EVIDENCE.md). Batches 001–010 remain retained evidence. The [bounded Stage 1 settlement is accepted](STAGE_1_EVIDENCE.md#acceptance-decision-bounded-stage-1-slice); [Stage 2 knowledge continuity is now accepted](STAGE_2_EVIDENCE.md#acceptance-decision-bounded-stage-2-slice) from batches 011–012 and exact authority tests. Population renewal is next; later stages remain open.
 
 ## Loop and controls
 

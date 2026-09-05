@@ -16,6 +16,7 @@ fn player(id: u32, controller: Controller, position: i32) -> Player {
         empathy: 40,
         introspection: 70,
         fear: 0,
+        knowledge: vec![],
         beliefs: vec![],
         relationships: BTreeMap::new(),
         memories: vec![],
@@ -31,7 +32,9 @@ fn world() -> World {
     World::new(
         "test".into(),
         Scenario {
-            starting_behaviors: BTreeMap::new(),
+            disturbances: vec![],
+            knowledge: BTreeMap::new(),
+            archives: vec![],            starting_behaviors: BTreeMap::new(),
             food_sources: vec![],
             weather: None,
             arenas: vec![],
@@ -231,6 +234,7 @@ fn model_interpretation_changes_identity_and_later_context() {
     let request = w.pending.iter().find(|p| p.actor == 2).unwrap().id;
     let mut d = decision(vec![Action::go(1)]);
     d.reflections.push(Reflection {
+        knowledge: None,
         source,
         interpretation: "I trust this warning, and should take more care".into(),
         caution_delta: 8,
@@ -302,6 +306,7 @@ fn false_source_cannot_write_subjective_state() {
     let mut w = world();
     let mut d = decision(vec![Action::new(Skill::Wait)]);
     d.reflections.push(Reflection {
+        knowledge: None,
         source: 999,
         interpretation: "invented evidence".into(),
         caution_delta: 10,
@@ -426,6 +431,7 @@ fn authored_knowledge_has_subjective_provenance_and_can_be_reconsidered() {
     let request = w.pending[0].id;
     let mut d = decision(vec![Action::go(2)]);
     d.reflections.push(Reflection {
+        knowledge: None,
         source,
         interpretation: "The report is uncertain but worth investigating".into(),
         caution_delta: 2,

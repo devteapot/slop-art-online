@@ -18,6 +18,7 @@ pub enum Click {
     Gather,
     Eat,
     Rest,
+    Intent(Value),
     Speak,
     Prev,
     Next,
@@ -206,8 +207,8 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
                 text(panel,p["name"].as_str().unwrap_or("Select a character in the world"),24.,INK);
                 if let Some(arena)=p["arena"].as_str() {text(panel,format!("{arena} · {}",p["runtime"].as_str().unwrap_or("")),12.,MUTED);}
                 text(panel,if game.observer(){"Observer truth / individual understanding"}else{"Your perceptions / private understanding"},12.,MUTED);
-                panel.spawn(row()).with_children(|p| {button(p,"Mind",Click::Tab(0),game.tab==0);button(p,"Policy",Click::Tab(1),game.tab==1);button(p,"History",Click::Tab(2),game.tab==2);});
-                match game.tab {0=>mind(panel,&p),1=>tree(panel,&p,&game),_=>history(panel,&game)}
+                panel.spawn(row()).with_children(|p| {button(p,"Mind",Click::Tab(0),game.tab==0);button(p,"Policy",Click::Tab(1),game.tab==1);button(p,"History",Click::Tab(2),game.tab==2);button(p,"Knowledge",Click::Tab(3),game.tab==3);});
+                match game.tab {0=>mind(panel,&p),1=>tree(panel,&p,&game),3=>knowledge(panel,&p,&game),_=>history(panel,&game)}
             });
         }
         if !game.world_visible {
@@ -332,6 +333,46 @@ fn mind(panel: &mut ChildSpawnerCommands, p: &Value) {
         }
     }
 }
+fn knowledge(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
+    let own = !game.observer() && !game.archive && game.snapshot["actor"] == p["id"];
+    title(panel, "PERSONAL RECORDS");
+    text(panel, "Reports can disagree. Reading preserves a copy; understanding and practical ability develop separately.", 12., MUTED);
+    if let Some(holdings) = p["knowledge"].as_array() {
+        if holdings.is_empty() { text(panel, "No records held.", 13., MUTED); }
+        for holding in holdings {
+            let record = &holding["record"];
+            title(panel, record["topic"].as_str().unwrap_or("Record"));
+            text(panel, record["text"].as_str().unwrap_or(""), 13., INK);
+            text(panel, format!("{} · author #{} · stated confidence {}", record["id"].as_str().unwrap_or(""),number(&record["author"]),number(&record["confidence"])), 11., MUTED);
+            text(panel, holding["interpretation"].as_str().unwrap_or("Not yet assessed by this person."), 12., MUTED);
+            if own {
+                for other in game.snapshot["players"].as_array().into_iter().flatten().filter(|v|v["id"]!=p["id"] && v["position"]==p["position"]) {
+                    button(panel,format!("Teach {}",other["name"].as_str().unwrap_or("neighbor")),Click::Intent(json!({"skill":"teach","target":other["id"],"record":record["id"],"duration":1})),false);
+                }
+                for archive in game.snapshot["archives"].as_array().into_iter().flatten().filter(|a|a["position"]==p["position"] && a["destroyed"]!=true) {
+                    if !archive["records"].as_array().into_iter().flatten().any(|r|r["id"]==record["id"]) {
+                        button(panel,format!("Record in {}",archive["label"].as_str().unwrap_or("archive")),Click::Intent(json!({"skill":"record","archive":archive["id"],"record":record["id"],"duration":1})),false);
+                    }
+                }
+            }
+        }
+    } else { text(panel, "This person's private records are not visible.", 13., MUTED); }
+    title(panel, if game.observer() { "PHYSICAL ARCHIVES" } else { "KNOWN ARCHIVES" });
+    for archive in game.snapshot["archives"].as_array().into_iter().flatten() {
+        title(panel, archive["label"].as_str().unwrap_or("Archive"));
+        text(panel,format!("Cell {} · {}",number(&archive["position"]),if archive["destroyed"]==true {"destroyed"} else {"intact"}),12.,MUTED);
+        for record in archive["records"].as_array().into_iter().flatten() {
+            text(panel,record["topic"].as_str().unwrap_or("Record"),13.,INK);
+            if game.observer() { text(panel,record["text"].as_str().unwrap_or(""),12.,MUTED); }
+            if own && archive["position"]==p["position"] && archive["destroyed"]!=true {
+                button(panel,"Consult record",Click::Intent(json!({"skill":"consult","archive":archive["id"],"record":record["id"],"duration":1})),false);
+            }
+        }
+        if own && archive["position"]==p["position"] && archive["destroyed"]!=true {
+            button(panel,"Destroy archive",Click::Intent(json!({"skill":"destroy_archive","archive":archive["id"],"duration":1})),false);
+        }
+    }
+}
 fn describe(node: &Value) -> String {
     match node["kind"].as_str().unwrap_or("") {
         "priority" => "PRIORITY · recheck in order".into(),
@@ -347,6 +388,8 @@ fn describe(node: &Value) -> String {
                     format!(" → {x}")
                 } else if let Some(t) = a["text"].as_str() {
                     format!(" “{}”", t.chars().take(45).collect::<String>())
+                } else if a["record"].is_string() || a["archive"].is_number() {
+                    format!(" {}{}",a["record"].as_str().unwrap_or(""),a["archive"].as_u64().map(|id|format!(" @ archive {id}")).unwrap_or_default())
                 } else {
                     String::new()
                 }
@@ -372,6 +415,7 @@ fn condition(c: &Value) -> String {
             number(&c["value"])
         ),
         "at" => format!("at {}", number(&c["location"])),
+        "has_knowledge" => format!("holds {}", c["record"].as_str().unwrap_or("record")),
         "food_at" => format!("remembered food at {}", number(&c["location"])),
         "not" => format!("not ({})", condition(&c["condition"])),
         "all" | "any" => {
@@ -642,6 +686,7 @@ pub fn interact(
             Click::Gather => net.intent(json!({"skill":"gather","duration":1})),
             Click::Eat => net.intent(json!({"skill":"eat","duration":1})),
             Click::Rest => net.intent(json!({"skill":"rest","duration":3})),
+            Click::Intent(action) => net.intent(action.clone()),
             Click::Speak => game.typing = true,
             Click::Prev => game.page = game.page.saturating_sub(1),
             Click::Next => game.page = (game.page + 1).min(30),

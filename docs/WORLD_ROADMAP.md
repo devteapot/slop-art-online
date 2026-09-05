@@ -38,6 +38,8 @@ The active foundation is `simulation/` with SpacetimeDB foundation integration, 
 
 ### 2. A society that learns
 
+**Status:** [bounded Stage 2 slice accepted](STAGE_2_EVIDENCE.md#acceptance-decision-bounded-stage-2-slice), with chosen teaching/recording/consultation, post-death acquisition, learning-to-action evidence, a fresh repeat and exact loss/privacy tests. Wider distribution and practical mastery remain unproven.
+
 **Scope:** explicit teaching/transfer, personal understanding, one physical archive, recording and consultation. Preserve source/evidence and uncertain claims. Receiving a record is not automatically gaining practical skill mastery.
 
 **Evidence:** learned information affects subsequent action; preserved knowledge remains available after its contributor dies; uncommunicated information does not spread. Destroying all in-world copies removes access without exposing audit history.
@@ -106,7 +108,7 @@ A single survivor or cooperative conversation does not establish a sustainable s
 - [x] Decide the next minimal state change: accounted food production; retain the existing attributes for this trial, as explained in the [evidence mapping](STAGE_1_EVIDENCE.md).
 - [x] [Establish a resource budget and renewable provisioning for four inhabitants, with a separate scarcity control](STAGE_1_EVIDENCE.md#acceptance-decision-bounded-stage-1-slice).
 - [ ] Define body-specific eating/charging only as far as the first representative inhabitants need.
-- [ ] After Stage 1 evidence, define knowledge records and teach/record/consult operations for Stage 2.
+- [x] [Implement and validate personal knowledge records, teaching, recording, consultation and physical loss for Stage 2](STAGE_2_EVIDENCE.md).
 - [ ] Plan reproduction/fabrication and care around measured surplus and knowledge transfer, then test Stage 3.
 
 Stages may overlap in design and tooling. Character access to advanced tools waits for the relevant capability and execution evidence. Keep reincarnation, detailed species development, large-scale presentation and full-world population targets deferred rather than quietly adding them to the first society experiment.

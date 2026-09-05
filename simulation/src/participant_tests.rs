@@ -186,6 +186,7 @@ fn independent_speech_and_learning_leave_motion_intact() {
                 expected_revision: 0,
                 observed_cursor: cursor,
                 reflections: vec![Reflection {
+                    knowledge: None,
                     source,
                     interpretation: "I choose to be more cautious".into(),
                     caution_delta: 2,
@@ -217,6 +218,7 @@ fn reflection_provenance_revision_and_duplicate_sources_are_enforced() {
         .unwrap()
         .source;
     let r = Reflection {
+        knowledge: None,
         source,
         interpretation: "A possibly mistaken conclusion".into(),
         caution_delta: 1,
@@ -239,6 +241,7 @@ fn reflection_provenance_revision_and_duplicate_sources_are_enforced() {
     assert!(!send(&mut w, 1, make(1)).ok);
     let c = w.players[0].caution;
     let bad = Reflection {
+        knowledge: None,
         source: 999999,
         ..r
     };
@@ -273,7 +276,7 @@ fn evidence_lease_survives_trace_churn_reload_but_not_expiry_or_control_change()
     for _ in 0..300 { w.observe_site(0).unwrap(); }
     assert!(!w.participants[&1].experiences.iter().any(|e| e.source == source));
     let make = |revision| Command::Reflect { expected_revision: revision, observed_cursor: cursor,
-        reflections: vec![Reflection { source, interpretation: "I can still interpret my earlier observation".into(),
+        reflections: vec![Reflection { knowledge: None, source, interpretation: "I can still interpret my earlier observation".into(),
             caution_delta: 1, trust_delta: 0, belief: None }], goal: None };
     let mut expired = w.clone();
     expired.timing.time_ms = participant::EVIDENCE_LEASE_MS + 1;
@@ -330,7 +333,7 @@ fn atomic_observation_captures_context_and_evidence_at_one_authority_revision() 
     for _ in 0..300 { w.observe_site(0).unwrap(); }
     let motive = w.players[0].motive.clone();
     assert!(send(&mut w, 1, Command::Reflect { expected_revision: 0, observed_cursor: cursor,
-        reflections: vec![Reflection { source, interpretation: "This is evidence from my captured read".into(),
+        reflections: vec![Reflection { knowledge: None, source, interpretation: "This is evidence from my captured read".into(),
             caution_delta: 0, trust_delta: 0, belief: None }], goal: Some("A revised near-term intention".into()) }).ok);
     assert_eq!(w.players[0].motive, motive);
     assert_eq!(w.players[0].current_goal.as_deref(), Some("A revised near-term intention"));

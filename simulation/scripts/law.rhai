@@ -9,9 +9,11 @@ fn cost(name) {
 fn validate_common(c) {
     let a = c.action;
     if a.duration < 1 || a.duration > 5 { return "duration must be 1..5"; }
-    if (c.allowed != "destination" && a.destination != ()) ||
-       (c.allowed != "target" && a.target != ()) ||
-       (c.allowed != "text" && a.text != ()) { return "skill contains arguments for a different skill"; }
+    if (!c.allowed.contains("destination") && a.destination != ()) ||
+       (!c.allowed.contains("target") && a.target != ()) ||
+       (!c.allowed.contains("text") && a.text != ()) ||
+       (!c.allowed.contains("record") && a.record != ()) ||
+       (!c.allowed.contains("archive") && a.archive != ()) { return "skill contains arguments for a different skill"; }
     ""
 }
 fn outcome(status, reason, remaining, state, effects, progress) {
@@ -72,6 +74,10 @@ fn guard(c) {
         },
         "not" => { let item=guard(#{player:p,condition:cond.condition}); [!item[0],item[1]] },
         "at" => [p.position == cond.location,[]],
+        "has_knowledge" => {
+            for holding in p.knowledge { if holding.record.id == cond.record { return [true,[holding.source]]; } }
+            [false,[]]
+        },
         "danger" => {
             let location=if cond.location == () { p.position } else { cond.location };
             for belief in p.beliefs { if belief.claim.location == location { return [belief.claim.danger,[belief.source]]; } }
@@ -110,6 +116,7 @@ fn valid_location(map, p) {
     true
 }
 fn validate_condition(c) {
+    if c.kind == "has_knowledge" && (c.record.trim() == "" || c.record.len() > 80) { return "knowledge condition needs a record ID of 1..80 characters"; }
     if (c.kind == "at" || c.kind == "food_at" || c.kind == "shelter_at" || c.kind == "danger") && c.location != () &&
        !valid_location(c.map, c.location) { return "condition location outside known world bounds"; }
     if c.kind == "resource" && (c.value < 0 || c.value > 100) { return "resource threshold must be 0..100"; }

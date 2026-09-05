@@ -1,0 +1,41 @@
+{
+  "hypothesis": "Ordinary model-controlled survivors can teach a private useful report, preserve physical copies, and use learned evidence after the original author dies; larger populations may distribute copies across two local archives. Authored archive loss changes availability only for physical copies actually present, without deleting living carriers.",
+  "evaluation": "Run four concurrent six-minute fresh Luna-medium variants under the same frozen knowledge-m2-1 implementation. Inspect teaching/recording/consultation events and source IDs, subjective interpretations, evidence-grounded policy changes and actual visits or gathering at cache56; distinguish independent discovery from transmitted knowledge. Compare the matched four-person runs before/after author damage at120s and the additional archive destruction at180s. Count living carriers and surviving archive copies at each boundary: archive destruction is not total knowledge loss while a living copy remains. Deterministic tests establish exact-loss controls; a fresh sample need not produce a particular narrative. The two-person run has no archive or scheduled death; the eight-person run has two supplied sheltered settlements and no scheduled deaths, so population/distribution findings are descriptive, not a single-factor causal estimate. Track actual simulation time, survivor health, resources, completed/error calls, usage, engine errors and scope violations. Motives, survival habits, private starting report and disturbances are authored inputs; teaching, speech, preservation and exploration remain model decisions. No claim of humanlike culture or stochastic reproducibility follows from one sample.",
+  "minutes": 6,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "teaching-two",
+      "port": 18954,
+      "implementation": "output/society-lab/implementations/knowledge-m2-1",
+      "scenario": "output/society-lab/implementations/knowledge-m2-1/scenarios/knowledge-teaching-two.json",
+      "controllers": "output/society-lab/implementations/knowledge-m2-1/configs/experiments/knowledge-2-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "archive-four",
+      "port": 18955,
+      "implementation": "output/society-lab/implementations/knowledge-m2-1",
+      "scenario": "output/society-lab/implementations/knowledge-m2-1/scenarios/knowledge-archive-four.json",
+      "controllers": "output/society-lab/implementations/knowledge-m2-1/configs/experiments/knowledge-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "archive-loss-four",
+      "port": 18956,
+      "implementation": "output/society-lab/implementations/knowledge-m2-1",
+      "scenario": "output/society-lab/implementations/knowledge-m2-1/scenarios/knowledge-archive-loss-four.json",
+      "controllers": "output/society-lab/implementations/knowledge-m2-1/configs/experiments/knowledge-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "distributed-eight",
+      "port": 18957,
+      "implementation": "output/society-lab/implementations/knowledge-m2-1",
+      "scenario": "output/society-lab/implementations/knowledge-m2-1/scenarios/knowledge-distributed-eight.json",
+      "controllers": "output/society-lab/implementations/knowledge-m2-1/configs/experiments/knowledge-8-medium.json",
+      "recovery": true
+    }
+  ]
+}

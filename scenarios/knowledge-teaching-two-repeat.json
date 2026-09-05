@@ -1,0 +1,491 @@
+{
+  "name": "Direct teaching / assessed-claim repeat",
+  "seed": 4242,
+  "max_ticks": 96,
+  "map": {
+    "width": 16,
+    "height": 12,
+    "blocked": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      31,
+      32,
+      47,
+      48,
+      63,
+      64,
+      79,
+      80,
+      95,
+      96,
+      111,
+      112,
+      127,
+      128,
+      143,
+      144,
+      159,
+      160,
+      175,
+      176,
+      177,
+      178,
+      179,
+      180,
+      181,
+      182,
+      183,
+      184,
+      185,
+      186,
+      187,
+      188,
+      189,
+      190,
+      191
+    ]
+  },
+  "arenas": [
+    {
+      "id": "clearing",
+      "label": "2 people / Direct teaching between two people",
+      "environment": "knowledge-settlement",
+      "variant": "luna-medium",
+      "bounds": {
+        "x": 1,
+        "y": 1,
+        "width": 14,
+        "height": 10
+      },
+      "actors": [
+        1,
+        2
+      ],
+      "controllers": {
+        "1": "builtin",
+        "2": "external"
+      }
+    }
+  ],
+  "players": [
+    {
+      "id": 1,
+      "name": "Mira",
+      "controller": "ai",
+      "motive": "I have a useful field note in my private knowledge. I want to deliberately teach its contents to someone who can use them and, where a physical archive is available, preserve a copy for people who arrive later. I value explanations others can check. I also need enough food, energy and shelter to remain capable.",
+      "role": "craftsperson",
+      "position": 84,
+      "health": 100,
+      "hunger": 20,
+      "energy": 80,
+      "food": 2,
+      "caution": 65,
+      "empathy": 80,
+      "introspection": 85,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 88,
+            "danger": false,
+            "text": "I remember a berry thicket four cells east of the camp. Its current food stock is unknown."
+          },
+          "source": 0,
+          "confidence": 40
+        },
+        {
+          "claim": {
+            "location": 84,
+            "danger": false,
+            "text": "This is the clearing where we met; no one has exclusive ownership of its supplies or shelter."
+          },
+          "source": 0,
+          "confidence": 60
+        }
+      ],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    },
+    {
+      "id": 2,
+      "name": "Tovan",
+      "controller": "ai",
+      "motive": "I want independence and a reliable food reserve. I am curious about useful field notes others can teach me and records in local archives. I want to assess reports against what I observe, and explore opportunities supported by evidence while staying supplied.",
+      "role": "forager",
+      "position": 84,
+      "health": 100,
+      "hunger": 20,
+      "energy": 80,
+      "food": 2,
+      "caution": 40,
+      "empathy": 45,
+      "introspection": 70,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 88,
+            "danger": false,
+            "text": "I remember a berry thicket four cells east of the camp. Its current food stock is unknown."
+          },
+          "source": 0,
+          "confidence": 40
+        },
+        {
+          "claim": {
+            "location": 84,
+            "danger": false,
+            "text": "This is the clearing where we met; no one has exclusive ownership of its supplies or shelter."
+          },
+          "source": 0,
+          "confidence": 60
+        }
+      ],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    }
+  ],
+  "sites": [
+    {
+      "position": 84,
+      "food": 8,
+      "hazard": 0,
+      "shelter": 12
+    },
+    {
+      "position": 88,
+      "food": 4,
+      "hazard": 0,
+      "shelter": 0
+    },
+    {
+      "position": 56,
+      "food": 8,
+      "hazard": 0,
+      "shelter": 0
+    }
+  ],
+  "weather": {
+    "cold_after_ms": 180000,
+    "damage_per_pulse": 2,
+    "shelter_required": 12
+  },
+  "food_sources": [
+    {
+      "position": 84,
+      "interval_ms": 7500,
+      "amount": 1,
+      "capacity": 12
+    }
+  ],
+  "starting_behaviors": {
+    "1": {
+      "id": "settlement.builder",
+      "revision": 1,
+      "description": "Keep two carried meals and recover energy; return home and contribute to its shared shelter until it reaches 12. Observe and wait when supplied and sheltered. This is a starting habit that can be revised through experience.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "resource",
+                  "resource": "hunger",
+                  "comparison": "at_least",
+                  "value": 60
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "eat"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 24
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "below",
+                  "value": 2
+                },
+                {
+                  "kind": "food_at",
+                  "location": 84,
+                  "minimum": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "gather"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "shelter_at",
+                    "location": 84,
+                    "minimum": 12
+                  }
+                },
+                {
+                  "kind": "resource",
+                  "resource": "energy",
+                  "comparison": "at_least",
+                  "value": 8
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "build"
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "2": {
+      "id": "settlement.reserve-keeper",
+      "revision": 1,
+      "description": "Keep up to four carried meals from observed local supplies, recover energy, and return home when away. Observe and wait once the reserve is met; no default sharing obligation. This starting habit can be revised through experience.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "resource",
+                  "resource": "hunger",
+                  "comparison": "at_least",
+                  "value": 60
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "eat"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 35
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "below",
+                  "value": 4
+                },
+                {
+                  "kind": "food_at",
+                  "location": 84,
+                  "minimum": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "gather"
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "knowledge": {
+    "1": [
+      {
+        "id": "route-cache",
+        "topic": "field-notes",
+        "text": "My field note: cell 56 held a safe food cache with eight portions when I last checked. From the camp at cell 84, travel four cells east and two north; verify the stock on arrival.",
+        "location": 56,
+        "confidence": 75
+      }
+    ]
+  },
+  "archives": [],
+  "disturbances": []
+}

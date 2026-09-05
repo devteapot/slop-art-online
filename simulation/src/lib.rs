@@ -2,7 +2,9 @@
 //! No I/O, wall clock, model calls, or second approximation of world rules.
 pub mod client_view;
 pub mod ecology;
+pub mod knowledge;
 pub mod participant;
+pub mod perturbations;
 mod scripted_world;
 pub mod scripting;
 pub mod spatial;
@@ -13,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "m1-18-starting-habits.1";
+pub const VERSION: &str = "m2-3-catalog-bounds.1";
 pub const DECISION_FORMAT_VERSION: &str = "survivor-policy-v2";
 pub const LEGACY_DECISION_FORMAT: &str = "survivor-sequence-v1";
 pub mod policy;
@@ -44,6 +46,10 @@ pub enum Skill {
     Deposit,
     Build,
     Observe,
+    Teach,
+    Record,
+    Consult,
+    DestroyArchive,
     Script(String),
 }
 impl Skill {
@@ -60,6 +66,10 @@ impl Skill {
             Self::Deposit => "deposit",
             Self::Build => "build",
             Self::Observe => "observe",
+            Self::Teach => "teach",
+            Self::Record => "record",
+            Self::Consult => "consult",
+            Self::DestroyArchive => "destroy_archive",
             Self::Script(id) => id,
         }
     }
@@ -69,6 +79,10 @@ impl Skill {
 #[serde(deny_unknown_fields)]
 pub struct Action {
     pub skill: Skill,
+    #[serde(default)]
+    pub record: Option<String>,
+    #[serde(default)]
+    pub archive: Option<u32>,
     #[serde(default)]
     pub destination: Option<i32>,
     #[serde(default)]
@@ -85,6 +99,8 @@ impl Action {
     pub fn new(skill: Skill) -> Self {
         Self {
             skill,
+            record: None,
+            archive: None,
             destination: None,
             target: None,
             text: None,
@@ -133,6 +149,8 @@ pub struct Percept {
 pub struct Reflection {
     pub source: u64,
     pub interpretation: String,
+    #[serde(default)]
+    pub knowledge: Option<knowledge::KnowledgeDraft>,
     #[serde(default)]
     pub caution_delta: i32,
     #[serde(default)]
@@ -186,6 +204,8 @@ pub struct Player {
     pub introspection: i32,
     pub fear: i32,
     #[serde(default)]
+    pub knowledge: Vec<knowledge::Holding>,
+    #[serde(default)]
     pub beliefs: Vec<Known>,
     #[serde(default)]
     pub relationships: BTreeMap<u32, i32>,
@@ -221,6 +241,12 @@ pub struct Weather {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Scenario {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disturbances: Vec<perturbations::Disturbance>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub knowledge: BTreeMap<u32, Vec<knowledge::RecordSeed>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub archives: Vec<knowledge::ArchiveSeed>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub starting_behaviors: BTreeMap<u32, starting_behaviors::StartingBehavior>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -267,6 +293,8 @@ pub struct World {
     pub timing: timing::Timing,
     pub players: Vec<Player>,
     pub sites: Vec<Site>,
+    #[serde(default)]
+    pub archives: Vec<knowledge::Archive>,
     pub pending: Vec<Pending>,
     pub next_event: u64,
     pub stopped: bool,
@@ -311,6 +339,7 @@ impl World {
                 || p.execution.is_some()
                 || !p.memories.is_empty()
                 || !p.site_observations.is_empty()
+                || !p.knowledge.is_empty()
             {
                 return Err("invalid initial player".into());
             }
@@ -329,12 +358,17 @@ impl World {
         }
         spatial::validate_arenas(&scenario)?;
         ecology::validate(&scenario)?;
+        perturbations::validate(&scenario)?;
         let mut w = Self {
             run,
             version: VERSION.into(),
             scripts: scripting::Registry::default(),
             players: scenario.players.clone(),
             sites: scenario.sites.clone(),
+            archives: scenario.archives.iter().map(|s| knowledge::Archive {
+                id:s.id,position:s.position,label:s.label.clone(),capacity:s.capacity,
+                records:vec![],destroyed:false,revision:0,
+            }).collect(),
             initial: scenario,
             tick: 0,
             timing: timing::Timing::default(),
@@ -365,6 +399,7 @@ impl World {
             }
             w.observe_site(i)?;
         }
+        w.initialize_knowledge(id)?;
         w.install_starting_behaviors(id)?;
         Ok(w)
     }
@@ -450,6 +485,7 @@ impl World {
             json!(self.sites.iter().find(|s| s.position == pos)),
         )?;
         observation["food_source"] = json!(self.initial.food_sources.iter().find(|s| s.position == pos));
+        observation["archives"] = self.local_archive_catalog(i);
         let food = observation["food"].as_i64().unwrap_or(0);
         let parents = self.players[i]
             .execution
@@ -488,7 +524,7 @@ impl World {
         // Deliberate allowlist. Never serialize World, sites, other minds or audit into a prompt.
         let p = &self.players[i];
         let approach = p.execution.as_ref().map(|e| if let Some(policy)=&e.policy {json!({"decision":e.decision,"policy":policy,"state":e.state,"active_attempt":e.attempt})} else {json!(e)});
-        json!({"starting_behavior":self.initial.starting_behaviors.get(&p.id).map(|b|json!({"id":b.id,"revision":b.revision,"description":b.description,"source":"authored world seed; revisable starting habit"})),"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
+        json!({"starting_behavior":self.initial.starting_behaviors.get(&p.id).map(|b|json!({"id":b.id,"revision":b.revision,"description":b.description,"source":"authored world seed; revisable starting habit"})),"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"knowledge":p.knowledge,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
     }
     pub fn request(&mut self, i: usize, trigger: &str) {
         if self.participant_mode {
@@ -547,9 +583,14 @@ impl World {
                 return Err(reason);
             }
             if let Some(b) = &r.belief {
+                let record_location = if source.kind == "knowledge_report" {
+                    source.content["record"]["location"].as_i64()
+                } else if source.kind == "perception" && source.content["kind"] == "knowledge_report" {
+                    source.content["content"]["record"]["location"].as_i64()
+                } else { None };
                 if b.text.len() > 1000
                     || (!p.beliefs.iter().any(|k| k.claim.location == b.location)
-                        && b.location != source.location)
+                        && b.location != source.location && record_location != Some(i64::from(b.location)))
                 {
                     return Err("belief location is not known".into());
                 }
@@ -649,11 +690,11 @@ impl World {
                 }
             }
             let before = self.players[i].clone();
-            let from = evidence
+            let source = evidence
                 .iter()
                 .find(|m| m.source == r.source)
-                .and_then(|m| m.from);
-            self.reflect_identity(i, r, from)?;
+                .ok_or("validated reflection source missing")?;
+            self.reflect_identity(i, r, source)?;
             self.event(Some(actor),"identity_change",vec![id,r.source],json!({"interpretation":r.interpretation,"before":{"caution":before.caution,"beliefs":before.beliefs,"relationships":before.relationships},"after":{"caution":self.players[i].caution,"beliefs":self.players[i].beliefs,"relationships":self.players[i].relationships}}));
         }
         self.players[i].generation += 1;
@@ -1024,6 +1065,7 @@ impl World {
             periods.hazard_ms,
         )?;
         self.renew_food(delta_ms)?;
+        self.apply_disturbances()?;
         for i in 0..self.players.len() {
             if self.players[i].health <= 0 {
                 continue;
@@ -1189,6 +1231,8 @@ impl World {
 mod policy_tests;
 #[cfg(test)]
 mod starting_behavior_tests;
+#[cfg(test)]
+mod knowledge_tests;
 #[cfg(test)]
 mod tests;
 

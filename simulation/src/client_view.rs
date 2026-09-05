@@ -55,7 +55,7 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
         let mut known = BTreeMap::new();
         for memory in &me.site_observations {
             if memory.kind == "site" {
-                known.insert(memory.location, json!({"position":memory.location,"food":memory.content["food"],"shelter":memory.content["shelter"],"food_source":memory.content["food_source"],"observed_tick":memory.tick}));
+                known.insert(memory.location, json!({"position":memory.location,"food":memory.content["food"],"shelter":memory.content["shelter"],"food_source":memory.content["food_source"],"archives":memory.content["archives"],"observed_tick":memory.tick}));
             }
         }
         json!(known.into_values().collect::<Vec<_>>())
@@ -72,7 +72,7 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
         world.players[index.unwrap()].memories.iter().map(|m|json!({"id":m.source,"tick":m.tick,"actor":actor,"kind":m.kind,"parents":[],"data":m.content})).collect()
     };
     json!({"run":world.run,"tick":world.tick,"time_ms":world.timing.time_ms,"updates":world.timing.updates,"clock_unit_ms":crate::timing::LEGACY_UNIT_MS,"stopped":world.stopped,"max_ticks":world.initial.max_ticks,
-        "map":if observer {world.initial.map.clone()} else {world.map_for_actor(actor)},"arenas":if observer {json!(world.initial.arenas)} else {Value::Null},"can_participate":world.players.iter().any(|p| p.id == 3 && p.controller == crate::Controller::Human),"rules":world.version,"actor":if observer {Value::Null} else {json!(actor)},"observer":observer,"players":players,"sites":sites,"events":history,
+        "map":if observer {world.initial.map.clone()} else {world.map_for_actor(actor)},"arenas":if observer {json!(world.initial.arenas)} else {Value::Null},"can_participate":world.players.iter().any(|p| p.id == 3 && p.controller == crate::Controller::Human),"rules":world.version,"actor":if observer {Value::Null} else {json!(actor)},"observer":observer,"players":players,"sites":sites,"archives":if observer {json!(world.archives)} else {json!(world.players[index.unwrap()].site_observations.iter().filter(|m|m.kind=="site").flat_map(|m|m.content["archives"].as_array().into_iter().flatten().cloned()).collect::<Vec<_>>())},"events":history,
         "pending":if observer {json!(world.pending.iter().map(|p|json!({"id":p.id,"actor":p.actor,"tick":p.tick})).collect::<Vec<_>>())} else {Value::Null}})
 }
 #[cfg(test)]

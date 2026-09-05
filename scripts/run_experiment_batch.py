@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Run pinned implementation variants concurrently, retain a manifest and compare evidence.
+"""Run explicit pinned variants concurrently and compare retained authority evidence.
 
 The coordinator owns launch/stop/evidence, never character decisions or world advancement.
 Review each completed batch before creating the next hypothesis manifest.
 """
 import argparse
 import json
+import os
+import re
 import signal
 import subprocess
 import sys
@@ -15,105 +17,244 @@ from pathlib import Path
 from experiment_artifacts import ROOT, digest, verify, write
 from summarize_arena_matrix import summarize
 
+READINESS_SECONDS = 100
+CLEANUP_SECONDS = 40
+
+
+def integer(value, label, minimum, maximum=None):
+    if type(value) is not int or value < minimum or (maximum is not None and value > maximum):
+        limit = f'{minimum}..{maximum}' if maximum is not None else f'at least {minimum}'
+        raise ValueError(f'{label} must be an integer {limit}')
+    return value
+
+
+def resolve_spec(spec):
+    """Validate all variants and read inputs before any process can launch."""
+    variants = spec.get('variants', [])
+    if not isinstance(variants, list) or not variants:
+        raise ValueError('A batch needs at least one explicitly configured variant')
+    if not spec.get('hypothesis') or not spec.get('evaluation'):
+        raise ValueError('Record a hypothesis and evaluation criteria before running')
+    concurrency = integer(spec.get('concurrency', len(variants)), 'concurrency', 1, len(variants))
+    ids, ports, verified, resolved = set(), set(), {}, []
+    for source in variants:
+        v = dict(source)
+        name = v.get('id')
+        if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_-]+', name):
+            raise ValueError('Use simple ASCII variant IDs')
+        port = integer(v.get('port'), f'{name} port', 1, 65535)
+        if name in ids or port in ports:
+            raise ValueError('Variant IDs and ports must be unique across the entire batch')
+        ids.add(name)
+        ports.add(port)
+        for key, default, minimum, maximum in (
+            ('serial_ms', 15000, 1000, None), ('minutes', 5, 1, 60), ('calls_per_actor', 0, 0, 100),
+        ):
+            v[key] = integer(v.get(key, spec.get(key, default)), f'{name} {key}', minimum, maximum)
+        if type(v.get('recovery', False)) is not bool:
+            raise ValueError(f'{name} recovery must be a boolean')
+        v['implementation'] = str(Path(v['implementation']).resolve())
+        if v['implementation'] not in verified:
+            folder = Path(v['implementation'])
+            verify(folder)
+            verified[v['implementation']] = digest(folder / 'implementation.json')
+        inputs = {}
+        for key in ('scenario', 'controllers'):
+            v[key] = str(Path(v[key]).resolve())
+            inputs[key] = json.loads(Path(v[key]).read_text())
+        controllers = inputs['controllers']
+        actor_ids = [p['id'] for p in inputs['scenario']['players']]
+        if (not controllers or len(set(actor_ids)) != len(actor_ids)
+                or len(controllers) != len(actor_ids)
+                or {c['actor'] for c in controllers} != set(actor_ids)):
+            raise ValueError(f'{name} controllers must cover each unique scenario actor exactly once')
+        for controller in controllers:
+            if controller['config']['backend']['model'] != 'gpt-5.6-luna':
+                raise ValueError('This iteration campaign is Luna-only')
+        resolved.append((v, inputs, verified[v['implementation']]))
+    spec = dict(spec, concurrency=concurrency, variants=[v for v, _, _ in resolved])
+    return spec, resolved
+
+
+def prepare(spec, resolved, out):
+    out.mkdir(parents=True)
+    write(out / 'manifest.json', spec)
+    (out / '.gates').mkdir()
+    plan = []
+    for index, (v, values, implementation_hash) in enumerate(resolved):
+        group = index // spec['concurrency']
+        group_size = min(spec['concurrency'], len(resolved) - group * spec['concurrency'])
+        inputs = out / '.inputs' / v['id']
+        inputs.mkdir(parents=True)
+        for key, value in values.items():
+            write(inputs / (key + '.json'), value)
+        # Each host initializes serially for old millisecond-named databases.
+        # This finite allowance also covers the earliest child's wait for its peers.
+        gate_timeout = group_size * READINESS_SECONDS + 30
+        gate = out / '.gates' / f'group-{group + 1}'
+        command = [sys.executable, str(ROOT / 'scripts/run_living_clearing.py'),
+                   '--output', str(out / v['id']), '--port', str(v['port']),
+                   '--minutes', str(v['minutes']), '--calls-per-actor', str(v['calls_per_actor']),
+                   '--serial-ms', str(v['serial_ms']), '--scenario', str(inputs / 'scenario.json'),
+                   '--controllers', str(inputs / 'controllers.json'), '--implementation', v['implementation'],
+                   '--start-gate', str(gate), '--start-gate-timeout', str(gate_timeout)]
+        if v.get('recovery', False):
+            command.append('--recovery')
+        plan.append(dict(id=v['id'], group=group + 1, url=f"http://127.0.0.1:{v['port']}",
+                         serial_ms=v['serial_ms'], minutes=v['minutes'], calls_per_actor=v['calls_per_actor'],
+                         implementation_manifest_hash=implementation_hash, command=command,
+                         inputs={key: digest(inputs / (key + '.json')) for key in values},
+                         start_gate=str(gate), gate_timeout_seconds=gate_timeout, phase='planned'))
+    write(out / 'plan.json', plan)
+    return plan
+
+
+def compare(record, folder):
+    result = json.loads((folder / 'LIVE_RESULT.json').read_text())
+    pilot = json.loads((folder / 'pilot.json').read_text())
+    players = [p for a in result['arenas'] for p in a['players']]
+    calls = [c for p in players for c in p['calls']]
+    started, finished = pilot.get('started_at'), pilot.get('finished_at')
+    return dict(variant=record['id'], group=record['group'], run=result['run'],
+                seconds=result['seconds'], updates=result['updates'],
+                wall_seconds=finished - started if started is not None and finished is not None else None,
+                alive=sum(p['alive'] for p in players), population=len(players), calls=len(calls),
+                completed_calls=sum(c['phase'] == 'completed' for c in calls),
+                output_errors=sum(bool(c.get('error') or c.get('provider_error')) for c in calls),
+                engine_errors=len(result['engine_errors']), scope_violations=len(result['scope_violations']),
+                details=str(folder / 'LIVE_RESULT.json'))
+
+
+def cleanup(jobs, failed):
+    # Give all supervisors a chance to pause their authority and export evidence in
+    # parallel. They intentionally keep paused observer hosts on successful runs.
+    errors = []
+    for job, _, _, _ in jobs:
+        if job.poll() is None:
+            job.terminate()
+    deadline = time.monotonic() + CLEANUP_SECONDS
+    for job, log, folder, _ in jobs:
+        try:
+            job.wait(timeout=max(0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            job.kill()
+            job.wait(timeout=5)
+        log.close()
+        if failed:
+            # Host is a separate session, so stopping only the supervisor leaks it.
+            # Its PID comes from the supervisor's own record, never a global search.
+            try:
+                pilot = json.loads((folder / 'pilot.json').read_text())
+                if pilot.get('phase') == 'running' or pilot.get('pause_error'):
+                    errors.append(f'{folder.name}: authority pause not confirmed; inspect pilot.json')
+                pid = pilot.get('host_pid')
+                if isinstance(pid, int) and pid > 1 and os.getpgid(pid) == pid:
+                    os.killpg(pid, signal.SIGTERM)
+            except (FileNotFoundError, ProcessLookupError):
+                pass
+            except (OSError, ValueError) as error:
+                errors.append(f'{folder.name}: host cleanup could not be confirmed: {error}')
+    return errors
+
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('manifest',type=Path);parser.add_argument('--output',type=Path,required=True)
-    args=parser.parse_args();spec=json.loads(args.manifest.read_text());out=args.output.resolve()
-    if out.exists():raise SystemExit('Choose a new batch evidence directory')
-    variants=spec.get('variants',[])
-    if not 1<=len(variants)<=4:raise SystemExit('A batch needs one to four variants')
-    if not spec.get('hypothesis') or not spec.get('evaluation'):raise SystemExit('Record a hypothesis and evaluation criteria before running')
-    ids=[v['id'] for v in variants];ports=[v['port'] for v in variants]
-    if len(set(ids))!=len(ids) or len(set(ports))!=len(ports):raise SystemExit('Variant IDs and ports must be unique')
-    for v in variants:
-        if not v['id'].replace('-','').replace('_','').isalnum():raise SystemExit('Use simple variant IDs')
-        v['serial_ms']=v.get('serial_ms',spec.get('serial_ms',15000))
-        if not isinstance(v['serial_ms'],int) or v['serial_ms']<1000:raise SystemExit('Serial intervals must be at least 1000 ms')
-        v['implementation']=str(Path(v['implementation']).resolve())
-        verify(Path(v['implementation']))
-        for key in ('scenario','controllers'):
-            v[key]=str(Path(v[key]).resolve())
-            json.loads(Path(v[key]).read_text())
-        for controller in json.loads(Path(v['controllers']).read_text()):
-            if controller['config']['backend']['model']!='gpt-5.6-luna':raise SystemExit('This iteration campaign is Luna-only')
-    out.mkdir(parents=True)
-    write(out/'manifest.json',spec)
-    report=dict(phase='preparing',hypothesis=spec['hypothesis'],evaluation=spec['evaluation'],variants=[])
-    jobs=[];stop=False
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('manifest', type=Path)
+    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--dry-run', action='store_true', help='validate and freeze a plan without starting processes or models')
+    args = parser.parse_args()
+    out = args.output.resolve()
+    if out.exists():
+        raise SystemExit('Choose a new batch evidence directory')
+    try:
+        spec, resolved = resolve_spec(json.loads(args.manifest.read_text()))
+    except (ValueError, KeyError, TypeError, OSError) as error:
+        raise SystemExit(str(error)) from None
+    plan = prepare(spec, resolved, out)
+    report = dict(phase='planned' if args.dry_run else 'preparing', hypothesis=spec['hypothesis'],
+                  evaluation=spec['evaluation'], concurrency=spec['concurrency'], variants=plan,
+                  observer_retention='Successful supervisors leave paused observer hosts available', comparison=[])
+    write(out / 'batch.json', report)
+    if args.dry_run:
+        print(f'Validated {len(plan)} variants; concurrency {spec["concurrency"]}; plan: {out / "plan.json"}')
+        return
+    jobs, databases = [], set()
+    stop = False
+
     def interrupted(*_):
         nonlocal stop
-        stop=True
-    signal.signal(signal.SIGINT,interrupted);signal.signal(signal.SIGTERM,interrupted)
+        stop = True
+
+    signal.signal(signal.SIGINT, interrupted)
+    signal.signal(signal.SIGTERM, interrupted)
     try:
-        for v in variants:
-            inputs=out/(v['id']+'-inputs');inputs.mkdir()
-            for key in ('scenario','controllers'):
-                value=json.loads(Path(v[key]).read_text());write(inputs/(key+'.json'),value)
-            folder=out/v['id'];log=(out/(v['id']+'.log')).open('w')
-            command=[sys.executable,str(ROOT/'scripts/run_living_clearing.py'),
-                     '--output',str(folder),'--port',str(v['port']),
-                     '--minutes',str(spec.get('minutes',5)),
-                     '--calls-per-actor',str(spec.get('calls_per_actor',0)),
-                     '--serial-ms',str(v['serial_ms']),
-                     '--scenario',str(inputs/'scenario.json'),'--controllers',str(inputs/'controllers.json'),
-                     '--implementation',v['implementation'],'--start-gate',str(out/'start')]
-            if v.get('recovery',False):command.append('--recovery')
-            job=subprocess.Popen(command,cwd=ROOT,stdout=log,stderr=log,start_new_session=True)
-            jobs.append((job,log,folder))
-            report['variants'].append(dict(id=v['id'],pid=job.pid,url=f"http://127.0.0.1:{v['port']}",serial_ms=v['serial_ms'],
-                                          implementation_manifest_hash=digest(Path(v['implementation'])/'implementation.json'),
-                                          inputs={key:digest(inputs/(key+'.json')) for key in ('scenario','controllers')}))
-            # Old frozen hosts use millisecond database names. Finish initialization
-            # before starting the next host; all world clocks still share the gate.
-            ready_deadline=time.monotonic()+100
-            while not (folder/'ready.json').exists():
-                if stop or job.poll() is not None or time.monotonic()>ready_deadline:
-                    raise RuntimeError(f"Variant {v['id']} failed before readiness; inspect its log")
-                time.sleep(.25)
-        write(out/'batch.json',report)
-        deadline=time.monotonic()+180
-        while not all((folder/'ready.json').exists() for _,_,folder in jobs):
-            if stop or any(job.poll() is not None for job,_,_ in jobs) or time.monotonic()>deadline:
-                raise RuntimeError('A variant failed or timed out before the common start; inspect variant logs')
-            time.sleep(.25)
-        databases=[json.loads((folder/'active.json').read_text())['db'] for _,_,folder in jobs]
-        if len(set(databases))!=len(databases):raise RuntimeError('Variants must have distinct authority databases')
-        (out/'start').touch();report.update(phase='running',started_at=time.time());write(out/'batch.json',report)
-        print('Parallel experiments started: '+', '.join(v['url'] for v in report['variants']),flush=True)
-        deadline=time.monotonic()+spec.get('minutes',5)*60+60
-        while any(job.poll() is None for job,_,_ in jobs):
-            if stop or time.monotonic()>deadline:raise RuntimeError('Batch cancelled or exceeded its supervision deadline')
-            if any(job.poll() not in (None,0) for job,_,_ in jobs):raise RuntimeError('A variant failed; stopping peers')
-            time.sleep(1)
-        if any(job.returncode for job,_,_ in jobs):raise RuntimeError('A variant failed')
-        for job,log,folder in jobs:
-            log.close();summarize(folder)
-        comparison=[]
-        for v,(_,_,folder) in zip(variants,jobs):
-            result=json.loads((folder/'LIVE_RESULT.json').read_text())
-            players=[p for a in result['arenas'] for p in a['players']]
-            calls=[c for p in players for c in p['calls']]
-            comparison.append(dict(variant=v['id'],run=result['run'],seconds=result['seconds'],updates=result['updates'],
-                                   alive=sum(p['alive'] for p in players),population=len(players),calls=len(calls),
-                                   completed_calls=sum(c['phase']=='completed' for c in calls),
-                                   output_errors=sum(bool(c.get('error') or c.get('provider_error')) for c in calls),
-                                   engine_errors=len(result['engine_errors']),scope_violations=len(result['scope_violations']),
-                                   details=str(folder/'LIVE_RESULT.json')))
-        write(out/'comparison.json',comparison)
-        report.update(phase='completed',finished_at=time.time(),comparison=comparison)
-        print(json.dumps(comparison,indent=2),flush=True)
-    except Exception as error:
-        report.update(phase='failed',error=str(error),finished_at=time.time())
+        for offset in range(0, len(plan), spec['concurrency']):
+            group = plan[offset:offset + spec['concurrency']]
+            group_jobs = []
+            report.update(phase='preparing', current_group=group[0]['group'])
+            for record in group:
+                if stop:
+                    raise RuntimeError('Batch cancelled before launch')
+                folder = out / record['id']
+                log = (out / (record['id'] + '.log')).open('w')
+                try:
+                    job = subprocess.Popen(record['command'], cwd=ROOT, stdout=log, stderr=log, start_new_session=True)
+                except BaseException:
+                    log.close()
+                    raise
+                item = (job, log, folder, record)
+                jobs.append(item)
+                group_jobs.append(item)
+                record.update(pid=job.pid, phase='initializing')
+                write(out / 'batch.json', report)
+                ready_deadline = time.monotonic() + READINESS_SECONDS
+                while not (folder / 'ready.json').exists():
+                    if stop or any(j.poll() is not None for j, _, _, _ in group_jobs) or time.monotonic() > ready_deadline:
+                        raise RuntimeError(f"Variant {record['id']} failed before readiness; inspect its log")
+                    time.sleep(.25)
+                active = json.loads((folder / 'active.json').read_text())
+                database = (active.get('server'), active['db'])
+                if database in databases:
+                    raise RuntimeError('Variants must have distinct authority databases')
+                databases.add(database)
+                record.update(phase='ready', database=active['db'], server=active.get('server'), run=active['run'])
+                write(out / 'batch.json', report)
+            if stop or any(j.poll() is not None for j, _, _, _ in group_jobs):
+                raise RuntimeError('A variant failed or batch cancelled before the common start')
+            Path(group[0]['start_gate']).touch()
+            started = time.time()
+            for record in group:
+                record.update(phase='running', gate_released_at=started)
+            report.update(phase='running')
+            report.setdefault('started_at', started)
+            write(out / 'batch.json', report)
+            print('Parallel experiments started: ' + ', '.join(v['url'] for v in group), flush=True)
+            # Each child has its own duration; supervision includes bounded export.
+            deadline = time.monotonic() + max(v['minutes'] for v in group) * 60 + 60
+            while any(j.poll() is None for j, _, _, _ in group_jobs):
+                if stop or time.monotonic() > deadline:
+                    raise RuntimeError('Batch cancelled or exceeded its supervision deadline')
+                if any(j.poll() not in (None, 0) for j, _, _, _ in group_jobs):
+                    raise RuntimeError('A variant failed; stopping peers')
+                time.sleep(1)
+            if any(j.returncode for j, _, _, _ in group_jobs):
+                raise RuntimeError('A variant failed')
+            for job, log, folder, record in group_jobs:
+                log.close()
+                summarize(folder)
+                record.update(phase='completed', exit_code=job.returncode)
+                report['comparison'].append(compare(record, folder))
+                write(out / 'comparison.json', report['comparison'])
+                write(out / 'batch.json', report)
+        report.update(phase='completed', finished_at=time.time())
+        print(json.dumps(report['comparison'], indent=2), flush=True)
+    except (Exception, SystemExit) as error:
+        report.update(phase='failed', error=str(error), finished_at=time.time())
         raise
     finally:
-        for job,_,_ in jobs:
-            if job.poll() is None:job.terminate()
-        for job,log,_ in jobs:
-            try:job.wait(timeout=40)
-            except subprocess.TimeoutExpired:job.kill();job.wait(timeout=5)
-            log.close()
-        write(out/'batch.json',report)
+        report['cleanup_errors'] = cleanup(jobs, report['phase'] != 'completed')
+        write(out / 'batch.json', report)
 
 
-if __name__=='__main__':main()
+if __name__ == '__main__':
+    main()

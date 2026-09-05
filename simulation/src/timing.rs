@@ -8,6 +8,8 @@ pub const UPDATE_MS: u64 = 50;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Timing {
+    #[serde(default)]
+    pub applied_disturbances: std::collections::BTreeSet<usize>,
     pub time_ms: u64,
     pub updates: u64,
     pub delta_ms: u64,

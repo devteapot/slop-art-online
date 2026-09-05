@@ -220,6 +220,7 @@ pub fn sync(
             run,
             game.world_visible,
             game.snapshot["map"],
+            game.snapshot["archives"].as_array().map(|a|a.iter().map(|v|json!([v["id"],v["position"],v["destroyed"]])).collect::<Vec<_>>()),
             game.snapshot["sites"].as_array().map(|sites| sites
                 .iter()
                 .map(|s| json!([s["position"], s["food"], s["hazard"], s["shelter"], s["food_source"]]))
@@ -317,6 +318,14 @@ pub fn sync(
                         }
                     }
                 }
+            }
+        }
+        if terrain_changed && game.world_visible {
+            for archive in game.snapshot["archives"].as_array().into_iter().flatten() {
+                let at=cell_position(&game.snapshot,archive["position"].as_i64().unwrap_or(0) as i32)+Vec3::new(-12.,0.,3.);
+                let intact=archive["destroyed"]!=true;
+                tile(&mut commands,if intact {Color::srgb(0.74,0.54,0.88)} else {Color::srgb(0.42,0.35,0.39)},at,Vec2::new(9.,if intact {18.} else {5.}));
+                if intact {tile(&mut commands,Color::srgb(0.9,0.82,0.95),at+Vec3::new(0.,0.,1.),Vec2::new(2.,13.));}
             }
         }
         let mut wanted = BTreeSet::new();

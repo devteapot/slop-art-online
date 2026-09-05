@@ -133,6 +133,7 @@ fn damage_during_reasoning_keeps_request_usable_and_preserves_newer_danger() {
     w.pending[0].context = w.context(0);
     let mut d = policy(reactive());
     d.reflections.push(Reflection {
+        knowledge: None,
         source: src.unwrap(),
         interpretation: "Old report said safe".into(),
         caution_delta: -3,

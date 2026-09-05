@@ -301,6 +301,7 @@ async fn main() {
                 expected_revision: after["learning_revision"].as_u64().unwrap(),
                 observed_cursor: after["latest_cursor"].as_u64().unwrap(),
                 reflections: vec![Reflection {
+                    knowledge: None,
                     source: wrong,
                     interpretation: "must reject".into(),
                     caution_delta: 1,

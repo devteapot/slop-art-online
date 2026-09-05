@@ -1,0 +1,25 @@
+{
+  "hypothesis": "An older still-valid receipt can assess its record after a duplicate receipt refresh, while an assessment from an older source cannot overwrite a newer assessment. Repeat direct teaching under assessment-m2-2 to inspect receipt-to-record linkage and assessment ordering; also examine whether readers starting beyond hearing range can obtain a useful preserved report after its author dies. Batch011 already demonstrated a new archive acquisition after author death; this challenges initial spatial separation.",
+  "evaluation": "Run two concurrent four-minute Luna-medium fresh samples on the same frozen assessment-m2-2 implementation. The teaching repeat retains original two-person inputs except its name and four-minute bound; compare acquired report, accepted assessment, chosen movement, actual cache visits and gathering with011, retaining failed or looping approaches. In neighbor-readers-four only the author starts at camp84 with archive1; three readers start at supplied sheltered thicket88, initially beyond speech range. Readers know the neighboring archive exists but not its record identities, contents or hidden cache location. Author damage remains at120s. Look for genuine recording before death and first acquisition by archive consultation after death; inspect every earlier teaching/speech/visit rather than assume initial separation prevents early contact. Travel, teaching, preservation, consultation and claims remain model choices, with ordinary survival starters and no scripted learning sequence. Existing living copies or paraphrases must not be counted as archive-only recovery. Track source citations, new_copy versus repeated reads, assessment source linkage and ordering, positions, food collection, elapsed simulation/wall time, model failures, engine/scope/conservation checks. This targeted repeat checks older-receipt assessment bookkeeping and robustness under initial spatial separation; 011 already demonstrated post-death archive consultation. The m2-2 change affects receipt linkage and assessment ordering only, not navigation rules or claim polarity semantics. This repeat does not guarantee a narrative or establish statistical superiority.",
+  "minutes": 4,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "teaching-two-repeat",
+      "port": 18958,
+      "implementation": "output/society-lab/implementations/assessment-m2-2",
+      "scenario": "output/society-lab/implementations/assessment-m2-2/scenarios/knowledge-teaching-two-repeat.json",
+      "controllers": "output/society-lab/implementations/assessment-m2-2/configs/experiments/knowledge-2-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "neighbor-readers-four",
+      "port": 18959,
+      "implementation": "output/society-lab/implementations/assessment-m2-2",
+      "scenario": "output/society-lab/implementations/assessment-m2-2/scenarios/knowledge-neighbor-readers-four.json",
+      "controllers": "output/society-lab/implementations/assessment-m2-2/configs/experiments/knowledge-4-medium.json",
+      "recovery": true
+    }
+  ]
+}

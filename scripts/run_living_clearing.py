@@ -25,6 +25,13 @@ def write(path, value):
     temporary.replace(path)
 
 
+def fresh_environment():
+    env = os.environ.copy()
+    for key in ("BEVY_DEV_RESUME_ACTIVE", "BEVY_DEV_ARCHIVE_ONLY"):
+        env.pop(key, None)
+    return env
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True, help="new evidence directory")
@@ -37,6 +44,8 @@ def main():
     parser.add_argument("--controllers", type=Path, help="per-actor config manifest; enables matched serial matrix schedules")
     parser.add_argument("--implementation", type=Path, help="verified frozen implementation bundle")
     parser.add_argument("--start-gate", type=Path, help="wait for the batch coordinator to release all ready variants")
+    parser.add_argument("--start-gate-timeout", type=int, default=180,
+                        help="positive seconds to wait for a batch start gate; coordinator derives this from planned initialization")
     parser.add_argument("--serial-ms", type=int, default=15000)
     parser.add_argument("--recovery", action="store_true", help="enable explicit model feedback and priority retry after failed behavior proposals")
     args = parser.parse_args()
@@ -46,6 +55,7 @@ def main():
         from experiment_artifacts import verify
         verify(implementation)
     if args.serial_ms < 1000:raise SystemExit("serial interval must be at least 1000 ms")
+    if args.start_gate_timeout < 1:raise SystemExit("start gate timeout must be positive")
     scenario = args.scenario.resolve()
     scenario_data = json.loads(scenario.read_text())
     if not args.controllers and [p["id"] for p in scenario_data["players"][:2]] != [1, 2]:
@@ -64,7 +74,7 @@ def main():
         probe.bind(("127.0.0.1", args.port))
     cli_root = Path.home() / ".local/share/spacetime/bin"
     config = ROOT / "configs/reasoning/codex-carlid-luna-streaming-proof.json"
-    env = os.environ.copy()
+    env = fresh_environment()
     try:
         key = env.get("CARLID_NPC_API_KEY") or load_key(CREDENTIAL)
     except ValueError as error:
@@ -132,6 +142,7 @@ def main():
     host = subprocess.Popen([str(binaries[0])], env=env, stdout=host_log, stderr=host_log,
                             start_new_session=True, cwd=implementation)
     report["host_pid"] = host.pid
+    write(out / "pilot.json", report)
     active = None
     participants = []
 
@@ -228,7 +239,7 @@ def main():
         write(out / "pilot.json", report)
         write(out / "ready.json",dict(run=active["run"],ready_at=time.time()))
         if args.start_gate:
-            gate_deadline=time.monotonic()+180
+            gate_deadline=time.monotonic()+args.start_gate_timeout
             while not args.start_gate.exists():
                 if host.poll() is not None or stop.wait(.1) or time.monotonic()>gate_deadline:
                     raise RuntimeError("Batch start gate was not released")
