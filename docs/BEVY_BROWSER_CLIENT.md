@@ -4,6 +4,8 @@ The foundation now runs in the existing Rust Bevy client compiled to WASM. Open 
 
 Current `m1-5` host details are in [Participant agents](PARTICIPANT_AGENTS.md). Its default is port 18891 and output `output/participant-agent-dev`; the m1-4 host on 18890 and verification below remain historical evidence. The current built-in harness has replaced the older host Reasoner dispatch.
 
+Current presentation: [world observer and parallel sessions](WORLD_OBSERVER.md). The top-down 2D world is the primary surface; diagnostics can be overlaid or detached, and each view can focus a different hosted run. The older screenshots and verification below are historical; current flat tile/sprite verification is in the world observer guide. **New parallel session** now retains earlier clocks and harnesses; it does not replace or pause the old run.
+
 ## Run it
 
 Versions: Rust stable (verified with **1.97.1**), Bevy **0.18.1**, SpacetimeDB module/server/SDK/bindings **2.1.0**, control CLI **2.7.1**, Trunk **0.21.14**. The lockfile includes `ethnum` **1.5.3**, which fixes the older dependency's build failure with Rust 1.97. Browser support first shipped in the released Rust SDK 2.1.0 ([release notes](https://github.com/clockworklabs/SpacetimeDB/releases/tag/v2.1.0)).
@@ -82,7 +84,7 @@ For optional native presentation, with the same host running:
 cargo run -p client --no-default-features --features foundation
 ```
 
-The same `client/src/foundation` Rust systems are used on native and WASM targets. Native foundation and preserved default legacy modes compile; native window interaction was not tested in this slice. Development and optimized browser builds use the same rendering/input code; build with Trunk `--release` for optimization. The shipped local build uses `wasm-dev` (optimization 1, no debug info), about 69 MB before transport compression. The default legacy entry point remains available through `cargo run -p client`.
+The same `client/src/foundation` Rust systems are used on native and WASM targets. The foundation is now the default native client; the previous voxel/3D mode has been removed. Native window interaction was not tested in this slice. Development and optimized browser builds use the same rendering/input code; build with Trunk `--release` for optimization. The shipped local build uses `wasm-dev` (optimization 1, no debug info), about 69 MB before transport compression. `cargo run -p client` now opens the 2D behavior lab against the same development host.
 
 ## Share on a trusted local network
 
@@ -137,7 +139,7 @@ Chromium rendered the client using WebGL 2 with SwiftShader in the headless veri
 - **Step** advances one authoritative tick while paused. **Resume/Pause** changes the server scheduler, which advances every 2.5 seconds independently of browser frames and model latency. Runs stop at 300 ticks or their normal simulation stop condition.
 - **Participate as You** changes the server grant. Only the owned human's current state, memories and currently seen characters are supplied. Click a field cell or use left/right arrows for movement; Gather, Eat and Rest use shared skills. Press Enter or Speak, type chosen words, then Enter to submit. Escape closes entry. Physical keyboard text is supported; clipboard insertion and complex IME composition are not yet implemented. Speech is bounded to 1,000 UTF-8 bytes in this UI.
 - While paused, submit a human intent, return to observer and Step to see its effect. To participate continuously, Resume first. The role switch does not change the character's controller or bypass skill requirements.
-- **Fresh fixture run** pauses the old run and creates a new bounded run. It preserves old data and exports. **Recorded model policy** opens the preserved Qwen run, labeled **archive / actual model output / read-only**. It has no time or participant controls. The generated policy's unguarded move branch failed to adapt and Mira died; this is evidence of that outcome, not a successful adaptive model demonstration.
+- **New parallel session** creates a new paused bounded run while earlier runs retain their clocks and harnesses. It preserves old data and exports. **Recorded model policy** opens the preserved Qwen run, labeled **archive / actual model output / read-only**. It has no time or participant controls. The generated policy's unguarded move branch failed to adapt and Mira died; this is evidence of that outcome, not a successful adaptive model demonstration.
 - **Reconnect** and browser reload enroll a fresh anonymous SDK identity into the existing development session, revoke the previous grant, and restore the current run/role. No provider or operator credentials are supplied to the browser.
 
 ## Authority and access boundary
@@ -167,4 +169,4 @@ The preceding m1-4 host used an explicitly supplied `NPC_REASONING_CONFIG` to se
 - Browser reload and Reconnect restored the same run. Resume advanced the server from tick 1 to tick 8, Pause held it, and Fresh fixture run created `sim-bevy-1788594073308` at tick 1 while preserving the previous paused run. Final-load console had no errors; the WebGL capability notices above remain. Summary: `output/bevy-browser-dev/browser-verification.json`.
 - Browser testing exposed and fixed a mutex held across async SDK construction and the older CLI identity argument incompatibility. Those failed attempts were not treated as successful verification.
 
-Known scope: desktop-sized browser UI, procedural 2D presentation of the actual 1D core, one owned human, local developer enrollment, bounded in-game history, no production deployment, and no successful newly generated adaptive policy claim. Richer scene art, full accessibility/IME, public authentication, multi-human provisioning, and legacy game migration remain follow-up work.
+Historical scope of the preceding verification: desktop-sized browser UI, procedural 2D presentation of the actual 1D core, one owned human, local developer enrollment, bounded in-game history, no production deployment, and no successful newly generated adaptive policy claim. Richer scene art, full accessibility/IME, public authentication, multi-human provisioning, and legacy game migration remain follow-up work.

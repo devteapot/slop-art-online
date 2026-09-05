@@ -1,6 +1,6 @@
 # Project guidance
 
-SAO / Slop Art Online retains its living-world game vision and Rust stack. Build the inspectable simulation foundation before expanding gameplay, visuals, or population scale.
+SAO / Slop Art Online retains its living-world game vision and Rust stack. Use the default top-down 2D behavior lab to evolve inspectable mechanics. The voxel/3D client is retired; defer 2.5D/3D presentation until behavior is solid.
 
 The implemented M1 path is documented in the [runbook](docs/M1_RUNBOOK.md) and [verification report](docs/M1_VERIFICATION.md). Use `simulation/` and `foundation.rs` for foundation rules; the old gameplay reducers remain a separate legacy prototype.
 

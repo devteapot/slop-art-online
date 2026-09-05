@@ -14,8 +14,6 @@ pub enum Click {
     New,
     Archive,
     Live,
-    Left,
-    Right,
     Gather,
     Eat,
     Rest,
@@ -24,10 +22,17 @@ pub enum Click {
     Next,
     Event(u64),
     Reconnect,
+    Inspect,
+    World,
+    Overlays,
+    Sessions,
+    Focus(String),
+    Follow,
+    Detach,
 }
 const INK: Color = Color::srgb(0.86, 0.91, 0.86);
 const MUTED: Color = Color::srgb(0.55, 0.65, 0.62);
-const PANEL: Color = Color::srgb(0.075, 0.12, 0.13);
+const PANEL: Color = Color::srgba(0.045, 0.085, 0.09, 0.94);
 fn text(p: &mut ChildSpawnerCommands, s: impl Into<String>, size: f32, color: Color) {
     let s = s
         .into()
@@ -102,7 +107,29 @@ fn title(p: &mut ChildSpawnerCommands, label: &str) {
     text(p, label, 12., Color::srgb(0.66, 0.78, 0.57));
 }
 pub fn setup(mut game: ResMut<Game>) {
+    #[cfg(target_arch = "wasm32")]
+    if web_sys::window()
+        .and_then(|w| w.location().hash().ok())
+        .is_some_and(|h| h == "#inspect")
+    {
+        game.world_visible = false;
+        game.inspect = true;
+        game.sessions_open = true;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if std::env::var("BEVY_INSPECT").as_deref() == Ok("1") {
+        game.world_visible = false;
+        game.inspect = true;
+        game.sessions_open = true;
+    }
     game.dirty = true;
+}
+// Share panel bounds with world picking and wheel handling; hidden panels never capture input.
+pub fn captures(game: &Game, pos: Vec2, width: f32, height: f32) -> bool {
+    pos.y < 92.
+        || pos.y > height - 112.
+        || (game.sessions_open && pos.x < 258.)
+        || (game.inspect && pos.x > width - 430.)
 }
 pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Entity, With<UiRoot>>) {
     if !game.dirty {
@@ -117,54 +144,71 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
         .as_str()
         .unwrap_or("connecting");
     let evidence = if game.archive {
-        "ARCHIVE · actual model output · read-only"
+        "ARCHIVE · read-only model evidence"
     } else if mode == "live_fixture" {
-        "LIVE · explicit fixture policy · no inference"
+        "LIVE · authored fixture · no inference"
     } else if mode == "live_model" {
         "LIVE · configured model reasoning"
     } else {
         "CONNECTING"
     };
-    commands.spawn((UiRoot,Node{position_type:PositionType::Absolute,width:percent(100),height:percent(100),..default()})).with_children(|root|{
-  root.spawn((Node{position_type:PositionType::Absolute,left:px(0),right:px(0),top:px(0),height:px(78),padding:UiRect::axes(px(24),px(14)),justify_content:JustifyContent::SpaceBetween,..row()},BackgroundColor(PANEL))).with_children(|bar|{
-   bar.spawn(column()).with_children(|p|{text(p,"S A O  /  FIELD STATION",23.,INK);text(p,evidence,12.,Color::srgb(0.75,0.72,0.45));});
-   bar.spawn(column()).with_children(|p|{text(p,format!("TICK {} / {}    {}",number(&game.snapshot["tick"]),number(&game.snapshot["max_ticks"]),if game.snapshot["stopped"]==true{"FINISHED"}else if game.snapshot["paused"]==true{"PAUSED"}else{"RUNNING"}),18.,INK);text(p,if game.observer(){"Observer: world truth + individual understanding"}else{"Participant: your own perceptions + shared skills"},12.,MUTED);});
-  });
-  root.spawn((Node{position_type:PositionType::Absolute,left:px(12),top:px(92),bottom:px(112),width:px(222),padding:UiRect::all(px(14)),overflow:Overflow::scroll_y(),..column()},BackgroundColor(PANEL),Panel(0),ScrollPosition(Vec2::new(0.,game.scroll[0])))).with_children(|left|{
-   title(left,"CHARACTERS");
-   if let Some(players)=game.snapshot["players"].as_array(){for player in players{let id=player["id"].as_u64().unwrap_or(0);button(left,format!("{}  {}\n{} · position {}",if id==game.selected{"●"}else{"○"},player["name"].as_str().unwrap_or("Player"),player["controller"].as_str().unwrap_or(""),number(&player["position"])),Click::Select(id),id==game.selected);}}
-   title(left,"DEVELOPMENT MODE");
-   if !game.archive{button(left,if game.observer(){"Participate as You"}else{"Return to observer"},Click::Mode,false);}
-   if game.observer()&&!game.archive {
-    left.spawn(row()).with_children(|p|{button(p,"Step",Click::Step,false);button(p,if game.snapshot["paused"]==true{"Resume"}else{"Pause"},Click::Play,false);});
-    button(left,if mode=="live_model"{"Fresh model run"}else{"Fresh fixture run"},Click::New,false);
-    button(left,"Recorded model policy",Click::Archive,false);
-   }
-   if game.archive {button(left,"Back to live run",Click::Live,false);}
-   button(left,"Reconnect",Click::Reconnect,false);
-   text(left,"The authority owns every tick, skill and consequence.",12.,MUTED);
-   text(left,if game.archive{"History is read-only. This is not a live playable run."}else if game.observer(){"Click a world cell to select its character. Arrow keys pan the field."}else{"Click a field cell or use arrow keys to move. Enter opens speech. If paused, switch to observer to resume."},12.,MUTED);
-  });
-  root.spawn((Node{position_type:PositionType::Absolute,right:px(12),top:px(92),bottom:px(112),width:px(404),padding:UiRect::all(px(16)),overflow:Overflow::scroll_y(),..column()},BackgroundColor(PANEL),Panel(1),ScrollPosition(Vec2::new(0.,game.scroll[1])))).with_children(|panel|{
-   text(panel,p["name"].as_str().unwrap_or("Select a character"),24.,INK);
-   text(panel,format!("{} · {}",p["role"].as_str().unwrap_or("perceived character"),if p["health"]==0{"dead — history retained"}else{"individual understanding"}),12.,MUTED);
-   panel.spawn(row()).with_children(|p|{button(p,"Mind",Click::Tab(0),game.tab==0);button(p,"Policy",Click::Tab(1),game.tab==1);button(p,"History",Click::Tab(2),game.tab==2);});
-   match game.tab {
-    0=>mind(panel,&p),
-    1=>tree(panel,&p,&game),
-    _=>history(panel,&game),
-   }
-  });
-  root.spawn(Node{position_type:PositionType::Absolute,left:px(250),right:px(432),top:px(104),..column()}).with_children(|p|{
-   text(p,"THE CLEARING",14.,Color::srgb(0.53,0.69,0.56));
-   text(p,if game.observer(){"Shared world · amber AI · blue human\nDanger shown here is observer truth."}else{"Your view · unseen sites stay unknown\nMovement, food and speech use authoritative skills."},13.,MUTED);
-  });
-  root.spawn((Node{position_type:PositionType::Absolute,left:px(12),right:px(12),bottom:px(12),height:px(88),padding:UiRect::axes(px(16),px(10)),..column()},BackgroundColor(PANEL))).with_children(|bottom|{
-   if !game.observer()&&!game.archive {bottom.spawn(row()).with_children(|p|{button(p,"← Move",Click::Left,false);button(p,"Move →",Click::Right,false);button(p,"Gather",Click::Gather,false);button(p,"Eat",Click::Eat,false);button(p,"Rest",Click::Rest,false);button(p,if game.typing{"Typing… Enter to send"}else{"Speak…"},Click::Speak,game.typing);});}
-   text(bottom,if game.typing{format!("Say: {}▏",game.draft)}else{game.status.clone()},14.,if game.typing{INK}else{MUTED});
-   if game.observer(){text(bottom,format!("{}   ·   {}",game.snapshot["run"].as_str().unwrap_or("Authoritative connection pending"),if game.archive{"preserved model evidence"}else{"Bevy WASM game view · server-enforced role"}),12.,MUTED);}
-  });
- });
+    commands.spawn((UiRoot, GlobalZIndex(10), Node {position_type:PositionType::Absolute,width:percent(100),height:percent(100),..default()})).with_children(|root| {
+        root.spawn((Node {position_type:PositionType::Absolute,left:px(12),right:px(12),top:px(12),height:px(70),padding:UiRect::all(px(12)),justify_content:JustifyContent::SpaceBetween,..row()},BackgroundColor(PANEL))).with_children(|bar| {
+            bar.spawn(column()).with_children(|p| {text(p,"S A O  /  BEHAVIOR LAB",20.,INK);text(p,evidence,12.,MUTED);});
+            bar.spawn(row()).with_children(|p| {
+                button(p,"Sessions",Click::Sessions,game.sessions_open);
+                button(p,if game.world_visible {"Close world"} else {"Peek into world"},Click::World,game.world_visible);
+                button(p,"Inspect [I]",Click::Inspect,game.inspect);
+                button(p,"Labels [O]",Click::Overlays,game.overlays);
+                if !game.archive {button(p,"Detach",Click::Detach,false);}
+            });
+        });
+        if game.sessions_open {
+            root.spawn((Node{position_type:PositionType::Absolute,left:px(12),top:px(92),bottom:px(112),width:px(234),padding:UiRect::all(px(14)),overflow:Overflow::scroll_y(),..column()},BackgroundColor(PANEL),Panel(0),ScrollPosition(Vec2::new(0.,game.scroll[0])))).with_children(|left| {
+                title(left,"HOSTED SESSIONS");
+                text(left,"Focus changes this view. Other worlds keep their own clocks.",12.,MUTED);
+                for run in &game.runs {
+                    if let Some(id)=run["run"].as_str() {
+                        button(left,format!("{}\ntick {} · {}",id.trim_start_matches("sim-bevy-"),number(&run["tick"]),if run["stopped"]==true {"finished"} else if run["paused"]==true {"paused"} else if run["paused"]==false {"running"} else {"clock unknown"}),Click::Focus(id.into()),game.snapshot["run"]==id && !game.archive);
+                    }
+                }
+                if game.observer() && !game.archive {button(left,"New parallel session",Click::New,false);button(left,"Recorded model policy",Click::Archive,false);}
+                if game.archive {button(left,"Back to live session",Click::Live,false);}
+                title(left,"CHARACTERS");
+                if let Some(players)=game.snapshot["players"].as_array() {
+                    for player in players {let id=player["id"].as_u64().unwrap_or(0);button(left,player["name"].as_str().unwrap_or("Character"),Click::Select(id),id==game.selected);}
+                }
+                if !game.archive {button(left,if game.observer(){"Participate as You"}else{"Return to observer"},Click::Mode,false);}
+                button(left,"Reconnect",Click::Reconnect,false);
+            });
+        }
+        if game.inspect {
+            root.spawn((Node{position_type:PositionType::Absolute,right:px(12),top:px(92),bottom:px(112),width:px(404),padding:UiRect::all(px(16)),overflow:Overflow::scroll_y(),..column()},BackgroundColor(PANEL),Panel(1),ScrollPosition(Vec2::new(0.,game.scroll[1])))).with_children(|panel| {
+                text(panel,p["name"].as_str().unwrap_or("Select a character in the world"),24.,INK);
+                text(panel,if game.observer(){"Observer truth / individual understanding"}else{"Your perceptions / private understanding"},12.,MUTED);
+                panel.spawn(row()).with_children(|p| {button(p,"Mind",Click::Tab(0),game.tab==0);button(p,"Policy",Click::Tab(1),game.tab==1);button(p,"History",Click::Tab(2),game.tab==2);});
+                match game.tab {0=>mind(panel,&p),1=>tree(panel,&p,&game),_=>history(panel,&game)}
+            });
+        }
+        if !game.world_visible {
+            root.spawn(Node{position_type:PositionType::Absolute,left:px(280),top:percent(40),width:px(320),..column()}).with_children(|p| {
+                text(p,"World view detached",24.,INK);
+                text(p,"The session continues on the server. Choose a session to inspect, or peek into its world whenever you want.",16.,MUTED);
+            });
+        }
+        root.spawn((Node{position_type:PositionType::Absolute,left:px(12),right:px(12),bottom:px(12),height:px(88),padding:UiRect::axes(px(16),px(8)),..column()},BackgroundColor(PANEL))).with_children(|bottom| {
+            bottom.spawn(row()).with_children(|p| {
+                text(p,format!("t{} / {} · {}",number(&game.snapshot["tick"]),number(&game.snapshot["max_ticks"]),if game.snapshot["stopped"]==true{"FINISHED"}else if game.snapshot["paused"]==true{"PAUSED"}else{"RUNNING"}),15.,INK);
+                if game.observer() && !game.archive {button(p,"Step",Click::Step,false);button(p,if game.snapshot["paused"]==true{"Resume"}else{"Pause"},Click::Play,false);}
+                if !game.observer() && !game.archive && !game.snapshot.is_null() {
+                    button(p,"Gather",Click::Gather,false);button(p,"Eat",Click::Eat,false);button(p,"Rest",Click::Rest,false);button(p,"Speak",Click::Speak,game.typing);
+                }
+                button(p,"Follow [F]",Click::Follow,game.follow);
+                text(p,"WASD / right drag pan · wheel zoom",12.,MUTED);
+            });
+            text(bottom,if game.typing{format!("Say: {} | Enter to send",game.draft)}else{format!("{} · {}",game.snapshot["run"].as_str().unwrap_or("Connecting"),game.status)},12.,MUTED);
+        });
+    });
 }
 fn mind(panel: &mut ChildSpawnerCommands, p: &Value) {
     title(panel, "MOTIVE / GOAL");
@@ -468,6 +512,7 @@ pub fn interact(
             Click::Select(id) => {
                 game.scroll[1] = 0.;
                 game.selected = *id;
+                game.inspect = true;
                 game.page = 0;
                 game.event = None;
             }
@@ -482,6 +527,58 @@ pub fn interact(
                 game.typing = false;
                 game.status = "Changing server-granted role…".into();
             }
+            Click::Inspect => game.inspect = !game.inspect,
+            Click::World => {
+                game.world_visible = !game.world_visible;
+                if !game.world_visible {
+                    game.inspect = true;
+                    game.sessions_open = true;
+                }
+            }
+            Click::Overlays => game.overlays = !game.overlays,
+            Click::Follow => game.follow = !game.follow,
+            Click::Sessions => {
+                game.sessions_open = !game.sessions_open;
+                if game.sessions_open && game.observer() {
+                    net.post("runs", "/api/runs", json!({}));
+                }
+            }
+            Click::Focus(run) => {
+                net.post("focus", "/api/focus", json!({"run":run}));
+                game.status = "Focusing session…".into();
+            }
+            Click::Detach => {
+                #[cfg(target_arch = "wasm32")]
+                let opened = web_sys::window().is_some_and(|w| {
+                    w.open_with_url_and_target(
+                        &format!(
+                            "/?run={}#inspect",
+                            game.snapshot["run"].as_str().unwrap_or("")
+                        ),
+                        "sao-inspector",
+                    )
+                    .ok()
+                    .flatten()
+                    .is_some()
+                });
+                #[cfg(not(target_arch = "wasm32"))]
+                let opened = std::env::current_exe().ok().is_some_and(|exe| {
+                    std::process::Command::new(exe)
+                        .env("BEVY_INSPECT", "1")
+                        .env(
+                            "BEVY_FOCUS_RUN",
+                            game.snapshot["run"].as_str().unwrap_or(""),
+                        )
+                        .spawn()
+                        .is_ok()
+                });
+                if opened {
+                    game.inspect = false;
+                } else {
+                    game.status =
+                        "Could not open inspector; allow popups for this site and try again".into();
+                }
+            }
             Click::Step => net.control("step"),
             Click::Play => net.control(if game.snapshot["paused"] == true {
                 "resume"
@@ -495,9 +592,6 @@ pub fn interact(
                 game.archive = false;
                 net.latest.clear();
                 game.page = 0;
-            }
-            Click::Left | Click::Right => {
-                net.intent(json!({"skill":"move","destination":(game.own_position()+if matches!(action,Click::Left){-1}else{1}).clamp(-10,10),"duration":1}));
             }
             Click::Gather => net.intent(json!({"skill":"gather","duration":1})),
             Click::Eat => net.intent(json!({"skill":"eat","duration":1})),
@@ -531,13 +625,16 @@ pub fn scroll(
         let Some(pos) = window.cursor_position() else {
             continue;
         };
-        let index = if pos.x < 246. {
+        let index = if game.sessions_open && pos.x < 258. {
             0
-        } else if pos.x > window.width() - 430. {
+        } else if game.inspect && pos.x > window.width() - 430. {
             1
         } else {
             continue;
         };
+        if pos.y < 92. || pos.y > window.height() - 112. {
+            continue;
+        }
         for (panel, mut offset) in &mut panels {
             if panel.0 == index {
                 let delta = match event.unit {

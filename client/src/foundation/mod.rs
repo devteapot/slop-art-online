@@ -1,6 +1,7 @@
 //! Shared browser/desktop Bevy presentation. No world stepping or skill effects run here.
 mod network;
 mod ui;
+mod world;
 use bevy::prelude::*;
 use network::Network;
 use serde_json::{Value, json};
@@ -18,6 +19,14 @@ pub struct Game {
     pub archive: bool,
     pub dirty: bool,
     pub camera: f32,
+    pub inspect: bool,
+    pub world_visible: bool,
+    pub overlays: bool,
+    pub sessions_open: bool,
+    pub runs: Vec<Value>,
+    pub zoom: f32,
+    pub camera_y: f32,
+    pub follow: bool,
     pub scroll: [f32; 2],
 }
 impl Default for Game {
@@ -34,6 +43,14 @@ impl Default for Game {
             archive: false,
             dirty: true,
             camera: 1.,
+            inspect: false,
+            world_visible: true,
+            overlays: true,
+            sessions_open: false,
+            runs: vec![],
+            zoom: 1.,
+            camera_y: 0.,
+            follow: false,
             scroll: [0.; 2],
         }
     }
@@ -52,7 +69,7 @@ impl Game {
     fn own_position(&self) -> i32 {
         self.snapshot["players"]
             .as_array()
-            .and_then(|p| p.iter().find(|p| p["id"] == 3))
+            .and_then(|p| p.iter().find(|p| p["id"] == self.snapshot["actor"]))
             .and_then(|p| p["position"].as_i64())
             .unwrap_or(0) as i32
     }
@@ -74,7 +91,7 @@ pub fn run() {
         }))
         .init_resource::<Game>()
         .insert_non_send_resource(Network::default())
-        .add_systems(Startup, (setup, ui::setup, network::start))
+        .add_systems(Startup, (world::setup, ui::setup, network::start))
         .add_systems(
             Update,
             (
@@ -82,151 +99,21 @@ pub fn run() {
                 ui::interact,
                 ui::scroll,
                 keyboard,
-                world_click,
+                world::click,
+                world::camera,
                 resized,
-                world_render,
+                world::sync,
                 ui::refresh,
             )
                 .chain(),
         )
+        .add_systems(
+            PostUpdate,
+            world::labels
+                .after(bevy::camera::CameraUpdateSystems)
+                .before(bevy::ui::UiSystems::Layout),
+        )
         .run();
-}
-#[derive(Component)]
-struct WorldVisual;
-fn setup(mut commands: Commands) {
-    commands.spawn(Camera2d);
-}
-fn world_render(
-    mut commands: Commands,
-    game: Res<Game>,
-    window: Single<&Window>,
-    old: Query<Entity, With<WorldVisual>>,
-) {
-    if !game.dirty {
-        return;
-    }
-    for entity in &old {
-        commands.entity(entity).despawn();
-    }
-    let scale = ((window.width() - 680.) / 7.).clamp(42., 100.);
-    let offset = -90.;
-    for position in -10..=10 {
-        let x = (position as f32 - game.camera) * scale + offset;
-        let site = game.snapshot["sites"]
-            .as_array()
-            .and_then(|a| a.iter().find(|s| s["position"] == position));
-        let danger = site.and_then(|s| s["hazard"].as_i64()).unwrap_or(0) > 0;
-        let color = if danger {
-            Color::srgb(0.37, 0.20, 0.16)
-        } else if site.is_some() {
-            Color::srgb(0.17, 0.30, 0.23)
-        } else {
-            Color::srgb(0.10, 0.16, 0.16)
-        };
-        commands.spawn((
-            Sprite::from_color(color, Vec2::new(scale - 6., 160.)),
-            Transform::from_xyz(x, -20., 0.),
-            WorldVisual,
-        ));
-        let name = match position {
-            0 => "Camp",
-            1 => "Trail",
-            2 => "Clearing",
-            3 => "Grove",
-            _ => "Land",
-        };
-        let food = site
-            .and_then(|s| s["food"].as_i64())
-            .map(|f| format!("food {f}"))
-            .unwrap_or("unseen".into());
-        commands.spawn((
-            Text2d::new(format!(
-                "{name} {position}\n{food}{}",
-                if danger { "\nDANGER" } else { "" }
-            )),
-            TextFont {
-                font_size: 13.,
-                ..default()
-            },
-            TextColor(Color::srgb(0.71, 0.80, 0.73)),
-            Transform::from_xyz(x, -135., 2.),
-            WorldVisual,
-        ));
-    }
-    if let Some(players) = game.snapshot["players"].as_array() {
-        for p in players {
-            let id = p["id"].as_u64().unwrap_or(0);
-            let x = (p["position"].as_f64().unwrap_or(0.) as f32 - game.camera) * scale + offset;
-            let y = -15. + (id as f32 - 2.) * 40.;
-            let alive = p["health"].as_i64().unwrap_or(100) > 0;
-            let color = if !alive {
-                Color::srgb(0.37, 0.37, 0.36)
-            } else if p["controller"] == "human" {
-                Color::srgb(0.40, 0.68, 0.87)
-            } else if p["controller"] == "other" {
-                Color::srgb(0.62, 0.69, 0.65)
-            } else {
-                Color::srgb(0.91, 0.65, 0.33)
-            };
-            if id == game.selected {
-                commands.spawn((
-                    Sprite::from_color(Color::srgb(0.92, 0.93, 0.72), Vec2::new(32., 32.)),
-                    Transform::from_xyz(x, y, 3.),
-                    WorldVisual,
-                ));
-            }
-            commands.spawn((
-                Sprite::from_color(color, Vec2::new(24., 24.)),
-                Transform::from_xyz(x, y, 4.),
-                WorldVisual,
-            ));
-            commands.spawn((
-                Text2d::new(p["name"].as_str().unwrap_or("Player")),
-                TextFont {
-                    font_size: 14.,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                Transform::from_xyz(x, y + 23., 5.),
-                WorldVisual,
-            ));
-        }
-    }
-}
-fn world_click(
-    mouse: Res<ButtonInput<MouseButton>>,
-    window: Single<&Window>,
-    mut game: ResMut<Game>,
-    net: NonSend<Network>,
-) {
-    if !mouse.just_pressed(MouseButton::Left) || game.typing {
-        return;
-    }
-    let Some(pos) = window.cursor_position() else {
-        return;
-    };
-    if pos.x < 246.
-        || pos.x > window.width() - 430.
-        || pos.y < 100.
-        || pos.y > window.height() - 130.
-    {
-        return;
-    }
-    let scale = ((window.width() - 680.) / 7.).clamp(42., 100.);
-    let cell = ((pos.x - window.width() / 2. + 90.) / scale + game.camera)
-        .round()
-        .clamp(-10., 10.) as i32;
-    if !game.observer() && !game.archive {
-        net.intent(json!({"skill":"move","destination":cell,"duration":1}));
-        game.status = format!("Move to {cell} submitted; waiting for authority");
-    } else if let Some(p) = game.snapshot["players"]
-        .as_array()
-        .and_then(|a| a.iter().find(|p| p["position"] == cell))
-    {
-        game.selected = p["id"].as_u64().unwrap();
-        game.page = 0;
-    }
-    game.dirty = true;
 }
 fn keyboard(
     mut input: MessageReader<bevy::input::keyboard::KeyboardInput>,
@@ -275,10 +162,18 @@ fn keyboard(
                         1
                     };
                     if game.observer() {
-                        game.camera += d as f32;
+                        game.camera = (game.camera + d as f32).clamp(-10., 10.);
+                        game.follow = false;
                     } else if !game.archive {
                         net.intent(json!({"skill":"move","destination":(game.own_position()+d).clamp(-10,10),"duration":1}));
                     }
+                }
+                KeyCode::KeyI => game.inspect = !game.inspect,
+                KeyCode::KeyO => game.overlays = !game.overlays,
+                KeyCode::KeyF => game.follow = !game.follow,
+                KeyCode::Escape => {
+                    game.inspect = false;
+                    game.sessions_open = false;
                 }
                 KeyCode::Enter if !game.observer() && !game.archive => game.typing = true,
                 _ => {}

@@ -12,7 +12,7 @@ Transport follow-up: [Carlid streaming verification](CARLID_STREAMING_VERIFICATI
 
 The first proof is a small population pursuing basic survival, communicating freely, holding imperfect beliefs, and changing through experience. The implemented slice uses three survivors, food, rest, and danger, with the bounded defaults in [ADR 008](adr/008-m1-authoritative-survival-slice.md). Rich game presentation, large population targets, work/family simulation, and complex society are outside this milestone.
 
-**The headless/developer M1 foundation was accepted on 2026-09-04; browser-hosted Bevy observation and participation are now implemented and verified for the bounded slice.** See the [verification report](M1_VERIFICATION.md) for exact run IDs, acceptance evidence, and model-quality limitations, and the [runbook](M1_RUNBOOK.md) to exercise it. The legacy Bevy gameplay path is not yet migrated; M1 runs through the new authoritative SpacetimeDB reducers.
+**The headless/developer M1 foundation was accepted on 2026-09-04; browser-hosted Bevy observation and participation are now implemented and verified for the bounded slice.** See the [verification report](M1_VERIFICATION.md) for exact run IDs, acceptance evidence, and model-quality limitations, and the [runbook](M1_RUNBOOK.md) to exercise it. The voxel/3D client is retired. Legacy server reducers remain outside this foundation; M1 runs through the authoritative SpacetimeDB foundation reducers.
 
 The following were implemented in dependency order, iterating through a thin connected cycle early. Audit records and scenario support accompany each mechanic from its first implementation; they are not a cleanup phase.
 
@@ -63,6 +63,7 @@ M1 is complete only when the integrated proof passes, not when its component tab
 - [x] Actual Bevy WASM world rendering, selection, mind/policy/history panels and shared native-target code.
 - [x] Owned human skill and free-form keyboard speech input through the shared authoritative executor, with trace-linked outcomes.
 - [x] Real browser observer/participant checks plus separate-identity access tests; live fixture and recorded model evidence distinguished.
+- [x] Top-down 2D observation with pan/zoom camera, optional overlays, detached inspection and independent hosted session focus; see [scope and verification](WORLD_OBSERVER.md).
 - [ ] Production authenticated role provisioning, broader browser/accessibility/IME coverage, richer scene presentation and multiple human assignments.
 - [ ] Demonstrate a fresh generated policy that complies with limits and changes branches meaningfully; transport success is already separate evidence.
 
@@ -76,7 +77,7 @@ These are staged growth areas after the foundation; richer presentation can deve
 |---|---|---|
 | M2 — Participation and broader daily life | Build on browser-hosted Bevy observation and human participation; extend reusable skills toward work, trade, and richer relationships as evidence supports them. | Preserve shared rules, subjective boundaries, and M1 audit/scenario checks. |
 | M3 — Society and scale | Explore cooperation, conflict, economy and social structures; optimize measured bottlenecks, model budgets, and populations. | Explain individual and collective outcomes with causal history; maintain tooling as mechanics evolve. |
-| M4 — Rich game/world presentation | Expand visual gameplay, world content, and terrain tooling around the proven simulation. | No second simulation authority; rendering and content must integrate with skills and perception. |
+| M4 — Optional 2.5D/3D presentation | Reconsider the official visual interface after the 2D behavior/mechanics foundation is solid. | No second simulation authority; rendering and content must integrate with skills and perception. |
 
 Reincarnation/souls are explicitly deferred, with no implementation commitment. Animal/monster taxonomy and cognitive range remain design questions. [ADR 006](adr/006-hy-world-2-integration-assessment.md) is deferred world-generation research, not a required dependency or current product recommendation.
 

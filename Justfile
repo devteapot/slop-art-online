@@ -19,7 +19,7 @@ generate-all: generate generate-web
 client:
     cargo run -p client
 
-# Start the database, wait for it, and create/update the game module.
+# Legacy server prototype; use bevy-db-up / bevy-dev for the 2D foundation client.
 dev: check-cli up publish
 
 publish: check-cli

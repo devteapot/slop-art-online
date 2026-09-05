@@ -4,8 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["legacy"]
-legacy = ["bevy/default", "bevy/bevy_dev_tools", "dep:bevy_voxel_world", "dep:avian3d", "dep:fast-surface-nets"]
+default = ["foundation"]
 foundation = ["bevy/std", "bevy/default_app", "bevy/bevy_winit", "bevy/default_font", "bevy/2d_bevy_render", "bevy/ui_bevy_render", "bevy/png", "bevy/x11"]
 webgpu = ["bevy/webgpu"]
 webgl2 = ["bevy/webgl2"]
@@ -14,9 +13,6 @@ webgl2 = ["bevy/webgl2"]
 bevy = { version = "=0.18.1", default-features = false }
 spacetimedb-sdk = { version = "=2.1.0" }
 shared = { path = "../shared" }
-bevy_voxel_world = { version = "0.15", optional = true }
-avian3d = { version = "0.6.0", optional = true }
-fast-surface-nets = { version = "0.2", optional = true }
 serde_json = "1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -25,7 +21,7 @@ shared = { path = "../shared", features = ["browser"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 gloo-net = { version = "0.6", features = ["http"] }
-web-sys = { version = "0.3", features = ["Window", "Location"] }
+web-sys = { version = "0.3", features = ["Window", "Location", "Storage", "History"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 reqwest = { version = "0.12", features = ["blocking", "json"] }

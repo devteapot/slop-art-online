@@ -9,7 +9,7 @@ The M1 kernel now lives in `simulation/`, called by `foundation.rs` in the exist
 | Tier | Responsibility | Source |
 |---|---|---|
 | SpacetimeDB Rust/WASM module | Authoritative simulation state, reducers, scheduling, NPC execution and validated consequences | [module](server/module/spacetimedb/Cargo.toml) |
-| Bevy Rust client | Supported game client: rendering, input, physics, prediction, and UI | [client](client/Cargo.toml) |
+| Bevy Rust client | Supported game client: 2D rendering, input, confirmed-state interpolation, and UI | [client](client/Cargo.toml) |
 | Rust LLM bridge | Pending-decision subscription, prompt/model calls and returned proposals | [bridge](server/bridge/Cargo.toml) |
 | Shared bindings | Generated Rust SpacetimeDB types and reducer interfaces for client/bridge | [shared](shared/Cargo.toml) |
 
@@ -25,18 +25,16 @@ SpacetimeDB reducers are transactional state updates; subscriptions carry state 
 | Client and bridge SDK | `spacetimedb-sdk = =2.1.0` | Exact SDK pin; match CLI/bindings when regenerating |
 | Bevy | `0.18.1` | Game client; foundation uses browser WASM, native is optional |
 | Behavior-tree data | `bonsai-bt = 0.11` with serde | Custom evaluator in `npc_ai.rs`; sequence lifecycle gap remains |
-| Voxel/physics | `bevy_voxel_world = 0.15`, `avian3d = 0.6.0`, `fast-surface-nets = 0.2` | Existing client terrain/physics dependencies |
+| Presentation | Bevy 2D sprite/UI features only | Voxel, Avian 3D physics, surface meshing and GLB assets removed |
 | Bridge transport | Tokio, reqwest, serde/serde_json | Current backend implementation calls Ollama |
 
 These are repository declarations, not recommendations to upgrade or claims about the latest releases. `Cargo.lock` records resolved versions. `bevy_replicon` and the old stack document's hypothetical world/faction schemas are not established dependencies or implemented features.
 
 ## Game presentation and networking
 
-Bevy remains responsible for rendering, input, physics, audio, and UI. The foundation [browser client](docs/BEVY_BROWSER_CLIENT.md) uses shared Rust render/input systems and caller-scoped subscriptions. Preserved [legacy_main.rs](client/src/legacy_main.rs) registers fixed-update movement/input work and update-time presentation; [player.rs](client/src/player.rs), [interpolation.rs](client/src/interpolation.rs), and [network.rs](client/src/network.rs) contain prediction/reconciliation, interpolation, and subscriptions. Authority stays on the server even when the client predicts presentation or movement. This review does not certify networking correctness, latency budgets, or a particular frame rate.
+The default [client entry point](client/src/main.rs) opens a top-down 2D behavior lab. The [world module](client/src/foundation/world.rs) projects subscribed state into flat tiles and sprites; [networking](client/src/foundation/network.rs) submits intents and consumes caller-specific authority snapshots. The client does not implement local skills, physics, collision or predicted consequences. Browser and native targets use the same code.
 
-Native desktop and eventual WASM/browser use remain part of the client direction. Do not infer current browser support, performance parity, or verified packaging from the Rust architecture alone; test the actual target when that work is scheduled.
-
-Existing voxel terrain work is preserved. The [client world module](client/src/world.rs) uses the voxel world plugin and procedural terrain. Server-authoritative editable terrain, NPC world editing through skills, LOD policy, and richer world-generation tooling should be evaluated later against the simulation's needs. Old numerical LOD thresholds and performance forecasts are not milestone requirements. [ADR 006](docs/adr/006-hy-world-2-integration-assessment.md) retains historical world-model research as deferred exploration.
+The voxel client and its terrain/physics/model pipeline have been removed. Git history retains the prototype; it is not a second supported client mode. Behavior and mechanics are the current iteration priority. A later 2.5D/3D presentation can replace this view without owning the simulation. The current spatial rules are still one-dimensional: sprite lanes separate characters visually and do not implement a second movement axis. See [ADR 015](docs/adr/015-top-down-behavior-lab.md).
 
 ## Local services and commands
 

@@ -18,7 +18,7 @@ Rust LLM bridge
 Ollama (current backend; cloud integration remains an option)
 ```
 
-M1 now has an executable survival foundation with shared skills, persistent behavior sequences, free-form model speech, subjective perception, individual change, permanent death, durable evidence, and isolated scenario runs. The legacy Bevy gameplay path remains separate while the foundation is proved. The [browser-hosted Bevy game client](docs/BEVY_BROWSER_CLIENT.md) now provides in-game observer and owned human participant modes, using the same authoritative foundation. The external HTML inspector remains developer audit tooling. See the [M1 runbook](docs/M1_RUNBOOK.md) and [verification report](docs/M1_VERIFICATION.md) for exact scope and model limitations.
+M1 now has an executable survival foundation with shared skills, persistent behavior sequences, free-form model speech, subjective perception, individual change, permanent death, durable evidence, and isolated scenario runs. The default client is a top-down 2D behavior lab; the old voxel/3D client has been retired. The [browser-hosted Bevy game client](docs/BEVY_BROWSER_CLIENT.md) now provides in-game observer and owned human participant modes, using the same authoritative foundation. The external HTML inspector remains developer audit tooling. See the [M1 runbook](docs/M1_RUNBOOK.md) and [verification report](docs/M1_VERIFICATION.md) for exact scope and model limitations.
 
 With the isolated local SpacetimeDB server and Ollama running:
 
@@ -68,67 +68,25 @@ just bevy-web-build
 just bevy-dev
 ```
 
-Open [127.0.0.1:18891](http://127.0.0.1:18891), then **Step** or **Resume**. Default startup uses an authored NPC fixture without model calls. `just bevy-db-down` stops the database while preserving its named volume; use the same `runtime=podman` override if you started with Podman. `bevy-db-status` and `bevy-db-logs` inspect this stack. The following steps describe the separate legacy gameplay stack on port 3000.
+Open [127.0.0.1:18891](http://127.0.0.1:18891), then **Step** or **Resume**. Default startup uses an authored NPC fixture without model calls. `just bevy-db-down` stops the database while preserving its named volume; use the same `runtime=podman` override if you started with Podman. `bevy-db-status` and `bevy-db-logs` inspect this stack. The optional legacy server recipes still target port 3000; they are not the 2D client setup.
 
 To share the browser simulation on your LAN, stop the browser host and run `just runtime=podman bevy-lan <your-lan-ip>` (omit the runtime override for Docker). This binds both services to `0.0.0.0` and advertises the LAN database address to browsers. Open `http://<your-lan-ip>:18891` from another device. See [LAN setup and firewall commands](docs/BEVY_BROWSER_CLIENT.md#share-on-a-trusted-local-network).
 
-### 1. Start and initialize the database
+### Native 2D client
+
+With the same development host running:
 
 ```bash
-# Docker (default)
-just dev
-
-# Or Podman
-just runtime=podman dev
+just client                 # cargo run -p client
+# To use a different development host:
+BEVY_DEV_URL=http://127.0.0.1:18892 cargo run -p client
 ```
 
-`just dev` starts SpacetimeDB **2.1.0** in a container, waits for its HTTP endpoint, then builds and publishes `slop-art-online`. It works on Intel/AMD and ARM machines. The database is available at `http://localhost:3000`; the Bevy client and bridge already use that address. Rust compilation and the SpacetimeDB CLI run on the host.
+The browser and native clients use the same flat tile/sprite presentation and authoritative rules. See [world controls and session inspection](docs/WORLD_OBSERVER.md). There is no voxel terrain, 3D physics or model asset pipeline in the client. A future 2.5D/3D interface can consume the same simulation boundary.
 
-On macOS or Windows, start Docker Desktop or a Podman machine first. For a new Podman installation:
+### Mechanics and model iteration
 
-```bash
-podman machine init     # once; skip if a machine already exists
-podman machine start
-podman compose version # verify a Compose provider is installed
-```
-
-On Linux, Podman runs directly on the host. [`podman compose` delegates to an installed Compose provider](https://docs.podman.io/en/latest/markdown/podman-compose.1.html).
-
-To use Podman for all subsequent commands in your terminal:
-
-```bash
-export CONTAINER_RUNTIME=podman
-just up
-just status
-```
-
-Use the same runtime for `dev`, `up`, `down`, `status`, and `logs`. Docker and Podman keep separate database volumes; run only one on port 3000 at a time. `just up` starts only the database and waits for readiness; `just dev` also publishes the module. No cloud account is needed for local publishing.
-
-### 2. Update the game module during development
-
-```bash
-just publish         # create or incrementally update the database
-just generate        # regenerate Rust client bindings into shared/
-just publish-reset   # destructive: clear game data and republish
-```
-
-Ordinary `publish` / `dev` preserves data and fails if a schema change requires deleting it. Use `publish-reset` only when you want to discard local game state.
-
-### 3. Run the LLM bridge (needed for model-backed decisions)
-
-```bash
-# Defaults: SpacetimeDB at http://localhost:3000, Ollama at http://localhost:11434
-export OLLAMA_MODEL=llama3.2   # or whatever you have pulled
-cargo run -p bridge
-```
-
-### 4. Run the Bevy client
-
-For the primary foundation development interface, use the [Bevy browser runbook](docs/BEVY_BROWSER_CLIENT.md) and open [127.0.0.1:18891](http://127.0.0.1:18891). The command below starts the preserved legacy gameplay mode.
-
-```bash
-just client      # cargo run -p client
-```
+Use [headless scenarios](docs/M1_RUNBOOK.md) for repeatable mechanic checks and [participant runtimes](docs/PARTICIPANT_AGENTS.md) for model configuration. Rebuild the authoritative module when its Rust rules change, then restart the development host to create a fresh isolated run. Regenerate bindings only when changing public schema/reducer interfaces. The original bridge binary and `just dev` / `publish` recipes serve the retained legacy server prototype, not the current client harness.
 
 ### Useful commands
 
@@ -136,8 +94,8 @@ just client      # cargo run -p client
 |---------|-------------|
 | `cargo build` | Build all workspace crates |
 | `cargo test` | Run all tests |
-| `just client` | Run the Bevy game client |
-| `just dev` | Start the container, wait for readiness, and publish the module |
+| `just client` | Run the native 2D behavior lab against the development host |
+| `just dev` | Start/publish the legacy server prototype on port 3000 |
 | `just up` / `just down` | Start the database / remove containers while retaining data |
 | `just status` | Show container status and health |
 | `just logs` | Tail SpacetimeDB logs |

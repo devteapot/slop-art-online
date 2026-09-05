@@ -2,7 +2,7 @@
 
 M1 is a small survival simulation inside the existing SpacetimeDB module. [simulation/src/lib.rs](../simulation/src/lib.rs) owns the rules; [foundation.rs](../server/module/spacetimedb/src/foundation.rs) invokes them transactionally. The runner never steps a second local simulation. The Rust [sao-sim](../server/bridge/src/bin/sao-sim.rs) binary publishes unique local databases, calls reducers, performs asynchronous model requests, and exports evidence. Its HTML inspector is an operator tool, not a replacement for the Bevy game client.
 
-This is the foundation path for future gameplay. Existing Bevy gameplay and legacy `Player`/`Npc` reducers have not been migrated to it; their respawn, skill and evaluator limitations still apply to the legacy prototype. Use the commands below to exercise M1, not `just client` or the original bridge binary.
+This is the foundation path for future gameplay. The old voxel/3D client has been removed. Legacy `Player`/`Npc` server reducers have not been migrated; their respawn, skill and evaluator limitations still apply to that prototype. Use the commands below for headless M1 checks. `just client` now opens the supported 2D foundation client; the original bridge binary still targets legacy reducers.
 
 The current module/SDK moved to 2.1.0 for the [browser Bevy client](BEVY_BROWSER_CLIENT.md). Historical verification reports retain their original 2.0.1 versions. Use a separate 2.1.0 data directory; do not point the new binary at retained 2.0.1 experiment storage.
 

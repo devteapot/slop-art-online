@@ -23,3 +23,7 @@ The numbering follows existing repository history; there is no ADR 004 file in t
 - [ADR 012 — Browser-hosted Bevy foundation](012-bevy-browser-foundation.md): shared WASM/native presentation, caller-specific authority views and local development enrollment.
 
 - [ADR 013 — Participant agent runtimes](013-participant-agent-runtimes.md): shared scoped API, independent behavior/speech/learning, and official MCP adapter.
+
+- [ADR 014: World observation and independent session focus](014-world-observer-and-session-focus.md) — implemented 3D presentation, detachable inspection and independent hosted runs.
+
+- [ADR 015: Top-down behavior lab](015-top-down-behavior-lab.md) — retire the voxel/3D client and use 2D for mechanics iteration.

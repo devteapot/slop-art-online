@@ -14,7 +14,6 @@ pub enum Signal {
 }
 #[derive(Clone, Default)]
 pub struct Inbox(pub Arc<Mutex<Vec<Signal>>>);
-#[derive(Default)]
 pub struct Network {
     pub connection: Option<DbConnection>,
     pub inbox: Inbox,
@@ -22,12 +21,69 @@ pub struct Network {
     pub connecting: bool,
     pub retry_at: f64,
     pub latest: String,
+    pub view: String,
+    pub runs_at: f64,
+    pub expected_run: Option<String>,
+    pub bound_once: bool,
+}
+impl Default for Network {
+    fn default() -> Self {
+        #[cfg(target_arch = "wasm32")]
+        let view = {
+            let w = web_sys::window().unwrap();
+            let key = format!("sao-view{}", w.location().hash().unwrap_or_default());
+            let storage = w.session_storage().ok().flatten();
+            storage
+                .as_ref()
+                .and_then(|s| s.get_item(&key).ok().flatten())
+                .unwrap_or_else(|| {
+                    let id = format!("v{}", js_timestamp());
+                    if let Some(s) = storage {
+                        let _ = s.set_item(&key, &id);
+                    }
+                    id
+                })
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        let view = format!(
+            "v{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        Self {
+            connection: None,
+            inbox: Inbox::default(),
+            cookie: Arc::default(),
+            connecting: false,
+            retry_at: 0.,
+            latest: String::new(),
+            view,
+            runs_at: 0.,
+            expected_run: None,
+            bound_once: false,
+        }
+    }
+}
+#[cfg(target_arch = "wasm32")]
+fn js_timestamp() -> String {
+    // Browser performance time plus random UUID, without any authentication material in URLs.
+    view_id()
+}
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(
+    inline_js = "export function view_id() { return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join(''); }"
+)]
+extern "C" {
+    fn view_id() -> String;
 }
 impl Network {
     pub fn post(&self, tag: &str, path: &str, body: Value) {
         post(
             self.inbox.clone(),
             self.cookie.clone(),
+            self.view.clone(),
             tag.into(),
             path.into(),
             body,
@@ -113,7 +169,14 @@ fn connect(inbox: Inbox, server: String, db: String) {
         ));
     });
 }
-fn post(inbox: Inbox, cookie: Arc<Mutex<String>>, tag: String, path: String, body: Value) {
+fn post(
+    inbox: Inbox,
+    cookie: Arc<Mutex<String>>,
+    view: String,
+    tag: String,
+    path: String,
+    body: Value,
+) {
     #[cfg(target_arch = "wasm32")]
     {
         let _ = cookie;
@@ -126,6 +189,7 @@ fn post(inbox: Inbox, cookie: Arc<Mutex<String>>, tag: String, path: String, bod
                     .map_err(|_| "origin unavailable")?;
                 let req = gloo_net::http::Request::post(&format!("{origin}{path}"))
                     .header("x-sao-client", "1")
+                    .header("x-sao-view", &view)
                     .json(&body)
                     .map_err(|_| "request failed")?;
                 let response = req
@@ -152,6 +216,7 @@ fn post(inbox: Inbox, cookie: Arc<Mutex<String>>, tag: String, path: String, bod
                 .post(format!("{origin}{path}"))
                 .header("origin", &origin)
                 .header("x-sao-client", "1")
+                .header("x-sao-view", &view)
                 .header("cookie", cookie.lock().unwrap().clone())
                 .json(&body)
                 .send()
@@ -204,17 +269,65 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
                 "mode" => {
                     game.status = "Role granted by authority".into();
                     game.scroll = [0.; 2];
+                    game.runs.clear();
                     game.snapshot = Value::Null;
                     net.latest.clear();
                     game.archive = false;
                     game.selected = if value["observer"] == true { 1 } else { 3 };
                     game.dirty = true;
                 }
-                "new" => {
+                "bind" => {
+                    game.status = "Connected to authoritative world".into();
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let Ok(run) = std::env::var("BEVY_FOCUS_RUN") {
+                        if !net.bound_once && value["run"] != run {
+                            net.post("focus", "/api/focus", json!({"run":run}));
+                        }
+                        // Environment is read only here; subsequent focus stays in the broker session.
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    if let Some(run) = web_sys::window()
+                        .and_then(|w| w.location().search().ok())
+                        .and_then(|s| s.strip_prefix("?run=").map(str::to_string))
+                    {
+                        if value["run"] != run {
+                            net.post("focus", "/api/focus", json!({"run":run}));
+                        }
+                    }
+                    net.bound_once = true;
+                }
+                "runs" => {
+                    game.runs = value["runs"].as_array().cloned().unwrap_or_default();
+                }
+                "new" | "focus" => {
+                    net.expected_run = value["run"].as_str().map(str::to_string);
+                    #[cfg(target_arch = "wasm32")]
+                    if let Some(w) = web_sys::window() {
+                        if let Ok(history) = w.history() {
+                            let url = format!(
+                                "/?run={}{}",
+                                value["run"].as_str().unwrap_or(""),
+                                w.location().hash().unwrap_or_default()
+                            );
+                            let _ = history.replace_state_with_url(
+                                &wasm_bindgen::JsValue::NULL,
+                                "",
+                                Some(&url),
+                            );
+                        }
+                    }
+                    game.snapshot = Value::Null;
+                    game.event = None;
+                    game.page = 0;
+                    game.scroll = [0.; 2];
+                    game.follow = false;
+                    game.camera = 1.;
+                    game.camera_y = 0.;
+                    net.post("runs", "/api/runs", json!({}));
                     game.archive = false;
                     net.latest.clear();
                     game.selected = 1;
-                    game.status = "Fresh bounded run created; paused".into();
+                    game.status = "Session focused; clocks remain independent".into();
                 }
                 _ => {
                     game.status = "Connected · state and effects come from SpacetimeDB".into();
@@ -254,7 +367,15 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
                 .map(|s| s.body.clone());
             if let Some(body) = body {
                 if body != net.latest {
-                    if let Ok(snapshot) = serde_json::from_str(&body) {
+                    if let Ok(snapshot) = serde_json::from_str::<Value>(&body) {
+                        if net
+                            .expected_run
+                            .as_ref()
+                            .is_some_and(|run| snapshot["run"] != run.as_str())
+                        {
+                            return;
+                        }
+                        net.expected_run = None;
                         game.snapshot = snapshot;
                         game.dirty = true;
                     }
@@ -267,6 +388,10 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
                 game.dirty = true;
             }
         }
+    }
+    if game.sessions_open && game.observer() && time.elapsed_secs_f64() >= net.runs_at {
+        net.runs_at = time.elapsed_secs_f64() + 5.;
+        net.post("runs", "/api/runs", json!({}));
     }
     if net.connection.is_none() && !net.connecting && time.elapsed_secs_f64() >= net.retry_at {
         net.connecting = true;
