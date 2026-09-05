@@ -31,7 +31,7 @@ impl Default for Network {
         #[cfg(target_arch = "wasm32")]
         let view = {
             let w = web_sys::window().unwrap();
-            let key = format!("sao-view{}", w.location().hash().unwrap_or_default());
+            let key = format!("sao-view{}{}", w.location().pathname().unwrap_or_default(), w.location().hash().unwrap_or_default());
             let storage = w.session_storage().ok().flatten();
             storage
                 .as_ref()
@@ -187,7 +187,9 @@ fn post(
                     .location()
                     .origin()
                     .map_err(|_| "origin unavailable")?;
-                let req = gloo_net::http::Request::post(&format!("{origin}{path}"))
+                let pathname = web_sys::window().unwrap().location().pathname().unwrap_or_default();
+                let prefix = session_prefix(&pathname);
+                let req = gloo_net::http::Request::post(&format!("{origin}{prefix}{path}"))
                     .header("x-sao-client", "1")
                     .header("x-sao-view", &view)
                     .json(&body)
@@ -305,7 +307,8 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
                     if let Some(w) = web_sys::window() {
                         if let Ok(history) = w.history() {
                             let url = format!(
-                                "/?run={}{}",
+                                "{}/?run={}{}",
+                                session_prefix(&w.location().pathname().unwrap_or_default()),
                                 value["run"].as_str().unwrap_or(""),
                                 w.location().hash().unwrap_or_default()
                             );
@@ -408,4 +411,21 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
         net.connecting = true;
         net.post("boot", "/api/session", json!({}));
     }
+}
+
+// A lab session shares its forwarded origin while retaining its own host and browser identity.
+fn session_prefix(path: &str) -> String {
+    let parts: Vec<_> = path.split('/').collect();
+    if parts.len() >= 3 && parts[1] == "session" && !parts[2].is_empty()
+        && parts[2].chars().all(|c|c.is_ascii_alphanumeric() || c=='-') {
+        format!("/session/{}",parts[2])
+    } else { String::new() }
+}
+#[cfg(test)]
+#[test]
+fn lab_session_prefix_keeps_requests_inside_the_selected_host() {
+    assert_eq!(session_prefix("/session/s123/"),"/session/s123");
+    assert_eq!(session_prefix("/session/s456/index.html"),"/session/s456");
+    assert_eq!(session_prefix("/"),"");
+    assert_eq!(session_prefix("/session/../"),"");
 }

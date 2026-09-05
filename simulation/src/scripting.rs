@@ -84,12 +84,12 @@ impl Default for Registry {
             (
                 "eat",
                 include_str!("../scripts/eat.rhai"),
-                "consume one carried food; reduce hunger by 35, 1000 ms cooldown",
+                "consume one carried food at ANY position, including while away from camp; reduce hunger by 35, 1000 ms cooldown",
             ),
             (
                 "rest",
                 include_str!("../scripts/rest.rhai"),
-                "restore 12 energy per 2500 ms; duration 1..5 of those units",
+                "rest at ANY position, even without a site or shelter; restore 12 + 2 per local shelter unit energy per 2500 ms, capped at 100; duration 1..5 of those units",
             ),
             (
                 "wait",
@@ -101,6 +101,10 @@ impl Default for Registry {
                 include_str!("../scripts/speak.rhai"),
                 "free-form text; hearing determined by active world law",
             ),
+            ("give", include_str!("../scripts/give.rhai"), "give one carried food to a perceived living target at the same cell; recipient receives a direct perception; no automatic reciprocity; 1000 ms cooldown"),
+            ("deposit", include_str!("../scripts/deposit.rhai"), "place one carried food in the existing site at your position, available for anyone to gather; 1000 ms cooldown"),
+            ("build", include_str!("../scripts/build.rhai"), "contribute one shelter unit at the existing site at your position; costs 8 energy; shelter maximum 12, remains shared; 2500 ms cooldown"),
+            ("observe", include_str!("../scripts/observe.rhai"), "refresh direct local site and nearby-character observations; 1000 ms cooldown"),
             (
                 "attack",
                 include_str!("../scripts/attack.rhai"),
@@ -150,6 +154,8 @@ pub struct StepResult {
 pub enum Effect {
     Actor { fields: BTreeMap<String, i32> },
     SiteFood { value: i32 },
+    TransferFood { target: Option<u32>, amount: i32 },
+    SiteShelter { amount: i32 },
     Observe,
     Speech { text: String },
     Damage { target: u32, amount: i32 },
@@ -511,5 +517,6 @@ pub fn subjective(p: &Player) -> Value {
     let mut value = facts(p);
     value["beliefs"] = json!(p.beliefs);
     value["memories"] = json!(p.memories);
+    value["site_observations"] = json!(p.site_observations);
     value
 }

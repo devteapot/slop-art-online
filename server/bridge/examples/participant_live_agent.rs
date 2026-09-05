@@ -128,9 +128,12 @@ async fn main() -> Result<(), String> {
     };
     let discovery = mcp.rpc("server/discover", json!({})).await?;
     let tools = mcp.rpc("tools/list", json!({})).await?;
-    let state = mcp
+    let mut state = mcp
         .call("observe", json!({"after_cursor":0,"limit":256}))
         .await?;
+    let planned_role = role;
+    let feedback_dir = out.parent().ok_or("actor audit directory missing")?;
+    let role = bridge::agent_harness::add_controller_feedback(&mut state, feedback_dir, role);
     let backend = Backend::new(config.clone())?;
     if config.max_attempts != 1 {
         return Err("single attempt required".into());
@@ -138,7 +141,7 @@ async fn main() -> Result<(), String> {
     let mut schema = bridge::agent_harness::proposal_schema(role);
     bridge::agent_harness::ground_reflection_schema(&mut schema, &state);
     let payload=backend.payload(json!([{"role":"system","content":format!("You are a separately running external AI player connected to SAO through MCP. Own your choices using ONLY the supplied subjective state. This turn's responsibility: {role:?}. Behavior chooses replace_tree or patch_subtree; Communication chooses speak; Learning chooses reflect. You may choose no operation when appropriate. Return a compact JSON Proposal matching {schema}. The runtime maps each chosen op unchanged into its matching MCP tool and supplies request ID and the observed control_epoch. Use the observed policy_revision or learning_revision, never guess revisions. Learning needs 1..8 reflections citing retained own experience source IDs of kind perception, skill_progress, skill_result, action_interrupted, behavior_interrupted or speech_cancelled; observed_cursor=latest_cursor. Do not cite a skill_attempt or participant_command. Reflect on what you perceived, including speech if relevant; false conclusions are allowed but provenance must be real. Behavior trees must have at most64nodes, depth8, children8; prefer a small intelligible approach rather than elaborate plans. Dialogue is independent of the running tree; expiry follows current rules_description. Learning does not replace behavior. Choose actual useful intentions for your character; do not output examples or authored test fixtures. No observer truth is available. MCP tool contracts: {tools}. Skill semantics: {}",state["context"]["skill_definitions"])},{"role":"user","content":state.to_string()}]),schema);
-    let mut record=backend.safe_value(&json!({"runtime":"separate minimal Rust model-driven MCP client","role":args[3],"discovery":discovery,"participant_context":state,"request":payload,"phase":"started"}));
+    let mut record=backend.safe_value(&json!({"runtime":"separate minimal Rust model-driven MCP client","role":role,"planned_responsibility":planned_role,"discovery":discovery,"participant_context":state,"request":payload,"phase":"started"}));
     std::fs::write(out.join("external.json"), record.to_string()).map_err(|_| "write failed")?;
     let reply = backend
         .complete(
@@ -150,7 +153,7 @@ async fn main() -> Result<(), String> {
     record["reply"] = backend.safe_value(&json!(reply));
     let result=async{
         if let Some(e)=reply.error{return Err(e);}
-        let proposal:Proposal=serde_json::from_str(&reply.raw_output).map_err(|_|"invalid generated proposal".to_string())?;
+        let proposal:Proposal=serde_json::from_str(&reply.raw_output).map_err(|error|format!("invalid generated proposal: {error}"))?;
         if proposal.operations.len()>4{return Err("too many operations".into());}
         let mut receipts=vec![];
         for (i,op) in proposal.operations.iter().enumerate(){
@@ -167,6 +170,7 @@ async fn main() -> Result<(), String> {
     record["phase"] = json!("completed");
     record["result"] = json!(result.as_ref().ok());
     record["error"] = json!(result.as_ref().err());
+    bridge::agent_harness::save_controller_feedback(feedback_dir, role, &backend.safe_value(&record))?;
     std::fs::write(
         out.join("external.json"),
         backend.safe_value(&record).to_string(),

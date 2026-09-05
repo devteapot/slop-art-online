@@ -18,6 +18,7 @@ fn world() -> World {
         position: 0,
         food: 10,
         hazard: 0,
+        shelter: 0,
     }];
     World::new("script-test".into(), scenario).unwrap()
 }
@@ -69,6 +70,92 @@ fn bundled_survival_scenario_runs_without_script_faults() {
         .events
         .iter()
         .any(|e| e.kind == "script_error" || e.kind == "script_tick_failed"));
+}
+
+#[test]
+fn food_giving_and_public_deposits_conserve_food_and_are_perceived() {
+    let mut w = world();
+    let total = |w: &World| w.players.iter().map(|p| p.food).sum::<i32>() + w.sites.iter().map(|s| s.food).sum::<i32>();
+    let before = total(&w);
+    let mut give = Action::new(Skill::Give);
+    give.target = Some(w.players[1].id);
+    submit(&mut w, give.clone());
+    w.advance_ms(1000);
+    assert_eq!(w.players[0].food, 1);
+    assert_eq!(w.players[1].food, 3);
+    assert_eq!(total(&w), before);
+    assert!(w.players[1].memories.iter().any(|m| m.kind == "received_food" && m.from == Some(w.players[0].id)));
+    submit(&mut w, Action::new(Skill::Deposit));
+    w.advance_ms(1000);
+    assert_eq!(w.players[0].food, 0);
+    assert_eq!(w.sites[0].food, 11);
+    assert_eq!(total(&w), before);
+    submit(&mut w, give);
+    w.advance_ms(1000);
+    assert_eq!(total(&w), before);
+    assert!(w.events.iter().any(|e| e.kind == "skill_result" && e.data["status"] == "failed"));
+}
+
+#[test]
+fn invalid_multi_transfer_rolls_back_every_effect() {
+    let mut w = world();
+    let target = w.players[1].id;
+    let definition = custom("bad_transfer", &format!("law::done([#{{kind:\"transfer_food\",target:{target},amount:2}},#{{kind:\"transfer_food\",target:{target},amount:2}}])"));
+    w.stage_scripts_by_operator(update(&w, vec![definition])).unwrap();
+    w.advance_ms(1);
+    let mut action = Action::new(Skill::Script("bad_transfer".into()));
+    action.target = Some(target);
+    submit(&mut w, action);
+    w.advance_ms(1000);
+    assert_eq!((w.players[0].food, w.players[1].food), (2, 2));
+    assert!(w.events.iter().any(|e| e.kind == "script_error"));
+    assert!(!w.events.iter().any(|e| e.kind == "food_transfer"));
+}
+
+#[test]
+fn shelter_contributions_help_every_occupant_and_cold_does_not_apply_retroactively() {
+    let mut w = world();
+    submit(&mut w, Action::new(Skill::Build));
+    w.advance_ms(2500);
+    assert_eq!(w.sites[0].shelter, 1);
+    assert_eq!(w.players[0].energy, 62);
+    assert!(w.players[1].memories.iter().any(|p| p.kind == "shelter_work"));
+    assert!(Condition::ShelterAt { location: 0, minimum: 1 }.evaluate(&w.players[1]).0);
+    w.sites[0].shelter = 12;
+    w.players[0].energy = 30;
+    submit(&mut w, Action::new(Skill::Rest));
+    w.advance_ms(2500);
+    assert_eq!(w.players[0].energy, 66);
+    w.initial.weather = Some(Weather { cold_after_ms: 10_000, damage_per_pulse: 2, shelter_required: 12 });
+    w.players[1].position = 1;
+    w.advance_ms(5000);
+    assert_eq!(w.players[0].health, 100);
+    assert_eq!(w.players[1].health, 98, "only the pulse at 10 seconds is cold");
+    w.advance_ms(5000);
+    assert_eq!(w.players[1].health, 94);
+    assert!(!w.events.iter().any(|e| e.kind == "script_error" || e.kind == "script_tick_failed"));
+}
+
+#[test]
+fn gradual_cold_allows_rest_progress_but_still_hurts_and_kills() {
+    let mut w = world();
+    w.initial.weather = Some(Weather { cold_after_ms: 0, damage_per_pulse: 2, shelter_required: 12 });
+    w.players[0].energy = 0;
+    w.advance_ms(750);
+    let mut rest = Action::new(Skill::Rest);
+    rest.duration = 2;
+    submit(&mut w, rest);
+    for _ in 0..40 { w.advance_ms(125); }
+    assert_eq!(w.players[0].energy, 24, "cold must not reset every incomplete rest interval");
+    assert_eq!(w.players[0].health, 96);
+    w.players[0].health = 2;
+    submit(&mut w, Action::new(Skill::Rest));
+    for _ in 0..20 { w.advance_ms(125); }
+    assert_eq!(w.players[0].health, 0);
+    assert!(w.events.iter().any(|e| e.actor == Some(w.players[0].id) && e.kind == "death"));
+    let energy = w.players[0].energy;
+    w.advance_ms(5000);
+    assert_eq!(w.players[0].energy, energy, "dead actors cannot continue resting");
 }
 
 #[test]

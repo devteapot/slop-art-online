@@ -144,7 +144,8 @@ fn schema_comes_from_authoritative_decision_and_skills() {
     }
     assert_eq!(schema["required"].as_array().unwrap().len(), 3);
     let roots = schema["properties"]["policy"]["anyOf"].as_array().unwrap();
-    assert_eq!(roots.len(), 4);
+    assert_eq!(roots.len(), 5);
+    assert!(roots.iter().any(|v| v["properties"]["kind"]["const"] == "when"));
     assert!(roots
         .iter()
         .all(|v| v["properties"]["kind"]["const"] != "reconsider"));
@@ -155,7 +156,7 @@ fn schema_comes_from_authoritative_decision_and_skills() {
         .any(|v| v["properties"]["kind"]["const"] == "reconsider"));
     let m = messages(&pending());
     assert_eq!(m[1]["content"], pending().context.to_string());
-    assert!(!m.to_string().contains("hazard"));
+    assert!(!m[1]["content"].as_str().unwrap().contains("\"hazard\""), "actor context must not expose hidden site hazard fields");
 }
 #[test]
 fn provider_errors_refusals_truncation_and_unknown_usage_remain_distinct() {

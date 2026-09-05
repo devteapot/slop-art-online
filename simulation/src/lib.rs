@@ -1,6 +1,7 @@
 //! The authoritative M1 rules, invoked by SpacetimeDB reducers and unit tests.
 //! No I/O, wall clock, model calls, or second approximation of world rules.
 pub mod client_view;
+pub mod ecology;
 pub mod participant;
 mod scripted_world;
 pub mod scripting;
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "m1-9-arenas.1";
+pub const VERSION: &str = "m1-17-renewal.1";
 pub const DECISION_FORMAT_VERSION: &str = "survivor-policy-v2";
 pub const LEGACY_DECISION_FORMAT: &str = "survivor-sequence-v1";
 pub mod policy;
@@ -38,6 +39,10 @@ pub enum Skill {
     Wait,
     Speak,
     Attack,
+    Give,
+    Deposit,
+    Build,
+    Observe,
     Script(String),
 }
 impl Skill {
@@ -50,6 +55,10 @@ impl Skill {
             Self::Wait => "wait",
             Self::Speak => "speak",
             Self::Attack => "attack",
+            Self::Give => "give",
+            Self::Deposit => "deposit",
+            Self::Build => "build",
+            Self::Observe => "observe",
             Self::Script(id) => id,
         }
     }
@@ -163,6 +172,8 @@ pub struct Player {
     pub name: String,
     pub controller: Controller,
     pub motive: String,
+    #[serde(default)]
+    pub current_goal: Option<String>,
     pub role: String,
     pub position: i32,
     pub health: i32,
@@ -180,6 +191,8 @@ pub struct Player {
     #[serde(default)]
     pub memories: Vec<Percept>,
     #[serde(default)]
+    pub site_observations: Vec<Percept>,
+    #[serde(default)]
     pub execution: Option<Execution>,
     #[serde(default)]
     pub generation: u64,
@@ -195,9 +208,22 @@ pub struct Site {
     pub position: i32,
     pub food: i32,
     pub hazard: i32,
+    #[serde(default)]
+    pub shelter: i32,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Weather {
+    pub cold_after_ms: u64,
+    pub damage_per_pulse: i32,
+    pub shelter_required: i32,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Scenario {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub food_sources: Vec<ecology::FoodSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weather: Option<Weather>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub arenas: Vec<spatial::Arena>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -262,6 +288,10 @@ impl World {
         if let Some(map) = &scenario.map {
             map.validate()?;
         }
+        if scenario.weather.as_ref().is_some_and(|w| w.cold_after_ms > 25_000_000
+            || !(1..=20).contains(&w.damage_per_pulse) || !(1..=12).contains(&w.shelter_required)) {
+            return Err("invalid weather parameters".into());
+        }
         let mut ids = std::collections::BTreeSet::new();
         for p in &scenario.players {
             if !ids.insert(p.id)
@@ -277,6 +307,7 @@ impl World {
                 || p.food > 100
                 || p.execution.is_some()
                 || !p.memories.is_empty()
+                || !p.site_observations.is_empty()
             {
                 return Err("invalid initial player".into());
             }
@@ -288,11 +319,13 @@ impl World {
                 || s.food < 0
                 || s.food > 100
                 || !(0..=100).contains(&s.hazard)
+                || !(0..=12).contains(&s.shelter)
             {
                 return Err("invalid site".into());
             }
         }
         spatial::validate_arenas(&scenario)?;
+        ecology::validate(&scenario)?;
         let mut w = Self {
             run,
             version: VERSION.into(),
@@ -383,14 +416,20 @@ impl World {
             vec![world_event],
             json!({"kind":kind,"from":from,"location":location,"content":content}),
         );
-        self.players[i].memories.push(Percept {
+        let percept = Percept {
             source: id,
             tick: self.tick,
             kind: kind.into(),
             from,
             location,
             content,
-        });
+        };
+        if kind == "site" {
+            self.players[i].site_observations.retain(|p| p.location != location);
+            self.players[i].site_observations.push(percept.clone());
+            if self.players[i].site_observations.len() > 64 { self.players[i].site_observations.remove(0); }
+        }
+        self.players[i].memories.push(percept);
         while self.players[i].memories.len() > limit {
             self.players[i].memories.remove(0);
         }
@@ -402,10 +441,11 @@ impl World {
             return Ok(());
         }
         let pos = self.players[i].position;
-        let observation: Value = self.scripts.law(
+        let mut observation: Value = self.scripts.law(
             "observation",
             json!(self.sites.iter().find(|s| s.position == pos)),
         )?;
+        observation["food_source"] = json!(self.initial.food_sources.iter().find(|s| s.position == pos));
         let food = observation["food"].as_i64().unwrap_or(0);
         let parents = self.players[i]
             .execution
@@ -444,7 +484,7 @@ impl World {
         // Deliberate allowlist. Never serialize World, sites, other minds or audit into a prompt.
         let p = &self.players[i];
         let approach = p.execution.as_ref().map(|e| if let Some(policy)=&e.policy {json!({"decision":e.decision,"policy":policy,"state":e.state,"active_attempt":e.attempt})} else {json!(e)});
-        json!({"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
+        json!({"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
     }
     pub fn request(&mut self, i: usize, trigger: &str) {
         if self.participant_mode {
@@ -979,6 +1019,7 @@ impl World {
             delta_ms,
             periods.hazard_ms,
         )?;
+        self.renew_food(delta_ms)?;
         for i in 0..self.players.len() {
             if self.players[i].health <= 0 {
                 continue;
@@ -1045,9 +1086,11 @@ impl World {
             struct Aftermath {
                 starvation: i32,
                 hazard: i32,
+                #[serde(default)]
+                cold: i32,
             }
-            let after:Aftermath=self.scripts.law("aftermath",json!({"pulses":hazard_pulses,"elapsed_ms":hazard_pulses*periods.hazard_ms,"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
-            if after.starvation < 0 || after.hazard < 0 {
+            let after:Aftermath=self.scripts.law("aftermath",json!({"time_ms":self.timing.time_ms,"weather":self.initial.weather,"pulses":hazard_pulses,"elapsed_ms":hazard_pulses*periods.hazard_ms,"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
+            if after.starvation < 0 || after.hazard < 0 || after.cold < 0 {
                 return Err("negative damage policy".into());
             }
             if after.starvation > 0 {
@@ -1055,6 +1098,10 @@ impl World {
             }
             if self.players[i].health <= 0 {
                 continue;
+            }
+            if after.cold > 0 {
+                self.damage(i, after.cold, None, metabolism, "weather")?;
+                if self.players[i].health <= 0 { continue; }
             }
             let hazard = after.hazard;
             if hazard > 0 {

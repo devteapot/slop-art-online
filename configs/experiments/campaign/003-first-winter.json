@@ -1,0 +1,23 @@
+{
+  "hypothesis": "Four individually motivated Luna characters can turn voluntary speech into material cooperation, use shared food and shelter to survive cold, and remain vulnerable to a genuine food shortage.",
+  "evaluation": "Check atomic-read/learning validity; conserved gifts and deposits; who gathers, contributes and benefits; heard speech followed by a relevant decision; surviving beyond carried and camp stocks; weather exposure and permanent starvation deaths. Do not count independent survival or speech alone as a functioning society.",
+  "minutes": 8,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "supplied",
+      "port": 18937,
+      "implementation": "output/society-lab/implementations/social-m1-12",
+      "scenario": "scenarios/society-first-winter.json",
+      "controllers": "configs/experiments/society-four-medium.json"
+    },
+    {
+      "id": "shortage",
+      "port": 18938,
+      "implementation": "output/society-lab/implementations/social-m1-12",
+      "scenario": "scenarios/society-first-winter-shortage.json",
+      "controllers": "configs/experiments/society-four-medium.json"
+    }
+  ]
+}

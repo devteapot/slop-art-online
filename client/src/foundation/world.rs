@@ -50,11 +50,14 @@ fn actor_position(p: &Value, snapshot: &Value) -> Vec3 {
     let mut position = cell_position(snapshot, p["position"].as_i64().unwrap_or(0) as i32);
     // Small display offsets distinguish occupants of the same authoritative cell.
     if snapshot["map"].is_object() {
-        position.x += if p["id"].as_u64().unwrap_or(1) % 2 == 0 {
-            6.
-        } else {
-            -6.
-        };
+        let occupants: Vec<_> = snapshot["players"].as_array().into_iter().flatten()
+            .filter(|other| other["position"] == p["position"]).collect();
+        let index = occupants.iter().position(|other| other["id"] == p["id"]).unwrap_or(0);
+        if occupants.len() > 1 {
+            let columns = if occupants.len() > 4 { 3 } else { 2 };
+            position.x += (index % columns) as f32 * 12. - (columns - 1) as f32 * 6.;
+            position.y += (index / columns) as f32 * 12. - ((occupants.len() - 1) / columns) as f32 * 6.;
+        }
     } else {
         position.y = 32. - (p["id"].as_u64().unwrap_or(1).saturating_sub(1) % 5) as f32 * 32.;
     }
@@ -105,6 +108,14 @@ fn grid_terrain(commands: &mut Commands, snapshot: &Value) {
                 pos + Vec3::Z,
                 Vec2::splat(12.),
             );
+        }
+        let shelter = site.and_then(|s| s["shelter"].as_i64()).unwrap_or(0);
+        if site.is_some_and(|s| s["food_source"].is_object()) {
+            tile(commands, Color::srgb(0.42, 0.8, 0.4), pos + Vec3::new(0., -14., 2.), Vec2::new(24., 4.));
+        }
+        if shelter > 0 {
+            tile(commands, Color::srgb(0.65, 0.79, 0.85), pos + Vec3::new(0., 14., 2.),
+                Vec2::new(30. * shelter as f32 / 12., 4.));
         }
     }
 }
@@ -211,7 +222,7 @@ pub fn sync(
             game.snapshot["map"],
             game.snapshot["sites"].as_array().map(|sites| sites
                 .iter()
-                .map(|s| json!([s["position"], s["food"], s["hazard"]]))
+                .map(|s| json!([s["position"], s["food"], s["hazard"], s["shelter"], s["food_source"]]))
                 .collect::<Vec<_>>())
         ]);
         let terrain_changed = *terrain_state != terrain;
@@ -330,6 +341,10 @@ pub fn sync(
                         .unwrap_or_default();
                     let food = site["food"].as_i64().unwrap_or(0);
                     let hazard = site["hazard"].as_i64().unwrap_or(0) > 0;
+                    let renewal = if site["food_source"].is_object() {
+                        format!(" · grows {}/{}s (cap {})", site["food_source"]["amount"],
+                            site["food_source"]["interval_ms"].as_f64().unwrap_or(0.) / 1000., site["food_source"]["capacity"])
+                    } else { String::new() };
                     let key = LabelKey::Site(pos);
                     wanted.insert(key);
                     label(
@@ -337,7 +352,8 @@ pub fn sync(
                         &mut existing_labels,
                         key,
                         format!(
-                            "{name} {pos} · food {food}{age}{}",
+                            "{name} {pos} · food {food} · shelter {}/12{age}{renewal}{}",
+                            site["shelter"].as_i64().unwrap_or(0),
                             if hazard { " · danger" } else { "" }
                         ),
                         cell_position(&game.snapshot, pos)
@@ -597,6 +613,8 @@ pub fn camera(
     let run = game.snapshot["run"].as_str().unwrap_or("").to_owned();
     if *framed_run != run {
         *framed_run = run;
+        #[cfg(target_arch = "wasm32")]
+        {game.compact=web_sys::window().and_then(|w|w.location().search().ok()).is_some_and(|q|q.trim_start_matches('?').split('&').any(|p|p=="compact=1"));}
         game.arena=None;
         game.frame=true;
         if game.snapshot["arenas"].as_array().is_some_and(|a|!a.is_empty()) { game.sessions_open=true;game.dirty=true; }
@@ -607,9 +625,9 @@ pub fn camera(
             let bounds=game.snapshot["arenas"].as_array().and_then(|a|a.iter().find(|a|a["id"].as_str()==game.arena.as_deref())).map(|a|a["bounds"].clone())
                 .or_else(||game.snapshot["map"].get("bounds").cloned());
             let (x,y,bw,bh)=bounds.map(|b|(b["x"].as_f64().unwrap_or(0.),b["y"].as_f64().unwrap_or(0.),b["width"].as_f64().unwrap_or(w),b["height"].as_f64().unwrap_or(h))).unwrap_or((0.,0.,w,h));
-            let left=if game.sessions_open {258.}else{0.};
+            let left=if game.sessions_open && !game.compact {258.}else{0.};
             game.zoom=(((bw as f32+2.)*GRID_CELL)/(window.width()-left-50.).max(100.))
-                .max(((bh as f32+2.)*GRID_CELL)/(window.height()-220.).max(100.)).clamp(0.5,8.);
+                .max(((bh as f32+2.)*GRID_CELL)/(window.height()-if game.compact {40.}else{220.}).max(100.)).clamp(0.5,8.);
             game.camera=(((x+(bw-w)/2.) as f32*GRID_CELL)-left/2.*game.zoom)/CELL;
             game.camera_y=(h/2.-y-bh/2.) as f32*GRID_CELL;
             game.follow=false;

@@ -17,6 +17,10 @@ pub enum Node {
     Sequence {
         children: Vec<Node>,
     },
+    When {
+        condition: Condition,
+        child: Box<Node>,
+    },
     Guard {
         condition: Condition,
         child: Box<Node>,
@@ -48,6 +52,10 @@ pub enum Condition {
         location: Option<i32>,
     },
     FoodAt {
+        location: i32,
+        minimum: i32,
+    },
+    ShelterAt {
         location: i32,
         minimum: i32,
     },
@@ -87,6 +95,8 @@ pub enum Status {
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PolicyState {
+    #[serde(default)]
+    pub entries: std::collections::BTreeSet<String>,
     pub cursors: BTreeMap<String, usize>,
     pub branches: BTreeMap<String, usize>,
     pub active_path: Option<String>,
@@ -143,7 +153,7 @@ impl Node {
                     c.check(depth + 1, total, actions, laws, map)?;
                 }
             }
-            Self::Guard { condition, child } => {
+            Self::Guard { condition, child } | Self::When { condition, child } => {
                 condition.check(depth + 1, total, laws, map)?;
                 child.check(depth + 1, total, actions, laws, map)?;
             }
@@ -226,6 +236,7 @@ impl World {
         }
         e.state.cursors.retain(|p, _| !within(p, path));
         e.state.branches.retain(|p, _| !within(p, path));
+        e.state.entries.retain(|p| !within(p, path));
     }
     pub(super) fn execute_policy(&mut self, i: usize, tree: &Node, mut e: Execution) {
         let mut budget = TICK_BUDGET;
@@ -236,8 +247,9 @@ impl World {
         let tick=self.event(Some(self.players[i].id),"policy_tick",vec![e.decision],json!({"status":status,"active_path":e.state.active_path,"cursors":e.state.cursors,"node_visits":TICK_BUDGET-budget,"skill_stepped":acted}));
         if status != Status::Running {
             self.abort_leaf(i, &mut e, tick, "policy cycle ended");
-            e.state.cursors.clear();
             if status == Status::Failure {
+                e.state.cursors.clear();
+                e.state.entries.clear();
                 self.request(i, "installed policy has no successful branch / reconsider");
             }
         }
@@ -264,7 +276,14 @@ impl World {
         }
         *budget -= 1;
         match node {
-            Node::Guard { condition, child } => {
+            Node::Guard { condition, child } | Node::When { condition, child } => {
+                let entry_only = matches!(node, Node::When { .. });
+                let child_path = format!("{path}/{}", if entry_only { "when" } else { "guard" });
+                if entry_only && e.state.entries.contains(path) {
+                    let status = self.tick_node(i, child, &child_path, e, budget, acted);
+                    if status != Status::Running { e.state.entries.remove(path); }
+                    return status;
+                }
                 let (allowed, sources): (bool, Vec<u64>) = match self.scripts.law(
                     "guard",
                     json!({"condition":condition,"player":scripting::subjective(&self.players[i])}),
@@ -283,7 +302,10 @@ impl World {
                 let event=self.event(Some(self.players[i].id),"guard_evaluated",std::iter::once(e.decision).chain(sources).collect(),json!({"path":path,"condition":condition,"result":allowed,"source":"subjective character state"}));
                 e.state.last_guard = Some(event);
                 if allowed {
-                    self.tick_node(i, child, &format!("{path}/guard"), e, budget, acted)
+                    if entry_only { e.state.entries.insert(path.into()); }
+                    let status = self.tick_node(i, child, &child_path, e, budget, acted);
+                    if entry_only && status != Status::Running { e.state.entries.remove(path); }
+                    status
                 } else {
                     self.reset_branch(i, e, path, event);
                     Status::Failure
@@ -330,7 +352,16 @@ impl World {
                                 json!({"path":path,"previous":old,"selected":n,"status":result}),
                             );
                             if let Some(old) = old {
-                                self.reset_branch(i, e, &format!("{path}/{old}"), change);
+                                let old_path = format!("{path}/{old}");
+                                // Priority preemption suspends a task. False continuous
+                                // guards and failed/completed sequences still reset it.
+                                if e.state.active_path.as_ref().is_some_and(|p| within(p, &old_path)) {
+                                    self.abort_leaf(i, e, change, "higher priority suspended this task");
+                                }
+                                if n < old && (e.state.cursors.keys().any(|p| within(p, &old_path)) || e.state.entries.iter().any(|p| within(p, &old_path))) {
+                                    self.event(Some(self.players[i].id), "task_suspended", vec![change],
+                                        json!({"path":old_path,"sequence_progress_retained":true}));
+                                }
                             }
                         }
                         return result;
@@ -400,8 +431,8 @@ pub struct PolicyProposal {
     pub reflections: Vec<Reflection>,
 }
 
-pub const CONTRACT: &str = r#"Generate this individual's OWN executable persistent reactive behavior policy. Choose runtime conditions and alternative branches so this individual can act as circumstances change without another model response. The policy must contain at least one action node using an actual skill. A root-only reconsider is invalid: reconsider only requests later reasoning and cannot replace executable behavior. Reconsider may occur inside an executable tree. Choose conditions, branches and actions from the vocabulary; no authored survival policy is installed for you. Node kinds: priority {children} rechecks children in order every tick and selects the first non-failure; sequence {children} remembers its running cursor; guard {condition,child} rechecks its condition whenever reached, returning failure and aborting its subtree when false; action {action} uses the shared skill contract; reconsider {reason} requests asynchronous revision when eligible and succeeds immediately. Wrap a running sequence in a guard when it needs ongoing protection: earlier successful sequence children are not rechecked. Abandoning a branch resets its sequence cursors and interrupts its current skill; reentry restarts that branch. The root repeats on subsequent ticks after success/failure, so choose guards that avoid unintended repeated speech/actions. At most one skill advances per tick; actions can run across ticks. Damage interrupts the current skill, not the policy: the next tick re-evaluates reactive branches using newly perceived evidence while reasoning may remain pending. A failed policy remains installed and asks for revision, not authored survival actions.
-Conditions: all/any {conditions}; not {condition}; at {location}; danger {location:null for current position, or a fixed location} reads retained subjective danger belief, false if unknown; food_at {location,minimum} uses latest remembered food observation, false if unknown; resource {resource:health|hunger|energy|food|fear|failures,comparison:below|at_least,value:integer} reads this character's state. Gameplay ranges follow the current rules_description and authoritative validation. Unknown danger is NOT proven safety, reports may be mistaken, observations can age. Consider ongoing intent, recovery, depleted resources and avoiding accidental retreat/return oscillations according to YOUR beliefs and priorities. A fixed-location danger guard can remember a threat after leaving it; a current-location guard alone stops applying once you move. Rethink as needed. Node and condition total <=64, combined depth <=8, each composite 1..8 children. At least one skill action is required. You must supply reason, policy and reflections. Existing installed policy continues while you reason. Proposals from the same policy generation can survive damage; guards and skill prerequisites are checked against current state. Newer subjective beliefs are retained over old-source reflections. Explain your chosen approach briefly without claiming effects have already occurred."#;
+pub const CONTRACT: &str = r#"Generate this individual's OWN executable persistent reactive behavior policy. Choose runtime conditions and alternative branches so this individual can act as circumstances change without another model response. The policy must contain at least one action node using an actual skill. A root-only reconsider is invalid: reconsider only requests later reasoning and cannot replace executable behavior. Reconsider may occur inside an executable tree. Choose conditions, branches and actions from the vocabulary; no authored survival policy is installed for you. Node kinds: when {condition,child} checks the condition only on entry, then retains the running child until it finishes/fails; a higher-priority branch suspends it and it resumes afterward; guard is the separate continuously checked alternative. priority {children} rechecks children in order every tick and selects the first non-failure; sequence {children} remembers its running cursor; guard {condition,child} rechecks its condition whenever reached, returning failure and aborting its subtree when false; action {action} uses the shared skill contract; reconsider {reason} requests asynchronous revision when eligible and succeeds immediately. Wrap a running sequence in a guard when it needs ongoing protection: earlier successful sequence children are not rechecked. A false continuous guard abandons its branch and resets its cursors. Priority preemption instead suspends the lower task: sequence cursors and when entries persist, while its interrupted skill can restart on resumption. The root repeats on subsequent ticks after success/failure, so choose guards that avoid unintended repeated speech/actions. At most one skill advances per tick; actions can run across ticks. Sudden attacks and site hazards interrupt the current skill, not the policy. Gradual cold and starvation reduce health without resetting action progress; death always stops action. Each tick re-evaluates reactive branches using newly perceived evidence while reasoning may remain pending. A failed policy remains installed and asks for revision, not authored survival actions.
+Conditions: all/any {conditions}; not {condition}; at {location}; danger {location:null for current position, or a fixed location} reads retained subjective danger belief, false if unknown; food_at {location,minimum} and shelter_at {location,minimum} use the latest retained direct site observation, false if unknown; resource {resource:health|hunger|energy|food|fear|failures,comparison:below|at_least,value:integer} reads this character's state. Gameplay ranges follow the current rules_description and authoritative validation. Unknown danger is NOT proven safety, reports may be mistaken, observations can age. Consider ongoing intent, recovery, depleted resources and avoiding accidental retreat/return oscillations according to YOUR beliefs and priorities. A fixed-location danger guard can remember a threat after leaving it; a current-location guard alone stops applying once you move. Rethink as needed. Node and condition total <=64, combined depth <=8, each composite 1..8 children. At least one skill action is required. You must supply reason, policy and reflections. Existing installed policy continues while you reason. Proposals from the same policy generation can survive damage; guards and skill prerequisites are checked against current state. Newer subjective beliefs are retained over old-source reflections. Explain your chosen approach briefly without claiming effects have already occurred."#;
 
 impl PolicyState {
     pub fn is_default(&self) -> bool {

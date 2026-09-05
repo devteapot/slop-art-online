@@ -1,0 +1,33 @@
+{
+  "hypothesis": "Gradual exposure should reduce health without preventing action progress. Repeat the promising intent-resumption implementation, compare the exposure fix under identical conditions, and retain a food-shortage mortality control.",
+  "evaluation": "Check sustained net food delivery and collection by other actors, shared shelter, speech-grounded learning and subsequent choices, resumption across urgent actions, and recovery after resource depletion. Keep food, cold damage and all model settings matched between supplied variants. The shortage variant changes only site food to zero; it must retain real resource pressure and permanent death.",
+  "minutes": 8,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "intents-repeat",
+      "port": 18945,
+      "implementation": "output/society-lab/implementations/intents-m1-15",
+      "scenario": "scenarios/society-first-winter.json",
+      "controllers": "configs/experiments/society-four-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "exposure",
+      "port": 18946,
+      "implementation": "output/society-lab/implementations/exposure-m1-16",
+      "scenario": "scenarios/society-first-winter.json",
+      "controllers": "configs/experiments/society-four-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "shortage",
+      "port": 18947,
+      "implementation": "output/society-lab/implementations/exposure-m1-16",
+      "scenario": "scenarios/society-first-winter-shortage.json",
+      "controllers": "configs/experiments/society-four-medium.json",
+      "recovery": true
+    }
+  ]
+}

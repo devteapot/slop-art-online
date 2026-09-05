@@ -43,6 +43,8 @@ python3 scripts/run_living_clearing.py \
 
 Choose an unused port and a new output directory. This starts one session with all twelve controllers, retains inference/receipts and snapshots, pauses at the deadline, and leaves the observer available. A fresh matrix is launched through this supervisor so external processes are enrolled too; the viewer's ordinary fresh-session button is hidden for matrices.
 
+For the causal comparison across cells, see [the run analysis](LUNA_MATRIX_RUN_ANALYSIS.md).
+
 ## Verification and evidence
 
 - Core: 56 tests, including bounds rejection, cross-arena visibility/speech/damage denial, scoped surveys, sealed membership validation, reload and movement through the full twelve-character world.

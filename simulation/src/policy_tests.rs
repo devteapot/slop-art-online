@@ -38,6 +38,7 @@ fn world() -> World {
         position: 1,
         food: 6,
         hazard: 5,
+        shelter: 0,
     }];
     World::new("reactive-test".into(), scenario).unwrap()
 }

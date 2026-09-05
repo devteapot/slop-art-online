@@ -151,6 +151,8 @@ SpacetimeDB itself does not need a GPU or either optional profile.
 
 | Document | Purpose |
 |---|---|
+| [World vision](docs/WORLD_VISION.md) | Agreed living-world design, faction seed, population, knowledge and open decisions |
+| [World development roadmap](docs/WORLD_ROADMAP.md) | Evidence stages from a viable settlement to societies, invention and AGI |
 | [Simulation vision](docs/SIMULATION_VISION.md) | Authoritative direction, vocabulary, architecture boundaries, open questions |
 | [Audit and experiments](docs/AUDIT_AND_EXPERIMENTS.md) | Common evidence, live/historical inspection, isolated runs, replay limits, acceptance checks |
 | [Current state](docs/CURRENT_STATE.md) | Static implementation assessment and foundation gaps |

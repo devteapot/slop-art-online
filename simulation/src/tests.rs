@@ -5,6 +5,7 @@ fn player(id: u32, controller: Controller, position: i32) -> Player {
         name: format!("P{id}"),
         controller,
         motive: "survive to reunite with companions".into(),
+        current_goal: None,
         role: "forager".into(),
         position,
         health: 100,
@@ -18,6 +19,7 @@ fn player(id: u32, controller: Controller, position: i32) -> Player {
         beliefs: vec![],
         relationships: BTreeMap::new(),
         memories: vec![],
+        site_observations: vec![],
         execution: None,
         generation: 0,
         failures: 0,
@@ -29,6 +31,8 @@ fn world() -> World {
     World::new(
         "test".into(),
         Scenario {
+            food_sources: vec![],
+            weather: None,
             arenas: vec![],
             map: None,
             name: "test".into(),
@@ -43,6 +47,7 @@ fn world() -> World {
                 position: 2,
                 food: 4,
                 hazard: 0,
+                shelter: 0,
             }],
         },
     )
@@ -147,6 +152,7 @@ fn interruption_has_distinct_result_and_permanent_death_keeps_history() {
         position: 0,
         food: 0,
         hazard: 20,
+        shelter: 0,
     });
     w.submit(
         1,
@@ -257,6 +263,7 @@ fn observer_truth_is_excluded_from_model_context() {
         position: 9,
         food: 99,
         hazard: 77,
+        shelter: 0,
     });
     w.players[2].motive = "SECRET-MOTIVE".into();
     let text = w.context(0).to_string();
@@ -345,6 +352,7 @@ fn experience_changes_individuals_but_bootstrap_does_not_invent_survival_policy(
         position: 0,
         food: 10,
         hazard: 5,
+        shelter: 0,
     });
     w.step();
     assert_eq!(w.players[0].caution, 65);

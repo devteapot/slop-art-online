@@ -42,7 +42,7 @@ impl World {
             None
         };
         json!({"map":self.map_for_actor(p.id),"navigation":navigation,"actor":facts(p),"action":a,"target":target,
-            "site":self.sites.iter().find(|s| s.position==p.position).map(|s| json!({"position":s.position,"food":s.food})),
+            "site":self.sites.iter().find(|s| s.position==p.position).map(|s| json!({"position":s.position,"food":s.food,"shelter":s.shelter})),
             "time_ms":self.timing.time_ms,"delta_ms":self.timing.time_ms.saturating_sub(e.script.as_ref().map_or(self.timing.time_ms, |s| s.evaluated_ms)),
             "ready_at_ms":self.execution_ready_at(p.id,e),
             "remaining":e.remaining,"state":e.script.as_ref().map(|s| &s.state),
@@ -79,6 +79,34 @@ impl World {
         effect: &Effect,
     ) -> Result<(), String> {
         match effect {
+            Effect::TransferFood { target, amount } => {
+                let actor = &self.players[i];
+                if *amount <= 0 || *amount > actor.food {
+                    return Err("food transfer exceeds carried resource".into());
+                }
+                let destination_food = if let Some(target) = target {
+                    let recipient = self.players.iter().find(|p| p.id == *target)
+                        .ok_or("unknown food recipient")?;
+                    if a.target != Some(*target) || *target == actor.id || recipient.health <= 0
+                        || !self.same_arena(actor.id, *target) || recipient.position != actor.position {
+                        return Err("food recipient outside local target capability".into());
+                    }
+                    recipient.food
+                } else {
+                    self.sites.iter().find(|s| s.position == actor.position)
+                        .ok_or("deposit site unavailable")?.food
+                };
+                if destination_food.checked_add(*amount).is_none() {
+                    return Err("food transfer overflow".into());
+                }
+            }
+            Effect::SiteShelter { amount } => {
+                let site = self.sites.iter().find(|s| s.position == self.players[i].position)
+                    .ok_or("shelter site unavailable")?;
+                if *amount <= 0 || site.shelter.checked_add(*amount).is_none_or(|v| v > 12) {
+                    return Err("shelter contribution outside site capability".into());
+                }
+            }
             Effect::Actor { fields } => {
                 if fields.get("position").is_some_and(|&position| !spatial::walkable(self.map_for_actor(self.players[i].id).as_ref(), position)) {
                     return Err("position outside actor terrain capability".into());
@@ -129,6 +157,43 @@ impl World {
         effect: Effect,
     ) -> Result<(), String> {
         match effect {
+            Effect::TransferFood { target, amount } => {
+                let actor = self.players[i].id;
+                let location = self.players[i].position;
+                self.players[i].food -= amount;
+                if let Some(target) = target {
+                    let j = self.idx(target)?;
+                    self.players[j].food += amount;
+                    let id = self.event(Some(actor), "food_transfer", vec![cause],
+                        json!({"target":target,"location":location,"amount":amount,"donor_food":self.players[i].food,"recipient_food":self.players[j].food}));
+                    self.perceive(j, id, "received_food", Some(actor), location,
+                        json!({"amount":amount,"food_after":self.players[j].food}))?;
+                    self.perceive(i, id, "gave_food", Some(target), location, json!({"amount":amount}))?;
+                    self.wake(target);
+                } else {
+                    let site = self.sites.iter_mut().find(|s| s.position == location).ok_or("deposit site unavailable")?;
+                    site.food += amount;
+                    let food_after = site.food;
+                    self.event(Some(actor), "resource_change", vec![cause],
+                        json!({"location":location,"food_delta":amount,"food_after":food_after,"nature":"deposit"}));
+                }
+            }
+            Effect::SiteShelter { amount } => {
+                let location = self.players[i].position;
+                let site = self.sites.iter_mut().find(|s| s.position == location).ok_or("shelter site unavailable")?;
+                site.shelter += amount;
+                let shelter_after = site.shelter;
+                let id = self.event(Some(self.players[i].id), "shelter_contribution", vec![cause],
+                    json!({"location":location,"amount":amount,"shelter_after":shelter_after}));
+                for j in 0..self.players.len() {
+                    if j != i && self.players[j].health > 0 && self.players[j].position == location
+                        && self.same_arena(self.players[i].id, self.players[j].id) {
+                        self.perceive(j, id, "shelter_work", Some(self.players[i].id), location,
+                            json!({"amount":amount,"shelter_after":shelter_after}))?;
+                        self.observe_site(j)?;
+                    }
+                }
+            }
             Effect::Actor { fields } => {
                 for (field, value) in fields {
                     let p = &mut self.players[i];

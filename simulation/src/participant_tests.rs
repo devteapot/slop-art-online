@@ -262,6 +262,193 @@ fn reflection_provenance_revision_and_duplicate_sources_are_enforced() {
         .iter()
         .any(|b| b.claim.location == 0 && b.claim.danger));
 }
+
+#[test]
+fn evidence_lease_survives_trace_churn_reload_but_not_expiry_or_control_change() {
+    let mut w = world();
+    let source = w.players[0].memories.iter().find(|p| p.kind == "site").unwrap().source;
+    let cursor = w.participants[&1].cursor;
+    assert!(!send(&mut w, 2, Command::PinObservation { observed_cursor: cursor, sources: vec![source] }).ok);
+    assert!(send(&mut w, 1, Command::PinObservation { observed_cursor: cursor, sources: vec![source] }).ok);
+    for _ in 0..300 { w.observe_site(0).unwrap(); }
+    assert!(!w.participants[&1].experiences.iter().any(|e| e.source == source));
+    let make = |revision| Command::Reflect { expected_revision: revision, observed_cursor: cursor,
+        reflections: vec![Reflection { source, interpretation: "I can still interpret my earlier observation".into(),
+            caution_delta: 1, trust_delta: 0, belief: None }], goal: None };
+    let mut expired = w.clone();
+    expired.timing.time_ms = participant::EVIDENCE_LEASE_MS + 1;
+    assert!(!send(&mut expired, 1, make(0)).ok);
+    let mut transferred = w.clone();
+    transferred.change_control(1).unwrap();
+    assert!(!send(&mut transferred, 1, make(0)).ok);
+    let mut loaded: World = serde_json::from_str(&serde_json::to_string(&w).unwrap()).unwrap();
+    assert!(send(&mut loaded, 1, make(0)).ok);
+    assert!(!send(&mut loaded, 1, make(1)).ok);
+}
+
+#[test]
+fn evidence_leases_bound_concurrent_reads_and_reject_forged_sources() {
+    let mut w = world();
+    for _ in 0..7 {
+        w.observe_site(0).unwrap();
+        let cursor = w.participants[&1].cursor;
+        let source = w.players[0].site_observations.last().unwrap().source;
+        assert!(send(&mut w, 1, Command::PinObservation { observed_cursor: cursor, sources: vec![source] }).ok);
+    }
+    assert_eq!(w.participants[&1].evidence_leases.len(), 4);
+    let cursor = w.participants[&1].cursor;
+    assert!(!send(&mut w, 1, Command::PinObservation { observed_cursor: cursor, sources: vec![u64::MAX] }).ok);
+}
+
+#[test]
+fn latest_site_observation_survives_recent_memory_churn_and_updates_only_locally() {
+    let mut w = world();
+    let initial = w.players[0].site_observations.clone();
+    for n in 0..40 { w.perceive(0, 0, "speech", Some(2), 0, json!({"text":format!("remark {n}")})).unwrap(); }
+    assert!(w.players[0].memories.iter().all(|p| p.kind != "site"));
+    assert_eq!(serde_json::to_value(&w.players[0].site_observations).unwrap(), serde_json::to_value(&initial).unwrap());
+    let pos = w.players[0].position;
+    let old_source = initial.iter().find(|p| p.location == pos).unwrap().source;
+    w.observe_site(0).unwrap();
+    assert!(w.players[0].site_observations.iter().find(|p| p.location == pos).unwrap().source > old_source);
+    assert_eq!(w.players[0].site_observations.len(), initial.len());
+}
+
+#[test]
+fn atomic_observation_captures_context_and_evidence_at_one_authority_revision() {
+    let mut w = world();
+    for _ in 0..300 { w.observe_site(0).unwrap(); }
+    let cursor = w.participants[&1].cursor;
+    assert!(send(&mut w, 1, Command::ReadObservation { after: 0, limit: 256 }).ok);
+    let lease = w.participants[&1].evidence_leases.last().unwrap().clone();
+    assert_eq!(lease.observed_cursor, cursor);
+    assert_eq!(lease.experiences.len(), 128);
+    assert_eq!(lease.observation["latest_cursor"], cursor);
+    assert_eq!(lease.observation["context"]["player"]["food"], w.players[0].food);
+    assert!(lease.observation.get("read_observations").is_none());
+    let source = lease.experiences.iter().find(|e| e.kind == "perception" && e.data["kind"] == "site").unwrap().source;
+    for _ in 0..300 { w.observe_site(0).unwrap(); }
+    let motive = w.players[0].motive.clone();
+    assert!(send(&mut w, 1, Command::Reflect { expected_revision: 0, observed_cursor: cursor,
+        reflections: vec![Reflection { source, interpretation: "This is evidence from my captured read".into(),
+            caution_delta: 0, trust_delta: 0, belief: None }], goal: Some("A revised near-term intention".into()) }).ok);
+    assert_eq!(w.players[0].motive, motive);
+    assert_eq!(w.players[0].current_goal.as_deref(), Some("A revised near-term intention"));
+}
+
+#[test]
+fn entry_condition_persists_through_departure_reload_and_child_patch() {
+    let mut w = world();
+    let start = w.players[0].position;
+    install(&mut w, 1, Node::When { condition: Condition::At { location: start },
+        child: Box::new(node(Action::go(5))) });
+    w.advance_ms(250);
+    assert_eq!(w.players[0].position, start + 1);
+    assert!(w.players[0].execution.as_ref().unwrap().state.entries.contains("root"));
+    let mut w: World = serde_json::from_value(json!(w)).unwrap();
+    let revision = w.players[0].generation;
+    assert!(send(&mut w, 1, Command::PatchSubtree { expected_revision: revision, reason: "change destination while retaining entry".into(),
+        path: "root/when".into(), subtree: node(Action::go(4)) }).ok);
+    for _ in 0..4 { w.advance_ms(250); }
+    assert_eq!(w.players[0].position, 4);
+    assert!(w.players[0].execution.as_ref().unwrap().state.entries.is_empty());
+}
+
+#[test]
+fn higher_priority_branch_suspends_and_resumes_an_entry_condition_commitment() {
+    let mut w = world();
+    let start = w.players[0].position;
+    install(&mut w, 1, Node::Priority { children: vec![
+        Node::Guard { condition: Condition::Resource { resource: policy::Resource::Energy, comparison: policy::Comparison::Below, value: 20 },
+            child: Box::new(node(Action::new(Skill::Rest))) },
+        Node::When { condition: Condition::At { location: start }, child: Box::new(node(Action::go(5))) }
+    ] });
+    w.advance_ms(250);
+    assert_eq!(w.players[0].position, start + 1);
+    w.players[0].energy = 0;
+    w.wake(1);
+    w.advance_ms(250);
+    assert_eq!(w.players[0].position, start + 1);
+    assert!(w.players[0].execution.as_ref().unwrap().state.entries.contains("root/1"));
+    assert!(w.events.iter().any(|e| e.kind == "action_interrupted"));
+    w.players[0].energy = 80;
+    w.wake(1);
+    for _ in 0..5 { w.advance_ms(250); }
+    assert_eq!(w.players[0].position, 5);
+    assert!(w.players[0].execution.as_ref().unwrap().state.entries.is_empty());
+}
+
+#[test]
+fn activity_reports_net_resource_flow_without_exposing_other_actors() {
+    let mut w = world();
+    w.event(Some(1), "resource_change", vec![], json!({"location":0,"food_delta":-3}));
+    w.event(Some(1), "resource_change", vec![], json!({"location":0,"food_delta":3}));
+    w.event(Some(2), "resource_change", vec![], json!({"location":5,"food_delta":99}));
+    let a = w.context(0)["recent_activity"].clone();
+    assert_eq!(a["own_site_food_changes"], json!([{"location":0,"withdrawn":3,"deposited":3,"net_added":0}]));
+    assert!(!a.to_string().contains("99"));
+    w.timing.time_ms = 60_001;
+    assert_eq!(w.context(0)["recent_activity"]["own_site_food_changes"], json!([]));
+}
+
+#[test]
+fn activity_distinguishes_stationary_move_success_from_displacement() {
+    let mut w = world();
+    let position = w.players[0].position;
+    install(&mut w, 1, node(Action::go(position)));
+    w.advance_ms(250);
+    assert_eq!(w.context(0)["recent_activity"]["completed_moves_without_displacement"], 1);
+    install(&mut w, 1, node(Action::go(position+1)));
+    w.advance_ms(250);
+    assert_eq!(w.context(0)["recent_activity"]["position_changes"], 1);
+    assert_eq!(w.context(0)["recent_activity"]["completed_moves_without_displacement"], 1);
+}
+
+#[test]
+fn completed_urgent_action_does_not_erase_a_suspended_journey() {
+    let mut w = world();
+    let start = w.players[0].position;
+    install(&mut w, 1, Node::Priority { children: vec![
+        Node::Guard { condition: Condition::Resource { resource: policy::Resource::Hunger, comparison: policy::Comparison::AtLeast, value: 60 },
+            child: Box::new(node(Action::new(Skill::Eat))) },
+        Node::Sequence { children: vec![
+            Node::When { condition: Condition::At { location: start }, child: Box::new(node(Action::go(4))) },
+            Node::Reconsider { reason: "journey completed".into() }
+        ] }
+    ] });
+    w.advance_ms(250);
+    w.advance_ms(250);
+    assert_eq!(w.players[0].position, start+2);
+    w.players[0].hunger = 60;
+    w.players[0].food = 1;
+    w.wake(1);
+    w.advance_ms(250);
+    assert_eq!(w.players[0].food, 0);
+    assert!(w.players[0].execution.as_ref().unwrap().state.entries.contains("root/1/0"));
+    let mut w: World = serde_json::from_value(json!(w)).unwrap();
+    for _ in 0..10 { w.advance_ms(250); }
+    assert_eq!(w.players[0].position, 4, "resume the journey after the higher-priority meal completes");
+}
+
+#[test]
+fn false_continuous_guard_cancels_a_suspended_entry_condition() {
+    let mut w = world();
+    let start = w.players[0].position;
+    install(&mut w, 1, Node::Guard {
+        condition: Condition::Resource { resource: policy::Resource::Fear, comparison: policy::Comparison::Below, value: 50 },
+        child: Box::new(Node::When { condition: Condition::At { location: start }, child: Box::new(node(Action::go(4))) })
+    });
+    w.advance_ms(250);
+    assert_eq!(w.players[0].position, start+1);
+    w.players[0].fear = 80;
+    w.wake(1);
+    w.advance_ms(250);
+    assert!(w.players[0].execution.as_ref().unwrap().state.entries.is_empty());
+    w.players[0].fear = 0;
+    w.wake(1);
+    w.advance_ms(250);
+    assert_eq!(w.players[0].position, start+1, "cancelled entry condition must be checked again");
+}
 #[test]
 fn receipts_reconnect_epochs_and_bounded_trace_gaps() {
     let mut w = world();

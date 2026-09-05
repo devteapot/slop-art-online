@@ -394,7 +394,7 @@ async fn create_run(app: &App) -> Result<String, String> {
     }
 
     std::fs::write(dir.join("mode.json"),json!({"run":run,"db":app.db,"server":app.server,"evidence_mode":if app.config.is_some() || !app.controllers.is_empty(){"live_model"}else{"live_fixture"},"note":"actual authoritative run; fixture explicitly test-authored; no model substitution"}).to_string()).map_err(|_|"mode write failed")?;
-    let private = app.root.join(".local/credentials");
+    let private = std::env::var("BEVY_DEV_CREDENTIAL_DIR").map(PathBuf::from).unwrap_or_else(|_| app.root.join(".local/credentials"));
     std::fs::create_dir_all(&private).map_err(|_| "private session directory unavailable")?;
     let mut links = vec![];
     let entries: Vec<(u32, &str, Option<&Config>)> = if app.controllers.is_empty() {
@@ -462,6 +462,9 @@ async fn create_run(app: &App) -> Result<String, String> {
     Ok(run)
 }
 async fn fresh(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
+    if std::env::var_os("BEVY_DEV_ARCHIVE_ONLY").is_some() {
+        return Err(error("completed experiment viewer; create new runs through the batch coordinator"));
+    }
     let _guard = app.mutation.lock().await;
     let (id, mut s) = session(&app, &headers)?;
     if !s.observer {
@@ -591,6 +594,7 @@ async fn index(State(app): State<Shared>) -> Response {
     files(State(app), Path("index.html".into())).await
 }
 async fn background(app: Shared) {
+    let mut recorded = HashMap::new();
     loop {
         tokio::time::sleep(std::time::Duration::from_millis(600)).await;
         let runs = app.runs.lock().unwrap().clone();
@@ -598,12 +602,14 @@ async fn background(app: Shared) {
             let Ok(w) = state(&app, &run).await else {
                 continue;
             };
+            let revision = (w.next_event, w.timing.updates, w.stopped);
+            if recorded.get(&run) == Some(&revision) { continue; }
             if let Ok(events) = audit(&app, &run).await {
                 let dir = app.out.join(&run);
-                let _ = std::fs::write(
+                if std::fs::write(
                     dir.join("snapshot.json"),
                     json!({"world":w,"events":events}).to_string(),
-                );
+                ).is_ok() { recorded.insert(run, revision); }
             }
         }
     }
@@ -629,7 +635,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .as_str()
             .ok_or("resume database missing")?
             .to_owned(),
-        None => format!("sim-bevy-db-{}", now()),
+        None => format!("sim-bevy-db-{}-{}", now(), std::process::id()),
     };
     let server = "http://127.0.0.1:3101".to_string();
     let out = root
@@ -686,8 +692,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
         *app.run.lock().unwrap() = create_run(&app).await?;
     }
-    write_active(&app)?;
-    tokio::spawn(background(app.clone()));
+    if std::env::var_os("BEVY_DEV_ARCHIVE_ONLY").is_none() {
+        write_active(&app)?;
+        tokio::spawn(background(app.clone()));
+    }
     let router = Router::new()
         .route("/", get(index))
         .route("/api/session", post(bootstrap))

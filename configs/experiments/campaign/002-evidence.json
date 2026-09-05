@@ -1,0 +1,23 @@
+{
+  "hypothesis": "Persistent latest local observations and bounded evidence leases prevent forgetting and source expiry during deliberation, without weakening revision or privacy checks.",
+  "evaluation": "Compare lost-source rejections, observation lease failures, accepted learning, prompt size, survivor and action outcomes. Reject authority errors, cross-actor evidence acceptance or stale learning acceptance. Both variants retain explicit mechanics descriptions.",
+  "minutes": 5,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "explicit-contract",
+      "port": 18935,
+      "implementation": "output/society-lab/implementations/explicit-contract-m1-10",
+      "scenario": "scenarios/luna-arena-matrix.json",
+      "controllers": "configs/experiments/luna-arena-matrix.json"
+    },
+    {
+      "id": "evidence",
+      "port": 18936,
+      "implementation": "output/society-lab/implementations/evidence-m1-11",
+      "scenario": "scenarios/luna-arena-matrix.json",
+      "controllers": "configs/experiments/luna-arena-matrix.json"
+    }
+  ]
+}

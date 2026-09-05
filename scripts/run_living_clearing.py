@@ -30,13 +30,22 @@ def main():
     parser.add_argument("--output", type=Path, required=True, help="new evidence directory")
     parser.add_argument("--port", type=int, default=18908)
     parser.add_argument("--minutes", type=int, default=5, choices=range(1, 61), metavar="1..60")
-    parser.add_argument("--calls-per-actor", type=int, default=18, choices=range(2, 31), metavar="2..30")
+    parser.add_argument("--calls-per-actor", type=int, default=18, choices=range(0, 101), metavar="0..100", help="0 means no model-call cap; wall-time deadline still applies")
     parser.add_argument("--scenario", type=Path, default=Path("scenarios/woodland-pathfinding.json"))
     parser.add_argument("--npc-runtime", choices=("host", "pilot"), default="host",
                         help="host runs the normal NPC harness; pilot reproduces the older shared schedule")
     parser.add_argument("--controllers", type=Path, help="per-actor config manifest; enables matched serial matrix schedules")
+    parser.add_argument("--implementation", type=Path, help="verified frozen implementation bundle")
+    parser.add_argument("--start-gate", type=Path, help="wait for the batch coordinator to release all ready variants")
+    parser.add_argument("--serial-ms", type=int, default=15000)
+    parser.add_argument("--recovery", action="store_true", help="enable explicit model feedback and priority retry after failed behavior proposals")
     args = parser.parse_args()
     os.chdir(ROOT)
+    implementation=args.implementation.resolve() if args.implementation else ROOT
+    if args.implementation:
+        from experiment_artifacts import verify
+        verify(implementation)
+    if args.serial_ms < 1000:raise SystemExit("serial interval must be at least 1000 ms")
     scenario = args.scenario.resolve()
     scenario_data = json.loads(scenario.read_text())
     if not args.controllers and [p["id"] for p in scenario_data["players"][:2]] != [1, 2]:
@@ -71,13 +80,18 @@ def main():
         BEVY_DEV_OUTPUT=str(out), BEVY_DEV_SCENARIO=str(scenario),
         BEVY_DEV_MAX_TICKS=str(args.minutes * 24), BEVY_DEV_TICK_MS="50",
         SAO_HARNESS_MANUAL="1" if args.npc_runtime == "pilot" else "0",
-        SAO_HARNESS_MAX_CALLS=str(args.calls_per_actor),
-        BEVY_DEV_MODULE="target/wasm32-unknown-unknown/release/server_module.wasm",
+        BEVY_DEV_CREDENTIAL_DIR=str(ROOT / ".local/credentials"),
+        BEVY_DEV_MODULE=str(implementation / "target/wasm32-unknown-unknown/release/server_module.wasm"),
     )
+    env["SAO_HARNESS_RECOVERY"] = "1" if args.recovery else "0"
+    if args.calls_per_actor:
+        env["SAO_HARNESS_MAX_CALLS"]=str(args.calls_per_actor)
+    else:
+        env.pop("SAO_HARNESS_MAX_CALLS",None)
     if controllers:
-        env.update(BEVY_DEV_CONTROLLERS=str(args.controllers.resolve()),SAO_HARNESS_SERIAL_MS="15000",
+        env.update(BEVY_DEV_CONTROLLERS=str(args.controllers.resolve()),SAO_HARNESS_SERIAL_MS=str(args.serial_ms),
                    SAO_HARNESS_START_FILE=str(out / "start-harness"))
-    binaries = [ROOT / "target/debug" / name for name in
+    binaries = [implementation / "target/debug" / name for name in
                 ("sao-dev-client", "sao-agent-mcp", "examples/participant_live_agent")]
     for binary in binaries:
         if not binary.is_file():
@@ -92,8 +106,9 @@ def main():
         path = out / f"actor-{c['actor']}-config.json"
         write(path,c["config"])
         actor_configs[c["actor"]] = path
-    report = dict(phase="starting", url=env["BEVY_DEV_PUBLIC_URL"], minutes=args.minutes,
-                  tick_ms=50, max_model_calls=args.calls_per_actor * len(actor_ids),
+    report = dict(recovery=args.recovery, phase="starting", url=env["BEVY_DEV_PUBLIC_URL"], minutes=args.minutes,
+                  tick_ms=50, max_model_calls=args.calls_per_actor * len(actor_ids) if args.calls_per_actor else None,
+                  implementation=str(implementation),
                   scenario=str(scenario), npc_runtime=args.npc_runtime,
                   controller_schedules={"builtin":"host independent behavior/communication/learning loops" if args.npc_runtime == "host" else "pilot serial rotation", "external":"separate MCP process; pilot serial rotation"},
                   model="gpt-5.6-luna", calls=[], evidence_mode="genuine model calls; no fixture policy",
@@ -102,18 +117,20 @@ def main():
                              for p in [*binaries, ROOT / "Cargo.lock", config,
                                        ROOT / env["BEVY_DEV_MODULE"],
                                        scenario]})
+    if args.implementation:
+        report["implementation_manifest"]=json.loads((implementation / "implementation.json").read_text())
     if controllers:
         report["artifacts"].update({str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in [args.controllers.resolve(),*actor_configs.values()]})
         write(out / "controller-manifest.json", controllers)
         report.update(arenas=scenario_data["arenas"],controller_manifest=str(args.controllers.resolve()),
-                      controller_schedules={"builtin":"host serial behavior/communication/learning; 15s after each completion", "external":"MCP process serial behavior/communication/learning; 15s after each completion"},
+                      controller_schedules={"builtin":f"host serial behavior/communication/learning; {args.serial_ms}ms after each completion", "external":f"MCP process serial behavior/communication/learning; {args.serial_ms}ms after each completion"},
                       reasoning_note="Requested effort sent explicitly; endpoint acceptance is not effective-effort attestation")
     write(out / "pilot.json", report)
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     host_log = (out / "host.log").open("w")
     host = subprocess.Popen([str(binaries[0])], env=env, stdout=host_log, stderr=host_log,
-                            start_new_session=True)
+                            start_new_session=True, cwd=implementation)
     report["host_pid"] = host.pid
     active = None
     participants = []
@@ -158,7 +175,7 @@ def main():
                 job.wait(timeout=3)
 
     def deliberate(actor, role):
-        if stop.is_set() or not alive(actor) or counters[actor] >= args.calls_per_actor:
+        if stop.is_set() or not alive(actor) or (args.calls_per_actor and counters[actor] >= args.calls_per_actor):
             return
         counters[actor] += 1
         number = counters[actor]
@@ -170,7 +187,7 @@ def main():
                       phase="started", journal=str(folder.relative_to(out)))
         with (folder / "process.log").open("w") as log:
             job = subprocess.Popen([str(binaries[2]), side, participant_by_actor[actor]["session_file"], str(actor_configs.get(actor,config)), role, str(folder)],
-                                   env=actor_env, stdout=log, stderr=log, start_new_session=True)
+                                   env=actor_env, stdout=log, stderr=log, start_new_session=True, cwd=implementation)
             with lock:
                 jobs[actor] = job
                 report["calls"].append(record)
@@ -190,13 +207,13 @@ def main():
         # Separate participant schedules. Failed outputs remain evidence; later calls
         # receive fresh observations and receipts, never silently repaired proposals.
         deliberate(actor, "behavior")
-        if controllers and stop.wait(15): return
+        if controllers and stop.wait(args.serial_ms/1000): return
         roles = ("communication", "learning", "behavior")
         index = 0
-        while not stop.is_set() and alive(actor) and counters[actor] < args.calls_per_actor:
+        while not stop.is_set() and alive(actor) and (not args.calls_per_actor or counters[actor] < args.calls_per_actor):
             deliberate(actor, roles[index % len(roles)])
             index += 1
-            if stop.wait(15 if controllers else 45):
+            if stop.wait(args.serial_ms/1000 if controllers else 45):
                 break
 
     try:
@@ -209,6 +226,12 @@ def main():
         participants = json.loads((out / active["run"] / "participants.json").read_text())
         participant_by_actor = {p["actor"]: p for p in participants}
         write(out / "pilot.json", report)
+        write(out / "ready.json",dict(run=active["run"],ready_at=time.time()))
+        if args.start_gate:
+            gate_deadline=time.monotonic()+180
+            while not args.start_gate.exists():
+                if host.poll() is not None or stop.wait(.1) or time.monotonic()>gate_deadline:
+                    raise RuntimeError("Batch start gate was not released")
         print(f"Observer ready at {report['url']}; starting at the native 50 ms scheduled interval (20 Hz target)", flush=True)
         # No model-readiness gate. The authority advances even while initial reasoning
         # is pending; subsequent calls cannot pause or slow the simulation clock.
@@ -216,7 +239,7 @@ def main():
         if controllers: (out / "start-harness").touch()
         report.update(phase="running", started_at=time.time(), deadline_at=time.time() + args.minutes * 60)
         write(out / "pilot.json", report)
-        print(f"Live pilot running for {args.minutes} minutes; bounded to {report['max_model_calls']} model calls", flush=True)
+        print(f"Live pilot running for {args.minutes} minutes; model-call cap: {report['max_model_calls'] or 'none'}", flush=True)
         deadline = time.monotonic() + args.minutes * 60
         last_tick = None
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(actor_ids)) as pool:
@@ -266,6 +289,12 @@ def main():
                     for participant in participants:
                         if participant["role"] == "builtin":
                             call("sim_revoke_client", participant["identity"])
+                final_world = state()
+                rows = json.loads(control("sql", f"SELECT json FROM sim_audit WHERE run = '{active['run']}'", "--format", "json"))
+                final_events = sorted((json.loads(row[0]) for row in rows[0]["rows"]), key=lambda e: e["id"])
+                write(out / active["run"] / "final-snapshot.json", dict(world=final_world, events=final_events))
+                report["final_time_ms"] = final_world["timing"]["time_ms"]
+                report["final_snapshot"] = str(out / active["run"] / "final-snapshot.json")
                 reasoning = list((out / active["run"] / "reasoning").rglob("harness-*.json"))
                 report["builtin_model_calls"] = len(reasoning)
                 report["builtin_journal"] = str(out / active["run"] / "reasoning")

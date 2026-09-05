@@ -127,6 +127,7 @@ pub fn setup(mut game: ResMut<Game>) {
 }
 // Share panel bounds with world picking and wheel handling; hidden panels never capture input.
 pub fn captures(game: &Game, pos: Vec2, width: f32, height: f32) -> bool {
+    if game.compact { return game.inspect && pos.x > width-428.; }
     pos.y < 92.
         || pos.y > height - 112.
         || (game.sessions_open && pos.x < 258.)
@@ -154,6 +155,7 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
         "CONNECTING"
     };
     commands.spawn((UiRoot, GlobalZIndex(10), Node {position_type:PositionType::Absolute,width:percent(100),height:percent(100),..default()})).with_children(|root| {
+        if !game.compact {
         root.spawn((Node {position_type:PositionType::Absolute,left:px(12),right:px(12),top:px(12),height:px(70),padding:UiRect::all(px(12)),justify_content:JustifyContent::SpaceBetween,..row()},BackgroundColor(PANEL))).with_children(|bar| {
             bar.spawn(column()).with_children(|p| {text(p,"S A O  /  BEHAVIOR LAB",20.,INK);text(p,evidence,12.,MUTED);});
             bar.spawn(row()).with_children(|p| {
@@ -164,7 +166,8 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
                 if !game.archive {button(p,"Detach",Click::Detach,false);}
             });
         });
-        if game.sessions_open {
+        }
+        if game.sessions_open && !game.compact {
             root.spawn((Node{position_type:PositionType::Absolute,left:px(12),top:px(92),bottom:px(112),width:px(234),padding:UiRect::all(px(14)),overflow:Overflow::scroll_y(),..column()},BackgroundColor(PANEL),Panel(0),ScrollPosition(Vec2::new(0.,game.scroll[0])))).with_children(|left| {
                 if let Some(arenas)=game.snapshot["arenas"].as_array().filter(|a| !a.is_empty()) {
                     title(left,"EXPERIMENT MATRIX");
@@ -215,6 +218,7 @@ Left to right: low, medium, high",12.,MUTED);
                 text(p,"The session continues on the server. Choose a session to inspect, or peek into its world whenever you want.",16.,MUTED);
             });
         }
+        if !game.compact {
         root.spawn((Node{position_type:PositionType::Absolute,left:px(12),right:px(12),bottom:px(12),height:px(88),padding:UiRect::axes(px(16),px(8)),..column()},BackgroundColor(PANEL))).with_children(|bottom| {
             bottom.spawn(row()).with_children(|p| {
                 text(p,format!("{:.1}s / {:.0}s · {}",game.snapshot["time_ms"].as_u64().unwrap_or(game.snapshot["tick"].as_u64().unwrap_or(0) * 2500) as f64 / 1000.,game.snapshot["max_ticks"].as_u64().unwrap_or(0) as f64 * 2.5,if game.snapshot["stopped"]==true{"FINISHED"}else if game.snapshot["paused"]==true{"PAUSED"}else{"RUNNING"}),15.,INK);
@@ -227,10 +231,11 @@ Left to right: low, medium, high",12.,MUTED);
             });
             text(bottom,if game.typing{format!("Say: {} | Enter to send",game.draft)}else{format!("{} · {}",game.snapshot["run"].as_str().unwrap_or("Connecting"),game.status)},12.,MUTED);
         });
+        }
     });
 }
 fn mind(panel: &mut ChildSpawnerCommands, p: &Value) {
-    title(panel, "MOTIVE / GOAL");
+    title(panel, "MOTIVE");
     text(
         panel,
         p["motive"]
@@ -239,6 +244,10 @@ fn mind(panel: &mut ChildSpawnerCommands, p: &Value) {
         14.,
         INK,
     );
+    if let Some(goal) = p["current_goal"].as_str() {
+        title(panel, "CURRENT GOAL");
+        text(panel, goal, 14., INK);
+    }
     if p.get("health").is_none() {
         return;
     }
@@ -292,6 +301,13 @@ fn mind(panel: &mut ChildSpawnerCommands, p: &Value) {
         13.,
         INK,
     );
+    if let Some(activity) = p.get("recent_activity").filter(|a| a.is_object()) {
+        title(panel, "RECENT ACTIVITY");
+        text(panel, format!("{} position changes · {} moves without displacement", number(&activity["position_changes"]), number(&activity["completed_moves_without_displacement"])), 12., MUTED);
+        for site in activity["own_site_food_changes"].as_array().into_iter().flatten().take(3) {
+            text(panel, format!("Cell {}: withdrew {}, deposited {} · net {}", number(&site["location"]), number(&site["withdrawn"]), number(&site["deposited"]), number(&site["net_added"])), 12., INK);
+        }
+    }
     title(panel, "BELIEFS — MAY BE WRONG");
     if let Some(beliefs) = p["beliefs"].as_array() {
         if beliefs.is_empty() {
@@ -317,7 +333,8 @@ fn describe(node: &Value) -> String {
     match node["kind"].as_str().unwrap_or("") {
         "priority" => "PRIORITY · recheck in order".into(),
         "sequence" => "SEQUENCE · remembers progress".into(),
-        "guard" => format!("IF {}", condition(&node["condition"])),
+        "guard" => format!("WHILE {}", condition(&node["condition"])),
+        "when" => format!("START WHEN {}", condition(&node["condition"])),
         "action" => {
             let a = &node["action"];
             format!(
@@ -372,7 +389,7 @@ fn outline(node: &Value, path: String, depth: usize, rows: &mut Vec<(String, usi
         }
     }
     if let Some(child) = node.get("child") {
-        outline(child, format!("{path}/guard"), depth + 1, rows);
+        outline(child, format!("{path}/{}", if node["kind"] == "when" { "when" } else { "guard" }), depth + 1, rows);
     }
 }
 fn tree(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {

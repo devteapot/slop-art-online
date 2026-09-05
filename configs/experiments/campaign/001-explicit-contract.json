@@ -1,0 +1,11 @@
+{
+  "hypothesis": "Explicit shared resource scales and reactive execution semantics reduce inverted hunger conditions and interrupted journeys without supplying a survival policy.",
+  "evaluation": "Compare generated hunger guards, first-policy latency, actual destination arrivals, starvation with carried food, malformed outputs and learning rejection causes. Reject any engine/isolation regression. Survival is one measure, not the acceptance criterion.",
+  "minutes": 5,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {"id":"baseline", "port":18931, "implementation":"output/society-lab/implementations/baseline-m1-9", "scenario":"scenarios/luna-arena-matrix.json", "controllers":"configs/experiments/luna-arena-matrix.json"},
+    {"id":"explicit-contract", "port":18932, "implementation":"output/society-lab/implementations/explicit-contract-m1-10", "scenario":"scenarios/luna-arena-matrix.json", "controllers":"configs/experiments/luna-arena-matrix.json"}
+  ]
+}

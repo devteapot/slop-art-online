@@ -1,5 +1,7 @@
 # Simulation foundation: vision and design
 
+Worldbuilding reference: [world vision and initial seed](WORLD_VISION.md) records the agreed factions, gods, mortality, population renewal and knowledge preservation. [From first society to living world](WORLD_ROADMAP.md) maps experiments toward that target. These extend this architectural vision; proposed seed details are explicitly distinguished from agreed rules and implemented behavior.
+
 Current scripting implementation: [scripted gameplay](SCRIPTED_GAMEPLAY.md), rules `m1-7-time.1`, integrates the existing foundation skills and policies with the selected Rhai runtime. Public authoring and divine progression remain future work.
 
 Timing: [native SpacetimeDB scheduling and simulation time](SIMULATION_TIMING.md) separates the 20 Hz target update cadence from scripted gameplay rates. Model reasoning never slows or gates world advancement.
@@ -9,6 +11,12 @@ Previous participant iteration:  [participant agent runtimes](PARTICIPANT_AGENTS
 This is the authoritative design entry point for SAO / Slop Art Online. The longer-term multiplayer game vision remains a living world that the user can observe and join. The development order changes: establish a concrete, inspectable simulation of individuals first, then build richer UI and gameplay around it. This document describes the target, not completed implementation.
 
 Read next: [current implementation and gaps](CURRENT_STATE.md), [audit and experiment contract](AUDIT_AND_EXPERIMENTS.md), and [milestones and work queue](TODO.md). [ADR 007](adr/007-simulation-first-foundation.md) records this change in direction; older ADRs preserve historical rationale. [Stack reference](../STACK_REFERENCE.md) documents the retained Rust architecture.
+
+## Mechanics independent of social setting
+
+Keep reusable scripted mechanics and balancing separate from world-seed content. Named factions, doctrines and the first setting's AGI narrative must not be prerequisites baked into survival, resource costs, skill progression, knowledge or population mechanics. A seed supplies inhabitants, cultures, assets, relationships and initial permissions using generic definitions. These layers interact through ordinary intentions, capability checks and authorized effects, including later law changes. See the [world-seed contract](WORLD_VISION.md#reusable-mechanics-and-world-seeds--agreed).
+
+Build toward validated, versioned seed generation while keeping the first authored AI-lab world the immediate content target. Reuse existing scenarios; do not require a second setting or a general procedural generation system before the first society proof.
 
 ## Modularity and independent inspection
 
@@ -162,6 +170,6 @@ The bounded M1 choices are now recorded in [ADR 008](adr/008-m1-authoritative-su
 | How are model responses correlated, authorized, versioned, and rejected when stale? | Untrusted output cannot directly determine world effects. |
 | Which audit storage, retention/export format, query interface, and observer layout? | Durable causal history and common evidence; not just a short scratch buffer. |
 | How are runs isolated, clocked, initialized, and replayed? | Real authoritative core, recorded inputs/outputs, explicit reproducibility limits. |
-| How do animals and monsters fit? | Do not assume a settled taxonomy or universal intelligence ladder. |
+| How do animals and monsters fit? | Same player entity with initially simpler LLM controllers; species details and cognitive progression remain open. See [world vision](WORLD_VISION.md). |
 
 Implementation status belongs in [CURRENT_STATE.md](CURRENT_STATE.md); execution order and completion evidence belong in [TODO.md](TODO.md). Keep these boundaries when updating the docs.

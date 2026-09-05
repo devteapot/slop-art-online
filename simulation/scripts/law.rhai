@@ -20,12 +20,25 @@ fn outcome(status, reason, remaining, state, effects, progress) {
 fn done(effects) { outcome("success", "", 0, (), effects, #{}) }
 fn failed(reason) { outcome("failure", reason, 0, (), [], #{}) }
 fn metabolism(p) { #{hunger:bounded(p.hunger+2*p.pulses,0,100), fear:bounded(p.fear-p.pulses,0,100)} }
-fn aftermath(c) { #{starvation:if c.actor.hunger >= 100 { 8*c.pulses } else { 0 }, hazard:if c.site == () { 0 } else { c.site.hazard*c.pulses }} }
+fn food_renewal(c) { bounded(c.source.amount*c.pulses,0,if c.food < c.source.capacity { c.source.capacity-c.food } else { 0 }) }
+fn aftermath(c) {
+    let cold=0;
+    if c.weather != () && c.time_ms >= c.weather.cold_after_ms {
+        let shelter=if c.site == () { 0 } else { c.site.shelter };
+        let boundary=if c.weather.cold_after_ms > 0 { c.weather.cold_after_ms-1 } else { 0 };
+        let period=c.elapsed_ms/c.pulses;
+        let cold_pulses=bounded(c.time_ms/period-boundary/period,0,c.pulses);
+        if shelter < c.weather.shelter_required { cold=c.weather.damage_per_pulse*cold_pulses; }
+    }
+    #{starvation:if c.actor.hunger >= 100 { 8*c.pulses } else { 0 },
+      hazard:if c.site == () { 0 } else { c.site.hazard*c.pulses }, cold:cold}
+}
 fn on_damage(c) {
     let p=c.actor;
     let health=bounded(p.health-c.amount,0,100);
     #{health:health, fear:bounded(p.fear+15,0,100), caution:bounded(p.caution+1+p.introspection/25,0,100),
-      learn_danger:c.nature != "starvation", confidence:95, interrupt:true, dead:health == 0}
+      learn_danger:c.nature != "starvation" && c.nature != "weather", confidence:95,
+      interrupt:health == 0 || (c.nature != "starvation" && c.nature != "weather"), dead:health == 0}
 }
 fn reflection(c) {
     #{caution:bounded(c.actor.caution+c.caution_delta,0,100), trust:bounded(c.trust+c.trust_delta,-100,100), confidence:60}
@@ -41,7 +54,7 @@ fn visible(c) {
     c.viewer.health > 0 && (c.other.health > 0 || c.kind == "death") && c.viewer.id != c.other.id &&
     c.distance <= (if c.kind == "speech" { 2 } else { 1 })
 }
-fn observation(site) { #{food:if site == () { 0 } else { site.food }} }
+fn observation(site) { #{food:if site == () { 0 } else { site.food }, shelter:if site == () { 0 } else { site.shelter }, buildable:site != ()} }
 fn memory_limit(c) { 16 }
 fn reconsider_interval(p) { 4+(100-p.introspection)/10 }
 fn bootstrap(p) { if p.food > 0 && p.hunger >= 25 { "eat" } else if p.energy < 35 { "rest" } else { "wait" } }
@@ -64,11 +77,11 @@ fn guard(c) {
             for belief in p.beliefs { if belief.claim.location == location { return [belief.claim.danger,[belief.source]]; } }
             [false,[]]
         },
-        "food_at" => {
+        "food_at" | "shelter_at" => {
             let found=false; let enough=false; let source=0;
-            for memory in p.memories {
+            for memory in p.site_observations {
                 if memory.kind == "site" && memory.location == cond.location {
-                    found=true; enough=memory.content.food >= cond.minimum; source=memory.source;
+                    found=true; enough=memory.content[if cond.kind == "food_at" { "food" } else { "shelter" }] >= cond.minimum; source=memory.source;
                 }
             }
             [found && enough,if found { [source] } else { [] }]
@@ -97,9 +110,10 @@ fn valid_location(map, p) {
     true
 }
 fn validate_condition(c) {
-    if (c.kind == "at" || c.kind == "food_at" || c.kind == "danger") && c.location != () &&
+    if (c.kind == "at" || c.kind == "food_at" || c.kind == "shelter_at" || c.kind == "danger") && c.location != () &&
        !valid_location(c.map, c.location) { return "condition location outside known world bounds"; }
     if c.kind == "resource" && (c.value < 0 || c.value > 100) { return "resource threshold must be 0..100"; }
+    if c.kind == "shelter_at" && (c.minimum < 1 || c.minimum > 12) { return "shelter minimum must be 1..12"; }
     if c.kind == "food_at" && (c.minimum < 1 || c.minimum > 100) { return "food minimum must be 1..100"; }
     ""
 }
@@ -107,7 +121,7 @@ fn validate_condition(c) {
 // Periods are game content, independent of how frequently the authority wakes.
 fn system_periods_ms(c) { #{needs_ms:2500, hazard_ms:2500} }
 fn action_interval_ms(skill) {
-    switch skill { "move" => 250, "gather" | "eat" | "speak" => 1000, "attack" => 750, _ => 2500 }
+    switch skill { "move" => 250, "gather" | "eat" | "speak" | "give" | "deposit" | "observe" => 1000, "attack" => 750, _ => 2500 }
 }
 fn retry_delay_ms(c) { 250 }
 fn paced(result, c, interval) {

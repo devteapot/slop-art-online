@@ -5,7 +5,8 @@ fn step(c) {
     let count=law::bounded(elapsed/interval,0,c.remaining);
     let remaining=c.remaining-count;
     let state=#{elapsed_ms:elapsed % interval};
-    let energy=law::bounded(c.actor.energy+12*count,0,100);
+    let shelter=if c.site == () { 0 } else { c.site.shelter };
+    let energy=law::bounded(c.actor.energy+(12+2*shelter)*count,0,100);
     let effects=if count > 0 { [#{kind:"actor",fields:#{energy:energy}}] } else { [] };
     let status=if remaining > 0 { "running" } else { "success" };
     let progress=if count > 0 { #{remaining:remaining} } else { #{} };

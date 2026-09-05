@@ -1,5 +1,7 @@
 # Implementation state and legacy baseline
 
+Active society campaign: [experiment lab and contracts](SOCIETY_LAB.md), current candidate `m1-16-exposure.1`. Versioned implementations run paired, isolated trials; the dashboard supports session and map comparison. Four-character trials now have conserved food giving/deposits, shared shelter, cold, atomic private observations, controller feedback, resumable task progress and gradual exposure that preserves action progress. The society milestone remains open; individual trial successes are not yet robust. Earlier implementation sections below are historical.
+
 Current arena iteration: [isolated reasoning/environment matrix](ARENA_MATRIX.md), rules `m1-9-arenas.1`: six sealed arenas in one world, Luna low/medium/high × open/corridors, one host NPC and one external MCP player per arena, scoped terrain/perception/effects, per-actor provider configs and labels off by default. See the linked evidence and experimental limitations.
 
 Current spatial prototype: [surveyed grid and mixed-controller experiment](GRID_PATHFINDING.md), rules `m1-8-grid.1`, adds a real 24×16 obstacle map, shared shortest-route movement, and an observer with no character. The default pilot now runs one host-managed LLM NPC and one external MCP player. The earlier timing/scripting evidence below retains its historical scope.

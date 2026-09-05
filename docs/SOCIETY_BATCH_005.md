@@ -1,0 +1,9 @@
+# Batch 005: progress summaries and failure-driven reconsideration
+
+The recovery-m1-13 repeat lost all four characters by 302.503 seconds. This demonstrates that its previous three-survivor result was not robust. The progress-m1-14 candidate finished eight minutes with two survivors: Mira 72 health and Iri 74. It made 50 recorded calls (857,929 reported tokens) versus 39 (603,229 tokens) in the repeat. Neither had detected engine, scope or conservation violations; the candidate had no rejected participant commands.
+
+Net summaries reduced some previous extremes of withdrawal/deposit cycling, but useful cooperation still failed to stabilize. Candidate totals: Mira gathered 48, deposited 10 and ate 10; Tovan 22/11/6; Iri 8/0/10; Renn 20/3/17. These are gross counts and include movement of already-existing food. The repeat left 54 carried food on dead Tovan and 37 on dead Iri, while camp ran empty.
+
+A remaining execution limitation is that priority preemption discarded unfinished sequence cursors and entry commitments, including when a higher-priority action completed successfully at the root. A journey could therefore restart at a camp-only first step while the character was already on the road. The next candidate suspends lower tasks across priority preemption and retains their progress. A false continuous guard or failed sequence still cancels its subtree. Targeted checks cover urgent eating followed by journey resumption, reload, and continuous cancellation. Skill descriptions now explicitly state the already-existing ability to eat carried food and rest at any position; neither requires camp.
+
+Resource pressure, food nutrition and weather timing remain unchanged in the next comparison. This is an execution-contract test, not a survival claim from easier conditions. The society milestone remains open.

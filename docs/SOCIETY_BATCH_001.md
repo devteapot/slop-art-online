@@ -1,0 +1,11 @@
+# Batch 001: explicit shared contract
+
+Two frozen implementations ran the same six Luna low/medium/high × open/corridor arenas concurrently for 300 seconds, with no model-call cap. Baseline m1-9: 8/12 survived, 112 calls, 1450 authority updates. Explicit contract m1-10: 12/12 survived, 126 calls, 1506 updates; one survivor had 76 health. No engine errors or scope violations were detected.
+
+The candidate describes the hunger scale and continuous guard/sequence semantics; it supplies no behavior tree or survival strategy. All twelve candidate actors consumed six food units and gathered additional food (8–43 units), demonstrating action execution beyond initial stocks. In the baseline one actor never ate despite gathering 35, and another died after only two meals while gathering 31. Other deaths involved insufficient acquisition or overconsumption. This supports keeping the descriptive change provisionally; one stochastic run per cell does not establish a general effect size or a reasoning-level ranking.
+
+Learning still rejected eight submissions for lost trace sources in **each** implementation. Baseline also rejected three stale learning revisions, one trust update without a perceived counterpart, one duplicate interpretation, one overlarge composite, and one post-death command. Candidate had one invalid patch path and one stale policy revision. Generated-output and cancellation errors remain in journals; they were not silently repaired. Candidate speech produced 21 heard perceptions from 36 speech events; baseline produced 15 from 32. This is contact, not yet evidence of material cooperation.
+
+Decision: retain the explicit contract and test durable local observations plus bounded evidence leases next. These address concrete representation/latency failures without choosing goals for characters. Compare lease success, source-expiry rejection, prompt volume, survival, useful movement and unchanged privacy/authority checks. A successful learning submission must still pass epoch, revision, duplicate, counterpart and provenance checks.
+
+Artifacts: `output/society-lab/batches/001-explicit-contract/{baseline,explicit-contract}` contains frozen implementation references, configs, full authority snapshots and provider journals. Completed sessions remain visible in the experiment dashboard while their hosts run.

@@ -14,7 +14,9 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
             .iter()
             .enumerate()
             .map(|(i, p)| {
-                let mut value = world.context(i)["player"].clone();
+                let context = world.context(i);
+                let mut value = context["player"].clone();
+                value["recent_activity"] = context["recent_activity"].clone();
                 value["controller"] = json!(p.controller);
                 if let Some(arena)=world.arena_for_actor(p.id) {
                     value["arena"]=json!(arena.label);
@@ -26,7 +28,9 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
     } else {
         let index = index.unwrap();
         let me = &world.players[index];
-        let mut own = world.context(index)["player"].clone();
+        let context = world.context(index);
+        let mut own = context["player"].clone();
+        own["recent_activity"] = context["recent_activity"].clone();
         own["controller"] = json!(me.controller);
         let mut visible = BTreeMap::new();
         for memory in &me.memories {
@@ -39,13 +43,17 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
         std::iter::once(own).chain(visible.into_values()).collect()
     };
     let sites = if observer {
-        json!(world.sites)
+        json!(world.sites.iter().map(|site| {
+            let mut value=json!(site);
+            value["food_source"]=json!(world.initial.food_sources.iter().find(|s|s.position==site.position));
+            value
+        }).collect::<Vec<_>>())
     } else {
         let me = &world.players[index.unwrap()];
         let mut known = BTreeMap::new();
-        for memory in &me.memories {
+        for memory in &me.site_observations {
             if memory.kind == "site" {
-                known.insert(memory.location, json!({"position":memory.location,"food":memory.content["food"],"observed_tick":memory.tick}));
+                known.insert(memory.location, json!({"position":memory.location,"food":memory.content["food"],"shelter":memory.content["shelter"],"food_source":memory.content["food_source"],"observed_tick":memory.tick}));
             }
         }
         json!(known.into_values().collect::<Vec<_>>())

@@ -1,0 +1,27 @@
+{
+  "hypothesis": "The exposure candidate can reproduce a materially cooperative surviving group with fresh Luna decisions. A matched faster-reconsideration run tests sensitivity to controller latency without changing world mechanics.",
+  "evaluation": "Repeat m1-16 at the prior 15-second post-completion cadence and compare m1-16 at a 5-second cadence, with the same four-character world and Luna medium. Check net provision, shelter use, heard speech and learning, depleted-site recovery, final health and permanent death. Record the cadence difference explicitly; faster inference opportunities are not an engine improvement.",
+  "minutes": 8,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "exposure-repeat",
+      "port": 18948,
+      "implementation": "output/society-lab/implementations/exposure-m1-16",
+      "scenario": "scenarios/society-first-winter.json",
+      "controllers": "configs/experiments/society-four-medium.json",
+      "recovery": true,
+      "serial_ms": 15000
+    },
+    {
+      "id": "responsive",
+      "port": 18949,
+      "implementation": "output/society-lab/implementations/exposure-m1-16",
+      "scenario": "scenarios/society-first-winter.json",
+      "controllers": "configs/experiments/society-four-medium.json",
+      "recovery": true,
+      "serial_ms": 5000
+    }
+  ]
+}

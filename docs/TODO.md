@@ -1,5 +1,7 @@
 # Simulation roadmap and work queue
 
+Long-horizon development order: [from first society to living world](WORLD_ROADMAP.md), based on the [world vision](WORLD_VISION.md). Its seven stages refine the broad later-stage headings below without resetting accepted M1 work. The [small-society iteration plan](SOCIETY_ITERATION_PLAN.md) remains the immediate experiment scope; reproduction, archives and faction-world expansion are staged future work.
+
 Current participant iteration: [participant agent runtimes](PARTICIPANT_AGENTS.md) and [ADR 013](adr/013-participant-agent-runtimes.md). Rules `m1-5` use one scoped API for the built-in harness and external MCP runtimes, with independent tree, speech and learning operations. Earlier evidence and legacy runner descriptions below retain their historical scope.
 
 Read the [authoritative vision](SIMULATION_VISION.md) first, then [source-backed gaps](CURRENT_STATE.md) and the [audit/experiment contract](AUDIT_AND_EXPERIMENTS.md). This replaces the former v1 → v2 “COMPLETE” checklist as the active roadmap. Historical migration rationale remains in [ADR 005](adr/005-npc-architecture-v2.md); existing tables and routes are reusable scaffolding, not completion of this milestone.
@@ -92,7 +94,7 @@ These are staged growth areas after the foundation; richer presentation can deve
 | M3 — Society and scale | Explore cooperation, conflict, economy and social structures; optimize measured bottlenecks, model budgets, and populations. | Explain individual and collective outcomes with causal history; maintain tooling as mechanics evolve. |
 | M4 — Optional 2.5D/3D presentation | Reconsider the official visual interface after the 2D behavior/mechanics foundation is solid. | No second simulation authority; rendering and content must integrate with skills and perception. |
 
-Reincarnation/souls are explicitly deferred, with no implementation commitment. Animal/monster taxonomy and cognitive range remain design questions. [ADR 006](adr/006-hy-world-2-integration-assessment.md) is deferred world-generation research, not a required dependency or current product recommendation.
+Reincarnation/souls are explicitly deferred, with no implementation commitment. Animals and monsters use the shared player entity with initially simpler LLM controllers; detailed species and cognitive progression remain design questions. [ADR 006](adr/006-hy-world-2-integration-assessment.md) is deferred world-generation research, not a required dependency or current product recommendation.
 
 ## Supporting technical debt
 

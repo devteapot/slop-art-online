@@ -1,0 +1,25 @@
+{
+  "hypothesis": "Net activity summaries reveal unproductive transfer loops, while new failures or harm trigger a behavior opportunity even when a waiting fallback hides the failed task.",
+  "evaluation": "Compare recovery-m1-13 with progress-m1-14 on the same four-person supplied clearing. Check actual net food relocation and consumption, reduced cycling, response to new harm/failures, society survival and social choices. Summaries must contain only actor-owned effects and retain correct conservation; all model proposals remain validated unchanged.",
+  "minutes": 8,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "recovery-repeat",
+      "port": 18941,
+      "implementation": "output/society-lab/implementations/recovery-m1-13",
+      "scenario": "scenarios/society-first-winter.json",
+      "controllers": "configs/experiments/society-four-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "progress",
+      "port": 18942,
+      "implementation": "output/society-lab/implementations/progress-m1-14",
+      "scenario": "scenarios/society-first-winter.json",
+      "controllers": "configs/experiments/society-four-medium.json",
+      "recovery": true
+    }
+  ]
+}

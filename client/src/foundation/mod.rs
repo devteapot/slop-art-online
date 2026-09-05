@@ -29,6 +29,7 @@ pub struct Game {
     pub follow: bool,
     pub arena: Option<String>,
     pub frame: bool,
+    pub compact: bool,
     pub scroll: [f32; 2],
 }
 impl Default for Game {
@@ -55,6 +56,7 @@ impl Default for Game {
             follow: false,
             arena: None,
             frame: false,
+            compact: false,
             scroll: [0.; 2],
         }
     }

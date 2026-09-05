@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use shared::module_bindings::{
     sim_participant_command, DbConnection, SimParticipantStateTableAccess,
 };
-use simulation::participant::{Receipt, Request};
+use simulation::participant::{Command, Receipt, Request, API_VERSION};
 use spacetimedb_sdk::{DbContext, Table};
 use std::{
     path::Path,
@@ -75,6 +75,19 @@ impl ParticipantService {
                 _ => tokio::time::sleep(Duration::from_millis(15)).await,
             }
         };
+        if v["capabilities"].as_array().is_some_and(|xs| xs.iter().any(|x| x == "read_observation")) {
+            let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| "clock unavailable")?.as_nanos();
+            let request_id = format!("read-{nonce}");
+            let receipt = self.command(Request { api_version: API_VERSION.into(), request_id: request_id.clone(),
+                control_epoch: v["control_epoch"].as_u64().ok_or("missing control epoch")?,
+                command: Command::ReadObservation { after, limit } }).await?;
+            if !receipt.ok { return Err(receipt.error.unwrap_or_else(|| "read rejected".into())); }
+            let current = self.current()?;
+            return current["read_observations"].as_array().into_iter().flatten()
+                .find(|read| read["request_id"] == request_id).map(|read| read["observation"].clone())
+                .ok_or_else(|| "atomic read no longer retained; refresh".into());
+        }
         if after > v["latest_cursor"].as_u64().unwrap_or(0) {
             return Err("cursor ahead of character trace".into());
         }
@@ -93,6 +106,18 @@ impl ParticipantService {
         v["next_cursor"] = json!(next);
         v["gap"] = json!(after.saturating_add(1) < v["oldest_cursor"].as_u64().unwrap_or(1));
         v["experiences"] = json!(entries);
+        if v["capabilities"].as_array().is_some_and(|xs| xs.iter().any(|x| x == "pin_observation")) {
+            let observed_cursor = v["latest_cursor"].as_u64().ok_or("missing cursor")?;
+            let sources = v["experiences"].as_array().unwrap().iter()
+                .filter_map(|e| e["source"].as_u64()).collect();
+            let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| "clock unavailable")?.as_nanos();
+            let receipt = self.command(Request { api_version: API_VERSION.into(),
+                request_id: format!("observe-{nonce}"), control_epoch: v["control_epoch"].as_u64().unwrap(),
+                command: Command::PinObservation { observed_cursor, sources } }).await?;
+            if !receipt.ok { return Err(receipt.error.unwrap_or_else(|| "evidence lease rejected".into())); }
+            v["evidence_lease"] = json!({"observed_cursor": observed_cursor, "duration_ms": v["limits"]["evidence_lease_ms"]});
+        }
         Ok(v)
     }
     pub async fn command(&self, request: Request) -> Result<Receipt, String> {

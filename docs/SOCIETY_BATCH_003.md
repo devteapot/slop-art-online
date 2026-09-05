@@ -1,0 +1,13 @@
+# Batch 003: first winter, society gate not met
+
+Four distinct Luna-medium characters, two internal and two external, shared a clearing and faced forecast cold after three minutes. The supplied world had 128 food in three sites plus ten carried units; shortage had zero site food and the same carried stock. Neither run received a behavior tree from the operator.
+
+The supplied world completed 12 shared shelter units: Iri contributed five, Mira four, Renn three. Their speech acknowledged the common result, and Tovan's accepted reflection cited Iri's request to gather and Mira's offer of sharing when revising his goal toward keeping camp supplied. This is evidence of shared work and heard speech influencing stated intent. It did not become sustained provisioning: there were no deposits or direct gifts. Tovan's first proposed foraging tree was malformed JSON and never installed; the fixed role rotation did not promptly retry behavior. Other trips stopped after one step because continuously checked departure conditions became false.
+
+Only Mira survived the roughly eight-minute supplied run (42 health, eight food). Tovan died carrying two food, Renn died without food after leaving camp, and Iri eventually exhausted her stock. The shortage world lost all four by 290 seconds. Tovan and Iri made five public deposits, showing voluntary transfer mechanics; Mira nevertheless died carrying six. The shortage is capable of permanent failure, but neither result establishes a functioning society.
+
+Atomic observations no longer have the client-read/retain race. One apparent lost-source rejection was a fabricated source (1776, twice) absent from the model's actual supplied trace, not expiration of valid evidence; another was correctly rejected for stale learning revision. No engine or arena-scope errors were detected. Provider failures and malformed outputs remain in original journals.
+
+Next changes: `when` applies a condition only when its task starts, while `guard` continues to provide ongoing checks and higher priorities can interrupt either. Controller feedback supplies the precise previous error and unmodified failed output as controller diagnostics, and prioritizes a fresh behavior attempt after rejection or execution failure. The model still authors every new plan. Near-term learning goals remain separate from each character's underlying motive.
+
+A final capture now reads the paused authority synchronously after controller shutdown into `final-snapshot.json`. This fixes a race where the periodic observer export lagged the end of the experiment. Earlier asynchronous summaries are retained as `pre-final-capture-result.json` when superseded; the final supplied simulation duration is 479.918 seconds.

@@ -10,7 +10,8 @@ from pathlib import Path
 def summarize(out):
     pilot=json.loads((out/'pilot.json').read_text())
     run=out/pilot['run']
-    snapshot=json.loads((run/'snapshot.json').read_text())
+    snapshot_path=run/'final-snapshot.json' if (run/'final-snapshot.json').is_file() else run/'snapshot.json'
+    snapshot=json.loads(snapshot_path.read_text())
     world,events=snapshot['world'],snapshot['events']
     arenas=world['initial']['arenas'];width=world['initial']['map']['width']
     arena_by_actor={actor:arena for arena in arenas for actor in arena['actors']}
@@ -59,7 +60,7 @@ def summarize(out):
                 total_calls=sum(map(len,calls.values())),scope_violations=violations,
                 engine_errors=[dict(id=e['id'],kind=e['kind'],data=e['data']) for e in events if e['kind'] in ('script_error','script_tick_failed')],
                 limitations='One sample per cell; requested effort only; distinct runtime prompts/personas; incomplete calls retain started journals and supervisor cancellation evidence.',
-                artifact_hashes={str(p.relative_to(out)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [run/'snapshot.json',*out.glob('actor-*-config.json')]})
+                artifact_hashes={str(p.relative_to(out)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [snapshot_path,*out.glob('actor-*-config.json')]})
     (out/'LIVE_RESULT.json').write_text(json.dumps(result,indent=2)+'\n')
     print(json.dumps({k:result[k] for k in ['run','phase','seconds','updates','total_calls','scope_violations','engine_errors']},indent=2))
     for cell in cells:print(cell['label'],[(p['name'],p['health'],len(p['calls'])) for p in cell['players']])

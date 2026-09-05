@@ -1,0 +1,24 @@
+{
+  "hypothesis": "Explicit entry conditions and controller feedback let characters recover from interrupted journeys and failed proposals, enabling continued provisioning after the initial shelter project.",
+  "evaluation": "Compare unchanged social-m1-12 with recovery-m1-13 using the same four characters and resources. Track use of when, journey arrivals, plan parse errors followed by successful new proposals, model calls diverted for failed execution, food transfers/deposits and beneficiaries, accepted evidence-grounded learning, deaths and provider failures. Reject engine/authority regressions. Require sustained social effects and a fresh repeat before declaring the society milestone.",
+  "minutes": 8,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "original",
+      "port": 18939,
+      "implementation": "output/society-lab/implementations/social-m1-12",
+      "scenario": "scenarios/society-first-winter.json",
+      "controllers": "configs/experiments/society-four-medium.json"
+    },
+    {
+      "id": "recovery",
+      "port": 18940,
+      "implementation": "output/society-lab/implementations/recovery-m1-13",
+      "scenario": "scenarios/society-first-winter.json",
+      "controllers": "configs/experiments/society-four-medium.json",
+      "recovery": true
+    }
+  ]
+}

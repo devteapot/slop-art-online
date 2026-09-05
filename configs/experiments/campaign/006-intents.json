@@ -1,0 +1,25 @@
+{
+  "hypothesis": "A task that preserves sequence progress across urgent actions can finish a food-delivery journey instead of becoming stranded after eating or resting.",
+  "evaluation": "Compare progress-m1-14 with intents-m1-15 using unchanged four-character world, food, cold and model settings. Check actual interruptions followed by resumption, net food transport, shared consumption, stability of intent, survival and invalid outputs. Continuous false guards must still cancel tasks; no authored survival policy is installed.",
+  "minutes": 8,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "progress-repeat",
+      "port": 18943,
+      "implementation": "output/society-lab/implementations/progress-m1-14",
+      "scenario": "scenarios/society-first-winter.json",
+      "controllers": "configs/experiments/society-four-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "intents",
+      "port": 18944,
+      "implementation": "output/society-lab/implementations/intents-m1-15",
+      "scenario": "scenarios/society-first-winter.json",
+      "controllers": "configs/experiments/society-four-medium.json",
+      "recovery": true
+    }
+  ]
+}
