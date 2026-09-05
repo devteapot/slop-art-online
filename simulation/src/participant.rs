@@ -30,6 +30,8 @@ pub struct QueuedSpeech {
     pub cause: u64,
     pub text: String,
     pub expires_tick: u64,
+    #[serde(default)]
+    pub execution: Option<Execution>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Receipt {
@@ -369,7 +371,7 @@ impl World {
                     reflections: vec![],
                 };
                 self.validate(i, &d, &self.players[i].memories)?;
-                for action in tree.validate()? {
+                for action in tree.validate_with_laws(&self.scripts)? {
                     if let Some(target) = action.target {
                         if !self.players[i]
                             .memories
@@ -405,15 +407,15 @@ impl World {
                 );
             }
             Command::Speak { text, expires_tick } => {
-                if text.trim().is_empty()
-                    || text.chars().count() > 1000
-                    || *expires_tick <= self.tick
-                    || *expires_tick > self.tick + 30
-                {
-                    return Err(
-                        "speech requires 1..1000 characters and expiry within next 30 ticks".into(),
-                    );
+                let error: String = self.scripts.law(
+                    "validate_dialogue",
+                    json!({"text":text,"expires_tick":expires_tick,"tick":self.tick}),
+                )?;
+                if !error.is_empty() {
+                    return Err(error);
                 }
+                self.scripts
+                    .validate_action(&Action::say(text), &self.players[i])?;
                 if self.participants[&actor].speech.len() >= 8 {
                     return Err("speech queue full".into());
                 }
@@ -425,6 +427,7 @@ impl World {
                         cause,
                         text: text.clone(),
                         expires_tick: *expires_tick,
+                        execution: None,
                     });
                 self.event(
                     Some(actor),
@@ -516,26 +519,11 @@ impl World {
                 self.validate(i, &d, &evidence)?;
                 let before = json!({"caution":self.players[i].caution,"relationships":self.players[i].relationships,"beliefs":self.players[i].beliefs,"goal":self.players[i].motive});
                 for r in reflections {
-                    self.players[i].caution =
-                        (self.players[i].caution + r.caution_delta).clamp(0, 100);
-                    if let Some(from) = evidence
+                    let from = evidence
                         .iter()
                         .find(|e| e.source == r.source)
-                        .and_then(|e| e.from)
-                    {
-                        let t = self.players[i].relationships.entry(from).or_default();
-                        *t = (*t + r.trust_delta).clamp(-100, 100);
-                    }
-                    if let Some(b) = &r.belief {
-                        self.players[i]
-                            .beliefs
-                            .retain(|k| k.claim.location != b.location);
-                        self.players[i].beliefs.push(Known {
-                            claim: b.clone(),
-                            source: r.source,
-                            confidence: 60,
-                        });
-                    }
+                        .and_then(|e| e.from);
+                    self.reflect_identity(i, r, from)?;
                     self.participants
                         .get_mut(&actor)
                         .unwrap()
@@ -571,9 +559,9 @@ impl World {
             );
         }
     }
-    pub(super) fn deliver_queued_speech(&mut self) {
+    pub(super) fn deliver_queued_speech(&mut self) -> Result<(), String> {
         if !self.participant_mode {
-            return;
+            return Ok(());
         }
         for i in 0..self.players.len() {
             let actor = self.players[i].id;
@@ -605,12 +593,35 @@ impl World {
                 continue;
             }
             if !self.participants[&actor].speech.is_empty() {
-                let q = self.participants.get_mut(&actor).unwrap().speech.remove(0);
-                self.emit_speech(i, q.cause, &q.text);
+                let mut q = self.participants.get_mut(&actor).unwrap().speech.remove(0);
+                let action = Action::say(&q.text);
+                let mut execution = q.execution.take().unwrap_or_else(|| Execution {
+                    decision: q.cause,
+                    tree: Behavior::Action(action.clone()),
+                    cursor: 0,
+                    attempt: None,
+                    remaining: 0,
+                    script: None,
+                    policy: None,
+                    state: PolicyState::default(),
+                });
+                // Dialogue has its own continuation; preserve the independent behavior policy.
+                let policy = self.players[i].execution.clone();
+                let status = self.execute_action(i, &mut execution, action);
+                self.players[i].execution = policy;
+                if status == Status::Running {
+                    q.execution = Some(execution);
+                    self.participants
+                        .get_mut(&actor)
+                        .unwrap()
+                        .speech
+                        .insert(0, q);
+                }
             }
         }
+        Ok(())
     }
-    pub(super) fn emit_speech(&mut self, i: usize, cause: u64, text: &str) {
+    pub(super) fn emit_speech(&mut self, i: usize, cause: u64, text: &str) -> Result<(), String> {
         let pos = self.players[i].position;
         let actor = self.players[i].id;
         if self.participant_mode {
@@ -623,7 +634,7 @@ impl World {
             json!({"text":text,"position":pos}),
         );
         for j in 0..self.players.len() {
-            if j != i && self.players[j].health > 0 && (self.players[j].position - pos).abs() <= 2 {
+            if self.visible(j, i, "speech")? {
                 self.perceive(
                     j,
                     event,
@@ -631,9 +642,10 @@ impl World {
                     Some(actor),
                     pos,
                     json!({"text":text,"speaker":self.players[i].name}),
-                );
+                )?;
                 self.request(j, "heard free-form speech");
             }
         }
+        Ok(())
     }
 }

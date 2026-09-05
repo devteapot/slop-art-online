@@ -165,7 +165,7 @@ fn keyboard(
                         game.camera = (game.camera + d as f32).clamp(-10., 10.);
                         game.follow = false;
                     } else if !game.archive {
-                        net.intent(json!({"skill":"move","destination":(game.own_position()+d).clamp(-10,10),"duration":1}));
+                        net.intent(json!({"skill":"move","destination":game.own_position().saturating_add(d),"duration":1}));
                     }
                 }
                 KeyCode::KeyI => game.inspect = !game.inspect,

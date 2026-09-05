@@ -69,6 +69,19 @@ M1 is complete only when the integrated proof passes, not when its component tab
 
 See [verification and reproduction](BEVY_BROWSER_CLIENT.md). This is a local development client; the external HTML inspector remains supporting audit tooling.
 
+## Scripted gameplay foundation: next gate
+
+[ADR 016](adr/016-scripted-gameplay-rhai.md) selects Rhai and fixes the engine/gameplay boundary. Introduce this foundation before expanding the action vocabulary or broader world mechanics. This gate supersedes treating scripting as optional later extensibility.
+
+- [x] Select the language using executable native and SpacetimeDB WASM embedding evidence; see [verification](SCRIPTING_VERIFICATION.md).
+- [x] Integrate Rhai into the actual simulation with transactional effects, explicit continuation, bounded interpreter calls and scoped host capabilities. [Executed integration](SCRIPTED_GAMEPLAY.md).
+- [x] Introduce source/version history and an authoritative registry, next-tick law activation, action/dependency pinning, current-law validation, operator authentication and audit rejection.
+- [x] Migrate all seven active foundation skills (including queued speech), world policy formulas and subjective guard evaluation. Keep one execution path with dynamic skill references and current catalog descriptions for controllers.
+- [x] Verify composed movement and law changes in a real database, failure/rollback and existing Bevy movement/speech. Retain source/state and reject incompatible old rule versions.
+- [ ] Before public player authoring, add aggregate allocation/work accounting and capability/progression policies that enforce composition costs against untrusted definitions.
+- [ ] Prove player discovery, authoring and communicated learning of a new technique, with a law change during execution and visible character response. Operator-authored fixtures do not prove this experience.
+- [ ] Measure parsing/evaluation, transactional cloning and persistence cost; design history retention and explicit migration before expanding population or content volume.
+
 ## Later stages
 
 These are staged growth areas after the foundation; richer presentation can develop alongside broader mechanics rather than waiting for all society or scaling work to finish.

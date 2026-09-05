@@ -496,8 +496,8 @@ pub fn click(
         }
     } else if let Ok(point) = camera.0.viewport_to_world_2d(camera.1, pos) {
         // Only the lane is actionable: surrounding scenery does not invent 2D navigation rules.
-        if point.y.abs() <= 80. && point.x.abs() <= 10.5 * CELL {
-            let cell = (point.x / CELL).round().clamp(-10., 10.) as i32;
+        if point.y.abs() <= 80. {
+            let cell = (point.x / CELL).round() as i32;
             net.intent(json!({"skill":"move","destination":cell,"duration":1}));
             game.status = format!("Move to {cell} submitted; waiting for authority");
             game.dirty = true;

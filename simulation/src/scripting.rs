@@ -1,0 +1,497 @@
+//! Versioned authoritative content. Runtime caches are disposable; only source/state is persisted.
+use crate::{Action, Player};
+use rhai::{packages::Package, Dynamic, Engine, Scope, AST};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    rc::Rc,
+};
+
+pub const API_VERSION: u32 = 1;
+const MAX_SOURCE: usize = 32_768;
+const MAX_CONTENT: usize = 1_048_576;
+const MAX_VALUE: usize = 65_536;
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct DefinitionRef {
+    pub id: String,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Definition {
+    pub id: String,
+    pub revision: u64,
+    pub source: String,
+    pub description: String,
+    #[serde(default)]
+    pub dependencies: Vec<DefinitionRef>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Update {
+    pub api_version: u32,
+    pub expected_revision: u64,
+    pub definitions: Vec<Definition>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Pending {
+    pub activate_tick: u64,
+    pub definitions: Vec<Definition>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Registry {
+    pub api_version: u32,
+    pub revision: u64,
+    pub active: BTreeMap<String, u64>,
+    pub history: BTreeMap<String, BTreeMap<u64, Definition>>,
+    pub pending: Option<Pending>,
+}
+
+impl Default for Registry {
+    fn default() -> Self {
+        let mut registry = Self {
+            api_version: API_VERSION,
+            revision: 1,
+            active: BTreeMap::new(),
+            history: BTreeMap::new(),
+            pending: None,
+        };
+        for (id, source, description) in [
+            (
+                "law",
+                include_str!("../scripts/law.rhai"),
+                "Default laws: action duration 1..5 ticks; movement and condition locations -10..10; resource thresholds 0..100; food minimum 1..100; speech expiry within 30 ticks. Skill descriptions describe their authored defaults; current law validation is authoritative.",
+            ),
+            (
+                "move",
+                include_str!("../scripts/move.rhai"),
+                "destination -10..10; costs 1 energy per cell; continues to destination",
+            ),
+            (
+                "gather",
+                include_str!("../scripts/gather.rhai"),
+                "gather one food at own position; costs 4 energy",
+            ),
+            (
+                "eat",
+                include_str!("../scripts/eat.rhai"),
+                "consume one carried food; reduce hunger by 35",
+            ),
+            (
+                "rest",
+                include_str!("../scripts/rest.rhai"),
+                "restore 12 energy per tick; duration 1..5",
+            ),
+            (
+                "wait",
+                include_str!("../scripts/wait.rhai"),
+                "intentional inactivity; duration 1..5",
+            ),
+            (
+                "speak",
+                include_str!("../scripts/speak.rhai"),
+                "free-form text; hearing determined by active world law",
+            ),
+            (
+                "attack",
+                include_str!("../scripts/attack.rhai"),
+                "perceived target at same position; costs 8 energy; deals 20 damage",
+            ),
+        ] {
+            registry.insert(Definition {
+                id: id.into(),
+                revision: 1,
+                source: source.into(),
+                description: description.into(),
+                dependencies: vec![],
+            });
+        }
+        registry
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Invocation {
+    pub definition: DefinitionRef,
+    #[serde(default)]
+    pub state: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StepResult {
+    pub status: crate::Status,
+    pub reason: String,
+    pub remaining: u32,
+    pub state: Value,
+    pub effects: Vec<Effect>,
+    pub progress: Value,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Effect {
+    Actor { fields: BTreeMap<String, i32> },
+    SiteFood { value: i32 },
+    Observe,
+    Speech { text: String },
+    Damage { target: u32, amount: i32 },
+}
+
+struct Compiled {
+    engine: Engine,
+    ast: AST,
+}
+thread_local! { static CACHE: RefCell<BTreeMap<String, Rc<Compiled>>> = RefCell::new(BTreeMap::new()); }
+
+fn engine() -> Engine {
+    let mut e = Engine::new_raw();
+    rhai::packages::StandardPackage::new().register_into_engine(&mut e);
+    e.set_max_operations(50_000);
+    e.set_max_call_levels(24);
+    e.set_max_expr_depths(32, 24);
+    e.set_max_string_size(8_192);
+    e.set_max_array_size(512);
+    e.set_max_map_size(512);
+    e.set_max_variables(128);
+    for symbol in ["eval", "import", "print", "debug"] {
+        e.disable_symbol(symbol);
+    }
+    e
+}
+
+fn compile(e: &Engine, source: &str) -> Result<AST, String> {
+    if source.len() > MAX_SOURCE {
+        return Err("script source exceeds 32 KiB".into());
+    }
+    // Content contract is functions only. No top-level code runs on installation or cache rebuild.
+    e.compile(source)
+        .map(|ast| ast.clone_functions_only())
+        .map_err(|e| format!("script compile: {e}"))
+}
+
+// Explicit numeric conversion is essential: serde_json/arbitrary_precision serializes
+// numbers through a private map token, which generic Serde-to-Rhai conversion preserves.
+fn input_value(value: Value) -> Result<Dynamic, String> {
+    Ok(match value {
+        Value::Null => Dynamic::UNIT,
+        Value::Bool(v) => v.into(),
+        Value::String(v) => v.into(),
+        Value::Number(v) => v
+            .as_i64()
+            .ok_or("script numbers must fit signed 64-bit integers")?
+            .into(),
+        Value::Array(v) => v
+            .into_iter()
+            .map(input_value)
+            .collect::<Result<rhai::Array, _>>()?
+            .into(),
+        Value::Object(v) => v
+            .into_iter()
+            .map(|(k, v)| Ok((k.into(), input_value(v)?)))
+            .collect::<Result<rhai::Map, String>>()?
+            .into(),
+    })
+}
+
+fn output_value(value: Dynamic, depth: usize, remaining: &mut usize) -> Result<Value, String> {
+    if depth > 32 || *remaining == 0 {
+        return Err("script output nesting/node budget exceeded".into());
+    }
+    *remaining -= 1;
+    if value.is_unit() {
+        return Ok(Value::Null);
+    }
+    if value.is::<bool>() {
+        return Ok(json!(value.cast::<bool>()));
+    }
+    if value.is::<rhai::INT>() {
+        return Ok(json!(value.cast::<rhai::INT>()));
+    }
+    if value.is::<rhai::ImmutableString>() {
+        return Ok(json!(value.cast::<rhai::ImmutableString>().to_string()));
+    }
+    if value.is::<rhai::Array>() {
+        return value
+            .cast::<rhai::Array>()
+            .into_iter()
+            .map(|v| output_value(v, depth + 1, remaining))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Value::Array);
+    }
+    if value.is::<rhai::Map>() {
+        return value
+            .cast::<rhai::Map>()
+            .into_iter()
+            .map(|(k, v)| Ok((k.to_string(), output_value(v, depth + 1, remaining)?)))
+            .collect::<Result<serde_json::Map<String, Value>, String>>()
+            .map(Value::Object);
+    }
+    Err("script output must be plain serializable data".into())
+}
+
+impl Registry {
+    fn insert(&mut self, d: Definition) {
+        self.active.insert(d.id.clone(), d.revision);
+        self.history
+            .entry(d.id.clone())
+            .or_default()
+            .insert(d.revision, d);
+    }
+    pub fn resolve(&self, id: &str) -> Result<DefinitionRef, String> {
+        Ok(DefinitionRef {
+            id: id.into(),
+            revision: *self.active.get(id).ok_or("unknown scripted skill")?,
+        })
+    }
+    fn definition(&self, r: &DefinitionRef) -> Result<&Definition, String> {
+        self.history
+            .get(&r.id)
+            .and_then(|v| v.get(&r.revision))
+            .ok_or("script revision unavailable".into())
+    }
+    fn dependencies<'a>(
+        &'a self,
+        d: &'a Definition,
+        visiting: &mut BTreeSet<String>,
+        result: &mut BTreeMap<String, &'a Definition>,
+    ) -> Result<(), String> {
+        if visiting.len() >= 16 || !visiting.insert(d.id.clone()) {
+            return Err("cyclic or too-deep script dependencies".into());
+        }
+        for reference in &d.dependencies {
+            if reference.id == "law" {
+                return Err("laws are always resolved from the active revision".into());
+            }
+            let dep = self.definition(reference)?;
+            if result
+                .get(&dep.id)
+                .is_some_and(|old| old.revision != dep.revision)
+            {
+                return Err("conflicting dependency revisions".into());
+            }
+            self.dependencies(dep, visiting, result)?;
+            result.insert(dep.id.clone(), dep);
+        }
+        visiting.remove(&d.id);
+        Ok(())
+    }
+    fn compiled(&self, r: &DefinitionRef) -> Result<Rc<Compiled>, String> {
+        if self.api_version != API_VERSION {
+            return Err("unsupported scripting API".into());
+        }
+        let definition = self.definition(r)?;
+        let law = self.definition(&self.resolve("law")?)?;
+        let mut dependencies = BTreeMap::new();
+        self.dependencies(definition, &mut BTreeSet::new(), &mut dependencies)?;
+        let key = format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&(API_VERSION, definition, law, &dependencies))
+                    .map_err(|e| e.to_string())?
+            )
+        );
+        if let Some(value) = CACHE.with(|cache| cache.borrow().get(&key).cloned()) {
+            return Ok(value);
+        }
+        let mut e = engine();
+        let law_ast = compile(&e, &law.source)?;
+        let module =
+            rhai::Module::eval_ast_as_new(Scope::new(), &law_ast, &e).map_err(|e| e.to_string())?;
+        e.register_static_module("law", module.into());
+        for (id, dep) in dependencies {
+            let ast = compile(&e, &dep.source)?;
+            let module =
+                rhai::Module::eval_ast_as_new(Scope::new(), &ast, &e).map_err(|e| e.to_string())?;
+            e.register_static_module(id, module.into());
+        }
+        let ast = if r.id == "law" {
+            law_ast
+        } else {
+            compile(&e, &definition.source)?
+        };
+        let compiled = Rc::new(Compiled { engine: e, ast });
+        CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if cache.len() >= 32 {
+                cache.clear();
+            }
+            cache.insert(key, compiled.clone());
+        });
+        Ok(compiled)
+    }
+    pub fn call<T: DeserializeOwned>(
+        &self,
+        reference: &DefinitionRef,
+        function: &str,
+        input: Value,
+    ) -> Result<T, String> {
+        if serde_json::to_vec(&input).map_err(|e| e.to_string())?.len() > MAX_VALUE {
+            return Err("script input budget exceeded".into());
+        }
+        let compiled = self.compiled(reference)?;
+        let input = input_value(input)?;
+        let result: Dynamic = compiled
+            .engine
+            .call_fn(&mut Scope::new(), &compiled.ast, function, (input,))
+            .map_err(|e| {
+                format!(
+                    "script {}@{}::{function}: {e}",
+                    reference.id, reference.revision
+                )
+            })?;
+        let result = output_value(result, 0, &mut 8_192)?;
+        if serde_json::to_vec(&result)
+            .map_err(|e| e.to_string())?
+            .len()
+            > MAX_VALUE
+        {
+            return Err("script output budget exceeded".into());
+        }
+        serde_json::from_value(result).map_err(|e| format!("script output contract: {e}"))
+    }
+    pub fn law<T: DeserializeOwned>(&self, function: &str, input: Value) -> Result<T, String> {
+        self.call(&self.resolve("law")?, function, input)
+    }
+    pub fn validate_action(&self, action: &Action, actor: &Player) -> Result<(), String> {
+        let reference = self.resolve(action.skill.id())?;
+        if reference.id == "law" {
+            return Err("world law is not a skill".into());
+        }
+        let reason: String = self.call(
+            &reference,
+            "validate",
+            json!({"action":action,"actor":facts(actor)}),
+        )?;
+        if reason.is_empty() {
+            Ok(())
+        } else {
+            Err(reason)
+        }
+    }
+    pub fn stage(&mut self, update: Update, tick: u64) -> Result<(), String> {
+        if update.api_version != API_VERSION
+            || update.expected_revision != self.revision
+            || self.pending.is_some()
+        {
+            return Err(
+                "stale scripting revision, unsupported API, or update already pending".into(),
+            );
+        }
+        if update.definitions.is_empty() || update.definitions.len() > 32 {
+            return Err("script update needs 1..32 definitions".into());
+        }
+        let allowed: bool = self.law("authorize_update", json!({"operator":true}))?;
+        if !allowed {
+            return Err("active law denies this edit".into());
+        }
+        let mut next = self.clone();
+        let mut seen = BTreeSet::new();
+        for d in &update.definitions {
+            if d.id.is_empty()
+                || d.id.len() > 48
+                || !d.id.bytes().all(|c| c.is_ascii_lowercase() || c == b'_')
+                || !seen.insert(&d.id)
+                || d.revision != self.active.get(&d.id).copied().unwrap_or(0) + 1
+                || d.description.len() > 2_000
+                || d.dependencies.len() > 8
+            {
+                return Err("invalid script identity, revision, or dependencies".into());
+            }
+            next.insert(d.clone());
+        }
+        if next.active.len() > 64
+            || next.history.values().map(|v| v.len()).sum::<usize>() > 256
+            || serde_json::to_vec(&next).map_err(|e| e.to_string())?.len() > MAX_CONTENT
+        {
+            return Err("script registry storage budget exceeded".into());
+        }
+        for d in &update.definitions {
+            let compiled = next.compiled(&DefinitionRef {
+                id: d.id.clone(),
+                revision: d.revision,
+            })?;
+            let functions: BTreeSet<_> = compiled
+                .ast
+                .iter_functions()
+                .map(|f| (f.name.to_owned(), f.params.len()))
+                .collect();
+            let required = if d.id == "law" {
+                LAW_FUNCTIONS
+            } else {
+                &["validate", "step"][..]
+            };
+            if required
+                .iter()
+                .any(|name| !functions.contains(&(name.to_string(), 1)))
+            {
+                return Err("script is missing a required single-argument entry point".into());
+            }
+        }
+        self.pending = Some(Pending {
+            activate_tick: tick.checked_add(1).ok_or("tick overflow")?,
+            definitions: update.definitions,
+        });
+        Ok(())
+    }
+    pub fn activate(&mut self, tick: u64) -> bool {
+        if !self
+            .pending
+            .as_ref()
+            .is_some_and(|p| p.activate_tick <= tick)
+        {
+            return false;
+        }
+        let pending = self.pending.take().unwrap();
+        for d in pending.definitions {
+            self.insert(d);
+        }
+        self.revision += 1;
+        true
+    }
+    pub fn catalog(&self) -> Value {
+        json!(self.active.iter().filter(|(id,_)| id.as_str() != "law").map(|(id,revision)| {
+            json!({"id":id,"skill":{"script":id},"revision":revision,"description":self.history[id][revision].description})
+        }).collect::<Vec<_>>())
+    }
+}
+
+const LAW_FUNCTIONS: &[&str] = &[
+    "authorize_update",
+    "cost",
+    "validate_common",
+    "metabolism",
+    "aftermath",
+    "on_damage",
+    "reflection",
+    "visible",
+    "observation",
+    "memory_limit",
+    "reconsider_interval",
+    "bootstrap",
+    "guard",
+    "validate_reflection",
+    "authorize_effect",
+    "validate_dialogue",
+    "validate_condition",
+];
+
+pub fn facts(p: &Player) -> Value {
+    json!({"id":p.id,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection,"fear":p.fear,"failures":p.failures})
+}
+
+pub fn subjective(p: &Player) -> Value {
+    let mut value = facts(p);
+    value["beliefs"] = json!(p.beliefs);
+    value["memories"] = json!(p.memories);
+    value
+}

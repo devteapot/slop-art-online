@@ -110,8 +110,11 @@ fn width(n: usize) -> Result<(), String> {
 }
 impl Node {
     pub fn validate(&self) -> Result<Vec<&Action>, String> {
+        self.validate_with_laws(&scripting::Registry::default())
+    }
+    pub fn validate_with_laws(&self, laws: &scripting::Registry) -> Result<Vec<&Action>, String> {
         let mut actions = vec![];
-        self.check(1, &mut 0, &mut actions)?;
+        self.check(1, &mut 0, &mut actions, laws)?;
         if actions.is_empty() {
             return Err("policy needs at least one skill action".into());
         }
@@ -122,18 +125,19 @@ impl Node {
         depth: usize,
         total: &mut usize,
         actions: &mut Vec<&'a Action>,
+        laws: &scripting::Registry,
     ) -> Result<(), String> {
         count(depth, total)?;
         match self {
             Self::Priority { children } | Self::Sequence { children } => {
                 width(children.len())?;
                 for c in children {
-                    c.check(depth + 1, total, actions)?;
+                    c.check(depth + 1, total, actions, laws)?;
                 }
             }
             Self::Guard { condition, child } => {
-                condition.check(depth + 1, total)?;
-                child.check(depth + 1, total, actions)?;
+                condition.check(depth + 1, total, laws)?;
+                child.check(depth + 1, total, actions, laws)?;
             }
             Self::Action { action } => actions.push(action),
             Self::Reconsider { reason } => {
@@ -146,96 +150,39 @@ impl Node {
     }
 }
 impl Condition {
-    fn check(&self, depth: usize, total: &mut usize) -> Result<(), String> {
+    fn check(
+        &self,
+        depth: usize,
+        total: &mut usize,
+        laws: &scripting::Registry,
+    ) -> Result<(), String> {
         count(depth, total)?;
         match self {
             Self::All { conditions } | Self::Any { conditions } => {
                 width(conditions.len())?;
                 for c in conditions {
-                    c.check(depth + 1, total)?;
+                    c.check(depth + 1, total, laws)?;
                 }
             }
-            Self::Not { condition } => condition.check(depth + 1, total)?,
-            Self::At { location }
-            | Self::FoodAt { location, .. }
-            | Self::Danger {
-                location: Some(location),
-            } if !(-10..=10).contains(location) => {
-                return Err("condition location outside known world bounds".into())
-            }
-            Self::Resource { value, .. } if !(0..=100).contains(value) => {
-                return Err("resource threshold must be 0..100".into())
-            }
+            Self::Not { condition } => condition.check(depth + 1, total, laws)?,
             _ => (),
         }
-        if matches!(self,Self::FoodAt{minimum,..} if !(1..=100).contains(minimum)) {
-            return Err("food minimum must be 1..100".into());
+        let error: String = laws.law("validate_condition", json!(self))?;
+        if !error.is_empty() {
+            return Err(error);
         }
         Ok(())
     }
     pub fn evaluate(&self, p: &Player) -> (bool, Vec<u64>) {
-        match self {
-            Self::All { conditions } | Self::Any { conditions } => {
-                let values: Vec<_> = conditions.iter().map(|c| c.evaluate(p)).collect();
-                let result = if matches!(self, Self::All { .. }) {
-                    values.iter().all(|v| v.0)
-                } else {
-                    values.iter().any(|v| v.0)
-                };
-                (result, values.into_iter().flat_map(|v| v.1).collect())
-            }
-            Self::Not { condition } => {
-                let (b, s) = condition.evaluate(p);
-                (!b, s)
-            }
-            Self::At { location } => (p.position == *location, vec![]),
-            Self::Danger { location } => {
-                let known = p
-                    .beliefs
-                    .iter()
-                    .find(|k| k.claim.location == location.unwrap_or(p.position));
-                (
-                    known.is_some_and(|k| k.claim.danger),
-                    known.map(|k| vec![k.source]).unwrap_or_default(),
-                )
-            }
-            Self::FoodAt { location, minimum } => {
-                let seen = p
-                    .memories
-                    .iter()
-                    .rev()
-                    .find(|m| m.kind == "site" && m.location == *location);
-                (
-                    seen.is_some_and(|m| {
-                        m.content["food"].as_i64().unwrap_or(0) >= *minimum as i64
-                    }),
-                    seen.map(|m| vec![m.source]).unwrap_or_default(),
-                )
-            }
-            Self::Resource {
-                resource,
-                comparison,
-                value,
-            } => {
-                let actual = match resource {
-                    Resource::Health => p.health,
-                    Resource::Hunger => p.hunger,
-                    Resource::Energy => p.energy,
-                    Resource::Food => p.food,
-                    Resource::Fear => p.fear,
-                    Resource::Failures => p.failures.min(i32::MAX as u32) as i32,
-                };
-                (
-                    match comparison {
-                        Comparison::Below => actual < *value,
-                        Comparison::AtLeast => actual >= *value,
-                    },
-                    vec![],
-                )
-            }
-        }
+        scripting::Registry::default()
+            .law(
+                "guard",
+                json!({"condition":self,"player":scripting::subjective(p)}),
+            )
+            .expect("bundled subjective guard script must be valid")
     }
 }
+
 fn within(path: &str, prefix: &str) -> bool {
     path == prefix || path.starts_with(&format!("{prefix}/"))
 }
@@ -307,7 +254,21 @@ impl World {
         *budget -= 1;
         match node {
             Node::Guard { condition, child } => {
-                let (allowed, sources) = condition.evaluate(&self.players[i]);
+                let (allowed, sources): (bool, Vec<u64>) = match self.scripts.law(
+                    "guard",
+                    json!({"condition":condition,"player":scripting::subjective(&self.players[i])}),
+                ) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        self.event(
+                            Some(self.players[i].id),
+                            "script_error",
+                            vec![e.decision],
+                            json!({"error":error,"path":path}),
+                        );
+                        return Status::Failure;
+                    }
+                };
                 let event=self.event(Some(self.players[i].id),"guard_evaluated",std::iter::once(e.decision).chain(sources).collect(),json!({"path":path,"condition":condition,"result":allowed,"source":"subjective character state"}));
                 e.state.last_guard = Some(event);
                 if allowed {
@@ -384,10 +345,31 @@ impl World {
             }
             Node::Reconsider { reason } => {
                 if self.participant_mode {
-                    if !*acted { self.event(Some(self.players[i].id), "reconsider_requested", vec![e.decision], json!({"reason":reason})); }
+                    if !*acted {
+                        self.event(
+                            Some(self.players[i].id),
+                            "reconsider_requested",
+                            vec![e.decision],
+                            json!({"reason":reason}),
+                        );
+                    }
                     return Status::Success;
                 }
-                let interval = 4 + (100 - self.players[i].introspection) as u64 / 10;
+                let interval: u64 = match self
+                    .scripts
+                    .law("reconsider_interval", scripting::facts(&self.players[i]))
+                {
+                    Ok(value) => value,
+                    Err(error) => {
+                        self.event(
+                            Some(self.players[i].id),
+                            "script_error",
+                            vec![e.decision],
+                            json!({"error":error}),
+                        );
+                        return Status::Failure;
+                    }
+                };
                 if self.tick.saturating_sub(self.players[i].last_reflection) >= interval {
                     self.request(i, reason);
                 }
@@ -408,7 +390,7 @@ pub struct PolicyProposal {
 }
 
 pub const CONTRACT: &str = r#"Generate this individual's OWN executable persistent reactive behavior policy. Choose runtime conditions and alternative branches so this individual can act as circumstances change without another model response. The policy must contain at least one action node using an actual skill. A root-only reconsider is invalid: reconsider only requests later reasoning and cannot replace executable behavior. Reconsider may occur inside an executable tree. Choose conditions, branches and actions from the vocabulary; no authored survival policy is installed for you. Node kinds: priority {children} rechecks children in order every tick and selects the first non-failure; sequence {children} remembers its running cursor; guard {condition,child} rechecks its condition whenever reached, returning failure and aborting its subtree when false; action {action} uses the shared skill contract; reconsider {reason} requests asynchronous revision when eligible and succeeds immediately. Wrap a running sequence in a guard when it needs ongoing protection: earlier successful sequence children are not rechecked. Abandoning a branch resets its sequence cursors and interrupts its current skill; reentry restarts that branch. The root repeats on subsequent ticks after success/failure, so choose guards that avoid unintended repeated speech/actions. At most one skill advances per tick; actions can run across ticks. Damage interrupts the current skill, not the policy: the next tick re-evaluates reactive branches using newly perceived evidence while reasoning may remain pending. A failed policy remains installed and asks for revision, not authored survival actions.
-Conditions: all/any {conditions}; not {condition}; at {location}; danger {location:null for current position, or a fixed location} reads retained subjective danger belief, false if unknown; food_at {location,minimum} uses latest remembered food observation, false if unknown; resource {resource:health|hunger|energy|food|fear|failures,comparison:below|at_least,value:0..100} reads this character's state. Locations -10..10; food minimum 1..100. Unknown danger is NOT proven safety, reports may be mistaken, observations can age. Consider ongoing intent, recovery, depleted resources and avoiding accidental retreat/return oscillations according to YOUR beliefs and priorities. A fixed-location danger guard can remember a threat after leaving it; a current-location guard alone stops applying once you move. Rethink as needed. Node and condition total <=64, combined depth <=8, each composite 1..8 children. At least one skill action is required. You must supply reason, policy and reflections. Existing installed policy continues while you reason. Proposals from the same policy generation can survive damage; guards and skill prerequisites are checked against current state. Newer subjective beliefs are retained over old-source reflections. Explain your chosen approach briefly without claiming effects have already occurred."#;
+Conditions: all/any {conditions}; not {condition}; at {location}; danger {location:null for current position, or a fixed location} reads retained subjective danger belief, false if unknown; food_at {location,minimum} uses latest remembered food observation, false if unknown; resource {resource:health|hunger|energy|food|fear|failures,comparison:below|at_least,value:integer} reads this character's state. Gameplay ranges follow the current rules_description and authoritative validation. Unknown danger is NOT proven safety, reports may be mistaken, observations can age. Consider ongoing intent, recovery, depleted resources and avoiding accidental retreat/return oscillations according to YOUR beliefs and priorities. A fixed-location danger guard can remember a threat after leaving it; a current-location guard alone stops applying once you move. Rethink as needed. Node and condition total <=64, combined depth <=8, each composite 1..8 children. At least one skill action is required. You must supply reason, policy and reflections. Existing installed policy continues while you reason. Proposals from the same policy generation can survive damage; guards and skill prerequisites are checked against current state. Newer subjective beliefs are retained over old-source reflections. Explain your chosen approach briefly without claiming effects have already occurred."#;
 
 impl PolicyState {
     pub fn is_default(&self) -> bool {

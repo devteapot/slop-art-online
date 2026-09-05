@@ -2,12 +2,14 @@
 //! No I/O, wall clock, model calls, or second approximation of world rules.
 pub mod client_view;
 pub mod participant;
+mod scripted_world;
+pub mod scripting;
 use bonsai_bt::Behavior;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "m1-5";
+pub const VERSION: &str = "m1-6-rhai";
 pub const DECISION_FORMAT_VERSION: &str = "survivor-policy-v2";
 pub const LEGACY_DECISION_FORMAT: &str = "survivor-sequence-v1";
 pub mod policy;
@@ -34,6 +36,21 @@ pub enum Skill {
     Wait,
     Speak,
     Attack,
+    Script(String),
+}
+impl Skill {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Move => "move",
+            Self::Gather => "gather",
+            Self::Eat => "eat",
+            Self::Rest => "rest",
+            Self::Wait => "wait",
+            Self::Speak => "speak",
+            Self::Attack => "attack",
+            Self::Script(id) => id,
+        }
+    }
 }
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -47,7 +64,6 @@ pub struct Action {
     #[serde(default)]
     pub text: Option<String>,
     #[serde(default = "one")]
-    #[cfg_attr(feature = "schema", schemars(range(min = 1, max = 5)))]
     pub duration: u32,
 }
 fn one() -> u32 {
@@ -130,6 +146,8 @@ pub struct Execution {
     pub cursor: usize,
     pub attempt: Option<u64>,
     pub remaining: u32,
+    #[serde(default)]
+    pub script: Option<scripting::Invocation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy: Option<Node>,
     #[serde(default, skip_serializing_if = "PolicyState::is_default")]
@@ -204,6 +222,8 @@ pub struct Pending {
 pub struct World {
     pub run: String,
     pub version: String,
+    #[serde(default)]
+    pub scripts: scripting::Registry,
     pub initial: Scenario,
     pub tick: u64,
     pub players: Vec<Player>,
@@ -262,6 +282,7 @@ impl World {
         let mut w = Self {
             run,
             version: VERSION.into(),
+            scripts: scripting::Registry::default(),
             players: scenario.players.clone(),
             sites: scenario.sites.clone(),
             initial: scenario,
@@ -274,7 +295,7 @@ impl World {
             participants: BTreeMap::new(),
             events: vec![],
         };
-        let id=w.event(None,"initialization",vec![],json!({"scenario":w.initial,"rules":VERSION,"prompt":PROMPT,"seed_usage":"reserved; current world rules use no random draws"}));
+        let id=w.event(None,"initialization",vec![],json!({"scenario":w.initial,"rules":VERSION,"scripts":w.scripts,"prompt":PROMPT,"seed_usage":"reserved; current world rules use no random draws"}));
         for i in 0..w.players.len() {
             w.players[i].last_cause = Some(id);
             // Authored starting knowledge is a remembered prior report, not a
@@ -288,14 +309,23 @@ impl World {
                     None,
                     claim.location,
                     json!({"claim":claim}),
-                );
+                )?;
                 w.players[i].beliefs[n].source = source;
             }
-            w.observe_site(i);
+            w.observe_site(i)?;
         }
         Ok(w)
     }
-    pub fn event(&mut self, actor: Option<u32>, kind: &str, parents: Vec<u64>, data: Value) -> u64 {
+    pub fn event(
+        &mut self,
+        actor: Option<u32>,
+        kind: &str,
+        parents: Vec<u64>,
+        mut data: Value,
+    ) -> u64 {
+        if let Some(object) = data.as_object_mut() {
+            object.insert("rules_revision".into(), json!(self.scripts.revision));
+        }
         let id = self.next_event;
         self.next_event += 1;
         self.events.push(Event {
@@ -324,7 +354,11 @@ impl World {
         from: Option<u32>,
         location: i32,
         content: Value,
-    ) -> u64 {
+    ) -> Result<u64, String> {
+        let limit: usize = self.scripts.law("memory_limit", json!({}))?;
+        if limit > 256 {
+            return Err("memory policy exceeds storage budget".into());
+        }
         let id = self.event(
             Some(self.players[i].id),
             "perception",
@@ -339,24 +373,22 @@ impl World {
             location,
             content,
         });
-        if self.players[i].memories.len() > 16 {
+        while self.players[i].memories.len() > limit {
             self.players[i].memories.remove(0);
         }
         self.players[i].last_cause = Some(id);
-        id
+        Ok(id)
     }
-    fn observe_site(&mut self, i: usize) {
+    fn observe_site(&mut self, i: usize) -> Result<(), String> {
         if self.players[i].health <= 0 {
-            return;
+            return Ok(());
         }
         let pos = self.players[i].position;
-        // Food is visible; hazard is learned through actual experience or a report.
-        let food = self
-            .sites
-            .iter()
-            .find(|s| s.position == pos)
-            .map(|s| s.food)
-            .unwrap_or(0);
+        let observation: Value = self.scripts.law(
+            "observation",
+            json!(self.sites.iter().find(|s| s.position == pos)),
+        )?;
+        let food = observation["food"].as_i64().unwrap_or(0);
         let parents = self.players[i]
             .execution
             .as_ref()
@@ -370,13 +402,14 @@ impl World {
             parents,
             json!({"location":pos,"visible_food":food}),
         );
-        self.perceive(i, id, "site", None, pos, json!({"food":food}));
-        let visible: Vec<_> = self
-            .players
-            .iter()
-            .filter(|p| p.id != self.players[i].id && p.health > 0 && (p.position - pos).abs() <= 1)
-            .map(|p| (p.id, p.name.clone(), p.position))
-            .collect();
+        self.perceive(i, id, "site", None, pos, observation)?;
+        let mut visible = vec![];
+        for other in 0..self.players.len() {
+            if self.visible(i, other, "sight")? {
+                let p = &self.players[other];
+                visible.push((p.id, p.name.clone(), p.position));
+            }
+        }
         for (other, name, location) in visible {
             self.perceive(
                 i,
@@ -385,17 +418,20 @@ impl World {
                 Some(other),
                 location,
                 json!({"name":name,"position":location}),
-            );
+            )?;
         }
+        Ok(())
     }
     pub fn context(&self, i: usize) -> Value {
         // Deliberate allowlist. Never serialize World, sites, other minds or audit into a prompt.
         let p = &self.players[i];
         let approach = p.execution.as_ref().map(|e| if let Some(policy)=&e.policy {json!({"decision":e.decision,"policy":policy,"state":e.state,"active_attempt":e.attempt})} else {json!(e)});
-        json!({"player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":["move","gather","eat","rest","wait","speak","attack"]})
+        json!({"player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
     }
     pub fn request(&mut self, i: usize, trigger: &str) {
-        if self.participant_mode { return; }
+        if self.participant_mode {
+            return;
+        }
         let actor = self.players[i].id;
         if self.players[i].health <= 0
             || self.players[i].controller != Controller::Ai
@@ -430,41 +466,12 @@ impl World {
             );
         }
         let policy_actions = if let Some(policy) = &d.policy {
-            policy.validate()?
+            policy.validate_with_laws(&self.scripts)?
         } else {
             vec![]
         };
         for a in d.actions.iter().chain(policy_actions.iter().copied()) {
-            if (a.skill != Skill::Move && a.destination.is_some())
-                || (a.skill != Skill::Attack && a.target.is_some())
-                || (a.skill != Skill::Speak && a.text.is_some())
-            {
-                return Err("skill contains arguments for a different skill".into());
-            }
-            if a.duration < 1 || a.duration > 5 {
-                return Err("duration must be 1..5".into());
-            }
-            match a.skill {
-                Skill::Move => {
-                    if !a.destination.is_some_and(|x| (-10..=10).contains(&x)) {
-                        return Err("invalid destination".into());
-                    }
-                }
-                Skill::Speak => {
-                    if a.text
-                        .as_ref()
-                        .is_none_or(|t| t.trim().is_empty() || t.chars().count() > 1000)
-                    {
-                        return Err("speech must contain 1..1000 characters".into());
-                    }
-                }
-                Skill::Attack => {
-                    if a.target.is_none() || a.target == Some(self.players[i].id) {
-                        return Err("attack requires another target".into());
-                    }
-                }
-                _ => {}
-            }
+            self.scripts.validate_action(a, &self.players[i])?;
         }
         let p = &self.players[i];
         for r in &d.reflections {
@@ -472,12 +479,9 @@ impl World {
                 .iter()
                 .find(|m| m.source == r.source)
                 .ok_or("reflection source not in remembered perceptions")?;
-            if r.interpretation.trim().is_empty()
-                || r.interpretation.len() > 2000
-                || !(-10..=10).contains(&r.caution_delta)
-                || !(-10..=10).contains(&r.trust_delta)
-            {
-                return Err("invalid interpretation/delta".into());
+            let reason: String = self.scripts.law("validate_reflection", json!(r))?;
+            if !reason.is_empty() {
+                return Err(reason);
             }
             if let Some(b) = &r.belief {
                 if b.text.len() > 1000
@@ -524,10 +528,12 @@ impl World {
         d: Decision,
         parent: Option<u64>,
     ) -> Result<(), String> {
-        if self.participant_mode { return Err("use actor-scoped participant commands".into()); }
+        if self.participant_mode {
+            return Err("use actor-scoped participant commands".into());
+        }
         self.apply_decision(actor, controller, d, parent, None)
     }
-    fn apply_decision(
+    fn apply_decision_inner(
         &mut self,
         actor: u32,
         controller: Controller,
@@ -549,7 +555,7 @@ impl World {
             let policy_actions = d
                 .policy
                 .as_ref()
-                .map(|p| p.validate())
+                .map(|p| p.validate_with_laws(&self.scripts))
                 .transpose()?
                 .unwrap_or_default();
             for a in d.actions.iter().chain(policy_actions.iter().copied()) {
@@ -584,21 +590,7 @@ impl World {
                 .iter()
                 .find(|m| m.source == r.source)
                 .and_then(|m| m.from);
-            self.players[i].caution = (self.players[i].caution + r.caution_delta).clamp(0, 100);
-            if let Some(from) = from {
-                let entry = self.players[i].relationships.entry(from).or_default();
-                *entry = (*entry + r.trust_delta).clamp(-100, 100);
-            }
-            if let Some(b) = &r.belief {
-                self.players[i]
-                    .beliefs
-                    .retain(|k| k.claim.location != b.location);
-                self.players[i].beliefs.push(Known {
-                    claim: b.clone(),
-                    source: r.source,
-                    confidence: 60,
-                });
-            }
+            self.reflect_identity(i, r, from)?;
             self.event(Some(actor),"identity_change",vec![id,r.source],json!({"interpretation":r.interpretation,"before":{"caution":before.caution,"beliefs":before.beliefs,"relationships":before.relationships},"after":{"caution":self.players[i].caution,"beliefs":self.players[i].beliefs,"relationships":self.players[i].relationships}}));
         }
         self.players[i].generation += 1;
@@ -608,6 +600,7 @@ impl World {
             cursor: 0,
             attempt: None,
             remaining: 0,
+            script: None,
             policy: d.policy.clone(),
             state: PolicyState::default(),
         });
@@ -618,7 +611,9 @@ impl World {
         Ok(())
     }
     pub fn model_result(&mut self, request: u64, raw: &str, metadata: Value) -> Result<(), String> {
-        if self.participant_mode { return Err("legacy model-result route disabled for participant runs".into()); }
+        if self.participant_mode {
+            return Err("legacy model-result route disabled for participant runs".into());
+        }
         let no_proposal = raw.trim().is_empty() && metadata["error"].as_str().is_some();
         let pending = self
             .pending
@@ -667,15 +662,12 @@ impl World {
         }
         result
     }
-    fn fallback(&mut self, i: usize) {
+    fn fallback(&mut self, i: usize) -> Result<(), String> {
         let p = &self.players[i];
-        let action = if p.food > 0 && p.hunger >= 25 {
-            Action::new(Skill::Eat)
-        } else if p.energy < 35 {
-            Action::new(Skill::Rest)
-        } else {
-            Action::new(Skill::Wait)
-        };
+        let skill: Skill =
+            serde_json::from_value(self.scripts.law("bootstrap", scripting::facts(p))?)
+                .map_err(|e| e.to_string())?;
+        let action = Action::new(skill);
         let id=self.event(Some(p.id),"decision",p.last_cause.into_iter().collect(),json!({"controller":"authored_bootstrap","reported_explanation":"Minimal eat/rest/wait while awaiting an installed policy","context":self.context(i),"actions":[action],"behavior_version":VERSION}));
         self.players[i].execution = Some(Execution {
             decision: id,
@@ -683,9 +675,11 @@ impl World {
             cursor: 0,
             attempt: None,
             remaining: 0,
+            script: None,
             policy: None,
             state: PolicyState::default(),
         });
+        Ok(())
     }
     fn fail(&mut self, i: usize, attempt: u64, reason: &str) -> Status {
         let id = self.event(
@@ -694,14 +688,21 @@ impl World {
             vec![attempt],
             json!({"status":"failed","reason":reason}),
         );
-        self.perceive(
+        if let Err(error) = self.perceive(
             i,
             id,
             "failure",
             None,
             self.players[i].position,
             json!({"reason":reason}),
-        );
+        ) {
+            self.event(
+                Some(self.players[i].id),
+                "script_error",
+                vec![id],
+                json!({"error":error}),
+            );
+        }
         self.players[i].failures += 1;
         Status::Failure
     }
@@ -741,89 +742,77 @@ impl World {
             _ => self.players[i].execution = None,
         }
     }
-    fn execute_action(&mut self, i: usize, e: &mut Execution, a: Action) -> Status {
+    fn execute_action_inner(
+        &mut self,
+        i: usize,
+        e: &mut Execution,
+        a: Action,
+    ) -> Result<Status, String> {
         let actor = self.players[i].id;
         let attempt = if let Some(id) = e.attempt {
             id
         } else {
-            let id=self.event(Some(actor),"skill_attempt",std::iter::once(e.decision).chain(e.state.last_guard).collect(),json!({"action":a,"step":e.cursor,"node_path":e.state.active_path,"skill_version":VERSION,"before":{"position":self.players[i].position,"food":self.players[i].food,"energy":self.players[i].energy,"hunger":self.players[i].hunger}}));
+            e.script = Some(scripting::Invocation {
+                definition: self.scripts.resolve(a.skill.id())?,
+                state: Value::Null,
+            });
+            let id=self.event(Some(actor),"skill_attempt",std::iter::once(e.decision).chain(e.state.last_guard).collect(),json!({"action":a,"step":e.cursor,"node_path":e.state.active_path,"skill_version":VERSION,"definition":e.script.as_ref().map(|s| &s.definition),"law_revision":self.scripts.active["law"],"before":{"position":self.players[i].position,"food":self.players[i].food,"energy":self.players[i].energy,"hunger":self.players[i].hunger}}));
             e.attempt = Some(id);
             e.remaining = a.duration;
             id
         };
         self.players[i].execution = Some(e.clone());
-        let pos = self.players[i].position;
-        match a.skill {
-            Skill::Move => {
-                let dest = a.destination.unwrap();
-                if self.players[i].energy < 1 {
-                    e.attempt = None;
-                    return self.fail(i, attempt, "exhausted");
-                }
-                self.players[i].position += (dest - pos).signum();
-                self.players[i].energy -= 1;
-                self.observe_site(i);
-                if self.players[i].position != dest {
-                    self.event(
-                        Some(actor),
-                        "skill_progress",
-                        vec![attempt],
-                        json!({"position":self.players[i].position}),
-                    );
-                    return Status::Running;
-                }
-            }
-            Skill::Gather => {
-                let site = self
-                    .sites
-                    .iter()
-                    .position(|s| s.position == pos && s.food > 0);
-                if site.is_none() || self.players[i].energy < 4 {
-                    e.attempt = None;
-                    return self.fail(i, attempt, "no food here or insufficient energy");
-                }
-                self.sites[site.unwrap()].food -= 1;
-                self.players[i].food += 1;
-                self.players[i].energy -= 4;
-                self.event(Some(actor),"resource_change",vec![attempt],json!({"location":pos,"food_delta":-1,"food_after":self.sites[site.unwrap()].food}));
-                self.observe_site(i);
-            }
-            Skill::Eat => {
-                if self.players[i].food <= 0 {
-                    e.attempt = None;
-                    return self.fail(i, attempt, "no carried food");
-                }
-                self.players[i].food -= 1;
-                self.players[i].hunger = (self.players[i].hunger - 35).max(0);
-            }
-            Skill::Rest => {
-                self.players[i].energy = (self.players[i].energy + 12).min(100);
-            }
-            Skill::Wait => {}
-            Skill::Speak => {
-                if self.participant_mode && self.participants[&actor].last_speech_tick==Some(self.tick){return Status::Running;}
-                self.emit_speech(i, attempt, a.text.as_deref().unwrap());
-            }
-            Skill::Attack => {
-                let target = a.target.and_then(|id| self.idx(id).ok());
-                if target.is_none() || self.players[i].energy < 8 {
-                    e.attempt = None;
-                    return self.fail(i, attempt, "target unavailable or insufficient energy");
-                }
-                let j = target.unwrap();
-                if self.players[j].health <= 0 || self.players[j].position != pos {
-                    e.attempt = None;
-                    return self.fail(i, attempt, "target dead or out of range");
-                }
-                self.players[i].energy -= 8;
-                self.damage(j, 20, Some(actor), attempt, "attack");
-            }
+        let invocation = e.script.clone().ok_or("missing pinned skill")?;
+        let reason: String = self.scripts.call(
+            &invocation.definition,
+            "validate",
+            json!({"action":a,"actor":scripting::facts(&self.players[i])}),
+        )?;
+        if !reason.is_empty() {
+            e.attempt = None;
+            e.script = None;
+            e.remaining = 0;
+            return Ok(self.fail(i, attempt, &reason));
         }
-        if matches!(a.skill, Skill::Rest | Skill::Wait) && e.remaining > 1 {
-            e.remaining -= 1;
-            self.players[i].execution = Some(e.clone());
-            self.event(Some(actor),"skill_progress",vec![attempt],json!({"energy":self.players[i].energy,"remaining":self.players[i].execution.as_ref().unwrap().remaining}));
-            return Status::Running;
+        let result: scripting::StepResult = self.scripts.call(
+            &invocation.definition,
+            "step",
+            self.script_context(i, &a, e),
+        )?;
+        if result.effects.len() > 32
+            || result.remaining > 10000
+            || matches!(result.status, Status::Interrupted)
+        {
+            return Err("script effect/lifecycle budget exceeded".into());
+        }
+        if result.status == Status::Failure {
+            if !result.effects.is_empty() {
+                return Err("failed script returned effects".into());
+            }
+            e.attempt = None;
+            e.script = None;
+            return Ok(self.fail(i, attempt, &result.reason));
+        }
+        for effect in result.effects {
+            // Validate against preceding staged effects; the enclosing transaction rolls
+            // the whole invocation back if any capability or policy rejects the batch.
+            self.validate_script_effect(i, &a, &effect)?;
+            self.apply_script_effect(i, attempt, effect)?;
+        }
+        e.remaining = result.remaining;
+        if let Some(invocation) = &mut e.script {
+            invocation.state = result.state;
+        }
+        if result.status == Status::Running {
+            if result.progress.as_object().is_some_and(|p| !p.is_empty()) {
+                self.event(
+                    Some(actor),
+                    "skill_progress",
+                    vec![attempt],
+                    result.progress,
+                );
+            }
+            return Ok(Status::Running);
         }
         let result=self.event(Some(actor),"skill_result",vec![attempt],json!({"status":"completed","skill":a.skill,"after":{"position":self.players[i].position,"food":self.players[i].food,"energy":self.players[i].energy,"hunger":self.players[i].hunger}}));
         self.perceive(
@@ -833,14 +822,37 @@ impl World {
             None,
             self.players[i].position,
             json!({"skill":a.skill,"status":"completed"}),
-        );
+        )?;
         e.attempt = None;
         e.remaining = 0;
-        Status::Success
+        e.script = None;
+        Ok(Status::Success)
     }
-    fn damage(&mut self, i: usize, amount: i32, from: Option<u32>, cause: u64, nature: &str) {
+    fn damage(
+        &mut self,
+        i: usize,
+        amount: i32,
+        from: Option<u32>,
+        cause: u64,
+        nature: &str,
+    ) -> Result<(), String> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Reaction {
+            health: i32,
+            fear: i32,
+            caution: i32,
+            learn_danger: bool,
+            confidence: i32,
+            interrupt: bool,
+            dead: bool,
+        }
         let before = self.players[i].clone();
-        self.players[i].health = (before.health - amount).max(0);
+        let reaction: Reaction = self.scripts.law(
+            "on_damage",
+            json!({"actor":scripting::facts(&before),"amount":amount,"nature":nature}),
+        )?;
+        self.players[i].health = reaction.health;
         let world=self.event(Some(before.id),"damage",vec![cause],json!({"from":from,"amount":amount,"before":before.health,"after":self.players[i].health,"location":before.position,"cause_kind":nature}));
         let perception = self.perceive(
             i,
@@ -853,10 +865,10 @@ impl World {
             from,
             before.position,
             json!({"damage":amount,"cause":nature}),
-        );
-        self.players[i].fear = (before.fear + 15).min(100);
-        self.players[i].caution = (before.caution + 1 + before.introspection / 25).min(100);
-        if nature != "starvation" {
+        )?;
+        self.players[i].fear = reaction.fear;
+        self.players[i].caution = reaction.caution;
+        if reaction.learn_danger {
             self.players[i]
                 .beliefs
                 .retain(|k| k.claim.location != before.position);
@@ -867,14 +879,16 @@ impl World {
                     text: "I was hurt here".into(),
                 },
                 source: perception,
-                confidence: 95,
+                confidence: reaction.confidence,
             });
         }
         self.event(Some(before.id),"identity_change",vec![perception],json!({"interpretation":"experienced harm; personal introspection changes caution","before":{"caution":before.caution,"fear":before.fear,"beliefs":before.beliefs},"after":{"caution":self.players[i].caution,"fear":self.players[i].fear,"beliefs":self.players[i].beliefs}}));
-        self.interrupt(i, world, "damage");
+        if reaction.interrupt {
+            self.interrupt(i, world, "damage");
+        }
         self.players[i].failures += 1;
         self.request(i, "experienced harm; installed policy remains active");
-        if self.players[i].health == 0 {
+        if reaction.dead {
             self.players[i].generation += 1;
             let death = self.event(
                 Some(before.id),
@@ -883,10 +897,7 @@ impl World {
                 json!({"name":before.name,"position":before.position,"permanent":true}),
             );
             for j in 0..self.players.len() {
-                if j != i
-                    && self.players[j].health > 0
-                    && (self.players[j].position - before.position).abs() <= 1
-                {
+                if self.visible(j, i, "death")? {
                     self.perceive(
                         j,
                         death,
@@ -894,14 +905,15 @@ impl World {
                         Some(before.id),
                         before.position,
                         json!({"name":before.name}),
-                    );
+                    )?;
                 }
             }
         }
+        Ok(())
     }
-    pub fn step(&mut self) {
+    fn step_inner(&mut self) -> Result<(), String> {
         if self.stopped {
-            return;
+            return Ok(());
         }
         self.tick += 1;
         for i in 0..self.players.len() {
@@ -909,14 +921,25 @@ impl World {
                 continue;
             }
             let before = self.players[i].hunger;
-            self.players[i].hunger = (before + 2).min(100);
-            self.players[i].fear = (self.players[i].fear - 1).max(0);
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Needs {
+                hunger: i32,
+                fear: i32,
+            }
+            let needs: Needs = self
+                .scripts
+                .law("metabolism", scripting::facts(&self.players[i]))?;
+            self.players[i].hunger = needs.hunger;
+            self.players[i].fear = needs.fear;
             let metabolism=self.event(Some(self.players[i].id),"needs_change",vec![],json!({"hunger_before":before,"hunger_after":self.players[i].hunger,"fear":self.players[i].fear}));
 
             if self.players[i].health <= 0 {
                 continue;
             }
-            let interval = 4 + (100 - self.players[i].introspection) as u64 / 10;
+            let interval: u64 = self
+                .scripts
+                .law("reconsider_interval", scripting::facts(&self.players[i]))?;
             if self.tick == 1 || (self.tick - self.players[i].last_reflection >= interval) {
                 self.request(
                     i,
@@ -927,22 +950,30 @@ impl World {
                     },
                 );
             }
-            if !self.participant_mode && self.players[i].controller == Controller::Ai && self.players[i].execution.is_none() {
-                self.fallback(i);
+            if !self.participant_mode
+                && self.players[i].controller == Controller::Ai
+                && self.players[i].execution.is_none()
+            {
+                self.fallback(i)?;
             }
             self.execute(i);
-            if self.players[i].hunger >= 100 {
-                self.damage(i, 8, None, metabolism, "starvation");
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Aftermath {
+                starvation: i32,
+                hazard: i32,
+            }
+            let after:Aftermath=self.scripts.law("aftermath",json!({"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
+            if after.starvation < 0 || after.hazard < 0 {
+                return Err("negative damage policy".into());
+            }
+            if after.starvation > 0 {
+                self.damage(i, after.starvation, None, metabolism, "starvation")?;
             }
             if self.players[i].health <= 0 {
                 continue;
             }
-            let hazard = self
-                .sites
-                .iter()
-                .find(|s| s.position == self.players[i].position)
-                .map(|s| s.hazard)
-                .unwrap_or(0);
+            let hazard = after.hazard;
             if hazard > 0 {
                 let event = self.event(
                     None,
@@ -950,10 +981,10 @@ impl World {
                     self.players[i].last_cause.into_iter().collect(),
                     json!({"location":self.players[i].position,"damage":hazard}),
                 );
-                self.damage(i, hazard, None, event, "environment");
+                self.damage(i, hazard, None, event, "environment")?;
             }
         }
-        self.deliver_queued_speech();
+        self.deliver_queued_speech()?;
         let invalid: Vec<_> = self
             .pending
             .iter()
@@ -1001,7 +1032,7 @@ impl World {
         }
         if self.tick >= self.initial.max_ticks || self.players.iter().all(|p| p.health <= 0) {
             self.stopped = true;
-            self.deliver_queued_speech();
+            self.deliver_queued_speech()?;
             let stop = self.event(None, "run_stopped", vec![], json!({"tick":self.tick}));
             for i in 0..self.players.len() {
                 self.interrupt(i, stop, "run ended");
@@ -1016,6 +1047,7 @@ impl World {
                 );
             }
         }
+        Ok(())
     }
 }
 
@@ -1029,3 +1061,5 @@ pub mod contract;
 
 #[cfg(test)]
 mod participant_tests;
+#[cfg(test)]
+mod scripting_tests;

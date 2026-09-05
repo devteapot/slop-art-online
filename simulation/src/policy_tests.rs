@@ -78,7 +78,12 @@ fn installed_tree_reacts_to_new_danger_without_model_response_and_does_not_oscil
     let id = install(&mut w, reactive());
     let generation = w.players[0].generation;
     w.step();
-    assert_eq!(w.players[0].position, 1);
+    assert_eq!(
+        w.players[0].position,
+        1,
+        "{:?}",
+        w.events.iter().rev().take(5).collect::<Vec<_>>()
+    );
     assert_eq!(w.players[0].health, 95);
     let pending = w.pending[0].id;
     assert_eq!(w.players[0].generation, generation);
@@ -127,7 +132,7 @@ fn damage_during_reasoning_keeps_request_usable_and_preserves_newer_danger() {
     w.pending[0].context = w.context(0);
     let mut d = policy(reactive());
     d.reflections.push(Reflection {
-        source: src,
+        source: src.unwrap(),
         interpretation: "Old report said safe".into(),
         caution_delta: -3,
         trust_delta: 0,
@@ -240,9 +245,11 @@ fn conditions_cannot_observe_remote_truth_and_latest_subjective_observation_wins
     assert!(!food.evaluate(&w.players[0]).0);
     assert!(!danger.evaluate(&w.players[0]).0);
     let cause = w.events[0].id;
-    w.perceive(0, cause, "site", None, 1, json!({"food":3}));
+    w.perceive(0, cause, "site", None, 1, json!({"food":3}))
+        .unwrap();
     assert!(food.evaluate(&w.players[0]).0);
-    w.perceive(0, cause, "site", None, 1, json!({"food":0}));
+    w.perceive(0, cause, "site", None, 1, json!({"food":0}))
+        .unwrap();
     assert!(!food.evaluate(&w.players[0]).0);
     assert!(!w.context(0).to_string().contains("hazard"));
 }

@@ -1,5 +1,7 @@
 # Implementation state and legacy baseline
 
+Current scripted foundation: rules `m1-6-rhai` run the active game's seven skills and world policies through Rhai inside SpacetimeDB. Versioned definitions, next-tick law activation, pinned action/dependency revisions, transactional effects and operator installation are implemented. [Integration contract and evidence](SCRIPTED_GAMEPLAY.md) records 76 core/bridge/archive regressions plus four host tests, actual database source updates and Bevy input verification. Public player authoring and divine progression remain future work; the legacy server prototype is unchanged.
+
 Latest live evidence: [mixed internal/external agent verification](LIVE_MIXED_AGENT_VERIFICATION.md) records ten genuine Luna calls, accepted behavior/dialogue/learning through both routes, preserved failures and corrections, and 66 passing regressions. Earlier no-fresh-inference statements below describe the preceding implementation milestone.
 
 Current participant iteration (64 passing core/provider/archive tests; [executed checks](PARTICIPANT_AGENT_VERIFICATION.md)): [participant agent runtimes](PARTICIPANT_AGENTS.md) and [ADR 013](adr/013-participant-agent-runtimes.md). Rules `m1-5` use one scoped API for the built-in harness and external MCP runtimes, with independent tree, speech and learning operations. Earlier evidence and legacy runner descriptions below retain their historical scope.

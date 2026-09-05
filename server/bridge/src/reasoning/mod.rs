@@ -36,7 +36,12 @@ fn now_ms() -> u128 {
         .as_millis()
 }
 pub fn messages(p: &Pending) -> Value {
-    let system=format!("{PROMPT}\nDecision format: {DECISION_FORMAT_VERSION}. Respond with one JSON decision matching the schema. Supply null for unused optional action arguments and an empty reflections array when none apply. Duration must be 1..5; caution/trust deltas -10..10.\nPolicy contract: {CONTRACT}\nSkill contract: {}\nDecision schema: {}",skill_contract(),decision_schema());
+    let catalog = p
+        .context
+        .get("skill_definitions")
+        .cloned()
+        .unwrap_or_else(skill_contract);
+    let system=format!("{PROMPT}\nDecision format: {DECISION_FORMAT_VERSION}. Respond with one JSON decision matching the schema. Supply null for unused optional action arguments and an empty reflections array when none apply. Duration must be 1..5; caution/trust deltas -10..10.\nPolicy contract: {CONTRACT}\nInstalled skill catalog (authored descriptions; current laws can change outcomes): {}\nDecision schema: {}",catalog,decision_schema());
     json!([{"role":"system","content":system},{"role":"user","content":p.context.to_string()}])
 }
 fn journal(path: &Path, value: &Value) -> Result<(), String> {

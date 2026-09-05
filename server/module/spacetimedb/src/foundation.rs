@@ -88,6 +88,28 @@ pub fn sim_step(ctx: &ReducerContext, run: String) -> Result<(), String> {
     save(ctx, row, world);
     Ok(())
 }
+
+/// Operator-authenticated content installation. Participant endpoints cannot submit script source.
+#[spacetimedb::reducer]
+pub fn sim_stage_scripts(ctx: &ReducerContext, run: String, update: String) -> Result<(), String> {
+    let (row, mut world) = load(ctx, &run)?;
+    if update.len() > 262_144 {
+        return Err("script update exceeds 256 KiB".into());
+    }
+    let result = serde_json::from_str::<simulation::scripting::Update>(&update)
+        .map_err(|e| e.to_string())
+        .and_then(|update| world.stage_scripts_by_operator(update));
+    if let Err(error) = result {
+        world.event(
+            None,
+            "script_update_rejected",
+            vec![],
+            serde_json::json!({"error":error}),
+        );
+    }
+    save(ctx, row, world);
+    Ok(())
+}
 #[spacetimedb::reducer]
 pub fn sim_intent(
     ctx: &ReducerContext,
@@ -96,7 +118,9 @@ pub fn sim_intent(
     decision: String,
 ) -> Result<(), String> {
     let (row, mut world) = load(ctx, &run)?;
-    if world.participant_mode { return Err("operator intent route disabled; use scoped participant service".into()); }
+    if world.participant_mode {
+        return Err("operator intent route disabled; use scoped participant service".into());
+    }
     if decision.len() > 50_000 {
         return Err("intent too large".into());
     }
@@ -129,7 +153,9 @@ pub fn sim_model_result(
     metadata: String,
 ) -> Result<(), String> {
     let (row, mut world) = load(ctx, &run)?;
-    if world.participant_mode { return Err("operator model-result route disabled; use scoped participant service".into()); }
+    if world.participant_mode {
+        return Err("operator model-result route disabled; use scoped participant service".into());
+    }
     if raw.len() > 50_000 || metadata.len() > 100_000 {
         return Err("model response too large".into());
     }
@@ -142,13 +168,27 @@ pub fn sim_model_result(
 
 /// Creates a separately owned run; provisioning is distinct from participant reasoning.
 #[spacetimedb::reducer]
-pub fn sim_create_participant(ctx: &ReducerContext, run: String, scenario: String) -> Result<(),String> {
-    sim_create(ctx,run.clone(),scenario)?;
-    let (row,mut w)=load(ctx,&run)?;
+pub fn sim_create_participant(
+    ctx: &ReducerContext,
+    run: String,
+    scenario: String,
+) -> Result<(), String> {
+    sim_create(ctx, run.clone(), scenario)?;
+    let (row, mut w) = load(ctx, &run)?;
     // sim_create persisted its initial events; seed only safe initial perceptions into the trace.
     w.enable_participants();
-    let events:Vec<simulation::Event>=ctx.db.sim_audit().iter().filter(|e|e.run==run).filter_map(|e|serde_json::from_str(&e.json).ok()).collect();
-    let mut events=events; events.sort_by_key(|e|e.id);
-    for e in events { w.record_initial_participant_event(&e); }
-    save(ctx,row,w); Ok(())
+    let events: Vec<simulation::Event> = ctx
+        .db
+        .sim_audit()
+        .iter()
+        .filter(|e| e.run == run)
+        .filter_map(|e| serde_json::from_str(&e.json).ok())
+        .collect();
+    let mut events = events;
+    events.sort_by_key(|e| e.id);
+    for e in events {
+        w.record_initial_participant_event(&e);
+    }
+    save(ctx, row, w);
+    Ok(())
 }

@@ -129,7 +129,12 @@ fn schema_comes_from_authoritative_decision_and_skills() {
     assert!(schema["properties"].get("policy").is_some());
     assert!(schema["properties"].get("actions").is_none());
     assert_eq!(schema["additionalProperties"], false);
-    let skill_names = schema["$defs"]["Skill"]["enum"].as_array().unwrap();
+    let variants = schema["$defs"]["Skill"]["anyOf"].as_array().unwrap();
+    let skill_names = variants.iter().find_map(|v| v["enum"].as_array()).unwrap();
+    assert!(variants
+        .iter()
+        .any(|v| v["properties"].get("script").is_some()));
+    assert!(serde_json::from_value::<simulation::Skill>(json!({"script":"stride"})).is_ok());
     assert_eq!(
         skill_names.len(),
         skill_contract().as_array().unwrap().len()
@@ -316,7 +321,7 @@ async fn latency_does_not_block_world_and_cancellation_preserves_evidence() {
     for _ in 0..3 {
         w.step();
     }
-    assert_eq!(w.tick, 3);
+    assert_eq!(w.tick, 3, "{:?}", w.events.last());
     assert!(!job.is_finished());
     tx.send(Some("generation changed".into())).unwrap();
     let r = job.await.unwrap();
@@ -605,7 +610,12 @@ async fn generic_modes_all_reach_the_same_authoritative_semantic_validation() {
             serde_json::from_str(include_str!("../../../../scenarios/survival.json")).unwrap();
         let mut world = simulation::World::new(format!("mode-{mode}"), scenario).unwrap();
         world.step();
-        let p = world.pending.iter().find(|p| p.actor == 1).unwrap().clone();
+        let p = world
+            .pending
+            .iter()
+            .find(|p| p.actor == 1)
+            .unwrap_or_else(|| panic!("missing decision: {:?}", world.events.last()))
+            .clone();
         let before = serde_json::to_value(&world.players[0].execution).unwrap();
         let invalid = json!({"reason":"typed but beyond the simulation policy bound","policy":{"kind":"sequence","children":vec![json!({"kind":"action","action":{"skill":"rest","duration":1}});simulation::policy::MAX_CHILDREN+1]},"reflections":[]});
         let mut v = response();

@@ -1,0 +1,18 @@
+[package]
+name = "sao-scripting-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Isolated decision evidence, not a second game or a production dependency.
+[workspace]
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+database = ["dep:spacetimedb"]
+
+[dependencies]
+rhai = { version = "=1.26.0", default-features = false, features = ["std", "no_float", "no_time"] }
+spacetimedb = { version = "=2.1.0", optional = true }

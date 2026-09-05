@@ -6,6 +6,8 @@ The M1 kernel now lives in `simulation/`, called by `foundation.rs` in the exist
 
 ## Retained architecture
 
+[ADR 016](docs/adr/016-scripted-gameplay-rhai.md) selects Rhai 1.26.0, now embedded in the shared simulation and real SpacetimeDB WASM module. Rust retains engine capabilities and evaluation; the active foundation skills and world policies execute from versioned scripts. See the [implementation and verification](docs/SCRIPTED_GAMEPLAY.md). The runtime disables floating point and ambient time (`no_float`, `no_time`); the bridge and client retain their existing roles.
+
 | Tier | Responsibility | Source |
 |---|---|---|
 | SpacetimeDB Rust/WASM module | Authoritative simulation state, reducers, scheduling, NPC execution and validated consequences | [module](server/module/spacetimedb/Cargo.toml) |

@@ -107,6 +107,7 @@ pub mod sim_participant_state_table;
 pub mod sim_revoke_client_reducer;
 pub mod sim_run_type;
 pub mod sim_setup_client_clock_reducer;
+pub mod sim_stage_scripts_reducer;
 pub mod sim_step_reducer;
 pub mod skill_attributes_table;
 pub mod skill_attributes_type;
@@ -237,6 +238,7 @@ pub use sim_participant_state_table::*;
 pub use sim_revoke_client_reducer::sim_revoke_client;
 pub use sim_run_type::SimRun;
 pub use sim_setup_client_clock_reducer::sim_setup_client_clock;
+pub use sim_stage_scripts_reducer::sim_stage_scripts;
 pub use sim_step_reducer::sim_step;
 pub use skill_attributes_table::*;
 pub use skill_attributes_type::SkillAttributes;
@@ -350,6 +352,10 @@ pub enum Reducer {
         run: String,
         evidence_mode: String,
     },
+    SimStageScripts {
+        run: String,
+        update: String,
+    },
     SimStep {
         run: String,
     },
@@ -451,6 +457,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SimParticipantCommand { .. } => "sim_participant_command",
             Reducer::SimRevokeClient { .. } => "sim_revoke_client",
             Reducer::SimSetupClientClock { .. } => "sim_setup_client_clock",
+            Reducer::SimStageScripts { .. } => "sim_stage_scripts",
             Reducer::SimStep { .. } => "sim_step",
             Reducer::SpawnNpc { .. } => "spawn_npc",
             Reducer::StartNpcTicker => "start_npc_ticker",
@@ -597,6 +604,12 @@ impl __sdk::Reducer for Reducer {
                 __sats::bsatn::to_vec(&sim_setup_client_clock_reducer::SimSetupClientClockArgs {
                     run: run.clone(),
                     evidence_mode: evidence_mode.clone(),
+                })
+            }
+            Reducer::SimStageScripts { run, update } => {
+                __sats::bsatn::to_vec(&sim_stage_scripts_reducer::SimStageScriptsArgs {
+                    run: run.clone(),
+                    update: update.clone(),
                 })
             }
             Reducer::SimStep { run } => {

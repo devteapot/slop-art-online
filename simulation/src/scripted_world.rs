@@ -1,0 +1,216 @@
+//! Engine capability adapters and transactional script invocation. Gameplay formulas live in scripts.
+use crate::*;
+use scripting::{facts, Effect};
+
+impl World {
+    pub(super) fn apply_decision(
+        &mut self,
+        actor: u32,
+        controller: Controller,
+        decision: Decision,
+        parent: Option<u64>,
+        remembered: Option<Vec<Percept>>,
+    ) -> Result<(), String> {
+        let mut candidate = self.clone();
+        candidate.apply_decision_inner(actor, controller, decision, parent, remembered)?;
+        *self = candidate;
+        Ok(())
+    }
+    /// Host must authenticate the world operator before calling this installation boundary.
+    pub fn stage_scripts_by_operator(&mut self, update: scripting::Update) -> Result<(), String> {
+        self.scripts.stage(update.clone(), self.tick)?;
+        self.event(
+            None,
+            "script_update_staged",
+            vec![],
+            json!({"activate_tick":self.tick+1,"update":update}),
+        );
+        Ok(())
+    }
+
+    pub(super) fn script_context(&self, i: usize, a: &Action, e: &Execution) -> Value {
+        let p = &self.players[i];
+        let target = a
+            .target
+            .and_then(|id| self.players.iter().find(|p| p.id == id))
+            .map(|p| json!({"id":p.id,"position":p.position,"health":p.health}));
+        json!({"actor":facts(p),"action":a,"target":target,
+            "site":self.sites.iter().find(|s| s.position==p.position).map(|s| json!({"position":s.position,"food":s.food})),
+            "remaining":e.remaining,"state":e.script.as_ref().map(|s| &s.state),
+            "spoke":self.participants.get(&p.id).is_some_and(|s| s.last_speech_tick==Some(self.tick))})
+    }
+
+    pub(super) fn execute_action(&mut self, i: usize, e: &mut Execution, a: Action) -> Status {
+        let mut candidate = self.clone();
+        let mut execution = e.clone();
+        match candidate.execute_action_inner(i, &mut execution, a.clone()) {
+            Ok(status) => {
+                *self = candidate;
+                *e = execution;
+                status
+            }
+            Err(error) => {
+                let cause = self.event(Some(self.players[i].id), "script_error", e.attempt.into_iter().collect(),
+                    json!({"action":a,"definition":e.script,"error":error,"effects_committed":false}));
+                e.attempt = None;
+                e.script = None;
+                e.remaining = 0;
+                self.fail(i, cause, &error)
+            }
+        }
+    }
+
+    pub(super) fn validate_script_effect(
+        &self,
+        i: usize,
+        a: &Action,
+        effect: &Effect,
+    ) -> Result<(), String> {
+        match effect {
+            Effect::Actor { fields } => {
+                if fields
+                    .keys()
+                    .any(|k| !matches!(k.as_str(), "position" | "energy" | "food" | "hunger"))
+                {
+                    return Err("script attempted to write outside actor capability".into());
+                }
+            }
+            Effect::SiteFood { .. }
+                if !self
+                    .sites
+                    .iter()
+                    .any(|s| s.position == self.players[i].position) =>
+            {
+                return Err("site capability unavailable".into())
+            }
+            Effect::Speech { text } if text.trim().is_empty() || text.chars().count() > 1000 => {
+                return Err("speech effect exceeds contract".into())
+            }
+            Effect::Damage { target, amount }
+                if a.target != Some(*target)
+                    || *target == self.players[i].id
+                    || *amount < 0
+                    || self.idx(*target).is_err() =>
+            {
+                return Err("damage effect outside target capability".into())
+            }
+            _ => (),
+        }
+        let allowed: bool = self.scripts.law(
+            "authorize_effect",
+            json!({"actor":facts(&self.players[i]),"action":a,"effect":effect}),
+        )?;
+        if !allowed {
+            return Err("active law denied effect".into());
+        }
+        Ok(())
+    }
+
+    pub(super) fn apply_script_effect(
+        &mut self,
+        i: usize,
+        cause: u64,
+        effect: Effect,
+    ) -> Result<(), String> {
+        match effect {
+            Effect::Actor { fields } => {
+                for (field, value) in fields {
+                    let p = &mut self.players[i];
+                    match field.as_str() {
+                        "position" => p.position = value,
+                        "energy" => p.energy = value,
+                        "food" => p.food = value,
+                        "hunger" => p.hunger = value,
+                        _ => return Err("unknown actor field".into()),
+                    }
+                }
+            }
+            Effect::SiteFood { value } => {
+                let pos = self.players[i].position;
+                let site = self
+                    .sites
+                    .iter_mut()
+                    .find(|s| s.position == pos)
+                    .ok_or("site capability unavailable")?;
+                let before = site.food;
+                site.food = value;
+                self.event(Some(self.players[i].id),"resource_change",vec![cause],json!({"location":pos,"food_delta":i64::from(value)-i64::from(before),"food_after":value}));
+            }
+            Effect::Observe => self.observe_site(i)?,
+            Effect::Speech { text } => self.emit_speech(i, cause, &text)?,
+            Effect::Damage { target, amount } => self.damage(
+                self.idx(target)?,
+                amount,
+                Some(self.players[i].id),
+                cause,
+                "attack",
+            )?,
+        }
+        Ok(())
+    }
+
+    pub(super) fn visible(&self, viewer: usize, other: usize, kind: &str) -> Result<bool, String> {
+        self.scripts.law("visible",json!({"viewer":facts(&self.players[viewer]),"other":facts(&self.players[other]),"kind":kind}))
+    }
+
+    pub(super) fn reflect_identity(
+        &mut self,
+        i: usize,
+        r: &Reflection,
+        from: Option<u32>,
+    ) -> Result<(), String> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Outcome {
+            caution: i32,
+            trust: i32,
+            confidence: i32,
+        }
+        let trust = from
+            .and_then(|id| self.players[i].relationships.get(&id))
+            .copied()
+            .unwrap_or(0);
+        let change:Outcome=self.scripts.law("reflection",json!({"actor":facts(&self.players[i]),"trust":trust,"caution_delta":r.caution_delta,"trust_delta":r.trust_delta}))?;
+        self.players[i].caution = change.caution;
+        if let Some(from) = from {
+            self.players[i].relationships.insert(from, change.trust);
+        }
+        if let Some(b) = &r.belief {
+            self.players[i]
+                .beliefs
+                .retain(|k| k.claim.location != b.location);
+            self.players[i].beliefs.push(Known {
+                claim: b.clone(),
+                source: r.source,
+                confidence: change.confidence,
+            });
+        }
+        Ok(())
+    }
+
+    pub fn step(&mut self) {
+        if self.stopped {
+            return;
+        }
+        if self.version != VERSION {
+            self.event(None,"script_tick_failed",vec![],json!({"error":"saved world requires an explicit rules migration","effects_committed":false}));
+            return;
+        }
+        let mut candidate = self.clone();
+        if candidate.scripts.activate(candidate.tick + 1) {
+            candidate.event(None,"script_update_activated",vec![],json!({"effective_tick":candidate.tick+1,"revision":candidate.scripts.revision,"active":candidate.scripts.active}));
+        }
+        match candidate.step_inner() {
+            Ok(()) => *self = candidate,
+            Err(error) => {
+                let rejected = self.scripts.pending.take();
+                self.event(
+                    None,
+                    "script_tick_failed",
+                    vec![],
+                    json!({"error":error,"effects_committed":false,"rejected_update":rejected}),
+                );
+            }
+        }
+    }
+}

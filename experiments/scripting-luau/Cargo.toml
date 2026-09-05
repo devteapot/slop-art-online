@@ -1,0 +1,13 @@
+[package]
+name = "sao-luau-target-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+mlua = { version = "=0.12.1", features = ["luau"] }

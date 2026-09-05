@@ -27,3 +27,5 @@ The numbering follows existing repository history; there is no ADR 004 file in t
 - [ADR 014: World observation and independent session focus](014-world-observer-and-session-focus.md) — implemented 3D presentation, detachable inspection and independent hosted runs.
 
 - [ADR 015: Top-down behavior lab](015-top-down-behavior-lab.md) — retire the voxel/3D client and use 2D for mechanics iteration.
+
+- [ADR 016: Scripted gameplay with Rhai](016-scripted-gameplay-rhai.md) — accepted language and execution boundary, rule-change semantics, and next migration gate; embedding verified, production migration pending.

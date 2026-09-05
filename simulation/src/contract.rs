@@ -20,31 +20,11 @@ pub fn decision_schema() -> Value {
     schema
 }
 
-// Match every authoritative variant: adding a skill requires describing its contract.
-impl Skill {
-    pub fn description(&self) -> &'static str {
-        match self {
-            Self::Move => "requires non-null destination integer -10..10; target/text null; move one cell per tick; costs energy",
-            Self::Gather => "destination/target/text must be null; gathers food at own position, not a destination; costs 4 energy; gains one carried food",
-            Self::Eat => "requires one carried food; reduces hunger by 35",
-            Self::Rest => "duration 1..5 ticks; restores 12 energy each tick",
-            Self::Wait => "duration 1..5 ticks; intentional inactivity",
-            Self::Speak => "text of 1..1000 characters; heard within distance 2",
-            Self::Attack => "known target player ID at same position; costs 8 energy; 20 damage",
-        }
-    }
-}
 pub fn skill_contract() -> Value {
-    let schema = serde_json::to_value(schemars::schema_for!(Skill)).unwrap();
-    json!(schema["enum"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|name| {
-            let skill: Skill = serde_json::from_value(name.clone()).unwrap();
-            json!({"skill":name,"requirements_and_effects":skill.description()})
-        })
-        .collect::<Vec<_>>())
+    let registry = scripting::Registry::default();
+    json!(registry.catalog().as_array().unwrap().iter().map(|d| {
+        json!({"skill":d["id"],"requirements_and_effects":d["description"],"revision":d["revision"]})
+    }).collect::<Vec<_>>())
 }
 
 pub fn strict_schema(v: &mut Value) {
