@@ -113,8 +113,15 @@ impl Node {
         self.validate_with_laws(&scripting::Registry::default())
     }
     pub fn validate_with_laws(&self, laws: &scripting::Registry) -> Result<Vec<&Action>, String> {
+        self.validate_with_map(laws, None)
+    }
+    pub fn validate_with_map(
+        &self,
+        laws: &scripting::Registry,
+        map: Option<&crate::spatial::Grid>,
+    ) -> Result<Vec<&Action>, String> {
         let mut actions = vec![];
-        self.check(1, &mut 0, &mut actions, laws)?;
+        self.check(1, &mut 0, &mut actions, laws, map)?;
         if actions.is_empty() {
             return Err("policy needs at least one skill action".into());
         }
@@ -126,18 +133,19 @@ impl Node {
         total: &mut usize,
         actions: &mut Vec<&'a Action>,
         laws: &scripting::Registry,
+        map: Option<&crate::spatial::Grid>,
     ) -> Result<(), String> {
         count(depth, total)?;
         match self {
             Self::Priority { children } | Self::Sequence { children } => {
                 width(children.len())?;
                 for c in children {
-                    c.check(depth + 1, total, actions, laws)?;
+                    c.check(depth + 1, total, actions, laws, map)?;
                 }
             }
             Self::Guard { condition, child } => {
-                condition.check(depth + 1, total, laws)?;
-                child.check(depth + 1, total, actions, laws)?;
+                condition.check(depth + 1, total, laws, map)?;
+                child.check(depth + 1, total, actions, laws, map)?;
             }
             Self::Action { action } => actions.push(action),
             Self::Reconsider { reason } => {
@@ -155,19 +163,22 @@ impl Condition {
         depth: usize,
         total: &mut usize,
         laws: &scripting::Registry,
+        map: Option<&crate::spatial::Grid>,
     ) -> Result<(), String> {
         count(depth, total)?;
         match self {
             Self::All { conditions } | Self::Any { conditions } => {
                 width(conditions.len())?;
                 for c in conditions {
-                    c.check(depth + 1, total, laws)?;
+                    c.check(depth + 1, total, laws, map)?;
                 }
             }
-            Self::Not { condition } => condition.check(depth + 1, total, laws)?,
+            Self::Not { condition } => condition.check(depth + 1, total, laws, map)?,
             _ => (),
         }
-        let error: String = laws.law("validate_condition", json!(self))?;
+        let mut input = json!(self);
+        input["map"] = json!(map);
+        let error: String = laws.law("validate_condition", input)?;
         if !error.is_empty() {
             return Err(error);
         }

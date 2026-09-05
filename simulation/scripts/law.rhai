@@ -39,7 +39,7 @@ fn validate_reflection(r) {
 }
 fn visible(c) {
     c.viewer.health > 0 && (c.other.health > 0 || c.kind == "death") && c.viewer.id != c.other.id &&
-    distance(c.viewer.position,c.other.position) <= (if c.kind == "speech" { 2 } else { 1 })
+    c.distance <= (if c.kind == "speech" { 2 } else { 1 })
 }
 fn observation(site) { #{food:if site == () { 0 } else { site.food }} }
 fn memory_limit(c) { 16 }
@@ -87,9 +87,18 @@ fn validate_dialogue(c) {
     }
     ""
 }
+fn valid_location(map, p) {
+    if map == () { return p >= -10 && p <= 10; }
+    if p < 0 || p >= map.width * map.height { return false; }
+    if "bounds" in map && map.bounds != () {
+        let b = map.bounds; let x = p % map.width; let y = p / map.width;
+        return x >= b.x && x < b.x+b.width && y >= b.y && y < b.y+b.height;
+    }
+    true
+}
 fn validate_condition(c) {
     if (c.kind == "at" || c.kind == "food_at" || c.kind == "danger") && c.location != () &&
-       (c.location < -10 || c.location > 10) { return "condition location outside known world bounds"; }
+       !valid_location(c.map, c.location) { return "condition location outside known world bounds"; }
     if c.kind == "resource" && (c.value < 0 || c.value > 100) { return "resource threshold must be 0..100"; }
     if c.kind == "food_at" && (c.minimum < 1 || c.minimum > 100) { return "food minimum must be 1..100"; }
     ""

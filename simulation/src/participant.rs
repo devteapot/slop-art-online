@@ -372,7 +372,7 @@ impl World {
                     reflections: vec![],
                 };
                 self.validate(i, &d, &self.players[i].memories)?;
-                for action in tree.validate_with_laws(&self.scripts)? {
+                for action in tree.validate_with_map(&self.scripts, self.map_for_actor(actor).as_ref())? {
                     if let Some(target) = action.target {
                         if !self.players[i]
                             .memories

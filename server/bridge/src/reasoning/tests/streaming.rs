@@ -372,3 +372,20 @@ async fn total_stream_wire_limit_bounds_heartbeat_flood_independently_of_capture
     assert_eq!(result.metadata["attempts"].as_array().unwrap().len(), 1);
     task.await.unwrap();
 }
+
+#[test]
+fn explicit_chat_effort_is_validated_and_preserved_on_wire() {
+    let mut config: serde_json::Value = serde_json::from_str(include_str!("../../../../../configs/reasoning/codex-carlid-luna-streaming-proof.json")).unwrap();
+    config["backend"]["auth"] = json!({"kind":"none"});
+    config["backend"]["base_url"] = json!("http://127.0.0.1:9999/v1");
+    for effort in ["low","medium","high"] {
+        config["backend"]["reasoning_effort"]=json!(effort);
+        config["backend"]["capabilities"]["reasoning_efforts"]=json!([]);
+        let c: backend::Config=serde_json::from_value(config.clone()).unwrap();
+        assert!(c.validate().is_err());
+        config["backend"]["capabilities"]["reasoning_efforts"]=json!(["low","medium","high"]);
+        let c=serde_json::from_value(config.clone()).unwrap();
+        let b=backend::Backend::new(c).unwrap();
+        assert_eq!(b.payload(json!([]),json!({}))["reasoning_effort"],effort);
+    }
+}

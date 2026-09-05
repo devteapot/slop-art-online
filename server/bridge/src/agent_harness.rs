@@ -169,6 +169,31 @@ pub async fn run(
     audit: std::path::PathBuf,
     cancel: watch::Receiver<Option<String>>,
 ) {
+    if let Ok(path) = std::env::var("SAO_HARNESS_START_FILE") {
+        let mut gate_cancel = cancel.clone();
+        while !std::path::Path::new(&path).exists() {
+            if gate_cancel.borrow().is_some() { return; }
+            tokio::select! { _=tokio::time::sleep(Duration::from_millis(100))=>(), _=gate_cancel.changed()=>return }
+        }
+    }
+    if let Ok(interval) = std::env::var("SAO_HARNESS_SERIAL_MS") {
+        let interval = interval.parse::<u64>().unwrap_or(15000).max(1000);
+        let calls = std::env::var("SAO_HARNESS_MAX_CALLS").ok().and_then(|n| n.parse::<usize>().ok()).unwrap_or(6);
+        let mut cancel = cancel;
+        for n in 0..calls {
+            if cancel.borrow().is_some() || service.current().is_ok_and(|v|v["stopped"]==true||v["context"]["player"]["health"]==0) {break;}
+            let role = [Responsibility::Behavior, Responsibility::Communication, Responsibility::Learning][n%3];
+            if let Err(e) = deliberate_once(&service, config.clone(), role, &audit, cancel.clone()).await {eprintln!("participant harness {role:?}: {e}");}
+            tokio::select! { _=tokio::time::sleep(Duration::from_millis(interval))=>(), _=cancel.changed()=>break }
+        }
+        return;
+    }
+    let remaining = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(
+        std::env::var("SAO_HARNESS_MAX_CALLS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(u64::MAX),
+    ));
     let mut tasks = vec![];
     for (role, default_ms, env) in [
         (Responsibility::Behavior, 15000, "SAO_BEHAVIOR_MS"),
@@ -184,9 +209,11 @@ pub async fn run(
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(default_ms)
             .max(1000);
+        let remaining = remaining.clone();
         tasks.push(tokio::spawn(async move{loop{
             if cancel.borrow().is_some(){break;}
             if service.current().is_ok_and(|v|v["stopped"]==true||v["context"]["player"]["health"]==0){break;}
+            if remaining.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |n| n.checked_sub(1)).is_err(){break;}
             if let Err(e)=deliberate_once(&service,config.clone(),role,&audit,cancel.clone()).await{eprintln!("participant harness {role:?}: {e}");}
             tokio::select!{_=tokio::time::sleep(Duration::from_millis(interval))=>(),_=cancel.changed()=>break}
         }}));

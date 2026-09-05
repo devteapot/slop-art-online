@@ -69,12 +69,12 @@ impl Default for Registry {
             (
                 "law",
                 include_str!("../scripts/law.rhai"),
-                "Default laws: action duration 1..5 units of 2500 ms; legacy simulation_tick/expiry units are 2500 ms regardless of update frequency; movement and condition locations -10..10; resource thresholds 0..100; food minimum 1..100; speech expiry within 30 ticks. Skill descriptions describe their authored defaults; current law validation is authoritative.",
+                "Default laws: action duration 1..5 units of 2500 ms; legacy simulation_tick/expiry units are 2500 ms regardless of update frequency; locations use supplied map cell IDs (legacy worlds -10..10); resource thresholds 0..100; food minimum 1..100; speech expiry within 30 ticks. Skill descriptions describe their authored defaults; current law validation is authoritative.",
             ),
             (
                 "move",
                 include_str!("../scripts/move.rhai"),
-                "destination -10..10; costs 1 energy per cell, one cell per 250 ms; continues to destination",
+                "destination is a surveyed walkable map cell ID (legacy -10..10); shortest cardinal route around walls, no automatic danger avoidance; costs 1 energy per cell, one cell per 250 ms; continues to destination",
             ),
             (
                 "gather",
@@ -371,6 +371,14 @@ impl Registry {
         self.call(&self.resolve("law")?, function, input)
     }
     pub fn validate_action(&self, action: &Action, actor: &Player) -> Result<(), String> {
+        self.validate_action_on_map(action, actor, None)
+    }
+    pub fn validate_action_on_map(
+        &self,
+        action: &Action,
+        actor: &Player,
+        map: Option<&crate::spatial::Grid>,
+    ) -> Result<(), String> {
         let reference = self.resolve(action.skill.id())?;
         if reference.id == "law" {
             return Err("world law is not a skill".into());
@@ -378,7 +386,7 @@ impl Registry {
         let reason: String = self.call(
             &reference,
             "validate",
-            json!({"action":action,"actor":facts(actor)}),
+            json!({"action":action,"actor":facts(actor),"map":map}),
         )?;
         if reason.is_empty() {
             Ok(())

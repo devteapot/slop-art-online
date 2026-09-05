@@ -27,6 +27,13 @@ struct Session {
     observer: bool,
     run: String,
 }
+#[derive(Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ActorConfig {
+    actor: u32,
+    role: String,
+    config: Config,
+}
 struct App {
     root: PathBuf,
     out: PathBuf,
@@ -40,6 +47,7 @@ struct App {
     runs: Mutex<Vec<String>>,
     mutation: tokio::sync::Mutex<()>,
     config: Option<Config>,
+    controllers: Vec<ActorConfig>,
     harness_cancellations: Mutex<Vec<tokio::sync::watch::Sender<Option<String>>>>,
 }
 type Shared = Arc<App>;
@@ -224,7 +232,7 @@ async fn bootstrap(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
         .unwrap_or(&app.browser_server);
     if let Ok((_, s)) = session(&app, &headers) {
         return Ok(
-            Json(json!({"db":app.db,"server":browser_server,"run":s.run,"actor":3}))
+            Json(json!({"db":app.db,"server":browser_server,"run":s.run,"actor":0}))
                 .into_response(),
         );
     }
@@ -241,7 +249,7 @@ async fn bootstrap(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
             run: app.run.lock().unwrap().clone(),
         },
     );
-    let mut response=Json(json!({"db":app.db,"server":browser_server,"run":app.run.lock().unwrap().clone(),"mode":"local development","actor":3})).into_response();
+    let mut response=Json(json!({"db":app.db,"server":browser_server,"run":app.run.lock().unwrap().clone(),"mode":"local development","actor":0})).into_response();
     response.headers_mut().insert(
         header::SET_COOKIE,
         format!(
@@ -271,7 +279,12 @@ async fn bind(State(app): State<Shared>, headers: HeaderMap, Json(body): Json<Va
     call(
         &app,
         "sim_grant_client",
-        vec![json!(run), json!(identity), json!(s.observer), json!(3)],
+        vec![
+            json!(run),
+            json!(identity),
+            json!(s.observer),
+            json!(if s.observer { 0 } else { 3 }),
+        ],
     )
     .await
     .map_err(error)?;
@@ -288,7 +301,12 @@ async fn mode(State(app): State<Shared>, headers: HeaderMap, Json(body): Json<Va
     call(
         &app,
         "sim_grant_client",
-        vec![json!(run), json!(identity), json!(observer), json!(3)],
+        vec![
+            json!(run),
+            json!(identity),
+            json!(observer),
+            json!(if observer { 0 } else { 3 }),
+        ],
     )
     .await
     .map_err(error)?;
@@ -311,6 +329,21 @@ async fn create_run(app: &App) -> Result<String, String> {
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(300)
         .clamp(1, 10_000));
+    let parsed: simulation::Scenario = serde_json::from_value(scenario.clone()).map_err(|e| e.to_string())?;
+    simulation::World::new(run.clone(), parsed.clone())?;
+    if !app.controllers.is_empty() {
+        let mut ids = std::collections::BTreeSet::new();
+        for entry in &app.controllers {
+            if parsed.arenas.iter().find(|a|a.actors.contains(&entry.actor)).and_then(|a|a.controllers.get(&entry.actor)).is_some_and(|role|*role!=entry.role) {
+                return Err("controller manifest disagrees with arena metadata".into());
+            }
+            if !ids.insert(entry.actor) || !matches!(entry.role.as_str(), "builtin" | "external")
+                || !parsed.players.iter().any(|p| p.id == entry.actor && p.controller == simulation::Controller::Ai) {
+                return Err("controller manifest requires unique existing AI actors and builtin/external roles".into());
+            }
+        }
+        if ids.len() != parsed.players.len() { return Err("matrix needs one controller per actor".into()); }
+    }
     call(
         app,
         "sim_create_participant",
@@ -322,7 +355,7 @@ async fn create_run(app: &App) -> Result<String, String> {
         "sim_setup_client_clock",
         vec![
             json!(run),
-            json!(if app.config.is_some() {
+            json!(if app.config.is_some() || !app.controllers.is_empty() {
                 "live_model"
             } else {
                 "live_fixture"
@@ -352,7 +385,7 @@ async fn create_run(app: &App) -> Result<String, String> {
         std::fs::copy(app.root.join(source), dir.join(name))
             .map_err(|_| "version archive failed")?;
     }
-    if app.config.is_none() {
+    if app.config.is_none() && app.controllers.is_empty() {
         std::fs::copy(
             app.root.join("scenarios/reactive-client-fixture.json"),
             dir.join("fixture-policy.json"),
@@ -360,12 +393,17 @@ async fn create_run(app: &App) -> Result<String, String> {
         .map_err(|_| "fixture archive failed")?;
     }
 
-    std::fs::write(dir.join("mode.json"),json!({"run":run,"db":app.db,"server":app.server,"evidence_mode":if app.config.is_some(){"live_model"}else{"live_fixture"},"note":"actual authoritative run; fixture explicitly test-authored; no model substitution"}).to_string()).map_err(|_|"mode write failed")?;
+    std::fs::write(dir.join("mode.json"),json!({"run":run,"db":app.db,"server":app.server,"evidence_mode":if app.config.is_some() || !app.controllers.is_empty(){"live_model"}else{"live_fixture"},"note":"actual authoritative run; fixture explicitly test-authored; no model substitution"}).to_string()).map_err(|_|"mode write failed")?;
     let private = app.root.join(".local/credentials");
     std::fs::create_dir_all(&private).map_err(|_| "private session directory unavailable")?;
     let mut links = vec![];
-    for (actor, role) in [(1, "builtin"), (2, "external")] {
-        let path = private.join(format!("{run}-{role}.json"));
+    let entries: Vec<(u32, &str, Option<&Config>)> = if app.controllers.is_empty() {
+        vec![(1, "builtin", app.config.as_ref()), (2, "external", app.config.as_ref())]
+    } else {
+        app.controllers.iter().map(|c| (c.actor, c.role.as_str(), Some(&c.config))).collect()
+    };
+    for (actor, role, config) in entries {
+        let path = private.join(format!("{run}-actor-{actor}-{role}.json"));
         let (service, identity) = new_session(app.server.clone(), app.db.clone(), &path).await?;
         call(
             app,
@@ -374,9 +412,9 @@ async fn create_run(app: &App) -> Result<String, String> {
         )
         .await?;
         let view = service.observe(0, 256).await?;
-        links.push(json!({"actor":actor,"role":role,"session_file":path}));
+        links.push(json!({"actor":actor,"role":role,"identity":identity,"session_file":path}));
         if role == "builtin" {
-            if let Some(config) = &app.config {
+            if let Some(config) = config {
                 if std::env::var("SAO_HARNESS_MANUAL").as_deref() == Ok("1") {
                     let _ = service.connection.disconnect();
                     continue;
@@ -386,7 +424,7 @@ async fn create_run(app: &App) -> Result<String, String> {
                 tokio::spawn(agent_harness::run(
                     service,
                     config.clone(),
-                    dir.join("reasoning"),
+                    if app.controllers.is_empty() {dir.join("reasoning")} else {dir.join("reasoning").join(format!("actor-{actor}"))},
                     rx,
                 ));
             } else {
@@ -435,7 +473,7 @@ async fn fresh(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
         call(
             &app,
             "sim_grant_client",
-            vec![json!(run), json!(identity), json!(true), json!(3)],
+            vec![json!(run), json!(identity), json!(true), json!(0)],
         )
         .await
         .map_err(error)?;
@@ -464,7 +502,7 @@ async fn focus(
     call(
         &app,
         "sim_grant_client",
-        vec![json!(run), json!(identity), json!(true), json!(3)],
+        vec![json!(run), json!(identity), json!(true), json!(0)],
     )
     .await
     .map_err(error)?;
@@ -607,6 +645,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             },
         )
         .transpose()?;
+    let controllers: Vec<ActorConfig> = std::env::var("BEVY_DEV_CONTROLLERS").ok()
+        .map(|path| -> Result<_, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(serde_json::from_slice(&std::fs::read(path)?)?)
+        }).transpose()?.unwrap_or_default();
+    for c in &controllers { Reasoner::new(c.config.clone())?; }
     let app = Arc::new(App {
         root,
         out,
@@ -620,6 +663,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         runs: Mutex::new(vec![]),
         mutation: tokio::sync::Mutex::new(()),
         config,
+        controllers,
         harness_cancellations: Mutex::new(vec![]),
     });
     if let Some(active) = resume {
@@ -663,7 +707,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!(
         "Bevy game client: {} — live authoritative {}, initially paused",
         app.origin,
-        if app.config.is_some() {
+        if app.config.is_some() || !app.controllers.is_empty() {
             "model mode"
         } else {
             "explicit fixture mode, no inference"

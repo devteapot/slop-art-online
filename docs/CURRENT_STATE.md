@@ -1,5 +1,9 @@
 # Implementation state and legacy baseline
 
+Current arena iteration: [isolated reasoning/environment matrix](ARENA_MATRIX.md), rules `m1-9-arenas.1`: six sealed arenas in one world, Luna low/medium/high × open/corridors, one host NPC and one external MCP player per arena, scoped terrain/perception/effects, per-actor provider configs and labels off by default. See the linked evidence and experimental limitations.
+
+Current spatial prototype: [surveyed grid and mixed-controller experiment](GRID_PATHFINDING.md), rules `m1-8-grid.1`, adds a real 24×16 obstacle map, shared shortest-route movement, and an observer with no character. The default pilot now runs one host-managed LLM NPC and one external MCP player. The earlier timing/scripting evidence below retains its historical scope.
+
 Timing update: [m1-7-time.1 contract](SIMULATION_TIMING.md) uses native SpacetimeDB scheduled reducers with a 50 ms target and elapsed-time gameplay. The bounded [living-clearing pilot](LIVING_CLEARING_PILOT.md) uses an optimized authoritative module; see its evidence for measured cadence and model outcomes. Earlier counts and runs below are historical.
 
 Current scripted foundation: rules `m1-7-time.1` run the active game's seven skills and world policies through Rhai inside SpacetimeDB. Versioned definitions, next-update law activation, pinned action/dependency revisions, transactional effects and operator installation are implemented. [Integration contract and evidence](SCRIPTED_GAMEPLAY.md) records the prior scripting integration. Current timing verification has 84 passing tests (49 simulation, 30 bridge, one archive, four host), fresh native-scheduler and cancellation checks, and a successful Bevy WASM build. Public player authoring and divine progression remain future work; the legacy server prototype is unchanged.

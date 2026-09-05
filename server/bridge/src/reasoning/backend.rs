@@ -14,6 +14,8 @@ pub enum BackendConfig {
         auth: ChatAuth,
         capabilities: ChatCapabilities,
         #[serde(default)]
+        reasoning_effort: Option<Effort>,
+        #[serde(default)]
         stream: bool,
     },
     #[serde(rename = "openrouter")]
@@ -46,6 +48,8 @@ pub enum ChatAuth {
 #[serde(deny_unknown_fields)]
 pub struct ChatCapabilities {
     pub response_modes: Vec<StructuredOutput>,
+    #[serde(default)]
+    pub reasoning_efforts: Vec<Effort>,
     pub token_limit_field: TokenLimitField,
     #[serde(default)]
     pub temperature: bool,
@@ -115,7 +119,7 @@ pub enum ReasoningBudget {
     Effort { effort: Effort },
     Tokens { max_tokens: u32 },
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Effort {
     None,
@@ -238,9 +242,13 @@ impl Config {
                 base_url,
                 auth,
                 capabilities,
+                reasoning_effort,
                 ..
             } => {
                 chat_base(base_url)?;
+                if reasoning_effort.as_ref().is_some_and(|effort| !capabilities.reasoning_efforts.contains(effort)) {
+                    return Err("reasoning effort was requested but is not declared supported by this endpoint".into());
+                }
                 if let ChatAuth::BearerEnv { credential_env } = auth {
                     credential_name(credential_env)?;
                 }
@@ -395,6 +403,7 @@ impl Backend {
             BackendConfig::Ollama { endpoint, .. } => (endpoint.trim_end_matches('/').into(), None),
         };
         let client = reqwest::Client::builder()
+            .user_agent("sao-reasoning/1.0")
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(10))
             .build()
@@ -441,10 +450,12 @@ impl Backend {
             BackendConfig::OpenaiCompatible {
                 model,
                 capabilities,
+                reasoning_effort,
                 stream,
                 ..
             } => {
                 let mut v = json!({"model":model,"messages":messages,"stream":stream});
+                if let Some(effort) = reasoning_effort { v["reasoning_effort"] = json!(effort); }
                 let limit = match capabilities.token_limit_field {
                     TokenLimitField::MaxTokens => Some("max_tokens"),
                     TokenLimitField::MaxCompletionTokens => Some("max_completion_tokens"),

@@ -32,9 +32,16 @@ impl World {
         let p = &self.players[i];
         let target = a
             .target
-            .and_then(|id| self.players.iter().find(|p| p.id == id))
+            .and_then(|id| self.players.iter().find(|other| other.id == id && self.same_arena(p.id, other.id)))
             .map(|p| json!({"id":p.id,"position":p.position,"health":p.health}));
-        json!({"actor":facts(p),"action":a,"target":target,
+        // Any destination-bearing scripted skill may inspect this bounded terrain query.
+        let navigation = if a.destination.is_some() {
+            self.map_for_actor(p.id).as_ref().and_then(|map| a.destination.and_then(|goal| map.route(p.position, goal)))
+                .map(|route| json!({"next":route.first().copied().unwrap_or(p.position),"remaining_steps":route.len()}))
+        } else {
+            None
+        };
+        json!({"map":self.map_for_actor(p.id),"navigation":navigation,"actor":facts(p),"action":a,"target":target,
             "site":self.sites.iter().find(|s| s.position==p.position).map(|s| json!({"position":s.position,"food":s.food})),
             "time_ms":self.timing.time_ms,"delta_ms":self.timing.time_ms.saturating_sub(e.script.as_ref().map_or(self.timing.time_ms, |s| s.evaluated_ms)),
             "ready_at_ms":self.execution_ready_at(p.id,e),
@@ -73,6 +80,9 @@ impl World {
     ) -> Result<(), String> {
         match effect {
             Effect::Actor { fields } => {
+                if fields.get("position").is_some_and(|&position| !spatial::walkable(self.map_for_actor(self.players[i].id).as_ref(), position)) {
+                    return Err("position outside actor terrain capability".into());
+                }
                 if fields
                     .keys()
                     .any(|k| !matches!(k.as_str(), "position" | "energy" | "food" | "hunger"))
@@ -95,7 +105,8 @@ impl World {
                 if a.target != Some(*target)
                     || *target == self.players[i].id
                     || *amount < 0
-                    || self.idx(*target).is_err() =>
+                    || self.idx(*target).is_err()
+                    || !self.same_arena(self.players[i].id, *target) =>
             {
                 return Err("damage effect outside target capability".into())
             }
@@ -155,7 +166,8 @@ impl World {
     }
 
     pub(super) fn visible(&self, viewer: usize, other: usize, kind: &str) -> Result<bool, String> {
-        self.scripts.law("visible",json!({"viewer":facts(&self.players[viewer]),"other":facts(&self.players[other]),"kind":kind}))
+        if !self.same_arena(self.players[viewer].id, self.players[other].id) { return Ok(false); }
+        self.scripts.law("visible",json!({"viewer":facts(&self.players[viewer]),"other":facts(&self.players[other]),"kind":kind,"distance":self.initial.map.as_ref().map_or((self.players[viewer].position-self.players[other].position).abs(), |map| map.distance(self.players[viewer].position,self.players[other].position))}))
     }
 
     pub(super) fn reflect_identity(

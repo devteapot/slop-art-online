@@ -27,16 +27,86 @@ pub struct SelectionRing;
 #[derive(Component)]
 pub struct Terrain;
 const CELL: f32 = 160.;
+const GRID_CELL: f32 = 40.;
 const GRASS: Color = Color::srgb(0.20, 0.32, 0.23);
 const DARK: Color = Color::srgb(0.10, 0.17, 0.16);
 const PATH: Color = Color::srgb(0.48, 0.43, 0.30);
-fn actor_position(p: &Value) -> Vec3 {
-    // Display lanes separate sprites sharing a location. They are not additional world coordinates.
-    Vec3::new(
-        p["position"].as_f64().unwrap_or(0.) as f32 * CELL,
-        32. - (p["id"].as_u64().unwrap_or(1).saturating_sub(1) % 5) as f32 * 32.,
-        10.,
-    )
+fn cell_position(snapshot: &Value, cell: i32) -> Vec3 {
+    if let (Some(w), Some(h)) = (
+        snapshot["map"]["width"].as_i64(),
+        snapshot["map"]["height"].as_i64(),
+    ) {
+        let w = w as i32;
+        Vec3::new(
+            (cell % w) as f32 * GRID_CELL - (w - 1) as f32 * GRID_CELL / 2.,
+            (h as f32 - 1.) * GRID_CELL / 2. - (cell / w) as f32 * GRID_CELL,
+            0.,
+        )
+    } else {
+        Vec3::new(cell as f32 * CELL, 0., 0.)
+    }
+}
+fn actor_position(p: &Value, snapshot: &Value) -> Vec3 {
+    let mut position = cell_position(snapshot, p["position"].as_i64().unwrap_or(0) as i32);
+    // Small display offsets distinguish occupants of the same authoritative cell.
+    if snapshot["map"].is_object() {
+        position.x += if p["id"].as_u64().unwrap_or(1) % 2 == 0 {
+            6.
+        } else {
+            -6.
+        };
+    } else {
+        position.y = 32. - (p["id"].as_u64().unwrap_or(1).saturating_sub(1) % 5) as f32 * 32.;
+    }
+    position.z = 10.;
+    position
+}
+fn grid_terrain(commands: &mut Commands, snapshot: &Value) {
+    let map = &snapshot["map"];
+    let count = map["width"].as_i64().unwrap_or(0) * map["height"].as_i64().unwrap_or(0);
+    for cell in 0..count as i32 {
+        if let Some(b)=map.get("bounds").filter(|b|b.is_object()) {
+            let width=map["width"].as_i64().unwrap_or(1); let x=cell as i64%width; let y=cell as i64/width;
+            if x<b["x"].as_i64().unwrap_or(0) || y<b["y"].as_i64().unwrap_or(0)
+                || x>=b["x"].as_i64().unwrap_or(0)+b["width"].as_i64().unwrap_or(0)
+                || y>=b["y"].as_i64().unwrap_or(0)+b["height"].as_i64().unwrap_or(0) {continue;}
+        }
+        let blocked = map["blocked"]
+            .as_array()
+            .is_some_and(|cells| cells.contains(&json!(cell)));
+        let site = snapshot["sites"]
+            .as_array()
+            .and_then(|sites| sites.iter().find(|s| s["position"] == cell));
+        let danger = site.and_then(|s| s["hazard"].as_i64()).unwrap_or(0) > 0;
+        let pos = cell_position(snapshot, cell);
+        tile(
+            commands,
+            if blocked {
+                DARK
+            } else if danger {
+                Color::srgb(0.46, 0.29, 0.23)
+            } else {
+                GRASS
+            },
+            pos,
+            Vec2::splat(GRID_CELL - 1.),
+        );
+        if blocked {
+            tile(
+                commands,
+                Color::srgb(0.34, 0.39, 0.37),
+                pos + Vec3::Z,
+                Vec2::splat(GRID_CELL - 7.),
+            );
+        } else if site.and_then(|s| s["food"].as_i64()).unwrap_or(0) > 0 {
+            tile(
+                commands,
+                Color::srgb(0.85, 0.72, 0.33),
+                pos + Vec3::Z,
+                Vec2::splat(12.),
+            );
+        }
+    }
 }
 pub fn setup(mut commands: Commands) {
     commands.spawn((Camera2d, Transform::from_xyz(CELL, 0., 0.), WorldCamera));
@@ -138,6 +208,7 @@ pub fn sync(
         let terrain = json!([
             run,
             game.world_visible,
+            game.snapshot["map"],
             game.snapshot["sites"].as_array().map(|sites| sites
                 .iter()
                 .map(|s| json!([s["position"], s["food"], s["hazard"]]))
@@ -150,84 +221,88 @@ pub fn sync(
                 commands.entity(e).despawn();
             }
             if game.world_visible {
-                for pos in -10..=10 {
-                    let x = pos as f32 * CELL;
-                    let site = game.snapshot["sites"]
-                        .as_array()
-                        .and_then(|sites| sites.iter().find(|s| s["position"] == pos));
-                    let known = site.is_some();
-                    let hazard = site.and_then(|s| s["hazard"].as_i64()).unwrap_or(0) > 0;
-                    tile(
-                        &mut commands,
-                        if known { GRASS } else { DARK },
-                        Vec3::new(x, 0., 0.),
-                        Vec2::new(CELL, 448.),
-                    );
-                    // Flat, deterministic tiles. Only the authority supplies resources and hazards.
-                    for col in -2..=2 {
-                        for row in -6i32..=6 {
-                            let tx = x + col as f32 * 32.;
-                            let ty = row as f32 * 32.;
-                            if row.abs() <= 1 {
-                                tile(
-                                    &mut commands,
-                                    if hazard {
-                                        Color::srgb(0.46, 0.29, 0.23)
-                                    } else if known {
-                                        PATH
-                                    } else {
-                                        Color::srgb(0.20, 0.25, 0.22)
-                                    },
-                                    Vec3::new(tx, ty, 0.2),
-                                    Vec2::splat(32.),
-                                );
-                                if known && (col + row + pos) % 3 == 0 {
+                if game.snapshot["map"].is_object() {
+                    grid_terrain(&mut commands, &game.snapshot);
+                } else {
+                    for pos in -10..=10 {
+                        let x = pos as f32 * CELL;
+                        let site = game.snapshot["sites"]
+                            .as_array()
+                            .and_then(|sites| sites.iter().find(|s| s["position"] == pos));
+                        let known = site.is_some();
+                        let hazard = site.and_then(|s| s["hazard"].as_i64()).unwrap_or(0) > 0;
+                        tile(
+                            &mut commands,
+                            if known { GRASS } else { DARK },
+                            Vec3::new(x, 0., 0.),
+                            Vec2::new(CELL, 448.),
+                        );
+                        // Flat, deterministic tiles. Only the authority supplies resources and hazards.
+                        for col in -2..=2 {
+                            for row in -6i32..=6 {
+                                let tx = x + col as f32 * 32.;
+                                let ty = row as f32 * 32.;
+                                if row.abs() <= 1 {
                                     tile(
                                         &mut commands,
-                                        Color::srgba(0.68, 0.60, 0.41, 0.35),
-                                        Vec3::new(tx + 7., ty - 6., 0.3),
-                                        Vec2::new(8., 3.),
+                                        if hazard {
+                                            Color::srgb(0.46, 0.29, 0.23)
+                                        } else if known {
+                                            PATH
+                                        } else {
+                                            Color::srgb(0.20, 0.25, 0.22)
+                                        },
+                                        Vec3::new(tx, ty, 0.2),
+                                        Vec2::splat(32.),
+                                    );
+                                    if known && (col + row + pos) % 3 == 0 {
+                                        tile(
+                                            &mut commands,
+                                            Color::srgba(0.68, 0.60, 0.41, 0.35),
+                                            Vec3::new(tx + 7., ty - 6., 0.3),
+                                            Vec2::new(8., 3.),
+                                        );
+                                    }
+                                } else if known && (col + row + pos) % 3 == 0 {
+                                    tile(
+                                        &mut commands,
+                                        Color::srgb(0.30, 0.41, 0.25),
+                                        Vec3::new(tx, ty, 0.2),
+                                        Vec2::new(3., 7.),
+                                    );
+                                    tile(
+                                        &mut commands,
+                                        Color::srgb(0.30, 0.41, 0.25),
+                                        Vec3::new(tx + 5., ty - 2., 0.2),
+                                        Vec2::new(3., 4.),
                                     );
                                 }
-                            } else if known && (col + row + pos) % 3 == 0 {
-                                tile(
-                                    &mut commands,
-                                    Color::srgb(0.30, 0.41, 0.25),
-                                    Vec3::new(tx, ty, 0.2),
-                                    Vec2::new(3., 7.),
-                                );
-                                tile(
-                                    &mut commands,
-                                    Color::srgb(0.30, 0.41, 0.25),
-                                    Vec3::new(tx + 5., ty - 2., 0.2),
-                                    Vec2::new(3., 4.),
-                                );
                             }
                         }
-                    }
-                    if known {
-                        for (dx, y) in [(-46., 164.), (45., 190.), (28., -174.)] {
-                            tree(&mut commands, x + dx, y);
-                        }
-                        let food = site.and_then(|s| s["food"].as_i64()).unwrap_or(0);
-                        for i in 0..food.clamp(0, 16) {
-                            let at = Vec3::new(
-                                x - 40. + (i % 4) as f32 * 13.,
-                                -95. - (i / 4) as f32 * 12.,
-                                2.,
-                            );
-                            tile(
-                                &mut commands,
-                                Color::srgb(0.37, 0.46, 0.22),
-                                at,
-                                Vec2::new(12., 10.),
-                            );
-                            tile(
-                                &mut commands,
-                                Color::srgb(0.85, 0.72, 0.33),
-                                at + Vec3::new(0., 2., 1.),
-                                Vec2::new(8., 6.),
-                            );
+                        if known {
+                            for (dx, y) in [(-46., 164.), (45., 190.), (28., -174.)] {
+                                tree(&mut commands, x + dx, y);
+                            }
+                            let food = site.and_then(|s| s["food"].as_i64()).unwrap_or(0);
+                            for i in 0..food.clamp(0, 16) {
+                                let at = Vec3::new(
+                                    x - 40. + (i % 4) as f32 * 13.,
+                                    -95. - (i / 4) as f32 * 12.,
+                                    2.,
+                                );
+                                tile(
+                                    &mut commands,
+                                    Color::srgb(0.37, 0.46, 0.22),
+                                    at,
+                                    Vec2::new(12., 10.),
+                                );
+                                tile(
+                                    &mut commands,
+                                    Color::srgb(0.85, 0.72, 0.33),
+                                    at + Vec3::new(0., 2., 1.),
+                                    Vec2::new(8., 6.),
+                                );
+                            }
                         }
                     }
                 }
@@ -238,12 +313,16 @@ pub fn sync(
             if let Some(sites) = game.snapshot["sites"].as_array() {
                 for site in sites {
                     let pos = site["position"].as_i64().unwrap_or(0) as i32;
-                    let name = match pos {
-                        0 => "Camp",
-                        1 => "Trail",
-                        2 => "Clearing",
-                        3 => "Grove",
-                        _ => "Land",
+                    let name = if game.snapshot["map"].is_object() {
+                        "Site"
+                    } else {
+                        match pos {
+                            0 => "Camp",
+                            1 => "Trail",
+                            2 => "Clearing",
+                            3 => "Grove",
+                            _ => "Land",
+                        }
                     };
                     let age = site["observed_tick"]
                         .as_u64()
@@ -261,7 +340,16 @@ pub fn sync(
                             "{name} {pos} · food {food}{age}{}",
                             if hazard { " · danger" } else { "" }
                         ),
-                        Vec3::new(pos as f32 * CELL, -140., 8.),
+                        cell_position(&game.snapshot, pos)
+                            + Vec3::new(
+                                0.,
+                                if game.snapshot["map"].is_object() {
+                                    -20.
+                                } else {
+                                    -140.
+                                },
+                                8.,
+                            ),
                     );
                 }
             }
@@ -279,10 +367,10 @@ pub fn sync(
             for p in players {
                 let id = p["id"].as_u64().unwrap_or(0);
                 let dead = p["health"].as_i64() == Some(0);
-                let target = actor_position(&p);
+                let target = actor_position(&p, &game.snapshot);
                 let color = if dead {
                     Color::srgb(0.40, 0.43, 0.40)
-                } else if p["controller"] == "human" {
+                } else if p["controller"] == "human" || p["runtime"] == "external" {
                     Color::srgb(0.32, 0.63, 0.85)
                 } else if p["controller"] == "other" {
                     Color::srgb(0.54, 0.63, 0.55)
@@ -408,7 +496,7 @@ pub fn sync(
                             "{}{health}{action}{speech}",
                             p["name"].as_str().unwrap_or("Character")
                         ),
-                        actor_position(&p) + Vec3::Y * 34.,
+                        actor_position(&p, &game.snapshot) + Vec3::Y * 34.,
                     );
                 }
             }
@@ -504,7 +592,29 @@ pub fn camera(
     mut wheel: MessageReader<MouseWheel>,
     window: Single<&Window>,
     time: Res<Time>,
+    mut framed_run: Local<String>,
 ) {
+    let run = game.snapshot["run"].as_str().unwrap_or("").to_owned();
+    if *framed_run != run {
+        *framed_run = run;
+        game.arena=None;
+        game.frame=true;
+        if game.snapshot["arenas"].as_array().is_some_and(|a|!a.is_empty()) { game.sessions_open=true;game.dirty=true; }
+    }
+    if game.frame {
+        game.frame=false;
+        if let (Some(w),Some(h))=(game.snapshot["map"]["width"].as_f64(),game.snapshot["map"]["height"].as_f64()) {
+            let bounds=game.snapshot["arenas"].as_array().and_then(|a|a.iter().find(|a|a["id"].as_str()==game.arena.as_deref())).map(|a|a["bounds"].clone())
+                .or_else(||game.snapshot["map"].get("bounds").cloned());
+            let (x,y,bw,bh)=bounds.map(|b|(b["x"].as_f64().unwrap_or(0.),b["y"].as_f64().unwrap_or(0.),b["width"].as_f64().unwrap_or(w),b["height"].as_f64().unwrap_or(h))).unwrap_or((0.,0.,w,h));
+            let left=if game.sessions_open {258.}else{0.};
+            game.zoom=(((bw as f32+2.)*GRID_CELL)/(window.width()-left-50.).max(100.))
+                .max(((bh as f32+2.)*GRID_CELL)/(window.height()-220.).max(100.)).clamp(0.5,8.);
+            game.camera=(((x+(bw-w)/2.) as f32*GRID_CELL)-left/2.*game.zoom)/CELL;
+            game.camera_y=(h/2.-y-bh/2.) as f32*GRID_CELL;
+            game.follow=false;
+        }
+    }
     let over_ui = window
         .cursor_position()
         .is_some_and(|p| super::ui::captures(&game, p, window.width(), window.height()));
@@ -517,7 +627,7 @@ pub fn camera(
                             MouseScrollUnit::Line => 0.1,
                             _ => 0.002,
                         }))
-            .clamp(0.5, 2.5);
+            .clamp(0.5, 8.);
         }
     }
     if !game.typing && game.world_visible {
@@ -534,13 +644,16 @@ pub fn camera(
             game.follow = false;
         }
     }
-    game.camera = game.camera.clamp(-10., 10.);
-    game.camera_y = game.camera_y.clamp(-350., 350.);
+    let width=game.snapshot["map"]["width"].as_f64().unwrap_or(80.) as f32*GRID_CELL;
+    let height=game.snapshot["map"]["height"].as_f64().unwrap_or(20.) as f32*GRID_CELL;
+    game.camera=game.camera.clamp(-width/CELL,width/CELL);
+    game.camera_y=game.camera_y.clamp(-height,height);
     if game.follow {
         let p = game.player();
-        if let Some(x) = p["position"].as_f64() {
-            game.camera = x as f32;
-            game.camera_y = actor_position(&p).y;
+        if p["position"].as_f64().is_some() {
+            let at = actor_position(&p, &game.snapshot);
+            game.camera = at.x / CELL;
+            game.camera_y = at.y;
         }
     }
     camera.0.translation = Vec3::new((game.camera * CELL).round(), game.camera_y.round(), 0.);
@@ -571,7 +684,7 @@ pub fn click(
                 .filter_map(|p| {
                     let screen = camera
                         .0
-                        .world_to_viewport(camera.1, actor_position(p))
+                        .world_to_viewport(camera.1, actor_position(p, &game.snapshot))
                         .ok()?;
                     let distance = screen.distance(pos);
                     (distance < 24.).then_some((p["id"].as_u64()?, distance))
@@ -586,6 +699,19 @@ pub fn click(
             game.dirty = true;
         }
     } else if let Ok(point) = camera.0.viewport_to_world_2d(camera.1, pos) {
+        if let (Some(w), Some(h)) = (
+            game.snapshot["map"]["width"].as_i64(),
+            game.snapshot["map"]["height"].as_i64(),
+        ) {
+            let x = (point.x / GRID_CELL + (w - 1) as f32 / 2.).round() as i64;
+            let y = ((h - 1) as f32 / 2. - point.y / GRID_CELL).round() as i64;
+            if x >= 0 && x < w && y >= 0 && y < h {
+                net.intent(json!({"skill":"move","destination":y*w+x,"duration":1}));
+                game.status = format!("Move to ({x}, {y}) submitted; waiting for authority");
+                game.dirty = true;
+            }
+            return;
+        }
         // Only the lane is actionable: surrounding scenery does not invent 2D navigation rules.
         if point.y.abs() <= 80. {
             let cell = (point.x / CELL).round() as i32;

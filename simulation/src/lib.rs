@@ -4,13 +4,14 @@ pub mod client_view;
 pub mod participant;
 mod scripted_world;
 pub mod scripting;
+pub mod spatial;
 pub mod timing;
 use bonsai_bt::Behavior;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "m1-7-time.1";
+pub const VERSION: &str = "m1-9-arenas.1";
 pub const DECISION_FORMAT_VERSION: &str = "survivor-policy-v2";
 pub const LEGACY_DECISION_FORMAT: &str = "survivor-sequence-v1";
 pub mod policy;
@@ -197,6 +198,10 @@ pub struct Site {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Scenario {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arenas: Vec<spatial::Arena>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub map: Option<spatial::Grid>,
     pub name: String,
     pub seed: u64,
     pub max_ticks: u64,
@@ -254,12 +259,15 @@ impl World {
         {
             return Err("scenario needs 1..16 players and 1..10000 ticks".into());
         }
+        if let Some(map) = &scenario.map {
+            map.validate()?;
+        }
         let mut ids = std::collections::BTreeSet::new();
         for p in &scenario.players {
             if !ids.insert(p.id)
                 || p.health <= 0
                 || p.health > 100
-                || !(-10..=10).contains(&p.position)
+                || !spatial::walkable(scenario.map.as_ref(), p.position)
                 || !(0..=100).contains(&p.hunger)
                 || !(0..=100).contains(&p.energy)
                 || !(0..=100).contains(&p.caution)
@@ -276,7 +284,7 @@ impl World {
         let mut locations = std::collections::BTreeSet::new();
         for s in &scenario.sites {
             if !locations.insert(s.position)
-                || !(-10..=10).contains(&s.position)
+                || !spatial::walkable(scenario.map.as_ref(), s.position)
                 || s.food < 0
                 || s.food > 100
                 || !(0..=100).contains(&s.hazard)
@@ -284,6 +292,7 @@ impl World {
                 return Err("invalid site".into());
             }
         }
+        spatial::validate_arenas(&scenario)?;
         let mut w = Self {
             run,
             version: VERSION.into(),
@@ -435,7 +444,7 @@ impl World {
         // Deliberate allowlist. Never serialize World, sites, other minds or audit into a prompt.
         let p = &self.players[i];
         let approach = p.execution.as_ref().map(|e| if let Some(policy)=&e.policy {json!({"decision":e.decision,"policy":policy,"state":e.state,"active_attempt":e.attempt})} else {json!(e)});
-        json!({"player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
+        json!({"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
     }
     pub fn request(&mut self, i: usize, trigger: &str) {
         if self.participant_mode {
@@ -475,12 +484,13 @@ impl World {
             );
         }
         let policy_actions = if let Some(policy) = &d.policy {
-            policy.validate_with_laws(&self.scripts)?
+            policy.validate_with_map(&self.scripts, self.map_for_actor(self.players[i].id).as_ref())?
         } else {
             vec![]
         };
         for a in d.actions.iter().chain(policy_actions.iter().copied()) {
-            self.scripts.validate_action(a, &self.players[i])?;
+            self.scripts
+                .validate_action_on_map(a, &self.players[i], self.map_for_actor(self.players[i].id).as_ref())?;
         }
         let p = &self.players[i];
         for r in &d.reflections {
@@ -564,7 +574,7 @@ impl World {
             let policy_actions = d
                 .policy
                 .as_ref()
-                .map(|p| p.validate_with_laws(&self.scripts))
+                .map(|p| p.validate_with_map(&self.scripts, self.map_for_actor(self.players[i].id).as_ref()))
                 .transpose()?
                 .unwrap_or_default();
             for a in d.actions.iter().chain(policy_actions.iter().copied()) {
@@ -786,7 +796,7 @@ impl World {
         let reason: String = self.scripts.call(
             &invocation.definition,
             "validate",
-            json!({"action":a,"actor":scripting::facts(&self.players[i])}),
+            json!({"action":a,"actor":scripting::facts(&self.players[i]),"map":self.map_for_actor(self.players[i].id)}),
         )?;
         if !reason.is_empty() {
             e.attempt = None;
@@ -1139,3 +1149,6 @@ mod scripting_tests;
 
 #[cfg(test)]
 mod timing_tests;
+
+#[cfg(test)]
+mod spatial_tests;

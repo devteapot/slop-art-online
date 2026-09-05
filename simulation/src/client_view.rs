@@ -1,13 +1,13 @@
 //! Server-side presentation projection. No observer information is sent to participant clients.
 use crate::{Event, World};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> Value {
-    let Some(index) = world.players.iter().position(|p| p.id == actor) else {
+    let index = world.players.iter().position(|p| p.id == actor);
+    if !observer && index.is_none() {
         return Value::Null;
-    };
-    let me = &world.players[index];
+    }
     let players: Vec<Value> = if observer {
         world
             .players
@@ -16,10 +16,16 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
             .map(|(i, p)| {
                 let mut value = world.context(i)["player"].clone();
                 value["controller"] = json!(p.controller);
+                if let Some(arena)=world.arena_for_actor(p.id) {
+                    value["arena"]=json!(arena.label);
+                    value["runtime"]=json!(arena.controllers.get(&p.id));
+                }
                 value
             })
             .collect()
     } else {
+        let index = index.unwrap();
+        let me = &world.players[index];
         let mut own = world.context(index)["player"].clone();
         own["controller"] = json!(me.controller);
         let mut visible = BTreeMap::new();
@@ -35,6 +41,7 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
     let sites = if observer {
         json!(world.sites)
     } else {
+        let me = &world.players[index.unwrap()];
         let mut known = BTreeMap::new();
         for memory in &me.memories {
             if memory.kind == "site" {
@@ -52,10 +59,10 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
             v
         }).collect()
     } else {
-        me.memories.iter().map(|m|json!({"id":m.source,"tick":m.tick,"actor":actor,"kind":m.kind,"parents":[],"data":m.content})).collect()
+        world.players[index.unwrap()].memories.iter().map(|m|json!({"id":m.source,"tick":m.tick,"actor":actor,"kind":m.kind,"parents":[],"data":m.content})).collect()
     };
     json!({"run":world.run,"tick":world.tick,"time_ms":world.timing.time_ms,"updates":world.timing.updates,"clock_unit_ms":crate::timing::LEGACY_UNIT_MS,"stopped":world.stopped,"max_ticks":world.initial.max_ticks,
-        "rules":world.version,"actor":actor,"observer":observer,"players":players,"sites":sites,"events":history,
+        "map":if observer {world.initial.map.clone()} else {world.map_for_actor(actor)},"arenas":if observer {json!(world.initial.arenas)} else {Value::Null},"can_participate":world.players.iter().any(|p| p.id == 3 && p.controller == crate::Controller::Human),"rules":world.version,"actor":if observer {Value::Null} else {json!(actor)},"observer":observer,"players":players,"sites":sites,"events":history,
         "pending":if observer {json!(world.pending.iter().map(|p|json!({"id":p.id,"actor":p.actor,"tick":p.tick})).collect::<Vec<_>>())} else {Value::Null}})
 }
 #[cfg(test)]
@@ -79,11 +86,9 @@ mod tests {
         }
         assert!(participant["pending"].is_null());
         assert!(!participant.to_string().contains("model_request"));
-        assert!(
-            snapshot(&world, true, 3, &world.events)["sites"][2]
-                .get("hazard")
-                .is_some()
-        );
+        assert!(snapshot(&world, true, 3, &world.events)["sites"][2]
+            .get("hazard")
+            .is_some());
         assert!(snapshot(&world, false, 999, &world.events).is_null());
     }
 }

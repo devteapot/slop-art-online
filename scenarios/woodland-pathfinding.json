@@ -1,0 +1,140 @@
+{
+  "name": "Surveyed woodland \u2014 runtime NPC and external LLM player",
+  "seed": 73,
+  "max_ticks": 120,
+  "players": [
+    {
+      "id": 1,
+      "name": "Mira",
+      "controller": "ai",
+      "motive": "Build a reliable food supply and a safe meeting place. I care about companions surviving, but I need evidence before trusting a route.",
+      "role": "careful forager",
+      "position": 147,
+      "health": 100,
+      "hunger": 20,
+      "energy": 70,
+      "food": 2,
+      "caution": 65,
+      "empathy": 75,
+      "introspection": 80,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 92,
+            "danger": false,
+            "text": "A traveller reported food at cell 92 (20, 3). The terrain survey is shared, but this food report is unverified."
+          },
+          "source": 0,
+          "confidence": 60
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Tovan",
+      "controller": "ai",
+      "motive": "Find useful food sources and learn which routes are worth the risk. I value independence and want others to recognize what I discover.",
+      "role": "curious scout",
+      "position": 148,
+      "health": 100,
+      "hunger": 20,
+      "energy": 70,
+      "food": 2,
+      "caution": 25,
+      "empathy": 30,
+      "introspection": 35,
+      "fear": 0,
+      "beliefs": [
+        {
+          "claim": {
+            "location": 92,
+            "danger": false,
+            "text": "A traveller reported food at cell 92 (20, 3). The terrain survey is shared, but this food report is unverified."
+          },
+          "source": 0,
+          "confidence": 60
+        }
+      ]
+    }
+  ],
+  "sites": [
+    {
+      "position": 147,
+      "food": 8,
+      "hazard": 0
+    },
+    {
+      "position": 148,
+      "food": 8,
+      "hazard": 0
+    },
+    {
+      "position": 92,
+      "food": 35,
+      "hazard": 0
+    },
+    {
+      "position": 318,
+      "food": 30,
+      "hazard": 0
+    },
+    {
+      "position": 258,
+      "food": 25,
+      "hazard": 0
+    },
+    {
+      "position": 281,
+      "food": 40,
+      "hazard": 3
+    }
+  ],
+  "map": {
+    "width": 24,
+    "height": 16,
+    "blocked": [
+      8,
+      15,
+      32,
+      39,
+      56,
+      63,
+      87,
+      104,
+      111,
+      128,
+      135,
+      152,
+      176,
+      183,
+      195,
+      196,
+      197,
+      199,
+      200,
+      201,
+      202,
+      203,
+      205,
+      206,
+      207,
+      208,
+      209,
+      211,
+      212,
+      224,
+      231,
+      248,
+      255,
+      272,
+      279,
+      303,
+      320,
+      344,
+      351,
+      368,
+      375
+    ]
+  }
+}

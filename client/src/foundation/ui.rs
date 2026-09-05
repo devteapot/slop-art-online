@@ -7,6 +7,7 @@ pub struct Panel(usize);
 #[derive(Component, Clone)]
 pub enum Click {
     Select(u64),
+    Arena(Option<String>),
     Tab(usize),
     Mode,
     Step,
@@ -156,7 +157,7 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
         root.spawn((Node {position_type:PositionType::Absolute,left:px(12),right:px(12),top:px(12),height:px(70),padding:UiRect::all(px(12)),justify_content:JustifyContent::SpaceBetween,..row()},BackgroundColor(PANEL))).with_children(|bar| {
             bar.spawn(column()).with_children(|p| {text(p,"S A O  /  BEHAVIOR LAB",20.,INK);text(p,evidence,12.,MUTED);});
             bar.spawn(row()).with_children(|p| {
-                button(p,"Sessions",Click::Sessions,game.sessions_open);
+                button(p,if game.snapshot["arenas"].is_array(){"Arenas / sessions"}else{"Sessions"},Click::Sessions,game.sessions_open);
                 button(p,if game.world_visible {"Close world"} else {"Peek into world"},Click::World,game.world_visible);
                 button(p,"Inspect [I]",Click::Inspect,game.inspect);
                 button(p,"Labels [O]",Click::Overlays,game.overlays);
@@ -165,6 +166,17 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
         });
         if game.sessions_open {
             root.spawn((Node{position_type:PositionType::Absolute,left:px(12),top:px(92),bottom:px(112),width:px(234),padding:UiRect::all(px(14)),overflow:Overflow::scroll_y(),..column()},BackgroundColor(PANEL),Panel(0),ScrollPosition(Vec2::new(0.,game.scroll[0])))).with_children(|left| {
+                if let Some(arenas)=game.snapshot["arenas"].as_array().filter(|a| !a.is_empty()) {
+                    title(left,"EXPERIMENT MATRIX");
+                    text(left,"One clock · isolated pairs
+Top: open / bottom: corridors
+Left to right: low, medium, high",12.,MUTED);
+                    button(left,"Whole matrix",Click::Arena(None),game.arena.is_none());
+                    for arena in arenas {
+                        let id=arena["id"].as_str().unwrap_or("");
+                        button(left,arena["label"].as_str().unwrap_or(id),Click::Arena(Some(id.into())),game.arena.as_deref()==Some(id));
+                    }
+                }
                 title(left,"HOSTED SESSIONS");
                 text(left,"Focus changes this view. Other worlds keep their own clocks.",12.,MUTED);
                 for run in &game.runs {
@@ -172,19 +184,26 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
                         button(left,format!("{}\ntick {} · {}",id.trim_start_matches("sim-bevy-"),number(&run["tick"]),if run["stopped"]==true {"finished"} else if run["paused"]==true {"paused"} else if run["paused"]==false {"running"} else {"clock unknown"}),Click::Focus(id.into()),game.snapshot["run"]==id && !game.archive);
                     }
                 }
-                if game.observer() && !game.archive {button(left,"New parallel session",Click::New,false);button(left,"Recorded model policy",Click::Archive,false);}
+                if game.observer() && !game.archive {if !game.snapshot["arenas"].is_array(){button(left,"New parallel session",Click::New,false);}button(left,"Recorded model policy",Click::Archive,false);}
                 if game.archive {button(left,"Back to live session",Click::Live,false);}
                 title(left,"CHARACTERS");
                 if let Some(players)=game.snapshot["players"].as_array() {
-                    for player in players {let id=player["id"].as_u64().unwrap_or(0);button(left,player["name"].as_str().unwrap_or("Character"),Click::Select(id),id==game.selected);}
+                    for player in players {
+                        let id=player["id"].as_u64().unwrap_or(0);
+                        let arena=game.snapshot["arenas"].as_array().and_then(|a|a.iter().find(|a|a["actors"].as_array().is_some_and(|ids|ids.contains(&json!(id)))));
+                        if game.arena.as_ref().is_some_and(|selected|arena.is_none_or(|a|a["id"]!=*selected)){continue;}
+                        let name=player["name"].as_str().unwrap_or("Character");
+                        button(left,format!("{name} #{id} · {}",player["runtime"].as_str().unwrap_or("character")),Click::Select(id),id==game.selected);
+                    }
                 }
-                if !game.archive {button(left,if game.observer(){"Participate as You"}else{"Return to observer"},Click::Mode,false);}
+                if !game.archive && game.snapshot["can_participate"] != false {button(left,if game.observer(){"Participate as You"}else{"Return to observer"},Click::Mode,false);}
                 button(left,"Reconnect",Click::Reconnect,false);
             });
         }
         if game.inspect {
             root.spawn((Node{position_type:PositionType::Absolute,right:px(12),top:px(92),bottom:px(112),width:px(404),padding:UiRect::all(px(16)),overflow:Overflow::scroll_y(),..column()},BackgroundColor(PANEL),Panel(1),ScrollPosition(Vec2::new(0.,game.scroll[1])))).with_children(|panel| {
                 text(panel,p["name"].as_str().unwrap_or("Select a character in the world"),24.,INK);
+                if let Some(arena)=p["arena"].as_str() {text(panel,format!("{arena} · {}",p["runtime"].as_str().unwrap_or("")),12.,MUTED);}
                 text(panel,if game.observer(){"Observer truth / individual understanding"}else{"Your perceptions / private understanding"},12.,MUTED);
                 panel.spawn(row()).with_children(|p| {button(p,"Mind",Click::Tab(0),game.tab==0);button(p,"Policy",Click::Tab(1),game.tab==1);button(p,"History",Click::Tab(2),game.tab==2);});
                 match game.tab {0=>mind(panel,&p),1=>tree(panel,&p,&game),_=>history(panel,&game)}
@@ -509,6 +528,13 @@ pub fn interact(
             continue;
         }
         match action {
+            Click::Arena(id) => {
+                game.arena=id.clone(); game.frame=true; game.follow=false;
+                if let Some(arena)=game.snapshot["arenas"].as_array().and_then(|a|a.iter().find(|a|Some(a["id"].as_str().unwrap_or(""))==id.as_deref())) {
+                    game.selected=arena["actors"][0].as_u64().unwrap_or(1);
+                }
+                game.inspect=false; game.scroll[0]=0.;
+            }
             Click::Select(id) => {
                 game.scroll[1] = 0.;
                 game.selected = *id;

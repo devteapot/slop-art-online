@@ -27,6 +27,8 @@ pub struct Game {
     pub zoom: f32,
     pub camera_y: f32,
     pub follow: bool,
+    pub arena: Option<String>,
+    pub frame: bool,
     pub scroll: [f32; 2],
 }
 impl Default for Game {
@@ -45,12 +47,14 @@ impl Default for Game {
             camera: 1.,
             inspect: false,
             world_visible: true,
-            overlays: true,
+            overlays: false,
             sessions_open: false,
             runs: vec![],
             zoom: 1.,
             camera_y: 0.,
             follow: false,
+            arena: None,
+            frame: false,
             scroll: [0.; 2],
         }
     }

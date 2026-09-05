@@ -345,7 +345,7 @@ fn condition_limits_follow_active_laws() {
     let policy: Node=serde_json::from_value(json!({"kind":"guard","condition":{"kind":"at","location":11},"child":{"kind":"action","action":{"skill":"wait"}}})).unwrap();
     assert!(policy.validate_with_laws(&w.scripts).is_err());
     let mut law = revise(&w, "law");
-    law.source = law.source.replace("c.location > 10", "c.location > 20");
+    law.source = law.source.replace("p <= 10", "p <= 20");
     w.stage_scripts_by_operator(update(&w, vec![law])).unwrap();
     w.step();
     assert!(policy.validate_with_laws(&w.scripts).is_ok());

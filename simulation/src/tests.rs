@@ -29,6 +29,8 @@ fn world() -> World {
     World::new(
         "test".into(),
         Scenario {
+            arenas: vec![],
+            map: None,
             name: "test".into(),
             seed: 42,
             max_ticks: 40,

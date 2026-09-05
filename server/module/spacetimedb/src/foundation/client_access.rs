@@ -61,10 +61,11 @@ pub fn sim_grant_client(
     if row.owner != ctx.sender() {
         return Err("only the run operator grants access".into());
     }
-    if !w
-        .players
-        .iter()
-        .any(|p| p.id == actor && (w.participant_mode || p.controller == Controller::Human))
+    if !(observer && actor == 0)
+        && !w
+            .players
+            .iter()
+            .any(|p| p.id == actor && (w.participant_mode || p.controller == Controller::Human))
     {
         return Err("grant requires an eligible character".into());
     }
@@ -159,7 +160,7 @@ pub fn sim_my_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
         vec![]
     };
     let mut v = simulation::client_view::snapshot(&w, access.observer, access.actor, &events);
-    if w.participant_mode {
+    if w.participant_mode && !access.observer {
         v["participant"] = w.participant_snapshot(access.actor, 0, 256).ok()?;
     }
     if let Some(clock) = ctx.db.sim_client_clock().run().find(&access.run) {
