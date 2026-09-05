@@ -1,5 +1,7 @@
 # Simulation foundation: vision and design
 
+Current participant iteration: [participant agent runtimes](PARTICIPANT_AGENTS.md) and [ADR 013](adr/013-participant-agent-runtimes.md). Rules `m1-5` use one scoped API for the built-in harness and external MCP runtimes, with independent tree, speech and learning operations. Earlier evidence and legacy runner descriptions below retain their historical scope.
+
 This is the authoritative design entry point for SAO / Slop Art Online. The longer-term multiplayer game vision remains a living world that the user can observe and join. The development order changes: establish a concrete, inspectable simulation of individuals first, then build richer UI and gameplay around it. This document describes the target, not completed implementation.
 
 Read next: [current implementation and gaps](CURRENT_STATE.md), [audit and experiment contract](AUDIT_AND_EXPERIMENTS.md), and [milestones and work queue](TODO.md). [ADR 007](adr/007-simulation-first-foundation.md) records this change in direction; older ADRs preserve historical rationale. [Stack reference](../STACK_REFERENCE.md) documents the retained Rust architecture.

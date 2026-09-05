@@ -8,6 +8,7 @@ use axum::{
     routing::{get, post},
 };
 use bridge::reasoning::{Reasoner, backend::Config};
+use bridge::{participant::new_session,agent_harness};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
@@ -16,6 +17,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::process::Command;
+use spacetimedb_sdk::DbContext;
 
 #[derive(Clone)]
 struct Session {
@@ -31,6 +33,7 @@ struct App {
     run: Mutex<String>,
     sessions: Mutex<HashMap<String, Session>>,
     config: Option<Config>,
+    harness_cancellations: Mutex<Vec<tokio::sync::watch::Sender<Option<String>>>>,
 }
 type Shared = Arc<App>;
 type ApiResult = Result<Response, (StatusCode, String)>;
@@ -212,39 +215,17 @@ async fn mode(State(app): State<Shared>, headers: HeaderMap, Json(body): Json<Va
 async fn create_run(app: &App) -> Result<String, String> {
     let run = format!("sim-bevy-{}", now());
     let mut scenario: Value = serde_json::from_slice(
-        &std::fs::read(app.root.join("scenarios/survival.json")).map_err(|_| "scenario missing")?,
+        &std::fs::read(app.root.join(std::env::var("BEVY_DEV_SCENARIO").unwrap_or("scenarios/survival.json".into()))).map_err(|_| "scenario missing")?,
     )
     .map_err(|_| "invalid scenario")?;
     scenario["name"] = json!("Bevy development survival");
-    scenario["max_ticks"] = json!(300);
+    scenario["max_ticks"] = json!(std::env::var("BEVY_DEV_MAX_TICKS").ok().and_then(|s|s.parse::<u32>().ok()).unwrap_or(300).clamp(1,300));
     call(
         app,
-        "sim_create",
+        "sim_create_participant",
         vec![json!(run), json!(scenario.to_string())],
     )
     .await?;
-    call(app, "sim_step", vec![json!(run)]).await?;
-    if app.config.is_none() {
-        let w = state(app, &run).await?;
-        let raw = std::fs::read_to_string(app.root.join("scenarios/reactive-client-fixture.json"))
-            .map_err(|_| "fixture missing")?;
-        for pending in w.pending {
-            call(
-                app,
-                "sim_model_result",
-                vec![
-                    json!(run),
-                    json!(pending.id),
-                    json!(raw),
-                    json!(
-                        json!({"source":"explicit developer fixture","not_model_generated":true})
-                            .to_string()
-                    ),
-                ],
-            )
-            .await?;
-        }
-    }
     call(
         app,
         "sim_setup_client_clock",
@@ -282,6 +263,31 @@ async fn create_run(app: &App) -> Result<String, String> {
     }
 
     std::fs::write(dir.join("mode.json"),json!({"run":run,"db":app.db,"server":app.server,"evidence_mode":if app.config.is_some(){"live_model"}else{"live_fixture"},"note":"actual authoritative run; fixture explicitly test-authored; no model substitution"}).to_string()).map_err(|_|"mode write failed")?;
+    let private=app.root.join(".local/credentials");
+    std::fs::create_dir_all(&private).map_err(|_|"private session directory unavailable")?;
+    let mut links=vec![];
+    for (actor,role) in [(1,"builtin"),(2,"external")] {
+        let path=private.join(format!("{run}-{role}.json"));
+        let (service,identity)=new_session(app.server.clone(),app.db.clone(),&path).await?;
+        call(app,"sim_grant_client",vec![json!(run),json!(identity),json!(false),json!(actor)]).await?;
+        let view=service.observe(0,256).await?;
+        links.push(json!({"actor":actor,"role":role,"session_file":path}));
+        if role=="builtin" {
+            if let Some(config)=&app.config {
+                if std::env::var("SAO_HARNESS_MANUAL").as_deref()==Ok("1"){let _=service.connection.disconnect();continue;}
+                let (tx,rx)=tokio::sync::watch::channel(None);
+                app.harness_cancellations.lock().unwrap().push(tx);
+                tokio::spawn(agent_harness::run(service,config.clone(),dir.join("reasoning"),rx));
+            }else{
+                let fixture:simulation::Decision=serde_json::from_slice(&std::fs::read(app.root.join("scenarios/reactive-client-fixture.json")).map_err(|_|"fixture missing")?).map_err(|_|"fixture invalid")?;
+                let receipt=service.command(simulation::participant::Request{api_version:simulation::participant::API_VERSION.into(),request_id:format!("fixture-{run}"),control_epoch:view["control_epoch"].as_u64().unwrap(),command:simulation::participant::Command::ReplaceTree{expected_revision:view["policy_revision"].as_u64().unwrap(),reason:"explicit test-authored developer fixture; no model inference".into(),tree:fixture.policy.ok_or("fixture tree missing")?}}).await?;
+                if !receipt.ok{return Err(format!("fixture rejected: {:?}",receipt.error));}
+                let _=service.connection.disconnect();
+            }
+        }else{let _=service.connection.disconnect();}
+    }
+    std::fs::write(dir.join("participants.json"),json!(links).to_string()).map_err(|_|"participant descriptors failed")?;
+    call(app,"sim_step",vec![json!(run)]).await?;
     Ok(run)
 }
 async fn fresh(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
@@ -289,6 +295,7 @@ async fn fresh(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
     if !s.observer {
         return Err((StatusCode::FORBIDDEN, "observer privilege required".into()));
     }
+    for tx in app.harness_cancellations.lock().unwrap().drain(..) { let _=tx.send(Some("run replaced".into())); }
     let old = app.run.lock().unwrap().clone();
     call(&app, "sim_operator_pause", vec![json!(old)])
         .await
@@ -337,7 +344,7 @@ async fn files(State(app): State<Shared>, Path(path): Path<String>) -> Response 
         return StatusCode::NOT_FOUND.into_response();
     }
     let path = if path.is_empty() { "index.html" } else { &path };
-    let file = app.root.join("client/dist").join(path);
+    let file = app.root.join("client/dist-participant").join(path);
     match tokio::fs::read(file).await {
         Ok(bytes) => {
             let mime = if path.ends_with(".wasm") {
@@ -365,7 +372,6 @@ async fn index(State(app): State<Shared>) -> Response {
     files(State(app), Path("index.html".into())).await
 }
 async fn background(app: Shared) {
-    let mut jobs = HashMap::new();
     loop {
         tokio::time::sleep(std::time::Duration::from_millis(600)).await;
         let run = app.run.lock().unwrap().clone();
@@ -379,70 +385,16 @@ async fn background(app: Shared) {
                 json!({"world":w,"events":events}).to_string(),
             );
         }
-        // The scheduler ticks in the authority independently of any pending external reasoning.
-        if let Some(config) = &app.config {
-            for p in &w.pending {
-                let key = (run.clone(), p.id);
-                if jobs.contains_key(&key)
-                    || app
-                        .out
-                        .join(&run)
-                        .join(format!("reasoning/request-{}.jsonl", p.id))
-                        .exists()
-                {
-                    continue;
-                }
-                let Ok(reasoner) = Reasoner::new(config.clone()) else {
-                    continue;
-                };
-                let (tx, rx) = tokio::sync::watch::channel(None);
-                jobs.insert(key, tx);
-                let task_app = app.clone();
-                let pending = p.clone();
-                let task_run = run.clone();
-                tokio::spawn(async move {
-                    let result = reasoner
-                        .reason(
-                            task_run.clone(),
-                            pending,
-                            rx,
-                            task_app.out.join(&task_run).join("reasoning"),
-                        )
-                        .await;
-                    let _ = call(
-                        &task_app,
-                        "sim_model_result",
-                        vec![
-                            json!(task_run),
-                            json!(result.request_id),
-                            json!(result.raw),
-                            json!(result.metadata.to_string()),
-                        ],
-                    )
-                    .await;
-                });
-            }
-            for ((job_run, id), tx) in &jobs {
-                if job_run != &run
-                    || w.stopped
-                    || !w.pending.iter().any(|p| {
-                        p.id == *id
-                            && w.tick.saturating_sub(p.tick) <= simulation::REQUEST_EXPIRY_TICKS
-                    })
-                {
-                    let _ = tx.send(Some("run stopped, replaced or request expired".into()));
-                }
-            }
-        }
+
     }
 }
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let root = std::env::current_dir()?;
-    let port = std::env::var("BEVY_DEV_PORT").unwrap_or("18890".into());
+    let port = std::env::var("BEVY_DEV_PORT").unwrap_or("18891".into());
     let db = format!("sim-bevy-db-{}", now());
     let server = "http://127.0.0.1:3101".to_string();
-    let out = root.join("output/bevy-browser-dev");
+    let out = root.join(std::env::var("BEVY_DEV_OUTPUT").unwrap_or("output/participant-agent-dev".into()));
     std::fs::create_dir_all(&out)?;
     let config = std::env::var("NPC_REASONING_CONFIG")
         .ok()
@@ -463,6 +415,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         run: Mutex::new(String::new()),
         sessions: Mutex::new(HashMap::new()),
         config,
+        harness_cancellations:Mutex::new(vec![]),
     });
     cli(vec![
         "publish".into(),

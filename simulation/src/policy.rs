@@ -383,6 +383,10 @@ impl World {
                 self.execute_action(i, e, action.clone())
             }
             Node::Reconsider { reason } => {
+                if self.participant_mode {
+                    if !*acted { self.event(Some(self.players[i].id), "reconsider_requested", vec![e.decision], json!({"reason":reason})); }
+                    return Status::Success;
+                }
                 let interval = 4 + (100 - self.players[i].introspection) as u64 / 10;
                 if self.tick.saturating_sub(self.players[i].last_reflection) >= interval {
                     self.request(i, reason);

@@ -1,5 +1,9 @@
 # NPC reasoning backends
 
+Latest live evidence: [mixed internal/external agent verification](LIVE_MIXED_AGENT_VERIFICATION.md) records ten genuine Luna calls, accepted behavior/dialogue/learning through both routes, preserved failures and corrections, and 66 passing regressions. Earlier no-fresh-inference statements below describe the preceding implementation milestone.
+
+Current participant iteration: [participant agent runtimes](PARTICIPANT_AGENTS.md) and [ADR 013](adr/013-participant-agent-runtimes.md). Rules `m1-5` use one scoped API for the built-in harness and external MCP runtimes, with independent tree, speech and learning operations. Earlier evidence and legacy runner descriptions below retain their historical scope.
+
 M1 now separates the simulation's NPC reasoning contract from provider transport. This applies to `sao-sim` and the foundation reducers. The legacy `bridge`/Bevy path remains Ollama-specific and has not been migrated. Nothing here changes a character's in-world intelligence or personality when choosing a model.
 
 ## Ownership

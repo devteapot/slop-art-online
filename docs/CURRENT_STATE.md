@@ -1,5 +1,9 @@
 # Implementation state and legacy baseline
 
+Latest live evidence: [mixed internal/external agent verification](LIVE_MIXED_AGENT_VERIFICATION.md) records ten genuine Luna calls, accepted behavior/dialogue/learning through both routes, preserved failures and corrections, and 66 passing regressions. Earlier no-fresh-inference statements below describe the preceding implementation milestone.
+
+Current participant iteration (64 passing core/provider/archive tests; [executed checks](PARTICIPANT_AGENT_VERIFICATION.md)): [participant agent runtimes](PARTICIPANT_AGENTS.md) and [ADR 013](adr/013-participant-agent-runtimes.md). Rules `m1-5` use one scoped API for the built-in harness and external MCP runtimes, with independent tree, speech and learning operations. Earlier evidence and legacy runner descriptions below retain their historical scope.
+
 ## Current M1 path
 
 The foundation is implemented through [simulation/src/lib.rs](../simulation/src/lib.rs), [foundation reducers](../server/module/spacetimedb/src/foundation.rs), and the [Rust scenario/model runner](../server/bridge/src/bin/sao-sim.rs). It uses shared skills across controllers, persistent LLM-generated reactive policies and legacy sequence progress, subjective model context, durable causal records, permanent mortality and isolated real-database experiments. Read [M1_VERIFICATION.md](M1_VERIFICATION.md) for executed checks/live trace evidence and [M1_RUNBOOK.md](M1_RUNBOOK.md) to run it. [ADR 008](adr/008-m1-authoritative-survival-slice.md) records bounded defaults and limitations.

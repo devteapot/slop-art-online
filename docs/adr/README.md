@@ -21,3 +21,5 @@ The numbering follows existing repository history; there is no ADR 004 file in t
 - [ADR 011 — Persistent reactive policies](011-persistent-reactive-policies.md): model-generated conditions/branches, durable execution, and separate damage/request validity.
 
 - [ADR 012 — Browser-hosted Bevy foundation](012-bevy-browser-foundation.md): shared WASM/native presentation, caller-specific authority views and local development enrollment.
+
+- [ADR 013 — Participant agent runtimes](013-participant-agent-runtimes.md): shared scoped API, independent behavior/speech/learning, and official MCP adapter.

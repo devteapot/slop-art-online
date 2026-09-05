@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only/static and enrollment boundary checks; never logs cookie values."""
-import urllib.request,urllib.error,json
-BASE='http://127.0.0.1:18890'
+import urllib.request,urllib.error,json,os
+BASE=os.environ.get('BEVY_DEV_URL','http://127.0.0.1:18891')
 def request(path,headers=None,body=None):
  req=urllib.request.Request(BASE+path,headers={"Content-Type":"application/json",**(headers or {})},data=json.dumps(body or {}).encode(),method='POST')
  try:

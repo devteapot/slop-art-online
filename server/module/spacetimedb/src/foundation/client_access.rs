@@ -29,7 +29,7 @@ pub struct SimClientSnapshot {
     pub body: String,
 }
 
-fn world(ctx: &ReducerContext, run: &str) -> Result<(SimRun, World), String> {
+pub(super) fn world(ctx: &ReducerContext, run: &str) -> Result<(SimRun, World), String> {
     let row = ctx
         .db
         .sim_run()
@@ -42,7 +42,7 @@ fn world(ctx: &ReducerContext, run: &str) -> Result<(SimRun, World), String> {
     }
     Ok((row, w))
 }
-fn grant(ctx: &ReducerContext) -> Result<SimClientAccess, String> {
+pub(super) fn grant(ctx: &ReducerContext) -> Result<SimClientAccess, String> {
     ctx.db
         .sim_client_access()
         .identity()
@@ -57,16 +57,16 @@ pub fn sim_grant_client(
     observer: bool,
     actor: u32,
 ) -> Result<(), String> {
-    let (row, w) = world(ctx, &run)?;
+    let (row, mut w) = world(ctx, &run)?;
     if row.owner != ctx.sender() {
         return Err("only the run operator grants access".into());
     }
     if !w
         .players
         .iter()
-        .any(|p| p.id == actor && p.controller == Controller::Human)
+        .any(|p| p.id == actor && (w.participant_mode || p.controller == Controller::Human))
     {
-        return Err("grant requires a human character".into());
+        return Err("grant requires an eligible character".into());
     }
     // A human character has at most one client owner. Observer-only peers can inspect it.
     if !observer
@@ -76,8 +76,31 @@ pub fn sim_grant_client(
             .iter()
             .any(|g| g.run == run && !g.observer && g.actor == actor && g.identity != identity)
     {
-        return Err("human character already controlled by another client".into());
+        return Err("character already controlled by another client".into());
     }
+    let previous = ctx.db.sim_client_access().identity().find(identity);
+    if let Some(old) = &previous {
+        if !old.observer && (old.run != run || old.actor != actor) {
+            let (oldrow, mut oldworld) = world(ctx, &old.run)?;
+            if oldrow.owner != ctx.sender() {
+                return Err("cannot replace another operator's grant".into());
+            }
+            if old.run == run {
+                w.change_control(old.actor)?;
+            } else {
+                oldworld.change_control(old.actor)?;
+                save(ctx, oldrow, oldworld);
+            }
+        }
+    }
+    if !observer
+        && previous
+            .as_ref()
+            .is_none_or(|old| old.observer || old.run != run || old.actor != actor)
+    {
+        w.change_control(actor)?;
+    }
+    save(ctx, row, w);
     let access = SimClientAccess {
         identity,
         run,
@@ -105,9 +128,13 @@ pub fn sim_revoke_client(ctx: &ReducerContext, identity: Identity) -> Result<(),
         .identity()
         .find(identity)
         .ok_or("grant not found")?;
-    let (row, _) = world(ctx, &access.run)?;
+    let (row, mut w) = world(ctx, &access.run)?;
     if row.owner != ctx.sender() {
         return Err("only operator revokes grants".into());
+    }
+    if !access.observer {
+        w.change_control(access.actor)?;
+        save(ctx, row, w);
     }
     ctx.db.sim_client_access().identity().delete(identity);
     Ok(())
@@ -121,7 +148,8 @@ pub fn sim_my_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
         let mut events: Vec<simulation::Event> = ctx
             .db
             .sim_audit()
-            .run().filter(&access.run)
+            .run()
+            .filter(&access.run)
             .filter_map(|e| serde_json::from_str(&e.json).ok())
             .collect();
         events.sort_by_key(|e| e.id);
@@ -130,6 +158,9 @@ pub fn sim_my_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
         vec![]
     };
     let mut v = simulation::client_view::snapshot(&w, access.observer, access.actor, &events);
+    if w.participant_mode {
+        v["participant"] = w.participant_snapshot(access.actor, 0, 256).ok()?;
+    }
     if let Some(clock) = ctx.db.sim_client_clock().run().find(&access.run) {
         v["paused"] = serde_json::json!(clock.paused);
         v["evidence_mode"] = serde_json::json!(clock.evidence_mode);
@@ -149,6 +180,67 @@ pub fn sim_client_intent(ctx: &ReducerContext, decision: String) -> Result<(), S
     let (row, mut w) = world(ctx, &access.run)?;
     if decision.len() > 50_000 {
         return Err("intent too large".into());
+    }
+    if w.participant_mode {
+        let d: Decision = serde_json::from_str(&decision).map_err(|e| e.to_string())?;
+        if !d.reflections.is_empty() {
+            return Err("submit learning separately".into());
+        }
+        let i = w
+            .players
+            .iter()
+            .position(|p| p.id == access.actor)
+            .ok_or("actor missing")?;
+        if d.policy.is_none()
+            && !(d.actions.len() == 1 && d.actions[0].skill == simulation::Skill::Speak)
+        {
+            let before = w.clone();
+            if let Err(error) = w.participant_manual(access.actor, d) {
+                w = before;
+                w.event(
+                    Some(access.actor),
+                    "participant_rejected",
+                    vec![],
+                    serde_json::json!({"error":error}),
+                );
+            }
+            save(ctx, row, w);
+            return Ok(());
+        }
+        let command = if d.policy.is_none()
+            && d.actions.len() == 1
+            && d.actions[0].skill == simulation::Skill::Speak
+        {
+            simulation::participant::Command::Speak {
+                text: d.actions[0].text.clone().unwrap_or_default(),
+                expires_tick: w.tick + 10,
+            }
+        } else {
+            if d.policy.is_some() && !d.actions.is_empty() {
+                return Err("ambiguous policy/actions".into());
+            }
+            let tree = d.policy.unwrap_or_else(|| simulation::Node::Sequence {
+                children: d
+                    .actions
+                    .into_iter()
+                    .map(|action| simulation::Node::Action { action })
+                    .collect(),
+            });
+            simulation::participant::Command::ReplaceTree {
+                expected_revision: w.players[i].generation,
+                reason: d.reason,
+                tree,
+            }
+        };
+        let request = simulation::participant::Request {
+            api_version: simulation::participant::API_VERSION.into(),
+            request_id: format!("bevy-{}", w.next_event),
+            control_epoch: w.participants[&access.actor].control_epoch,
+            command,
+        };
+        w.participant_apply(access.actor, request)?;
+        save(ctx, row, w);
+        return Ok(());
     }
     let input=w.event(Some(access.actor),"human_input",vec![],serde_json::json!({"raw":decision,"source":"authenticated Bevy client","identity":ctx.sender().to_hex().to_string()}));
     let result = serde_json::from_str::<Decision>(&decision)
@@ -249,5 +341,39 @@ pub fn sim_operator_pause(ctx: &ReducerContext, run: String) -> Result<(), Strin
         clock.paused = true;
         ctx.db.sim_client_clock().id().update(clock);
     }
+    Ok(())
+}
+
+#[spacetimedb::view(accessor=sim_participant_state, public)]
+pub fn sim_participant_state(ctx: &ViewContext) -> Option<SimClientSnapshot> {
+    let access = ctx.db.sim_client_access().identity().find(ctx.sender())?;
+    if access.observer {
+        return None;
+    }
+    let row = ctx.db.sim_run().id().find(&access.run)?;
+    let w: World = serde_json::from_str(&row.state).ok()?;
+    Some(SimClientSnapshot {
+        run: access.run,
+        tick: w.tick,
+        body: w
+            .participant_snapshot(access.actor, 0, 256)
+            .ok()?
+            .to_string(),
+    })
+}
+#[spacetimedb::reducer]
+pub fn sim_participant_command(ctx: &ReducerContext, request: String) -> Result<(), String> {
+    let access = grant(ctx)?;
+    if access.observer {
+        return Err("participant ownership required".into());
+    }
+    if request.len() > 50_000 {
+        return Err("request too large".into());
+    }
+    let request: simulation::participant::Request =
+        serde_json::from_str(&request).map_err(|e| e.to_string())?;
+    let (row, mut w) = world(ctx, &access.run)?;
+    w.participant_apply(access.actor, request)?;
+    save(ctx, row, w);
     Ok(())
 }

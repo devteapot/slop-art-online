@@ -20,3 +20,5 @@
 # Python verification-script caches
 __pycache__/
 *.py[cod]
+
+/client/dist-participant/

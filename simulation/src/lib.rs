@@ -1,12 +1,13 @@
 //! The authoritative M1 rules, invoked by SpacetimeDB reducers and unit tests.
 //! No I/O, wall clock, model calls, or second approximation of world rules.
 pub mod client_view;
+pub mod participant;
 use bonsai_bt::Behavior;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "m1-4";
+pub const VERSION: &str = "m1-5";
 pub const DECISION_FORMAT_VERSION: &str = "survivor-policy-v2";
 pub const LEGACY_DECISION_FORMAT: &str = "survivor-sequence-v1";
 pub mod policy;
@@ -46,6 +47,7 @@ pub struct Action {
     #[serde(default)]
     pub text: Option<String>,
     #[serde(default = "one")]
+    #[cfg_attr(feature = "schema", schemars(range(min = 1, max = 5)))]
     pub duration: u32,
 }
 fn one() -> u32 {
@@ -76,6 +78,7 @@ impl Action {
 }
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Belief {
     pub location: i32,
     pub danger: bool,
@@ -98,6 +101,7 @@ pub struct Percept {
 }
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Reflection {
     pub source: u64,
     pub interpretation: String,
@@ -209,6 +213,10 @@ pub struct World {
     pub stopped: bool,
     #[serde(default)]
     pub request_ids: Vec<u64>,
+    #[serde(default)]
+    pub participant_mode: bool,
+    #[serde(default)]
+    pub participants: BTreeMap<u32, participant::ParticipantState>,
     #[serde(skip)]
     pub events: Vec<Event>,
 }
@@ -262,6 +270,8 @@ impl World {
             next_event: 1,
             stopped: false,
             request_ids: vec![],
+            participant_mode: false,
+            participants: BTreeMap::new(),
             events: vec![],
         };
         let id=w.event(None,"initialization",vec![],json!({"scenario":w.initial,"rules":VERSION,"prompt":PROMPT,"seed_usage":"reserved; current world rules use no random draws"}));
@@ -297,6 +307,7 @@ impl World {
             parents,
             data,
         });
+        self.record_experience(&self.events.last().unwrap().clone());
         id
     }
     fn idx(&self, actor: u32) -> Result<usize, String> {
@@ -384,6 +395,7 @@ impl World {
         json!({"player":{"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":["move","gather","eat","rest","wait","speak","attack"]})
     }
     pub fn request(&mut self, i: usize, trigger: &str) {
+        if self.participant_mode { return; }
         let actor = self.players[i].id;
         if self.players[i].health <= 0
             || self.players[i].controller != Controller::Ai
@@ -512,6 +524,7 @@ impl World {
         d: Decision,
         parent: Option<u64>,
     ) -> Result<(), String> {
+        if self.participant_mode { return Err("use actor-scoped participant commands".into()); }
         self.apply_decision(actor, controller, d, parent, None)
     }
     fn apply_decision(
@@ -605,6 +618,7 @@ impl World {
         Ok(())
     }
     pub fn model_result(&mut self, request: u64, raw: &str, metadata: Value) -> Result<(), String> {
+        if self.participant_mode { return Err("legacy model-result route disabled for participant runs".into()); }
         let no_proposal = raw.trim().is_empty() && metadata["error"].as_str().is_some();
         let pending = self
             .pending
@@ -787,28 +801,8 @@ impl World {
             }
             Skill::Wait => {}
             Skill::Speak => {
-                let id = self.event(
-                    Some(actor),
-                    "speech",
-                    vec![attempt],
-                    json!({"text":a.text,"position":pos}),
-                );
-                for j in 0..self.players.len() {
-                    if j != i
-                        && self.players[j].health > 0
-                        && (self.players[j].position - pos).abs() <= 2
-                    {
-                        self.perceive(
-                            j,
-                            id,
-                            "speech",
-                            Some(actor),
-                            pos,
-                            json!({"text":a.text,"speaker":self.players[i].name}),
-                        );
-                        self.request(j, "heard free-form speech");
-                    }
-                }
+                if self.participant_mode && self.participants[&actor].last_speech_tick==Some(self.tick){return Status::Running;}
+                self.emit_speech(i, attempt, a.text.as_deref().unwrap());
             }
             Skill::Attack => {
                 let target = a.target.and_then(|id| self.idx(id).ok());
@@ -933,7 +927,7 @@ impl World {
                     },
                 );
             }
-            if self.players[i].controller == Controller::Ai && self.players[i].execution.is_none() {
+            if !self.participant_mode && self.players[i].controller == Controller::Ai && self.players[i].execution.is_none() {
                 self.fallback(i);
             }
             self.execute(i);
@@ -959,6 +953,7 @@ impl World {
                 self.damage(i, hazard, None, event, "environment");
             }
         }
+        self.deliver_queued_speech();
         let invalid: Vec<_> = self
             .pending
             .iter()
@@ -1006,6 +1001,7 @@ impl World {
         }
         if self.tick >= self.initial.max_ticks || self.players.iter().all(|p| p.health <= 0) {
             self.stopped = true;
+            self.deliver_queued_speech();
             let stop = self.event(None, "run_stopped", vec![], json!({"tick":self.tick}));
             for i in 0..self.players.len() {
                 self.interrupt(i, stop, "run ended");
@@ -1030,3 +1026,6 @@ mod tests;
 
 #[cfg(feature = "schema")]
 pub mod contract;
+
+#[cfg(test)]
+mod participant_tests;
