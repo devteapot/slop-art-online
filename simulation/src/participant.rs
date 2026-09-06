@@ -328,7 +328,7 @@ impl World {
             location,
             kind: e.kind.clone(),
             parents,
-            data: (&e.data).into(),
+            data: (&crate::research::redacted(e.data.clone())).into(),
         });
         if s.experiences.len() > TRACE_LIMIT {
             s.experiences.remove(0);
@@ -380,6 +380,13 @@ impl World {
     /// Stream borrowed immutable read results directly. Building a Value tree
     /// here needlessly cloned every retained observation on every world save.
     pub fn participant_status_json(&self, actor: u32) -> Result<String, String> {
+        self.participant_status_json_inner(actor, true)
+    }
+    /// Header-only private storage projection; the public API still includes reads.
+    pub fn participant_status_header_json(&self, actor: u32) -> Result<String, String> {
+        self.participant_status_json_inner(actor, false)
+    }
+    fn participant_status_json_inner(&self, actor: u32, include_reads: bool) -> Result<String, String> {
         #[derive(Serialize)]
         struct Status<'a> {#[serde(flatten)] head:Value, read_observations:Vec<CapturedRead<'a>>}
         if !self.participant_mode {return Err("legacy run has no participant-v1 contract".into());}
@@ -392,7 +399,7 @@ impl World {
             "context":{"player":{"health":self.players[i].health}},"receipts":s.receipts,
             "capabilities":["read_observation","replace_tree","patch_subtree","speak","reflect","pin_observation"]
         });
-        let read_observations=s.evidence_leases.iter().filter(|l|l.expires_ms>=self.timing.time_ms && l.observation.get()!="null").map(captured_read).collect::<Result<Vec<_>,_>>()?;
+        let read_observations=s.evidence_leases.iter().filter(|l|include_reads && l.expires_ms>=self.timing.time_ms && l.observation.get()!="null").map(captured_read).collect::<Result<Vec<_>,_>>()?;
         serde_json::to_string(&Status{head,read_observations}).map_err(|e|e.to_string())
     }
     pub fn change_control(&mut self, actor: u32) -> Result<(), String> {
@@ -892,7 +899,7 @@ pub fn state_contract() -> Value {
             "sequence":"Runs children in order. Progress persists while the branch remains active. Failure or a false enclosing continuous guard clears its progress. Switching to a higher-priority branch suspends this sequence and retains its cursor; when selected again it resumes the unfinished child.",
             "priority":"Checks higher-priority branches again on each evaluation. A newly eligible higher branch can interrupt the current skill in a lower branch. Lower sequence cursors and when commitments remain suspended for later resumption; they are not silently restarted.",
             "repetition":"The root repeats. A successful action may execute again on later cycles. Completing move while already at its destination makes no displacement.",
-            "knowledge":"Your knowledge holds attributed reports, not global truth or automatic skill mastery. has_knowledge checks your own record ID. Teach/record/consult/destroy_archive are ordinary timed physical skills using target/record/archive arguments from their contracts. Site observations list local archive catalogs only; consult to read contents. reflect may include knowledge:{topic,text,location,confidence} to create a new assertion citing the selected own evidence; null knowledge interprets an acquired report without making a new assertion. Preserve uncertainty and conflicting reports. A reported location can support a later locational belief. Copy lineage points to evidence but cannot recover destroyed content from audit history.",
+            "knowledge":"Your knowledge holds attributed reports, not global truth or automatic skill mastery. has_knowledge checks your own record ID. Teach/record/consult/reread_record/destroy_archive are ordinary timed physical skills using target/record/archive arguments from their contracts. Site observations list local archive catalogs only; consult to read contents. An acquisition source can age out of the retained trace while your durable copy remains. Use reread_record with your own record ID (1500 ms and 1 energy) to create fresh personally citable knowledge_report evidence, then reflect on its new source. Rereading preserves the record identity, origin, ownership, number of copies and existing interpretation; executable source still requires its explicit terminal inspection. reflect assesses the cited report when you still hold its copy. It may also include knowledge:{topic,text,location,confidence} to create a new assertion citing that same own evidence; null knowledge makes no new assertion. Derived assertions never copy executable code or paid experiment proof. Preserve uncertainty and conflicting reports. A reported location can support a later locational belief. Copy lineage points to evidence but cannot recover destroyed content from audit history.",
             "independent_operations":"Speech and reflection do not replace the running behavior tree. A reflection alone does not alter the tree; later behavior authoring can apply the lesson."
         },
         "weather":"If weather_forecast is present, cold begins at cold_after_ms and causes damage_per_pulse each exposure pulse (2500 ms in the bundled law) at cells with less than shelter_required. Shelter belongs to the site and protects every occupant; food and shelter remain independent resources.",

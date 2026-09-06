@@ -101,7 +101,7 @@ impl Default for Registry {
                 include_str!("../scripts/speak.rhai"),
                 "free-form text; hearing determined by active world law",
             ),
-            ("infrastructure", include_str!("../scripts/infrastructure.rhai"), "Use a local utility station through the typed infrastructure operation. Requires configured infrastructure, local presence and explicit asset rights; duration 1, 1000 ms cooldown. Electricity is separate from stamina. Charge transfers stored electricity; eating/rest do not recharge. Build/repair consume carried parts. Compute jobs consume electricity and cooling water per completed work quantum, pause on missing supply/access, and produce a private physical forecast with explicit assumptions. Retrieve your finished job at its terminal to acquire a communicable report. Use once {child} around a deliberately single submission task to avoid creating jobs on every policy cycle. retrieve_ready retrieves your oldest completed, uncollected local job without predicting its ID; failure while none is ready creates nothing. Operation and parameter schema are provided with the action contract."),
+            ("infrastructure", include_str!("../scripts/infrastructure.rhai"), "Use a configured local utility station with explicit asset rights; duration 1, 1000 ms cooldown. Electricity is separate from stamina. Charge transfers stored electricity; eating/rest do not recharge. Build/repair consume carried parts. Compute jobs consume electricity and cooling water per completed work quantum, pause on missing supply/access, and produce a private physical forecast with explicit assumptions. Retrieve your finished job at its terminal to acquire a communicable report. Use once {child} for one submission, avoiding repeats on every policy cycle. retrieve_ready acquires your oldest completed uncollected local job without guessing its ID; with none ready, it creates nothing. Research operations: prototype submits your own numeric Rhai technique after personally paid, retrieved and interpreted terminal work; practice_program requires an interpreted held program and a prediction; run_program requires your own interpreted successful prototype/practice for the exact source hash. Code and private experiment reports are separate physical records; retrieve_ready acquires both atomically. Teach the program record to share code without private inputs. inspect_program reveals only your held code. erase_job locally removes that job’s inputs/source/output copies without refunds. Program syntax: declare fn technique(input) followed by its function body. Rhai functions are public by default; there is no pub keyword. The function receives at most 64 integers and returns at most 64 integers; helpers allowed, source<=8192 bytes, no top-level statements or globals. Read your research facts for current capability evidence and bounds. For forecast and numeric experiment sources, use at most eight unique ID strings from your own player.knowledge[].record.id, or [] for uncited assumptions. These IDs identify physical held records; descriptions and numeric experience source IDs are invalid here. Operation and parameter schema are provided with the action contract."),
             ("give", include_str!("../scripts/give.rhai"), "give one carried food to a perceived living target at the same cell; recipient receives a direct perception; no automatic reciprocity; 1000 ms cooldown"),
             ("deposit", include_str!("../scripts/deposit.rhai"), "place one carried food in the existing site at your position, available for anyone to gather; 1000 ms cooldown"),
             ("build", include_str!("../scripts/build.rhai"), "contribute one shelter unit at the existing site at your position; costs 8 energy; shelter maximum 12, remains shared; 2500 ms cooldown"),
@@ -109,6 +109,7 @@ impl Default for Registry {
             ("teach", include_str!("../scripts/teach.rhai"), "teach one of your held knowledge record IDs to a living target at your cell; record and target required; takes 2000 ms and 2 energy. Transfers an unassessed report, not practical skill mastery. Does not consume your copy."),
             ("record", include_str!("../scripts/record.rhai"), "copy one of your held knowledge record IDs into an intact archive at your cell; record and archive IDs required; takes 2500 ms and 4 energy. Capacity limited; your own copy remains."),
             ("consult", include_str!("../scripts/consult.rhai"), "read a selected record ID from an intact archive at your cell into your own durable knowledge; archive and record IDs required; takes 1500 ms and 1 energy. Local site observations list archive catalogs but do not reveal record contents. Reading does not automatically establish truth or grant skill mastery."),
+            ("reread_record", include_str!("../scripts/reread_record.rhai"), "reread a personally held record; record ID required, duration 1, takes 1500 ms and 1 energy. An acquisition source can age out of your retained trace while the copy remains. Rereading creates fresh personally citable knowledge_report evidence; then reflect on that new source. Preserves record identity, origin, ownership, copies and existing interpretation. Does not disclose executable source or grant practical capability."),
             ("destroy_archive", include_str!("../scripts/destroy_archive.rhai"), "destroy a physical archive at your cell and all its stored records; archive ID required; takes 5000 ms and 8 energy. Copies held by living people or other archives remain; audit history is never an in-world recovery source."),
             ("offer_reproduction", include_str!("../scripts/offer_reproduction.rhai"), "explicitly offer paired reproduction to a living independent biological target at your cell; duration 1. Offer lasts 90000 ms and quotes your commitment of 2 food and 10 energy, paid only upon completed reproduction. The partner must independently offer to you. Repeating the same live offer retains its source; withdrawal or replacement invalidates work begun under it."),
             ("withdraw_reproduction", include_str!("../scripts/withdraw_reproduction.rhai"), "withdraw your own reproduction offer; duration 1, no target. Invalidates unfinished attempts using it; does not erase an already created individual."),
@@ -174,6 +175,7 @@ pub enum Effect {
     Teach { target: u32, record: String },
     RecordKnowledge { archive: u32, record: String },
     ConsultKnowledge { archive: u32, record: String },
+    ReadRecord { record: String },
     DestroyArchive { archive: u32 },
     OfferReproduction { partner: u32, expires_ms: u64, food: i32, energy: i32 },
     WithdrawReproduction,
@@ -532,6 +534,8 @@ const LAW_FUNCTIONS: &[&str] = &[
     "validate_condition",
     "system_periods_ms",
     "retry_delay_ms",
+    "research_authoring",
+    "research_use",
 ];
 
 pub fn facts(p: &Player) -> Value {
@@ -547,7 +551,9 @@ pub fn subjective(p: &Player) -> Value {
     // expand this bounded interpreter input with every physical archive copy.
     let guard_percept = |m: &crate::Percept| {
         let mut v = json!(m);
-        if m.kind == "knowledge_report" {
+        if m.kind == "program_inspected" {
+            v["content"] = json!({"record":m.content["record"],"program_hash":m.content["program"]["source_hash"]});
+        } else if m.kind == "knowledge_report" {
             v["content"] = json!({"record":{"id":m.content["record"]["id"]}});
         } else if m.kind == "site" {
             if let Some(content) = v["content"].as_object_mut() { content.remove("archives"); content.remove("lifecycle"); content.remove("infrastructure"); }

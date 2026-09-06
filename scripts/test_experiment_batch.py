@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -42,13 +43,15 @@ class ScalingChecks(unittest.TestCase):
         self.tmp.cleanup()
 
     def invoke(self, spec=None, dry=False, fail_launch=None, evidence_failure=False, duplicate_db=False,
-               invalid_completion=None, interrupt_after_exit=False):
+               invalid_completion=None, interrupt_after_exit=False, disk_free=None, hold_running=False,
+               reserve_override=None):
         spec = spec or self.spec
         manifest = self.root / 'source-manifest.json'
         write(manifest, spec)
         out = self.root / 'evidence'
         launches = []
         signal_handlers = {}
+        elapsed = [0.0]
 
         class Job:
             def __init__(self, command, **kwargs):
@@ -84,7 +87,7 @@ class ScalingChecks(unittest.TestCase):
                 launches.append(self)
 
             def poll(self):
-                if self.gate.exists():
+                if self.returncode is None and self.gate.exists() and not hold_running:
                     self.returncode = 0
                     if interrupt_after_exit:
                         signal_handlers[batch.signal.SIGINT](batch.signal.SIGINT, None)
@@ -108,9 +111,15 @@ class ScalingChecks(unittest.TestCase):
         argv = ['run_experiment_batch.py', str(manifest), '--output', str(out)]
         if dry:
             argv.append('--dry-run')
+        if reserve_override is not None:
+            argv.extend(['--disk-reserve-bytes', str(reserve_override)])
         error = None
         with patch.object(sys, 'argv', argv), patch.object(batch.subprocess, 'Popen', Job), \
              patch.object(batch, 'summarize', summarize), \
+             patch.object(batch.shutil, 'disk_usage', lambda _: SimpleNamespace(
+                 total=100*1024**3, free=disk_free(launches) if disk_free else 50*1024**3)), \
+             patch.object(batch.time, 'monotonic', lambda: elapsed[0]), \
+             patch.object(batch.time, 'sleep', lambda seconds: elapsed.__setitem__(0, elapsed[0]+seconds)), \
              patch.object(batch.signal, 'signal', lambda sig, handler: signal_handlers.update({sig: handler})), \
              contextlib.redirect_stdout(io.StringIO()):
             try:
@@ -145,6 +154,67 @@ class ScalingChecks(unittest.TestCase):
         self.assertEqual(json.loads((out / 'batch.json').read_text())['phase'], 'planned')
         self.assertEqual(list((out / '.gates').iterdir()), [])
         self.assertEqual(len(list((out / '.inputs').iterdir())), 7)
+
+    def test_disk_preflight_refuses_launch_and_records_measurement(self):
+        reserve = batch.DEFAULT_DISK_RESERVE_BYTES
+        out, jobs, error = self.invoke(disk_free=lambda _: reserve-1)
+        self.assertIsInstance(error, batch.DiskReserveError)
+        self.assertEqual(jobs, [])
+        report = json.loads((out / 'batch.json').read_text())
+        self.assertEqual(report['phase'], 'failed')
+        self.assertEqual(report['failure_code'], 'disk_reserve_exhausted')
+        self.assertEqual(report['disk_space']['reserve_bytes'], 3*1024**3)
+        self.assertEqual(report['disk_space']['breach']['stage'], 'preflight')
+        self.assertEqual(report['disk_space']['samples'][0]['free_bytes'], reserve-1)
+        self.assertEqual(list((out / '.gates').iterdir()), [])
+
+    def test_disk_drop_during_launch_stops_peer_before_common_gate(self):
+        reserve = batch.DEFAULT_DISK_RESERVE_BYTES
+        out, jobs, error = self.invoke(disk_free=lambda jobs: reserve-1 if jobs else reserve+1)
+        self.assertIsInstance(error, batch.DiskReserveError)
+        self.assertEqual(len(jobs), 1)
+        self.assertTrue(jobs[0].terminated)
+        self.assertFalse(jobs[0].gate.exists())
+        report = json.loads((out / 'batch.json').read_text())
+        self.assertEqual(report['disk_space']['breach']['stage'], 'before_launch')
+        self.assertEqual(report['cleanup_errors'], [])
+
+    def test_disk_drop_while_running_gracefully_stops_all_peers(self):
+        reserve = batch.DEFAULT_DISK_RESERVE_BYTES
+        def free(jobs):
+            return reserve if any(j.gate.exists() for j in jobs) else reserve+1024**3
+        out, jobs, error = self.invoke(hold_running=True, disk_free=free)
+        self.assertIsInstance(error, batch.DiskReserveError)
+        self.assertEqual(len(jobs), 7)
+        self.assertTrue(all(j.terminated and j.returncode == -15 for j in jobs))
+        report = json.loads((out / 'batch.json').read_text())
+        self.assertEqual(report['phase'], 'failed')
+        self.assertEqual(report['disk_space']['breach']['stage'], 'running')
+        self.assertEqual(report['disk_space']['samples'][-1]['free_bytes'], reserve)
+        self.assertEqual(report['comparison'], [])
+        self.assertEqual(report['cleanup_errors'], [])
+
+    def test_disk_reserve_override_is_retained_in_plan_and_enforced(self):
+        out, jobs, error = self.invoke(disk_free=lambda _: 1024, reserve_override=2048)
+        self.assertIsInstance(error, batch.DiskReserveError)
+        self.assertEqual(jobs, [])
+        self.assertEqual(json.loads((out / 'manifest.json').read_text())['disk_reserve_bytes'], 2048)
+        self.assertEqual(json.loads((out / 'batch.json').read_text())['disk_space']['reserve_bytes'], 2048)
+
+    def test_disk_measurements_are_periodic_and_forced_at_boundaries(self):
+        out = self.root / 'guard'
+        out.mkdir()
+        report = {}
+        guard = batch.DiskReserveGuard(out, report, 100)
+        with patch.object(batch.time, 'monotonic', side_effect=[0, .5, 1, 1.1]), \
+             patch.object(batch.shutil, 'disk_usage', return_value=SimpleNamespace(total=1000, free=900)) as usage:
+            guard.check('preflight', force=True)
+            guard.check('running')
+            guard.check('running')
+            guard.check('before_launch', force=True)
+        self.assertEqual(usage.call_count, 3)
+        self.assertEqual([s['stage'] for s in report['disk_space']['samples']],
+                         ['preflight', 'running', 'before_launch'])
 
     def test_fresh_run_cannot_inherit_resume_or_archive(self):
         inherited = dict(BEVY_DEV_RESUME_ACTIVE='/unrelated/active.json',
@@ -224,7 +294,9 @@ class ScalingChecks(unittest.TestCase):
     def test_invalid_specs_reject_before_launch(self):
         cases = []
         for key, value in [('concurrency', 0), ('concurrency', True), ('concurrency', 8),
-                           ('minutes', 61), ('serial_ms', 2), ('calls_per_actor', -1)]:
+                           ('minutes', 61), ('serial_ms', 2), ('calls_per_actor', -1),
+                           ('disk_reserve_bytes', 0), ('disk_reserve_bytes', True),
+                           ('disk_reserve_bytes', -1), ('disk_reserve_bytes', 3.5)]:
             cases.append(dict(self.spec, **{key: value}))
         for key, value in [('id', '../escape'), ('port', True), ('port', 65536),
                            ('id', 'candidate-1'), ('port', 19001), ('recovery', 'false')]:

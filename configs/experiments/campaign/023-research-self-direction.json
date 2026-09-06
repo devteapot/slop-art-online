@@ -1,0 +1,42 @@
+{
+  "hypothesis": "Generic review of current motives and completed immediate goals may alter autonomous choices after terminal learning, compared with the current habit-preserving controller wording. Two fresh repeats per condition distinguish a possible wording effect from one stochastic result. Increased activity alone is not invention.",
+  "evaluation": "Four concurrent fresh eighteen-minute worlds with identical invention-baseline scenario bytes, initial personalities, corrected source-ID documentation and .2 rules. Same Luna medium model, no call cap and fifteen seconds after each serial role completion. The treatment adds the same general self-direction invitation to built-in and external prompts, without mentioning research, teaching, code or any desired outcome. Preserve initial API failures, genuine rejections and deliberate inactivity. Count eligible post-assessment behavior contexts and self-chosen goal reviews, separately from paid prototype submission, successful meaningful source, physical transfer, own source inspection and interpretation, exact-source paid practice and completed ordinary run. Review exact journals and authority receipts; no automatic acceptance. Prior frozen trials remain unchanged.",
+  "minutes": 18,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "concurrency": 4,
+  "variants": [
+    {
+      "id": "current-a",
+      "port": 19021,
+      "implementation": "output/society-lab/implementations/research-m6-8-contract",
+      "scenario": "output/society-lab/implementations/research-m6-8-contract/scenarios/research-invention.json",
+      "controllers": "output/society-lab/implementations/research-m6-8-contract/configs/experiments/research-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "current-b",
+      "port": 19022,
+      "implementation": "output/society-lab/implementations/research-m6-8-contract",
+      "scenario": "output/society-lab/implementations/research-m6-8-contract/scenarios/research-invention.json",
+      "controllers": "output/society-lab/implementations/research-m6-8-contract/configs/experiments/research-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "self-direction-a",
+      "port": 19023,
+      "implementation": "output/society-lab/implementations/research-m6-9-self-direction",
+      "scenario": "output/society-lab/implementations/research-m6-9-self-direction/scenarios/research-invention.json",
+      "controllers": "output/society-lab/implementations/research-m6-9-self-direction/configs/experiments/research-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "self-direction-b",
+      "port": 19024,
+      "implementation": "output/society-lab/implementations/research-m6-9-self-direction",
+      "scenario": "output/society-lab/implementations/research-m6-9-self-direction/scenarios/research-invention.json",
+      "controllers": "output/society-lab/implementations/research-m6-9-self-direction/configs/experiments/research-4-medium.json",
+      "recovery": true
+    }
+  ]
+}

@@ -238,6 +238,7 @@ mod tests {
         let mut w = World::new("disturbance-archive".into(), s).unwrap();
         // Supplied physical dependency; the production destruction helper is exercised.
         w.archives[0].records.push(knowledge::Record {
+            program:None, experiment:None,
             id: "private-record".into(),
             topic: "Route".into(),
             text: "UNPUBLISHED_ARCHIVE_PAYLOAD".into(),

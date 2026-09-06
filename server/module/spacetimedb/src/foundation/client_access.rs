@@ -1,5 +1,5 @@
 //! Run-scoped browser grants. All checks use authenticated ctx.sender(), never a claimed actor.
-use super::{save, sim_audit__view, sim_run, sim_run__view, SimRun};
+use super::{save, sim_audit__view, storage, storage_codec, SimRun};
 use simulation::{Controller, Decision, World};
 use spacetimedb::{Identity, ReducerContext, ScheduleAt, SpacetimeType, Table, ViewContext};
 
@@ -40,10 +40,10 @@ pub struct SimParticipantCache {
     pub tick: u64,
     pub body: String,
 }
-pub(super) fn publish_participants(ctx: &ReducerContext, world: &World) {
+pub(super) fn publish_participants(ctx: &ReducerContext, world: &World, layout: &storage_codec::Layout) {
     if !world.participant_mode {return;}
     for actor in world.participants.keys() {
-        let Ok(body)=world.participant_status_json(*actor) else {continue;};
+        let body=storage_codec::status(world,*actor,layout).expect("valid normalized participant status");
         let key=format!("{}:{actor}",world.run);
         let previous=ctx.db.sim_participant_cache().key().find(&key);
         if previous.as_ref().is_some_and(|old|old.body==body) {continue;}
@@ -54,13 +54,7 @@ pub(super) fn publish_participants(ctx: &ReducerContext, world: &World) {
 }
 
 pub(super) fn world(ctx: &ReducerContext, run: &str) -> Result<(SimRun, World), String> {
-    let row = ctx
-        .db
-        .sim_run()
-        .id()
-        .find(run.to_string())
-        .ok_or("run not found")?;
-    let w: World = serde_json::from_str(&row.state).map_err(|_| "invalid run state")?;
+    let (row, w) = storage::load(ctx, run)?;
     if w.version != simulation::VERSION {
         return Err("old rules are read-only".into());
     }
@@ -167,15 +161,13 @@ pub fn sim_revoke_client(ctx: &ReducerContext, identity: Identity) -> Result<(),
 #[spacetimedb::view(accessor = sim_my_snapshot, public)]
 pub fn sim_my_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
     let access = ctx.db.sim_client_access().identity().find(ctx.sender())?;
-    let row = ctx.db.sim_run().id().find(&access.run)?;
-    let w: World = serde_json::from_str(&row.state).ok()?;
+    let w = storage::world_for_view(ctx, &access.run)?;
     let events = if access.observer {
         let mut events: Vec<simulation::Event> = ctx
             .db
             .sim_audit()
-            .run()
-            .filter(&access.run)
-            .filter(|e| e.event_id >= w.next_event.saturating_sub(180))
+            .run_and_event()
+            .filter((&access.run, w.next_event.saturating_sub(180)..w.next_event))
             .filter_map(|e| serde_json::from_str(&e.json).ok())
             .collect();
         events.sort_by_key(|e| e.id);
@@ -432,10 +424,11 @@ pub fn sim_participant_state(ctx: &ViewContext) -> Option<SimClientSnapshot> {
         return None;
     }
     let row=ctx.db.sim_participant_cache().key().find(format!("{}:{}",access.run,access.actor))?;
+    let body = storage::status_for_view(ctx, &access.run, access.actor, &row.body);
     Some(SimClientSnapshot {
         run: access.run,
         tick: row.tick,
-        body: row.body,
+        body,
     })
 }
 #[spacetimedb::reducer]

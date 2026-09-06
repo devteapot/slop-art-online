@@ -433,6 +433,11 @@ fn utilities(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
 }
 fn knowledge(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
     let own = !game.observer() && !game.archive && game.snapshot["actor"] == p["id"];
+    if p["infrastructure"]["enabled"]==true {
+        title(panel,"TECHNIQUES AND EXPERIMENTS");
+        text(panel,if p["research"]["can_author"]==true {"This person can currently author a technique."} else {"Authorship capability has not been demonstrated under the current rules."},12.,MUTED);
+        text(panel,"A code copy and an experiment report are separate records. Receiving code does not grant the sender's practical capability.",12.,MUTED);
+    }
     title(panel, "PERSONAL RECORDS");
     text(panel, "Reports can disagree. Reading preserves a copy; understanding and practical ability develop separately.", 12., MUTED);
     if let Some(holdings) = p["knowledge"].as_array() {
@@ -443,7 +448,31 @@ fn knowledge(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
             text(panel, record["text"].as_str().unwrap_or(""), 13., INK);
             text(panel, format!("{} · author #{} · stated confidence {}", record["id"].as_str().unwrap_or(""),number(&record["author"]),number(&record["confidence"])), 11., MUTED);
             text(panel, holding["interpretation"].as_str().unwrap_or("Not yet assessed by this person."), 12., MUTED);
+            if let Some(program)=record.get("program").filter(|v|v.is_object()) {
+                let can_run=p["research"]["programs"].as_array().into_iter().flatten().any(|v|v["record"]==record["id"] && v["can_run"]==true);
+                text(panel,if can_run {"Technique use is currently permitted."} else {"Technique use is not currently permitted."},12.,MUTED);
+                text(panel,format!("Inputs: {}\nOutputs: {}",program["input_contract"].as_str().unwrap_or(""),program["output_contract"].as_str().unwrap_or("")),12.,INK);
+                if own {
+                    if let Some(station)=p["infrastructure"]["stations"].as_array().into_iter().flatten().find(|s|
+                        s["position"]==p["position"] && s["enabled"]==true && s["rights"]["use_allowed"]==true && s["modules"].as_array().is_some_and(|m|m.iter().any(|m|m=="terminal"))) {
+                        button(panel,"Inspect code",Click::Intent(json!({"skill":"infrastructure","infrastructure":{"op":"inspect_program","station":station["id"],"record":record["id"]}})),false);
+                    }
+                }
+                if let Some(source)=p["memories"].as_array().into_iter().flatten().rev().find(|m|
+                    m["kind"]=="program_inspected" && m["content"]["record"]==record["id"] && m["content"]["program"]["source_hash"]==program["source_hash"])
+                    .and_then(|m|m["content"]["program"]["source"].as_str()) {
+                    text(panel,"Last personally inspected source",11.,MUTED);
+                    text(panel,source,12.,INK);
+                }
+            }
+            if let Some(experiment)=record.get("experiment").filter(|v|v.is_object()) {
+                text(panel,format!("{} experiment · {} paid work units · {}",experiment["kind"].as_str().unwrap_or("terminal"),number(&experiment["paid_quanta"]),if experiment["successful"]==true {"successful on supplied inputs"} else {"unsuccessful on supplied inputs"}),12.,MUTED);
+                if experiment["output"].is_array() {text(panel,format!("Recorded output: {}",experiment["output"]),12.,INK);}
+            }
             if own {
+                if p["health"].as_i64().unwrap_or(0) > 0 && p["energy"].as_i64().unwrap_or(0) >= 1 {
+                    button(panel, "Reread record", Click::Intent(json!({"skill":"reread_record","record":record["id"],"duration":1})), false);
+                }
                 for other in game.snapshot["players"].as_array().into_iter().flatten().filter(|v|v["id"]!=p["id"] && v["position"]==p["position"]) {
                     button(panel,format!("Teach {}",other["name"].as_str().unwrap_or("neighbor")),Click::Intent(json!({"skill":"teach","target":other["id"],"record":record["id"],"duration":1})),false);
                 }

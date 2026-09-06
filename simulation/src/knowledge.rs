@@ -39,6 +39,10 @@ pub struct ArchiveSeed {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Record {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<crate::research_programs::ProgramArtifact>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub experiment: Option<crate::research::ExperimentEvidence>,
     pub id: String,
     pub topic: String,
     pub text: String,
@@ -159,6 +163,8 @@ impl World {
                 let origin = self.event(Some(actor), "knowledge_seeded", vec![initialization],
                     json!({"id":seed.id,"source":"authored initial assertion; not verified world truth"}));
                 let record = Record {
+                    program: None,
+                    experiment: None,
                     id: seed.id,
                     topic: seed.topic,
                     text: seed.text,
@@ -256,6 +262,12 @@ impl World {
                     archive.capacity,
                 )?;
             }
+            Effect::ReadRecord { record } => {
+                if a.skill.id() != "reread_record" || a.record.as_ref() != Some(record) {
+                    return Err("rereading effect exceeds selected personal record capability".into());
+                }
+                self.own_record(i, record)?;
+            }
             Effect::ConsultKnowledge { archive, record } => {
                 if a.skill.id() != "consult"
                     || a.archive != Some(*archive)
@@ -299,7 +311,7 @@ impl World {
     ) -> Result<(), String> {
         self.check_holding(i, record)?;
         let source = self.perceive(i, cause, "knowledge_report", from, self.players[i].position,
-            json!({"record":record,"via":via,"new_copy":!self.players[i].knowledge.iter().any(|h| h.record.id == record.id),"meaning":"An attributed assertion, not verified truth or practical skill mastery"}))?;
+            json!({"record":crate::research::record_view(record),"via":via,"new_copy":!self.players[i].knowledge.iter().any(|h| h.record.id == record.id),"meaning":"An attributed assertion, not verified truth or practical skill mastery"}))?;
         if let Some(holding) = self.players[i]
             .knowledge
             .iter_mut()
@@ -383,6 +395,15 @@ impl World {
                     json!({"archive":archive,"record":record.id,"revision":revision}),
                 )?;
                 self.observe_site(i)?;
+            }
+            Effect::ReadRecord { record } => {
+                if self.players[i].health <= 0 {
+                    return Err("dead characters cannot reread knowledge".into());
+                }
+                let record = self.own_record(i, record)?.clone();
+                let event = self.event(Some(actor), "knowledge_reread", vec![cause],
+                    json!({"record":record.id,"location":location,"new_copy":false}));
+                self.receive_record(i, event, None, &record, "personal record rereading")?;
             }
             Effect::ConsultKnowledge { archive, record } => {
                 let local = self.local_archive(i, *archive)?;
@@ -468,6 +489,30 @@ impl World {
         if source.source != r.source {
             return Err("knowledge interpretation evidence does not match cited source".into());
         }
+        // Both transports supply personally retained evidence: legacy perceptions
+        // directly, participant perceptions inside the authority event envelope.
+        let (kind, content) = if source.kind == "perception" {
+            (source.content["kind"].as_str().unwrap_or(""), &source.content["content"])
+        } else {
+            (source.kind.as_str(), &source.content)
+        };
+        let record = match kind {
+            "knowledge_report" => content["record"]["id"].as_str(),
+            "program_inspected" => {
+                let id = content["record"].as_str();
+                if let Some(holding) = self.players[i].knowledge.iter()
+                    .find(|h| Some(h.record.id.as_str()) == id)
+                {
+                    if holding.record.program.is_none()
+                        || serde_json::to_value(&holding.record.program).map_err(|_| "invalid held program")? != content["program"]
+                    {
+                        return Err("inspected source differs from currently held program".into());
+                    }
+                }
+                id
+            }
+            _ => None,
+        };
         if let Some(draft) = &r.knowledge {
             validate_assertion(&draft.topic, &draft.text, draft.confidence)?;
             if draft.location.is_some_and(|location| {
@@ -500,6 +545,8 @@ impl World {
                 json!({"id":id,"interpretation":r.interpretation,"evidence":r.source}),
             );
             let record = Record {
+                program: None,
+                experiment: None,
                 id,
                 topic: draft.topic.clone(),
                 text: draft.text.clone(),
@@ -519,31 +566,32 @@ impl World {
             holding.interpretation = Some(r.interpretation.clone());
             holding.interpreted_source = Some(r.source);
             holding.confidence = Some(draft.confidence);
-        } else {
-            // Source ownership and retention are established by the caller. Resolve
-            // only that supplied report, never an origin ID through world/audit state.
-            let record = match source.kind.as_str() {
-                "knowledge_report" => source.content["record"]["id"].as_str(),
-                "perception" if source.content["kind"] == "knowledge_report" => {
-                    source.content["content"]["record"]["id"].as_str()
-                }
-                _ => None,
-            };
-            if let Some(holding) = self.players[i]
-                .knowledge
-                .iter_mut()
-                .find(|h| Some(h.record.id.as_str()) == record)
-            {
-                // Acquisition can refresh while a previously read report is still
-                // leased. Assessments follow cited evidence order, independently.
-                let assessed = holding
-                    .interpreted_source
-                    .or_else(|| holding.interpretation.as_ref().map(|_| holding.source));
-                if assessed.is_none_or(|previous| previous <= r.source) {
-                    holding.interpretation = Some(r.interpretation.clone());
-                    holding.interpreted_source = Some(r.source);
-                }
+        }
+        // The mandatory interpretation assesses its cited held report in either
+        // form. An optional derived assertion is additional knowledge, not a
+        // replacement for that assessment; validate/create it before this step.
+        // Source ownership and retention are established by the caller. Resolve
+        // only that supplied report or exact inspected code, never audit/origin state.
+        let mut assessed_record = None;
+        if let Some(holding) = self.players[i]
+            .knowledge
+            .iter_mut()
+            .find(|h| Some(h.record.id.as_str()) == record)
+        {
+            // Acquisition can refresh while a previously read report is still
+            // leased. Assessments follow cited evidence order, independently.
+            let assessed = holding
+                .interpreted_source
+                .or_else(|| holding.interpretation.as_ref().map(|_| holding.source));
+            if assessed.is_none_or(|previous| previous <= r.source) {
+                holding.interpretation = Some(r.interpretation.clone());
+                holding.interpreted_source = Some(r.source);
+                assessed_record = Some(holding.record.id.clone());
             }
+        }
+        if let Some(record) = assessed_record {
+            self.event(Some(self.players[i].id), "knowledge_interpreted", vec![r.source],
+                json!({"record":record,"source":r.source,"interpretation":r.interpretation}));
         }
         Ok(())
     }
@@ -555,7 +603,7 @@ impl World {
             .map(|archive| json!({"id":archive.id,"position":archive.position,"label":archive.label,
                 "revision":archive.revision,"destroyed":archive.destroyed,
                 "records":archive.records.iter().filter(|_| !archive.destroyed)
-                    .map(|r| json!({"id":r.id,"topic":r.topic,"author":r.author})).collect::<Vec<_>>()})).collect::<Vec<_>>())
+                    .map(|r| json!({"id":r.id,"topic":r.topic,"author":r.author,"program":r.program.as_ref().map(|p|json!({"source_hash":p.source_hash,"interface_version":p.interface_version}))})).collect::<Vec<_>>()})).collect::<Vec<_>>())
     }
     pub(super) fn knowledge_script_context(&self, i: usize, a: &Action) -> Value {
         let record = a
@@ -569,7 +617,7 @@ impl World {
         let target = a.target.and_then(|target| self.recipient(i, target).ok()).map(|j|
             json!({"id":self.players[j].id,"knowledge_count":self.players[j].knowledge.len(),"capacity":MAX_HOLDINGS,
                 "has_record":a.record.as_ref().is_some_and(|id| self.players[j].knowledge.iter().any(|h| &h.record.id == id))}));
-        json!({"record":record,"archive":archive,"target":target,
+        json!({"record":record.map(crate::research::record_view),"archive":archive,"target":target,
             "own_count":self.players[i].knowledge.len(),"own_capacity":MAX_HOLDINGS})
     }
 }

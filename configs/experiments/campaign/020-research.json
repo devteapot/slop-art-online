@@ -1,0 +1,42 @@
+{
+  "hypothesis": "Four autonomous neighbors may move from personally assessed paid forecasts to a new useful nonlinear multi-interval numeric technique, communicate its physical code, and develop independent exact-source competence through paid practice. No discovery, transfer, cooperation or preservation is guaranteed.",
+  "evaluation": "Four fresh parallel eighteen-minute Luna medium worlds, fifteen seconds after each serial behavior/communication/learning completion, no call cap. Invention and transfer-repeat have identical inputs except display name. Cooling changes only initial station water from 48 to 1, leaving 24 carried water available for voluntary recovery. Loss-risk changes only two explicit authored disturbances: actor 1 receives 100 damage at 540000 ms and archive 1 is destroyed at 570000 ms. They do not erase terminal jobs or choose who invents. Audit all retained terminal/source/report copies and voluntary erase operations; report nonactivation when no discovery exists. Survival-only initial habits and private textual problem statements contain no code, computed result, mastery or prescribed action path. Require a personally paid, retrieved and interpreted built-in forecast bootstrap; inspect actual model-created source for meaningful nonlinear multi-interval behavior. Paid matching vectors alone are not proof of general correctness. Require a learner-held communicated code copy, own source inspection and interpretation, own paid successful exact-hash practice and interpretation before an ordinary run. Preserve unsuccessful experiments, unavailable jobs, decisions not to investigate, food/material accounts and limited evidence of useful consequences. An author death or archive destruction alone never establishes total discovery loss.",
+  "minutes": 18,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "concurrency": 4,
+  "variants": [
+    {
+      "id": "invention",
+      "port": 18985,
+      "implementation": "output/society-lab/implementations/research-m6-5",
+      "scenario": "output/society-lab/implementations/research-m6-5/scenarios/research-invention.json",
+      "controllers": "output/society-lab/implementations/research-m6-5/configs/experiments/research-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "transfer-repeat",
+      "port": 18986,
+      "implementation": "output/society-lab/implementations/research-m6-5",
+      "scenario": "output/society-lab/implementations/research-m6-5/scenarios/research-transfer-repeat.json",
+      "controllers": "output/society-lab/implementations/research-m6-5/configs/experiments/research-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "cooling",
+      "port": 18987,
+      "implementation": "output/society-lab/implementations/research-m6-5",
+      "scenario": "output/society-lab/implementations/research-m6-5/scenarios/research-cooling.json",
+      "controllers": "output/society-lab/implementations/research-m6-5/configs/experiments/research-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "loss-risk",
+      "port": 18988,
+      "implementation": "output/society-lab/implementations/research-m6-5",
+      "scenario": "output/society-lab/implementations/research-m6-5/scenarios/research-loss-risk.json",
+      "controllers": "output/society-lab/implementations/research-m6-5/configs/experiments/research-4-medium.json",
+      "recovery": true
+    }
+  ]
+}

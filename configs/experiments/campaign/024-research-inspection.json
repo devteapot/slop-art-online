@@ -1,0 +1,42 @@
+{
+  "hypothesis": "With natural held-code inspection assessment corrected and thirty minutes available, fresh residents may independently develop, assess, communicate and use a meaningful numeric method. Invention and transfer remain voluntary; longer time and corrected rules do not guarantee either.",
+  "evaluation": "Four fresh parallel thirty-minute Luna medium worlds, fifteen seconds after each serial behavior/communication/learning completion, no call cap. Invention and transfer-repeat have identical inputs except display name. Cooling changes only initial station water from 48 to 1, leaving 24 carried water available for voluntary recovery. Loss-risk changes only two explicit authored disturbances: actor 1 receives 100 damage at 540000 ms and archive 1 is destroyed at 570000 ms. They do not erase terminal jobs or choose who invents. Audit all retained terminal/source/report copies and voluntary erase operations; report nonactivation when no discovery exists. Survival-only initial habits and private textual problem statements contain no code, computed result, mastery or prescribed action path. Require a personally paid, retrieved and interpreted built-in forecast bootstrap; inspect actual model-created source for meaningful nonlinear multi-interval behavior. Paid matching vectors alone are not proof of general correctness. Require a learner-held communicated code copy, own source inspection and interpretation, own paid successful exact-hash practice and interpretation before an ordinary run. Preserve unsuccessful experiments, unavailable jobs, decisions not to investigate, food/material accounts and limited evidence of useful consequences. An author death or archive destruction alone never establishes total discovery loss. Rules .3 allow actual own-held InspectProgram evidence to assess the matching current code holding through ordinary reflection. Exact artifact and authority receipt checks remain required; inspection confers no paid practice. Retain the generic self-direction wording from campaign 023 without treating its two repeats per condition as proof of a causal benefit. The additional twelve minutes are fixed before launch from observed roughly 84-second Behavior/Learning recurrence and late prototype timing. Identical initial physical inputs and original disturbances remain; no source, output or proof from campaign 023 is supplied.",
+  "minutes": 30,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "concurrency": 4,
+  "variants": [
+    {
+      "id": "invention",
+      "port": 19025,
+      "implementation": "output/society-lab/implementations/research-m6-10-inspection",
+      "scenario": "output/society-lab/implementations/research-m6-10-inspection/scenarios/research-invention.json",
+      "controllers": "output/society-lab/implementations/research-m6-10-inspection/configs/experiments/research-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "transfer-repeat",
+      "port": 19026,
+      "implementation": "output/society-lab/implementations/research-m6-10-inspection",
+      "scenario": "output/society-lab/implementations/research-m6-10-inspection/scenarios/research-transfer-repeat.json",
+      "controllers": "output/society-lab/implementations/research-m6-10-inspection/configs/experiments/research-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "cooling",
+      "port": 19027,
+      "implementation": "output/society-lab/implementations/research-m6-10-inspection",
+      "scenario": "output/society-lab/implementations/research-m6-10-inspection/scenarios/research-cooling.json",
+      "controllers": "output/society-lab/implementations/research-m6-10-inspection/configs/experiments/research-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "loss-risk",
+      "port": 19028,
+      "implementation": "output/society-lab/implementations/research-m6-10-inspection",
+      "scenario": "output/society-lab/implementations/research-m6-10-inspection/scenarios/research-loss-risk.json",
+      "controllers": "output/society-lab/implementations/research-m6-10-inspection/configs/experiments/research-4-medium.json",
+      "recovery": true
+    }
+  ]
+}

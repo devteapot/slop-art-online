@@ -85,6 +85,10 @@ fn reflect(
     source: u64,
     knowledge: Option<KnowledgeDraft>,
 ) -> participant::Receipt {
+    let cursor=w.participants[&actor].cursor;
+    reflect_at(w,actor,source,cursor,knowledge)
+}
+fn reflect_at(w:&mut World,actor:u32,source:u64,observed_cursor:u64,knowledge:Option<KnowledgeDraft>)->participant::Receipt {
     w.participant_apply(
         actor,
         Request {
@@ -93,7 +97,7 @@ fn reflect(
             control_epoch: w.participants[&actor].control_epoch,
             command: Command::Reflect {
                 expected_revision: w.participants[&actor].learning_revision,
-                observed_cursor: w.participants[&actor].cursor,
+                observed_cursor,
                 reflections: vec![Reflection {
                     source,
                     interpretation: "I retain this as a tentative account, not an observed fact"
@@ -985,4 +989,188 @@ fn maximum_local_archive_catalog_does_not_overflow_unrelated_behavior_guards() {
             .collect::<Vec<_>>()
     );
     assert_eq!(w.players[0].energy, 92);
+}
+
+#[test]
+fn rereading_expired_acquisition_is_paid_and_restores_personal_citable_evidence() {
+    let mut w = world();
+    let held = w.players[0].knowledge[0].clone();
+    // Actual private trace churn, without recovering the receipt from audit history.
+    for n in 0..participant::TRACE_LIMIT + 1 {
+        let event = w.event(Some(1), "reread_fixture", vec![], json!({}));
+        w.perceive(0, event, "heard", None, 0, json!({"text":format!("ordinary trace {n}")})).unwrap();
+    }
+    assert!(!w.participants[&1].experiences.iter().any(|e| e.source == held.source));
+    assert!(!reflect(&mut w, 1, held.source, None).ok);
+    assert_eq!(w.players[0].knowledge[0].record, held.record);
+    let energy = w.players[0].energy;
+    install(&mut w, 1, action(Skill::RereadRecord, None, None, Some("garden-report")));
+    w.advance_ms(1499);
+    assert_eq!(w.players[0].knowledge[0].source, held.source);
+    assert_eq!(w.players[0].energy, energy);
+    w.advance_ms(1);
+    let refreshed = w.players[0].knowledge[0].clone();
+    assert_eq!(w.players[0].energy, energy - 1);
+    assert_ne!(refreshed.source, held.source);
+    assert_eq!(refreshed.record, held.record);
+    assert_eq!(refreshed.interpretation, held.interpretation);
+    assert_eq!(w.players[0].knowledge.len(), 1);
+    assert_eq!(w.archives.iter().map(|a| a.records.len()).sum::<usize>(), 0);
+    assert!(w.players[1].knowledge.is_empty());
+    let receipt = w.participants[&1].experiences.iter().find(|e|e.source == refreshed.source).unwrap();
+    assert_eq!(receipt.data["kind"], "knowledge_report");
+    assert_eq!(receipt.data["content"]["new_copy"], false);
+    assert!(!w.participants[&2].experiences.iter().any(|e|e.source == refreshed.source));
+    assert!(reflect(&mut w, 1, refreshed.source, None).ok);
+    assert!(w.players[0].knowledge[0].interpretation.is_some());
+}
+
+#[test]
+fn rereading_preserves_existing_interpretation_and_durable_identity() {
+    let mut w = world();
+    let source = w.players[0].knowledge[0].source;
+    assert!(reflect(&mut w, 1, source, None).ok);
+    let held = w.players[0].knowledge[0].clone();
+    finish(&mut w, 1, action(Skill::RereadRecord, None, None, Some("garden-report")), 1500);
+    let after = &w.players[0].knowledge[0];
+    assert_eq!(after.record, held.record);
+    assert_eq!(after.interpretation, held.interpretation);
+    assert_eq!(after.interpreted_source, held.interpreted_source);
+    assert_eq!(after.confidence, held.confidence);
+    assert_ne!(after.source, held.source);
+    let source = after.source;
+    assert!(reflect(&mut w, 1, source, None).ok);
+    assert_eq!(w.players[0].knowledge.len(), 1);
+}
+
+#[test]
+fn rereading_rejects_foreign_missing_dead_and_substituted_records() {
+    use scripting::Effect;
+    for (actor, record, dead) in [(2, "garden-report", false), (1, "missing", false), (1, "garden-report", true)] {
+        let mut w = world();
+        let i = w.idx(actor).unwrap();
+        if dead { w.players[i].health = 0; }
+        let a = action(Skill::RereadRecord, None, None, Some(record));
+        let effect = Effect::ReadRecord { record:record.into() };
+        assert!(w.validate_script_effect(i, &a, &effect).is_err());
+        let before = w.players[i].knowledge.clone();
+        let energy = w.players[i].energy;
+        if !dead { finish(&mut w, actor, a, 1500); }
+        assert_eq!(w.players[i].energy, energy);
+        assert_eq!(serde_json::to_value(&w.players[i].knowledge).unwrap(), serde_json::to_value(before).unwrap());
+        assert!(!w.events.iter().any(|e| e.kind == "knowledge_reread"));
+    }
+    let mut w = world();
+    let effect = Effect::ReadRecord { record:"garden-report".into() };
+    assert!(w.validate_script_effect(0, &action(Skill::RereadRecord, None, None, Some("different")), &effect).is_err());
+    assert!(w.validate_script_effect(0, &action(Skill::Consult, None, Some(7), Some("garden-report")), &effect).is_err());
+    let result = w.participant_manual(1, Decision { reason:"invalid reread target".into(), actions:vec![action(Skill::RereadRecord,Some(2),None,Some("garden-report"))], policy:None,reflections:vec![] });
+    assert!(result.is_err());
+    // Losing the copy during an otherwise valid action must cancel its receipt and cost.
+    install(&mut w, 1, action(Skill::RereadRecord, None, None, Some("garden-report")));
+    w.advance_ms(750);
+    w.players[0].knowledge.clear();
+    w.advance_ms(750);
+    assert_eq!(w.players[0].energy, 80);
+    assert!(!w.events.iter().any(|e|e.kind == "knowledge_reread"));
+}
+
+#[test]
+fn rereading_executable_record_reports_metadata_without_source_inspection() {
+    let mut w = world();
+    let program = research_programs::compile(&research_programs::ProgramDraft {
+        interface_version:1, source:"// private_reread_source_82971\nfn technique(input){input}".into(), input_contract:"Numbers".into(),output_contract:"Same numbers".into()
+    }).unwrap();
+    w.players[0].knowledge[0].record.program = Some(program.clone());
+    finish(&mut w, 1, action(Skill::RereadRecord, None, None, Some("garden-report")), 1500);
+    let held = &w.players[0].knowledge[0];
+    assert_eq!(held.record.program.as_ref(), Some(&program));
+    let report = w.players[0].memories.iter().find(|m|m.source == held.source).unwrap();
+    assert_eq!(report.kind, "knowledge_report");
+    assert!(report.content["record"]["program"].get("source").is_none());
+    assert_eq!(report.content["record"]["program"]["source_omitted"], true);
+    assert!(!w.context(0).to_string().contains("private_reread_source_82971"));
+    assert!(!crate::client_view::snapshot(&w, false, 1, &w.events).to_string().contains("private_reread_source_82971"));
+    assert!(!w.players[0].memories.iter().any(|m|m.kind == "program_inspected"));
+}
+
+fn derived_draft() -> KnowledgeDraft {
+    KnowledgeDraft {topic:"Conditional inference".into(),text:"The reported result suggests a hypothesis under its supplied conditions, not a general fact.".into(),location:None,confidence:35}
+}
+#[test]
+fn derived_assertion_also_assesses_its_held_report_without_copying_its_payload() {
+    let mut w=world();
+    let original=w.players[0].knowledge[0].clone();
+    assert!(reflect(&mut w,1,original.source,Some(derived_draft())).ok);
+    let held=&w.players[0].knowledge[0];
+    assert_eq!(held.record,original.record);assert_eq!(held.source,original.source);
+    assert_eq!(held.interpreted_source,Some(original.source));assert!(held.interpretation.is_some());
+    let derived=w.players[0].knowledge.last().unwrap();
+    assert_ne!(derived.record.id,held.record.id);assert_eq!(derived.record.author,1);
+    assert!(derived.record.program.is_none());assert!(derived.record.experiment.is_none());
+    assert_eq!(derived.interpreted_source,Some(original.source));
+    assert!(w.events.iter().any(|e|e.kind=="knowledge_asserted" && e.parents==vec![original.source]));
+}
+#[test]
+fn invalid_optional_assertion_does_not_partially_assess_or_change_identity() {
+    for mode in 0..4 {
+        let mut w=world();let source=w.players[0].knowledge[0].source;
+        let evidence=w.players[0].memories.iter().find(|p|p.source==source).unwrap().clone();
+        let mut draft=derived_draft();
+        match mode {0=>draft.confidence=101,1=>draft.text.clear(),2=>{w.initial.map=Some(spatial::Grid{width:4,height:2,blocked:Default::default(),bounds:None});draft.location=Some(-1)},_=>{
+            let original=w.players[0].knowledge[0].clone();
+            for n in 1..MAX_HOLDINGS {let mut h=original.clone();h.record.id=format!("fixture-{n}");w.players[0].knowledge.push(h);}
+        }}
+        let reflection=Reflection{source,interpretation:"I assessed the original report, but this whole request must reject.".into(),caution_delta:5,trust_delta:0,belief:None,knowledge:Some(draft.clone())};
+        let before=serde_json::to_value(&w).unwrap();let events=serde_json::to_value(&w.events).unwrap();
+        assert!(w.interpret_knowledge(0,&reflection,&evidence).is_err(),"mode {mode}");
+        assert_eq!(serde_json::to_value(&w).unwrap(),before);assert_eq!(serde_json::to_value(&w.events).unwrap(),events);
+        let player=serde_json::to_value(&w.players[0]).unwrap();let revision=w.participants[&1].learning_revision;
+        assert!(!reflect(&mut w,1,source,Some(draft)).ok);
+        assert_eq!(serde_json::to_value(&w.players[0]).unwrap(),player);assert_eq!(w.participants[&1].learning_revision,revision);
+        assert!(!w.events.iter().any(|e|e.kind=="knowledge_asserted"));
+    }
+}
+#[test]
+fn optional_assertion_respects_leased_evidence_order_and_does_not_restore_a_missing_copy() {
+    let mut w=world();
+    finish(&mut w,1,action(Skill::Teach,Some(2),None,Some("garden-report")),2000);
+    let older=w.players[1].knowledge[0].source;let cursor=w.participants[&2].cursor;
+    assert!(w.participant_apply(2,Request{api_version:API_VERSION.into(),request_id:"assertion-lease".into(),control_epoch:w.participants[&2].control_epoch,command:Command::PinObservation{observed_cursor:cursor,sources:vec![older]}}).unwrap().ok);
+    finish(&mut w,1,action(Skill::Teach,Some(2),None,Some("garden-report")),2000);
+    let newer=w.players[1].knowledge[0].source;let newer_cursor=w.participants[&2].cursor;
+    assert!(w.participant_apply(2,Request{api_version:API_VERSION.into(),request_id:"assertion-newer-lease".into(),control_epoch:w.participants[&2].control_epoch,command:Command::PinObservation{observed_cursor:w.participants[&2].cursor,sources:vec![newer]}}).unwrap().ok);
+    let mut missing=w.clone();missing.players[1].knowledge.clear();
+    for _ in 0..100 {w.observe_site(1).unwrap();}
+    assert!(!w.players[1].memories.iter().any(|p|p.source==older));
+    assert!(!w.participants[&2].experiences.iter().any(|e|e.source==older));
+    let mut branch=w.clone();
+    let receipt=reflect_at(&mut branch,2,older,cursor,Some(derived_draft()));assert!(receipt.ok,"{:?}",receipt.error);
+    assert_eq!(branch.players[1].knowledge[0].source,newer);assert_eq!(branch.players[1].knowledge[0].interpreted_source,Some(older));
+    // A newer valid assessment wins even when an older in-flight reflection also
+    // creates an assertion; derived knowledge must not rewind the original copy.
+    assert!(reflect_at(&mut w,2,newer,newer_cursor,None).ok);
+    let latest_assessment=w.players[1].knowledge[0].interpretation.clone();
+    assert!(reflect_at(&mut w,2,older,cursor,Some(derived_draft())).ok);
+    assert_eq!(w.players[1].knowledge[0].interpretation,latest_assessment);
+    assert_eq!(w.players[1].knowledge[0].interpreted_source,Some(newer));
+    let receipt=reflect_at(&mut missing,2,older,cursor,Some(derived_draft()));assert!(receipt.ok,"{:?}",receipt.error);
+    assert!(missing.players[1].knowledge.iter().all(|h|h.record.id!="garden-report"));
+    let before=w.players[2].knowledge.len();
+    assert!(!reflect(&mut w,3,older,Some(derived_draft())).ok);
+    assert_eq!(w.players[2].knowledge.len(),before);
+}
+#[test]
+fn human_and_ai_decisions_assess_and_derive_through_the_same_atomic_path() {
+    for controller in [Controller::Human,Controller::Ai] {
+        let mut w=world();w.participant_mode=false;w.players[0].controller=controller.clone();
+        let source=w.players[0].knowledge[0].source;
+        let decision=|draft|Decision{reason:"Assess personally held report and derive a conditional assertion".into(),actions:vec![Action::new(Skill::Wait)],policy:None,reflections:vec![Reflection{source,interpretation:"This is a conditional report, not a guaranteed result.".into(),caution_delta:2,trust_delta:0,belief:None,knowledge:Some(draft)}]};
+        let before=serde_json::to_value(&w).unwrap();let events=serde_json::to_value(&w.events).unwrap();
+        let mut invalid=derived_draft();invalid.confidence=101;
+        assert!(w.submit(1,controller.clone(),decision(invalid),None).is_err());
+        assert_eq!(serde_json::to_value(&w).unwrap(),before);assert_eq!(serde_json::to_value(&w.events).unwrap(),events);
+        w.submit(1,controller,decision(derived_draft()),None).unwrap();
+        assert_eq!(w.players[0].knowledge[0].interpreted_source,Some(source));assert_eq!(w.players[0].knowledge.len(),2);
+    }
 }

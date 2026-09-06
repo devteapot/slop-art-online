@@ -4,6 +4,8 @@ pub mod client_view;
 pub mod ecology;
 pub mod knowledge;
 pub mod infrastructure;
+pub mod research;
+pub mod research_programs;
 pub mod lifecycle;
 mod lifecycle_view;
 pub mod participant;
@@ -19,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "m5-4-scaled-publication.1";
+pub const VERSION: &str = "m6-1-numeric-techniques.3";
 pub const DECISION_FORMAT_VERSION: &str = "survivor-policy-v2";
 pub const LEGACY_DECISION_FORMAT: &str = "survivor-sequence-v1";
 pub mod policy;
@@ -53,6 +55,7 @@ pub enum Skill {
     Teach,
     Record,
     Consult,
+    RereadRecord,
     DestroyArchive,
     OfferReproduction,
     WithdrawReproduction,
@@ -80,6 +83,7 @@ impl Skill {
             Self::Teach => "teach",
             Self::Record => "record",
             Self::Consult => "consult",
+            Self::RereadRecord => "reread_record",
             Self::DestroyArchive => "destroy_archive",
             Self::OfferReproduction => "offer_reproduction",
             Self::WithdrawReproduction => "withdraw_reproduction",
@@ -574,7 +578,7 @@ impl World {
             .or_else(||self.lifecycle.get(&p.id).is_some_and(|l| !matches!(l.origin, lifecycle::Origin::Initial)).then(|| self.initial.lifecycle.as_ref()
                 .map(|l|(&l.newcomer.starting_behavior,"newborn seed; revisable starting habit"))).flatten());
         let approach = p.execution.as_ref().map(|e| if let Some(policy)=&e.policy {json!({"decision":e.decision,"policy":policy,"state":e.state,"active_attempt":e.attempt})} else {json!(e)});
-        json!({"society":self.society_context(p.id),"infrastructure":self.infrastructure_facts(p.id),"body":self.body_support_context(p.id),"starting_behavior":starter.map(|(b,source)|json!({"id":b.id,"revision":b.revision,"description":b.description,"source":source,"revisable":true})),"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","lifecycle":self.local_lifecycle_catalog(i),"player":{"development":self.lifecycle.get(&p.id),"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"knowledge":p.knowledge,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
+        research::redacted(json!({"research":self.research_facts(p.id),"society":self.society_context(p.id),"infrastructure":self.infrastructure_facts(p.id),"body":self.body_support_context(p.id),"starting_behavior":starter.map(|(b,source)|json!({"id":b.id,"revision":b.revision,"description":b.description,"source":source,"revisable":true})),"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","lifecycle":self.local_lifecycle_catalog(i),"player":{"development":self.lifecycle.get(&p.id),"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"knowledge":p.knowledge,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description}))
     }
     pub fn request(&mut self, i: usize, trigger: &str) {
         if self.participant_mode {
@@ -1348,3 +1352,6 @@ mod spatial_tests;
 
 #[cfg(test)]
 mod infrastructure_tests;
+
+#[cfg(test)]
+mod research_tests;

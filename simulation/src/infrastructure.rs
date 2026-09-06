@@ -6,9 +6,9 @@ use scripting::Effect;
 use sha2::{Digest, Sha256};
 
 const MAX_STATIONS: usize = 32;
-const MAX_JOBS: usize = 64;
+pub(super) const MAX_JOBS: usize = 64;
 const MAX_STOCK: i32 = 1_000_000;
-const FORECAST_PROGRAM: &str = "fn forecast(c) { let net = c.inflow_per_min - c.demand_per_min; let projected = c.stock + net * c.horizon_ms / 60000; #{ projected_stock: projected, residual: if projected > 0 { projected } else { 0 }, shortfall: if projected < 0 { -projected } else { 0 } } }";
+pub(super) const FORECAST_PROGRAM: &str = "fn forecast(c) { let net = c.inflow_per_min - c.demand_per_min; let projected = c.stock + net * c.horizon_ms / 60000; #{ projected_stock: projected, residual: if projected > 0 { projected } else { 0 }, shortfall: if projected < 0 { -projected } else { 0 } } }";
 
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -182,6 +182,8 @@ pub struct ForecastInput {
     pub inflow_per_min: i32,
     pub demand_per_min: i32,
     pub horizon_ms: u64,
+    /// Optional citations: at most eight unique IDs from your own player.knowledge[].record.id.
+    /// Use [] for uncited assumptions. These are record ID strings, not descriptions or numeric experience sources.
     #[serde(default)]
     pub sources: Vec<String>,
 }
@@ -227,6 +229,40 @@ pub enum InfrastructureOperation {
         station: u32,
         enabled: bool,
     },
+    Prototype {
+        station: u32,
+        draft: crate::research_programs::ProgramDraft,
+        inputs: Vec<i64>,
+        /// At most eight unique IDs from your own player.knowledge[].record.id; [] permits uncited assumptions.
+        /// Record ID strings only, not descriptions or numeric experience sources.
+        sources: Vec<String>,
+        expected_results: Vec<i64>,
+    },
+    PracticeProgram {
+        station: u32,
+        record: String,
+        inputs: Vec<i64>,
+        /// At most eight unique IDs from your own player.knowledge[].record.id; [] permits uncited assumptions.
+        /// Record ID strings only, not descriptions or numeric experience sources.
+        sources: Vec<String>,
+        expected_results: Vec<i64>,
+    },
+    RunProgram {
+        station: u32,
+        record: String,
+        inputs: Vec<i64>,
+        /// At most eight unique IDs from your own player.knowledge[].record.id; [] permits uncited assumptions.
+        /// Record ID strings only, not descriptions or numeric experience sources.
+        sources: Vec<String>,
+    },
+    InspectProgram {
+        station: u32,
+        record: String,
+    },
+    EraseJob {
+        station: u32,
+        job: u64,
+    },
     SubmitJob {
         station: u32,
         input: ForecastInput,
@@ -254,6 +290,11 @@ impl InfrastructureOperation {
             | Self::SupportCharge { station, .. }
             | Self::SetAccess { station, .. }
             | Self::SetEnabled { station, .. }
+            | Self::Prototype { station, .. }
+            | Self::PracticeProgram { station, .. }
+            | Self::RunProgram { station, .. }
+            | Self::InspectProgram { station, .. }
+            | Self::EraseJob { station, .. }
             | Self::SubmitJob { station, .. }
             | Self::CancelJob { station, .. }
             | Self::RetrieveJob { station, .. } => *station,
@@ -267,7 +308,9 @@ pub struct ComputeJob {
     pub owner: u32,
     pub submitted_ms: u64,
     pub source: u64,
-    pub input: ForecastInput,
+    pub input: Option<ForecastInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program_work: Option<crate::research::ProgramWork>,
     pub input_hash: String,
     pub sources: Vec<knowledge::Record>,
     pub progress: u32,
@@ -474,11 +517,14 @@ impl World {
         let permitted = match op {
             SetAccess { .. } | SetEnabled { .. } => rights.admin,
             Build { .. } | Repair { .. } => rights.maintain,
-            CancelJob { .. } => rights.admin || rights.use_allowed,
+            CancelJob { .. } | EraseJob { .. } => rights.admin || rights.use_allowed,
             _ => rights.use_allowed,
         };
         if !permitted {
             return Err("station permission denied".into());
+        }
+        if self.validate_research_operation(i, n, op)? {
+            return Ok(n);
         }
         let own = self
             .infrastructure
@@ -488,6 +534,11 @@ impl World {
             .unwrap_or_default();
         let b = &self.infrastructure.balance;
         match op {
+            Prototype { .. }
+            | PracticeProgram { .. }
+            | RunProgram { .. }
+            | InspectProgram { .. }
+            | EraseJob { .. } => unreachable!("research checked above"),
             TakeMaterial {
                 material, amount, ..
             } => {
@@ -615,29 +666,21 @@ impl World {
                 }
             }
             RetrieveJob { .. } | RetrieveReady { .. } => {
-                let report = s
-                    .jobs
-                    .iter()
-                    .find(|j| j.owner == actor && match op {
-                        RetrieveJob {job,..} => j.id==*job,
-                        _ => !j.retrieved && j.report.is_some(),
-                    })
-                    .and_then(|j| j.report.as_ref())
-                    .ok_or("no own completed report at this terminal")?;
                 if !s.enabled || s.integrity <= 0 || !s.seed.modules.contains(&Module::Terminal) {
                     return Err("terminal unavailable for retrieval".into());
                 }
-                if let Some(held) = self.players[i]
-                    .knowledge
+                let job = s
+                    .jobs
                     .iter()
-                    .find(|h| h.record.id == report.id)
-                {
-                    if held.record != *report {
-                        return Err("computed report identity conflicts with held record".into());
-                    }
-                } else if self.players[i].knowledge.len() >= knowledge::MAX_HOLDINGS {
-                    return Err("personal knowledge storage is full".into());
-                }
+                    .find(|j| {
+                        j.owner == actor
+                            && match op {
+                                RetrieveJob { job, .. } => j.id == *job,
+                                _ => !j.retrieved && j.report.is_some(),
+                            }
+                    })
+                    .ok_or("no own completed report at this terminal")?;
+                self.validate_compute_retrieval(i, job)?;
             }
         }
         Ok(n)
@@ -667,196 +710,204 @@ impl World {
             return Err("not an infrastructure effect".into());
         };
         let n = self.validate_infrastructure_operation(i, operation)?;
-        if let InfrastructureOperation::RetrieveReady {station} = operation {
-            let job=self.infrastructure.stations[n].jobs.iter()
-                .find(|j|j.owner==self.players[i].id && !j.retrieved && j.report.is_some())
-                .ok_or("no own completed report at this terminal")?.id;
-            return self.apply_infrastructure_effect(i,parent,&Effect::Infrastructure {
-                operation:InfrastructureOperation::RetrieveJob {station:*station,job}
-            });
+        if let InfrastructureOperation::RetrieveReady { station } = operation {
+            let job = self.infrastructure.stations[n]
+                .jobs
+                .iter()
+                .find(|j| j.owner == self.players[i].id && !j.retrieved && j.report.is_some())
+                .ok_or("no own completed report at this terminal")?
+                .id;
+            return self.apply_infrastructure_effect(
+                i,
+                parent,
+                &Effect::Infrastructure {
+                    operation: InfrastructureOperation::RetrieveJob {
+                        station: *station,
+                        job,
+                    },
+                },
+            );
         }
         use InfrastructureOperation::*;
         let actor = self.players[i].id;
         let location = self.players[i].position;
         let b = self.infrastructure.balance.clone();
-        let event = match operation {
-            RetrieveReady { .. } => unreachable!("ready report resolved above"),
-            TakeMaterial {
-                station,
-                material,
-                amount,
-            }
-            | DepositMaterial {
-                station,
-                material,
-                amount,
-            } => {
-                let take = matches!(operation, TakeMaterial { .. });
-                let delta = if take { *amount } else { -*amount };
-                self.infrastructure
-                    .actor_materials
-                    .entry(actor)
-                    .or_default()
-                    .add(*material, delta);
-                self.infrastructure.stations[n]
-                    .seed
-                    .materials
-                    .add(*material, -delta);
-                self.event(Some(actor),"material_transferred",vec![parent],json!({"station":station,"location":location,"material":material,"amount":amount,"direction":if take {"to_actor"} else {"to_station"}}))
-            }
-            Build { station, module } => {
-                let parts = b.build_parts[module];
-                self.infrastructure
-                    .actor_materials
-                    .entry(actor)
-                    .or_default()
-                    .parts -= parts;
-                let s = &mut self.infrastructure.stations[n];
-                s.seed.modules.push(*module);
-                s.embodied_parts += parts;
-                self.event(Some(actor),"infrastructure_built",vec![parent],json!({"station":station,"location":location,"module":module,"parts":parts,"balance_version":b.version}))
-            }
-            Repair { station, parts } => {
-                self.infrastructure
-                    .actor_materials
-                    .entry(actor)
-                    .or_default()
-                    .parts -= parts;
-                let s = &mut self.infrastructure.stations[n];
-                s.integrity = (s.integrity + parts * b.repair_per_part).min(100);
-                s.repair_parts_consumed += parts;
-                let integrity = s.integrity;
-                self.event(Some(actor),"infrastructure_repaired",vec![parent],json!({"station":station,"location":location,"parts":parts,"integrity":integrity,"balance_version":b.version}))
-            }
-            Charge { station, amount }
-            | SupportCharge {
-                station, amount, ..
-            } => {
-                let target = if let SupportCharge { target, .. } = operation {
-                    *target
-                } else {
-                    actor
-                };
-                let spent = amount * b.electricity_per_charge;
-                self.infrastructure.stations[n].seed.electricity -= spent;
-                self.infrastructure.bodies.get_mut(&target).unwrap().charge += amount;
-                let event = self.event(Some(actor),"body_charged",vec![parent],json!({"station":station,"location":location,"target":target,"electricity":spent,"charge":amount,"conversion_loss":spent-amount,"support":target!=actor}));
-                if target != actor && *amount >= b.support_care_min_charge {
-                    let j = self.idx(target)?;
-                    let source = self.perceive(
-                        j,
-                        event,
-                        "charge_care_received",
-                        Some(actor),
-                        location,
-                        json!({"station":station,"charge":amount}),
-                    )?;
-                    if let Some(l) = self.lifecycle.get_mut(&target) {
-                        l.care_meals = l.care_meals.saturating_add(1);
-                        if let Some(c) = l.care.iter_mut().find(|c| c.caregiver == actor) {
-                            c.meals = c.meals.saturating_add(1);
-                            c.source = source;
-                        } else {
-                            l.care.push(lifecycle::CareEvidence {
-                                caregiver: actor,
-                                source,
-                                meals: 1,
-                            });
+        let event = if let Some(event) = self.apply_research_operation(i, n, parent, operation)? {
+            event
+        } else {
+            match operation {
+                Prototype { .. }
+                | PracticeProgram { .. }
+                | RunProgram { .. }
+                | InspectProgram { .. }
+                | EraseJob { .. } => unreachable!("research handled above"),
+                RetrieveReady { .. } => unreachable!("ready report resolved above"),
+                TakeMaterial {
+                    station,
+                    material,
+                    amount,
+                }
+                | DepositMaterial {
+                    station,
+                    material,
+                    amount,
+                } => {
+                    let take = matches!(operation, TakeMaterial { .. });
+                    let delta = if take { *amount } else { -*amount };
+                    self.infrastructure
+                        .actor_materials
+                        .entry(actor)
+                        .or_default()
+                        .add(*material, delta);
+                    self.infrastructure.stations[n]
+                        .seed
+                        .materials
+                        .add(*material, -delta);
+                    self.event(Some(actor),"material_transferred",vec![parent],json!({"station":station,"location":location,"material":material,"amount":amount,"direction":if take {"to_actor"} else {"to_station"}}))
+                }
+                Build { station, module } => {
+                    let parts = b.build_parts[module];
+                    self.infrastructure
+                        .actor_materials
+                        .entry(actor)
+                        .or_default()
+                        .parts -= parts;
+                    let s = &mut self.infrastructure.stations[n];
+                    s.seed.modules.push(*module);
+                    s.embodied_parts += parts;
+                    self.event(Some(actor),"infrastructure_built",vec![parent],json!({"station":station,"location":location,"module":module,"parts":parts,"balance_version":b.version}))
+                }
+                Repair { station, parts } => {
+                    self.infrastructure
+                        .actor_materials
+                        .entry(actor)
+                        .or_default()
+                        .parts -= parts;
+                    let s = &mut self.infrastructure.stations[n];
+                    s.integrity = (s.integrity + parts * b.repair_per_part).min(100);
+                    s.repair_parts_consumed += parts;
+                    let integrity = s.integrity;
+                    self.event(Some(actor),"infrastructure_repaired",vec![parent],json!({"station":station,"location":location,"parts":parts,"integrity":integrity,"balance_version":b.version}))
+                }
+                Charge { station, amount }
+                | SupportCharge {
+                    station, amount, ..
+                } => {
+                    let target = if let SupportCharge { target, .. } = operation {
+                        *target
+                    } else {
+                        actor
+                    };
+                    let spent = amount * b.electricity_per_charge;
+                    self.infrastructure.stations[n].seed.electricity -= spent;
+                    self.infrastructure.bodies.get_mut(&target).unwrap().charge += amount;
+                    let event = self.event(Some(actor),"body_charged",vec![parent],json!({"station":station,"location":location,"target":target,"electricity":spent,"charge":amount,"conversion_loss":spent-amount,"support":target!=actor}));
+                    if target != actor && *amount >= b.support_care_min_charge {
+                        let j = self.idx(target)?;
+                        let source = self.perceive(
+                            j,
+                            event,
+                            "charge_care_received",
+                            Some(actor),
+                            location,
+                            json!({"station":station,"charge":amount}),
+                        )?;
+                        if let Some(l) = self.lifecycle.get_mut(&target) {
+                            l.care_meals = l.care_meals.saturating_add(1);
+                            if let Some(c) = l.care.iter_mut().find(|c| c.caregiver == actor) {
+                                c.meals = c.meals.saturating_add(1);
+                                c.source = source;
+                            } else {
+                                l.care.push(lifecycle::CareEvidence {
+                                    caregiver: actor,
+                                    source,
+                                    meals: 1,
+                                });
+                            }
                         }
                     }
+                    event
                 }
-                event
-            }
-            SetAccess {
-                station,
-                actor: target,
-                use_allowed,
-                maintain,
-                admin,
-            } => {
-                self.infrastructure.stations[n].seed.access.insert(
-                    *target,
-                    Rights {
-                        use_allowed: *use_allowed,
-                        maintain: *maintain,
-                        admin: *admin,
-                    },
-                );
-                self.event(Some(actor),"infrastructure_access_changed",vec![parent],json!({"station":station,"target":target,"use_allowed":use_allowed,"maintain":maintain,"admin":admin,"location":location}))
-            }
-            SetEnabled { station, enabled } => {
-                self.infrastructure.stations[n].enabled = *enabled;
-                self.event(
-                    Some(actor),
-                    "infrastructure_enabled_changed",
-                    vec![parent],
-                    json!({"station":station,"enabled":enabled,"location":location}),
-                )
-            }
-            SubmitJob { station, input } => {
-                let id = self.infrastructure.next_job;
-                self.infrastructure.next_job += 1;
-                let sources: Vec<_> = input
-                    .sources
-                    .iter()
-                    .map(|id| {
-                        self.players[i]
-                            .knowledge
-                            .iter()
-                            .find(|h| &h.record.id == id)
-                            .unwrap()
-                            .record
-                            .clone()
-                    })
-                    .collect();
-                let hash=format!("{:x}",Sha256::digest(serde_json::to_vec(&json!({"input":input,"sources":sources,"program":FORECAST_PROGRAM,"program_version":1})).map_err(|e|e.to_string())?));
-                let source=self.event(Some(actor),"compute_submitted",vec![parent],json!({"station":station,"job":id,"input":input,"input_hash":hash,"program":"resource_forecast_v1","required_quanta":b.compute_quanta,"quantum_ms":b.compute_quantum_ms,"location":location}));
-                let s = &mut self.infrastructure.stations[n];
-                if s.jobs.iter().all(|j| j.report.is_some() || j.cancelled) {
-                    s.compute_remainder_ms = 0;
+                SetAccess {
+                    station,
+                    actor: target,
+                    use_allowed,
+                    maintain,
+                    admin,
+                } => {
+                    self.infrastructure.stations[n].seed.access.insert(
+                        *target,
+                        Rights {
+                            use_allowed: *use_allowed,
+                            maintain: *maintain,
+                            admin: *admin,
+                        },
+                    );
+                    self.event(Some(actor),"infrastructure_access_changed",vec![parent],json!({"station":station,"target":target,"use_allowed":use_allowed,"maintain":maintain,"admin":admin,"location":location}))
                 }
-                s.jobs.push(ComputeJob {
-                    id,
-                    owner: actor,
-                    submitted_ms: self.timing.time_ms,
-                    source,
-                    input: input.clone(),
-                    input_hash: hash,
-                    sources,
-                    progress: 0,
-                    required: b.compute_quanta,
-                    last_quantum_ms: None,
-                    report: None,
-                    retrieved: false,
-                    blocked_reason: None,
-                    cancelled: false,
-                });
-                source
-            }
-            CancelJob { station, job } => {
-                let queued = self.infrastructure.stations[n]
-                    .jobs
-                    .iter_mut()
-                    .find(|j| j.id == *job)
-                    .unwrap();
-                queued.cancelled = true;
-                let progress = queued.progress;
-                self.event(Some(actor),"compute_cancelled",vec![parent],json!({"station":station,"job":job,"progress":progress,"refund":false,"location":location}))
-            }
-            RetrieveJob { station, job } => {
-                let n_job = self.infrastructure.stations[n]
-                    .jobs
-                    .iter()
-                    .position(|j| j.id == *job)
-                    .unwrap();
-                let record = self.infrastructure.stations[n].jobs[n_job]
-                    .report
-                    .clone()
-                    .unwrap();
-                let event=self.event(Some(actor),"compute_retrieved",vec![parent,record.origin],json!({"station":station,"job":job,"record":record.id,"location":location,"new_copy":!self.players[i].knowledge.iter().any(|h|h.record.id==record.id)}));
-                self.receive_record(i, event, None, &record, "compute_terminal")?;
-                self.infrastructure.stations[n].jobs[n_job].retrieved = true;
-                event
+                SetEnabled { station, enabled } => {
+                    self.infrastructure.stations[n].enabled = *enabled;
+                    self.event(
+                        Some(actor),
+                        "infrastructure_enabled_changed",
+                        vec![parent],
+                        json!({"station":station,"enabled":enabled,"location":location}),
+                    )
+                }
+                SubmitJob { station, input } => {
+                    let id = self.infrastructure.next_job;
+                    self.infrastructure.next_job += 1;
+                    let sources: Vec<_> = input
+                        .sources
+                        .iter()
+                        .map(|id| {
+                            self.players[i]
+                                .knowledge
+                                .iter()
+                                .find(|h| &h.record.id == id)
+                                .unwrap()
+                                .record
+                                .clone()
+                        })
+                        .collect();
+                    let hash=format!("{:x}",Sha256::digest(serde_json::to_vec(&json!({"input":input,"sources":sources,"program":FORECAST_PROGRAM,"program_version":1})).map_err(|e|e.to_string())?));
+                    let source=self.event(Some(actor),"compute_submitted",vec![parent],json!({"station":station,"job":id,"input":input,"input_hash":hash,"program":"resource_forecast_v1","required_quanta":b.compute_quanta,"quantum_ms":b.compute_quantum_ms,"location":location}));
+                    let s = &mut self.infrastructure.stations[n];
+                    if s.jobs.iter().all(|j| j.report.is_some() || j.cancelled) {
+                        s.compute_remainder_ms = 0;
+                    }
+                    s.jobs.push(ComputeJob {
+                        id,
+                        owner: actor,
+                        submitted_ms: self.timing.time_ms,
+                        source,
+                        input: Some(input.clone()),
+                        program_work: None,
+                        input_hash: hash,
+                        sources,
+                        progress: 0,
+                        required: b.compute_quanta,
+                        last_quantum_ms: None,
+                        report: None,
+                        retrieved: false,
+                        blocked_reason: None,
+                        cancelled: false,
+                    });
+                    source
+                }
+                CancelJob { station, job } => {
+                    let queued = self.infrastructure.stations[n]
+                        .jobs
+                        .iter_mut()
+                        .find(|j| j.id == *job)
+                        .unwrap();
+                    queued.cancelled = true;
+                    let progress = queued.progress;
+                    self.event(Some(actor),"compute_cancelled",vec![parent],json!({"station":station,"job":job,"progress":progress,"refund":false,"location":location}))
+                }
+                RetrieveJob { station, job } => {
+                    self.retrieve_compute_outputs(i, n, parent, *station, *job)?
+                }
             }
         };
         self.perceive(
@@ -865,14 +916,17 @@ impl World {
             "infrastructure_action",
             None,
             location,
-            json!({"operation":operation,"result":"completed"}),
+            crate::research::redacted(json!({"operation":operation,"result":"completed"})),
         )?;
         Ok(())
     }
-    fn fresh_compute_record_id(&self, job: u64, origin: u64) -> String {
+    pub(super) fn fresh_compute_record_id(&self, job: u64, origin: u64) -> String {
+        self.fresh_material_record_id("compute", job, origin)
+    }
+    pub(super) fn fresh_material_record_id(&self, prefix: &str, job: u64, origin: u64) -> String {
         let mut suffix = 0u32;
         loop {
-            let id = format!("compute-{job}-{origin}-{suffix}");
+            let id = format!("{prefix}-{job}-{origin}-{suffix}");
             let taken = self
                 .players
                 .iter()
@@ -882,9 +936,13 @@ impl World {
                     .iter()
                     .any(|a| a.records.iter().any(|r| r.id == id))
                 || self.infrastructure.stations.iter().any(|s| {
-                    s.jobs
-                        .iter()
-                        .any(|j| j.report.as_ref().is_some_and(|r| r.id == id))
+                    s.jobs.iter().any(|j| {
+                        j.report.as_ref().is_some_and(|r| r.id == id)
+                            || j.program_work
+                                .as_ref()
+                                .is_some_and(|w| w.program_record.id == id)
+                            || j.sources.iter().any(|r| r.id == id)
+                    })
                 });
             if !taken {
                 return id;
@@ -904,10 +962,10 @@ impl World {
             .unwrap_or_default();
         let stations:Vec<_>=self.infrastructure.stations.iter().filter(|s|s.seed.position==self.players[i].position && self.same_arena(actor,s.seed.owner)).map(|s| {
             let rights=s.seed.access.get(&actor).cloned().unwrap_or_default();
-            let jobs:Vec<_>=s.jobs.iter().filter(|j|j.owner==actor).map(|j|json!({"id":j.id,"progress":j.progress,"required":j.required,"input":j.input,"input_hash":j.input_hash,"report":j.report.as_ref().map(|r|&r.id),"retrieved":j.retrieved,"blocked_reason":j.blocked_reason,"cancelled":j.cancelled})).collect();
+            let jobs:Vec<_>=s.jobs.iter().filter(|j|j.owner==actor).map(|j|json!({"id":j.id,"progress":j.progress,"required":j.required,"input":j.program_work.as_ref().map(|w|json!(w.inputs)).unwrap_or_else(||json!(j.input)),"program":j.program_work.as_ref().map(|w|json!({"kind":w.kind,"record":w.program_record.id,"source_hash":w.program_record.program.as_ref().map(|p|&p.source_hash)})),"input_hash":j.input_hash,"report":j.report.as_ref().map(|r|&r.id),"retrieved":j.retrieved,"blocked_reason":j.blocked_reason,"cancelled":j.cancelled})).collect();
             json!({"id":s.seed.id,"owner":s.seed.owner,"position":s.seed.position,"label":s.seed.label,"enabled":s.enabled,"integrity":s.integrity,"modules":s.seed.modules,"electricity":s.seed.electricity,"electricity_capacity":s.seed.electricity_capacity,"materials":s.seed.materials,"generation_period_ms":s.seed.generation_period_ms,"generation_amount":s.seed.generation_amount,"rights":rights,"access":if rights.admin {json!(s.seed.access)} else {Value::Null},"queue_length":s.jobs.iter().filter(|j|j.report.is_none() && !j.cancelled).count(),"own_jobs":jobs,"admin_queue":if rights.admin {json!(s.jobs.iter().map(|j|json!({"id":j.id,"owner":j.owner,"progress":j.progress,"required":j.required,"complete":j.report.is_some(),"cancelled":j.cancelled,"blocked_reason":j.blocked_reason})).collect::<Vec<_>>())} else {Value::Null}})
         }).collect();
-        json!({"enabled":self.initial.infrastructure.is_some(),"body":self.body_support_context(actor),"materials":own,"balance":self.infrastructure.balance,"stations":stations})
+        json!({"enabled":self.initial.infrastructure.is_some(),"body":self.body_support_context(actor),"materials":own,"balance":self.infrastructure.balance,"research":self.research_facts(actor),"stations":stations})
     }
     pub(super) fn advance_infrastructure(&mut self, delta_ms: u64) -> Result<(), String> {
         if self.initial.infrastructure.is_none() || delta_ms == 0 {
@@ -1014,20 +1072,35 @@ impl World {
         let event=self.event(Some(owner),"compute_quantum",vec![source],json!({"station":station,"job":id,"progress":progress,"required":required,"electricity":b.compute_electricity,"water":b.compute_water,"water_consumed":b.compute_water,"wear":b.wear_per_quantum,"quantum_at_ms":at,"location":position,"balance_version":b.version}));
         if progress == required {
             let job = self.infrastructure.stations[n].jobs[j].clone();
-            let output = forecast(&job.input)?;
-            let text=format!("Conditional resource forecast v1. Assumed stock {}, inflow {}/min, demand {}/min, horizon {} ms. Projected stock {}; residual {}; shortfall {}. Input SHA-256 {}. Sources: {}. Arithmetic uses supplied assumptions; it does not verify geography, future production, access, or others' intentions.",job.input.stock,job.input.inflow_per_min,job.input.demand_per_min,job.input.horizon_ms,output["projected_stock"],output["residual"],output["shortfall"],job.input_hash,if job.input.sources.is_empty(){"none".into()}else{job.input.sources.join(",")});
-            let origin = self.next_event;
-            let record = knowledge::Record {
-                id: self.fresh_compute_record_id(id, origin),
-                topic: "Conditional resource forecast".into(),
-                text,
-                location: None,
-                author: owner,
-                origin,
-                confidence: 50,
+            let origin = if job.program_work.is_some() {
+                self.finish_program_job(n, j, event, at)?
+            } else {
+                let input = job.input.as_ref().ok_or("compute job lacks input")?;
+                let output = forecast(input)?;
+                let text=format!("Conditional resource forecast v1. Assumed stock {}, inflow {}/min, demand {}/min, horizon {} ms. Projected stock {}; residual {}; shortfall {}. Input SHA-256 {}. Sources: {}. Arithmetic uses supplied assumptions; it does not verify geography, future production, access, or others' intentions.",input.stock,input.inflow_per_min,input.demand_per_min,input.horizon_ms,output["projected_stock"],output["residual"],output["shortfall"],job.input_hash,if input.sources.is_empty(){"none".into()}else{input.sources.join(",")});
+                let origin = self.next_event;
+                let record = knowledge::Record {
+                    program: None,
+                    experiment: Some(crate::research::ExperimentEvidence::forecast(
+                        owner,
+                        station,
+                        id,
+                        job.input_hash.clone(),
+                        job.progress,
+                        self.scripts.revision,
+                    )),
+                    id: self.fresh_compute_record_id(id, origin),
+                    topic: "Conditional resource forecast".into(),
+                    text,
+                    location: None,
+                    author: owner,
+                    origin,
+                    confidence: 50,
+                };
+                self.event(Some(owner),"compute_completed",vec![event,source],json!({"station":station,"job":id,"input_hash":job.input_hash,"program":"resource_forecast_v1","program_source":FORECAST_PROGRAM,"program_hash":format!("{:x}",Sha256::digest(FORECAST_PROGRAM.as_bytes())),"output":output,"record":record,"location":position,"quantum_at_ms":at,"delivery":"private physical terminal report; explicit local retrieval required"}));
+                self.infrastructure.stations[n].jobs[j].report = Some(record);
+                origin
             };
-            self.event(Some(owner),"compute_completed",vec![event,source],json!({"station":station,"job":id,"input_hash":job.input_hash,"program":"resource_forecast_v1","program_source":FORECAST_PROGRAM,"program_hash":format!("{:x}",Sha256::digest(FORECAST_PROGRAM.as_bytes())),"output":output,"record":record,"location":position,"quantum_at_ms":at,"delivery":"private physical terminal report; explicit local retrieval required"}));
-            self.infrastructure.stations[n].jobs[j].report = Some(record);
             if let Ok(i) = self.idx(owner) {
                 if self.players[i].health > 0
                     && self.players[i].position == position

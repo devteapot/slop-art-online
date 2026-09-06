@@ -73,7 +73,7 @@ def analyze(world, events):
                 violations.append(f"Event {event['id']} reuses a compute job")
             jobs[key] = dict(owner=event.get('actor'), progress=0, required=data['required_quanta'],
                              quantum_ms=data['quantum_ms'], submitted_ms=data['time_ms'], last_ms=None,
-                             cancelled=False, completed=False, retrieved=False, source=event['id'])
+                             cancelled=False, completed=False, retrieved=False, erased=False, source=event['id'])
         elif kind == 'compute_quantum':
             compute_use += amount(data, 'electricity', event)
             cooling_use += amount(data, 'water', event)
@@ -82,7 +82,7 @@ def analyze(world, events):
                 violations.append(f"Event {event['id']} works on an unsubmitted job")
                 continue
             at = data.get('quantum_at_ms', -1)
-            if (job['cancelled'] or job['completed'] or data.get('progress') != job['progress'] + 1
+            if (job['cancelled'] or job['erased'] or job['completed'] or data.get('progress') != job['progress'] + 1
                     or at < job['submitted_ms'] + job['quantum_ms']
                     or (job['last_ms'] is not None and at < job['last_ms'] + job['quantum_ms'])):
                 violations.append(f"Event {event['id']} grants duplicate, early or invalid work")
@@ -90,7 +90,7 @@ def analyze(world, events):
             job['last_ms'] = at
         elif kind == 'compute_completed':
             job = jobs.get(key)
-            if not job or job['cancelled'] or job['completed'] or job['progress'] != job['required']:
+            if not job or job['cancelled'] or job['erased'] or job['completed'] or job['progress'] != job['required']:
                 violations.append(f"Event {event['id']} produces an unpaid or duplicate output")
             else:
                 job['completed'] = True
@@ -100,9 +100,15 @@ def analyze(world, events):
                 violations.append(f"Event {event['id']} cancels an unknown job or refunds spent work")
             else:
                 jobs[key]['cancelled'] = True
+        elif kind == 'compute_erased':
+            job = jobs.get(key)
+            if not job or job['erased'] or data.get('refund') is not False or data.get('progress') != job['progress']:
+                violations.append(f"Event {event['id']} erases an unknown job or refunds spent work")
+            else:
+                job['erased'] = True
         elif kind == 'compute_retrieved':
             job = jobs.get(key)
-            if not job or not job['completed'] or job['owner'] != event.get('actor'):
+            if not job or job['erased'] or not job['completed'] or job['owner'] != event.get('actor'):
                 violations.append(f"Event {event['id']} retrieves an unavailable or foreign result")
             else:
                 job['retrieved'] = True
@@ -132,11 +138,11 @@ def analyze(world, events):
             key = (station['seed']['id'], job['id'])
             final_jobs[key] = job
             expected = jobs.get(key)
-            if not expected or any(expected[field] != job.get(field) for field in ('owner', 'progress', 'required', 'cancelled', 'retrieved')):
+            if not expected or expected['erased'] or any(expected[field] != job.get(field) for field in ('owner', 'progress', 'required', 'cancelled', 'retrieved')):
                 violations.append(f'Final job {key} differs from its work ledger')
             elif expected['completed'] != bool(job.get('report')):
                 violations.append(f'Final job {key} output differs from completion evidence')
-    if set(jobs) != set(final_jobs):
+    if {k for k, job in jobs.items() if not job['erased']} != set(final_jobs):
         violations.append('Final job roster differs from submitted job ledger')
     computed_ids = {e['data'].get('record', {}).get('id') for e in completed}
     receipt_ids = {e['id'] for e in events if e['kind'] == 'perception'

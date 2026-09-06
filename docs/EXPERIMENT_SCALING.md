@@ -20,6 +20,7 @@ Both commands require a new output directory. Dry-run verifies bundle hashes, re
   "minutes": 5,
   "calls_per_actor": 12,
   "serial_ms": 15000,
+  "disk_reserve_bytes": 3221225472,
   "variants": [
     {
       "id": "baseline-two",
@@ -70,11 +71,13 @@ On failure, supervisors receive termination and have a shared 40-second allowanc
 
 Successful runs preserve the supervisor's existing behavior: the authority is paused and observer hosts remain available. Thus `concurrency` limits experimental runs and model activity, not retained observer processes or total stored evidence. Hosts and retained databases still consume resources after completion.
 
+The coordinator reserves 3 GiB of free space on the output filesystem by default. Set positive integer `disk_reserve_bytes` in the manifest, or override it with `--disk-reserve-bytes`. Before any supervisor launch and common gate release, it refuses to continue at or below the reserve. During initialization and running it checks at one-second intervals; it also checks before completion validation. A breach records `failure_code: disk_reserve_exhausted` and uses the same parallel graceful shutdown so supervisors can pause and save evidence while space remains. This is a host resource guard, not a world rule. It does not delete files or restart services. Sampling cannot prevent an unrelated writer from consuming the remaining reserve between checks, and a database on another filesystem needs its own capacity monitoring.
+
 ## Evidence and interpretation
 
 - `manifest.json`: resolved settings and original absolute input paths.
 - `plan.json`: frozen hashes, exact launch commands, group membership and bounded gate settings.
-- `batch.json`: incrementally written phase, supervisor IDs, observer URLs, authority identities, gate times, results and cleanup status.
+- `batch.json`: incrementally written phase, supervisor IDs, observer URLs, authority identities, gate times, results and cleanup status. `disk_space` records the monitored path, reserve, interval, timestamped free/total-byte samples and any breach stage.
 - `<variant>/`: the existing run evidence, `pilot.json`, authority snapshots, model journals and `LIVE_RESULT.json`.
 - `comparison.json`: completed summaries, retained incrementally across groups.
 
@@ -89,4 +92,4 @@ python3 -m unittest discover -s scripts -p 'test_experiment_batch.py' -v
 python3 -m py_compile scripts/run_experiment_batch.py scripts/run_living_clearing.py
 ```
 
-Twelve deterministic orchestration checks passed, adding explicit frozen newcomer profiles, invalid lifecycle/profile rejection and idempotent dynamic admission to the earlier checks: seven simultaneous candidates, explicit groups of three, process-free dry-run, fresh-run environment isolation, frozen input integrity, invalid configuration rejection, startup-failure peer cleanup, duplicate-authority rejection before gate release, and retained failure state when evidence checks raise `SystemExit`. These tests use inert hashed bundles and mocked subprocesses; they test scheduling and evidence contracts, not engine behavior, live scalability or provider capacity. The scheduling tests launch no live worlds or model calls. Live population evidence is recorded separately in the Stage 3 campaign.
+Twenty-three deterministic orchestration checks pass. Disk-space fixtures verify refusal before any launch, a drop during initialization stopping already started peers before the gate, a running drop terminating every supervisor gracefully, configuration override and periodic measurements. Existing checks cover groups, frozen inputs, newcomer admission, completion provenance, early termination and interruption handling. These tests use inert hashed bundles, mocked subprocesses and mocked filesystem capacity; they test scheduling and evidence contracts, not engine behavior, live scalability or provider capacity. They launch no live worlds or model calls.

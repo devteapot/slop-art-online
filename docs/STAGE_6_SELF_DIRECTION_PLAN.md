@@ -1,0 +1,21 @@
+# Stage 6: controller wording comparison
+
+Campaign 023 is prepared as a follow-up if the completed 020 assessment-corrected trial remains negative for invention. It tests a possible cause of post-task inactivity, not an assumption that every character should invent. No launch or acceptance is claimed by this plan.
+
+Several 020 residents personally completed, retrieved and assessed paid forecasts and then received `can_author:true` in actual subsequent behavior contexts. They preserved assertions, adjusted survival habits or chose no operation. In one supplied context, the current goal still referred to assessing a report already assessed. This supports a controller-wording hypothesis without establishing a runtime defect. Small hypothetical arithmetic and limited practical need for reusable programming remain separate explanations.
+
+Four fresh eighteen-minute worlds use byte-identical `research-invention.json` inputs and controller configurations. Two use frozen `research-m6-8-contract`, which has the `.2` assessment correction and explicit source-ID documentation. Two use `research-m6-9-self-direction`, with only the following additional controller guidance, shared by built-in and external paths:
+
+> Consider what, if anything, is worth doing now given your motives and what your own evidence shows has changed or been completed. Continuing, reconsidering a goal, choosing another activity, and doing nothing are valid choices; use only this turn's permitted operations.
+
+The guidance names no research, transfer, algorithm, source, experiment, result or required goal. Existing habits can continue unchanged. Authority rules, physical inputs, personal traits, model (`gpt-5.6-luna`, medium), three serial responsibilities, fifteen-second intervals and uncapped calls are identical. The two repeats per condition provide a small stochastic comparison, not a population effect estimate. Ports are 19021–19024; each world has its own fresh authority database and retained evidence.
+
+Count actual living, eligible post-assessment Behavior contexts. Record whether those proposals review completed goals, choose another worthwhile activity or deliberately decline. Do not count extra activity or verbal plans as invention. Numeric acceptance still needs actual personally authored meaningful source, paid execution, physical communication, a learner's source inspection and interpretation, their own successful paid practice of the exact hash, and a completed ordinary run. Kernel fixtures and prompt wording are not evidence that this chain occurred.
+
+Both conditions include the initial API documentation correction: `sources` means up to eight unique IDs from the caller's own `player.knowledge[].record.id`, or an empty list for uncited assumptions. It does not mean descriptive prose or numeric experience source IDs. Actual validation and rights are unchanged. The earlier 020 trial used its retained older documentation and will not be relabeled.
+
+Before release, build and freeze both implementations separately, verify every artifact, confirm the scenario/controller bytes match across all four variants, and validate [the manifest](../configs/experiments/campaign/023-research-self-direction.json). Keep the 3 GiB disk reserve enabled. Review the completed 020 outcome before starting this comparison. A negative result remains negative; a changed environment or stronger practical-demand hypothesis would be a separate future comparison.
+
+The final 020 journal also retained a late identity-function prototype attempt using `pub fn`, rejected before payment. Both comparison arms now clarify the exact Rhai declaration `fn technique(input)` and that functions are public by default without a `pub` keyword. This supplies an interface, not a candidate function body. The originally prepared `m6-6`/`m6-7` bundles remain frozen and were never launched; `m6-8`/`m6-9` replace them prospectively.
+
+The first 023 launch failed before readiness or model calls because port 18995 was already occupied. Its output is retained in `output/batches/023-research-self-direction`. The retry uses checked-free ports 19021–19024 and a separate evidence directory; frozen implementations and participant inputs are unchanged.

@@ -159,3 +159,8 @@ fn paced(result, c, interval) {
     result.cooldown_until_ms=result.wake_at_ms;
     result
 }
+
+// Research capabilities derive from personally assessed, physically paid work.
+// These booleans are authority-derived evidence facts, not participant assertions.
+fn research_authoring(c) { c.own_forecast_assessed || c.own_practice_assessed || c.own_prototype_assessed }
+fn research_use(c) { c.held_interpreted && c.own_matching_practice_assessed }

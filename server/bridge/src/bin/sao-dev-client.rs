@@ -22,6 +22,8 @@ use tokio::process::Command;
 mod transport;
 #[path = "sao-dev-client/enrollment.rs"]
 mod enrollment;
+#[path = "sao-dev-client/export.rs"]
+mod export;
 
 #[derive(Clone)]
 struct Session {
@@ -104,45 +106,33 @@ async fn call(app: &App, name: &str, args: Vec<Value>) -> Result<(), String> {
     ]);
     cli(command).await.map(|_| ())
 }
+async fn sql_text(app: &App, query: &str) -> Result<String, String> {
+    cli(vec![
+        "sql".into(), app.db.clone(), query.into(), "--server".into(),
+        app.server.clone(), "--format".into(), "json".into(), "--no-config".into(),
+    ]).await.map_err(|error| {
+        // CLI stderr can contain query/transport details; background diagnostics
+        // distinguish deadlines without logging response text or credentials.
+        if error == "SpacetimeDB CLI exceeded its 30-second deadline" {
+            "database SQL read exceeded its 30-second deadline".into()
+        } else { "database SQL read failed".into() }
+    })
+}
 async fn sql(app: &App, query: &str) -> Result<Vec<Vec<Value>>, String> {
-    let text = cli(vec![
-        "sql".into(),
-        app.db.clone(),
-        query.into(),
-        "--server".into(),
-        app.server.clone(),
-        "--format".into(),
-        "json".into(),
-        "--no-config".into(),
-    ])
-    .await?;
-    let value: Value = serde_json::from_str(&text).map_err(|_| "invalid database reply")?;
-    serde_json::from_value(value[0]["rows"].clone()).map_err(|_| "invalid rows".into())
+    export::rows(&sql_text(app, query).await?)
+}
+async fn world_json(app: &App, run: &str) -> Result<String, String> {
+    let reply = sql_text(app, &format!("SELECT state FROM sim_run WHERE id = '{run}'")).await?;
+    tokio::task::spawn_blocking(move || {
+        let rows: Vec<(String,)> = export::rows(&reply)?;
+        if rows.len() != 1 { return Err("run missing or ambiguous".into()); }
+        Ok(rows.into_iter().next().unwrap().0)
+    }).await.map_err(|_| "world row worker failed")?
 }
 async fn state(app: &App, run: &str) -> Result<simulation::World, String> {
-    let rows = sql(
-        app,
-        &format!("SELECT state FROM sim_run WHERE id = '{run}'"),
-    )
-    .await?;
-    serde_json::from_str(
-        rows.first()
-            .and_then(|r| r[0].as_str())
-            .ok_or("run missing")?,
-    )
-    .map_err(|_| "invalid world".into())
-}
-async fn audit(app: &App, run: &str) -> Result<Vec<simulation::Event>, String> {
-    let mut events: Vec<simulation::Event> = sql(
-        app,
-        &format!("SELECT json FROM sim_audit WHERE run = '{run}'"),
-    )
-    .await?
-    .into_iter()
-    .filter_map(|r| serde_json::from_str(r[0].as_str()?).ok())
-    .collect();
-    events.sort_by_key(|e| e.id);
-    Ok(events)
+    let body = world_json(app, run).await?;
+    tokio::task::spawn_blocking(move || serde_json::from_str(&body).map_err(|_| "invalid world".into()))
+        .await.map_err(|_| "world decode worker failed")?
 }
 fn loopback_url(value: &str) -> bool {
     reqwest::Url::parse(value).is_ok_and(|u| {
@@ -543,7 +533,7 @@ async fn index(State(app): State<Shared>) -> Response {
     files(State(app), Path("index.html".into())).await
 }
 async fn background(app: Shared) {
-    let mut recorded = HashMap::new();
+    let mut exports = HashMap::<String, export::Export>::new();
     loop {
         tokio::time::sleep(std::time::Duration::from_millis(600)).await;
         if let Err(error) = enrollment::acknowledge_stop(&app).await {
@@ -551,24 +541,62 @@ async fn background(app: Shared) {
         }
         let runs = app.runs.lock().unwrap().clone();
         for run in runs {
-            let Ok(w) = state(&app, &run).await else {
-                continue;
+            let body = match world_json(&app, &run).await {
+                Ok(body) => body,
+                Err(error) => { eprintln!("snapshot export {run}: {error}"); continue; }
             };
-            if let Err(error) = enrollment::discover(&app, &run, &w).await {
+            let mut saved = exports.remove(&run).unwrap_or_default();
+            let expected_run = run.clone();
+            let prepared = tokio::task::spawn_blocking(move || {
+                let result = saved.prepare(&expected_run, &body);
+                (saved, result)
+            }).await;
+            let (saved, result) = match prepared {
+                Ok(value) => value,
+                Err(_) => { eprintln!("snapshot export {run}: world decode worker failed"); continue; }
+            };
+            if let Err(error) = result {
+                eprintln!("snapshot export {run}: {error}");
+                exports.insert(run, saved);
+                continue;
+            }
+            // Enrollment still retries on an unchanged world, using the cached
+            // typed state rather than reparsing its retained observations.
+            if let Err(error) = enrollment::discover(&app, &run, saved.world()).await {
                 eprintln!("newcomer enrollment: {error}");
                 let path = app.out.join("enrollment-errors.json");
                 if !path.exists() {
                     let _ = enrollment::atomic_json(&path, &json!({"errors":[{"run":run,"error":error,"at_ms":now()}]}));
                 }
             }
-            let revision = (w.next_event, w.timing.updates, w.stopped);
-            if recorded.get(&run) == Some(&revision) { continue; }
-            if let Ok(events) = audit(&app, &run).await {
-                let dir = app.out.join(&run);
-                if std::fs::write(
-                    dir.join("snapshot.json"),
-                    json!({"world":w,"events":events}).to_string(),
-                ).is_ok() { recorded.insert(run, revision); }
+            if !saved.pending() { exports.insert(run, saved); continue; }
+            let reply = if let Some(query) = saved.audit_query() {
+                match sql_text(&app, &query).await {
+                    Ok(reply) => Some(reply),
+                    Err(error) => {
+                        eprintln!("snapshot export {run}: {error}");
+                        exports.insert(run, saved);
+                        continue;
+                    }
+                }
+            } else { None };
+            let path = app.out.join(&run).join("snapshot.json");
+            // Large first exports and local disk writes do not occupy a Tokio
+            // worker shared with the participant harnesses and transports.
+            let written = tokio::task::spawn_blocking(move || {
+                let mut saved = saved;
+                let result = (|| {
+                    if let Some(reply) = reply { saved.append(&reply)?; }
+                    saved.write(&path)
+                })();
+                (saved, result)
+            }).await;
+            match written {
+                Ok((saved, result)) => {
+                    if let Err(error) = result { eprintln!("snapshot export {run}: {error}"); }
+                    exports.insert(run, saved);
+                }
+                Err(_) => eprintln!("snapshot export {run}: serialization worker failed"),
             }
         }
     }

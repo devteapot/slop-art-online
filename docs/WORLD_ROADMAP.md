@@ -80,6 +80,8 @@ The active foundation is `simulation/` with SpacetimeDB foundation integration, 
 
 ### 6. Research and skill invention
 
+**Status:** [bounded Stage 6 numerical-technique implementation accepted](STAGE_6_EVIDENCE.md#acceptance-decision-bounded-stage-6-implementation-milestone): one meaningful autonomous paid prototype in campaign 023, natural own-code assessment/practice/use in campaign 024, and exact communicated-learning authority checks. The predeclared autonomous useful-method → peer practice → peer use chain was not achieved and remains open; useful planning benefit and broad skill invention are unproven.
+
 **Scope:** researchable clues, experiments, knowledge exchange, character capability requirements, skill creation and direct script authorship. Preserve versioned effects, bounded evaluation and current law validation. Different approaches can contribute to the same capability.
 
 **Evidence:** characters produce and use a genuinely new working technique through permitted information and tools; another can learn it through communication. Missing capabilities and invalid scripts fail without unauthorized effects. Renaming/composing actions does not evade currently applicable costs.
@@ -113,7 +115,7 @@ A single survivor or cooperative conversation does not establish a sustainable s
 - [x] [Map retained small-society evidence and open failures to Stage 1](STAGE_1_EVIDENCE.md#what-the-retained-trials-establish). The bounded Stage 1 acceptance is recorded in the linked evidence.
 - [x] Decide the next minimal state change: accounted food production; retain the existing attributes for this trial, as explained in the [evidence mapping](STAGE_1_EVIDENCE.md).
 - [x] [Establish a resource budget and renewable provisioning for four inhabitants, with a separate scarcity control](STAGE_1_EVIDENCE.md#acceptance-decision-bounded-stage-1-slice).
-- [ ] Define body-specific eating/charging only as far as the first representative inhabitants need.
+- [x] [Define nutrient and electric body support for the first representative inhabitants](STAGE_5_EVIDENCE.md), with explicit charging and paid infrastructure demand; richer species physiology remains deferred.
 - [x] [Implement and validate personal knowledge records, teaching, recording, consultation and physical loss for Stage 2](STAGE_2_EVIDENCE.md).
 - [x] [Implement and test material reproduction/fabrication, care and acquired newcomer capability](STAGE_3_EVIDENCE.md), retaining the live stability and caregiver-loss limitations.
 

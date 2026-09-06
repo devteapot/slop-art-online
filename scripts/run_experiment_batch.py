@@ -9,6 +9,7 @@ import json
 import math
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -21,6 +22,36 @@ from run_living_clearing import actor_limit, validate_newcomer_controller
 
 READINESS_SECONDS = 100
 CLEANUP_SECONDS = 40
+DEFAULT_DISK_RESERVE_BYTES = 3 * 1024**3
+DISK_CHECK_SECONDS = 1
+
+
+class DiskReserveError(RuntimeError):
+    """Stop host work while the filesystem still has room for final evidence."""
+
+
+class DiskReserveGuard:
+    def __init__(self, out, report, reserve):
+        self.out, self.report, self.reserve = out, report, reserve
+        self.last_check = None
+        report['disk_space'] = dict(path=str(out), reserve_bytes=reserve,
+                                  check_interval_seconds=DISK_CHECK_SECONDS, samples=[])
+
+    def check(self, stage, *, force=False):
+        now = time.monotonic()
+        if not force and self.last_check is not None and now - self.last_check < DISK_CHECK_SECONDS:
+            return
+        usage = shutil.disk_usage(self.out)
+        self.last_check = now
+        sample = dict(at=time.time(), stage=stage, free_bytes=usage.free, total_bytes=usage.total)
+        self.report['disk_space']['samples'].append(sample)
+        if usage.free <= self.reserve:
+            self.report['disk_space']['breach'] = sample
+            self.report['failure_code'] = 'disk_reserve_exhausted'
+            raise DiskReserveError(
+                f'Disk reserve reached during {stage}: {usage.free} free bytes <= '
+                f'{self.reserve} reserved bytes on {self.out}; stopping to preserve final evidence')
+        write(self.out / 'batch.json', self.report)
 
 
 def integer(value, label, minimum, maximum=None):
@@ -38,6 +69,7 @@ def resolve_spec(spec):
     if not spec.get('hypothesis') or not spec.get('evaluation'):
         raise ValueError('Record a hypothesis and evaluation criteria before running')
     concurrency = integer(spec.get('concurrency', len(variants)), 'concurrency', 1, len(variants))
+    reserve = integer(spec.get('disk_reserve_bytes', DEFAULT_DISK_RESERVE_BYTES), 'disk_reserve_bytes', 1)
     ids, ports, verified, resolved = set(), set(), {}, []
     for source in variants:
         v = dict(source)
@@ -78,7 +110,7 @@ def resolve_spec(spec):
             if controller['config']['backend']['model'] != 'gpt-5.6-luna':
                 raise ValueError('This iteration campaign is Luna-only')
         resolved.append((v, inputs, verified[v['implementation']]))
-    spec = dict(spec, concurrency=concurrency, variants=[v for v, _, _ in resolved])
+    spec = dict(spec, concurrency=concurrency, disk_reserve_bytes=reserve, variants=[v for v, _, _ in resolved])
     return spec, resolved
 
 
@@ -207,12 +239,17 @@ def main():
     parser.add_argument('manifest', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--dry-run', action='store_true', help='validate and freeze a plan without starting processes or models')
+    parser.add_argument('--disk-reserve-bytes', type=int,
+                        help='override manifest disk_reserve_bytes (default 3 GiB); host resource guard only')
     args = parser.parse_args()
     out = args.output.resolve()
     if out.exists():
         raise SystemExit('Choose a new batch evidence directory')
     try:
-        spec, resolved = resolve_spec(json.loads(args.manifest.read_text()))
+        raw_spec = json.loads(args.manifest.read_text())
+        if args.disk_reserve_bytes is not None:
+            raw_spec['disk_reserve_bytes'] = args.disk_reserve_bytes
+        spec, resolved = resolve_spec(raw_spec)
     except (ValueError, KeyError, TypeError, OSError) as error:
         raise SystemExit(str(error)) from None
     plan = prepare(spec, resolved, out)
@@ -224,6 +261,7 @@ def main():
         print(f'Validated {len(plan)} variants; concurrency {spec["concurrency"]}; plan: {out / "plan.json"}')
         return
     jobs, databases = [], set()
+    disk = DiskReserveGuard(out, report, spec['disk_reserve_bytes'])
     stop = False
 
     def interrupted(signum, _frame):
@@ -234,6 +272,7 @@ def main():
     signal.signal(signal.SIGINT, interrupted)
     signal.signal(signal.SIGTERM, interrupted)
     try:
+        disk.check('preflight', force=True)
         for offset in range(0, len(plan), spec['concurrency']):
             group = plan[offset:offset + spec['concurrency']]
             group_jobs = []
@@ -241,6 +280,7 @@ def main():
             for record in group:
                 if stop:
                     raise RuntimeError('Batch cancelled before launch')
+                disk.check('before_launch', force=True)
                 folder = out / record['id']
                 log = (out / (record['id'] + '.log')).open('w')
                 try:
@@ -255,6 +295,7 @@ def main():
                 write(out / 'batch.json', report)
                 ready_deadline = time.monotonic() + READINESS_SECONDS
                 while not (folder / 'ready.json').exists():
+                    disk.check('readiness')
                     if stop or any(j.poll() is not None for j, _, _, _ in group_jobs) or time.monotonic() > ready_deadline:
                         raise RuntimeError(f"Variant {record['id']} failed before readiness; inspect its log")
                     time.sleep(.25)
@@ -267,6 +308,7 @@ def main():
                 write(out / 'batch.json', report)
             if stop or any(j.poll() is not None for j, _, _, _ in group_jobs):
                 raise RuntimeError('A variant failed or batch cancelled before the common start')
+            disk.check('before_start_gate', force=True)
             Path(group[0]['start_gate']).touch()
             started = time.time()
             for record in group:
@@ -278,6 +320,7 @@ def main():
             # Each child has its own duration; supervision includes bounded export.
             deadline = time.monotonic() + max(v['minutes'] for v in group) * 60 + 60
             while any(j.poll() is None for j, _, _, _ in group_jobs):
+                disk.check('running')
                 if stop or time.monotonic() > deadline:
                     raise RuntimeError('Batch cancelled or exceeded its supervision deadline')
                 if any(j.poll() not in (None, 0) for j, _, _, _ in group_jobs):
@@ -288,6 +331,7 @@ def main():
             if stop:
                 raise RuntimeError('Batch cancelled before completion validation')
             for job, log, folder, record in group_jobs:
+                disk.check('completion_validation', force=True)
                 log.close()
                 try:
                     record['completion'] = validate_completion(record, folder)

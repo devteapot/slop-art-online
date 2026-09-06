@@ -18,12 +18,31 @@ from summarize_society import summarize as summarize_society
 
 KNOWLEDGE_EVENTS = ('knowledge_seeded', 'knowledge_asserted', 'knowledge_taught',
                     'knowledge_recorded', 'knowledge_consulted', 'archive_destroyed',
-                    'compute_completed', 'compute_retrieved')
+                    'compute_submitted', 'compute_completed', 'compute_retrieved', 'compute_erased')
 
 
 def reference(event):
     return dict(event=event['id'], kind=event['kind'], actor=event.get('actor'),
                 time_ms=event['data'].get('time_ms'), parents=event.get('parents', []))
+
+
+def record_view(record):
+    """Match the participant record envelope without inventing omitted source bytes."""
+    import copy
+    result = copy.deepcopy(record)
+    if result.get('program') and 'source' in result['program']:
+        result['program'].pop('source')
+        result['program']['source_omitted'] = True
+    return result
+
+
+def terminal_records(job):
+    records = list(job.get('sources', []))
+    if job.get('program_work'):
+        records.append(job['program_work']['program_record'])
+    if job.get('report'):
+        records.append(job['report'])
+    return records
 
 
 def analyze(world, events):
@@ -44,13 +63,15 @@ def analyze(world, events):
     added_counts = collections.Counter()
     repeat_counts = collections.Counter()
     unknown_counts = collections.Counter()
+    inspections_by_source = {}
+    assessment_receipts = collections.defaultdict(list)
 
     def availability():
         return {record: dict(living_carriers=sorted(a for a, copies in personal.items() if a in alive and record in copies),
                              dead_holders=sorted(a for a, copies in personal.items() if a not in alive and record in copies),
                              archive_copies=sorted(a for a, copies in archives.items() if a not in destroyed and record in copies),
                              terminal_copies=[dict(station=s, job=j, owner=copy['owner'], owner_alive=copy['owner'] in alive)
-                                              for (s, j), copy in sorted(terminals.items()) if copy['record']==record])
+                                              for (s, j), copy in sorted(terminals.items()) if record in copy['records']])
                 for record in sorted(records)}
 
     def mark_copy(event, copies, record, declared):
@@ -62,7 +83,7 @@ def analyze(world, events):
 
     for event in events:
         kind, data, actor = event['kind'], event['data'], event.get('actor')
-        before = availability() if kind in ('death', 'archive_destroyed') else None
+        before = availability() if kind in ('death', 'archive_destroyed', 'compute_erased') else None
         changed = False
         if kind == 'actor_created':
             if actor in personal:
@@ -81,22 +102,48 @@ def analyze(world, events):
                 declared = data.get('new_copy', data.get('added'))
                 counter = added_counts if declared is True else repeat_counts if declared is False else unknown_counts
                 counter[kind] += 1
-        if kind == 'compute_completed':
+        if kind == 'compute_submitted':
+            key = (data.get('station'), data.get('job'))
+            if key in terminals:
+                violations.append(f"Event {event['id']} reuses a physical terminal job")
+            physical = list(data.get('source_records', []))
+            if data.get('program_record'):
+                physical.append(data['program_record'])
+            if isinstance(data.get('input'), dict):
+                for rid in data['input'].get('sources', []):
+                    if rid not in records:
+                        violations.append(f"Event {event['id']} cites an unknown source record {rid}")
+                    else:
+                        physical.append(records[rid])
+            for record in physical:
+                rid = record['id']
+                if rid in records and records[rid] != record:
+                    violations.append(f"Event {event['id']} changes a physical source payload {rid}")
+                records[rid] = record
+            terminals[key] = dict(records={r['id'] for r in physical}, owner=actor)
+            changed = bool(physical)
+        elif kind == 'compute_completed':
             record = data.get('record', {})
             rid = record.get('id')
             key = (data.get('station'), data.get('job'))
             if not rid or None in key or record.get('origin') != event['id']:
                 violations.append(f"Event {event['id']} lacks its material compute output record")
-            elif key in terminals or rid in records:
+            elif rid in records:
                 violations.append(f"Event {event['id']} reuses a terminal output or record identity")
             else:
                 records[rid] = record
-                terminals[key] = dict(record=rid, owner=actor)
+                terminal = terminals.setdefault(key, dict(records=set(), owner=actor))
+                terminal['records'].add(rid)
                 changed = True
         elif kind == 'compute_retrieved':
             copy = terminals.get((data.get('station'), data.get('job')))
-            if not copy or copy['record'] != data.get('record') or copy['owner'] != actor:
+            if not copy or data.get('record') not in copy['records'] or copy['owner'] != actor:
                 violations.append(f"Event {event['id']} retrieves a missing or foreign terminal output")
+        elif kind == 'compute_erased':
+            copy = terminals.pop((data.get('station'), data.get('job')), None)
+            if copy is None or set(data.get('record_ids', [])) != copy['records'] or data.get('refund') is not False:
+                violations.append(f"Event {event['id']} erasure differs from physical terminal copies")
+            changed = True
         elif kind == 'perception' and data.get('kind') == 'knowledge_report':
             content = data.get('content', {})
             record = content.get('record', {})
@@ -104,13 +151,32 @@ def analyze(world, events):
             if rid is None or actor not in personal:
                 violations.append(f"Event {event['id']} has an unresolvable knowledge recipient or record")
                 continue
-            if rid in records and records[rid] != record:
+            if record.get('program') and 'source' in record['program']:
+                violations.append(f"Event {event['id']} exposes program source outside own inspection")
+            if rid in records and record_view(records[rid]) != record:
                 violations.append(f"Event {event['id']} changes immutable record payload {rid}")
-            records[rid] = record
+            elif rid not in records:
+                records[rid] = record
             changed = mark_copy(event, personal[actor], rid, content.get('new_copy'))
             acquisitions.append(dict(**reference(event), record=rid, via=content.get('via'),
                                      from_actor=data.get('from'), new_copy=content.get('new_copy'),
                                      first_observed_copy=changed, location=record.get('location')))
+        elif kind == 'perception' and data.get('kind') == 'program_inspected':
+            content = data.get('content', {})
+            rid = content.get('record')
+            program = records.get(rid, {}).get('program')
+            parents = [index[p] for p in event.get('parents', []) if p in index]
+            typed_inspection = any(p['kind'] == 'program_inspected'
+                and p.get('actor') == actor and p['data'].get('record') == rid
+                and p['data'].get('program_hash') == (program or {}).get('source_hash')
+                and p['id'] < event['id'] for p in parents)
+            if (actor in alive and rid in personal.get(actor, set()) and program
+                    and content.get('program') == program and typed_inspection):
+                inspections_by_source[event['id']] = dict(**reference(event), record=rid)
+        elif kind == 'knowledge_interpreted':
+            if actor in alive and data.get('record') in personal.get(actor, set()):
+                key = (actor, data.get('record'), data.get('source'), data.get('interpretation'))
+                assessment_receipts[key].append(event['id'])
         elif kind == 'knowledge_recorded':
             archive, rid = data.get('archive'), data.get('record')
             if archive not in archives or archive in destroyed:
@@ -151,6 +217,9 @@ def analyze(world, events):
             violations.append(f'Actor {actor} final holdings differ from the recorded acquisition ledger')
         if (actor in alive) != (player['health'] > 0):
             violations.append(f'Actor {actor} final mortality differs from recorded death events')
+        for holding in holdings:
+            if records.get(holding['record']['id']) != holding['record']:
+                violations.append(f'Actor {actor} changes an immutable held record payload')
         final_players.append(dict(actor=actor, name=player.get('name'), alive=player['health'] > 0,
                                   holdings=[dict(record=h['record']['id'], source=h.get('source'),
                                                  interpreted_source=h.get('interpreted_source'),
@@ -159,10 +228,10 @@ def analyze(world, events):
     final_terminals = {}
     for station in world.get('infrastructure', {}).get('stations', []):
         for job in station.get('jobs', []):
-            record = job.get('report')
-            if record:
-                key = (station['seed']['id'], job['id'])
-                final_terminals[key] = dict(record=record['id'], owner=job['owner'])
+            key = (station['seed']['id'], job['id'])
+            physical = terminal_records(job)
+            final_terminals[key] = dict(records={r['id'] for r in physical}, owner=job['owner'])
+            for record in physical:
                 if records.get(record['id']) != record:
                     violations.append(f'Terminal job {key} changes its recorded output payload')
     if final_terminals != terminals:
@@ -172,6 +241,9 @@ def analyze(world, events):
         actual = {r['id'] for r in archive.get('records', [])}
         if archives.get(aid, set()) != actual or (aid in destroyed) != archive['destroyed']:
             violations.append(f'Archive {aid} final state differs from the recorded copy ledger')
+        for record in archive.get('records', []):
+            if records.get(record['id']) != record:
+                violations.append(f'Archive {aid} changes an immutable record payload')
         final_archives.append(dict(archive=aid, position=archive['position'], destroyed=archive['destroyed'],
                                    revision=archive['revision'], records=sorted(actual)))
 
@@ -184,12 +256,21 @@ def analyze(world, events):
         reflections = data.get('reflections')
         if reflections is None:
             reflections = [dict(source=source, interpretation=data.get('interpretation'))
-                           for source in event.get('parents', []) if source in reports_by_source]
+                           for source in event.get('parents', []) if source in reports_by_source or source in inspections_by_source]
         for reflection in reflections:
             source = reflection.get('source')
             acquisition = reports_by_source.get(source)
-            if acquisition and acquisition['actor'] == event.get('actor'):
-                citations.append(dict(**reference(event), source=source, record=acquisition['record'],
+            inspection = inspections_by_source.get(source)
+            evidence = acquisition or inspection
+            if evidence and evidence['actor'] == event.get('actor'):
+                if inspection:
+                    # Before rules .3, accepted reflection on inspected code did not
+                    # assess the holding. Require its actual authority update, not
+                    # merely an inspection followed by plausible reflection prose.
+                    key = (event.get('actor'), inspection['record'], source, reflection.get('interpretation'))
+                    if not any(source < receipt < event['id'] for receipt in assessment_receipts.get(key, [])):
+                        continue
+                citations.append(dict(**reference(event), source=source, record=evidence['record'],
                                       interpretation=reflection.get('interpretation'),
                                       derived_assertion=reflection.get('knowledge')))
 

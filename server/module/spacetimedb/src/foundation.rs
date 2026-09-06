@@ -1,18 +1,14 @@
 //! Dedicated M1 runs in the existing authoritative module. Legacy gameplay tables
 //! remain available, but cannot mutate foundation characters or their history.
 mod client_access;
+mod storage;
+mod storage_codec;
+use storage::LoadedRun as SimRun;
 use simulation::{Controller, Decision, Scenario, World};
-use spacetimedb::{Identity, ReducerContext, Table};
+use spacetimedb::{ReducerContext, Table};
 
-#[spacetimedb::table(accessor = sim_run)]
-pub struct SimRun {
-    #[primary_key]
-    pub id: String,
-    pub owner: Identity,
-    pub state: String,
-    pub last_advanced_at: spacetimedb::Timestamp,
-}
-#[spacetimedb::table(accessor = sim_audit)]
+#[spacetimedb::table(accessor = sim_audit,
+    index(accessor = run_and_event, btree(columns = [run, event_id])))]
 pub struct SimAudit {
     #[primary_key]
     pub key: String,
@@ -24,17 +20,7 @@ pub struct SimAudit {
     pub json: String,
 }
 fn load(ctx: &ReducerContext, run: &str) -> Result<(SimRun, World), String> {
-    let row = ctx
-        .db
-        .sim_run()
-        .id()
-        .find(&run.to_string())
-        .ok_or("run not found")?;
-    if row.owner != ctx.sender() {
-        return Err("only this run's operator may mutate or submit model results".into());
-    }
-    let state: World =
-        serde_json::from_str(&row.state).map_err(|e| format!("corrupt run state: {e}"))?;
+    let (row, state) = storage::load_owned(ctx, run)?;
     if state.version != simulation::VERSION {
         return Err(
             "saved rules version differs; inspect old archives read-only or start a new run".into(),
@@ -43,7 +29,8 @@ fn load(ctx: &ReducerContext, run: &str) -> Result<(SimRun, World), String> {
     Ok((row, state))
 }
 pub(super) fn save(ctx: &ReducerContext, mut row: SimRun, mut world: World) {
-    client_access::publish_participants(ctx, &world);
+    let encoded = storage::encode(ctx, &mut row, &world).expect("valid normalized World storage");
+    client_access::publish_participants(ctx, &world, &encoded.layout);
     for event in world.events.drain(..) {
         ctx.db.sim_audit().insert(SimAudit {
             key: format!("{}:{}", world.run, event.id),
@@ -54,8 +41,7 @@ pub(super) fn save(ctx: &ReducerContext, mut row: SimRun, mut world: World) {
             json: serde_json::to_string(&event).unwrap(),
         });
     }
-    row.state = serde_json::to_string(&world).unwrap();
-    ctx.db.sim_run().id().update(row);
+    storage::commit(ctx, row, encoded);
 }
 #[spacetimedb::reducer]
 pub fn sim_create(ctx: &ReducerContext, run: String, scenario: String) -> Result<(), String> {
@@ -67,7 +53,7 @@ pub fn sim_create(ctx: &ReducerContext, run: String, scenario: String) -> Result
             "run ID must start sim- and contain only ASCII letters, digits, hyphens".into(),
         );
     }
-    if ctx.db.sim_run().id().find(&run).is_some() {
+    if storage::exists(ctx, &run) {
         return Err("run already exists; never overwrite".into());
     }
     // The shared core permits 256 inhabitants with bounded personal knowledge.
@@ -78,12 +64,7 @@ pub fn sim_create(ctx: &ReducerContext, run: String, scenario: String) -> Result
     }
     let scenario: Scenario = serde_json::from_str(&scenario).map_err(|e| e.to_string())?;
     let world = World::new(run.clone(), scenario)?;
-    let row = ctx.db.sim_run().insert(SimRun {
-        id: run,
-        owner: ctx.sender(),
-        state: String::new(),
-        last_advanced_at: ctx.timestamp,
-    });
+    let row = storage::create(ctx, run);
     save(ctx, row, world);
     Ok(())
 }

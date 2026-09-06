@@ -21,6 +21,7 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
                 value["local_lifecycle"] = context["lifecycle"].clone();
                 value["body"] = context["body"].clone();
                 value["infrastructure"] = context["infrastructure"].clone();
+                value["research"] = context["research"].clone();
                 value["society"] = context["society"].clone();
                 value["controller"] = json!(p.controller);
                 if let Some(arena)=world.arena_for_actor(p.id) {
@@ -40,6 +41,7 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
         own["local_lifecycle"] = context["lifecycle"].clone();
         own["body"] = context["body"].clone();
         own["infrastructure"] = context["infrastructure"].clone();
+        own["research"] = context["research"].clone();
         own["society"] = context["society"].clone();
         own["controller"] = json!(me.controller);
         let mut visible = BTreeMap::new();
@@ -79,10 +81,11 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
     } else {
         world.players[index.unwrap()].memories.iter().map(|m|json!({"id":m.source,"tick":m.tick,"actor":actor,"kind":m.kind,"parents":[],"data":m.content})).collect()
     };
-    json!({"run":world.run,"tick":world.tick,"time_ms":world.timing.time_ms,"updates":world.timing.updates,"clock_unit_ms":crate::timing::LEGACY_UNIT_MS,"stopped":world.stopped,"max_ticks":world.initial.max_ticks,
+    let projection=json!({"run":world.run,"tick":world.tick,"time_ms":world.timing.time_ms,"updates":world.timing.updates,"clock_unit_ms":crate::timing::LEGACY_UNIT_MS,"stopped":world.stopped,"max_ticks":world.initial.max_ticks,
         "map":if observer {world.initial.map.clone()} else {world.map_for_actor(actor)},"arenas":if observer {json!(world.initial.arenas)} else {Value::Null},"can_participate":world.players.iter().any(|p| p.id == 3 && p.controller == crate::Controller::Human),"rules":world.version,"actor":if observer {Value::Null} else {json!(actor)},"observer":observer,"players":players,"sites":sites,"archives":if observer {json!(world.archives)} else {json!(world.players[index.unwrap()].site_observations.iter().filter(|m|m.kind=="site").flat_map(|m|m.content["archives"].as_array().into_iter().flatten().cloned()).collect::<Vec<_>>())},"workshops":if observer {json!(world.initial.lifecycle.as_ref().map(|l|l.workshops.clone()).unwrap_or_default())} else {json!(world.players[index.unwrap()].site_observations.iter().filter(|m|m.kind=="site" && m.content["lifecycle"]["workshop"]==true).map(|m|m.location).collect::<Vec<_>>())},"events":history,
         "regions":world.society_survey(if observer {None} else {Some(actor)}),
-        "pending":if observer {json!(world.pending.iter().map(|p|json!({"id":p.id,"actor":p.actor,"tick":p.tick})).collect::<Vec<_>>())} else {Value::Null}})
+        "pending":if observer {json!(world.pending.iter().map(|p|json!({"id":p.id,"actor":p.actor,"tick":p.tick})).collect::<Vec<_>>())} else {Value::Null}});
+    if observer {projection} else {crate::research::redacted(projection)}
 }
 #[cfg(test)]
 mod tests {
