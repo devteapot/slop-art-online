@@ -2,7 +2,7 @@
 fn bounded(v, lo, hi) { if v < lo { lo } else if v > hi { hi } else { v } }
 fn distance(a, b) { if a > b { a-b } else { b-a } }
 fn authorize_update(c) { c.operator }
-fn authorize_effect(c) { true } // Installed definitions are operator-controlled in this slice.
+fn authorize_effect(c) { true } // Actor-authored scope overlays can replace this permission policy.
 fn cost(name) {
     switch name { "move" => 1, "gather" => 4, "attack" => 8, _ => 0 }
 }
@@ -164,3 +164,6 @@ fn paced(result, c, interval) {
 // These booleans are authority-derived evidence facts, not participant assertions.
 fn research_authoring(c) { c.own_forecast_assessed || c.own_practice_assessed || c.own_prototype_assessed }
 fn research_use(c) { c.held_interpreted && c.own_matching_practice_assessed }
+
+// Scope and evidence facts are supplied by the authority, never the proposed law.
+fn authorize_law_edit(c) { if c.scope == "universal" { c.own_matching_assessed_experiment } else { c.local_grant || c.own_matching_assessed_experiment } }

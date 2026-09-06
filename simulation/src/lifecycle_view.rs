@@ -11,7 +11,7 @@ impl World {
             .map(|p| {
                 let life = self.lifecycle.get(&p.id);
                 let dependent = life.is_some_and(|l| l.dependent);
-                let needs_care = self.scripts.law::<bool>("needs_care", json!({
+                let needs_care = self.law_at::<bool>(p.position,"needs_care", json!({
                     "dependent":dependent,"hunger":p.hunger,"health":p.health
                 })).unwrap_or(false);
                 json!({"id":p.id,"name":p.name,"body":life.map(|l|json!(l.body)).unwrap_or(json!("biological")),

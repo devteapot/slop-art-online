@@ -75,12 +75,12 @@ pub struct ProgramWork {
 pub fn redact_program_sources(value: &mut Value) {
     match value {
         Value::Object(map) => {
-            if map.get("kind").and_then(Value::as_str) == Some("program_inspected") {
+            if map.get("kind").and_then(Value::as_str)  .is_some_and(|k|matches!(k,"program_inspected"|"law_inspected")) {
                 return;
             }
             if map.contains_key("interface_version")
-                && map.contains_key("input_contract")
-                && map.contains_key("output_contract")
+                && (map.contains_key("hooks") || (map.contains_key("input_contract")
+                && map.contains_key("output_contract")))
                 && map.remove("source").is_some()
             {
                 map.insert("source_omitted".into(), json!(true));
@@ -131,9 +131,8 @@ impl World {
             "proofs":evidence.iter().filter(|(_,e)|e.kind!=ExperimentKind::Run).map(|(h,e)|json!({"record":h.record.id,"kind":e.kind,"program_hash":e.program_hash,"assessment":h.interpreted_source})).collect::<Vec<_>>()
         })
     }
-    fn can_author_program(&self, i: usize) -> Result<bool, String> {
-        self.scripts
-            .law("research_authoring", self.authoring_evidence(i))
+    pub(super) fn can_author_program(&self, i: usize) -> Result<bool, String> {
+        self.actor_law(i,"research_authoring", self.authoring_evidence(i))
     }
     fn personally_held_program(
         &self,
@@ -167,7 +166,7 @@ impl World {
             matches!(e.kind, ExperimentKind::Prototype | ExperimentKind::Practice)
                 && e.program_hash.as_ref() == Some(hash)
         });
-        self.scripts.law("research_use",json!({"held_interpreted":held.is_some_and(|h|h.interpretation.is_some() && h.interpreted_source.is_some()),"own_matching_practice_assessed":proof}))
+        self.actor_law(i,"research_use",json!({"held_interpreted":held.is_some_and(|h|h.interpretation.is_some() && h.interpreted_source.is_some()),"own_matching_practice_assessed":proof}))
     }
     /// Trusted skill evaluation receives only its selected physical capability.
     /// Private experiment vectors and source catalogs never inflate unrelated guards/actions.
@@ -194,9 +193,9 @@ impl World {
         json!({"can_author":self.players[i].health>0 && self.can_author_program(i).unwrap_or(false),"evidence":self.authoring_evidence(i),"programs":programs,
             "interface":"Set interface_version to 1. Rhai declaration: fn technique(input), followed by its function body. Functions are public by default; there is no pub keyword. Local bindings use let x = ... and are mutable without a mut keyword. The function receives only the supplied integer array (at most 64) and returns at most 64 integers. Helpers are permitted. No top-level statements, globals, imports, eval, I/O, effects, or dynamic function pointers. Source at most 8192 bytes; each input/output contract 1..512 bytes; 20000 interpreter operations and 16 call levels.",
             "learning":"First personally complete, retrieve and interpret a paid built-in forecast, or learn an interpreted communicated program through your own paid successful practice. Prototype and practice compare outputs against predictions submitted before work. Reflect on your own program_inspected perception to assess the exact code you still hold, or assess its received knowledge_report. Inspection alone grants no practice proof. Interpret your own successful experiment and the code record to run that exact source hash. Communicated experiment reports do not grant their author's personal practice.",
-            "privacy":"Code and private experiment reports are separate records. Teach the program record to share code without experiment inputs. InspectProgram reads only your held source. Terminal jobs retain physical copies until explicitly erased; erase never refunds past work."})
+            "law_research":self.law_research_facts(actor),"privacy":"Code and private experiment reports are separate records. Teach the program record to share code without experiment inputs. InspectProgram reads only your held source. Terminal jobs retain physical copies until explicitly erased; erase never refunds past work."})
     }
-    fn validate_numeric_inputs(
+    pub(super) fn validate_numeric_inputs(
         &self,
         i: usize,
         inputs: &[i64],
@@ -328,7 +327,7 @@ impl World {
                 let program = research_programs::compile(draft).map_err(|e| e.to_string())?;
                 let origin = self.next_event;
                 let job = self.infrastructure.next_job;
-                let record=Record {id:self.fresh_material_record_id("technique",job,origin),topic:format!("Numeric technique {}",&program.source_hash[..12]),text:format!("Participant-authored technique. Input contract: {} Output contract: {} Compilation and tests do not establish that its assumptions match future reality.",program.input_contract,program.output_contract),location:None,author:actor,origin,confidence:50,program:Some(program),experiment:None};
+                let record=Record {id:self.fresh_material_record_id("technique",job,origin),topic:format!("Numeric technique {}",&program.source_hash[..12]),text:format!("Participant-authored technique. Input contract: {} Output contract: {} Compilation and tests do not establish that its assumptions match future reality.",program.input_contract,program.output_contract),location:None,author:actor,origin,confidence:50,law_program:None,law_experiment:None,program:Some(program),experiment:None};
                 (
                     ExperimentKind::Prototype,
                     record,
@@ -383,6 +382,7 @@ impl World {
                     .ok_or("job disappeared")?;
                 let erased = self.infrastructure.stations[n].jobs.remove(at);
                 let mut copies = erased.sources;
+                if let Some(work) = erased.law_work { copies.push(work.program_record); }
                 copies.extend(erased.report);
                 if let Some(work) = erased.program_work {
                     copies.push(work.program_record);
@@ -391,7 +391,7 @@ impl World {
                     copies.iter().map(|r| r.id.clone()).collect();
                 let hashes: std::collections::BTreeSet<_> = copies
                     .iter()
-                    .filter_map(|r| r.program.as_ref().map(|p| p.source_hash.clone()))
+                    .filter_map(|r| r.program.as_ref().map(|p| p.source_hash.clone()).or_else(||r.law_program.as_ref().map(|p|p.source_hash.clone())))
                     .collect();
                 return Ok(Some(self.event(Some(actor),"compute_erased",vec![parent],json!({"station":station,"job":job,"owner":erased.owner,"progress":erased.progress,"record_ids":ids,"program_hashes":hashes,"refund":false,"location":location,"meaning":"This terminal job's input, source and output copies were removed. Surviving personal and archive copies are unaffected."}))));
             }
@@ -430,6 +430,7 @@ impl World {
             submitted_ms: self.timing.time_ms,
             source,
             input: None,
+            law_work: None,
             program_work: Some(ProgramWork {
                 kind,
                 program_record: record,
@@ -495,7 +496,7 @@ impl World {
             rules_revision: self.scripts.revision,
         };
         let origin = self.next_event;
-        let record=Record {id:self.fresh_compute_record_id(job.id,origin),topic:"Numeric technique experiment".into(),text:format!("Paid {:?} experiment for source {}. {} The evidence contains supplied inputs, predictions and actual numeric output; it establishes only this experiment, not general correctness or verified future conditions.",work.kind,artifact.source_hash,if runtime_error.is_some(){"The bounded program failed during execution."}else if matched==Some(false){"The output did not match the submitted prediction."}else{"The execution succeeded and any submitted prediction matched."}),location:None,author:job.owner,origin,confidence:50,program:None,experiment:Some(evidence)};
+        let record=Record {id:self.fresh_compute_record_id(job.id,origin),topic:"Numeric technique experiment".into(),text:format!("Paid {:?} experiment for source {}. {} The evidence contains supplied inputs, predictions and actual numeric output; it establishes only this experiment, not general correctness or verified future conditions.",work.kind,artifact.source_hash,if runtime_error.is_some(){"The bounded program failed during execution."}else if matched==Some(false){"The output did not match the submitted prediction."}else{"The execution succeeded and any submitted prediction matched."}),location:None,author:job.owner,origin,confidence:50,law_program:None,law_experiment:None,program:None,experiment:Some(evidence)};
         self.event(Some(job.owner),"compute_completed",vec![cause,job.source],json!({"station":station,"job":job.id,"experiment_kind":work.kind,"input_hash":job.input_hash,"program_hash":artifact.source_hash,"output":output,"runtime_error":runtime_error,"successful":successful,"record":record,"program_record":work.program_record,"location":location,"quantum_at_ms":at,"delivery":"Separate private experiment and portable program records require explicit local retrieval."}));
         self.infrastructure.stations[n].jobs[j].report = Some(record);
         Ok(origin)
@@ -505,6 +506,7 @@ impl World {
         if let Some(work) = &job.program_work {
             records.push(&work.program_record)
         }
+        if let Some(work) = &job.law_work { records.push(&work.program_record); }
         Ok(records)
     }
     pub(super) fn validate_compute_retrieval(
@@ -558,7 +560,7 @@ impl World {
         let location = self.players[i].position;
         let mut latest = parent;
         for record in records {
-            let event=self.event(Some(actor),"compute_retrieved",vec![parent,record.origin],json!({"station":station,"job":job,"record":record.id,"record_kind":if record.program.is_some(){"program"}else{"experiment"},"location":location,"new_copy":!self.players[i].knowledge.iter().any(|h|h.record.id==record.id)}));
+            let event=self.event(Some(actor),"compute_retrieved",vec![parent,record.origin],json!({"station":station,"job":job,"record":record.id,"record_kind":if record.law_program.is_some(){"law_program"}else if record.program.is_some(){"program"}else{"experiment"},"location":location,"new_copy":!self.players[i].knowledge.iter().any(|h|h.record.id==record.id)}));
             self.receive_record(i, event, None, &record, "compute_terminal")?;
             latest = event;
         }

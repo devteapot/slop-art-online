@@ -21,6 +21,8 @@ pub struct Region {
     /// Explicit initial designation; operative editing is a separate capability.
     #[serde(default)]
     pub territorial_editors: Vec<u32>,
+    #[serde(default)]
+    pub priority: i32,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -101,7 +103,7 @@ impl World {
                 bounds.width = right - bounds.x; bounds.height = bottom - bounds.y;
                 if bounds.width <= 0 || bounds.height <= 0 {return None;}
             }
-            Some(json!({"id":r.id,"label":r.label,"kind":r.kind,"bounds":bounds}))
+            Some(json!({"id":r.id,"label":r.label,"kind":r.kind,"bounds":bounds,"priority":r.priority}))
         }).collect::<Vec<_>>())
     }
     pub(super) fn society_context(&self, actor: u32) -> Value {
@@ -127,7 +129,7 @@ mod tests {
         let mut seed=scenario();
         seed.society=Some(SocietySeed {version:1,
             regions:vec![Region{id:"city".into(),label:"Public city".into(),kind:RegionKind::City,
-                bounds:spatial::Bounds{x:1,y:1,width:10,height:8},territorial_editors:vec![]}],
+                bounds:spatial::Bounds{x:1,y:1,width:10,height:8},territorial_editors:vec![],priority:0}],
             organizations:vec![Organization{id:"association".into(),label:"Resident association".into(),members:vec![1,2],stations:vec![]}],
             offices:vec![Office{id:"council-seat".into(),label:"Resident representative".into(),holder:1,
                 region:"city".into(),represented_group:Some("association".into())}]});
@@ -145,9 +147,9 @@ mod tests {
     fn surveyed_regions_are_clipped_to_personal_arena_without_editor_leakage() {
         let mut seed=scenario();
         seed.society=Some(SocietySeed {version:1, regions:vec![
-            Region{id:"crossing".into(),label:"Shared range".into(),kind:RegionKind::Wild,
+            Region{id:"crossing".into(),label:"Shared range".into(),kind:RegionKind::Wild,priority:0,
                 bounds:spatial::Bounds{x:1,y:1,width:10,height:8},territorial_editors:vec![1]},
-            Region{id:"remote".into(),label:"Remote range".into(),kind:RegionKind::City,
+            Region{id:"remote".into(),label:"Remote range".into(),kind:RegionKind::City,priority:0,
                 bounds:spatial::Bounds{x:12,y:1,width:2,height:2},territorial_editors:vec![]}
         ], organizations:vec![], offices:vec![]});
         let mut world=World::new("survey".into(),seed).unwrap();

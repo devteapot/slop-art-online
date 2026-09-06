@@ -8,7 +8,7 @@ use axum::{
     Json, Router,
 };
 use bridge::reasoning::{backend::Config, Reasoner};
-use bridge::{agent_harness, participant::new_session};
+use bridge::{agent_harness, owner_snapshot::{self, SnapshotApi}, participant::new_session};
 use serde_json::{json, Value};
 use spacetimedb_sdk::DbContext;
 use std::{
@@ -43,6 +43,7 @@ struct App {
     out: PathBuf,
     db: String,
     server: String,
+    owner_snapshot_api: SnapshotApi,
     origin: String,
     local_origin: String,
     browser_server: String,
@@ -95,7 +96,7 @@ async fn cli(args: Vec<String>) -> Result<String, String> {
     }
     Ok(String::from_utf8_lossy(&output.stdout).into())
 }
-async fn call(app: &App, name: &str, args: Vec<Value>) -> Result<(), String> {
+async fn call_text(app: &App, name: &str, args: Vec<Value>) -> Result<String, String> {
     let mut command = vec!["call".into(), app.db.clone(), name.into()];
     command.extend(args.into_iter().map(|v| v.to_string()));
     command.extend([
@@ -104,7 +105,10 @@ async fn call(app: &App, name: &str, args: Vec<Value>) -> Result<(), String> {
         "--no-config".into(),
         "-y".into(),
     ]);
-    cli(command).await.map(|_| ())
+    cli(command).await
+}
+async fn call(app: &App, name: &str, args: Vec<Value>) -> Result<(), String> {
+    call_text(app, name, args).await.map(|_| ())
 }
 async fn sql_text(app: &App, query: &str) -> Result<String, String> {
     cli(vec![
@@ -121,17 +125,40 @@ async fn sql_text(app: &App, query: &str) -> Result<String, String> {
 async fn sql(app: &App, query: &str) -> Result<Vec<Vec<Value>>, String> {
     export::rows(&sql_text(app, query).await?)
 }
+fn parse_world_reply(api: SnapshotApi, reply: &str) -> Result<String, String> {
+    match api {
+        SnapshotApi::Sql => {
+            let rows: Vec<(String,)> = export::rows(reply)?;
+            if rows.len() != 1 { return Err("run missing or ambiguous".into()); }
+            Ok(rows.into_iter().next().unwrap().0)
+        }
+        SnapshotApi::Procedure => owner_snapshot::parse_export_json(reply),
+    }
+}
 async fn world_json(app: &App, run: &str) -> Result<String, String> {
-    let reply = sql_text(app, &format!("SELECT state FROM sim_run WHERE id = '{run}'")).await?;
-    tokio::task::spawn_blocking(move || {
-        let rows: Vec<(String,)> = export::rows(&reply)?;
-        if rows.len() != 1 { return Err("run missing or ambiguous".into()); }
-        Ok(rows.into_iter().next().unwrap().0)
-    }).await.map_err(|_| "world row worker failed")?
+    let reply = match app.owner_snapshot_api {
+        SnapshotApi::Sql => sql_text(app, &format!("SELECT state FROM sim_run WHERE id = '{run}'")).await?,
+        SnapshotApi::Procedure => call_text(app, owner_snapshot::EXPORT_PROCEDURE, vec![json!(run)])
+            .await.map_err(|error| {
+                if error == "SpacetimeDB CLI exceeded its 30-second deadline" {
+                    "owner export exceeded its 30-second deadline"
+                } else { "owner export call failed" }
+            })?,
+    };
+    let api = app.owner_snapshot_api;
+    tokio::task::spawn_blocking(move || parse_world_reply(api, &reply))
+        .await.map_err(|_| "world row worker failed")?
 }
 async fn state(app: &App, run: &str) -> Result<simulation::World, String> {
     let body = world_json(app, run).await?;
-    tokio::task::spawn_blocking(move || serde_json::from_str(&body).map_err(|_| "invalid world".into()))
+    let expected_run = run.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let world: simulation::World = serde_json::from_str(&body).map_err(|_| "invalid world")?;
+        if world.run != expected_run || world.next_event == 0 {
+            return Err("world identity or event cursor invalid".into());
+        }
+        Ok(world)
+    })
         .await.map_err(|_| "world decode worker failed")?
 }
 fn loopback_url(value: &str) -> bool {
@@ -477,7 +504,7 @@ async fn runs(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
 }
 fn write_active(app: &App) -> std::io::Result<()> {
     std::fs::write(app.out.join("active.json"), json!({"db":app.db,"server":app.server,"run":app.run.lock().unwrap().clone(),"url":app.origin,
-        "enrollment_protocol":enrollment::PROTOCOL,"newcomer_enrollment":app.newcomer.is_some()}).to_string())
+        "owner_snapshot_api":app.owner_snapshot_api,"enrollment_protocol":enrollment::PROTOCOL,"newcomer_enrollment":app.newcomer.is_some()}).to_string())
 }
 async fn archive(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
     let (_, s) = session(&app, &headers)?;
@@ -624,7 +651,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .to_owned(),
         None => format!("sim-bevy-db-{}-{}", now(), std::process::id()),
     };
-    let server = "http://127.0.0.1:3101".to_string();
+    let server = std::env::var("BEVY_DEV_SERVER")
+        .unwrap_or_else(|_| "http://127.0.0.1:3101".to_string());
     let out = root
         .join(std::env::var("BEVY_DEV_OUTPUT").unwrap_or("output/participant-agent-dev".into()));
     std::fs::create_dir_all(&out)?;
@@ -653,6 +681,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         out,
         db,
         server,
+        owner_snapshot_api: SnapshotApi::from_env()?,
         origin,
         local_origin,
         browser_server,
@@ -722,6 +751,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 #[cfg(test)]
 mod network_tests {
     use super::*;
+
+    #[test]
+    fn owner_snapshot_mode_selects_its_wire_format_without_fallback() {
+        let body = "{\"run\":\"r\",\"next_event\":1}";
+        let sql = json!([{"rows":[[body]]}]).to_string();
+        let procedure = json!([0, body]).to_string();
+        assert_eq!(parse_world_reply(SnapshotApi::from_setting(None).unwrap(), &sql).unwrap(), body);
+        assert_eq!(parse_world_reply(SnapshotApi::Procedure, &procedure).unwrap(), body);
+        assert!(parse_world_reply(SnapshotApi::Sql, &procedure).is_err());
+        assert!(parse_world_reply(SnapshotApi::Procedure, &sql).is_err());
+        assert_eq!(parse_world_reply(SnapshotApi::Procedure, "[1,\"run unavailable\"]").unwrap_err(), "run unavailable");
+    }
 
     #[test]
     fn forwarded_loopback_browser_uses_one_origin_and_keeps_csrf_check() {

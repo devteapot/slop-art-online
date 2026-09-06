@@ -1,0 +1,857 @@
+{
+  "name": "Autonomous physical law: local-borders",
+  "seed": 4242,
+  "max_ticks": 576,
+  "map": {
+    "width": 16,
+    "height": 12,
+    "blocked": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      31,
+      32,
+      47,
+      48,
+      63,
+      64,
+      79,
+      80,
+      95,
+      96,
+      111,
+      112,
+      127,
+      128,
+      143,
+      144,
+      159,
+      160,
+      175,
+      176,
+      177,
+      178,
+      179,
+      180,
+      181,
+      182,
+      183,
+      184,
+      185,
+      186,
+      187,
+      188,
+      189,
+      190,
+      191
+    ]
+  },
+  "arenas": [
+    {
+      "id": "physical-laws",
+      "label": "Two territories and independent neighbors",
+      "environment": "law-control",
+      "variant": "luna-medium",
+      "bounds": {
+        "x": 1,
+        "y": 1,
+        "width": 14,
+        "height": 10
+      },
+      "actors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "controllers": {
+        "1": "builtin",
+        "2": "external",
+        "3": "builtin",
+        "4": "external"
+      }
+    }
+  ],
+  "players": [
+    {
+      "id": 1,
+      "name": "Ari",
+      "controller": "ai",
+      "motive": "I live in the west camp at cell 84. People call me a god, but I still need electricity, rest and other people. My initial editing grant concerns the west territory only. I am curious whether everyday effort and recovery here make sense, and what a different arrangement would mean for neighbors. I can choose to investigate, listen, change something or leave it alone; my title does not decide anyone else's goals.",
+      "role": "ordinary god with the initial west territorial grant",
+      "position": 84,
+      "health": 100,
+      "hunger": 0,
+      "energy": 80,
+      "food": 0,
+      "caution": 65,
+      "empathy": 80,
+      "introspection": 85,
+      "fear": 0,
+      "beliefs": [],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    },
+    {
+      "id": 2,
+      "name": "Bryn",
+      "controller": "ai",
+      "motive": "I live at cell 84 and want useful work, food and independence. I do not hold an initial territorial editing grant. I am curious about how practical understanding can give an ordinary person a say in the rules everyone lives under. I may question a claim, study something communicated to me, experiment myself or pursue another priority.",
+      "role": "independent west neighbor interested in practical understanding",
+      "position": 84,
+      "health": 100,
+      "hunger": 20,
+      "energy": 80,
+      "food": 2,
+      "caution": 40,
+      "empathy": 45,
+      "introspection": 70,
+      "fear": 0,
+      "beliefs": [],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    },
+    {
+      "id": 3,
+      "name": "Cato",
+      "controller": "ai",
+      "motive": "I live in the east camp at cell 88 and hold its initial territorial editing grant. I want dependable charging and time for work worth doing. I wonder whether our everyday conditions fit the people here, and whether the same change would suit the west. I can reconsider my preferences and choose whether or how to use my grant.",
+      "role": "east neighbor with the initial east territorial grant",
+      "position": 88,
+      "health": 100,
+      "hunger": 0,
+      "energy": 80,
+      "food": 0,
+      "caution": 65,
+      "empathy": 90,
+      "introspection": 85,
+      "fear": 0,
+      "beliefs": [],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    },
+    {
+      "id": 4,
+      "name": "Dara",
+      "controller": "ai",
+      "motive": "I live at cell 88 and care about reliable food and arrangements people can understand across a border. I have no initial territorial editing grant. I am interested in what persists when an influential person is absent, but I can decide whether to investigate, travel, preserve knowledge, exchange ideas or look after other needs.",
+      "role": "independent east neighbor concerned with shared life",
+      "position": 88,
+      "health": 100,
+      "hunger": 20,
+      "energy": 80,
+      "food": 2,
+      "caution": 70,
+      "empathy": 55,
+      "introspection": 70,
+      "fear": 0,
+      "beliefs": [],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    }
+  ],
+  "sites": [
+    {
+      "position": 84,
+      "food": 6,
+      "hazard": 0,
+      "shelter": 12
+    },
+    {
+      "position": 88,
+      "food": 6,
+      "hazard": 0,
+      "shelter": 12
+    }
+  ],
+  "weather": {
+    "cold_after_ms": 180000,
+    "damage_per_pulse": 2,
+    "shelter_required": 12
+  },
+  "food_sources": [
+    {
+      "position": 84,
+      "interval_ms": 15000,
+      "amount": 1,
+      "capacity": 12
+    },
+    {
+      "position": 88,
+      "interval_ms": 15000,
+      "amount": 1,
+      "capacity": 12
+    }
+  ],
+  "starting_behaviors": {
+    "1": {
+      "id": "infrastructure.electric-home-survival",
+      "revision": 1,
+      "description": "Use a local charger below half battery, recover stamina, return to the known home and observe. Battery and stamina are distinct. This ordinary starting habit is revisable; it contains no computation, maintenance or access decision.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "charge",
+                  "comparison": "below",
+                  "value": 50
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "infrastructure",
+                "duration": 1,
+                "infrastructure": {
+                  "op": "charge",
+                  "station": 1,
+                  "amount": 20
+                }
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 35
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "2": {
+      "id": "settlement.reserve-keeper",
+      "revision": 1,
+      "description": "Keep up to four carried meals from observed local supplies, recover energy, and return home when away. Observe and wait once the reserve is met; no default sharing obligation. This starting habit can be revised through experience.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "resource",
+                  "resource": "hunger",
+                  "comparison": "at_least",
+                  "value": 60
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "eat"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 35
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "below",
+                  "value": 4
+                },
+                {
+                  "kind": "food_at",
+                  "location": 84,
+                  "minimum": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "gather"
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "3": {
+      "id": "infrastructure.electric-home-survival",
+      "revision": 1,
+      "description": "Use a local charger below half battery, recover stamina, return to the known home and observe. Battery and stamina are distinct. This ordinary starting habit is revisable; it contains no computation, maintenance or access decision.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 88
+                },
+                {
+                  "kind": "resource",
+                  "resource": "charge",
+                  "comparison": "below",
+                  "value": 50
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "infrastructure",
+                "duration": 1,
+                "infrastructure": {
+                  "op": "charge",
+                  "station": 2,
+                  "amount": 20
+                }
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 35
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 88
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 88
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "4": {
+      "id": "settlement.reserve-keeper",
+      "revision": 1,
+      "description": "Keep up to four carried meals from observed local supplies, recover energy, and return home when away. Observe and wait once the reserve is met; no default sharing obligation. This starting habit can be revised through experience.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "resource",
+                  "resource": "hunger",
+                  "comparison": "at_least",
+                  "value": 60
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "eat"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 35
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 88
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 88
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 88
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "below",
+                  "value": 4
+                },
+                {
+                  "kind": "food_at",
+                  "location": 88,
+                  "minimum": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "gather"
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "archives": [
+    {
+      "id": 1,
+      "position": 84,
+      "label": "West notebook cabinet",
+      "capacity": 32
+    },
+    {
+      "id": 2,
+      "position": 88,
+      "label": "East notebook cabinet",
+      "capacity": 32
+    }
+  ],
+  "knowledge": {
+    "1": [
+      {
+        "id": "west-effort-question",
+        "topic": "An open question about ordinary work",
+        "text": "The west camp is at cell 84; the east camp is at cell 88. Their adjacent territories meet between columns seven and eight. My west grant is current institutional starting information, not a universal entitlement. I wonder whether effort spent on everyday work ought to depend on what is being done, and whether any change would be tolerable in a neighboring camp. I have no tested candidate or answers.",
+        "location": 84,
+        "confidence": 80
+      }
+    ],
+    "2": [
+      {
+        "id": "ordinary-understanding-question",
+        "topic": "Understanding without an initial grant",
+        "text": "A copied account can be useful without making its claims true or giving me its author's experience. The local terminal can do conditional calculations and paid experiments. Equipment power, cooling and condition are finite. I wonder what I could learn for myself and what kind of evidence would make a rule change credible beyond one territory. This is an unresolved question, not a prescribed route.",
+        "location": 84,
+        "confidence": 80
+      }
+    ],
+    "3": [
+      {
+        "id": "east-difference-question",
+        "topic": "Two camps and different priorities",
+        "text": "The east camp is at cell 88 and the west at cell 84, across the boundary between columns seven and eight. My initial grant concerns the east territory. People might value less tiring work, reliable food and freedom to visit differently. I have no tested source or promised outcome; I am interested in what an actual change would do to everyday life and people crossing the boundary.",
+        "location": 88,
+        "confidence": 80
+      }
+    ],
+    "4": [
+      {
+        "id": "continuity-and-maintenance",
+        "topic": "Knowledge, equipment and continuity",
+        "text": "Each camp has a terminal and notebook cabinet. Local power, cooling water and equipment condition are real constraints; carried supplies do not automatically reach a machine. Personal reports, cabinet copies and installed rules are different things. I wonder which arrangements and knowledge people could still use if a grant-holder became absent. Nothing in this account determines anyone's actions.",
+        "location": 88,
+        "confidence": 80
+      }
+    ]
+  },
+  "lifecycle": null,
+  "disturbances": [],
+  "society": {
+    "version": 1,
+    "regions": [
+      {
+        "id": "west",
+        "label": "West territory",
+        "kind": "homeland",
+        "bounds": {
+          "x": 1,
+          "y": 1,
+          "width": 7,
+          "height": 10
+        },
+        "territorial_editors": [
+          1
+        ],
+        "priority": 0
+      },
+      {
+        "id": "east",
+        "label": "East territory",
+        "kind": "homeland",
+        "bounds": {
+          "x": 8,
+          "y": 1,
+          "width": 7,
+          "height": 10
+        },
+        "territorial_editors": [
+          3
+        ],
+        "priority": 0
+      }
+    ],
+    "organizations": [],
+    "offices": []
+  },
+  "infrastructure": {
+    "version": 1,
+    "balance": {
+      "version": 1,
+      "build_parts": {
+        "generator": 6,
+        "charger": 3,
+        "terminal": 5
+      },
+      "repair_per_part": 20,
+      "electricity_per_charge": 1,
+      "compute_electricity": 2,
+      "compute_water": 1,
+      "compute_quanta": 3,
+      "compute_quantum_ms": 1000,
+      "wear_per_quantum": 1
+    },
+    "bodies": {
+      "1": {
+        "version": 1,
+        "support": "electric",
+        "capacity": 100,
+        "initial_charge": 80,
+        "drain_per_pulse": 1
+      },
+      "3": {
+        "version": 1,
+        "support": "electric",
+        "capacity": 100,
+        "initial_charge": 80,
+        "drain_per_pulse": 1
+      }
+    },
+    "actor_materials": {
+      "2": {
+        "parts": 8,
+        "water": 12
+      },
+      "4": {
+        "parts": 8,
+        "water": 12
+      }
+    },
+    "stations": [
+      {
+        "id": 1,
+        "owner": 1,
+        "position": 84,
+        "label": "West utility",
+        "electricity": 60,
+        "electricity_capacity": 120,
+        "materials": {
+          "parts": 0,
+          "water": 36
+        },
+        "modules": [
+          "generator",
+          "charger",
+          "terminal"
+        ],
+        "access": {
+          "2": {
+            "use_allowed": true,
+            "maintain": true,
+            "admin": false
+          },
+          "3": {
+            "use_allowed": true,
+            "maintain": false,
+            "admin": false
+          },
+          "4": {
+            "use_allowed": true,
+            "maintain": true,
+            "admin": false
+          }
+        },
+        "generation_period_ms": 2500,
+        "generation_amount": 2
+      },
+      {
+        "id": 2,
+        "owner": 3,
+        "position": 88,
+        "label": "East utility",
+        "electricity": 60,
+        "electricity_capacity": 120,
+        "materials": {
+          "parts": 0,
+          "water": 36
+        },
+        "modules": [
+          "generator",
+          "charger",
+          "terminal"
+        ],
+        "access": {
+          "1": {
+            "use_allowed": true,
+            "maintain": false,
+            "admin": false
+          },
+          "2": {
+            "use_allowed": true,
+            "maintain": true,
+            "admin": false
+          },
+          "4": {
+            "use_allowed": true,
+            "maintain": true,
+            "admin": false
+          }
+        },
+        "generation_period_ms": 2500,
+        "generation_amount": 2
+      }
+    ]
+  }
+}

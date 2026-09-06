@@ -40,6 +40,10 @@ pub struct ArchiveSeed {
 #[serde(deny_unknown_fields)]
 pub struct Record {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub law_program: Option<crate::laws::LawArtifact>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub law_experiment: Option<crate::law_research::LawEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program: Option<crate::research_programs::ProgramArtifact>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub experiment: Option<crate::research::ExperimentEvidence>,
@@ -163,7 +167,7 @@ impl World {
                 let origin = self.event(Some(actor), "knowledge_seeded", vec![initialization],
                     json!({"id":seed.id,"source":"authored initial assertion; not verified world truth"}));
                 let record = Record {
-                    program: None,
+                    law_program: None, law_experiment: None, program: None,
                     experiment: None,
                     id: seed.id,
                     topic: seed.topic,
@@ -511,6 +515,19 @@ impl World {
                 }
                 id
             }
+            "law_inspected" if content.get("installed").is_none() => {
+                let id = content["record"].as_str();
+                if let Some(holding) = self.players[i].knowledge.iter()
+                    .find(|h| Some(h.record.id.as_str()) == id)
+                {
+                    if holding.record.law_program.is_none()
+                        || serde_json::to_value(&holding.record.law_program).map_err(|_| "invalid held law program")? != content["law_program"]
+                    {
+                        return Err("inspected source differs from currently held law program".into());
+                    }
+                }
+                id
+            }
             _ => None,
         };
         if let Some(draft) = &r.knowledge {
@@ -545,7 +562,7 @@ impl World {
                 json!({"id":id,"interpretation":r.interpretation,"evidence":r.source}),
             );
             let record = Record {
-                program: None,
+                law_program: None, law_experiment: None, program: None,
                 experiment: None,
                 id,
                 topic: draft.topic.clone(),
@@ -603,7 +620,7 @@ impl World {
             .map(|archive| json!({"id":archive.id,"position":archive.position,"label":archive.label,
                 "revision":archive.revision,"destroyed":archive.destroyed,
                 "records":archive.records.iter().filter(|_| !archive.destroyed)
-                    .map(|r| json!({"id":r.id,"topic":r.topic,"author":r.author,"program":r.program.as_ref().map(|p|json!({"source_hash":p.source_hash,"interface_version":p.interface_version}))})).collect::<Vec<_>>()})).collect::<Vec<_>>())
+                    .map(|r| json!({"id":r.id,"topic":r.topic,"author":r.author,"law_program":r.law_program.as_ref().map(|p|json!({"source_hash":p.source_hash,"hooks":p.hooks})),"program":r.program.as_ref().map(|p|json!({"source_hash":p.source_hash,"interface_version":p.interface_version}))})).collect::<Vec<_>>()})).collect::<Vec<_>>())
     }
     pub(super) fn knowledge_script_context(&self, i: usize, a: &Action) -> Value {
         let record = a

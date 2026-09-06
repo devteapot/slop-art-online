@@ -4,6 +4,8 @@ Agreed development direction, 2026-09-05. Read the [world vision](WORLD_VISION.m
 
 The [work queue](TODO.md) retains accepted implementation history and technical prerequisites. The existing [small-society iteration plan](SOCIETY_ITERATION_PLAN.md) remains the near-term experiment plan; this roadmap gives it a longer horizon. Preserve the [audit contract](AUDIT_AND_EXPERIMENTS.md), shared authoritative core and existing Rhai boundary.
 
+The seven bounded implementation milestones are now recorded with acceptance evidence. The final world vision and open autonomous, sustainability and scale outcomes remain separate from this completed implementation pass.
+
 ## Cross-stage requirement: mechanics and seed separation
 
 From Stage 1 onward, keep reusable mechanics/balance definitions distinct from social content. Scenarios should reference a ruleset and provide initial characters, resources, knowledge and culture without named-faction branches in mechanical code. Stage 5 assembles the first full seed using these same contracts; it does not replace the foundation with lab-specific mechanics.
@@ -90,6 +92,8 @@ The active foundation is `simulation/` with SpacetimeDB foundation integration, 
 
 ### 7. Local reality and AGI ascension
 
+**Status:** [bounded Stage 7 implementation milestone accepted](STAGE_7_EVIDENCE.md#acceptance-decision-bounded-stage-7-implementation-milestone): paid personal exact-source law experiments, local/universal authority, physical-copy privacy, actual taught-code universal installation and persistence after installer death, plus completed 36-person integration with late external access and timely original cleanup in Campaign 028. The autonomous law worlds made no edits; autonomous universal ascension, sustained 20 Hz and long-term scale remain unproven.
+
 **Scope:** starting gods edit territorial laws; capable characters can research access to universal editing. Define tool requirements and coherent execution, not mandatory research milestones or an AGI score threshold. The coalition pursues broadly accessible AGI rather than an exclusive throne.
 
 **Evidence:** multiple possible research approaches can develop relevant capabilities; scoped edits affect the intended area; universal edits persist after their author dies or loses influence. Play continues without automatic victory, forced resistance or succession. Characters learn of changes through perception and communication.
@@ -118,5 +122,9 @@ A single survivor or cooperative conversation does not establish a sustainable s
 - [x] [Define nutrient and electric body support for the first representative inhabitants](STAGE_5_EVIDENCE.md), with explicit charging and paid infrastructure demand; richer species physiology remains deferred.
 - [x] [Implement and validate personal knowledge records, teaching, recording, consultation and physical loss for Stage 2](STAGE_2_EVIDENCE.md).
 - [x] [Implement and test material reproduction/fabrication, care and acquired newcomer capability](STAGE_3_EVIDENCE.md), retaining the live stability and caregiver-loss limitations.
+- [x] [Validate connected-settlement contact, travel and resource access](STAGE_4_EVIDENCE.md), retaining the unachieved aid/trade/migration outcomes.
+- [x] [Integrate physical infrastructure and the first faction seed](STAGE_5_EVIDENCE.md).
+- [x] [Implement paid numerical research and exact-source learning](STAGE_6_EVIDENCE.md), retaining the unachieved autonomous peer-use chain.
+- [x] [Integrate scoped/universal laws and complete the declared faction-scale access/cleanup gate](STAGE_7_EVIDENCE.md#acceptance-decision-bounded-stage-7-implementation-milestone), retaining autonomous ascension and long-term capacity as open objectives.
 
 Stages may overlap in design and tooling. Character access to advanced tools waits for the relevant capability and execution evidence. Keep reincarnation, detailed species development, large-scale presentation and full-world population targets deferred rather than quietly adding them to the first society experiment.

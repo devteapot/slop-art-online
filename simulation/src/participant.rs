@@ -45,6 +45,24 @@ pub struct Experience {
     pub parents: Vec<u64>,
     pub data: ExperienceData,
 }
+impl Experience {
+    /// Whether a strongly owned snapshot still has this exact serialized value.
+    /// Payload identity is sufficient because its stored JSON is immutable;
+    /// filling its parsed-value cache does not change that JSON.
+    pub fn can_reuse_encoding(&self, snapshot: &Self) -> bool {
+        // Keep this exhaustive so new serialized fields require guard review.
+        let Self {
+            cursor, source, tick, location, kind, parents, data,
+        } = self;
+        *cursor == snapshot.cursor
+            && *source == snapshot.source
+            && *tick == snapshot.tick
+            && *location == snapshot.location
+            && *kind == snapshot.kind
+            && *parents == snapshot.parents
+            && Arc::ptr_eq(&data.0, &snapshot.data.0)
+    }
+}
 // Historical payloads are immutable. Retain their JSON encoding across clock
 // pulses and only materialize a value when an evidence check needs its fields.
 // Clones share both representations; the persisted and participant API shapes
@@ -641,8 +659,7 @@ impl World {
                 if !error.is_empty() {
                     return Err(error);
                 }
-                self.scripts
-                    .validate_action(&Action::say(text), &self.players[i])?;
+                self.validate_scoped_action(i,&Action::say(text))?;
                 if self.participants[&actor].speech.len() >= 8 {
                     return Err("speech queue full".into());
                 }

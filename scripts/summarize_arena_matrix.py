@@ -8,6 +8,29 @@ import json
 from pathlib import Path
 
 
+
+def classify_execution_events(events):
+    """Keep typed law denials visible without calling them engine failures."""
+    active={};errors=[];denials=[]
+    for event in sorted(events,key=lambda e:e['id']):
+        data=event['data'];kind=event['kind']
+        if kind=='law_activated':
+            ref=data['reference'];scope=ref['scope']
+            key='universal' if scope['kind']=='universal' else 'territory:'+scope['region']
+            active[key]=dict(reference=ref,hooks=data.get('hooks',[]),activation=event['id'])
+        if kind not in ('script_error','script_tick_failed'):continue
+        entry=dict(id=event['id'],kind=kind,actor=event.get('actor'),data=data)
+        installations=[r for r in active.values() if 'authorize_effect' in r['hooks']]
+        if (kind=='script_error' and data.get('category')=='law_authorization_denied'
+                and data.get('error') in ('active law denied effect','destination law denied effect')
+                and data.get('effects_committed') is False and data.get('law_binding')
+                and installations):
+            entry['installed_authorization_evidence']=installations
+            denials.append(entry)
+        else:errors.append(entry)
+    return errors,denials
+
+
 def actor_layout(world, participants):
     """Resolve current membership while leaving the immutable scenario untouched."""
     initial = world['initial']
@@ -118,11 +141,12 @@ def summarize(out):
                                 born_ms=birth['data'].get('born_ms', birth['data'].get('time_ms')) if birth else None,
                                 event_counts=dict(collections.Counter(e['kind'] for e in own)), calls=calls[actor]))
         cells.append(dict(id=arena['id'], label=arena['label'], players=players))
+    engine_errors,law_denials=classify_execution_events(events)
     result = dict(run=pilot['run'], phase=pilot['phase'], seconds=world['timing']['time_ms'] / 1000,
                   updates=world['timing']['updates'], rules=world['version'], arenas=cells,
                   initial_population=len(world['initial']['players']), created_population=len(births),
                   total_calls=sum(map(len, calls.values())), scope_violations=violations,
-                  engine_errors=[dict(id=e['id'], kind=e['kind'], data=e['data']) for e in events if e['kind'] in ('script_error', 'script_tick_failed')],
+                  engine_errors=engine_errors,law_authorization_denials=law_denials,
                   limitations='One sample per cell; requested effort only; distinct runtime prompts/personas; incomplete calls retain started journals and supervisor cancellation evidence. Current actor membership includes authority-created identities; absent controllers are labeled unassigned.',
                   artifact_hashes={str(p.relative_to(out)): hashlib.sha256(p.read_bytes()).hexdigest()
                                    for p in [snapshot_path, *out.glob('actor-*-config.json'), *run.glob('actor-*-config.json')]})

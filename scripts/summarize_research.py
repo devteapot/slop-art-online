@@ -61,6 +61,32 @@ def analyze(world, events):
     authored, practices, runs, source_reads, erasures = [], [], [], [], []
     checked_hashes = set()
 
+    def changed_research_rule(event, hook):
+        # Later stages permit legal changes to research requirements. This
+        # observer cannot treat the original proof rule as immutable.
+        if any(e['kind']=='script_update_activated' and e['id']<event['id'] for e in events):
+            return True
+        position=event['data'].get('location')
+        if position is None:
+            position=next((p.get('position') for p in world['initial']['players'] if p['id']==event.get('actor')),None)
+        grid=world['initial'].get('map') or {};width=grid.get('width',0)
+        active={}
+        for item in events:
+            if item['id']>=event['id']:break
+            if item['kind']=='law_activated':
+                ref=item['data']['reference'];scope=ref['scope']
+                key='universal' if scope['kind']=='universal' else 'territory:'+scope['region']
+                active[key]=ref
+        for key,ref in active.items():
+            if ref['scope']['kind']=='territory':
+                region=next((r for r in (world['initial'].get('society') or {}).get('regions',[]) if r['id']==ref['scope']['region']),None)
+                if not region or position is None or not width:continue
+                b=region['bounds'];x,y=position%width,position//width
+                if not (b['x']<=x<b['x']+b['width'] and b['y']<=y<b['y']+b['height']):continue
+            artifact=world.get('laws',{}).get('history',{}).get(key,{}).get(str(ref['revision']),{}).get('artifact',{})
+            if hook in artifact.get('hooks',[]):return True
+        return False
+
     def fail(event, message):
         violations.append(f"Event {event['id']} {message}")
 
@@ -127,7 +153,7 @@ def analyze(world, events):
                 if config in balance and data.get(field) != balance[config]:
                     fail(event, f'job {field} differs from the configured physical work cost')
             experiment_kind = data.get('experiment_kind', 'builtin_forecast')
-            if experiment_kind == 'builtin_forecast':
+            if experiment_kind in ('builtin_forecast', 'law'):
                 continue
             record = data.get('program_record', {})
             artifact = record.get('program') or {}
@@ -146,7 +172,9 @@ def analyze(world, events):
                 program_hash=digest, inputs=data.get('input'), expected_results=data.get('expected_results'))
             if experiment_kind == 'prototype':
                 bootstrap = matching_proofs(actor, kinds=('builtin_forecast', 'practice', 'prototype'))
-                if not bootstrap:
+                authority_changed=changed_research_rule(event,'research_authoring')
+                entry['changed_authoring_rule_requires_review']=authority_changed
+                if not bootstrap and not authority_changed:
                     fail(event, 'authors without own paid retrieved interpreted bootstrap evidence')
                 if record.get('author') != actor or record.get('origin') != eid or not data.get('new_program'):
                     fail(event, 'new program lacks its author and submission origin')
@@ -163,7 +191,9 @@ def analyze(world, events):
                     practices.append(entry)
                 else:
                     exact = matching_proofs(actor, digest)
-                    if not exact:
+                    authority_changed=changed_research_rule(event,'research_use')
+                    entry['changed_use_rule_requires_review']=authority_changed
+                    if not exact and not authority_changed:
                         fail(event, 'runs without own assessed successful proof for this exact source hash')
                     entry['own_exact_hash_proofs'] = exact
                     entry['inspected_then_interpreted'] = bool(assessment and assessment['source_inspected_before'])
@@ -195,6 +225,8 @@ def analyze(world, events):
                 continue
             request = submitted['data']
             expected_kind = request.get('experiment_kind', 'builtin_forecast')
+            if expected_kind == 'law':
+                continue  # summarize_laws independently audits scoped-law cases and authority.
             if not experiment:
                 fail(event, 'completed research lacks structured experiment evidence')
                 continue
@@ -237,6 +269,8 @@ def analyze(world, events):
             event = event_index[submitted['event']]
             if job.get('input_hash') != request.get('input_hash') or job.get('source') != submitted['event']:
                 fail(event, 'retained job differs from its submitted hash or origin')
+            if request.get('experiment_kind') == 'law':
+                continue  # The law reporter checks its differently shaped persisted work.
             if request.get('experiment_kind'):
                 expected_work = dict(kind=request['experiment_kind'], program_record=request['program_record'],
                                      inputs=request['input'], expected_results=request.get('expected_results'))

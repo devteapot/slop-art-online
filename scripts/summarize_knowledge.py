@@ -30,9 +30,10 @@ def record_view(record):
     """Match the participant record envelope without inventing omitted source bytes."""
     import copy
     result = copy.deepcopy(record)
-    if result.get('program') and 'source' in result['program']:
-        result['program'].pop('source')
-        result['program']['source_omitted'] = True
+    for field in ('program', 'law_program'):
+        if result.get(field) and 'source' in result[field]:
+            result[field].pop('source')
+            result[field]['source_omitted'] = True
     return result
 
 
@@ -40,6 +41,8 @@ def terminal_records(job):
     records = list(job.get('sources', []))
     if job.get('program_work'):
         records.append(job['program_work']['program_record'])
+    if job.get('law_work'):
+        records.append(job['law_work']['program_record'])
     if job.get('report'):
         records.append(job['report'])
     return records
@@ -151,7 +154,7 @@ def analyze(world, events):
             if rid is None or actor not in personal:
                 violations.append(f"Event {event['id']} has an unresolvable knowledge recipient or record")
                 continue
-            if record.get('program') and 'source' in record['program']:
+            if any(record.get(field) and 'source' in record[field] for field in ('program', 'law_program')):
                 violations.append(f"Event {event['id']} exposes program source outside own inspection")
             if rid in records and record_view(records[rid]) != record:
                 violations.append(f"Event {event['id']} changes immutable record payload {rid}")
@@ -161,17 +164,19 @@ def analyze(world, events):
             acquisitions.append(dict(**reference(event), record=rid, via=content.get('via'),
                                      from_actor=data.get('from'), new_copy=content.get('new_copy'),
                                      first_observed_copy=changed, location=record.get('location')))
-        elif kind == 'perception' and data.get('kind') == 'program_inspected':
+        elif kind == 'perception' and data.get('kind') in ('program_inspected', 'law_inspected'):
             content = data.get('content', {})
             rid = content.get('record')
-            program = records.get(rid, {}).get('program')
+            inspection_kind = data['kind']
+            field = 'law_program' if inspection_kind == 'law_inspected' else 'program'
+            program = records.get(rid, {}).get(field)
             parents = [index[p] for p in event.get('parents', []) if p in index]
-            typed_inspection = any(p['kind'] == 'program_inspected'
+            typed_inspection = any(p['kind'] == inspection_kind
                 and p.get('actor') == actor and p['data'].get('record') == rid
-                and p['data'].get('program_hash') == (program or {}).get('source_hash')
+                and (inspection_kind == 'law_inspected' or p['data'].get('program_hash') == (program or {}).get('source_hash'))
                 and p['id'] < event['id'] for p in parents)
             if (actor in alive and rid in personal.get(actor, set()) and program
-                    and content.get('program') == program and typed_inspection):
+                    and 'installed' not in content and content.get(field) == program and typed_inspection):
                 inspections_by_source[event['id']] = dict(**reference(event), record=rid)
         elif kind == 'knowledge_interpreted':
             if actor in alive and data.get('record') in personal.get(actor, set()):
@@ -264,7 +269,7 @@ def analyze(world, events):
             evidence = acquisition or inspection
             if evidence and evidence['actor'] == event.get('actor'):
                 if inspection:
-                    # Before rules .3, accepted reflection on inspected code did not
+                    # Before the inspection-assessment fixes, reflection on code did not
                     # assess the holding. Require its actual authority update, not
                     # merely an inspection followed by plausible reflection prose.
                     key = (event.get('actor'), inspection['record'], source, reflection.get('interpretation'))

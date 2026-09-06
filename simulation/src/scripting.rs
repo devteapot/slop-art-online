@@ -101,7 +101,7 @@ impl Default for Registry {
                 include_str!("../scripts/speak.rhai"),
                 "free-form text; hearing determined by active world law",
             ),
-            ("infrastructure", include_str!("../scripts/infrastructure.rhai"), "Use a configured local utility station with explicit asset rights; duration 1, 1000 ms cooldown. Electricity is separate from stamina. Charge transfers stored electricity; eating/rest do not recharge. Build/repair consume carried parts. Compute jobs consume electricity and cooling water per completed work quantum, pause on missing supply/access, and produce a private physical forecast with explicit assumptions. Retrieve your finished job at its terminal to acquire a communicable report. Use once {child} for one submission, avoiding repeats on every policy cycle. retrieve_ready acquires your oldest completed uncollected local job without guessing its ID; with none ready, it creates nothing. Research operations: prototype submits your own numeric Rhai technique after personally paid, retrieved and interpreted terminal work; practice_program requires an interpreted held program and a prediction; run_program requires your own interpreted successful prototype/practice for the exact source hash. Code and private experiment reports are separate physical records; retrieve_ready acquires both atomically. Teach the program record to share code without private inputs. inspect_program reveals only your held code. erase_job locally removes that job’s inputs/source/output copies without refunds. Program syntax: declare fn technique(input) followed by its function body. Rhai functions are public by default; there is no pub keyword. The function receives at most 64 integers and returns at most 64 integers; helpers allowed, source<=8192 bytes, no top-level statements or globals. Read your research facts for current capability evidence and bounds. For forecast and numeric experiment sources, use at most eight unique ID strings from your own player.knowledge[].record.id, or [] for uncited assumptions. These IDs identify physical held records; descriptions and numeric experience source IDs are invalid here. Operation and parameter schema are provided with the action contract."),
+            ("infrastructure", include_str!("../scripts/infrastructure.rhai"), "Operate a local utility station with the typed infrastructure field. Requires local presence and asset rights; duration 1, 1000 ms cooldown. Electricity is separate from stamina; eating/rest do not recharge. Build/repair consume parts. Compute consumes electricity and cooling water per completed quantum and pauses on missing supply/access. Retrieve locally; retrieve_ready chooses your oldest completed uncollected job. Use once {child} around one submission. Prototype authors numeric Rhai after personally paid, retrieved and interpreted terminal work. PracticeProgram requires interpreted held code and a prediction. RunProgram requires your own interpreted successful exact-source experiment. Declare fn technique(input) followed by its body. Rhai functions are public by default; there is no pub keyword. Takes and returns at most 64 integers; source<=8192 bytes, helpers allowed, no top-level statements or globals. Read research facts for contracts and personal evidence. Code and private experiment reports are separate physical records, retrieved atomically. Teach code without private inputs. InspectProgram reads held source; reflecting on that inspection assesses the held code but does not grant paid practice. EraseJob removes terminal copies without refunds. PrototypeLaw/PracticeLaw test law-hook source and predictions through the same paid queue. InspectLaw reads held source; reflecting on it assesses that held code. InspectInstalledLaw reads locally operative source without granting a personal record. InstallLaw supplies scope, held record, evidence and expected revision/binding. Law research facts document precedence, contracts and authority. For forecast, numeric and law experiment sources, use at most eight unique ID strings from your own player.knowledge[].record.id, or [] for uncited assumptions; not prose or numeric experience source IDs. Operation schemas accompany the action contract."),
             ("give", include_str!("../scripts/give.rhai"), "give one carried food to a perceived living target at the same cell; recipient receives a direct perception; no automatic reciprocity; 1000 ms cooldown"),
             ("deposit", include_str!("../scripts/deposit.rhai"), "place one carried food in the existing site at your position, available for anyone to gather; 1000 ms cooldown"),
             ("build", include_str!("../scripts/build.rhai"), "contribute one shelter unit at the existing site at your position; costs 8 energy; shelter maximum 12, remains shared; 2500 ms cooldown"),
@@ -137,6 +137,10 @@ impl Default for Registry {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Invocation {
+    #[serde(default)]
+    pub law_binding: Option<crate::laws::LawBinding>,
+    #[serde(default)]
+    pub law_position: Option<i32>,
     pub definition: DefinitionRef,
     #[serde(default)]
     pub evaluated_ms: u64,
@@ -188,6 +192,12 @@ pub enum Effect {
 struct Compiled {
     engine: Engine,
     ast: AST,
+}
+// The tag is created afresh for every invocation, never retained by a cached engine.
+#[derive(Clone)]
+struct ScopedLawCall {
+    faults: Rc<RefCell<Vec<crate::laws::LawFault>>>,
+    calls: Rc<std::cell::Cell<u32>>,
 }
 thread_local! { static CACHE: RefCell<BTreeMap<String, Rc<Compiled>>> = RefCell::new(BTreeMap::new()); }
 
@@ -516,6 +526,9 @@ const LAW_FUNCTIONS: &[&str] = &[
     "development",
     "population_costs",
     "authorize_update",
+    "authorize_law_edit",
+    "food_renewal",
+    "action_interval_ms",
     "cost",
     "validate_common",
     "metabolism",
@@ -551,8 +564,8 @@ pub fn subjective(p: &Player) -> Value {
     // expand this bounded interpreter input with every physical archive copy.
     let guard_percept = |m: &crate::Percept| {
         let mut v = json!(m);
-        if m.kind == "program_inspected" {
-            v["content"] = json!({"record":m.content["record"],"program_hash":m.content["program"]["source_hash"]});
+        if m.kind == "program_inspected" || m.kind == "law_inspected" {
+            v["content"] = json!({"record":m.content["record"],"program_hash":m.content["program"]["source_hash"],"law_hash":m.content["law_program"]["source_hash"]});
         } else if m.kind == "knowledge_report" {
             v["content"] = json!({"record":{"id":m.content["record"]["id"]}});
         } else if m.kind == "site" {
@@ -576,4 +589,521 @@ pub fn subjective(p: &Player) -> Value {
     value["care_observations"] = json!(care_observations.into_values().collect::<Vec<_>>());
     value["knowledge"] = json!(p.knowledge.iter().map(|h| json!({"record":{"id":h.record.id},"source":h.source})).collect::<Vec<_>>());
     value
+}
+
+/// Strict participant law compiler. Unlike operator content, unused top-level
+/// statements are rejected rather than silently stripped.
+pub(crate) fn compile_participant_law(source: &str) -> Result<AST, String> {
+    let mut e = engine();
+    e.set_strict_variables(true);
+    e.set_optimization_level(rhai::OptimizationLevel::None);
+    e.set_allow_anonymous_fn(false);
+    for symbol in ["export", "Fn", "call", "curry"] {
+        e.disable_symbol(symbol);
+    }
+    let ast = e.compile(source).map_err(|e| format!("law compile: {e}"))?;
+    fn statements<T>(ast: &impl AsRef<[T]>) -> bool {
+        !ast.as_ref().is_empty()
+    }
+    if statements(&ast) {
+        return Err(
+            "law source must contain only hook functions; top-level statements are forbidden"
+                .into(),
+        );
+    }
+    Ok(ast.clone_functions_only())
+}
+impl Registry {
+    fn compiled_laws(
+        &self,
+        base: &DefinitionRef,
+        layers: &[(crate::laws::LawRef, crate::laws::LawArtifact)],
+        faults: &[crate::laws::LawDisabled],
+    ) -> Result<Rc<Compiled>, String> {
+        let law = self.definition(base)?;
+        let excluded: Vec<_> = faults.iter().map(|f| (&f.reference, &f.hook)).collect();
+        let key = format!(
+            "layered:{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&(API_VERSION, law, layers, excluded))
+                    .map_err(|e| e.to_string())?
+            )
+        );
+        if let Some(c) = CACHE.with(|c| c.borrow().get(&key).cloned()) {
+            return Ok(c);
+        }
+        let mut e = engine();
+        e.set_allow_anonymous_fn(false);
+        for symbol in ["export", "Fn", "call", "curry"] {
+            e.disable_symbol(symbol);
+        }
+        let mut ast = compile(&e, &law.source)?;
+        for (reference, artifact) in layers {
+            crate::laws::validate(artifact)?;
+            let mut patch = compile_participant_law(&artifact.source)?;
+            patch.retain_functions(|_, _, name, _| {
+                !faults
+                    .iter()
+                    .any(|f| f.reference == *reference && f.hook == name)
+            });
+            ast.combine(patch);
+        }
+        let c = Rc::new(Compiled { engine: e, ast });
+        CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if cache.len() >= 64 {
+                cache.clear();
+            }
+            cache.insert(key, c.clone());
+        });
+        Ok(c)
+    }
+    pub(crate) fn evaluate_law_candidate(
+        &self,
+        base: &DefinitionRef,
+        layers: &[(crate::laws::LawRef, crate::laws::LawArtifact)],
+        faults: &[crate::laws::LawDisabled],
+        hook: &str,
+        input: Value,
+    ) -> Result<Value, String> {
+        let compiled = self.compiled_laws(base, layers, faults)?;
+        Self::call_compiled(&compiled, hook, input)
+    }
+    fn call_compiled(compiled: &Compiled, hook: &str, input: Value) -> Result<Value, String> {
+        if serde_json::to_vec(&input).map_err(|e| e.to_string())?.len() > MAX_VALUE {
+            return Err("script input budget exceeded".into());
+        }
+        let original_input = input.clone();
+        let result = compiled
+            .engine
+            .call_fn_with_options::<Dynamic>(
+                rhai::CallFnOptions::new().eval_ast(false),
+                &mut Scope::new(),
+                &compiled.ast,
+                hook,
+                (input_value(input)?,),
+            )
+            .map_err(|e| e.to_string().chars().take(512).collect::<String>())?;
+        let v = output_value(result, 0, &mut 4096)?;
+        if serde_json::to_vec(&v).map_err(|e| e.to_string())?.len() > MAX_VALUE {
+            return Err("script output budget exceeded".into());
+        }
+        crate::laws::validate_output(hook, &v)?;
+        if hook == "food_renewal"
+            && original_input["food"]
+                .as_i64()
+                .zip(v.as_i64())
+                .is_some_and(|(food, growth)| {
+                    food.checked_add(growth).is_none_or(|n| n > 1_000_000)
+                })
+        {
+            return Err("food production exceeds physical storage budget".into());
+        }
+        Ok(v)
+    }
+    pub(crate) fn call_law_layers(
+        &self,
+        base: &DefinitionRef,
+        layers: &[(crate::laws::LawRef, crate::laws::LawArtifact)],
+        faults: &mut Vec<crate::laws::LawFault>,
+        hook: &str,
+        input: Value,
+    ) -> Result<Value, String> {
+        for _ in 0..=layers.len() {
+            let winner = layers
+                .iter()
+                .rev()
+                .find(|(r, a)| {
+                    a.hooks.iter().any(|h| h == hook)
+                        && !faults.iter().any(|f| f.reference == *r && f.hook == hook)
+                })
+                .map(|(r, _)| r.clone());
+            let disabled = faults
+                .iter()
+                .map(|f| crate::laws::LawDisabled {
+                    reference: f.reference.clone(),
+                    hook: f.hook.clone(),
+                })
+                .collect::<Vec<_>>();
+            let outcome = self
+                .compiled_laws(base, layers, &disabled)
+                .and_then(|compiled| Self::call_compiled(&compiled, hook, input.clone()));
+            match outcome {
+                Ok(v) => return Ok(v),
+                Err(error) => {
+                    if let Some(reference) = winner {
+                        faults.push(crate::laws::LawFault {
+                            reference,
+                            hook: hook.into(),
+                            error,
+                        });
+                    } else {
+                        return Err(error);
+                    }
+                }
+            }
+        }
+        Err("law fallback depth exceeded".into())
+    }
+    fn compiled_scoped_skill(
+        &self,
+        reference: &DefinitionRef,
+        base: &DefinitionRef,
+        layers: &[(crate::laws::LawRef, crate::laws::LawArtifact)],
+    ) -> Result<Rc<Compiled>, String> {
+        if self.api_version != API_VERSION {
+            return Err("unsupported scripting API".into());
+        }
+        let definition = self.definition(reference)?;
+        let law = self.definition(base)?;
+        let mut dependencies = BTreeMap::new();
+        self.dependencies(definition, &mut BTreeSet::new(), &mut dependencies)?;
+        // References alone are insufficient across independently restored worlds.
+        // Include exact source and dependency contents, as in the unscoped cache.
+        let key = format!(
+            "scoped:{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&(API_VERSION, definition, law, &dependencies, layers))
+                    .map_err(|e| e.to_string())?
+            )
+        );
+        if let Some(compiled) = CACHE.with(|cache| cache.borrow().get(&key).cloned()) {
+            return Ok(compiled);
+        }
+        // Dispatch needs only the pinned base definition, not registry history or
+        // any world state. Layers and this minimal registry are immutable.
+        let mut registry = Registry {
+            api_version: API_VERSION,
+            revision: 0,
+            active: BTreeMap::new(),
+            history: BTreeMap::new(),
+            pending: None,
+        };
+        registry.insert(law.clone());
+        let base_ref = base.clone();
+        let layers = layers.to_vec();
+        let mut e = engine();
+        e.register_fn(
+            "scoped_law_dispatch",
+            move |context: rhai::NativeCallContext,
+                  hook: rhai::ImmutableString,
+                  arg: Dynamic|
+                  -> Result<Dynamic, Box<rhai::EvalAltResult>> {
+                let state = context
+                    .tag()
+                    .and_then(|tag| tag.clone().try_cast::<ScopedLawCall>())
+                    .ok_or_else(|| {
+                        Box::<rhai::EvalAltResult>::from("missing scoped law invocation")
+                    })?;
+                state.calls.set(state.calls.get() + 1);
+                if state.calls.get() > 128 {
+                    return Err("law call budget exceeded".into());
+                }
+                let v = output_value(arg, 0, &mut 4096)
+                    .map_err(|e| Box::<rhai::EvalAltResult>::from(e))?;
+                let result = registry
+                    .call_law_layers(
+                        &base_ref,
+                        &layers,
+                        &mut state.faults.borrow_mut(),
+                        hook.as_str(),
+                        v,
+                    )
+                    .map_err(|e| Box::<rhai::EvalAltResult>::from(e))?;
+                input_value(result).map_err(|e| e.into())
+            },
+        );
+        let mut law_ast = self.compiled_laws(base, &[], &[])?.ast.clone();
+        let wrappers = crate::laws::HOOKS
+            .iter()
+            .map(|h| format!("fn {h}(c) {{ scoped_law_dispatch(\"{h}\",c) }}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        law_ast.combine(compile(&e, &wrappers)?);
+        let module =
+            rhai::Module::eval_ast_as_new(Scope::new(), &law_ast, &e).map_err(|e| e.to_string())?;
+        e.register_static_module("law", module.into());
+        for (id, dep) in dependencies {
+            let ast = compile(&e, &dep.source)?;
+            let module =
+                rhai::Module::eval_ast_as_new(Scope::new(), &ast, &e).map_err(|e| e.to_string())?;
+            e.register_static_module(id, module.into());
+        }
+        let ast = compile(&e, &definition.source)?;
+        let compiled = Rc::new(Compiled { engine: e, ast });
+        CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if cache.len() >= 64 {
+                cache.clear();
+            }
+            cache.insert(key, compiled.clone());
+        });
+        Ok(compiled)
+    }
+
+    /// Cached engines contain only immutable definitions. Faults and native-call
+    /// budgets travel in an invocation-local tag, including on error paths.
+    pub(crate) fn call_scoped_skill<T: DeserializeOwned>(
+        &self,
+        reference: &DefinitionRef,
+        base: &DefinitionRef,
+        layers: &[(crate::laws::LawRef, crate::laws::LawArtifact)],
+        faults: &mut Vec<crate::laws::LawFault>,
+        function: &str,
+        input: Value,
+    ) -> Result<T, String> {
+        if serde_json::to_vec(&input).map_err(|e| e.to_string())?.len() > MAX_VALUE {
+            return Err("script input budget exceeded".into());
+        }
+        if layers.is_empty() && self.resolve("law")? == *base {
+            return self.call(reference, function, input);
+        }
+        let compiled = self.compiled_scoped_skill(reference, base, layers)?;
+        let collected = Rc::new(RefCell::new(faults.clone()));
+        let state = ScopedLawCall {
+            faults: collected.clone(),
+            calls: Rc::new(std::cell::Cell::new(0)),
+        };
+        let outcome = compiled
+            .engine
+            .call_fn_with_options::<Dynamic>(
+                rhai::CallFnOptions::new().eval_ast(false).with_tag(state),
+                &mut Scope::new(),
+                &compiled.ast,
+                function,
+                (input_value(input)?,),
+            )
+            .map_err(|e| e.to_string());
+        *faults = collected.borrow().clone();
+        let value = output_value(outcome?, 0, &mut 4096)?;
+        if serde_json::to_vec(&value).map_err(|e| e.to_string())?.len() > MAX_VALUE {
+            return Err("script output budget exceeded".into());
+        }
+        serde_json::from_value(value).map_err(|e| format!("script result contract: {e}"))
+    }
+}
+
+#[cfg(test)]
+mod scoped_cache_tests {
+    use super::*;
+    use crate::laws::{LawArtifact, LawDraft, LawFault, LawRef, LawScope};
+
+    fn fixture() -> (
+        Registry,
+        DefinitionRef,
+        DefinitionRef,
+        Vec<(LawRef, LawArtifact)>,
+    ) {
+        let mut registry = Registry::default();
+        registry.insert(Definition {
+            id: "cache_probe".into(),
+            revision: 1,
+            source: "fn run(x) { law::cost(x) }".into(),
+            description: String::new(),
+            dependencies: vec![],
+        });
+        let skill = registry.resolve("cache_probe").unwrap();
+        let base = registry.resolve("law").unwrap();
+        let layers = vec![(
+            LawRef {
+                scope: LawScope::Universal,
+                revision: 1,
+            },
+            crate::laws::compile(&LawDraft {
+                interface_version: 1,
+                source: "fn cost(x) { 17 }".into(),
+            })
+            .unwrap(),
+        )];
+        (registry, skill, base, layers)
+    }
+
+    fn run(
+        registry: &Registry,
+        skill: &DefinitionRef,
+        base: &DefinitionRef,
+        layers: &[(LawRef, LawArtifact)],
+        faults: &mut Vec<LawFault>,
+    ) -> Result<i64, String> {
+        registry.call_scoped_skill(skill, base, layers, faults, "run", json!("gather"))
+    }
+
+    #[test]
+    fn scoped_cache_uses_exact_sources_and_dependencies() {
+        let (mut registry, skill, base, mut layers) = fixture();
+        let mut faults = vec![];
+        assert_eq!(
+            run(&registry, &skill, &base, &layers, &mut faults).unwrap(),
+            17
+        );
+        layers[0].1 = crate::laws::compile(&LawDraft {
+            interface_version: 1,
+            source: "fn cost(x) { 19 }".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            run(&registry, &skill, &base, &layers, &mut faults).unwrap(),
+            19
+        );
+        registry
+            .history
+            .get_mut("cache_probe")
+            .unwrap()
+            .get_mut(&1)
+            .unwrap()
+            .source = "fn run(x) { law::cost(x) + 1 }".into();
+        assert_eq!(
+            run(&registry, &skill, &base, &layers, &mut faults).unwrap(),
+            20
+        );
+        registry.insert(Definition {
+            id: "helper".into(),
+            revision: 1,
+            source: "fn number() { 3 }".into(),
+            description: String::new(),
+            dependencies: vec![],
+        });
+        let probe = registry
+            .history
+            .get_mut("cache_probe")
+            .unwrap()
+            .get_mut(&1)
+            .unwrap();
+        probe.dependencies = vec![DefinitionRef {
+            id: "helper".into(),
+            revision: 1,
+        }];
+        probe.source = "fn run(x) { law::cost(x) + helper::number() }".into();
+        assert_eq!(
+            run(&registry, &skill, &base, &layers, &mut faults).unwrap(),
+            22
+        );
+        registry
+            .history
+            .get_mut("helper")
+            .unwrap()
+            .get_mut(&1)
+            .unwrap()
+            .source = "fn number() { 5 }".into();
+        assert_eq!(
+            run(&registry, &skill, &base, &layers, &mut faults).unwrap(),
+            24
+        );
+        // Base source must matter even if an overlay is present but does not implement cost.
+        layers[0].1 = crate::laws::compile(&LawDraft {
+            interface_version: 1,
+            source: "fn action_interval_ms(x) { 1000 }".into(),
+        })
+        .unwrap();
+        registry
+            .history
+            .get_mut("law")
+            .unwrap()
+            .get_mut(&1)
+            .unwrap()
+            .source = "fn cost(x) { 7 }".into();
+        assert_eq!(
+            run(&registry, &skill, &base, &layers, &mut faults).unwrap(),
+            12
+        );
+        registry
+            .history
+            .get_mut("law")
+            .unwrap()
+            .get_mut(&1)
+            .unwrap()
+            .source = "fn cost(x) { 8 }".into();
+        assert_eq!(
+            run(&registry, &skill, &base, &layers, &mut faults).unwrap(),
+            13
+        );
+    }
+
+    #[test]
+    fn scoped_cache_keeps_faults_and_call_budget_per_invocation() {
+        let (mut registry, skill, base, layers) = fixture();
+        let mut quarantined = vec![LawFault {
+            reference: layers[0].0.clone(),
+            hook: "cost".into(),
+            error: "earlier fault".into(),
+        }];
+        assert_eq!(
+            run(&registry, &skill, &base, &layers, &mut quarantined).unwrap(),
+            4
+        );
+        let mut fresh = vec![];
+        assert_eq!(
+            run(&registry, &skill, &base, &layers, &mut fresh).unwrap(),
+            17
+        );
+        assert!(fresh.is_empty());
+        registry
+            .history
+            .get_mut("cache_probe")
+            .unwrap()
+            .get_mut(&1)
+            .unwrap()
+            .source =
+            "fn run(x) { let result = 0; for n in 0..128 { result = law::cost(x); } result }"
+                .into();
+        for _ in 0..2 {
+            assert_eq!(
+                run(&registry, &skill, &base, &layers, &mut fresh).unwrap(),
+                17
+            );
+        }
+        registry
+            .history
+            .get_mut("cache_probe")
+            .unwrap()
+            .get_mut(&1)
+            .unwrap()
+            .source = "fn run(x) { for n in 0..129 { law::cost(x); } 0 }".into();
+        assert!(run(&registry, &skill, &base, &layers, &mut fresh)
+            .unwrap_err()
+            .contains("law call budget exceeded"));
+        let mut broken = layers.clone();
+        broken[0].1 = crate::laws::compile(&LawDraft {
+            interface_version: 1,
+            source: "fn cost(x) { 1 / 0 }".into(),
+        })
+        .unwrap();
+        registry
+            .history
+            .get_mut("cache_probe")
+            .unwrap()
+            .get_mut(&1)
+            .unwrap()
+            .source = "fn run(x) { law::cost(x) }".into();
+        for _ in 0..2 {
+            let mut independent = vec![];
+            assert_eq!(
+                run(&registry, &skill, &base, &broken, &mut independent).unwrap(),
+                4
+            );
+            assert_eq!(independent.len(), 1);
+        }
+        assert!(fresh.is_empty());
+    }
+
+    #[test]
+    #[ignore = "manual scoped invocation performance comparison"]
+    fn scoped_invocation_benchmark() {
+        let (registry, skill, base, layers) = fixture();
+        for (name, active) in [
+            ("no_overlay", &[][..]),
+            ("active_overlay", layers.as_slice()),
+        ] {
+            let mut faults = vec![];
+            run(&registry, &skill, &base, active, &mut faults).unwrap();
+            let start = std::time::Instant::now();
+            for _ in 0..1000 {
+                std::hint::black_box(run(&registry, &skill, &base, active, &mut faults).unwrap());
+            }
+            eprintln!(
+                "scoped_invocation_benchmark {name}: {} us / 1000 calls",
+                start.elapsed().as_micros()
+            );
+        }
+    }
 }

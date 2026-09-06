@@ -1,0 +1,18 @@
+{
+  "hypothesis": "The existing 36-person faction seed may remain operational when its four initial territorial grants become usable under scoped law mechanics. Local gods may edit, investigate, share or decline; civic office gives no editing entitlement.",
+  "evaluation": "A fresh twelve-minute integration sample on reality-m7-1, with the same 36 Luna-medium controllers, uncapped calls and fifteen seconds after each serial responsibility. Preserve the earlier faction-world seed and its actual Stage 5 outcome. This variant changes only its display name and four now-obsolete motive sentences that described territorial grants as inoperative. All physical stocks, geography, initial knowledge, survival habits, offices, organizations and controller settings match the prior seed. No law source, experimental cases, successful proof or required action is seeded. The four existing homeland grants are operative under the new rules; SF, the independent city and wild regions have no initial local editor. Shared mechanisms apply to every identity. Audit resource, knowledge, numeric and law records, exact source/binding hashes, update rates, model access, deaths and chosen actions. Report absence of edits as a result. This short integration sample does not establish stable provisioning, universal ascension or long-term societal continuity. Lifecycle creation and detailed fictional dependency physiology remain at the earlier seed settings; the four smaller law worlds provide the separate editing/research/disturbance evidence.",
+  "minutes": 12,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "concurrency": 1,
+  "variants": [
+    {
+      "id": "faction-world-reality",
+      "port": 19029,
+      "implementation": "output/society-lab/implementations/reality-m7-1",
+      "scenario": "output/society-lab/implementations/reality-m7-1/scenarios/faction-world-reality.json",
+      "controllers": "output/society-lab/implementations/reality-m7-1/configs/experiments/faction-36-medium.json",
+      "recovery": true
+    }
+  ]
+}

@@ -431,6 +431,56 @@ fn utilities(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
         }
     }
 }
+fn law_scope_name(scope: &Value) -> String {
+    if scope["kind"] == "universal" { "Universal".into() }
+    else { format!("Territory {}", scope["region"].as_str().unwrap_or("unknown")) }
+}
+fn law_terminal(p: &Value) -> Option<&Value> {
+    if p["health"].as_i64().unwrap_or(0) <= 0 || p["infrastructure"]["enabled"] != true { return None; }
+    p["infrastructure"]["stations"].as_array()?.iter().find(|s|
+        s["position"] == p["position"] && s["enabled"] == true && s["integrity"].as_i64().unwrap_or(0) > 0
+        && s["rights"]["use_allowed"] == true
+        && s["modules"].as_array().is_some_and(|m| m.iter().any(|m| m == "terminal")))
+}
+fn inspected_law_source<'a>(p: &'a Value, record: Option<&Value>, installed: Option<&Value>) -> Option<&'a str> {
+    p["memories"].as_array()?.iter().rev().find(|m| {
+        if m["kind"] != "law_inspected" { return false; }
+        let content = &m["content"];
+        record.is_some_and(|r| content["record"] == r["id"]
+            && content["law_program"]["source_hash"] == r["law_program"]["source_hash"])
+            || installed.is_some_and(|r| content["installed"]["scope"] == r["scope"]
+                && content["installed"]["revision"] == r["revision"])
+    }).and_then(|m| m["content"]["law_program"]["source"].as_str())
+}
+fn laws(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
+    let laws = &p["laws"];
+    if !laws.is_object() { return; }
+    let own = !game.observer() && !game.archive && game.snapshot["actor"] == p["id"];
+    title(panel, "CURRENT LAWS");
+    text(panel, format!("Base law revision {}", number(&laws["effective_binding"]["base"]["revision"])), 12., MUTED);
+    text(panel, format!("Effective binding {}", laws["effective_binding"]["digest"].as_str().unwrap_or("unknown")), 11., MUTED);
+    for scope in laws["scopes"].as_array().into_iter().flatten() {
+        text(panel, format!("{} · revision {}", law_scope_name(&scope["scope"]), number(&scope["revision"])), 13., INK);
+        if scope["scope"]["kind"] == "territory" {
+            text(panel, if scope["local_grant"] == true { "Initial local editing grant here: yes" } else { "Initial local editing grant here: no" }, 12., MUTED);
+        }
+        text(panel, format!("Scope binding {}", scope["binding"].as_str().unwrap_or("unknown")), 11., MUTED);
+        if scope["revision"].as_u64().unwrap_or(0) == 0 {
+            text(panel, "No installed override in this scope.", 12., MUTED);
+            continue;
+        }
+        if own {
+            if let Some(station) = law_terminal(p) {
+                button(panel, format!("Inspect installed {} law", law_scope_name(&scope["scope"])),
+                    Click::Intent(json!({"skill":"infrastructure","duration":1,"infrastructure":{"op":"inspect_installed_law","station":station["id"],"scope":scope["scope"]}})), false);
+            }
+        }
+        if let Some(source) = inspected_law_source(p, None, Some(scope)) {
+            text(panel, "Last personally inspected source for this revision", 11., MUTED);
+            text(panel, source, 12., INK);
+        }
+    }
+}
 fn knowledge(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
     let own = !game.observer() && !game.archive && game.snapshot["actor"] == p["id"];
     if p["infrastructure"]["enabled"]==true {
@@ -438,6 +488,7 @@ fn knowledge(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
         text(panel,if p["research"]["can_author"]==true {"This person can currently author a technique."} else {"Authorship capability has not been demonstrated under the current rules."},12.,MUTED);
         text(panel,"A code copy and an experiment report are separate records. Receiving code does not grant the sender's practical capability.",12.,MUTED);
     }
+    laws(panel, p, game);
     title(panel, "PERSONAL RECORDS");
     text(panel, "Reports can disagree. Reading preserves a copy; understanding and practical ability develop separately.", 12., MUTED);
     if let Some(holdings) = p["knowledge"].as_array() {
@@ -468,6 +519,28 @@ fn knowledge(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
             if let Some(experiment)=record.get("experiment").filter(|v|v.is_object()) {
                 text(panel,format!("{} experiment · {} paid work units · {}",experiment["kind"].as_str().unwrap_or("terminal"),number(&experiment["paid_quanta"]),if experiment["successful"]==true {"successful on supplied inputs"} else {"unsuccessful on supplied inputs"}),12.,MUTED);
                 if experiment["output"].is_array() {text(panel,format!("Recorded output: {}",experiment["output"]),12.,INK);}
+            }
+            if let Some(program) = record.get("law_program").filter(|v| v.is_object()) {
+                let hooks = program["hooks"].as_array().into_iter().flatten().filter_map(Value::as_str).collect::<Vec<_>>().join(", ");
+                text(panel, format!("Law code · hooks: {hooks}"), 12., INK);
+                text(panel, format!("Source {}", program["source_hash"].as_str().unwrap_or("unknown")), 11., MUTED);
+                if own {
+                    if let Some(station) = law_terminal(p) {
+                        button(panel, "Inspect law code", Click::Intent(json!({"skill":"infrastructure","duration":1,"infrastructure":{"op":"inspect_law","station":station["id"],"record":record["id"]}})), false);
+                    }
+                }
+                if let Some(source) = inspected_law_source(p, Some(record), None) {
+                    text(panel, "Last personally inspected law source", 11., MUTED);
+                    text(panel, source, 12., INK);
+                }
+            }
+            if let Some(experiment) = record.get("law_experiment").filter(|v| v.is_object()) {
+                text(panel, format!("Law experiment · paid by #{} · {} work units · {}", number(&experiment["operator"]), number(&experiment["paid_quanta"]),
+                    if experiment["successful"] == true { "predictions matched" } else { "predictions did not all match" }), 12., MUTED);
+                text(panel, format!("{} · {} supplied cases", law_scope_name(&experiment["scope"]), experiment["cases"].as_array().map_or(0, Vec::len)), 12., INK);
+                text(panel, format!("Tested source {}\nTested binding {}", experiment["program_hash"].as_str().unwrap_or("unknown"), experiment["binding"]["digest"].as_str().unwrap_or("unknown")), 11., MUTED);
+                let current = p["laws"]["scopes"].as_array().into_iter().flatten().any(|s| s["scope"] == experiment["scope"] && s["binding"] == experiment["binding"]["digest"]);
+                text(panel, if current { "The experiment names the current scope binding." } else { "This experiment names a different or unavailable scope binding." }, 12., MUTED);
             }
             if own {
                 if p["health"].as_i64().unwrap_or(0) > 0 && p["energy"].as_i64().unwrap_or(0) >= 1 {

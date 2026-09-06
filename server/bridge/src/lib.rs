@@ -4,3 +4,5 @@ pub mod reasoning;
 pub mod participant;
 
 pub mod agent_harness;
+
+pub mod owner_snapshot;

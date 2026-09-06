@@ -1,0 +1,42 @@
+{
+  "hypothesis": "Four autonomous neighbors in two territories may author and test real physical-law changes, exercise endowed local grants, develop broader authority through personal experiments or communicated source, and experience chosen rules across a border. Neither research, travel, editing, cooperation nor persistence after death is guaranteed.",
+  "evaluation": "Run four fresh concurrent twenty-four-minute worlds with identical Luna medium controllers, serial behavior/communication/learning, fifteen seconds after each completion and no call cap. Local-borders and universal-repeat differ only in name. Cooling changes only west station water 36 to 1; east station and carried supplies remain available if people choose to use them. Author-absence changes only one authored damage disturbance against actor 1 at 1080000 ms. The active damage law may change its effect; only actual recorded death following actual law authorship can activate author-death persistence evidence. Both local grant-holders are endowed editors irrespective of narrative title. Independents have no initial grant; current mechanics allow personally assessed paid numeric terminal work or taught source and own paid practice. No seeded code, candidate cases, computed proofs, forced research/edit/travel actions or AGI score. Audit paid work and private cases, exact source/current-binding own proof, requested versus staged versus activated edits, law scope/revision/precedence, current effect authorization, crossings and survival. Universal authorization resolves universal/base rules, never a local self-promotion. Default proof requirements are not immutable: a valid participant-authored universal authorization change may legally alter later requirements. Retain harmful but valid changes, quarantined invalid hooks, failures and nonactivation without automatic rescue or success. Preserve exact food/material audits under actual recorded production. The twenty-four-minute duration and eighteen-minute authored absence are fixed before launch, informed by observed roughly 84-second responsibility recurrence in Stage 6; they allow more investigation and a final six-minute persistence window without prescribing an outcome.",
+  "minutes": 24,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "concurrency": 4,
+  "variants": [
+    {
+      "id": "local-borders",
+      "port": 18991,
+      "implementation": "output/society-lab/implementations/reality-m7-1",
+      "scenario": "output/society-lab/implementations/reality-m7-1/scenarios/law-local-borders.json",
+      "controllers": "output/society-lab/implementations/reality-m7-1/configs/experiments/law-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "universal-repeat",
+      "port": 18992,
+      "implementation": "output/society-lab/implementations/reality-m7-1",
+      "scenario": "output/society-lab/implementations/reality-m7-1/scenarios/law-universal-repeat.json",
+      "controllers": "output/society-lab/implementations/reality-m7-1/configs/experiments/law-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "cooling",
+      "port": 18993,
+      "implementation": "output/society-lab/implementations/reality-m7-1",
+      "scenario": "output/society-lab/implementations/reality-m7-1/scenarios/law-cooling.json",
+      "controllers": "output/society-lab/implementations/reality-m7-1/configs/experiments/law-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "author-absence",
+      "port": 18994,
+      "implementation": "output/society-lab/implementations/reality-m7-1",
+      "scenario": "output/society-lab/implementations/reality-m7-1/scenarios/law-author-absence.json",
+      "controllers": "output/society-lab/implementations/reality-m7-1/configs/experiments/law-4-medium.json",
+      "recovery": true
+    }
+  ]
+}

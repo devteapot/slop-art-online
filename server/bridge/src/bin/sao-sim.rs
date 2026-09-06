@@ -3,6 +3,7 @@ use bridge::reasoning::{
     backend::{BackendConfig, Config},
     Reasoner, ReasoningResult,
 };
+use bridge::owner_snapshot::{self, SnapshotApi};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use simulation::{Event, Scenario, World, VERSION};
@@ -22,6 +23,8 @@ struct Manifest {
     run: String,
     db: String,
     server: String,
+    #[serde(default)]
+    owner_snapshot_api: SnapshotApi,
     scenario: Scenario,
     model: String,
     #[serde(default)]
@@ -72,36 +75,92 @@ fn call(m: &Manifest, name: &str, args: Vec<Value>) -> Result<()> {
     Ok(())
 }
 fn sql(m: &Manifest, query: &str) -> Result<Vec<Value>> {
-    let raw = command(&[
-        "sql".into(),
-        m.db.clone(),
-        query.into(),
-        "--server".into(),
-        m.server.clone(),
-        "--format".into(),
-        "json".into(),
-        "--no-config".into(),
-    ])?;
+    let raw = match m.owner_snapshot_api {
+        SnapshotApi::Sql => command(&[
+            "sql".into(),
+            m.db.clone(),
+            query.into(),
+            "--server".into(),
+            m.server.clone(),
+            "--format".into(),
+            "json".into(),
+            "--no-config".into(),
+        ])?,
+        SnapshotApi::Procedure => owner_command(m, "sql", vec![query.into(), "--format".into(), "json".into()])?,
+    };
     let results: Value = serde_json::from_str(&raw)?;
     Ok(results[0]["rows"]
         .as_array()
         .ok_or("SQL response has no rows")?
         .clone())
 }
+fn owner_command(m: &Manifest, verb: &str, args: Vec<String>) -> Result<String> {
+    // Keep the legacy runner's synchronous transport behavior. Procedure calls
+    // use the control CLI when configured; publishing remains on its own CLI.
+    let binary = std::env::var("SPACETIME_CONTROL_CLI")
+        .or_else(|_| std::env::var("SPACETIME_CLI"))
+        .unwrap_or("spacetime".into());
+    let mut command = Command::new(binary);
+    if let Ok(config) = std::env::var("SPACETIME_CONFIG_PATH") {
+        command.args(["--config-path", &config]);
+    }
+    command.args([verb, &m.db]);
+    command.args(args);
+    let out = command.args(["--server", &m.server, "--no-config"]).output()?;
+    if !out.status.success() {
+        return Err("owner database call failed (output suppressed)".into());
+    }
+    String::from_utf8(out.stdout).map_err(|_| "invalid owner database response".into())
+}
+fn owner_call(m: &Manifest, name: &str, args: Vec<Value>) -> Result<String> {
+    let mut values = vec![name.into()];
+    values.extend(args.into_iter().map(|arg| arg.to_string()));
+    values.push("-y".into());
+    owner_command(m, "call", values)
+}
+fn snapshot_events(api: SnapshotApi, world: &World, mut events: Vec<Event>) -> Result<Vec<Event>> {
+    events.retain(|e| e.id < world.next_event && (api == SnapshotApi::Sql || e.run == world.run));
+    events.sort_by_key(|e| e.id);
+    if api == SnapshotApi::Procedure {
+        let mut next = 1;
+        for event in &events {
+            if event.id != next {
+                return Err("owner snapshot audit gap or duplicate".into());
+            }
+            next += 1;
+        }
+        if next != world.next_event {
+            return Err("owner snapshot audit is incomplete".into());
+        }
+    }
+    Ok(events)
+}
 fn snapshot(m: &Manifest) -> Result<Snapshot> {
     // Each experiment owns a dedicated DB. Read-only consumers never become model context.
-    let rows = sql(m, "SELECT state FROM sim_run")?;
-    let world: World = serde_json::from_str(
-        rows.first()
-            .and_then(|v| v[0].as_str())
-            .ok_or("missing run")?,
-    )?;
-    let mut events: Vec<Event> = sql(m, "SELECT json FROM sim_audit")?
+    let world: World = match m.owner_snapshot_api {
+        SnapshotApi::Sql => {
+            let rows = sql(m, "SELECT state FROM sim_run")?;
+            serde_json::from_str(rows.first().and_then(|v| v[0].as_str()).ok_or("missing run")?)?
+        }
+        SnapshotApi::Procedure => {
+            let ids = owner_snapshot::parse_inventory(&owner_call(m, owner_snapshot::INVENTORY_PROCEDURE, vec![])?)?;
+            // A named manifest must never silently select another owned run.
+            if !ids.iter().any(|id| id == &m.run) {
+                return Err("manifest run unavailable in owner inventory".into());
+            }
+            let body = owner_snapshot::parse_export_json(&owner_call(m, owner_snapshot::EXPORT_PROCEDURE, vec![json!(m.run)])?)?;
+            let world: World = serde_json::from_str(&body)?;
+            if world.run != m.run || world.next_event == 0 {
+                return Err("world identity or event cursor invalid".into());
+            }
+            world
+        }
+    };
+    let events: Vec<Event> = sql(m, "SELECT json FROM sim_audit")?
         .iter()
         .map(|r| serde_json::from_str(r[0].as_str().unwrap_or("")))
         .collect::<std::result::Result<_, _>>()?;
-    events.retain(|e| e.id < world.next_event);
-    events.sort_by_key(|e| e.id);
+    let events = snapshot_events(m.owner_snapshot_api, &world, events)?;
     Ok(Snapshot { world, events })
 }
 fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
@@ -302,7 +361,7 @@ fn http(mut stream: TcpStream, out: &Path, live: bool) -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
-    let usage="Usage: sao-sim run SCENARIO OUTPUT [MODEL] [PORT] | inspect OUTPUT [PORT] | compare OUTPUT... | export OUTPUT\nEnvironment: SIM_SERVER (loopback only, default http://127.0.0.1:3100), SIM_TICK_MS (default 1000), SIM_WASM, OLLAMA_URL, SPACETIME_CLI, NPC_REASONING_CONFIG (JSON path)";
+    let usage="Usage: sao-sim run SCENARIO OUTPUT [MODEL] [PORT] | inspect OUTPUT [PORT] | compare OUTPUT... | export OUTPUT\nEnvironment: SIM_SERVER (loopback only, default http://127.0.0.1:3100), SIM_TICK_MS (default 1000), SIM_WASM, OLLAMA_URL, SPACETIME_CLI, SPACETIME_CONTROL_CLI, SAO_OWNER_SNAPSHOT_API (sql|procedure, default sql), NPC_REASONING_CONFIG (JSON path)";
     match args.get(1).map(String::as_str) {
         Some("inspect") => {
             let out = PathBuf::from(args.get(2).ok_or(usage)?);
@@ -329,7 +388,10 @@ async fn main() -> Result<()> {
         }
         Some("export") => {
             let out = PathBuf::from(args.get(2).ok_or(usage)?);
-            let m: Manifest = serde_json::from_slice(&fs::read(out.join("manifest.json"))?)?;
+            let mut m: Manifest = serde_json::from_slice(&fs::read(out.join("manifest.json"))?)?;
+            if std::env::var_os(owner_snapshot::API_ENV).is_some() {
+                m.owner_snapshot_api = SnapshotApi::from_env()?;
+            }
             export(&m, &out)?;
             println!("Exported retained database state and audit history");
         }
@@ -376,6 +438,7 @@ async fn main() -> Result<()> {
                 run: run.clone(),
                 db: run.clone(),
                 server,
+                owner_snapshot_api: SnapshotApi::from_env()?,
                 scenario,
                 model: config.model().to_string(),
                 ollama: match &config.backend {
@@ -523,6 +586,31 @@ async fn main() -> Result<()> {
 mod compatibility_tests {
     use super::*;
     #[test]
+    fn procedure_snapshot_audit_retains_exact_run_and_cutoff_and_rejects_gaps() {
+        let scenario: Scenario =
+            serde_json::from_str(include_str!("../../../../scenarios/survival.json")).unwrap();
+        let world = World::new("owner-run".into(), scenario).unwrap();
+        let expected: Vec<_> = world.events.iter().map(|event| event.id).collect();
+        let mut events = world.events.clone();
+        let mut foreign = events[0].clone();
+        foreign.run = "another-run".into();
+        events.push(foreign);
+        let mut future = events[0].clone();
+        future.id = world.next_event;
+        events.push(future);
+        events.reverse();
+        let exact = snapshot_events(SnapshotApi::Procedure, &world, events).unwrap();
+        assert_eq!(exact.iter().map(|event| event.id).collect::<Vec<_>>(), expected);
+        let mut missing = world.events.clone();
+        missing.remove(0);
+        assert!(snapshot_events(SnapshotApi::Procedure, &world, missing.clone()).is_err());
+        assert!(snapshot_events(SnapshotApi::Sql, &world, missing).is_ok());
+        let mut duplicate = world.events.clone();
+        duplicate.push(duplicate[0].clone());
+        assert!(snapshot_events(SnapshotApi::Procedure, &world, duplicate).is_err());
+    }
+
+    #[test]
     fn old_manifest_and_snapshot_load_without_backends_or_credentials() {
         let scenario: Scenario =
             serde_json::from_str(include_str!("../../../../scenarios/survival.json")).unwrap();
@@ -530,6 +618,7 @@ mod compatibility_tests {
         let m: Manifest = serde_json::from_value(old).unwrap();
         assert!(m.reasoning.is_none());
         assert_eq!(m.rules, "m1-2");
+        assert_eq!(m.owner_snapshot_api, SnapshotApi::Sql);
         let world = World::new("archive".into(), scenario).unwrap();
         let snapshot = json!({"world":world,"events":world.events});
         let s: Snapshot = serde_json::from_value(snapshot).unwrap();

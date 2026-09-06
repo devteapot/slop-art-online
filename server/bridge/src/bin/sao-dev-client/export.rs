@@ -1,4 +1,4 @@
-//! Incremental local audit export. All data still comes from the operator's SQL
+//! Incremental local audit export from explicit owner snapshots and SQL audit
 //! reads; exports never advance the world or supply participant observations.
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::value::RawValue;

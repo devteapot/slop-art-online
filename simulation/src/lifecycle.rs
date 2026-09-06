@@ -795,7 +795,7 @@ impl World {
                 continue;
             }
             let age_ms = self.timing.time_ms.saturating_sub(life.born_ms);
-            let ready: bool = self.scripts.law(
+            let ready: bool = self.actor_law(i,
                 "development",
                 json!({"body":life.body,"age_ms":age_ms,
                 "care_meals":life.care_meals,"practice":life.practice}),

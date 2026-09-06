@@ -17,6 +17,47 @@ import threading
 import time
 
 from run_carlid_npc import ROOT, CREDENTIAL, load_key
+from owner_snapshot import export_world
+from external_worker import ExternalWorker
+from pilot_cleanup import finalize_fixed_run
+
+
+class SnapshotReader:
+    """Share one decoded host export across the supervisor's reader threads.
+
+    The host replaces exports atomically. File identity matters as well as mtime:
+    a replacement of equal size must never retain an old actor's alive state.
+    Callers only inspect the returned object; they must not mutate it.
+    """
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.key = None
+        self.value = None
+
+    @staticmethod
+    def signature(path, stat):
+        return (path, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+
+    def read(self, path):
+        path = Path(path)
+        with self.lock:
+            try:
+                key = self.signature(path, path.stat())
+                if key == self.key:
+                    return self.value
+                with path.open() as stream:
+                    before = self.signature(path, os.fstat(stream.fileno()))
+                    value = json.load(stream)
+                    after = self.signature(path, os.fstat(stream.fileno()))
+                if before != after:
+                    self.key, self.value = None, None
+                    return None
+                self.key, self.value = after, value
+                return value
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                self.key, self.value = None, None
+                return None
 
 
 def write(path, value):
@@ -28,9 +69,28 @@ def write(path, value):
 def fresh_environment():
     env = os.environ.copy()
     for key in ("BEVY_DEV_RESUME_ACTIVE", "BEVY_DEV_ARCHIVE_ONLY",
-                "BEVY_DEV_NEWCOMER_CONTROLLER", "BEVY_DEV_ENROLLMENT_STOP_FILE"):
+                "BEVY_DEV_NEWCOMER_CONTROLLER", "BEVY_DEV_ENROLLMENT_STOP_FILE",
+                "SAO_EXTERNAL_RPC_ADMISSION_DIR", "SAO_EXTERNAL_RPC_CONCURRENCY"):
         env.pop(key, None)
     return env
+
+
+def prepare_external_rpc_admission(output, count, mode):
+    if type(count) is not int or not 0 <= count <= 36:
+        raise ValueError("external RPC concurrency must be an integer from 0 to 36")
+    if count and mode != "persistent":
+        raise ValueError("external RPC admission requires persistent external MCP")
+    if not count:
+        return {}, None
+    directory = (Path(output) / "external-rpc-admission").resolve()
+    directory.mkdir(mode=0o700)
+    for slot in range(count):
+        descriptor = os.open(directory / f"slot-{slot:02}.lock", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        os.close(descriptor)
+    return dict(SAO_EXTERNAL_RPC_ADMISSION_DIR=str(directory), SAO_EXTERNAL_RPC_CONCURRENCY=str(count)), dict(
+        protocol="sao-external-rpc-admission-v1", directory=str(directory), concurrency=count,
+        methods=["tools/call"], deadline="admission wait is inside the existing whole-RPC 15-second deadline",
+        scope="external native workers for this pilot; permits do not limit concurrent model requests")
 
 
 def validate_newcomer_controller(value):
@@ -111,6 +171,14 @@ def main():
     parser.add_argument("--controllers", type=Path, help="per-actor config manifest; enables matched serial matrix schedules")
     parser.add_argument("--newcomer-controller", type=Path, help="explicit frozen role/config template for authority-created AI actors")
     parser.add_argument("--implementation", type=Path, help="verified frozen implementation bundle")
+    parser.add_argument("--owner-snapshot-api", choices=("sql", "procedure"), default="sql",
+                        help="explicit owner export contract; procedure requires a supporting implementation")
+    parser.add_argument("--external-mcp-mode", choices=("per_call", "persistent"), default="per_call",
+                        help="retain one external worker/MCP connection per actor when explicitly selected")
+    parser.add_argument("--external-rpc-concurrency", type=int, default=0,
+                        help="optional 1..36 external tools/call slots; 0 disables admission; wait counts inside RPC deadline")
+    parser.add_argument("--finalization-mode", choices=("legacy", "stopped_host"), default="legacy",
+                        help="stopped_host stops owned producers before fixed-population final capture")
     parser.add_argument("--start-gate", type=Path, help="wait for the batch coordinator to release all ready variants")
     parser.add_argument("--start-gate-timeout", type=int, default=180,
                         help="positive seconds to wait for a batch start gate; coordinator derives this from planned initialization")
@@ -124,6 +192,10 @@ def main():
         verify(implementation)
     if args.serial_ms < 1000:raise SystemExit("serial interval must be at least 1000 ms")
     if args.start_gate_timeout < 1:raise SystemExit("start gate timeout must be positive")
+    if not 0 <= args.external_rpc_concurrency <= 36:
+        raise SystemExit("external RPC concurrency must be from 0 to 36")
+    if args.external_rpc_concurrency and args.external_mcp_mode != "persistent":
+        raise SystemExit("external RPC admission requires persistent external MCP")
     scenario = args.scenario.resolve()
     scenario_data = json.loads(scenario.read_text())
     if not args.controllers and [p["id"] for p in scenario_data["players"][:2]] != [1, 2]:
@@ -133,6 +205,8 @@ def main():
     newcomer = validate_newcomer_controller(json.loads(args.newcomer_controller.read_text())) if args.newcomer_controller else None
     if newcomer and (not controllers or args.npc_runtime != "host"):
         raise SystemExit("newcomer enrollment requires --controllers and the host runtime")
+    if newcomer and args.finalization_mode == "stopped_host":
+        raise SystemExit("stopped_host finalization currently requires a fixed population")
     maximum_actors = actor_limit(scenario_data, newcomer is not None)
     if controllers and (set(c["actor"] for c in controllers) != set(actor_ids) or len(controllers) != len(actor_ids)):
         raise SystemExit("Controller manifest must cover each actor exactly once.")
@@ -155,13 +229,14 @@ def main():
         CARLID_NPC_API_KEY=key,
         SPACETIME_CLI=str(cli_root / "2.1.0/spacetimedb-cli"),
         SPACETIME_CONTROL_CLI=str(cli_root / "2.7.1/spacetimedb-cli"),
-        SPACETIME_CONFIG_PATH=str(ROOT / ".local/credentials/bevy-cli.toml"),
+        SPACETIME_CONFIG_PATH=env.get("SPACETIME_CONFIG_PATH", str(ROOT / ".local/credentials/bevy-cli.toml")),
         NPC_REASONING_CONFIG=str(config),
         BEVY_DEV_PORT=str(args.port), BEVY_DEV_BIND="127.0.0.1",
         BEVY_DEV_PUBLIC_URL=f"http://127.0.0.1:{args.port}",
         BEVY_DEV_OUTPUT=str(out), BEVY_DEV_SCENARIO=str(scenario),
         BEVY_DEV_MAX_TICKS=str(args.minutes * 24), BEVY_DEV_TICK_MS="50",
         SAO_HARNESS_MANUAL="1" if args.npc_runtime == "pilot" else "0",
+        SAO_OWNER_SNAPSHOT_API=args.owner_snapshot_api,
         BEVY_DEV_CREDENTIAL_DIR=str(ROOT / ".local/credentials"),
         BEVY_DEV_MODULE=str(implementation / "target/wasm32-unknown-unknown/release/server_module.wasm"),
     )
@@ -182,9 +257,23 @@ def main():
         if not binary.is_file():
             raise SystemExit("Build the host, MCP and participant_live_agent example first.")
     out.mkdir(parents=True)
+    admission_env, admission = prepare_external_rpc_admission(out, args.external_rpc_concurrency, args.external_mcp_mode)
+    supervisor_source = out / "supervisor-source.py"
+    supervisor_source.write_bytes(Path(__file__).read_bytes())
+    owner_snapshot_source = Path(__file__).with_name("owner_snapshot.py")
+    if args.owner_snapshot_api == "procedure":
+        (out / "owner-snapshot-source.py").write_bytes(owner_snapshot_source.read_bytes())
+    runtime_sources = []
+    for enabled, filename in ((args.external_mcp_mode == "persistent", "external_worker.py"),
+                              (args.finalization_mode == "stopped_host", "pilot_cleanup.py")):
+        if enabled:
+            source = Path(__file__).with_name(filename)
+            (out / filename.replace(".py", "-source.py")).write_bytes(source.read_bytes())
+            runtime_sources.append(source)
     stop = threading.Event()
     lock = threading.Lock()
     jobs = {}
+    external_workers = {}
     counters = {actor: 0 for actor in actor_ids}
     actor_configs = {}
     for c in controllers:
@@ -197,12 +286,16 @@ def main():
                   newcomer_controller=str(args.newcomer_controller.resolve()) if newcomer else None,
                   enrolled_actors=[],
                   implementation=str(implementation),
+                  owner_snapshot_api=args.owner_snapshot_api,
+                  supervisor_source=str(supervisor_source),
+                  authority_server=env.get("BEVY_DEV_SERVER", "http://127.0.0.1:3101"),
+                  authority_config_path=env["SPACETIME_CONFIG_PATH"],
                   scenario=str(scenario), npc_runtime=args.npc_runtime,
                   controller_schedules={"builtin":"host independent behavior/communication/learning loops" if args.npc_runtime == "host" else "pilot serial rotation", "external":"separate MCP process; pilot serial rotation"},
                   model="gpt-5.6-luna", calls=[], evidence_mode="genuine model calls; no fixture policy",
                   provider_limits="one attempt/call, 300-second deadline; endpoint has no output-token cap",
                   artifacts={str(p): hashlib.sha256(p.read_bytes()).hexdigest()
-                             for p in [*binaries, ROOT / "Cargo.lock", config,
+                             for p in [*binaries, supervisor_source, ROOT / "Cargo.lock", config,
                                        ROOT / env["BEVY_DEV_MODULE"],
                                        scenario]})
     if newcomer:
@@ -210,6 +303,12 @@ def main():
         write(out / "newcomer-controller.json", newcomer)
     if args.implementation:
         report["implementation_manifest"]=json.loads((implementation / "implementation.json").read_text())
+    if args.owner_snapshot_api == "procedure":
+        report["artifacts"][str(owner_snapshot_source.resolve())] = hashlib.sha256(owner_snapshot_source.read_bytes()).hexdigest()
+    report.update(external_mcp_mode=args.external_mcp_mode, finalization_mode=args.finalization_mode,
+                  external_rpc_concurrency=args.external_rpc_concurrency, external_rpc_admission=admission)
+    for source in runtime_sources:
+        report["artifacts"][str(source.resolve())] = hashlib.sha256(source.read_bytes()).hexdigest()
     if controllers:
         report["artifacts"].update({str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in [args.controllers.resolve(),*actor_configs.values()]})
         write(out / "controller-manifest.json", controllers)
@@ -244,15 +343,16 @@ def main():
         return control("call", name, *[json.dumps(v) for v in values], "-y")
 
     def state():
+        if args.owner_snapshot_api == "procedure":
+            return export_world(call, active["run"])
         rows = json.loads(control("sql", f"SELECT state FROM sim_run WHERE id = '{active['run']}'", "--format", "json"))
         return json.loads(rows[0]["rows"][0][0])
 
+    snapshot_reader = SnapshotReader()
+
     def snapshot():
         # The host exports actual state/events; no local world is advanced here.
-        try:
-            return json.loads((out / active["run"] / "snapshot.json").read_text())
-        except (OSError, json.JSONDecodeError):
-            return None
+        return snapshot_reader.read(out / active["run"] / "snapshot.json")
 
     def alive(actor):
         current = snapshot()
@@ -288,6 +388,35 @@ def main():
         actor_env = {k: v for k, v in env.items() if not k.startswith(("SPACETIME_", "BEVY_DEV_"))}
         record = dict(actor=actor, responsibility=role, number=number, started_at=time.time(),
                       phase="started", journal=str(folder.relative_to(out)))
+        if side == "external" and args.external_mcp_mode == "persistent":
+            actor_env.update(admission_env)
+            # Timer starts before lazy worker/MCP startup. The same supervisor
+            # schedule creates every responsibility; the worker never schedules
+            # another job, retries a proposal or reconnects a lost transport.
+            deadline = time.monotonic() + 315
+            with lock:
+                report["calls"].append(record)
+            if actor not in external_workers:
+                external_workers[actor] = ExternalWorker(
+                    [str(binaries[2]), "external-worker", participant_by_actor[actor]["session_file"], str(folder.parent)],
+                    cwd=implementation, env=actor_env, log_path=folder.parent / "worker-process.log")
+            worker = external_workers[actor]
+
+            def started(process):
+                with lock:
+                    jobs[actor] = process
+                    record["worker_pid"] = process.pid
+
+            result = worker.run(number, role, actor_configs.get(actor, config), folder.name,
+                                deadline=deadline, cancelled=stop.is_set, alive=lambda: alive(actor), on_start=started)
+            with (folder / "process.log").open("w") as log:
+                log.write(json.dumps(result) + "\n")
+            with lock:
+                record.update(phase=result["phase"], finished_at=time.time(), exit_code=result["exit_code"],
+                              interruption=result.get("interruption"), error=result.get("error"),
+                              worker_reusable=result.get("worker_reusable"), external_mcp_mode="persistent")
+                jobs.pop(actor, None)
+            return
         with (folder / "process.log").open("w") as log:
             job = subprocess.Popen([str(binaries[2]), side, participant_by_actor[actor]["session_file"], str(actor_configs.get(actor,config)), role, str(folder)],
                                    env=actor_env, stdout=log, stderr=log, start_new_session=True, cwd=implementation)
@@ -433,16 +562,39 @@ def main():
         raise
     finally:
         stop.set()
+        # Idle persistent workers also own MCP children. Stop all in parallel so
+        # their bounded termination grace is not multiplied by the population.
+        if external_workers:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(external_workers)) as stoppers:
+                list(stoppers.map(lambda worker: worker.stop(), external_workers.values()))
+            report["external_worker_cleanup_errors"] = [worker.cleanup_error for worker in external_workers.values()
+                                                        if worker.cleanup_error]
         with lock:
             remaining = list(jobs.values())
         for job in remaining:
             terminate(job)
         if active:
             try:
+                if args.finalization_mode == "stopped_host":
+                    def stop_final_host():
+                        terminate(host)
+                        report["host_stopped_before_finalization"] = host.poll() is not None
+                        # Persist process ownership before any slower authority
+                        # cleanup, so batch fallback cannot signal a reaped PID.
+                        write(out / "pilot.json", report)
+                        return dict(pid=host.pid, stopped=host.poll() is not None, exit_code=host.returncode)
+
+                    final_world, final_events = finalize_fixed_run(
+                        active["run"], stop_host=stop_final_host, control=control, call=call, state=state,
+                        record=lambda proof: write(out / "finalization.json", proof))
+                    report["host_stopped_before_finalization"] = True
+                else:
+                    final_world, final_events = None, None
                 if newcomer:
                     (out / "stop-enrollment").touch()
-                call("sim_operator_pause", active["run"])
-                report["final_tick"] = state()["tick"]
+                if args.finalization_mode == "legacy":
+                    call("sim_operator_pause", active["run"])
+                    report["final_tick"] = state()["tick"]
                 if newcomer:
                     stop_deadline = time.monotonic() + 30
                     acknowledgement = out / "enrollment-stopped.json"
@@ -455,16 +607,18 @@ def main():
                         raise RuntimeError("invalid enrollment shutdown acknowledgement")
                     refresh_participants()
                     report["enrollment_stopped"] = ack
-                if args.npc_runtime == "host":
+                if args.npc_runtime == "host" and args.finalization_mode == "legacy":
                     # Final descriptors include any enrollment that completed before
                     # the stop acknowledgement. Revoke all grants, with finite CLI deadlines.
                     with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, max(1, len(participants)))) as revokers:
                         futures = [revokers.submit(call, "sim_revoke_client", p["identity"]) for p in participants]
                         for future in futures:
                             future.result()
-                final_world = state()
-                rows = json.loads(control("sql", f"SELECT json FROM sim_audit WHERE run = '{active['run']}'", "--format", "json"))
-                final_events = sorted((json.loads(row[0]) for row in rows[0]["rows"]), key=lambda e: e["id"])
+                if args.finalization_mode == "legacy":
+                    final_world = state()
+                    rows = json.loads(control("sql", f"SELECT json FROM sim_audit WHERE run = '{active['run']}'", "--format", "json"))
+                    final_events = sorted((json.loads(row[0]) for row in rows[0]["rows"]), key=lambda e: e["id"])
+                report["final_tick"] = final_world["tick"]
                 write(out / active["run"] / "final-snapshot.json", dict(world=final_world, events=final_events))
                 report["final_time_ms"] = final_world["timing"]["time_ms"]
                 report["final_snapshot"] = str(out / active["run"] / "final-snapshot.json")
@@ -472,6 +626,11 @@ def main():
                 reasoning = list((out / active["run"] / "reasoning").rglob("harness-*.json"))
                 report["builtin_model_calls"] = len(reasoning)
                 report["builtin_journal"] = str(out / active["run"] / "reasoning")
+                if report.get("external_worker_cleanup_errors"):
+                    # Authority pause/revocation/capture still runs after a
+                    # process-cleanup failure. It cannot turn that failure into
+                    # an accepted completion, but removes remaining game access.
+                    raise RuntimeError("persistent external worker cleanup was not confirmed")
             except Exception as error:
                 report.update(phase="failed", pause_error=f"Final pause/enrollment cleanup was not confirmed: {error}")
         else:
@@ -481,7 +640,9 @@ def main():
             report.update(phase="failed", error="Pilot received a termination signal; retained evidence is an interrupted sample")
         write(out / "pilot.json", report)
         host_log.close()
-        print(f"Pilot {report['phase']}; evidence: {out}. Observer host remains available if started.", flush=True)
+        print(f"Pilot {report['phase']}; evidence: {out}. " +
+              ("Owned host stopped before final capture." if report.get("host_stopped_before_finalization")
+               else "Observer host remains available if started."), flush=True)
     if report["phase"] != "completed":
         raise SystemExit(report.get("pause_error", report.get("error", "Pilot failed")))
 

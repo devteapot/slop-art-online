@@ -87,6 +87,17 @@ def resolve_spec(spec):
             v[key] = integer(v.get(key, spec.get(key, default)), f'{name} {key}', minimum, maximum)
         if type(v.get('recovery', False)) is not bool:
             raise ValueError(f'{name} recovery must be a boolean')
+        if v.get('owner_snapshot_api', 'sql') not in ('sql', 'procedure'):
+            raise ValueError(f'{name} owner_snapshot_api must be sql or procedure')
+        if v.get('external_mcp_mode', 'per_call') not in ('per_call', 'persistent'):
+            raise ValueError(f'{name} external_mcp_mode must be per_call or persistent')
+        rpc_concurrency = integer(v.get('external_rpc_concurrency', 0), f'{name} external_rpc_concurrency', 0, 36)
+        if rpc_concurrency and v.get('external_mcp_mode', 'per_call') != 'persistent':
+            raise ValueError(f'{name} external_rpc_concurrency requires persistent external MCP')
+        if v.get('finalization_mode', 'legacy') not in ('legacy', 'stopped_host'):
+            raise ValueError(f'{name} finalization_mode must be legacy or stopped_host')
+        if v.get('newcomer_controller') is not None and v.get('finalization_mode') == 'stopped_host':
+            raise ValueError(f'{name} stopped_host finalization requires a fixed population')
         v['implementation'] = str(Path(v['implementation']).resolve())
         if v['implementation'] not in verified:
             folder = Path(v['implementation'])
@@ -140,6 +151,14 @@ def prepare(spec, resolved, out):
             command.extend(['--newcomer-controller', str(inputs / 'newcomer_controller.json')])
         if v.get('recovery', False):
             command.append('--recovery')
+        if 'owner_snapshot_api' in v:
+            command.extend(['--owner-snapshot-api', v['owner_snapshot_api']])
+        if 'external_mcp_mode' in v:
+            command.extend(['--external-mcp-mode', v['external_mcp_mode']])
+        if 'external_rpc_concurrency' in v:
+            command.extend(['--external-rpc-concurrency', str(v['external_rpc_concurrency'])])
+        if 'finalization_mode' in v:
+            command.extend(['--finalization-mode', v['finalization_mode']])
         plan.append(dict(id=v['id'], group=group + 1, url=f"http://127.0.0.1:{v['port']}",
                          serial_ms=v['serial_ms'], minutes=v['minutes'], calls_per_actor=v['calls_per_actor'],
                          implementation_manifest_hash=implementation_hash, command=command,
@@ -224,6 +243,10 @@ def cleanup(jobs, failed):
                 pilot = json.loads((folder / 'pilot.json').read_text())
                 if pilot.get('phase') == 'running' or pilot.get('pause_error'):
                     errors.append(f'{folder.name}: authority pause not confirmed; inspect pilot.json')
+                if pilot.get('host_stopped_before_finalization') is True:
+                    # The supervisor already reaped it. Its former PID is no
+                    # longer an owned process and must never be signaled.
+                    continue
                 pid = pilot.get('host_pid')
                 if isinstance(pid, int) and pid > 1 and os.getpgid(pid) == pid:
                     os.killpg(pid, signal.SIGTERM)

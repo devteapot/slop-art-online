@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import run_experiment_batch as batch
 from run_living_clearing import (fresh_environment, actor_limit, pending_participants,
-                                 read_participants, supplied_config_matches, validate_newcomer_controller)
+                                 read_participants, supplied_config_matches, validate_newcomer_controller,
+                                 prepare_external_rpc_admission)
 from experiment_artifacts import EXECUTABLES, digest, write
 
 
@@ -41,6 +42,17 @@ class ScalingChecks(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def test_failed_batch_never_signals_already_stopped_host_pid(self):
+        folder = self.root / 'finished-pilot'
+        folder.mkdir()
+        write(folder / 'pilot.json', dict(phase='failed', host_pid=424242,
+                                         host_stopped_before_finalization=True))
+        job = SimpleNamespace(poll=lambda: 0, wait=lambda **kwargs: 0)
+        with patch.object(batch.os, 'getpgid') as getpgid, patch.object(batch.os, 'killpg') as killpg:
+            self.assertEqual(batch.cleanup([(job, io.StringIO(), folder, {})], True), [])
+        getpgid.assert_not_called()
+        killpg.assert_not_called()
 
     def invoke(self, spec=None, dry=False, fail_launch=None, evidence_failure=False, duplicate_db=False,
                invalid_completion=None, interrupt_after_exit=False, disk_free=None, hold_running=False,
@@ -219,15 +231,82 @@ class ScalingChecks(unittest.TestCase):
     def test_fresh_run_cannot_inherit_resume_or_archive(self):
         inherited = dict(BEVY_DEV_RESUME_ACTIVE='/unrelated/active.json',
                          BEVY_DEV_ARCHIVE_ONLY='1', BEVY_DEV_NEWCOMER_CONTROLLER='/unrelated/template.json',
-                         BEVY_DEV_ENROLLMENT_STOP_FILE='/unrelated/stop', CARLID_NPC_API_KEY='fixture-token')
+                         BEVY_DEV_ENROLLMENT_STOP_FILE='/unrelated/stop', CARLID_NPC_API_KEY='fixture-token',
+                         SAO_EXTERNAL_RPC_ADMISSION_DIR='/unrelated/slots', SAO_EXTERNAL_RPC_CONCURRENCY='8')
         with patch.dict(os.environ, inherited, clear=True):
             fresh = fresh_environment()
             self.assertNotIn('BEVY_DEV_RESUME_ACTIVE', fresh)
             self.assertNotIn('BEVY_DEV_ARCHIVE_ONLY', fresh)
             self.assertNotIn('BEVY_DEV_NEWCOMER_CONTROLLER', fresh)
             self.assertNotIn('BEVY_DEV_ENROLLMENT_STOP_FILE', fresh)
+            self.assertNotIn('SAO_EXTERNAL_RPC_ADMISSION_DIR', fresh)
+            self.assertNotIn('SAO_EXTERNAL_RPC_CONCURRENCY', fresh)
             self.assertEqual(fresh['CARLID_NPC_API_KEY'], 'fixture-token')
             self.assertIn('BEVY_DEV_RESUME_ACTIVE', os.environ)
+
+    def test_owner_snapshot_contract_is_explicit_and_preserved(self):
+        self.spec['variants'][0]['owner_snapshot_api'] = 'procedure'
+        spec, resolved = batch.resolve_spec(self.spec)
+        plan = batch.prepare(spec, resolved, self.root / 'owner-procedure')
+        command = plan[0]['command']
+        self.assertEqual(command[command.index('--owner-snapshot-api') + 1], 'procedure')
+        self.assertNotIn('--owner-snapshot-api', plan[1]['command'])
+        self.spec['variants'][0]['owner_snapshot_api'] = 'automatic-fallback'
+        with self.assertRaisesRegex(ValueError, 'owner_snapshot_api'):
+            batch.resolve_spec(self.spec)
+
+    def test_persistent_transport_and_stopped_host_finalization_are_explicit(self):
+        self.spec['variants'][0].update(external_mcp_mode='persistent', finalization_mode='stopped_host')
+        spec, resolved = batch.resolve_spec(self.spec)
+        plan = batch.prepare(spec, resolved, self.root / 'persistent-transport')
+        command = plan[0]['command']
+        self.assertEqual(command[command.index('--external-mcp-mode') + 1], 'persistent')
+        self.assertEqual(command[command.index('--finalization-mode') + 1], 'stopped_host')
+        self.assertNotIn('--external-mcp-mode', plan[1]['command'])
+        self.assertNotIn('--finalization-mode', plan[1]['command'])
+        for key in ('external_mcp_mode', 'finalization_mode'):
+            invalid = copy.deepcopy(self.spec)
+            invalid['variants'][0][key] = 'automatic-fallback'
+            with self.assertRaisesRegex(ValueError, key):
+                batch.resolve_spec(invalid)
+        invalid = copy.deepcopy(self.spec)
+        invalid['variants'][0]['newcomer_controller'] = 'unused-before-validation'
+        with self.assertRaisesRegex(ValueError, 'fixed population'):
+            batch.resolve_spec(invalid)
+
+    def test_external_rpc_admission_is_explicit_and_rejects_invalid_modes_and_counts(self):
+        self.spec['variants'][0].update(external_mcp_mode='persistent', external_rpc_concurrency=8)
+        spec, resolved = batch.resolve_spec(self.spec)
+        plan = batch.prepare(spec, resolved, self.root / 'admitted-transport')
+        command = plan[0]['command']
+        self.assertEqual(command[command.index('--external-rpc-concurrency') + 1], '8')
+        self.assertNotIn('--external-rpc-concurrency', plan[1]['command'])
+        for count in (True, -1, 37, 1.5, '8'):
+            invalid = copy.deepcopy(self.spec)
+            invalid['variants'][0]['external_rpc_concurrency'] = count
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                batch.resolve_spec(invalid)
+        invalid = copy.deepcopy(self.spec)
+        invalid['variants'][0]['external_mcp_mode'] = 'per_call'
+        with self.assertRaisesRegex(ValueError, 'requires persistent'):
+            batch.resolve_spec(invalid)
+
+    def test_admission_slots_are_new_private_distinct_files_and_never_reused(self):
+        self.assertEqual(prepare_external_rpc_admission(self.root, 0, 'per_call'), ({}, None))
+        directory = self.root / 'external-rpc-admission'
+        self.assertFalse(directory.exists())
+        env, report = prepare_external_rpc_admission(self.root, 8, 'persistent')
+        self.assertEqual(env, dict(SAO_EXTERNAL_RPC_ADMISSION_DIR=str(directory), SAO_EXTERNAL_RPC_CONCURRENCY='8'))
+        self.assertEqual(report['concurrency'], 8)
+        slots = sorted(directory.iterdir())
+        self.assertEqual([p.name for p in slots], [f'slot-{i:02}.lock' for i in range(8)])
+        self.assertEqual(len({p.stat().st_ino for p in slots}), 8)
+        self.assertTrue(all(p.stat().st_size == 0 and p.stat().st_mode & 0o777 == 0o600 for p in slots))
+        self.assertEqual(directory.stat().st_mode & 0o777, 0o700)
+        with self.assertRaises(FileExistsError):
+            prepare_external_rpc_admission(self.root, 8, 'persistent')
+        with self.assertRaisesRegex(ValueError, 'requires persistent'):
+            prepare_external_rpc_admission(self.root, 8, 'per_call')
 
     def test_newcomer_template_is_explicit_frozen_input(self):
         path = self.root / 'newcomer.json'

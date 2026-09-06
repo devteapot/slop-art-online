@@ -65,12 +65,13 @@ impl World {
                 status
             }
             Err(error) => {
-                let cause = self.event(Some(self.players[i].id), "script_error", e.attempt.into_iter().collect(),
-                    json!({"action":a,"definition":e.script,"error":error,"effects_committed":false}));
+                let mut data=json!({"action":a,"definition":e.script,"error":error.message,"effects_committed":false});
+                if let Some(denial)=error.law_denial {data["category"]=json!("law_authorization_denied");for (key,value) in denial.as_object().unwrap(){data[key]=value.clone();}}
+                let cause = self.event(Some(self.players[i].id), "script_error", e.attempt.into_iter().collect(),data);
                 e.attempt = None;
                 e.script = None;
                 e.remaining = 0;
-                self.fail(i, cause, &error, e.dialogue)
+                self.fail(i, cause, &error.message, e.dialogue)
             }
         }
     }
@@ -147,14 +148,27 @@ impl World {
             }
             _ => (),
         }
-        let allowed: bool = self.scripts.law(
+        let allowed: bool = self.actor_law(i,
             "authorize_effect",
             json!({"actor":facts(&self.players[i]),"action":a,"effect":effect}),
         )?;
         if !allowed {
             return Err("active law denied effect".into());
         }
+        let destination = self.effect_destination(effect);
+        if let Some(position)=destination {if position!=self.players[i].position {
+            let allowed:bool=self.law_at(position,"authorize_effect",json!({"actor":facts(&self.players[i]),"action":a,"effect":effect,"destination":position}))?;
+            if !allowed{return Err("destination law denied effect".into());}
+        }}
         Ok(())
+    }
+
+    pub(super) fn effect_destination(&self,effect:&Effect)->Option<i32> {
+        match effect {
+            Effect::Actor{fields}=>fields.get("position").copied(),
+            Effect::Damage{target,..}|Effect::TransferFood{target:Some(target),..}=>self.players.iter().find(|p|p.id==*target).map(|p|p.position),
+            _=>None,
+        }
     }
 
     pub(super) fn apply_script_effect(
@@ -243,7 +257,7 @@ impl World {
 
     pub(super) fn visible(&self, viewer: usize, other: usize, kind: &str) -> Result<bool, String> {
         if !self.same_arena(self.players[viewer].id, self.players[other].id) { return Ok(false); }
-        self.scripts.law("visible",json!({"viewer":facts(&self.players[viewer]),"other":facts(&self.players[other]),"kind":kind,"distance":self.initial.map.as_ref().map_or((self.players[viewer].position-self.players[other].position).abs(), |map| map.distance(self.players[viewer].position,self.players[other].position))}))
+        self.actor_law(viewer,"visible",json!({"viewer":facts(&self.players[viewer]),"other":facts(&self.players[other]),"kind":kind,"distance":self.initial.map.as_ref().map_or((self.players[viewer].position-self.players[other].position).abs(), |map| map.distance(self.players[viewer].position,self.players[other].position))}))
     }
 
     pub(super) fn reflect_identity(
@@ -264,7 +278,7 @@ impl World {
             .and_then(|id| self.players[i].relationships.get(&id))
             .copied()
             .unwrap_or(0);
-        let change:Outcome=self.scripts.law("reflection",json!({"actor":facts(&self.players[i]),"trust":trust,"caution_delta":r.caution_delta,"trust_delta":r.trust_delta}))?;
+        let change:Outcome=self.actor_law(i,"reflection",json!({"actor":facts(&self.players[i]),"trust":trust,"caution_delta":r.caution_delta,"trust_delta":r.trust_delta}))?;
         self.players[i].caution = change.caution;
         if let Some(from) = from {
             self.players[i].relationships.insert(from, change.trust);
@@ -302,7 +316,8 @@ impl World {
             }
             candidate.event(None,"script_update_activated",vec![],json!({"effective_update":candidate.timing.updates+1,"revision":candidate.scripts.revision,"active":candidate.scripts.active}));
         }
-        match candidate.step_inner(delta_ms) {
+        let activation=candidate.activate_laws(candidate.timing.updates+1);
+        match activation.and_then(|_|candidate.step_inner(delta_ms)) {
             Ok(()) => *self = candidate,
             Err(error) => {
                 let rejected = self.scripts.pending.take();

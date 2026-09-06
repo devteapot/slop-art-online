@@ -5,6 +5,8 @@ pub mod ecology;
 pub mod knowledge;
 pub mod infrastructure;
 pub mod research;
+pub mod laws;
+pub mod law_research;
 pub mod research_programs;
 pub mod lifecycle;
 mod lifecycle_view;
@@ -21,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "m6-1-numeric-techniques.3";
+pub const VERSION: &str = "m7-1-scoped-laws.2";
 pub const DECISION_FORMAT_VERSION: &str = "survivor-policy-v2";
 pub const LEGACY_DECISION_FORMAT: &str = "survivor-sequence-v1";
 pub mod policy;
@@ -318,6 +320,8 @@ pub struct World {
     pub version: String,
     #[serde(default)]
     pub scripts: scripting::Registry,
+    #[serde(default)]
+    pub laws: laws::LawState,
     pub initial: Scenario,
     pub tick: u64,
     #[serde(default)]
@@ -405,6 +409,7 @@ impl World {
             run,
             version: VERSION.into(),
             scripts: scripting::Registry::default(),
+            laws: laws::LawState::default(),
             players: scenario.players.clone(),
             sites: scenario.sites.clone(),
             infrastructure: infrastructure::InfrastructureState::default(),
@@ -529,7 +534,7 @@ impl World {
             return Ok(());
         }
         let pos = self.players[i].position;
-        let mut observation: Value = self.scripts.law(
+        let mut observation: Value = self.actor_law(i,
             "observation",
             json!(self.sites.iter().find(|s| s.position == pos)),
         )?;
@@ -623,8 +628,7 @@ impl World {
             vec![]
         };
         for a in d.actions.iter().chain(policy_actions.iter().copied()) {
-            self.scripts
-                .validate_action_on_map(a, &self.players[i], self.map_for_actor(self.players[i].id).as_ref())?;
+            self.validate_scoped_action(i,a)?;
         }
         let p = &self.players[i];
         for r in &d.reflections {
@@ -926,26 +930,35 @@ impl World {
         i: usize,
         e: &mut Execution,
         a: Action,
-    ) -> Result<Status, String> {
+    ) -> Result<Status, ActionFailure> {
         let actor = self.players[i].id;
         let attempt = if let Some(id) = e.attempt {
             id
         } else {
             e.script = Some(scripting::Invocation {
                 definition: self.scripts.resolve(a.skill.id())?,
+                law_binding: Some(self.law_binding_at(Some(self.players[i].position))),
+                law_position: Some(self.players[i].position),
                 state: Value::Null,
                 evaluated_ms: self.timing.time_ms.saturating_sub(self.timing.delta_ms),
                 wake_at_ms: 0,
             });
-            let id=self.event(Some(actor),"skill_attempt",std::iter::once(e.decision).chain(e.state.last_guard).collect(),json!({"action":a,"step":e.cursor,"node_path":e.state.active_path,"skill_version":VERSION,"definition":e.script.as_ref().map(|s| &s.definition),"law_revision":self.scripts.active["law"],"before":{"position":self.players[i].position,"food":self.players[i].food,"energy":self.players[i].energy,"hunger":self.players[i].hunger}}));
+            let id=self.event(Some(actor),"skill_attempt",std::iter::once(e.decision).chain(e.state.last_guard).collect(),json!({"action":a,"step":e.cursor,"node_path":e.state.active_path,"skill_version":VERSION,"definition":e.script.as_ref().map(|s| &s.definition),"law_revision":self.scripts.active["law"],"law_binding":e.script.as_ref().and_then(|s|s.law_binding.as_ref()),"before":{"position":self.players[i].position,"food":self.players[i].food,"energy":self.players[i].energy,"hunger":self.players[i].hunger}}));
             e.attempt = Some(id);
             e.remaining = a.duration;
             id
         };
         self.players[i].execution = Some(e.clone());
+        if a.skill.id()=="move" {
+            let position=self.players[i].position;
+            if e.script.as_ref().is_some_and(|s|s.law_position!=Some(position)) {
+                let binding=self.law_binding_at(Some(position));let invocation=e.script.as_mut().unwrap();invocation.law_binding=Some(binding);invocation.law_position=Some(position);
+            }
+        }
         let invocation = e.script.clone().ok_or("missing pinned skill")?;
-        let reason: String = self.scripts.call(
-            &invocation.definition,
+        let binding=invocation.law_binding.clone().unwrap_or_else(||self.law_binding_at(Some(self.players[i].position)));
+        let reason: String = self.bound_skill(
+            &binding, &invocation.definition,
             "validate",
             json!({"action":a,"actor":scripting::facts(&self.players[i]),"map":self.map_for_actor(self.players[i].id)}),
         )?;
@@ -963,8 +976,8 @@ impl World {
             e.remaining = 0;
             return Ok(self.fail(i, attempt, "independent provisioning requires care, development and demonstrated guided practice", e.dialogue));
         }
-        let result: scripting::StepResult = self.scripts.call(
-            &invocation.definition,
+        let result: scripting::StepResult = self.bound_skill(
+            &binding, &invocation.definition,
             "step",
             self.script_context(i, &a, e),
         )?;
@@ -985,7 +998,13 @@ impl World {
         for effect in result.effects {
             // Validate against preceding staged effects; the enclosing transaction rolls
             // the whole invocation back if any capability or policy rejects the batch.
-            self.validate_script_effect(i, &a, &effect)?;
+            if let Err(message)=self.validate_script_effect(i, &a, &effect) {
+                let law_denial=matches!(message.as_str(),"active law denied effect"|"destination law denied effect").then(|| {
+                    let position=self.players[i].position;let destination=self.effect_destination(&effect);
+                    json!({"law_binding":self.law_binding_at(Some(position)),"validation_position":position,"destination":destination,"destination_binding":destination.map(|p|self.law_binding_at(Some(p)))})
+                });
+                return Err(ActionFailure{message,law_denial});
+            }
             self.apply_script_effect(i, attempt, effect)?;
         }
         for deadline in [result.wake_at_ms, result.cooldown_until_ms]
@@ -1052,12 +1071,12 @@ impl World {
             dead: bool,
         }
         let before = self.players[i].clone();
-        let reaction: Reaction = self.scripts.law(
+        let reaction: Reaction = self.actor_law(i,
             "on_damage",
             json!({"actor":scripting::facts(&before),"amount":amount,"nature":nature}),
         )?;
         self.players[i].health = reaction.health;
-        let world=self.event(Some(before.id),"damage",vec![cause],json!({"from":from,"amount":amount,"before":before.health,"after":self.players[i].health,"location":before.position,"cause_kind":nature}));
+        let world=self.event(Some(before.id),"damage",vec![cause],json!({"from":from,"amount":amount,"before":before.health,"after":self.players[i].health,"location":before.position,"cause_kind":nature,"law_binding":self.law_binding_at(Some(before.position))}));
         let perception = self.perceive(
             i,
             world,
@@ -1170,11 +1189,11 @@ impl World {
                 facts["pulses"] = json!(needs_pulses);
                 facts["body"] = self.body_support_context(self.players[i].id);
                 facts["elapsed_ms"] = json!(needs_pulses * periods.needs_ms);
-                let needs: Needs = self.scripts.law("metabolism", facts)?;
+                let needs: Needs = self.actor_law(i,"metabolism", facts)?;
                 self.players[i].hunger = needs.hunger;
                 self.players[i].fear = needs.fear;
                 self.wake(self.players[i].id);
-                metabolism=self.event(Some(self.players[i].id),"needs_change",vec![],json!({"hunger_before":before,"hunger_after":self.players[i].hunger,"fear":self.players[i].fear,"elapsed_ms":needs_pulses*periods.needs_ms}));
+                metabolism=self.event(Some(self.players[i].id),"needs_change",vec![],json!({"hunger_before":before,"hunger_after":self.players[i].hunger,"fear":self.players[i].fear,"elapsed_ms":needs_pulses*periods.needs_ms,"law_binding":self.law_binding_at(Some(self.players[i].position))}));
             }
 
             self.consume_body_charge(self.players[i].id, needs_pulses, metabolism)?;
@@ -1226,7 +1245,7 @@ impl World {
                 #[serde(default)]
                 cold: i32,
             }
-            let after:Aftermath=self.scripts.law("aftermath",json!({"body":self.body_support_context(actor),"time_ms":self.timing.time_ms,"weather":self.initial.weather,"pulses":hazard_pulses,"last_hazard_pulse_ms":self.timing.actor_hazard_remainder_ms.get(&actor).map(|remainder|self.timing.time_ms.saturating_sub(*remainder)),"elapsed_ms":hazard_pulses*periods.hazard_ms,"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
+            let after:Aftermath=self.actor_law(i,"aftermath",json!({"body":self.body_support_context(actor),"time_ms":self.timing.time_ms,"weather":self.initial.weather,"pulses":hazard_pulses,"last_hazard_pulse_ms":self.timing.actor_hazard_remainder_ms.get(&actor).map(|remainder|self.timing.time_ms.saturating_sub(*remainder)),"elapsed_ms":hazard_pulses*periods.hazard_ms,"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
             if after.starvation < 0 || after.hazard < 0 || after.cold < 0 || after.power_depletion < 0 {
                 return Err("negative damage policy".into());
             }
@@ -1257,6 +1276,7 @@ impl World {
             }
         }
         self.advance_lifecycle()?;
+        self.flush_law_faults()?;
         self.refresh_lifecycle_observations()?;
         self.deliver_queued_speech()?;
         let invalid: Vec<_> = self
@@ -1355,3 +1375,11 @@ mod infrastructure_tests;
 
 #[cfg(test)]
 mod research_tests;
+
+#[cfg(test)]
+mod law_tests;
+
+/// A normal law veto is distinguished from interpreter or effect-contract faults.
+struct ActionFailure {message:String,law_denial:Option<Value>}
+impl From<String> for ActionFailure {fn from(message:String)->Self{Self{message,law_denial:None}}}
+impl From<&str> for ActionFailure {fn from(message:&str)->Self{message.to_owned().into()}}

@@ -35,14 +35,14 @@ impl World {
             let index = self.sites.iter().position(|site| site.position == source.position)
                 .ok_or("food source site missing")?;
             let before = self.sites[index].food;
-            let produced: i32 = self.scripts.law("food_renewal", json!({"source":source,
+            let produced: i32 = self.law_at(source.position,"food_renewal", json!({"source":source,
                 "food":before,"pulses":pulses,"elapsed_ms":pulses*source.interval_ms}))?;
             let after = before.checked_add(produced).ok_or("food production overflow")?;
             if produced < 0 || after > 1_000_000 { return Err("invalid food production effect".into()); }
             if produced == 0 { continue; }
             self.sites[index].food = after;
             let event = self.event(None,"resource_produced",vec![],json!({"location":source.position,
-                "food_delta":produced,"food_before":before,"food_after":after,"source":source,"pulses":pulses}));
+                "food_delta":produced,"food_before":before,"food_after":after,"source":source,"pulses":pulses,"law_binding":self.law_binding_at(Some(source.position))}));
             for i in 0..self.players.len() {
                 if self.players[i].health > 0 && self.players[i].position == source.position {
                     self.perceive(i,event,"food_growth",None,source.position,json!({"food_delta":produced,"food_after":after}))?;

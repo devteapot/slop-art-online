@@ -229,6 +229,42 @@ pub enum InfrastructureOperation {
         station: u32,
         enabled: bool,
     },
+    PrototypeLaw {
+        station: u32,
+        scope: crate::laws::LawScope,
+        draft: crate::laws::LawDraft,
+        cases: Vec<crate::law_research::LawCase>,
+        /// At most eight unique IDs from your own player.knowledge[].record.id; [] permits uncited assumptions.
+        /// Record ID strings only, not descriptions or numeric experience sources.
+        sources: Vec<String>,
+    },
+    PracticeLaw {
+        station: u32,
+        scope: crate::laws::LawScope,
+        record: String,
+        cases: Vec<crate::law_research::LawCase>,
+        /// At most eight unique IDs from your own player.knowledge[].record.id; [] permits uncited assumptions.
+        /// Record ID strings only, not descriptions or numeric experience sources.
+        sources: Vec<String>,
+    },
+    InspectLaw { station: u32, record: String },
+    InspectInstalledLaw { station: u32, scope: crate::laws::LawScope },
+    InstallLaw {
+        station: u32,
+        scope: crate::laws::LawScope,
+        /// Your held law code record ID from player.knowledge[].record.id.
+        record: String,
+        /// Optional own assessed law experiment record ID. Null lets current authorization
+        /// consider any matching own proof; it does not waive proof requirements.
+        /// Under initial rules, a local grant permits installation without a successful experiment.
+        experiment_record: Option<String>,
+        /// Current revision of the requested scope: use that entry's revision in research.law_research.scopes.
+        expected_revision: u64,
+        /// Copy binding from the requested scope's entry in research.law_research.scopes.
+        /// This is a digest string, not the binding object. For universal requests the
+        /// scope binding excludes regional overlays and can differ from effective_binding.digest.
+        expected_binding: String,
+    },
     Prototype {
         station: u32,
         draft: crate::research_programs::ProgramDraft,
@@ -282,7 +318,8 @@ pub enum InfrastructureOperation {
 impl InfrastructureOperation {
     pub fn station(&self) -> u32 {
         match self {
-            Self::TakeMaterial { station, .. }
+            Self::PrototypeLaw {station,..} | Self::PracticeLaw {station,..} | Self::InspectLaw {station,..} | Self::InspectInstalledLaw {station,..} | Self::InstallLaw {station,..}
+            | Self::TakeMaterial { station, .. }
             | Self::DepositMaterial { station, .. }
             | Self::Build { station, .. }
             | Self::Repair { station, .. }
@@ -311,6 +348,8 @@ pub struct ComputeJob {
     pub input: Option<ForecastInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program_work: Option<crate::research::ProgramWork>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub law_work: Option<crate::law_research::LawWork>,
     pub input_hash: String,
     pub sources: Vec<knowledge::Record>,
     pub progress: u32,
@@ -523,6 +562,7 @@ impl World {
         if !permitted {
             return Err("station permission denied".into());
         }
+        if self.validate_law_operation(i, n, op)? { return Ok(n); }
         if self.validate_research_operation(i, n, op)? {
             return Ok(n);
         }
@@ -534,7 +574,7 @@ impl World {
             .unwrap_or_default();
         let b = &self.infrastructure.balance;
         match op {
-            Prototype { .. }
+            PrototypeLaw {..} | PracticeLaw {..} | InspectLaw {..} | InspectInstalledLaw {..} | InstallLaw {..} | Prototype { .. }
             | PracticeProgram { .. }
             | RunProgram { .. }
             | InspectProgram { .. }
@@ -732,11 +772,11 @@ impl World {
         let actor = self.players[i].id;
         let location = self.players[i].position;
         let b = self.infrastructure.balance.clone();
-        let event = if let Some(event) = self.apply_research_operation(i, n, parent, operation)? {
+        let event = if let Some(event) = self.apply_law_operation(i, n, parent, operation)? { event } else if let Some(event) = self.apply_research_operation(i, n, parent, operation)? {
             event
         } else {
             match operation {
-                Prototype { .. }
+                PrototypeLaw {..} | PracticeLaw {..} | InspectLaw {..} | InspectInstalledLaw {..} | InstallLaw {..} | Prototype { .. }
                 | PracticeProgram { .. }
                 | RunProgram { .. }
                 | InspectProgram { .. }
@@ -882,7 +922,7 @@ impl World {
                         submitted_ms: self.timing.time_ms,
                         source,
                         input: Some(input.clone()),
-                        program_work: None,
+                        law_work: None, program_work: None,
                         input_hash: hash,
                         sources,
                         progress: 0,
@@ -941,6 +981,7 @@ impl World {
                             || j.program_work
                                 .as_ref()
                                 .is_some_and(|w| w.program_record.id == id)
+                            || j.law_work.as_ref().is_some_and(|w|w.program_record.id==id)
                             || j.sources.iter().any(|r| r.id == id)
                     })
                 });
@@ -962,7 +1003,7 @@ impl World {
             .unwrap_or_default();
         let stations:Vec<_>=self.infrastructure.stations.iter().filter(|s|s.seed.position==self.players[i].position && self.same_arena(actor,s.seed.owner)).map(|s| {
             let rights=s.seed.access.get(&actor).cloned().unwrap_or_default();
-            let jobs:Vec<_>=s.jobs.iter().filter(|j|j.owner==actor).map(|j|json!({"id":j.id,"progress":j.progress,"required":j.required,"input":j.program_work.as_ref().map(|w|json!(w.inputs)).unwrap_or_else(||json!(j.input)),"program":j.program_work.as_ref().map(|w|json!({"kind":w.kind,"record":w.program_record.id,"source_hash":w.program_record.program.as_ref().map(|p|&p.source_hash)})),"input_hash":j.input_hash,"report":j.report.as_ref().map(|r|&r.id),"retrieved":j.retrieved,"blocked_reason":j.blocked_reason,"cancelled":j.cancelled})).collect();
+            let jobs:Vec<_>=s.jobs.iter().filter(|j|j.owner==actor).map(|j|json!({"id":j.id,"progress":j.progress,"required":j.required,"input":j.program_work.as_ref().map(|w|json!(w.inputs)).unwrap_or_else(||json!(j.input)),"program":j.program_work.as_ref().map(|w|json!({"kind":w.kind,"record":w.program_record.id,"source_hash":w.program_record.program.as_ref().map(|p|&p.source_hash)})),"law":j.law_work.as_ref().map(|w|json!({"record":w.program_record.id,"scope":w.scope,"binding":w.binding.digest,"cases":w.cases})),"input_hash":j.input_hash,"report":j.report.as_ref().map(|r|&r.id),"retrieved":j.retrieved,"blocked_reason":j.blocked_reason,"cancelled":j.cancelled})).collect();
             json!({"id":s.seed.id,"owner":s.seed.owner,"position":s.seed.position,"label":s.seed.label,"enabled":s.enabled,"integrity":s.integrity,"modules":s.seed.modules,"electricity":s.seed.electricity,"electricity_capacity":s.seed.electricity_capacity,"materials":s.seed.materials,"generation_period_ms":s.seed.generation_period_ms,"generation_amount":s.seed.generation_amount,"rights":rights,"access":if rights.admin {json!(s.seed.access)} else {Value::Null},"queue_length":s.jobs.iter().filter(|j|j.report.is_none() && !j.cancelled).count(),"own_jobs":jobs,"admin_queue":if rights.admin {json!(s.jobs.iter().map(|j|json!({"id":j.id,"owner":j.owner,"progress":j.progress,"required":j.required,"complete":j.report.is_some(),"cancelled":j.cancelled,"blocked_reason":j.blocked_reason})).collect::<Vec<_>>())} else {Value::Null}})
         }).collect();
         json!({"enabled":self.initial.infrastructure.is_some(),"body":self.body_support_context(actor),"materials":own,"balance":self.infrastructure.balance,"research":self.research_facts(actor),"stations":stations})
@@ -1072,7 +1113,9 @@ impl World {
         let event=self.event(Some(owner),"compute_quantum",vec![source],json!({"station":station,"job":id,"progress":progress,"required":required,"electricity":b.compute_electricity,"water":b.compute_water,"water_consumed":b.compute_water,"wear":b.wear_per_quantum,"quantum_at_ms":at,"location":position,"balance_version":b.version}));
         if progress == required {
             let job = self.infrastructure.stations[n].jobs[j].clone();
-            let origin = if job.program_work.is_some() {
+            let origin = if job.law_work.is_some() {
+                self.finish_law_job(n,j,event,at)?
+            } else if job.program_work.is_some() {
                 self.finish_program_job(n, j, event, at)?
             } else {
                 let input = job.input.as_ref().ok_or("compute job lacks input")?;
@@ -1080,7 +1123,7 @@ impl World {
                 let text=format!("Conditional resource forecast v1. Assumed stock {}, inflow {}/min, demand {}/min, horizon {} ms. Projected stock {}; residual {}; shortfall {}. Input SHA-256 {}. Sources: {}. Arithmetic uses supplied assumptions; it does not verify geography, future production, access, or others' intentions.",input.stock,input.inflow_per_min,input.demand_per_min,input.horizon_ms,output["projected_stock"],output["residual"],output["shortfall"],job.input_hash,if input.sources.is_empty(){"none".into()}else{input.sources.join(",")});
                 let origin = self.next_event;
                 let record = knowledge::Record {
-                    program: None,
+                    law_program: None, law_experiment: None, program: None,
                     experiment: Some(crate::research::ExperimentEvidence::forecast(
                         owner,
                         station,

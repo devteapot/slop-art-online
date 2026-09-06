@@ -18,7 +18,8 @@ pub struct SimRunStore {
     pub last_advanced_at: spacetimedb::Timestamp,
 }
 #[derive(Clone)]
-#[spacetimedb::table(accessor=sim_world_blob)]
+#[spacetimedb::table(accessor = sim_world_blob,
+    index(accessor = run_and_kind, btree(columns = [run, kind])))]
 pub struct SimWorldBlob {
     #[primary_key]
     #[auto_inc]
@@ -49,6 +50,8 @@ struct Catalog {
 pub(crate) struct LoadedRun {
     row: SimRunStore,
     catalog: Catalog,
+    previous_layout: Option<codec::Layout>,
+    lease_reuse: Option<codec::LeaseReuse>,
 }
 impl Deref for LoadedRun {
     type Target = SimRunStore;
@@ -100,9 +103,61 @@ fn cached(
     catalog.blobs.insert(id, blob);
     Ok(body)
 }
+// Prefetched rows are untrusted staging, not validated Catalog entries. Move a
+// requested row through the same first-read scope/hash/key-alias checks; rows
+// never requested do not become eligible for retention or garbage collection.
+fn staged_cached(
+    catalog: &mut Catalog,
+    staged: &mut BTreeMap<u64, SimWorldBlob>,
+    run: &str,
+    actor: Option<u32>,
+    kind: &str,
+    id: u64,
+    fetch: impl FnOnce() -> Option<SimWorldBlob>,
+) -> Result<String, String> {
+    cached(catalog, run, actor, kind, id, || {
+        staged.remove(&id).or_else(fetch)
+    })
+}
+// Batch only these small canonical payload kinds during full hydration. Each
+// lookup remains scoped by run and kind; observations and derived bodies keep
+// their existing point-read paths. Returned rows are still untrusted staging.
+const PREFETCH_KINDS: [&str; 4] = ["experience", "memory", "activity", "receipt"];
+fn prefetch_selected_blobs<I>(
+    rows_for_kind: impl FnMut(&'static str) -> I,
+) -> BTreeMap<u64, SimWorldBlob>
+where
+    I: IntoIterator<Item = SimWorldBlob>,
+{
+    PREFETCH_KINDS
+        .into_iter()
+        .flat_map(rows_for_kind)
+        .map(|blob| (blob.id, blob))
+        .collect()
+}
+fn retain_validated(
+    catalog: &mut Catalog,
+    run: &str,
+    actor: Option<u32>,
+    kind: &str,
+    id: u64,
+) -> Result<(), String> {
+    // Only a content-validated load or an exactly checked intern grants this
+    // transaction permission to retain a row. Raw staging grants no permission.
+    let blob = catalog
+        .blobs
+        .get(&id)
+        .ok_or("immutable reference was not validated in this transaction")?;
+    if id == 0 || blob.id != id || blob.run != run || blob.actor != actor || blob.kind != kind {
+        return Err("retained immutable reference scope mismatch".into());
+    }
+    catalog.live.insert(id);
+    Ok(())
+}
 struct Reader<'a> {
     ctx: &'a ViewContext,
     catalog: Catalog,
+    staged_blobs: BTreeMap<u64, SimWorldBlob>,
 }
 impl Blobs for Reader<'_> {
     fn intern(&mut self, _: &str, _: Option<u32>, _: &str, _: String) -> Result<u64, String> {
@@ -115,16 +170,33 @@ impl Blobs for Reader<'_> {
         kind: &str,
         id: u64,
     ) -> Result<String, String> {
-        cached(&mut self.catalog, run, actor, kind, id, || {
-            self.ctx.db.sim_world_blob().id().find(id)
-        })
+        staged_cached(
+            &mut self.catalog,
+            &mut self.staged_blobs,
+            run,
+            actor,
+            kind,
+            id,
+            || self.ctx.db.sim_world_blob().id().find(id),
+        )
     }
 }
 struct Writer<'a> {
     ctx: &'a ReducerContext,
     catalog: &'a mut Catalog,
+    staged_blobs: BTreeMap<u64, SimWorldBlob>,
 }
 impl Blobs for Writer<'_> {
+    fn retain_validated(
+        &mut self,
+        run: &str,
+        actor: Option<u32>,
+        kind: &str,
+        id: u64,
+    ) -> Result<(), String> {
+        retain_validated(self.catalog, run, actor, kind, id)
+    }
+
     fn intern(
         &mut self,
         run: &str,
@@ -176,9 +248,15 @@ impl Blobs for Writer<'_> {
         kind: &str,
         id: u64,
     ) -> Result<String, String> {
-        cached(self.catalog, run, actor, kind, id, || {
-            self.ctx.db.sim_world_blob().id().find(id)
-        })
+        staged_cached(
+            self.catalog,
+            &mut self.staged_blobs,
+            run,
+            actor,
+            kind,
+            id,
+            || self.ctx.db.sim_world_blob().id().find(id),
+        )
     }
 }
 pub(super) fn load(ctx: &ReducerContext, run: &str) -> Result<(LoadedRun, World), String> {
@@ -206,18 +284,29 @@ fn hydrate(ctx: &ReducerContext, row: SimRunStore) -> Result<(LoadedRun, World),
     let mut loaded = LoadedRun {
         row,
         catalog: Catalog::default(),
+        previous_layout: None,
+        lease_reuse: None,
     };
     let state = loaded.row.state.clone();
-    let world = codec::decode(
+    let staged_blobs = prefetch_selected_blobs(|kind| {
+        ctx.db
+            .sim_world_blob()
+            .run_and_kind()
+            .filter((loaded.row.id.as_str(), kind))
+    });
+    let (world, layout, reuse) = codec::decode_for_save(
         &state,
         &mut Writer {
             ctx,
             catalog: &mut loaded.catalog,
+            staged_blobs,
         },
     )?;
     if world.run != loaded.row.id {
         return Err("stored run identity differs from World".into());
     }
+    loaded.previous_layout = Some(layout);
+    loaded.lease_reuse = Some(reuse);
     Ok((loaded, world))
 }
 pub(super) fn exists(ctx: &ReducerContext, run: &str) -> bool {
@@ -232,6 +321,8 @@ pub(super) fn create(ctx: &ReducerContext, run: String) -> LoadedRun {
             last_advanced_at: ctx.timestamp,
         }),
         catalog: Catalog::default(),
+        previous_layout: None,
+        lease_reuse: None,
     }
 }
 pub(super) fn encode(
@@ -243,23 +334,46 @@ pub(super) fn encode(
         return Err("stored run identity differs from World".into());
     }
     row.catalog.live.clear();
-    codec::encode(
+    codec::encode_with_reuse(
         world,
         &mut Writer {
             ctx,
             catalog: &mut row.catalog,
+            staged_blobs: BTreeMap::new(),
         },
+        row.previous_layout.as_ref(),
+        row.lease_reuse.as_ref(),
     )
 }
 pub(super) fn commit(ctx: &ReducerContext, mut row: LoadedRun, encoded: Encoded) {
     // Remove only this run's no-longer-referenced private payloads. This follows
     // the kernel's existing trace/lease eviction; authority audit is untouched.
-    for id in row
-        .catalog
-        .blobs
-        .keys()
-        .filter(|id| !row.catalog.live.contains(id))
-    {
+    // Reused derived fragments are deliberately not read or interned during a
+    // save. Preserve their references, and collect evicted fragments even when
+    // their bodies were never hydrated into the canonical World catalog.
+    row.catalog
+        .live
+        .extend(codec::derived_fragment_ids(&encoded.layout));
+    let mut previous_ids: BTreeSet<u64> = row.catalog.blobs.keys().copied().collect();
+    if let Some(layout) = &row.previous_layout {
+        for (id, actor) in codec::derived_fragment_owners(layout) {
+            if !row.catalog.live.contains(&id) {
+                // A retained reference never authorizes deleting an arbitrary
+                // numeric row. Validate only evicted fragments here; unchanged
+                // saves still avoid fetching/hashing every retained body.
+                let blob = ctx
+                    .db
+                    .sim_world_blob()
+                    .id()
+                    .find(id)
+                    .expect("evicted captured read exists");
+                validate(&blob, &row.id, Some(actor), "captured_read_v1", id)
+                    .expect("valid evicted captured read scope and content");
+            }
+            previous_ids.insert(id);
+        }
+    }
+    for id in previous_ids.difference(&row.catalog.live) {
         ctx.db.sim_world_blob().id().delete(*id);
     }
     row.row.state = encoded.state;
@@ -271,11 +385,20 @@ pub(super) fn world_for_view(ctx: &ViewContext, run: &str) -> Option<World> {
     Some(world)
 }
 fn decode_view(ctx: &ViewContext, row: &SimRunStore) -> World {
+    // Full World hydration batches selected canonical payload kinds. The
+    // small participant-status reader below keeps empty staging.
+    let staged_blobs = prefetch_selected_blobs(|kind| {
+        ctx.db
+            .sim_world_blob()
+            .run_and_kind()
+            .filter((row.id.as_str(), kind))
+    });
     let world = codec::decode(
         &row.state,
         &mut Reader {
             ctx,
             catalog: Catalog::default(),
+            staged_blobs,
         },
     )
     .unwrap_or_else(|error| panic!("corrupt normalized run: {error}"));
@@ -290,6 +413,7 @@ pub(super) fn status_for_view(ctx: &ViewContext, run: &str, actor: u32, body: &s
         &mut Reader {
             ctx,
             catalog: Catalog::default(),
+            staged_blobs: BTreeMap::new(),
         },
     )
     .unwrap_or_else(|error| panic!("corrupt normalized participant status: {error}"))
@@ -313,3 +437,87 @@ pub fn sim_run(ctx: &ViewContext) -> Vec<SimRun> {
         })
         .collect()
 }
+
+// Explicit one-shot owner exports. Their private-row reads do not invoke or
+// materialize compatibility views, and no adapter operation can write rows.
+struct OwnerExportReader<'a> {
+    ctx: &'a ReducerContext,
+    catalog: Catalog,
+    staged_blobs: BTreeMap<u64, SimWorldBlob>,
+}
+impl Blobs for OwnerExportReader<'_> {
+    fn intern(&mut self, _: &str, _: Option<u32>, _: &str, _: String) -> Result<u64, String> {
+        Err("read-only storage adapter".into())
+    }
+    fn get(
+        &mut self,
+        run: &str,
+        actor: Option<u32>,
+        kind: &str,
+        id: u64,
+    ) -> Result<String, String> {
+        staged_cached(
+            &mut self.catalog,
+            &mut self.staged_blobs,
+            run,
+            actor,
+            kind,
+            id,
+            || self.ctx.db.sim_world_blob().id().find(id),
+        )
+    }
+}
+fn decode_owned_export<B: Blobs>(
+    row: Option<SimRunStore>,
+    caller: Identity,
+    reader: impl FnOnce(&str) -> B,
+) -> Result<World, String> {
+    let row = row
+        .filter(|row| row.owner == caller)
+        .ok_or("run unavailable")?;
+    // Ownership precedes even reader construction, which prefetches blobs.
+    let world =
+        codec::decode(&row.state, &mut reader(&row.id)).map_err(|_| "stored run invalid")?;
+    if world.run != row.id {
+        return Err("stored run invalid".into());
+    }
+    Ok(world)
+}
+fn export_owned_world(ctx: &ReducerContext, run: &str) -> Result<World, String> {
+    let row = ctx.db.sim_run_store().id().find(run.to_owned());
+    decode_owned_export(row, ctx.sender(), |run| OwnerExportReader {
+        ctx,
+        catalog: Catalog::default(),
+        staged_blobs: prefetch_selected_blobs(|kind| {
+            ctx.db.sim_world_blob().run_and_kind().filter((run, kind))
+        }),
+    })
+}
+#[spacetimedb::procedure]
+pub fn sim_owned_run_ids(ctx: &mut spacetimedb::ProcedureContext) -> Result<Vec<String>, String> {
+    let mut ids: Vec<String> = ctx.with_tx(|tx| {
+        tx.db
+            .sim_run_store()
+            .owner()
+            .filter(tx.sender())
+            .map(|row| row.id)
+            .collect()
+    });
+    ids.sort();
+    Ok(ids)
+}
+#[spacetimedb::procedure]
+pub fn sim_export_owned_run(
+    ctx: &mut spacetimedb::ProcedureContext,
+    run: String,
+) -> Result<String, String> {
+    // Closure-local reads only: the SDK may retry this transaction once.
+    let world = ctx.try_with_tx(|tx| export_owned_world(tx, &run))?;
+    // This owned World is the coherent transaction snapshot. Serialization
+    // happens after the transaction completes and performs no database reads.
+    serde_json::to_string(&world).map_err(|_| "world serialization failed".into())
+}
+
+#[cfg(test)]
+#[path = "storage_tests.rs"]
+mod tests;
