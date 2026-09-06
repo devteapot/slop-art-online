@@ -217,8 +217,12 @@ def main():
                       controller_schedules={"builtin":f"host serial behavior/communication/learning; {args.serial_ms}ms after each completion", "external":f"MCP process serial behavior/communication/learning; {args.serial_ms}ms after each completion"},
                       reasoning_note="Requested effort sent explicitly; endpoint acceptance is not effective-effort attestation")
     write(out / "pilot.json", report)
-    signal.signal(signal.SIGTERM, lambda *_: stop.set())
-    signal.signal(signal.SIGINT, lambda *_: stop.set())
+    def interrupted(signum, _frame):
+        report.setdefault("interruption", dict(signal=signal.Signals(signum).name, received_at=time.time()))
+        stop.set()
+
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
     host_log = (out / "host.log").open("w")
     host = subprocess.Popen([str(binaries[0])], env=env, stdout=host_log, stderr=host_log,
                             start_new_session=True, cwd=implementation)
@@ -363,11 +367,14 @@ def main():
         # is pending; subsequent calls cannot pause or slow the simulation clock.
         call("sim_operator_clock", active["run"], report["tick_ms"], False)
         if controllers: (out / "start-harness").touch()
-        report.update(phase="running", started_at=time.time(), deadline_at=time.time() + args.minutes * 60)
+        started_monotonic = time.monotonic()
+        started_at = time.time()
+        report.update(phase="running", started_at=started_at, deadline_at=started_at + args.minutes * 60)
         write(out / "pilot.json", report)
         print(f"Live pilot running for {args.minutes} minutes; model-call cap: {report['max_model_calls'] or 'none'}", flush=True)
-        deadline = time.monotonic() + args.minutes * 60
+        deadline = started_monotonic + args.minutes * 60
         last_tick = None
+        terminal_reason = None
         with concurrent.futures.ThreadPoolExecutor(max_workers=maximum_actors) as pool:
             workers = {actor: pool.submit(worker, actor) for actor in participant_by_actor
                        if args.npc_runtime == "pilot" or participant_by_actor[actor]["role"] == "external"}
@@ -397,6 +404,7 @@ def main():
                             with (out / "observations.jsonl").open("a") as stream:
                                 stream.write(json.dumps(metrics) + "\n")
                         if w["stopped"] or all(p["health"] <= 0 for p in w["players"]):
+                            terminal_reason = "world_stopped" if w["stopped"] else "all_actors_dead"
                             break
                     with lock:
                         report["last_observed_tick"] = last_tick
@@ -405,10 +413,21 @@ def main():
                         if worker_job.done():
                             worker_job.result()
             finally:
+                # Capture active duration before draining workers or exporting the
+                # authority. Cleanup time must never satisfy the requested duration.
+                ended_monotonic = time.monotonic()
+                reason = ("interrupted" if report.get("interruption") else terminal_reason
+                          or ("duration_elapsed" if ended_monotonic >= deadline else "unexplained_stop"))
+                report["completion"] = dict(protocol="sao-pilot-completion-v1", reason=reason,
+                    requested_seconds=args.minutes * 60,
+                    observed_wall_seconds=ended_monotonic - started_monotonic, ended_at=time.time())
                 stop.set()
                 if newcomer:
                     (out / "stop-enrollment").touch()
-        report["phase"] = "completed"
+        if report["completion"]["reason"] in ("interrupted", "unexplained_stop"):
+            report.update(phase="failed", error="Pilot interrupted before a valid completion")
+        else:
+            report["phase"] = "completed"
     except Exception as error:
         report.update(phase="failed", error=str(error))
         raise
@@ -449,6 +468,7 @@ def main():
                 write(out / active["run"] / "final-snapshot.json", dict(world=final_world, events=final_events))
                 report["final_time_ms"] = final_world["timing"]["time_ms"]
                 report["final_snapshot"] = str(out / active["run"] / "final-snapshot.json")
+                report["final_snapshot_sha256"] = hashlib.sha256(Path(report["final_snapshot"]).read_bytes()).hexdigest()
                 reasoning = list((out / active["run"] / "reasoning").rglob("harness-*.json"))
                 report["builtin_model_calls"] = len(reasoning)
                 report["builtin_journal"] = str(out / active["run"] / "reasoning")
@@ -457,6 +477,8 @@ def main():
         else:
             terminate(host)
         report["finished_at"] = time.time()
+        if report.get("interruption"):
+            report.update(phase="failed", error="Pilot received a termination signal; retained evidence is an interrupted sample")
         write(out / "pilot.json", report)
         host_log.close()
         print(f"Pilot {report['phase']}; evidence: {out}. Observer host remains available if started.", flush=True)

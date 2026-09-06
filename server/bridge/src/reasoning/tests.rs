@@ -144,7 +144,8 @@ fn schema_comes_from_authoritative_decision_and_skills() {
     }
     assert_eq!(schema["required"].as_array().unwrap().len(), 3);
     let roots = schema["properties"]["policy"]["anyOf"].as_array().unwrap();
-    assert_eq!(roots.len(), 5);
+    assert_eq!(roots.len(), 6);
+    assert!(roots.iter().any(|v| v["properties"]["kind"]["const"] == "once"));
     assert!(roots.iter().any(|v| v["properties"]["kind"]["const"] == "when"));
     assert!(roots
         .iter()

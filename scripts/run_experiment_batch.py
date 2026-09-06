@@ -6,6 +6,7 @@ Review each completed batch before creating the next hypothesis manifest.
 """
 import argparse
 import json
+import math
 import os
 import re
 import signal
@@ -132,6 +133,43 @@ def compare(record, folder):
                 details=str(folder / 'LIVE_RESULT.json'))
 
 
+def validate_completion(record, folder):
+    """Require a measured end condition and final authority provenance, not exit 0."""
+    pilot = json.loads((folder / 'pilot.json').read_text())
+    if pilot.get('phase') != 'completed' or pilot.get('interruption') or pilot.get('pause_error'):
+        raise ValueError('Pilot did not complete without interruption and confirmed cleanup')
+    completion = pilot.get('completion') or {}
+    if completion.get('protocol') != 'sao-pilot-completion-v1':
+        raise ValueError('Pilot lacks measured completion provenance')
+    requested = record['minutes'] * 60
+    elapsed = completion.get('observed_wall_seconds')
+    if (completion.get('requested_seconds') != requested or pilot.get('minutes') != record['minutes']
+            or type(elapsed) not in (int, float) or not math.isfinite(elapsed) or elapsed < 0):
+        raise ValueError('Pilot completion duration differs from the planned sample')
+    if pilot.get('run') != record['run']:
+        raise ValueError('Pilot final authority belongs to a different run')
+    source = (folder / record['run'] / 'final-snapshot.json').resolve()
+    if (Path(pilot.get('final_snapshot', '')).resolve() != source
+            or not source.is_file() or digest(source) != pilot.get('final_snapshot_sha256')):
+        raise ValueError('Pilot final snapshot provenance is missing or mismatched')
+    world = json.loads(source.read_text())['world']
+    if world.get('run') != record['run'] or world['timing']['time_ms'] != pilot.get('final_time_ms'):
+        raise ValueError('Pilot final authority identity or timing does not match')
+    reason = completion.get('reason')
+    if reason == 'duration_elapsed':
+        if elapsed < requested:
+            raise ValueError('Pilot ended before the minimum active duration; cleanup does not count')
+    elif reason == 'world_stopped':
+        if world.get('stopped') is not True:
+            raise ValueError('Claimed world termination is absent from final authority')
+    elif reason == 'all_actors_dead':
+        if not world.get('players') or any(p['health'] > 0 for p in world['players']):
+            raise ValueError('Claimed population termination is absent from final authority')
+    else:
+        raise ValueError('Pilot lacks a valid terminal reason')
+    return completion
+
+
 def cleanup(jobs, failed):
     # Give all supervisors a chance to pause their authority and export evidence in
     # parallel. They intentionally keep paused observer hosts on successful runs.
@@ -188,8 +226,9 @@ def main():
     jobs, databases = [], set()
     stop = False
 
-    def interrupted(*_):
+    def interrupted(signum, _frame):
         nonlocal stop
+        report.setdefault('interruption', dict(signal=signal.Signals(signum).name, received_at=time.time()))
         stop = True
 
     signal.signal(signal.SIGINT, interrupted)
@@ -246,19 +285,30 @@ def main():
                 time.sleep(1)
             if any(j.returncode for j, _, _, _ in group_jobs):
                 raise RuntimeError('A variant failed')
+            if stop:
+                raise RuntimeError('Batch cancelled before completion validation')
             for job, log, folder, record in group_jobs:
                 log.close()
-                summarize(folder)
+                try:
+                    record['completion'] = validate_completion(record, folder)
+                    summarize(folder)
+                except (Exception, SystemExit) as error:
+                    record.update(phase='failed', exit_code=job.returncode, error=str(error))
+                    raise
                 record.update(phase='completed', exit_code=job.returncode)
                 report['comparison'].append(compare(record, folder))
                 write(out / 'comparison.json', report['comparison'])
                 write(out / 'batch.json', report)
+        if stop:
+            raise RuntimeError('Batch cancelled during completion validation')
         report.update(phase='completed', finished_at=time.time())
         print(json.dumps(report['comparison'], indent=2), flush=True)
     except (Exception, SystemExit) as error:
         report.update(phase='failed', error=str(error), finished_at=time.time())
         raise
     finally:
+        if stop:
+            report.update(phase='failed', error='Batch received a termination signal', finished_at=time.time())
         report['cleanup_errors'] = cleanup(jobs, report['phase'] != 'completed')
         write(out / 'batch.json', report)
 

@@ -17,7 +17,8 @@ from summarize_arena_matrix import summarize as summarize_arena
 from summarize_society import summarize as summarize_society
 
 KNOWLEDGE_EVENTS = ('knowledge_seeded', 'knowledge_asserted', 'knowledge_taught',
-                    'knowledge_recorded', 'knowledge_consulted', 'archive_destroyed')
+                    'knowledge_recorded', 'knowledge_consulted', 'archive_destroyed',
+                    'compute_completed', 'compute_retrieved')
 
 
 def reference(event):
@@ -37,6 +38,7 @@ def analyze(world, events):
     alive = {p['id'] for p in initial['players'] if p['health'] > 0}
     archives = {a['id']: set() for a in initial.get('archives', [])}
     destroyed = set()
+    terminals = {}
     records, acquisitions, timeline, deaths, destructions, interventions = {}, [], [], [], [], []
     operation_counts = collections.Counter()
     added_counts = collections.Counter()
@@ -46,7 +48,9 @@ def analyze(world, events):
     def availability():
         return {record: dict(living_carriers=sorted(a for a, copies in personal.items() if a in alive and record in copies),
                              dead_holders=sorted(a for a, copies in personal.items() if a not in alive and record in copies),
-                             archive_copies=sorted(a for a, copies in archives.items() if a not in destroyed and record in copies))
+                             archive_copies=sorted(a for a, copies in archives.items() if a not in destroyed and record in copies),
+                             terminal_copies=[dict(station=s, job=j, owner=copy['owner'], owner_alive=copy['owner'] in alive)
+                                              for (s, j), copy in sorted(terminals.items()) if copy['record']==record])
                 for record in sorted(records)}
 
     def mark_copy(event, copies, record, declared):
@@ -73,11 +77,27 @@ def analyze(world, events):
                 changed = True
         if kind in KNOWLEDGE_EVENTS:
             operation_counts[kind] += 1
-            if kind in ('knowledge_taught', 'knowledge_recorded', 'knowledge_consulted'):
+            if kind in ('knowledge_taught', 'knowledge_recorded', 'knowledge_consulted', 'compute_retrieved'):
                 declared = data.get('new_copy', data.get('added'))
                 counter = added_counts if declared is True else repeat_counts if declared is False else unknown_counts
                 counter[kind] += 1
-        if kind == 'perception' and data.get('kind') == 'knowledge_report':
+        if kind == 'compute_completed':
+            record = data.get('record', {})
+            rid = record.get('id')
+            key = (data.get('station'), data.get('job'))
+            if not rid or None in key or record.get('origin') != event['id']:
+                violations.append(f"Event {event['id']} lacks its material compute output record")
+            elif key in terminals or rid in records:
+                violations.append(f"Event {event['id']} reuses a terminal output or record identity")
+            else:
+                records[rid] = record
+                terminals[key] = dict(record=rid, owner=actor)
+                changed = True
+        elif kind == 'compute_retrieved':
+            copy = terminals.get((data.get('station'), data.get('job')))
+            if not copy or copy['record'] != data.get('record') or copy['owner'] != actor:
+                violations.append(f"Event {event['id']} retrieves a missing or foreign terminal output")
+        elif kind == 'perception' and data.get('kind') == 'knowledge_report':
             content = data.get('content', {})
             record = content.get('record', {})
             rid = record.get('id')
@@ -136,6 +156,17 @@ def analyze(world, events):
                                                  interpreted_source=h.get('interpreted_source'),
                                                  interpretation=h.get('interpretation'), confidence=h.get('confidence')) for h in holdings]))
     final_archives = []
+    final_terminals = {}
+    for station in world.get('infrastructure', {}).get('stations', []):
+        for job in station.get('jobs', []):
+            record = job.get('report')
+            if record:
+                key = (station['seed']['id'], job['id'])
+                final_terminals[key] = dict(record=record['id'], owner=job['owner'])
+                if records.get(record['id']) != record:
+                    violations.append(f'Terminal job {key} changes its recorded output payload')
+    if final_terminals != terminals:
+        violations.append('Final physical terminal copies differ from recorded completed jobs')
     for archive in world.get('archives', []):
         aid = archive['id']
         actual = {r['id'] for r in archive.get('records', [])}

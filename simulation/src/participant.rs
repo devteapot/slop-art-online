@@ -1,5 +1,8 @@
 //! Versioned, transport-independent character commands. Authority authenticates actor separately.
 use super::*;
+use std::sync::Arc;
+use std::sync::OnceLock;
+use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
 pub const API_VERSION: &str = "sao-participant-v1";
 pub const TRACE_LIMIT: usize = 256;
@@ -8,11 +11,29 @@ pub const EVIDENCE_LEASE_MS: u64 = 330_000;
 pub struct EvidenceLease {
     #[serde(default)]
     pub request_id: String,
-    #[serde(default)]
-    pub observation: Value,
+    #[serde(default="empty_observation")]
+    pub observation: Arc<RawValue>,
     pub observed_cursor: u64,
     pub expires_ms: u64,
-    pub experiences: Vec<Experience>,
+    pub experiences: Arc<Vec<Experience>>,
+}
+fn empty_observation() -> Arc<RawValue> {
+    serde_json::value::to_raw_value(&Value::Null).unwrap().into()
+}
+#[derive(Serialize)]
+struct CapturedRead<'a> {request_id:&'a str, observation:Box<RawValue>}
+fn captured_read(lease:&EvidenceLease) -> Result<CapturedRead<'_>,String> {
+    // The captured context is immutable JSON. Keep it opaque during world
+    // loading/cloning; append the separately retained evidence without parsing
+    // its full object graph for every other character's command or clock pulse.
+    let body=lease.observation.get().trim();
+    let prefix=body.strip_prefix('{').and_then(|_|body.strip_suffix('}')).ok_or("invalid captured observation object")?;
+    let experiences=serde_json::to_string(&lease.experiences).map_err(|e|e.to_string())?;
+    let mut result=String::with_capacity(body.len()+experiences.len()+20);
+    result.push_str(prefix);
+    if prefix.trim_end()!="{" {result.push(',');}
+    result.push_str("\"experiences\":");result.push_str(&experiences);result.push('}');
+    Ok(CapturedRead{request_id:&lease.request_id,observation:RawValue::from_string(result).map_err(|e|e.to_string())?})
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Experience {
@@ -22,10 +43,58 @@ pub struct Experience {
     pub location: i32,
     pub kind: String,
     pub parents: Vec<u64>,
-    pub data: Value,
+    pub data: ExperienceData,
+}
+// Historical payloads are immutable. Retain their JSON encoding across clock
+// pulses and only materialize a value when an evidence check needs its fields.
+// Clones share both representations; the persisted and participant API shapes
+// remain ordinary JSON objects, with no wrapper fields.
+#[derive(Clone, Debug)]
+pub struct ExperienceData(Arc<ExperienceDataInner>);
+#[derive(Debug)]
+struct ExperienceDataInner {
+    raw: Box<RawValue>,
+    parsed: OnceLock<Value>,
+}
+impl From<&Value> for ExperienceData {
+    fn from(value: &Value) -> Self {
+        Self(Arc::new(ExperienceDataInner {
+            raw: serde_json::value::to_raw_value(value).expect("JSON value serializes"),
+            parsed: OnceLock::new(),
+        }))
+    }
+}
+impl std::ops::Deref for ExperienceData {
+    type Target = Value;
+    fn deref(&self) -> &Value {
+        self.0.parsed.get_or_init(|| serde_json::from_str(self.0.raw.get()).expect("validated historical JSON"))
+    }
+}
+impl Serialize for ExperienceData {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.raw.serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for ExperienceData {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self(Arc::new(ExperienceDataInner {
+            raw: Box::<RawValue>::deserialize(deserializer)?,
+            parsed: OnceLock::new(),
+        })))
+    }
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct ParticipantState {
+#[serde(transparent)]
+pub struct ParticipantState(Arc<ParticipantStateData>);
+impl std::ops::Deref for ParticipantState {
+    type Target=ParticipantStateData;
+    fn deref(&self)->&Self::Target {&self.0}
+}
+impl std::ops::DerefMut for ParticipantState {
+    fn deref_mut(&mut self)->&mut Self::Target {Arc::make_mut(&mut self.0)}
+}
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ParticipantStateData {
     pub control_epoch: u64,
     pub learning_revision: u64,
     pub cursor: u64,
@@ -162,6 +231,9 @@ fn replace_at(node: &mut Node, parts: &[&str], replacement: Node) -> Result<(), 
         return Ok(());
     }
     match node {
+        Node::Once { child } if parts[0] == "once" => {
+            replace_at(child, &parts[1..], replacement)
+        }
         Node::Guard { child, .. } if parts[0] == "guard" => {
             replace_at(child, &parts[1..], replacement)
         }
@@ -248,14 +320,15 @@ impl World {
             .filter(|id| s.experiences.iter().any(|x| x.source == **id))
             .copied()
             .collect();
+        let cursor=s.cursor;
         s.experiences.push(Experience {
-            cursor: s.cursor,
+            cursor,
             source: e.id,
             tick: e.tick,
             location,
             kind: e.kind.clone(),
             parents,
-            data: e.data.clone(),
+            data: (&e.data).into(),
         });
         if s.experiences.len() > TRACE_LIMIT {
             s.experiences.remove(0);
@@ -267,6 +340,9 @@ impl World {
         after: u64,
         limit: usize,
     ) -> Result<Value, String> {
+        self.participant_snapshot_inner(actor,after,limit,true)
+    }
+    fn participant_snapshot_inner(&self, actor:u32, after:u64, limit:usize, include_reads:bool) -> Result<Value,String> {
         if !self.participant_mode {
             return Err("legacy run has no participant-v1 contract".into());
         }
@@ -291,13 +367,33 @@ impl World {
             "control_epoch":s.control_epoch,"policy_revision":self.players[i].generation,"learning_revision":s.learning_revision,
             "context":self.context(i),"experiences":experiences,"next_cursor":next,"latest_cursor":s.cursor,"oldest_cursor":oldest,"gap":after.saturating_add(1)<oldest,
             "receipts":s.receipts,"queued_speech":s.speech,
-            "read_observations":s.evidence_leases.iter().filter(|l| l.expires_ms >= self.timing.time_ms && !l.observation.is_null()).map(|l| {
-                let mut observation=l.observation.clone(); observation["experiences"]=json!(l.experiences);
-                json!({"request_id":l.request_id,"observation":observation})
-            }).collect::<Vec<_>>(),"capabilities":["replace_tree","patch_subtree","speak","reflect","pin_observation","read_observation"],
+            "read_observations":s.evidence_leases.iter().filter(|l| include_reads && l.expires_ms >= self.timing.time_ms && l.observation.get()!="null").map(captured_read).collect::<Result<Vec<_>,_>>()?,"capabilities":["replace_tree","patch_subtree","speak","reflect","pin_observation","read_observation"],
             "limits":{"tree_nodes":64,"tree_depth":8,"children":8,"speech_queue":8,"trace_retention":TRACE_LIMIT,"evidence_lease_ms":EVIDENCE_LEASE_MS,"evidence_leases":4,"reflections":8},
             "patch_semantics":"Replace one node at a canonical path with NO leading slash. The whole tree is root; zero-based children are root/0, root/1, root/2. A guarded child is root/2/guard and a when child is root/2/when. Paths such as /2, /root/0 and root/children/0 are invalid. /guard and /when descend into the CHILD, not its condition; replace the enclosing guard node to change its condition. Repeating a condition inside the child keeps the old outer condition active. Reset cursors at/under patch; retain ancestor/sibling progress; interrupt active leaf only if inside patch; next update rechecks current guards"}),
         )
+    }
+    /// Subscription status is deliberately small and stable between commands.
+    /// Fresh subjective state comes only from an atomic ReadObservation receipt.
+    pub fn participant_status(&self, actor: u32) -> Result<Value, String> {
+        serde_json::from_str(&self.participant_status_json(actor)?).map_err(|e|e.to_string())
+    }
+    /// Stream borrowed immutable read results directly. Building a Value tree
+    /// here needlessly cloned every retained observation on every world save.
+    pub fn participant_status_json(&self, actor: u32) -> Result<String, String> {
+        #[derive(Serialize)]
+        struct Status<'a> {#[serde(flatten)] head:Value, read_observations:Vec<CapturedRead<'a>>}
+        if !self.participant_mode {return Err("legacy run has no participant-v1 contract".into());}
+        let i=self.idx(actor)?;
+        let s=self.participants.get(&actor).ok_or("character not provisioned")?;
+        let head=json!({"api_version":API_VERSION,"projection":"status; use read_observation for fresh subjective state",
+            "run":self.run,"actor":actor,"tick":self.tick,"stopped":self.stopped,
+            "latest_cursor":s.cursor,"oldest_cursor":s.experiences.first().map(|e|e.cursor).unwrap_or(1),
+            "control_epoch":s.control_epoch,"policy_revision":self.players[i].generation,"learning_revision":s.learning_revision,
+            "context":{"player":{"health":self.players[i].health}},"receipts":s.receipts,
+            "capabilities":["read_observation","replace_tree","patch_subtree","speak","reflect","pin_observation"]
+        });
+        let read_observations=s.evidence_leases.iter().filter(|l|l.expires_ms>=self.timing.time_ms && l.observation.get()!="null").map(captured_read).collect::<Result<Vec<_>,_>>()?;
+        serde_json::to_string(&Status{head,read_observations}).map_err(|e|e.to_string())
     }
     pub fn change_control(&mut self, actor: u32) -> Result<(), String> {
         let i = self.idx(actor)?;
@@ -414,7 +510,7 @@ impl World {
                 let limit = (*limit).clamp(1, 128);
                 // Initial reads show the newest page. Incremental reads preserve cursor order.
                 let start = if *after == 0 { latest.saturating_sub(limit as u64) } else { *after };
-                let mut observation = self.participant_snapshot(actor, start, limit)?;
+                let mut observation = self.participant_snapshot_inner(actor, start, limit, false)?;
                 observation.as_object_mut().unwrap().remove("read_observations");
                 let experiences: Vec<Experience> = serde_json::from_value(observation.as_object_mut().unwrap().remove("experiences").unwrap())
                     .map_err(|_| "invalid observation projection")?;
@@ -423,8 +519,8 @@ impl World {
                 observation["limits"]["read_page"] = json!(128);
                 let s = self.participants.get_mut(&actor).unwrap();
                 s.evidence_leases.retain(|l| l.expires_ms >= self.timing.time_ms);
-                s.evidence_leases.push(EvidenceLease { request_id: request.request_id.clone(), observation,
-                    observed_cursor: latest, expires_ms: self.timing.time_ms.saturating_add(EVIDENCE_LEASE_MS), experiences });
+                s.evidence_leases.push(EvidenceLease { request_id: request.request_id.clone(), observation:serde_json::value::to_raw_value(&observation).map_err(|e|e.to_string())?.into(),
+                    observed_cursor: latest, expires_ms: self.timing.time_ms.saturating_add(EVIDENCE_LEASE_MS), experiences:Arc::new(experiences) });
                 if s.evidence_leases.len() > 4 { s.evidence_leases.remove(0); }
             }
             Command::PinObservation { observed_cursor, sources } => {
@@ -441,8 +537,8 @@ impl World {
                     experiences.push(e.clone());
                 }
                 s.evidence_leases.retain(|l| l.expires_ms >= self.timing.time_ms && l.observed_cursor != *observed_cursor);
-                s.evidence_leases.push(EvidenceLease { request_id: request.request_id.clone(), observation: Value::Null, observed_cursor: *observed_cursor,
-                    expires_ms: self.timing.time_ms.saturating_add(EVIDENCE_LEASE_MS), experiences });
+                s.evidence_leases.push(EvidenceLease { request_id: request.request_id.clone(), observation: empty_observation(), observed_cursor: *observed_cursor,
+                    expires_ms: self.timing.time_ms.saturating_add(EVIDENCE_LEASE_MS), experiences:Arc::new(experiences) });
                 if s.evidence_leases.len() > 4 { s.evidence_leases.remove(0); }
             }
             Command::ReplaceTree {
@@ -516,6 +612,9 @@ impl World {
                 e.state.cursors.retain(|p, _| !within(p, path));
                 e.state.branches.retain(|p, _| !within(p, path));
                 e.state.entries.retain(|p| !within(p, path));
+                // Replacing a completed once subtree (or its child) explicitly
+                // re-arms that intent; unrelated patches preserve completion.
+                e.state.once_completed.retain(|p| !within(p,path) && !within(path,p));
                 e.policy = Some(tree);
                 e.decision = cause;
                 self.players[i].execution = Some(e);
@@ -590,7 +689,7 @@ impl World {
                         .find(|e| e.source == r.source && e.cursor <= *observed_cursor)
                         .or_else(|| s.evidence_leases.iter()
                             .filter(|l| l.observed_cursor == *observed_cursor && l.expires_ms >= self.timing.time_ms)
-                            .flat_map(|l| &l.experiences).find(|e| e.source == r.source))
+                            .flat_map(|l| l.experiences.iter()).find(|e| e.source == r.source))
                         .ok_or("source not in supplied retained character trace")?;
                     let (from, location) = if e.kind == "perception" {
                         (
@@ -631,7 +730,7 @@ impl World {
                         kind: e.kind.clone(),
                         from,
                         location,
-                        content: e.data.clone(),
+                        content: (*e.data).clone(),
                     });
                 }
                 let d = Decision {
@@ -661,7 +760,7 @@ impl World {
                     .experiences
                     .iter()
                     .chain(self.participants[&actor].evidence_leases.iter()
-                        .filter(|l| l.expires_ms >= self.timing.time_ms).flat_map(|l| &l.experiences))
+                        .filter(|l| l.expires_ms >= self.timing.time_ms).flat_map(|l| l.experiences.iter()))
                     .map(|e| e.source)
                     .collect();
                 self.participants
@@ -787,6 +886,7 @@ pub fn state_contract() -> Value {
             "food":"Number of carried food units, not food visible at a site. An eat attempt requires at least one carried unit. Eating and resting are allowed at ANY position, including roads and the thicket; shelter only improves rest and protects from cold. Moving to shelter itself requires energy."
         },
         "behavior_execution": {
+            "once":"Runs its child until first success, then returns failure on later visits so priority can choose other work. Completion persists across cycles and reload until the subtree or its child is explicitly replaced. Failed children may retry; preemption does not complete them.",
             "when":"Entry condition: checks its condition only before starting the child. Once started, a running child continues even if that condition changes. Completion, failure, replacement or a false enclosing continuous guard ends this commitment. A higher-priority branch suspends it; its entry condition and sequence progress are retained so it can resume afterward. The currently executing skill can restart on resumption. Use this node when the condition describes when a task may START, and guard when it must remain true throughout the task.",
             "guard":"Continuously rechecked while its child runs. It is not just an entry prerequisite. If it becomes false, the child branch and its sequence progress are abandoned. A condition that changes as a direct consequence of the child can therefore interrupt that child.",
             "sequence":"Runs children in order. Progress persists while the branch remains active. Failure or a false enclosing continuous guard clears its progress. Switching to a higher-priority branch suspends this sequence and retains its cursor; when selected again it resumes the unfinished child.",

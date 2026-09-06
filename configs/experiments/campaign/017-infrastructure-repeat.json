@@ -1,0 +1,41 @@
+{
+  "hypothesis": "Repeat the four infrastructure controls with unchanged initial physical stocks, personal knowledge and habits under the runtime that supports a persistent once behavior node and retrieval of the oldest personally owned completed uncollected job. Participants may choose to use those capabilities; no compute sequence is authored.",
+  "evaluation": "Run four concurrent eight-minute fresh Luna-medium samples with fifteen-second post-completion cadence and no call cap on infrastructure-m5-2. All four actors begin at sheltered camp 84. Actors 1/3 are electric with battery 80/100 and drain 1 per 2500 ms (24/min each); actors 2/4 need nutrients, reference 48/35 meals/min each. Food production is 4/min with initial pantry 6 and two meals per nutrient body. Baseline station generation is 72 electricity/min with buffer 30/capacity 100, versus 48/min body demand before computation; stock ceilings and access make nominal output different from usable output. Power changes only generation to 24/min, cooling only station water 20 to 1, access only removes actor 3's initial use permission. Owner 1 retains administrative rights; actor 2 can maintain and actor 4 can use/deposit. Carried parts 12 on 2 and water 12 on 4 stay identical. A forecast costs 3 physical quanta, 6 electricity, 3 water and 3 integrity, uses explicit submitted assumptions and personally held sources, and requires explicit local retrieval. Its arithmetic is not an oracle. Trace input provenance, queued/blocked/completed/retrieved jobs, actual consumption, own report interpretation and subsequent choices. Count charging separately from stamina/rest and food; retain denied access, outages, cooling stalls, failed proposals, deaths and absent work. Initial habits contain only ordinary survival and electric charging, never authored compute/grant/repair sequences. Knowledge priors provide planning methods and maintenance guidance rather than current remote truth or fabricated results. Compare actual energy, food, water and part ledgers, controller errors and simulation/wall time. No new population, stronger backend model or automatic social agreement is introduced. This repeats batch 016 with exactly the same scenario and controller inputs. Runtime m5-2 adds a persistent once node and retrieve_ready for the oldest personally owned completed uncollected job, resolving the repeated-job and unknown-future-ID concerns raised in an actual batch 016 owner proposal. No initial policy contains either new capability. Compare actual job choices, costs, retrievals, interpretations, access, support and deaths; absence of use remains a result.",
+  "minutes": 8,
+  "calls_per_actor": 0,
+  "serial_ms": 15000,
+  "variants": [
+    {
+      "id": "baseline",
+      "port": 18977,
+      "implementation": "output/society-lab/implementations/infrastructure-m5-2",
+      "scenario": "output/society-lab/implementations/infrastructure-m5-2/scenarios/infrastructure-baseline.json",
+      "controllers": "output/society-lab/implementations/infrastructure-m5-2/configs/experiments/infrastructure-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "power",
+      "port": 18978,
+      "implementation": "output/society-lab/implementations/infrastructure-m5-2",
+      "scenario": "output/society-lab/implementations/infrastructure-m5-2/scenarios/infrastructure-power.json",
+      "controllers": "output/society-lab/implementations/infrastructure-m5-2/configs/experiments/infrastructure-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "cooling",
+      "port": 18979,
+      "implementation": "output/society-lab/implementations/infrastructure-m5-2",
+      "scenario": "output/society-lab/implementations/infrastructure-m5-2/scenarios/infrastructure-cooling.json",
+      "controllers": "output/society-lab/implementations/infrastructure-m5-2/configs/experiments/infrastructure-4-medium.json",
+      "recovery": true
+    },
+    {
+      "id": "access",
+      "port": 18980,
+      "implementation": "output/society-lab/implementations/infrastructure-m5-2",
+      "scenario": "output/society-lab/implementations/infrastructure-m5-2/scenarios/infrastructure-access.json",
+      "controllers": "output/society-lab/implementations/infrastructure-m5-2/configs/experiments/infrastructure-4-medium.json",
+      "recovery": true
+    }
+  ]
+}

@@ -1,0 +1,773 @@
+{
+  "name": "Mixed-body infrastructure: power",
+  "seed": 4242,
+  "max_ticks": 192,
+  "map": {
+    "width": 16,
+    "height": 12,
+    "blocked": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      31,
+      32,
+      47,
+      48,
+      63,
+      64,
+      79,
+      80,
+      95,
+      96,
+      111,
+      112,
+      127,
+      128,
+      143,
+      144,
+      159,
+      160,
+      175,
+      176,
+      177,
+      178,
+      179,
+      180,
+      181,
+      182,
+      183,
+      184,
+      185,
+      186,
+      187,
+      188,
+      189,
+      190,
+      191
+    ]
+  },
+  "arenas": [
+    {
+      "id": "mixed-infrastructure",
+      "label": "Shared mixed-body infrastructure",
+      "environment": "infrastructure-control",
+      "variant": "luna-medium",
+      "bounds": {
+        "x": 1,
+        "y": 1,
+        "width": 14,
+        "height": 10
+      },
+      "actors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "controllers": {
+        "1": "builtin",
+        "2": "external",
+        "3": "builtin",
+        "4": "external"
+      }
+    }
+  ],
+  "players": [
+    {
+      "id": 1,
+      "name": "Ari",
+      "controller": "ai",
+      "motive": "I want our shared work to be sustainable. I am interested in using the local terminal to compare an explicit electricity forecast with observed conditions, then decide what workload or charging arrangement makes sense. I can reconsider access and seek help; a prediction is not proof and owning equipment does not make other people obedient.",
+      "role": "electric analyst and local station owner",
+      "position": 84,
+      "health": 100,
+      "hunger": 0,
+      "energy": 80,
+      "food": 0,
+      "caution": 65,
+      "empathy": 80,
+      "introspection": 85,
+      "fear": 0,
+      "beliefs": [],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    },
+    {
+      "id": 2,
+      "name": "Bryn",
+      "controller": "ai",
+      "motive": "I want useful equipment and reliable food. I have a maintenance account and some carried parts. I may inspect wear or cooling and choose whether to repair, contribute supplies or negotiate help. I also need to remain fed and rested; my role is not a standing order.",
+      "role": "nutrient-supported maintenance worker",
+      "position": 84,
+      "health": 100,
+      "hunger": 20,
+      "energy": 80,
+      "food": 2,
+      "caution": 40,
+      "empathy": 45,
+      "introspection": 70,
+      "fear": 0,
+      "beliefs": [],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    },
+    {
+      "id": 3,
+      "name": "Cato",
+      "controller": "ai",
+      "motive": "I need dependable charging and want to assess whether our station can support useful work alongside everyone's needs. I may request access, use an explicit forecast, share my assessment or seek alternatives. I want fair practical arrangements, not assumed entitlement.",
+      "role": "electric resident and prospective terminal user",
+      "position": 84,
+      "health": 100,
+      "hunger": 0,
+      "energy": 80,
+      "food": 0,
+      "caution": 65,
+      "empathy": 90,
+      "introspection": 85,
+      "fear": 0,
+      "beliefs": [],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    },
+    {
+      "id": 4,
+      "name": "Dara",
+      "controller": "ai",
+      "motive": "I value reliable food and useful shared work. I carry a finite water reserve and may contribute it, ask for reciprocal help or preserve it for later after checking local conditions. I want promises and computed reports to be checked against actual supplies.",
+      "role": "nutrient-supported logistics neighbor",
+      "position": 84,
+      "health": 100,
+      "hunger": 20,
+      "energy": 80,
+      "food": 2,
+      "caution": 70,
+      "empathy": 55,
+      "introspection": 70,
+      "fear": 0,
+      "beliefs": [],
+      "relationships": {},
+      "memories": [],
+      "site_observations": [],
+      "current_goal": null,
+      "execution": null,
+      "generation": 0,
+      "failures": 0,
+      "last_reflection": 0,
+      "last_cause": null,
+      "knowledge": []
+    }
+  ],
+  "sites": [
+    {
+      "position": 84,
+      "food": 6,
+      "hazard": 0,
+      "shelter": 12
+    }
+  ],
+  "weather": {
+    "cold_after_ms": 180000,
+    "damage_per_pulse": 2,
+    "shelter_required": 12
+  },
+  "food_sources": [
+    {
+      "position": 84,
+      "interval_ms": 15000,
+      "amount": 1,
+      "capacity": 12
+    }
+  ],
+  "starting_behaviors": {
+    "1": {
+      "id": "infrastructure.electric-home-survival",
+      "revision": 1,
+      "description": "Use a local charger below half battery, recover stamina, return to the known home and observe. Battery and stamina are distinct. This ordinary starting habit is revisable; it contains no computation, maintenance or access decision.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "charge",
+                  "comparison": "below",
+                  "value": 50
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "infrastructure",
+                "duration": 1,
+                "infrastructure": {
+                  "op": "charge",
+                  "station": 1,
+                  "amount": 20
+                }
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 35
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "2": {
+      "id": "settlement.reserve-keeper",
+      "revision": 1,
+      "description": "Keep up to four carried meals from observed local supplies, recover energy, and return home when away. Observe and wait once the reserve is met; no default sharing obligation. This starting habit can be revised through experience.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "resource",
+                  "resource": "hunger",
+                  "comparison": "at_least",
+                  "value": 60
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "eat"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 35
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "below",
+                  "value": 4
+                },
+                {
+                  "kind": "food_at",
+                  "location": 84,
+                  "minimum": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "gather"
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "3": {
+      "id": "infrastructure.electric-home-survival",
+      "revision": 1,
+      "description": "Use a local charger below half battery, recover stamina, return to the known home and observe. Battery and stamina are distinct. This ordinary starting habit is revisable; it contains no computation, maintenance or access decision.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "charge",
+                  "comparison": "below",
+                  "value": 50
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "infrastructure",
+                "duration": 1,
+                "infrastructure": {
+                  "op": "charge",
+                  "station": 1,
+                  "amount": 20
+                }
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 35
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "4": {
+      "id": "settlement.shared-provider",
+      "revision": 1,
+      "description": "Keep two carried meals and recover energy at home. Deposit carried surplus only with at least four meals and observed public stock below four; gathering stops at two, so it cannot replenish that surplus for a gather/deposit cycle. Observe and wait when no contribution is needed. This habit is revisable.",
+      "tree": {
+        "kind": "priority",
+        "children": [
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "resource",
+                  "resource": "hunger",
+                  "comparison": "at_least",
+                  "value": 60
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "eat"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "resource",
+              "resource": "energy",
+              "comparison": "below",
+              "value": 35
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "rest",
+                "duration": 2
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "at",
+                "location": 84
+              }
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "move",
+                "destination": 84
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "below",
+                  "value": 2
+                },
+                {
+                  "kind": "food_at",
+                  "location": 84,
+                  "minimum": 1
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "gather"
+              }
+            }
+          },
+          {
+            "kind": "guard",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "at",
+                  "location": 84
+                },
+                {
+                  "kind": "resource",
+                  "resource": "food",
+                  "comparison": "at_least",
+                  "value": 4
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "food_at",
+                    "location": 84,
+                    "minimum": 4
+                  }
+                }
+              ]
+            },
+            "child": {
+              "kind": "action",
+              "action": {
+                "skill": "deposit"
+              }
+            }
+          },
+          {
+            "kind": "sequence",
+            "children": [
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "observe"
+                }
+              },
+              {
+                "kind": "action",
+                "action": {
+                  "skill": "wait",
+                  "duration": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "archives": [],
+  "knowledge": {
+    "1": [
+      {
+        "id": "camp-electricity-planning",
+        "topic": "Conditional electricity planning",
+        "text": "My planning method is to forecast a specified stock using explicit assumptions. For station electricity, use the current locally observed station buffer as stock and derive nominal inflow from its observed generation_amount and generation_period_ms. A working reference is 2 electric residents at 24 charge units per minute each (48 total); count actual local needs and revise this assumption if circumstances differ. A two-minute horizon can reveal a possible shortage or surplus. A full resource_forecast_v1 job also spends six station electricity, three cooling water and three integrity; body demand alone excludes compute and other uses. The terminal computes only supplied arithmetic, not future truth. Explicitly retrieve a completed report, personally assess it, and choose whether it changes charging, workload, maintenance or a request to another person. This note is not a current stock reading or proof of anyone else's future behavior.",
+        "location": 84,
+        "confidence": 80
+      }
+    ],
+    "2": [
+      {
+        "id": "camp-equipment-maintenance",
+        "topic": "Local equipment maintenance account",
+        "text": "A terminal job needs three successful compute quanta. Each quantum consumes two electricity and one cooling water and wears one integrity. Missing cooling or electricity can stop progress without making a result. Carried water can be deposited if access permits; one carried part repairs up to twenty missing integrity when repair is useful and permitted. Parts and water are finite physical stocks. Ownership or office is not permission at every facility. Check actual equipment, local supplies and the posted access before acting; this account is guidance, not an automatic repair instruction.",
+        "location": 84,
+        "confidence": 80
+      }
+    ]
+  },
+  "lifecycle": null,
+  "disturbances": [],
+  "infrastructure": {
+    "version": 1,
+    "balance": {
+      "version": 1,
+      "build_parts": {
+        "generator": 6,
+        "charger": 3,
+        "terminal": 5
+      },
+      "repair_per_part": 20,
+      "electricity_per_charge": 1,
+      "compute_electricity": 2,
+      "compute_water": 1,
+      "compute_quanta": 3,
+      "compute_quantum_ms": 1000,
+      "wear_per_quantum": 1
+    },
+    "bodies": {
+      "1": {
+        "version": 1,
+        "support": "electric",
+        "capacity": 100,
+        "initial_charge": 80,
+        "drain_per_pulse": 1
+      },
+      "3": {
+        "version": 1,
+        "support": "electric",
+        "capacity": 100,
+        "initial_charge": 80,
+        "drain_per_pulse": 1
+      }
+    },
+    "actor_materials": {
+      "2": {
+        "parts": 12,
+        "water": 0
+      },
+      "4": {
+        "parts": 0,
+        "water": 12
+      }
+    },
+    "stations": [
+      {
+        "id": 1,
+        "owner": 1,
+        "position": 84,
+        "label": "Camp utility",
+        "electricity": 30,
+        "electricity_capacity": 100,
+        "materials": {
+          "parts": 0,
+          "water": 20
+        },
+        "modules": [
+          "generator",
+          "charger",
+          "terminal"
+        ],
+        "access": {
+          "2": {
+            "use_allowed": true,
+            "maintain": true,
+            "admin": false
+          },
+          "3": {
+            "use_allowed": true,
+            "maintain": false,
+            "admin": false
+          },
+          "4": {
+            "use_allowed": true,
+            "maintain": false,
+            "admin": false
+          }
+        },
+        "generation_period_ms": 2500,
+        "generation_amount": 1
+      }
+    ]
+  }
+}

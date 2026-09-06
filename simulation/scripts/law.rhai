@@ -13,7 +13,8 @@ fn validate_common(c) {
        (!c.allowed.contains("target") && a.target != ()) ||
        (!c.allowed.contains("text") && a.text != ()) ||
        (!c.allowed.contains("record") && a.record != ()) ||
-       (!c.allowed.contains("archive") && a.archive != ()) { return "skill contains arguments for a different skill"; }
+       (!c.allowed.contains("archive") && a.archive != ()) ||
+       (!c.allowed.contains("infrastructure") && a.infrastructure != ()) { return "skill contains arguments for a different skill"; }
     ""
 }
 fn outcome(status, reason, remaining, state, effects, progress) {
@@ -21,7 +22,7 @@ fn outcome(status, reason, remaining, state, effects, progress) {
 }
 fn done(effects) { outcome("success", "", 0, (), effects, #{}) }
 fn failed(reason) { outcome("failure", reason, 0, (), [], #{}) }
-fn metabolism(p) { #{hunger:bounded(p.hunger+2*p.pulses,0,100), fear:bounded(p.fear-p.pulses,0,100)} }
+fn metabolism(p) { #{hunger:if p.body != () && p.body.support == "electric" {0} else {bounded(p.hunger+2*p.pulses,0,100)}, fear:bounded(p.fear-p.pulses,0,100)} }
 fn food_renewal(c) { bounded(c.source.amount*c.pulses,0,if c.food < c.source.capacity { c.source.capacity-c.food } else { 0 }) }
 fn needs_care(c) { c.health > 0 && c.dependent && c.hunger >= 35 }
 fn development(c) { c.age_ms >= 60000 && c.care_meals >= 2 && c.practice >= 1 }
@@ -44,15 +45,16 @@ fn aftermath(c) {
         else { bounded((c.last_hazard_pulse_ms-c.weather.cold_after_ms)/period+1,0,c.pulses) };
         if shelter < c.weather.shelter_required { cold=c.weather.damage_per_pulse*cold_pulses; }
     }
-    #{starvation:if c.actor.hunger >= 100 { 8*c.pulses } else { 0 },
+    #{starvation:if c.body != () && c.body.support == "electric" {0} else if c.actor.hunger >= 100 { 8*c.pulses } else { 0 },
+      power_depletion:if c.body != () && c.body.support == "electric" {8*c.body.unpaid_support_pulses} else {0},
       hazard:if c.site == () { 0 } else { c.site.hazard*c.pulses }, cold:cold}
 }
 fn on_damage(c) {
     let p=c.actor;
     let health=bounded(p.health-c.amount,0,100);
     #{health:health, fear:bounded(p.fear+15,0,100), caution:bounded(p.caution+1+p.introspection/25,0,100),
-      learn_danger:c.nature != "starvation" && c.nature != "weather", confidence:95,
-      interrupt:health == 0 || (c.nature != "starvation" && c.nature != "weather"), dead:health == 0}
+      learn_danger:c.nature != "starvation" && c.nature != "weather" && c.nature != "power_depletion", confidence:95,
+      interrupt:health == 0 || (c.nature != "starvation" && c.nature != "weather" && c.nature != "power_depletion"), dead:health == 0}
 }
 fn reflection(c) {
     #{caution:bounded(c.actor.caution+c.caution_delta,0,100), trust:bounded(c.trust+c.trust_delta,-100,100), confidence:60}

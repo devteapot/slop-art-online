@@ -21,9 +21,11 @@ pub struct Session {
 #[derive(Clone)]
 pub struct ParticipantService {
     pub connection: Arc<DbConnection>,
+    session: Arc<Session>,
 }
 impl ParticipantService {
     pub async fn open(session: Session) -> Result<Self, String> {
+        let reconnect_session = Arc::new(session.clone());
         tokio::task::spawn_blocking(move || {
             let conn = DbConnection::builder()
                 .with_uri(session.server)
@@ -38,10 +40,23 @@ impl ParticipantService {
             conn.run_threaded();
             Ok(Self {
                 connection: Arc::new(conn),
+                session: reconnect_session,
             })
         })
         .await
         .map_err(|_| "connection worker failed")?
+    }
+    /// Resume the same identity after a transport failure. Never create a grant,
+    /// change controllers or replay a possibly completed command.
+    pub async fn reconnect_if_needed(&mut self) -> Result<bool, String> {
+        if self.connection.is_active() { return Ok(false); }
+        let replacement = Self::open((*self.session).clone()).await?;
+        if let Err(error) = replacement.observe(0, 1).await {
+            let _ = replacement.connection.disconnect();
+            return Err(error);
+        }
+        *self = replacement;
+        Ok(true)
     }
     pub async fn from_file(path: &Path) -> Result<Self, String> {
         let session: Session = serde_json::from_slice(
@@ -209,18 +224,17 @@ pub async fn new_session(
     let mut file = options
         .open(path)
         .map_err(|_| "new private session path required")?;
-    file.write_all(
-        &serde_json::to_vec(&Session {
+    let session = Arc::new(Session {
             server: config_server,
             database: config_db,
             token,
-        })
-        .unwrap(),
-    )
+        });
+    file.write_all(&serde_json::to_vec(&*session).unwrap())
     .map_err(|_| "session write failed")?;
     Ok((
         ParticipantService {
             connection: Arc::new(conn),
+            session,
         },
         identity,
     ))

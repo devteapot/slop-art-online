@@ -1,0 +1,1226 @@
+[
+  {
+    "actor": 1,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 2,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 3,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 4,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 5,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 6,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 7,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 8,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 9,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 10,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 11,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 12,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 13,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 14,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 15,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 16,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 17,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 18,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 19,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 20,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 21,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 22,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 23,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 24,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 25,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 26,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 27,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 28,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 29,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 30,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 31,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 32,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 33,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 34,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 35,
+    "role": "builtin",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  },
+  {
+    "actor": 36,
+    "role": "external",
+    "config": {
+      "backend": {
+        "kind": "openai_compatible",
+        "model": "gpt-5.6-luna",
+        "base_url": "https://codex.carlid.dev/v1",
+        "auth": {
+          "kind": "bearer_env",
+          "credential_env": "CARLID_NPC_API_KEY"
+        },
+        "capabilities": {
+          "response_modes": [
+            "prompt_json"
+          ],
+          "token_limit_field": "unsupported",
+          "temperature": false,
+          "seed": false,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stream": true,
+        "reasoning_effort": "medium"
+      },
+      "structured_output": "prompt_json",
+      "deadline_ms": 300000,
+      "max_attempts": 1,
+      "max_output_tokens": null
+    }
+  }
+]

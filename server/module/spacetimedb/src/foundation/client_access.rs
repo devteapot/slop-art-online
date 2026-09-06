@@ -29,6 +29,30 @@ pub struct SimClientSnapshot {
     pub body: String,
 }
 
+// Private materialized projection. A participant view still authenticates its
+// grant, then reads only this actor's row instead of reparsing the entire world
+// after every other participant's command. No client may query this table.
+#[spacetimedb::table(accessor = sim_participant_cache)]
+pub struct SimParticipantCache {
+    #[primary_key]
+    pub key: String,
+    pub run: String,
+    pub tick: u64,
+    pub body: String,
+}
+pub(super) fn publish_participants(ctx: &ReducerContext, world: &World) {
+    if !world.participant_mode {return;}
+    for actor in world.participants.keys() {
+        let Ok(body)=world.participant_status_json(*actor) else {continue;};
+        let key=format!("{}:{actor}",world.run);
+        let previous=ctx.db.sim_participant_cache().key().find(&key);
+        if previous.as_ref().is_some_and(|old|old.body==body) {continue;}
+        let row=SimParticipantCache{key,run:world.run.clone(),tick:world.tick,body};
+        if previous.is_some() {ctx.db.sim_participant_cache().key().update(row);}
+        else {ctx.db.sim_participant_cache().insert(row);}
+    }
+}
+
 pub(super) fn world(ctx: &ReducerContext, run: &str) -> Result<(SimRun, World), String> {
     let row = ctx
         .db
@@ -407,15 +431,11 @@ pub fn sim_participant_state(ctx: &ViewContext) -> Option<SimClientSnapshot> {
     if access.observer {
         return None;
     }
-    let row = ctx.db.sim_run().id().find(&access.run)?;
-    let w: World = serde_json::from_str(&row.state).ok()?;
+    let row=ctx.db.sim_participant_cache().key().find(format!("{}:{}",access.run,access.actor))?;
     Some(SimClientSnapshot {
         run: access.run,
-        tick: w.tick,
-        body: w
-            .participant_snapshot(access.actor, 0, 256)
-            .ok()?
-            .to_string(),
+        tick: row.tick,
+        body: row.body,
     })
 }
 #[spacetimedb::reducer]

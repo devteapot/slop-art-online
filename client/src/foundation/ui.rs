@@ -234,6 +234,12 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
     });
 }
 fn mind(panel: &mut ChildSpawnerCommands, p: &Value) {
+    for membership in p["society"]["initial_memberships"].as_array().into_iter().flatten() {
+        text(panel, format!("Initial affiliation: {}", membership["label"].as_str().unwrap_or("")), 12., MUTED);
+    }
+    for office in p["society"]["initial_offices"].as_array().into_iter().flatten() {
+        text(panel, format!("Initial office: {}", office["label"].as_str().unwrap_or("")), 12., MUTED);
+    }
     title(panel, "MOTIVE");
     text(
         panel,
@@ -334,6 +340,7 @@ fn mind(panel: &mut ChildSpawnerCommands, p: &Value) {
     }
 }
 fn life(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
+    utilities(panel, p, game);
     let development=&p["development"];
     let local=&p["local_lifecycle"];
     let own=!game.observer() && !game.archive && game.snapshot["actor"]==p["id"];
@@ -387,6 +394,43 @@ fn life(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
         }
     }
 }
+fn utilities(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
+    let utility=&p["infrastructure"];
+    if utility["enabled"]!=true {return;}
+    let own=!game.observer() && !game.archive && game.snapshot["actor"]==p["id"];
+    title(panel,"POWER AND MATERIALS");
+    if p["body"]["support"]=="electric" {
+        text(panel,format!("Battery {} / {} · stamina {}",number(&p["body"]["charge"]),number(&p["body"]["capacity"]),number(&p["energy"])),14.,INK);
+        text(panel,"This body needs electricity. Rest restores stamina; charging replenishes its battery.",12.,MUTED);
+    }
+    text(panel,format!("Carried parts {} · cooling water {}",number(&utility["materials"]["parts"]),number(&utility["materials"]["water"])),13.,INK);
+    for station in utility["stations"].as_array().into_iter().flatten() {
+        let id=station["id"].clone();
+        text(panel,station["label"].as_str().unwrap_or("Utility station"),15.,INK);
+        text(panel,format!("Power {} / {} · condition {} · {}",number(&station["electricity"]),number(&station["electricity_capacity"]),number(&station["integrity"]),if station["enabled"]==true {"enabled"} else {"disabled"}),12.,MUTED);
+        text(panel,format!("Parts {} · water {} · queued jobs {}",number(&station["materials"]["parts"]),number(&station["materials"]["water"]),number(&station["queue_length"])),12.,MUTED);
+        if own && station["rights"]["use_allowed"]==true {
+            if p["body"]["support"]=="electric" {
+                let room=p["body"]["capacity"].as_i64().unwrap_or(0)-p["body"]["charge"].as_i64().unwrap_or(0);
+                let amount=room.min(20).max(0);
+                if amount>0 {button(panel,format!("Charge {amount}"),Click::Intent(json!({"skill":"infrastructure","infrastructure":{"op":"charge","station":id,"amount":amount}})),false);}
+            }
+            if station["materials"]["water"].as_i64().unwrap_or(0)>0 {
+                button(panel,"Collect one water",Click::Intent(json!({"skill":"infrastructure","infrastructure":{"op":"take_material","station":id,"material":"water","amount":1}})),false);
+            }
+        }
+        if own && station["rights"]["maintain"]==true && utility["materials"]["water"].as_i64().unwrap_or(0)>0 {
+            button(panel,"Supply one cooling water",Click::Intent(json!({"skill":"infrastructure","infrastructure":{"op":"deposit_material","station":id,"material":"water","amount":1}})),false);
+        }
+        for job in station["own_jobs"].as_array().into_iter().flatten() {
+            text(panel,format!("Your job #{} · {}/{} work",number(&job["id"]),number(&job["progress"]),number(&job["required"])),12.,INK);
+            if let Some(reason)=job["blocked_reason"].as_str() {text(panel,reason,12.,MUTED);}
+            if own && job["report"].is_string() && job["retrieved"]!=true {
+                button(panel,"Collect computed report",Click::Intent(json!({"skill":"infrastructure","infrastructure":{"op":"retrieve_job","station":id,"job":job["id"]}})),false);
+            }
+        }
+    }
+}
 fn knowledge(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {
     let own = !game.observer() && !game.archive && game.snapshot["actor"] == p["id"];
     title(panel, "PERSONAL RECORDS");
@@ -431,6 +475,7 @@ fn describe(node: &Value) -> String {
     match node["kind"].as_str().unwrap_or("") {
         "priority" => "PRIORITY · recheck in order".into(),
         "sequence" => "SEQUENCE · remembers progress".into(),
+        "once" => "ONCE UNTIL SUCCESS".into(),
         "guard" => format!("WHILE {}", condition(&node["condition"])),
         "when" => format!("START WHEN {}", condition(&node["condition"])),
         "action" => {
@@ -491,7 +536,7 @@ fn outline(node: &Value, path: String, depth: usize, rows: &mut Vec<(String, usi
         }
     }
     if let Some(child) = node.get("child") {
-        outline(child, format!("{path}/{}", if node["kind"] == "when" { "when" } else { "guard" }), depth + 1, rows);
+        outline(child, format!("{path}/{}", if node["kind"] == "when" { "when" } else if node["kind"] == "once" { "once" } else { "guard" }), depth + 1, rows);
     }
 }
 fn tree(panel: &mut ChildSpawnerCommands, p: &Value, game: &Game) {

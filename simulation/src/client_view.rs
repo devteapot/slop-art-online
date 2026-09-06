@@ -19,6 +19,9 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
                 value["recent_activity"] = context["recent_activity"].clone();
                 value["starting_behavior"] = context["starting_behavior"].clone();
                 value["local_lifecycle"] = context["lifecycle"].clone();
+                value["body"] = context["body"].clone();
+                value["infrastructure"] = context["infrastructure"].clone();
+                value["society"] = context["society"].clone();
                 value["controller"] = json!(p.controller);
                 if let Some(arena)=world.arena_for_actor(p.id) {
                     value["arena"]=json!(arena.label);
@@ -35,6 +38,9 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
         own["recent_activity"] = context["recent_activity"].clone();
         own["starting_behavior"] = context["starting_behavior"].clone();
         own["local_lifecycle"] = context["lifecycle"].clone();
+        own["body"] = context["body"].clone();
+        own["infrastructure"] = context["infrastructure"].clone();
+        own["society"] = context["society"].clone();
         own["controller"] = json!(me.controller);
         let mut visible = BTreeMap::new();
         for memory in &me.memories {
@@ -57,7 +63,7 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
         let mut known = BTreeMap::new();
         for memory in &me.site_observations {
             if memory.kind == "site" {
-                known.insert(memory.location, json!({"position":memory.location,"food":memory.content["food"],"shelter":memory.content["shelter"],"food_source":memory.content["food_source"],"archives":memory.content["archives"],"lifecycle":memory.content["lifecycle"],"observed_tick":memory.tick}));
+                known.insert(memory.location, json!({"position":memory.location,"food":memory.content["food"],"shelter":memory.content["shelter"],"food_source":memory.content["food_source"],"archives":memory.content["archives"],"lifecycle":memory.content["lifecycle"],"infrastructure":memory.content["infrastructure"],"observed_tick":memory.tick}));
             }
         }
         json!(known.into_values().collect::<Vec<_>>())
@@ -75,6 +81,7 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
     };
     json!({"run":world.run,"tick":world.tick,"time_ms":world.timing.time_ms,"updates":world.timing.updates,"clock_unit_ms":crate::timing::LEGACY_UNIT_MS,"stopped":world.stopped,"max_ticks":world.initial.max_ticks,
         "map":if observer {world.initial.map.clone()} else {world.map_for_actor(actor)},"arenas":if observer {json!(world.initial.arenas)} else {Value::Null},"can_participate":world.players.iter().any(|p| p.id == 3 && p.controller == crate::Controller::Human),"rules":world.version,"actor":if observer {Value::Null} else {json!(actor)},"observer":observer,"players":players,"sites":sites,"archives":if observer {json!(world.archives)} else {json!(world.players[index.unwrap()].site_observations.iter().filter(|m|m.kind=="site").flat_map(|m|m.content["archives"].as_array().into_iter().flatten().cloned()).collect::<Vec<_>>())},"workshops":if observer {json!(world.initial.lifecycle.as_ref().map(|l|l.workshops.clone()).unwrap_or_default())} else {json!(world.players[index.unwrap()].site_observations.iter().filter(|m|m.kind=="site" && m.content["lifecycle"]["workshop"]==true).map(|m|m.location).collect::<Vec<_>>())},"events":history,
+        "regions":world.society_survey(if observer {None} else {Some(actor)}),
         "pending":if observer {json!(world.pending.iter().map(|p|json!({"id":p.id,"actor":p.actor,"tick":p.tick})).collect::<Vec<_>>())} else {Value::Null}})
 }
 #[cfg(test)]

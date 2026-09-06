@@ -3,6 +3,7 @@
 pub mod client_view;
 pub mod ecology;
 pub mod knowledge;
+pub mod infrastructure;
 pub mod lifecycle;
 mod lifecycle_view;
 pub mod participant;
@@ -10,6 +11,7 @@ pub mod perturbations;
 mod scripted_world;
 pub mod scripting;
 pub mod spatial;
+pub mod society;
 pub mod starting_behaviors;
 pub mod timing;
 use bonsai_bt::Behavior;
@@ -17,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "m3-2-perceived-care.1";
+pub const VERSION: &str = "m5-4-scaled-publication.1";
 pub const DECISION_FORMAT_VERSION: &str = "survivor-policy-v2";
 pub const LEGACY_DECISION_FORMAT: &str = "survivor-sequence-v1";
 pub mod policy;
@@ -58,6 +60,7 @@ pub enum Skill {
     Fabricate,
     Care,
     Practice,
+    Infrastructure,
     Script(String),
 }
 impl Skill {
@@ -84,6 +87,7 @@ impl Skill {
             Self::Fabricate => "fabricate",
             Self::Care => "care",
             Self::Practice => "practice",
+            Self::Infrastructure => "infrastructure",
             Self::Script(id) => id,
         }
     }
@@ -93,6 +97,8 @@ impl Skill {
 #[serde(deny_unknown_fields)]
 pub struct Action {
     pub skill: Skill,
+    #[serde(default)]
+    pub infrastructure: Option<infrastructure::InfrastructureOperation>,
     #[serde(default)]
     pub record: Option<String>,
     #[serde(default)]
@@ -113,6 +119,7 @@ impl Action {
     pub fn new(skill: Skill) -> Self {
         Self {
             skill,
+            infrastructure: None,
             record: None,
             archive: None,
             destination: None,
@@ -256,6 +263,10 @@ pub struct Weather {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Scenario {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub society: Option<society::SocietySeed>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub infrastructure: Option<infrastructure::InfrastructureSeed>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<lifecycle::LifecycleSeed>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub disturbances: Vec<perturbations::Disturbance>,
@@ -310,6 +321,8 @@ pub struct World {
     pub players: Vec<Player>,
     pub sites: Vec<Site>,
     #[serde(default)]
+    pub infrastructure: infrastructure::InfrastructureState,
+    #[serde(default)]
     pub archives: Vec<knowledge::Archive>,
     #[serde(default)]
     pub lifecycle: BTreeMap<u32, lifecycle::Lifecycle>,
@@ -334,11 +347,11 @@ pub struct World {
 impl World {
     pub fn new(run: String, scenario: Scenario) -> Result<Self, String> {
         if scenario.players.is_empty()
-            || scenario.players.len() > 16
+            || scenario.players.len() > lifecycle::MAX_TOTAL_ACTORS
             || scenario.max_ticks == 0
             || scenario.max_ticks > 10000
         {
-            return Err("scenario needs 1..16 players and 1..10000 ticks".into());
+            return Err("scenario needs 1..256 players and 1..10000 ticks".into());
         }
         if let Some(map) = &scenario.map {
             map.validate()?;
@@ -382,6 +395,7 @@ impl World {
         }
         spatial::validate_arenas(&scenario)?;
         ecology::validate(&scenario)?;
+        society::validate(&scenario)?;
         perturbations::validate(&scenario)?;
         let mut w = Self {
             run,
@@ -389,6 +403,7 @@ impl World {
             scripts: scripting::Registry::default(),
             players: scenario.players.clone(),
             sites: scenario.sites.clone(),
+            infrastructure: infrastructure::InfrastructureState::default(),
             archives: scenario.archives.iter().map(|s| knowledge::Archive {
                 id:s.id,position:s.position,label:s.label.clone(),capacity:s.capacity,
                 records:vec![],destroyed:false,revision:0,
@@ -410,6 +425,7 @@ impl World {
         };
         let id=w.event(None,"initialization",vec![],json!({"scenario":w.initial,"rules":VERSION,"scripts":w.scripts,"prompt":PROMPT,"seed_usage":"reserved; current world rules use no random draws"}));
         w.initialize_lifecycle(id)?;
+        w.initialize_infrastructure(id)?;
         for i in 0..w.players.len() {
             w.players[i].last_cause = Some(id);
             // Authored starting knowledge is a remembered prior report, not a
@@ -516,6 +532,7 @@ impl World {
         observation["food_source"] = json!(self.initial.food_sources.iter().find(|s| s.position == pos));
         observation["archives"] = self.local_archive_catalog(i);
         observation["lifecycle"] = self.local_lifecycle_catalog(i);
+        observation["infrastructure"] = self.infrastructure_facts(self.players[i].id);
         let food = observation["food"].as_i64().unwrap_or(0);
         let parents = self.players[i]
             .execution
@@ -557,7 +574,7 @@ impl World {
             .or_else(||self.lifecycle.get(&p.id).is_some_and(|l| !matches!(l.origin, lifecycle::Origin::Initial)).then(|| self.initial.lifecycle.as_ref()
                 .map(|l|(&l.newcomer.starting_behavior,"newborn seed; revisable starting habit"))).flatten());
         let approach = p.execution.as_ref().map(|e| if let Some(policy)=&e.policy {json!({"decision":e.decision,"policy":policy,"state":e.state,"active_attempt":e.attempt})} else {json!(e)});
-        json!({"starting_behavior":starter.map(|(b,source)|json!({"id":b.id,"revision":b.revision,"description":b.description,"source":source,"revisable":true})),"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","lifecycle":self.local_lifecycle_catalog(i),"player":{"development":self.lifecycle.get(&p.id),"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"knowledge":p.knowledge,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
+        json!({"society":self.society_context(p.id),"infrastructure":self.infrastructure_facts(p.id),"body":self.body_support_context(p.id),"starting_behavior":starter.map(|(b,source)|json!({"id":b.id,"revision":b.revision,"description":b.description,"source":source,"revisable":true})),"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","lifecycle":self.local_lifecycle_catalog(i),"player":{"development":self.lifecycle.get(&p.id),"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"knowledge":p.knowledge,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description})
     }
     pub fn request(&mut self, i: usize, trigger: &str) {
         if self.participant_mode {
@@ -1042,6 +1059,8 @@ impl World {
             world,
             if nature == "starvation" {
                 "starvation"
+            } else if nature == "power_depletion" {
+                "power_depletion"
             } else {
                 "danger"
             },
@@ -1119,6 +1138,7 @@ impl World {
         )?;
         self.renew_food(delta_ms)?;
         self.apply_disturbances()?;
+        self.advance_infrastructure(delta_ms)?;
         for i in 0..self.players.len() {
             if self.players[i].health <= 0 {
                 continue;
@@ -1144,6 +1164,7 @@ impl World {
             if needs_pulses > 0 {
                 let mut facts = scripting::facts(&self.players[i]);
                 facts["pulses"] = json!(needs_pulses);
+                facts["body"] = self.body_support_context(self.players[i].id);
                 facts["elapsed_ms"] = json!(needs_pulses * periods.needs_ms);
                 let needs: Needs = self.scripts.law("metabolism", facts)?;
                 self.players[i].hunger = needs.hunger;
@@ -1152,6 +1173,7 @@ impl World {
                 metabolism=self.event(Some(self.players[i].id),"needs_change",vec![],json!({"hunger_before":before,"hunger_after":self.players[i].hunger,"fear":self.players[i].fear,"elapsed_ms":needs_pulses*periods.needs_ms}));
             }
 
+            self.consume_body_charge(self.players[i].id, needs_pulses, metabolism)?;
             if self.players[i].health <= 0 {
                 continue;
             }
@@ -1194,19 +1216,26 @@ impl World {
             #[serde(deny_unknown_fields)]
             struct Aftermath {
                 starvation: i32,
+                #[serde(default)]
+                power_depletion: i32,
                 hazard: i32,
                 #[serde(default)]
                 cold: i32,
             }
-            let after:Aftermath=self.scripts.law("aftermath",json!({"time_ms":self.timing.time_ms,"weather":self.initial.weather,"pulses":hazard_pulses,"last_hazard_pulse_ms":self.timing.actor_hazard_remainder_ms.get(&actor).map(|remainder|self.timing.time_ms.saturating_sub(*remainder)),"elapsed_ms":hazard_pulses*periods.hazard_ms,"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
-            if after.starvation < 0 || after.hazard < 0 || after.cold < 0 {
+            let after:Aftermath=self.scripts.law("aftermath",json!({"body":self.body_support_context(actor),"time_ms":self.timing.time_ms,"weather":self.initial.weather,"pulses":hazard_pulses,"last_hazard_pulse_ms":self.timing.actor_hazard_remainder_ms.get(&actor).map(|remainder|self.timing.time_ms.saturating_sub(*remainder)),"elapsed_ms":hazard_pulses*periods.hazard_ms,"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
+            if after.starvation < 0 || after.hazard < 0 || after.cold < 0 || after.power_depletion < 0 {
                 return Err("negative damage policy".into());
             }
+            self.clear_body_support_deficit(actor);
             if after.starvation > 0 {
                 self.damage(i, after.starvation, None, metabolism, "starvation")?;
             }
             if self.players[i].health <= 0 {
                 continue;
+            }
+            if after.power_depletion > 0 {
+                self.damage(i, after.power_depletion, None, metabolism, "power_depletion")?;
+                if self.players[i].health <= 0 { continue; }
             }
             if after.cold > 0 {
                 self.damage(i, after.cold, None, metabolism, "weather")?;
@@ -1316,3 +1345,6 @@ mod timing_tests;
 
 #[cfg(test)]
 mod spatial_tests;
+
+#[cfg(test)]
+mod infrastructure_tests;

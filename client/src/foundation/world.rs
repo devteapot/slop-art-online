@@ -16,6 +16,7 @@ pub struct Character {
 pub enum LabelKey {
     Actor(u64),
     Site(i32),
+    Region(usize),
 }
 #[derive(Component)]
 pub struct Label {
@@ -220,6 +221,7 @@ pub fn sync(
             run,
             game.world_visible,
             game.snapshot["map"],
+            game.snapshot["regions"],
             game.snapshot["workshops"],
             game.snapshot["archives"].as_array().map(|a|a.iter().map(|v|json!([v["id"],v["position"],v["destroyed"]])).collect::<Vec<_>>()),
             game.snapshot["sites"].as_array().map(|sites| sites
@@ -336,6 +338,25 @@ pub fn sync(
         }
         let mut wanted = BTreeSet::new();
         if game.world_visible {
+            for (index, region) in game.snapshot["regions"].as_array().into_iter().flatten().enumerate() {
+                let b = &region["bounds"];
+                let (x,y,w,h) = (b["x"].as_i64().unwrap_or(0), b["y"].as_i64().unwrap_or(0), b["width"].as_i64().unwrap_or(1), b["height"].as_i64().unwrap_or(1));
+                let width = game.snapshot["map"]["width"].as_i64().unwrap_or(1);
+                let top_left = cell_position(&game.snapshot, (y * width + x) as i32);
+                let center = top_left + Vec3::new((w-1) as f32 * GRID_CELL / 2., -(h-1) as f32 * GRID_CELL / 2., 0.5);
+                if terrain_changed {
+                    let color = match region["kind"].as_str() {
+                        Some("homeland") => Color::srgb(0.62,0.65,0.49),
+                        Some("city") => Color::srgb(0.60,0.75,0.85),
+                        Some("mixed") => Color::srgb(0.72,0.58,0.79),
+                        _ => Color::srgb(0.33,0.46,0.34),
+                    };
+                    for dy in [-1.,1.] {tile(&mut commands,color,center+Vec3::new(0.,dy*h as f32*GRID_CELL/2.,0.),Vec2::new(w as f32*GRID_CELL,2.));}
+                    for dx in [-1.,1.] {tile(&mut commands,color,center+Vec3::new(dx*w as f32*GRID_CELL/2.,0.,0.),Vec2::new(2.,h as f32*GRID_CELL));}
+                }
+                let key = LabelKey::Region(index); wanted.insert(key);
+                label(&mut commands,&mut existing_labels,key,region["label"].as_str().unwrap_or("Region").to_owned(),center+Vec3::new(0.,h as f32*GRID_CELL/2.-18.,0.));
+            }
             if let Some(sites) = game.snapshot["sites"].as_array() {
                 for site in sites {
                     let pos = site["position"].as_i64().unwrap_or(0) as i32;
@@ -564,16 +585,24 @@ pub fn labels(
     game: Res<Game>,
 ) {
     let mut occupied: Vec<Rect> = vec![];
+    let camera_transform=GlobalTransform::from(*camera.1);
+    let overview=game.snapshot["regions"].as_array().is_some_and(|r|!r.is_empty()) && camera.0.world_to_viewport(&camera_transform,Vec3::ZERO).ok()
+        .zip(camera.0.world_to_viewport(&camera_transform,Vec3::X*GRID_CELL).ok())
+        .is_some_and(|(a,b)|a.distance(b)<20.);
     let mut ordered: Vec<_> = labels.iter_mut().collect();
-    ordered.sort_by_key(|(label, _, _, _)| label.key);
+    ordered.sort_by_key(|(label, _, _, _)| (!matches!(label.key,LabelKey::Region(_)),label.key));
     for (label, computed, mut transform, mut visibility) in ordered {
+        if overview && !matches!(label.key,LabelKey::Region(_)) {
+            *visibility=Visibility::Hidden;
+            continue;
+        }
         let anchor = match label.key {
             LabelKey::Actor(id) => actors
                 .iter()
                 .find(|(actor, _)| actor.id == id)
                 .map(|(_, t)| t.translation + Vec3::Y * 34.)
                 .unwrap_or(label.anchor),
-            LabelKey::Site(_) => label.anchor,
+            LabelKey::Site(_) | LabelKey::Region(_) => label.anchor,
         };
         if let Ok(pos) = camera
             .0
@@ -587,6 +616,7 @@ pub fn labels(
             let mut top_left = Vec2::new(pos.x - size.x / 2., pos.y - size.y);
             // Move overlapping callouts upward; keep their world anchor unchanged.
             for _ in 0..20 {
+                if matches!(label.key,LabelKey::Region(_)) {break;}
                 let rect = Rect::from_corners(top_left, top_left + size);
                 if let Some(other) = occupied.iter().find(|r| {
                     r.min.x < rect.max.x

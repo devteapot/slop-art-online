@@ -32,6 +32,8 @@ fn world() -> World {
     World::new(
         "test".into(),
         Scenario {
+            infrastructure: None,
+            society: None,
         lifecycle: None,
             disturbances: vec![],
             knowledge: BTreeMap::new(),

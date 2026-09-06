@@ -43,6 +43,7 @@ fn load(ctx: &ReducerContext, run: &str) -> Result<(SimRun, World), String> {
     Ok((row, state))
 }
 pub(super) fn save(ctx: &ReducerContext, mut row: SimRun, mut world: World) {
+    client_access::publish_participants(ctx, &world);
     for event in world.events.drain(..) {
         ctx.db.sim_audit().insert(SimAudit {
             key: format!("{}:{}", world.run, event.id),
@@ -69,7 +70,10 @@ pub fn sim_create(ctx: &ReducerContext, run: String, scenario: String) -> Result
     if ctx.db.sim_run().id().find(&run).is_some() {
         return Err("run already exists; never overwrite".into());
     }
-    if scenario.len() > 100_000 {
+    // The shared core permits 256 inhabitants with bounded personal knowledge.
+    // Keep transport allocation bounded while allowing authored multi-settlement
+    // seeds (the 36-person seed is already 117 KB after compact serialization).
+    if scenario.len() > 2 * 1024 * 1024 {
         return Err("scenario too large".into());
     }
     let scenario: Scenario = serde_json::from_str(&scenario).map_err(|e| e.to_string())?;

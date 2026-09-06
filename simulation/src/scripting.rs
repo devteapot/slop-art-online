@@ -101,6 +101,7 @@ impl Default for Registry {
                 include_str!("../scripts/speak.rhai"),
                 "free-form text; hearing determined by active world law",
             ),
+            ("infrastructure", include_str!("../scripts/infrastructure.rhai"), "Use a local utility station through the typed infrastructure operation. Requires configured infrastructure, local presence and explicit asset rights; duration 1, 1000 ms cooldown. Electricity is separate from stamina. Charge transfers stored electricity; eating/rest do not recharge. Build/repair consume carried parts. Compute jobs consume electricity and cooling water per completed work quantum, pause on missing supply/access, and produce a private physical forecast with explicit assumptions. Retrieve your finished job at its terminal to acquire a communicable report. Use once {child} around a deliberately single submission task to avoid creating jobs on every policy cycle. retrieve_ready retrieves your oldest completed, uncollected local job without predicting its ID; failure while none is ready creates nothing. Operation and parameter schema are provided with the action contract."),
             ("give", include_str!("../scripts/give.rhai"), "give one carried food to a perceived living target at the same cell; recipient receives a direct perception; no automatic reciprocity; 1000 ms cooldown"),
             ("deposit", include_str!("../scripts/deposit.rhai"), "place one carried food in the existing site at your position, available for anyone to gather; 1000 ms cooldown"),
             ("build", include_str!("../scripts/build.rhai"), "contribute one shelter unit at the existing site at your position; costs 8 energy; shelter maximum 12, remains shared; 2500 ms cooldown"),
@@ -162,6 +163,7 @@ pub struct StepResult {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Effect {
+    Infrastructure { operation: crate::infrastructure::InfrastructureOperation },
     Actor { fields: BTreeMap<String, i32> },
     SiteFood { value: i32 },
     TransferFood { target: Option<u32>, amount: i32 },
@@ -538,6 +540,7 @@ pub fn facts(p: &Player) -> Value {
 
 pub fn subjective(p: &Player) -> Value {
     let mut value = facts(p);
+    value["charge"] = json!(0);
     value["beliefs"] = json!(p.beliefs);
     // Policy guards need personal record IDs and observed resource quantities.
     // Full reports/catalogs remain in private model and human context, but cannot
@@ -547,7 +550,7 @@ pub fn subjective(p: &Player) -> Value {
         if m.kind == "knowledge_report" {
             v["content"] = json!({"record":{"id":m.content["record"]["id"]}});
         } else if m.kind == "site" {
-            if let Some(content) = v["content"].as_object_mut() { content.remove("archives"); content.remove("lifecycle"); }
+            if let Some(content) = v["content"].as_object_mut() { content.remove("archives"); content.remove("lifecycle"); content.remove("infrastructure"); }
         }
         v
     };

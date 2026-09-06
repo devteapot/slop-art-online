@@ -15,7 +15,7 @@ import run_living_clearing as living
 
 
 class LivingEnrollmentChecks(unittest.TestCase):
-    def exercise(self, acknowledge=True):
+    def exercise(self, acknowledge=True, interrupt_at=None):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
@@ -43,6 +43,7 @@ class LivingEnrollmentChecks(unittest.TestCase):
         descriptors, dispatched, revoked, protocol = [], [], [], []
         clock = [0]
         waits = [0]
+        signal_handlers = {}
 
         def admit(actor, newcomer=False):
             if actor not in {p['id'] for p in world['players']}:
@@ -81,6 +82,9 @@ class LivingEnrollmentChecks(unittest.TestCase):
                 if waits[0] == 1:
                     admit(3, True)
                     clock[0] += 2
+                    if interrupt_at == 'running':
+                        signal_handlers[living.signal.SIGINT](living.signal.SIGINT, None)
+                        return True
                 else:
                     clock[0] += 100
                 return False
@@ -108,6 +112,8 @@ class LivingEnrollmentChecks(unittest.TestCase):
 
         def control(command, **kwargs):
             if 'sim_operator_pause' in command:
+                if interrupt_at == 'cleanup':
+                    signal_handlers[living.signal.SIGTERM](living.signal.SIGTERM, None)
                 self.assertTrue((out / 'stop-enrollment').exists())
                 protocol.append('stop_requested')
                 # Represents an in-flight enrollment whose descriptor is published
@@ -139,7 +145,8 @@ class LivingEnrollmentChecks(unittest.TestCase):
              patch.dict(os.environ, {'CARLID_NPC_API_KEY': 'fixture-token'}), \
              patch.object(living.subprocess, 'Popen', Host), patch.object(living.subprocess, 'run', control), \
              patch.object(living.threading, 'Event', Stop), patch.object(living.concurrent.futures, 'ThreadPoolExecutor', Pool), \
-             patch.object(living.signal, 'signal'), patch.object(living.time, 'monotonic', lambda: clock[0]), \
+             patch.object(living.signal, 'signal', lambda sig, handler: signal_handlers.update({sig: handler})), \
+             patch.object(living.time, 'monotonic', lambda: clock[0]), \
              patch.object(living.time, 'sleep', sleep), contextlib.redirect_stdout(io.StringIO()):
             try:
                 living.main()
@@ -165,6 +172,24 @@ class LivingEnrollmentChecks(unittest.TestCase):
         self.assertIn('did not acknowledge', report['pause_error'])
         self.assertEqual(dispatched, [2, 3])
         self.assertEqual(revoked, [])
+
+    def test_signal_during_run_keeps_failed_phase_after_successful_cleanup(self):
+        report, _, revoked, error = self.exercise(interrupt_at='running')
+        self.assertIsNotNone(error)
+        self.assertEqual(report['phase'], 'failed')
+        self.assertEqual(report['interruption']['signal'], 'SIGINT')
+        self.assertEqual(report['completion']['reason'], 'interrupted')
+        self.assertEqual(report['completion']['observed_wall_seconds'], 2)
+        self.assertEqual(sorted(revoked), [1, 2, 3, 4])
+        self.assertTrue(report['final_snapshot_sha256'])
+
+    def test_signal_during_cleanup_cannot_relabel_run_as_completed(self):
+        report, _, revoked, error = self.exercise(interrupt_at='cleanup')
+        self.assertIsNotNone(error)
+        self.assertEqual(report['phase'], 'failed')
+        self.assertEqual(report['interruption']['signal'], 'SIGTERM')
+        self.assertEqual(report['completion']['reason'], 'duration_elapsed')
+        self.assertEqual(sorted(revoked), [1, 2, 3, 4])
 
 
 if __name__ == '__main__':

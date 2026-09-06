@@ -8,6 +8,44 @@ fn world() -> World {
     w.enable_participants();
     w
 }
+#[test]
+fn cloned_world_keeps_historical_evidence_and_receipts_isolated() {
+    let mut original=world();
+    original.advance_ms(2500);
+    assert!(send(&mut original,1,Command::ReadObservation{after:0,limit:128}).ok);
+    let original_json=serde_json::to_value(&original).unwrap();
+    let captured=original.participant_status(1).unwrap();
+    let mut branch=original.clone();
+    branch.advance_ms(3500);
+    assert!(send(&mut branch,1,Command::ReadObservation{after:0,limit:128}).ok);
+    branch.change_control(2).unwrap();
+    assert_eq!(serde_json::to_value(&original).unwrap(),original_json);
+    assert_eq!(original.participant_status(1).unwrap(),captured);
+    let restored:World=serde_json::from_value(original_json.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&restored).unwrap(),original_json);
+    assert_eq!(restored.participant_status(1).unwrap(),captured);
+    assert!(original_json["participants"]["1"]["experiences"].as_array().unwrap().iter().any(|e|e["data"].is_object()));
+}
+#[test]
+fn subscription_status_keeps_atomic_reads_private_and_does_not_refresh_their_evidence() {
+    let mut w=world();
+    assert!(w.participant_status(1).unwrap()["context"]["player"].get("memories").is_none());
+    let read=send(&mut w,1,Command::ReadObservation{after:0,limit:16});
+    assert!(read.ok);
+    let before=w.participant_status(1).unwrap();
+    let captured=before["read_observations"][0]["observation"].clone();
+    assert!(captured.get("read_observations").is_none());
+    assert!(captured["context"]["player"]["memories"].is_array());
+    assert_eq!(w.participant_status(2).unwrap()["read_observations"],json!([]));
+    w.advance_ms(2500);
+    w.players[0].health=0;
+    let after=w.participant_status(1).unwrap();
+    assert_eq!(after["context"]["player"]["health"],0);
+    assert_eq!(after["tick"],w.tick);
+    assert_eq!(after["read_observations"][0]["observation"],captured);
+    assert_eq!(after["receipts"][0]["request_id"],read.request_id);
+    assert!(w.participant_status(999).is_err());
+}
 fn send(w: &mut World, actor: u32, command: Command) -> participant::Receipt {
     let request = Request {
         api_version: API_VERSION.into(),
@@ -34,6 +72,27 @@ fn install(w: &mut World, actor: u32, tree: Node) {
         )
         .ok
     );
+}
+
+#[test]
+fn completed_once_survives_unrelated_patch_and_rearms_only_when_explicitly_changed() {
+    let mut w=world();
+    w.players[0].food=4;
+    w.players[0].hunger=70;
+    let once=Node::Once {child:Box::new(node(Action::new(Skill::Eat)))};
+    install(&mut w,1,Node::Priority {children:vec![once,node(Action::new(Skill::Wait))]});
+    for _ in 0..60 {w.advance_ms(50);}
+    assert_eq!(w.players[0].food,3);
+    let revision=w.players[0].generation;
+    assert!(send(&mut w,1,Command::PatchSubtree {expected_revision:revision,reason:"Change later waiting".into(),
+        path:"root/1".into(),subtree:node(Action::new(Skill::Rest))}).ok);
+    for _ in 0..60 {w.advance_ms(50);}
+    assert_eq!(w.players[0].food,3);
+    let revision=w.players[0].generation;
+    assert!(send(&mut w,1,Command::PatchSubtree {expected_revision:revision,reason:"Deliberately eat again".into(),
+        path:"root/0/once".into(),subtree:node(Action::new(Skill::Eat))}).ok);
+    for _ in 0..100 {w.advance_ms(50);}
+    assert_eq!(w.players[0].food,2);
 }
 #[test]
 fn participant_runs_have_no_hidden_bootstrap_or_model_schedule() {
@@ -326,9 +385,10 @@ fn atomic_observation_captures_context_and_evidence_at_one_authority_revision() 
     let lease = w.participants[&1].evidence_leases.last().unwrap().clone();
     assert_eq!(lease.observed_cursor, cursor);
     assert_eq!(lease.experiences.len(), 128);
-    assert_eq!(lease.observation["latest_cursor"], cursor);
-    assert_eq!(lease.observation["context"]["player"]["food"], w.players[0].food);
-    assert!(lease.observation.get("read_observations").is_none());
+    let observation:Value=serde_json::from_str(lease.observation.get()).unwrap();
+    assert_eq!(observation["latest_cursor"], cursor);
+    assert_eq!(observation["context"]["player"]["food"], w.players[0].food);
+    assert!(observation.get("read_observations").is_none());
     let source = lease.experiences.iter().find(|e| e.kind == "perception" && e.data["kind"] == "site").unwrap().source;
     for _ in 0..300 { w.observe_site(0).unwrap(); }
     let motive = w.players[0].motive.clone();

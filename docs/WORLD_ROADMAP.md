@@ -68,6 +68,8 @@ The active foundation is `simulation/` with SpacetimeDB foundation integration, 
 
 ### 5. The first faction world
 
+**Status:** [bounded Stage 5 infrastructure/faction-seed slice accepted](STAGE_5_EVIDENCE.md#bounded-stage-5-decision): explicit body charging and utilities, paid queued computation, four small comparison worlds and a full 36-person live world. The final sample retained 29 survivors, one paid/retrieved forecast and three actual food gifts. Stable provisioning, useful compute allocation, chosen terminal construction and sustained 20 Hz operation remain unproven.
+
 **Scope:** four homelands; SF with its representative council; a separate city without sovereign authority; wild regions and mixed settlements; Hugging Face and NVIDIA organizations. Seed different bodies, expertise, cultures and infrastructure. Introduce physical compute costs and its useful effects through bounded experiments before scaling it across the map.
 
 **Evidence:** starting identities affect decisions without becoming fixed roles; geography and material dependencies matter; independent organizations act through their members. Councils do not acquire reality-editing powers by office. Universal laws apply outside territorial overrides.

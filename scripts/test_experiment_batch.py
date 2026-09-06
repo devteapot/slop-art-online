@@ -41,12 +41,14 @@ class ScalingChecks(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def invoke(self, spec=None, dry=False, fail_launch=None, evidence_failure=False, duplicate_db=False):
+    def invoke(self, spec=None, dry=False, fail_launch=None, evidence_failure=False, duplicate_db=False,
+               invalid_completion=None, interrupt_after_exit=False):
         spec = spec or self.spec
         manifest = self.root / 'source-manifest.json'
         write(manifest, spec)
         out = self.root / 'evidence'
         launches = []
+        signal_handlers = {}
 
         class Job:
             def __init__(self, command, **kwargs):
@@ -61,7 +63,18 @@ class ScalingChecks(unittest.TestCase):
                 run = 'fixture-' + self.folder.name
                 write(self.folder / 'ready.json', dict(run=run))
                 write(self.folder / 'active.json', dict(server='fixture', db='same' if duplicate_db else run, run=run))
-                write(self.folder / 'pilot.json', dict(started_at=10, finished_at=13, phase='completed'))
+                requested = int(arg('--minutes')) * 60
+                final = self.folder / run / 'final-snapshot.json'
+                final.parent.mkdir()
+                write(final, dict(world=dict(run=run, timing=dict(time_ms=2000), stopped=False,
+                                           players=[dict(id=1, health=100)]), events=[]))
+                pilot = dict(started_at=10, finished_at=10 + requested + 3, phase='completed', run=run,
+                    minutes=int(arg('--minutes')), final_snapshot=str(final), final_snapshot_sha256=digest(final),
+                    final_time_ms=2000, completion=dict(protocol='sao-pilot-completion-v1', reason='duration_elapsed',
+                        requested_seconds=requested, observed_wall_seconds=requested, ended_at=10 + requested))
+                if invalid_completion:
+                    invalid_completion(pilot, final)
+                write(self.folder / 'pilot.json', pilot)
                 write(self.folder / 'LIVE_RESULT.json', dict(run=run, seconds=2, updates=40,
                     arenas=[dict(players=[dict(alive=True, calls=[dict(phase='completed')])])],
                     engine_errors=[], scope_violations=[]))
@@ -73,6 +86,8 @@ class ScalingChecks(unittest.TestCase):
             def poll(self):
                 if self.gate.exists():
                     self.returncode = 0
+                    if interrupt_after_exit:
+                        signal_handlers[batch.signal.SIGINT](batch.signal.SIGINT, None)
                 return self.returncode
 
             def wait(self, timeout=None):
@@ -95,7 +110,8 @@ class ScalingChecks(unittest.TestCase):
             argv.append('--dry-run')
         error = None
         with patch.object(sys, 'argv', argv), patch.object(batch.subprocess, 'Popen', Job), \
-             patch.object(batch, 'summarize', summarize), patch.object(batch.signal, 'signal'), \
+             patch.object(batch, 'summarize', summarize), \
+             patch.object(batch.signal, 'signal', lambda sig, handler: signal_handlers.update({sig: handler})), \
              contextlib.redirect_stdout(io.StringIO()):
             try:
                 batch.main()
@@ -111,7 +127,7 @@ class ScalingChecks(unittest.TestCase):
         report = json.loads((out / 'batch.json').read_text())
         self.assertEqual(report['phase'], 'completed')
         self.assertEqual(len(report['comparison']), 7)
-        self.assertEqual(report['comparison'][0]['wall_seconds'], 3)
+        self.assertEqual(report['comparison'][0]['wall_seconds'], 303)
         self.assertEqual(report['variants'][0]['gate_timeout_seconds'], 730)
         self.assertEqual(len({r['database'] for r in report['variants']}), 7)
 
@@ -237,6 +253,56 @@ class ScalingChecks(unittest.TestCase):
         out, jobs, error = self.invoke(evidence_failure=True)
         self.assertIsInstance(error, SystemExit)
         self.assertEqual(json.loads((out / 'batch.json').read_text())['phase'], 'failed')
+
+    def test_short_zero_exit_pilot_rejected_even_when_cleanup_finishes_after_deadline(self):
+        def shorten(pilot, _):
+            pilot['completion']['observed_wall_seconds'] = 200
+        out, _, error = self.invoke(invalid_completion=shorten)
+        self.assertIn('minimum active duration', str(error))
+        report = json.loads((out / 'batch.json').read_text())
+        self.assertEqual(report['phase'], 'failed')
+        self.assertEqual(report['variants'][0]['phase'], 'failed')
+        self.assertEqual(report['comparison'], [])
+
+    def test_interrupted_completed_claim_rejected(self):
+        def interrupt(pilot, _):
+            pilot['interruption'] = dict(signal='SIGINT')
+        out, _, error = self.invoke(invalid_completion=interrupt)
+        self.assertIn('interruption', str(error))
+        self.assertEqual(json.loads((out / 'batch.json').read_text())['phase'], 'failed')
+
+    def test_unproven_terminal_claim_rejected(self):
+        def terminal(pilot, _):
+            pilot['completion'].update(reason='all_actors_dead', observed_wall_seconds=20)
+        _, _, error = self.invoke(invalid_completion=terminal)
+        self.assertIn('population termination', str(error))
+
+    def test_actual_early_terminal_authority_is_accepted(self):
+        def terminal(pilot, final):
+            pilot['completion'].update(reason='all_actors_dead', observed_wall_seconds=20)
+            snapshot = json.loads(final.read_text())
+            snapshot['world']['players'][0]['health'] = 0
+            write(final, snapshot)
+            pilot['final_snapshot_sha256'] = digest(final)
+        out, _, error = self.invoke(invalid_completion=terminal)
+        self.assertIsNone(error)
+        self.assertEqual(json.loads((out / 'batch.json').read_text())['phase'], 'completed')
+
+    def test_final_authority_provenance_mismatch_rejected(self):
+        def altered(pilot, final):
+            snapshot = json.loads(final.read_text())
+            snapshot['world']['timing']['time_ms'] += 1
+            write(final, snapshot)
+        _, _, error = self.invoke(invalid_completion=altered)
+        self.assertIn('snapshot provenance', str(error))
+
+    def test_batch_signal_at_last_process_exit_cannot_report_completion(self):
+        out, _, error = self.invoke(interrupt_after_exit=True)
+        self.assertIn('cancelled', str(error))
+        report = json.loads((out / 'batch.json').read_text())
+        self.assertEqual(report['phase'], 'failed')
+        self.assertEqual(report['interruption']['signal'], 'SIGINT')
+        self.assertEqual(report['comparison'], [])
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

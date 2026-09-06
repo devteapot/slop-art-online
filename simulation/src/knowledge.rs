@@ -289,7 +289,7 @@ impl World {
         Ok(())
     }
 
-    fn receive_record(
+    pub(super) fn receive_record(
         &mut self,
         i: usize,
         cause: u64,
