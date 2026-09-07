@@ -99,10 +99,34 @@ pub fn parse_inventory(text: &str) -> Result<Vec<String>, String> {
     Ok(ids)
 }
 
+pub const AUDIT_PROCEDURE: &str = "sim_export_owned_audit";
+pub fn parse_audit_page(text: &str, run: &str, start: u64, end: u64) -> Result<Vec<String>, String> {
+    if start == 0 || end < start { return Err("invalid audit range".into()); }
+    let bodies: Vec<String> = reply(text)?;
+    if bodies.len() as u64 != (end - start).min(4096) { return Err("audit page incomplete".into()); }
+    #[derive(Deserialize)]
+    struct Header { run: String, id: u64 }
+    for (n, body) in bodies.iter().enumerate() {
+        let h: Header = serde_json::from_str(body).map_err(|_| "invalid audit event")?;
+        if h.run != run || h.id != start + n as u64 { return Err("audit event gap or scope mismatch".into()); }
+    }
+    Ok(bodies)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[test]
+    fn audit_pages_preserve_original_json_and_reject_wrong_scope_or_gaps() {
+        let body = "{ \"run\":\"r\", \"id\":1, \"n\":1.00 }";
+        let wire = serde_json::to_string(&(0u8, vec![body])).unwrap();
+        assert_eq!(parse_audit_page(&wire, "r", 1, 2).unwrap(), vec![body]);
+        assert!(parse_audit_page(&wire, "other", 1, 2).is_err());
+        assert!(parse_audit_page(&wire, "r", 2, 3).is_err());
+        assert!(parse_audit_page("[0,[]]", "r", 1, 2).is_err());
+        assert!(parse_audit_page("[1,\"run unavailable\"]", "r", 1, 2).is_err());
+    }
     #[test]
     fn explicit_transport_defaults_to_historical_sql_and_rejects_unknown_modes() {
         assert_eq!(SnapshotApi::from_setting(None).unwrap(), SnapshotApi::Sql);

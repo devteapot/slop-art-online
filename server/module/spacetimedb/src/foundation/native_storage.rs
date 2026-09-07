@@ -7,6 +7,7 @@ use simulation::{
     Controller, Player, World,
 };
 use spacetimedb::{ReducerContext, Table, ViewContext};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -38,7 +39,38 @@ fn parse<T: serde::de::DeserializeOwned>(value: &str) -> Result<T, String> {
     serde_json::from_str(value).map_err(|e| format!("invalid native component: {e}"))
 }
 
+/// Mutable action admission/delivery metadata, separated from the private seed.
 #[derive(Clone, PartialEq)]
+#[spacetimedb::table(accessor = sim_native_controller)]
+pub struct SimNativeController {
+    #[primary_key]
+    pub key: String,
+    #[index(btree)]
+    pub run: String,
+    pub actor: u32,
+    pub known_targets: Vec<u32>,
+    pub last_lifecycle: String,
+    pub action: String,
+}
+#[derive(Clone, PartialEq)]
+#[spacetimedb::table(accessor = sim_controller_bootstrap)]
+pub struct SimControllerBootstrap {
+    #[primary_key]
+    pub key: String,
+    #[index(btree)]
+    pub run: String,
+    pub actor: u32,
+    pub body: String,
+}
+impl SimNativeController {
+    fn from_state(run: &str, actor: u32, c: &simulation::controller::Authority) -> Self {
+        Self { key: key(run, actor), run: run.into(), actor,
+            known_targets: c.known_targets.iter().copied().collect(),
+            last_lifecycle: json(&c.last_lifecycle), action: json(&c.action) }
+    }
+}
+
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[spacetimedb::table(accessor = sim_native_head)]
 pub struct SimNativeHead {
     #[primary_key]
@@ -52,6 +84,8 @@ pub struct SimNativeHead {
     pub time_ms: u64,
     pub updates: u64,
     pub delta_ms: u64,
+    #[serde(default)]
+    pub maintenance_ms: Option<u64>,
     pub needs_remainder_ms: u64,
     pub hazard_remainder_ms: u64,
     pub next_job: u64,
@@ -59,6 +93,26 @@ pub struct SimNativeHead {
     pub food_remainder: String,
     pub pending: String,
     pub request_ids: Vec<u64>,
+}
+/// Presentation clock advances with physical/global commits. Actor-local action
+/// admission does not invalidate every connected renderer through next_event.
+#[derive(Clone, PartialEq)]
+#[spacetimedb::table(accessor = sim_render_clock)]
+pub struct SimRenderClock {
+    #[primary_key]
+    pub run: String,
+    pub head: String,
+}
+macro_rules! render_head {
+    ($db:expr, $run:expr) => {{
+        if let Some(row) = $db.sim_render_clock().run().find($run.to_owned()) {
+            parse::<SimNativeHead>(&row.head)
+        } else {
+            // Existing databases acquire the presentation row on their next
+            // global commit; until then retain the original read dependency.
+            $db.sim_native_head().run().find($run.to_owned()).ok_or_else(|| "native run head missing".to_string())
+        }
+    }};
 }
 const CLOCK_INDEX_VERSION: u32 = 1;
 #[derive(Clone, PartialEq)]
@@ -91,6 +145,38 @@ pub struct SimNativeDefinition {
     pub run: String,
     pub kind: String,
     pub body: String,
+}
+/// Updated atomically with the authoritative definition. This small row lets a
+/// disposable parsed cache avoid fetching the large body on matching versions.
+#[derive(Clone, PartialEq)]
+#[spacetimedb::table(accessor = sim_native_definition_version)]
+pub struct SimNativeDefinitionVersion {
+    #[primary_key]
+    pub key: String,
+    pub digest: String,
+}
+struct DefinitionSet {
+    initial: Deferred<simulation::Scenario>,
+    scripts: Deferred<simulation::scripting::Registry>,
+    laws: simulation::laws::LawState,
+    balance: simulation::infrastructure::InfrastructureBalance,
+}
+macro_rules! read_definitions {
+    ($db:expr, $run:expr) => {{
+        let run = $run;
+        let initial = $db.sim_native_definition_version().key().find(key(run, "initial"));
+        let scripts = $db.sim_native_definition_version().key().find(key(run, "scripts"));
+        DefinitionSet {
+            initial: super::definition_cache::initial_versioned(initial.as_ref().map(|r| r.digest.as_str()), || {
+                $db.sim_native_definition().key().find(key(run, "initial")).map(|r| r.body).ok_or("native initial missing".into())
+            })?,
+            scripts: super::definition_cache::scripts_versioned(scripts.as_ref().map(|r| r.digest.as_str()), || {
+                $db.sim_native_definition().key().find(key(run, "scripts")).map(|r| r.body).ok_or("native scripts missing".into())
+            })?,
+            laws: parse(&$db.sim_native_definition().key().find(key(run, "laws")).ok_or("native laws missing")?.body)?,
+            balance: parse(&$db.sim_native_definition().key().find(key(run, "balance")).ok_or("native balance missing")?.body)?,
+        }
+    }};
 }
 /// Public body facts and physical state; no private trace or captured reads.
 #[derive(Clone, PartialEq)]
@@ -183,7 +269,8 @@ pub struct SimNativeParticipant {
 /// ordered cursor references, so changing a cursor does not rewrite old payloads.
 #[derive(Clone, PartialEq)]
 #[spacetimedb::table(accessor = sim_native_experience,
-    index(accessor = participant, btree(columns = [run, actor, cursor])))]
+    index(accessor = participant, btree(columns = [run, actor, cursor])),
+    index(accessor = controller_scope, btree(columns = [run, actor])))]
 pub struct SimNativeExperience {
     #[primary_key]
     pub key: String,
@@ -295,6 +382,34 @@ pub struct SimNativeActorAux {
     pub dialogue_ready_ms: Option<u64>,
     pub dirty: Option<bool>,
 }
+/// Presentation support excludes scheduling bookkeeping. An admitted action
+/// can dirty its actor without invalidating every observer of physical bodies.
+#[derive(Clone, PartialEq)]
+#[spacetimedb::table(accessor = sim_render_actor_support)]
+pub struct SimRenderActorSupport {
+    #[primary_key]
+    pub key: String,
+    #[index(btree)]
+    pub run: String,
+    pub actor: u32,
+    pub arena: Option<String>,
+    pub lifecycle: Option<String>,
+    pub offer: Option<String>,
+    pub body: Option<String>,
+    pub materials: Option<String>,
+}
+impl SimRenderActorSupport {
+    fn from_aux(row: SimNativeActorAux) -> Self {
+        Self { key:row.key, run:row.run, actor:row.actor, arena:row.arena,
+            lifecycle:row.lifecycle, offer:row.offer, body:row.body, materials:row.materials }
+    }
+    fn into_aux(self) -> SimNativeActorAux {
+        SimNativeActorAux { key:self.key, run:self.run, actor:self.actor, arena:self.arena,
+            lifecycle:self.lifecycle, offer:self.offer, body:self.body, materials:self.materials,
+            needs_remainder_ms:None, hazard_remainder_ms:None, action_ready_ms:None,
+            dialogue_ready_ms:None, dirty:None }
+    }
+}
 #[derive(Clone, PartialEq)]
 #[spacetimedb::table(accessor = sim_native_site,
     index(accessor = location, btree(columns = [run, position])))]
@@ -369,6 +484,7 @@ impl SimNativeHead {
             time_ms: w.timing.time_ms,
             updates: w.timing.updates,
             delta_ms: w.timing.delta_ms,
+            maintenance_ms: w.timing.maintenance_ms,
             needs_remainder_ms: w.timing.needs_remainder_ms,
             hazard_remainder_ms: w.timing.hazard_remainder_ms,
             next_job: w.infrastructure.next_job,
@@ -501,6 +617,9 @@ impl SimNativeMind {
 }
 impl SimNativeParticipant {
     fn from_state(run: &str, actor: u32, s: &ParticipantState) -> Self {
+        Self::from_state_with_heads(run, actor, s, None)
+    }
+    fn from_state_with_heads(run: &str, actor: u32, s: &ParticipantState, heads: Option<String>) -> Self {
         Self {
             key: key(run, actor),
             run: run.into(),
@@ -508,7 +627,7 @@ impl SimNativeParticipant {
             control_epoch: s.control_epoch,
             learning_revision: s.learning_revision,
             cursor: s.cursor,
-            experiences: json(&ExperienceHeads { native_experience_rows_v2: s.experiences.iter().map(experience_index).collect() }),
+            experiences: heads.unwrap_or_else(|| json(&ExperienceHeads { native_experience_rows_v2: s.experiences.iter().map(experience_index).collect() })),
             speech: json(&s.speech),
             last_speech_tick: s.last_speech_tick,
             learned_sources: s.learned_sources.clone(),
@@ -540,11 +659,12 @@ impl SimNativeParticipant {
             // Read old component rows until this actor's next ordinary save.
             parse(&self.experiences)?
         };
-        self.state_from_experiences(experiences, leases, receipts)
+        self.state_from_experiences(experiences.into(), leases, receipts.into())
     }
-    fn state_from_experiences(&self, experiences: Vec<Experience>, leases: Vec<EvidenceLease>,
-        receipts: Vec<Receipt>) -> Result<ParticipantState, String> {
+    fn state_from_experiences(&self, experiences: simulation::deferred::Deferred<Vec<Experience>>, leases: Vec<EvidenceLease>,
+        receipts: Deferred<Vec<Receipt>>) -> Result<ParticipantState, String> {
         Ok(simulation::participant::ParticipantStateData {
+            client_controller: None,
             control_epoch: self.control_epoch,
             learning_revision: self.learning_revision,
             cursor: self.cursor,
@@ -715,17 +835,35 @@ impl SimNativeStation {
 /// Host reads are kept separate from assembly so the exact representation and
 /// scoped dependency projection can be differential-tested without a DB host.
 struct ColdReader {
+    receipts: Box<dyn Fn(&str, u32) -> Result<Vec<Receipt>, String> + Send + Sync>,
+    bootstrap: Box<dyn Fn(&str, u32) -> Result<simulation::controller::Bootstrap, String> + Send + Sync>,
     mind: Box<dyn Fn(&str, u32) -> Result<SimNativeMindHistory, String> + Send + Sync>,
     experience: Box<dyn Fn(&str, u32, u64) -> Result<SimNativeExperience, String> + Send + Sync>,
     legacy_experiences: Box<dyn Fn(&str, u32) -> Result<Vec<SimNativeExperience>, String> + Send + Sync>,
     lease: Box<dyn Fn(&str, u32, u64) -> Result<Vec<Experience>, String> + Send + Sync>,
 }
-fn cold_reader(ctx: &ReducerContext) -> Arc<ColdReader> {
+macro_rules! cold_reader_for {
+    ($ctx:expr) => {{
+        let ctx = $ctx;
+    let receipts = ctx.db.sim_participant_receipt().participant();
+    let bootstraps = ctx.db.sim_controller_bootstrap().key();
     let minds = ctx.db.sim_native_mind_history().key();
     let experiences = ctx.db.sim_native_experience().key();
     let legacy_experiences = ctx.db.sim_native_experience().participant();
     let leases = ctx.db.sim_native_lease_evidence().lease_id();
     Arc::new(ColdReader {
+        receipts: Box::new(move |run, actor| {
+            let mut values = receipts.filter((run, actor)).map(|r| Receipt {
+                request_id:r.request_id, fingerprint:r.fingerprint, ok:r.ok, error:r.error, event:r.event,
+            }).collect::<Vec<_>>();
+            values.sort_by_key(|r| r.event);
+            Ok(values)
+        }),
+        bootstrap: Box::new(move |run, actor| {
+            let row = bootstraps.find(key(run, actor)).ok_or("controller bootstrap missing")?;
+            if row.run != run || row.actor != actor { return Err("controller bootstrap scope mismatch".into()); }
+            parse(&row.body)
+        }),
         mind: Box::new(move |run, actor| {
             let row = minds.find(key(run, actor)).ok_or("native mind history missing")?;
             if row.run != run || row.actor != actor || row.key != key(run, actor) {
@@ -755,7 +893,12 @@ fn cold_reader(ctx: &ReducerContext) -> Arc<ColdReader> {
             parse(&row.experiences)
         }),
     })
+
+    }};
 }
+fn cold_reader(ctx: &ReducerContext) -> Arc<ColdReader> { cold_reader_for!(ctx) }
+fn view_cold_reader(ctx: &ViewContext) -> Arc<ColdReader> { cold_reader_for!(ctx) }
+
 fn deferred_player(a: &SimNativeActor, m: &SimNativeMind, reader: &Arc<ColdReader>) -> Result<Player, String> {
     if m.memories != MIND_HISTORY { return a.player(m, None); }
     let mut hot = m.clone();
@@ -804,8 +947,10 @@ fn deferred_experiences(p: &SimNativeParticipant, reader: &Arc<ColdReader>) -> R
     }).collect(), true))
 }
 struct Rows {
+    controllers: Vec<SimNativeController>,
+    bootstraps: Vec<SimControllerBootstrap>,
     head: SimNativeHead,
-    definitions: Vec<SimNativeDefinition>,
+    definitions: DefinitionSet,
     actors: Vec<SimNativeActor>,
     minds: Vec<SimNativeMind>,
     mind_histories: Vec<SimNativeMindHistory>,
@@ -834,27 +979,18 @@ fn assemble_with(
     cold: Option<Arc<ColdReader>>,
 ) -> Result<(World, LeaseIds), String> {
     let h = rows.head;
-    let definitions: BTreeMap<_, _> = rows
-        .definitions
-        .into_iter()
-        .map(|d| (d.kind, d.body))
-        .collect();
-    let definition = |kind: &str| {
-        definitions
-            .get(kind)
-            .ok_or_else(|| format!("native {kind} missing"))
-    };
     let mut w = World {
         run: h.run,
         version: h.version,
-        initial: parse(definition("initial")?)?,
-        scripts: parse(definition("scripts")?)?,
-        laws: parse(definition("laws")?)?,
+        initial: rows.definitions.initial,
+        scripts: rows.definitions.scripts,
+        laws: rows.definitions.laws,
         tick: h.tick,
         timing: simulation::timing::Timing {
             time_ms: h.time_ms,
             updates: h.updates,
             delta_ms: h.delta_ms,
+            maintenance_ms: h.maintenance_ms,
             needs_remainder_ms: h.needs_remainder_ms,
             hazard_remainder_ms: h.hazard_remainder_ms,
             applied_disturbances: h
@@ -872,7 +1008,7 @@ fn assemble_with(
         players: vec![],
         sites: vec![],
         infrastructure: simulation::infrastructure::InfrastructureState {
-            balance: parse(definition("balance")?)?,
+            balance: rows.definitions.balance,
             next_job: h.next_job,
             bodies: BTreeMap::new(),
             actor_materials: BTreeMap::new(),
@@ -950,19 +1086,25 @@ fn assemble_with(
         }
         lease_ids.entry(p.actor).or_default();
         if let Some(reader) = &cold {
-            let (decoded, indexed) = deferred_experiences(&p, reader)?;
-            if indexed {
-                // The exact ordered metadata was parsed once above. Every
-                // deferred payload validates that metadata on first access.
-                w.participants.insert(p.actor, p.state_from_experiences(decoded,
-                    leases.remove(&p.actor).unwrap_or_default(), receipts.remove(&p.actor).unwrap_or_default())?);
-                continue;
-            }
-            let mut values = BTreeMap::new();
-            for e in decoded {
-                if values.insert(e.cursor, e).is_some() { return Err("duplicate native experience cursor".into()); }
-            }
-            experiences.insert(p.actor, values);
+            let (source, reader) = (p.clone(), reader.clone());
+            let trace = simulation::deferred::Deferred::load_with(move || {
+                let (decoded, indexed) = deferred_experiences(&source, &reader)?;
+                if indexed { return Ok(decoded); }
+                let mut values = BTreeMap::new();
+                for e in decoded {
+                    if values.insert(e.cursor, e).is_some() {
+                        return Err("duplicate native experience cursor".into());
+                    }
+                }
+                // The legacy decoder validates cursor references and preserves
+                // inline-array semantics before returning the exact trace.
+                Ok(source.state(values, vec![], vec![])?.experiences.to_vec())
+            });
+            let (receipt_reader, receipt_run, receipt_actor) = (cold.as_ref().unwrap().clone(), w.run.clone(), p.actor);
+            let receipt_values = Deferred::load_with(move || (receipt_reader.receipts)(&receipt_run, receipt_actor));
+            w.participants.insert(p.actor, p.state_from_experiences(trace,
+                leases.remove(&p.actor).unwrap_or_default(), receipt_values)?);
+            continue;
         }
         w.participants.insert(
             p.actor,
@@ -972,6 +1114,22 @@ fn assemble_with(
                 receipts.remove(&p.actor).unwrap_or_default(),
             )?,
         );
+    }
+    let mut bootstraps: BTreeMap<_, _> = rows.bootstraps.into_iter().map(|b|(b.actor,b)).collect();
+    for c in rows.controllers {
+        if c.run != w.run || c.key != key(&w.run, c.actor) { return Err("controller scope mismatch".into()); }
+        let bootstrap = if let Some(reader) = &cold {
+            let (reader, run, actor) = (reader.clone(), w.run.clone(), c.actor);
+            Deferred::load_with(move || (reader.bootstrap)(&run, actor))
+        } else {
+            let b = bootstraps.remove(&c.actor).ok_or("controller bootstrap missing")?;
+            if b.run != w.run || b.key != c.key { return Err("bootstrap scope mismatch".into()); }
+            parse::<simulation::controller::Bootstrap>(&b.body)?.into()
+        };
+        w.participants.get_mut(&c.actor).ok_or("controller participant missing")?.client_controller = Some(simulation::controller::Authority {
+            bootstrap, known_targets: c.known_targets.into_iter().collect(),
+            last_lifecycle: parse(&c.last_lifecycle)?, action: parse(&c.action)?,
+        });
     }
     for aux in rows.aux {
         aux.apply(&mut w)?;
@@ -1017,12 +1175,14 @@ macro_rules! read_all {
     ($db:expr,$run:expr,$materialize:expr,$cold:expr) => {{
         let run = $run;
         Rows {
+            controllers: $db.sim_native_controller().run().filter(run).collect(),
+            bootstraps: if $cold { vec![] } else { $db.sim_controller_bootstrap().run().filter(run).collect() },
             head: $db
                 .sim_native_head()
                 .run()
                 .find(run.to_owned())
                 .ok_or("native run head missing")?,
-            definitions: $db.sim_native_definition().run().filter(run).collect(),
+            definitions: read_definitions!($db, run),
             actors: $db.sim_native_actor().run().filter(run).collect(),
             minds: $db.sim_native_mind().run().filter(run).collect(),
             mind_histories: if $cold { vec![] } else { $db.sim_native_mind_history().run().filter(run).collect() },
@@ -1035,11 +1195,11 @@ macro_rules! read_all {
             } else {
                 vec![]
             },
-            receipts: $db
+            receipts: if $cold { vec![] } else { $db
                 .sim_participant_receipt()
                 .participant()
                 .filter((run,))
-                .collect(),
+                .collect() },
             aux: $db.sim_native_actor_aux().run().filter(run).collect(),
             sites: $db.sim_native_site().run().filter(run).collect(),
             stations: $db.sim_native_station().run().filter(run).collect(),
@@ -1053,7 +1213,8 @@ pub(super) fn load(ctx: &ReducerContext, run: &str) -> Result<(World, LeaseIds),
 pub(super) fn load_clock(ctx: &ReducerContext, run: &str) -> Result<(World, LeaseIds), String> {
     #[cfg(feature = "clock-profile")]
     COLD_READS.with(|counts| counts.set([0; 6]));
-    assemble_with(read_all!(ctx.db, run, false, true), None, false, Some(cold_reader(ctx)))
+    let rows = super::measured("clock.read_rows", || Ok::<Rows, String>(read_all!(ctx.db, run, false, true)))?;
+    super::measured("clock.assemble", || assemble_with(rows, None, false, Some(cold_reader(ctx))))
 }
 pub(super) fn select_clock(ctx: &ReducerContext, w: &World, delta_ms: u64) -> Option<simulation::clock::Selection> {
     let state = ctx.db.sim_native_clock_state().run().find(&w.run)?;
@@ -1073,6 +1234,36 @@ pub(super) fn load_export(ctx: &ReducerContext, run: &str) -> Result<World, Stri
 pub(super) fn load_view(ctx: &ViewContext, run: &str) -> Result<World, String> {
     assemble(read_all!(ctx.db, run, true), None, true).map(|(w, _)| w)
 }
+/// Observer-only caller authenticates before entering this path. Bodies remain
+/// a run-indexed render set; private histories are read for one inspector only.
+pub(super) fn observer_view(ctx: &ViewContext, run: &str, inspected: Option<u32>) -> Result<World, String> {
+    let actors: Vec<_> = ctx.db.sim_native_actor().run().filter(run).collect();
+    let actor = inspected.or_else(|| actors.first().map(|p| p.actor)).unwrap_or(0);
+    let actor_key = key(run, actor);
+    let support: Vec<_> = ctx.db.sim_render_actor_support().run().filter(run).collect();
+    let aux = if support.is_empty() {
+        // Existing databases acquire support rows on the next global commit.
+        ctx.db.sim_native_actor_aux().run().filter(run).collect()
+    } else { support.into_iter().map(SimRenderActorSupport::into_aux).collect() };
+    let rows = Rows {
+        head: render_head!(ctx.db, run)?,
+        definitions: read_definitions!(ctx.db, run),
+        actors,
+        minds: ctx.db.sim_native_mind().key().find(&actor_key).into_iter().collect(),
+        mind_histories: vec![],
+        participants: ctx.db.sim_native_participant().key().find(&actor_key).into_iter().collect(),
+        controllers: ctx.db.sim_native_controller().key().find(&actor_key).into_iter().collect(),
+        bootstraps: vec![],
+        experiences: vec![],
+        // Inspection context does not read command receipts or captured leases.
+        leases: vec![], lease_evidence: vec![], captures: vec![], receipts: vec![],
+        aux,
+        sites: ctx.db.sim_native_site().run().filter(run).collect(),
+        stations: ctx.db.sim_native_station().run().filter(run).collect(),
+        archives: ctx.db.sim_native_archive().run().filter(run).collect(),
+    };
+    assemble_with(rows, Some(actor), false, Some(view_cold_reader(ctx))).map(|(world, _)| world)
+}
 pub(super) fn histories_separated(ctx: &ReducerContext, run: &str) -> bool {
     ctx.db.sim_native_mind().run().filter(run).all(|m| m.memories == MIND_HISTORY)
         && ctx.db.sim_native_participant().run().filter(run).all(|p| parse::<ExperienceHeads>(&p.experiences).is_ok())
@@ -1081,7 +1272,8 @@ pub(super) fn histories_separated(ctx: &ReducerContext, run: &str) -> bool {
 }
 
 macro_rules! read_participant_rows {
-    ($db:expr,$run:expr,$actor:expr,$materialize:expr) => {{
+    ($db:expr,$run:expr,$actor:expr,$materialize:expr) => {read_participant_rows!($db,$run,$actor,$materialize,false)};
+    ($db:expr,$run:expr,$actor:expr,$materialize:expr,$cold:expr) => {{
         let run = $run;
         let actor = $actor;
 
@@ -1128,46 +1320,47 @@ macro_rules! read_participant_rows {
             vec![]
         };
         Ok::<Rows, String>(Rows {
-            head: $db
+            controllers: $db.sim_native_controller().key().find(key(run, actor)).into_iter().collect(),
+            bootstraps: if $cold {vec![]} else {$db.sim_controller_bootstrap().key().find(key(run, actor)).into_iter().collect()},
+            head: if $materialize { render_head!($db, run)? } else { $db
                 .sim_native_head()
                 .run()
                 .find(run.to_owned())
-                .ok_or("native run head missing")?,
-            definitions: ["initial", "scripts", "laws", "balance"]
-                .into_iter()
-                .map(|kind| {
-                    $db.sim_native_definition()
-                        .key()
-                        .find(key(run, kind))
-                        .ok_or("native definition missing")
-                })
-                .collect::<Result<_, _>>()?,
+                .ok_or("native run head missing")? },
+            definitions: read_definitions!($db, run),
             actors,
             minds: vec![$db
                 .sim_native_mind()
                 .key()
                 .find(key(run, actor))
                 .ok_or("native mind missing")?],
-            mind_histories: $db.sim_native_mind_history().key().find(key(run, actor)).into_iter().collect(),
+            mind_histories: if $cold {vec![]} else {$db.sim_native_mind_history().key().find(key(run, actor)).into_iter().collect()},
             participants: $db
                 .sim_native_participant()
                 .key()
                 .find(key(run, actor))
                 .into_iter()
                 .collect(),
-            experiences: $db.sim_native_experience().participant().filter((run, actor)).collect(),
-            lease_evidence: leases.iter().filter(|l| l.experiences == LEASE_EVIDENCE)
-                .filter_map(|l| $db.sim_native_lease_evidence().lease_id().find(l.id)).collect(),
+            experiences: if $cold {vec![]} else {$db.sim_native_experience().participant().filter((run, actor)).collect()},
+            lease_evidence: if $cold {vec![]} else {leases.iter().filter(|l| l.experiences == LEASE_EVIDENCE)
+                .filter_map(|l| $db.sim_native_lease_evidence().lease_id().find(l.id)).collect()},
             leases,
             captures,
-            receipts: $db
+            receipts: if $cold { vec![] } else { $db
                 .sim_participant_receipt()
                 .participant()
                 .filter((run, actor))
-                .collect(),
+                .collect() },
             aux: aux_ids
                 .into_iter()
-                .filter_map(|id| $db.sim_native_actor_aux().key().find(key(run, id)))
+                .filter_map(|id| {
+                    if $materialize {
+                        if let Some(row) = $db.sim_render_actor_support().key().find(key(run, id)) {
+                            return Some(row.into_aux());
+                        }
+                    }
+                    $db.sim_native_actor_aux().key().find(key(run, id))
+                })
                 .collect(),
             sites: vec![],
             stations,
@@ -1176,15 +1369,15 @@ macro_rules! read_participant_rows {
     }};
 }
 fn read_participant(ctx: &ReducerContext, run: &str, actor: u32) -> Result<Rows, String> {
-    read_participant_rows!(ctx.db, run, actor, false)
+    read_participant_rows!(ctx.db, run, actor, false, true)
 }
 pub(super) fn participant_view(
     ctx: &ViewContext,
     run: &str,
     actor: u32,
 ) -> Result<(World, bool), String> {
-    let rows: Rows = read_participant_rows!(ctx.db, run, actor, true)?;
-    let (world, _) = assemble(rows, Some(actor), true)?;
+    let rows: Rows = read_participant_rows!(ctx.db, run, actor, true, true)?;
+    let (world, _) = assemble_with(rows, Some(actor), true, Some(view_cold_reader(ctx)))?;
     let can_participate = ctx
         .db
         .sim_native_actor()
@@ -1192,6 +1385,16 @@ pub(super) fn participant_view(
         .find(key(run, 3))
         .is_some_and(|a| a.human);
     Ok((world, can_participate))
+}
+pub(super) fn render_event_end(ctx: &ViewContext, run: &str) -> Option<u64> {
+    render_head!(ctx.db, run).ok().map(|h| h.next_event)
+}
+pub(super) fn render_memories(ctx: &ViewContext, run: &str, actor: u32) -> Option<Vec<simulation::Percept>> {
+    let key = key(run, actor);
+    if let Some(row) = ctx.db.sim_native_mind_history().key().find(&key) {
+        return parse(&row.memories).ok();
+    }
+    ctx.db.sim_native_mind().key().find(&key).and_then(|row| parse(&row.memories).ok())
 }
 
 macro_rules! upsert {
@@ -1243,7 +1446,7 @@ fn transact(
         simulation::participant_transaction::ParticipantTransaction,
     ) -> Result<simulation::participant_transaction::ParticipantCommit, String>,
 ) -> Result<(), String> {
-    let rows = read_participant(ctx, run, actor)?;
+    let rows = super::measured("command.read", || read_participant(ctx, run, actor))?;
     let mut head = rows.head.clone();
     if !head.participant_mode {
         return Err("participant-v1 requires a participant run".into());
@@ -1258,7 +1461,7 @@ fn transact(
         .ok_or("unknown actor")?
         .ordinal;
     let mut aux = rows.aux.iter().find(|a| a.actor == actor).cloned();
-    let (world, ids) = assemble(rows, Some(actor), false)?;
+    let (world, ids) = super::measured("command.assemble", || assemble_with(rows, Some(actor), false, Some(cold_reader(ctx))))?;
     let previous = world
         .participants
         .get(&actor)
@@ -1272,7 +1475,9 @@ fn transact(
         .clone();
     let laws = world.laws.clone();
     let commit =
-        execute(simulation::participant_transaction::ParticipantTransaction::new(world, actor)?)?;
+        super::measured("command.execute", || execute(simulation::participant_transaction::ParticipantTransaction::new(world, actor)?))?;
+    #[cfg(feature = "clock-profile")]
+    let save_timer = spacetimedb::log_stopwatch::LogStopwatch::new("command.save");
     head.next_event = commit.next_event;
     save_clock_hint(ctx, run, commit.clock_hint);
     upsert!(ctx, sim_native_head, run, head.clone());
@@ -1309,7 +1514,9 @@ fn transact(
             body: json(&laws)
         }
     );
-    super::participant_delivery::publish_actor(
+    #[cfg(feature = "clock-profile")]
+    drop(save_timer);
+    super::measured("command.delivery", || super::participant_delivery::publish_actor(
         ctx,
         run,
         head.tick,
@@ -1320,8 +1527,8 @@ fn transact(
         &lease_ids,
         Some(&previous),
         head.time_ms,
-    );
-    super::append_audit(ctx, run, commit.events);
+    ));
+    super::measured("command.audit", || super::append_audit(ctx, run, commit.events));
     Ok(())
 }
 fn save_leases(ctx: &ReducerContext, run: &str, actor: u32, state: &ParticipantState,
@@ -1457,29 +1664,52 @@ fn save_participants(
 
 fn save_participant_state(ctx: &ReducerContext, run: &str, actor: u32,
     state: &ParticipantState, previous: Option<&ParticipantState>) {
-    let row = SimNativeParticipant::from_state(run, actor, state);
-    let old = ctx.db.sim_native_participant().key().find(&row.key);
-    let stored: BTreeSet<u64> = old.as_ref().filter(|r| r.experiences.starts_with('{'))
-        .map(|r| experience_cursors(&r.experiences).expect("validated experience references")
-            .into_iter().collect()).unwrap_or_default();
-    let current: BTreeMap<_, _> = state.experiences.iter().map(|e| (e.cursor, e)).collect();
-    assert_eq!(current.len(), state.experiences.len(), "unique personal cursors");
-    let previous: BTreeMap<_, _> = previous.into_iter().flat_map(|p| p.experiences.iter())
-        .map(|e| (e.cursor, e)).collect();
-    for cursor in stored.iter().filter(|id| !current.contains_key(id)) {
-        ctx.db.sim_native_experience().key().delete(key(run, format!("{actor}:{cursor}")));
-    }
-    for (&cursor, value) in &current {
-        if stored.contains(&cursor) && previous.get(&cursor).is_some_and(|old| value.can_reuse_encoding(old)) {
-            continue;
+    if let Some(controller) = &state.client_controller {
+        upsert!(ctx, sim_native_controller, key, SimNativeController::from_state(run, actor, controller));
+        if previous.and_then(|p|p.client_controller.as_ref()).is_none_or(|p| !p.bootstrap.same_snapshot(&controller.bootstrap)) {
+            upsert!(ctx, sim_controller_bootstrap, key, SimControllerBootstrap {
+                key: key(run, actor), run: run.into(), actor, body: json(&controller.bootstrap),
+            });
         }
-        upsert!(ctx, sim_native_experience, key, SimNativeExperience::from_experience(run, actor, value));
+    }
+    let old = ctx.db.sim_native_participant().key().find(key(run, actor));
+    // Activity/controller changes do not necessarily change personal evidence.
+    // Reuse only the retained transaction snapshot and the current row format;
+    // legacy rows still take the migration/reconciliation path below.
+    let heads = retained_experience_heads(state, previous, old.as_ref());
+    let unchanged_experiences = heads.is_some();
+    let row = SimNativeParticipant::from_state_with_heads(run, actor, state, heads);
+    if !unchanged_experiences {
+        let stored: BTreeSet<u64> = old.as_ref().filter(|r| r.experiences.starts_with('{'))
+            .map(|r| experience_cursors(&r.experiences).expect("validated experience references")
+                .into_iter().collect()).unwrap_or_default();
+        let current: BTreeMap<_, _> = state.experiences.iter().map(|e| (e.cursor, e)).collect();
+        assert_eq!(current.len(), state.experiences.len(), "unique personal cursors");
+        let previous: BTreeMap<_, _> = previous.into_iter().flat_map(|p| p.experiences.iter())
+            .map(|e| (e.cursor, e)).collect();
+        for cursor in stored.iter().filter(|id| !current.contains_key(id)) {
+            ctx.db.sim_native_experience().key().delete(key(run, format!("{actor}:{cursor}")));
+        }
+        for (&cursor, value) in &current {
+            if stored.contains(&cursor) && previous.get(&cursor).is_some_and(|old| value.can_reuse_encoding(old)) {
+                continue;
+            }
+            upsert!(ctx, sim_native_experience, key, SimNativeExperience::from_experience(run, actor, value));
+        }
     }
     match old {
         Some(old) if old == row => (),
         Some(_) => { ctx.db.sim_native_participant().key().update(row); }
         None => { ctx.db.sim_native_participant().insert(row); }
     }
+}
+
+fn retained_experience_heads(state: &ParticipantState, previous: Option<&ParticipantState>,
+    row: Option<&SimNativeParticipant>) -> Option<String> {
+    if !previous.is_some_and(|p| p.experiences.same_snapshot(&state.experiences)) { return None; }
+    let row = row?;
+    parse::<ExperienceHeads>(&row.experiences).ok()?;
+    Some(row.experiences.clone())
 }
 
 fn save_mind(ctx: &ReducerContext, run: &str, player: &Player, previous: Option<&Player>) {
@@ -1498,21 +1728,14 @@ fn save_mind(ctx: &ReducerContext, run: &str, player: &Player, previous: Option<
         None => { ctx.db.sim_native_mind().insert(row); }
     }
 }
-fn definitions(w: &World) -> Vec<SimNativeDefinition> {
-    [
-        ("initial", json(&w.initial)),
-        ("scripts", json(&w.scripts)),
-        ("laws", json(&w.laws)),
-        ("balance", json(&w.infrastructure.balance)),
-    ]
-    .into_iter()
-    .map(|(kind, body)| SimNativeDefinition {
-        key: key(&w.run, kind),
-        run: w.run.clone(),
-        kind: kind.into(),
-        body,
-    })
-    .collect()
+#[cfg(test)]
+fn definitions(w: &World) -> DefinitionSet {
+    DefinitionSet {
+        initial: super::definition_cache::initial(&json(&w.initial)).unwrap(),
+        scripts: super::definition_cache::scripts(&json(&w.scripts)).unwrap(),
+        laws: parse(&json(&w.laws)).unwrap(),
+        balance: parse(&json(&w.infrastructure.balance)).unwrap(),
+    }
 }
 fn save_clock_hint(ctx: &ReducerContext, run: &str, hint: simulation::clock::ActorHint) {
     upsert!(ctx, sim_native_clock_actor, key, SimNativeClockActor {
@@ -1567,27 +1790,57 @@ pub(super) fn save(
     previous: &BTreeMap<u32, ParticipantState>,
     previous_ids: &LeaseIds,
     previous_players: &BTreeMap<u32, Player>,
+    previous_definitions: Option<&super::storage::PreviousDefinitions>,
 ) -> LeaseIds {
-    upsert!(ctx, sim_native_head, run, SimNativeHead::from_world(w));
-    for d in definitions(w) {
-        upsert!(ctx, sim_native_definition, key, d);
+    #[cfg(feature = "clock-profile")]
+    let phase = spacetimedb::log_stopwatch::LogStopwatch::new("native.rows.definitions");
+    let head = SimNativeHead::from_world(w);
+    upsert!(ctx, sim_render_clock, run, SimRenderClock { run:w.run.clone(), head:json(&head) });
+    upsert!(ctx, sim_native_head, run, head);
+    // The loaded immutable snapshots belong to this transaction. Avoid
+    // serializing and fetching unchanged scenario/script rows on every pulse.
+    for (kind, body) in [
+        ("initial", (!previous_definitions.is_some_and(|(p, _)| p.same_snapshot(&w.initial))
+            || ctx.db.sim_native_definition_version().key().find(key(&w.run,"initial")).is_none()).then(|| json(&w.initial))),
+        ("scripts", (!previous_definitions.is_some_and(|(_, p)| p.same_snapshot(&w.scripts))
+            || ctx.db.sim_native_definition_version().key().find(key(&w.run,"scripts")).is_none()).then(|| json(&w.scripts))),
+        ("laws", Some(json(&w.laws))),
+        ("balance", Some(json(&w.infrastructure.balance))),
+    ] {
+        if let Some(body) = body {
+            if kind == "initial" || kind == "scripts" {
+                upsert!(ctx, sim_native_definition_version, key, SimNativeDefinitionVersion {
+                    key:key(&w.run,kind), digest:format!("{:x}",Sha256::digest(body.as_bytes())),
+                });
+            }
+            upsert!(ctx, sim_native_definition, key, SimNativeDefinition {
+                key: key(&w.run, kind), run: w.run.clone(), kind: kind.into(), body,
+            });
+        }
     }
     // Global clock/population operations can add/remove entities. Their full
     // run-indexed reconciliation is not used by participant command commits.
     macro_rules! reconcile {
         ($table:ident,$rows:expr) => {{
             let rows: Vec<_> = $rows;
-            let keys: BTreeSet<_> = rows.iter().map(|r| r.key.clone()).collect();
-            for old in ctx.db.$table().run().filter(w.run.as_str()) {
-                if !keys.contains(&old.key) {
-                    ctx.db.$table().key().delete(old.key);
+            let mut previous: BTreeMap<_, _> = ctx.db.$table().run().filter(w.run.as_str())
+                .map(|row| (row.key.clone(), row)).collect();
+            for row in rows {
+                match previous.remove(&row.key) {
+                    Some(old) if old == row => (),
+                    Some(_) => { ctx.db.$table().key().update(row); },
+                    None => { ctx.db.$table().insert(row); },
                 }
             }
-            for row in rows {
-                upsert!(ctx, $table, key, row);
+            for key in previous.into_keys() {
+                ctx.db.$table().key().delete(key);
             }
         }};
     }
+    #[cfg(feature = "clock-profile")]
+    drop(phase);
+    #[cfg(feature = "clock-profile")]
+    let phase = spacetimedb::log_stopwatch::LogStopwatch::new("native.rows.actors");
     let actors: BTreeSet<_> = w.players.iter().map(|p| p.id).collect();
     for actor in previous_players.keys().filter(|id| !actors.contains(id)) {
         ctx.db.sim_native_actor().key().delete(key(&w.run, actor));
@@ -1611,6 +1864,10 @@ pub(super) fn save(
             save_mind(ctx, &w.run, player, previous_players.get(&player.id));
         }
     }
+    #[cfg(feature = "clock-profile")]
+    drop(phase);
+    #[cfg(feature = "clock-profile")]
+    let phase = spacetimedb::log_stopwatch::LogStopwatch::new("native.rows.auxiliary");
     reconcile!(
         sim_native_actor_aux,
         aux_ids(w)
@@ -1618,6 +1875,12 @@ pub(super) fn save(
             .map(|a| SimNativeActorAux::from_world(w, a))
             .collect()
     );
+    reconcile!(sim_render_actor_support, aux_ids(w).into_iter()
+        .map(|a| SimRenderActorSupport::from_aux(SimNativeActorAux::from_world(w, a))).collect());
+    #[cfg(feature = "clock-profile")]
+    drop(phase);
+    #[cfg(feature = "clock-profile")]
+    let phase = spacetimedb::log_stopwatch::LogStopwatch::new("native.rows.sites");
     reconcile!(
         sim_native_site,
         w.sites
@@ -1662,11 +1925,19 @@ pub(super) fn save(
             })
             .collect()
     );
-    let ids = save_participants(ctx, w, previous, previous_ids);
-    save_clock_index(ctx, w, previous_players, previous);
+    #[cfg(feature = "clock-profile")]
+    drop(phase);
+    let ids = super::measured("native.rows.participants", || save_participants(ctx, w, previous, previous_ids));
+    super::measured("native.rows.clock_index", || save_clock_index(ctx, w, previous_players, previous));
     ids
 }
 
 #[cfg(test)]
 #[path = "native_storage_tests.rs"]
 mod tests;
+
+mod action_clock;
+pub(super) use action_clock::advance_actions;
+fn clock_definitions(ctx: &ReducerContext, run: &str) -> Result<DefinitionSet,String> {
+    Ok(read_definitions!(ctx.db, run))
+}

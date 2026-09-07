@@ -29,6 +29,7 @@ impl World {
     }
 
     pub(super) fn script_context(&self, i: usize, a: &Action, e: &Execution) -> Value {
+        let _profile = timing::DiagnosticScope::new("action.context");
         let p = &self.players[i];
         let target = a
             .target
@@ -53,6 +54,7 @@ impl World {
     }
 
     pub(super) fn execute_action(&mut self, i: usize, e: &mut Execution, a: Action) -> Status {
+        let _profile = timing::DiagnosticScope::new("action.total");
         if self.timing.time_ms < self.execution_ready_at(self.players[i].id, e) {
             return Status::Running;
         }
@@ -61,11 +63,14 @@ impl World {
         // Keep that prefix in the parent while the candidate stages new events;
         // otherwise the Nth action copies every earlier action's audit payload.
         let prior_events = std::mem::take(&mut self.events);
+        let clone_profile = timing::DiagnosticScope::new("action.clone");
         let mut candidate = self.clone();
+        drop(clone_profile);
         self.events = prior_events;
         let mut execution = e.clone();
         match candidate.execute_action_inner(i, &mut execution, a.clone()) {
             Ok(status) => {
+                let _profile = timing::DiagnosticScope::new("action.commit");
                 let mut events = std::mem::take(&mut self.events);
                 events.append(&mut candidate.events);
                 candidate.events = events;
@@ -324,6 +329,30 @@ impl World {
         observer: &mut impl timing::AdvanceObserver,
         selection: Option<&crate::clock::Selection>,
     ) {
+        self.advance_clock_phase(delta_ms, observer, selection, true, false);
+    }
+
+    /// Host has established that no global maintenance deadline is due and
+    /// supplied the complete physical dependency set for the selected actions.
+    /// `outside_alive` prevents a partial domain from ending the whole run.
+    pub fn advance_actions_ms(
+        &mut self,
+        delta_ms: u64,
+        observer: &mut impl timing::AdvanceObserver,
+        selection: &crate::clock::Selection,
+        outside_alive: bool,
+    ) {
+        self.advance_clock_phase(delta_ms, observer, Some(selection), false, outside_alive);
+    }
+
+    fn advance_clock_phase(
+        &mut self,
+        delta_ms: u64,
+        observer: &mut impl timing::AdvanceObserver,
+        selection: Option<&crate::clock::Selection>,
+        maintenance: bool,
+        outside_alive: bool,
+    ) {
         if self.stopped || delta_ms == 0 {
             return;
         }
@@ -338,14 +367,15 @@ impl World {
         observer.begin("kernel.clone");
         let mut candidate = self.clone();
         observer.begin("kernel.activation");
-        if candidate.scripts.activate(candidate.timing.updates + 1) {
+        if candidate.scripts.pending.as_ref().is_some_and(|p| p.activate_tick <= candidate.timing.updates + 1)
+            && candidate.scripts.activate(candidate.timing.updates + 1) {
             for p in &candidate.players {
                 candidate.timing.dirty.insert(p.id, true);
             }
             candidate.event(None,"script_update_activated",vec![],json!({"effective_update":candidate.timing.updates+1,"revision":candidate.scripts.revision,"active":candidate.scripts.active}));
         }
         let activation=candidate.activate_laws(candidate.timing.updates+1);
-        let result = activation.and_then(|_|candidate.step_inner(delta_ms, observer, selection));
+        let result = activation.and_then(|_|candidate.step_inner(delta_ms, observer, selection, maintenance, outside_alive));
         observer.begin("kernel.commit");
         match result {
             Ok(()) => *self = candidate,

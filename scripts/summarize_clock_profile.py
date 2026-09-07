@@ -10,7 +10,12 @@ from summarize_native_scale import percentile
 
 
 def summarize(directory, seconds=None):
-    helper = json.loads((directory / 'reads/helper-result.json').read_text())
+    if (directory/'workload-window.json').exists():
+        window=json.loads((directory/'workload-window.json').read_text())
+        helper=dict(fixed_window_seconds=window['seconds'],window_start_wall_ms=window['start_wall_ms'],
+                    pause_sent_wall_ms=window['pause_sent_wall_ms'])
+    else:
+        helper = json.loads((directory / 'reads/helper-result.json').read_text())
     duration = helper['fixed_window_seconds'] if seconds is None else seconds
     if not 0 < duration <= helper['fixed_window_seconds']:
         raise ValueError('profile interval must be inside the declared active window')
@@ -21,7 +26,7 @@ def summarize(directory, seconds=None):
     units = {'ns': 1e-9, 'µs': 1e-6, 'ms': 1e-3, 's': 1}
     for line in (directory / 'module-logs.jsonl').read_text().splitlines():
         record = json.loads(line)
-        if record.get('function') != 'sim_client_pulse' or not start <= record['ts'] < end:
+        if record.get('function') not in ('sim_client_pulse', 'sim_deadline_pulse', 'sim_dispatch_controller_action', 'sim_dispatch_controller_action_after', 'sim_participant_command', 'sim_my_render_snapshot', 'sim_my_snapshot') or not start <= record['ts'] < end:
             continue
         if record['message'].startswith('clock_cold_reads '):
             values = json.loads(record['message'].split(' ', 1)[1])

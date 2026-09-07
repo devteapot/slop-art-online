@@ -1,6 +1,7 @@
 //! Host-only identity enrollment. Authority creates characters; this module supplies
 //! explicitly configured controller connections, never bodies, goals or knowledge.
 use super::*;
+use spacetimedb_sdk::Table;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const PROTOCOL: &str = "sao-enrollment-v1";
@@ -26,6 +27,39 @@ pub(super) struct Registry {
     failed: BTreeSet<(String, u32)>,
     errors: Vec<Value>,
     stopped: bool,
+    resident: Vec<ResidentController>,
+}
+
+/// Keeps authored/native policies connected even when no model worker is active.
+/// The task owns the replacement transports; dropping it disconnects those too.
+struct ResidentController(tokio::task::JoinHandle<()>);
+impl Drop for ResidentController {fn drop(&mut self) {self.0.abort();}}
+struct ResidentConnection(bridge::participant::ParticipantService);
+impl Drop for ResidentConnection {fn drop(&mut self) {let _=self.0.connection.disconnect();}}
+impl ResidentController {
+    async fn stop(mut self) {
+        self.0.abort();
+        let _=(&mut self.0).await;
+    }
+    fn start(service:bridge::participant::ParticipantService)->Self {
+        Self(tokio::spawn(async move {
+            let mut current=ResidentConnection(service);
+            let mut last_error=None;
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                match current.0.reconnect_if_needed().await {
+                    Ok(reconnected)=>{
+                        if reconnected {eprintln!("resident controller resumed with its existing identity");}
+                        last_error=None;
+                    }
+                    Err(error)=>{
+                        if last_error.as_ref()!=Some(&error) {eprintln!("resident controller recovery pending: {error}");}
+                        last_error=Some(error);
+                    }
+                }
+            }
+        }))
+    }
 }
 
 pub(super) fn atomic_json(path: &std::path::Path, value: &Value) -> Result<(), String> {
@@ -109,7 +143,7 @@ async fn enroll_locked(
         .unwrap_or_else(|_| app.root.join(".local/credentials"));
     std::fs::create_dir_all(&private).map_err(|_| "private session directory unavailable")?;
     let path = private.join(format!("{run}-actor-{actor}-{role}.json"));
-    let (service, identity) = new_session(app.server.clone(), app.db.clone(), &path).await?;
+    let (mut service, identity) = new_session(app.server.clone(), app.db.clone(), &path).await?;
     let admitted = async {
         call(
             app,
@@ -117,6 +151,20 @@ async fn enroll_locked(
             vec![json!(run), json!(identity), json!(false), json!(actor)],
         )
         .await?;
+        let native=app.controller_database.as_ref();
+        if let Some(database)=&native {
+            let deadline=std::time::Instant::now()+std::time::Duration::from_secs(10);
+            loop {
+                use shared::module_bindings::SimMyControllerFrameTableAccess;
+                if service.connection.db.sim_my_controller_frame().iter().next().is_some() {break;}
+                if std::time::Instant::now()>=deadline {return Err("controller frame subscription timeout".into());}
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            let controller=bridge::controller::Controller::provision(
+                app.controller_server.clone(),
+                (*database).clone(),&path.with_extension("controller.json")).await?;
+            service.attach_open_controller(controller).await?;
+        }
         let view = service.observe(0, 256).await?;
         let config_file = dir.join(format!("actor-{actor}-config.json"));
         if let Some(config) = config {
@@ -184,11 +232,12 @@ async fn enroll_locked(
                 if !receipt.ok {
                     return Err(format!("fixture rejected: {:?}", receipt.error));
                 }
-                let _ = service.connection.disconnect();
+                if native.is_none() {let _ = service.connection.disconnect();}
             }
-        } else {
+        } else if native.is_none() || role=="external" {
             let _ = service.connection.disconnect();
         }
+        if native.is_some() && role!="external" {registry.resident.push(ResidentController::start(service.clone()));}
         Ok(())
     }
     .await;
@@ -218,6 +267,7 @@ pub(super) async fn acknowledge_stop(app: &App) -> Result<bool, String> {
     // dispatch. Its acknowledgement therefore excludes any later enrollment.
     let mut registry = app.enrollments.lock().await;
     registry.stopped = true;
+    for resident in registry.resident.drain(..) {resident.stop().await;}
     for cancel in app.harness_cancellations.lock().unwrap().drain(..) {
         let _ = cancel.send(Some("experiment ending; enrollment stopped".into()));
     }
@@ -236,9 +286,10 @@ pub(super) async fn discover(
     run: &str,
     world: &simulation::World,
 ) -> Result<(), String> {
-    let Some(template) = &app.newcomer else {
+    let template = app.newcomer.as_ref();
+    if template.is_none() && app.controller_database.is_none() {
         return Ok(());
-    };
+    }
     if world.stopped || stop_requested() {
         return Ok(());
     }
@@ -264,8 +315,8 @@ pub(super) async fn discover(
             &mut registry,
             run,
             actor,
-            &template.role,
-            Some(&template.config),
+            template.map_or("seeded", |t| t.role.as_str()),
+            template.map(|t| &t.config),
             true,
         )
         .await

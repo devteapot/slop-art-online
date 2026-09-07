@@ -16,11 +16,13 @@ pub mod perturbations;
 mod scripted_world;
 pub mod scripting;
 pub mod spatial;
+mod visibility;
 pub mod society;
 pub mod starting_behaviors;
 pub mod timing;
 pub mod deferred;
 pub mod clock;
+pub mod controller;
 use bonsai_bt::Behavior;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -340,10 +342,10 @@ pub struct World {
     pub run: String,
     pub version: String,
     #[serde(default)]
-    pub scripts: scripting::Registry,
+    pub scripts: deferred::Deferred<scripting::Registry>,
     #[serde(default)]
     pub laws: laws::LawState,
-    pub initial: Scenario,
+    pub initial: deferred::Deferred<Scenario>,
     pub tick: u64,
     #[serde(default)]
     pub timing: timing::Timing,
@@ -429,7 +431,7 @@ impl World {
         let mut w = Self {
             run,
             version: VERSION.into(),
-            scripts: scripting::Registry::default(),
+            scripts: scripting::Registry::default().into(),
             laws: laws::LawState::default(),
             players: scenario.players.clone(),
             sites: scenario.sites.clone(),
@@ -442,7 +444,7 @@ impl World {
             reproduction_offers: BTreeMap::new(),
             next_actor: 0,
             actor_arenas: scenario.arenas.iter().flat_map(|a| a.actors.iter().map(|id| (*id, a.id.clone()))).collect(),
-            initial: scenario,
+            initial: scenario.into(),
             tick: 0,
             timing: timing::Timing::default(),
             pending: vec![],
@@ -520,7 +522,8 @@ impl World {
         content: Value,
     ) -> Result<u64, String> {
         self.wake(self.players[i].id);
-        let limit: usize = self.scripts.law("memory_limit", json!({}))?;
+        let client = self.client_controlled(self.players[i].id);
+        let limit: usize = if client { 0 } else { self.scripts.law("memory_limit", json!({}))? };
         if limit > 256 {
             return Err("memory policy exceeds storage budget".into());
         }
@@ -530,6 +533,20 @@ impl World {
             vec![world_event],
             json!({"kind":kind,"from":from,"location":location,"content":content}),
         );
+        if client {
+            let controller = self.participants.get_mut(&self.players[i].id).unwrap().client_controller.as_mut().unwrap();
+            if let Some(target) = from { controller.known_targets.insert(target); }
+            if kind == "site" {
+                controller.last_lifecycle = Some(content["lifecycle"].clone());
+                for person in content["lifecycle"]["people"].as_array().into_iter().flatten() {
+                    if let Some(id) = person["id"].as_u64().and_then(|v| u32::try_from(v).ok()) {
+                        controller.known_targets.insert(id);
+                    }
+                }
+            }
+            self.players[i].last_cause = Some(id);
+            return Ok(id);
+        }
         let percept = Percept {
             source: id,
             tick: self.tick,
@@ -551,10 +568,30 @@ impl World {
         Ok(id)
     }
     fn observe_site(&mut self, i: usize) -> Result<(), String> {
+        let _profile = timing::DiagnosticScope::new("observe.total");
         if self.players[i].health <= 0 {
             return Ok(());
         }
+        let id = self.observe_site_facts(i)?;
+        let visibility_profile = timing::DiagnosticScope::new("observe.visibility");
+        let mut visible = vec![];
+        for other in self.visible_players(i, "sight")? {
+            let p = &self.players[other];
+            visible.push((p.id, p.name.clone(), p.position));
+        }
+        drop(visibility_profile);
+        let _profile = timing::DiagnosticScope::new("observe.people_perception");
+        for (other, name, location) in visible {
+            self.perceive(i, id, "seen_player", Some(other), location,
+                json!({"name":name,"position":location}))?;
+        }
+        Ok(())
+    }
+    /// Refresh the changed site's facts without manufacturing new sightings of
+    /// every nearby person. Explicit observation still performs both operations.
+    fn observe_site_facts(&mut self, i: usize) -> Result<u64, String> {
         let pos = self.players[i].position;
+        let catalog_profile = timing::DiagnosticScope::new("observe.catalog");
         let mut observation: Value = self.actor_law(i,
             "observation",
             json!(self.sites.iter().find(|s| s.position == pos)),
@@ -563,6 +600,7 @@ impl World {
         observation["archives"] = self.local_archive_catalog(i);
         observation["lifecycle"] = self.local_lifecycle_catalog(i);
         observation["infrastructure"] = self.infrastructure_facts(self.players[i].id);
+        drop(catalog_profile);
         let food = observation["food"].as_i64().unwrap_or(0);
         let parents = self.players[i]
             .execution
@@ -577,34 +615,29 @@ impl World {
             parents,
             json!({"location":pos,"visible_food":food}),
         );
-        self.perceive(i, id, "site", None, pos, observation)?;
-        let mut visible = vec![];
-        for other in 0..self.players.len() {
-            if self.visible(i, other, "sight")? {
-                let p = &self.players[other];
-                visible.push((p.id, p.name.clone(), p.position));
-            }
+        {
+            let _profile = timing::DiagnosticScope::new("observe.site_perception");
+            self.perceive(i, id, "site", None, pos, observation)?;
         }
-        for (other, name, location) in visible {
-            self.perceive(
-                i,
-                id,
-                "seen_player",
-                Some(other),
-                location,
-                json!({"name":name,"position":location}),
-            )?;
-        }
-        Ok(())
+        Ok(id)
     }
     pub fn context(&self, i: usize) -> Value {
-        // Deliberate allowlist. Never serialize World, sites, other minds or audit into a prompt.
+        self.context_inner(i, true)
+    }
+    pub(crate) fn presentation_context(&self, i: usize) -> Value {
         let p = &self.players[i];
         let starter = self.initial.starting_behaviors.get(&p.id).map(|b|(b,"authored world seed; revisable starting habit"))
             .or_else(||self.lifecycle.get(&p.id).is_some_and(|l| !matches!(l.origin, lifecycle::Origin::Initial)).then(|| self.initial.lifecycle.as_ref()
                 .map(|l|(&l.newcomer.starting_behavior,"newborn seed; revisable starting habit"))).flatten());
         let approach = p.execution.as_ref().map(|e| if let Some(policy)=&e.policy {json!({"decision":e.decision,"policy":policy,"state":e.state,"active_attempt":e.attempt})} else {json!(e)});
-        research::redacted(json!({"research":self.research_facts(p.id),"society":self.society_context(p.id),"infrastructure":self.infrastructure_facts(p.id),"body":self.body_support_context(p.id),"starting_behavior":starter.map(|(b,source)|json!({"id":b.id,"revision":b.revision,"description":b.description,"source":source,"revisable":true})),"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","lifecycle":self.local_lifecycle_catalog(i),"player":{"development":self.lifecycle.get(&p.id),"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"knowledge":p.knowledge,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach},"simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":self.scripts.catalog(),"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description}))
+        research::redacted(json!({"research":self.research_facts(p.id),"society":self.society_context(p.id),"infrastructure":self.infrastructure_facts(p.id),"body":self.body_support_context(p.id),"starting_behavior":starter.map(|(b,source)|json!({"id":b.id,"revision":b.revision,"description":b.description,"source":source,"revisable":true})),"recent_activity":self.participants.get(&p.id).map(|s|s.activity_summary(self.timing.time_ms)),"lifecycle":self.local_lifecycle_catalog(i),"player":{"development":self.lifecycle.get(&p.id),"id":p.id,"name":p.name,"role":p.role,"motive":p.motive,"current_goal":p.current_goal,"position":p.position,"health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,"personality":{"caution":p.caution,"empathy":p.empathy,"introspection":p.introspection},"fear":p.fear,"knowledge":p.knowledge,"beliefs":p.beliefs,"relationships":p.relationships,"memories":p.memories,"site_observations":p.site_observations,"failures":p.failures,"current_approach":approach}}))
+    }
+    fn context_inner(&self, i: usize, include_skill_catalog: bool) -> Value {
+        let p = &self.players[i];
+        let mut context = self.presentation_context(i);
+        let extra = research::redacted(json!({"state_contract":participant::state_contract(),"weather_forecast":self.initial.weather,"map":self.map_for_actor(p.id),"map_contract":"If map is present, it is a shared surveyed terrain map: cell ID = y * width + x; north decreases y. blocked cells are walls. If bounds is present, only cells within that rectangle exist for you; all destinations must stay inside it. Move chooses a shortest cardinal route through surveyed walkable terrain; it does not avoid unseen dangers or choose goals. Use intermediate destinations to choose a different route. Resources and dangers are not included in the survey.","simulation_tick":self.tick,"skills":self.scripts.active.keys().filter(|id| id.as_str() != "law").collect::<Vec<_>>(),"skill_definitions":if include_skill_catalog { json!(self.scripts.catalog()) } else { Value::Null },"simulation_time_ms":self.timing.time_ms,"simulation_updates":self.timing.updates,"clock_unit_ms":timing::LEGACY_UNIT_MS,"rules_revision":self.scripts.revision,"rules_description":self.scripts.history["law"][&self.scripts.active["law"]].description}));
+        context.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        context
     }
     pub fn request(&mut self, i: usize, trigger: &str) {
         if self.participant_mode {
@@ -678,6 +711,7 @@ impl World {
         Ok(())
     }
     fn interrupt(&mut self, i: usize, cause: u64, reason: &str) {
+        self.controller_action_status(self.players[i].id, Status::Interrupted, None);
         if let Some(mut e) = self.players[i].execution.take() {
             let persistent = e.policy.is_some();
             self.event(Some(self.players[i].id),if persistent {"action_interrupted"} else {"behavior_interrupted"},vec![cause,e.decision],json!({"cursor":e.cursor,"node_path":e.state.active_path,"reason":reason,"policy_preserved":persistent && reason != "approach revised"}));
@@ -717,6 +751,9 @@ impl World {
         self.apply_decision(actor, controller, d, parent, None)
     }
     fn target_perceived(&self, i: usize, target: u32, evidence: &[Percept]) -> bool {
+        if let Some(client) = self.participants.get(&self.players[i].id).and_then(|s|s.client_controller.as_ref()) {
+            return client.known_targets.contains(&target);
+        }
         evidence.iter().any(|memory| memory.from == Some(target))
             || self.players[i].site_observations.iter().any(|observation| {
                 observation.kind == "site"
@@ -927,6 +964,7 @@ impl World {
         let count = steps.len();
         let action = a.clone();
         let status = self.execute_action(i, &mut e, action);
+        self.controller_action_status(self.players[i].id, status.clone(), e.attempt);
         match status {
             Status::Success => {
                 e.cursor += 1;
@@ -978,11 +1016,13 @@ impl World {
         }
         let invocation = e.script.clone().ok_or("missing pinned skill")?;
         let binding=invocation.law_binding.clone().unwrap_or_else(||self.law_binding_at(Some(self.players[i].position)));
+        let validation_profile = timing::DiagnosticScope::new("action.validate");
         let reason: String = self.bound_skill(
             &binding, &invocation.definition,
             "validate",
             json!({"action":a,"actor":scripting::facts(&self.players[i]),"map":self.map_for_actor(self.players[i].id)}),
         )?;
+        drop(validation_profile);
         if !reason.is_empty() {
             e.attempt = None;
             e.script = None;
@@ -997,11 +1037,13 @@ impl World {
             e.remaining = 0;
             return Ok(self.fail(i, attempt, "independent provisioning requires care, development and demonstrated guided practice", e.dialogue));
         }
+        let step_profile = timing::DiagnosticScope::new("action.step");
         let result: scripting::StepResult = self.bound_skill(
             &binding, &invocation.definition,
             "step",
             self.script_context(i, &a, e),
         )?;
+        drop(step_profile);
         if result.effects.len() > 32
             || result.remaining > 10000
             || matches!(result.status, Status::Interrupted)
@@ -1016,9 +1058,11 @@ impl World {
             e.script = None;
             return Ok(self.fail(i, attempt, &result.reason, e.dialogue));
         }
+        let effects_profile = timing::DiagnosticScope::new("action.effects");
         for effect in result.effects {
             // Validate against preceding staged effects; the enclosing transaction rolls
             // the whole invocation back if any capability or policy rejects the batch.
+            let validation_profile = timing::DiagnosticScope::new("effect.validate");
             if let Err(message)=self.validate_script_effect(i, &a, &effect) {
                 let law_denial=matches!(message.as_str(),"active law denied effect"|"destination law denied effect").then(|| {
                     let position=self.players[i].position;let destination=self.effect_destination(&effect);
@@ -1026,8 +1070,11 @@ impl World {
                 });
                 return Err(ActionFailure{message,law_denial});
             }
+            drop(validation_profile);
+            let _profile = timing::DiagnosticScope::new("effect.apply");
             self.apply_script_effect(i, attempt, effect)?;
         }
+        drop(effects_profile);
         for deadline in [result.wake_at_ms, result.cooldown_until_ms]
             .into_iter()
             .flatten()
@@ -1113,6 +1160,7 @@ impl World {
             json!({"damage":amount,"cause":nature}),
         )?;
         self.players[i].fear = reaction.fear;
+        if !self.client_controlled(before.id) {
         self.players[i].caution = reaction.caution;
         if reaction.learn_danger {
             self.players[i]
@@ -1129,6 +1177,7 @@ impl World {
             });
         }
         self.event(Some(before.id),"identity_change",vec![perception],json!({"interpretation":"experienced harm; personal introspection changes caution","before":{"caution":before.caution,"fear":before.fear,"beliefs":before.beliefs},"after":{"caution":self.players[i].caution,"fear":self.players[i].fear,"beliefs":self.players[i].beliefs}}));
+        }
         if reaction.interrupt {
             self.interrupt(i, world, "damage");
         }
@@ -1158,11 +1207,13 @@ impl World {
         Ok(())
     }
     fn step_inner(&mut self, delta_ms: u64, observer: &mut impl timing::AdvanceObserver,
-        selection: Option<&clock::Selection>) -> Result<(), String> {
+        selection: Option<&clock::Selection>, maintenance: bool, outside_alive: bool) -> Result<(), String> {
         if self.stopped {
             return Ok(());
         }
         observer.begin("kernel.timing");
+        let settled = self.timing.maintenance_ms.unwrap_or(self.timing.time_ms);
+        if !maintenance { self.timing.maintenance_ms = Some(settled); }
         self.timing.time_ms = self
             .timing
             .time_ms
@@ -1171,22 +1222,25 @@ impl World {
         self.timing.delta_ms = delta_ms;
         self.timing.updates += 1;
         self.tick = self.timing.time_ms / timing::LEGACY_UNIT_MS;
+        let world_delta = self.timing.time_ms.checked_sub(settled).ok_or("maintenance clock moved backwards")?;
         let periods: timing::Periods = self.scripts.law("system_periods_ms", json!({}))?;
-        let needs_pulses = timing::pulses(
+        let needs_pulses = if maintenance { timing::pulses(
             &mut self.timing.needs_remainder_ms,
-            delta_ms,
+            world_delta,
             periods.needs_ms,
-        )?;
-        let hazard_pulses = timing::pulses(
+        )? } else { 0 };
+        let hazard_pulses = if maintenance { timing::pulses(
             &mut self.timing.hazard_remainder_ms,
-            delta_ms,
+            world_delta,
             periods.hazard_ms,
-        )?;
+        )? } else { 0 };
+        if maintenance {
         observer.begin("kernel.ecology");
-        self.renew_food(delta_ms)?;
+        self.renew_food(world_delta)?;
         self.apply_disturbances()?;
         observer.begin("kernel.infrastructure");
-        self.advance_infrastructure(delta_ms)?;
+        self.advance_infrastructure(world_delta)?;
+        }
         observer.begin("kernel.actors");
         for i in 0..self.players.len() {
             if self.players[i].health <= 0 {
@@ -1196,7 +1250,7 @@ impl World {
             // inheriting a partial global pulse accumulated before it existed.
             let (needs_pulses, hazard_pulses) = if let Some(life) = self.lifecycle.get(&self.players[i].id).filter(|l| !matches!(l.origin, lifecycle::Origin::Initial)) {
                 let actor = self.players[i].id;
-                let lived = delta_ms.min(self.timing.time_ms.saturating_sub(life.born_ms));
+                let lived = if maintenance { world_delta.min(self.timing.time_ms.saturating_sub(life.born_ms)) } else { 0 };
                 (
                     timing::pulses(self.timing.actor_needs_remainder_ms.entry(actor).or_default(), lived, periods.needs_ms)?,
                     timing::pulses(self.timing.actor_hazard_remainder_ms.entry(actor).or_default(), lived, periods.hazard_ms)?,
@@ -1218,6 +1272,7 @@ impl World {
             }
             let mut metabolism = self.players[i].last_cause.unwrap_or(1);
             if needs_pulses > 0 {
+                let _profile = timing::DiagnosticScope::new("actor.metabolism");
                 let mut facts = scripting::facts(&self.players[i]);
                 facts["pulses"] = json!(needs_pulses);
                 facts["body"] = self.body_support_context(self.players[i].id);
@@ -1229,10 +1284,14 @@ impl World {
                 metabolism=self.event(Some(self.players[i].id),"needs_change",vec![],json!({"hunger_before":before,"hunger_after":self.players[i].hunger,"fear":self.players[i].fear,"elapsed_ms":needs_pulses*periods.needs_ms,"law_binding":self.law_binding_at(Some(self.players[i].position))}));
             }
 
-            self.consume_body_charge(self.players[i].id, needs_pulses, metabolism)?;
+            {
+                let _profile = timing::DiagnosticScope::new("actor.body_charge");
+                self.consume_body_charge(self.players[i].id, needs_pulses, metabolism)?;
+            }
             if self.players[i].health <= 0 {
                 continue;
             }
+            if !self.client_controlled(self.players[i].id) {
             let interval: u64 = self
                 .scripts
                 .law("reconsider_interval", scripting::facts(&self.players[i]))?;
@@ -1247,6 +1306,7 @@ impl World {
                         "reconsider goals"
                     },
                 );
+            }
             }
             if !self.participant_mode
                 && self.players[i].controller == Controller::Ai
@@ -1278,6 +1338,7 @@ impl World {
                 #[serde(default)]
                 cold: i32,
             }
+            let _profile = timing::DiagnosticScope::new("actor.aftermath");
             let after:Aftermath=self.actor_law(i,"aftermath",json!({"body":self.body_support_context(actor),"time_ms":self.timing.time_ms,"weather":self.initial.weather,"pulses":hazard_pulses,"last_hazard_pulse_ms":self.timing.actor_hazard_remainder_ms.get(&actor).map(|remainder|self.timing.time_ms.saturating_sub(*remainder)),"elapsed_ms":hazard_pulses*periods.hazard_ms,"actor":scripting::facts(&self.players[i]),"site":self.sites.iter().find(|s|s.position==self.players[i].position)}))?;
             if after.starvation < 0 || after.hazard < 0 || after.cold < 0 || after.power_depletion < 0 {
                 return Err("negative damage policy".into());
@@ -1361,7 +1422,10 @@ impl World {
                 json!({"error":"simulation request deadline exceeded"}),
             );
         }
-        if self.tick >= self.initial.max_ticks || self.players.iter().all(|p| p.health <= 0) {
+        if maintenance && self.timing.maintenance_ms.is_some() {
+            self.timing.maintenance_ms = Some(self.timing.time_ms);
+        }
+        if self.tick >= self.initial.max_ticks || (!outside_alive && self.players.iter().all(|p| p.health <= 0)) {
             self.stopped = true;
             self.deliver_queued_speech()?;
             let stop = self.event(None, "run_stopped", vec![], json!({"tick":self.tick}));

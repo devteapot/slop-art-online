@@ -10,6 +10,39 @@ fn law_inspector(world: &World, actor: u32) -> Value {
 }
 
 pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> Value {
+    snapshot_with_inspection(world, observer, actor, events, None, true)
+}
+
+/// Live observer rendering needs bodies for the world and a context only for
+/// the open inspector. Explicit diagnostics retain the full snapshot above.
+pub fn observer_render(world: &World, inspected: Option<u32>, events: &[Event]) -> Value {
+    let mut result = snapshot_with_inspection(world, true, 0, events, Some(inspected), true);
+    result["inspected_actor"] = json!(inspected);
+    result
+}
+
+/// Live clients receive history through separate incremental event rows.
+pub fn live_render(world: &World, observer: bool, actor: u32, inspected: Option<u32>) -> Value {
+    let mut result = snapshot_with_inspection(world, observer, actor, &[], Some(inspected), false);
+    if observer { result["inspected_actor"] = json!(inspected); }
+    result.as_object_mut().map(|o| o.remove("events"));
+    result
+}
+
+pub fn observer_event(event: &Event) -> Value {
+    let mut value = json!(event);
+    if event.kind == "model_result" {
+        value["data"] = json!({"request_id":event.data["request_id"],"outcome":event.data["metadata"]["outcome"],"error":event.data["metadata"]["error"]});
+    }
+    if event.kind == "model_request" {
+        value["data"].as_object_mut().map(|o|o.remove("context"));
+        value["data"].as_object_mut().map(|o|o.remove("base_system_prompt"));
+    }
+    value
+}
+
+fn snapshot_with_inspection(world: &World, observer: bool, actor: u32, events: &[Event],
+    inspected: Option<Option<u32>>, include_history: bool) -> Value {
     let index = world.players.iter().position(|p| p.id == actor);
     if !observer && index.is_none() {
         return Value::Null;
@@ -20,7 +53,17 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
             .iter()
             .enumerate()
             .map(|(i, p)| {
-                let context = world.context(i);
+                if inspected.is_some_and(|selected| selected != Some(p.id)) {
+                    let mut value = json!({"id":p.id,"name":p.name,"position":p.position,
+                        "health":p.health,"hunger":p.hunger,"energy":p.energy,"food":p.food,
+                        "controller":p.controller,"body":world.infrastructure.bodies.get(&p.id)});
+                    if let Some(arena) = world.arena_for_actor(p.id) {
+                        value["arena"] = json!(arena.label);
+                        value["runtime"] = json!(arena.controllers.get(&p.id));
+                    }
+                    return value;
+                }
+                let context = world.presentation_context(i);
                 let mut value = context["player"].clone();
                 value["recent_activity"] = context["recent_activity"].clone();
                 value["starting_behavior"] = context["starting_behavior"].clone();
@@ -41,7 +84,7 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
     } else {
         let index = index.unwrap();
         let me = &world.players[index];
-        let context = world.context(index);
+        let context = world.presentation_context(index);
         let mut own = context["player"].clone();
         own["recent_activity"] = context["recent_activity"].clone();
         own["starting_behavior"] = context["starting_behavior"].clone();
@@ -78,14 +121,8 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
         }
         json!(known.into_values().collect::<Vec<_>>())
     };
-    let history: Vec<Value> = if observer {
-        events.iter().rev().take(180).rev().map(|e| {
-            let mut v = json!(e);
-            // Full provider exchanges remain in operator journals, not the rendering payload.
-            if e.kind == "model_result" { v["data"] = json!({"request_id":e.data["request_id"],"outcome":e.data["metadata"]["outcome"],"error":e.data["metadata"]["error"]}); }
-            if e.kind == "model_request" { v["data"].as_object_mut().map(|o|o.remove("context")); v["data"].as_object_mut().map(|o|o.remove("base_system_prompt")); }
-            v
-        }).collect()
+    let history: Vec<Value> = if !include_history { vec![] } else if observer {
+        events.iter().rev().take(180).rev().map(observer_event).collect()
     } else {
         world.players[index.unwrap()].memories.iter().map(|m|json!({"id":m.source,"tick":m.tick,"actor":actor,"kind":m.kind,"parents":[],"data":m.content})).collect()
     };
@@ -98,6 +135,30 @@ pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn presentation_context_preserves_facts_without_unused_skill_catalog() {
+        let mut world = World::new("render-context".into(), serde_json::from_str(
+            include_str!("../../scenarios/faction-world-reality.json")).unwrap()).unwrap();
+        world.enable_participants();
+        world.advance_ms(2500);
+        for i in 0..world.players.len() {
+            let full = world.context(i);
+            assert!(full["skill_definitions"].is_array());
+            let presentation = world.presentation_context(i);
+            let expected: serde_json::Map<String, Value> = presentation.as_object().unwrap().keys()
+                .map(|key| (key.clone(), full[key].clone())).collect();
+            assert_eq!(presentation, Value::Object(expected));
+            assert!(presentation.get("map").is_none());
+            assert!(presentation.get("skill_definitions").is_none());
+            for observer in [true, false] {
+                let actor = world.players[i].id;
+                let mut expected = if observer { observer_render(&world, Some(actor), &world.events) }
+                    else { snapshot(&world, false, actor, &[]) };
+                expected.as_object_mut().unwrap().remove("events");
+                assert_eq!(live_render(&world, observer, actor, Some(actor)), expected);
+            }
+        }
+    }
     #[test]
     fn participant_projection_excludes_other_minds_hidden_sites_audit_and_requests() {
         let scenario = serde_json::from_str(include_str!("../../scenarios/survival.json")).unwrap();

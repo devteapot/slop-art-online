@@ -47,6 +47,8 @@ struct Catalog {
     keys: BTreeMap<String, u64>,
     live: BTreeSet<u64>,
 }
+pub(super) type PreviousDefinitions = (simulation::deferred::Deferred<simulation::Scenario>,
+    simulation::deferred::Deferred<simulation::scripting::Registry>);
 pub(crate) struct LoadedRun {
     row: SimRunStore,
     catalog: Catalog,
@@ -55,6 +57,7 @@ pub(crate) struct LoadedRun {
     pub(super) previous_participants: BTreeMap<u32, simulation::participant::ParticipantState>,
     pub(super) previous_time_ms: u64,
     pub(super) native_lease_ids: super::native_storage::LeaseIds,
+    pub(super) previous_definitions: Option<PreviousDefinitions>,
     pub(super) previous_players: BTreeMap<u32, simulation::Player>,
 }
 impl Deref for LoadedRun {
@@ -303,12 +306,14 @@ fn hydrate_with(ctx: &ReducerContext, row: SimRunStore, clock: bool) -> Result<(
         previous_time_ms: 0,
         native_lease_ids: BTreeMap::new(),
         previous_players: BTreeMap::new(),
+        previous_definitions: None,
     };
     if loaded.row.state == super::native_storage::FORMAT {
         let (world, ids) = super::measured("native.load.rows", || if clock {
             super::native_storage::load_clock(ctx, &loaded.row.id)
         } else { super::native_storage::load(ctx, &loaded.row.id) })?;
         super::measured("native.load.clone", || {
+            loaded.previous_definitions = Some((world.initial.clone(), world.scripts.clone()));
             loaded.previous_participants = world.participants.clone();
             loaded.previous_players = world.players.iter().map(|p| (p.id,p.clone())).collect();
         });
@@ -366,6 +371,7 @@ pub(super) fn create(ctx: &ReducerContext, run: String) -> LoadedRun {
         previous_time_ms: 0,
         native_lease_ids: BTreeMap::new(),
         previous_players: BTreeMap::new(),
+        previous_definitions: None,
     }
 }
 pub(super) fn commit_native(ctx: &ReducerContext, row: LoadedRun) {
@@ -429,6 +435,13 @@ pub(super) fn world_for_view(ctx: &ViewContext, run: &str) -> Option<World> {
     let row = ctx.db.sim_run_store().id().find(run.to_string())?;
     let world = decode_view(ctx, &row);
     Some(world)
+}
+pub(super) fn observer_for_view(ctx: &ViewContext, run: &str, inspected: Option<u32>) -> Option<World> {
+    let row = ctx.db.sim_run_store().id().find(run.to_owned())?;
+    if row.state == super::native_storage::FORMAT {
+        return super::native_storage::observer_view(ctx, run, inspected).ok();
+    }
+    Some(decode_view(ctx, &row))
 }
 pub(super) fn participant_for_view(ctx: &ViewContext, run: &str, actor: u32) -> Option<(World,bool)> {
     let row = ctx.db.sim_run_store().id().find(run.to_owned())?;

@@ -1,5 +1,6 @@
 //! Run-scoped browser grants. All checks use authenticated ctx.sender(), never a claimed actor.
 use super::{save, sim_audit__view, storage, SimRun};
+use super::native_storage::sim_native_actor;
 use simulation::{Controller, Decision, World};
 use spacetimedb::{Identity, ReducerContext, ScheduleAt, SpacetimeType, Table, ViewContext};
 
@@ -146,21 +147,62 @@ pub fn sim_revoke_client(ctx: &ReducerContext, identity: Identity) -> Result<(),
     ctx.db.sim_client_access().identity().delete(identity);
     Ok(())
 }
+#[spacetimedb::table(accessor = sim_client_inspector)]
+pub struct SimClientInspector {
+    #[primary_key]
+    pub identity: Identity,
+    pub run: String,
+    pub actor: Option<u32>,
+}
+#[spacetimedb::reducer]
+pub fn sim_select_inspector(ctx: &ReducerContext, actor: Option<u32>) -> Result<(), String> {
+    let access = grant(ctx)?;
+    if !access.observer { return Err("observer privilege required for inspection selection".into()); }
+    if let Some(actor) = actor {
+        if storage::is_native(ctx, &access.run)? {
+            if ctx.db.sim_native_actor().key().find(format!("{}:{actor}",access.run)).is_none() {
+                return Err("unknown actor".into());
+            }
+        } else if !world(ctx, &access.run)?.1.players.iter().any(|p| p.id == actor) {
+            return Err("unknown actor".into());
+        }
+    }
+    let row = SimClientInspector { identity:ctx.sender(), run:access.run, actor };
+    if ctx.db.sim_client_inspector().identity().find(ctx.sender()).is_some() {
+        ctx.db.sim_client_inspector().identity().update(row);
+    } else { ctx.db.sim_client_inspector().insert(row); }
+    Ok(())
+}
 #[spacetimedb::view(accessor = sim_my_snapshot, public)]
 pub fn sim_my_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
+    render_snapshot(ctx, true)
+}
+#[spacetimedb::view(accessor = sim_my_render_snapshot, public)]
+pub fn sim_my_render_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
+    render_snapshot(ctx, false)
+}
+fn render_snapshot(ctx: &ViewContext, include_history: bool) -> Option<SimClientSnapshot> {
+    #[cfg(feature = "clock-profile")]
+    let phase = spacetimedb::log_stopwatch::LogStopwatch::new("view.render.load");
     let access = ctx.db.sim_client_access().identity().find(ctx.sender())?;
+    let inspected = ctx.db.sim_client_inspector().identity().find(ctx.sender())
+        .filter(|row| row.run == access.run).and_then(|row| row.actor);
     let (w,can_participate) = if access.observer {
-        (storage::world_for_view(ctx, &access.run)?,None)
+        (storage::observer_for_view(ctx, &access.run, inspected)?,None)
     } else {
         let (world,can)=storage::participant_for_view(ctx,&access.run,access.actor)?;
         (world,Some(can))
     };
-    let events = if access.observer {
-        let mut events: Vec<simulation::Event> = ctx
-            .db
-            .sim_audit()
-            .run_and_event()
-            .filter((&access.run, w.next_event.saturating_sub(180)..w.next_event))
+    #[cfg(feature = "clock-profile")]
+    drop(phase);
+    #[cfg(feature = "clock-profile")]
+    let phase = spacetimedb::log_stopwatch::LogStopwatch::new("view.render.projection");
+    let events = if access.observer && include_history {
+        // The pinned host tracks a range scan as a whole-table dependency.
+        // The clock supplies exact contiguous event IDs, so point reads keep
+        // unrelated action-admission appends outside this view's read set.
+        let mut events: Vec<simulation::Event> = (w.next_event.saturating_sub(180).max(1)..w.next_event)
+            .filter_map(|id| ctx.db.sim_audit().key().find(format!("{}:{id}", access.run)))
             .filter_map(|e| serde_json::from_str(&e.json).ok())
             .collect();
         events.sort_by_key(|e| e.id);
@@ -168,20 +210,64 @@ pub fn sim_my_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
     } else {
         vec![]
     };
-    let mut v = simulation::client_view::snapshot(&w, access.observer, access.actor, &events);
+    let mut v = if !include_history { simulation::client_view::live_render(&w, access.observer, access.actor, inspected) }
+        else if access.observer { simulation::client_view::observer_render(&w, inspected, &events) }
+        else { simulation::client_view::snapshot(&w, false, access.actor, &events) };
     if let Some(can)=can_participate {v["can_participate"]=serde_json::json!(can);}
+    #[cfg(feature = "clock-profile")]
+    drop(phase);
+    #[cfg(feature = "clock-profile")]
+    let phase = spacetimedb::log_stopwatch::LogStopwatch::new("view.render.status");
     if w.participant_mode && !access.observer {
-        v["participant"] = w.participant_snapshot(access.actor, 0, 256).ok()?;
+        // Bevy renders the scoped player projection above. The participant
+        // protocol has its own views and explicit reads; do not duplicate its
+        // complete context and retained experience tail in every render frame.
+        v["participant"] = w.participant_status(access.actor).ok()?;
     }
     if let Some(clock) = ctx.db.sim_client_clock().run().find(&access.run) {
         v["paused"] = serde_json::json!(clock.paused);
         v["evidence_mode"] = serde_json::json!(clock.evidence_mode);
     }
+    #[cfg(feature = "clock-profile")]
+    drop(phase);
     Some(SimClientSnapshot {
         run: access.run,
         tick: w.tick,
-        body: v.to_string(),
+        body: super::measured("view.render.serialize", || v.to_string()),
     })
+}
+
+#[derive(SpacetimeType)]
+pub struct SimClientRenderEvent {
+    pub run: String,
+    pub event: u64,
+    pub body: String,
+}
+#[spacetimedb::view(accessor = sim_my_render_events, public)]
+pub fn sim_my_render_events(ctx: &ViewContext) -> Vec<SimClientRenderEvent> {
+    let Some(access) = ctx.db.sim_client_access().identity().find(ctx.sender()) else { return vec![]; };
+    if access.observer {
+        let end = super::native_storage::render_event_end(ctx, &access.run).or_else(||
+            storage::observer_for_view(ctx, &access.run, None).map(|w| w.next_event));
+        let Some(end) = end else { return vec![]; };
+        (end.saturating_sub(180).max(1)..end).filter_map(|event| {
+            let row = ctx.db.sim_audit().key().find(format!("{}:{event}", access.run))?;
+            let body = if matches!(row.kind.as_str(), "model_request" | "model_result") {
+                let value: simulation::Event = serde_json::from_str(&row.json).ok()?;
+                simulation::client_view::observer_event(&value).to_string()
+            } else { row.json };
+            Some(SimClientRenderEvent {run:access.run.clone(),event,body})
+        }).collect()
+    } else {
+        let memories = super::native_storage::render_memories(ctx, &access.run, access.actor).or_else(||
+            storage::participant_for_view(ctx, &access.run, access.actor)
+                .and_then(|(w,_)| w.players.iter().find(|p|p.id==access.actor).map(|p|p.memories.to_vec())));
+        memories.unwrap_or_default().into_iter().map(|m| SimClientRenderEvent {
+            run:access.run.clone(),event:m.source,
+            body:simulation::research::redacted(serde_json::json!({"id":m.source,"tick":m.tick,
+                "actor":access.actor,"kind":m.kind,"parents":[],"data":m.content})).to_string(),
+        }).collect()
+    }
 }
 #[spacetimedb::reducer]
 pub fn sim_client_intent(ctx: &ReducerContext, decision: String) -> Result<(), String> {
@@ -269,6 +355,8 @@ pub fn sim_client_control(ctx: &ReducerContext, command: String) -> Result<(), S
     let (mut row, w) = world(ctx, &clock.run)?;
     row.last_advanced_at = ctx.timestamp;
     save(ctx, row, w);
+    let period = super::deadline_clock::period(ctx, &clock);
+    super::deadline_clock::reset(ctx, &mut clock, period);
     ctx.db.sim_client_clock().id().update(clock);
     Ok(())
 }
@@ -277,14 +365,21 @@ pub fn sim_client_pulse(ctx: &ReducerContext, clock: SimClientClock) -> Result<(
     if ctx.sender() != ctx.identity() {
         return Err("scheduled clock only".into());
     }
-    let mut current = ctx
+    if super::deadline_clock::enabled(ctx, &clock.run) { return Ok(()); }
+    let current = ctx
         .db
         .sim_client_clock()
         .run()
         .find(&clock.run)
         .ok_or("clock missing")?;
+    advance_pulse(ctx, current).map(|_| ())
+}
+
+pub(super) fn advance_pulse(ctx: &ReducerContext, mut current: SimClientClock) -> Result<bool, String> {
+    let mut paused = current.paused;
     if !current.paused {
-        let (mut row, mut w) = super::measured("clock.load", || storage::load_clock(ctx, &clock.run))?;
+        if let Some(paused) = super::physical_clock::advance_actions(ctx, &current)? { return Ok(paused); }
+        let (mut row, mut w) = super::measured("clock.load", || storage::load_clock(ctx, &current.run))?;
         if !w.stopped {
             let elapsed = ctx
                 .timestamp
@@ -294,6 +389,7 @@ pub fn sim_client_pulse(ctx: &ReducerContext, clock: SimClientClock) -> Result<(
             if delta_ms > 60_000 {
                 // An outage requires explicit recovery; never silently discard elapsed time.
                 current.paused = true;
+                paused = true;
                 ctx.db.sim_client_clock().id().update(current);
                 w.event(
                     None,
@@ -313,7 +409,7 @@ pub fn sim_client_pulse(ctx: &ReducerContext, clock: SimClientClock) -> Result<(
             super::native_storage::report_clock_reads();
         }
     }
-    Ok(())
+    Ok(paused)
 }
 
 #[spacetimedb::reducer]
@@ -327,8 +423,8 @@ pub fn sim_operator_clock(
     if row.owner != ctx.sender() {
         return Err("operator only".into());
     }
-    if !(50..=60_000).contains(&tick_ms) {
-        return Err("clock interval must be 50..60000 milliseconds".into());
+    if !(10..=60_000).contains(&tick_ms) {
+        return Err("clock interval must be 10..60000 milliseconds".into());
     }
     let mut clock = ctx
         .db
@@ -338,6 +434,7 @@ pub fn sim_operator_clock(
         .ok_or("clock missing")?;
     clock.scheduled_at = std::time::Duration::from_millis(tick_ms).into();
     clock.paused = paused;
+    super::deadline_clock::reset(ctx, &mut clock, tick_ms);
     row.last_advanced_at = ctx.timestamp;
     ctx.db.sim_client_clock().id().update(clock);
     w.event(
@@ -353,8 +450,11 @@ pub fn sim_operator_clock(
 #[spacetimedb::reducer]
 pub fn sim_operator_pause(ctx: &ReducerContext, run: String) -> Result<(), String> {
     storage::require_owner(ctx, &run)?;
+    super::physical_clock::cancel(ctx, &run);
     if let Some(mut clock) = ctx.db.sim_client_clock().run().find(&run) {
         clock.paused = true;
+        let period = super::deadline_clock::period(ctx, &clock);
+        super::deadline_clock::reset(ctx, &mut clock, period);
         ctx.db.sim_client_clock().id().update(clock);
     }
     Ok(())

@@ -10,7 +10,7 @@ from pathlib import Path
 
 def prepare(source, population):
     seed = json.loads(source.read_text())
-    assert len(seed['players']) == 36 and population in (72, 144)
+    assert len(seed['players']) == 36 and population in (72, 144, 216)
     assert [p['id'] for p in seed['players']] == list(range(1, 37))
     assert not seed['lifecycle'] and not seed['disturbances']
     # The fixture uses initial character templates only: no runtime evidence,
@@ -61,7 +61,7 @@ def prepare(source, population):
 if __name__ == '__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source',type=Path,default=Path(__file__).resolve().parents[1]/'scenarios/faction-world-reality.json')
-    parser.add_argument('--population',type=int,choices=(72,144),required=True)
+    parser.add_argument('--population',type=int,choices=(72,144,216),required=True)
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=False)

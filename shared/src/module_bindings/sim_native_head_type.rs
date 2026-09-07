@@ -17,6 +17,7 @@ pub struct SimNativeHead {
     pub time_ms: u64,
     pub updates: u64,
     pub delta_ms: u64,
+    pub maintenance_ms: Option<u64>,
     pub needs_remainder_ms: u64,
     pub hazard_remainder_ms: u64,
     pub next_job: u64,
@@ -44,6 +45,7 @@ pub struct SimNativeHeadCols {
     pub time_ms: __sdk::__query_builder::Col<SimNativeHead, u64>,
     pub updates: __sdk::__query_builder::Col<SimNativeHead, u64>,
     pub delta_ms: __sdk::__query_builder::Col<SimNativeHead, u64>,
+    pub maintenance_ms: __sdk::__query_builder::Col<SimNativeHead, Option<u64>>,
     pub needs_remainder_ms: __sdk::__query_builder::Col<SimNativeHead, u64>,
     pub hazard_remainder_ms: __sdk::__query_builder::Col<SimNativeHead, u64>,
     pub next_job: __sdk::__query_builder::Col<SimNativeHead, u64>,
@@ -67,6 +69,7 @@ impl __sdk::__query_builder::HasCols for SimNativeHead {
             time_ms: __sdk::__query_builder::Col::new(table_name, "time_ms"),
             updates: __sdk::__query_builder::Col::new(table_name, "updates"),
             delta_ms: __sdk::__query_builder::Col::new(table_name, "delta_ms"),
+            maintenance_ms: __sdk::__query_builder::Col::new(table_name, "maintenance_ms"),
             needs_remainder_ms: __sdk::__query_builder::Col::new(table_name, "needs_remainder_ms"),
             hazard_remainder_ms: __sdk::__query_builder::Col::new(
                 table_name,

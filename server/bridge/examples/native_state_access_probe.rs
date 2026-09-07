@@ -188,6 +188,10 @@ async fn check(
         .is_none());
     passed.push("ungranted views and owner export view are empty");
     for table in [
+        "sim_audit_block",
+        "sim_audit_retention",
+        "sim_clock_deadline",
+        "sim_clock_wake",
         "sim_native_actor",
         "sim_native_mind",
         "sim_native_mind_history",
@@ -215,6 +219,19 @@ async fn check(
     grant(c, &identities[0], &c.run, 1, false).await?;
     grant(c, &identities[1], &c.run, 2, false).await?;
     grant(c, &identities[2], &c.run, 0, true).await?;
+    for name in ["first", "observer"] {
+        let session: bridge::participant::Session = serde_json::from_slice(
+            &std::fs::read(c.credentials.join(format!("{name}.json"))).map_err(|_| "session unavailable")?)
+            .map_err(|_| "invalid session")?;
+        let reply: Value = reqwest::Client::new()
+            .post(format!("{}/v1/database/{}/call/sim_export_owned_audit", c.server, c.database))
+            .bearer_auth(&session.token).json(&json!([c.run, 1, 2, 4096]))
+            .timeout(Duration::from_secs(10)).send().await.map_err(|_| "audit access transport")?
+            .json().await.map_err(|_| "audit access response")?;
+        verify_eq!(reply, json!([1, "run unavailable"]));
+    }
+    passed.push("participant and observer identities cannot export owner audit archives");
+
     wait(|| first.current().is_ok() && second.current().is_ok()).await?;
     let denied = Arc::new(AtomicBool::new(false));
     let flag = denied.clone();

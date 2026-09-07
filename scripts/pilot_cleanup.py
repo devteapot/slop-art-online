@@ -17,7 +17,7 @@ def identity_text(value):
     raise ValueError("invalid authority grant identity")
 
 
-def finalize_fixed_run(run, *, stop_host, control, call, state, record):
+def finalize_fixed_run(run, *, stop_host, control, call, state, record, audit_export=None):
     """Stop host, pause, revoke this run's grants, and capture one audit cutoff.
 
     Every authority operation uses the caller's existing finite CLI deadline.
@@ -95,7 +95,8 @@ def finalize_fixed_run(run, *, stop_host, control, call, state, record):
         if world.get("run") != run or type(world.get("next_event")) is not int or world["next_event"] < 1:
             raise ValueError("invalid final World identity or event cutoff")
         cutoff = world["next_event"]
-        audit = sql(f"SELECT json FROM sim_audit WHERE run = '{run}' AND event_id < {cutoff}")
+        audit = ([[body] for body in audit_export(run, cutoff)] if audit_export else
+                 sql(f"SELECT json FROM sim_audit WHERE run = '{run}' AND event_id < {cutoff}"))
         if any(not isinstance(row, list) or len(row) != 1 or not isinstance(row[0], str) for row in audit):
             raise ValueError("invalid final audit rows")
         events = sorted((json.loads(row[0]) for row in audit), key=lambda event: event["id"])

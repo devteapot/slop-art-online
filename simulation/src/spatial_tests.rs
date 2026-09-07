@@ -181,10 +181,10 @@ fn matrix_scope_blocks_movement_conditions_perception_and_script_effects() {
 #[test]
 fn matrix_requires_sealed_boundaries_and_advances_all_arenas_after_reload() {
     let mut w = matrix();
-    let mut invalid = w.initial.clone();
+    let mut invalid = (*w.initial).clone();
     invalid.map.as_mut().unwrap().blocked.remove(&0);
     assert!(World::new("invalid".into(),invalid).is_err());
-    let mut invalid = w.initial.clone();
+    let mut invalid = (*w.initial).clone();
     invalid.arenas[1].actors.push(1);
     assert!(World::new("invalid".into(),invalid).is_err());
     let goal = w.players[0].position+5;

@@ -89,22 +89,50 @@ pub mod resource_type_type;
 pub mod rotate_player_reducer;
 pub mod send_chat_message_reducer;
 pub mod set_display_name_reducer;
+pub mod sim_audit_block_type;
+pub mod sim_audit_retention_type;
 pub mod sim_audit_type;
+pub mod sim_audit_wake_type;
 pub mod sim_client_access_type;
 pub mod sim_client_clock_type;
 pub mod sim_client_control_reducer;
+pub mod sim_client_inspector_type;
 pub mod sim_client_intent_reducer;
+pub mod sim_client_render_event_type;
 pub mod sim_client_snapshot_type;
+pub mod sim_clock_deadline_type;
+pub mod sim_clock_wake_type;
+pub mod sim_compact_audit_reducer;
+pub mod sim_configure_audit_archive_reducer;
+pub mod sim_configure_deadline_clock_reducer;
+pub mod sim_configure_physical_clock_reducer;
+pub mod sim_controller_bootstrap_type;
+pub mod sim_controller_delivery_cursor_type;
+pub mod sim_controller_dispatch_type;
+pub mod sim_controller_frame_state_type;
+pub mod sim_controller_frame_type;
+pub mod sim_controller_knowledge_type;
+pub mod sim_create_client_world_reducer;
 pub mod sim_create_participant_reducer;
 pub mod sim_create_reducer;
+pub mod sim_dispatch_controller_action_after_reducer;
+pub mod sim_dispatch_controller_action_reducer;
+pub mod sim_export_owned_audit_procedure;
 pub mod sim_export_owned_run_procedure;
 pub mod sim_grant_client_reducer;
 pub mod sim_intent_reducer;
 pub mod sim_migrate_native_state_reducer;
 pub mod sim_model_result_reducer;
+pub mod sim_my_controller_bootstrap_table;
+pub mod sim_my_controller_dispatch_table;
+pub mod sim_my_controller_experiences_table;
+pub mod sim_my_controller_frame_table;
+pub mod sim_my_controller_knowledge_table;
 pub mod sim_my_participant_head_table;
 pub mod sim_my_participant_reads_table;
 pub mod sim_my_participant_receipts_table;
+pub mod sim_my_render_events_table;
+pub mod sim_my_render_snapshot_table;
 pub mod sim_my_snapshot_table;
 pub mod sim_native_actor_aux_type;
 pub mod sim_native_actor_type;
@@ -112,7 +140,9 @@ pub mod sim_native_archive_type;
 pub mod sim_native_capture_type;
 pub mod sim_native_clock_actor_type;
 pub mod sim_native_clock_state_type;
+pub mod sim_native_controller_type;
 pub mod sim_native_definition_type;
+pub mod sim_native_definition_version_type;
 pub mod sim_native_experience_type;
 pub mod sim_native_head_type;
 pub mod sim_native_lease_evidence_type;
@@ -131,14 +161,20 @@ pub mod sim_participant_head_type;
 pub mod sim_participant_read_type;
 pub mod sim_participant_receipt_type;
 pub mod sim_participant_state_table;
+pub mod sim_physical_clock_type;
+pub mod sim_render_actor_support_type;
+pub mod sim_render_clock_type;
 pub mod sim_revoke_client_reducer;
 pub mod sim_run_store_type;
 pub mod sim_run_table;
 pub mod sim_run_type;
+pub mod sim_select_inspector_reducer;
+pub mod sim_set_controller_delivery_cursor_reducer;
 pub mod sim_setup_client_clock_reducer;
 pub mod sim_stage_scripts_reducer;
 pub mod sim_step_reducer;
 pub mod sim_world_blob_type;
+pub mod sim_world_wake_type;
 pub mod skill_attributes_table;
 pub mod skill_attributes_type;
 pub mod skill_cooldown_table;
@@ -250,22 +286,50 @@ pub use resource_type_type::ResourceType;
 pub use rotate_player_reducer::rotate_player;
 pub use send_chat_message_reducer::send_chat_message;
 pub use set_display_name_reducer::set_display_name;
+pub use sim_audit_block_type::SimAuditBlock;
+pub use sim_audit_retention_type::SimAuditRetention;
 pub use sim_audit_type::SimAudit;
+pub use sim_audit_wake_type::SimAuditWake;
 pub use sim_client_access_type::SimClientAccess;
 pub use sim_client_clock_type::SimClientClock;
 pub use sim_client_control_reducer::sim_client_control;
+pub use sim_client_inspector_type::SimClientInspector;
 pub use sim_client_intent_reducer::sim_client_intent;
+pub use sim_client_render_event_type::SimClientRenderEvent;
 pub use sim_client_snapshot_type::SimClientSnapshot;
+pub use sim_clock_deadline_type::SimClockDeadline;
+pub use sim_clock_wake_type::SimClockWake;
+pub use sim_compact_audit_reducer::sim_compact_audit;
+pub use sim_configure_audit_archive_reducer::sim_configure_audit_archive;
+pub use sim_configure_deadline_clock_reducer::sim_configure_deadline_clock;
+pub use sim_configure_physical_clock_reducer::sim_configure_physical_clock;
+pub use sim_controller_bootstrap_type::SimControllerBootstrap;
+pub use sim_controller_delivery_cursor_type::SimControllerDeliveryCursor;
+pub use sim_controller_dispatch_type::SimControllerDispatch;
+pub use sim_controller_frame_state_type::SimControllerFrameState;
+pub use sim_controller_frame_type::SimControllerFrame;
+pub use sim_controller_knowledge_type::SimControllerKnowledge;
+pub use sim_create_client_world_reducer::sim_create_client_world;
 pub use sim_create_participant_reducer::sim_create_participant;
 pub use sim_create_reducer::sim_create;
+pub use sim_dispatch_controller_action_after_reducer::sim_dispatch_controller_action_after;
+pub use sim_dispatch_controller_action_reducer::sim_dispatch_controller_action;
+pub use sim_export_owned_audit_procedure::sim_export_owned_audit;
 pub use sim_export_owned_run_procedure::sim_export_owned_run;
 pub use sim_grant_client_reducer::sim_grant_client;
 pub use sim_intent_reducer::sim_intent;
 pub use sim_migrate_native_state_reducer::sim_migrate_native_state;
 pub use sim_model_result_reducer::sim_model_result;
+pub use sim_my_controller_bootstrap_table::*;
+pub use sim_my_controller_dispatch_table::*;
+pub use sim_my_controller_experiences_table::*;
+pub use sim_my_controller_frame_table::*;
+pub use sim_my_controller_knowledge_table::*;
 pub use sim_my_participant_head_table::*;
 pub use sim_my_participant_reads_table::*;
 pub use sim_my_participant_receipts_table::*;
+pub use sim_my_render_events_table::*;
+pub use sim_my_render_snapshot_table::*;
 pub use sim_my_snapshot_table::*;
 pub use sim_native_actor_aux_type::SimNativeActorAux;
 pub use sim_native_actor_type::SimNativeActor;
@@ -273,7 +337,9 @@ pub use sim_native_archive_type::SimNativeArchive;
 pub use sim_native_capture_type::SimNativeCapture;
 pub use sim_native_clock_actor_type::SimNativeClockActor;
 pub use sim_native_clock_state_type::SimNativeClockState;
+pub use sim_native_controller_type::SimNativeController;
 pub use sim_native_definition_type::SimNativeDefinition;
+pub use sim_native_definition_version_type::SimNativeDefinitionVersion;
 pub use sim_native_experience_type::SimNativeExperience;
 pub use sim_native_head_type::SimNativeHead;
 pub use sim_native_lease_evidence_type::SimNativeLeaseEvidence;
@@ -292,14 +358,20 @@ pub use sim_participant_head_type::SimParticipantHead;
 pub use sim_participant_read_type::SimParticipantRead;
 pub use sim_participant_receipt_type::SimParticipantReceipt;
 pub use sim_participant_state_table::*;
+pub use sim_physical_clock_type::SimPhysicalClock;
+pub use sim_render_actor_support_type::SimRenderActorSupport;
+pub use sim_render_clock_type::SimRenderClock;
 pub use sim_revoke_client_reducer::sim_revoke_client;
 pub use sim_run_store_type::SimRunStore;
 pub use sim_run_table::*;
 pub use sim_run_type::SimRun;
+pub use sim_select_inspector_reducer::sim_select_inspector;
+pub use sim_set_controller_delivery_cursor_reducer::sim_set_controller_delivery_cursor;
 pub use sim_setup_client_clock_reducer::sim_setup_client_clock;
 pub use sim_stage_scripts_reducer::sim_stage_scripts;
 pub use sim_step_reducer::sim_step;
 pub use sim_world_blob_type::SimWorldBlob;
+pub use sim_world_wake_type::SimWorldWake;
 pub use skill_attributes_table::*;
 pub use skill_attributes_type::SkillAttributes;
 pub use skill_cooldown_table::*;
@@ -374,13 +446,41 @@ pub enum Reducer {
     SimClientIntent {
         decision: String,
     },
+    SimCompactAudit {
+        run: String,
+    },
+    SimConfigureAuditArchive {
+        run: String,
+        enabled: bool,
+    },
+    SimConfigureDeadlineClock {
+        run: String,
+        enabled: bool,
+    },
+    SimConfigurePhysicalClock {
+        run: String,
+        enabled: bool,
+    },
     SimCreate {
+        run: String,
+        scenario: String,
+    },
+    SimCreateClientWorld {
         run: String,
         scenario: String,
     },
     SimCreateParticipant {
         run: String,
         scenario: String,
+    },
+    SimDispatchControllerAction {
+        sequence: u64,
+        request: String,
+    },
+    SimDispatchControllerActionAfter {
+        sequence: u64,
+        request: String,
+        cursor: u64,
     },
     SimGrantClient {
         run: String,
@@ -415,6 +515,12 @@ pub enum Reducer {
     },
     SimRevokeClient {
         identity: __sdk::Identity,
+    },
+    SimSelectInspector {
+        actor: Option<u32>,
+    },
+    SimSetControllerDeliveryCursor {
+        cursor: u64,
     },
     SimSetupClientClock {
         run: String,
@@ -516,8 +622,17 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetDisplayName { .. } => "set_display_name",
             Reducer::SimClientControl { .. } => "sim_client_control",
             Reducer::SimClientIntent { .. } => "sim_client_intent",
+            Reducer::SimCompactAudit { .. } => "sim_compact_audit",
+            Reducer::SimConfigureAuditArchive { .. } => "sim_configure_audit_archive",
+            Reducer::SimConfigureDeadlineClock { .. } => "sim_configure_deadline_clock",
+            Reducer::SimConfigurePhysicalClock { .. } => "sim_configure_physical_clock",
             Reducer::SimCreate { .. } => "sim_create",
+            Reducer::SimCreateClientWorld { .. } => "sim_create_client_world",
             Reducer::SimCreateParticipant { .. } => "sim_create_participant",
+            Reducer::SimDispatchControllerAction { .. } => "sim_dispatch_controller_action",
+            Reducer::SimDispatchControllerActionAfter { .. } => {
+                "sim_dispatch_controller_action_after"
+            }
             Reducer::SimGrantClient { .. } => "sim_grant_client",
             Reducer::SimIntent { .. } => "sim_intent",
             Reducer::SimMigrateNativeState { .. } => "sim_migrate_native_state",
@@ -526,6 +641,8 @@ impl __sdk::Reducer for Reducer {
             Reducer::SimOperatorPause { .. } => "sim_operator_pause",
             Reducer::SimParticipantCommand { .. } => "sim_participant_command",
             Reducer::SimRevokeClient { .. } => "sim_revoke_client",
+            Reducer::SimSelectInspector { .. } => "sim_select_inspector",
+            Reducer::SimSetControllerDeliveryCursor { .. } => "sim_set_controller_delivery_cursor",
             Reducer::SimSetupClientClock { .. } => "sim_setup_client_clock",
             Reducer::SimStageScripts { .. } => "sim_stage_scripts",
             Reducer::SimStep { .. } => "sim_step",
@@ -551,153 +668,224 @@ impl __sdk::Reducer for Reducer {
     #[allow(clippy::clone_on_copy)]
     fn args_bsatn(&self) -> Result<Vec<u8>, __sats::bsatn::EncodeError> {
         match self {
-            Reducer::AllocateSkillPoint {
+                        Reducer::AllocateSkillPoint{
                 skill_id,
                 attribute,
-            } => __sats::bsatn::to_vec(&allocate_skill_point_reducer::AllocateSkillPointArgs {
+}             => __sats::bsatn::to_vec(&allocate_skill_point_reducer::AllocateSkillPointArgs {
                 skill_id: skill_id.clone(),
                 attribute: attribute.clone(),
-            }),
-            Reducer::DropEquippedItem { equipped_item_id } => {
-                __sats::bsatn::to_vec(&drop_equipped_item_reducer::DropEquippedItemArgs {
-                    equipped_item_id: equipped_item_id.clone(),
-                })
-            }
-            Reducer::DropItem { inventory_item_id } => {
-                __sats::bsatn::to_vec(&drop_item_reducer::DropItemArgs {
-                    inventory_item_id: inventory_item_id.clone(),
-                })
-            }
-            Reducer::EquipItem { inventory_item_id } => {
-                __sats::bsatn::to_vec(&equip_item_reducer::EquipItemArgs {
-                    inventory_item_id: inventory_item_id.clone(),
-                })
-            }
-            Reducer::JoinGame => __sats::bsatn::to_vec(&join_game_reducer::JoinGameArgs {}),
-            Reducer::MovePlayer { x, y, z, seq } => {
-                __sats::bsatn::to_vec(&move_player_reducer::MovePlayerArgs {
-                    x: x.clone(),
-                    y: y.clone(),
-                    z: z.clone(),
-                    seq: seq.clone(),
-                })
-            }
-            Reducer::PickupItem { ground_item_id } => {
-                __sats::bsatn::to_vec(&pickup_item_reducer::PickupItemArgs {
-                    ground_item_id: ground_item_id.clone(),
-                })
-            }
-            Reducer::RotatePlayer { angle } => {
-                __sats::bsatn::to_vec(&rotate_player_reducer::RotatePlayerArgs {
-                    angle: angle.clone(),
-                })
-            }
-            Reducer::SendChatMessage { text } => {
-                __sats::bsatn::to_vec(&send_chat_message_reducer::SendChatMessageArgs {
-                    text: text.clone(),
-                })
-            }
-            Reducer::SetDisplayName { display_name } => {
-                __sats::bsatn::to_vec(&set_display_name_reducer::SetDisplayNameArgs {
-                    display_name: display_name.clone(),
-                })
-            }
-            Reducer::SimClientControl { command } => {
-                __sats::bsatn::to_vec(&sim_client_control_reducer::SimClientControlArgs {
-                    command: command.clone(),
-                })
-            }
-            Reducer::SimClientIntent { decision } => {
-                __sats::bsatn::to_vec(&sim_client_intent_reducer::SimClientIntentArgs {
-                    decision: decision.clone(),
-                })
-            }
-            Reducer::SimCreate { run, scenario } => {
-                __sats::bsatn::to_vec(&sim_create_reducer::SimCreateArgs {
-                    run: run.clone(),
-                    scenario: scenario.clone(),
-                })
-            }
-            Reducer::SimCreateParticipant { run, scenario } => {
-                __sats::bsatn::to_vec(&sim_create_participant_reducer::SimCreateParticipantArgs {
-                    run: run.clone(),
-                    scenario: scenario.clone(),
-                })
-            }
-            Reducer::SimGrantClient {
+}),
+            Reducer::DropEquippedItem{
+                equipped_item_id,
+}             => __sats::bsatn::to_vec(&drop_equipped_item_reducer::DropEquippedItemArgs {
+                equipped_item_id: equipped_item_id.clone(),
+}),
+            Reducer::DropItem{
+                inventory_item_id,
+}             => __sats::bsatn::to_vec(&drop_item_reducer::DropItemArgs {
+                inventory_item_id: inventory_item_id.clone(),
+}),
+            Reducer::EquipItem{
+                inventory_item_id,
+}             => __sats::bsatn::to_vec(&equip_item_reducer::EquipItemArgs {
+                inventory_item_id: inventory_item_id.clone(),
+}),
+            Reducer::JoinGame => __sats::bsatn::to_vec(&join_game_reducer::JoinGameArgs {
+                }),
+Reducer::MovePlayer{
+                x,
+                y,
+                z,
+                seq,
+}             => __sats::bsatn::to_vec(&move_player_reducer::MovePlayerArgs {
+                x: x.clone(),
+                y: y.clone(),
+                z: z.clone(),
+                seq: seq.clone(),
+}),
+            Reducer::PickupItem{
+                ground_item_id,
+}             => __sats::bsatn::to_vec(&pickup_item_reducer::PickupItemArgs {
+                ground_item_id: ground_item_id.clone(),
+}),
+            Reducer::RotatePlayer{
+                angle,
+}             => __sats::bsatn::to_vec(&rotate_player_reducer::RotatePlayerArgs {
+                angle: angle.clone(),
+}),
+            Reducer::SendChatMessage{
+                text,
+}             => __sats::bsatn::to_vec(&send_chat_message_reducer::SendChatMessageArgs {
+                text: text.clone(),
+}),
+            Reducer::SetDisplayName{
+                display_name,
+}             => __sats::bsatn::to_vec(&set_display_name_reducer::SetDisplayNameArgs {
+                display_name: display_name.clone(),
+}),
+            Reducer::SimClientControl{
+                command,
+}             => __sats::bsatn::to_vec(&sim_client_control_reducer::SimClientControlArgs {
+                command: command.clone(),
+}),
+            Reducer::SimClientIntent{
+                decision,
+}             => __sats::bsatn::to_vec(&sim_client_intent_reducer::SimClientIntentArgs {
+                decision: decision.clone(),
+}),
+            Reducer::SimCompactAudit{
+                run,
+}             => __sats::bsatn::to_vec(&sim_compact_audit_reducer::SimCompactAuditArgs {
+                run: run.clone(),
+}),
+            Reducer::SimConfigureAuditArchive{
+                run,
+                enabled,
+}             => __sats::bsatn::to_vec(&sim_configure_audit_archive_reducer::SimConfigureAuditArchiveArgs {
+                run: run.clone(),
+                enabled: enabled.clone(),
+}),
+            Reducer::SimConfigureDeadlineClock{
+                run,
+                enabled,
+}             => __sats::bsatn::to_vec(&sim_configure_deadline_clock_reducer::SimConfigureDeadlineClockArgs {
+                run: run.clone(),
+                enabled: enabled.clone(),
+}),
+            Reducer::SimConfigurePhysicalClock{
+                run,
+                enabled,
+}             => __sats::bsatn::to_vec(&sim_configure_physical_clock_reducer::SimConfigurePhysicalClockArgs {
+                run: run.clone(),
+                enabled: enabled.clone(),
+}),
+            Reducer::SimCreate{
+                run,
+                scenario,
+}             => __sats::bsatn::to_vec(&sim_create_reducer::SimCreateArgs {
+                run: run.clone(),
+                scenario: scenario.clone(),
+}),
+            Reducer::SimCreateClientWorld{
+                run,
+                scenario,
+}             => __sats::bsatn::to_vec(&sim_create_client_world_reducer::SimCreateClientWorldArgs {
+                run: run.clone(),
+                scenario: scenario.clone(),
+}),
+            Reducer::SimCreateParticipant{
+                run,
+                scenario,
+}             => __sats::bsatn::to_vec(&sim_create_participant_reducer::SimCreateParticipantArgs {
+                run: run.clone(),
+                scenario: scenario.clone(),
+}),
+            Reducer::SimDispatchControllerAction{
+                sequence,
+                request,
+}             => __sats::bsatn::to_vec(&sim_dispatch_controller_action_reducer::SimDispatchControllerActionArgs {
+                sequence: sequence.clone(),
+                request: request.clone(),
+}),
+            Reducer::SimDispatchControllerActionAfter{
+                sequence,
+                request,
+                cursor,
+}             => __sats::bsatn::to_vec(&sim_dispatch_controller_action_after_reducer::SimDispatchControllerActionAfterArgs {
+                sequence: sequence.clone(),
+                request: request.clone(),
+                cursor: cursor.clone(),
+}),
+            Reducer::SimGrantClient{
                 run,
                 identity,
                 observer,
                 actor,
-            } => __sats::bsatn::to_vec(&sim_grant_client_reducer::SimGrantClientArgs {
+}             => __sats::bsatn::to_vec(&sim_grant_client_reducer::SimGrantClientArgs {
                 run: run.clone(),
                 identity: identity.clone(),
                 observer: observer.clone(),
                 actor: actor.clone(),
-            }),
-            Reducer::SimIntent {
+}),
+            Reducer::SimIntent{
                 run,
                 actor,
                 decision,
-            } => __sats::bsatn::to_vec(&sim_intent_reducer::SimIntentArgs {
+}             => __sats::bsatn::to_vec(&sim_intent_reducer::SimIntentArgs {
                 run: run.clone(),
                 actor: actor.clone(),
                 decision: decision.clone(),
-            }),
-            Reducer::SimMigrateNativeState { run } => __sats::bsatn::to_vec(
-                &sim_migrate_native_state_reducer::SimMigrateNativeStateArgs { run: run.clone() },
-            ),
-            Reducer::SimModelResult {
+}),
+            Reducer::SimMigrateNativeState{
+                run,
+}             => __sats::bsatn::to_vec(&sim_migrate_native_state_reducer::SimMigrateNativeStateArgs {
+                run: run.clone(),
+}),
+            Reducer::SimModelResult{
                 run,
                 request,
                 raw,
                 metadata,
-            } => __sats::bsatn::to_vec(&sim_model_result_reducer::SimModelResultArgs {
+}             => __sats::bsatn::to_vec(&sim_model_result_reducer::SimModelResultArgs {
                 run: run.clone(),
                 request: request.clone(),
                 raw: raw.clone(),
                 metadata: metadata.clone(),
-            }),
-            Reducer::SimOperatorClock {
+}),
+            Reducer::SimOperatorClock{
                 run,
                 tick_ms,
                 paused,
-            } => __sats::bsatn::to_vec(&sim_operator_clock_reducer::SimOperatorClockArgs {
+}             => __sats::bsatn::to_vec(&sim_operator_clock_reducer::SimOperatorClockArgs {
                 run: run.clone(),
                 tick_ms: tick_ms.clone(),
                 paused: paused.clone(),
-            }),
-            Reducer::SimOperatorPause { run } => {
-                __sats::bsatn::to_vec(&sim_operator_pause_reducer::SimOperatorPauseArgs {
-                    run: run.clone(),
-                })
-            }
-            Reducer::SimParticipantCommand { request } => __sats::bsatn::to_vec(
-                &sim_participant_command_reducer::SimParticipantCommandArgs {
-                    request: request.clone(),
-                },
-            ),
-            Reducer::SimRevokeClient { identity } => {
-                __sats::bsatn::to_vec(&sim_revoke_client_reducer::SimRevokeClientArgs {
-                    identity: identity.clone(),
-                })
-            }
-            Reducer::SimSetupClientClock { run, evidence_mode } => {
-                __sats::bsatn::to_vec(&sim_setup_client_clock_reducer::SimSetupClientClockArgs {
-                    run: run.clone(),
-                    evidence_mode: evidence_mode.clone(),
-                })
-            }
-            Reducer::SimStageScripts { run, update } => {
-                __sats::bsatn::to_vec(&sim_stage_scripts_reducer::SimStageScriptsArgs {
-                    run: run.clone(),
-                    update: update.clone(),
-                })
-            }
-            Reducer::SimStep { run } => {
-                __sats::bsatn::to_vec(&sim_step_reducer::SimStepArgs { run: run.clone() })
-            }
-            Reducer::SpawnNpc {
+}),
+            Reducer::SimOperatorPause{
+                run,
+}             => __sats::bsatn::to_vec(&sim_operator_pause_reducer::SimOperatorPauseArgs {
+                run: run.clone(),
+}),
+            Reducer::SimParticipantCommand{
+                request,
+}             => __sats::bsatn::to_vec(&sim_participant_command_reducer::SimParticipantCommandArgs {
+                request: request.clone(),
+}),
+            Reducer::SimRevokeClient{
+                identity,
+}             => __sats::bsatn::to_vec(&sim_revoke_client_reducer::SimRevokeClientArgs {
+                identity: identity.clone(),
+}),
+            Reducer::SimSelectInspector{
+                actor,
+}             => __sats::bsatn::to_vec(&sim_select_inspector_reducer::SimSelectInspectorArgs {
+                actor: actor.clone(),
+}),
+            Reducer::SimSetControllerDeliveryCursor{
+                cursor,
+}             => __sats::bsatn::to_vec(&sim_set_controller_delivery_cursor_reducer::SimSetControllerDeliveryCursorArgs {
+                cursor: cursor.clone(),
+}),
+            Reducer::SimSetupClientClock{
+                run,
+                evidence_mode,
+}             => __sats::bsatn::to_vec(&sim_setup_client_clock_reducer::SimSetupClientClockArgs {
+                run: run.clone(),
+                evidence_mode: evidence_mode.clone(),
+}),
+            Reducer::SimStageScripts{
+                run,
+                update,
+}             => __sats::bsatn::to_vec(&sim_stage_scripts_reducer::SimStageScriptsArgs {
+                run: run.clone(),
+                update: update.clone(),
+}),
+            Reducer::SimStep{
+                run,
+}             => __sats::bsatn::to_vec(&sim_step_reducer::SimStepArgs {
+                run: run.clone(),
+}),
+            Reducer::SpawnNpc{
                 x,
                 z,
                 level,
@@ -705,7 +893,7 @@ impl __sdk::Reducer for Reducer {
                 name,
                 gold,
                 persona,
-            } => __sats::bsatn::to_vec(&spawn_npc_reducer::SpawnNpcArgs {
+}             => __sats::bsatn::to_vec(&spawn_npc_reducer::SpawnNpcArgs {
                 x: x.clone(),
                 z: z.clone(),
                 level: level.clone(),
@@ -713,110 +901,114 @@ impl __sdk::Reducer for Reducer {
                 name: name.clone(),
                 gold: gold.clone(),
                 persona: persona.clone(),
-            }),
-            Reducer::StartNpcTicker => {
-                __sats::bsatn::to_vec(&start_npc_ticker_reducer::StartNpcTickerArgs {})
-            }
-            Reducer::StartProjectileTicker => __sats::bsatn::to_vec(
-                &start_projectile_ticker_reducer::StartProjectileTickerArgs {},
-            ),
-            Reducer::SubmitNpcActions {
+}),
+            Reducer::StartNpcTicker => __sats::bsatn::to_vec(&start_npc_ticker_reducer::StartNpcTickerArgs {
+                }),
+Reducer::StartProjectileTicker => __sats::bsatn::to_vec(&start_projectile_ticker_reducer::StartProjectileTickerArgs {
+                }),
+Reducer::SubmitNpcActions{
                 npc_id,
                 actions_json,
-            } => __sats::bsatn::to_vec(&submit_npc_actions_reducer::SubmitNpcActionsArgs {
+}             => __sats::bsatn::to_vec(&submit_npc_actions_reducer::SubmitNpcActionsArgs {
                 npc_id: npc_id.clone(),
                 actions_json: actions_json.clone(),
-            }),
-            Reducer::SubmitNpcBeliefs {
+}),
+            Reducer::SubmitNpcBeliefs{
                 npc_id,
                 beliefs_json,
-            } => __sats::bsatn::to_vec(&submit_npc_beliefs_reducer::SubmitNpcBeliefsArgs {
+}             => __sats::bsatn::to_vec(&submit_npc_beliefs_reducer::SubmitNpcBeliefsArgs {
                 npc_id: npc_id.clone(),
                 beliefs_json: beliefs_json.clone(),
-            }),
-            Reducer::SubmitNpcGoals { npc_id, goals_json } => {
-                __sats::bsatn::to_vec(&submit_npc_goals_reducer::SubmitNpcGoalsArgs {
-                    npc_id: npc_id.clone(),
-                    goals_json: goals_json.clone(),
-                })
-            }
-            Reducer::SubmitNpcIdentityUpdate { npc_id, json } => __sats::bsatn::to_vec(
-                &submit_npc_identity_update_reducer::SubmitNpcIdentityUpdateArgs {
-                    npc_id: npc_id.clone(),
-                    json: json.clone(),
-                },
-            ),
-            Reducer::SubmitNpcKnowledge {
+}),
+            Reducer::SubmitNpcGoals{
+                npc_id,
+                goals_json,
+}             => __sats::bsatn::to_vec(&submit_npc_goals_reducer::SubmitNpcGoalsArgs {
+                npc_id: npc_id.clone(),
+                goals_json: goals_json.clone(),
+}),
+            Reducer::SubmitNpcIdentityUpdate{
+                npc_id,
+                json,
+}             => __sats::bsatn::to_vec(&submit_npc_identity_update_reducer::SubmitNpcIdentityUpdateArgs {
+                npc_id: npc_id.clone(),
+                json: json.clone(),
+}),
+            Reducer::SubmitNpcKnowledge{
                 npc_id,
                 category,
                 fact,
                 learned_from,
                 confidence,
-            } => __sats::bsatn::to_vec(&submit_npc_knowledge_reducer::SubmitNpcKnowledgeArgs {
+}             => __sats::bsatn::to_vec(&submit_npc_knowledge_reducer::SubmitNpcKnowledgeArgs {
                 npc_id: npc_id.clone(),
                 category: category.clone(),
                 fact: fact.clone(),
                 learned_from: learned_from.clone(),
                 confidence: confidence.clone(),
-            }),
-            Reducer::SubmitNpcMemory { npc_id, text } => {
-                __sats::bsatn::to_vec(&submit_npc_memory_reducer::SubmitNpcMemoryArgs {
-                    npc_id: npc_id.clone(),
-                    text: text.clone(),
-                })
-            }
-            Reducer::SubmitNpcReflection { npc_id, json } => {
-                __sats::bsatn::to_vec(&submit_npc_reflection_reducer::SubmitNpcReflectionArgs {
-                    npc_id: npc_id.clone(),
-                    json: json.clone(),
-                })
-            }
-            Reducer::SubmitNpcSpeech { npc_id, message } => {
-                __sats::bsatn::to_vec(&submit_npc_speech_reducer::SubmitNpcSpeechArgs {
-                    npc_id: npc_id.clone(),
-                    message: message.clone(),
-                })
-            }
-            Reducer::SubmitNpcTree { npc_id, tree_json } => {
-                __sats::bsatn::to_vec(&submit_npc_tree_reducer::SubmitNpcTreeArgs {
-                    npc_id: npc_id.clone(),
-                    tree_json: tree_json.clone(),
-                })
-            }
-            Reducer::UnequipItem { equipped_item_id } => {
-                __sats::bsatn::to_vec(&unequip_item_reducer::UnequipItemArgs {
-                    equipped_item_id: equipped_item_id.clone(),
-                })
-            }
-            Reducer::UseItem { inventory_item_id } => {
-                __sats::bsatn::to_vec(&use_item_reducer::UseItemArgs {
-                    inventory_item_id: inventory_item_id.clone(),
-                })
-            }
-            Reducer::UseSkill {
+}),
+            Reducer::SubmitNpcMemory{
+                npc_id,
+                text,
+}             => __sats::bsatn::to_vec(&submit_npc_memory_reducer::SubmitNpcMemoryArgs {
+                npc_id: npc_id.clone(),
+                text: text.clone(),
+}),
+            Reducer::SubmitNpcReflection{
+                npc_id,
+                json,
+}             => __sats::bsatn::to_vec(&submit_npc_reflection_reducer::SubmitNpcReflectionArgs {
+                npc_id: npc_id.clone(),
+                json: json.clone(),
+}),
+            Reducer::SubmitNpcSpeech{
+                npc_id,
+                message,
+}             => __sats::bsatn::to_vec(&submit_npc_speech_reducer::SubmitNpcSpeechArgs {
+                npc_id: npc_id.clone(),
+                message: message.clone(),
+}),
+            Reducer::SubmitNpcTree{
+                npc_id,
+                tree_json,
+}             => __sats::bsatn::to_vec(&submit_npc_tree_reducer::SubmitNpcTreeArgs {
+                npc_id: npc_id.clone(),
+                tree_json: tree_json.clone(),
+}),
+            Reducer::UnequipItem{
+                equipped_item_id,
+}             => __sats::bsatn::to_vec(&unequip_item_reducer::UnequipItemArgs {
+                equipped_item_id: equipped_item_id.clone(),
+}),
+            Reducer::UseItem{
+                inventory_item_id,
+}             => __sats::bsatn::to_vec(&use_item_reducer::UseItemArgs {
+                inventory_item_id: inventory_item_id.clone(),
+}),
+            Reducer::UseSkill{
                 skill_id,
                 target_x,
                 target_y,
                 target_z,
-            } => __sats::bsatn::to_vec(&use_skill_reducer::UseSkillArgs {
+}             => __sats::bsatn::to_vec(&use_skill_reducer::UseSkillArgs {
                 skill_id: skill_id.clone(),
                 target_x: target_x.clone(),
                 target_y: target_y.clone(),
                 target_z: target_z.clone(),
-            }),
-            Reducer::UseTargetedSkill {
+}),
+            Reducer::UseTargetedSkill{
                 skill_id,
                 target_kind,
                 target_npc_id,
                 target_player_hex,
-            } => __sats::bsatn::to_vec(&use_targeted_skill_reducer::UseTargetedSkillArgs {
+}             => __sats::bsatn::to_vec(&use_targeted_skill_reducer::UseTargetedSkillArgs {
                 skill_id: skill_id.clone(),
                 target_kind: target_kind.clone(),
                 target_npc_id: target_npc_id.clone(),
                 target_player_hex: target_player_hex.clone(),
-            }),
+}),
             _ => unreachable!(),
-        }
+}
     }
 }
 
@@ -855,9 +1047,16 @@ pub struct DbUpdate {
     player_skill: __sdk::TableUpdate<PlayerSkill>,
     point_of_interest: __sdk::TableUpdate<PointOfInterest>,
     projectile: __sdk::TableUpdate<Projectile>,
+    sim_my_controller_bootstrap: __sdk::TableUpdate<SimControllerBootstrap>,
+    sim_my_controller_dispatch: __sdk::TableUpdate<SimControllerDispatch>,
+    sim_my_controller_experiences: __sdk::TableUpdate<SimNativeExperience>,
+    sim_my_controller_frame: __sdk::TableUpdate<SimControllerFrame>,
+    sim_my_controller_knowledge: __sdk::TableUpdate<SimControllerKnowledge>,
     sim_my_participant_head: __sdk::TableUpdate<SimParticipantHead>,
     sim_my_participant_reads: __sdk::TableUpdate<SimParticipantRead>,
     sim_my_participant_receipts: __sdk::TableUpdate<SimParticipantReceipt>,
+    sim_my_render_events: __sdk::TableUpdate<SimClientRenderEvent>,
+    sim_my_render_snapshot: __sdk::TableUpdate<SimClientSnapshot>,
     sim_my_snapshot: __sdk::TableUpdate<SimClientSnapshot>,
     sim_participant_state: __sdk::TableUpdate<SimClientSnapshot>,
     sim_run: __sdk::TableUpdate<SimRun>,
@@ -967,6 +1166,21 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "projectile" => db_update
                     .projectile
                     .append(projectile_table::parse_table_update(table_update)?),
+                "sim_my_controller_bootstrap" => db_update.sim_my_controller_bootstrap.append(
+                    sim_my_controller_bootstrap_table::parse_table_update(table_update)?,
+                ),
+                "sim_my_controller_dispatch" => db_update.sim_my_controller_dispatch.append(
+                    sim_my_controller_dispatch_table::parse_table_update(table_update)?,
+                ),
+                "sim_my_controller_experiences" => db_update.sim_my_controller_experiences.append(
+                    sim_my_controller_experiences_table::parse_table_update(table_update)?,
+                ),
+                "sim_my_controller_frame" => db_update.sim_my_controller_frame.append(
+                    sim_my_controller_frame_table::parse_table_update(table_update)?,
+                ),
+                "sim_my_controller_knowledge" => db_update.sim_my_controller_knowledge.append(
+                    sim_my_controller_knowledge_table::parse_table_update(table_update)?,
+                ),
                 "sim_my_participant_head" => db_update.sim_my_participant_head.append(
                     sim_my_participant_head_table::parse_table_update(table_update)?,
                 ),
@@ -975,6 +1189,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 ),
                 "sim_my_participant_receipts" => db_update.sim_my_participant_receipts.append(
                     sim_my_participant_receipts_table::parse_table_update(table_update)?,
+                ),
+                "sim_my_render_events" => db_update.sim_my_render_events.append(
+                    sim_my_render_events_table::parse_table_update(table_update)?,
+                ),
+                "sim_my_render_snapshot" => db_update.sim_my_render_snapshot.append(
+                    sim_my_render_snapshot_table::parse_table_update(table_update)?,
                 ),
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
@@ -1137,6 +1357,26 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.world_state = cache
             .apply_diff_to_table::<WorldState>("world_state", &self.world_state)
             .with_updates_by_pk(|row| &row.id);
+        diff.sim_my_controller_bootstrap = cache.apply_diff_to_table::<SimControllerBootstrap>(
+            "sim_my_controller_bootstrap",
+            &self.sim_my_controller_bootstrap,
+        );
+        diff.sim_my_controller_dispatch = cache.apply_diff_to_table::<SimControllerDispatch>(
+            "sim_my_controller_dispatch",
+            &self.sim_my_controller_dispatch,
+        );
+        diff.sim_my_controller_experiences = cache.apply_diff_to_table::<SimNativeExperience>(
+            "sim_my_controller_experiences",
+            &self.sim_my_controller_experiences,
+        );
+        diff.sim_my_controller_frame = cache.apply_diff_to_table::<SimControllerFrame>(
+            "sim_my_controller_frame",
+            &self.sim_my_controller_frame,
+        );
+        diff.sim_my_controller_knowledge = cache.apply_diff_to_table::<SimControllerKnowledge>(
+            "sim_my_controller_knowledge",
+            &self.sim_my_controller_knowledge,
+        );
         diff.sim_my_participant_head = cache.apply_diff_to_table::<SimParticipantHead>(
             "sim_my_participant_head",
             &self.sim_my_participant_head,
@@ -1148,6 +1388,14 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.sim_my_participant_receipts = cache.apply_diff_to_table::<SimParticipantReceipt>(
             "sim_my_participant_receipts",
             &self.sim_my_participant_receipts,
+        );
+        diff.sim_my_render_events = cache.apply_diff_to_table::<SimClientRenderEvent>(
+            "sim_my_render_events",
+            &self.sim_my_render_events,
+        );
+        diff.sim_my_render_snapshot = cache.apply_diff_to_table::<SimClientSnapshot>(
+            "sim_my_render_snapshot",
+            &self.sim_my_render_snapshot,
         );
         diff.sim_my_snapshot = cache
             .apply_diff_to_table::<SimClientSnapshot>("sim_my_snapshot", &self.sim_my_snapshot);
@@ -1256,6 +1504,21 @@ impl __sdk::DbUpdate for DbUpdate {
                 "projectile" => db_update
                     .projectile
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_controller_bootstrap" => db_update
+                    .sim_my_controller_bootstrap
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_controller_dispatch" => db_update
+                    .sim_my_controller_dispatch
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_controller_experiences" => db_update
+                    .sim_my_controller_experiences
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_controller_frame" => db_update
+                    .sim_my_controller_frame
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_controller_knowledge" => db_update
+                    .sim_my_controller_knowledge
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "sim_my_participant_head" => db_update
                     .sim_my_participant_head
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1264,6 +1527,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "sim_my_participant_receipts" => db_update
                     .sim_my_participant_receipts
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_render_events" => db_update
+                    .sim_my_render_events
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_render_snapshot" => db_update
+                    .sim_my_render_snapshot
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
@@ -1395,6 +1664,21 @@ impl __sdk::DbUpdate for DbUpdate {
                 "projectile" => db_update
                     .projectile
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_controller_bootstrap" => db_update
+                    .sim_my_controller_bootstrap
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_controller_dispatch" => db_update
+                    .sim_my_controller_dispatch
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_controller_experiences" => db_update
+                    .sim_my_controller_experiences
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_controller_frame" => db_update
+                    .sim_my_controller_frame
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_controller_knowledge" => db_update
+                    .sim_my_controller_knowledge
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "sim_my_participant_head" => db_update
                     .sim_my_participant_head
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1403,6 +1687,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "sim_my_participant_receipts" => db_update
                     .sim_my_participant_receipts
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_render_events" => db_update
+                    .sim_my_render_events
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_render_snapshot" => db_update
+                    .sim_my_render_snapshot
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
@@ -1474,9 +1764,16 @@ pub struct AppliedDiff<'r> {
     player_skill: __sdk::TableAppliedDiff<'r, PlayerSkill>,
     point_of_interest: __sdk::TableAppliedDiff<'r, PointOfInterest>,
     projectile: __sdk::TableAppliedDiff<'r, Projectile>,
+    sim_my_controller_bootstrap: __sdk::TableAppliedDiff<'r, SimControllerBootstrap>,
+    sim_my_controller_dispatch: __sdk::TableAppliedDiff<'r, SimControllerDispatch>,
+    sim_my_controller_experiences: __sdk::TableAppliedDiff<'r, SimNativeExperience>,
+    sim_my_controller_frame: __sdk::TableAppliedDiff<'r, SimControllerFrame>,
+    sim_my_controller_knowledge: __sdk::TableAppliedDiff<'r, SimControllerKnowledge>,
     sim_my_participant_head: __sdk::TableAppliedDiff<'r, SimParticipantHead>,
     sim_my_participant_reads: __sdk::TableAppliedDiff<'r, SimParticipantRead>,
     sim_my_participant_receipts: __sdk::TableAppliedDiff<'r, SimParticipantReceipt>,
+    sim_my_render_events: __sdk::TableAppliedDiff<'r, SimClientRenderEvent>,
+    sim_my_render_snapshot: __sdk::TableAppliedDiff<'r, SimClientSnapshot>,
     sim_my_snapshot: __sdk::TableAppliedDiff<'r, SimClientSnapshot>,
     sim_participant_state: __sdk::TableAppliedDiff<'r, SimClientSnapshot>,
     sim_run: __sdk::TableAppliedDiff<'r, SimRun>,
@@ -1609,6 +1906,31 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Projectile>("projectile", &self.projectile, event);
+        callbacks.invoke_table_row_callbacks::<SimControllerBootstrap>(
+            "sim_my_controller_bootstrap",
+            &self.sim_my_controller_bootstrap,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimControllerDispatch>(
+            "sim_my_controller_dispatch",
+            &self.sim_my_controller_dispatch,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimNativeExperience>(
+            "sim_my_controller_experiences",
+            &self.sim_my_controller_experiences,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimControllerFrame>(
+            "sim_my_controller_frame",
+            &self.sim_my_controller_frame,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimControllerKnowledge>(
+            "sim_my_controller_knowledge",
+            &self.sim_my_controller_knowledge,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<SimParticipantHead>(
             "sim_my_participant_head",
             &self.sim_my_participant_head,
@@ -1622,6 +1944,16 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<SimParticipantReceipt>(
             "sim_my_participant_receipts",
             &self.sim_my_participant_receipts,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimClientRenderEvent>(
+            "sim_my_render_events",
+            &self.sim_my_render_events,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimClientSnapshot>(
+            "sim_my_render_snapshot",
+            &self.sim_my_render_snapshot,
             event,
         );
         callbacks.invoke_table_row_callbacks::<SimClientSnapshot>(
@@ -2343,9 +2675,16 @@ impl __sdk::SpacetimeModule for RemoteModule {
         player_skill_table::register_table(client_cache);
         point_of_interest_table::register_table(client_cache);
         projectile_table::register_table(client_cache);
+        sim_my_controller_bootstrap_table::register_table(client_cache);
+        sim_my_controller_dispatch_table::register_table(client_cache);
+        sim_my_controller_experiences_table::register_table(client_cache);
+        sim_my_controller_frame_table::register_table(client_cache);
+        sim_my_controller_knowledge_table::register_table(client_cache);
         sim_my_participant_head_table::register_table(client_cache);
         sim_my_participant_reads_table::register_table(client_cache);
         sim_my_participant_receipts_table::register_table(client_cache);
+        sim_my_render_events_table::register_table(client_cache);
+        sim_my_render_snapshot_table::register_table(client_cache);
         sim_my_snapshot_table::register_table(client_cache);
         sim_participant_state_table::register_table(client_cache);
         sim_run_table::register_table(client_cache);
@@ -2387,9 +2726,16 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "player_skill",
         "point_of_interest",
         "projectile",
+        "sim_my_controller_bootstrap",
+        "sim_my_controller_dispatch",
+        "sim_my_controller_experiences",
+        "sim_my_controller_frame",
+        "sim_my_controller_knowledge",
         "sim_my_participant_head",
         "sim_my_participant_reads",
         "sim_my_participant_receipts",
+        "sim_my_render_events",
+        "sim_my_render_snapshot",
         "sim_my_snapshot",
         "sim_participant_state",
         "sim_run",

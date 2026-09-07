@@ -113,6 +113,93 @@ def verify_migration(cli, config, owner_identity, database, baseline, candidate,
     return result
 
 
+def verify_archive_restart(cli, config, database, run_id, container, out):
+    from owner_snapshot import export_world, export_audit_json
+    out.mkdir()
+    result = dict(passed=False, run=run_id)
+    def call(name, *args):
+        return run(str(cli), '--config-path', str(config), 'call', database, name,
+                   *(json.dumps(arg) for arg in args), '--server', SERVER, '--no-config', '-y', timeout=60)
+    def capture(name):
+        world = export_world(call, run_id)
+        events = export_audit_json(call, run_id, world['next_event'])
+        value = dict(world=world, exact_event_json=events)
+        (out / name).write_text(json.dumps(value, separators=(',', ':')) + '\n')
+        return value
+    try:
+        before = capture('before.json')
+        run('podman', 'stop', '--time', '10', container, timeout=20)
+        result['restart_stop'] = json.loads(run('podman', 'inspect', container))[0]['State']
+        run('podman', 'start', container)
+        for _ in range(100):
+            try:
+                with urllib.request.urlopen(SERVER + '/v1/ping', timeout=1):
+                    break
+            except OSError:
+                time.sleep(.1)
+        after = capture('after.json')
+        assert before == after, 'restart changed World or exact historical audit'
+        call('sim_step', run_id)
+        continued = capture('continued.json')
+        assert continued['world']['timing']['time_ms'] == after['world']['timing']['time_ms'] + 2500
+        assert continued['exact_event_json'][:len(after['exact_event_json'])] == after['exact_event_json']
+        result.update(passed=True, exact_world=True, exact_audit=True, continued=True,
+                      events=len(after['exact_event_json']))
+    except BaseException as error:
+        result['error'] = f'{type(error).__name__}: {error}'
+    write(out / 'result.json', result)
+    return result
+
+
+def verify_deadline_controls(cli, config, database, run_id, out):
+    from owner_snapshot import export_world
+    result = dict(passed=False, run=run_id)
+    def call(name, *args):
+        return run(str(cli), '--config-path', str(config), 'call', database, name,
+            *(json.dumps(arg) for arg in args), '--server', SERVER, '--no-config', '-y')
+    def state():
+        raw = run(str(cli), '--config-path', str(config), 'sql', database,
+            f"SELECT enabled, pending_id, wakes, missed_slots, max_lateness_us FROM sim_clock_deadline WHERE run = '{run_id}'",
+            '--server', SERVER, '--no-config', '--format', 'json')
+        return json.loads(raw)[0]['rows'][0]
+    def now():
+        return export_world(call, run_id)['timing']['time_ms']
+    try:
+        assert state()[1] == 0, 'paused clock retains a wake'
+        before = now()
+        time.sleep(.2)
+        assert now() == before, 'paused world advanced'
+        initial = state()
+        for _ in range(3):
+            call('sim_operator_clock', run_id, 50, False)
+            call('sim_operator_pause', run_id)
+        paused = now()
+        time.sleep(.2)
+        assert now() == paused and state()[1] == 0, 'cancelled wake advanced world'
+        call('sim_operator_clock', run_id, 50, False)
+        time.sleep(.5)
+        call('sim_operator_pause', run_id)
+        assert now() > paused and state()[2] > initial[2], 'resume did not arm fresh deadline'
+        call('sim_configure_deadline_clock', run_id, False)
+        before = now()
+        call('sim_operator_clock', run_id, 50, False)
+        time.sleep(.5)
+        call('sim_operator_pause', run_id)
+        assert now() > before and not state()[0], 'interval fallback did not advance'
+        call('sim_configure_deadline_clock', run_id, True)
+        assert state()[0] and state()[1] == 0
+        result.update(passed=True, pause_stable=True, stale_wakes_cancelled=True,
+            resume_advances=True, interval_fallback=True, final_state=state())
+    except BaseException as error:
+        result['error'] = f'{type(error).__name__}: {error}'
+    finally:
+        try: call('sim_operator_pause', run_id)
+        except Exception as error:
+            result.update(passed=False, cleanup_error=str(error))
+    write(out / 'deadline-controls.json', result)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--wasm', type=Path, required=True)
@@ -133,13 +220,18 @@ def main():
     parser.add_argument('--round-seconds', type=int, nargs='+', default=[5, 20, 35, 50])
     parser.add_argument('--setup-seconds', type=int, default=120)
     parser.add_argument('--max-log-mib', type=int, default=4096)
+    parser.add_argument('--verify-archive-restart', action='store_true')
+    parser.add_argument('--deadline-clock', action='store_true')
+    parser.add_argument('--archive-audit', action='store_true', help='Opt in to lossless audit blocks and paged owner audit export')
     parser.add_argument('--execute', action='store_true')
     args = parser.parse_args()
+    if args.verify_archive_restart and not args.archive_audit:
+        parser.error("archive restart requires --archive-audit")
     if not 0 <= args.page_pool_mib <= 8192:
         parser.error('page pool must be 0..8192 MiB')
-    if not 60 <= args.window_seconds <= 300 or not 120 <= args.setup_seconds <= 240:
-        parser.error('bounded window 60..300s and setup 120..240s required')
-    if (not args.round_seconds or len(args.round_seconds) > 20
+    if not 60 <= args.window_seconds <= 600 or not 120 <= args.setup_seconds <= 240:
+        parser.error('bounded window 60..600s and setup 120..240s required')
+    if (not args.round_seconds or len(args.round_seconds) > 40
             or args.round_seconds != sorted(set(args.round_seconds))
             or any(s <= 0 or s + 10 > args.window_seconds for s in args.round_seconds)):
         parser.error('ordered rounds must leave ten seconds before the end')
@@ -151,7 +243,7 @@ def main():
     scenario_path = args.scenario.resolve()
     scenario = json.loads(scenario_path.read_text())
     actors = [p['id'] for p in scenario['players']]
-    assert len(actors) == len(set(actors)) and len(actors) in (36, 72, 144)
+    assert len(actors) == len(set(actors)) and len(actors) in (36, 72, 144, 216)
     write(out / 'scenario.json', scenario)
     cli = Path.home() / '.local/share/spacetime/bin/2.7.1/spacetimedb-cli'
     manifest = dict(case=args.case, server=SERVER, image=args.image,
@@ -160,7 +252,8 @@ def main():
                     wasm=str(wasm), wasm_sha256=digest(wasm),
                     probe=str(probe), probe_sha256=digest(probe),
                     runner_sha256=digest(Path(__file__)),
-                    capture_module_logs=args.capture_module_logs,
+                    capture_module_logs=args.capture_module_logs, deadline_clock=args.deadline_clock, archive_audit=args.archive_audit, verify_archive_restart=args.verify_archive_restart,
+                    audit_api="procedure" if args.archive_audit else "sql",
                     case_runner_sha256=digest(ROOT / 'scripts/run_authority36_probe.py'),
                     scenario_sha256=digest(scenario_path), model_calls=0,
                     active_seconds=args.window_seconds, participants=len(actors), create_transport='http' if len(actors)>36 else 'cli',
@@ -277,7 +370,8 @@ def main():
         call_args = SimpleNamespace(server=SERVER, cli=cli, cli_config=config_path,
                                     probe_binary=probe, implementation=ROOT, owner_snapshot_api='procedure',
                                     window_seconds=args.window_seconds, read_round_seconds=args.round_seconds,
-                                    setup_seconds=args.setup_seconds, create_http=len(actors) > 36)
+                                    setup_seconds=args.setup_seconds, create_http=len(actors) > 36,
+                                    archive_audit=args.archive_audit, deadline_clock=args.deadline_clock, audit_api="procedure" if args.archive_audit else "sql")
         result['case'] = execute_case(call_args, out / args.case, args.case, database,
                                      json.dumps(scenario, separators=(',', ':')), actors)
         if args.case == 'reads':
@@ -290,7 +384,7 @@ def main():
         result['measurement_end_wall_ms'] = time.time_ns() // 10**6
         if not result['case'].get('completed_protocol') or abort:
             raise RuntimeError('workload failed; optional compatibility checks were not started')
-        if args.access_probe or args.migration_baseline_wasm:
+        if args.access_probe or args.migration_baseline_wasm or args.verify_archive_restart or args.deadline_clock:
             # Keep the performance sample population exactly the declared one.
             # The access check creates its own two small runs after measurement.
             stopped.set()
@@ -310,6 +404,12 @@ def main():
         if args.migration_baseline_wasm:
             result['migration'] = verify_migration(cli, config_path, identity['identity'],
                 'sim-authority36-migration-' + suffix, args.migration_baseline_wasm.resolve(), wasm, out / 'migration')
+        if args.deadline_clock:
+            result['deadline_controls'] = verify_deadline_controls(cli, config_path, database,
+                result['case']['run'], out)
+        if args.verify_archive_restart:
+            result['archive_restart'] = verify_archive_restart(cli, config_path, database,
+                result['case']['run'], container, out / 'archive-restart')
     except BaseException as error:
         result['error'] = f'{type(error).__name__}: {error}'
     finally:
@@ -343,6 +443,8 @@ def main():
     passed = (result.get('case', {}).get('completed_protocol') and not monitor_errors and not abort
               and result.get('read_deadlines_pass', args.case != 'reads')
               and not result.get('error') and not result.get('stop_error')
+              and (not args.verify_archive_restart or result.get('archive_restart', {}).get('passed'))
+              and (not args.deadline_clock or result.get('deadline_controls', {}).get('passed'))
               and (not args.access_probe or result.get('access', {}).get('passed'))
               and (not args.migration_baseline_wasm or result.get('migration', {}).get('passed'))
               and not result.get('after_stop', {}).get('Running', True))

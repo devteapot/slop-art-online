@@ -2,6 +2,7 @@
 pub mod reasoning;
 
 pub mod participant;
+pub mod controller;
 
 pub mod agent_harness;
 

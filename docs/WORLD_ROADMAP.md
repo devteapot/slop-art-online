@@ -6,6 +6,22 @@ The [work queue](TODO.md) retains accepted implementation history and technical 
 
 The seven bounded implementation milestones are now recorded with acceptance evidence. The final world vision and open autonomous, sustainability and scale outcomes remain separate from this completed implementation pass.
 
+The [sustained clock work](SUSTAINED_CLOCK.md) records the later runtime comparison,
+selective hot-path improvements, opt-in lossless audit archives and deadline
+recovery tests. These implementation improvements preserve the shared mechanics;
+missed deadlines and remaining global processing keep sustained scale unaccepted.
+
+The [client/authority separation](CLIENT_AUTHORITY_BOUNDARY.md) is implemented,
+including a separate native controller database as the canonical client runtime.
+External controllers consume the same scoped world events and finite-action API.
+Larger maps and regional processing are deferred while this boundary is measured
+on the current crowded 48×36 maps. Bounded dispatch recovery and relay supervision
+now pass crash/timeout checks; the latest finite 216-controller trial reached
+4.45 updates/s. Subsequent [real-time diagnostics](REALTIME_PERFORMANCE.md)
+reached 16.16 updates/s without rendering clients; a distinct provisioned mixed
+human/AI/observer trial reached only 4.15 updates/s. The 30-minute playable
+real-time gate remains open. Implementation is not yet full workload acceptance.
+
 ## Cross-stage requirement: mechanics and seed separation
 
 From Stage 1 onward, keep reusable mechanics/balance definitions distinct from social content. Scenarios should reference a ruleset and provide initial characters, resources, knowledge and culture without named-faction branches in mechanical code. Stage 5 assembles the first full seed using these same contracts; it does not replace the foundation with lab-specific mechanics.

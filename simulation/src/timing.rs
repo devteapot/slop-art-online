@@ -15,6 +15,37 @@ impl AdvanceObserver for () {
     fn begin(&mut self, _: &'static str) {}
 }
 
+/// Diagnostic host spans are erased in normal builds. The host owns clocks and
+/// logging; their values never enter simulation state or execution decisions.
+pub struct DiagnosticScope {
+    #[cfg(feature = "runtime-profile")]
+    _host: Option<Box<dyn std::any::Any>>,
+}
+impl DiagnosticScope {
+    #[inline]
+    pub fn new(_name: &'static str) -> Self {
+        Self {
+            #[cfg(feature = "runtime-profile")]
+            _host: DIAGNOSTICS.with(|f| f.get().map(|f| f(_name))),
+        }
+    }
+}
+#[cfg(feature = "runtime-profile")]
+type DiagnosticFactory = fn(&'static str) -> Box<dyn std::any::Any>;
+#[cfg(feature = "runtime-profile")]
+thread_local! {
+    static DIAGNOSTICS: std::cell::Cell<Option<DiagnosticFactory>> = const { std::cell::Cell::new(None) };
+}
+#[cfg(feature = "runtime-profile")]
+pub fn with_diagnostics<T>(factory: DiagnosticFactory, work: impl FnOnce() -> T) -> T {
+    struct Restore(Option<DiagnosticFactory>);
+    impl Drop for Restore {
+        fn drop(&mut self) { DIAGNOSTICS.with(|f| f.set(self.0)); }
+    }
+    let _restore = Restore(DIAGNOSTICS.with(|f| f.replace(Some(factory))));
+    work()
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Timing {
     #[serde(default)]
@@ -22,6 +53,10 @@ pub struct Timing {
     pub time_ms: u64,
     pub updates: u64,
     pub delta_ms: u64,
+    /// When present, slow-system remainders are settled through this time.
+    /// Action transactions can advance time without rewriting those systems.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maintenance_ms: Option<u64>,
     pub needs_remainder_ms: u64,
     pub hazard_remainder_ms: u64,
     #[serde(default)]

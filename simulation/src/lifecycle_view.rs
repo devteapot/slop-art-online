@@ -32,9 +32,11 @@ impl World {
         for i in 0..self.players.len() {
             if self.players[i].health <= 0 { continue; }
             let current = self.local_lifecycle_catalog(i);
-            let remembered = self.players[i].site_observations.iter()
+            let remembered = if let Some(controller) = self.participants.get(&self.players[i].id).and_then(|p|p.client_controller.as_ref()) {
+                controller.last_lifecycle.as_ref()
+            } else { self.players[i].site_observations.iter()
                 .find(|m|m.location == self.players[i].position && m.kind == "site")
-                .map(|m|&m.content["lifecycle"]);
+                .map(|m|&m.content["lifecycle"]) };
             if remembered != Some(&current) {
                 self.observe_site(i)?;
                 self.wake(self.players[i].id);

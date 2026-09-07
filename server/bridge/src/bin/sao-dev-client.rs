@@ -43,7 +43,11 @@ struct App {
     out: PathBuf,
     db: String,
     server: String,
+    controller_database: Option<String>,
+    controller_server: String,
     owner_snapshot_api: SnapshotApi,
+    archive_audit: bool,
+    deadline_clock: bool,
     origin: String,
     local_origin: String,
     browser_server: String,
@@ -53,6 +57,7 @@ struct App {
     mutation: tokio::sync::Mutex<()>,
     config: Option<Config>,
     controllers: Vec<ActorConfig>,
+    model_actors: Option<Vec<u32>>,
     newcomer: Option<enrollment::NewcomerController>,
     enrollments: tokio::sync::Mutex<enrollment::Registry>,
     harness_cancellations: Mutex<Vec<tokio::sync::watch::Sender<Option<String>>>>,
@@ -96,7 +101,30 @@ async fn cli(args: Vec<String>) -> Result<String, String> {
     }
     Ok(String::from_utf8_lossy(&output.stdout).into())
 }
+fn owner_token(config: &str) -> Result<String, String> {
+    #[derive(serde::Deserialize)]
+    struct Credentials { spacetimedb_token: String }
+    let config: Credentials = toml::from_str(config).map_err(|_| "invalid owner CLI configuration")?;
+    if config.spacetimedb_token.is_empty() { return Err("owner credential missing".into()); }
+    Ok(config.spacetimedb_token)
+}
+fn needs_http_create(name: &str, args: &[Value]) -> bool {
+    matches!(name, "sim_create_participant" | "sim_create_client_world") && args.iter().any(|arg| arg.to_string().len() > 120 * 1024)
+}
 async fn call_text(app: &App, name: &str, args: Vec<Value>) -> Result<String, String> {
+    if needs_http_create(name, &args) {
+        // The CLI has no argument-file option. Use its authenticated HTTP
+        // reducer contract for large setup input, without a process-argument cap.
+        let path = std::env::var("SPACETIME_CONFIG_PATH").map_err(|_| "large create requires an owner CLI configuration")?;
+        let config = std::fs::read_to_string(path).map_err(|_| "owner CLI configuration unavailable")?;
+        let token = owner_token(&config)?;
+        let response = reqwest::Client::new()
+            .post(format!("{}/v1/database/{}/call/{name}", app.server.trim_end_matches('/'), app.db))
+            .bearer_auth(token).json(&args).timeout(std::time::Duration::from_secs(30))
+            .send().await.map_err(|_| "owner HTTP create failed or timed out; reconcile outcome before retry")?;
+        if !response.status().is_success() { return Err("owner HTTP create rejected; inspect authority logs".into()); }
+        return response.text().await.map_err(|_| "owner HTTP create response unavailable; reconcile outcome before retry".into());
+    }
     let mut command = vec!["call".into(), app.db.clone(), name.into()];
     command.extend(args.into_iter().map(|v| v.to_string()));
     command.extend([
@@ -351,6 +379,9 @@ async fn create_run(app: &App) -> Result<String, String> {
         .clamp(1, 10_000));
     let parsed: simulation::Scenario = serde_json::from_value(scenario.clone()).map_err(|e| e.to_string())?;
     simulation::World::new(run.clone(), parsed.clone())?;
+    if app.model_actors.is_some() && app.controllers.is_empty() {
+        return Err("an explicit model subset requires a controller manifest".into());
+    }
     if !app.controllers.is_empty() {
         let mut ids = std::collections::BTreeSet::new();
         for entry in &app.controllers {
@@ -362,11 +393,11 @@ async fn create_run(app: &App) -> Result<String, String> {
                 return Err("controller manifest requires unique existing AI actors and builtin/external roles".into());
             }
         }
-        if ids.len() != parsed.players.len() { return Err("matrix needs one controller per actor".into()); }
+        validate_controller_coverage(&ids, parsed.players.len(), app.model_actors.as_deref())?;
     }
     call(
         app,
-        "sim_create_participant",
+        if app.controller_database.is_some() {"sim_create_client_world"} else {"sim_create_participant"},
         vec![json!(run), json!(scenario.to_string())],
     )
     .await?;
@@ -392,6 +423,12 @@ async fn create_run(app: &App) -> Result<String, String> {
         )
         .await?;
     }
+    if app.deadline_clock {
+        call(app, "sim_configure_deadline_clock", vec![json!(run), json!(true)]).await?;
+    }
+    if app.archive_audit {
+        call(app, "sim_configure_audit_archive", vec![json!(run), json!(true)]).await?;
+    }
     let dir = app.out.join(&run);
     std::fs::create_dir(&dir).map_err(|_| "archive creation failed")?;
     std::fs::create_dir(dir.join("reasoning")).map_err(|_| "audit directory failed")?;
@@ -414,11 +451,18 @@ async fn create_run(app: &App) -> Result<String, String> {
     }
 
     std::fs::write(dir.join("mode.json"),json!({"run":run,"db":app.db,"server":app.server,"evidence_mode":if app.config.is_some() || !app.controllers.is_empty(){"live_model"}else{"live_fixture"},"note":"actual authoritative run; fixture explicitly test-authored; no model substitution"}).to_string()).map_err(|_|"mode write failed")?;
-    let entries: Vec<(u32, &str, Option<&Config>)> = if app.controllers.is_empty() {
+    let mut entries: Vec<(u32, &str, Option<&Config>)> = if app.controllers.is_empty() {
         vec![(1, "builtin", app.config.as_ref()), (2, "external", app.config.as_ref())]
     } else {
         app.controllers.iter().map(|c| (c.actor, c.role.as_str(), Some(&c.config))).collect()
     };
+    if app.controller_database.is_some() {
+        for actor in &parsed.players {
+            if actor.controller==simulation::Controller::Ai && !entries.iter().any(|e|e.0==actor.id) {
+                entries.push((actor.id,"seeded",None));
+            }
+        }
+    }
     for (actor, role, config) in entries {
         enrollment::enroll_initial(app, &run, actor, role, config).await?;
     }
@@ -490,21 +534,31 @@ async fn runs(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
         .map_err(error)?;
     let mut entries = vec![];
     for run in ids {
-        if let Ok(w) = state(&app, &run).await {
+        let head = sql(&app, &format!("SELECT tick, stopped FROM sim_native_head WHERE run = '{}'",
+            run.replace('\'', "''"))).await.map_err(error)?;
+        let head = if let Some(row) = head.first().filter(|row|row.len()==2) {
+            Some((row[0].clone(),row[1].clone()))
+        } else {
+            // Compatibility for retained normalized worlds without native
+            // headers. Routine native session-list polling never exports World.
+            state(&app, &run).await.ok().map(|w|(json!(w.tick),json!(w.stopped)))
+        };
+        if let Some((tick,stopped)) = head {
             let paused = clocks
                 .iter()
                 .find(|r| r.first() == Some(&json!(run)))
                 .and_then(|r| r.get(1))
                 .cloned()
                 .unwrap_or(Value::Null);
-            entries.push(json!({"run":run,"tick":w.tick,"stopped":w.stopped,"paused":paused}));
+            entries.push(json!({"run":run,"tick":tick,"stopped":stopped,"paused":paused}));
         }
     }
     Ok(Json(json!({"runs":entries})).into_response())
 }
 fn write_active(app: &App) -> std::io::Result<()> {
     std::fs::write(app.out.join("active.json"), json!({"db":app.db,"server":app.server,"run":app.run.lock().unwrap().clone(),"url":app.origin,
-        "owner_snapshot_api":app.owner_snapshot_api,"enrollment_protocol":enrollment::PROTOCOL,"newcomer_enrollment":app.newcomer.is_some()}).to_string())
+        "controller_database":app.controller_database,"controller_server":app.controller_server,
+        "owner_snapshot_api":app.owner_snapshot_api,"archive_audit":app.archive_audit,"deadline_clock":app.deadline_clock,"model_actors":app.model_actors,"enrollment_protocol":enrollment::PROTOCOL,"newcomer_enrollment":app.newcomer.is_some()}).to_string())
 }
 async fn archive(State(app): State<Shared>, headers: HeaderMap) -> ApiResult {
     let (_, s) = session(&app, &headers)?;
@@ -597,7 +651,28 @@ async fn background(app: Shared) {
                 }
             }
             if !saved.pending() { exports.insert(run, saved); continue; }
-            let reply = if let Some(query) = saved.audit_query() {
+            let mut archived_rows = None;
+            if app.archive_audit {
+                let result = async {
+                    let mut batch = vec![];
+                    if let Some((mut start, end)) = saved.audit_range() {
+                        while start < end {
+                            let reply = call_text(&app, owner_snapshot::AUDIT_PROCEDURE,
+                                vec![json!(run), json!(start), json!(end), json!(4096)]).await?;
+                            let page = owner_snapshot::parse_audit_page(&reply, &run, start, end)?;
+                            let count = page.len() as u64;
+                            batch.extend(page.into_iter().enumerate().map(|(n, body)| (start + n as u64, body)));
+                            start += count;
+                        }
+                    }
+                    Ok::<_, String>(batch)
+                }.await;
+                match result {
+                    Ok(rows) => archived_rows = Some(rows),
+                    Err(error) => { eprintln!("snapshot audit export {run}: {error}"); exports.insert(run, saved); continue; }
+                }
+            }
+            let reply = if app.archive_audit { None } else if let Some(query) = saved.audit_query() {
                 match sql_text(&app, &query).await {
                     Ok(reply) => Some(reply),
                     Err(error) => {
@@ -613,6 +688,7 @@ async fn background(app: Shared) {
             let written = tokio::task::spawn_blocking(move || {
                 let mut saved = saved;
                 let result = (|| {
+                    if let Some(rows) = archived_rows { saved.append_rows(rows)?; }
                     if let Some(reply) = reply { saved.append(&reply)?; }
                     saved.write(&path)
                 })();
@@ -627,6 +703,19 @@ async fn background(app: Shared) {
             }
         }
     }
+}
+fn validate_controller_coverage(ids: &std::collections::BTreeSet<u32>, population: usize, selected: Option<&[u32]>) -> Result<(), String> {
+    match selected {
+        Some(selected) if !selected.is_empty() && selected.len() == ids.len()
+            && selected.iter().copied().collect::<std::collections::BTreeSet<_>>() == *ids => Ok(()),
+        None if ids.len() == population => Ok(()),
+        _ => Err("controller manifest must cover the full population or exactly the explicit model subset".into()),
+    }
+}
+// Reconnecting an archived run must keep its merged audit export contract even
+// when the launching shell no longer carries the opt-in environment variables.
+fn persisted_run_flag(active: Option<&Value>, name: &str, configured: bool) -> bool {
+    active.and_then(|value| value.get(name)).and_then(Value::as_bool).unwrap_or(configured)
 }
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -653,6 +742,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
     let server = std::env::var("BEVY_DEV_SERVER")
         .unwrap_or_else(|_| "http://127.0.0.1:3101".to_string());
+    // Existing active descriptors retain their original execution contract.
+    // An explicitly supplied database is pre-provisioned, possibly on another service.
+    let controller_database = if let Some(active)=&resume {
+        active["controller_database"].as_str().map(str::to_owned)
+    } else if std::env::var("BEVY_DEV_LEGACY_CONTROLLER").as_deref()==Ok("1") {
+        None
+    } else {
+        Some(std::env::var("BEVY_DEV_CONTROLLER_DATABASE").unwrap_or_else(|_|format!("{db}-controllers")))
+    };
+    let controller_server = resume.as_ref().and_then(|v|v["controller_server"].as_str()).map(str::to_owned)
+        .unwrap_or_else(||std::env::var("BEVY_DEV_CONTROLLER_SERVER").unwrap_or_else(|_|server.clone()));
+    let publish_controller=resume.is_none() && controller_database.is_some()
+        && std::env::var_os("BEVY_DEV_CONTROLLER_DATABASE").is_none();
+    if publish_controller && controller_server!=server {
+        return Err("a separate controller service requires a pre-published BEVY_DEV_CONTROLLER_DATABASE".into());
+    }
     let out = root
         .join(std::env::var("BEVY_DEV_OUTPUT").unwrap_or("output/participant-agent-dev".into()));
     std::fs::create_dir_all(&out)?;
@@ -681,7 +786,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         out,
         db,
         server,
+        controller_database,
+        controller_server,
         owner_snapshot_api: SnapshotApi::from_env()?,
+        deadline_clock: persisted_run_flag(resume.as_ref(), "deadline_clock", std::env::var("SAO_DEADLINE_CLOCK").is_ok_and(|v| v == "1")),
+        archive_audit: persisted_run_flag(resume.as_ref(), "archive_audit", std::env::var("SAO_AUDIT_ARCHIVE").is_ok_and(|v| v == "1")),
         origin,
         local_origin,
         browser_server,
@@ -690,6 +799,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         runs: Mutex::new(vec![]),
         mutation: tokio::sync::Mutex::new(()),
         config,
+        model_actors: std::env::var("BEVY_DEV_MODEL_ACTORS").ok()
+            .map(|value| serde_json::from_str::<Vec<u32>>(&value)).transpose()?,
         controllers,
         newcomer,
         enrollments: tokio::sync::Mutex::new(enrollment::Registry::default()),
@@ -701,6 +812,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         *app.run.lock().unwrap() = run.into();
         app.runs.lock().unwrap().push(run.into());
     } else {
+        if publish_controller {
+            cli(vec!["publish".into(),app.controller_database.clone().unwrap(),"--server".into(),app.controller_server.clone(),
+                "--bin-path".into(),std::env::var("BEVY_DEV_CONTROLLER_MODULE").unwrap_or("target/wasm32-unknown-unknown/debug/controller_module.wasm".into()),
+                "--delete-data=never".into(),"--no-config".into(),"-y".into()]).await?;
+        }
         cli(vec![
             "publish".into(),
             app.db.clone(),
@@ -752,6 +868,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 mod network_tests {
     use super::*;
 
+    #[test]
+    fn model_subsets_are_explicit_and_large_creation_keeps_configured_owner_auth() {
+        let ids = [1,2].into_iter().collect();
+        assert!(validate_controller_coverage(&ids,72,None).is_err());
+        assert!(validate_controller_coverage(&ids,72,Some(&[1,2])).is_ok());
+        assert!(validate_controller_coverage(&ids,72,Some(&[1,3])).is_err());
+        assert!(validate_controller_coverage(&ids,72,Some(&[1,1])).is_err());
+        assert!(validate_controller_coverage(&ids,2,None).is_ok());
+        assert_eq!(owner_token("spacetimedb_token = 'test-owner'\n[extra]\nvalue = true\n").unwrap(),"test-owner");
+        assert!(owner_token("spacetimedb_token = 42").is_err());
+        assert!(owner_token("spacetimedb_token = ''").is_err());
+        let args = vec![json!("run"),json!("x".repeat(140_000))];
+        assert!(needs_http_create("sim_create_participant",&args));
+        assert!(!needs_http_create("other_reducer",&args));
+        assert!(!needs_http_create("sim_create_participant",&[json!("small")]));
+    }
+    #[test]
+    fn resumed_run_keeps_its_persisted_archive_and_clock_modes() {
+        let active = json!({"archive_audit":true,"deadline_clock":false});
+        assert!(persisted_run_flag(Some(&active),"archive_audit",false));
+        assert!(!persisted_run_flag(Some(&active),"deadline_clock",true));
+        assert!(persisted_run_flag(Some(&json!({})),"archive_audit",true));
+        assert!(!persisted_run_flag(None,"archive_audit",false));
+    }
     #[test]
     fn owner_snapshot_mode_selects_its_wire_format_without_fallback() {
         let body = "{\"run\":\"r\",\"next_event\":1}";

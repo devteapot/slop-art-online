@@ -17,7 +17,7 @@ import threading
 import time
 
 from run_carlid_npc import ROOT, CREDENTIAL, load_key
-from owner_snapshot import export_world
+from owner_snapshot import export_world, export_audit_json
 from external_worker import ExternalWorker
 from pilot_cleanup import finalize_fixed_run
 
@@ -68,7 +68,7 @@ def write(path, value):
 
 def fresh_environment():
     env = os.environ.copy()
-    for key in ("BEVY_DEV_RESUME_ACTIVE", "BEVY_DEV_ARCHIVE_ONLY",
+    for key in ("BEVY_DEV_MODEL_ACTORS", "BEVY_DEV_RESUME_ACTIVE", "BEVY_DEV_ARCHIVE_ONLY",
                 "BEVY_DEV_NEWCOMER_CONTROLLER", "BEVY_DEV_ENROLLMENT_STOP_FILE",
                 "SAO_EXTERNAL_RPC_ADMISSION_DIR", "SAO_EXTERNAL_RPC_CONCURRENCY"):
         env.pop(key, None)
@@ -168,9 +168,12 @@ def main():
     parser.add_argument("--scenario", type=Path, default=Path("scenarios/woodland-pathfinding.json"))
     parser.add_argument("--npc-runtime", choices=("host", "pilot"), default="host",
                         help="host runs the normal NPC harness; pilot reproduces the older shared schedule")
+    parser.add_argument("--model-actors", type=int, nargs="+", help="explicit fixed subset receiving models; others retain authored/human controllers")
     parser.add_argument("--controllers", type=Path, help="per-actor config manifest; enables matched serial matrix schedules")
     parser.add_argument("--newcomer-controller", type=Path, help="explicit frozen role/config template for authority-created AI actors")
     parser.add_argument("--implementation", type=Path, help="verified frozen implementation bundle")
+    parser.add_argument("--deadline-clock", action="store_true")
+    parser.add_argument("--archive-audit", action="store_true", help="enable lossless archive and paged owner audit recovery")
     parser.add_argument("--owner-snapshot-api", choices=("sql", "procedure"), default="sql",
                         help="explicit owner export contract; procedure requires a supporting implementation")
     parser.add_argument("--external-mcp-mode", choices=("per_call", "persistent"), default="per_call",
@@ -201,7 +204,12 @@ def main():
     if not args.controllers and [p["id"] for p in scenario_data["players"][:2]] != [1, 2]:
         raise SystemExit("Pilot requires runtime actor 1 and external actor 2.")
     controllers = json.loads(args.controllers.resolve().read_text()) if args.controllers else []
-    actor_ids = [p["id"] for p in scenario_data["players"]]
+    world_actor_ids = [p["id"] for p in scenario_data["players"]]
+    actor_ids = args.model_actors if args.model_actors is not None else world_actor_ids
+    if not actor_ids or len(set(actor_ids)) != len(actor_ids) or not set(actor_ids).issubset(world_actor_ids):
+        raise SystemExit("model actors must be a unique nonempty subset of initial actors")
+    if args.model_actors is not None and (not args.controllers or args.newcomer_controller):
+        raise SystemExit("a model subset requires an explicit controller manifest and fixed population")
     newcomer = validate_newcomer_controller(json.loads(args.newcomer_controller.read_text())) if args.newcomer_controller else None
     if newcomer and (not controllers or args.npc_runtime != "host"):
         raise SystemExit("newcomer enrollment requires --controllers and the host runtime")
@@ -209,7 +217,7 @@ def main():
         raise SystemExit("stopped_host finalization currently requires a fixed population")
     maximum_actors = actor_limit(scenario_data, newcomer is not None)
     if controllers and (set(c["actor"] for c in controllers) != set(actor_ids) or len(controllers) != len(actor_ids)):
-        raise SystemExit("Controller manifest must cover each actor exactly once.")
+        raise SystemExit("Controller manifest must cover each selected model actor exactly once.")
     if controllers and args.npc_runtime != "host":
         raise SystemExit("Matrix uses the actual host NPC runtime.")
     out = args.output.resolve()
@@ -237,6 +245,8 @@ def main():
         BEVY_DEV_MAX_TICKS=str(args.minutes * 24), BEVY_DEV_TICK_MS="50",
         SAO_HARNESS_MANUAL="1" if args.npc_runtime == "pilot" else "0",
         SAO_OWNER_SNAPSHOT_API=args.owner_snapshot_api,
+        SAO_DEADLINE_CLOCK="1" if args.deadline_clock else "0",
+        SAO_AUDIT_ARCHIVE="1" if args.archive_audit else "0",
         BEVY_DEV_CREDENTIAL_DIR=str(ROOT / ".local/credentials"),
         BEVY_DEV_MODULE=str(implementation / "target/wasm32-unknown-unknown/release/server_module.wasm"),
     )
@@ -248,6 +258,8 @@ def main():
     if newcomer:
         env.update(BEVY_DEV_NEWCOMER_CONTROLLER=str(args.newcomer_controller.resolve()),
                    BEVY_DEV_ENROLLMENT_STOP_FILE=str(out / "stop-enrollment"))
+    if args.model_actors is not None:
+        env["BEVY_DEV_MODEL_ACTORS"] = json.dumps(actor_ids)
     if controllers:
         env.update(BEVY_DEV_CONTROLLERS=str(args.controllers.resolve()),SAO_HARNESS_SERIAL_MS=str(args.serial_ms),
                    SAO_HARNESS_START_FILE=str(out / "start-harness"))
@@ -261,7 +273,7 @@ def main():
     supervisor_source = out / "supervisor-source.py"
     supervisor_source.write_bytes(Path(__file__).read_bytes())
     owner_snapshot_source = Path(__file__).with_name("owner_snapshot.py")
-    if args.owner_snapshot_api == "procedure":
+    if args.owner_snapshot_api == "procedure" or args.archive_audit:
         (out / "owner-snapshot-source.py").write_bytes(owner_snapshot_source.read_bytes())
     runtime_sources = []
     for enabled, filename in ((args.external_mcp_mode == "persistent", "external_worker.py"),
@@ -281,12 +293,12 @@ def main():
         write(path,c["config"])
         actor_configs[c["actor"]] = path
     report = dict(recovery=args.recovery, phase="starting", url=env["BEVY_DEV_PUBLIC_URL"], minutes=args.minutes,
-                  tick_ms=50, max_model_calls=args.calls_per_actor * maximum_actors if args.calls_per_actor else None,
-                  initial_actors=actor_ids, maximum_actors=maximum_actors,
+                  tick_ms=50, max_model_calls=args.calls_per_actor * (maximum_actors if newcomer else len(actor_ids)) if args.calls_per_actor else None,
+                  initial_actors=world_actor_ids, model_actors=actor_ids, maximum_actors=maximum_actors,
                   newcomer_controller=str(args.newcomer_controller.resolve()) if newcomer else None,
                   enrolled_actors=[],
                   implementation=str(implementation),
-                  owner_snapshot_api=args.owner_snapshot_api,
+                  owner_snapshot_api=args.owner_snapshot_api, archive_audit=args.archive_audit, deadline_clock=args.deadline_clock,
                   supervisor_source=str(supervisor_source),
                   authority_server=env.get("BEVY_DEV_SERVER", "http://127.0.0.1:3101"),
                   authority_config_path=env["SPACETIME_CONFIG_PATH"],
@@ -312,7 +324,7 @@ def main():
     if controllers:
         report["artifacts"].update({str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in [args.controllers.resolve(),*actor_configs.values()]})
         write(out / "controller-manifest.json", controllers)
-        report.update(arenas=scenario_data["arenas"],controller_manifest=str(args.controllers.resolve()),
+        report.update(arenas=scenario_data.get("arenas", []),controller_manifest=str(args.controllers.resolve()),
                       controller_schedules={"builtin":f"host serial behavior/communication/learning; {args.serial_ms}ms after each completion", "external":f"MCP process serial behavior/communication/learning; {args.serial_ms}ms after each completion"},
                       reasoning_note="Requested effort sent explicitly; endpoint acceptance is not effective-effort attestation")
     write(out / "pilot.json", report)
@@ -586,7 +598,8 @@ def main():
 
                     final_world, final_events = finalize_fixed_run(
                         active["run"], stop_host=stop_final_host, control=control, call=call, state=state,
-                        record=lambda proof: write(out / "finalization.json", proof))
+                        record=lambda proof: write(out / "finalization.json", proof),
+                        audit_export=(lambda run, end: export_audit_json(call, run, end)) if args.archive_audit else None)
                     report["host_stopped_before_finalization"] = True
                 else:
                     final_world, final_events = None, None
@@ -616,8 +629,12 @@ def main():
                             future.result()
                 if args.finalization_mode == "legacy":
                     final_world = state()
-                    rows = json.loads(control("sql", f"SELECT json FROM sim_audit WHERE run = '{active['run']}'", "--format", "json"))
-                    final_events = sorted((json.loads(row[0]) for row in rows[0]["rows"]), key=lambda e: e["id"])
+                    if args.archive_audit:
+                        final_events = [json.loads(body) for body in export_audit_json(call, active['run'], final_world['next_event'])]
+                    else:
+                        rows = json.loads(control("sql", f"SELECT json FROM sim_audit WHERE run = '{active['run']}'", "--format", "json"))
+                        final_events = sorted((json.loads(row[0]) for row in rows[0]["rows"]), key=lambda e: e["id"])
+
                 report["final_tick"] = final_world["tick"]
                 write(out / active["run"] / "final-snapshot.json", dict(world=final_world, events=final_events))
                 report["final_time_ms"] = final_world["timing"]["time_ms"]

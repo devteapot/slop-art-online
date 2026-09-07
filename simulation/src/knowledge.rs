@@ -85,7 +85,7 @@ fn valid_id(id: &str) -> bool {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
 }
-fn validate_assertion(topic: &str, text: &str, confidence: i32) -> Result<(), String> {
+pub(crate) fn validate_assertion(topic: &str, text: &str, confidence: i32) -> Result<(), String> {
     if topic.trim().is_empty()
         || topic.chars().count() > 160
         || text.trim().is_empty()

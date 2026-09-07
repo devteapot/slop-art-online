@@ -154,12 +154,12 @@ async fn run(c: Config) -> Result<(), String> {
         || !c.database.starts_with(PREFIX)
         || !c.run.starts_with(PREFIX)
         || !["clock", "status", "reads"].contains(&c.case.as_str())
-        || ![36,72,144].contains(&c.actors.len())
+        || ![36,72,144,216].contains(&c.actors.len())
         || (c.actors.len()!=36 && c.server!="http://127.0.0.1:3103")
-        || !(60..=300).contains(&c.window_seconds)
+        || !(60..=600).contains(&c.window_seconds)
         || !(120..=240).contains(&c.setup_seconds)
         || c.read_round_seconds.is_empty()
-        || c.read_round_seconds.len()>20
+        || c.read_round_seconds.len()>40
         || c.read_round_seconds.windows(2).any(|w|w[0]>=w[1])
         || c.read_round_seconds.iter().any(|s|*s==0 || *s+10>c.window_seconds)
         || c.actors
@@ -304,7 +304,7 @@ async fn main() {
             serde_json::from_slice(&std::fs::read(&args[2]).unwrap()).unwrap();
         let mut world = simulation::World::new("offline-authority36".into(), scenario).unwrap();
         world.enable_participants();
-        assert!([36,72,144].contains(&world.players.len()));
+        assert!([36,72,144,216].contains(&world.players.len()));
         println!(
             "{}",
             json!({"offline_fixture_valid":true,"actors":world.players.len(),"authority_connections":0})

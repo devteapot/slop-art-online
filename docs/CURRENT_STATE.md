@@ -1,12 +1,46 @@
 # Implementation state and legacy baseline
 
+The latest [authority execution review](AUTHORITY_EXECUTION_REVIEW.md) prioritizes
+raw server work and core-system design in the existing small world; client/render
+work is deferred. Food renewal now refreshes site facts without generating
+quadratic peer sightings. Shared-kernel and actual dual-service correctness checks
+pass; [the measured comparison](REALTIME_PERFORMANCE.md#raw-authority-cause-specific-food-perception-23)
+records the workload and limits. The opt-in [independent physical clock](INDEPENDENT_PHYSICAL_CLOCK.md)
+now executes supported local actions between shared world-maintenance deadlines;
+forensic compression runs in separate scheduled transactions. Global maintenance
+and unsupported action fallbacks still load the whole hot world. Policy and mental
+interpretation continue to belong to the separate controller instance.
+
 The later [native authority storage](SPACETIMEDB_NATIVE_STATE.md),
 [72/144-actor scale trials](NATIVE_SCALE_TRIALS.md) and
 [clock profiling/history optimization](NATIVE_CLOCK_IMPLEMENTATION.md) track
 performance work beyond the frozen milestone below. Participant access is indexed;
 the [hybrid clock](HYBRID_CLOCK.md) now selects active/due actors and loads private
-histories on demand. Global hot-state and subsystem scans remain. Sustained 20 Hz
-and thousands of players remain unverified.
+histories on demand. The [sustained clock work](SUSTAINED_CLOCK.md) adds shared
+immutable configuration, deferred trace metadata, source-verified guard input
+selection, opt-in lossless audit blocks and deadline scheduling with explicit
+missed slots and outage recovery. Global hot-state and subsystem scans remain.
+Final finite trials reached 18.66/14.57/7.02 updates per second at 72/144/216 actors;
+the mixed-model/client/observer trial reached 13.48. Access checks passed, while
+sustained 20 Hz and thousands of players remain unverified. The user subsequently
+prioritized the [client/authority boundary](CLIENT_AUTHORITY_BOUNDARY.md): native
+controllers own policy and mental processing in a separate database and submit
+finite actions through the same world API available to external clients. The
+current maps remain 48×36; larger maps and regional processing are deferred until
+this boundary is measured. The boundary implementation passes scoped access,
+reconnect and human browser action checks. Its final 216-controller finite trial
+reached only 4.31 updates/s; a subsequent durable-dispatch/relay-recovery pass
+passed four real crash boundaries and a timeout-after-commit check, with its final
+216-controller trial reaching 4.45 updates/s. Both services and the relay add
+measured cost. The ongoing [playable real-time work](REALTIME_PERFORMANCE.md)
+subsequently reached 16.16 updates/s in a 216-controller diagnostic. A distinct
+provisioned 215-AI/one-human workload with an observer fell to 4.15 updates/s and
+1456 ms input-completion latency at p95, exposing rendering-view invalidation.
+The 30-minute, 216-living-actor playability target remains unmet. Six
+fresh model requests failed with provider HTTP 530, so successful inference on
+the migrated paths remains unverified. The ten-minute soak completed without a resource abort but
+failed its all-reads-success gate after 36 permanent deaths; its later cadence
+cannot establish capacity for 72 living actors.
 
 The seven-stage [living-world roadmap](WORLD_ROADMAP.md) has completed its bounded implementation pass. The current tested candidate is frozen as `reality-m7-10`; gameplay law semantics remain `m7-1-scoped-laws.2`. Acceptance is limited to the linked evidence, with autonomous and long-term outcomes kept separate.
 

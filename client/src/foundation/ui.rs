@@ -208,6 +208,10 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
                 if let Some(arena)=p["arena"].as_str() {text(panel,format!("{arena} · {}",p["runtime"].as_str().unwrap_or("")),12.,MUTED);}
                 text(panel,if game.observer(){"Observer truth / individual understanding"}else{"Your perceptions / private understanding"},12.,MUTED);
                 panel.spawn(row()).with_children(|p| {button(p,"Mind",Click::Tab(0),game.tab==0);button(p,"Policy",Click::Tab(1),game.tab==1);button(p,"History",Click::Tab(2),game.tab==2);button(p,"Knowledge",Click::Tab(3),game.tab==3);button(p,"Life",Click::Tab(4),game.tab==4);});
+                if game.observer() && !game.archive && game.snapshot["inspected_actor"].as_u64() != Some(game.selected) {
+                    text(panel,"Loading character details…",16.,MUTED);
+                    return;
+                }
                 match game.tab {0=>mind(panel,&p),1=>tree(panel,&p,&game),3=>knowledge(panel,&p,&game),4=>life(panel,&p,&game),_=>history(panel,&game)}
             });
         }

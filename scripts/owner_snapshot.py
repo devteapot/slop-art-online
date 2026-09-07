@@ -88,3 +88,35 @@ def export_json(call, run):
 
 def export_world(call, run):
     return parse_export(call(EXPORT_PROCEDURE, run), run)
+
+
+AUDIT_PROCEDURE = 'sim_export_owned_audit'
+
+
+def parse_audit_page(raw, run, start, end, limit=4096):
+    """Exact event strings, checked against a captured exclusive event cutoff."""
+    bodies = _result(raw)
+    if (type(start) is not int or type(end) is not int or start < 1 or end < start
+            or type(limit) is not int or not 1 <= limit <= 4096 or not isinstance(bodies, list)):
+        raise ValueError("invalid audit page size or range")
+    until = min(end, start + limit)
+    if len(bodies) != until - start:
+        raise ValueError('invalid audit page size or range')
+    for event_id, body in enumerate(bodies, start):
+        event = _json(body, 'invalid audit event')
+        if (not isinstance(event, dict) or event.get('run') != run
+                or type(event.get('id')) is not int or event['id'] != event_id):
+            raise ValueError('audit event gap or identity mismatch')
+    return bodies
+
+
+def export_audit_json(call, run, end, start=1):
+    """Recover archived and live events without treating the recent table as complete."""
+    if type(end) is not int or type(start) is not int or start < 1 or end < start:
+        raise ValueError('invalid audit export range')
+    bodies = []
+    while start < end:
+        page = parse_audit_page(call(AUDIT_PROCEDURE, run, start, end, 4096), run, start, end)
+        bodies.extend(page)
+        start += len(page)
+    return bodies

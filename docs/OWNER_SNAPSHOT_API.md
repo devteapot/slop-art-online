@@ -15,3 +15,22 @@ A SQL projection such as `SELECT id FROM sim_run` can materialize the whole owne
 The original SQL-observer tests remain failed, including the Experience-batching candidate's 120 timely receipts out of 144. The new procedure condition is declared separately. It keeps the same 36-person seed, participant API, four rounds of 36 requests, ten-second receipt deadline, fixed sixty-second active window, ten-second pause requirement, zero retries and resource limits. Owner inventory and mandatory baseline/final exports remain at their original checkpoints. No new owner `sim_run` SQL query may occur before or during that measurement. Compatibility checks run in separate databases.
 
 Before a model trial, require actual procedure ownership/error/parity/no-mutation checks, the separately declared participant access gate, exact authored-law/private-case/retained-read storage checks, and clean pause/revocation with passing resource evidence. The law fixture retains its SQL observer workload; optional procedure equality checks occur only after pause and the original final measurement boundary, before retained-read collection. The model host retains its existing export cadence with procedure mode selected explicitly. Earlier failures, changed observer lifecycle, process conditions and finite-run limitations remain in the evidence; a passing sample cannot establish sustained 20 Hz, arbitrary scale or autonomous law editing.
+
+
+## Optional lossless audit archives
+
+New runs can explicitly enable `sim_configure_audit_archive(run, true)`. The
+private `sim_audit` table then contains only the recent indexed tail; immutable
+private blocks preserve the original historical event JSON. Disabling compaction
+does not expand old blocks back into that table. Therefore full historical export
+must continue to use `sim_export_owned_audit(run, start, end, limit)` after archival
+has been enabled. Its range is inclusive/exclusive, IDs start at 1, and the maximum
+page is 4,096 events. Obtain the end cursor from a coherent owner World export.
+Each page verifies ownership, sequence and integrity and fails on gaps.
+
+The development host uses `SAO_AUDIT_ARCHIVE=1` for new runs; the pilot uses
+`--archive-audit`. Their active-run descriptor retains this export mode across host
+resume. Raw SQL remains the default for old non-archived runs. Participant leases,
+personal learning and scoped reconnect recovery remain separate from owner audit
+truth. See the [sustained clock report](SUSTAINED_CLOCK.md) for retention limits,
+restart tests, resource measurements and the remaining unbounded durable growth.

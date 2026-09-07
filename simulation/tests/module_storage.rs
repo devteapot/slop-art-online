@@ -1129,7 +1129,7 @@ fn corrupt_evicted_reference_cannot_collect_another_runs_fragment() {
     let mut world = four_read_world();
     let mut committed = MemoryBlobs::default();
     let encoded = encode(&world, &mut committed).unwrap();
-    let mut foreign = World::new("other-storage-run".into(), world.initial.clone()).unwrap();
+    let mut foreign = World::new("other-storage-run".into(), (*world.initial).clone()).unwrap();
     foreign.enable_participants();
     send(
         &mut foreign,

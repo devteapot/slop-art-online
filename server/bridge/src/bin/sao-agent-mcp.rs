@@ -59,6 +59,16 @@ struct Reflect {
     reflections: Vec<Reflection>,
     goal: Option<String>,
 }
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct PublishKnowledge {
+    request_id: String,
+    control_epoch: u64,
+    observed_cursor: u64,
+    source: u64,
+    interpretation: String,
+    knowledge: Option<simulation::knowledge::KnowledgeDraft>,
+}
 fn result(r: Result<Value, String>) -> CallToolResult {
     match r {
         Ok(v) => CallToolResult::structured(v),
@@ -156,6 +166,12 @@ impl GameMcp {
             },
         )
         .await
+    }
+    #[tool(description = "Explicitly submit a client-reported assessment or derived knowledge assertion to the world authority. Requires personally retained evidence; cannot mint experimental proof or mastery. In client-control worlds, private reflection alone does not publish an assessment for research prerequisites. Sends only the supplied interpretation and optional assertion, never private beliefs or goals.")]
+    async fn publish_knowledge(&self, Parameters(p): Parameters<PublishKnowledge>) -> CallToolResult {
+        self.apply(p.request_id, p.control_epoch, Command::PublishKnowledge {
+            observed_cursor:p.observed_cursor,source:p.source,interpretation:p.interpretation,knowledge:p.knowledge,
+        }).await
     }
 }
 #[tool_handler]

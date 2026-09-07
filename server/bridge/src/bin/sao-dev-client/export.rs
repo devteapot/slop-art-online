@@ -75,6 +75,10 @@ impl Export {
     pub(super) fn pending(&self) -> bool {
         self.revision != self.published
     }
+    pub(super) fn audit_range(&self) -> Option<(u64, u64)> {
+        let start = self.next_event.max(1);
+        (start < self.world().next_event).then_some((start, self.world().next_event))
+    }
     pub(super) fn audit_query(&self) -> Option<String> {
         let world = self.world();
         let start = self.next_event.max(1);
@@ -83,7 +87,9 @@ impl Export {
             world.run, start, world.next_event))
     }
     pub(super) fn append(&mut self, reply: &str) -> Result<(), String> {
-        let mut batch: Vec<(u64, String)> = rows(reply)?;
+        self.append_rows(rows(reply)?)
+    }
+    pub(super) fn append_rows(&mut self, mut batch: Vec<(u64, String)>) -> Result<(), String> {
         batch.sort_by_key(|(id, _)| *id);
         let world = self.world();
         let mut expected = self.next_event.max(1);

@@ -2,6 +2,7 @@
 //! second simulator. Storage persists/indexes them; all effects use World rules.
 use crate::{timing, Controller, Player, World};
 use std::collections::{BTreeMap, BTreeSet};
+mod maintenance;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ActorHint {
@@ -46,8 +47,9 @@ impl World {
         let Ok(periods) = self.scripts.law::<timing::Periods>("system_periods_ms", serde_json::json!({})) else {
             return active();
         };
-        let Ok(reconsider) = self.scripts.law::<u64>("reconsider_interval", crate::scripting::facts(p)) else {
-            return active();
+        let reconsider = if self.client_controlled(p.id) { 0 } else {
+            let Ok(interval) = self.scripts.law::<u64>("reconsider_interval", crate::scripting::facts(p)) else { return active(); };
+            interval
         };
         if !(1..=3_600_000).contains(&periods.needs_ms) || !(1..=3_600_000).contains(&periods.hazard_ms) {
             return active();
@@ -58,8 +60,9 @@ impl World {
             else { self.timing.needs_remainder_ms };
         let hazard = if born { self.timing.actor_hazard_remainder_ms.get(&p.id).copied().unwrap_or(0) }
             else { self.timing.hazard_remainder_ms };
-        let mut due = now.saturating_add(periods.needs_ms.saturating_sub(needs))
-            .min(now.saturating_add(periods.hazard_ms.saturating_sub(hazard)));
+        let settled = self.timing.maintenance_ms.unwrap_or(now);
+        let mut due = settled.saturating_add(periods.needs_ms.saturating_sub(needs))
+            .min(settled.saturating_add(periods.hazard_ms.saturating_sub(hazard)));
         if self.timing.dirty.get(&p.id) != Some(&false) { due = now; }
         if let Some(e) = &p.execution { due = due.min(self.execution_ready_at(p.id, e)); }
         // The law above still validates in participant mode, matching the old

@@ -70,13 +70,27 @@ def summarize(path):
     first_file, last_file = nearest(start), nearest(end)
     first, last = parse_metrics(first_file), parse_metrics(last_file)
     reducers = {}
-    for reducer in ('sim_client_pulse', 'sim_participant_command'):
+    for reducer in ('sim_client_pulse', 'sim_deadline_pulse', 'sim_participant_command'):
         deltas = {}
         for metric in ('reducer_wasm_time_usec', 'reducer_abi_time_usec',
                        'spacetime_reducer_wait_time_sec_sum', 'spacetime_reducer_wait_time_sec_count',
                        'spacetime_reducer_plus_query_duration_sec_sum', 'spacetime_reducer_plus_query_duration_sec_count'):
-            deltas[metric] = total(last, metric, reducer=reducer)-total(first, metric, reducer=reducer)
+            present = any(n == metric and labels.get('reducer') == reducer for n, labels, _ in last)
+            deltas[metric] = total(last, metric, reducer=reducer)-total(first, metric, reducer=reducer) if present else None
         reducers[reducer] = deltas
+    # Scheduled callbacks share a queue metric label in 2.1/2.10. Do not
+    # misreport absent per-function queue series as zero queueing.
+    scheduled_queue = {metric: total(last, metric, reducer='scheduled reducer')-total(first, metric, reducer='scheduled reducer')
+        for metric in ('spacetime_reducer_wait_time_sec_sum', 'spacetime_reducer_wait_time_sec_count')}
+    resource_names = ('spacetime_worker_wasm_memory_bytes', 'page_pool_resident_bytes',
+        'bsatn_rlb_pool_resident_bytes', 'jemalloc_allocated_bytes', 'jemalloc_resident_bytes')
+    resource_peaks = {name: None for name in resource_names}
+    for file in files:
+        if start <= int(file.stem) <= end:
+            values = parse_metrics(file)
+            for name in resource_names:
+                if any(n == name for n, _, _ in values):
+                    resource_peaks[name] = max(resource_peaks[name] or 0, total(values, name))
     latencies = [r['elapsed_ms'] for r in reads if 'elapsed_ms' in r]
     by_round = {}
     for number in sorted({r.get('round', 0) for r in reads}):
@@ -96,6 +110,8 @@ def summarize(path):
         overall_pass=bool(result['case']['completed_protocol'] and result.get('read_deadlines_pass',False)
             and not result['resource_abort'] and not result['monitor_errors'] and not result.get('error')
             and result.get('access', {}).get('passed', True) and result.get('migration', {}).get('passed', True)
+            and result.get('archive_restart', {}).get('passed', True)
+            and result.get('deadline_controls', {}).get('passed', True)
             and not result.get('stop_error') and not result['after_stop']['Running'] and not authority['engine_errors']),
         clock_20hz_pass=authority['update_count']/manifest['active_seconds'] >= 20,
         reads_pass=result.get('read_deadlines_pass',False),
@@ -106,13 +122,15 @@ def summarize(path):
         peak_service_swap_bytes=max(s['swap_bytes'] for s in samples),growth=growth,
         body_bytes=payload['status_body_bytes_fixed_window'],samples_dropped=payload['samples_dropped'],
         retained_log_bytes_at_pause=total(last,'spacetime_message_log_size_bytes'),
+        audit_retention=snapshots.get('audit_retention'),live_audit_rows=snapshots.get('live_audit_rows'),
+        deadline_clock=snapshots.get('deadline_clock'),
         audit_events=len(snapshots['events']),alive_at_end=sum(p['health']>0 for p in world['players']),
         stopped=world['stopped'],engine_errors=authority['engine_errors'],
         full_world_export_bytes=payload['final_full_world_json_bytes'],
         pause_ms=helper['pause_latency_ms'],remaining_grants=result['case']['remaining_grants'],
         resource_abort=result['resource_abort'],service_stopped=not result['after_stop']['Running'],
         service_exit_code=result['after_stop']['ExitCode'],
-        approx_window_reducer_deltas=reducers,metric_boundaries=[first_file.name,last_file.name],
+        approx_window_reducer_deltas=reducers,scheduled_queue_all_callbacks=scheduled_queue,active_resource_peaks=resource_peaks,metric_boundaries=[first_file.name,last_file.name],
         note='Single finite density trial; nested JSON/BSATN body samples exclude network framing. Metrics boundaries use nearest 1s samples; log gauge is retained size, not cumulative writes.')
 
 

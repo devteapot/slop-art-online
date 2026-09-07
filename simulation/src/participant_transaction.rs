@@ -34,6 +34,11 @@ impl ParticipantTransaction {
     pub fn execute(mut self, request: Request) -> Result<ParticipantCommit, String> {
         // An added command must receive an explicit dependency/write-set review.
         match &request.command {
+            crate::participant::Command::StartAction { .. }
+            | crate::participant::Command::CancelAction { .. } => (),
+            // Reads retained own evidence and holdings; writes only this actor's
+            // assessment/assertion and scoped receipt/experience rows.
+            crate::participant::Command::PublishKnowledge { .. } => (),
             crate::participant::Command::ReadObservation { .. }
             | crate::participant::Command::PinObservation { .. }
             | crate::participant::Command::Speak { .. }
@@ -87,6 +92,17 @@ impl World {
             return Err("submit learning separately".into());
         }
         let i = self.idx(actor)?;
+        if self.client_controlled(actor) {
+            if d.policy.is_some() || d.actions.len() != 1 {
+                return Err("client mode accepts one physical action; evaluate policies in the client".into());
+            }
+            let action = d.actions.into_iter().next().unwrap();
+            let command = if action.skill == crate::Skill::Speak {
+                Command::Speak {text:action.text.unwrap_or_default(),expires_tick:self.tick + 10}
+            } else { Command::StartAction {expected_revision:self.players[i].generation,action} };
+            return self.participant_apply(actor,Request {api_version:API_VERSION.into(),
+                request_id:format!("bevy-{}",self.next_event),control_epoch:self.participants[&actor].control_epoch,command}).map(Some);
+        }
         if d.policy.is_none()
             && !(d.actions.len() == 1 && d.actions[0].skill == crate::Skill::Speak)
         {

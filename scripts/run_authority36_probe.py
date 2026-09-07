@@ -170,10 +170,19 @@ def execute_case(args, out, case, database, scenario, actors):
             assert len(raw) == 1
             state = raw[0][0]
         world = json.loads(state)
-        events_raw = rows(f"SELECT json FROM sim_audit WHERE run = '{run}'")
+        if getattr(args, 'audit_api', 'sql') == 'procedure':
+            from owner_snapshot import export_audit_json
+            events_raw = [[body] for body in export_audit_json(call, run, world['next_event'])]
+        else:
+            events_raw = rows(f"SELECT json FROM sim_audit WHERE run = '{run}'")
         events = sorted((json.loads(x[0]) for x in events_raw), key=lambda e: e['id'])
         snapshot = dict(world=world, events=events, full_world_json_bytes=len(state.encode()),
                         audit_json_bytes=sum(len(r[0].encode()) for r in events_raw))
+        if getattr(args, 'archive_audit', False):
+            snapshot['audit_retention'] = rows(f"SELECT archived_through, next_event, archived_plain_bytes, archived_compressed_bytes, blocked FROM sim_audit_retention WHERE run = '{run}'")
+            snapshot['live_audit_rows'] = rows(f"SELECT COUNT(*) AS count FROM sim_audit WHERE run = '{run}'")[0][0]
+        if getattr(args, 'deadline_clock', False):
+            snapshot['deadline_clock'] = rows(f"SELECT period_ms, pending_id, wakes, missed_slots, lateness_us, max_lateness_us FROM sim_clock_deadline WHERE run = '{run}'")
         write(out / name, snapshot)
         if owner_api == 'procedure':
             record_owner_checkpoint(name, started, run=run,
@@ -188,6 +197,10 @@ def execute_case(args, out, case, database, scenario, actors):
         report['created'] = True
         call('sim_setup_client_clock', run, 'live_fixture')
         call('sim_operator_clock', run, 50, True)
+        if getattr(args, 'archive_audit', False):
+            call('sim_configure_audit_archive', run, True)
+        if getattr(args, 'deadline_clock', False):
+            call('sim_configure_deadline_clock', run, True)
         before = capture('baseline-snapshot.json')
         assert len(before['world']['players']) == len(actors)
         with (out / 'helper.log').open('w') as log:
@@ -219,6 +232,12 @@ def execute_case(args, out, case, database, scenario, actors):
                 report['paused_verified'] = bool(clocks) and all(r[1] for r in clocks)
                 assert report['paused_verified'], 'clock not authoritatively paused'
                 after = capture('final-snapshot.json')
+                if getattr(args, 'archive_audit', False):
+                    retention = after['audit_retention']
+                    assert len(retention) == 1 and retention[0][0] > 0, 'no archived evidence'
+                    assert retention[0][1] == after['world']['next_event'], 'archive cursor mismatch'
+                    assert after['live_audit_rows'] <= 2175, 'active audit tail exceeded declared bound'
+                    report['archive_bound_pass'] = True
                 if (out / 'baseline-snapshot.json').exists():
                     before = json.loads((out / 'baseline-snapshot.json').read_text())
                     reads = json.loads((out / 'read-results.json').read_text()) if (out / 'read-results.json').exists() else {}

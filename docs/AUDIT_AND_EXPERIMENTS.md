@@ -8,6 +8,12 @@ Provide Bevy in-game visual observation (primarily browser WASM, with shared nat
 
 The observer can compare world truth with each player's subjective understanding. This privileged view is not an input to the player's controller. Query permissions and context construction must preserve that boundary, including when a human observer also participates as a character.
 
+The [sustained clock archive contract](SUSTAINED_CLOCK.md#lossless-audit-retention)
+can move old owner-audit events atomically into private compressed blocks while
+retaining their exact JSON, IDs and ordering. Enabled runs require the merged
+owner export API; raw audit-table SQL is a recent tail. Bounding that active index
+does not bound all durable history or permit restoring lost character knowledge.
+
 ## Component experiments
 
 Support independent, deep inspection of a component as well as integrated runs. A focused experiment should invoke the production implementation through its normal contract, with explicit supplied dependencies and state. It should need only the surrounding systems relevant to the question. A skill evaluator can be exercised with selected facts and law definitions; a belief update can be exercised with selected prior beliefs, perceptions and interpretations. Database commit semantics and interactions between components still require integration checks against the real authority.

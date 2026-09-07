@@ -165,7 +165,7 @@ async fn main() -> Result<(), String> {
         let mut receipts=vec![];
         for (i,op) in proposal.operations.iter().enumerate(){
             let mut value=serde_json::to_value(op).unwrap();let name=value["op"].as_str().unwrap().to_string();
-            let allowed=match role{Responsibility::Behavior=>name=="replace_tree"||name=="patch_subtree",Responsibility::Communication=>name=="speak",Responsibility::Learning=>name=="reflect"};
+            let allowed=match role{Responsibility::Behavior=>name=="replace_tree"||name=="patch_subtree",Responsibility::Communication=>name=="speak",Responsibility::Learning=>name=="reflect"||name=="publish_knowledge"};
             if !allowed{return Err("wrong responsibility".into());}
             value.as_object_mut().unwrap().remove("op");value["request_id"]=json!(format!("external-live-{}-{i}",rand::random::<u64>()));value["control_epoch"]=state["control_epoch"].clone();
             let receipt=mcp.call(&name,value.clone()).await;

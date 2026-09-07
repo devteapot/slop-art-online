@@ -101,11 +101,18 @@ Reincarnation/souls are explicitly deferred, with no implementation commitment. 
 ## Supporting technical debt
 
 - [x] Implement and differentially verify the [native hybrid clock](HYBRID_CLOCK.md): indexed active/due work, durable wakeups and on-demand private-history loading through the shared kernel.
+- [x] Complete the [matched 2.1/2.10 runtime comparison and bounded clock/storage implementation](SUSTAINED_CLOCK.md): immutable configuration, selective bundled-guard evidence, lossless active-audit retention, exact restart recovery and explicit deadline/outage controls.
 - [ ] Establish sustained cadence and thousand-player capacity with representative longer workloads; reduce remaining global scans and bound long-term evidence/storage growth without erasing historical audit evidence.
 
 - [ ] As mechanics evolve, provide reusable component experiment tooling for use-case-generated skill, belief and other mechanic investigations, using production implementations and traceable inputs/outputs. Preserve end-to-end verification and focused contract regressions; see [component experiments](AUDIT_AND_EXPERIMENTS.md#component-experiments). Deferred tooling direction, not an immediate framework build.
 - [ ] Use existing NPC event/memory indexes in hot queries where appropriate; do not duplicate existing schema indexes.
-- [ ] Measure spatial query cost before choosing a regional partitioning strategy. Thousands of players remain the target; finite clock trials do not establish that capacity.
+- [x] Measure the [72/144/216-actor population series, separate density case and mixed model/human/observer workload](SUSTAINED_CLOCK.md). These finite trials failed the separate 20 Hz target; the subsequent user direction prioritizes client/authority separation before regional work.
+- [x] Implement the [client/authority boundary](CLIENT_AUTHORITY_BOUNDARY.md): separate native controller database, ordinary scoped world protocol, finite shared actions, durable private mental evidence, reconnect/privacy checks and actual Bevy human movement/speech. Both-service/relay costs and failed trials are retained.
+- [x] Add bounded durable dispatch recovery and native relay supervision: four real process-kill boundaries, ordinary-receipt eviction, timeout after authority commit, and healthy-transport relay restart passed; see [recovery evidence](CLIENT_AUTHORITY_BOUNDARY.md#recoverable-dispatch-and-relay-supervision).
+- [x] Separate [local action opportunities, world maintenance and audit compression](INDEPENDENT_PHYSICAL_CLOCK.md), preserving shared physical rules and due-maintenance ordering. The initial physical mode is opt-in and retains full-world fallback for unsupported dependencies.
+- [ ] Meet the [playable real-time gate](REALTIME_PERFORMANCE.md): 216 living actors for 30 minutes at a 20 Hz authority target, human input completion below 100 ms at p95, observer load, stable queues and bounded active memory; verify browser frame pacing separately. Short controller-only improvements do not pass this gate.
+- [ ] Complete successful fresh model operations through the migrated built-in and external paths; the latest six provider requests all returned HTTP 530. Meet the separate sustained 20 Hz target under living-controller load before claiming scale acceptance.
+- [ ] Reassess bounded regional execution after the boundary measurements; current 48×36 maps do not justify a premature region-size decision. Thousands of players remain the target.
 - [ ] Extract tick/action/controller responsibilities from large `lib.rs` and `npc_ai.rs` as the relevant contracts are implemented; avoid unrelated rewrites.
 - [ ] Keep scenario schemas, trace records, model/behavior/skill versions, and comparison readers aligned with mechanic changes.
 

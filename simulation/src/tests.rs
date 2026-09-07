@@ -416,7 +416,7 @@ fn starving_player_can_execute_eat_before_damage_and_does_not_blame_location() {
 
 #[test]
 fn authored_knowledge_has_subjective_provenance_and_can_be_reconsidered() {
-    let mut s = world().initial;
+    let mut s = (*world().initial).clone();
     s.players[0].controller = Controller::Ai;
     s.players[0].beliefs.push(Known {
         claim: Belief {

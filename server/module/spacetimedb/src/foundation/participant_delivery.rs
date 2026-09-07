@@ -60,6 +60,7 @@ fn head(
     stopped: bool,
     player: &Player,
     state: &ParticipantState,
+    retained_oldest: Option<u64>,
 ) -> SimParticipantHead {
     let actor = player.id;
     SimParticipantHead {
@@ -69,7 +70,7 @@ fn head(
         tick,
         stopped,
         latest_cursor: state.cursor,
-        oldest_cursor: state.experiences.first().map_or(1, |e| e.cursor),
+        oldest_cursor: retained_oldest.unwrap_or_else(|| state.experiences.first().map_or(1, |e| e.cursor)),
         control_epoch: state.control_epoch,
         policy_revision: player.generation,
         learning_revision: state.learning_revision,
@@ -157,8 +158,15 @@ pub(super) fn publish_actor(
     previous_time_ms: u64,
 ) {
     let actor = player.id;
-    let row = head(run, tick, stopped, player, state);
-    let old = ctx.db.sim_participant_head().key().find(&row.key);
+    super::controller_delivery::publish_frame(ctx,run,tick,stopped,player,state);
+    let old = ctx.db.sim_participant_head().key().find(format!("{run}:{actor}"));
+    // The trace can remain deferred even when tick/health changes. Reuse only
+    // the header of the exact retained trace from this transaction.
+    let retained_oldest = old.as_ref().filter(|h| h.run == run && h.actor == actor
+        && h.latest_cursor == state.cursor
+        && previous.is_some_and(|p| p.experiences.same_snapshot(&state.experiences)))
+        .map(|h| h.oldest_cursor);
+    let row = head(run, tick, stopped, player, state, retained_oldest);
     let existing = old.is_some();
     match old {
         Some(old) if same_head(&old, &row) => (),
@@ -176,6 +184,7 @@ pub(super) fn publish_actor(
     if existing && !expired && previous.is_some_and(|old| state.same_snapshot(old)) {
         return;
     }
+    if !existing || previous.is_none_or(|old| !state.receipts.same_snapshot(&old.receipts)) {
     let receipt_ids: BTreeSet<_> = state
         .receipts
         .iter()
@@ -211,6 +220,7 @@ pub(super) fn publish_actor(
                 ctx.db.sim_participant_receipt().insert(row);
             }
         }
+    }
     }
     assert_eq!(ids.len(), state.evidence_leases.len());
     let leases: Vec<_> = state

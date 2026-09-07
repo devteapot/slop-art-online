@@ -301,14 +301,14 @@ pub(super) fn encode_with_reuse(
     let mut compact = world.clone();
     // These placeholders never escape the private storage envelope. Hydration
     // restores every field before a World reaches a reducer, SQL caller or view.
-    compact.initial = initial_placeholder()?;
+    compact.initial = initial_placeholder()?.into();
     compact.scripts = simulation::scripting::Registry {
         api_version: 0,
         revision: 0,
         active: BTreeMap::new(),
         history: BTreeMap::new(),
         pending: None,
-    };
+    }.into();
     for (scope, revisions) in &world.laws.history {
         let mut ids = BTreeMap::new();
         for (revision, value) in revisions {
@@ -795,7 +795,7 @@ fn decode_inner(
             actor,
             &refs.trace,
             state.cursor,
-        )?;
+        )?.into();
         if state
             .experiences
             .windows(2)
@@ -818,7 +818,7 @@ fn decode_inner(
             );
         }
         state.activity = get_list(store, run, actor, "activity", &refs.activity)?;
-        state.receipts = get_list(store, run, actor, "receipt", &refs.receipts)?;
+        state.receipts = get_list::<simulation::participant::Receipt>(store, run, actor, "receipt", &refs.receipts)?.into();
         let control_epoch = state.control_epoch;
         for (lease, id) in state.evidence_leases.iter_mut().zip(&refs.leases) {
             if lease.observation.get() != "null" || !lease.experiences.is_empty() {

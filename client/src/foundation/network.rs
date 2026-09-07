@@ -1,6 +1,7 @@
 use super::*;
 use shared::module_bindings::{
-    sim_client_control, sim_client_intent, DbConnection, SimMySnapshotTableAccess,
+    sim_client_control, sim_client_intent, sim_select_inspector, DbConnection,
+    SimMyRenderSnapshotTableAccess, SimMyRenderEventsTableAccess,
 };
 use spacetimedb_sdk::{DbContext, Table};
 use std::sync::{Arc, Mutex};
@@ -11,6 +12,7 @@ pub enum Signal {
     Connection(Result<DbConnection, String>),
     Status(String),
     Disconnected,
+    HistoryChanged,
 }
 #[derive(Clone, Default)]
 pub struct Inbox(pub Arc<Mutex<Vec<Signal>>>);
@@ -25,6 +27,7 @@ pub struct Network {
     pub runs_at: f64,
     pub expected_run: Option<String>,
     pub bound_once: bool,
+    pub inspector_retry_at: f64,
 }
 impl Default for Network {
     fn default() -> Self {
@@ -63,6 +66,7 @@ impl Default for Network {
             runs_at: 0.,
             expected_run: None,
             bound_once: false,
+            inspector_retry_at: 0.,
         }
     }
 }
@@ -138,8 +142,12 @@ fn connect(inbox: Inbox, server: String, db: String) {
         // Never persist or reuse the returned authentication token. Enrollment binds a fresh
         // browser identity through the HttpOnly development session, with no auth in URLs.
         .on_connect(move |ctx, identity, _| {
+            let history = connected.clone();
+            ctx.db.sim_my_render_events().on_insert(move |_,_| history.0.lock().unwrap().push(Signal::HistoryChanged));
+            let history = connected.clone();
+            ctx.db.sim_my_render_events().on_delete(move |_,_| history.0.lock().unwrap().push(Signal::HistoryChanged));
             ctx.subscription_builder()
-                .subscribe(["SELECT * FROM sim_my_snapshot"]);
+                .subscribe(["SELECT * FROM sim_my_render_snapshot", "SELECT * FROM sim_my_render_events"]);
             connected
                 .0
                 .lock()
@@ -249,9 +257,11 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
         let _ = conn.frame_tick();
     }
     let signals = std::mem::take(&mut *net.inbox.0.lock().unwrap());
+    let mut history_changed = false;
     for signal in signals {
         game.dirty = true;
         match signal {
+            Signal::HistoryChanged => history_changed = true,
             Signal::Http(tag, Ok(value)) => match tag.as_str() {
                 "boot" => {
                     game.status = "Connecting to authoritative run…".into();
@@ -375,13 +385,13 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
         if let Some(conn) = &net.connection {
             let body = conn
                 .db
-                .sim_my_snapshot()
+                .sim_my_render_snapshot()
                 .iter()
                 .next()
                 .map(|s| s.body.clone());
             if let Some(body) = body {
-                if body != net.latest {
-                    if let Ok(snapshot) = serde_json::from_str::<Value>(&body) {
+                if body != net.latest || history_changed {
+                    if let Ok(mut snapshot) = serde_json::from_str::<Value>(&body) {
                         if net
                             .expected_run
                             .as_ref()
@@ -389,6 +399,11 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
                         {
                             return;
                         }
+                        let mut events: Vec<_> = conn.db.sim_my_render_events().iter()
+                            .filter(|row| snapshot["run"] == row.run)
+                            .filter_map(|row| serde_json::from_str::<Value>(&row.body).ok()).collect();
+                        events.sort_by_key(|event| event["id"].as_u64().unwrap_or(0));
+                        snapshot["events"] = json!(events);
                         net.expected_run = None;
                         game.snapshot = snapshot;
                         game.dirty = true;
@@ -401,6 +416,20 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
                 game.status = "No active grant for this connection".into();
                 game.dirty = true;
             }
+        }
+    }
+    if !game.archive && game.observer() && time.elapsed_secs_f64() >= net.inspector_retry_at {
+        let desired = game.inspect.then_some(game.selected);
+        if game.snapshot["inspected_actor"].as_u64() != desired {
+            if let Some(conn) = &net.connection {
+                let inbox = net.inbox.clone();
+                let _ = conn.reducers.sim_select_inspector_then(desired.map(|id| id as u32), move |_, result| {
+                    if let Ok(Err(error)) = result {
+                        inbox.0.lock().unwrap().push(Signal::Status(error));
+                    }
+                });
+            }
+            net.inspector_retry_at = time.elapsed_secs_f64() + 1.;
         }
     }
     if game.sessions_open && game.observer() && time.elapsed_secs_f64() >= net.runs_at {

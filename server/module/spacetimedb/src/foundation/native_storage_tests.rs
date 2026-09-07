@@ -1,4 +1,5 @@
 use super::*;
+use serde_json::json;
 use simulation::{
     participant::{Command, Request, API_VERSION},
     participant_transaction::ParticipantTransaction,
@@ -6,10 +7,69 @@ use simulation::{
     Action, Scenario, Skill,
 };
 
+#[test]
+fn local_physical_domain_preserves_combat_movement_and_recipient_evidence() {
+    for skill in [Skill::Attack,Skill::Move,Skill::Give,Skill::Build,Skill::Gather,Skill::Observe,Skill::Speak] {
+        let mut seed:Scenario=serde_json::from_str(include_str!("../../../../../scenarios/living-clearing.json")).unwrap();
+        seed.map=None;seed.arenas.clear();seed.weather=None;seed.food_sources.clear();
+        let mut far=seed.players[0].clone();far.id=99;far.position=9;far.name="Far away".into();
+        seed.players.push(far);
+        for player in seed.players.iter_mut().filter(|p|p.id!=99) {player.position=0;player.food=10;player.energy=100;}
+        let mut before=World::new("local-action-domain".into(),seed).unwrap();
+        before.enable_client_controllers().unwrap();before.advance_ms(50);
+        let actor=before.players[0].id;let target=before.players[1].id;
+        if skill==Skill::Attack {before.players[1].health=20;}
+        let mut action=Action::new(skill.clone());
+        if matches!(skill,Skill::Attack|Skill::Give) {action.target=Some(target);}
+        if skill==Skill::Move {action.destination=Some(1);}
+        if skill==Skill::Speak {action.text=Some("Local spoken evidence".into());}
+        let receipt=before.participant_apply(actor,Request {api_version:API_VERSION.into(),request_id:"local-action".into(),
+            control_epoch:before.participants[&actor].control_epoch,
+            command:if skill==Skill::Speak {Command::Speak{text:action.text.clone().unwrap(),expires_tick:10}}
+                else {Command::StartAction{expected_revision:before.players[0].generation,action}}}).unwrap();
+        assert!(receipt.ok,"{:?}",receipt.error);
+        before.events.clear();
+        let positions=action_clock::cells(&before.initial,before.players[0].position);
+        let mut rows=fixture(&before);
+        rows.actors.retain(|p|positions.contains(&p.position));
+        let included:BTreeSet<_>=rows.actors.iter().map(|p|p.actor).collect();
+        assert!(!included.contains(&99));
+        rows.minds.retain(|p|included.contains(&p.actor));
+        rows.mind_histories.retain(|p|included.contains(&p.actor));
+        rows.participants.retain(|p|included.contains(&p.actor));
+        rows.controllers.retain(|p|included.contains(&p.actor));
+        rows.bootstraps.retain(|p|included.contains(&p.actor));
+        rows.experiences.retain(|p|included.contains(&p.actor));
+        rows.receipts.retain(|p|included.contains(&p.actor));
+        rows.aux.retain(|p|included.contains(&p.actor));
+        rows.sites.retain(|p|positions.contains(&p.position));
+        rows.archives.retain(|p|positions.contains(&p.position));
+        rows.stations.retain(|p|positions.contains(&p.position));
+        let (mut local,_)=assemble(rows,None,false).unwrap();
+        assert!(local.local_clock_actor(actor));
+        let selection=simulation::clock::Selection::new(&local,[actor]);
+        let mut reference=before.clone();reference.advance_ms(50);
+        local.advance_actions_ms(50,&mut (),&selection,true);
+        assert_eq!(json!(local.events),json!(reference.events),"ordered evidence for {skill:?}");
+        for player in &reference.players {
+            if included.contains(&player.id) {
+                assert_eq!(json!(local.players.iter().find(|p|p.id==player.id).unwrap()),json!(player),"physical actor {skill:?}");
+                assert_eq!(json!(local.participants[&player.id]),json!(reference.participants[&player.id]),"recipient {skill:?}");
+            } else {
+                assert_eq!(json!(before.players.iter().find(|p|p.id==player.id).unwrap()),json!(player),"omitted actor must not change");
+                assert_eq!(json!(before.participants[&player.id]),json!(reference.participants[&player.id]));
+            }
+        }
+        for site in &local.sites {assert_eq!(json!(site),json!(reference.sites.iter().find(|s|s.position==site.position).unwrap()));}
+    }
+}
+
 fn fixture(w: &World) -> Rows {
     let mut next = 1;
     let mut captures = vec![];
     Rows {
+        controllers: w.participants.iter().filter_map(|(&a,p)|p.client_controller.as_ref().map(|c|SimNativeController::from_state(&w.run,a,c))).collect(),
+        bootstraps: w.participants.iter().filter_map(|(&a,p)|p.client_controller.as_ref().map(|c|SimControllerBootstrap { key:key(&w.run,a), run:w.run.clone(),actor:a,body:json(&c.bootstrap) })).collect(),
         head: SimNativeHead::from_world(w),
         definitions: definitions(w),
         actors: w
@@ -149,6 +209,9 @@ fn scoped_materialized(w: &World, actor: u32, materialize: bool) -> World {
         .chain([actor])
         .collect();
     rows.aux.retain(|a| aux_ids.contains(&a.actor));
+    if materialize {
+        rows.aux = rows.aux.into_iter().map(|row| SimRenderActorSupport::from_aux(row).into_aux()).collect();
+    }
     rows.minds.retain(|m| m.actor == actor);
     rows.mind_histories.retain(|m| m.actor == actor);
     rows.participants.retain(|p| p.actor == actor);
@@ -195,7 +258,19 @@ fn cold_fixture(w: &World) -> (World, [Arc<std::sync::atomic::AtomicUsize>; 3], 
         (l.id, data)
     }).collect();
     let captures = std::mem::take(&mut rows.captures).into_iter().map(|c| (c.lease_id, c)).collect();
+    let bootstraps: BTreeMap<_,_> = std::mem::take(&mut rows.bootstraps).into_iter().map(|b|(b.actor,b)).collect();
+    let receipt_values: BTreeMap<u32, Vec<Receipt>> = rows.participants.iter().map(|p| (p.actor,
+        rows.receipts.iter().filter(|r|r.actor==p.actor).map(|r|Receipt {
+            request_id:r.request_id.clone(), fingerprint:r.fingerprint.clone(), ok:r.ok, error:r.error.clone(), event:r.event,
+        }).collect())).collect();
+    rows.receipts.clear();
     let reader = Arc::new(ColdReader {
+        receipts: Box::new(move |_,actor| Ok(receipt_values.get(&actor).cloned().unwrap_or_default())),
+        bootstrap: Box::new(move |run,actor| {
+            let b = bootstraps.get(&actor).ok_or("missing bootstrap")?;
+            if b.run != run { return Err("foreign bootstrap".into()); }
+            parse(&b.body)
+        }),
         mind: Box::new(move |run, actor| {
             mind_count.fetch_add(1, Ordering::SeqCst);
             let row = minds.get(&actor).ok_or("missing mind")?;
@@ -241,6 +316,7 @@ fn cold_clock_defers_payloads_and_matches_full_clock_across_storage_reload() {
             full.events.clear();
             let (mut cold, counts, captures) = cold_fixture(&full);
             assert_eq!(counts.each_ref().map(|n| n.load(Ordering::SeqCst)), [0, 0, 0], "assembly fetches no cold rows");
+            assert!(cold.participants.values().all(|s| !s.experiences.is_loaded()), "assembly does not decode trace metadata");
             let due = (0..cold.players.len()).map(|i| cold.actor_clock_hint(i))
                 .filter(|h| h.active || h.due_ms <= cold.timing.time_ms + delta).map(|h| h.actor).collect::<Vec<_>>();
             let selection = simulation::clock::Selection::new(&cold, due);
@@ -265,6 +341,8 @@ fn idle_clock_has_no_cold_dependencies_and_cow_does_not_load_untouched_fields() 
     full.advance_ms(50);
     cold.advance_ms_selected(50, &mut (), Some(&selection));
     assert_eq!(counts.each_ref().map(|n| n.load(Ordering::SeqCst)), [0, 0, 0]);
+    assert!(cold.participants.values().all(|s| !s.experiences.is_loaded()), "idle physics leaves trace metadata untouched");
+    assert!(cold.participants.values().all(|s| !s.receipts.is_loaded()), "idle physics must not fetch command receipts");
     assert_eq!(json(&cold), json(&full));
 }
 
@@ -641,5 +719,115 @@ fn scoped_presentation_and_human_intents_match_full_kernel() {
             let intent: simulation::Decision = serde_json::from_value(intent).unwrap();
             differential_operation(&mut w, actor, None, Some(intent));
         }
+    }
+}
+
+#[test]
+fn observer_render_matches_full_truth_with_one_private_inspector() {
+    for mut w in worlds() {
+        w.advance_ms(2500);
+        let full = simulation::client_view::snapshot(&w, true, 0, &w.events);
+        for actor in w.players.iter().map(|p| p.id) {
+            let mut rows = fixture(&w);
+            rows.minds.retain(|p| p.actor == actor);
+            rows.mind_histories.retain(|p| p.actor == actor);
+            rows.participants.retain(|p| p.actor == actor);
+            rows.controllers.retain(|p| p.actor == actor);
+            rows.bootstraps.retain(|p| p.actor == actor);
+            rows.experiences.retain(|p| p.actor == actor);
+            rows.leases.clear(); rows.lease_evidence.clear(); rows.captures.clear(); rows.receipts.clear();
+            rows.aux = rows.aux.into_iter().map(|row| SimRenderActorSupport::from_aux(row).into_aux()).collect();
+            let (light, _) = assemble(rows, Some(actor), false).unwrap();
+            for selected in [Some(actor), None] {
+                let projected = simulation::client_view::observer_render(&light, selected, &w.events);
+                assert_eq!(projected, simulation::client_view::observer_render(&w, selected, &w.events));
+                for player in projected["players"].as_array().unwrap() {
+                    let id = player["id"].as_u64().unwrap() as u32;
+                    let original = full["players"].as_array().unwrap().iter().find(|p| p["id"] == id).unwrap();
+                    if selected == Some(id) { assert_eq!(player, original); }
+                    else {
+                        assert!(player.get("beliefs").is_none());
+                        assert!(player.get("knowledge").is_none());
+                        for field in ["id","name","position","health","hunger","energy","food","controller"] {
+                            assert_eq!(player[field], original[field], "render field {field}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn client_controller_rows_roundtrip_without_hydrating_seed_on_clock() {
+    let scenario = serde_json::from_str(include_str!("../../../../../scenarios/survival.json")).unwrap();
+    let mut original = World::new("native-client-boundary".into(),scenario).unwrap();
+    original.enable_client_controllers().unwrap();
+    let expected = serde_json::to_value(&original).unwrap();
+    let (roundtrip,_) = assemble(fixture(&original),None,true).unwrap();
+    assert_eq!(serde_json::to_value(&roundtrip).unwrap(),expected);
+    let mut rows = fixture(&original);
+    let bootstraps: BTreeMap<_,_> = std::mem::take(&mut rows.bootstraps).into_iter().map(|b|(b.actor,b)).collect();
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = calls.clone();
+    let reader = Arc::new(ColdReader {
+        receipts:Box::new(|_,_|Err("unexpected receipts load".into())),
+        bootstrap:Box::new(move |run,actor| {
+            seen.fetch_add(1,std::sync::atomic::Ordering::SeqCst);
+            let b=bootstraps.get(&actor).ok_or("missing seed")?;
+            if b.run != run {return Err("foreign seed".into());}
+            parse(&b.body)
+        }),
+        mind:Box::new(|_,_|Err("unexpected mind load".into())),
+        experience:Box::new(|_,_,_|Err("unexpected experience load".into())),
+        legacy_experiences:Box::new(|_,_|Err("unexpected trace load".into())),
+        lease:Box::new(|_,_,_|Err("unexpected lease load".into())),
+    });
+    // Test the seed loader independently of the existing history loaders.
+    let (mut roundtrip,_) = assemble(fixture(&original),None,true).unwrap();
+    for c in rows.controllers {
+        let (reader,run,actor)=(reader.clone(),c.run,c.actor);
+        roundtrip.participants.get_mut(&actor).unwrap().client_controller.as_mut().unwrap().bootstrap = Deferred::load_with(move || (reader.bootstrap)(&run,actor));
+    }
+    roundtrip.advance_ms(50);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst),0);
+    assert!(roundtrip.participants.values().all(|p|!p.client_controller.as_ref().unwrap().bootstrap.is_loaded()));
+}
+#[test]
+fn unchanged_personal_evidence_reuses_heads_without_loading_history() {
+    let mut state = ParticipantState::default();
+    let row = SimNativeParticipant::from_state("retained-evidence", 3, &state);
+    state.experiences = Deferred::load_with(|| Err("unchanged history must remain unloaded".into()));
+    let previous = state.clone();
+    state.control_epoch += 1;
+    let heads = retained_experience_heads(&state, Some(&previous), Some(&row));
+    assert_eq!(heads.as_deref(), Some(row.experiences.as_str()));
+    let updated = SimNativeParticipant::from_state_with_heads("retained-evidence", 3, &state, heads);
+    assert_eq!(updated.control_epoch, 1);
+    assert_eq!(updated.experiences, row.experiences);
+    assert!(!state.experiences.is_loaded());
+    assert!(retained_experience_heads(&state, None, Some(&row)).is_none());
+    let mut legacy = row.clone();
+    legacy.experiences = "{\"native_experience_rows_v1\":[]}".into();
+    assert!(retained_experience_heads(&state, Some(&previous), Some(&legacy)).is_none());
+    state.experiences = Vec::new().into();
+    assert!(retained_experience_heads(&state, Some(&previous), Some(&row)).is_none());
+}
+
+#[test]
+fn deferred_render_matches_eager_without_experience_payload_reads() {
+    use std::sync::atomic::Ordering;
+    for mut world in worlds() {
+        world.advance_ms(2500);
+        let (cold, counts, _) = cold_fixture(&world);
+        for player in &world.players {
+            for observer in [false, true] {
+                assert_eq!(
+                    simulation::client_view::live_render(&cold, observer, player.id, Some(player.id)),
+                    simulation::client_view::live_render(&world, observer, player.id, Some(player.id)));
+            }
+            assert_eq!(cold.participant_status(player.id).unwrap(), world.participant_status(player.id).unwrap());
+        }
+        assert_eq!(counts[1].load(Ordering::SeqCst), 0, "render must not load private experience payloads");
     }
 }

@@ -535,6 +535,9 @@ impl World {
             created,
             "newborn seed habit",
         )?;
+        if self.participants.values().any(|p|p.client_controller.is_some()) {
+            self.enable_actor_client(child)?;
+        }
         Ok(actor)
     }
     pub(super) fn apply_lifecycle_effect(

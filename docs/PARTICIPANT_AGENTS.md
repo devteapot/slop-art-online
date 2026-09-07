@@ -45,12 +45,30 @@ This adapter uses official Rust SDK `rmcp = 3.2.0`, stdio, and the current MCP *
 | `patch_subtree` | Requires current policy revision and canonical `root/0/guard`-style path. Atomically replaces one node after validating the resulting whole tree. |
 | `speak` | Requires current control epoch, chosen text and expiry tick. Queues speech independently of policy and learning revisions. |
 | `reflect` | Requires current learning revision and observed cursor. Applies bounded interpretations, caution/trust/belief changes and optional goal independently of execution. |
+| `publish_knowledge` | Client-control worlds only. Explicitly submits a cited assessment or optional assertion to authority-held knowledge; private reflection alone does not satisfy physical research assessment prerequisites. |
+
+New development runs use the [client authority boundary](CLIENT_AUTHORITY_BOUNDARY.md).
+Policy installation, patching and reflection run in the separate controller
+database, with `client:` receipt fingerprints and event ID zero. Its fast loop
+submits revision-checked `start_action`/`cancel_action` requests to the world.
+External implementations may consume the scoped world protocol directly instead.
+Private reflection drafts remain private until explicitly published. The legacy
+authority-executed policy contract remains selectable with
+`BEVY_DEV_LEGACY_CONTROLLER=1`; historical evidence below uses that contract.
 
 Every mutation carries `api_version` (the MCP adapter supplies it), a unique `request_id` and the observed `control_epoch`. The authenticated grant determines the run and actor; callers cannot select another actor. Wrong versions/epochs, invalid trees, unknown fields, hidden targets and stale revisions are rejected. A command is atomic; a multi-operation harness proposal is a sequence of separately atomic commands, not a transaction. A failed command leaves intent/learning unchanged and retains a rejection receipt.
 
 Patch semantics retain ancestor and unaffected sibling sequence progress. Cursors and branch state at or below the replaced node reset. The running attempt is interrupted only when its active leaf lies inside that subtree. The next tick rechecks guards, so preserved progress is still subject to current conditions. Tree bounds remain 64 nodes, depth 8, eight children and the shared skill requirements.
 
-The installed fast tree continues while reasoning is delayed, disconnected or absent. A new participant assignment or active grant revocation increments the control epoch and cancels queued speech, preserving the already installed tree. A same-identity switch to observer preserves committed intent/speech so paused human input can be stepped; re-entry as participant advances the epoch. Grant removal also removes the caller-specific row. Death and stopped runs reject new effects and cancel queued speech. Slow harness calls are cancelled on death, stop, disconnect or epoch change, and the authority independently checks submission validity.
+The installed fast tree continues while model inference is delayed or absent,
+provided its controller relay remains connected. Disconnecting the relay stops
+new world submissions; an already accepted finite action remains subject to
+physical timing and interruption. The legacy contract keeps its tree in the
+world instead. A new assignment or active grant revocation increments the control
+epoch and cancels queued speech. A native controller whose epoch changes requires
+explicit handoff. Death and stopped runs reject new effects. Slow harness calls
+are cancelled on death, stop, disconnect or epoch change, and the authority
+independently checks submission validity.
 
 Independent speech is FIFO, at most eight queued utterances, 1–1000 characters, with expiry from the next tick through 30 ticks ahead. Delivery occurs after movement/consequences at the speaker's actual position, to living listeners within distance two. Tree speech shares the one-utterance-per-character-per-tick limit; a repeatedly speaking tree can delay queued speech until expiry. Cancellation is audited. Hearing creates a perception, never automatic belief agreement.
 

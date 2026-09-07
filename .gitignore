@@ -14,6 +14,9 @@
 # Local NPC endpoint credentials; never part of run evidence
 /.local/credentials/
 
+# Temporary test journals when the system temporary directory reaches its quota
+/.local/test-tmp/
+
 # Generated Bevy WASM bundle
 /client/dist/
 

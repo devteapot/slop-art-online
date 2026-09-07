@@ -208,10 +208,10 @@ impl Condition {
         Ok(())
     }
     pub fn evaluate(&self, p: &Player) -> (bool, Vec<u64>) {
-        scripting::Registry::default()
-            .law(
+        let laws = scripting::Registry::default();
+        laws.law(
                 "guard",
-                json!({"condition":self,"player":scripting::subjective(p)}),
+                json!({"condition":self,"player":laws.guard_subjective(p, self)}),
             )
             .expect("bundled subjective guard script must be valid")
     }
@@ -306,7 +306,7 @@ impl World {
                     if status != Status::Running { e.state.entries.remove(path); }
                     return status;
                 }
-                let mut subjective = scripting::subjective(&self.players[i]);
+                let mut subjective = self.scripts.guard_subjective(&self.players[i], condition);
                 subjective["charge"] = self.body_support_context(self.players[i].id)["charge"].as_i64().unwrap_or(0).into();
                 let (allowed, sources): (bool, Vec<u64>) = match self.scripts.law(
                     "guard",

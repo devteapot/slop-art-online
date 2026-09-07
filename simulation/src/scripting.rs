@@ -10,6 +10,8 @@ use std::{
     rc::Rc,
 };
 
+mod guard_input;
+
 pub const API_VERSION: u32 = 1;
 const MAX_SOURCE: usize = 32_768;
 const MAX_CONTENT: usize = 1_048_576;
@@ -236,6 +238,29 @@ struct CachedScript {
     compiled: Rc<Compiled>,
     source_bytes: usize,
 }
+struct CachedScopedScript {
+    script: CachedScript,
+    layers: Vec<(crate::laws::LawRef, crate::laws::LawArtifact)>,
+}
+thread_local! { static SCOPED_SCRIPT_FAST_CACHE: RefCell<Vec<CachedScopedScript>> = const { RefCell::new(Vec::new()) }; }
+fn remember_scoped_script(definition: &Definition, law: &Definition,
+    dependencies: &BTreeMap<String, &Definition>,
+    layers: &[(crate::laws::LawRef, crate::laws::LawArtifact)], compiled: &Rc<Compiled>) {
+    const SOURCE_BUDGET: usize = 2 * MAX_CONTENT;
+    let source_bytes = definition.source.len() + definition.description.len() + law.source.len() + law.description.len()
+        + dependencies.values().map(|d| d.source.len() + d.description.len()).sum::<usize>()
+        + layers.iter().map(|(_, a)| a.source.len()).sum::<usize>();
+    if source_bytes > SOURCE_BUDGET { return; }
+    SCOPED_SCRIPT_FAST_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        while cache.len() >= 8 || cache.iter().map(|c| c.script.source_bytes).sum::<usize>() + source_bytes > SOURCE_BUDGET {
+            cache.remove(0);
+        }
+        cache.push(CachedScopedScript { script: CachedScript { definition: definition.clone(), law: law.clone(),
+            dependencies: dependencies.iter().map(|(k, d)| (k.clone(), (*d).clone())).collect(),
+            compiled: compiled.clone(), source_bytes }, layers: layers.to_vec() });
+    });
+}
 thread_local! { static SCRIPT_FAST_CACHE: RefCell<Vec<CachedScript>> = const { RefCell::new(Vec::new()) }; }
 fn remember_script(definition: &Definition, law: &Definition, dependencies: &BTreeMap<String, &Definition>,
     compiled: &Rc<Compiled>) {
@@ -354,7 +379,7 @@ impl Registry {
             revision: *self.active.get(id).ok_or("unknown scripted skill")?,
         })
     }
-    fn definition(&self, r: &DefinitionRef) -> Result<&Definition, String> {
+    pub(crate) fn definition(&self, r: &DefinitionRef) -> Result<&Definition, String> {
         self.history
             .get(&r.id)
             .and_then(|v| v.get(&r.revision))
@@ -828,6 +853,13 @@ impl Registry {
         self.dependencies(definition, &mut BTreeSet::new(), &mut dependencies)?;
         // References alone are insufficient across independently restored worlds.
         // Include exact source and dependency contents, as in the unscoped cache.
+        if let Some(compiled) = SCOPED_SCRIPT_FAST_CACHE.with(|cache| cache.borrow().iter().rev()
+            .find(|c| c.script.definition == *definition && c.script.law == *law && c.layers == layers
+                && c.script.dependencies.len() == dependencies.len()
+                && c.script.dependencies.iter().all(|(key, value)| dependencies.get(key).is_some_and(|current| value == *current)))
+            .map(|c| c.script.compiled.clone())) {
+            return Ok(compiled);
+        }
         let key = format!(
             "scoped:{:x}",
             Sha256::digest(
@@ -836,6 +868,7 @@ impl Registry {
             )
         );
         if let Some(compiled) = CACHE.with(|cache| cache.borrow().get(&key).cloned()) {
+            remember_scoped_script(definition, law, &dependencies, layers, &compiled);
             return Ok(compiled);
         }
         // Dispatch needs only the pinned base definition, not registry history or
@@ -849,7 +882,7 @@ impl Registry {
         };
         registry.insert(law.clone());
         let base_ref = base.clone();
-        let layers = layers.to_vec();
+        let captured_layers = layers.to_vec();
         let mut e = engine();
         e.register_fn(
             "scoped_law_dispatch",
@@ -872,7 +905,7 @@ impl Registry {
                 let result = registry
                     .call_law_layers(
                         &base_ref,
-                        &layers,
+                        &captured_layers,
                         &mut state.faults.borrow_mut(),
                         hook.as_str(),
                         v,
@@ -891,11 +924,11 @@ impl Registry {
         let module =
             rhai::Module::eval_ast_as_new(Scope::new(), &law_ast, &e).map_err(|e| e.to_string())?;
         e.register_static_module("law", module.into());
-        for (id, dep) in dependencies {
+        for (id, dep) in &dependencies {
             let ast = compile(&e, &dep.source)?;
             let module =
                 rhai::Module::eval_ast_as_new(Scope::new(), &ast, &e).map_err(|e| e.to_string())?;
-            e.register_static_module(id, module.into());
+            e.register_static_module(id.clone(), module.into());
         }
         let ast = compile(&e, &definition.source)?;
         let compiled = Rc::new(Compiled { engine: e, ast });
@@ -906,6 +939,7 @@ impl Registry {
             }
             cache.insert(key, compiled.clone());
         });
+        remember_scoped_script(definition, law, &dependencies, layers, &compiled);
         Ok(compiled)
     }
 

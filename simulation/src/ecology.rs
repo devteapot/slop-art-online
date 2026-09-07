@@ -46,7 +46,7 @@ impl World {
             for i in 0..self.players.len() {
                 if self.players[i].health > 0 && self.players[i].position == source.position {
                     self.perceive(i,event,"food_growth",None,source.position,json!({"food_delta":produced,"food_after":after}))?;
-                    self.observe_site(i)?;
+                    self.observe_site_facts(i)?;
                     self.wake(self.players[i].id);
                 }
             }
@@ -113,6 +113,70 @@ mod tests {
         finite.advance_ms(10000);
         assert!(finite.sites.iter().all(|s|s.food==0));
         assert!(!finite.events.iter().any(|e|e.kind=="resource_produced"));
+    }
+
+    #[test]
+    fn growth_refreshes_site_facts_without_reobserving_crowded_people() {
+        for population in [2, 8, 32] {
+            for client_mode in [false, true] {
+                let mut seed = scenario();
+                let template = seed.players[0].clone();
+                seed.players = (1..=population).map(|id| {
+                    let mut player = template.clone();
+                    player.id = id;
+                    player.name = format!("person-{id}");
+                    player.position = 0;
+                    player
+                }).collect();
+                let mut world = World::new("growth-crowd".into(), seed).unwrap();
+                world.enable_participants();
+                if client_mode { world.enable_client_controllers().unwrap(); }
+                let start = world.events.len();
+                world.renew_food(2500).unwrap();
+                let added = &world.events[start..];
+                assert_eq!(added.len(), 1 + 3 * population as usize);
+                assert_eq!(added.iter().filter(|e|e.kind == "resource_produced").count(), 1);
+                assert!(!added.iter().any(|e|e.data["kind"] == "seen_player"));
+                for player in &world.players {
+                    let site = added.iter().find(|e|e.actor == Some(player.id)
+                        && e.kind == "perception" && e.data["kind"] == "site").unwrap();
+                    assert_eq!(site.data["content"]["food"], 1);
+                    assert_eq!(site.data["content"]["food_source"]["capacity"], 3);
+                    if client_mode {
+                        let state = &world.participants[&player.id];
+                        let seed = &state.client_controller.as_ref().unwrap().bootstrap;
+                        let mut runtime = controller::runtime::Runtime::new(seed).unwrap();
+                        for experience in state.experiences.iter() {
+                            runtime.ingest(experience.clone(), &world.scripts).unwrap();
+                        }
+                        let recovered: controller::runtime::Runtime =
+                            serde_json::from_value(json!(runtime)).unwrap();
+                        let remembered = recovered.player.site_observations.iter()
+                            .find(|p|p.location == 0).unwrap();
+                        assert_eq!(remembered.source, site.id);
+                        assert_eq!(remembered.content["food"], 1);
+                        assert!(player.site_observations.is_empty(), "memory belongs to the client");
+                    }
+                }
+                // Explicit observation remains a full perception operation.
+                let start = world.events.len();
+                world.observe_site(0).unwrap();
+                assert_eq!(world.events[start..].iter()
+                    .filter(|e|e.data["kind"] == "seen_player").count(), population as usize - 1);
+            }
+        }
+    }
+
+    #[test]
+    fn growth_site_refresh_uses_the_active_observation_law() {
+        let mut world = World::new("growth-law".into(), scenario()).unwrap();
+        let law = world.scripts.history.get_mut("law").unwrap().get_mut(&1).unwrap();
+        law.source = law.source.replace("food:if site == () { 0 } else { site.food }",
+            "food:if site == () { 0 } else { site.food * 2 }");
+        world.renew_food(2500).unwrap();
+        assert_eq!(world.sites[0].food, 1);
+        let observation = world.players[0].site_observations.iter().find(|p|p.location == 0).unwrap();
+        assert_eq!(observation.content["food"], 2);
     }
 
     #[test]

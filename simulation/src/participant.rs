@@ -194,14 +194,16 @@ impl ParticipantState {
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ParticipantStateData {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_controller: Option<crate::controller::Authority>,
     pub control_epoch: u64,
     pub learning_revision: u64,
     pub cursor: u64,
-    pub experiences: Vec<Experience>,
+    pub experiences: crate::deferred::Deferred<Vec<Experience>>,
     pub speech: Vec<QueuedSpeech>,
     #[serde(default)]
     pub last_speech_tick: Option<u64>,
-    pub receipts: Vec<Receipt>,
+    pub receipts: crate::deferred::Deferred<Vec<Receipt>>,
     pub learned_sources: Vec<u64>,
     #[serde(default)]
     pub evidence_leases: Vec<EvidenceLease>,
@@ -210,7 +212,7 @@ pub struct ParticipantStateData {
     #[serde(default)]
     pub activity_position: Option<i32>,
 }
-fn record_activity(state: &mut ParticipantState, event: &Event, time_ms: u64, position: i32) {
+pub(crate) fn record_activity(state: &mut ParticipantState, event: &Event, time_ms: u64, position: i32) {
     let moved = state.activity_position.is_some_and(|old| old != position);
     if moved {
         state.activity.push(json!({"kind":"move_step","location":position,"time_ms":time_ms}));
@@ -296,6 +298,16 @@ pub struct Request {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    StartAction { expected_revision: u64, action: Action },
+    CancelAction { expected_revision: u64 },
+    /// Explicitly submit an assessment/assertion for authority-held knowledge.
+    /// Private beliefs, goals and policy state are never part of this operation.
+    PublishKnowledge {
+        observed_cursor: u64,
+        source: u64,
+        interpretation: String,
+        knowledge: Option<crate::knowledge::KnowledgeDraft>,
+    },
     ReadObservation { after: u64, limit: usize },
     PinObservation {
         observed_cursor: u64,
@@ -326,7 +338,7 @@ pub enum Command {
 fn within(p: &str, root: &str) -> bool {
     p == root || p.starts_with(&format!("{root}/"))
 }
-fn replace_at(node: &mut Node, parts: &[&str], replacement: Node) -> Result<(), String> {
+pub(crate) fn replace_at(node: &mut Node, parts: &[&str], replacement: Node) -> Result<(), String> {
     if parts.is_empty() {
         *node = replacement;
         return Ok(());
@@ -380,7 +392,9 @@ impl World {
             return;
         };
         let location = self.players.iter().find(|p| p.id == actor).map_or(0, |p| p.position);
-        record_activity(self.participants.entry(actor).or_default(), e, self.timing.time_ms, location);
+        if !self.client_controlled(actor) {
+            record_activity(self.participants.entry(actor).or_default(), e, self.timing.time_ms, location);
+        }
         if !matches!(
             e.kind.as_str(),
             "perception"
@@ -468,13 +482,20 @@ impl World {
             "control_epoch":s.control_epoch,"policy_revision":self.players[i].generation,"learning_revision":s.learning_revision,
             "context":self.context(i),"experiences":experiences,"next_cursor":next,"latest_cursor":s.cursor,"oldest_cursor":oldest,"gap":after.saturating_add(1)<oldest,
             "receipts":s.receipts,"queued_speech":s.speech,
-            "read_observations":s.evidence_leases.iter().filter(|l| include_reads && l.expires_ms >= self.timing.time_ms && l.observation.is_capture()).map(captured_read).collect::<Result<Vec<_>,_>>()?,"capabilities":["replace_tree","patch_subtree","speak","reflect","pin_observation","read_observation"],
+            "read_observations":s.evidence_leases.iter().filter(|l| include_reads && l.expires_ms >= self.timing.time_ms && l.observation.is_capture()).map(captured_read).collect::<Result<Vec<_>,_>>()?,"capabilities":self.participant_capabilities(actor),
             "limits":{"tree_nodes":64,"tree_depth":8,"children":8,"speech_queue":8,"trace_retention":TRACE_LIMIT,"evidence_lease_ms":EVIDENCE_LEASE_MS,"evidence_leases":4,"reflections":8},
             "patch_semantics":"Replace one node at a canonical path with NO leading slash. The whole tree is root; zero-based children are root/0, root/1, root/2. A guarded child is root/2/guard and a when child is root/2/when. Paths such as /2, /root/0 and root/children/0 are invalid. /guard and /when descend into the CHILD, not its condition; replace the enclosing guard node to change its condition. Repeating a condition inside the child keeps the old outer condition active. Reset cursors at/under patch; retain ancestor/sibling progress; interrupt active leaf only if inside patch; next update rechecks current guards"}),
         )
     }
     /// Subscription status is deliberately small and stable between commands.
     /// Fresh subjective state comes only from an atomic ReadObservation receipt.
+    pub fn participant_capabilities(&self, actor:u32)->Vec<&'static str> {
+        if self.client_controlled(actor) {
+            vec!["read_observation","pin_observation","start_action","cancel_action","speak","publish_knowledge"]
+        } else {
+            vec!["read_observation","replace_tree","patch_subtree","speak","reflect","pin_observation"]
+        }
+    }
     pub fn participant_status(&self, actor: u32) -> Result<Value, String> {
         serde_json::from_str(&self.participant_status_json(actor)?).map_err(|e|e.to_string())
     }
@@ -498,7 +519,7 @@ impl World {
             "latest_cursor":s.cursor,"oldest_cursor":s.experiences.first().map(|e|e.cursor).unwrap_or(1),
             "control_epoch":s.control_epoch,"policy_revision":self.players[i].generation,"learning_revision":s.learning_revision,
             "context":{"player":{"health":self.players[i].health}},"receipts":s.receipts,
-            "capabilities":["read_observation","replace_tree","patch_subtree","speak","reflect","pin_observation"]
+            "capabilities":self.participant_capabilities(actor)
         });
         let read_observations=s.evidence_leases.iter().filter(|l|include_reads && l.expires_ms>=self.timing.time_ms && l.observation.is_capture()).map(captured_read).collect::<Result<Vec<_>,_>>()?;
         serde_json::to_string(&Status{head,read_observations}).map_err(|e|e.to_string())
@@ -612,6 +633,12 @@ impl World {
         }
         let cause=self.event(Some(actor),"participant_command",vec![],json!({"request_id":request.request_id,"command":request.command,"control_epoch":request.control_epoch}));
         match &request.command {
+            Command::StartAction { expected_revision, action } => {
+                self.controller_start_action(i, &request.request_id, *expected_revision, action, cause)?;
+            }
+            Command::CancelAction { expected_revision } => {
+                self.controller_cancel_action(i, *expected_revision, cause)?;
+            }
             Command::ReadObservation { after, limit } => {
                 let latest = self.participants[&actor].cursor;
                 if *after > latest { return Err("cursor ahead of character trace".into()); }
@@ -654,6 +681,7 @@ impl World {
                 reason,
                 tree,
             } => {
+                if self.client_controlled(actor) { return Err("behavior trees belong to the client controller".into()); }
                 if *expected_revision != self.players[i].generation {
                     return Err("stale policy revision".into());
                 }
@@ -676,6 +704,7 @@ impl World {
                 path,
                 subtree,
             } => {
+                if self.client_controlled(actor) { return Err("behavior trees belong to the client controller".into()); }
                 if *expected_revision != self.players[i].generation {
                     return Err("stale policy revision".into());
                 }
@@ -763,12 +792,36 @@ impl World {
                     json!({"text":text,"expires_tick":expires_tick}),
                 );
             }
+            Command::PublishKnowledge { observed_cursor, source, interpretation, knowledge } => {
+                if !self.client_controlled(actor) { return Err("explicit knowledge publication requires client control".into()); }
+                let s = &self.participants[&actor];
+                if *observed_cursor > s.cursor { return Err("cursor ahead of character trace".into()); }
+                let e = s.experiences.iter().find(|e| e.source == *source && e.cursor <= *observed_cursor)
+                    .or_else(|| s.evidence_leases.iter()
+                        // Controller/world reads are asynchronous. Any still-valid
+                        // own lease can prove this source, but never a later cursor.
+                        .filter(|l| l.expires_ms >= self.timing.time_ms)
+                        .flat_map(|l| l.experiences.iter()).find(|e| e.source == *source && e.cursor <= *observed_cursor))
+                    .ok_or("source not in supplied retained character trace")?;
+                if !matches!(e.kind.as_str(), "perception" | "skill_result" | "skill_progress" | "action_interrupted" | "behavior_interrupted" | "speech_cancelled") {
+                    return Err("source is not an experienced observation/outcome".into());
+                }
+                let percept = Percept {source:*source,tick:e.tick,kind:e.kind.clone(),
+                    from:e.data["from"].as_u64().and_then(|v| u32::try_from(v).ok()),location:e.location,content:(*e.data).clone()};
+                let reflection = Reflection {source:*source,interpretation:interpretation.clone(),knowledge:knowledge.clone(),
+                    caution_delta:0,trust_delta:0,belief:None};
+                let error:String = self.scripts.law("validate_reflection",json!(reflection))?;
+                if !error.is_empty() { return Err(error); }
+                self.interpret_knowledge(i, &reflection, &percept)?;
+                self.event(Some(actor), "knowledge_publication", vec![cause,*source], json!({"interpretation":interpretation,"knowledge":knowledge,"provenance":"client_reported"}));
+            }
             Command::Reflect {
                 expected_revision,
                 observed_cursor,
                 reflections,
                 goal,
             } => {
+                if self.client_controlled(actor) { return Err("interpretation belongs to the client controller".into()); }
                 let s = &self.participants[&actor];
                 if *expected_revision != s.learning_revision {
                     return Err("stale learning revision".into());

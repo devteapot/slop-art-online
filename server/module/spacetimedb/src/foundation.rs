@@ -4,7 +4,12 @@ mod client_access;
 mod storage;
 mod storage_codec;
 mod participant_delivery;
+mod audit_archive;
+mod deadline_clock;
+mod physical_clock;
 mod native_storage;
+mod controller_delivery;
+mod definition_cache;
 use storage::LoadedRun as SimRun;
 use simulation::{Controller, Decision, Scenario, World};
 use spacetimedb::{ReducerContext, Table};
@@ -28,7 +33,9 @@ fn advance_clock(world: &mut World, delta_ms: u64, selection: Option<&simulation
                 self.0 = Some(spacetimedb::log_stopwatch::LogStopwatch::new(phase));
             }
         }
-        world.advance_ms_selected(delta_ms, &mut Phases::default(), selection);
+        simulation::timing::with_diagnostics(
+            |name| Box::new(spacetimedb::log_stopwatch::LogStopwatch::new(name)),
+            || world.advance_ms_selected(delta_ms, &mut Phases::default(), selection));
     }
     #[cfg(not(feature = "clock-profile"))]
     world.advance_ms_selected(delta_ms, &mut (), selection);
@@ -57,7 +64,7 @@ fn load(ctx: &ReducerContext, run: &str) -> Result<(SimRun, World), String> {
 }
 pub(super) fn save(ctx: &ReducerContext, mut row: SimRun, mut world: World) {
     let encoded = if row.state == native_storage::FORMAT {
-        let ids = measured("native.save.rows", || native_storage::save(ctx, &world, &row.previous_participants, &row.native_lease_ids, &row.previous_players));
+        let ids = measured("native.save.rows", || native_storage::save(ctx, &world, &row.previous_participants, &row.native_lease_ids, &row.previous_players, row.previous_definitions.as_ref()));
         measured("native.save.delivery", || participant_delivery::publish(ctx, &world, &ids, &row.previous_participants, row.previous_time_ms));
         None
     } else {
@@ -67,12 +74,18 @@ pub(super) fn save(ctx: &ReducerContext, mut row: SimRun, mut world: World) {
         participant_delivery::publish(ctx, &world, &ids, &row.previous_participants, row.previous_time_ms);
         Some(encoded)
     };
+    physical_clock::refresh(ctx, &world, row.last_advanced_at);
     measured("native.save.audit", || append_audit(ctx, &world.run, world.events.drain(..)));
     if let Some(encoded) = encoded { storage::commit(ctx, row, encoded); }
     else { storage::commit_native(ctx, row); }
 }
 fn append_audit(ctx: &ReducerContext, run: &str, events: impl IntoIterator<Item = simulation::Event>) {
+    let mut first = 0;
+    let mut count = 0;
     for event in events {
+        if count == 0 { first = event.id; }
+        assert_eq!(event.id, first + count, "contiguous audit append");
+        count += 1;
         assert_eq!(event.run, run, "audit run identity");
         ctx.db.sim_audit().insert(SimAudit {
             key: format!("{}:{}", run, event.id),
@@ -83,6 +96,7 @@ fn append_audit(ctx: &ReducerContext, run: &str, events: impl IntoIterator<Item 
             json: serde_json::to_string(&event).unwrap(),
         });
     }
+    audit_archive::appended(ctx, run, first, count);
 }
 
 /// Explicit representation migration. No gameplay event, controller change,
@@ -258,5 +272,15 @@ pub fn sim_create_participant(
         w.record_initial_participant_event(&e);
     }
     save(ctx, row, w);
+    Ok(())
+}
+
+/// New runs execute controller policies in participant clients.
+#[spacetimedb::reducer]
+pub fn sim_create_client_world(ctx: &ReducerContext, run: String, scenario: String) -> Result<(), String> {
+    sim_create_participant(ctx, run.clone(), scenario)?;
+    let (row, mut world) = load(ctx, &run)?;
+    world.enable_client_controllers()?;
+    save(ctx, row, world);
     Ok(())
 }

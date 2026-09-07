@@ -33,7 +33,7 @@ just bevy-db-up                     # Docker
 just bevy-db-login                  # Once for this database volume.
 
 # Build authority and browser client; checked-in bindings already match.
-cargo build --locked -p server_module --target wasm32-unknown-unknown
+cargo build --locked -p server_module -p controller_module --target wasm32-unknown-unknown
 cargo build --locked -p bridge --bin sao-dev-client --bin sao-agent-mcp
 just bevy-web-build
 
@@ -44,6 +44,25 @@ just bevy-dev
 Open **http://127.0.0.1:18891** after the host prints `Bevy game client`. Use this exact address: the enrollment API checks the browser's Origin. The run starts paused; **Step** advances once and **Resume** starts the clock. **Participate as You** enables human controls. Default startup installs an authored fixture for Mira; Tovan awaits an external runtime. See [Participant agents](PARTICIPANT_AGENTS.md) for optional model configuration.
 
 The host uses the 2.1.0 CLI for publishing and the **2.7.1 control CLI** for SQL and reducer calls. The latter supports JSON SQL output and string identity arguments; 2.1.0 did not support those control forms in the original verification. The exports above select both explicitly (adjust the install paths if needed). The host binds to `127.0.0.1` by default; `BEVY_DEV_BIND` changes the bind address and `BEVY_DEV_PORT` changes its port. Each host startup creates a new isolated database and bounded run without deleting an old one.
+
+New runs use a separate controller database for native policy execution and
+private mental state. The host publishes both modules by default; the controller
+WASM path can be overridden with `BEVY_DEV_CONTROLLER_MODULE`. Resident participant
+relays keep seed policies active, including for newly born native characters.
+`BEVY_DEV_LEGACY_CONTROLLER=1` explicitly selects the old authority-executed policy
+contract for regression work. Resuming an old `active.json` retains its recorded
+contract.
+
+The default two databases share one service process. To isolate controller CPU
+and memory, publish `controller_module.wasm` to a separate service using that
+service's own operator login, then set `BEVY_DEV_CONTROLLER_SERVER` and
+`BEVY_DEV_CONTROLLER_DATABASE` to its URL and database name before host startup.
+An explicitly supplied controller database must already exist; the host connects
+with private participant identities. Each world session has a private
+`.controller.json` companion for reconnect. See the
+[authority boundary](CLIENT_AUTHORITY_BOUNDARY.md) for ownership and evidence
+semantics, actual browser verification, finite workload results and the remaining
+model-provider and scale limitations.
 
 `bevy-db-login` saves a server-issued operator identity in `.local/credentials/bevy-cli.toml` with private file permissions, separate from your global CLI login. `just bevy-dev` selects that file automatically; the `SPACETIME_CONFIG_PATH` export also selects it when running `cargo run` directly. Keep it between restarts so you retain ownership of existing databases. A login issued by another server or a previous standalone instance is not valid for the new container: this can appear as `InvalidSignature`, HTTP 401 or a broken pipe while publishing. Use this project's login command after creating a new database volume, rather than replacing your global CLI login.
 
