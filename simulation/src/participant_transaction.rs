@@ -10,6 +10,7 @@ pub struct ParticipantTransaction {
     actor: u32,
 }
 pub struct ParticipantCommit {
+    pub clock_hint: crate::clock::ActorHint,
     pub player: Player,
     pub participant: ParticipantState,
     pub next_event: u64,
@@ -53,6 +54,7 @@ impl ParticipantTransaction {
     fn finish(mut self, receipt: Option<Receipt>) -> Result<ParticipantCommit, String> {
         let i = self.world.idx(self.actor)?;
         Ok(ParticipantCommit {
+            clock_hint: self.world.actor_clock_hint(i),
             player: self.world.players.remove(i),
             participant: self
                 .world

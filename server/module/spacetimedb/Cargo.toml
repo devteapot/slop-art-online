@@ -11,6 +11,8 @@ crate-type = ["cdylib"]
 [features]
 # Explicit diagnostic builds only: timers write module logs and perturb timings.
 clock-profile = []
+# Diagnostic control: same native storage, original full actor scan.
+clock-scan = []
 
 [dependencies]
 spacetimedb = { version = "=2.1.0", features = ["unstable"] }

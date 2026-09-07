@@ -6,7 +6,8 @@ dependency version or experiment result.
 
 Follow-up: [the first implementation pass](NATIVE_CLOCK_IMPLEMENTATION.md) records
 the runtime comparison, phase measurements, history separation and script-cache
-optimization. Indexed active/due/dirty clock execution remains future work.
+optimization. The subsequent [hybrid clock](HYBRID_CLOCK.md) implements indexed
+active/due selection, durable wakeups and on-demand private-history loading.
 
 ## Decision
 

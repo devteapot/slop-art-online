@@ -1329,11 +1329,10 @@ fn strong_reuse_owners_block_get_mut_and_make_mut_detaches_into_the_validated_sl
     let (mut world, layout, reuse) = decode_for_save(&initial.state, &mut store).unwrap();
     let lease = &mut world.participants.get_mut(&1).unwrap().evidence_leases[0];
     assert!(std::sync::Arc::get_mut(&mut lease.observation).is_none());
-    assert!(std::sync::Arc::get_mut(&mut lease.experiences).is_none());
     let original = lease.experiences.clone();
     let original_location = original[0].location;
-    std::sync::Arc::make_mut(&mut lease.experiences)[0].location += 1;
-    assert!(!std::sync::Arc::ptr_eq(&original, &lease.experiences));
+    (&mut *lease.experiences)[0].location += 1;
+    assert!(!original.same_snapshot(&lease.experiences));
     assert_eq!(original[0].location, original_location);
     let mut slow_store = store.clone();
     reset_reuse_counts(&mut store);
@@ -1352,7 +1351,8 @@ fn strong_reuse_owners_block_get_mut_and_make_mut_detaches_into_the_validated_sl
     drop(fresh_reuse);
     let lease = &mut fresh.participants.get_mut(&1).unwrap().evidence_leases[0];
     assert!(std::sync::Arc::get_mut(&mut lease.observation).is_some());
-    assert!(std::sync::Arc::get_mut(&mut lease.experiences).is_some());
+    // Deferred exposes mutation only through its copy-on-write boundary,
+    // exercised above; it does not expose the underlying Arc.
 }
 
 #[test]
@@ -1370,7 +1370,7 @@ fn equal_content_new_arc_allocations_miss_reuse_and_invalid_detached_payloads_fa
                     .unwrap();
             lease.observation = replacement.into();
         } else {
-            lease.experiences = std::sync::Arc::new((*lease.experiences).clone());
+            lease.experiences = (*lease.experiences).clone().into();
         }
         reset_reuse_counts(&mut store);
         let next = encode_with_reuse(&world, &mut store, Some(&layout), Some(&reuse)).unwrap();
@@ -1396,7 +1396,7 @@ fn equal_content_new_arc_allocations_miss_reuse_and_invalid_detached_payloads_fa
             body["actor"] = json!(2);
             lease.observation = serde_json::value::to_raw_value(&body).unwrap().into();
         } else {
-            std::sync::Arc::make_mut(&mut lease.experiences).swap(0, 1);
+            (&mut *lease.experiences).swap(0, 1);
         }
         reset_reuse_counts(&mut store);
         assert!(encode_with_reuse(&world, &mut store, Some(&layout), Some(&reuse)).is_err());
@@ -1810,7 +1810,7 @@ fn typed_experience_memo_clones_mutable_metadata_between_trace_and_captured_list
         before
     );
     let first = &mut restored.participants.get_mut(&1).unwrap().evidence_leases[0];
-    let changed = &mut std::sync::Arc::make_mut(&mut first.experiences)[first_index];
+    let changed = &mut (&mut *first.experiences)[first_index];
     changed.location -= 23;
     changed.kind.push_str(" changed capture");
     changed.parents.push(888_888);

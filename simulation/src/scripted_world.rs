@@ -315,6 +315,15 @@ impl World {
         delta_ms: u64,
         observer: &mut impl timing::AdvanceObserver,
     ) {
+        self.advance_ms_selected(delta_ms, observer, None);
+    }
+
+    pub fn advance_ms_selected(
+        &mut self,
+        delta_ms: u64,
+        observer: &mut impl timing::AdvanceObserver,
+        selection: Option<&crate::clock::Selection>,
+    ) {
         if self.stopped || delta_ms == 0 {
             return;
         }
@@ -336,7 +345,7 @@ impl World {
             candidate.event(None,"script_update_activated",vec![],json!({"effective_update":candidate.timing.updates+1,"revision":candidate.scripts.revision,"active":candidate.scripts.active}));
         }
         let activation=candidate.activate_laws(candidate.timing.updates+1);
-        let result = activation.and_then(|_|candidate.step_inner(delta_ms, observer));
+        let result = activation.and_then(|_|candidate.step_inner(delta_ms, observer, selection));
         observer.begin("kernel.commit");
         match result {
             Ok(()) => *self = candidate,

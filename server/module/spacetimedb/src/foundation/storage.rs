@@ -285,6 +285,15 @@ pub(super) fn load_owned(ctx: &ReducerContext, run: &str) -> Result<(LoadedRun, 
     hydrate(ctx, row)
 }
 fn hydrate(ctx: &ReducerContext, row: SimRunStore) -> Result<(LoadedRun, World), String> {
+    hydrate_with(ctx, row, false)
+}
+pub(super) fn load_clock(ctx: &ReducerContext, run: &str) -> Result<(LoadedRun, World), String> {
+    let row = ctx.db.sim_run_store().id().find(run.to_owned()).ok_or("run not found")?;
+    let result = hydrate_with(ctx, row, true)?;
+    if result.1.version != simulation::VERSION { return Err("old rules are read-only".into()); }
+    Ok(result)
+}
+fn hydrate_with(ctx: &ReducerContext, row: SimRunStore, clock: bool) -> Result<(LoadedRun, World), String> {
     let mut loaded = LoadedRun {
         row,
         catalog: Catalog::default(),
@@ -296,7 +305,9 @@ fn hydrate(ctx: &ReducerContext, row: SimRunStore) -> Result<(LoadedRun, World),
         previous_players: BTreeMap::new(),
     };
     if loaded.row.state == super::native_storage::FORMAT {
-        let (world, ids) = super::measured("native.load.rows", || super::native_storage::load(ctx, &loaded.row.id))?;
+        let (world, ids) = super::measured("native.load.rows", || if clock {
+            super::native_storage::load_clock(ctx, &loaded.row.id)
+        } else { super::native_storage::load(ctx, &loaded.row.id) })?;
         super::measured("native.load.clone", || {
             loaded.previous_participants = world.participants.clone();
             loaded.previous_players = world.players.iter().map(|p| (p.id,p.clone())).collect();

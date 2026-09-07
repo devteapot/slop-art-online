@@ -19,6 +19,8 @@ pub mod spatial;
 pub mod society;
 pub mod starting_behaviors;
 pub mod timing;
+pub mod deferred;
+pub mod clock;
 use bonsai_bt::Behavior;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -250,15 +252,15 @@ pub struct PlayerData {
     pub introspection: i32,
     pub fear: i32,
     #[serde(default)]
-    pub knowledge: Vec<knowledge::Holding>,
+    pub knowledge: deferred::Deferred<Vec<knowledge::Holding>>,
     #[serde(default)]
-    pub beliefs: Vec<Known>,
+    pub beliefs: deferred::Deferred<Vec<Known>>,
     #[serde(default)]
-    pub relationships: BTreeMap<u32, i32>,
+    pub relationships: deferred::Deferred<BTreeMap<u32, i32>>,
     #[serde(default)]
-    pub memories: Vec<Percept>,
+    pub memories: deferred::Deferred<Vec<Percept>>,
     #[serde(default)]
-    pub site_observations: Vec<Percept>,
+    pub site_observations: deferred::Deferred<Vec<Percept>>,
     #[serde(default)]
     pub execution: Option<Execution>,
     #[serde(default)]
@@ -740,7 +742,7 @@ impl World {
         if self.players[i].controller != controller {
             return Err("wrong controller".into());
         }
-        let evidence = remembered.unwrap_or_else(|| self.players[i].memories.clone());
+        let evidence = remembered.unwrap_or_else(|| self.players[i].memories.to_vec());
         self.validate(i, &d, &evidence)?;
         // Targets must be known through the actor's own evidence, including
         // retained local catalogs after their short arrival memories expire.
@@ -1155,7 +1157,8 @@ impl World {
         }
         Ok(())
     }
-    fn step_inner(&mut self, delta_ms: u64, observer: &mut impl timing::AdvanceObserver) -> Result<(), String> {
+    fn step_inner(&mut self, delta_ms: u64, observer: &mut impl timing::AdvanceObserver,
+        selection: Option<&clock::Selection>) -> Result<(), String> {
         if self.stopped {
             return Ok(());
         }
@@ -1199,6 +1202,13 @@ impl World {
                     timing::pulses(self.timing.actor_hazard_remainder_ms.entry(actor).or_default(), lived, periods.hazard_ms)?,
                 )
             } else { (needs_pulses, hazard_pulses) };
+            // Keep newborn clocks exact even on updates where no work is due.
+            // Earlier actors may have changed this actor or woken its policy;
+            // selection is rechecked here, in the original actor order.
+            if needs_pulses == 0 && hazard_pulses == 0
+                && selection.is_some_and(|s| !s.includes(self, &self.players[i])) {
+                continue;
+            }
             let before = self.players[i].hunger;
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -1304,7 +1314,7 @@ impl World {
         observer.begin("kernel.lifecycle_observation");
         self.refresh_lifecycle_observations()?;
         observer.begin("kernel.speech");
-        self.deliver_queued_speech()?;
+        self.deliver_queued_speech_selected(selection.is_some())?;
         observer.begin("kernel.requests");
         let invalid: Vec<_> = self
             .pending

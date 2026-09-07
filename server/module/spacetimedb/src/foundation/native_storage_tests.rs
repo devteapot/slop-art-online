@@ -65,6 +65,7 @@ fn fixture(w: &World) -> Rows {
             })
             .collect(),
         captures,
+        lease_evidence: vec![],
         receipts: w
             .participants
             .iter()
@@ -175,6 +176,96 @@ fn worlds() -> Vec<World> {
         w
     })
     .collect()
+}
+
+fn cold_fixture(w: &World) -> (World, [Arc<std::sync::atomic::AtomicUsize>; 3], BTreeMap<u64, SimNativeCapture>) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let mut rows = fixture(w);
+    let counts = std::array::from_fn(|_| Arc::new(AtomicUsize::new(0)));
+    let mind_count = counts[0].clone();
+    let experience_count = counts[1].clone();
+    let lease_count = counts[2].clone();
+    let minds: BTreeMap<_, _> = std::mem::take(&mut rows.mind_histories).into_iter().map(|m| (m.actor, m)).collect();
+    let experiences: Arc<BTreeMap<_, _>> = Arc::new(std::mem::take(&mut rows.experiences).into_iter()
+        .map(|e| ((e.actor, e.cursor), e)).collect());
+    let legacy = experiences.clone();
+    let leases: BTreeMap<_, _> = rows.leases.iter_mut().map(|l| {
+        let data = SimNativeLeaseEvidence { lease_id: l.id, run: l.run.clone(), actor: l.actor,
+            experiences: std::mem::replace(&mut l.experiences, LEASE_EVIDENCE.into()) };
+        (l.id, data)
+    }).collect();
+    let captures = std::mem::take(&mut rows.captures).into_iter().map(|c| (c.lease_id, c)).collect();
+    let reader = Arc::new(ColdReader {
+        mind: Box::new(move |run, actor| {
+            mind_count.fetch_add(1, Ordering::SeqCst);
+            let row = minds.get(&actor).ok_or("missing mind")?;
+            if row.run != run || row.actor != actor { return Err("foreign mind".into()); }
+            Ok(row.clone())
+        }),
+        experience: Box::new(move |run, actor, cursor| {
+            experience_count.fetch_add(1, Ordering::SeqCst);
+            let row = experiences.get(&(actor, cursor)).ok_or("missing experience")?;
+            if row.run != run { return Err("foreign experience".into()); }
+            Ok(row.clone())
+        }),
+        legacy_experiences: Box::new(move |run, actor| Ok(legacy.values()
+            .filter(|e| e.run == run && e.actor == actor).cloned().collect())),
+        lease: Box::new(move |run, actor, id| {
+            lease_count.fetch_add(1, Ordering::SeqCst);
+            let row = leases.get(&id).ok_or("missing lease")?;
+            if row.run != run || row.actor != actor { return Err("foreign lease".into()); }
+            parse(&row.experiences)
+        }),
+    });
+    let world = assemble_with(rows, None, false, Some(reader)).unwrap().0;
+    (world, counts, captures)
+}
+fn materialize_test_captures(w: &mut World, captures: &BTreeMap<u64, SimNativeCapture>) {
+    for state in w.participants.values_mut() {
+        for lease in &mut state.evidence_leases {
+            if let Some(id) = lease.observation.reference() {
+                lease.observation = serde_json::value::RawValue::from_string(captures[&id].observation.clone()).unwrap().into();
+            }
+        }
+    }
+}
+
+#[test]
+fn cold_clock_defers_payloads_and_matches_full_clock_across_storage_reload() {
+    use std::sync::atomic::Ordering;
+    for mut full in worlds() {
+        let actor = full.players[0].id;
+        let read = request(&full, actor, Command::ReadObservation { after: 0, limit: 128 });
+        full.participant_apply(actor, read).unwrap();
+        for delta in [50, 75, 250, 2_500, 50] {
+            full.events.clear();
+            let (mut cold, counts, captures) = cold_fixture(&full);
+            assert_eq!(counts.each_ref().map(|n| n.load(Ordering::SeqCst)), [0, 0, 0], "assembly fetches no cold rows");
+            let due = (0..cold.players.len()).map(|i| cold.actor_clock_hint(i))
+                .filter(|h| h.active || h.due_ms <= cold.timing.time_ms + delta).map(|h| h.actor).collect::<Vec<_>>();
+            let selection = simulation::clock::Selection::new(&cold, due);
+            full.advance_ms(delta);
+            cold.advance_ms_selected(delta, &mut (), Some(&selection));
+            assert_eq!(counts[2].load(Ordering::SeqCst), 0, "physics does not read leased evidence");
+            materialize_test_captures(&mut cold, &captures);
+            assert_eq!(json(&cold), json(&full), "full state, evidence and ordering after reload");
+        }
+    }
+}
+
+#[test]
+fn idle_clock_has_no_cold_dependencies_and_cow_does_not_load_untouched_fields() {
+    use std::sync::atomic::Ordering;
+    let mut full = worlds().remove(0);
+    for player in &mut full.players { player.execution = None; }
+    full.advance_ms(50);
+    full.events.clear();
+    let (mut cold, counts, _) = cold_fixture(&full);
+    let selection = simulation::clock::Selection::new(&cold, []);
+    full.advance_ms(50);
+    cold.advance_ms_selected(50, &mut (), Some(&selection));
+    assert_eq!(counts.each_ref().map(|n| n.load(Ordering::SeqCst)), [0, 0, 0]);
+    assert_eq!(json(&cold), json(&full));
 }
 
 #[test]

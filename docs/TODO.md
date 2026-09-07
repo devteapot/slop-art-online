@@ -100,9 +100,12 @@ Reincarnation/souls are explicitly deferred, with no implementation commitment. 
 
 ## Supporting technical debt
 
+- [x] Implement and differentially verify the [native hybrid clock](HYBRID_CLOCK.md): indexed active/due work, durable wakeups and on-demand private-history loading through the shared kernel.
+- [ ] Establish sustained cadence and thousand-player capacity with representative longer workloads; reduce remaining global scans and bound long-term evidence/storage growth without erasing historical audit evidence.
+
 - [ ] As mechanics evolve, provide reusable component experiment tooling for use-case-generated skill, belief and other mechanic investigations, using production implementations and traceable inputs/outputs. Preserve end-to-end verification and focused contract regressions; see [component experiments](AUDIT_AND_EXPERIMENTS.md#component-experiments). Deferred tooling direction, not an immediate framework build.
 - [ ] Use existing NPC event/memory indexes in hot queries where appropriate; do not duplicate existing schema indexes.
-- [ ] Measure spatial query cost before choosing an index/partitioning strategy. Population scale is not the current success criterion.
+- [ ] Measure spatial query cost before choosing a regional partitioning strategy. Thousands of players remain the target; finite clock trials do not establish that capacity.
 - [ ] Extract tick/action/controller responsibilities from large `lib.rs` and `npc_ai.rs` as the relevant contracts are implemented; avoid unrelated rewrites.
 - [ ] Keep scenario schemas, trace records, model/behavior/skill versions, and comparison readers aligned with mechanic changes.
 

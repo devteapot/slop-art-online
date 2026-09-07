@@ -160,8 +160,8 @@ SpacetimeDB itself does not need a GPU or either optional profile.
 | [Stack reference](STACK_REFERENCE.md) | Retained technology and source/configuration pointers |
 | [Diagrams](docs/diagrams/README.md) | Labeled target flows and current tick reference |
 | [ADR index](docs/adr/README.md) | Decision history and supersession boundaries |
-| [Root guidance](CLAUDE.md) | Working rules for coding agents |
-| [Module guidance](server/module/spacetimedb/CLAUDE.md) / [bridge guidance](server/bridge/CLAUDE.md) | Local source maps and implementation constraints |
+| [Root guidance](AGENTS.md) | Working rules for coding agents |
+| [Module guidance](server/module/spacetimedb/AGENTS.md) / [bridge guidance](server/bridge/AGENTS.md) | Local source maps and implementation constraints |
 
 ## License
 

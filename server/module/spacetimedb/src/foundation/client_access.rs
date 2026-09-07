@@ -284,7 +284,7 @@ pub fn sim_client_pulse(ctx: &ReducerContext, clock: SimClientClock) -> Result<(
         .find(&clock.run)
         .ok_or("clock missing")?;
     if !current.paused {
-        let (mut row, mut w) = super::measured("clock.load", || world(ctx, &clock.run))?;
+        let (mut row, mut w) = super::measured("clock.load", || storage::load_clock(ctx, &clock.run))?;
         if !w.stopped {
             let elapsed = ctx
                 .timestamp
@@ -302,10 +302,15 @@ pub fn sim_client_pulse(ctx: &ReducerContext, clock: SimClientClock) -> Result<(
                     serde_json::json!({"elapsed_ms":delta_ms}),
                 );
             } else {
-                super::measured("clock.advance", || super::advance_clock(&mut w, delta_ms));
+                #[cfg(not(feature = "clock-scan"))]
+                let selection = super::native_storage::select_clock(ctx, &w, delta_ms);
+                #[cfg(feature = "clock-scan")]
+                let selection = None;
+                super::measured("clock.advance", || super::advance_clock(&mut w, delta_ms, selection.as_ref()));
                 row.last_advanced_at += std::time::Duration::from_millis(delta_ms);
             }
             super::measured("clock.save", || save(ctx, row, w));
+            super::native_storage::report_clock_reads();
         }
     }
     Ok(())

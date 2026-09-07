@@ -128,6 +128,21 @@ fn ready_retrieval_selects_only_own_uncollected_physical_output() {
 }
 
 #[test]
+fn hybrid_clock_preserves_remote_owned_computation_after_owner_death() {
+    let mut eager = world();
+    submit(&mut eager, 1);
+    eager.players[0].position = 2;
+    eager.players[0].health = 0;
+    let mut selected = eager.clone();
+    for delta in [50, 950, 50, 950, 1_000, 50] {
+        crate::clock::tests::advance_pair(&mut eager, &mut selected, delta);
+    }
+    assert!(selected.events.iter().any(|e| e.kind == "compute_completed"));
+    selected = serde_json::from_value(serde_json::to_value(&selected).unwrap()).unwrap();
+    crate::clock::tests::advance_pair(&mut eager, &mut selected, 2_500);
+}
+
+#[test]
 fn infrastructure_permissions_materials_and_selection_are_atomic() {
     let mut w = world();
     let before = state(&w);

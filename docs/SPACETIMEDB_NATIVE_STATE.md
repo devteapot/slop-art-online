@@ -3,8 +3,9 @@
 New foundation runs store canonical state in private SpacetimeDB tables grouped
 by access pattern. Participant commands and participant Bevy input use indexed,
 actor-scoped transactions through the existing simulation kernel. They no longer
-hydrate, clone or serialize the whole World. The global clock still executes the
-shared deterministic World kernel; this refactor does not establish thousand-player
+hydrate, clone or serialize the whole World. The [hybrid global clock](HYBRID_CLOCK.md)
+uses indexed active/due selection and loads private histories on demand through the
+shared deterministic World kernel; this does not establish thousand-player
 capacity or sustained 20 Hz.
 
 ## Design and version evidence
@@ -58,7 +59,7 @@ human-controller availability flag uses a separate point lookup. Observer views
 and owner exports intentionally load full state. Bevy retains its existing JSON
 presentation contract, so its snapshot is not as incremental as the agent path.
 
-The global clock loads mutable components, preserves deterministic movement,
+The global clock loads hot components and private histories on demand, preserves deterministic movement,
 perception, speech, ecology, population and law ordering, then updates changed
 rows. It skips captured observation bodies. Explicit exports materialize those
 bodies and fail if any are missing. Copy-on-write character/participant state

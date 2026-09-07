@@ -144,7 +144,7 @@ impl LeaseReuse {
                 && old.lease.observed_cursor == lease.observed_cursor
                 && old.lease.expires_ms == lease.expires_ms
                 && Arc::ptr_eq(&old.lease.observation, &lease.observation)
-                && Arc::ptr_eq(&old.lease.experiences, &lease.experiences)
+                && old.lease.experiences.same_snapshot(&lease.experiences)
         })
     }
 }
@@ -513,7 +513,7 @@ pub(super) fn encode_with_reuse(
             lease.observation = serde_json::value::to_raw_value(&Value::Null)
                 .map_err(|_| "null encoding failed")?
                 .into();
-            lease.experiences = Arc::new(vec![]);
+            lease.experiences = vec![].into();
         }
     }
     let stored = StoredWorld {
@@ -772,9 +772,9 @@ fn decode_inner(
             .players
             .get(&player.id)
             .ok_or("missing player references")?;
-        player.memories = get_list(store, run, player.id, "memory", &refs.memories)?;
-        player.site_observations = get_list(store, run, player.id, "memory", &refs.sites)?;
-        player.knowledge = get_list(store, run, player.id, "holding", &refs.knowledge)?;
+        player.memories = get_list(store, run, player.id, "memory", &refs.memories)?.into();
+        player.site_observations = get_list(store, run, player.id, "memory", &refs.sites)?.into();
+        player.knowledge = get_list(store, run, player.id, "holding", &refs.knowledge)?.into();
     }
     for (&actor, state) in &mut world.participants {
         let refs = layout
@@ -845,14 +845,14 @@ fn decode_inner(
                 lease.observation =
                     get::<Box<RawValue>>(store, run, Some(actor), "observation", id)?.into();
             }
-            lease.experiences = Arc::new(experiences(
+            lease.experiences = experiences(
                 store,
                 &mut experience_memo,
                 run,
                 actor,
                 &refs.experiences,
                 lease.observed_cursor,
-            )?);
+            )?.into();
             validate_lease(run, actor, control_epoch, lease)?;
             if let Some(reuse) = &mut reuse {
                 reuse.actors.entry(actor).or_default().push(ValidatedLease {
@@ -1149,7 +1149,7 @@ pub(super) fn expand_status(
             observation: body.into(),
             observed_cursor: refs.observed_cursor,
             expires_ms: refs.expires_ms,
-            experiences: Arc::new(xs),
+            experiences: xs.into(),
         };
         validate_lease(run, actor, epoch, &lease)?;
         let observation = assemble_observation(&lease)?;

@@ -1,6 +1,6 @@
 # LLM reasoning above behavior execution
 
-**Target responsibilities**, not fixed call quotas or an exhaustive trigger implementation. Current bridge routes are `tree_generation`, `experience`, and `conversation`. See [bridge guidance](../../server/bridge/CLAUDE.md) for source/configuration and [vision](../SIMULATION_VISION.md#behavior-execution-and-llm-reasoning) for direction.
+**Target responsibilities**, not fixed call quotas or an exhaustive trigger implementation. Current bridge routes are `tree_generation`, `experience`, and `conversation`. See [bridge guidance](../../server/bridge/AGENTS.md) for source/configuration and [vision](../SIMULATION_VISION.md#behavior-execution-and-llm-reasoning) for direction.
 
 ```mermaid
 flowchart TD

@@ -194,6 +194,9 @@ async fn check(
         "sim_native_participant",
         "sim_native_experience",
         "sim_native_lease",
+        "sim_native_lease_evidence",
+        "sim_native_clock_actor",
+        "sim_native_clock_state",
         "sim_native_capture",
         "sim_participant_receipt",
     ] {

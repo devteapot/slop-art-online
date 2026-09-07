@@ -1,5 +1,9 @@
 # Native clock profiling and history separation
 
+Historical first pass. The subsequent [hybrid clock implementation](HYBRID_CLOCK.md)
+completes active/due selection and on-demand private-history loading. The results
+and deferred-work statements below describe this earlier pass.
+
 This implements the first measured optimization pass from
 [the clock research](NATIVE_CLOCK_RESEARCH.md). The runtime comparison identified
 instance retention; phase profiling identified repeated script-cache key encoding

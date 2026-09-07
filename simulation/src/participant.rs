@@ -15,6 +15,13 @@ pub struct Observation(ObservationPayload);
 #[derive(Clone, Debug)]
 enum ObservationPayload { Inline(Arc<RawValue>), Deferred(u64) }
 impl Observation {
+    pub fn same_snapshot(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (ObservationPayload::Inline(a), ObservationPayload::Inline(b)) => Arc::ptr_eq(a, b),
+            (ObservationPayload::Deferred(a), ObservationPayload::Deferred(b)) => a == b,
+            _ => false,
+        }
+    }
     pub fn deferred(id:u64)->Self {
         assert_ne!(id,0,"deferred observation needs a canonical identity");
         Self(ObservationPayload::Deferred(id))
@@ -65,7 +72,7 @@ pub struct EvidenceLease {
     pub observation: Observation,
     pub observed_cursor: u64,
     pub expires_ms: u64,
-    pub experiences: Arc<Vec<Experience>>,
+    pub experiences: crate::deferred::Deferred<Vec<Experience>>,
 }
 fn empty_observation() -> Observation {
     serde_json::value::to_raw_value(&Value::Null).unwrap().into()
@@ -128,13 +135,13 @@ impl Experience {
 pub struct ExperienceData(Arc<ExperienceDataInner>);
 #[derive(Debug)]
 struct ExperienceDataInner {
-    raw: Box<RawValue>,
+    raw: crate::deferred::Deferred<Box<RawValue>>,
     parsed: OnceLock<Value>,
 }
 impl From<&Value> for ExperienceData {
     fn from(value: &Value) -> Self {
         Self(Arc::new(ExperienceDataInner {
-            raw: serde_json::value::to_raw_value(value).expect("JSON value serializes"),
+            raw: serde_json::value::to_raw_value(value).expect("JSON value serializes").into(),
             parsed: OnceLock::new(),
         }))
     }
@@ -145,6 +152,13 @@ impl std::ops::Deref for ExperienceData {
         self.0.parsed.get_or_init(|| serde_json::from_str(self.0.raw.get()).expect("validated historical JSON"))
     }
 }
+impl ExperienceData {
+    pub fn load_with(loader: impl Fn() -> Result<Box<RawValue>, String> + Send + Sync + 'static) -> Self {
+        Self(Arc::new(ExperienceDataInner {
+            raw: crate::deferred::Deferred::load_with(loader), parsed: OnceLock::new(),
+        }))
+    }
+}
 impl Serialize for ExperienceData {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.0.raw.serialize(serializer)
@@ -153,7 +167,7 @@ impl Serialize for ExperienceData {
 impl<'de> Deserialize<'de> for ExperienceData {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Ok(Self(Arc::new(ExperienceDataInner {
-            raw: Box::<RawValue>::deserialize(deserializer)?,
+            raw: Box::<RawValue>::deserialize(deserializer)?.into(),
             parsed: OnceLock::new(),
         })))
     }
@@ -614,7 +628,7 @@ impl World {
                 let s = self.participants.get_mut(&actor).unwrap();
                 s.evidence_leases.retain(|l| l.expires_ms >= self.timing.time_ms);
                 s.evidence_leases.push(EvidenceLease { request_id: request.request_id.clone(), observation:serde_json::value::to_raw_value(&observation).map_err(|e|e.to_string())?.into(),
-                    observed_cursor: latest, expires_ms: self.timing.time_ms.saturating_add(EVIDENCE_LEASE_MS), experiences:Arc::new(experiences) });
+                    observed_cursor: latest, expires_ms: self.timing.time_ms.saturating_add(EVIDENCE_LEASE_MS), experiences:experiences.into() });
                 if s.evidence_leases.len() > 4 { s.evidence_leases.remove(0); }
             }
             Command::PinObservation { observed_cursor, sources } => {
@@ -632,7 +646,7 @@ impl World {
                 }
                 s.evidence_leases.retain(|l| l.expires_ms >= self.timing.time_ms && l.observed_cursor != *observed_cursor);
                 s.evidence_leases.push(EvidenceLease { request_id: request.request_id.clone(), observation: empty_observation(), observed_cursor: *observed_cursor,
-                    expires_ms: self.timing.time_ms.saturating_add(EVIDENCE_LEASE_MS), experiences:Arc::new(experiences) });
+                    expires_ms: self.timing.time_ms.saturating_add(EVIDENCE_LEASE_MS), experiences:experiences.into() });
                 if s.evidence_leases.len() > 4 { s.evidence_leases.remove(0); }
             }
             Command::ReplaceTree {
@@ -879,6 +893,9 @@ impl World {
         }
     }
     pub(super) fn deliver_queued_speech(&mut self) -> Result<(), String> {
+        self.deliver_queued_speech_selected(false)
+    }
+    pub(super) fn deliver_queued_speech_selected(&mut self, select: bool) -> Result<(), String> {
         if !self.participant_mode {
             return Ok(());
         }
@@ -888,6 +905,7 @@ impl World {
                 self.cancel_speech(actor, "character dead or run stopped");
                 continue;
             }
+            if select && !self.queued_speech_due(actor) { continue; }
             // One utterance per character per tick, after movement/consequences. FIFO with explicit expiry.
             let expired: Vec<_> = self.participants[&actor]
                 .speech

@@ -632,6 +632,31 @@ fn newborn_metabolism_starts_at_birth_between_global_pulse_boundaries() {
 }
 
 #[test]
+fn hybrid_clock_preserves_birth_relative_pulses_expiry_and_permanent_death() {
+    let mut eager = world();
+    eager.advance_ms(333);
+    offer(&mut eager, 1, 2);
+    install(&mut eager, 1, Action::new(Skill::Fabricate));
+    let mut selected = eager.clone();
+    for delta in [45_000, 2_167, 332, 1, 50] {
+        crate::clock::tests::advance_pair(&mut eager, &mut selected, delta);
+    }
+    assert_eq!(selected.lifecycle[&4].born_ms, 45_333);
+    assert_eq!(selected.players[selected.idx(4).unwrap()].hunger, 52);
+    selected = serde_json::from_value(serde_json::to_value(&selected).unwrap()).unwrap();
+    for w in [&mut eager, &mut selected] {
+        let i = w.idx(2).unwrap();
+        w.players[i].health = 1;
+        w.players[i].hunger = 100;
+    }
+    for delta in [2_500, 60_000, 12_000] {
+        crate::clock::tests::advance_pair(&mut eager, &mut selected, delta);
+    }
+    assert!(selected.players[selected.idx(2).unwrap()].health <= 0);
+    assert!(!selected.reproduction_offers.contains_key(&1));
+}
+
+#[test]
 fn care_need_guard_refreshes_after_meal_departure_and_other_cell_observation() {
     let mut w = world();
     let child = fabricate(&mut w, 1);

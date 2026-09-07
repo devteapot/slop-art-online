@@ -453,6 +453,23 @@ fn local_god_paid_authoring_installation_and_death_persistence() {
     let w: World = serde_json::from_value(json!(w)).unwrap();
     assert_eq!(w.law_at::<i32>(0, "cost", json!("gather")).unwrap(), 2);
 }
+
+#[test]
+fn hybrid_clock_preserves_paid_scoped_activation_and_author_death() {
+    let mut eager = world();
+    let (code, _) = prototype(&mut eager, 1, territory("west"), "fn cost(s){2}",
+        vec![case("cost", json!("gather"), json!(2))]);
+    install(&mut eager, 1, territory("west"), &code, None).unwrap();
+    eager.participant_manual(2, Decision { reason: "gather under the newly installed law".into(),
+        actions: vec![Action::new(Skill::Gather)], policy: None, reflections: vec![] }).unwrap();
+    let mut selected = eager.clone();
+    crate::clock::tests::advance_pair(&mut eager, &mut selected, 50);
+    assert_eq!(selected.law_scope_revision(&territory("west")), 1);
+    for w in [&mut eager, &mut selected] { w.players[0].health = 0; }
+    selected = serde_json::from_value(serde_json::to_value(&selected).unwrap()).unwrap();
+    crate::clock::tests::advance_pair(&mut eager, &mut selected, 2_500);
+    assert_eq!(selected.law_scope_revision(&territory("west")), 1);
+}
 #[test]
 fn universal_requires_own_assessed_exact_experiment_not_council_or_local_escalation() {
     let mut w = world();

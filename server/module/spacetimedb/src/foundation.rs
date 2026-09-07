@@ -17,7 +17,7 @@ fn measured<T>(_name: &str, work: impl FnOnce() -> T) -> T {
     work()
 }
 
-fn advance_clock(world: &mut World, delta_ms: u64) {
+fn advance_clock(world: &mut World, delta_ms: u64, selection: Option<&simulation::clock::Selection>) {
     #[cfg(feature = "clock-profile")]
     {
         #[derive(Default)]
@@ -28,10 +28,10 @@ fn advance_clock(world: &mut World, delta_ms: u64) {
                 self.0 = Some(spacetimedb::log_stopwatch::LogStopwatch::new(phase));
             }
         }
-        world.advance_ms_observed(delta_ms, &mut Phases::default());
+        world.advance_ms_selected(delta_ms, &mut Phases::default(), selection);
     }
     #[cfg(not(feature = "clock-profile"))]
-    world.advance_ms(delta_ms);
+    world.advance_ms_selected(delta_ms, &mut (), selection);
 }
 
 #[spacetimedb::table(accessor = sim_audit,
