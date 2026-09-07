@@ -2,7 +2,7 @@
 use bridge::participant::{new_session, ParticipantService};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use shared::module_bindings::{Reducer, SimParticipantStateTableAccess};
+use shared::module_bindings::{Reducer, SimMyParticipantHeadTableAccess, SimMyParticipantReceiptsTableAccess, SimMyParticipantReadsTableAccess};
 use simulation::participant::{Command, Request, API_VERSION};
 use spacetimedb_sdk::{DbContext, Event, Table};
 use std::{
@@ -24,7 +24,16 @@ struct Config {
     cli: PathBuf,
     cli_config: PathBuf,
     actors: Vec<u32>,
+    #[serde(default = "default_window")]
+    window_seconds: u64,
+    #[serde(default = "default_rounds")]
+    read_round_seconds: Vec<u64>,
+    #[serde(default = "default_setup")]
+    setup_seconds: u64,
 }
+fn default_window() -> u64 {60}
+fn default_rounds() -> Vec<u64> {vec![5,20,35,50]}
+fn default_setup() -> u64 {120}
 struct Person {
     actor: u32,
     epoch: u64,
@@ -141,20 +150,27 @@ async fn read(
     report
 }
 async fn run(c: Config) -> Result<(), String> {
-    if c.server != "http://127.0.0.1:3102"
+    if !["http://127.0.0.1:3102", "http://127.0.0.1:3103"].contains(&c.server.as_str())
         || !c.database.starts_with(PREFIX)
         || !c.run.starts_with(PREFIX)
         || !["clock", "status", "reads"].contains(&c.case.as_str())
-        || c.actors.len() != 36
+        || ![36,72,144].contains(&c.actors.len())
+        || (c.actors.len()!=36 && c.server!="http://127.0.0.1:3103")
+        || !(60..=300).contains(&c.window_seconds)
+        || !(120..=240).contains(&c.setup_seconds)
+        || c.read_round_seconds.is_empty()
+        || c.read_round_seconds.len()>20
+        || c.read_round_seconds.windows(2).any(|w|w[0]>=w[1])
+        || c.read_round_seconds.iter().any(|s|*s==0 || *s+10>c.window_seconds)
         || c.actors
             .iter()
             .copied()
             .collect::<std::collections::BTreeSet<_>>()
             .len()
-            != 36
+            != c.actors.len()
     {
         return Err(
-            "exclusive localhost3102 / fresh authority36 / exactly36 actors config required".into(),
+            "isolated localhost service / fresh authority probe / bounded actors and duration required".into(),
         );
     }
     let origin = Instant::now();
@@ -163,30 +179,39 @@ async fn run(c: Config) -> Result<(), String> {
     let mut people = Vec::new();
     let mut identities = Vec::new();
     let mut initial = Vec::new();
-    let setup:Result<(),String>=tokio::time::timeout(Duration::from_secs(120),async {
+    let setup:Result<(),String>=tokio::time::timeout(Duration::from_secs(c.setup_seconds),async {
         for &actor in &c.actors {
             let (service,identity)=new_session(c.server.clone(),c.database.clone(),&c.credential_dir.join(format!("actor-{actor}.json"))).await?;
             identities.push(identity.clone()); write(&c.output.join("identities.json"),&json!(identities))?;
-            let copy=samples.clone(); let overflow=dropped.clone(); let expected_run=c.run.clone();
-            service.connection.db.sim_participant_state().on_insert(move |ctx,row| {
-                let mut sample=json!({"actor":actor,"elapsed_from_process_ms":origin.elapsed().as_millis(),
-                    "wall_ms":wall_ms(),"tick":row.tick,"body_bytes":row.body.len(),"own_run":row.run==expected_run});
-                match &ctx.event {
-                    Event::Reducer(e) => {
-                        sample["event_kind"]=json!("own_reducer");
-                        sample["reducer_timestamp_us"]=json!(e.timestamp.to_micros_since_unix_epoch());
-                        sample["reducer_status"]=json!(format!("{:?}",e.status));
-                        if let Reducer::SimParticipantCommand{request}=&e.reducer {
-                            if let Ok(request)=serde_json::from_str::<Value>(request) { sample["request_id"]=request["request_id"].clone(); }
+            macro_rules! track {
+                ($table:ident, $kind:literal, $row:ident, $tick:expr) => {{
+                    let copy=samples.clone(); let overflow=dropped.clone(); let expected_run=c.run.clone();
+                    service.connection.db.$table().on_insert(move |ctx,$row| {
+                        let mut sample=json!({"actor":actor,"elapsed_from_process_ms":origin.elapsed().as_millis(),
+                            "wall_ms":wall_ms(),"tick":$tick,
+                            "body_bytes":spacetimedb_sdk::__codegen::__sats::bsatn::to_vec($row).unwrap().len(),
+                            "row_encoding":"bsatn","table":$kind,"own_run":$row.run==expected_run});
+                        match &ctx.event {
+                            Event::Reducer(e) => {
+                                sample["event_kind"]=json!("own_reducer");
+                                sample["reducer_timestamp_us"]=json!(e.timestamp.to_micros_since_unix_epoch());
+                                sample["reducer_status"]=json!(format!("{:?}",e.status));
+                                if let Reducer::SimParticipantCommand{request}=&e.reducer {
+                                    if let Ok(request)=serde_json::from_str::<Value>(request) { sample["request_id"]=request["request_id"].clone(); }
+                                }
+                            }
+                            Event::Transaction => {sample["event_kind"]=json!("transaction");}
+                            Event::SubscribeApplied => {sample["event_kind"]=json!("subscribe_applied");}
+                            _ => {sample["event_kind"]=json!("other");}
                         }
-                    }
-                    Event::Transaction => {sample["event_kind"]=json!("transaction");}
-                    Event::SubscribeApplied => {sample["event_kind"]=json!("subscribe_applied");}
-                    _ => {sample["event_kind"]=json!("other");}
-                }
-                let mut entries=copy.lock().unwrap();
-                if entries.len()<SAMPLE_CAP {entries.push(sample);} else {overflow.fetch_add(1,std::sync::atomic::Ordering::Relaxed);}
-            });
+                        let mut entries=copy.lock().unwrap();
+                        if entries.len()<SAMPLE_CAP {entries.push(sample);} else {overflow.fetch_add(1,std::sync::atomic::Ordering::Relaxed);}
+                    });
+                }};
+            }
+            track!(sim_my_participant_head, "head", row, Some(row.tick));
+            track!(sim_my_participant_receipts, "receipt", row, None::<u64>);
+            track!(sim_my_participant_reads, "read", row, None::<u64>);
             people.push(Person{actor,epoch:0,service});
             cli(&c,"sim_grant_client",vec![json!(c.run),json!(identity),json!(false),json!(actor)]).await?;
             let p=people.last_mut().unwrap(); let deadline=Instant::now()+Duration::from_secs(5);
@@ -203,10 +228,10 @@ async fn run(c: Config) -> Result<(), String> {
             initial.push(json!({"actor":actor,"epoch":p.epoch,"tick":status["tick"],"status_json_bytes":serde_json::to_vec(&status).unwrap().len()}));
         }
         Ok(())
-    }).await.unwrap_or_else(|_|Err("120s setup ceiling reached".into()));
+    }).await.unwrap_or_else(|_|Err(format!("{}s setup ceiling reached",c.setup_seconds)));
     write(&c.output.join("initial-status.json"), &json!(initial))?;
     let mut report = json!({"case":c.case,"run":c.run,"setup_ok":setup.is_ok(),"setup_elapsed_ms":origin.elapsed().as_millis(),
-        "fixed_window_seconds":60,"round_seconds":if c.case=="reads" {vec![5,20,35,50]} else {vec![]},
+        "fixed_window_seconds":c.window_seconds,"round_seconds":if c.case=="reads" {c.read_round_seconds.clone()} else {vec![]},
         "host_execution_duration_available":false,"energy_available":false,"pause_acknowledged":false});
     let operation:Result<(),String>=async {
         setup?;
@@ -214,18 +239,18 @@ async fn run(c: Config) -> Result<(), String> {
         report["connections_at_resume"]=json!(people.iter().filter(|p|p.service.connection.is_active()).count());
         report["resume_sent_wall_ms"]=json!(wall_ms()); let resume=Instant::now();
         cli(&c,"sim_operator_clock",vec![json!(c.run),json!(50),json!(false)]).await?;
-        let start=Instant::now(); let deadline=start+Duration::from_secs(60);
+        let start=Instant::now(); let deadline=start+Duration::from_secs(c.window_seconds);
         report["resume_latency_ms"]=json!(resume.elapsed().as_millis());
         report["window_start_wall_ms"]=json!(wall_ms());
         report["window_start_process_ms"]=json!(start.duration_since(origin).as_millis());
         write(&c.output.join("runtime-progress.json"),&report)?;
         let mut tasks=tokio::task::JoinSet::new(); let mut reads=Vec::new(); let mut dispatched=Vec::new();
-        let rounds=[5,20,35,50]; let mut next=if c.case=="reads" {0} else {4};
+        let rounds=&c.read_round_seconds; let mut next=if c.case=="reads" {0} else {rounds.len()};
         loop {
-            let round_at=if next<4 {start+Duration::from_secs(rounds[next])} else {deadline+Duration::from_secs(1)};
+            let round_at=if next<rounds.len() {start+Duration::from_secs(rounds[next])} else {deadline+Duration::from_secs(1)};
             tokio::select! { biased;
                 _=tokio::time::sleep_until(deadline.into()) => {break;}
-                _=tokio::time::sleep_until(round_at.into()), if next<4 => {
+                _=tokio::time::sleep_until(round_at.into()), if next<rounds.len() => {
                     for p in &people {
                         let id=format!("{}-r{}-a{}",c.run,next+1,p.actor);
                         dispatched.push(json!({"actor":p.actor,"round":next+1,"request_id":id,"scheduled_seconds":rounds[next]}));
@@ -279,10 +304,10 @@ async fn main() {
             serde_json::from_slice(&std::fs::read(&args[2]).unwrap()).unwrap();
         let mut world = simulation::World::new("offline-authority36".into(), scenario).unwrap();
         world.enable_participants();
-        assert_eq!(world.players.len(), 36);
+        assert!([36,72,144].contains(&world.players.len()));
         println!(
             "{}",
-            json!({"offline_fixture_valid":true,"actors":36,"authority_connections":0})
+            json!({"offline_fixture_valid":true,"actors":world.players.len(),"authority_connections":0})
         );
         return;
     }

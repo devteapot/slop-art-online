@@ -38,21 +38,3 @@ impl __sdk::__query_builder::HasCols for SimRun {
         }
     }
 }
-
-/// Indexed column accessor struct for the table `SimRun`.
-///
-/// Provides typed access to indexed columns for query building.
-pub struct SimRunIxCols {
-    pub id: __sdk::__query_builder::IxCol<SimRun, String>,
-}
-
-impl __sdk::__query_builder::HasIxCols for SimRun {
-    type IxCols = SimRunIxCols;
-    fn ix_cols(table_name: &'static str) -> Self::IxCols {
-        SimRunIxCols {
-            id: __sdk::__query_builder::IxCol::new(table_name, "id"),
-        }
-    }
-}
-
-impl __sdk::__query_builder::CanBeLookupTable for SimRun {}

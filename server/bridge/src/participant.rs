@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use shared::module_bindings::{
-    sim_participant_command, DbConnection, SimParticipantStateTableAccess,
+    sim_participant_command, DbConnection, SimMyParticipantHeadTableAccess,
+    SimMyParticipantReceiptsTableAccess, SimMyParticipantReadsTableAccess,
 };
 use simulation::participant::{Command, Receipt, Request, API_VERSION};
 use spacetimedb_sdk::{DbContext, Table};
@@ -12,6 +13,11 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+const SUBSCRIPTIONS: [&str; 3] = [
+    "SELECT * FROM sim_my_participant_head",
+    "SELECT * FROM sim_my_participant_receipts",
+    "SELECT * FROM sim_my_participant_reads",
+];
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Session {
     pub server: String,
@@ -33,7 +39,7 @@ impl ParticipantService {
                 .with_token(Some(session.token))
                 .on_connect(|c, _, _| {
                     c.subscription_builder()
-                        .subscribe(["SELECT * FROM sim_participant_state"]);
+                        .subscribe(SUBSCRIPTIONS);
                 })
                 .build()
                 .map_err(|_| "participant authority unavailable")?;
@@ -71,69 +77,59 @@ impl ParticipantService {
                 "participant connection disconnected; reconnect with same session file".into(),
             );
         }
-        let body = self
+        let h = self
             .connection
             .db
-            .sim_participant_state()
+            .sim_my_participant_head()
             .iter()
             .next()
-            .ok_or("no participant grant or subscription not ready")?
-            .body;
-        serde_json::from_str(&body).map_err(|_| "invalid authority response".into())
+            .ok_or("no participant grant or subscription not ready")?;
+        let mut receipts: Vec<_> = self.connection.db.sim_my_participant_receipts().iter()
+            .map(|r| Receipt { request_id:r.request_id, fingerprint:r.fingerprint,
+                ok:r.ok,error:r.error,event:r.event }).collect();
+        receipts.sort_by_key(|r| r.event);
+        let mut reads: Vec<_> = self.connection.db.sim_my_participant_reads().iter().collect();
+        reads.sort_by_key(|r| r.sequence);
+        let reads = reads.into_iter().map(|r| {
+            let observation: Value = serde_json::from_str(&r.observation).map_err(|_| "invalid authority read")?;
+            Ok(json!({"request_id":r.request_id,"observation":observation}))
+        }).collect::<Result<Vec<_>, String>>()?;
+        // Compatibility assembly for diagnostic callers. Each read response is
+        // immutable and atomic; this live header is not a new captured context.
+        Ok(json!({"api_version":API_VERSION,"projection":"status; use read_observation for fresh subjective state",
+            "run":h.run,"actor":h.actor,"tick":h.tick,"stopped":h.stopped,
+            "latest_cursor":h.latest_cursor,"oldest_cursor":h.oldest_cursor,
+            "control_epoch":h.control_epoch,"policy_revision":h.policy_revision,"learning_revision":h.learning_revision,
+            "context":{"player":{"health":h.health}},"receipts":receipts,"read_observations":reads,
+            "capabilities":["read_observation","replace_tree","patch_subtree","speak","reflect","pin_observation"]}))
     }
     pub async fn observe(&self, after: u64, limit: usize) -> Result<Value, String> {
         let deadline = Instant::now() + Duration::from_secs(5);
-        let mut v = loop {
-            match self.current() {
-                Ok(v) => break v,
-                Err(e) if Instant::now() >= deadline => return Err(e),
-                _ => tokio::time::sleep(Duration::from_millis(15)).await,
+        let head = loop {
+            if !self.connection.is_active() {
+                return Err("participant connection disconnected".into());
             }
+            if let Some(head) = self.connection.db.sim_my_participant_head().iter().next() {
+                break head;
+            }
+            if Instant::now() >= deadline {
+                return Err("no participant grant or subscription not ready".into());
+            }
+            tokio::time::sleep(Duration::from_millis(15)).await;
         };
-        if v["capabilities"].as_array().is_some_and(|xs| xs.iter().any(|x| x == "read_observation")) {
-            let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| "clock unavailable")?.as_nanos();
-            let request_id = format!("read-{nonce}");
-            let receipt = self.command(Request { api_version: API_VERSION.into(), request_id: request_id.clone(),
-                control_epoch: v["control_epoch"].as_u64().ok_or("missing control epoch")?,
-                command: Command::ReadObservation { after, limit } }).await?;
-            if !receipt.ok { return Err(receipt.error.unwrap_or_else(|| "read rejected".into())); }
-            let current = self.current()?;
-            return current["read_observations"].as_array().into_iter().flatten()
-                .find(|read| read["request_id"] == request_id).map(|read| read["observation"].clone())
-                .ok_or_else(|| "atomic read no longer retained; refresh".into());
-        }
-        if after > v["latest_cursor"].as_u64().unwrap_or(0) {
-            return Err("cursor ahead of character trace".into());
-        }
-        let entries: Vec<Value> = v["experiences"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|e| e["cursor"].as_u64().unwrap() > after)
-            .take(limit.clamp(1, 256))
-            .cloned()
-            .collect();
-        let next = entries
-            .last()
-            .and_then(|e| e["cursor"].as_u64())
-            .unwrap_or(after);
-        v["next_cursor"] = json!(next);
-        v["gap"] = json!(after.saturating_add(1) < v["oldest_cursor"].as_u64().unwrap_or(1));
-        v["experiences"] = json!(entries);
-        if v["capabilities"].as_array().is_some_and(|xs| xs.iter().any(|x| x == "pin_observation")) {
-            let observed_cursor = v["latest_cursor"].as_u64().ok_or("missing cursor")?;
-            let sources = v["experiences"].as_array().unwrap().iter()
-                .filter_map(|e| e["source"].as_u64()).collect();
-            let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| "clock unavailable")?.as_nanos();
-            let receipt = self.command(Request { api_version: API_VERSION.into(),
-                request_id: format!("observe-{nonce}"), control_epoch: v["control_epoch"].as_u64().unwrap(),
-                command: Command::PinObservation { observed_cursor, sources } }).await?;
-            if !receipt.ok { return Err(receipt.error.unwrap_or_else(|| "evidence lease rejected".into())); }
-            v["evidence_lease"] = json!({"observed_cursor": observed_cursor, "duration_ms": v["limits"]["evidence_lease_ms"]});
-        }
-        Ok(v)
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "clock unavailable")?.as_nanos();
+        let request_id = format!("read-{nonce}");
+        let receipt = self.command(Request {
+            api_version: API_VERSION.into(), request_id: request_id.clone(),
+            control_epoch: head.control_epoch, command: Command::ReadObservation { after, limit },
+        }).await?;
+        if !receipt.ok { return Err(receipt.error.unwrap_or_else(|| "read rejected".into())); }
+        let read = self.connection.db.sim_my_participant_reads().iter()
+            .filter(|r| r.request_id == request_id && r.control_epoch == head.control_epoch)
+            .max_by_key(|r| r.sequence)
+            .ok_or("atomic read no longer retained; refresh")?;
+        serde_json::from_str(&read.observation).map_err(|_| "invalid atomic observation".into())
     }
     pub async fn command(&self, request: Request) -> Result<Receipt, String> {
         let id = request.request_id.clone();
@@ -159,14 +155,10 @@ impl ParticipantService {
         loop {
             if let Some(result) = response.lock().unwrap().clone() {
                 result?;
-                if let Ok(v) = self.current() {
-                    if let Some(r) = v["receipts"]
-                        .as_array()
-                        .and_then(|rs| rs.iter().find(|r| r["request_id"] == id))
-                    {
-                        return serde_json::from_value(r.clone())
-                            .map_err(|_| "invalid command receipt".into());
-                    }
+                if let Some(r) = self.connection.db.sim_my_participant_receipts().iter()
+                    .find(|r| r.request_id == id) {
+                    return Ok(Receipt { request_id:r.request_id, fingerprint:r.fingerprint,
+                        ok:r.ok, error:r.error, event:r.event });
                 }
             }
             if Instant::now() >= deadline {
@@ -195,7 +187,7 @@ pub async fn new_session(
             .on_connect(move |c, id, token| {
                 *copy.lock().unwrap() = Some((id.to_hex().to_string(), token.to_string()));
                 c.subscription_builder()
-                    .subscribe(["SELECT * FROM sim_participant_state"]);
+                    .subscribe(SUBSCRIPTIONS);
             })
             .build()
             .map_err(|_| "new participant connection failed")

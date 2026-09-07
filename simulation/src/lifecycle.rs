@@ -468,7 +468,7 @@ impl World {
             }
         };
         let name = format!("{} {}", template.name_prefix.trim(), actor);
-        self.players.push(Player {
+        self.players.push(PlayerData {
             id: actor,
             name: name.clone(),
             controller: Controller::Ai,
@@ -494,7 +494,7 @@ impl World {
             failures: 0,
             last_reflection: self.tick,
             last_cause: None,
-        });
+        }.into());
         let child = self.players.len() - 1;
         self.next_actor = next;
         if let Some(arena) = &arena {

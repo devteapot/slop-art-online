@@ -22,7 +22,7 @@ pub struct DefinitionRef {
     pub revision: u64,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Definition {
     pub id: String,
@@ -201,6 +201,59 @@ struct ScopedLawCall {
 }
 thread_local! { static CACHE: RefCell<BTreeMap<String, Rc<Compiled>>> = RefCell::new(BTreeMap::new()); }
 
+// Exact semantic inputs, not revision IDs or addresses. Most actor hooks use
+// the same law repeatedly; comparing immutable source bytes avoids allocating,
+// JSON-encoding and hashing the entire source for every cache hit. All runtime
+// faults and invocation budgets remain outside the compiled-artifact cache.
+struct CachedLaw {
+    law: Definition,
+    layers: Vec<(crate::laws::LawRef, crate::laws::LawArtifact)>,
+    disabled: Vec<crate::laws::LawDisabled>,
+    compiled: Rc<Compiled>,
+    source_bytes: usize,
+}
+thread_local! { static LAW_FAST_CACHE: RefCell<Vec<CachedLaw>> = const { RefCell::new(Vec::new()) }; }
+fn remember_law(law: &Definition, layers: &[(crate::laws::LawRef, crate::laws::LawArtifact)],
+    disabled: &[crate::laws::LawDisabled], compiled: &Rc<Compiled>) {
+    const SOURCE_BUDGET: usize = 2 * MAX_CONTENT;
+    let source_bytes = law.source.len() + law.description.len()
+        + layers.iter().map(|(_, a)| a.source.len()).sum::<usize>();
+    if source_bytes > SOURCE_BUDGET { return; }
+    LAW_FAST_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        while cache.len() >= 8 || cache.iter().map(|c| c.source_bytes).sum::<usize>() + source_bytes > SOURCE_BUDGET {
+            cache.remove(0);
+        }
+        cache.push(CachedLaw { law: law.clone(), layers: layers.to_vec(), disabled: disabled.to_vec(),
+            compiled: compiled.clone(), source_bytes });
+    });
+}
+
+struct CachedScript {
+    definition: Definition,
+    law: Definition,
+    dependencies: BTreeMap<String, Definition>,
+    compiled: Rc<Compiled>,
+    source_bytes: usize,
+}
+thread_local! { static SCRIPT_FAST_CACHE: RefCell<Vec<CachedScript>> = const { RefCell::new(Vec::new()) }; }
+fn remember_script(definition: &Definition, law: &Definition, dependencies: &BTreeMap<String, &Definition>,
+    compiled: &Rc<Compiled>) {
+    const SOURCE_BUDGET: usize = 2 * MAX_CONTENT;
+    let source_bytes = definition.source.len() + definition.description.len() + law.source.len() + law.description.len()
+        + dependencies.values().map(|d| d.source.len() + d.description.len()).sum::<usize>();
+    if source_bytes > SOURCE_BUDGET { return; }
+    SCRIPT_FAST_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        while cache.len() >= 8 || cache.iter().map(|c| c.source_bytes).sum::<usize>() + source_bytes > SOURCE_BUDGET {
+            cache.remove(0);
+        }
+        cache.push(CachedScript { definition: definition.clone(), law: law.clone(),
+            dependencies: dependencies.iter().map(|(k, d)| (k.clone(), (*d).clone())).collect(),
+            compiled: compiled.clone(), source_bytes });
+    });
+}
+
 fn engine() -> Engine {
     let mut e = Engine::new_raw();
     rhai::packages::StandardPackage::new().register_into_engine(&mut e);
@@ -341,6 +394,12 @@ impl Registry {
         let law = self.definition(&self.resolve("law")?)?;
         let mut dependencies = BTreeMap::new();
         self.dependencies(definition, &mut BTreeSet::new(), &mut dependencies)?;
+        if let Some(compiled) = SCRIPT_FAST_CACHE.with(|cache| cache.borrow().iter().rev()
+            .find(|c| c.definition == *definition && c.law == *law && c.dependencies.len() == dependencies.len()
+                && c.dependencies.iter().all(|(key, value)| dependencies.get(key).is_some_and(|current| value == *current)))
+            .map(|c| c.compiled.clone())) {
+            return Ok(compiled);
+        }
         let key = format!(
             "{:x}",
             Sha256::digest(
@@ -349,6 +408,7 @@ impl Registry {
             )
         );
         if let Some(value) = CACHE.with(|cache| cache.borrow().get(&key).cloned()) {
+            remember_script(definition, law, &dependencies, &value);
             return Ok(value);
         }
         let mut e = engine();
@@ -356,11 +416,11 @@ impl Registry {
         let module =
             rhai::Module::eval_ast_as_new(Scope::new(), &law_ast, &e).map_err(|e| e.to_string())?;
         e.register_static_module("law", module.into());
-        for (id, dep) in dependencies {
+        for (id, dep) in &dependencies {
             let ast = compile(&e, &dep.source)?;
             let module =
                 rhai::Module::eval_ast_as_new(Scope::new(), &ast, &e).map_err(|e| e.to_string())?;
-            e.register_static_module(id, module.into());
+            e.register_static_module(id.clone(), module.into());
         }
         let ast = if r.id == "law" {
             law_ast
@@ -375,6 +435,7 @@ impl Registry {
             }
             cache.insert(key, compiled.clone());
         });
+        remember_script(definition, law, &dependencies, &compiled);
         Ok(compiled)
     }
     pub fn call<T: DeserializeOwned>(
@@ -621,6 +682,11 @@ impl Registry {
         faults: &[crate::laws::LawDisabled],
     ) -> Result<Rc<Compiled>, String> {
         let law = self.definition(base)?;
+        if let Some(compiled) = LAW_FAST_CACHE.with(|cache| cache.borrow().iter().rev()
+            .find(|c| c.law == *law && c.layers == layers && c.disabled == faults)
+            .map(|c| c.compiled.clone())) {
+            return Ok(compiled);
+        }
         let excluded: Vec<_> = faults.iter().map(|f| (&f.reference, &f.hook)).collect();
         let key = format!(
             "layered:{:x}",
@@ -630,6 +696,7 @@ impl Registry {
             )
         );
         if let Some(c) = CACHE.with(|c| c.borrow().get(&key).cloned()) {
+            remember_law(law, layers, faults, &c);
             return Ok(c);
         }
         let mut e = engine();
@@ -656,6 +723,7 @@ impl Registry {
             }
             cache.insert(key, c.clone());
         });
+        remember_law(law, layers, faults, &c);
         Ok(c)
     }
     pub(crate) fn evaluate_law_candidate(
@@ -1017,6 +1085,32 @@ mod scoped_cache_tests {
             run(&registry, &skill, &base, &layers, &mut faults).unwrap(),
             13
         );
+    }
+
+    #[test]
+    fn unscoped_fast_cache_tracks_exact_sources_dependencies_and_bounds() {
+        let (mut registry, skill, base, _) = fixture();
+        let mut faults = vec![];
+        registry.history.get_mut("cache_probe").unwrap().get_mut(&1).unwrap().source = "fn run(x) { 3 }".into();
+        assert_eq!(run(&registry, &skill, &base, &[], &mut faults).unwrap(), 3);
+        registry.history.get_mut("cache_probe").unwrap().get_mut(&1).unwrap().source = "fn run(x) { 4 }".into();
+        assert_eq!(run(&registry, &skill, &base, &[], &mut faults).unwrap(), 4);
+        registry.insert(Definition { id: "helper".into(), revision: 1, source: "fn number() { 5 }".into(),
+            description: String::new(), dependencies: vec![] });
+        let probe = registry.history.get_mut("cache_probe").unwrap().get_mut(&1).unwrap();
+        probe.source = "fn run(x) { helper::number() }".into();
+        probe.dependencies = vec![DefinitionRef { id: "helper".into(), revision: 1 }];
+        assert_eq!(run(&registry, &skill, &base, &[], &mut faults).unwrap(), 5);
+        registry.history.get_mut("helper").unwrap().get_mut(&1).unwrap().source = "fn number() { 6 }".into();
+        assert_eq!(run(&registry, &skill, &base, &[], &mut faults).unwrap(), 6);
+        for n in 0..12 {
+            registry.history.get_mut("helper").unwrap().get_mut(&1).unwrap().source = format!("fn number() {{ {n} }}");
+            assert_eq!(run(&registry, &skill, &base, &[], &mut faults).unwrap(), n);
+        }
+        SCRIPT_FAST_CACHE.with(|c| {
+            assert!(c.borrow().len() <= 8);
+            assert!(c.borrow().iter().map(|e| e.source_bytes).sum::<usize>() <= 2 * MAX_CONTENT);
+        });
     }
 
     #[test]

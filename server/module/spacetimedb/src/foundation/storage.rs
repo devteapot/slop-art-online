@@ -52,6 +52,10 @@ pub(crate) struct LoadedRun {
     catalog: Catalog,
     previous_layout: Option<codec::Layout>,
     lease_reuse: Option<codec::LeaseReuse>,
+    pub(super) previous_participants: BTreeMap<u32, simulation::participant::ParticipantState>,
+    pub(super) previous_time_ms: u64,
+    pub(super) native_lease_ids: super::native_storage::LeaseIds,
+    pub(super) previous_players: BTreeMap<u32, simulation::Player>,
 }
 impl Deref for LoadedRun {
     type Target = SimRunStore;
@@ -286,7 +290,21 @@ fn hydrate(ctx: &ReducerContext, row: SimRunStore) -> Result<(LoadedRun, World),
         catalog: Catalog::default(),
         previous_layout: None,
         lease_reuse: None,
+        previous_participants: BTreeMap::new(),
+        previous_time_ms: 0,
+        native_lease_ids: BTreeMap::new(),
+        previous_players: BTreeMap::new(),
     };
+    if loaded.row.state == super::native_storage::FORMAT {
+        let (world, ids) = super::measured("native.load.rows", || super::native_storage::load(ctx, &loaded.row.id))?;
+        super::measured("native.load.clone", || {
+            loaded.previous_participants = world.participants.clone();
+            loaded.previous_players = world.players.iter().map(|p| (p.id,p.clone())).collect();
+        });
+        loaded.previous_time_ms = world.timing.time_ms;
+        loaded.native_lease_ids = ids;
+        return Ok((loaded, world));
+    }
     let state = loaded.row.state.clone();
     let staged_blobs = prefetch_selected_blobs(|kind| {
         ctx.db
@@ -305,6 +323,8 @@ fn hydrate(ctx: &ReducerContext, row: SimRunStore) -> Result<(LoadedRun, World),
     if world.run != loaded.row.id {
         return Err("stored run identity differs from World".into());
     }
+    loaded.previous_participants = world.participants.clone();
+    loaded.previous_time_ms = world.timing.time_ms;
     loaded.previous_layout = Some(layout);
     loaded.lease_reuse = Some(reuse);
     Ok((loaded, world))
@@ -312,18 +332,33 @@ fn hydrate(ctx: &ReducerContext, row: SimRunStore) -> Result<(LoadedRun, World),
 pub(super) fn exists(ctx: &ReducerContext, run: &str) -> bool {
     ctx.db.sim_run_store().id().find(run.to_string()).is_some()
 }
+pub(super) fn is_native(ctx: &ReducerContext, run: &str) -> Result<bool, String> {
+    Ok(ctx.db.sim_run_store().id().find(run.to_owned()).ok_or("run not found")?.state == super::native_storage::FORMAT)
+}
+pub(super) fn require_owner(ctx: &ReducerContext, run: &str) -> Result<(), String> {
+    let row = ctx.db.sim_run_store().id().find(run.to_string()).ok_or("run unavailable")?;
+    if row.owner != ctx.sender() { return Err("run unavailable".into()); }
+    Ok(())
+}
 pub(super) fn create(ctx: &ReducerContext, run: String) -> LoadedRun {
     LoadedRun {
         row: ctx.db.sim_run_store().insert(SimRunStore {
             id: run,
             owner: ctx.sender(),
-            state: String::new(),
+            state: super::native_storage::FORMAT.into(),
             last_advanced_at: ctx.timestamp,
         }),
         catalog: Catalog::default(),
         previous_layout: None,
         lease_reuse: None,
+        previous_participants: BTreeMap::new(),
+        previous_time_ms: 0,
+        native_lease_ids: BTreeMap::new(),
+        previous_players: BTreeMap::new(),
     }
+}
+pub(super) fn commit_native(ctx: &ReducerContext, row: LoadedRun) {
+    ctx.db.sim_run_store().id().update(row.row);
 }
 pub(super) fn encode(
     ctx: &ReducerContext,
@@ -384,7 +419,19 @@ pub(super) fn world_for_view(ctx: &ViewContext, run: &str) -> Option<World> {
     let world = decode_view(ctx, &row);
     Some(world)
 }
+pub(super) fn participant_for_view(ctx: &ViewContext, run: &str, actor: u32) -> Option<(World,bool)> {
+    let row = ctx.db.sim_run_store().id().find(run.to_owned())?;
+    if row.state == super::native_storage::FORMAT {
+        return super::native_storage::participant_view(ctx,run,actor).ok();
+    }
+    let world=decode_view(ctx,&row);
+    let can_participate=world.players.iter().any(|p|p.id==3 && p.controller==simulation::Controller::Human);
+    Some((world,can_participate))
+}
 fn decode_view(ctx: &ViewContext, row: &SimRunStore) -> World {
+    if row.state == super::native_storage::FORMAT {
+        return super::native_storage::load_view(ctx, &row.id).expect("valid native World storage");
+    }
     // Full World hydration batches selected canonical payload kinds. The
     // small participant-status reader below keeps empty staging.
     let staged_blobs = prefetch_selected_blobs(|kind| {
@@ -485,6 +532,10 @@ fn decode_owned_export<B: Blobs>(
 }
 fn export_owned_world(ctx: &ReducerContext, run: &str) -> Result<World, String> {
     let row = ctx.db.sim_run_store().id().find(run.to_owned());
+    if row.as_ref().is_some_and(|row| row.state == super::native_storage::FORMAT) {
+        let row = row.filter(|row| row.owner == ctx.sender()).ok_or("run unavailable")?;
+        return super::native_storage::load_export(ctx, &row.id);
+    }
     decode_owned_export(row, ctx.sender(), |run| OwnerExportReader {
         ctx,
         catalog: Catalog::default(),

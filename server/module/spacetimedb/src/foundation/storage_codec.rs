@@ -222,6 +222,11 @@ pub(super) struct Layout {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     captured_reads: Option<CapturedReadRefs>,
 }
+impl Layout {
+    pub(super) fn participant_leases(&self, actor: u32) -> Option<&[u64]> {
+        self.participants.get(&actor).map(|p| p.leases.as_slice())
+    }
+}
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StoredWorld {

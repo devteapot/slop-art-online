@@ -11,6 +11,7 @@ pub mod research_programs;
 pub mod lifecycle;
 mod lifecycle_view;
 pub mod participant;
+pub mod participant_transaction;
 pub mod perturbations;
 mod scripted_world;
 pub mod scripting;
@@ -148,20 +149,20 @@ impl Action {
     }
 }
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Belief {
     pub location: i32,
     pub danger: bool,
     pub text: String,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Known {
     pub claim: Belief,
     pub source: u64,
     pub confidence: i32,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Percept {
     pub source: u64,
     pub tick: u64,
@@ -213,7 +214,25 @@ pub struct Execution {
     pub state: PolicyState,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Player {
+#[serde(transparent)]
+pub struct Player(std::sync::Arc<PlayerData>);
+impl From<PlayerData> for Player {
+    fn from(data:PlayerData)->Self {Self(std::sync::Arc::new(data))}
+}
+impl std::ops::Deref for Player {
+    type Target=PlayerData;
+    fn deref(&self)->&Self::Target {&self.0}
+}
+impl std::ops::DerefMut for Player {
+    fn deref_mut(&mut self)->&mut Self::Target {std::sync::Arc::make_mut(&mut self.0)}
+}
+impl Player {
+    /// Transaction-local identity of an unchanged character, with copy-on-write
+    /// isolation for candidate actions. This is not a persisted identity.
+    pub fn same_snapshot(&self,other:&Self)->bool {std::sync::Arc::ptr_eq(&self.0,&other.0)}
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PlayerData {
     pub id: u32,
     pub name: String,
     pub controller: Controller,
@@ -1136,10 +1155,11 @@ impl World {
         }
         Ok(())
     }
-    fn step_inner(&mut self, delta_ms: u64) -> Result<(), String> {
+    fn step_inner(&mut self, delta_ms: u64, observer: &mut impl timing::AdvanceObserver) -> Result<(), String> {
         if self.stopped {
             return Ok(());
         }
+        observer.begin("kernel.timing");
         self.timing.time_ms = self
             .timing
             .time_ms
@@ -1159,9 +1179,12 @@ impl World {
             delta_ms,
             periods.hazard_ms,
         )?;
+        observer.begin("kernel.ecology");
         self.renew_food(delta_ms)?;
         self.apply_disturbances()?;
+        observer.begin("kernel.infrastructure");
         self.advance_infrastructure(delta_ms)?;
+        observer.begin("kernel.actors");
         for i in 0..self.players.len() {
             if self.players[i].health <= 0 {
                 continue;
@@ -1275,10 +1298,14 @@ impl World {
                 self.damage(i, hazard, None, event, "environment")?;
             }
         }
+        observer.begin("kernel.lifecycle");
         self.advance_lifecycle()?;
         self.flush_law_faults()?;
+        observer.begin("kernel.lifecycle_observation");
         self.refresh_lifecycle_observations()?;
+        observer.begin("kernel.speech");
         self.deliver_queued_speech()?;
+        observer.begin("kernel.requests");
         let invalid: Vec<_> = self
             .pending
             .iter()

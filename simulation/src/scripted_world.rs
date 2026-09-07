@@ -56,10 +56,19 @@ impl World {
         if self.timing.time_ms < self.execution_ready_at(self.players[i].id, e) {
             return Status::Running;
         }
+        // The audit prefix is append-only and is never an input to skill
+        // execution. Personal evidence is already in participant/memory state.
+        // Keep that prefix in the parent while the candidate stages new events;
+        // otherwise the Nth action copies every earlier action's audit payload.
+        let prior_events = std::mem::take(&mut self.events);
         let mut candidate = self.clone();
+        self.events = prior_events;
         let mut execution = e.clone();
         match candidate.execute_action_inner(i, &mut execution, a.clone()) {
             Ok(status) => {
+                let mut events = std::mem::take(&mut self.events);
+                events.append(&mut candidate.events);
+                candidate.events = events;
                 *self = candidate;
                 *e = execution;
                 status
@@ -298,6 +307,14 @@ impl World {
     }
 
     pub fn advance_ms(&mut self, delta_ms: u64) {
+        self.advance_ms_observed(delta_ms, &mut ());
+    }
+
+    pub fn advance_ms_observed(
+        &mut self,
+        delta_ms: u64,
+        observer: &mut impl timing::AdvanceObserver,
+    ) {
         if self.stopped || delta_ms == 0 {
             return;
         }
@@ -309,7 +326,9 @@ impl World {
             self.event(None,"script_tick_failed",vec![],json!({"error":"saved world requires an explicit rules migration","effects_committed":false}));
             return;
         }
+        observer.begin("kernel.clone");
         let mut candidate = self.clone();
+        observer.begin("kernel.activation");
         if candidate.scripts.activate(candidate.timing.updates + 1) {
             for p in &candidate.players {
                 candidate.timing.dirty.insert(p.id, true);
@@ -317,7 +336,9 @@ impl World {
             candidate.event(None,"script_update_activated",vec![],json!({"effective_update":candidate.timing.updates+1,"revision":candidate.scripts.revision,"active":candidate.scripts.active}));
         }
         let activation=candidate.activate_laws(candidate.timing.updates+1);
-        match activation.and_then(|_|candidate.step_inner(delta_ms)) {
+        let result = activation.and_then(|_|candidate.step_inner(delta_ms, observer));
+        observer.begin("kernel.commit");
+        match result {
             Ok(()) => *self = candidate,
             Err(error) => {
                 let rejected = self.scripts.pending.take();

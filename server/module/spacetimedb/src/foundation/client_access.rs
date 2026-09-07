@@ -1,9 +1,10 @@
 //! Run-scoped browser grants. All checks use authenticated ctx.sender(), never a claimed actor.
-use super::{save, sim_audit__view, storage, storage_codec, SimRun};
+use super::{save, sim_audit__view, storage, SimRun};
 use simulation::{Controller, Decision, World};
 use spacetimedb::{Identity, ReducerContext, ScheduleAt, SpacetimeType, Table, ViewContext};
 
-#[spacetimedb::table(accessor = sim_client_access)]
+#[spacetimedb::table(accessor = sim_client_access,
+    index(accessor = actor_owner, btree(columns = [run, actor])))]
 pub struct SimClientAccess {
     #[primary_key]
     pub identity: Identity,
@@ -29,9 +30,8 @@ pub struct SimClientSnapshot {
     pub body: String,
 }
 
-// Private materialized projection. A participant view still authenticates its
-// grant, then reads only this actor's row instead of reparsing the entire world
-// after every other participant's command. No client may query this table.
+// Retained legacy schema for existing normalized archives. New publication
+// uses independent native rows; explicit migration collects this old cache.
 #[spacetimedb::table(accessor = sim_participant_cache)]
 pub struct SimParticipantCache {
     #[primary_key]
@@ -40,19 +40,6 @@ pub struct SimParticipantCache {
     pub tick: u64,
     pub body: String,
 }
-pub(super) fn publish_participants(ctx: &ReducerContext, world: &World, layout: &storage_codec::Layout) {
-    if !world.participant_mode {return;}
-    for actor in world.participants.keys() {
-        let body=storage_codec::status(world,*actor,layout).expect("valid normalized participant status");
-        let key=format!("{}:{actor}",world.run);
-        let previous=ctx.db.sim_participant_cache().key().find(&key);
-        if previous.as_ref().is_some_and(|old|old.body==body) {continue;}
-        let row=SimParticipantCache{key,run:world.run.clone(),tick:world.tick,body};
-        if previous.is_some() {ctx.db.sim_participant_cache().key().update(row);}
-        else {ctx.db.sim_participant_cache().insert(row);}
-    }
-}
-
 pub(super) fn world(ctx: &ReducerContext, run: &str) -> Result<(SimRun, World), String> {
     let (row, w) = storage::load(ctx, run)?;
     if w.version != simulation::VERSION {
@@ -92,8 +79,9 @@ pub fn sim_grant_client(
         && ctx
             .db
             .sim_client_access()
-            .iter()
-            .any(|g| g.run == run && !g.observer && g.actor == actor && g.identity != identity)
+            .actor_owner()
+            .filter((run.as_str(), actor))
+            .any(|g| !g.observer && g.identity != identity)
     {
         return Err("character already controlled by another client".into());
     }
@@ -161,7 +149,12 @@ pub fn sim_revoke_client(ctx: &ReducerContext, identity: Identity) -> Result<(),
 #[spacetimedb::view(accessor = sim_my_snapshot, public)]
 pub fn sim_my_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
     let access = ctx.db.sim_client_access().identity().find(ctx.sender())?;
-    let w = storage::world_for_view(ctx, &access.run)?;
+    let (w,can_participate) = if access.observer {
+        (storage::world_for_view(ctx, &access.run)?,None)
+    } else {
+        let (world,can)=storage::participant_for_view(ctx,&access.run,access.actor)?;
+        (world,Some(can))
+    };
     let events = if access.observer {
         let mut events: Vec<simulation::Event> = ctx
             .db
@@ -176,6 +169,7 @@ pub fn sim_my_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
         vec![]
     };
     let mut v = simulation::client_view::snapshot(&w, access.observer, access.actor, &events);
+    if let Some(can)=can_participate {v["can_participate"]=serde_json::json!(can);}
     if w.participant_mode && !access.observer {
         v["participant"] = w.participant_snapshot(access.actor, 0, 256).ok()?;
     }
@@ -195,69 +189,16 @@ pub fn sim_client_intent(ctx: &ReducerContext, decision: String) -> Result<(), S
     if access.observer {
         return Err("enter participant mode to control your character".into());
     }
-    let (row, mut w) = world(ctx, &access.run)?;
-    if decision.len() > 50_000 {
-        return Err("intent too large".into());
+    if decision.len() > 50_000 {return Err("intent too large".into());}
+    if storage::is_native(ctx,&access.run)? && super::native_storage::participant_mode(ctx,&access.run)? {
+        let d:Decision=serde_json::from_str(&decision).map_err(|e|e.to_string())?;
+        return super::native_storage::intent(ctx,&access.run,access.actor,d);
     }
+    let (row,mut w)=world(ctx,&access.run)?;
     if w.participant_mode {
-        let d: Decision = serde_json::from_str(&decision).map_err(|e| e.to_string())?;
-        if !d.reflections.is_empty() {
-            return Err("submit learning separately".into());
-        }
-        let i = w
-            .players
-            .iter()
-            .position(|p| p.id == access.actor)
-            .ok_or("actor missing")?;
-        if d.policy.is_none()
-            && !(d.actions.len() == 1 && d.actions[0].skill == simulation::Skill::Speak)
-        {
-            let before = w.clone();
-            if let Err(error) = w.participant_manual(access.actor, d) {
-                w = before;
-                w.event(
-                    Some(access.actor),
-                    "participant_rejected",
-                    vec![],
-                    serde_json::json!({"error":error}),
-                );
-            }
-            save(ctx, row, w);
-            return Ok(());
-        }
-        let command = if d.policy.is_none()
-            && d.actions.len() == 1
-            && d.actions[0].skill == simulation::Skill::Speak
-        {
-            simulation::participant::Command::Speak {
-                text: d.actions[0].text.clone().unwrap_or_default(),
-                expires_tick: w.tick + 10,
-            }
-        } else {
-            if d.policy.is_some() && !d.actions.is_empty() {
-                return Err("ambiguous policy/actions".into());
-            }
-            let tree = d.policy.unwrap_or_else(|| simulation::Node::Sequence {
-                children: d
-                    .actions
-                    .into_iter()
-                    .map(|action| simulation::Node::Action { action })
-                    .collect(),
-            });
-            simulation::participant::Command::ReplaceTree {
-                expected_revision: w.players[i].generation,
-                reason: d.reason,
-                tree,
-            }
-        };
-        let request = simulation::participant::Request {
-            api_version: simulation::participant::API_VERSION.into(),
-            request_id: format!("bevy-{}", w.next_event),
-            control_epoch: w.participants[&access.actor].control_epoch,
-            command,
-        };
-        w.participant_apply(access.actor, request)?;
-        save(ctx, row, w);
+        let d:Decision=serde_json::from_str(&decision).map_err(|e|e.to_string())?;
+        w.participant_client_intent(access.actor,d)?;
+        save(ctx,row,w);
         return Ok(());
     }
     let input=w.event(Some(access.actor),"human_input",vec![],serde_json::json!({"raw":decision,"source":"authenticated Bevy client","identity":ctx.sender().to_hex().to_string()}));
@@ -343,7 +284,7 @@ pub fn sim_client_pulse(ctx: &ReducerContext, clock: SimClientClock) -> Result<(
         .find(&clock.run)
         .ok_or("clock missing")?;
     if !current.paused {
-        let (mut row, mut w) = world(ctx, &clock.run)?;
+        let (mut row, mut w) = super::measured("clock.load", || world(ctx, &clock.run))?;
         if !w.stopped {
             let elapsed = ctx
                 .timestamp
@@ -361,10 +302,10 @@ pub fn sim_client_pulse(ctx: &ReducerContext, clock: SimClientClock) -> Result<(
                     serde_json::json!({"elapsed_ms":delta_ms}),
                 );
             } else {
-                w.advance_ms(delta_ms);
+                super::measured("clock.advance", || super::advance_clock(&mut w, delta_ms));
                 row.last_advanced_at += std::time::Duration::from_millis(delta_ms);
             }
-            save(ctx, row, w);
+            super::measured("clock.save", || save(ctx, row, w));
         }
     }
     Ok(())
@@ -406,10 +347,7 @@ pub fn sim_operator_clock(
 
 #[spacetimedb::reducer]
 pub fn sim_operator_pause(ctx: &ReducerContext, run: String) -> Result<(), String> {
-    let (row, _) = world(ctx, &run)?;
-    if row.owner != ctx.sender() {
-        return Err("operator only".into());
-    }
+    storage::require_owner(ctx, &run)?;
     if let Some(mut clock) = ctx.db.sim_client_clock().run().find(&run) {
         clock.paused = true;
         ctx.db.sim_client_clock().id().update(clock);
@@ -419,17 +357,7 @@ pub fn sim_operator_pause(ctx: &ReducerContext, run: String) -> Result<(), Strin
 
 #[spacetimedb::view(accessor=sim_participant_state, public)]
 pub fn sim_participant_state(ctx: &ViewContext) -> Option<SimClientSnapshot> {
-    let access = ctx.db.sim_client_access().identity().find(ctx.sender())?;
-    if access.observer {
-        return None;
-    }
-    let row=ctx.db.sim_participant_cache().key().find(format!("{}:{}",access.run,access.actor))?;
-    let body = storage::status_for_view(ctx, &access.run, access.actor, &row.body);
-    Some(SimClientSnapshot {
-        run: access.run,
-        tick: row.tick,
-        body,
-    })
+    super::participant_delivery::legacy_status(ctx)
 }
 #[spacetimedb::reducer]
 pub fn sim_participant_command(ctx: &ReducerContext, request: String) -> Result<(), String> {
@@ -442,6 +370,9 @@ pub fn sim_participant_command(ctx: &ReducerContext, request: String) -> Result<
     }
     let request: simulation::participant::Request =
         serde_json::from_str(&request).map_err(|e| e.to_string())?;
+    if storage::is_native(ctx, &access.run)? {
+        return super::native_storage::command(ctx, &access.run, access.actor, request);
+    }
     let (row, mut w) = world(ctx, &access.run)?;
     w.participant_apply(access.actor, request)?;
     save(ctx, row, w);

@@ -97,19 +97,45 @@ pub mod sim_client_intent_reducer;
 pub mod sim_client_snapshot_type;
 pub mod sim_create_participant_reducer;
 pub mod sim_create_reducer;
+pub mod sim_export_owned_run_procedure;
 pub mod sim_grant_client_reducer;
 pub mod sim_intent_reducer;
+pub mod sim_migrate_native_state_reducer;
 pub mod sim_model_result_reducer;
+pub mod sim_my_participant_head_table;
+pub mod sim_my_participant_reads_table;
+pub mod sim_my_participant_receipts_table;
 pub mod sim_my_snapshot_table;
+pub mod sim_native_actor_aux_type;
+pub mod sim_native_actor_type;
+pub mod sim_native_archive_type;
+pub mod sim_native_capture_type;
+pub mod sim_native_definition_type;
+pub mod sim_native_experience_type;
+pub mod sim_native_head_type;
+pub mod sim_native_lease_type;
+pub mod sim_native_mind_history_type;
+pub mod sim_native_mind_type;
+pub mod sim_native_participant_type;
+pub mod sim_native_site_type;
+pub mod sim_native_station_type;
 pub mod sim_operator_clock_reducer;
 pub mod sim_operator_pause_reducer;
+pub mod sim_owned_run_ids_procedure;
+pub mod sim_participant_cache_type;
 pub mod sim_participant_command_reducer;
+pub mod sim_participant_head_type;
+pub mod sim_participant_read_type;
+pub mod sim_participant_receipt_type;
 pub mod sim_participant_state_table;
 pub mod sim_revoke_client_reducer;
+pub mod sim_run_store_type;
+pub mod sim_run_table;
 pub mod sim_run_type;
 pub mod sim_setup_client_clock_reducer;
 pub mod sim_stage_scripts_reducer;
 pub mod sim_step_reducer;
+pub mod sim_world_blob_type;
 pub mod skill_attributes_table;
 pub mod skill_attributes_type;
 pub mod skill_cooldown_table;
@@ -229,19 +255,45 @@ pub use sim_client_intent_reducer::sim_client_intent;
 pub use sim_client_snapshot_type::SimClientSnapshot;
 pub use sim_create_participant_reducer::sim_create_participant;
 pub use sim_create_reducer::sim_create;
+pub use sim_export_owned_run_procedure::sim_export_owned_run;
 pub use sim_grant_client_reducer::sim_grant_client;
 pub use sim_intent_reducer::sim_intent;
+pub use sim_migrate_native_state_reducer::sim_migrate_native_state;
 pub use sim_model_result_reducer::sim_model_result;
+pub use sim_my_participant_head_table::*;
+pub use sim_my_participant_reads_table::*;
+pub use sim_my_participant_receipts_table::*;
 pub use sim_my_snapshot_table::*;
+pub use sim_native_actor_aux_type::SimNativeActorAux;
+pub use sim_native_actor_type::SimNativeActor;
+pub use sim_native_archive_type::SimNativeArchive;
+pub use sim_native_capture_type::SimNativeCapture;
+pub use sim_native_definition_type::SimNativeDefinition;
+pub use sim_native_experience_type::SimNativeExperience;
+pub use sim_native_head_type::SimNativeHead;
+pub use sim_native_lease_type::SimNativeLease;
+pub use sim_native_mind_history_type::SimNativeMindHistory;
+pub use sim_native_mind_type::SimNativeMind;
+pub use sim_native_participant_type::SimNativeParticipant;
+pub use sim_native_site_type::SimNativeSite;
+pub use sim_native_station_type::SimNativeStation;
 pub use sim_operator_clock_reducer::sim_operator_clock;
 pub use sim_operator_pause_reducer::sim_operator_pause;
+pub use sim_owned_run_ids_procedure::sim_owned_run_ids;
+pub use sim_participant_cache_type::SimParticipantCache;
 pub use sim_participant_command_reducer::sim_participant_command;
+pub use sim_participant_head_type::SimParticipantHead;
+pub use sim_participant_read_type::SimParticipantRead;
+pub use sim_participant_receipt_type::SimParticipantReceipt;
 pub use sim_participant_state_table::*;
 pub use sim_revoke_client_reducer::sim_revoke_client;
+pub use sim_run_store_type::SimRunStore;
+pub use sim_run_table::*;
 pub use sim_run_type::SimRun;
 pub use sim_setup_client_clock_reducer::sim_setup_client_clock;
 pub use sim_stage_scripts_reducer::sim_stage_scripts;
 pub use sim_step_reducer::sim_step;
+pub use sim_world_blob_type::SimWorldBlob;
 pub use skill_attributes_table::*;
 pub use skill_attributes_type::SkillAttributes;
 pub use skill_cooldown_table::*;
@@ -334,6 +386,9 @@ pub enum Reducer {
         run: String,
         actor: u32,
         decision: String,
+    },
+    SimMigrateNativeState {
+        run: String,
     },
     SimModelResult {
         run: String,
@@ -459,6 +514,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SimCreateParticipant { .. } => "sim_create_participant",
             Reducer::SimGrantClient { .. } => "sim_grant_client",
             Reducer::SimIntent { .. } => "sim_intent",
+            Reducer::SimMigrateNativeState { .. } => "sim_migrate_native_state",
             Reducer::SimModelResult { .. } => "sim_model_result",
             Reducer::SimOperatorClock { .. } => "sim_operator_clock",
             Reducer::SimOperatorPause { .. } => "sim_operator_pause",
@@ -582,6 +638,9 @@ impl __sdk::Reducer for Reducer {
                 actor: actor.clone(),
                 decision: decision.clone(),
             }),
+            Reducer::SimMigrateNativeState { run } => __sats::bsatn::to_vec(
+                &sim_migrate_native_state_reducer::SimMigrateNativeStateArgs { run: run.clone() },
+            ),
             Reducer::SimModelResult {
                 run,
                 request,
@@ -790,8 +849,12 @@ pub struct DbUpdate {
     player_skill: __sdk::TableUpdate<PlayerSkill>,
     point_of_interest: __sdk::TableUpdate<PointOfInterest>,
     projectile: __sdk::TableUpdate<Projectile>,
+    sim_my_participant_head: __sdk::TableUpdate<SimParticipantHead>,
+    sim_my_participant_reads: __sdk::TableUpdate<SimParticipantRead>,
+    sim_my_participant_receipts: __sdk::TableUpdate<SimParticipantReceipt>,
     sim_my_snapshot: __sdk::TableUpdate<SimClientSnapshot>,
     sim_participant_state: __sdk::TableUpdate<SimClientSnapshot>,
+    sim_run: __sdk::TableUpdate<SimRun>,
     skill_attributes: __sdk::TableUpdate<SkillAttributes>,
     skill_cooldown: __sdk::TableUpdate<SkillCooldown>,
     skill_def: __sdk::TableUpdate<SkillDef>,
@@ -898,12 +961,24 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "projectile" => db_update
                     .projectile
                     .append(projectile_table::parse_table_update(table_update)?),
+                "sim_my_participant_head" => db_update.sim_my_participant_head.append(
+                    sim_my_participant_head_table::parse_table_update(table_update)?,
+                ),
+                "sim_my_participant_reads" => db_update.sim_my_participant_reads.append(
+                    sim_my_participant_reads_table::parse_table_update(table_update)?,
+                ),
+                "sim_my_participant_receipts" => db_update.sim_my_participant_receipts.append(
+                    sim_my_participant_receipts_table::parse_table_update(table_update)?,
+                ),
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
                     .append(sim_my_snapshot_table::parse_table_update(table_update)?),
                 "sim_participant_state" => db_update.sim_participant_state.append(
                     sim_participant_state_table::parse_table_update(table_update)?,
                 ),
+                "sim_run" => db_update
+                    .sim_run
+                    .append(sim_run_table::parse_table_update(table_update)?),
                 "skill_attributes" => db_update
                     .skill_attributes
                     .append(skill_attributes_table::parse_table_update(table_update)?),
@@ -1056,12 +1131,25 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.world_state = cache
             .apply_diff_to_table::<WorldState>("world_state", &self.world_state)
             .with_updates_by_pk(|row| &row.id);
+        diff.sim_my_participant_head = cache.apply_diff_to_table::<SimParticipantHead>(
+            "sim_my_participant_head",
+            &self.sim_my_participant_head,
+        );
+        diff.sim_my_participant_reads = cache.apply_diff_to_table::<SimParticipantRead>(
+            "sim_my_participant_reads",
+            &self.sim_my_participant_reads,
+        );
+        diff.sim_my_participant_receipts = cache.apply_diff_to_table::<SimParticipantReceipt>(
+            "sim_my_participant_receipts",
+            &self.sim_my_participant_receipts,
+        );
         diff.sim_my_snapshot = cache
             .apply_diff_to_table::<SimClientSnapshot>("sim_my_snapshot", &self.sim_my_snapshot);
         diff.sim_participant_state = cache.apply_diff_to_table::<SimClientSnapshot>(
             "sim_participant_state",
             &self.sim_participant_state,
         );
+        diff.sim_run = cache.apply_diff_to_table::<SimRun>("sim_run", &self.sim_run);
 
         diff
     }
@@ -1162,11 +1250,23 @@ impl __sdk::DbUpdate for DbUpdate {
                 "projectile" => db_update
                     .projectile
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_participant_head" => db_update
+                    .sim_my_participant_head
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_participant_reads" => db_update
+                    .sim_my_participant_reads
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_participant_receipts" => db_update
+                    .sim_my_participant_receipts
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "sim_participant_state" => db_update
                     .sim_participant_state
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_run" => db_update
+                    .sim_run
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "skill_attributes" => db_update
                     .skill_attributes
@@ -1289,11 +1389,23 @@ impl __sdk::DbUpdate for DbUpdate {
                 "projectile" => db_update
                     .projectile
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_participant_head" => db_update
+                    .sim_my_participant_head
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_participant_reads" => db_update
+                    .sim_my_participant_reads
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_participant_receipts" => db_update
+                    .sim_my_participant_receipts
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "sim_participant_state" => db_update
                     .sim_participant_state
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_run" => db_update
+                    .sim_run
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "skill_attributes" => db_update
                     .skill_attributes
@@ -1356,8 +1468,12 @@ pub struct AppliedDiff<'r> {
     player_skill: __sdk::TableAppliedDiff<'r, PlayerSkill>,
     point_of_interest: __sdk::TableAppliedDiff<'r, PointOfInterest>,
     projectile: __sdk::TableAppliedDiff<'r, Projectile>,
+    sim_my_participant_head: __sdk::TableAppliedDiff<'r, SimParticipantHead>,
+    sim_my_participant_reads: __sdk::TableAppliedDiff<'r, SimParticipantRead>,
+    sim_my_participant_receipts: __sdk::TableAppliedDiff<'r, SimParticipantReceipt>,
     sim_my_snapshot: __sdk::TableAppliedDiff<'r, SimClientSnapshot>,
     sim_participant_state: __sdk::TableAppliedDiff<'r, SimClientSnapshot>,
+    sim_run: __sdk::TableAppliedDiff<'r, SimRun>,
     skill_attributes: __sdk::TableAppliedDiff<'r, SkillAttributes>,
     skill_cooldown: __sdk::TableAppliedDiff<'r, SkillCooldown>,
     skill_def: __sdk::TableAppliedDiff<'r, SkillDef>,
@@ -1487,6 +1603,21 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Projectile>("projectile", &self.projectile, event);
+        callbacks.invoke_table_row_callbacks::<SimParticipantHead>(
+            "sim_my_participant_head",
+            &self.sim_my_participant_head,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimParticipantRead>(
+            "sim_my_participant_reads",
+            &self.sim_my_participant_reads,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimParticipantReceipt>(
+            "sim_my_participant_receipts",
+            &self.sim_my_participant_receipts,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<SimClientSnapshot>(
             "sim_my_snapshot",
             &self.sim_my_snapshot,
@@ -1497,6 +1628,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.sim_participant_state,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<SimRun>("sim_run", &self.sim_run, event);
         callbacks.invoke_table_row_callbacks::<SkillAttributes>(
             "skill_attributes",
             &self.skill_attributes,
@@ -2205,8 +2337,12 @@ impl __sdk::SpacetimeModule for RemoteModule {
         player_skill_table::register_table(client_cache);
         point_of_interest_table::register_table(client_cache);
         projectile_table::register_table(client_cache);
+        sim_my_participant_head_table::register_table(client_cache);
+        sim_my_participant_reads_table::register_table(client_cache);
+        sim_my_participant_receipts_table::register_table(client_cache);
         sim_my_snapshot_table::register_table(client_cache);
         sim_participant_state_table::register_table(client_cache);
+        sim_run_table::register_table(client_cache);
         skill_attributes_table::register_table(client_cache);
         skill_cooldown_table::register_table(client_cache);
         skill_def_table::register_table(client_cache);
@@ -2245,8 +2381,12 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "player_skill",
         "point_of_interest",
         "projectile",
+        "sim_my_participant_head",
+        "sim_my_participant_reads",
+        "sim_my_participant_receipts",
         "sim_my_snapshot",
         "sim_participant_state",
+        "sim_run",
         "skill_attributes",
         "skill_cooldown",
         "skill_def",

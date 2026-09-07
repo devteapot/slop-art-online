@@ -1,6 +1,6 @@
 use super::*;
 fn player(id: u32, controller: Controller, position: i32) -> Player {
-    Player {
+    PlayerData {
         id,
         name: format!("P{id}"),
         controller,
@@ -26,7 +26,7 @@ fn player(id: u32, controller: Controller, position: i32) -> Player {
         failures: 0,
         last_reflection: 0,
         last_cause: None,
-    }
+    }.into()
 }
 fn world() -> World {
     World::new(
