@@ -3,9 +3,36 @@
 mod client_access;
 mod storage;
 mod storage_codec;
+mod participant_delivery;
+mod native_storage;
 use storage::LoadedRun as SimRun;
 use simulation::{Controller, Decision, Scenario, World};
 use spacetimedb::{ReducerContext, Table};
+
+/// Host timing is diagnostic only and never influences authoritative decisions.
+/// The default build has no timer calls or additional retained log records.
+fn measured<T>(_name: &str, work: impl FnOnce() -> T) -> T {
+    #[cfg(feature = "clock-profile")]
+    let _timer = spacetimedb::log_stopwatch::LogStopwatch::new(_name);
+    work()
+}
+
+fn advance_clock(world: &mut World, delta_ms: u64) {
+    #[cfg(feature = "clock-profile")]
+    {
+        #[derive(Default)]
+        struct Phases(Option<spacetimedb::log_stopwatch::LogStopwatch>);
+        impl simulation::timing::AdvanceObserver for Phases {
+            fn begin(&mut self, phase: &'static str) {
+                drop(self.0.take());
+                self.0 = Some(spacetimedb::log_stopwatch::LogStopwatch::new(phase));
+            }
+        }
+        world.advance_ms_observed(delta_ms, &mut Phases::default());
+    }
+    #[cfg(not(feature = "clock-profile"))]
+    world.advance_ms(delta_ms);
+}
 
 #[spacetimedb::table(accessor = sim_audit,
     index(accessor = run_and_event, btree(columns = [run, event_id])))]
@@ -29,19 +56,73 @@ fn load(ctx: &ReducerContext, run: &str) -> Result<(SimRun, World), String> {
     Ok((row, state))
 }
 pub(super) fn save(ctx: &ReducerContext, mut row: SimRun, mut world: World) {
-    let encoded = storage::encode(ctx, &mut row, &world).expect("valid normalized World storage");
-    client_access::publish_participants(ctx, &world, &encoded.layout);
-    for event in world.events.drain(..) {
+    let encoded = if row.state == native_storage::FORMAT {
+        let ids = measured("native.save.rows", || native_storage::save(ctx, &world, &row.previous_participants, &row.native_lease_ids, &row.previous_players));
+        measured("native.save.delivery", || participant_delivery::publish(ctx, &world, &ids, &row.previous_participants, row.previous_time_ms));
+        None
+    } else {
+        let encoded = storage::encode(ctx, &mut row, &world).expect("valid normalized World storage");
+        let ids = world.participants.keys().map(|&actor| (actor,
+            encoded.layout.participant_leases(actor).expect("participant leases").to_vec())).collect();
+        participant_delivery::publish(ctx, &world, &ids, &row.previous_participants, row.previous_time_ms);
+        Some(encoded)
+    };
+    measured("native.save.audit", || append_audit(ctx, &world.run, world.events.drain(..)));
+    if let Some(encoded) = encoded { storage::commit(ctx, row, encoded); }
+    else { storage::commit_native(ctx, row); }
+}
+fn append_audit(ctx: &ReducerContext, run: &str, events: impl IntoIterator<Item = simulation::Event>) {
+    for event in events {
+        assert_eq!(event.run, run, "audit run identity");
         ctx.db.sim_audit().insert(SimAudit {
-            key: format!("{}:{}", world.run, event.id),
-            run: world.run.clone(),
+            key: format!("{}:{}", run, event.id),
+            run: run.into(),
             event_id: event.id,
             kind: event.kind.clone(),
             actor: event.actor.unwrap_or(0),
             json: serde_json::to_string(&event).unwrap(),
         });
     }
-    storage::commit(ctx, row, encoded);
+}
+
+/// Explicit representation migration. No gameplay event, controller change,
+/// history truncation or simulation advance is implied by moving storage.
+#[spacetimedb::reducer]
+pub fn sim_migrate_native_state(ctx: &ReducerContext, run: String) -> Result<(), String> {
+    use client_access::sim_participant_cache;
+    use storage::sim_world_blob;
+    let (mut row, world) = load(ctx, &run)?;
+    if row.state == native_storage::FORMAT && native_storage::histories_separated(ctx, &run) { return Ok(()); }
+    // Routine native hydration deliberately defers captured response bodies.
+    // Migration compares complete snapshots, so explicitly materialize them.
+    let world = if row.state == native_storage::FORMAT {
+        native_storage::load_export(ctx, &run)?
+    } else { world };
+    let expected = serde_json::to_value(&world).map_err(|e|e.to_string())?;
+    // Numeric lease identities belong to different representations. Clearing
+    // the derived delivery rows avoids confusing an old blob ID with a new
+    // native lease ID; captured evidence remains in the loaded canonical World.
+    for actor in world.participants.keys() {
+        participant_delivery::clear_actor(ctx, &run, *actor);
+    }
+    row.state = native_storage::FORMAT.into();
+    row.previous_participants.clear();
+    row.previous_players.clear();
+    row.native_lease_ids.clear();
+    save(ctx, row, world);
+    let restored = native_storage::load_export(ctx, &run)?;
+    if serde_json::to_value(&restored).map_err(|e|e.to_string())? != expected {
+        return Err("native migration changed authoritative state; transaction rolled back".into());
+    }
+    // The complete canonical state was verified above, in this transaction.
+    // Audit rows are separate and are deliberately never collected here.
+    for blob in ctx.db.sim_world_blob().run().filter(run.as_str()) {
+        ctx.db.sim_world_blob().id().delete(blob.id);
+    }
+    for actor in restored.participants.keys() {
+        ctx.db.sim_participant_cache().key().delete(format!("{run}:{actor}"));
+    }
+    Ok(())
 }
 #[spacetimedb::reducer]
 pub fn sim_create(ctx: &ReducerContext, run: String, scenario: String) -> Result<(), String> {
@@ -167,8 +248,8 @@ pub fn sim_create_participant(
     let events: Vec<simulation::Event> = ctx
         .db
         .sim_audit()
-        .iter()
-        .filter(|e| e.run == run)
+        .run()
+        .filter(&run)
         .filter_map(|e| serde_json::from_str(&e.json).ok())
         .collect();
     let mut events = events;

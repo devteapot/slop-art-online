@@ -1,5 +1,12 @@
 # Implementation state and legacy baseline
 
+The later [native authority storage](SPACETIMEDB_NATIVE_STATE.md),
+[72/144-actor scale trials](NATIVE_SCALE_TRIALS.md) and
+[clock profiling/history optimization](NATIVE_CLOCK_IMPLEMENTATION.md) track
+performance work beyond the frozen milestone below. Participant access is indexed;
+the global clock still loads the whole world. Sustained 20 Hz and thousands of
+players remain unverified.
+
 The seven-stage [living-world roadmap](WORLD_ROADMAP.md) has completed its bounded implementation pass. The current tested candidate is frozen as `reality-m7-10`; gameplay law semantics remain `m7-1-scoped-laws.2`. Acceptance is limited to the linked evidence, with autonomous and long-term outcomes kept separate.
 
 | Milestone | Accepted evidence | Remaining limits |

@@ -13,6 +13,8 @@ import re
 import signal
 import subprocess
 import time
+import tomllib
+import urllib.request
 
 PREFIX = 'sim-authority36-'
 CASES = ('clock', 'status', 'reads')
@@ -28,28 +30,30 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def validate(before, after, helper, reads, case):
+def validate(before, after, helper, reads, case, participants=36, window_seconds=60, rounds=(5, 20, 35, 50)):
     world, events = after['world'], after['events']
     assert helper.get('setup_ok') and helper.get('pause_acknowledged'), 'incomplete helper setup/pause'
-    assert helper.get('connections_at_resume') == (0 if case == 'clock' else 36), 'wrong initial connection count'
-    assert helper.get('connections_after_pause') == (0 if case == 'clock' else 36), 'connection loss during window'
-    assert 60000 <= helper.get('pause_sent_elapsed_ms', 0), 'window shorter than 60s'
+    assert helper.get('connections_at_resume') == (0 if case == 'clock' else participants), 'wrong initial connection count'
+    assert helper.get('connections_after_pause') == (0 if case == 'clock' else participants), 'connection loss during window'
+    assert window_seconds * 1000 <= helper.get('pause_sent_elapsed_ms', 0), 'window shorter than declared'
+    assert helper.get('fixed_window_seconds') == window_seconds
+    assert helper.get('round_seconds') == (list(rounds) if case == 'reads' else [])
     assert [e['id'] for e in events] == list(range(1, world['next_event'])), 'noncontiguous audit'
     commands = [e for e in events if e['kind'] == 'participant_command']
     control = [e for e in events if e['kind'] == 'control_changed']
-    assert len(control) == 36, 'expected identical 36 control changes before active window'
+    assert len(control) == participants, 'expected one control change per actor before active window'
     disallowed = [e for e in events if e['kind'] in ('model_request', 'model_result', 'law_edit_staged', 'law_activated')]
     assert not disallowed, 'unexpected model/law activity'
     assert world['initial'] == before['world']['initial'], 'initial scenario mutated'
     assert all(e['data']['command']['op'] == 'read_observation' for e in commands), 'unexpected participant command'
     dispatched = reads.get('dispatched', [])
-    assert len(dispatched) == (144 if case == 'reads' else 0), 'incomplete prospective read rounds'
+    assert len(dispatched) == (participants * len(rounds) if case == 'reads' else 0), 'incomplete prospective read rounds'
     assert len({d['request_id'] for d in dispatched}) == len(dispatched)
     assert {e['data']['request_id'] for e in commands} <= {d['request_id'] for d in dispatched}
     if case != 'reads':
         assert not commands
     else:
-        assert all(sum(d['actor'] == actor for d in dispatched) == 4 for actor in {d['actor'] for d in dispatched})
+        assert all(sum(d['actor'] == actor for d in dispatched) == len(rounds) for actor in {d['actor'] for d in dispatched})
     command_map = {e['data']['request_id']: e for e in commands}
     receipts = {r['request_id']: dict(r, actor=int(actor))
                 for actor, participant in world['participants'].items()
@@ -75,28 +79,37 @@ def validate(before, after, helper, reads, case):
     updates = world['timing']['updates'] - before['world']['timing']['updates']
     decision_tick_delta = world['tick'] - before['world']['tick']
     errors = [e for e in events if e['kind'] in ('script_error', 'script_tick_failed')]
-    return dict(protocol_audit_pass=True, model_calls=0, command_count=len(commands),
+    matched_reads = all(r['authority_outcome'] == 'committed_ok'
+                        and r['client_result']
+                        and r['client_result'].get('receipt', {}).get('event') == r['authority_receipt']['event']
+                        for r in reconciled)
+    return dict(protocol_audit_pass=not errors and matched_reads, model_calls=0, command_count=len(commands),
                 exact_scenario_preserved=True, simulation_delta_ms=delta, update_count=updates,
                 decision_tick_delta=decision_tick_delta,
-                simulation_seconds_to_configured_window_ratio=delta / 60000,
-                update_count_divided_by_configured_window_seconds=updates / 60,
+                simulation_seconds_to_configured_window_ratio=delta / (window_seconds * 1000),
+                update_count_divided_by_configured_window_seconds=updates / window_seconds,
                 resume_latency_ms=helper.get('resume_latency_ms'),
                 pause_sent_elapsed_ms=helper.get('pause_sent_elapsed_ms'),
                 resume_ack_to_pause_ack_ms=(helper.get('pause_sent_elapsed_ms', 0) + helper.get('pause_latency_ms', 0)),
-                pause_overrun_ms=max(0, helper.get('pause_sent_elapsed_ms', 60000) - 60000),
+                pause_overrun_ms=max(0, helper.get('pause_sent_elapsed_ms', window_seconds * 1000) - window_seconds * 1000),
                 pause_latency_ms=helper.get('pause_latency_ms'), engine_errors=errors,
                 request_reconciliation=reconciled,
-                note='The status sample window is 60s after resume ACK. World delta can include simulation during resume latency and pause latency; dividing by 60 is a fixed-window normalization, not an exact active-time speed.')
+                note='The sample window follows resume ACK. World delta can include resume/pause latency; rates use the declared wall window.')
 
 
 def execute_case(args, out, case, database, scenario, actors):
+    window_seconds = getattr(args, 'window_seconds', 60)
+    rounds = getattr(args, 'read_round_seconds', [5, 20, 35, 50])
+    setup_seconds = getattr(args, 'setup_seconds', 120)
+    helper_seconds = setup_seconds + window_seconds + 80
     out.mkdir()
     credentials = out / 'credentials'
     credentials.mkdir(mode=0o700)
     run = PREFIX + case + '-' + str(time.time_ns())
     config = dict(server=args.server, database=database, run=run, case=case, output=str(out),
                   credential_dir=str(credentials), cli=str(args.cli.resolve()),
-                  cli_config=str(args.cli_config.resolve()), actors=actors)
+                  cli_config=str(args.cli_config.resolve()), actors=actors, window_seconds=window_seconds,
+                  read_round_seconds=rounds, setup_seconds=setup_seconds)
     write(out / 'config.json', config)
     report = dict(case=case, database=database, run=run, created=False, model_calls=0,
                   helper_ok=False, paused_verified=False, remaining_grants=None, cleanup_errors=[])
@@ -118,6 +131,19 @@ def execute_case(args, out, case, database, scenario, actors):
         return response.stdout
 
     def call(name, *values):
+        if name == 'sim_create_participant' and getattr(args, 'create_http', False):
+            # Large seed JSON exceeds Linux's per-argument CLI limit. This is
+            # the same authenticated reducer endpoint used by the official CLI.
+            token = tomllib.loads(Path(config['cli_config']).read_text())['spacetimedb_token']
+            request = urllib.request.Request(
+                f'{args.server}/v1/database/{database}/call/{name}',
+                data=json.dumps(list(values), separators=(',', ':')).encode(),
+                headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    return response.read().decode()
+            except Exception as error:
+                raise RuntimeError(f'owner HTTP create failed: {type(error).__name__}; outcome must be reconciled') from None
         return cli('call', name, *map(json.dumps, values), '-y')
 
     def rows(query):
@@ -163,14 +189,14 @@ def execute_case(args, out, case, database, scenario, actors):
         call('sim_setup_client_clock', run, 'live_fixture')
         call('sim_operator_clock', run, 50, True)
         before = capture('baseline-snapshot.json')
-        assert len(before['world']['players']) == 36
+        assert len(before['world']['players']) == len(actors)
         with (out / 'helper.log').open('w') as log:
             process = subprocess.Popen([str(args.probe_binary.resolve()), str(out / 'config.json')],
                                        cwd=args.implementation, stdout=log, stderr=log)
             try:
-                report['helper_exit_code'] = process.wait(timeout=260)
+                report['helper_exit_code'] = process.wait(timeout=helper_seconds)
             except subprocess.TimeoutExpired:
-                raise RuntimeError('260s helper ceiling reached; no retry')
+                raise RuntimeError(f'{helper_seconds}s helper ceiling reached; no retry')
         report['helper_ok'] = report['helper_exit_code'] == 0
     except BaseException as error:
         report['error'] = f'{type(error).__name__}: {error}'
@@ -196,13 +222,13 @@ def execute_case(args, out, case, database, scenario, actors):
                 if (out / 'baseline-snapshot.json').exists():
                     before = json.loads((out / 'baseline-snapshot.json').read_text())
                     reads = json.loads((out / 'read-results.json').read_text()) if (out / 'read-results.json').exists() else {}
-                    checked = validate(before, after, helper, reads, case)
+                    checked = validate(before, after, helper, reads, case, len(actors), window_seconds, rounds)
                     write(out / 'authority-validation.json', checked)
                     report['protocol_audit_pass'] = checked['protocol_audit_pass']
                 samples = json.loads((out / 'status-samples.json').read_text()) if (out / 'status-samples.json').exists() else []
                 start = helper.get('window_start_process_ms')
-                active = [s for s in samples if start is not None and start <= s['elapsed_from_process_ms'] < start + 60000]
-                late = [s for s in samples if start is not None and s['elapsed_from_process_ms'] >= start + 60000]
+                active = [s for s in samples if start is not None and start <= s['elapsed_from_process_ms'] < start + window_seconds * 1000]
+                late = [s for s in samples if start is not None and s['elapsed_from_process_ms'] >= start + window_seconds * 1000]
                 sizes = sorted(s['body_bytes'] for s in active)
                 write(out / 'payload-summary.json', dict(
                     status_samples_fixed_window=len(active), status_samples_after_window=len(late),
@@ -210,12 +236,13 @@ def execute_case(args, out, case, database, scenario, actors):
                     status_body_bytes_max=max(sizes, default=None), samples_dropped=helper.get('samples_dropped'),
                     baseline_full_world_json_bytes=before['full_world_json_bytes'],
                     final_full_world_json_bytes=after['full_world_json_bytes'], final_audit_json_bytes=after['audit_json_bytes'],
-                    note='JSON body sizes are payload measures, not network wire bytes. Status callback sampling excludes setup and pause overrun.'))
+                    row_encodings=sorted({s.get('row_encoding', 'json') for s in active}),
+                    note='Recorded row/body sizes are payload measures, not complete network frames. Original status samples use JSON; native table samples declare BSATN. Sampling excludes setup and pause overrun.'))
         except Exception as error:
             report['capture_or_pause_error'] = f'{type(error).__name__}: {error}'
-        # Revoke only identities provisioned by this case, at most 36 with 8 workers.
+        # Revoke only identities provisioned by this case, with 8 workers.
         identities = json.loads((out / 'identities.json').read_text()) if (out / 'identities.json').exists() else []
-        assert len(identities) <= 36
+        assert len(identities) <= len(actors)
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             futures = [pool.submit(call, 'sim_revoke_client', identity) for identity in identities]
             for future in futures:

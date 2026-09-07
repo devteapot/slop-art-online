@@ -7,17 +7,67 @@ use sha2::{Digest, Sha256};
 pub const API_VERSION: &str = "sao-participant-v1";
 pub const TRACE_LIMIT: usize = 256;
 pub const EVIDENCE_LEASE_MS: u64 = 330_000;
+/// An immutable captured context, or a transaction-local storage reference.
+/// Deferred payloads cannot serialize as World JSON: exports must materialize
+/// them explicitly. Physics and interpretation only need the lease's evidence.
+#[derive(Clone, Debug)]
+pub struct Observation(ObservationPayload);
+#[derive(Clone, Debug)]
+enum ObservationPayload { Inline(Arc<RawValue>), Deferred(u64) }
+impl Observation {
+    pub fn deferred(id:u64)->Self {
+        assert_ne!(id,0,"deferred observation needs a canonical identity");
+        Self(ObservationPayload::Deferred(id))
+    }
+    pub fn reference(&self)->Option<u64> {
+        match &self.0 {ObservationPayload::Deferred(id)=>Some(*id),_=>None}
+    }
+    pub fn raw(&self)->Result<&RawValue,String> {
+        match &self.0 {ObservationPayload::Inline(value)=>Ok(value),
+            ObservationPayload::Deferred(_)=>Err("captured observation must be materialized for export".into())}
+    }
+    pub fn is_capture(&self)->bool {
+        match &self.0 {ObservationPayload::Inline(value)=>value.get()!="null",ObservationPayload::Deferred(_)=>true}
+    }
+}
+impl From<Box<RawValue>> for Observation {
+    fn from(value:Box<RawValue>)->Self {Self(ObservationPayload::Inline(value.into()))}
+}
+impl From<Arc<RawValue>> for Observation {
+    fn from(value:Arc<RawValue>)->Self {Self(ObservationPayload::Inline(value))}
+}
+impl std::ops::Deref for Observation {
+    type Target=Arc<RawValue>;
+    fn deref(&self)->&Self::Target {
+        match &self.0 {ObservationPayload::Inline(value)=>value,ObservationPayload::Deferred(_)=>panic!("deferred observation requires explicit materialization")}
+    }
+}
+impl std::ops::DerefMut for Observation {
+    fn deref_mut(&mut self)->&mut Self::Target {
+        match &mut self.0 {ObservationPayload::Inline(value)=>value,ObservationPayload::Deferred(_)=>panic!("deferred observation requires explicit materialization")}
+    }
+}
+impl Serialize for Observation {
+    fn serialize<S:serde::Serializer>(&self,serializer:S)->Result<S::Ok,S::Error> {
+        self.raw().map_err(serde::ser::Error::custom)?.serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for Observation {
+    fn deserialize<D:serde::Deserializer<'de>>(deserializer:D)->Result<Self,D::Error> {
+        Box::<RawValue>::deserialize(deserializer).map(Into::into)
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EvidenceLease {
     #[serde(default)]
     pub request_id: String,
     #[serde(default="empty_observation")]
-    pub observation: Arc<RawValue>,
+    pub observation: Observation,
     pub observed_cursor: u64,
     pub expires_ms: u64,
     pub experiences: Arc<Vec<Experience>>,
 }
-fn empty_observation() -> Arc<RawValue> {
+fn empty_observation() -> Observation {
     serde_json::value::to_raw_value(&Value::Null).unwrap().into()
 }
 #[derive(Serialize)]
@@ -26,7 +76,7 @@ fn captured_read(lease:&EvidenceLease) -> Result<CapturedRead<'_>,String> {
     // The captured context is immutable JSON. Keep it opaque during world
     // loading/cloning; append the separately retained evidence without parsing
     // its full object graph for every other character's command or clock pulse.
-    let body=lease.observation.get().trim();
+    let body=lease.observation.raw()?.get().trim();
     let prefix=body.strip_prefix('{').and_then(|_|body.strip_suffix('}')).ok_or("invalid captured observation object")?;
     let experiences=serde_json::to_string(&lease.experiences).map_err(|e|e.to_string())?;
     let mut result=String::with_capacity(body.len()+experiences.len()+20);
@@ -34,6 +84,13 @@ fn captured_read(lease:&EvidenceLease) -> Result<CapturedRead<'_>,String> {
     if prefix.trim_end()!="{" {result.push(',');}
     result.push_str("\"experiences\":");result.push_str(&experiences);result.push('}');
     Ok(CapturedRead{request_id:&lease.request_id,observation:RawValue::from_string(result).map_err(|e|e.to_string())?})
+}
+impl EvidenceLease {
+    /// Exact immutable response for row-based delivery. Call only when creating
+    /// the response row, not when unrelated simulation state changes.
+    pub fn response_json(&self) -> Result<String, String> {
+        Ok(captured_read(self)?.observation.get().to_owned())
+    }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Experience {
@@ -104,12 +161,22 @@ impl<'de> Deserialize<'de> for ExperienceData {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ParticipantState(Arc<ParticipantStateData>);
+impl From<ParticipantStateData> for ParticipantState {
+    fn from(data:ParticipantStateData)->Self {Self(Arc::new(data))}
+}
 impl std::ops::Deref for ParticipantState {
     type Target=ParticipantStateData;
     fn deref(&self)->&Self::Target {&self.0}
 }
 impl std::ops::DerefMut for ParticipantState {
     fn deref_mut(&mut self)->&mut Self::Target {Arc::make_mut(&mut self.0)}
+}
+impl ParticipantState {
+    /// A retained snapshot forces copy-on-write before any mutation. Equality
+    /// here is a transaction-local change detector, never a durable identity.
+    pub fn same_snapshot(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ParticipantStateData {
@@ -134,7 +201,9 @@ fn record_activity(state: &mut ParticipantState, event: &Event, time_ms: u64, po
     if moved {
         state.activity.push(json!({"kind":"move_step","location":position,"time_ms":time_ms}));
     }
-    state.activity_position = Some(position);
+    if state.activity_position != Some(position) {
+        state.activity_position = Some(position);
+    }
     let data = &event.data;
     let item = match event.kind.as_str() {
         "resource_change" => Some(json!({"kind":"site_food","location":data["location"],"delta":data["food_delta"]})),
@@ -385,7 +454,7 @@ impl World {
             "control_epoch":s.control_epoch,"policy_revision":self.players[i].generation,"learning_revision":s.learning_revision,
             "context":self.context(i),"experiences":experiences,"next_cursor":next,"latest_cursor":s.cursor,"oldest_cursor":oldest,"gap":after.saturating_add(1)<oldest,
             "receipts":s.receipts,"queued_speech":s.speech,
-            "read_observations":s.evidence_leases.iter().filter(|l| include_reads && l.expires_ms >= self.timing.time_ms && l.observation.get()!="null").map(captured_read).collect::<Result<Vec<_>,_>>()?,"capabilities":["replace_tree","patch_subtree","speak","reflect","pin_observation","read_observation"],
+            "read_observations":s.evidence_leases.iter().filter(|l| include_reads && l.expires_ms >= self.timing.time_ms && l.observation.is_capture()).map(captured_read).collect::<Result<Vec<_>,_>>()?,"capabilities":["replace_tree","patch_subtree","speak","reflect","pin_observation","read_observation"],
             "limits":{"tree_nodes":64,"tree_depth":8,"children":8,"speech_queue":8,"trace_retention":TRACE_LIMIT,"evidence_lease_ms":EVIDENCE_LEASE_MS,"evidence_leases":4,"reflections":8},
             "patch_semantics":"Replace one node at a canonical path with NO leading slash. The whole tree is root; zero-based children are root/0, root/1, root/2. A guarded child is root/2/guard and a when child is root/2/when. Paths such as /2, /root/0 and root/children/0 are invalid. /guard and /when descend into the CHILD, not its condition; replace the enclosing guard node to change its condition. Repeating a condition inside the child keeps the old outer condition active. Reset cursors at/under patch; retain ancestor/sibling progress; interrupt active leaf only if inside patch; next update rechecks current guards"}),
         )
@@ -417,7 +486,7 @@ impl World {
             "context":{"player":{"health":self.players[i].health}},"receipts":s.receipts,
             "capabilities":["read_observation","replace_tree","patch_subtree","speak","reflect","pin_observation"]
         });
-        let read_observations=s.evidence_leases.iter().filter(|l|include_reads && l.expires_ms>=self.timing.time_ms && l.observation.get()!="null").map(captured_read).collect::<Result<Vec<_>,_>>()?;
+        let read_observations=s.evidence_leases.iter().filter(|l|include_reads && l.expires_ms>=self.timing.time_ms && l.observation.is_capture()).map(captured_read).collect::<Result<Vec<_>,_>>()?;
         serde_json::to_string(&Status{head,read_observations}).map_err(|e|e.to_string())
     }
     pub fn change_control(&mut self, actor: u32) -> Result<(), String> {
@@ -798,6 +867,7 @@ impl World {
         Ok(cause)
     }
     pub(super) fn cancel_speech(&mut self, actor: u32, reason: &str) {
+        if self.participants.get(&actor).is_some_and(|s| s.speech.is_empty()) { return; }
         let queued = std::mem::take(&mut self.participants.entry(actor).or_default().speech);
         for q in queued {
             self.event(
@@ -825,11 +895,9 @@ impl World {
                 .filter(|q| q.expires_tick < self.tick)
                 .cloned()
                 .collect();
-            self.participants
-                .get_mut(&actor)
-                .unwrap()
-                .speech
-                .retain(|q| q.expires_tick >= self.tick);
+            if !expired.is_empty() {
+                self.participants.get_mut(&actor).unwrap().speech.retain(|q| q.expires_tick >= self.tick);
+            }
             for q in expired {
                 self.event(
                     Some(actor),

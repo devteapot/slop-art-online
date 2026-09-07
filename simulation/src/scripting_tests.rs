@@ -73,6 +73,31 @@ fn bundled_survival_scenario_runs_without_script_faults() {
 }
 
 #[test]
+fn skill_transaction_stages_audit_without_changing_full_clone_outcome() {
+    let mut actual = world();
+    for n in 0..32 {
+        actual.event(Some(1), "retained_prefix", vec![], json!({"n":n,"payload":"x".repeat(1024)}));
+    }
+    let mut action = Action::new(Skill::Give);
+    action.target = Some(2);
+    submit(&mut actual, action.clone());
+    actual.enable_participants();
+    let prefix = serde_json::to_value(&actual.events).unwrap();
+    let mut actual_execution = actual.players[0].execution.clone().unwrap();
+    let mut expected_execution = actual_execution.clone();
+    // Original transaction strategy, invoking exactly the same skill kernel.
+    let mut expected = actual.clone();
+    let expected_status = expected.execute_action_inner(0, &mut expected_execution, action.clone())
+        .unwrap_or_else(|e| panic!("{}", e.message));
+    let actual_status = actual.execute_action(0, &mut actual_execution, action);
+    assert_eq!(actual_status, expected_status);
+    assert_eq!(serde_json::to_value(&actual).unwrap(), serde_json::to_value(&expected).unwrap());
+    assert_eq!(serde_json::to_value(&actual.events).unwrap(), serde_json::to_value(&expected.events).unwrap());
+    assert_eq!(serde_json::to_value(&actual_execution).unwrap(), serde_json::to_value(&expected_execution).unwrap());
+    assert_eq!(serde_json::to_value(&actual.events[..prefix.as_array().unwrap().len()]).unwrap(), prefix);
+}
+
+#[test]
 fn food_giving_and_public_deposits_conserve_food_and_are_perceived() {
     let mut w = world();
     let total = |w: &World| w.players.iter().map(|p| p.food).sum::<i32>() + w.sites.iter().map(|s| s.food).sum::<i32>();

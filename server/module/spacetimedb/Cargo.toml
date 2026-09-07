@@ -8,6 +8,10 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+# Explicit diagnostic builds only: timers write module logs and perturb timings.
+clock-profile = []
+
 [dependencies]
 spacetimedb = { version = "=2.1.0", features = ["unstable"] }
 log = "0.4"

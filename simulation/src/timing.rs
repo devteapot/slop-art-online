@@ -6,6 +6,15 @@ use crate::*;
 pub const LEGACY_UNIT_MS: u64 = 2_500;
 pub const UPDATE_MS: u64 = 50;
 
+/// Optional diagnostic phase notifications. No measured time enters the kernel,
+/// persisted state or gameplay decisions. The normal path uses the no-op sink.
+pub trait AdvanceObserver {
+    fn begin(&mut self, phase: &'static str);
+}
+impl AdvanceObserver for () {
+    fn begin(&mut self, _: &'static str) {}
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Timing {
     #[serde(default)]
