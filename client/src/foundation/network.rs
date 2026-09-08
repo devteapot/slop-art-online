@@ -1,7 +1,8 @@
 use super::*;
 use shared::module_bindings::{
     sim_client_control, sim_client_intent, sim_select_inspector, DbConnection,
-    SimMyRenderSnapshotTableAccess, SimMyRenderEventsTableAccess,
+    SimMyRenderActorsTableAccess, SimMyRenderBodiesTableAccess, SimMyRenderEventsTableAccess,
+    SimMyRenderHeaderTableAccess, SimMyRenderSceneTableAccess, SimMyRenderSitesTableAccess,
 };
 use spacetimedb_sdk::{DbContext, Table};
 use std::sync::{Arc, Mutex};
@@ -12,7 +13,7 @@ pub enum Signal {
     Connection(Result<DbConnection, String>),
     Status(String),
     Disconnected,
-    HistoryChanged,
+    RenderChanged(u8),
 }
 #[derive(Clone, Default)]
 pub struct Inbox(pub Arc<Mutex<Vec<Signal>>>);
@@ -23,6 +24,7 @@ pub struct Network {
     pub connecting: bool,
     pub retry_at: f64,
     pub latest: String,
+    pub render_cache: shared::render_projection::Cache,
     pub view: String,
     pub runs_at: f64,
     pub expected_run: Option<String>,
@@ -34,7 +36,11 @@ impl Default for Network {
         #[cfg(target_arch = "wasm32")]
         let view = {
             let w = web_sys::window().unwrap();
-            let key = format!("sao-view{}{}", w.location().pathname().unwrap_or_default(), w.location().hash().unwrap_or_default());
+            let key = format!(
+                "sao-view{}{}",
+                w.location().pathname().unwrap_or_default(),
+                w.location().hash().unwrap_or_default()
+            );
             let storage = w.session_storage().ok().flatten();
             storage
                 .as_ref()
@@ -62,6 +68,7 @@ impl Default for Network {
             connecting: false,
             retry_at: 0.,
             latest: String::new(),
+            render_cache: Default::default(),
             view,
             runs_at: 0.,
             expected_run: None,
@@ -143,11 +150,49 @@ fn connect(inbox: Inbox, server: String, db: String) {
         // browser identity through the HttpOnly development session, with no auth in URLs.
         .on_connect(move |ctx, identity, _| {
             let history = connected.clone();
-            ctx.db.sim_my_render_events().on_insert(move |_,_| history.0.lock().unwrap().push(Signal::HistoryChanged));
+            ctx.db.sim_my_render_events().on_insert(move |_, _| {
+                history
+                    .0
+                    .lock()
+                    .unwrap()
+                    .push(Signal::RenderChanged(shared::render_projection::EVENTS))
+            });
             let history = connected.clone();
-            ctx.db.sim_my_render_events().on_delete(move |_,_| history.0.lock().unwrap().push(Signal::HistoryChanged));
+            ctx.db.sim_my_render_events().on_delete(move |_, _| {
+                history
+                    .0
+                    .lock()
+                    .unwrap()
+                    .push(Signal::RenderChanged(shared::render_projection::EVENTS))
+            });
+            // Bevy exclusively advances this connection in frame_tick below.
+            // Coalesce row changes and reconstruct once after its cache updates.
+            macro_rules! changed {
+                ($table:ident,$part:ident) => {{
+                    let inbox = connected.clone();
+                    ctx.db.$table().on_insert(move |_, _| {
+                        inbox
+                            .0
+                            .lock()
+                            .unwrap()
+                            .push(Signal::RenderChanged(shared::render_projection::$part))
+                    });
+                    let inbox = connected.clone();
+                    ctx.db.$table().on_delete(move |_, _| {
+                        inbox
+                            .0
+                            .lock()
+                            .unwrap()
+                            .push(Signal::RenderChanged(shared::render_projection::$part))
+                    });
+                }};
+            }
+            changed!(sim_my_render_actors, ACTORS);
+            changed!(sim_my_render_bodies, BODIES);
+            changed!(sim_my_render_sites, SITES);
+            changed!(sim_my_render_scene, SCENE);
             ctx.subscription_builder()
-                .subscribe(["SELECT * FROM sim_my_render_snapshot", "SELECT * FROM sim_my_render_events"]);
+                .subscribe(shared::render_projection::SUBSCRIPTIONS);
             connected
                 .0
                 .lock()
@@ -195,7 +240,11 @@ fn post(
                     .location()
                     .origin()
                     .map_err(|_| "origin unavailable")?;
-                let pathname = web_sys::window().unwrap().location().pathname().unwrap_or_default();
+                let pathname = web_sys::window()
+                    .unwrap()
+                    .location()
+                    .pathname()
+                    .unwrap_or_default();
                 let prefix = session_prefix(&pathname);
                 let req = gloo_net::http::Request::post(&format!("{origin}{prefix}{path}"))
                     .header("x-sao-client", "1")
@@ -257,11 +306,11 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
         let _ = conn.frame_tick();
     }
     let signals = std::mem::take(&mut *net.inbox.0.lock().unwrap());
-    let mut history_changed = false;
+    let mut render_changed = 0;
     for signal in signals {
         game.dirty = true;
         match signal {
-            Signal::HistoryChanged => history_changed = true,
+            Signal::RenderChanged(part) => render_changed |= part,
             Signal::Http(tag, Ok(value)) => match tag.as_str() {
                 "boot" => {
                     game.status = "Connecting to authoritative run…".into();
@@ -365,6 +414,8 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
                 net.post("bind", "/api/bind", json!({"identity":identity}));
             }
             Signal::Connection(Ok(conn)) => {
+                net.render_cache = Default::default();
+                net.latest.clear();
                 net.connection = Some(conn);
                 net.connecting = false;
             }
@@ -385,28 +436,41 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
         if let Some(conn) = &net.connection {
             let body = conn
                 .db
-                .sim_my_render_snapshot()
+                .sim_my_render_header()
                 .iter()
                 .next()
                 .map(|s| s.body.clone());
             if let Some(body) = body {
-                if body != net.latest || history_changed {
-                    if let Ok(mut snapshot) = serde_json::from_str::<Value>(&body) {
-                        if net
-                            .expected_run
-                            .as_ref()
-                            .is_some_and(|run| snapshot["run"] != run.as_str())
-                        {
+                if body != net.latest || render_changed != 0 {
+                    if net.expected_run.as_ref().is_some_and(|run| {
+                        conn.db
+                            .sim_my_render_header()
+                            .iter()
+                            .next()
+                            .is_some_and(|row| &row.run != run)
+                    }) {
+                        return;
+                    }
+                    let mut cache = std::mem::take(&mut net.render_cache);
+                    let refreshed = cache.refresh(
+                        &net.connection.as_ref().unwrap().db,
+                        &mut game.snapshot,
+                        render_changed,
+                    );
+                    net.render_cache = cache;
+                    match refreshed {
+                        Ok(true) => {
+                            net.expected_run = None;
+                            game.dirty = true;
+                        }
+                        Ok(false) => {
+                            net.latest.clear();
                             return;
                         }
-                        let mut events: Vec<_> = conn.db.sim_my_render_events().iter()
-                            .filter(|row| snapshot["run"] == row.run)
-                            .filter_map(|row| serde_json::from_str::<Value>(&row.body).ok()).collect();
-                        events.sort_by_key(|event| event["id"].as_u64().unwrap_or(0));
-                        snapshot["events"] = json!(events);
-                        net.expected_run = None;
-                        game.snapshot = snapshot;
-                        game.dirty = true;
+                        Err(error) => {
+                            game.status = format!("Render projection failed: {error}");
+                            game.dirty = true;
+                        }
                     }
                     net.latest = body;
                 }
@@ -423,11 +487,14 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
         if game.snapshot["inspected_actor"].as_u64() != desired {
             if let Some(conn) = &net.connection {
                 let inbox = net.inbox.clone();
-                let _ = conn.reducers.sim_select_inspector_then(desired.map(|id| id as u32), move |_, result| {
-                    if let Ok(Err(error)) = result {
-                        inbox.0.lock().unwrap().push(Signal::Status(error));
-                    }
-                });
+                let _ = conn.reducers.sim_select_inspector_then(
+                    desired.map(|id| id as u32),
+                    move |_, result| {
+                        if let Ok(Err(error)) = result {
+                            inbox.0.lock().unwrap().push(Signal::Status(error));
+                        }
+                    },
+                );
             }
             net.inspector_retry_at = time.elapsed_secs_f64() + 1.;
         }
@@ -445,16 +512,23 @@ pub fn tick(mut net: NonSendMut<Network>, mut game: ResMut<Game>, time: Res<Time
 // A lab session shares its forwarded origin while retaining its own host and browser identity.
 fn session_prefix(path: &str) -> String {
     let parts: Vec<_> = path.split('/').collect();
-    if parts.len() >= 3 && parts[1] == "session" && !parts[2].is_empty()
-        && parts[2].chars().all(|c|c.is_ascii_alphanumeric() || c=='-') {
-        format!("/session/{}",parts[2])
-    } else { String::new() }
+    if parts.len() >= 3
+        && parts[1] == "session"
+        && !parts[2].is_empty()
+        && parts[2]
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        format!("/session/{}", parts[2])
+    } else {
+        String::new()
+    }
 }
 #[cfg(test)]
 #[test]
 fn lab_session_prefix_keeps_requests_inside_the_selected_host() {
-    assert_eq!(session_prefix("/session/s123/"),"/session/s123");
-    assert_eq!(session_prefix("/session/s456/index.html"),"/session/s456");
-    assert_eq!(session_prefix("/"),"");
-    assert_eq!(session_prefix("/session/../"),"");
+    assert_eq!(session_prefix("/session/s123/"), "/session/s123");
+    assert_eq!(session_prefix("/session/s456/index.html"), "/session/s456");
+    assert_eq!(session_prefix("/"), "");
+    assert_eq!(session_prefix("/session/../"), "");
 }

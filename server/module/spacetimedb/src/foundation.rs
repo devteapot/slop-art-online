@@ -9,7 +9,11 @@ mod deadline_clock;
 mod physical_clock;
 mod native_storage;
 mod controller_delivery;
+mod render_parts;
 mod definition_cache;
+mod evidence_profile;
+mod seed_upload;
+mod world_build;
 use storage::LoadedRun as SimRun;
 use simulation::{Controller, Decision, Scenario, World};
 use spacetimedb::{ReducerContext, Table};
@@ -22,23 +26,36 @@ fn measured<T>(_name: &str, work: impl FnOnce() -> T) -> T {
     work()
 }
 
-fn advance_clock(world: &mut World, delta_ms: u64, selection: Option<&simulation::clock::Selection>) {
+#[derive(Default)]
+struct ClockObserver {
+    #[cfg(feature = "clock-profile")]
+    span: Option<spacetimedb::log_stopwatch::LogStopwatch>,
+}
+
+impl simulation::timing::AdvanceObserver for ClockObserver {
+    fn begin(&mut self, _phase: &'static str) {
+        #[cfg(feature = "clock-profile")]
+        {
+            drop(self.span.take());
+            self.span = Some(spacetimedb::log_stopwatch::LogStopwatch::new(_phase));
+        }
+    }
+}
+
+fn observe_clock<T>(work: impl FnOnce(&mut ClockObserver) -> T) -> T {
     #[cfg(feature = "clock-profile")]
     {
-        #[derive(Default)]
-        struct Phases(Option<spacetimedb::log_stopwatch::LogStopwatch>);
-        impl simulation::timing::AdvanceObserver for Phases {
-            fn begin(&mut self, phase: &'static str) {
-                drop(self.0.take());
-                self.0 = Some(spacetimedb::log_stopwatch::LogStopwatch::new(phase));
-            }
-        }
+        let _sampling = evidence_profile::KernelScope::new();
         simulation::timing::with_diagnostics(
-            |name| Box::new(spacetimedb::log_stopwatch::LogStopwatch::new(name)),
-            || world.advance_ms_selected(delta_ms, &mut Phases::default(), selection));
+            evidence_profile::timer,
+            || work(&mut ClockObserver::default()))
     }
     #[cfg(not(feature = "clock-profile"))]
-    world.advance_ms_selected(delta_ms, &mut (), selection);
+    work(&mut ClockObserver::default())
+}
+
+fn advance_clock(world: &mut World, delta_ms: u64, selection: Option<&simulation::clock::Selection>) {
+    observe_clock(|observer| world.advance_ms_selected(delta_ms, observer, selection));
 }
 
 #[spacetimedb::table(accessor = sim_audit,
@@ -82,21 +99,31 @@ pub(super) fn save(ctx: &ReducerContext, mut row: SimRun, mut world: World) {
 fn append_audit(ctx: &ReducerContext, run: &str, events: impl IntoIterator<Item = simulation::Event>) {
     let mut first = 0;
     let mut count = 0;
+    #[cfg(feature = "clock-profile")]
+    let mut json_bytes = 0usize;
     for event in events {
         if count == 0 { first = event.id; }
         assert_eq!(event.id, first + count, "contiguous audit append");
         count += 1;
         assert_eq!(event.run, run, "audit run identity");
+        let sampled = (count - 1) % 67 == 0;
+        let mut profile = evidence_profile::SaveScope::new(sampled, "audit.append.encode");
+        let json = serde_json::to_string(&event).unwrap();
+        #[cfg(feature = "clock-profile")]
+        { json_bytes += json.len(); }
+        profile.phase(sampled, "audit.append.insert");
         ctx.db.sim_audit().insert(SimAudit {
             key: format!("{}:{}", run, event.id),
             run: run.into(),
             event_id: event.id,
             kind: event.kind.clone(),
             actor: event.actor.unwrap_or(0),
-            json: serde_json::to_string(&event).unwrap(),
+            json,
         });
     }
-    audit_archive::appended(ctx, run, first, count);
+    #[cfg(feature = "clock-profile")]
+    log::info!("audit-append-counts {}", serde_json::to_string(&[count, count.div_ceil(67), json_bytes as u64]).unwrap());
+    measured("audit.append.retention", || audit_archive::appended(ctx, run, first, count));
 }
 
 /// Explicit representation migration. No gameplay event, controller change,
@@ -106,7 +133,10 @@ pub fn sim_migrate_native_state(ctx: &ReducerContext, run: String) -> Result<(),
     use client_access::sim_participant_cache;
     use storage::sim_world_blob;
     let (mut row, world) = load(ctx, &run)?;
-    if row.state == native_storage::FORMAT && native_storage::histories_separated(ctx, &run) { return Ok(()); }
+    if row.state == native_storage::FORMAT && native_storage::histories_separated(ctx, &run) {
+        native_storage::prepare_action_admission(ctx, &world);
+        return Ok(());
+    }
     // Routine native hydration deliberately defers captured response bodies.
     // Migration compares complete snapshots, so explicitly materialize them.
     let world = if row.state == native_storage::FORMAT {
@@ -140,6 +170,35 @@ pub fn sim_migrate_native_state(ctx: &ReducerContext, run: String) -> Result<(),
 }
 #[spacetimedb::reducer]
 pub fn sim_create(ctx: &ReducerContext, run: String, scenario: String) -> Result<(), String> {
+    create_world(ctx, run, scenario, World::new, 2 * 1024 * 1024, false)
+}
+
+// Validate and construct once, then publish the completed initial state once.
+// Cross-character seed validation still needs the complete explicit input;
+// routine local actions do not use this provisioning path.
+fn create_world(ctx: &ReducerContext, run: String, scenario: String,
+    construct: fn(String, Scenario) -> Result<World, String>, input_limit: usize,
+    uploaded: bool) -> Result<(), String> {
+    validate_run_id(&run)?;
+    if storage::exists(ctx, &run) {
+        return Err("run already exists; never overwrite".into());
+    }
+    if !uploaded && seed_upload::reserved(ctx, &run) {
+        return Err("run has a pending seed upload".into());
+    }
+    // Bound transport allocation independently of character count. The service's
+    // request limit also applies; larger seeds use the private upload protocol.
+    if scenario.len() > input_limit {
+        return Err("scenario too large".into());
+    }
+    let scenario: Scenario = serde_json::from_str(&scenario).map_err(|e| e.to_string())?;
+    let world = construct(run.clone(), scenario)?;
+    let row = storage::create(ctx, run);
+    save(ctx, row, world);
+    Ok(())
+}
+
+fn validate_run_id(run: &str) -> Result<(), String> {
     if !run.starts_with("sim-")
         || run.len() > 100
         || !run.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
@@ -148,19 +207,6 @@ pub fn sim_create(ctx: &ReducerContext, run: String, scenario: String) -> Result
             "run ID must start sim- and contain only ASCII letters, digits, hyphens".into(),
         );
     }
-    if storage::exists(ctx, &run) {
-        return Err("run already exists; never overwrite".into());
-    }
-    // The shared core permits 256 inhabitants with bounded personal knowledge.
-    // Keep transport allocation bounded while allowing authored multi-settlement
-    // seeds (the 36-person seed is already 117 KB after compact serialization).
-    if scenario.len() > 2 * 1024 * 1024 {
-        return Err("scenario too large".into());
-    }
-    let scenario: Scenario = serde_json::from_str(&scenario).map_err(|e| e.to_string())?;
-    let world = World::new(run.clone(), scenario)?;
-    let row = storage::create(ctx, run);
-    save(ctx, row, world);
     Ok(())
 }
 #[spacetimedb::reducer]
@@ -255,32 +301,11 @@ pub fn sim_create_participant(
     run: String,
     scenario: String,
 ) -> Result<(), String> {
-    sim_create(ctx, run.clone(), scenario)?;
-    let (row, mut w) = load(ctx, &run)?;
-    // sim_create persisted its initial events; seed only safe initial perceptions into the trace.
-    w.enable_participants();
-    let events: Vec<simulation::Event> = ctx
-        .db
-        .sim_audit()
-        .run()
-        .filter(&run)
-        .filter_map(|e| serde_json::from_str(&e.json).ok())
-        .collect();
-    let mut events = events;
-    events.sort_by_key(|e| e.id);
-    for e in events {
-        w.record_initial_participant_event(&e);
-    }
-    save(ctx, row, w);
-    Ok(())
+    create_world(ctx, run, scenario, World::new_participant, 2 * 1024 * 1024, false)
 }
 
 /// New runs execute controller policies in participant clients.
 #[spacetimedb::reducer]
 pub fn sim_create_client_world(ctx: &ReducerContext, run: String, scenario: String) -> Result<(), String> {
-    sim_create_participant(ctx, run.clone(), scenario)?;
-    let (row, mut world) = load(ctx, &run)?;
-    world.enable_client_controllers()?;
-    save(ctx, row, world);
-    Ok(())
+    create_world(ctx, run, scenario, World::new_client, 2 * 1024 * 1024, false)
 }

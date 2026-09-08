@@ -24,6 +24,8 @@ pub(super) fn cells(initial: &simulation::Scenario, position: i32) -> BTreeSet<i
 
 pub(crate) fn advance_actions(ctx: &ReducerContext, run: &str, head: SimNativeHead,
     delta_ms: u64, alive: u64) -> Result<Option<Outcome>, String> {
+    #[cfg(feature = "clock-profile")]
+    let read_profile = spacetimedb::log_stopwatch::LogStopwatch::new("actions.read");
     let until = head.time_ms.checked_add(delta_ms).ok_or("physical clock overflow")?;
     let due: BTreeSet<_> = ctx.db.sim_native_clock_actor().active_actors().filter((run, true))
         .chain(ctx.db.sim_native_clock_actor().due().filter((run, ..=until)))
@@ -88,6 +90,9 @@ pub(crate) fn advance_actions(ctx: &ReducerContext, run: &str, head: SimNativeHe
         leases.extend(ctx.db.sim_native_lease().participant().filter((run, *actor)));
     }
     let rows = Rows {
+        paged_heads:vec![],trace_pages:vec![],evidence_bodies:vec![],
+        trace_indexes: vec![],
+        catalogs: vec![],
         head, definitions, actors:bodies.values().cloned().collect(), minds:minds.into_values().collect(),
         mind_histories:vec![], participants, controllers, bootstraps:vec![], experiences:vec![],
         leases, lease_evidence:vec![], captures:vec![], receipts:vec![],
@@ -95,6 +100,8 @@ pub(crate) fn advance_actions(ctx: &ReducerContext, run: &str, head: SimNativeHe
         sites, stations, archives,
     };
     let site_rows: BTreeMap<_,_> = rows.sites.iter().map(|s|(s.position,s.clone())).collect();
+    #[cfg(feature = "clock-profile")]
+    drop(read_profile);
     let (mut world, previous_ids) = super::super::measured("actions.assemble", || assemble_with(rows,None,false,Some(cold_reader(ctx))))?;
     if !world.local_clock_laws() || due.iter().any(|actor| !world.local_clock_actor(*actor)) {
         return Ok(None);
@@ -105,36 +112,56 @@ pub(crate) fn advance_actions(ctx: &ReducerContext, run: &str, head: SimNativeHe
     let previous_participants = world.participants.clone();
     let previous_time = world.timing.time_ms;
     let selection = simulation::clock::Selection::new(&world,due.iter().copied());
-    super::super::measured("actions.execute", || world.advance_actions_ms(delta_ms,&mut (),&selection,outside_alive>0));
+    super::super::measured("actions.execute", || super::super::observe_clock(|observer|
+        world.advance_actions_ms(delta_ms,observer,&selection,outside_alive>0)));
+    #[cfg(feature = "clock-profile")]
+    log::info!("clock_action_domain {}", serde_json::json!({"time_ms":world.timing.time_ms,
+        "loaded":world.players.len(),"alive_before":previous_alive,"due":due.len(),
+        "events":world.events.len()}));
     if world.players.len()!=bodies.len() || world.players.iter().any(|p|!bodies.contains_key(&p.id)) {
         return Err("local action changed undeclared population".into());
     }
     let alive = outside_alive + world.players.iter().filter(|p|p.health>0).count() as u64;
+    #[cfg(feature = "clock-profile")]
+    let save_profile = spacetimedb::log_stopwatch::LogStopwatch::new("actions.save");
+    let mut save_phase = super::super::evidence_profile::SaveScope::new(true, "actions.save.actors");
     for (i,player) in world.players.iter().enumerate() {
+        let sampled = i % 17 == 0;
         let old = &previous_players[&player.id];
         if !player.same_snapshot(old) {
+            let _profile = super::super::evidence_profile::SaveScope::new(sampled, "actions.save.actor.body");
             upsert!(ctx,sim_native_actor,key,SimNativeActor::from_player(run,bodies[&player.id].ordinal as usize,player));
             save_mind(ctx,run,player,Some(old));
         }
+        let aux_profile = super::super::evidence_profile::SaveScope::new(sampled, "actions.save.actor.aux");
         let aux = SimNativeActorAux::from_world(&world,player.id);
         upsert!(ctx,sim_render_actor_support,key,SimRenderActorSupport::from_aux(aux.clone()));
         upsert!(ctx,sim_native_actor_aux,key,aux);
+        drop(aux_profile);
         if due.contains(&player.id) || !player.same_snapshot(old)
             || world.participants.get(&player.id).is_some_and(|p|previous_participants.get(&player.id).is_none_or(|old|!p.same_snapshot(old))) {
+            let _profile = super::super::evidence_profile::SaveScope::new(sampled, "actions.save.actor.hint");
             save_clock_hint(ctx,run,world.actor_clock_hint(i));
         }
     }
+    save_phase.phase(true, "actions.save.sites");
     for site in &world.sites {
         let mut row = site_rows.get(&site.position).ok_or("local action created undeclared site")?.clone();
         row.food=site.food;row.hazard=site.hazard;row.shelter=site.shelter;
         upsert!(ctx,sim_native_site,key,row);
     }
+    save_phase.phase(true, "actions.save.participants");
     let ids = save_participants(ctx,&world,&previous_participants,&previous_ids);
+    save_phase.phase(true, "actions.save.head");
     let head = SimNativeHead::from_world(&world);
     upsert!(ctx,sim_render_clock,run,SimRenderClock {run:run.into(),head:json(&head)});
     upsert!(ctx,sim_native_head,run,head);
-    super::super::participant_delivery::publish(ctx,&world,&ids,&previous_participants,previous_time);
+    drop(save_phase);
+    #[cfg(feature = "clock-profile")]
+    drop(save_profile);
+    super::super::measured("actions.delivery", ||
+        super::super::participant_delivery::publish(ctx,&world,&ids,&previous_participants,previous_time));
     let outcome = Outcome {alive,actors_loaded:world.players.len() as u64,stopped:world.stopped};
-    super::super::append_audit(ctx,run,world.events);
+    super::super::measured("actions.audit", || super::super::append_audit(ctx,run,world.events));
     Ok(Some(outcome))
 }

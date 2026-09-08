@@ -1,5 +1,25 @@
 # Bevy browser simulation client
 
+The current rendering iteration also caches unchanged SDK presentation components,
+retains closed-inspector navigation entities and updates the clock text separately.
+Actor motion continues to update every frame; the open inspector keeps its rich
+refresh path. See [iteration 26](PERFORMANCE_ITERATION_26.md) for measured limits.
+
+Current live delivery is documented in [iteration 26](PERFORMANCE_ITERATION_26.md).
+The native and browser Bevy clients subscribe to a compact render header, typed
+actor/body/site rows, slow scene metadata and event rows. An observer's ordinary
+body update no longer hydrates and serializes the whole rendering World. Bevy
+assembles the same presentation after applying SDK updates. Opening an inspector
+still requests the existing rich selected-person projection; participant rendering
+retains its personally scoped authority projection. Observer component views deny
+participant/ungranted access, and revocation clears their cached rows.
+
+The live host now defaults to one-shot owner procedures and validates resume with
+indexed ownership metadata. Explicit SQL diagnostics and historical exports retain
+their documented behavior. The paragraphs below include earlier implementation
+states; current physics/controller ownership is described in
+[the client/authority boundary](CLIENT_AUTHORITY_BOUNDARY.md).
+
 The foundation now runs in the existing Rust Bevy client compiled to WASM. Open [the local game client](http://127.0.0.1:18891). Rendering, world selection, panels and human input are Bevy systems; the HTML page contains only the canvas and loading message. SpacetimeDB owns simulation time, policies, perceptions and skill effects. This is a bounded development client for the current one-dimensional survival world, not a migration of legacy voxel/combat gameplay.
 
 Current `m1-5` host details are in [Participant agents](PARTICIPANT_AGENTS.md). Its default is port 18891 and output `output/participant-agent-dev`; the m1-4 host on 18890 and verification below remain historical evidence. The current built-in harness has replaced the older host Reasoner dispatch.

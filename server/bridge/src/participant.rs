@@ -44,6 +44,26 @@ struct RelayTask {
 }
 impl Drop for RelayTask {fn drop(&mut self) {self.task.abort();}}
 impl ParticipantService {
+    /// Optional personal combat notifications. Keep the returned handle while
+    /// watching `sim_my_combat_events` in the SDK cache. Cursors may have gaps:
+    /// this filtered channel does not replace the ordered controller trace.
+    pub async fn subscribe_combat_events(&self) -> Result<shared::module_bindings::SubscriptionHandle, String> {
+        let (send, receive)=tokio::sync::oneshot::channel();
+        let send=Arc::new(Mutex::new(Some(send)));
+        let applied=send.clone();
+        let handle=self.connection.subscription_builder()
+            .on_applied(move |_| { if let Some(send)=applied.lock().unwrap().take() {let _=send.send(Ok(()));} })
+            .on_error(move |_,_| {if let Some(send)=send.lock().unwrap().take() {let _=send.send(Err("combat subscription failed".to_string()));}})
+            .subscribe("SELECT * FROM sim_my_combat_events");
+        match tokio::time::timeout(Duration::from_secs(10),receive).await {
+            Ok(Ok(Ok(()))) => Ok(handle),
+            result => {
+                use spacetimedb_sdk::SubscriptionHandle as _;
+                let _=handle.unsubscribe();
+                Err(match result {Ok(Ok(Err(error)))=>error,_=>"combat subscription timeout/disconnected".into()})
+            }
+        }
+    }
     async fn wait_controller_frame(&self)->Result<(),String> {
         use shared::module_bindings::SimMyControllerFrameTableAccess;
         let deadline=Instant::now()+Duration::from_secs(10);

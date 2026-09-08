@@ -452,6 +452,13 @@ pub(super) fn participant_for_view(ctx: &ViewContext, run: &str, actor: u32) -> 
     let can_participate=world.players.iter().any(|p|p.id==3 && p.controller==simulation::Controller::Human);
     Some((world,can_participate))
 }
+pub(super) fn inspector_for_view(ctx: &ViewContext, run: &str, actor: u32) -> Option<World> {
+    let row = ctx.db.sim_run_store().id().find(run.to_owned())?;
+    if row.state == super::native_storage::FORMAT {
+        return super::native_storage::inspector_view(ctx,run,actor).ok();
+    }
+    Some(decode_view(ctx,&row))
+}
 fn decode_view(ctx: &ViewContext, row: &SimRunStore) -> World {
     if row.state == super::native_storage::FORMAT {
         return super::native_storage::load_view(ctx, &row.id).expect("valid native World storage");

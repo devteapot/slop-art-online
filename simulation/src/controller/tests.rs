@@ -11,6 +11,76 @@ fn request(w: &World, actor:u32, id:&str, command:Command) -> Request {
     Request {api_version:API_VERSION.into(),request_id:id.into(),control_epoch:w.participants[&actor].control_epoch,command}
 }
 #[test]
+fn composed_initialization_matches_persisted_phases_and_safe_evidence() {
+    for body in [include_str!("../../../scenarios/survival.json"),
+        include_str!("../../../scenarios/faction-world-reality.json"),
+        include_str!("../../../scenarios/population-reproduction.json"),
+        include_str!("../../../scenarios/research-invention.json")] {
+        let seed:Scenario=serde_json::from_str(body).unwrap();
+        let initial=World::new("initialization-parity".into(),seed.clone()).unwrap();
+        let audit=serde_json::to_value(&initial.events).unwrap();
+        // The former authority path saved each phase and loaded a World with
+        // no pending audit events before importing permitted initial records.
+        let mut persisted:World=serde_json::from_value(serde_json::to_value(&initial).unwrap()).unwrap();
+        persisted.enable_participants();
+        for event in &initial.events {persisted.record_initial_participant_event(event);}
+        let composed=World::new_participant("initialization-parity".into(),seed.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&composed).unwrap(),serde_json::to_value(&persisted).unwrap(),"participant {}",seed.name);
+        assert_eq!(serde_json::to_value(&composed.events).unwrap(),audit);
+        persisted=serde_json::from_value(serde_json::to_value(&persisted).unwrap()).unwrap();
+        persisted.enable_client_controllers().unwrap();
+        let client=World::new_client("initialization-parity".into(),seed.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&client).unwrap(),serde_json::to_value(&persisted).unwrap(),"client {}",seed.name);
+        assert_eq!(serde_json::to_value(&client.events).unwrap(),audit,"one unchanged ordered audit");
+        for state in client.participants.values() {
+            assert!(state.experiences.iter().all(|e|e.kind!="initialization"),"operator seed truth is not personal evidence");
+        }
+    }
+}
+#[test]
+fn remembered_targets_share_unchanged_sets_and_detach_new_identities() {
+    let w=world();let actor=w.players[0].id;
+    let mut original=w.participants[&actor].client_controller.clone().unwrap();
+    original.known_targets=(1..=200).collect();
+    let mut candidate=original.clone();
+    candidate.action=Some(success("changed-action"));
+    for id in 1..=200 {assert!(!candidate.remember_target(id));}
+    assert!(candidate.known_targets.same_snapshot(&original.known_targets),"duplicate observations never copy the target set");
+    assert!(candidate.remember_target(u32::MAX));
+    assert!(!candidate.known_targets.same_snapshot(&original.known_targets));
+    assert!(!original.known_targets.contains(&u32::MAX));
+    assert!(candidate.known_targets.contains(&u32::MAX));
+    let mut legacy=serde_json::to_value(&original).unwrap();
+    legacy["known_targets"]=json!([3,1,3,u32::MAX]);
+    let decoded:Authority=serde_json::from_value(legacy).unwrap();
+    assert_eq!(serde_json::to_value(&decoded.known_targets).unwrap(),json!([1,3,u32::MAX]),"same legacy set/JSON semantics");
+    let retained=candidate.clone();
+    candidate.known_targets.clear();
+    assert_eq!(retained.known_targets.len(),201,"general mutable access still detaches");
+    assert_eq!(original.known_targets.len(),200);
+}
+#[test]
+fn real_death_witnesses_preserve_shared_remembered_target_snapshots() {
+    let mut w=world();let position=w.players[0].position;
+    for player in &mut w.players {player.position=position;}
+    let ids:Vec<_>=w.players.iter().map(|p|p.id).collect();
+    for state in w.participants.values_mut() {
+        state.client_controller.as_mut().unwrap().known_targets=ids.iter().copied().collect();
+    }
+    let before=w.clone();let cause=w.players[0].last_cause.unwrap_or(1);
+    let start=w.events.len();
+    w.damage(0,10000,None,cause,"attack").unwrap();
+    assert!(w.players[0].health<=0);assert!(before.players[0].health>0);
+    let witnesses:Vec<_>=w.events[start..].iter().filter(|e|e.kind=="perception" && e.data["kind"]=="death").collect();
+    assert_eq!(witnesses.len(),ids.len()-1,"exercise the real dense witness path");
+    for actor in ids {
+        let old=before.participants[&actor].client_controller.as_ref().unwrap();
+        let current=w.participants[&actor].client_controller.as_ref().unwrap();
+        assert!(current.known_targets.same_snapshot(&old.known_targets),"retained identities unchanged for actor {actor}");
+        assert_eq!(serde_json::to_value(&current.known_targets).unwrap(),serde_json::to_value(&old.known_targets).unwrap());
+    }
+}
+#[test]
 fn finite_action_and_human_intent_share_physical_execution_and_paid_costs() {
     let mut agent=world();let mut human=agent.clone();let actor=agent.players[0].id;
     human.players[0].controller=Controller::Human;

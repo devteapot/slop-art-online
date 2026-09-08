@@ -29,12 +29,32 @@ pub struct ActionState {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Authority {
     pub bootstrap: deferred::Deferred<Bootstrap>,
-    pub known_targets: BTreeSet<u32>,
-    pub last_lifecycle: Option<Value>,
+    // Remembered identities are usually unchanged by another observation of
+    // the same crowd. Candidate actions share the retained set until it grows.
+    pub known_targets: deferred::Deferred<BTreeSet<u32>>,
+    // A retained observation is immutable. Candidate actions share its exact
+    // JSON instead of cloning the whole local crowd for each witness update.
+    pub last_lifecycle: Option<participant::ExperienceData>,
     pub action: Option<ActionState>,
 }
 
+impl Authority {
+    pub(super) fn remember_target(&mut self, target:u32) -> bool {
+        // Check through the immutable view first: even a duplicate insertion
+        // through DerefMut would detach a retained pre-action snapshot.
+        if self.known_targets.contains(&target) { return false; }
+        self.known_targets.insert(target)
+    }
+}
+
 impl World {
+    /// Finish the shared initialization phases before any world rows are published.
+    pub fn new_client(run: String, scenario: Scenario) -> Result<Self, String> {
+        let mut world = Self::new_participant(run, scenario)?;
+        world.enable_client_controllers()?;
+        Ok(world)
+    }
+
     pub fn client_controlled(&self, actor: u32) -> bool {
         self.participants.get(&actor).is_some_and(|p| p.client_controller.is_some())
     }
@@ -43,6 +63,18 @@ impl World {
         if !self.participant_mode { self.enable_participants(); }
         for i in 0..self.players.len() { self.enable_actor_client(i)?; }
         Ok(())
+    }
+
+    /// Bootstrap a bounded authored-order slice while an initialized world is
+    /// still unpublished. Existing controllers are left intact on retries.
+    pub fn initialize_client_batch(&mut self, start: usize, limit: usize) -> Result<usize, String> {
+        if !self.participant_mode || self.tick != 0 || self.timing.time_ms != 0
+            || limit == 0 || start > self.players.len() {
+            return Err("invalid unpublished controller initialization batch".into());
+        }
+        let end = start.saturating_add(limit).min(self.players.len());
+        for i in start..end { self.enable_actor_client(i)?; }
+        Ok(end)
     }
 
     pub(super) fn enable_actor_client(&mut self, i: usize) -> Result<(), String> {
@@ -59,9 +91,9 @@ impl World {
         }
         let last_lifecycle = self.players[i].site_observations.iter()
             .find(|p| p.location == self.players[i].position && p.kind == "site")
-            .map(|p| p.content["lifecycle"].clone());
+            .map(|p| (&p.content["lifecycle"]).into());
         self.participants.entry(actor).or_default().client_controller = Some(Authority {
-            bootstrap: bootstrap.into(), known_targets, last_lifecycle, action: None,
+            bootstrap: bootstrap.into(), known_targets:known_targets.into(), last_lifecycle, action: None,
         });
         self.players[i].execution = None;
         self.players[i].memories = vec![].into();
@@ -80,8 +112,8 @@ impl World {
         if !self.client_controlled(actor) { return Err("action API requires client controller mode".into()); }
         if revision != self.players[i].generation { return Err("stale action revision".into()); }
         self.validate_scoped_action(i, action)?;
-        if action.target.is_some_and(|target| !self.target_perceived(i, target, &[])) {
-            return Err("target not perceived".into());
+        if let Some(target)=action.target {
+            if !self.target_perceived(i, target, &[])? { return Err("target not perceived".into()); }
         }
         self.interrupt(i, cause, "action replaced");
         self.players[i].generation += 1;

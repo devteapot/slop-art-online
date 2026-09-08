@@ -4,7 +4,6 @@ use crate::*;
 use scripting::Effect;
 use starting_behaviors::StartingBehavior;
 
-pub const MAX_TOTAL_ACTORS: usize = 256;
 pub const MAX_PRACTICE_EVIDENCE: usize = 16;
 fn default_max_total() -> usize {
     64
@@ -110,7 +109,6 @@ impl World {
         }
         if let Some(seed) = &self.initial.lifecycle {
             if seed.max_total < self.players.len()
-                || seed.max_total > MAX_TOTAL_ACTORS
                 || seed.workshops.len() > 32
                 || seed
                     .workshops
@@ -215,7 +213,7 @@ impl World {
     }
     fn check_capacity(&self, i: usize) -> Result<(), String> {
         let seed = self.lifecycle_enabled()?;
-        if self.players.len() >= seed.max_total || self.players.len() >= MAX_TOTAL_ACTORS {
+        if self.players.len() >= seed.max_total {
             return Err("this bounded world's retained actor capacity is full".into());
         }
         if self.next_actor == u32::MAX || self.players.iter().any(|p| p.id == self.next_actor) {
@@ -675,7 +673,7 @@ impl World {
                     care.source = source;
                     care.meals = care.meals.saturating_add(1);
                 } else {
-                    // One entry per actual actor is bounded by max_total (at most256).
+                    // One entry per actual caregiver, within the authored population capacity.
                     life.care.push(CareEvidence {
                         caregiver: actor,
                         source,

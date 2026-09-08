@@ -113,7 +113,7 @@ fn check_copy<'a>(
 }
 
 impl World {
-    pub(super) fn initialize_knowledge(&mut self, initialization: u64) -> Result<(), String> {
+    pub(super) fn validate_initial_knowledge(&self) -> Result<(), String> {
         if self.archives.len() > MAX_ARCHIVES {
             return Err("too many physical archives".into());
         }
@@ -161,7 +161,11 @@ impl World {
                 }
             }
         }
-        for (actor, seeds) in self.initial.knowledge.clone() {
+        Ok(())
+    }
+
+    pub(super) fn initialize_actor_knowledge(&mut self, actor: u32, initialization: u64) -> Result<(), String> {
+        if let Some(seeds) = self.initial.knowledge.get(&actor).cloned() {
             let i = self.idx(actor)?;
             for seed in seeds {
                 let origin = self.event(Some(actor), "knowledge_seeded", vec![initialization],

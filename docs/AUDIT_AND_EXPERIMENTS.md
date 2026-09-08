@@ -1,5 +1,85 @@
 # Audit and experiment contract
 
+Work is paused at [script invocation boundary (49)](SCRIPT_BOUNDARY_SCALING_49.md).
+Its shared-definition candidate passes 360 focused tests and builds successfully;
+candidate performance measurements have not run. Iteration 48 remains the latest
+measured normal release, and all performance gates remain open.
+
+The latest [compressed audit digest change (48)](AUDIT_DIGEST_SCALING_48.md)
+preserves all exact event strings, complete worlds, leases and private access.
+All 102 relevant authority/storage tests pass. Six real archives, 12 independently
+verified blocks, mixed-format upgrade and explicit persistence restart pass.
+The original checker failure on valid SATS optional encoding and a partial
+physical block-sharing failure remain preserved. Identical archive work uses
+35.8% less WASM time but 23.3% more wall time; normal combat misses 48.3% of clock
+slots versus 45.7% before. Recovery restarts are outside measurements and do not
+establish sustained resource acceptance.
+
+[Deferred definitions (45)](DEFERRED_DEFINITION_SCALING_45.md) retain exact
+2,000-character world/audit parity and sequential admission timing evidence.
+The failed export and both interrupted combat attempts remain preserved.
+
+[Staged initialization (43)](STAGED_WORLD_INITIALIZATION_43.md) preserves exact
+2,000-character admission, private staging and recovery evidence.
+
+The [deferred-catalog iteration (34)](DEFERRED_CATALOG_SCALING_34.md) verifies
+first-use identity validation, retained failures, scoped immutable reference
+reuse and complete export requirements. Actual profiles show zero command and
+inspection catalog fetches. Different death waves, greater profile work and
+remaining latency failures are retained alongside the improved release result.
+
+The [controller-catalog iteration (33)](CONTROLLER_CATALOG_SCALING_33.md) verifies
+content identity, scoped reads, reference retention, exact exports and actual
+old/new module world-and-audit parity after upgrade. It preserves a failed setup
+and nonzero service shutdown. Completed trials retain worse release cadence and
+higher command cost alongside fewer physics catalog reads; phase improvements
+do not imply performance acceptance.
+
+The [encoded-evidence iteration (32)](ENCODED_EVIDENCE_SCALING_32.md) checks exact
+event JSON, immutable source redaction, separate recipient records and loaded-row
+scope. It preserves a disk-guard-aborted trial with its forced probe stop. The
+completed comparison and profile retain greater work, worse cadence and higher
+aggregate costs alongside cheaper site-perception construction; no acceptance
+is inferred from isolated phase improvements.
+
+The [action-admission iteration (31)](ACTION_ADMISSION_SCALING_31.md) compares
+complete authority state, event ordering, receipts and clock hints against the
+full kernel for narrowed command reads. Actual profiling confirms actor/target
+dependencies; live combat, reconstruction, reconnect and access checks pass.
+Greater attack counts, CPU/wire increases and permanent-death shrinkage prevent
+treating the short comparison as sustained capacity evidence.
+
+The [component-inspection iteration (30)](COMPONENT_INSPECTION_SCALING_30.md)
+retains before/after trials using the current client's exact component query set,
+with open inspection. Actual component equality, reconnect, access/revocation
+and 200 personal combat feeds pass. The separate profile, original failures,
+death-driven workload shrinkage and stale-gauge limitations remain explicit;
+no sustained-performance claim follows from these ten-second executions.
+
+The [personal-evidence iteration (29)](PERSONAL_EVIDENCE_SCALING_29.md) verifies
+snapshot isolation under every metadata edit and compares complete state/events
+against full visibility evaluation. Its retained setup failure is distinct from
+the actual workload trials; optimized execution still preserves original evidence.
+
+The [action-domain iteration (28)](ACTION_DOMAIN_SCALING_28.md) separates crowded
+transaction profiles from quiet updates after deaths. It retains original
+intermediate failures, verifies exact witness state/events and scoped combat-feed
+recovery, and identifies retention gauges that cannot establish active growth.
+
+The [crowd lifecycle iteration (27)](CROWD_LIFECYCLE_SCALING_27.md) retains the original
+and intermediate failed combat runs. It distinguishes unchanged catalog-computation
+semantics from the deliberate removal of redundant automatic peer sightings;
+actual witness evidence and explicit observation remain separately verified.
+
+The [stack iteration (26)](PERFORMANCE_ITERATION_26.md) adds scoped component
+rendering, a personal combat feed and exact 30/60 Hz comparisons. Its bounded
+browser and combat trials retain original failures and leave all long-duration
+performance gates open.
+
+The [short performance baseline (25)](PERFORMANCE_BASELINE_25.md) records current
+contract checks, original failed trials and explicit measurement gaps. It does
+not substitute for the deferred 30-minute and eight-hour acceptance workloads.
+
 Requirements for the [simulation foundation](SIMULATION_VISION.md), maintained as mechanics evolve. The bounded M1 implementation and its acceptance evidence are recorded in [M1 verification](M1_VERIFICATION.md); this contract also applies to later extensions. See [implementation state](CURRENT_STATE.md) and the [work queue](TODO.md).
 
 ## One evidence model, two inspection interfaces
@@ -75,6 +155,13 @@ A **recorded-decision replay** supplies recorded decisions instead of fresh mode
 For the first milestone, preserve the material needed for replay and document the supported reproducibility limits. A bounded replay check under a pinned compatible setup is a recommended follow-up to the runner, not a requirement for a general replay engine in the first slice. Cross-version replay, a distributed experiment service, and exhaustive determinism guarantees are deferred.
 
 ## Acceptance checks
+
+Performance acceptance follows the agreed [performance contract](PERFORMANCE_CONTRACT.md).
+Freeze population, local combat load, controller mix, subscriptions, hardware and
+network conditions before a run. Separate input acceptance, execution, committed
+outcome and delivery; report tail latency, frame pacing, deadline misses and resource
+growth. Preserve failed outcomes. Historical update-count improvements cannot pass
+the current contract or justify silently relaxing its requirements.
 
 Each check requires inspectable evidence without prescribing one narrative. [M1 verification](M1_VERIFICATION.md) maps these checks to executed tests and retained runs.
 

@@ -217,21 +217,15 @@ pub fn sync(
     let switched = shown_run.as_str() != run;
     *shown_run = run.into();
     if game.dirty {
-        let terrain = json!([
-            run,
-            game.world_visible,
-            game.snapshot["map"],
-            game.snapshot["regions"],
-            game.snapshot["workshops"],
-            game.snapshot["archives"].as_array().map(|a|a.iter().map(|v|json!([v["id"],v["position"],v["destroyed"]])).collect::<Vec<_>>()),
-            game.snapshot["sites"].as_array().map(|sites| sites
-                .iter()
-                .map(|s| json!([s["position"], s["food"], s["hazard"], s["shelter"], s["food_source"]]))
-                .collect::<Vec<_>>())
-        ]);
-        let terrain_changed = *terrain_state != terrain;
-        *terrain_state = terrain;
+        let archives=json!(game.snapshot["archives"].as_array().map(|a|a.iter()
+            .map(|v|json!([v["id"],v["position"],v["destroyed"]])).collect::<Vec<_>>()));
+        let terrain_changed=terrain_state[0]!=run || terrain_state[1]!=game.world_visible
+            || terrain_state[2]!=game.snapshot["map"] || terrain_state[3]!=game.snapshot["regions"]
+            || terrain_state[4]!=game.snapshot["workshops"] || terrain_state[5]!=archives
+            || terrain_state[6]!=game.snapshot["sites"];
         if terrain_changed {
+            *terrain_state=json!([run,game.world_visible,game.snapshot["map"],game.snapshot["regions"],
+                game.snapshot["workshops"],archives,game.snapshot["sites"]]);
             for e in &old {
                 commands.entity(e).despawn();
             }

@@ -6,7 +6,18 @@ Inventory reads the private owner index and returns sorted run IDs. Export verif
 
 The CLI/HTTP return is an untyped SATS result: `[0, payload]` on success and `[1, error]` on application failure. An HTTP 200 or successful CLI exit does not establish application success. The shared Python and Rust parsers validate the result shape, reject malformed responses, and preserve the exact inner World JSON. Callers retain their existing transport deadlines. There is no retry or fallback to SQL.
 
-The host selects `SAO_OWNER_SNAPSHOT_API=sql|procedure`; the default is `sql` for compatibility. The pilot's `--owner-snapshot-api` selects the same mode for host and supervisor and records it in evidence. A batch variant can set `owner_snapshot_api: "procedure"`. The standalone `sao-sim` runner records the mode in its manifest; missing historical fields mean SQL. The three-case authority diagnostic also keeps SQL as its default and requires explicit procedure selection for a changed comparison.
+The live `sao-dev-client` host defaults to `procedure`; an explicit
+`SAO_OWNER_SNAPSHOT_API=sql|procedure` still selects the transport. Host resume
+validates ownership with the indexed `sim_owned_run_ids()` procedure and does not
+export a World merely to start serving the client. This default changed in
+[iteration 26](PERFORMANCE_ITERATION_26.md) after a browser benchmark activated the
+retained full-owner view. Other runners retain their historical SQL defaults.
+The pilot's `--owner-snapshot-api` selects the same mode for host and supervisor
+and records it in evidence. A batch variant can set
+`owner_snapshot_api: "procedure"`. The standalone `sao-sim` runner records the
+mode in its manifest; missing historical fields mean SQL. The three-case
+authority diagnostic also keeps SQL as its default and requires explicit
+procedure selection for a changed comparison.
 
 ## Observer cost and experiment boundaries
 

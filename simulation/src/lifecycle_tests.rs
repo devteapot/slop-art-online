@@ -588,6 +588,28 @@ fn expired_or_dead_partner_cannot_complete_unfinished_reproduction() {
 }
 
 #[test]
+fn material_renewal_crosses_the_old_actor_limit_and_keeps_the_authored_capacity() {
+    let mut s=scenario();
+    s.map=Some(spatial::Grid{width:64,height:64,blocked:Default::default(),bounds:None});
+    s.sites.retain(|site|site.position>=0);
+    let template=s.players[0].clone();
+    for id in 4..=256 {
+        let mut p=template.clone();p.id=id;p.position=id as i32;p.name=format!("Person {id}");
+        s.players.push(p);
+    }
+    s.lifecycle.as_mut().unwrap().max_total=257;
+    let mut w=World::new_participant("renewal-capacity".into(),s).unwrap();
+    let food=w.players[0].food;let energy=w.players[0].energy;
+    let actor=fabricate(&mut w,1);
+    assert_eq!(actor,257);assert_eq!(w.players.len(),257);assert_eq!(w.next_actor,258);
+    assert!(w.players[0].food<food && w.players[0].energy<energy,"ordinary material costs still paid");
+    assert!(matches!(w.lifecycle[&actor].origin,Origin::Fabrication{creator:1,..}));
+    assert!(w.lifecycle[&actor].dependent);
+    assert!(apply(&mut w,2,Action::new(Skill::Fabricate),Effect::Fabricate{food:6,energy:30}).is_err());
+    assert_eq!(w.players.len(),257,"the seed's explicit capacity is still enforced");
+}
+
+#[test]
 fn retained_population_capacity_is_not_reclaimed_by_death() {
     let mut s = scenario();
     s.lifecycle.as_mut().unwrap().max_total = 4;
@@ -850,8 +872,13 @@ fn retained_local_catalog_authorizes_care_install_and_patch_after_arrival_memory
         .unwrap()
     };
     for patch in [false, true] {
-        for (target, retain_catalog) in [(child, true), (child, false), (3, true), (9999, true)] {
+        for (target, retain_catalog, remote) in [(child, true, false), (child, false, false),
+            (child, true, true), (child, false, true), (3, true, true), (9999, true, true)] {
             let mut w = baseline.clone();
+            if remote {
+                let child_index = w.idx(child).unwrap();
+                w.players[child_index].position = 5;
+            }
             if !retain_catalog {
                 w.players[0].site_observations.clear();
             }
@@ -892,15 +919,17 @@ fn retained_local_catalog_authorizes_care_install_and_patch_after_arrival_memory
             let receipt = send(&mut w, command);
             assert_eq!(
                 receipt.ok,
-                target == child && retain_catalog,
+                target == child && (retain_catalog || !remote),
                 "patch={patch}, target={target}, receipt={receipt:?}"
             );
-            if target == child && retain_catalog {
+            if target == child && !remote {
                 w.advance_ms(3000);
                 assert_eq!(w.lifecycle[&child].care_meals, 1);
                 assert_eq!(w.players[0].food, baseline.players[0].food - 1);
             } else {
-                assert_eq!(w.players[0].generation, revision);
+                if !receipt.ok { assert_eq!(w.players[0].generation, revision); }
+                if receipt.ok { w.advance_ms(3000); }
+                assert_eq!(w.players[0].food, baseline.players[0].food);
                 assert_eq!(w.lifecycle[&child].care_meals, 0);
             }
         }

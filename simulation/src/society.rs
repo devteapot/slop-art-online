@@ -68,7 +68,7 @@ pub fn validate(scenario: &Scenario) -> Result<(), String> {
     let regions=ids.clone(); ids.clear();
     for org in &seed.organizations {
         if !valid_id(&org.id) || !ids.insert(org.id.clone()) || org.label.is_empty() || org.label.len()>160
-            || org.members.is_empty() || org.members.len()>lifecycle::MAX_TOTAL_ACTORS
+            || org.members.is_empty() || org.members.len()>people.len()
             || org.members.iter().any(|id|!people.contains(id))
             || org.members.iter().collect::<BTreeSet<_>>().len()!=org.members.len()
             || org.stations.len()>128 || org.stations.iter().collect::<BTreeSet<_>>().len()!=org.stations.len() {

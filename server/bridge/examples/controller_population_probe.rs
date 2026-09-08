@@ -7,6 +7,10 @@ use spacetimedb_sdk::{DbContext,Table};
 use std::{path::PathBuf,time::{Duration,Instant,SystemTime,UNIX_EPOCH},io::Write};
 #[path="controller_population_probe/live_clients.rs"]
 mod live_clients;
+#[path="controller_population_probe/combat_feed.rs"]
+mod combat_feed;
+#[path="controller_population_probe/render_parts.rs"]
+mod render_parts;
 fn wall_ms()->u128 {SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()}
 
 async fn call(c:&Value,name:&str,args:Vec<Value>)->Result<(),String> {
@@ -37,12 +41,18 @@ async fn workload(c:&Value,people:&mut Vec<ParticipantService>)->Result<Value,St
     call(c,"sim_setup_client_clock",vec![c["run"].clone(),json!("live_fixture")]).await?;
     call(c,"sim_operator_clock",vec![c["run"].clone(),json!(c["action_period_ms"].as_u64().unwrap_or(50)),json!(true)]).await?;
     call(c,"sim_configure_deadline_clock",vec![c["run"].clone(),json!(true)]).await?;
+    if let Some(hz)=c["action_hz"].as_u64() {
+        call(c,"sim_configure_clock_rate",vec![c["run"].clone(),json!(hz)]).await?;
+    }
     call(c,"sim_configure_audit_archive",vec![c["run"].clone(),json!(true)]).await?;
     if c["physical_clock"].as_bool().unwrap_or(false) {call(c,"sim_configure_physical_clock",vec![c["run"].clone(),json!(true)]).await?;}
     let enrollment=Instant::now();
     for actor in &scenario.players {
         let path=PathBuf::from(c["credentials"].as_str().unwrap()).join(format!("actor-{}.json",actor.id));
-        let (mut service,id)=new_session(c["server"].as_str().unwrap().into(),c["database"].as_str().unwrap().into(),&path).await?;
+        let endpoint=if c["human_actor"].as_u64()==Some(u64::from(actor.id)) {
+            c["human_server"].as_str().unwrap_or(c["server"].as_str().unwrap())
+        } else {c["server"].as_str().unwrap()};
+        let (mut service,id)=new_session(endpoint.into(),c["database"].as_str().unwrap().into(),&path).await?;
         call(c,"sim_grant_client",vec![c["run"].clone(),json!(id),json!(false),json!(actor.id)]).await?;
         let until=Instant::now()+Duration::from_secs(10);
         while service.connection.db.sim_my_controller_frame().count()==0 {
@@ -59,6 +69,17 @@ async fn workload(c:&Value,people:&mut Vec<ParticipantService>)->Result<Value,St
     }
     let mut live=live_clients::LiveClients::setup(c,&scenario,people).await?;
     let enrollment_ms=enrollment.elapsed().as_millis();
+    if let Some(gate)=c["start_gate"].as_str() {
+        std::fs::write(dir.join("ready.json"),json!({"ready":true,"population":people.len(),"wall_ms":wall_ms()}).to_string()).map_err(|e|e.to_string())?;
+        tokio::time::timeout(Duration::from_secs(180),async {
+            let gate=PathBuf::from(gate);
+            while !gate.exists() {
+                if gate.with_extension("cancel").exists() {return Err("measurement cancelled before start: browser setup failed");}
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            Ok(())
+        }).await.map_err(|_|"measurement start gate timeout")??;
+    }
     let mut samples=std::fs::File::create(dir.join("controller-samples.jsonl")).map_err(|e|e.to_string())?;
     let start=Instant::now();
     let start_wall_ms=wall_ms();
@@ -91,6 +112,13 @@ async fn workload(c:&Value,people:&mut Vec<ParticipantService>)->Result<Value,St
     call(c,"sim_operator_clock",vec![c["run"].clone(),json!(c["action_period_ms"].as_u64().unwrap_or(50)),json!(true)]).await?;
     let live=live.finish();
     std::fs::write(dir.join("live-client-result.json"),serde_json::to_vec_pretty(&live).unwrap()).map_err(|e|e.to_string())?;
+    if c["verify_combat_feed"]==true || c["verify_render_parts"]==true {
+        for person in people.iter() {person.interrupt_controller_relay().await;}
+    }
+    if c["verify_combat_feed"]==true {
+        combat_feed::verify(c,people,&scenario).await?;
+    }
+    if c["verify_render_parts"]==true {render_parts::verify(c,people,&scenario).await?;}
     let frames:Vec<_>=people.iter().map(|p|p.connection.db.sim_my_controller_frame().iter().next()
         .map(|f|json!({"actor":f.actor,"tick":f.tick,"health":f.health,"revision":f.revision,"action":f.action}))).collect();
     Ok(json!({"population":people.len(),"seconds":seconds,"enrollment_ms":enrollment_ms,"elapsed_ms":start.elapsed().as_millis(),

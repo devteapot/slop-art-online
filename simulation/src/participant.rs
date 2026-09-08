@@ -4,6 +4,8 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
+mod trace;
+pub use trace::Trace;
 pub const API_VERSION: &str = "sao-participant-v1";
 pub const TRACE_LIMIT: usize = 256;
 pub const EVIDENCE_LEASE_MS: u64 = 330_000;
@@ -100,7 +102,25 @@ impl EvidenceLease {
     }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Experience {
+#[serde(transparent)]
+pub struct Experience(Arc<ExperienceRecord>);
+
+impl From<ExperienceRecord> for Experience {
+    fn from(record: ExperienceRecord) -> Self { Self(Arc::new(record)) }
+}
+impl std::ops::Deref for Experience {
+    type Target = ExperienceRecord;
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+impl std::ops::DerefMut for Experience {
+    fn deref_mut(&mut self) -> &mut Self::Target { Arc::make_mut(&mut self.0) }
+}
+
+// Candidate actions copy retained history lists. Historical record metadata is
+// shared along with its immutable payload; an explicit edit detaches the record
+// before changing any field, preserving pre-action snapshots and encoding proofs.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExperienceRecord {
     pub cursor: u64,
     pub source: u64,
     pub tick: u64,
@@ -114,10 +134,11 @@ impl Experience {
     /// Payload identity is sufficient because its stored JSON is immutable;
     /// filling its parsed-value cache does not change that JSON.
     pub fn can_reuse_encoding(&self, snapshot: &Self) -> bool {
+        if Arc::ptr_eq(&self.0, &snapshot.0) { return true; }
         // Keep this exhaustive so new serialized fields require guard review.
-        let Self {
+        let ExperienceRecord {
             cursor, source, tick, location, kind, parents, data,
-        } = self;
+        } = &**self;
         *cursor == snapshot.cursor
             && *source == snapshot.source
             && *tick == snapshot.tick
@@ -127,51 +148,228 @@ impl Experience {
             && Arc::ptr_eq(&data.0, &snapshot.data.0)
     }
 }
-// Historical payloads are immutable. Retain their JSON encoding across clock
-// pulses and only materialize a value when an evidence check needs its fields.
-// Clones share both representations; the persisted and participant API shapes
-// remain ordinary JSON objects, with no wrapper fields.
+// Event and historical payloads are immutable. Constructed values can retain
+// their parsed form; storage/composed payloads can retain raw JSON. Generate the
+// other representation only when needed and share both across audit/evidence.
+// The persisted and participant API shapes remain ordinary JSON objects.
 #[derive(Clone, Debug)]
 pub struct ExperienceData(Arc<ExperienceDataInner>);
 #[derive(Debug)]
 struct ExperienceDataInner {
-    raw: crate::deferred::Deferred<Box<RawValue>>,
+    raw: OnceLock<crate::deferred::Deferred<Box<RawValue>>>,
     parsed: OnceLock<Value>,
+    redaction: OnceLock<PayloadRedaction>,
 }
+#[derive(Debug)]
+enum PayloadRedaction { Unchanged, Changed(ExperienceData) }
 impl From<&Value> for ExperienceData {
     fn from(value: &Value) -> Self {
+        serde_json::value::to_raw_value(value).expect("JSON value serializes").into()
+    }
+}
+impl From<Value> for ExperienceData {
+    fn from(value: Value) -> Self {
         Self(Arc::new(ExperienceDataInner {
-            raw: serde_json::value::to_raw_value(value).expect("JSON value serializes").into(),
-            parsed: OnceLock::new(),
+            raw: OnceLock::new(), parsed: OnceLock::from(value), redaction: OnceLock::new(),
+        }))
+    }
+}
+impl From<Box<RawValue>> for ExperienceData {
+    fn from(value: Box<RawValue>) -> Self {
+        Self(Arc::new(ExperienceDataInner {
+            raw: OnceLock::from(crate::deferred::Deferred::from(value)), parsed: OnceLock::new(), redaction: OnceLock::new(),
         }))
     }
 }
 impl std::ops::Deref for ExperienceData {
     type Target = Value;
     fn deref(&self) -> &Value {
-        self.0.parsed.get_or_init(|| serde_json::from_str(self.0.raw.get()).expect("validated historical JSON"))
+        self.0.parsed.get_or_init(|| serde_json::from_str(self.raw().expect("valid authoritative payload").get())
+            .expect("validated historical JSON"))
     }
 }
+impl PartialEq for ExperienceData {
+    fn eq(&self, other: &Self) -> bool { self.matches_data(other) }
+}
 impl ExperienceData {
+    fn raw(&self) -> Result<&RawValue, String> {
+        self.0.raw.get_or_init(|| serde_json::value::to_raw_value(
+            self.0.parsed.get().expect("payload has one representation"))
+            .expect("JSON value serializes").into()).try_get().map(Box::as_ref)
+    }
+
+    pub(crate) fn redacted(&self) -> Self {
+        match self.0.redaction.get_or_init(|| {
+            if crate::research::needs_source_redaction(self) {
+                PayloadRedaction::Changed(crate::research::redacted((**self).clone()).into())
+            } else { PayloadRedaction::Unchanged }
+        }) {
+            PayloadRedaction::Unchanged => self.clone(),
+            PayloadRedaction::Changed(value) => value.clone(),
+        }
+    }
+
+    /// Exact immutable payload identity within a retained transaction snapshot.
+    /// This does not load either value and is not a durable content identity.
+    pub fn same_snapshot(&self, other: &Self) -> bool { Arc::ptr_eq(&self.0, &other.0) }
+
+    /// Compose an object with one already-encoded field, without expanding its
+    /// object graph. The placeholder preserves the original field order.
+    pub(crate) fn with_field(object: &Value, field: &str, value: &Self) -> Self {
+        struct ObjectField<'a> { object: &'a serde_json::Map<String, Value>, field: &'a str, value: &'a ExperienceData }
+        impl Serialize for ObjectField<'_> {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                use serde::ser::SerializeMap;
+                let mut output = serializer.serialize_map(Some(self.object.len()))?;
+                for (key, value) in self.object {
+                    if key == self.field { output.serialize_entry(key, self.value)?; }
+                    else { output.serialize_entry(key, value)?; }
+                }
+                output.end()
+            }
+        }
+        let object = object.as_object().expect("encoded composition requires an object");
+        assert!(object.contains_key(field), "encoded field needs a placeholder");
+        serde_json::value::to_raw_value(&ObjectField { object, field, value })
+            .expect("JSON object serializes").into()
+    }
+
+    /// A composition caller can retain the result of the original source
+    /// redactor on its fields. Only use when the enclosing object does not
+    /// change the redactor's inspection exceptions or source-marker rules.
+    pub(crate) fn cache_redaction(&self, redacted: Self) {
+        let result = if self.same_snapshot(&redacted) { PayloadRedaction::Unchanged }
+            else { PayloadRedaction::Changed(redacted) };
+        assert!(self.0.redaction.set(result).is_ok(), "redaction already evaluated");
+    }
+
+    /// Compare two retained observations without re-encoding either payload.
+    /// Semantic fallback preserves equality across valid alternative JSON forms.
+    pub fn matches_data(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+            || self.raw().expect("valid authoritative payload").get() == other.raw().expect("valid authoritative payload").get()
+            || **self == **other
+    }
+
+    /// Compare an immutable observation without constructing its parsed tree
+    /// when canonical JSON already matches. Noncanonical input still uses Value
+    /// equality, so whitespace/key order cannot manufacture a changed fact.
+    pub fn matches_value(&self, value: &Value) -> bool {
+        if let Some(parsed) = self.0.parsed.get() { return parsed == value; }
+        let encoded = serde_json::value::to_raw_value(value).expect("JSON value serializes");
+        self.raw().expect("valid authoritative payload").get() == encoded.get() || &**self == value
+    }
+
     pub fn load_with(loader: impl Fn() -> Result<Box<RawValue>, String> + Send + Sync + 'static) -> Self {
         Self(Arc::new(ExperienceDataInner {
-            raw: crate::deferred::Deferred::load_with(loader), parsed: OnceLock::new(),
+            raw: OnceLock::from(crate::deferred::Deferred::load_with(loader)),
+            parsed: OnceLock::new(), redaction: OnceLock::new(),
         }))
     }
 }
 impl Serialize for ExperienceData {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.raw.serialize(serializer)
+        self.raw().map_err(serde::ser::Error::custom)?.serialize(serializer)
     }
 }
 impl<'de> Deserialize<'de> for ExperienceData {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(Self(Arc::new(ExperienceDataInner {
-            raw: Box::<RawValue>::deserialize(deserializer)?.into(),
-            parsed: OnceLock::new(),
-        })))
+        Box::<RawValue>::deserialize(deserializer).map(Into::into)
     }
 }
+
+#[cfg(test)]
+mod immutable_observation_tests {
+    use super::*;
+
+    #[test]
+    fn shared_payload_redaction_matches_original_recursive_policy_and_preserves_audit() {
+        let program = json!({"interface_version":1,"input_contract":{},"output_contract":{},"source":"private source"});
+        let law = json!({"interface_version":1,"hooks":["visible"],"source":"private law"});
+        for value in [Value::Null, json!({"source":"ordinary provenance"}), program.clone(), law.clone(),
+            json!({"nested":[program.clone(),law.clone()]}),
+            json!({"kind":"program_inspected","record":program.clone()}),
+            json!({"kind":"law_inspected","record":law.clone()}),
+            json!({"plain":program,"inspection":{"kind":"law_inspected","record":law}})] {
+            let expected = crate::research::redacted(value.clone());
+            for payload in [ExperienceData::from(value.clone()), ExperienceData::from(&value)] {
+                let redacted = payload.redacted();
+                assert_eq!(*redacted, expected);
+                assert_eq!(*payload, value, "source redaction cannot mutate audit truth");
+                assert!(redacted.same_snapshot(&payload.redacted()), "reuse exact redaction result");
+                assert_eq!(payload.same_snapshot(&redacted), value == expected);
+                assert_eq!(serde_json::to_value(&payload).unwrap(), value);
+            }
+        }
+        let owned = ExperienceData::from(json!({"nested":[1,2,3]}));
+        assert!(owned.0.raw.get().is_none(), "new small event avoids premature encoding");
+        let retained = owned.redacted();
+        assert!(retained.same_snapshot(&owned));
+        assert!(owned.0.raw.get().is_none());
+        assert_eq!(serde_json::to_string(&retained).unwrap(), r#"{"nested":[1,2,3]}"#);
+    }
+
+    #[test]
+    fn encoded_site_perception_keeps_exact_audit_private_redaction_and_controller_state() {
+        let scenario: Scenario = serde_json::from_str(include_str!("../../scenarios/population-reproduction.json")).unwrap();
+        let mut seed = World::new("encoded-site-evidence".into(), scenario).unwrap();
+        seed.enable_client_controllers().unwrap();
+        seed.events.clear();
+        let source = json!({"interface_version":1,"hooks":["visible"],"source":"retained audit source"});
+        for private in [false, true] {
+            let lifecycle = json!({"people":[{"id":1,"name":"quoted \"name\" \\ and λ"},{"id":2}],
+                "own_offer":null,"offers_to_you":[],"workshop":false,
+                "fixture":if private {source.clone()} else {Value::Null}});
+            let mut observation = json!({"food":12,"hazard":0,"lifecycle":lifecycle,
+                "nested":[{"program":source.clone()},{"kind":"law_inspected","record":source}]});
+            let mut actual = seed.clone();
+            let mut expected = seed.clone();
+            let location = actual.players[0].position;
+            expected.perceive(0,1,"site",None,location,observation.clone()).unwrap();
+            observation["lifecycle"] = Value::Null;
+            actual.perceive_client_site(0,1,location,observation,ExperienceData::from(&lifecycle)).unwrap();
+            let event = actual.events.last().unwrap();
+            assert!(event.data.0.parsed.get().is_none(), "audit envelope stays encoded at creation");
+            let personal = actual.participants[&actual.players[0].id].experiences.last().unwrap();
+            assert!(personal.data.0.parsed.get().is_none(), "personal envelope stays encoded at creation");
+            assert_eq!(serde_json::to_string(&actual.events).unwrap(),serde_json::to_string(&expected.events).unwrap());
+            assert_eq!(serde_json::to_value(&actual).unwrap(),serde_json::to_value(&expected).unwrap());
+            assert_eq!(event.data["content"]["nested"][0]["program"]["source"], "retained audit source");
+            assert!(personal.data["content"]["nested"][0]["program"].get("source").is_none());
+            assert_eq!(personal.data["content"]["nested"][1]["record"]["source"], "retained audit source");
+        }
+    }
+
+    #[test]
+    fn canonical_equality_avoids_parsing_and_noncanonical_equality_is_exact() {
+        let value = json!({"people":[{"id":1,"dependent":false}],"workshop":false});
+        let canonical = ExperienceData::from(&value);
+        let retained = canonical.clone();
+        assert!(Arc::ptr_eq(&canonical.0, &retained.0));
+        assert!(canonical.matches_value(&value));
+        assert!(canonical.0.parsed.get().is_none(), "unchanged canonical observation stays encoded");
+        let alternate = r#"{ "workshop": false, "people": [ { "id": 1, "dependent": false } ] }"#;
+        let noncanonical: ExperienceData = serde_json::from_str(alternate).unwrap();
+        assert!(noncanonical.matches_value(&value));
+        assert!(noncanonical.0.parsed.get().is_some(), "different encodings compare semantic values");
+        let mut changed = value.clone();
+        changed["people"][0]["dependent"] = json!(true);
+        assert!(!canonical.matches_value(&changed));
+        assert!(!noncanonical.matches_value(&changed));
+        assert_eq!(serde_json::to_value(&retained).unwrap(), value,
+            "comparison and candidate copies cannot change the retained observation");
+        assert_eq!(serde_json::to_string(&noncanonical).unwrap(), alternate,
+            "keep the original encoded observation when serializing");
+        let encoded_again = ExperienceData::from(&value);
+        let unparsed = ExperienceData::from(&value);
+        assert!(unparsed.matches_data(&encoded_again));
+        assert!(unparsed.0.parsed.get().is_none());
+        assert!(encoded_again.0.parsed.get().is_none());
+        assert!(unparsed.matches_data(&noncanonical));
+        assert!(!unparsed.matches_data(&ExperienceData::from(&changed)));
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ParticipantState(Arc<ParticipantStateData>);
@@ -199,7 +397,7 @@ pub struct ParticipantStateData {
     pub control_epoch: u64,
     pub learning_revision: u64,
     pub cursor: u64,
-    pub experiences: crate::deferred::Deferred<Vec<Experience>>,
+    pub experiences: Trace,
     pub speech: Vec<QueuedSpeech>,
     #[serde(default)]
     pub last_speech_tick: Option<u64>,
@@ -368,6 +566,20 @@ pub(crate) fn replace_at(node: &mut Node, parts: &[&str], replacement: Node) -> 
     }
 }
 impl World {
+    /// Compose participant initialization before the authority's first commit.
+    /// Import the same safe initial events as the persisted provisioning path;
+    /// the initialization audit payload is never a character's observation.
+    pub fn new_participant(run: String, scenario: Scenario) -> Result<Self, String> {
+        let mut world = Self::new(run, scenario)?;
+        let initial_events = std::mem::take(&mut world.events);
+        world.enable_participants();
+        for event in &initial_events {
+            world.record_initial_participant_event(event);
+        }
+        world.events = initial_events;
+        Ok(world)
+    }
+
     pub fn enable_participants(&mut self) {
         self.participant_mode = true;
         self.pending.clear();
@@ -375,9 +587,11 @@ impl World {
             self.participants.entry(p.id).or_default();
         }
         // Initialization already generated safe perceptions; import those, never initialization truth.
-        for event in self.events.clone() {
-            self.record_experience(&event);
+        let events = std::mem::take(&mut self.events);
+        for event in &events {
+            self.record_experience(event);
         }
+        self.events = events;
     }
     pub fn record_initial_participant_event(&mut self, event: &Event) {
         if self.tick == 0 && matches!(event.kind.as_str(),"perception"|"starting_behavior_installed"|"policy_installed") {
@@ -425,29 +639,32 @@ impl World {
             .map(|p| p.position)
             .unwrap_or(0);
         let s = self.participants.entry(actor).or_default();
+        let _record_profile = timing::DiagnosticScope::new(if s.experiences.is_loaded() {
+            "evidence.record.warm"
+        } else { "evidence.record.cold" });
         if e.kind == "identity_change" {
             s.learning_revision += 1;
         }
         s.cursor += 1;
+        let parent_profile = timing::DiagnosticScope::new("evidence.parents");
         let parents = e
             .parents
             .iter()
             .filter(|id| s.experiences.iter().any(|x| x.source == **id))
             .copied()
             .collect();
+        drop(parent_profile);
+        let _append_profile = timing::DiagnosticScope::new("evidence.append");
         let cursor=s.cursor;
-        s.experiences.push(Experience {
+        s.experiences.append_retaining_one(ExperienceRecord {
             cursor,
             source: e.id,
             tick: e.tick,
             location,
             kind: e.kind.clone(),
             parents,
-            data: (&crate::research::redacted(e.data.clone())).into(),
-        });
-        if s.experiences.len() > TRACE_LIMIT {
-            s.experiences.remove(0);
-        }
+            data: e.data.redacted(),
+        }.into(), TRACE_LIMIT);
     }
     pub fn participant_snapshot(
         &self,
@@ -730,7 +947,7 @@ impl World {
                 self.validate(i, &d, &self.players[i].memories)?;
                 for action in tree.validate_with_map(&self.scripts, self.map_for_actor(actor).as_ref())? {
                     if let Some(target) = action.target {
-                        if !self.target_perceived(i, target, &self.players[i].memories) {
+                        if !self.target_perceived(i, target, &self.players[i].memories)? {
                             return Err("target not perceived".into());
                         }
                     }

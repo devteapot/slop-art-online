@@ -1,10 +1,38 @@
 # Playable real-time performance
 
-The current acceptance target is 216 living actors for 30 minutes at a 20 Hz
-authority target, local input-to-authority latency below 100 ms at p95, no growing
-queue and bounded active memory. Include a human input client and an observer;
-measure browser frame pacing separately. Short seeded-controller trials are
-diagnostics, not acceptance of this target or thousand-player capacity.
+Work is paused at [script invocation boundary (49)](SCRIPT_BOUNDARY_SCALING_49.md).
+Its shared-definition candidate passes 360 focused tests and builds successfully;
+candidate performance measurements have not run. Iteration 48 remains the latest
+measured normal release, and all performance gates remain open.
+
+Latest retained change: [compressed audit digests (48)](AUDIT_DIGEST_SCALING_48.md).
+Identical archive work uses 35.8% less WASM time but 23.3% more catch-up wall time.
+Profiled encoder maximum falls from 85.01 to 37.39 ms; physical execution still
+reaches 78.85 ms. The normal release misses 48.3% of clock slots versus 45.7%
+before, and deadline p99 worsens from the 100–250 to 250–500 ms bucket. Lower
+sampled backend CPU accompanies greater wire volume and queue tails. No overall
+capacity gain or performance acceptance is established.
+
+[Deferred definitions (45)](DEFERRED_DEFINITION_SCALING_45.md) reduce sequential
+2,000-character REST admission from 71.51 ms to 1.76 ms on the final build.
+Its disk-guard interruptions remain excluded; iteration 46 recovers physical
+allocation while preserving all evidence and the original resource thresholds.
+
+[Staged initialization (43)](STAGED_WORLD_INITIALIZATION_43.md) admits all 2,000
+characters exactly. The iteration-41 live release missed 45% of clock slots; newer diagnostics
+above remain outside acceptance.
+
+The agreed [performance contract](PERFORMANCE_CONTRACT.md) is the current acceptance
+standard: 60 Hz active movement/combat, explicit server and network response limits,
+stable 60 FPS with higher refresh-rate support, and 2,000 active characters including
+a 200-character local battle for 8 hours within the reference resource budget.
+The immediate gate remains 216 characters for 30 minutes at the same quality limits.
+None of these gates is accepted.
+
+The experiments below used an earlier 20 Hz whole-world / sub-100 ms local-input
+checkpoint, followed by independent-clock diagnostics. Preserve their original
+targets, measurements and failures as history. Short seeded-controller trials and
+mixed action/world update counts do not establish the current performance contract.
 
 Baseline: the recovery pass reached 4.45 updates/s with 216 actors alive for a
 declared minute. [Boundary evidence](CLIENT_AUTHORITY_BOUNDARY.md) records the

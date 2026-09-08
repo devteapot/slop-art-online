@@ -788,7 +788,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         server,
         controller_database,
         controller_server,
-        owner_snapshot_api: SnapshotApi::from_env()?,
+        owner_snapshot_api: SnapshotApi::from_env_or(SnapshotApi::Procedure)?,
         deadline_clock: persisted_run_flag(resume.as_ref(), "deadline_clock", std::env::var("SAO_DEADLINE_CLOCK").is_ok_and(|v| v == "1")),
         archive_audit: persisted_run_flag(resume.as_ref(), "archive_audit", std::env::var("SAO_AUDIT_ARCHIVE").is_ok_and(|v| v == "1")),
         origin,
@@ -808,7 +808,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
     if let Some(active) = resume {
         let run = active["run"].as_str().ok_or("resume run missing")?;
-        state(&app, run).await?;
+        // Validate ownership through the existing indexed metadata procedure.
+        // Reading the full SQL compatibility view here registers a broad live
+        // dependency even after the startup query completes.
+        let owned = owner_snapshot::parse_inventory(
+            &call_text(&app, owner_snapshot::INVENTORY_PROCEDURE, vec![]).await?
+        )?;
+        if !owned.iter().any(|id| id == run) { return Err("run unavailable".into()); }
         *app.run.lock().unwrap() = run.into();
         app.runs.lock().unwrap().push(run.into());
     } else {

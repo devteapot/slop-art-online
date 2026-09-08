@@ -1,8 +1,99 @@
 # Implementation state and legacy baseline
 
-The latest [authority execution review](AUTHORITY_EXECUTION_REVIEW.md) prioritizes
+Work is paused at [script invocation boundary (49)](SCRIPT_BOUNDARY_SCALING_49.md).
+Its shared-definition candidate passes 360 focused tests and builds successfully;
+candidate performance measurements have not run. Iteration 48 remains the latest
+measured normal release, and all performance gates remain open.
+
+The latest [compressed audit digest change (48)](AUDIT_DIGEST_SCALING_48.md)
+preserves exact event history and reads both legacy and new blocks. Identical
+archive work uses 35.8% less WASM time, while catch-up wall time rises 23.3%.
+All 102 relevant tests, complete world/audit comparisons, privacy, upgrade and
+restart checks pass. Normal combat misses 48.3% of clock slots versus 45.7%
+before, with worse tail latency. This reduces a measured archive cost but does
+not establish an overall capacity gain. Sustained population, physical cadence,
+client pacing and autonomous outcomes remain unaccepted.
+
+[Deferred definitions (45)](DEFERRED_DEFINITION_SCALING_45.md) retain the local
+admission improvement: 2,000-character REST admission averages 1.76 ms versus
+71.51 ms on the reference. Its two disk-guard interruptions remain excluded;
+iteration 46 preserves their evidence and recovers physical disk space.
+
+[Staged initialization (43)](STAGED_WORLD_INITIALIZATION_43.md) admits the full
+2,000-character seed with byte-exact state and all 61,232 initial audit events.
+Its private resumable batches and recovery evidence remain the admission baseline.
+
+Earlier [parent lookup experiments (38)](INDEXED_PARENT_SCALING_38.md) rejected
+both candidates. The writer retains the [paged trace format (37)](PAGED_TRACE_SCALING_37.md),
+which supersedes [typed personal trace indexes (35)](TYPED_TRACE_SCALING_35.md).
+
+The [deferred-catalog iteration (34)](DEFERRED_CATALOG_SCALING_34.md) removes
+unused catalog reads from commands and inspection while preserving validated
+exports and physical comparisons. Actual command mean falls to 0.943 ms;
+release missed slots improve to 39.3% but still fail the 60 Hz gate. Physics and
+save bursts remain near 100 ms, with differing profile/release workloads retained.
+
+The [controller-catalog iteration (33)](CONTROLLER_CATALOG_SCALING_33.md) moves
+repeated last-observed catalogs into private referenced rows. Actual upgrade,
+reconstruction and retention checks pass; physics reads far fewer catalog
+bodies. The release still misses 52.3% of clock slots, and command cost rises.
+No end-to-end speedup or performance acceptance is established.
+
+The [encoded-evidence iteration (32)](ENCODED_EVIDENCE_SCALING_32.md) shares
+immutable audit/personal payloads and identical loaded lifecycle catalogs while
+preserving source redaction and exact event JSON. Site-perception construction
+is cheaper, but the changed release performs more work and worsens missed clock
+slots to 51.0%. No end-to-end performance gain or acceptance is established.
+
+The [action-admission iteration (31)](ACTION_ADMISSION_SCALING_31.md) narrows
+finite action start/cancel reads to the actor and named targets. Actual profiling
+confirms two bodies per attack admission; read/assembly mean falls from 0.577 to
+0.093 ms. The release workload still misses 46.8% of clock slots and ends with
+100 of 200 characters alive. Physical-update bursts and sustainable scale remain open.
+
+The [component-inspection iteration (30)](COMPONENT_INSPECTION_SCALING_30.md)
+exercises the current client's component subscriptions and removes full-world
+snapshot construction from open inspection. Shared care checks reduce repeated
+catalog work. Header processing falls from 1.46 to 0.51 seconds in short paired
+trials, but the changed run still misses 48.3% of clock slots and ends with half
+the starting population. No performance gate is accepted.
+
+The [personal-evidence iteration (29)](PERSONAL_EVIDENCE_SCALING_29.md) shares
+historical records across candidate actions, avoids duplicate event copying and
+reuses equivalent witness-law results under the exact bundled-source contract.
+Original perceptions, custom-law behavior and failed outcomes remain verified;
+large changed catalogs and sustained performance remain unresolved.
+
+The [action-domain iteration (28)](ACTION_DOMAIN_SCALING_28.md) reuses encoded
+local catalogs and source-verified visibility inputs while preserving real witness
+evidence. The combined short combat run still misses 54.2% of clock slots and
+loses half its population to permanent death; no performance gate is accepted.
+
+The [crowd lifecycle iteration (27)](CROWD_LIFECYCLE_SCALING_27.md) removes repeated
+care-law evaluation for unchanged local catalogs and makes lifecycle changes
+refresh site facts without manufacturing peer sightings. Immutable retained
+observations reduce candidate-action copying. Actual death witnesses,
+explicit observation and custom-law evaluation remain authoritative. The original
+and intermediate failed combat trials are retained; performance acceptance remains open.
+
+The agreed [performance contract](PERFORMANCE_CONTRACT.md) now defines acceptance:
+60 Hz active movement/combat, stable 60 FPS with higher refresh-rate support,
+specified server/network latency limits, and 2,000 active characters with a
+200-character local battle for 8 hours. The immediate 216-character/30-minute gate
+uses the same quality limits. None of these gates is accepted; historical 20 Hz
+targets and update-count averages below are earlier diagnostic evidence.
+
+The [stack iteration (26)](PERFORMANCE_ITERATION_26.md) fixes accidental full-owner
+view activation, introduces scoped typed observer delivery and an optional personal
+combat feed, and compares exact 30/60 Hz schedules in short actual-authority trials.
+The 200-character combat world now starts after removing redundant constructor
+cloning; battle cadence and general latency still fail the quality limits. The
+[original baseline failures](PERFORMANCE_BASELINE_25.md) remain preserved, including
+2,000-character admission. No long soak or fresh inference was added.
+
+The earlier [authority execution review](AUTHORITY_EXECUTION_REVIEW.md) prioritizes
 raw server work and core-system design in the existing small world; client/render
-work is deferred. Food renewal now refreshes site facts without generating
+work was deferred for that earlier pass. Food renewal now refreshes site facts without generating
 quadratic peer sightings. Shared-kernel and actual dual-service correctness checks
 pass; [the measured comparison](REALTIME_PERFORMANCE.md#raw-authority-cause-specific-food-perception-23)
 records the workload and limits. The opt-in [independent physical clock](INDEPENDENT_PHYSICAL_CLOCK.md)

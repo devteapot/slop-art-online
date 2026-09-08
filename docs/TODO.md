@@ -1,8 +1,96 @@
 # Simulation roadmap and work queue
 
+Work is paused at [script invocation boundary (49)](SCRIPT_BOUNDARY_SCALING_49.md).
+Its shared-definition candidate passes 360 focused tests and builds successfully;
+candidate performance measurements have not run. Iteration 48 remains the latest
+measured normal release, and all performance gates remain open.
+
+The latest [compressed audit digest change (48)](AUDIT_DIGEST_SCALING_48.md)
+reduces WASM cost for identical archive work by 35.8%; wall catch-up takes 23.3%
+longer. All 102 relevant tests and actual-authority recovery checks pass. Profiled
+archive encoder maximum falls from 85.01 to 37.39 ms; physical execution still
+reaches 78.85 ms and audit append 27.72 ms. Next reduce the remaining physical
+and maintenance bursts while preserving exact evidence. Normal combat misses
+48.3% of clock slots versus 45.7% before, with worse tail latency. Sustained
+cadence, population, full model workloads and client gates remain open.
+
+[Deferred definitions (45)](DEFERRED_DEFINITION_SCALING_45.md) retain the
+2,000-character local REST admission improvement from 71.51 ms to 1.76 ms.
+All disk-guard interruptions remain preserved and excluded from timing claims.
+
+[Staged initialization (43)](STAGED_WORLD_INITIALIZATION_43.md) completes exact
+authority admission through private resumable batches and atomic activation.
+
+Earlier [parent lookup experiments (38)](INDEXED_PARENT_SCALING_38.md) rejected
+both candidates. The writer retains the [paged trace format (37)](PAGED_TRACE_SCALING_37.md),
+which supersedes [typed personal trace indexes (35)](TYPED_TRACE_SCALING_35.md).
+
+The [deferred-catalog iteration (34)](DEFERRED_CATALOG_SCALING_34.md) verifies
+zero catalog body fetches during command admission and inspection. Next measure
+repeated participant evidence work inside actor execution and saves, and separate
+slow maintenance from combat deadlines. Release missed slots improve to 39.3%;
+all sustained population, client and complete combat gates remain open.
+
+The [controller-catalog iteration (33)](CONTROLLER_CATALOG_SCALING_33.md) removes
+repeated catalog bodies from mutable controller rows, with exact reconstruction
+and bounded current-reference retention. Next remove unnecessary catalog loads
+from commands/inspection, then address actor/evidence/save bursts and full
+maintenance. Release cadence still fails at 52.3% missed slots; sustainable
+population and both locked scale gates remain open.
+
+The [encoded-evidence iteration (32)](ENCODED_EVIDENCE_SCALING_32.md) reduces
+site-perception construction while preserving distinct recipient evidence.
+Release cadence still fails and worsens in the different asynchronous workload.
+Next investigate large controller/catalog/trace metadata loads during active
+local physics; sharing after loading does not remove storage/ABI costs. Any new
+boundary must retain authoritative visibility, atomic effects and reconnectable
+personal evidence, with bounded active-data retention.
+
+The [action-admission iteration (31)](ACTION_ADMISSION_SCALING_31.md) removes
+unrelated crowd/station reads from finite action start/cancel while preserving
+full shared-kernel parity, visibility laws and captured leases. Actual attack
+admissions load two bodies. Next investigate physical-update bursts, lifecycle
+catalog persistence and shared maintenance; the changed release still misses
+46.8% of clock slots and does not sustain its starting population.
+
+The [component-inspection iteration (30)](COMPONENT_INSPECTION_SCALING_30.md)
+removes full-world inspection snapshots and shares exact bundled care checks.
+The component workload still fails cadence and long-tail limits. Iteration 31
+addresses its excessive action-admission crowd reads while preserving target
+perception, shared rules and custom-law behavior; sustainable population,
+retention and full performance acceptance remain open.
+
+The [personal-evidence iteration (29)](PERSONAL_EVIDENCE_SCALING_29.md) reduces
+candidate-record copying and repeated witness-law evaluation. Next, reduce changed
+catalog materialization/persistence and broad maintenance dependencies, then verify
+representative living populations and the current client delivery path. The locked
+population, latency and duration gates remain unchecked.
+
+The [action-domain iteration (28)](ACTION_DOMAIN_SCALING_28.md) reduces repeated
+catalog encoding and witness-input construction. Next, reduce changed-catalog
+serialization/persistence, candidate-state copying and real witness bursts; retain
+exact personal evidence and custom-law behavior. Short-run retention gauges also
+need confirmed refresh boundaries before storage-growth claims are possible.
+
+The [crowd lifecycle iteration (27)](CROWD_LIFECYCLE_SCALING_27.md) reduces redundant
+care-law evaluation, lifecycle-triggered sight events and candidate-action copying.
+Next, reduce repeated
+per-character catalog storage/loading, large physical transaction dependencies and
+real witness-delivery bursts without losing causality, privacy or personal memory.
+The 60 Hz and sustained-population gates remain unchecked.
+
+The [stack iteration (26)](PERFORMANCE_ITERATION_26.md) implements the owner-read fix,
+scoped typed observer delivery, exact 30/60 Hz scheduling and a personal combat
+view. It preserves [baseline 25](PERFORMANCE_BASELINE_25.md) and its failures.
+Next work must reduce deadline transaction tails, global maintenance and remaining
+participant/inspection projection costs, then verify client presentation and exact
+latency boundaries. Combat startup now succeeds, but crowded battle cadence and
+2,000-character admission remain unresolved. Long acceptance runs remain pending;
+a completed diagnostic is not a passed performance gate.
+
 The [seven-stage living-world roadmap](WORLD_ROADMAP.md) has completed its bounded implementation pass: [settlement](STAGE_1_EVIDENCE.md), [teaching/archives](STAGE_2_EVIDENCE.md), [population renewal](STAGE_3_EVIDENCE.md), [connected settlements](STAGE_4_EVIDENCE.md), [physical infrastructure/faction seed](STAGE_5_EVIDENCE.md), [numerical research](STAGE_6_EVIDENCE.md) and [scoped/universal laws](STAGE_7_EVIDENCE.md#acceptance-decision-bounded-stage-7-implementation-milestone). [Campaign 028](SOCIETY_BATCH_028.md) supplies completed 36-person integration with the declared persistent/admission/finalization modes, late external access, timely original cleanup and passing final audits. Campaigns 025/026 and earlier fixture failures retain their failed outcomes; 027 remains unlaunched.
 
-Open research objectives include autonomous useful-code transfer and peer use, autonomous law discovery/universal ascension, sustained provisioning, delivered inter-settlement aid, stable migration and useful compute allocation. Scale work still includes sustained 20 Hz, long-term memory/WAL capacity and graceful shutdown of the dedicated authority service. These are not claimed complete by the bounded milestones. The broader work queue below retains its own unchecked requirements and deferred scope.
+Open research objectives include autonomous useful-code transfer and peer use, autonomous law discovery/universal ascension, sustained provisioning, delivered inter-settlement aid, stable migration and useful compute allocation. Scale work must meet the locked [performance contract](PERFORMANCE_CONTRACT.md), including 60 Hz active movement/combat, latency limits, long-term memory/WAL capacity and graceful shutdown. These are not claimed complete by the bounded milestones. The broader work queue below retains its own unchecked requirements and deferred scope.
 
 Current participant iteration: [participant agent runtimes](PARTICIPANT_AGENTS.md) and [ADR 013](adr/013-participant-agent-runtimes.md). Rules `m1-5` use one scoped API for the built-in harness and external MCP runtimes, with independent tree, speech and learning operations. Earlier evidence and legacy runner descriptions below retain their historical scope.
 
@@ -110,8 +198,10 @@ Reincarnation/souls are explicitly deferred, with no implementation commitment. 
 - [x] Implement the [client/authority boundary](CLIENT_AUTHORITY_BOUNDARY.md): separate native controller database, ordinary scoped world protocol, finite shared actions, durable private mental evidence, reconnect/privacy checks and actual Bevy human movement/speech. Both-service/relay costs and failed trials are retained.
 - [x] Add bounded durable dispatch recovery and native relay supervision: four real process-kill boundaries, ordinary-receipt eviction, timeout after authority commit, and healthy-transport relay restart passed; see [recovery evidence](CLIENT_AUTHORITY_BOUNDARY.md#recoverable-dispatch-and-relay-supervision).
 - [x] Separate [local action opportunities, world maintenance and audit compression](INDEPENDENT_PHYSICAL_CLOCK.md), preserving shared physical rules and due-maintenance ordering. The initial physical mode is opt-in and retains full-world fallback for unsupported dependencies.
-- [ ] Meet the [playable real-time gate](REALTIME_PERFORMANCE.md): 216 living actors for 30 minutes at a 20 Hz authority target, human input completion below 100 ms at p95, observer load, stable queues and bounded active memory; verify browser frame pacing separately. Short controller-only improvements do not pass this gate.
-- [ ] Complete successful fresh model operations through the migrated built-in and external paths; the latest six provider requests all returned HTTP 530. Meet the separate sustained 20 Hz target under living-controller load before claiming scale acceptance.
+- [ ] Meet the immediate [performance contract](PERFORMANCE_CONTRACT.md) gate: 216 active characters for 30 minutes, 60 Hz active movement/combat, server receipt-to-outcome ≤50/100 ms p95/p99, network input-to-outcome ≤150/250 ms p95/p99 at 80 ms RTT, normal subscriptions and observer load, stable queues and bounded active memory. Short controller-only improvements do not pass this gate.
+- [ ] Verify the eventual gameplay client against the same contract: stable 60 FPS with 99% of frames within approximately 16.7 ms, high-refresh rendering/input support, prediction/interpolation and actual combat feel. Current client polish remains deferred; missing client evidence keeps product acceptance open.
+- [ ] Meet the full contract: 2,000 active characters including a 200-character local battle for 8 hours within the combined 16-vCPU/64-GB backend budget, without relaxing responsiveness or correctness. Freeze hardware and representative workload details before acceptance runs.
+- [ ] Complete successful fresh model operations through the migrated built-in and external paths; the latest six provider requests all returned HTTP 530. Meet the performance contract under declared controller/inference load before claiming full workload acceptance.
 - [ ] Reassess bounded regional execution after the boundary measurements; current 48×36 maps do not justify a premature region-size decision. Thousands of players remain the target.
 - [ ] Extract tick/action/controller responsibilities from large `lib.rs` and `npc_ai.rs` as the relevant contracts are implemented; avoid unrelated rewrites.
 - [ ] Keep scenario schemas, trace records, model/behavior/skill versions, and comparison readers aligned with mechanic changes.

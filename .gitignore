@@ -16,6 +16,9 @@
 
 # Temporary test journals when the system temporary directory reaches its quota
 /.local/test-tmp/
+/.local/tmp/
+# Short browser socket paths (Unix-domain sockets have a platform length limit)
+/.local/t/
 
 # Generated Bevy WASM bundle
 /client/dist/

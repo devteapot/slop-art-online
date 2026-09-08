@@ -4,6 +4,78 @@ use crate::{
     participant::{ParticipantState, Receipt, Request},
     Event, Player, World,
 };
+use std::collections::BTreeSet;
+
+/// Initial-definition dependencies for start/cancel admission and control
+/// changes. These operations do not initialize people, teach seed knowledge,
+/// or expose authored starting habits. Physical execution and observations
+/// still receive the complete seed. The participant commit excludes this projection.
+pub fn action_admission_initial(seed: &crate::Scenario) -> crate::Scenario {
+    crate::Scenario {
+        society: seed.society.clone(), infrastructure: seed.infrastructure.clone(),
+        lifecycle: seed.lifecycle.clone(), disturbances: seed.disturbances.clone(),
+        knowledge: Default::default(), archives: seed.archives.clone(),
+        starting_behaviors: Default::default(), food_sources: seed.food_sources.clone(),
+        weather: seed.weather.clone(), arenas: seed.arenas.clone(), map: seed.map.clone(),
+        name: seed.name.clone(), seed: seed.seed, max_ticks: seed.max_ticks,
+        players: vec![], sites: seed.sites.clone(),
+    }
+}
+
+/// Explicit target read dependencies, independent of remembered evidence.
+/// Policy validation still enforces the node/depth/size limits at admission.
+pub fn tree_targets(tree: &crate::Node) -> BTreeSet<u32> {
+    let mut targets = BTreeSet::new();
+    let mut pending = vec![tree];
+    while let Some(node)=pending.pop() {
+        match node {
+            crate::Node::Action {action} => { targets.extend(action.target); },
+            crate::Node::Once {child} | crate::Node::When {child,..} | crate::Node::Guard {child,..} => pending.push(child),
+            crate::Node::Priority {children} | crate::Node::Sequence {children} => pending.extend(children),
+            crate::Node::Reconsider {..} => (),
+        }
+    }
+    targets
+}
+
+pub fn command_targets(command: &crate::participant::Command) -> BTreeSet<u32> {
+    use crate::participant::Command;
+    match command {
+        Command::StartAction {action,..} => action.target.into_iter().collect(),
+        Command::ReplaceTree {tree,..} => tree_targets(tree),
+        Command::PatchSubtree {subtree,..} => tree_targets(subtree),
+        Command::CancelAction {..} | Command::PublishKnowledge {..} | Command::ReadObservation {..}
+        | Command::PinObservation {..} | Command::Speak {..} | Command::Reflect {..} => BTreeSet::new(),
+    }
+}
+
+/// Start/cancel only admit or interrupt an actor's execution. Physical effects
+/// run later under the action clock's dependencies. Validation still receives
+/// the actor's complete facts/rules/map and each named target's visibility facts.
+/// Other commands can construct observations or validate persistent policies.
+pub fn command_reads_local_context(command: &crate::participant::Command) -> bool {
+    use crate::participant::Command;
+    match command {
+        Command::StartAction { .. } | Command::CancelAction { .. } => false,
+        Command::ReplaceTree { .. } | Command::PatchSubtree { .. }
+        | Command::PublishKnowledge { .. } | Command::ReadObservation { .. }
+        | Command::PinObservation { .. } | Command::Speak { .. }
+        | Command::Reflect { .. } => true,
+    }
+}
+
+pub fn decision_targets(decision: &crate::Decision) -> BTreeSet<u32> {
+    let mut targets: BTreeSet<_> = decision.actions.iter().filter_map(|a|a.target).collect();
+    if let Some(tree)=&decision.policy { targets.extend(tree_targets(tree)); }
+    targets
+}
+
+/// The Bevy convenience call maps a client's single physical action to the
+/// same StartAction command. Other intent forms retain their wider context.
+pub fn intent_reads_local_context(client_controlled: bool, decision: &crate::Decision) -> bool {
+    !client_controlled || !decision.reflections.is_empty() || decision.policy.is_some()
+        || decision.actions.len() != 1 || decision.actions[0].skill == crate::Skill::Speak
+}
 
 pub struct ParticipantTransaction {
     world: World,
@@ -20,8 +92,10 @@ pub struct ParticipantCommit {
     pub receipt: Option<Receipt>,
 }
 impl ParticipantTransaction {
-    /// `world` contains the actor's complete private state, co-located public
-    /// bodies/lifecycle and stations, their own support/materials, shared rules
+    /// `world` contains the actor's complete private state, explicitly targeted
+    /// bodies and (when command_reads_local_context) co-located public
+    /// bodies/lifecycle and stations, plus the facts
+    /// consumed by current visibility laws, their own support/materials, shared rules
     /// and surveyed configuration. Other characters' minds are not required.
     /// Only the declared fields in ParticipantCommit can leave this boundary.
     pub fn new(world: World, actor: u32) -> Result<Self, String> {
@@ -55,6 +129,12 @@ impl ParticipantTransaction {
     ) -> Result<ParticipantCommit, String> {
         let receipt = self.world.participant_client_intent(self.actor, decision)?;
         self.finish(receipt)
+    }
+    /// Ownership invalidates slow work and queued speech using the shared
+    /// kernel; installed physical behavior remains in force.
+    pub fn change_control(mut self) -> Result<ParticipantCommit, String> {
+        self.world.change_control(self.actor)?;
+        self.finish(None)
     }
     fn finish(mut self, receipt: Option<Receipt>) -> Result<ParticipantCommit, String> {
         let i = self.world.idx(self.actor)?;

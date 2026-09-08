@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 spacetimedb-sdk = { version = "=2.1.0" }
+serde_json = "1"
 
 [features]
 browser = ["spacetimedb-sdk/browser"]

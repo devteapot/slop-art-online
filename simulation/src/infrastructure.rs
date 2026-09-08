@@ -619,7 +619,7 @@ impl World {
                 } else {
                     actor
                 };
-                if target != actor && !self.target_perceived(i, target, &self.players[i].memories) {
+                if target != actor && !self.target_perceived(i, target, &self.players[i].memories)? {
                     return Err("supported target has not been perceived".into());
                 }
                 let j = self.idx(target)?;
@@ -657,7 +657,7 @@ impl World {
             SetAccess { actor: target, .. } => {
                 if *target != actor
                     && !s.seed.access.contains_key(target)
-                    && !self.target_perceived(i, *target, &self.players[i].memories)
+                    && !self.target_perceived(i, *target, &self.players[i].memories)?
                 {
                     return Err("access target has not been perceived".into());
                 }

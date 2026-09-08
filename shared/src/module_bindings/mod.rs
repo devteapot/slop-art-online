@@ -89,10 +89,14 @@ pub mod resource_type_type;
 pub mod rotate_player_reducer;
 pub mod send_chat_message_reducer;
 pub mod set_display_name_reducer;
+pub mod sim_advance_world_build_reducer;
+pub mod sim_append_world_upload_reducer;
 pub mod sim_audit_block_type;
 pub mod sim_audit_retention_type;
 pub mod sim_audit_type;
 pub mod sim_audit_wake_type;
+pub mod sim_begin_world_upload_reducer;
+pub mod sim_cancel_world_upload_reducer;
 pub mod sim_client_access_type;
 pub mod sim_client_clock_type;
 pub mod sim_client_control_reducer;
@@ -101,9 +105,11 @@ pub mod sim_client_intent_reducer;
 pub mod sim_client_render_event_type;
 pub mod sim_client_snapshot_type;
 pub mod sim_clock_deadline_type;
+pub mod sim_clock_rate_type;
 pub mod sim_clock_wake_type;
 pub mod sim_compact_audit_reducer;
 pub mod sim_configure_audit_archive_reducer;
+pub mod sim_configure_clock_rate_reducer;
 pub mod sim_configure_deadline_clock_reducer;
 pub mod sim_configure_physical_clock_reducer;
 pub mod sim_controller_bootstrap_type;
@@ -119,10 +125,12 @@ pub mod sim_dispatch_controller_action_after_reducer;
 pub mod sim_dispatch_controller_action_reducer;
 pub mod sim_export_owned_audit_procedure;
 pub mod sim_export_owned_run_procedure;
+pub mod sim_finish_world_upload_reducer;
 pub mod sim_grant_client_reducer;
 pub mod sim_intent_reducer;
 pub mod sim_migrate_native_state_reducer;
 pub mod sim_model_result_reducer;
+pub mod sim_my_combat_events_table;
 pub mod sim_my_controller_bootstrap_table;
 pub mod sim_my_controller_dispatch_table;
 pub mod sim_my_controller_experiences_table;
@@ -131,27 +139,42 @@ pub mod sim_my_controller_knowledge_table;
 pub mod sim_my_participant_head_table;
 pub mod sim_my_participant_reads_table;
 pub mod sim_my_participant_receipts_table;
+pub mod sim_my_render_actors_table;
+pub mod sim_my_render_bodies_table;
 pub mod sim_my_render_events_table;
+pub mod sim_my_render_header_table;
+pub mod sim_my_render_scene_table;
+pub mod sim_my_render_sites_table;
 pub mod sim_my_render_snapshot_table;
 pub mod sim_my_snapshot_table;
+pub mod sim_my_world_build_table;
+pub mod sim_my_world_upload_table;
 pub mod sim_native_actor_aux_type;
 pub mod sim_native_actor_type;
 pub mod sim_native_archive_type;
 pub mod sim_native_capture_type;
 pub mod sim_native_clock_actor_type;
 pub mod sim_native_clock_state_type;
+pub mod sim_native_controller_catalog_type;
 pub mod sim_native_controller_type;
 pub mod sim_native_definition_type;
 pub mod sim_native_definition_version_type;
+pub mod sim_native_evidence_body_type;
+pub mod sim_native_evidence_retention_type;
 pub mod sim_native_experience_type;
 pub mod sim_native_head_type;
 pub mod sim_native_lease_evidence_type;
 pub mod sim_native_lease_type;
 pub mod sim_native_mind_history_type;
 pub mod sim_native_mind_type;
+pub mod sim_native_paged_trace_entry_type;
 pub mod sim_native_participant_type;
 pub mod sim_native_site_type;
 pub mod sim_native_station_type;
+pub mod sim_native_trace_entry_type;
+pub mod sim_native_trace_head_type;
+pub mod sim_native_trace_index_type;
+pub mod sim_native_trace_page_type;
 pub mod sim_operator_clock_reducer;
 pub mod sim_operator_pause_reducer;
 pub mod sim_owned_run_ids_procedure;
@@ -162,8 +185,11 @@ pub mod sim_participant_read_type;
 pub mod sim_participant_receipt_type;
 pub mod sim_participant_state_table;
 pub mod sim_physical_clock_type;
+pub mod sim_prepare_world_build_reducer;
 pub mod sim_render_actor_support_type;
+pub mod sim_render_body_support_type;
 pub mod sim_render_clock_type;
+pub mod sim_render_scene_type;
 pub mod sim_revoke_client_reducer;
 pub mod sim_run_store_type;
 pub mod sim_run_table;
@@ -174,6 +200,10 @@ pub mod sim_setup_client_clock_reducer;
 pub mod sim_stage_scripts_reducer;
 pub mod sim_step_reducer;
 pub mod sim_world_blob_type;
+pub mod sim_world_build_event_type;
+pub mod sim_world_build_type;
+pub mod sim_world_upload_chunk_type;
+pub mod sim_world_upload_type;
 pub mod sim_world_wake_type;
 pub mod skill_attributes_table;
 pub mod skill_attributes_type;
@@ -286,10 +316,14 @@ pub use resource_type_type::ResourceType;
 pub use rotate_player_reducer::rotate_player;
 pub use send_chat_message_reducer::send_chat_message;
 pub use set_display_name_reducer::set_display_name;
+pub use sim_advance_world_build_reducer::sim_advance_world_build;
+pub use sim_append_world_upload_reducer::sim_append_world_upload;
 pub use sim_audit_block_type::SimAuditBlock;
 pub use sim_audit_retention_type::SimAuditRetention;
 pub use sim_audit_type::SimAudit;
 pub use sim_audit_wake_type::SimAuditWake;
+pub use sim_begin_world_upload_reducer::sim_begin_world_upload;
+pub use sim_cancel_world_upload_reducer::sim_cancel_world_upload;
 pub use sim_client_access_type::SimClientAccess;
 pub use sim_client_clock_type::SimClientClock;
 pub use sim_client_control_reducer::sim_client_control;
@@ -298,9 +332,11 @@ pub use sim_client_intent_reducer::sim_client_intent;
 pub use sim_client_render_event_type::SimClientRenderEvent;
 pub use sim_client_snapshot_type::SimClientSnapshot;
 pub use sim_clock_deadline_type::SimClockDeadline;
+pub use sim_clock_rate_type::SimClockRate;
 pub use sim_clock_wake_type::SimClockWake;
 pub use sim_compact_audit_reducer::sim_compact_audit;
 pub use sim_configure_audit_archive_reducer::sim_configure_audit_archive;
+pub use sim_configure_clock_rate_reducer::sim_configure_clock_rate;
 pub use sim_configure_deadline_clock_reducer::sim_configure_deadline_clock;
 pub use sim_configure_physical_clock_reducer::sim_configure_physical_clock;
 pub use sim_controller_bootstrap_type::SimControllerBootstrap;
@@ -316,10 +352,12 @@ pub use sim_dispatch_controller_action_after_reducer::sim_dispatch_controller_ac
 pub use sim_dispatch_controller_action_reducer::sim_dispatch_controller_action;
 pub use sim_export_owned_audit_procedure::sim_export_owned_audit;
 pub use sim_export_owned_run_procedure::sim_export_owned_run;
+pub use sim_finish_world_upload_reducer::sim_finish_world_upload;
 pub use sim_grant_client_reducer::sim_grant_client;
 pub use sim_intent_reducer::sim_intent;
 pub use sim_migrate_native_state_reducer::sim_migrate_native_state;
 pub use sim_model_result_reducer::sim_model_result;
+pub use sim_my_combat_events_table::*;
 pub use sim_my_controller_bootstrap_table::*;
 pub use sim_my_controller_dispatch_table::*;
 pub use sim_my_controller_experiences_table::*;
@@ -328,27 +366,42 @@ pub use sim_my_controller_knowledge_table::*;
 pub use sim_my_participant_head_table::*;
 pub use sim_my_participant_reads_table::*;
 pub use sim_my_participant_receipts_table::*;
+pub use sim_my_render_actors_table::*;
+pub use sim_my_render_bodies_table::*;
 pub use sim_my_render_events_table::*;
+pub use sim_my_render_header_table::*;
+pub use sim_my_render_scene_table::*;
+pub use sim_my_render_sites_table::*;
 pub use sim_my_render_snapshot_table::*;
 pub use sim_my_snapshot_table::*;
+pub use sim_my_world_build_table::*;
+pub use sim_my_world_upload_table::*;
 pub use sim_native_actor_aux_type::SimNativeActorAux;
 pub use sim_native_actor_type::SimNativeActor;
 pub use sim_native_archive_type::SimNativeArchive;
 pub use sim_native_capture_type::SimNativeCapture;
 pub use sim_native_clock_actor_type::SimNativeClockActor;
 pub use sim_native_clock_state_type::SimNativeClockState;
+pub use sim_native_controller_catalog_type::SimNativeControllerCatalog;
 pub use sim_native_controller_type::SimNativeController;
 pub use sim_native_definition_type::SimNativeDefinition;
 pub use sim_native_definition_version_type::SimNativeDefinitionVersion;
+pub use sim_native_evidence_body_type::SimNativeEvidenceBody;
+pub use sim_native_evidence_retention_type::SimNativeEvidenceRetention;
 pub use sim_native_experience_type::SimNativeExperience;
 pub use sim_native_head_type::SimNativeHead;
 pub use sim_native_lease_evidence_type::SimNativeLeaseEvidence;
 pub use sim_native_lease_type::SimNativeLease;
 pub use sim_native_mind_history_type::SimNativeMindHistory;
 pub use sim_native_mind_type::SimNativeMind;
+pub use sim_native_paged_trace_entry_type::SimNativePagedTraceEntry;
 pub use sim_native_participant_type::SimNativeParticipant;
 pub use sim_native_site_type::SimNativeSite;
 pub use sim_native_station_type::SimNativeStation;
+pub use sim_native_trace_entry_type::SimNativeTraceEntry;
+pub use sim_native_trace_head_type::SimNativeTraceHead;
+pub use sim_native_trace_index_type::SimNativeTraceIndex;
+pub use sim_native_trace_page_type::SimNativeTracePage;
 pub use sim_operator_clock_reducer::sim_operator_clock;
 pub use sim_operator_pause_reducer::sim_operator_pause;
 pub use sim_owned_run_ids_procedure::sim_owned_run_ids;
@@ -359,8 +412,11 @@ pub use sim_participant_read_type::SimParticipantRead;
 pub use sim_participant_receipt_type::SimParticipantReceipt;
 pub use sim_participant_state_table::*;
 pub use sim_physical_clock_type::SimPhysicalClock;
+pub use sim_prepare_world_build_reducer::sim_prepare_world_build;
 pub use sim_render_actor_support_type::SimRenderActorSupport;
+pub use sim_render_body_support_type::SimRenderBodySupport;
 pub use sim_render_clock_type::SimRenderClock;
+pub use sim_render_scene_type::SimRenderScene;
 pub use sim_revoke_client_reducer::sim_revoke_client;
 pub use sim_run_store_type::SimRunStore;
 pub use sim_run_table::*;
@@ -371,6 +427,10 @@ pub use sim_setup_client_clock_reducer::sim_setup_client_clock;
 pub use sim_stage_scripts_reducer::sim_stage_scripts;
 pub use sim_step_reducer::sim_step;
 pub use sim_world_blob_type::SimWorldBlob;
+pub use sim_world_build_event_type::SimWorldBuildEvent;
+pub use sim_world_build_type::SimWorldBuild;
+pub use sim_world_upload_chunk_type::SimWorldUploadChunk;
+pub use sim_world_upload_type::SimWorldUpload;
 pub use sim_world_wake_type::SimWorldWake;
 pub use skill_attributes_table::*;
 pub use skill_attributes_type::SkillAttributes;
@@ -440,6 +500,24 @@ pub enum Reducer {
     SetDisplayName {
         display_name: String,
     },
+    SimAdvanceWorldBuild {
+        run: String,
+        expected_step: u64,
+    },
+    SimAppendWorldUpload {
+        run: String,
+        index: u32,
+        body: String,
+    },
+    SimBeginWorldUpload {
+        run: String,
+        mode: String,
+        total_bytes: u32,
+        sha_256: String,
+    },
+    SimCancelWorldUpload {
+        run: String,
+    },
     SimClientControl {
         command: String,
     },
@@ -452,6 +530,10 @@ pub enum Reducer {
     SimConfigureAuditArchive {
         run: String,
         enabled: bool,
+    },
+    SimConfigureClockRate {
+        run: String,
+        hz: u32,
     },
     SimConfigureDeadlineClock {
         run: String,
@@ -481,6 +563,9 @@ pub enum Reducer {
         sequence: u64,
         request: String,
         cursor: u64,
+    },
+    SimFinishWorldUpload {
+        run: String,
     },
     SimGrantClient {
         run: String,
@@ -512,6 +597,9 @@ pub enum Reducer {
     },
     SimParticipantCommand {
         request: String,
+    },
+    SimPrepareWorldBuild {
+        run: String,
     },
     SimRevokeClient {
         identity: __sdk::Identity,
@@ -620,10 +708,15 @@ impl __sdk::Reducer for Reducer {
             Reducer::RotatePlayer { .. } => "rotate_player",
             Reducer::SendChatMessage { .. } => "send_chat_message",
             Reducer::SetDisplayName { .. } => "set_display_name",
+            Reducer::SimAdvanceWorldBuild { .. } => "sim_advance_world_build",
+            Reducer::SimAppendWorldUpload { .. } => "sim_append_world_upload",
+            Reducer::SimBeginWorldUpload { .. } => "sim_begin_world_upload",
+            Reducer::SimCancelWorldUpload { .. } => "sim_cancel_world_upload",
             Reducer::SimClientControl { .. } => "sim_client_control",
             Reducer::SimClientIntent { .. } => "sim_client_intent",
             Reducer::SimCompactAudit { .. } => "sim_compact_audit",
             Reducer::SimConfigureAuditArchive { .. } => "sim_configure_audit_archive",
+            Reducer::SimConfigureClockRate { .. } => "sim_configure_clock_rate",
             Reducer::SimConfigureDeadlineClock { .. } => "sim_configure_deadline_clock",
             Reducer::SimConfigurePhysicalClock { .. } => "sim_configure_physical_clock",
             Reducer::SimCreate { .. } => "sim_create",
@@ -633,6 +726,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SimDispatchControllerActionAfter { .. } => {
                 "sim_dispatch_controller_action_after"
             }
+            Reducer::SimFinishWorldUpload { .. } => "sim_finish_world_upload",
             Reducer::SimGrantClient { .. } => "sim_grant_client",
             Reducer::SimIntent { .. } => "sim_intent",
             Reducer::SimMigrateNativeState { .. } => "sim_migrate_native_state",
@@ -640,6 +734,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SimOperatorClock { .. } => "sim_operator_clock",
             Reducer::SimOperatorPause { .. } => "sim_operator_pause",
             Reducer::SimParticipantCommand { .. } => "sim_participant_command",
+            Reducer::SimPrepareWorldBuild { .. } => "sim_prepare_world_build",
             Reducer::SimRevokeClient { .. } => "sim_revoke_client",
             Reducer::SimSelectInspector { .. } => "sim_select_inspector",
             Reducer::SimSetControllerDeliveryCursor { .. } => "sim_set_controller_delivery_cursor",
@@ -723,6 +818,38 @@ Reducer::MovePlayer{
 }             => __sats::bsatn::to_vec(&set_display_name_reducer::SetDisplayNameArgs {
                 display_name: display_name.clone(),
 }),
+            Reducer::SimAdvanceWorldBuild{
+                run,
+                expected_step,
+}             => __sats::bsatn::to_vec(&sim_advance_world_build_reducer::SimAdvanceWorldBuildArgs {
+                run: run.clone(),
+                expected_step: expected_step.clone(),
+}),
+            Reducer::SimAppendWorldUpload{
+                run,
+                index,
+                body,
+}             => __sats::bsatn::to_vec(&sim_append_world_upload_reducer::SimAppendWorldUploadArgs {
+                run: run.clone(),
+                index: index.clone(),
+                body: body.clone(),
+}),
+            Reducer::SimBeginWorldUpload{
+                run,
+                mode,
+                total_bytes,
+                sha_256,
+}             => __sats::bsatn::to_vec(&sim_begin_world_upload_reducer::SimBeginWorldUploadArgs {
+                run: run.clone(),
+                mode: mode.clone(),
+                total_bytes: total_bytes.clone(),
+                sha_256: sha_256.clone(),
+}),
+            Reducer::SimCancelWorldUpload{
+                run,
+}             => __sats::bsatn::to_vec(&sim_cancel_world_upload_reducer::SimCancelWorldUploadArgs {
+                run: run.clone(),
+}),
             Reducer::SimClientControl{
                 command,
 }             => __sats::bsatn::to_vec(&sim_client_control_reducer::SimClientControlArgs {
@@ -744,6 +871,13 @@ Reducer::MovePlayer{
 }             => __sats::bsatn::to_vec(&sim_configure_audit_archive_reducer::SimConfigureAuditArchiveArgs {
                 run: run.clone(),
                 enabled: enabled.clone(),
+}),
+            Reducer::SimConfigureClockRate{
+                run,
+                hz,
+}             => __sats::bsatn::to_vec(&sim_configure_clock_rate_reducer::SimConfigureClockRateArgs {
+                run: run.clone(),
+                hz: hz.clone(),
 }),
             Reducer::SimConfigureDeadlineClock{
                 run,
@@ -795,6 +929,11 @@ Reducer::MovePlayer{
                 sequence: sequence.clone(),
                 request: request.clone(),
                 cursor: cursor.clone(),
+}),
+            Reducer::SimFinishWorldUpload{
+                run,
+}             => __sats::bsatn::to_vec(&sim_finish_world_upload_reducer::SimFinishWorldUploadArgs {
+                run: run.clone(),
 }),
             Reducer::SimGrantClient{
                 run,
@@ -850,6 +989,11 @@ Reducer::MovePlayer{
                 request,
 }             => __sats::bsatn::to_vec(&sim_participant_command_reducer::SimParticipantCommandArgs {
                 request: request.clone(),
+}),
+            Reducer::SimPrepareWorldBuild{
+                run,
+}             => __sats::bsatn::to_vec(&sim_prepare_world_build_reducer::SimPrepareWorldBuildArgs {
+                run: run.clone(),
 }),
             Reducer::SimRevokeClient{
                 identity,
@@ -1047,6 +1191,7 @@ pub struct DbUpdate {
     player_skill: __sdk::TableUpdate<PlayerSkill>,
     point_of_interest: __sdk::TableUpdate<PointOfInterest>,
     projectile: __sdk::TableUpdate<Projectile>,
+    sim_my_combat_events: __sdk::TableUpdate<SimNativeExperience>,
     sim_my_controller_bootstrap: __sdk::TableUpdate<SimControllerBootstrap>,
     sim_my_controller_dispatch: __sdk::TableUpdate<SimControllerDispatch>,
     sim_my_controller_experiences: __sdk::TableUpdate<SimNativeExperience>,
@@ -1055,9 +1200,16 @@ pub struct DbUpdate {
     sim_my_participant_head: __sdk::TableUpdate<SimParticipantHead>,
     sim_my_participant_reads: __sdk::TableUpdate<SimParticipantRead>,
     sim_my_participant_receipts: __sdk::TableUpdate<SimParticipantReceipt>,
+    sim_my_render_actors: __sdk::TableUpdate<SimNativeActor>,
+    sim_my_render_bodies: __sdk::TableUpdate<SimRenderBodySupport>,
     sim_my_render_events: __sdk::TableUpdate<SimClientRenderEvent>,
+    sim_my_render_header: __sdk::TableUpdate<SimClientSnapshot>,
+    sim_my_render_scene: __sdk::TableUpdate<SimRenderScene>,
+    sim_my_render_sites: __sdk::TableUpdate<SimNativeSite>,
     sim_my_render_snapshot: __sdk::TableUpdate<SimClientSnapshot>,
     sim_my_snapshot: __sdk::TableUpdate<SimClientSnapshot>,
+    sim_my_world_build: __sdk::TableUpdate<SimWorldBuild>,
+    sim_my_world_upload: __sdk::TableUpdate<SimWorldUpload>,
     sim_participant_state: __sdk::TableUpdate<SimClientSnapshot>,
     sim_run: __sdk::TableUpdate<SimRun>,
     skill_attributes: __sdk::TableUpdate<SkillAttributes>,
@@ -1166,6 +1318,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "projectile" => db_update
                     .projectile
                     .append(projectile_table::parse_table_update(table_update)?),
+                "sim_my_combat_events" => db_update.sim_my_combat_events.append(
+                    sim_my_combat_events_table::parse_table_update(table_update)?,
+                ),
                 "sim_my_controller_bootstrap" => db_update.sim_my_controller_bootstrap.append(
                     sim_my_controller_bootstrap_table::parse_table_update(table_update)?,
                 ),
@@ -1190,15 +1345,36 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "sim_my_participant_receipts" => db_update.sim_my_participant_receipts.append(
                     sim_my_participant_receipts_table::parse_table_update(table_update)?,
                 ),
+                "sim_my_render_actors" => db_update.sim_my_render_actors.append(
+                    sim_my_render_actors_table::parse_table_update(table_update)?,
+                ),
+                "sim_my_render_bodies" => db_update.sim_my_render_bodies.append(
+                    sim_my_render_bodies_table::parse_table_update(table_update)?,
+                ),
                 "sim_my_render_events" => db_update.sim_my_render_events.append(
                     sim_my_render_events_table::parse_table_update(table_update)?,
                 ),
+                "sim_my_render_header" => db_update.sim_my_render_header.append(
+                    sim_my_render_header_table::parse_table_update(table_update)?,
+                ),
+                "sim_my_render_scene" => db_update
+                    .sim_my_render_scene
+                    .append(sim_my_render_scene_table::parse_table_update(table_update)?),
+                "sim_my_render_sites" => db_update
+                    .sim_my_render_sites
+                    .append(sim_my_render_sites_table::parse_table_update(table_update)?),
                 "sim_my_render_snapshot" => db_update.sim_my_render_snapshot.append(
                     sim_my_render_snapshot_table::parse_table_update(table_update)?,
                 ),
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
                     .append(sim_my_snapshot_table::parse_table_update(table_update)?),
+                "sim_my_world_build" => db_update
+                    .sim_my_world_build
+                    .append(sim_my_world_build_table::parse_table_update(table_update)?),
+                "sim_my_world_upload" => db_update
+                    .sim_my_world_upload
+                    .append(sim_my_world_upload_table::parse_table_update(table_update)?),
                 "sim_participant_state" => db_update.sim_participant_state.append(
                     sim_participant_state_table::parse_table_update(table_update)?,
                 ),
@@ -1357,6 +1533,10 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.world_state = cache
             .apply_diff_to_table::<WorldState>("world_state", &self.world_state)
             .with_updates_by_pk(|row| &row.id);
+        diff.sim_my_combat_events = cache.apply_diff_to_table::<SimNativeExperience>(
+            "sim_my_combat_events",
+            &self.sim_my_combat_events,
+        );
         diff.sim_my_controller_bootstrap = cache.apply_diff_to_table::<SimControllerBootstrap>(
             "sim_my_controller_bootstrap",
             &self.sim_my_controller_bootstrap,
@@ -1389,16 +1569,40 @@ impl __sdk::DbUpdate for DbUpdate {
             "sim_my_participant_receipts",
             &self.sim_my_participant_receipts,
         );
+        diff.sim_my_render_actors = cache.apply_diff_to_table::<SimNativeActor>(
+            "sim_my_render_actors",
+            &self.sim_my_render_actors,
+        );
+        diff.sim_my_render_bodies = cache.apply_diff_to_table::<SimRenderBodySupport>(
+            "sim_my_render_bodies",
+            &self.sim_my_render_bodies,
+        );
         diff.sim_my_render_events = cache.apply_diff_to_table::<SimClientRenderEvent>(
             "sim_my_render_events",
             &self.sim_my_render_events,
         );
+        diff.sim_my_render_header = cache.apply_diff_to_table::<SimClientSnapshot>(
+            "sim_my_render_header",
+            &self.sim_my_render_header,
+        );
+        diff.sim_my_render_scene = cache.apply_diff_to_table::<SimRenderScene>(
+            "sim_my_render_scene",
+            &self.sim_my_render_scene,
+        );
+        diff.sim_my_render_sites = cache
+            .apply_diff_to_table::<SimNativeSite>("sim_my_render_sites", &self.sim_my_render_sites);
         diff.sim_my_render_snapshot = cache.apply_diff_to_table::<SimClientSnapshot>(
             "sim_my_render_snapshot",
             &self.sim_my_render_snapshot,
         );
         diff.sim_my_snapshot = cache
             .apply_diff_to_table::<SimClientSnapshot>("sim_my_snapshot", &self.sim_my_snapshot);
+        diff.sim_my_world_build = cache
+            .apply_diff_to_table::<SimWorldBuild>("sim_my_world_build", &self.sim_my_world_build);
+        diff.sim_my_world_upload = cache.apply_diff_to_table::<SimWorldUpload>(
+            "sim_my_world_upload",
+            &self.sim_my_world_upload,
+        );
         diff.sim_participant_state = cache.apply_diff_to_table::<SimClientSnapshot>(
             "sim_participant_state",
             &self.sim_participant_state,
@@ -1504,6 +1708,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "projectile" => db_update
                     .projectile
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_combat_events" => db_update
+                    .sim_my_combat_events
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "sim_my_controller_bootstrap" => db_update
                     .sim_my_controller_bootstrap
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1528,14 +1735,35 @@ impl __sdk::DbUpdate for DbUpdate {
                 "sim_my_participant_receipts" => db_update
                     .sim_my_participant_receipts
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_render_actors" => db_update
+                    .sim_my_render_actors
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_render_bodies" => db_update
+                    .sim_my_render_bodies
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "sim_my_render_events" => db_update
                     .sim_my_render_events
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_render_header" => db_update
+                    .sim_my_render_header
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_render_scene" => db_update
+                    .sim_my_render_scene
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_render_sites" => db_update
+                    .sim_my_render_sites
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "sim_my_render_snapshot" => db_update
                     .sim_my_render_snapshot
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_world_build" => db_update
+                    .sim_my_world_build
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sim_my_world_upload" => db_update
+                    .sim_my_world_upload
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "sim_participant_state" => db_update
                     .sim_participant_state
@@ -1664,6 +1892,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "projectile" => db_update
                     .projectile
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_combat_events" => db_update
+                    .sim_my_combat_events
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "sim_my_controller_bootstrap" => db_update
                     .sim_my_controller_bootstrap
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1688,14 +1919,35 @@ impl __sdk::DbUpdate for DbUpdate {
                 "sim_my_participant_receipts" => db_update
                     .sim_my_participant_receipts
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_render_actors" => db_update
+                    .sim_my_render_actors
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_render_bodies" => db_update
+                    .sim_my_render_bodies
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "sim_my_render_events" => db_update
                     .sim_my_render_events
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_render_header" => db_update
+                    .sim_my_render_header
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_render_scene" => db_update
+                    .sim_my_render_scene
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_render_sites" => db_update
+                    .sim_my_render_sites
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "sim_my_render_snapshot" => db_update
                     .sim_my_render_snapshot
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "sim_my_snapshot" => db_update
                     .sim_my_snapshot
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_world_build" => db_update
+                    .sim_my_world_build
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sim_my_world_upload" => db_update
+                    .sim_my_world_upload
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "sim_participant_state" => db_update
                     .sim_participant_state
@@ -1764,6 +2016,7 @@ pub struct AppliedDiff<'r> {
     player_skill: __sdk::TableAppliedDiff<'r, PlayerSkill>,
     point_of_interest: __sdk::TableAppliedDiff<'r, PointOfInterest>,
     projectile: __sdk::TableAppliedDiff<'r, Projectile>,
+    sim_my_combat_events: __sdk::TableAppliedDiff<'r, SimNativeExperience>,
     sim_my_controller_bootstrap: __sdk::TableAppliedDiff<'r, SimControllerBootstrap>,
     sim_my_controller_dispatch: __sdk::TableAppliedDiff<'r, SimControllerDispatch>,
     sim_my_controller_experiences: __sdk::TableAppliedDiff<'r, SimNativeExperience>,
@@ -1772,9 +2025,16 @@ pub struct AppliedDiff<'r> {
     sim_my_participant_head: __sdk::TableAppliedDiff<'r, SimParticipantHead>,
     sim_my_participant_reads: __sdk::TableAppliedDiff<'r, SimParticipantRead>,
     sim_my_participant_receipts: __sdk::TableAppliedDiff<'r, SimParticipantReceipt>,
+    sim_my_render_actors: __sdk::TableAppliedDiff<'r, SimNativeActor>,
+    sim_my_render_bodies: __sdk::TableAppliedDiff<'r, SimRenderBodySupport>,
     sim_my_render_events: __sdk::TableAppliedDiff<'r, SimClientRenderEvent>,
+    sim_my_render_header: __sdk::TableAppliedDiff<'r, SimClientSnapshot>,
+    sim_my_render_scene: __sdk::TableAppliedDiff<'r, SimRenderScene>,
+    sim_my_render_sites: __sdk::TableAppliedDiff<'r, SimNativeSite>,
     sim_my_render_snapshot: __sdk::TableAppliedDiff<'r, SimClientSnapshot>,
     sim_my_snapshot: __sdk::TableAppliedDiff<'r, SimClientSnapshot>,
+    sim_my_world_build: __sdk::TableAppliedDiff<'r, SimWorldBuild>,
+    sim_my_world_upload: __sdk::TableAppliedDiff<'r, SimWorldUpload>,
     sim_participant_state: __sdk::TableAppliedDiff<'r, SimClientSnapshot>,
     sim_run: __sdk::TableAppliedDiff<'r, SimRun>,
     skill_attributes: __sdk::TableAppliedDiff<'r, SkillAttributes>,
@@ -1906,6 +2166,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Projectile>("projectile", &self.projectile, event);
+        callbacks.invoke_table_row_callbacks::<SimNativeExperience>(
+            "sim_my_combat_events",
+            &self.sim_my_combat_events,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<SimControllerBootstrap>(
             "sim_my_controller_bootstrap",
             &self.sim_my_controller_bootstrap,
@@ -1946,9 +2211,34 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.sim_my_participant_receipts,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<SimNativeActor>(
+            "sim_my_render_actors",
+            &self.sim_my_render_actors,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimRenderBodySupport>(
+            "sim_my_render_bodies",
+            &self.sim_my_render_bodies,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<SimClientRenderEvent>(
             "sim_my_render_events",
             &self.sim_my_render_events,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimClientSnapshot>(
+            "sim_my_render_header",
+            &self.sim_my_render_header,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimRenderScene>(
+            "sim_my_render_scene",
+            &self.sim_my_render_scene,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimNativeSite>(
+            "sim_my_render_sites",
+            &self.sim_my_render_sites,
             event,
         );
         callbacks.invoke_table_row_callbacks::<SimClientSnapshot>(
@@ -1959,6 +2249,16 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<SimClientSnapshot>(
             "sim_my_snapshot",
             &self.sim_my_snapshot,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimWorldBuild>(
+            "sim_my_world_build",
+            &self.sim_my_world_build,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SimWorldUpload>(
+            "sim_my_world_upload",
+            &self.sim_my_world_upload,
             event,
         );
         callbacks.invoke_table_row_callbacks::<SimClientSnapshot>(
@@ -2675,6 +2975,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         player_skill_table::register_table(client_cache);
         point_of_interest_table::register_table(client_cache);
         projectile_table::register_table(client_cache);
+        sim_my_combat_events_table::register_table(client_cache);
         sim_my_controller_bootstrap_table::register_table(client_cache);
         sim_my_controller_dispatch_table::register_table(client_cache);
         sim_my_controller_experiences_table::register_table(client_cache);
@@ -2683,9 +2984,16 @@ impl __sdk::SpacetimeModule for RemoteModule {
         sim_my_participant_head_table::register_table(client_cache);
         sim_my_participant_reads_table::register_table(client_cache);
         sim_my_participant_receipts_table::register_table(client_cache);
+        sim_my_render_actors_table::register_table(client_cache);
+        sim_my_render_bodies_table::register_table(client_cache);
         sim_my_render_events_table::register_table(client_cache);
+        sim_my_render_header_table::register_table(client_cache);
+        sim_my_render_scene_table::register_table(client_cache);
+        sim_my_render_sites_table::register_table(client_cache);
         sim_my_render_snapshot_table::register_table(client_cache);
         sim_my_snapshot_table::register_table(client_cache);
+        sim_my_world_build_table::register_table(client_cache);
+        sim_my_world_upload_table::register_table(client_cache);
         sim_participant_state_table::register_table(client_cache);
         sim_run_table::register_table(client_cache);
         skill_attributes_table::register_table(client_cache);
@@ -2726,6 +3034,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "player_skill",
         "point_of_interest",
         "projectile",
+        "sim_my_combat_events",
         "sim_my_controller_bootstrap",
         "sim_my_controller_dispatch",
         "sim_my_controller_experiences",
@@ -2734,9 +3043,16 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "sim_my_participant_head",
         "sim_my_participant_reads",
         "sim_my_participant_receipts",
+        "sim_my_render_actors",
+        "sim_my_render_bodies",
         "sim_my_render_events",
+        "sim_my_render_header",
+        "sim_my_render_scene",
+        "sim_my_render_sites",
         "sim_my_render_snapshot",
         "sim_my_snapshot",
+        "sim_my_world_build",
+        "sim_my_world_upload",
         "sim_participant_state",
         "sim_run",
         "skill_attributes",

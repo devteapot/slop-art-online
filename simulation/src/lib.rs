@@ -4,6 +4,7 @@ pub mod client_view;
 pub mod ecology;
 pub mod knowledge;
 pub mod infrastructure;
+pub mod initialization;
 pub mod research;
 pub mod laws;
 pub mod law_research;
@@ -19,6 +20,7 @@ pub mod spatial;
 mod visibility;
 pub mod society;
 pub mod starting_behaviors;
+pub mod combat;
 pub mod timing;
 pub mod deferred;
 pub mod clock;
@@ -327,7 +329,7 @@ pub struct Event {
     pub actor: Option<u32>,
     pub kind: String,
     pub parents: Vec<u64>,
-    pub data: Value,
+    pub data: participant::ExperienceData,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Pending {
@@ -377,12 +379,18 @@ pub struct World {
 }
 impl World {
     pub fn new(run: String, scenario: Scenario) -> Result<Self, String> {
-        if scenario.players.is_empty()
-            || scenario.players.len() > lifecycle::MAX_TOTAL_ACTORS
-            || scenario.max_ticks == 0
-            || scenario.max_ticks > 10000
-        {
-            return Err("scenario needs 1..256 players and 1..10000 ticks".into());
+        let (mut world, mut progress) = Self::begin_initialization(run, scenario)?;
+        while !world.initialize_batch(&mut progress, 64)? {}
+        Ok(world)
+    }
+
+    /// Begin an unpublished world. The caller must finish `initialize_batch`
+    /// before admitting commands, advancing time, or granting access.
+    pub fn begin_initialization(run: String, scenario: Scenario)
+        -> Result<(Self, initialization::Progress), String> {
+
+        if scenario.players.is_empty() || scenario.max_ticks == 0 {
+            return Err("scenario needs players and a positive tick horizon".into());
         }
         if let Some(map) = &scenario.map {
             map.validate()?;
@@ -458,27 +466,7 @@ impl World {
         let id=w.event(None,"initialization",vec![],json!({"scenario":w.initial,"rules":VERSION,"scripts":w.scripts,"prompt":PROMPT,"seed_usage":"reserved; current world rules use no random draws"}));
         w.initialize_lifecycle(id)?;
         w.initialize_infrastructure(id)?;
-        for i in 0..w.players.len() {
-            w.players[i].last_cause = Some(id);
-            // Authored starting knowledge is a remembered prior report, not a
-            // reference to the observer's omniscient initialization payload.
-            for n in 0..w.players[i].beliefs.len() {
-                let claim = w.players[i].beliefs[n].claim.clone();
-                let source = w.perceive(
-                    i,
-                    id,
-                    "prior_report",
-                    None,
-                    claim.location,
-                    json!({"claim":claim}),
-                )?;
-                w.players[i].beliefs[n].source = source;
-            }
-            w.observe_site(i)?;
-        }
-        w.initialize_knowledge(id)?;
-        w.install_starting_behaviors(id)?;
-        Ok(w)
+        Ok((w, initialization::Progress::new(id)))
     }
     pub fn event(
         &mut self,
@@ -487,14 +475,21 @@ impl World {
         parents: Vec<u64>,
         mut data: Value,
     ) -> u64 {
+        self.event_metadata(&mut data);
+        self.append_event(actor, kind, parents, data.into())
+    }
+    fn event_metadata(&self, data: &mut Value) {
         if let Some(object) = data.as_object_mut() {
             object.insert("rules_revision".into(), json!(self.scripts.revision));
             object.insert("time_ms".into(), json!(self.timing.time_ms));
             object.insert("update".into(), json!(self.timing.updates));
         }
+    }
+    fn append_event(&mut self, actor: Option<u32>, kind: &str, parents: Vec<u64>,
+        data: participant::ExperienceData) -> u64 {
         let id = self.next_event;
         self.next_event += 1;
-        self.events.push(Event {
+        let event = Event {
             id,
             run: self.run.clone(),
             tick: self.tick,
@@ -502,8 +497,12 @@ impl World {
             kind: kind.into(),
             parents,
             data,
-        });
-        self.record_experience(&self.events.last().unwrap().clone());
+        };
+        // Personal evidence consumes this event and character state, never the
+        // audit prefix. Borrow it before moving it into the ordered audit vector
+        // instead of cloning every payload merely to cross the mutable boundary.
+        self.record_experience(&event);
+        self.events.push(event);
         id
     }
     fn idx(&self, actor: u32) -> Result<usize, String> {
@@ -521,26 +520,36 @@ impl World {
         location: i32,
         content: Value,
     ) -> Result<u64, String> {
+        self.perceive_with_payload(i, world_event, kind, from, location,
+            std::borrow::Cow::Owned(content), None)
+    }
+    /// A notification may share its immutable payload among actual witnesses.
+    /// Recipient authority, event identity and personal state remain separate.
+    fn perceive_with_payload(
+        &mut self, i: usize, world_event: u64, kind: &str, from: Option<u32>,
+        location: i32, content: std::borrow::Cow<'_, Value>,
+        payload: Option<&participant::ExperienceData>,
+    ) -> Result<u64, String> {
         self.wake(self.players[i].id);
         let client = self.client_controlled(self.players[i].id);
         let limit: usize = if client { 0 } else { self.scripts.law("memory_limit", json!({}))? };
         if limit > 256 {
             return Err("memory policy exceeds storage budget".into());
         }
-        let id = self.event(
-            Some(self.players[i].id),
-            "perception",
-            vec![world_event],
-            json!({"kind":kind,"from":from,"location":location,"content":content}),
-        );
+        let id = if let Some(payload) = payload {
+            self.append_event(Some(self.players[i].id), "perception", vec![world_event], payload.clone())
+        } else {
+            self.event(Some(self.players[i].id), "perception", vec![world_event],
+                json!({"kind":kind,"from":from,"location":location,"content":content.as_ref()}))
+        };
         if client {
             let controller = self.participants.get_mut(&self.players[i].id).unwrap().client_controller.as_mut().unwrap();
-            if let Some(target) = from { controller.known_targets.insert(target); }
+            if let Some(target) = from { controller.remember_target(target); }
             if kind == "site" {
-                controller.last_lifecycle = Some(content["lifecycle"].clone());
+                controller.last_lifecycle = Some((&content["lifecycle"]).into());
                 for person in content["lifecycle"]["people"].as_array().into_iter().flatten() {
                     if let Some(id) = person["id"].as_u64().and_then(|v| u32::try_from(v).ok()) {
-                        controller.known_targets.insert(id);
+                        controller.remember_target(id);
                     }
                 }
             }
@@ -553,7 +562,7 @@ impl World {
             kind: kind.into(),
             from,
             location,
-            content,
+            content: content.into_owned(),
         };
         if kind == "site" {
             self.players[i].site_observations.retain(|p| p.location != location);
@@ -590,6 +599,9 @@ impl World {
     /// Refresh the changed site's facts without manufacturing new sightings of
     /// every nearby person. Explicit observation still performs both operations.
     fn observe_site_facts(&mut self, i: usize) -> Result<u64, String> {
+        self.observe_site_facts_with_lifecycle(i, None)
+    }
+    fn observe_site_facts_with_lifecycle(&mut self, i: usize, lifecycle: Option<participant::ExperienceData>) -> Result<u64, String> {
         let pos = self.players[i].position;
         let catalog_profile = timing::DiagnosticScope::new("observe.catalog");
         let mut observation: Value = self.actor_law(i,
@@ -598,7 +610,9 @@ impl World {
         )?;
         observation["food_source"] = json!(self.initial.food_sources.iter().find(|s| s.position == pos));
         observation["archives"] = self.local_archive_catalog(i);
-        observation["lifecycle"] = self.local_lifecycle_catalog(i);
+        let encoded_lifecycle = lifecycle.as_ref().filter(|_| self.client_controlled(self.players[i].id)).cloned();
+        observation["lifecycle"] = if encoded_lifecycle.is_some() { Value::Null }
+            else { lifecycle.map(|value| (*value).clone()).unwrap_or_else(|| self.local_lifecycle_catalog(i)) };
         observation["infrastructure"] = self.infrastructure_facts(self.players[i].id);
         drop(catalog_profile);
         let food = observation["food"].as_i64().unwrap_or(0);
@@ -617,9 +631,46 @@ impl World {
         );
         {
             let _profile = timing::DiagnosticScope::new("observe.site_perception");
-            self.perceive(i, id, "site", None, pos, observation)?;
+            if let Some(lifecycle) = encoded_lifecycle {
+                self.perceive_client_site(i, id, pos, observation, lifecycle)?;
+            } else { self.perceive(i, id, "site", None, pos, observation)?; }
         }
         Ok(id)
+    }
+
+    fn perceive_client_site(&mut self, i: usize, world_event: u64, location: i32,
+        observation: Value, lifecycle: participant::ExperienceData) -> Result<(), String> {
+        use participant::ExperienceData;
+        let actor = self.players[i].id;
+        debug_assert!(self.client_controlled(actor));
+        // Only the bundled-law refresh supplies an encoded lifecycle. Its site
+        // object is not an inspection exception; redact the small remainder and
+        // the shared lifecycle independently with the original source policy.
+        debug_assert!(!matches!(observation["kind"].as_str(), Some("program_inspected" | "law_inspected")));
+        let redacted_observation = research::redacted(observation.clone());
+        let redacted_lifecycle = lifecycle.redacted();
+        let content = ExperienceData::with_field(&observation, "lifecycle", &lifecycle);
+        let redacted_content = if redacted_observation == observation && lifecycle.same_snapshot(&redacted_lifecycle) {
+            content.clone()
+        } else { ExperienceData::with_field(&redacted_observation, "lifecycle", &redacted_lifecycle) };
+        let mut envelope = json!({"kind":"site","from":null,"location":location,"content":null});
+        self.event_metadata(&mut envelope);
+        let data = ExperienceData::with_field(&envelope, "content", &content);
+        let personal = if content.same_snapshot(&redacted_content) { data.clone() }
+            else { ExperienceData::with_field(&envelope, "content", &redacted_content) };
+        // This fixed envelope has no source markers or inspection exception.
+        data.cache_redaction(personal);
+        self.wake(actor);
+        let id = self.append_event(Some(actor), "perception", vec![world_event], data);
+        let controller = self.participants.get_mut(&actor).unwrap().client_controller.as_mut().unwrap();
+        for person in lifecycle["people"].as_array().into_iter().flatten() {
+            if let Some(id) = person["id"].as_u64().and_then(|v| u32::try_from(v).ok()) {
+                controller.remember_target(id);
+            }
+        }
+        controller.last_lifecycle = Some(lifecycle);
+        self.players[i].last_cause = Some(id);
+        Ok(())
     }
     pub fn context(&self, i: usize) -> Value {
         self.context_inner(i, true)
@@ -750,11 +801,16 @@ impl World {
         }
         self.apply_decision(actor, controller, d, parent, None)
     }
-    fn target_perceived(&self, i: usize, target: u32, evidence: &[Percept]) -> bool {
-        if let Some(client) = self.participants.get(&self.players[i].id).and_then(|s|s.client_controller.as_ref()) {
-            return client.known_targets.contains(&target);
+    fn target_perceived(&self, i: usize, target: u32, evidence: &[Percept]) -> Result<bool, String> {
+        // Current perception is an authoritative law check, independent of the
+        // bounded memory tail. Check only the requested pair, not every actor.
+        if let Some(other) = self.players.iter().position(|p| p.id == target) {
+            if self.visible(i, other, "sight")? { return Ok(true); }
         }
-        evidence.iter().any(|memory| memory.from == Some(target))
+        if let Some(client) = self.participants.get(&self.players[i].id).and_then(|s|s.client_controller.as_ref()) {
+            return Ok(client.known_targets.contains(&target));
+        }
+        Ok(evidence.iter().any(|memory| memory.from == Some(target))
             || self.players[i].site_observations.iter().any(|observation| {
                 observation.kind == "site"
                     && observation.content["lifecycle"]["people"]
@@ -762,7 +818,7 @@ impl World {
                         .is_some_and(|people| {
                             people.iter().any(|person| person["id"].as_u64() == Some(u64::from(target)))
                         })
-            })
+            }))
     }
     fn apply_decision_inner(
         &mut self,
@@ -792,7 +848,7 @@ impl World {
                 .unwrap_or_default();
             for a in d.actions.iter().chain(policy_actions.iter().copied()) {
                 if let Some(target) = a.target {
-                    if !self.target_perceived(i, target, &evidence) {
+                    if !self.target_perceived(i, target, &evidence)? {
                         return Err("target not perceived".into());
                     }
                 }
@@ -1127,6 +1183,7 @@ impl World {
         cause: u64,
         nature: &str,
     ) -> Result<(), String> {
+        let _profile = timing::DiagnosticScope::new("damage.total");
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
         struct Reaction {
@@ -1184,6 +1241,7 @@ impl World {
         self.players[i].failures += 1;
         self.request(i, "experienced harm; installed policy remains active");
         if reaction.dead {
+            let _profile = timing::DiagnosticScope::new("damage.death_witnesses");
             self.players[i].generation += 1;
             let death = self.event(
                 Some(before.id),
@@ -1191,15 +1249,27 @@ impl World {
                 vec![world],
                 json!({"name":before.name,"position":before.position,"permanent":true}),
             );
+            let mut visibility = visibility::WitnessVisibility::default();
+            let content = json!({"name":before.name});
+            let mut data = json!({"kind":"death","from":before.id,"location":before.position,"content":content});
+            self.event_metadata(&mut data);
+            let payload: participant::ExperienceData = data.into();
+            // These envelope fields cannot change during perception delivery.
+            // Custom visibility/memory laws still run in original recipient
+            // order and can reject the same operation before any event append.
+            let share = true;
+            #[cfg(test)]
+            let share = share && !perception_tests::UNSHARED.with(|v| v.get());
             for j in 0..self.players.len() {
-                if self.visible(j, i, "death")? {
-                    self.perceive(
+                if self.visible_to_witness(j, i, "death", &mut visibility)? {
+                    self.perceive_with_payload(
                         j,
                         death,
                         "death",
                         Some(before.id),
                         before.position,
-                        json!({"name":before.name}),
+                        std::borrow::Cow::Borrowed(&content),
+                        share.then_some(&payload),
                     )?;
                 }
             }
@@ -1462,6 +1532,8 @@ pub mod contract;
 
 #[cfg(test)]
 mod participant_tests;
+#[cfg(test)]
+mod perception_tests;
 #[cfg(test)]
 mod scripting_tests;
 

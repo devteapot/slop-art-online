@@ -69,7 +69,7 @@ impl Runtime {
         if self.cursor != 0 && e.cursor != self.cursor + 1 { return Err("controller experience gap; recovery required".into()); }
         let time = e.data["time_ms"].as_u64().unwrap_or(e.tick * timing::LEGACY_UNIT_MS);
         participant::record_activity(&mut self.activity, &Event { id:e.source, run:self.run.clone(), tick:e.tick,
-            actor:Some(self.actor), kind:e.kind.clone(),parents:e.parents.clone(),data:(*e.data).clone() }, time, e.location);
+            actor:Some(self.actor), kind:e.kind.clone(),parents:e.parents.clone(),data:e.data.clone() }, time, e.location);
         if e.kind == "perception" {
             let p = Percept { source:e.source,tick:e.tick,kind:e.data["kind"].as_str().ok_or("perception kind missing")?.into(),
                 from:e.data["from"].as_u64().and_then(|n|u32::try_from(n).ok()),location:e.location,

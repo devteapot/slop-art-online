@@ -6,10 +6,11 @@ Slop Art Online is a persistent living-world game built with Rust, SpacetimeDB a
 
 - [Simulation vision](docs/SIMULATION_VISION.md) and [world vision](docs/WORLD_VISION.md): agreed direction and open design choices.
 - [Current state](docs/CURRENT_STATE.md), [world roadmap](docs/WORLD_ROADMAP.md) and [work queue](docs/TODO.md): implementation evidence and remaining work.
+- [Performance contract](docs/PERFORMANCE_CONTRACT.md): locked gameplay, latency, population and resource targets; benchmark acceptance rules.
 - [Audit and experiments](docs/AUDIT_AND_EXPERIMENTS.md): causal evidence and acceptance requirements.
 - [Module guidance](server/module/AGENTS.md), [authority guidance](server/module/spacetimedb/AGENTS.md) and [bridge guidance](server/bridge/AGENTS.md): local implementation rules.
 
-The seven-stage roadmap has completed a bounded implementation pass. That does not establish autonomous ascension, sustainable large populations, sustained 20 Hz or thousand-player capacity. The current scale target is thousands of players; existing whole-World processing and finite actor limits are prototype constraints to address, not patterns to extend. Historical ADRs and old sections of the current-state document do not override newer evidence or agreed design.
+The seven-stage roadmap has completed a bounded implementation pass. That does not establish autonomous ascension, sustainable large populations or performance acceptance. The locked target is 60 Hz active movement/combat, stable 60 FPS with higher refresh-rate support, and 2,000 active characters including a 200-character local battle for 8 hours within the performance contract's latency/resource limits. The immediate gate is 216 characters for 30 minutes at the same quality limits. Existing whole-World processing and finite actor limits are prototype constraints to address, not patterns to extend. Historical 20 Hz checkpoints, ADRs and old current-state sections do not override newer evidence or agreed design.
 
 ## Required SpacetimeDB documentation check
 

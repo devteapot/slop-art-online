@@ -49,13 +49,13 @@ fn revise(w: &World, id: &str) -> Definition {
     d
 }
 fn custom(id: &str, step: &str) -> Definition {
-    Definition {
+    scripting::DefinitionData {
         id: id.into(),
         revision: 1,
         source: format!("fn validate(c) {{ \"\" }} fn step(c) {{ {step} }}"),
         description: "integration fixture".into(),
         dependencies: vec![],
-    }
+    }.into()
 }
 
 #[test]

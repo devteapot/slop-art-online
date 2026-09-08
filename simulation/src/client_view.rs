@@ -3,10 +3,50 @@ use crate::{Event, World};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
+/// Slow observer scene facts, separate from current bodies, sites and the clock.
+/// Personal views must continue using the authority's scoped projection.
+pub fn observer_scene(initial:&crate::Scenario,archives:&[crate::knowledge::Archive])->Value {
+    json!({"max_ticks":initial.max_ticks,"map":initial.map,"arenas":initial.arenas,
+        "archives":archives,"food_sources":initial.food_sources,
+        "workshops":initial.lifecycle.as_ref().map(|l|l.workshops.clone()).unwrap_or_default(),
+        "regions":initial.society.as_ref().map(|s|s.regions.iter().map(|r|
+            json!({"id":r.id,"label":r.label,"kind":r.kind,"bounds":r.bounds,"priority":r.priority})).collect::<Vec<_>>()).unwrap_or_default()})
+}
+
 fn law_inspector(world: &World, actor: u32) -> Value {
     let facts = world.law_research_facts(actor);
     if facts.is_null() { return Value::Null; }
     json!({"effective_binding":facts["effective_binding"],"scopes":facts["scopes"]})
+}
+
+/// Rich observer inspection of one character. Storage must supply that actor's
+/// private state and the local public dependencies used by presentation_context.
+/// This helper does not construct a world snapshot or authorize an observer.
+pub fn inspected_player(world: &World, actor: u32) -> Option<Value> {
+    let index = world.players.iter().position(|p| p.id == actor)?;
+    Some(detailed_player(world, index, true))
+}
+
+fn detailed_player(world: &World, index: usize, arena_metadata: bool) -> Value {
+    let p = &world.players[index];
+    let context = world.presentation_context(index);
+    let mut value = context["player"].clone();
+    value["recent_activity"] = context["recent_activity"].clone();
+    value["starting_behavior"] = context["starting_behavior"].clone();
+    value["local_lifecycle"] = context["lifecycle"].clone();
+    value["body"] = context["body"].clone();
+    value["infrastructure"] = context["infrastructure"].clone();
+    value["research"] = context["research"].clone();
+    value["laws"] = law_inspector(world, p.id);
+    value["society"] = context["society"].clone();
+    value["controller"] = json!(p.controller);
+    if arena_metadata {
+        if let Some(arena) = world.arena_for_actor(p.id) {
+            value["arena"] = json!(arena.label);
+            value["runtime"] = json!(arena.controllers.get(&p.id));
+        }
+    }
+    value
 }
 
 pub fn snapshot(world: &World, observer: bool, actor: u32, events: &[Event]) -> Value {
@@ -63,38 +103,13 @@ fn snapshot_with_inspection(world: &World, observer: bool, actor: u32, events: &
                     }
                     return value;
                 }
-                let context = world.presentation_context(i);
-                let mut value = context["player"].clone();
-                value["recent_activity"] = context["recent_activity"].clone();
-                value["starting_behavior"] = context["starting_behavior"].clone();
-                value["local_lifecycle"] = context["lifecycle"].clone();
-                value["body"] = context["body"].clone();
-                value["infrastructure"] = context["infrastructure"].clone();
-                value["research"] = context["research"].clone();
-                value["laws"] = law_inspector(world, p.id);
-                value["society"] = context["society"].clone();
-                value["controller"] = json!(p.controller);
-                if let Some(arena)=world.arena_for_actor(p.id) {
-                    value["arena"]=json!(arena.label);
-                    value["runtime"]=json!(arena.controllers.get(&p.id));
-                }
-                value
+                detailed_player(world, i, true)
             })
             .collect()
     } else {
         let index = index.unwrap();
         let me = &world.players[index];
-        let context = world.presentation_context(index);
-        let mut own = context["player"].clone();
-        own["recent_activity"] = context["recent_activity"].clone();
-        own["starting_behavior"] = context["starting_behavior"].clone();
-        own["local_lifecycle"] = context["lifecycle"].clone();
-        own["body"] = context["body"].clone();
-        own["infrastructure"] = context["infrastructure"].clone();
-        own["research"] = context["research"].clone();
-        own["laws"] = law_inspector(world, me.id);
-        own["society"] = context["society"].clone();
-        own["controller"] = json!(me.controller);
+        let own = detailed_player(world, index, false);
         let mut visible = BTreeMap::new();
         for memory in &me.memories {
             if memory.kind == "seen_player" && memory.tick == world.tick {

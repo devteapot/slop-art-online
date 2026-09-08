@@ -4,6 +4,11 @@ User direction, 2026-09-07: support responsive movement/combat alongside slower
 world updates, in the existing small world. Rendering remains deferred. A 20 Hz
 whole-world average is a performance checkpoint, not a combat acceptance metric.
 
+The subsequently agreed [performance contract](PERFORMANCE_CONTRACT.md) supersedes
+that historical checkpoint: active movement/combat must sustain 60 Hz with explicit
+latency, population and resource limits. The bounded implementation and trials
+below do not establish that target.
+
 ## Implemented boundary
 
 The owner can enable `sim_configure_physical_clock(run, true)` while paused on a

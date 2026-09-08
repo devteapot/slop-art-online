@@ -4,7 +4,12 @@ Worldbuilding reference: [world vision and initial seed](WORLD_VISION.md) record
 
 Current scripting implementation: [scripted gameplay](SCRIPTED_GAMEPLAY.md), rules `m1-7-time.1`, integrates the existing foundation skills and policies with the selected Rhai runtime. Public authoring and divine progression remain future work.
 
-Timing: [native SpacetimeDB scheduling and simulation time](SIMULATION_TIMING.md) separates the 20 Hz target update cadence from scripted gameplay rates. Model reasoning never slows or gates world advancement.
+Timing and responsiveness: the agreed [performance contract](PERFORMANCE_CONTRACT.md)
+requires 60 Hz active movement/combat, independent slow-world deadlines, stable
+60 FPS with higher refresh-rate support, and explicit latency/population/resource
+limits. [Native scheduling and simulation time](SIMULATION_TIMING.md) records the
+earlier implementation and its historical 20 Hz checkpoint. Model reasoning never
+slows or gates world advancement.
 
 Previous participant iteration:  [participant agent runtimes](PARTICIPANT_AGENTS.md) and [ADR 013](adr/013-participant-agent-runtimes.md). Rules `m1-5` use one scoped API for the built-in harness and external MCP runtimes, with independent tree, speech and learning operations. Earlier evidence and legacy runner descriptions below retain their historical scope.
 

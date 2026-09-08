@@ -1,10 +1,85 @@
 # From a first society to the living world
 
+Work is paused at [script invocation boundary (49)](SCRIPT_BOUNDARY_SCALING_49.md).
+Its shared-definition candidate passes 360 focused tests and builds successfully;
+candidate performance measurements have not run. Iteration 48 remains the latest
+measured normal release, and all performance gates remain open.
+
+The latest [compressed audit digest change (48)](AUDIT_DIGEST_SCALING_48.md)
+preserves exact worlds, personal evidence and all original event strings across
+compaction, upgrade and restart. Identical archive work uses 35.8% less WASM time
+but takes 23.3% longer in wall time. The normal release misses 48.3% of clock
+slots versus 45.7% before and has worse tail latency. This local cost reduction
+does not establish sustainable population, live cadence, client frame rate or
+autonomous outcomes; those gates remain open.
+
+[Deferred definitions (45)](DEFERRED_DEFINITION_SCALING_45.md) retain exact
+2,000-character local action admission at a measured 1.76 ms mean. That admission
+result and short combat diagnostics do not satisfy the sustained world gates.
+
+[Staged initialization (43)](STAGED_WORLD_INITIALIZATION_43.md) establishes exact
+authority admission of all 2,000 characters, with private progress and recovery.
+
+Earlier [parent lookup experiments (38)](INDEXED_PARENT_SCALING_38.md) rejected
+both candidates. The writer retains the [paged trace format (37)](PAGED_TRACE_SCALING_37.md),
+which supersedes [typed personal trace indexes (35)](TYPED_TRACE_SCALING_35.md).
+
+The [deferred-catalog iteration (34)](DEFERRED_CATALOG_SCALING_34.md) narrows
+commands and inspection to their actual data dependencies. The short release
+improves, but 39.3% missed clock slots and shrinking population still fail the
+locked world-scale requirements. No sustainable capacity is established.
+
+The [controller-catalog iteration (33)](CONTROLLER_CATALOG_SCALING_33.md) verifies
+private storage sharing and an additive upgrade without changing existing world
+or audit outcomes. Fewer physics catalog reads do not establish sustainable
+world scale: the release misses 52.3% of clock slots and loses half its population.
+
+The [encoded-evidence iteration (32)](ENCODED_EVIDENCE_SCALING_32.md) preserves
+exact private/audit evidence while reducing repeated payload construction. Its
+short release comparison does not establish a whole-system performance gain;
+physical dependencies, sustainable populations and all locked scale gates remain open.
+
+The [action-admission iteration (31)](ACTION_ADMISSION_SCALING_31.md) narrows
+finite commands to their actor/target dependencies, reducing measured admission
+cost. Full world scale remains unaccepted: physical-update bursts, population
+sustainability and the locked performance gates are still unresolved.
+
+The [component-inspection iteration (30)](COMPONENT_INSPECTION_SCALING_30.md)
+reduces inspection and care-catalog costs under the current component subscription
+workload. Short combat trials preserve scoped evidence but still miss nearly half
+the requested clock slots and lose half the population. Sustainable world scale
+and both performance gates remain open.
+
+The [personal-evidence iteration (29)](PERSONAL_EVIDENCE_SCALING_29.md) reduces
+historical copying and repeated visibility work without dropping witnesses or
+changing permanent death. Short diagnostic evidence does not establish a sustained
+living society or accepted real-time performance.
+
+The [action-domain iteration (28)](ACTION_DOMAIN_SCALING_28.md) further reduces
+dense-world execution costs. Its short combat evidence preserves mortality and
+personal knowledge; sustained population and performance acceptance remain open.
+
+The [crowd lifecycle iteration (27)](CROWD_LIFECYCLE_SCALING_27.md) advances dense-world
+execution while preserving care laws, permanent death and personal evidence.
+Its bounded measurements leave the performance and sustained-society gates open.
+
+The [stack iteration (26)](PERFORMANCE_ITERATION_26.md) adds scoped component
+rendering, a personal combat feed and exact 30/60 Hz comparisons. Its bounded
+browser and combat trials retain original failures and leave all long-duration
+performance gates open.
+
 Agreed development direction, 2026-09-05. Read the [world vision](WORLD_VISION.md) for the target and status of its design choices. These are development evidence gates, never milestones, compulsory narratives or quests imposed on inhabitants. Runtime status below is grounded in linked implementation and experiment evidence.
 
 The [work queue](TODO.md) retains accepted implementation history and technical prerequisites. The existing [small-society iteration plan](SOCIETY_ITERATION_PLAN.md) remains the near-term experiment plan; this roadmap gives it a longer horizon. Preserve the [audit contract](AUDIT_AND_EXPERIMENTS.md), shared authoritative core and existing Rhai boundary.
 
 The seven bounded implementation milestones are now recorded with acceptance evidence. The final world vision and open autonomous, sustainability and scale outcomes remain separate from this completed implementation pass.
+
+The agreed [performance contract](PERFORMANCE_CONTRACT.md) fixes the cross-stage
+product target: 60 Hz active movement/combat, stable 60 FPS with higher refresh-rate
+support, and 2,000 active characters including a 200-character battle for 8 hours,
+within explicit response-time and resource limits. The immediate gate is 216
+characters for 30 minutes at those same quality limits. Historical 20 Hz milestones
+below retain their original scope; no current performance gate is accepted.
 
 The [sustained clock work](SUSTAINED_CLOCK.md) records the later runtime comparison,
 selective hot-path improvements, opt-in lossless audit archives and deadline

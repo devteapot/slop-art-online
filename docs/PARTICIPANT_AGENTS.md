@@ -1,5 +1,31 @@
 # Participant agent runtimes
 
+## Current combat and perception boundary
+
+[Iteration 26](PERFORMANCE_ITERATION_26.md) adds the optional
+`SELECT * FROM sim_my_combat_events` subscription. It returns only the
+authenticated participant's already-authorized personal facts: attack attempts,
+progress and outcomes, personally perceived attack damage/death, and their own
+interruptions/death. An observer or ungranted identity receives no rows. The view
+does not manufacture witnesses, copy another mind's knowledge or select a reaction.
+
+`ParticipantService::subscribe_combat_events()` waits for initial application and
+returns the subscription handle; keep it alive while reading the SDK's
+`sim_my_combat_events` cache. Deduplicate by personal cursor. Reconnect replays the
+combat subset of the latest 256 **general** personal experiences, not 256 combat
+events. Use `sim_my_participant_head.oldest_cursor` to detect retention gaps and
+retain any longer-lived evidence in the controller's own durable state.
+
+The internal reference controller still consumes the full ordered personal trace
+for memory and behavior revision. Do not feed this filtered channel into its
+contiguous-cursor `Runtime::ingest`; omitted non-combat events are intentional gaps.
+External LLM clients may organize memory and reactions differently. Current target
+admission now checks the authority's current visibility law independently of the
+short memory tail, while preserving remembered-target intents. Admission is not
+an attack effect: current range, costs, interruptions and death remain authoritative.
+
+## Earlier runtime evidence
+
 Latest live evidence: [mixed internal/external agent verification](LIVE_MIXED_AGENT_VERIFICATION.md) records ten genuine Luna calls, accepted behavior/dialogue/learning through both routes, preserved failures and corrections, and 66 passing regressions. Earlier no-fresh-inference statements below describe the preceding implementation milestone.
 
 Rules `m1-5` add `sao-participant-v1`: an external runtime owns its model, memory, tools and deliberation schedule. The game supplies subjective experience and executes accepted intent. The built-in NPC harness uses the same scoped `ParticipantService`, authenticated reducer and caller-specific view as the MCP adapter. It has no owner token, observer subscription, SQL or privileged model-result route.

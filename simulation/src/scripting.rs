@@ -8,6 +8,7 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     rc::Rc,
+    sync::Arc,
 };
 
 mod guard_input;
@@ -17,6 +18,30 @@ const MAX_SOURCE: usize = 32_768;
 const MAX_CONTENT: usize = 1_048_576;
 const MAX_VALUE: usize = 65_536;
 
+#[inline]
+fn measured<T>(name: &'static str, work: impl FnOnce() -> T) -> T {
+    let _profile = crate::timing::DiagnosticScope::new(name);
+    work()
+}
+
+fn input_budget(input: &Value) -> Result<(), String> {
+    measured("script.input_budget", || {
+        if serde_json::to_vec(input).map_err(|e| e.to_string())?.len() > MAX_VALUE {
+            return Err("script input budget exceeded".into());
+        }
+        Ok(())
+    })
+}
+
+fn output_budget(output: &Value) -> Result<(), String> {
+    measured("script.output_budget", || {
+        if serde_json::to_vec(output).map_err(|e| e.to_string())?.len() > MAX_VALUE {
+            return Err("script output budget exceeded".into());
+        }
+        Ok(())
+    })
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct DefinitionRef {
@@ -24,9 +49,31 @@ pub struct DefinitionRef {
     pub revision: u64,
 }
 
+/// Strongly owned immutable content. Editing a registry or cloned definition
+/// detaches it before mutation; cached engines never observe those edits.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Definition(Arc<DefinitionData>);
+impl From<DefinitionData> for Definition {
+    fn from(data: DefinitionData) -> Self { Self(Arc::new(data)) }
+}
+impl std::ops::Deref for Definition {
+    type Target = DefinitionData;
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+impl std::ops::DerefMut for Definition {
+    fn deref_mut(&mut self) -> &mut Self::Target { Arc::make_mut(&mut self.0) }
+}
+impl PartialEq for Definition {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
+    }
+}
+impl Eq for Definition {}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-pub struct Definition {
+pub struct DefinitionData {
     pub id: String,
     pub revision: u64,
     pub source: String,
@@ -125,13 +172,13 @@ impl Default for Registry {
                 "perceived target at same position; costs 8 energy; deals 20 damage",
             ),
         ] {
-            registry.insert(Definition {
+            registry.insert(DefinitionData {
                 id: id.into(),
                 revision: 1,
                 source: source.into(),
                 description: description.into(),
                 dependencies: vec![],
-            });
+            }.into());
         }
         registry
     }
@@ -237,6 +284,19 @@ struct CachedScript {
     dependencies: BTreeMap<String, Definition>,
     compiled: Rc<Compiled>,
     source_bytes: usize,
+}
+impl CachedScript {
+    /// Called only after every semantic input compares equal. Adopt the current
+    /// strong handles so a separately decoded, equal registry pays one content
+    /// comparison rather than repeating it for each actor invocation.
+    fn retain_equal_inputs(&mut self, definition: &Definition, law: &Definition,
+        dependencies: &BTreeMap<String, &Definition>) {
+        self.definition = definition.clone();
+        self.law = law.clone();
+        for (id, cached) in &mut self.dependencies {
+            *cached = (*dependencies[id]).clone();
+        }
+    }
 }
 struct CachedScopedScript {
     script: CachedScript,
@@ -419,10 +479,13 @@ impl Registry {
         let law = self.definition(&self.resolve("law")?)?;
         let mut dependencies = BTreeMap::new();
         self.dependencies(definition, &mut BTreeSet::new(), &mut dependencies)?;
-        if let Some(compiled) = SCRIPT_FAST_CACHE.with(|cache| cache.borrow().iter().rev()
+        if let Some(compiled) = SCRIPT_FAST_CACHE.with(|cache| cache.borrow_mut().iter_mut().rev()
             .find(|c| c.definition == *definition && c.law == *law && c.dependencies.len() == dependencies.len()
                 && c.dependencies.iter().all(|(key, value)| dependencies.get(key).is_some_and(|current| value == *current)))
-            .map(|c| c.compiled.clone())) {
+            .map(|c| {
+                c.retain_equal_inputs(definition, law, &dependencies);
+                c.compiled.clone()
+            })) {
             return Ok(compiled);
         }
         let key = format!(
@@ -469,11 +532,10 @@ impl Registry {
         function: &str,
         input: Value,
     ) -> Result<T, String> {
-        if serde_json::to_vec(&input).map_err(|e| e.to_string())?.len() > MAX_VALUE {
-            return Err("script input budget exceeded".into());
-        }
-        let compiled = self.compiled(reference)?;
-        let input = input_value(input)?;
+        input_budget(&input)?;
+        let compiled = measured("script.compiled", || self.compiled(reference))?;
+        let input = measured("script.input_convert", || input_value(input))?;
+        let invoke_profile = crate::timing::DiagnosticScope::new("script.invoke");
         let result: Dynamic = compiled
             .engine
             .call_fn(&mut Scope::new(), &compiled.ast, function, (input,))
@@ -483,14 +545,9 @@ impl Registry {
                     reference.id, reference.revision
                 )
             })?;
-        let result = output_value(result, 0, &mut 8_192)?;
-        if serde_json::to_vec(&result)
-            .map_err(|e| e.to_string())?
-            .len()
-            > MAX_VALUE
-        {
-            return Err("script output budget exceeded".into());
-        }
+        drop(invoke_profile);
+        let result = measured("script.output_convert", || output_value(result, 0, &mut 8_192))?;
+        output_budget(&result)?;
         serde_json::from_value(result).map_err(|e| format!("script output contract: {e}"))
     }
     pub fn law<T: DeserializeOwned>(&self, function: &str, input: Value) -> Result<T, String> {
@@ -707,9 +764,12 @@ impl Registry {
         faults: &[crate::laws::LawDisabled],
     ) -> Result<Rc<Compiled>, String> {
         let law = self.definition(base)?;
-        if let Some(compiled) = LAW_FAST_CACHE.with(|cache| cache.borrow().iter().rev()
+        if let Some(compiled) = LAW_FAST_CACHE.with(|cache| cache.borrow_mut().iter_mut().rev()
             .find(|c| c.law == *law && c.layers == layers && c.disabled == faults)
-            .map(|c| c.compiled.clone())) {
+            .map(|c| {
+                c.law = law.clone();
+                c.compiled.clone()
+            })) {
             return Ok(compiled);
         }
         let excluded: Vec<_> = faults.iter().map(|f| (&f.reference, &f.hook)).collect();
@@ -759,14 +819,14 @@ impl Registry {
         hook: &str,
         input: Value,
     ) -> Result<Value, String> {
-        let compiled = self.compiled_laws(base, layers, faults)?;
+        let compiled = measured("script.compiled", || self.compiled_laws(base, layers, faults))?;
         Self::call_compiled(&compiled, hook, input)
     }
     fn call_compiled(compiled: &Compiled, hook: &str, input: Value) -> Result<Value, String> {
-        if serde_json::to_vec(&input).map_err(|e| e.to_string())?.len() > MAX_VALUE {
-            return Err("script input budget exceeded".into());
-        }
+        input_budget(&input)?;
         let original_input = input.clone();
+        let input = measured("script.input_convert", || input_value(input))?;
+        let invoke_profile = crate::timing::DiagnosticScope::new("script.invoke");
         let result = compiled
             .engine
             .call_fn_with_options::<Dynamic>(
@@ -774,13 +834,12 @@ impl Registry {
                 &mut Scope::new(),
                 &compiled.ast,
                 hook,
-                (input_value(input)?,),
+                (input,),
             )
             .map_err(|e| e.to_string().chars().take(512).collect::<String>())?;
-        let v = output_value(result, 0, &mut 4096)?;
-        if serde_json::to_vec(&v).map_err(|e| e.to_string())?.len() > MAX_VALUE {
-            return Err("script output budget exceeded".into());
-        }
+        drop(invoke_profile);
+        let v = measured("script.output_convert", || output_value(result, 0, &mut 4096))?;
+        output_budget(&v)?;
         crate::laws::validate_output(hook, &v)?;
         if hook == "food_renewal"
             && original_input["food"]
@@ -853,11 +912,14 @@ impl Registry {
         self.dependencies(definition, &mut BTreeSet::new(), &mut dependencies)?;
         // References alone are insufficient across independently restored worlds.
         // Include exact source and dependency contents, as in the unscoped cache.
-        if let Some(compiled) = SCOPED_SCRIPT_FAST_CACHE.with(|cache| cache.borrow().iter().rev()
+        if let Some(compiled) = SCOPED_SCRIPT_FAST_CACHE.with(|cache| cache.borrow_mut().iter_mut().rev()
             .find(|c| c.script.definition == *definition && c.script.law == *law && c.layers == layers
                 && c.script.dependencies.len() == dependencies.len()
                 && c.script.dependencies.iter().all(|(key, value)| dependencies.get(key).is_some_and(|current| value == *current)))
-            .map(|c| c.script.compiled.clone())) {
+            .map(|c| {
+                c.script.retain_equal_inputs(definition, law, &dependencies);
+                c.script.compiled.clone()
+            })) {
             return Ok(compiled);
         }
         let key = format!(
@@ -954,18 +1016,18 @@ impl Registry {
         function: &str,
         input: Value,
     ) -> Result<T, String> {
-        if serde_json::to_vec(&input).map_err(|e| e.to_string())?.len() > MAX_VALUE {
-            return Err("script input budget exceeded".into());
-        }
+        input_budget(&input)?;
         if layers.is_empty() && self.resolve("law")? == *base {
             return self.call(reference, function, input);
         }
-        let compiled = self.compiled_scoped_skill(reference, base, layers)?;
+        let compiled = measured("script.compiled", || self.compiled_scoped_skill(reference, base, layers))?;
         let collected = Rc::new(RefCell::new(faults.clone()));
         let state = ScopedLawCall {
             faults: collected.clone(),
             calls: Rc::new(std::cell::Cell::new(0)),
         };
+        let input = measured("script.input_convert", || input_value(input))?;
+        let invoke_profile = crate::timing::DiagnosticScope::new("script.invoke");
         let outcome = compiled
             .engine
             .call_fn_with_options::<Dynamic>(
@@ -973,14 +1035,13 @@ impl Registry {
                 &mut Scope::new(),
                 &compiled.ast,
                 function,
-                (input_value(input)?,),
+                (input,),
             )
             .map_err(|e| e.to_string());
+        drop(invoke_profile);
         *faults = collected.borrow().clone();
-        let value = output_value(outcome?, 0, &mut 4096)?;
-        if serde_json::to_vec(&value).map_err(|e| e.to_string())?.len() > MAX_VALUE {
-            return Err("script output budget exceeded".into());
-        }
+        let value = measured("script.output_convert", || output_value(outcome?, 0, &mut 4096))?;
+        output_budget(&value)?;
         serde_json::from_value(value).map_err(|e| format!("script result contract: {e}"))
     }
 }
@@ -990,6 +1051,67 @@ mod scoped_cache_tests {
     use super::*;
     use crate::laws::{LawArtifact, LawDraft, LawFault, LawRef, LawScope};
 
+    #[test]
+    fn definition_snapshots_preserve_json_and_detach_before_every_edit() {
+        let value = json!({"id":"shared-source","revision":7,
+            "source":"fn run(x) { x }\n// \"quoted\" λ\t",
+            "description":"original","dependencies":[{"id":"helper","revision":2}]});
+        let original: Definition = serde_json::from_value(value.clone()).unwrap();
+        let mut changed = original.clone();
+        assert!(Arc::ptr_eq(&original.0, &changed.0));
+        assert_eq!(serde_json::to_value(&changed).unwrap(), value);
+        changed.source.push_str("// changed");
+        changed.description.push('!');
+        changed.dependencies[0].revision = 3;
+        changed.revision += 1;
+        assert!(!Arc::ptr_eq(&original.0, &changed.0));
+        assert_ne!(original, changed);
+        assert_eq!(serde_json::to_value(&original).unwrap(), value);
+        let restored: Definition = serde_json::from_value(value.clone()).unwrap();
+        assert!(!Arc::ptr_eq(&original.0, &restored.0));
+        assert_eq!(original, restored, "separate allocations retain value equality");
+        let mut unknown = value;
+        unknown["unexpected"] = json!(true);
+        assert!(serde_json::from_value::<Definition>(unknown).is_err());
+    }
+
+    #[test]
+    fn equal_restored_cache_inputs_adopt_strong_handles_without_stale_code() {
+        SCRIPT_FAST_CACHE.with(|c| c.borrow_mut().clear());
+        LAW_FAST_CACHE.with(|c| c.borrow_mut().clear());
+        SCOPED_SCRIPT_FAST_CACHE.with(|c| c.borrow_mut().clear());
+        let (mut registry, skill, base, layers) = fixture();
+        registry.insert(DefinitionData { id: "shared_helper".into(), revision: 1,
+            source: "fn number() { 3 }".into(), description: String::new(), dependencies: vec![] }.into());
+        let probe = registry.history.get_mut(&skill.id).unwrap().get_mut(&skill.revision).unwrap();
+        probe.source = "fn run(x) { shared_helper::number() }".into();
+        probe.dependencies = vec![DefinitionRef { id: "shared_helper".into(), revision: 1 }];
+        let mut restored: Registry = serde_json::from_str(&serde_json::to_string(&registry).unwrap()).unwrap();
+        let plain = registry.compiled(&skill).unwrap();
+        let scoped = registry.compiled_scoped_skill(&skill, &base, &layers).unwrap();
+        let law = registry.compiled_laws(&base, &layers, &[]).unwrap();
+        assert!(Rc::ptr_eq(&plain, &restored.compiled(&skill).unwrap()));
+        assert!(Rc::ptr_eq(&scoped, &restored.compiled_scoped_skill(&skill, &base, &layers).unwrap()));
+        assert!(Rc::ptr_eq(&law, &restored.compiled_laws(&base, &layers, &[]).unwrap()));
+        let check = |cached: &CachedScript| {
+            assert!(Arc::ptr_eq(&cached.definition.0, &restored.definition(&skill).unwrap().0));
+            assert!(Arc::ptr_eq(&cached.law.0, &restored.definition(&base).unwrap().0));
+            assert!(Arc::ptr_eq(&cached.dependencies["shared_helper"].0,
+                &restored.history["shared_helper"][&1].0));
+        };
+        SCRIPT_FAST_CACHE.with(|c| check(c.borrow().last().unwrap()));
+        SCOPED_SCRIPT_FAST_CACHE.with(|c| check(&c.borrow().last().unwrap().script));
+        LAW_FAST_CACHE.with(|c| assert!(Arc::ptr_eq(&c.borrow().last().unwrap().law.0,
+            &restored.definition(&base).unwrap().0)));
+        assert_eq!(run(&restored, &skill, &base, &layers, &mut vec![]).unwrap(), 3);
+        restored.history.get_mut("shared_helper").unwrap().get_mut(&1).unwrap().source =
+            "fn number() { 6 }".into();
+        assert_eq!(run(&restored, &skill, &base, &[], &mut vec![]).unwrap(), 6);
+        assert_eq!(run(&restored, &skill, &base, &layers, &mut vec![]).unwrap(), 6);
+        assert_eq!(run(&registry, &skill, &base, &layers, &mut vec![]).unwrap(), 3);
+        assert_eq!(run(&registry, &skill, &base, &[], &mut vec![]).unwrap(), 3);
+    }
+
     fn fixture() -> (
         Registry,
         DefinitionRef,
@@ -997,13 +1119,13 @@ mod scoped_cache_tests {
         Vec<(LawRef, LawArtifact)>,
     ) {
         let mut registry = Registry::default();
-        registry.insert(Definition {
+        registry.insert(DefinitionData {
             id: "cache_probe".into(),
             revision: 1,
             source: "fn run(x) { law::cost(x) }".into(),
             description: String::new(),
             dependencies: vec![],
-        });
+        }.into());
         let skill = registry.resolve("cache_probe").unwrap();
         let base = registry.resolve("law").unwrap();
         let layers = vec![(
@@ -1058,13 +1180,13 @@ mod scoped_cache_tests {
             run(&registry, &skill, &base, &layers, &mut faults).unwrap(),
             20
         );
-        registry.insert(Definition {
+        registry.insert(DefinitionData {
             id: "helper".into(),
             revision: 1,
             source: "fn number() { 3 }".into(),
             description: String::new(),
             dependencies: vec![],
-        });
+        }.into());
         let probe = registry
             .history
             .get_mut("cache_probe")
@@ -1129,8 +1251,8 @@ mod scoped_cache_tests {
         assert_eq!(run(&registry, &skill, &base, &[], &mut faults).unwrap(), 3);
         registry.history.get_mut("cache_probe").unwrap().get_mut(&1).unwrap().source = "fn run(x) { 4 }".into();
         assert_eq!(run(&registry, &skill, &base, &[], &mut faults).unwrap(), 4);
-        registry.insert(Definition { id: "helper".into(), revision: 1, source: "fn number() { 5 }".into(),
-            description: String::new(), dependencies: vec![] });
+        registry.insert(DefinitionData { id: "helper".into(), revision: 1, source: "fn number() { 5 }".into(),
+            description: String::new(), dependencies: vec![] }.into());
         let probe = registry.history.get_mut("cache_probe").unwrap().get_mut(&1).unwrap();
         probe.source = "fn run(x) { helper::number() }".into();
         probe.dependencies = vec![DefinitionRef { id: "helper".into(), revision: 1 }];

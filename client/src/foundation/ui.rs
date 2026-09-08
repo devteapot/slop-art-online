@@ -3,6 +3,8 @@ use spacetimedb_sdk::DbContext;
 #[derive(Component)]
 pub(super) struct UiRoot;
 #[derive(Component)]
+pub struct UiClock;
+#[derive(Component)]
 pub struct Panel(usize);
 #[derive(Component, Clone)]
 pub enum Click {
@@ -134,15 +136,43 @@ pub fn captures(game: &Game, pos: Vec2, width: f32, height: f32) -> bool {
         || (game.sessions_open && pos.x < 258.)
         || (game.inspect && pos.x > width - 430.)
 }
-pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Entity, With<UiRoot>>) {
-    if !game.dirty {
-        return;
-    }
+fn clock_text(game: &Game) -> String {
+    format!("{:.1}s / {:.0}s | {}",
+        game.snapshot["time_ms"].as_u64().unwrap_or(game.snapshot["tick"].as_u64().unwrap_or(0) * 2500) as f64 / 1000.,
+        game.snapshot["max_ticks"].as_u64().unwrap_or(0) as f64 * 2.5,
+        if game.snapshot["stopped"]==true {"FINISHED"} else if game.snapshot["paused"]==true {"PAUSED"} else {"RUNNING"})
+}
+
+// Closed inspection only displays identity/navigation data and the live clock.
+// Keep these entities while bodies move; the rich inspector retains its full refresh.
+fn navigation_state(game: &Game) -> Value {
+    json!({"selected":game.selected,"status":game.status,"draft":game.draft,"typing":game.typing,
+        "archive":game.archive,"compact":game.compact,"world_visible":game.world_visible,
+        "overlays":game.overlays,"sessions_open":game.sessions_open,"runs":game.runs,
+        "follow":game.follow,"arena":game.arena,"scroll":game.scroll,
+        "snapshot_null":game.snapshot.is_null(),"run":game.snapshot["run"],
+        "observer":game.snapshot["observer"],"evidence_mode":game.snapshot["evidence_mode"],
+        "paused":game.snapshot["paused"],"stopped":game.snapshot["stopped"],
+        "can_participate":game.snapshot["can_participate"],"arenas":game.snapshot["arenas"],
+        "players":game.snapshot["players"].as_array().map(|players|players.iter()
+            .map(|p|json!([p["id"],p["name"],p["runtime"]])).collect::<Vec<_>>())})
+}
+
+pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Entity, With<UiRoot>>,
+    mut clocks: Query<&mut Text,With<UiClock>>, mut navigation: Local<Option<Value>>) {
+    let clock=clock_text(&game);
+    for mut text in &mut clocks {if text.0!=clock {text.0=clock.clone();}}
+    if !game.dirty {return;}
     game.dirty = false;
+    if game.inspect {*navigation=None;} else {
+        let state=navigation_state(&game);
+        if navigation.as_ref()==Some(&state) && !roots.is_empty() {return;}
+        *navigation=Some(state);
+    }
     for e in &roots {
         commands.entity(e).despawn();
     }
-    let p = game.player();
+    let p = if game.inspect {game.player()} else {Value::Null};
     let mode = game.snapshot["evidence_mode"]
         .as_str()
         .unwrap_or("connecting");
@@ -224,7 +254,8 @@ pub fn refresh(mut commands: Commands, mut game: ResMut<Game>, roots: Query<Enti
         if !game.compact {
         root.spawn((Node{position_type:PositionType::Absolute,left:px(12),right:px(12),bottom:px(12),height:px(88),padding:UiRect::axes(px(16),px(8)),..column()},BackgroundColor(PANEL))).with_children(|bottom| {
             bottom.spawn(row()).with_children(|p| {
-                text(p,format!("{:.1}s / {:.0}s · {}",game.snapshot["time_ms"].as_u64().unwrap_or(game.snapshot["tick"].as_u64().unwrap_or(0) * 2500) as f64 / 1000.,game.snapshot["max_ticks"].as_u64().unwrap_or(0) as f64 * 2.5,if game.snapshot["stopped"]==true{"FINISHED"}else if game.snapshot["paused"]==true{"PAUSED"}else{"RUNNING"}),15.,INK);
+                p.spawn((UiClock,Text::new(clock.clone()),TextFont {font_size:15.,..default()},TextColor(INK),
+                    Node {max_width:percent(100),flex_shrink:0.,..default()}));
                 if game.observer() && !game.archive {button(p,"Step",Click::Step,false);button(p,if game.snapshot["paused"]==true{"Resume"}else{"Pause"},Click::Play,false);}
                 if !game.observer() && !game.archive && !game.snapshot.is_null() {
                     button(p,"Gather",Click::Gather,false);button(p,"Eat",Click::Eat,false);button(p,"Rest",Click::Rest,false);button(p,"Speak",Click::Speak,game.typing);

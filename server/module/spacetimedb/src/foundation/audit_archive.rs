@@ -8,6 +8,9 @@ const BLOCK_EVENTS: u64 = 128;
 const LIVE_EVENTS: u64 = 2048;
 const MAX_BLOCK_BYTES: usize = 32 * 1024 * 1024;
 const PAGE_EVENTS: u64 = 4096;
+// Existing 64-digit hashes cover plain JSON. New blocks bind the exact zlib
+// stream, avoiding a second full pass over repeated multi-megabyte event JSON.
+const COMPRESSED_DIGEST: &str = "zlib-sha256-v1:";
 
 #[spacetimedb::table(accessor = sim_audit_wake, scheduled(sim_audit_maintenance))]
 pub struct SimAuditWake {
@@ -96,14 +99,17 @@ fn encode(run: &str, first: u64, rows: &[SimAudit]) -> Result<SimAuditBlock, Str
     if rows.iter().map(|r| r.json.len()).sum::<usize>() > MAX_BLOCK_BYTES {
         return Err("audit block exceeds compression budget".into());
     }
-    let mut bodies = Vec::with_capacity(rows.len());
-    for (n, row) in rows.iter().enumerate() {
-        if row.run != run || row.event_id != first + n as u64 || row.key != key(run, row.event_id) {
-            return Err("audit row gap or scope mismatch".into());
+    let bodies = super::measured("audit.encode.validate", || {
+        let mut bodies = Vec::with_capacity(rows.len());
+        for (n, row) in rows.iter().enumerate() {
+            if row.run != run || row.event_id != first + n as u64 || row.key != key(run, row.event_id) {
+                return Err("audit row gap or scope mismatch".into());
+            }
+            bodies.push(row.json.clone());
         }
-        bodies.push(row.json.clone());
-    }
-    validate(run, first, &bodies)?;
+        validate(run, first, &bodies)?;
+        Ok::<_, String>(bodies)
+    })?;
     struct BoundedBytes(Vec<u8>);
     impl std::io::Write for BoundedBytes {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -117,20 +123,33 @@ fn encode(run: &str, first: u64, rows: &[SimAudit]) -> Result<SimAuditBlock, Str
             Ok(())
         }
     }
-    let mut encoded = BoundedBytes(Vec::new());
-    serde_json::to_writer(&mut encoded, &bodies)
-        .map_err(|_| "audit block exceeds compression budget")?;
-    let bytes = encoded.0;
+    let bytes = super::measured("audit.encode.json", || {
+        let mut encoded = BoundedBytes(Vec::new());
+        serde_json::to_writer(&mut encoded, &bodies)
+            .map_err(|_| "audit block exceeds compression budget")?;
+        Ok::<_, String>(encoded.0)
+    })?;
+    let zlib = super::measured("audit.encode.zlib", || miniz_oxide::deflate::compress_to_vec_zlib(&bytes, 1));
+    let digest = super::measured("audit.encode.hash", || compressed_digest(&zlib));
+    #[cfg(feature = "clock-profile")]
+    log::info!("audit-encode-bytes {}", serde_json::to_string(&[bytes.len(), zlib.len(), zlib.len()]).unwrap());
     Ok(SimAuditBlock {
         key: key(run, first),
         run: run.into(),
         first,
         last: first + BLOCK_EVENTS - 1,
         plain_bytes: bytes.len() as u64,
-        digest: format!("{:x}", Sha256::digest(&bytes)),
-        zlib: miniz_oxide::deflate::compress_to_vec_zlib(&bytes, 1),
+        digest,
+        zlib,
     })
 }
+fn compressed_digest(bytes: &[u8]) -> String {
+    format!("{COMPRESSED_DIGEST}{:x}", Sha256::digest(bytes))
+}
+fn plain_digest_shape(digest: &str) -> bool {
+    digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
 fn decode(run: &str, first: u64, block: SimAuditBlock) -> Result<Vec<String>, String> {
     if block.run != run
         || block.first != first
@@ -140,13 +159,21 @@ fn decode(run: &str, first: u64, block: SimAuditBlock) -> Result<Vec<String>, St
     {
         return Err("invalid audit block metadata".into());
     }
+    let compressed = block.digest.starts_with(COMPRESSED_DIGEST);
+    if compressed {
+        if compressed_digest(&block.zlib) != block.digest {
+            return Err("audit block integrity failure".into());
+        }
+    } else if !plain_digest_shape(&block.digest) {
+        return Err("unknown audit digest format".into());
+    }
     let bytes = miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(
         &block.zlib,
         block.plain_bytes as usize,
     )
     .map_err(|_| "invalid compressed audit")?;
     if bytes.len() as u64 != block.plain_bytes
-        || format!("{:x}", Sha256::digest(&bytes)) != block.digest
+        || (!compressed && format!("{:x}", Sha256::digest(&bytes)) != block.digest)
     {
         return Err("audit block integrity failure".into());
     }
@@ -167,13 +194,12 @@ fn compact(ctx: &ReducerContext, state: &mut SimAuditRetention, budget: u64) {
         if state.next_event.saturating_sub(first) < LIVE_EVENTS + BLOCK_EVENTS {
             break;
         }
-        let mut rows: Vec<_> = ctx
-            .db
-            .sim_audit()
-            .run_and_event()
-            .filter((state.run.as_str(), first..first + BLOCK_EVENTS))
-            .collect();
-        rows.sort_by_key(|r| r.event_id);
+        let rows = super::measured("audit.archive.read", || {
+            let mut rows: Vec<_> = ctx.db.sim_audit().run_and_event()
+                .filter((state.run.as_str(), first..first + BLOCK_EVENTS)).collect();
+            rows.sort_by_key(|r| r.event_id);
+            rows
+        });
         let block = match super::measured("audit.compress", || encode(&state.run, first, &rows)) {
             Ok(block) => block,
             Err(error) => {
@@ -186,10 +212,10 @@ fn compact(ctx: &ReducerContext, state: &mut SimAuditRetention, budget: u64) {
         state.archived_through = block.last;
         // The archive and deletion commit atomically. A failed transaction
         // retains the original rows; a failed encoder does not delete anything.
-        ctx.db.sim_audit_block().insert(block);
-        for row in rows {
-            ctx.db.sim_audit().key().delete(row.key);
-        }
+        super::measured("audit.archive.commit", || {
+            ctx.db.sim_audit_block().insert(block);
+            for row in rows { ctx.db.sim_audit().key().delete(row.key); }
+        });
     }
 }
 pub(super) fn appended(ctx: &ReducerContext, run: &str, first: u64, count: u64) {
@@ -340,6 +366,43 @@ mod tests {
             kind:"fixture".into(), actor:1,
             json:format!("{{ \"run\":\"r\", \"id\":{id}, \"data\":{{\"text\":\"λ \\\" \\\\ \\n\",\"number\":1.00}} }}") }).collect()
     }
+    #[test]
+    fn both_audit_digest_formats_preserve_exact_events_and_fail_closed() {
+        let rows = fixture();
+        let expected = rows.iter().map(|r|r.json.clone()).collect::<Vec<_>>();
+        let plain = serde_json::to_vec(&expected).unwrap();
+        for legacy in [false, true] {
+            let block = || {
+                let mut block = encode("r", 1, &rows).unwrap();
+                if legacy { block.digest = format!("{:x}", Sha256::digest(&plain)); }
+                block
+            };
+            assert_eq!(decode("r",1,block()).unwrap(),expected);
+            let mut changed = block();changed.plain_bytes += 1;
+            assert!(decode("r",1,changed).is_err());
+            let mut changed = block();changed.plain_bytes = MAX_BLOCK_BYTES as u64 + 1;
+            assert!(decode("r",1,changed).is_err());
+            let mut changed = block();changed.zlib[3] ^= 1;
+            assert!(decode("r",1,changed).is_err());
+            let mut changed = block();changed.digest.push('0');
+            assert!(decode("r",1,changed).is_err());
+            let mut changed = block();changed.digest = "sha256-v9:unknown".into();
+            assert!(decode("r",1,changed).is_err());
+            let mut changed = block();changed.key = "other:1".into();
+            assert!(decode("r",1,changed).is_err());
+        }
+        let mut block = encode("r",1,&rows).unwrap();
+        block.zlib = vec![0,1,2,3];block.digest=compressed_digest(&block.zlib);
+        assert!(decode("r",1,block).is_err(), "valid digest cannot authorize an invalid stream");
+        let mut block = encode("r",1,&rows).unwrap();
+        let wrong = vec!["{}".to_owned(); BLOCK_EVENTS as usize];
+        let bytes=serde_json::to_vec(&wrong).unwrap();
+        block.plain_bytes=bytes.len() as u64;
+        block.zlib=miniz_oxide::deflate::compress_to_vec_zlib(&bytes,1);
+        block.digest=compressed_digest(&block.zlib);
+        assert!(decode("r",1,block).is_err(), "valid digest cannot authorize foreign or missing event identities");
+    }
+
     #[test]
     fn archival_recovers_exact_bytes_and_rejects_corruption_scope_and_gaps() {
         let rows = fixture();

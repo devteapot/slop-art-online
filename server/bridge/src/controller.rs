@@ -8,7 +8,7 @@ use brain::{brain_ack, brain_command, brain_ingest, brain_register, brain_refres
 use world::{SimMyControllerBootstrapTableAccess, SimMyControllerExperiencesTableAccess,
     SimMyControllerFrameTableAccess, SimMyControllerKnowledgeTableAccess,
     SimMyControllerDispatchTableAccess};
-use simulation::{controller::runtime::Frame, participant::{Experience, Receipt, Request}};
+use simulation::{controller::runtime::Frame, participant::{Experience, ExperienceRecord, Receipt, Request}};
 use spacetimedb_sdk::{DbContext, Table};
 use std::{sync::{Arc, Mutex}, time::Duration};
 use serde_json::Value;
@@ -132,10 +132,10 @@ impl Controller {
             return Err("controller identity scope changed; explicit handoff required".into());
         }
         if let Some(fault)=head.fault {return Err(fault);}
-        let mut experiences:Vec<_>=world.connection.db.sim_my_controller_experiences().iter()
-            .filter(|e|e.cursor>head.cursor).map(|e| Ok(Experience {cursor:e.cursor,source:e.source,
+        let mut experiences:Vec<Experience>=world.connection.db.sim_my_controller_experiences().iter()
+            .filter(|e|e.cursor>head.cursor).map(|e| Ok(ExperienceRecord {cursor:e.cursor,source:e.source,
                 tick:e.tick,location:e.location,kind:e.kind,parents:e.parents,
-                data:serde_json::from_str(&e.data).map_err(|e|e.to_string())?}))
+                data:serde_json::from_str(&e.data).map_err(|e|e.to_string())?}.into()))
             .collect::<Result<_,String>>()?;
         experiences.sort_by_key(|e|e.cursor);
         let holdings=world.connection.db.sim_my_controller_knowledge().iter().next().map(|k|k.holdings);

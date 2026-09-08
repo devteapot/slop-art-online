@@ -1,9 +1,11 @@
 //! Canonical component rows. Full hydration is reserved for the global clock
 //! kernel and explicit exports; participant transactions use indexed reads.
+use trace::*;
+use catalog::{sim_native_controller_catalog, sim_native_controller_catalog__view, SimNativeControllerCatalog};
 use super::participant_delivery::{sim_participant_receipt, sim_participant_receipt__view};
 use simulation::{
     deferred::Deferred,
-    participant::{EvidenceLease, Experience, ParticipantState, Receipt},
+    participant::{EvidenceLease, Experience, ExperienceRecord, ParticipantState, Receipt},
     Controller, Player, World,
 };
 use spacetimedb::{ReducerContext, Table, ViewContext};
@@ -39,6 +41,16 @@ fn parse<T: serde::de::DeserializeOwned>(value: &str) -> Result<T, String> {
     serde_json::from_str(value).map_err(|e| format!("invalid native component: {e}"))
 }
 
+/// `scripting::facts` also reads these five mind fields. Keep the projected
+/// target facts identical to the full kernel without materializing its history.
+fn apply_visibility_facts(peer: &mut Player, facts: &SimNativeMind) {
+    peer.caution=facts.caution;
+    peer.empathy=facts.empathy;
+    peer.introspection=facts.introspection;
+    peer.fear=facts.fear;
+    peer.failures=facts.failures;
+}
+
 /// Mutable action admission/delivery metadata, separated from the private seed.
 #[derive(Clone, PartialEq)]
 #[spacetimedb::table(accessor = sim_native_controller)]
@@ -63,10 +75,14 @@ pub struct SimControllerBootstrap {
     pub body: String,
 }
 impl SimNativeController {
+    #[cfg(test)]
     fn from_state(run: &str, actor: u32, c: &simulation::controller::Authority) -> Self {
+        Self::with_catalog(run, actor, c, json(&c.last_lifecycle))
+    }
+    fn with_catalog(run: &str, actor: u32, c: &simulation::controller::Authority, last_lifecycle: String) -> Self {
         Self { key: key(run, actor), run: run.into(), actor,
             known_targets: c.known_targets.iter().copied().collect(),
-            last_lifecycle: json(&c.last_lifecycle), action: json(&c.action) }
+            last_lifecycle, action: json(&c.action) }
     }
 }
 
@@ -162,14 +178,21 @@ struct DefinitionSet {
     balance: simulation::infrastructure::InfrastructureBalance,
 }
 macro_rules! read_definitions {
-    ($db:expr, $run:expr) => {{
+    ($db:expr, $run:expr) => { read_definitions!($db, $run, false) };
+    ($db:expr, $run:expr, $owned:expr) => {{
         let run = $run;
         let initial = $db.sim_native_definition_version().key().find(key(run, "initial"));
         let scripts = $db.sim_native_definition_version().key().find(key(run, "scripts"));
+        let initial_rows = $db.sim_native_definition().key();
+        let initial_key = key(run, "initial");
         DefinitionSet {
-            initial: super::definition_cache::initial_versioned(initial.as_ref().map(|r| r.digest.as_str()), || {
-                $db.sim_native_definition().key().find(key(run, "initial")).map(|r| r.body).ok_or("native initial missing".into())
-            })?,
+            // Owner procedures serialize their coherent snapshot after the
+            // transaction ends. Such reads must return loader-free values.
+            initial: if $owned { super::definition_cache::initial_versioned(initial.as_ref().map(|r| r.digest.as_str()), || {
+                initial_rows.find(&initial_key).map(|r| r.body).ok_or("native initial missing".into())
+            })? } else { super::definition_cache::initial_deferred(initial.map(|r| r.digest), move || {
+                initial_rows.find(&initial_key).map(|r| r.body).ok_or("native initial missing".into())
+            })? },
             scripts: super::definition_cache::scripts_versioned(scripts.as_ref().map(|r| r.digest.as_str()), || {
                 $db.sim_native_definition().key().find(key(run, "scripts")).map(|r| r.body).ok_or("native scripts missing".into())
             })?,
@@ -298,6 +321,41 @@ type ExperienceIndex = (u64, u64, u64, i32, String, Vec<u64>);
 struct ExperienceHeads {
     native_experience_rows_v2: Vec<ExperienceIndex>,
 }
+const TRACE_INDEX: &str = "sao-native-trace-index-v3";
+#[derive(Clone, PartialEq, spacetimedb::SpacetimeType)]
+pub struct SimNativeTraceEntry {
+    pub cursor: u64,
+    pub source: u64,
+    pub tick: u64,
+    pub location: i32,
+    pub kind: String,
+    pub parents: Vec<u64>,
+}
+#[derive(Clone, PartialEq)]
+#[spacetimedb::table(accessor = sim_native_trace_index)]
+pub struct SimNativeTraceIndex {
+    #[primary_key]
+    pub key: String,
+    #[index(btree)]
+    pub run: String,
+    pub actor: u32,
+    pub entries: Vec<SimNativeTraceEntry>,
+}
+impl SimNativeTraceIndex {
+    fn from_state(run: &str, actor: u32, state: &ParticipantState) -> Self {
+        Self {key:key(run,actor),run:run.into(),actor,
+            entries:state.experiences.iter().map(|e|SimNativeTraceEntry {
+                cursor:e.cursor,source:e.source,tick:e.tick,location:e.location,
+                kind:e.kind.clone(),parents:e.parents.clone(),
+            }).collect()}
+    }
+    fn indexes(self, run: &str, actor: u32) -> Result<Vec<ExperienceIndex>,String> {
+        if self.run != run || self.actor != actor || self.key != key(run,actor) {
+            return Err("native trace index scope mismatch".into());
+        }
+        Ok(self.entries.into_iter().map(|e|(e.cursor,e.source,e.tick,e.location,e.kind,e.parents)).collect())
+    }
+}
 fn experience_index(e: &Experience) -> ExperienceIndex {
     (e.cursor, e.source, e.tick, e.location, e.kind.clone(), e.parents.clone())
 }
@@ -318,9 +376,9 @@ impl SimNativeExperience {
         if self.run != run || self.key != key(run, format!("{}:{}", self.actor, self.cursor)) {
             return Err("native experience scope mismatch".into());
         }
-        Ok(Experience { cursor: self.cursor, source: self.source, tick: self.tick,
+        Ok(ExperienceRecord { cursor: self.cursor, source: self.source, tick: self.tick,
             location: self.location, kind: self.kind, parents: self.parents,
-            data: parse(&self.data)? })
+            data: parse(&self.data)? }.into())
     }
 }
 #[derive(Clone, PartialEq)]
@@ -469,6 +527,12 @@ pub struct SimNativeArchive {
     pub destroyed: bool,
     pub revision: u64,
     pub records: String,
+}
+impl SimNativeArchive {
+    pub(super) fn archive(self) -> Result<simulation::knowledge::Archive, String> {
+        Ok(simulation::knowledge::Archive {id:self.archive,position:self.position,label:self.label,
+            capacity:self.capacity as usize,destroyed:self.destroyed,revision:self.revision,records:parse(&self.records)?})
+    }
 }
 
 impl SimNativeHead {
@@ -668,7 +732,7 @@ impl SimNativeParticipant {
             control_epoch: self.control_epoch,
             learning_revision: self.learning_revision,
             cursor: self.cursor,
-            experiences,
+            experiences: experiences.into(),
             speech: parse(&self.speech)?,
             last_speech_tick: self.last_speech_tick,
             learned_sources: self.learned_sources.clone(),
@@ -835,6 +899,10 @@ impl SimNativeStation {
 /// Host reads are kept separate from assembly so the exact representation and
 /// scoped dependency projection can be differential-tested without a DB host.
 struct ColdReader {
+    paged: Box<dyn Fn(&str,u32) -> Result<Vec<SimNativePagedTraceEntry>,String> + Send + Sync>,
+    payloads: trace::Payloads,
+    trace: Box<dyn Fn(&str, u32) -> Result<SimNativeTraceIndex, String> + Send + Sync>,
+    catalog: Box<dyn Fn(&str) -> Result<SimNativeControllerCatalog, String> + Send + Sync>,
     receipts: Box<dyn Fn(&str, u32) -> Result<Vec<Receipt>, String> + Send + Sync>,
     bootstrap: Box<dyn Fn(&str, u32) -> Result<simulation::controller::Bootstrap, String> + Send + Sync>,
     mind: Box<dyn Fn(&str, u32) -> Result<SimNativeMindHistory, String> + Send + Sync>,
@@ -845,6 +913,11 @@ struct ColdReader {
 macro_rules! cold_reader_for {
     ($ctx:expr) => {{
         let ctx = $ctx;
+    let page_heads = ctx.db.sim_native_trace_head().key();
+    let pages = ctx.db.sim_native_trace_page().participant();
+    let bodies = ctx.db.sim_native_evidence_body().id();
+    let traces = ctx.db.sim_native_trace_index().key();
+    let catalogs = ctx.db.sim_native_controller_catalog().key();
     let receipts = ctx.db.sim_participant_receipt().participant();
     let bootstraps = ctx.db.sim_controller_bootstrap().key();
     let minds = ctx.db.sim_native_mind_history().key();
@@ -852,6 +925,19 @@ macro_rules! cold_reader_for {
     let legacy_experiences = ctx.db.sim_native_experience().participant();
     let leases = ctx.db.sim_native_lease_evidence().lease_id();
     Arc::new(ColdReader {
+        paged: Box::new(move |run,actor| trace::unpack(run,actor,
+            page_heads.find(key(run,actor)).ok_or("native trace head missing")?, pages.filter((run,actor)).collect())),
+        payloads: trace::Payloads::new(move |run,id| {
+            let data=trace::body_data(run,id,bodies.find(id).ok_or("native evidence body missing")?)?;
+            count_cold_read(1,data.len()); Ok(data)
+        }),
+        trace: Box::new(move |run,actor| traces.find(key(run,actor)).ok_or("native trace index missing".into())),
+        catalog: Box::new(move |id| {
+            let row = catalogs.find(id.to_owned()).ok_or("controller catalog missing")?;
+            #[cfg(feature = "clock-profile")]
+            log::info!("controller-catalog-load bytes={}", row.body.len());
+            Ok(row)
+        }),
         receipts: Box::new(move |run, actor| {
             let mut values = receipts.filter((run, actor)).map(|r| Receipt {
                 request_id:r.request_id, fingerprint:r.fingerprint, ok:r.ok, error:r.error, event:r.event,
@@ -899,6 +985,26 @@ macro_rules! cold_reader_for {
 fn cold_reader(ctx: &ReducerContext) -> Arc<ColdReader> { cold_reader_for!(ctx) }
 fn view_cold_reader(ctx: &ViewContext) -> Arc<ColdReader> { cold_reader_for!(ctx) }
 
+/// The caller has already authenticated the participant scope. Only this
+/// actor's pages and actually delivered bodies enter the view's read set.
+pub(super) fn experience_rows_for_view(ctx:&ViewContext,run:&str,actor:u32,after:u64) -> Vec<SimNativeExperience> {
+    let paged=ctx.db.sim_native_participant().key().find(key(run,actor))
+        .is_some_and(|p|p.experiences==trace::MARKER);
+    if !paged {
+        return ctx.db.sim_native_experience().controller_scope().filter((run,actor))
+            .filter(|row|row.cursor>after).collect();
+    }
+    let entries=trace::view_entries(ctx,run,actor,after).expect("valid scoped trace pages");
+    let mut bodies=BTreeMap::new();
+    entries.into_iter().filter(|e|e.metadata.cursor>after).map(|entry| {
+        let data=bodies.entry(entry.body).or_insert_with(|| {
+            let row=ctx.db.sim_native_evidence_body().id().find(entry.body).expect("retained evidence body");
+            trace::body_data(run,entry.body,row).expect("valid evidence body")
+        }).clone();
+        trace::to_row(run,actor,entry,data)
+    }).collect()
+}
+
 fn deferred_player(a: &SimNativeActor, m: &SimNativeMind, reader: &Arc<ColdReader>) -> Result<Player, String> {
     if m.memories != MIND_HISTORY { return a.player(m, None); }
     let mut hot = m.clone();
@@ -920,7 +1026,14 @@ fn deferred_player(a: &SimNativeActor, m: &SimNativeMind, reader: &Arc<ColdReade
     Ok(p)
 }
 fn deferred_experiences(p: &SimNativeParticipant, reader: &Arc<ColdReader>) -> Result<(Vec<Experience>, bool), String> {
-    let Ok(heads) = parse::<ExperienceHeads>(&p.experiences) else {
+    if p.experiences == trace::MARKER {
+        let entries=(reader.paged)(&p.run,p.actor)?;
+        return Ok((reader.payloads.experiences(&p.run,entries),true));
+    }
+    let heads = if p.experiences == TRACE_INDEX {
+        Some(ExperienceHeads {native_experience_rows_v2:(reader.trace)(&p.run,p.actor)?.indexes(&p.run,p.actor)?})
+    } else { parse::<ExperienceHeads>(&p.experiences).ok() };
+    let Some(heads) = heads else {
         // Old inline arrays need no external rows. V1 cursor-only headers are
         // read once through the indexed compatibility path and upgrade on save.
         let values = if p.experiences.starts_with('{') {
@@ -934,7 +1047,7 @@ fn deferred_experiences(p: &SimNativeParticipant, reader: &Arc<ColdReader>) -> R
     }
     Ok((heads.native_experience_rows_v2.into_iter().map(|index| {
         let (run, actor, reader, expected) = (p.run.clone(), p.actor, reader.clone(), index.clone());
-        Experience { cursor: index.0, source: index.1, tick: index.2, location: index.3,
+        ExperienceRecord { cursor: index.0, source: index.1, tick: index.2, location: index.3,
             kind: index.4, parents: index.5,
             data: simulation::participant::ExperienceData::load_with(move || {
                 let row = (reader.experience)(&run, actor, expected.0)?;
@@ -943,10 +1056,15 @@ fn deferred_experiences(p: &SimNativeParticipant, reader: &Arc<ColdReader>) -> R
                 }
                 serde_json::value::RawValue::from_string(row.data).map_err(|e| e.to_string())
             }),
-        }
+        }.into()
     }).collect(), true))
 }
 struct Rows {
+    paged_heads: Vec<SimNativeTraceHead>,
+    trace_pages: Vec<SimNativeTracePage>,
+    evidence_bodies: Vec<SimNativeEvidenceBody>,
+    trace_indexes: Vec<SimNativeTraceIndex>,
+    catalogs: Vec<SimNativeControllerCatalog>,
     controllers: Vec<SimNativeController>,
     bootstraps: Vec<SimControllerBootstrap>,
     head: SimNativeHead,
@@ -1080,7 +1198,14 @@ fn assemble_with(
             return Err("duplicate native experience cursor".into());
         }
     }
-    for p in rows.participants {
+    let mut paged_heads:BTreeMap<_,_>=rows.paged_heads.into_iter().map(|r|(r.actor,r)).collect();
+    let mut trace_pages:BTreeMap<u32,Vec<SimNativeTracePage>>=BTreeMap::new();
+    for page in rows.trace_pages {trace_pages.entry(page.actor).or_default().push(page);}
+    let bodies:BTreeMap<_,_>=rows.evidence_bodies.into_iter().map(|row| {
+        let id=row.id; trace::body_data(&w.run,id,row).map(|body|(id,body))
+    }).collect::<Result<_,_>>()?;
+    let mut trace_indexes: BTreeMap<_,_> = rows.trace_indexes.into_iter().map(|r|(r.actor,r)).collect();
+    for mut p in rows.participants {
         if p.run != w.run {
             return Err("native participant run mismatch".into());
         }
@@ -1106,6 +1231,23 @@ fn assemble_with(
                 leases.remove(&p.actor).unwrap_or_default(), receipt_values)?);
             continue;
         }
+        if p.experiences == trace::MARKER {
+            let entries=trace::unpack(&p.run,p.actor,paged_heads.remove(&p.actor).ok_or("native trace head missing")?,
+                trace_pages.remove(&p.actor).unwrap_or_default())?;
+            let mut values=Vec::with_capacity(entries.len());
+            for entry in entries {
+                let data=bodies.get(&entry.body).ok_or("native evidence body missing")?.clone();
+                values.push(trace::to_row(&p.run,p.actor,entry,data).experience(&p.run)?);
+            }
+            w.participants.insert(p.actor,p.state_from_experiences(values.into(),
+                leases.remove(&p.actor).unwrap_or_default(),receipts.remove(&p.actor).unwrap_or_default().into())?);
+            continue;
+        }
+        if p.experiences == TRACE_INDEX {
+            let index = trace_indexes.remove(&p.actor).ok_or("native trace index missing")?.indexes(&p.run,p.actor)?;
+            // Eager exports retain the existing exact order/count/metadata checks.
+            p.experiences = json(&ExperienceHeads {native_experience_rows_v2:index});
+        }
         w.participants.insert(
             p.actor,
             p.state(
@@ -1116,6 +1258,17 @@ fn assemble_with(
         );
     }
     let mut bootstraps: BTreeMap<_, _> = rows.bootstraps.into_iter().map(|b|(b.actor,b)).collect();
+    // Rows have already been selected by this transaction's authority scope.
+    // Equal immutable payload bytes can share decoding/comparison work; retain
+    // separate controller metadata and never fetch another row to find a match.
+    let catalog_rows: BTreeMap<_, _> = rows.catalogs.into_iter().map(|row| (row.key.clone(), row)).collect();
+    let mut lifecycle_payloads = BTreeMap::<String, Option<simulation::participant::ExperienceData>>::new();
+    #[cfg(feature = "clock-profile")]
+    let controller_rows = rows.controllers.len();
+    #[cfg(feature = "clock-profile")]
+    let controller_hot_bytes: usize = rows.controllers.iter().map(|c|c.last_lifecycle.len()).sum();
+    #[cfg(feature = "clock-profile")]
+    let mut catalog_reads = [0usize; 2];
     for c in rows.controllers {
         if c.run != w.run || c.key != key(&w.run, c.actor) { return Err("controller scope mismatch".into()); }
         let bootstrap = if let Some(reader) = &cold {
@@ -1126,11 +1279,34 @@ fn assemble_with(
             if b.run != w.run || b.key != c.key { return Err("bootstrap scope mismatch".into()); }
             parse::<simulation::controller::Bootstrap>(&b.body)?.into()
         };
+        let last_lifecycle = match lifecycle_payloads.entry(c.last_lifecycle) {
+            std::collections::btree_map::Entry::Occupied(entry) => entry.get().clone(),
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                let value = if let Some(reader) = &cold {
+                    let reader = reader.clone();
+                    catalog::deferred(&w.run, entry.key(), move |id| (reader.catalog)(id))?
+                } else {
+                    catalog::resolve(&w.run, entry.key(), |id| {
+                        let row = catalog_rows.get(id).cloned().ok_or("controller catalog missing")?;
+                        #[cfg(feature = "clock-profile")]
+                        { catalog_reads[0] += 1; catalog_reads[1] += row.body.len(); }
+                        Ok(row)
+                    })?
+                };
+                entry.insert(value).clone()
+            }
+        };
         w.participants.get_mut(&c.actor).ok_or("controller participant missing")?.client_controller = Some(simulation::controller::Authority {
             bootstrap, known_targets: c.known_targets.into_iter().collect(),
-            last_lifecycle: parse(&c.last_lifecycle)?, action: parse(&c.action)?,
+            last_lifecycle, action: parse(&c.action)?,
         });
     }
+    #[cfg(feature = "clock-profile")]
+    log::info!("controller-catalogs rows={} distinct={}", controller_rows, lifecycle_payloads.len());
+    #[cfg(feature = "clock-profile")]
+    log::info!("controller-catalog-storage {}", serde_json::json!({
+        "hot_bytes":controller_hot_bytes,"body_reads":catalog_reads[0],"body_bytes":catalog_reads[1],
+        "deferred":cold.is_some()}));
     for aux in rows.aux {
         aux.apply(&mut w)?;
     }
@@ -1155,17 +1331,7 @@ fn assemble_with(
     w.archives = rows
         .archives
         .into_iter()
-        .map(|a| {
-            Ok(simulation::knowledge::Archive {
-                id: a.archive,
-                position: a.position,
-                label: a.label,
-                capacity: a.capacity as usize,
-                destroyed: a.destroyed,
-                revision: a.revision,
-                records: parse(&a.records)?,
-            })
-        })
+        .map(SimNativeArchive::archive)
         .collect::<Result<_, String>>()?;
     Ok((w, lease_ids))
 }
@@ -1175,6 +1341,11 @@ macro_rules! read_all {
     ($db:expr,$run:expr,$materialize:expr,$cold:expr) => {{
         let run = $run;
         Rows {
+            paged_heads: if $cold {vec![]} else {$db.sim_native_trace_head().run().filter(run).collect()},
+            trace_pages: if $cold {vec![]} else {$db.sim_native_trace_page().participant().filter((run,)).collect()},
+            evidence_bodies: if $cold {vec![]} else {$db.sim_native_evidence_body().run().filter(run).collect()},
+            trace_indexes: if $cold {vec![]} else {$db.sim_native_trace_index().run().filter(run).collect()},
+            catalogs: if $cold { vec![] } else { $db.sim_native_controller_catalog().run().filter(run).collect() },
             controllers: $db.sim_native_controller().run().filter(run).collect(),
             bootstraps: if $cold { vec![] } else { $db.sim_controller_bootstrap().run().filter(run).collect() },
             head: $db
@@ -1182,7 +1353,7 @@ macro_rules! read_all {
                 .run()
                 .find(run.to_owned())
                 .ok_or("native run head missing")?,
-            definitions: read_definitions!($db, run),
+            definitions: read_definitions!($db, run, $materialize),
             actors: $db.sim_native_actor().run().filter(run).collect(),
             minds: $db.sim_native_mind().run().filter(run).collect(),
             mind_histories: if $cold { vec![] } else { $db.sim_native_mind_history().run().filter(run).collect() },
@@ -1246,6 +1417,9 @@ pub(super) fn observer_view(ctx: &ViewContext, run: &str, inspected: Option<u32>
         ctx.db.sim_native_actor_aux().run().filter(run).collect()
     } else { support.into_iter().map(SimRenderActorSupport::into_aux).collect() };
     let rows = Rows {
+        paged_heads:vec![],trace_pages:vec![],evidence_bodies:vec![],
+        trace_indexes: vec![],
+        catalogs: vec![],
         head: render_head!(ctx.db, run)?,
         definitions: read_definitions!(ctx.db, run),
         actors,
@@ -1266,14 +1440,16 @@ pub(super) fn observer_view(ctx: &ViewContext, run: &str, inspected: Option<u32>
 }
 pub(super) fn histories_separated(ctx: &ReducerContext, run: &str) -> bool {
     ctx.db.sim_native_mind().run().filter(run).all(|m| m.memories == MIND_HISTORY)
-        && ctx.db.sim_native_participant().run().filter(run).all(|p| parse::<ExperienceHeads>(&p.experiences).is_ok())
+        && ctx.db.sim_native_participant().run().filter(run).all(|p| p.experiences == trace::MARKER || p.experiences == TRACE_INDEX || parse::<ExperienceHeads>(&p.experiences).is_ok())
         && ctx.db.sim_native_lease().run().filter(run).all(|l| l.experiences == LEASE_EVIDENCE)
         && ctx.db.sim_native_clock_state().run().find(run.to_owned()).is_some_and(|s| s.version == CLOCK_INDEX_VERSION)
 }
 
 macro_rules! read_participant_rows {
     ($db:expr,$run:expr,$actor:expr,$materialize:expr) => {read_participant_rows!($db,$run,$actor,$materialize,false)};
-    ($db:expr,$run:expr,$actor:expr,$materialize:expr,$cold:expr) => {{
+    ($db:expr,$run:expr,$actor:expr,$materialize:expr,$cold:expr) => {read_participant_rows!($db,$run,$actor,$materialize,$cold,true)};
+    ($db:expr,$run:expr,$actor:expr,$materialize:expr,$cold:expr,$leases:expr) => {read_participant_rows!($db,$run,$actor,$materialize,$cold,$leases,true)};
+    ($db:expr,$run:expr,$actor:expr,$materialize:expr,$cold:expr,$leases:expr,$local:expr) => {{
         let run = $run;
         let actor = $actor;
 
@@ -1282,16 +1458,17 @@ macro_rules! read_participant_rows {
             .key()
             .find(key(run, actor))
             .ok_or("unknown actor")?;
-        let actors: Vec<_> = $db
+        let position = own.position;
+        let actors: Vec<_> = if $local { $db
             .sim_native_actor()
             .location()
-            .filter((run, own.position))
-            .collect();
-        let stations: Vec<_> = $db
+            .filter((run, position))
+            .collect() } else { vec![own] };
+        let stations: Vec<_> = if $local { $db
             .sim_native_station()
             .location()
-            .filter((run, own.position))
-            .collect();
+            .filter((run, position))
+            .collect() } else { vec![] };
         // An owned station may belong to an actor at a different location; arena
         // membership for that owner is a dependency even though their mind is not.
         let aux_ids: BTreeSet<_> = actors
@@ -1300,11 +1477,11 @@ macro_rules! read_participant_rows {
             .chain(stations.iter().map(|s| s.owner))
             .chain([actor])
             .collect();
-        let leases: Vec<SimNativeLease> = $db
+        let leases: Vec<SimNativeLease> = if $leases { $db
             .sim_native_lease()
             .participant()
             .filter((run, actor))
-            .collect();
+            .collect() } else { vec![] };
         let captures = if $materialize {
             leases
                 .iter()
@@ -1320,6 +1497,20 @@ macro_rules! read_participant_rows {
             vec![]
         };
         Ok::<Rows, String>(Rows {
+            paged_heads: if $cold {vec![]} else {$db.sim_native_trace_head().key().find(key(run,actor)).into_iter().collect()},
+            trace_pages: if $cold {vec![]} else {$db.sim_native_trace_page().participant().filter((run,actor)).collect()},
+            evidence_bodies: if $cold {vec![]} else {
+                let ids:BTreeSet<_>=$db.sim_native_trace_page().participant().filter((run,actor))
+                    .flat_map(|p|p.entries.into_iter().map(|e|e.body)).collect();
+                ids.into_iter().map(|id|$db.sim_native_evidence_body().id().find(id).ok_or("native evidence body missing"))
+                    .collect::<Result<Vec<_>,_>>()?
+            },
+            trace_indexes: if $cold {vec![]} else {$db.sim_native_trace_index().key().find(key(run,actor)).into_iter().collect()},
+            catalogs: if $cold { vec![] } else {
+                $db.sim_native_controller().key().find(key(run, actor))
+                    .and_then(|c| c.last_lifecycle.strip_prefix("sao-controller-catalog-v1:").map(str::to_owned))
+                    .and_then(|id| $db.sim_native_controller_catalog().key().find(id)).into_iter().collect()
+            },
             controllers: $db.sim_native_controller().key().find(key(run, actor)).into_iter().collect(),
             bootstraps: if $cold {vec![]} else {$db.sim_controller_bootstrap().key().find(key(run, actor)).into_iter().collect()},
             head: if $materialize { render_head!($db, run)? } else { $db
@@ -1368,9 +1559,38 @@ macro_rules! read_participant_rows {
         })
     }};
 }
-fn read_participant(ctx: &ReducerContext, run: &str, actor: u32) -> Result<Rows, String> {
-    read_participant_rows!(ctx.db, run, actor, false, true)
+fn read_participant(ctx: &ReducerContext, run: &str, actor: u32, local_context: bool) -> Result<Rows, String> {
+    let mut rows = read_participant_rows!(ctx.db, run, actor, false, true, true, local_context)?;
+    if !local_context {
+        rows.definitions.initial = action_admission_definition(ctx, run, rows.definitions.initial)?;
+    }
+    Ok(rows)
 }
+
+const ADMISSION_INITIAL: &str = "admission_initial_v1";
+const ADMISSION_SOURCE: &str = "admission_initial_source_v1";
+
+fn action_admission_definition(ctx: &ReducerContext, run: &str,
+    complete: Deferred<simulation::Scenario>,
+) -> Result<Deferred<simulation::Scenario>, String> {
+    let source = ctx.db.sim_native_definition_version().key().find(key(run, "initial"));
+    let derived_from = ctx.db.sim_native_definition_version().key().find(key(run, ADMISSION_SOURCE));
+    let version = ctx.db.sim_native_definition_version().key().find(key(run, ADMISSION_INITIAL));
+    let Some((source, derived_from, version)) = source.zip(derived_from).zip(version).map(|((a,b),c)|(a,b,c)) else {
+        return Ok(complete); // Existing worlds remain usable before explicit preparation.
+    };
+    if source.digest != derived_from.digest { return Ok(complete); }
+    let rows = ctx.db.sim_native_definition().key();
+    let run = run.to_owned();
+    #[cfg(feature = "clock-profile")]
+    log::info!("definition-admission-projection");
+    super::definition_cache::admission_deferred(version.digest, move || {
+        let row = rows.find(key(&run, ADMISSION_INITIAL)).ok_or("admission definition missing")?;
+        if row.run != run || row.kind != ADMISSION_INITIAL { return Err("admission definition scope mismatch".into()); }
+        Ok(row.body)
+    })
+}
+
 pub(super) fn participant_view(
     ctx: &ViewContext,
     run: &str,
@@ -1386,6 +1606,12 @@ pub(super) fn participant_view(
         .is_some_and(|a| a.human);
     Ok((world, can_participate))
 }
+pub(super) fn inspector_view(ctx: &ViewContext, run: &str, actor: u32) -> Result<World, String> {
+    // Same local physical/knowledge dependencies as personal presentation, with
+    // no captured reads, command receipts or participant-status construction.
+    let rows: Rows = read_participant_rows!(ctx.db, run, actor, true, true, false)?;
+    assemble_with(rows, Some(actor), false, Some(view_cold_reader(ctx))).map(|(world, _)| world)
+}
 pub(super) fn render_event_end(ctx: &ViewContext, run: &str) -> Option<u64> {
     render_head!(ctx.db, run).ok().map(|h| h.next_event)
 }
@@ -1395,6 +1621,17 @@ pub(super) fn render_memories(ctx: &ViewContext, run: &str, actor: u32) -> Optio
         return parse(&row.memories).ok();
     }
     ctx.db.sim_native_mind().key().find(&key).and_then(|row| parse(&row.memories).ok())
+}
+
+pub(super) fn render_timing(ctx: &ViewContext, run: &str) -> Option<SimNativeHead> {
+    render_head!(ctx.db, run).ok()
+}
+
+pub(super) fn render_initial(ctx: &ViewContext, run: &str) -> Result<Deferred<simulation::Scenario>,String> {
+    let version=ctx.db.sim_native_definition_version().key().find(key(run,"initial"));
+    super::definition_cache::initial_versioned(version.as_ref().map(|r|r.digest.as_str()),|| {
+        ctx.db.sim_native_definition().key().find(key(run,"initial")).map(|r|r.body).ok_or("native initial missing".into())
+    })
 }
 
 macro_rules! upsert {
@@ -1411,13 +1648,43 @@ macro_rules! upsert {
         }
     }};
 }
+/// Derived representation only; does not change World, audit, grants or clocks.
+/// Provisioning/full saves maintain it atomically with the source definition.
+/// The existing explicit migration reducer prepares already separated worlds.
+pub(super) fn prepare_action_admission(ctx: &ReducerContext, w: &World) {
+    let source = match ctx.db.sim_native_definition_version().key().find(key(&w.run, "initial")) {
+        Some(version) => version,
+        None => {
+            let row = ctx.db.sim_native_definition().key().find(key(&w.run, "initial")).expect("native initial exists");
+            let version = SimNativeDefinitionVersion {
+                key: key(&w.run, "initial"), digest: format!("{:x}", Sha256::digest(row.body.as_bytes())),
+            };
+            upsert!(ctx, sim_native_definition_version, key, version.clone());
+            version
+        }
+    };
+    if ctx.db.sim_native_definition_version().key().find(key(&w.run, ADMISSION_SOURCE))
+        .is_some_and(|r| r.digest == source.digest)
+        && ctx.db.sim_native_definition_version().key().find(key(&w.run, ADMISSION_INITIAL)).is_some()
+        && ctx.db.sim_native_definition().key().find(key(&w.run, ADMISSION_INITIAL)).is_some() { return; }
+    let body = json(&simulation::participant_transaction::action_admission_initial(&w.initial));
+    let digest = format!("{:x}", Sha256::digest(body.as_bytes()));
+    upsert!(ctx, sim_native_definition, key, SimNativeDefinition {
+        key: key(&w.run, ADMISSION_INITIAL), run: w.run.clone(), kind: ADMISSION_INITIAL.into(), body,
+    });
+    upsert!(ctx, sim_native_definition_version, key, SimNativeDefinitionVersion { key: key(&w.run, ADMISSION_INITIAL), digest });
+    upsert!(ctx, sim_native_definition_version, key, SimNativeDefinitionVersion { key: key(&w.run, ADMISSION_SOURCE), digest: source.digest });
+}
 pub(super) fn command(
     ctx: &ReducerContext,
     run: &str,
     actor: u32,
     request: simulation::participant::Request,
 ) -> Result<(), String> {
-    transact(ctx, run, actor, |transaction| transaction.execute(request))
+    let targets = simulation::participant_transaction::command_targets(&request.command);
+    let local_context = simulation::participant_transaction::command_reads_local_context(&request.command);
+    let include_old_tree = matches!(&request.command, simulation::participant::Command::PatchSubtree {..});
+    transact(ctx, run, actor, targets, include_old_tree, local_context, |transaction| transaction.execute(request))
 }
 pub(super) fn participant_mode(ctx: &ReducerContext, run: &str) -> Result<bool, String> {
     Ok(ctx
@@ -1428,13 +1695,19 @@ pub(super) fn participant_mode(ctx: &ReducerContext, run: &str) -> Result<bool, 
         .ok_or("native head missing")?
         .participant_mode)
 }
+pub(super) fn change_control(ctx: &ReducerContext, run: &str, actor: u32) -> Result<(), String> {
+    transact(ctx, run, actor, BTreeSet::new(), false, false, |transaction| transaction.change_control())
+}
 pub(super) fn intent(
     ctx: &ReducerContext,
     run: &str,
     actor: u32,
     decision: simulation::Decision,
 ) -> Result<(), String> {
-    transact(ctx, run, actor, |transaction| {
+    let targets = simulation::participant_transaction::decision_targets(&decision);
+    let client_controlled = ctx.db.sim_native_controller().key().find(key(run, actor)).is_some();
+    let local_context = simulation::participant_transaction::intent_reads_local_context(client_controlled, &decision);
+    transact(ctx, run, actor, targets, false, local_context, |transaction| {
         transaction.execute_intent(decision)
     })
 }
@@ -1442,11 +1715,37 @@ fn transact(
     ctx: &ReducerContext,
     run: &str,
     actor: u32,
+    mut targets: BTreeSet<u32>,
+    include_old_tree: bool,
+    local_context: bool,
     execute: impl FnOnce(
         simulation::participant_transaction::ParticipantTransaction,
     ) -> Result<simulation::participant_transaction::ParticipantCommit, String>,
 ) -> Result<(), String> {
-    let rows = super::measured("command.read", || read_participant(ctx, run, actor))?;
+    let mut rows = super::measured("command.read", || read_participant(ctx, run, actor, local_context))?;
+    if include_old_tree {
+        if let Some(mind)=rows.minds.iter().find(|m|m.actor==actor) {
+            if let Some(execution)=parse::<Option<simulation::Execution>>(&mind.execution)? {
+                if let Some(tree)=execution.policy {targets.extend(simulation::participant_transaction::tree_targets(&tree));}
+            }
+        }
+    }
+    // A finite action/policy names a bounded set of targets. Point-read their
+    // body, arena and law-visible numerical facts; never hydrate remote minds,
+    // leases or experience history, and never scan every actor for this check.
+    let mut target_facts = Vec::new();
+    for target in targets.into_iter().filter(|target| *target != actor) {
+        let target_key=key(run,target);
+        let Some(body)=ctx.db.sim_native_actor().key().find(&target_key) else {continue;};
+        if !rows.actors.iter().any(|p|p.actor==target) {rows.actors.push(body);}
+        if !rows.aux.iter().any(|p|p.actor==target) {
+            rows.aux.push(ctx.db.sim_native_actor_aux().key().find(&target_key).ok_or("target support missing")?);
+        }
+        target_facts.push(ctx.db.sim_native_mind().key().find(&target_key).ok_or("target facts missing")?);
+    }
+    #[cfg(feature = "clock-profile")]
+    spacetimedb::log::info!("command-scope local={} actors={} auxiliary={} stations={} target_facts={}",
+        local_context, rows.actors.len(), rows.aux.len(), rows.stations.len(), target_facts.len());
     let mut head = rows.head.clone();
     if !head.participant_mode {
         return Err("participant-v1 requires a participant run".into());
@@ -1461,7 +1760,12 @@ fn transact(
         .ok_or("unknown actor")?
         .ordinal;
     let mut aux = rows.aux.iter().find(|a| a.actor == actor).cloned();
-    let (world, ids) = super::measured("command.assemble", || assemble_with(rows, Some(actor), false, Some(cold_reader(ctx))))?;
+    let (mut world, ids) = super::measured("command.assemble", || assemble_with(rows, Some(actor), false, Some(cold_reader(ctx))))?;
+    for facts in target_facts {
+        if let Some(peer)=world.players.iter_mut().find(|p|p.id==facts.actor) {
+            apply_visibility_facts(peer, &facts);
+        }
+    }
     let previous = world
         .participants
         .get(&actor)
@@ -1499,8 +1803,16 @@ fn transact(
     let lease_ids = if previous.same_snapshot(&commit.participant) {
         ids[&actor].clone()
     } else {
-        save_participant_state(ctx, run, actor, &commit.participant, Some(&previous));
-        save_leases(ctx, run, actor, &commit.participant, Some(&previous), &ids[&actor])
+        let mut catalogs = catalog::Writes::default();
+        let mut traces = trace::Writes::default();
+        save_participant_state(ctx, run, actor, &commit.participant, Some(&previous), &mut catalogs, &mut traces, false);
+        // A newly retained lease may still hold a lazy payload that this action
+        // evicts from the current trace. Materialize the lease before releasing
+        // the final current-trace body reference.
+        let leases=save_leases(ctx, run, actor, &commit.participant, Some(&previous), &ids[&actor]);
+        catalogs.finish(ctx, run);
+        traces.finish(ctx, run);
+        leases
     };
     *laws.faults.lock() = commit.law_faults;
     upsert!(
@@ -1644,6 +1956,9 @@ fn save_participants(
     previous_ids: &LeaseIds,
 ) -> LeaseIds {
     let mut ids = LeaseIds::new();
+    let mut catalogs = catalog::Writes::default();
+    let mut traces = trace::Writes::default();
+    let mut saved = 0usize;
     for (&actor, state) in &w.participants {
         if previous.get(&actor).is_some_and(|p| p.same_snapshot(state)) {
             ids.insert(
@@ -1655,48 +1970,53 @@ fn save_participants(
             );
             continue;
         }
-        save_participant_state(ctx, &w.run, actor, state, previous.get(&actor));
+        save_participant_state(ctx, &w.run, actor, state, previous.get(&actor), &mut catalogs, &mut traces, saved % 17 == 0);
+        saved += 1;
         ids.insert(actor, save_leases(ctx, &w.run, actor, state, previous.get(&actor),
             previous_ids.get(&actor).map(Vec::as_slice).unwrap_or(&[])));
     }
+    #[cfg(feature = "clock-profile")]
+    log::info!("participant-save-samples eligible={} sampled={}",saved,saved.div_ceil(17));
+    catalogs.finish(ctx, &w.run);
+    traces.finish(ctx, &w.run);
     ids
 }
 
 fn save_participant_state(ctx: &ReducerContext, run: &str, actor: u32,
-    state: &ParticipantState, previous: Option<&ParticipantState>) {
+    state: &ParticipantState, previous: Option<&ParticipantState>, catalogs: &mut catalog::Writes, traces: &mut trace::Writes, sampled: bool) {
+    let mut profile = super::evidence_profile::SaveScope::new(sampled, "participant.save.controller");
     if let Some(controller) = &state.client_controller {
-        upsert!(ctx, sim_native_controller, key, SimNativeController::from_state(run, actor, controller));
+        let old = ctx.db.sim_native_controller().key().find(key(run, actor));
+        let retained = retained_controller_catalog(run, actor, controller,
+            previous.and_then(|p|p.client_controller.as_ref()), old.as_ref());
+        let last_lifecycle = retained.unwrap_or_else(|| catalogs.replace(run,
+            old.as_ref().map(|r|r.last_lifecycle.as_str()), json(&controller.last_lifecycle)));
+        let row = SimNativeController::with_catalog(run, actor, controller, last_lifecycle);
+        match old {
+            Some(old) if old == row => (),
+            Some(_) => { ctx.db.sim_native_controller().key().update(row); }
+            None => { ctx.db.sim_native_controller().insert(row); }
+        }
         if previous.and_then(|p|p.client_controller.as_ref()).is_none_or(|p| !p.bootstrap.same_snapshot(&controller.bootstrap)) {
             upsert!(ctx, sim_controller_bootstrap, key, SimControllerBootstrap {
                 key: key(run, actor), run: run.into(), actor, body: json(&controller.bootstrap),
             });
         }
     }
+    profile.phase(sampled, "participant.save.header");
     let old = ctx.db.sim_native_participant().key().find(key(run, actor));
     // Activity/controller changes do not necessarily change personal evidence.
     // Reuse only the retained transaction snapshot and the current row format;
     // legacy rows still take the migration/reconciliation path below.
     let heads = retained_experience_heads(state, previous, old.as_ref());
     let unchanged_experiences = heads.is_some();
-    let row = SimNativeParticipant::from_state_with_heads(run, actor, state, heads);
+    let row = SimNativeParticipant::from_state_with_heads(run, actor, state, Some(heads.unwrap_or_else(||trace::MARKER.into())));
     if !unchanged_experiences {
-        let stored: BTreeSet<u64> = old.as_ref().filter(|r| r.experiences.starts_with('{'))
-            .map(|r| experience_cursors(&r.experiences).expect("validated experience references")
-                .into_iter().collect()).unwrap_or_default();
-        let current: BTreeMap<_, _> = state.experiences.iter().map(|e| (e.cursor, e)).collect();
-        assert_eq!(current.len(), state.experiences.len(), "unique personal cursors");
-        let previous: BTreeMap<_, _> = previous.into_iter().flat_map(|p| p.experiences.iter())
-            .map(|e| (e.cursor, e)).collect();
-        for cursor in stored.iter().filter(|id| !current.contains_key(id)) {
-            ctx.db.sim_native_experience().key().delete(key(run, format!("{actor}:{cursor}")));
-        }
-        for (&cursor, value) in &current {
-            if stored.contains(&cursor) && previous.get(&cursor).is_some_and(|old| value.can_reuse_encoding(old)) {
-                continue;
-            }
-            upsert!(ctx, sim_native_experience, key, SimNativeExperience::from_experience(run, actor, value));
-        }
+        // End the header timer before the trace writer's separately measured phases.
+        profile.phase(false, "participant.save.header");
+        traces.save(ctx,run,actor,state,previous,old.as_ref(),sampled);
     }
+    profile.phase(sampled, "participant.save.commit");
     match old {
         Some(old) if old == row => (),
         Some(_) => { ctx.db.sim_native_participant().key().update(row); }
@@ -1704,11 +2024,24 @@ fn save_participant_state(ctx: &ReducerContext, run: &str, actor: u32,
     }
 }
 
+/// The previous controller is the strongly owned snapshot loaded from this
+/// actor's row in the current transaction. Reuse only a current-format reference;
+/// legacy inline values still migrate through ordinary validated serialization.
+fn retained_controller_catalog(run: &str, actor: u32,
+    current: &simulation::controller::Authority, previous: Option<&simulation::controller::Authority>,
+    row: Option<&SimNativeController>) -> Option<String> {
+    let (current, previous) = (current.last_lifecycle.as_ref()?, previous?.last_lifecycle.as_ref()?);
+    if !current.same_snapshot(previous) { return None; }
+    let row = row?;
+    (row.run == run && row.actor == actor && row.key == key(run, actor)
+        && catalog::valid_reference(&row.last_lifecycle)).then(||row.last_lifecycle.clone())
+}
+
 fn retained_experience_heads(state: &ParticipantState, previous: Option<&ParticipantState>,
     row: Option<&SimNativeParticipant>) -> Option<String> {
     if !previous.is_some_and(|p| p.experiences.same_snapshot(&state.experiences)) { return None; }
     let row = row?;
-    parse::<ExperienceHeads>(&row.experiences).ok()?;
+    if row.experiences != trace::MARKER && row.experiences != TRACE_INDEX { parse::<ExperienceHeads>(&row.experiences).ok()?; }
     Some(row.experiences.clone())
 }
 
@@ -1818,6 +2151,7 @@ pub(super) fn save(
             });
         }
     }
+    prepare_action_admission(ctx, w);
     // Global clock/population operations can add/remove entities. Their full
     // run-indexed reconciliation is not used by participant command commits.
     macro_rules! reconcile {
@@ -1932,6 +2266,63 @@ pub(super) fn save(
     ids
 }
 
+/// Delete only an unpublished run held by world_build's authenticated private
+/// reservation. All body digests are run-scoped, so no other run holds these
+/// rows. The caller keeps the reservation until every bounded pass completes.
+pub(super) fn discard_unpublished_batch(ctx: &ReducerContext, run: &str, limit: usize) -> bool {
+    assert!(!super::storage::exists(ctx, run));
+    let mut remaining = limit;
+    // Delivery headers have actor keys rather than run indexes. Remove them
+    // using the native actor index before removing their addressing rows.
+    let actors:Vec<_> = ctx.db.sim_native_actor().run().filter(run).take(remaining).collect();
+    for actor in &actors {
+        super::participant_delivery::clear_actor(ctx, run, actor.actor);
+        use super::controller_delivery::sim_controller_frame_state;
+        ctx.db.sim_controller_frame_state().key().delete(&actor.key);
+        ctx.db.sim_native_actor().key().delete(&actor.key);
+    }
+    remaining -= actors.len();
+    if remaining == 0 { return false; }
+    macro_rules! clear {
+        ($table:ident, $index:ident, $filter:expr, $key:ident) => {{
+            let rows:Vec<_> = ctx.db.$table().$index().filter($filter).take(remaining).collect();
+            for row in &rows { ctx.db.$table().$key().delete(row.$key.clone()); }
+            remaining -= rows.len();
+            if remaining == 0 { return false; }
+        }};
+    }
+    clear!(sim_native_mind,run,run,key);
+    clear!(sim_native_mind_history,run,run,key);
+    clear!(sim_native_actor_aux,run,run,key);
+    clear!(sim_render_actor_support,run,run,key);
+    clear!(sim_native_controller,run,run,key);
+    clear!(sim_controller_bootstrap,run,run,key);
+    clear!(sim_native_participant,run,run,key);
+    clear!(sim_native_experience,participant,(run,),key);
+    clear!(sim_native_trace_index,run,run,key);
+    clear!(sim_native_trace_head,run,run,key);
+    clear!(sim_native_trace_page,participant,(run,),key);
+    clear!(sim_native_evidence_body,run,run,id);
+    clear!(sim_native_evidence_retention,run,run,id);
+    clear!(sim_native_controller_catalog,run,run,key);
+    clear!(sim_native_lease,run,run,id);
+    clear!(sim_native_lease_evidence,run,run,lease_id);
+    clear!(sim_native_capture,run,run,lease_id);
+    clear!(sim_native_clock_actor,due,(run,),key);
+    clear!(sim_native_site,run,run,key);
+    clear!(sim_native_station,run,run,key);
+    clear!(sim_native_archive,run,run,key);
+    clear!(sim_native_definition,run,run,key);
+    // A constant number of run headers, beyond the row batch above.
+    for kind in ["initial", "scripts", ADMISSION_INITIAL, ADMISSION_SOURCE] {
+        ctx.db.sim_native_definition_version().key().delete(key(run,kind));
+    }
+    ctx.db.sim_native_clock_state().run().delete(run.to_owned());
+    ctx.db.sim_render_clock().run().delete(run.to_owned());
+    ctx.db.sim_native_head().run().delete(run.to_owned());
+    true
+}
+
 #[cfg(test)]
 #[path = "native_storage_tests.rs"]
 mod tests;
@@ -1941,3 +2332,6 @@ pub(super) use action_clock::advance_actions;
 fn clock_definitions(ctx: &ReducerContext, run: &str) -> Result<DefinitionSet,String> {
     Ok(read_definitions!(ctx.db, run))
 }
+
+mod catalog;
+mod trace;

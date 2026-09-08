@@ -1,6 +1,7 @@
 //! Run-scoped browser grants. All checks use authenticated ctx.sender(), never a claimed actor.
 use super::{save, sim_audit__view, storage, SimRun};
-use super::native_storage::sim_native_actor;
+use super::native_storage::{sim_native_actor, sim_native_head};
+use super::storage::sim_run_store;
 use simulation::{Controller, Decision, World};
 use spacetimedb::{Identity, ReducerContext, ScheduleAt, SpacetimeType, Table, ViewContext};
 
@@ -55,6 +56,48 @@ pub(super) fn grant(ctx: &ReducerContext) -> Result<SimClientAccess, String> {
         .find(ctx.sender())
         .ok_or("this identity has no run access".into())
 }
+// Native grants need only the run header and addressed actor. Legacy archives
+// keep their original adapter. Both sides of a handoff commit in one reducer,
+// including epoch/evidence invalidation and durable audit publication.
+enum GrantWorld {
+    Native { run: String, participant: bool },
+    Legacy(SimRun, World),
+}
+impl GrantWorld {
+    fn load(ctx: &ReducerContext, run: &str) -> Result<(Identity, Self), String> {
+        let row = ctx.db.sim_run_store().id().find(run.to_owned()).ok_or("run not found")?;
+        if row.state == super::native_storage::FORMAT {
+            let head = ctx.db.sim_native_head().run().find(run.to_owned()).ok_or("native head missing")?;
+            if head.version != simulation::VERSION { return Err("old rules are read-only".into()); }
+            Ok((row.owner, Self::Native { run: run.into(), participant: head.participant_mode }))
+        } else {
+            let (row, w) = world(ctx, run)?;
+            Ok((row.owner, Self::Legacy(row, w)))
+        }
+    }
+    fn eligible(&self, ctx: &ReducerContext, actor: u32) -> bool {
+        match self {
+            Self::Native { run, participant } => ctx.db.sim_native_actor().key()
+                .find(format!("{run}:{actor}")).is_some_and(|p| *participant || p.human),
+            Self::Legacy(_, w) => w.players.iter().any(|p| p.id == actor && (w.participant_mode || p.controller == Controller::Human)),
+        }
+    }
+    fn change_control(&mut self, ctx: &ReducerContext, actor: u32) -> Result<(), String> {
+        match self {
+            Self::Native { run, participant: true } => super::native_storage::change_control(ctx, run, actor),
+            Self::Native { run, participant: false } => {
+                // The shared nonparticipant operation validates existence only.
+                ctx.db.sim_native_actor().key().find(format!("{run}:{actor}"))
+                    .ok_or("unknown actor")?;
+                Ok(())
+            }
+            Self::Legacy(_, w) => w.change_control(actor),
+        }
+    }
+    fn save(self, ctx: &ReducerContext) {
+        if let Self::Legacy(row, w) = self { save(ctx, row, w); }
+    }
+}
 #[spacetimedb::reducer]
 pub fn sim_grant_client(
     ctx: &ReducerContext,
@@ -63,15 +106,12 @@ pub fn sim_grant_client(
     observer: bool,
     actor: u32,
 ) -> Result<(), String> {
-    let (row, mut w) = world(ctx, &run)?;
-    if row.owner != ctx.sender() {
+    let (owner, mut w) = GrantWorld::load(ctx, &run)?;
+    if owner != ctx.sender() {
         return Err("only the run operator grants access".into());
     }
     if !(observer && actor == 0)
-        && !w
-            .players
-            .iter()
-            .any(|p| p.id == actor && (w.participant_mode || p.controller == Controller::Human))
+        && !w.eligible(ctx, actor)
     {
         return Err("grant requires an eligible character".into());
     }
@@ -89,15 +129,15 @@ pub fn sim_grant_client(
     let previous = ctx.db.sim_client_access().identity().find(identity);
     if let Some(old) = &previous {
         if !old.observer && (old.run != run || old.actor != actor) {
-            let (oldrow, mut oldworld) = world(ctx, &old.run)?;
-            if oldrow.owner != ctx.sender() {
+            let (oldowner, mut oldworld) = GrantWorld::load(ctx, &old.run)?;
+            if oldowner != ctx.sender() {
                 return Err("cannot replace another operator's grant".into());
             }
             if old.run == run {
-                w.change_control(old.actor)?;
+                w.change_control(ctx, old.actor)?;
             } else {
-                oldworld.change_control(old.actor)?;
-                save(ctx, oldrow, oldworld);
+                oldworld.change_control(ctx, old.actor)?;
+                oldworld.save(ctx);
             }
         }
     }
@@ -106,9 +146,9 @@ pub fn sim_grant_client(
             .as_ref()
             .is_none_or(|old| old.observer || old.run != run || old.actor != actor)
     {
-        w.change_control(actor)?;
+        w.change_control(ctx, actor)?;
     }
-    save(ctx, row, w);
+    w.save(ctx);
     let access = SimClientAccess {
         identity,
         run,
@@ -136,13 +176,13 @@ pub fn sim_revoke_client(ctx: &ReducerContext, identity: Identity) -> Result<(),
         .identity()
         .find(identity)
         .ok_or("grant not found")?;
-    let (row, mut w) = world(ctx, &access.run)?;
-    if row.owner != ctx.sender() {
+    let (owner, mut w) = GrantWorld::load(ctx, &access.run)?;
+    if owner != ctx.sender() {
         return Err("only operator revokes grants".into());
     }
     if !access.observer {
-        w.change_control(access.actor)?;
-        save(ctx, row, w);
+        w.change_control(ctx, access.actor)?;
+        w.save(ctx);
     }
     ctx.db.sim_client_access().identity().delete(identity);
     Ok(())
@@ -181,7 +221,7 @@ pub fn sim_my_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
 pub fn sim_my_render_snapshot(ctx: &ViewContext) -> Option<SimClientSnapshot> {
     render_snapshot(ctx, false)
 }
-fn render_snapshot(ctx: &ViewContext, include_history: bool) -> Option<SimClientSnapshot> {
+pub(super) fn render_snapshot(ctx: &ViewContext, include_history: bool) -> Option<SimClientSnapshot> {
     #[cfg(feature = "clock-profile")]
     let phase = spacetimedb::log_stopwatch::LogStopwatch::new("view.render.load");
     let access = ctx.db.sim_client_access().identity().find(ctx.sender())?;

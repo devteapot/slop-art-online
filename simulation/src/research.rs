@@ -72,6 +72,20 @@ pub struct ProgramWork {
 
 /// Default catalogs and experience feeds do not replicate every program body.
 /// An explicit own-program inspection is the sole unredacted reading response.
+pub(crate) fn needs_source_redaction(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => {
+            if map.get("kind").and_then(Value::as_str)
+                .is_some_and(|k| matches!(k, "program_inspected" | "law_inspected")) { return false; }
+            (map.contains_key("interface_version")
+                && (map.contains_key("hooks") || (map.contains_key("input_contract") && map.contains_key("output_contract")))
+                && map.contains_key("source"))
+                || map.values().any(needs_source_redaction)
+        }
+        Value::Array(values) => values.iter().any(needs_source_redaction),
+        _ => false,
+    }
+}
 pub fn redact_program_sources(value: &mut Value) {
     match value {
         Value::Object(map) => {

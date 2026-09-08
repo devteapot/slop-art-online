@@ -29,6 +29,27 @@ pub struct SimClockWake {
     pub run: String,
 }
 
+/// Optional rational-frequency grid, separate from the legacy millisecond
+/// control row. One row per configured run, with no client subscription.
+#[spacetimedb::table(accessor = sim_clock_rate)]
+pub struct SimClockRate {
+    #[primary_key]
+    pub run: String,
+    pub hz: u32,
+    pub epoch: Timestamp,
+    pub next_slot: u64,
+}
+
+fn slot_us(slot: u64, hz: u32) -> u64 {
+    ((u128::from(slot) * 1_000_000) / u128::from(hz)) as u64
+}
+
+fn next_slot(elapsed_us: u64, current: u64, hz: u32) -> u64 {
+    // Invert floor(slot * 1e6 / hz), including exact deadline boundaries.
+    let at_or_before = ((u128::from(elapsed_us) + 1) * u128::from(hz) - 1) / 1_000_000;
+    (at_or_before as u64 + 1).max(current + 1)
+}
+
 pub(super) fn enabled(ctx: &ReducerContext, run: &str) -> bool {
     ctx.db
         .sim_clock_deadline()
@@ -54,8 +75,17 @@ pub(super) fn reset(ctx: &ReducerContext, clock: &mut SimClientClock, period_ms:
         ctx.db.sim_clock_wake().id().delete(state.pending_id);
     }
     state.pending_id = 0;
+    if state.period_ms != period_ms {
+        ctx.db.sim_clock_rate().run().delete(&clock.run);
+    }
     state.period_ms = period_ms;
     state.next_deadline = ctx.timestamp + Duration::from_millis(period_ms);
+    if let Some(mut rate) = ctx.db.sim_clock_rate().run().find(&clock.run) {
+        rate.epoch = ctx.timestamp;
+        rate.next_slot = 1;
+        state.next_deadline = rate.epoch + Duration::from_micros(slot_us(1, rate.hz));
+        ctx.db.sim_clock_rate().run().update(rate);
+    }
     if state.enabled {
         // Keep the old control row/schema, with only a cheap minute heartbeat.
         clock.scheduled_at = Duration::from_secs(60).into();
@@ -119,6 +149,26 @@ fn next_offset(lateness_us: u64, period_us: u64) -> (u64, u64) {
     let missed = lateness_us / period_us;
     (missed, (missed + 1) * period_us)
 }
+
+/// Explicit owner-only experiment control. Reconfiguration always starts paused
+/// on a fresh grid; changing the legacy period subsequently returns to ms mode.
+#[spacetimedb::reducer]
+pub fn sim_configure_clock_rate(ctx: &ReducerContext, run: String, hz: u32) -> Result<(), String> {
+    storage::require_owner(ctx, &run)?;
+    if !(1..=1000).contains(&hz) { return Err("clock rate must be 1..=1000 Hz".into()); }
+    let mut clock = ctx.db.sim_client_clock().run().find(&run).ok_or("clock missing")?;
+    let mut state = ctx.db.sim_clock_deadline().run().find(&run).ok_or("deadline clock missing")?;
+    if !clock.paused || !state.enabled { return Err("pause and enable deadline clock before setting Hz".into()); }
+    state.period_ms = 1000 / u64::from(hz);
+    let period_ms = state.period_ms;
+    ctx.db.sim_clock_deadline().run().update(state);
+    let rate = SimClockRate { run:run.clone(), hz, epoch:ctx.timestamp, next_slot:1 };
+    if ctx.db.sim_clock_rate().run().find(&run).is_some() { ctx.db.sim_clock_rate().run().update(rate); }
+    else { ctx.db.sim_clock_rate().insert(rate); }
+    reset(ctx, &mut clock, period_ms);
+    ctx.db.sim_client_clock().id().update(clock);
+    Ok(())
+}
 #[spacetimedb::reducer]
 pub fn sim_deadline_pulse(ctx: &ReducerContext, wake: SimClockWake) -> Result<(), String> {
     if ctx.sender() != ctx.identity() {
@@ -145,7 +195,18 @@ pub fn sim_deadline_pulse(ctx: &ReducerContext, wake: SimClockWake) -> Result<()
             .duration_since(state.next_deadline)
             .ok_or("early clock wake")?
             .as_micros() as u64;
-        let (missed, offset) = next_offset(late, state.period_ms * 1000);
+        let (missed, next_deadline) = if let Some(mut rate) = ctx.db.sim_clock_rate().run().find(&wake.run) {
+            let elapsed = ctx.timestamp.duration_since(rate.epoch).ok_or("clock before epoch")?.as_micros() as u64;
+            let next = next_slot(elapsed, rate.next_slot, rate.hz);
+            let missed = next - rate.next_slot - 1;
+            rate.next_slot = next;
+            let deadline = rate.epoch + Duration::from_micros(slot_us(next, rate.hz));
+            ctx.db.sim_clock_rate().run().update(rate);
+            (missed, deadline)
+        } else {
+            let (missed, offset) = next_offset(late, state.period_ms * 1000);
+            (missed, state.next_deadline + Duration::from_micros(offset))
+        };
         state.wakes += 1;
         state.missed_slots += missed;
         state.lateness_us = state.lateness_us.saturating_add(late);
@@ -154,7 +215,7 @@ pub fn sim_deadline_pulse(ctx: &ReducerContext, wake: SimClockWake) -> Result<()
         // actual elapsed time; no fake 50ms steps or unbounded action replay.
         let paused = client_access::advance_pulse(ctx, clock)?;
         if !paused {
-            state.next_deadline += Duration::from_micros(offset);
+            state.next_deadline = next_deadline;
             arm(ctx, &mut state);
         }
     }
@@ -165,6 +226,24 @@ pub fn sim_deadline_pulse(ctx: &ReducerContext, wake: SimClockWake) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rational_grid_has_no_drift_and_skips_outages_without_replay() {
+        for hz in [30, 60] {
+            for seconds in [1, 60, 1800, 28800] {
+                assert_eq!(slot_us(seconds * u64::from(hz), hz), seconds * 1_000_000);
+            }
+            for slot in 1..=hz as u64 * 60 {
+                let deadline = slot_us(slot, hz);
+                for late in [0, 1, 16_667, 33_334, 60_000_001] {
+                    let now = deadline + late;
+                    let next = next_slot(now, slot, hz);
+                    assert!(slot_us(next, hz) > now);
+                    assert!(slot_us(next - 1, hz) <= now);
+                    assert!(slot_us(next, hz) - now <= 1_000_000u64.div_ceil(hz as u64));
+                }
+            }
+        }
+    }
     #[test]
     fn deadlines_preserve_phase_skip_missed_slots_and_schedule_strictly_after_now() {
         for (late, missed, offset) in [

@@ -69,6 +69,30 @@ fn decision(actions: Vec<Action>) -> Decision {
     }
 }
 #[test]
+fn initialization_accepts_two_thousand_people_and_an_eight_hour_horizon() {
+    let mut seed=(*world().initial).clone();
+    seed.map=Some(spatial::Grid{width:64,height:64,blocked:Default::default(),bounds:None});
+    seed.players=(1..=2000).map(|id|player(id,Controller::Human,(id-1) as i32*2)).collect();
+    seed.max_ticks=8*60*60*1000/timing::LEGACY_UNIT_MS+1;
+    seed.society=Some(serde_json::from_value(json!({"version":1,"regions":[],"offices":[],
+        "organizations":[{"id":"all-people","label":"An authored association","members":(1..=2000).collect::<Vec<_>>(),"stations":[]}]})).unwrap());
+    let world=World::new_client("population-initialization".into(),seed.clone()).unwrap();
+    assert_eq!(world.players.len(),2000);
+    assert_eq!(world.lifecycle.len(),2000);
+    assert_eq!(world.participants.len(),2000);
+    assert!(world.initial.max_ticks*timing::LEGACY_UNIT_MS>8*60*60*1000);
+    assert_eq!(world.next_actor,2001);
+    assert_eq!(world.events.last().unwrap().id+1,world.next_event);
+    assert!(world.players.iter().all(|p|world.client_controlled(p.id)));
+    // Structural validation and representable-time bounds still apply.
+    seed.players[1999].id=1;
+    assert!(World::new("duplicate-actor".into(),seed.clone()).is_err());
+    seed.players[1999].id=2000;seed.max_ticks=u64::MAX;
+    assert!(World::new("overflow-horizon".into(),seed.clone()).is_err());
+    seed.max_ticks=0;
+    assert!(World::new("empty-horizon".into(),seed).is_err());
+}
+#[test]
 fn sequence_waits_for_actual_completion_and_runs_each_skill() {
     let mut w = world();
     w.submit(

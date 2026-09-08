@@ -189,8 +189,21 @@ pub fn sim_my_controller_experiences(ctx: &ViewContext) -> Vec<SimNativeExperien
     // Keep the exact actor-prefix read set on the pinned host. The mixed
     // three-column prefix/range invalidates much more broadly in the measured
     // 2.10 runtime. The retained actor range is bounded to 256 rows.
-    ctx.db.sim_native_experience().controller_scope().filter((scope.run.as_str(), scope.actor))
-        .filter(|row|row.cursor>cursor).collect()
+    super::native_storage::experience_rows_for_view(ctx,&scope.run,scope.actor,cursor)
+}
+
+/// Optional combat channel for any authenticated participant. Uses the same
+/// personal, redacted durable facts as the general feed. It has no independent
+/// acknowledgement: reconnect replays the retained tail; deduplicate by cursor.
+/// Never use the observer audit or infer witnesses by proximity in this view.
+#[spacetimedb::view(accessor = sim_my_combat_events, public)]
+pub fn sim_my_combat_events(ctx: &ViewContext) -> Vec<SimNativeExperience> {
+    let Some(scope)=ctx.db.sim_client_access().identity().find(ctx.sender()).filter(|a| !a.observer) else {return vec![];};
+    let mut events:Vec<_>=super::native_storage::experience_rows_for_view(ctx,&scope.run,scope.actor,0).into_iter()
+        .filter(|row| serde_json::from_str(&row.data).is_ok_and(|data|
+            simulation::combat::is_combat_event(&row.kind,&data))).collect();
+    events.sort_by_key(|row|row.cursor);
+    events
 }
 #[derive(SpacetimeType)]
 pub struct SimControllerKnowledge {

@@ -29,9 +29,14 @@ impl SnapshotApi {
     }
 
     pub fn from_env() -> Result<Self, String> {
+        Self::from_env_or(Self::Sql)
+    }
+
+    /// Live hosts may choose one-shot exports without changing historical runner defaults.
+    pub fn from_env_or(default: Self) -> Result<Self, String> {
         match std::env::var(API_ENV) {
             Ok(value) => Self::from_setting(Some(&value)),
-            Err(std::env::VarError::NotPresent) => Self::from_setting(None),
+            Err(std::env::VarError::NotPresent) => Ok(default),
             Err(_) => Err("SAO_OWNER_SNAPSHOT_API must be sql or procedure".into()),
         }
     }
