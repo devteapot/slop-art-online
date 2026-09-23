@@ -12,6 +12,7 @@
 /output/
 
 # Local NPC endpoint credentials; never part of run evidence
+/.env
 /.local/credentials/
 
 # Temporary test journals when the system temporary directory reaches its quota

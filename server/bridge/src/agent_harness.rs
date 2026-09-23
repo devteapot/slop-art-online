@@ -150,7 +150,19 @@ pub async fn deliberate_once(
     config: Config,
     role: Responsibility,
     audit: &Path,
+    cancel: watch::Receiver<Option<String>>,
+) -> Result<Value, String> {
+    deliberate_once_with_shadow(service, config, role, audit, cancel, None).await
+}
+
+/// Opt-in observation tap. Shadow results never enter proposal parsing or submission.
+pub async fn deliberate_once_with_shadow(
+    service: &ParticipantService,
+    config: Config,
+    role: Responsibility,
+    audit: &Path,
     mut cancel: watch::Receiver<Option<String>>,
+    shadow: Option<&tokio::sync::mpsc::Sender<crate::typesafe_shadow::Sample>>,
 ) -> Result<Value, String> {
     let mut context = service.observe(0, 256).await?;
     let planned_role = role;
@@ -171,6 +183,13 @@ pub async fn deliberate_once(
     let path = audit.join(format!("{id}.json"));
     let mut record=backend.safe_value(&json!({"id":id,"responsibility":role,"planned_responsibility":planned_role,"participant_context":context,"request":payload,"config":config,"phase":"started","not_private_chain_of_thought":true}));
     std::fs::write(&path, record.to_string()).map_err(|_| "harness audit unavailable")?;
+    if let Some(shadow) = shadow {
+        // Copy the exact redacted personal context archived for this primary call.
+        // A full/closed shadow channel never delays or rejects the primary call.
+        record["shadow_capture"] = json!(crate::typesafe_shadow::offer(
+            shadow, &id, role, record["participant_context"].clone(),
+        ));
+    }
     let (local_cancel, mut local_rx) = watch::channel(cancel.borrow().clone());
     let exchange = backend.complete(
         &payload,
