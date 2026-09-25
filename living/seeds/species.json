@@ -1,0 +1,43 @@
+{
+  "person": {
+    "skills": null,
+    "speaks": true,
+    "signals": {},
+    "names": [],
+    "cognition": {"think_min_s": 0, "reflect_s": 150, "consolidate_threshold": 1.0, "max_nodes": 64}
+  },
+  "deer": {
+    "skills": ["goto", "wander", "flee", "graze", "sleep", "rest", "wait", "follow", "signal"],
+    "speaks": false,
+    "signals": {
+      "alarm": {"sound": "a sharp alarm snort", "range": 14, "salience": 0.75},
+      "call": {"sound": "a soft contact bleat", "range": 10, "salience": 0.35}
+    },
+    "names": ["Dapple", "Brindle", "Sorrel", "Thistle", "Hazel", "Clover", "Pip", "Russet", "Willow", "Bramble", "Sedge", "Tansy", "Birch", "Nettle", "Rowan", "Speck", "Mallow", "Heather", "Acorn", "Flick"],
+    "temperament": {"boldness": [5, 50], "sociability": [50, 95], "curiosity": [15, 70], "nervousness": [40, 95]},
+    "nature": "You are a deer: a grazing herd animal and prey. Wolves hunt you and people with spears can kill you. You feel safest near your herd and in open ground where danger can be seen. You eat by grazing grass. You have no words: you think in sensations, drives, smells and associations, never in sentences or long plans, and you communicate only with signals.",
+    "reflexes": [
+      {"if": {"cond": {"near": {"target": {"nearest": "wolf"}, "within": 6}}, "then": {"do": {"skill": "flee", "target": {"nearest": "wolf"}}}}},
+      {"if": {"cond": {"hurt_within": 6}, "then": {"do": {"skill": "flee", "target": "attacker"}}}}
+    ],
+    "cognition": {"think_min_s": 60, "reflect_s": 600, "consolidate_threshold": 3.0, "max_nodes": 24}
+  },
+  "wolf": {
+    "skills": ["goto", "wander", "flee", "attack", "eat", "sleep", "rest", "wait", "follow", "signal"],
+    "speaks": false,
+    "signals": {
+      "howl": {"sound": "a long howl", "range": 30, "salience": 0.5},
+      "growl": {"sound": "a low growl", "range": 8, "salience": 0.8},
+      "whimper": {"sound": "a whimper", "range": 6, "salience": 0.4},
+      "yip": {"sound": "excited hunting yips", "range": 14, "salience": 0.6}
+    },
+    "names": ["Ash", "Fang", "Scar", "Grey", "Moon", "Ember", "Shade", "Frost", "Rook", "Storm", "Tallow", "Slate"],
+    "temperament": {"boldness": [30, 95], "sociability": [30, 90], "curiosity": [20, 70], "aggression": [30, 90]},
+    "nature": "You are a wolf: a predator of the forests. You hunt deer, eat meat, and fear fire and people who strike back. You are stronger with other wolves; a pack hunts better and is safer. You have no words: you think in drives, smells, sensations and associations, never in sentences or long plans, and you communicate only with signals.",
+    "reflexes": [
+      {"if": {"cond": {"all": [{"hurt_within": 6}, {"health": {"below": 25}}]}, "then": {"do": {"skill": "flee", "target": "attacker"}}}},
+      {"if": {"cond": {"all": [{"hunger": {"above": 80}}, {"has": {"item": "meat"}}]}, "then": {"do": {"skill": "eat", "item": "meat"}}}}
+    ],
+    "cognition": {"think_min_s": 60, "reflect_s": 600, "consolidate_threshold": 3.0, "max_nodes": 24}
+  }
+}

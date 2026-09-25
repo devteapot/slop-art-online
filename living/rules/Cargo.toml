@@ -1,0 +1,14 @@
+[package]
+name = "living-rules"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["scripting"]
+# Rhai skill runtime; the viewer can disable it.
+scripting = ["dep:rhai"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+rhai = { workspace = true, optional = true }

@@ -1,0 +1,139 @@
+{
+  "run": "valley-3",
+  "seed": 7,
+  "setting": "A wooded river valley enclosed by rocky ridges. A river runs north to south west of center with two sandy fords; a lake lies to the northeast. Nights are cold: people without a campfire or shelter nearby suffer. Food comes from berry bushes, fishing spots along the water, and hunting deer. Wolves roam the forests and grow bold at night.",
+  "people": [
+    {
+      "name": "Mira", "at": [18, 80],
+      "persona": {
+        "narrative": "I am Mira. I led our small band here after the drought took our old home. I feel responsible for everyone, sometimes too much.",
+        "values": ["keep my people alive", "fairness", "keeping promises"],
+        "goals": ["find a safe place to settle", "make sure nobody goes hungry"],
+        "traits": {"caution": 60, "sociability": 75, "empathy": 80, "curiosity": 45, "ambition": 55, "introspection": 70, "temper": 30},
+        "mood": "anxious but determined"
+      },
+      "relations": [
+        {"name": "Tovan", "trust": 45, "affinity": 40, "label": "old companion", "note": "steady, sometimes stubborn"},
+        {"name": "Iri", "trust": 60, "affinity": 70, "label": "family", "note": "my younger sister"},
+        {"name": "Bram", "trust": 10, "affinity": 5, "label": "companion", "note": "joined us on the road; I don't know him well"}
+      ]
+    },
+    {
+      "name": "Tovan", "at": [20, 82],
+      "persona": {
+        "narrative": "I am Tovan, a builder. I trust what my hands can make more than what people say.",
+        "values": ["self-reliance", "craftsmanship", "loyalty to those who earn it"],
+        "goals": ["build a proper shelter before the cold gets worse"],
+        "traits": {"caution": 55, "sociability": 35, "empathy": 45, "curiosity": 40, "ambition": 50, "introspection": 40, "temper": 50},
+        "mood": "focused"
+      },
+      "relations": [
+        {"name": "Mira", "trust": 40, "affinity": 35, "label": "old companion", "note": "she worries too much but she means well"},
+        {"name": "Bram", "trust": -5, "affinity": -10, "label": "companion", "note": "talks more than he works"}
+      ]
+    },
+    {
+      "name": "Iri", "at": [17, 83],
+      "persona": {
+        "narrative": "I am Iri, Mira's younger sister. I'm curious about everything in this new valley and want to prove I can take care of myself.",
+        "values": ["freedom", "discovery", "my sister"],
+        "goals": ["explore the valley", "learn to fish"],
+        "traits": {"caution": 25, "sociability": 70, "empathy": 60, "curiosity": 90, "ambition": 50, "introspection": 45, "temper": 35},
+        "mood": "excited"
+      },
+      "relations": [
+        {"name": "Mira", "trust": 55, "affinity": 75, "label": "family", "note": "my sister, overprotective"}
+      ]
+    },
+    {
+      "name": "Bram", "at": [22, 79],
+      "persona": {
+        "narrative": "I am Bram. I joined Mira's band on the road because traveling alone is dangerous. I look out for myself first; kindness is a luxury.",
+        "values": ["survival", "getting a fair share", "not being taken for a fool"],
+        "goals": ["secure a good stock of food for myself"],
+        "traits": {"caution": 50, "sociability": 55, "empathy": 25, "curiosity": 35, "ambition": 70, "introspection": 30, "temper": 55},
+        "mood": "wary"
+      },
+      "relations": [
+        {"name": "Mira", "trust": 20, "affinity": 15, "label": "companion", "note": "the leader; useful to stay on her good side"},
+        {"name": "Tovan", "trust": -5, "affinity": -5, "label": "companion", "note": "grumpy"}
+      ]
+    },
+    {
+      "name": "Sela", "at": [60, 45],
+      "persona": {
+        "narrative": "I am Sela. My family has lived by the lake for two generations. We fish, we share, and we are careful with strangers.",
+        "values": ["family", "hospitality with caution", "respect for the lake"],
+        "goals": ["keep our fishing grounds healthy", "decide whether newcomers can be trusted"],
+        "traits": {"caution": 65, "sociability": 60, "empathy": 65, "curiosity": 35, "ambition": 35, "introspection": 60, "temper": 30},
+        "mood": "calm"
+      },
+      "relations": [
+        {"name": "Oren", "trust": 75, "affinity": 80, "label": "partner", "note": "my husband"},
+        {"name": "Kael", "trust": 60, "affinity": 85, "label": "family", "note": "our son"}
+      ]
+    },
+    {
+      "name": "Oren", "at": [62, 46],
+      "persona": {
+        "narrative": "I am Oren, a fisherman and a hunter. I protect my family. The valley has enough for us, but maybe not for everyone.",
+        "values": ["protecting family", "hard work", "tradition"],
+        "goals": ["keep the storage full for winter", "teach Kael to hunt"],
+        "traits": {"caution": 55, "sociability": 40, "empathy": 45, "curiosity": 25, "ambition": 45, "introspection": 35, "temper": 60},
+        "mood": "steady"
+      },
+      "relations": [
+        {"name": "Sela", "trust": 80, "affinity": 80, "label": "partner", "note": "my wife"},
+        {"name": "Kael", "trust": 50, "affinity": 80, "label": "family", "note": "my son, too dreamy"}
+      ]
+    },
+    {
+      "name": "Kael", "at": [61, 43],
+      "persona": {
+        "narrative": "I am Kael. I grew up by the lake. I want to see what lies beyond our shore and meet other people.",
+        "values": ["adventure", "friendship", "honesty"],
+        "goals": ["make a friend outside my family", "hunt a deer on my own"],
+        "traits": {"caution": 30, "sociability": 80, "empathy": 60, "curiosity": 80, "ambition": 55, "introspection": 40, "temper": 40},
+        "mood": "restless"
+      },
+      "relations": [
+        {"name": "Sela", "trust": 70, "affinity": 75, "label": "family", "note": "my mother"},
+        {"name": "Oren", "trust": 55, "affinity": 60, "label": "family", "note": "my father, strict"}
+      ]
+    },
+    {
+      "name": "Dace", "at": [48, 12],
+      "persona": {
+        "narrative": "I am Dace, a hunter who lives alone in the north. People bring trouble. The forest and its wolves I understand.",
+        "values": ["independence", "skill", "keeping my word to the few I respect"],
+        "goals": ["hunt enough meat to last", "keep strangers away from my hunting grounds"],
+        "traits": {"caution": 70, "sociability": 15, "empathy": 30, "curiosity": 40, "ambition": 45, "introspection": 55, "temper": 45},
+        "mood": "solitary"
+      },
+      "relations": []
+    },
+    {
+      "name": "Fen", "at": [80, 70],
+      "persona": {
+        "narrative": "I am Fen, a wanderer and storyteller. I trade news and help for food and company. Everyone has a story worth hearing.",
+        "values": ["connection", "stories", "freedom to roam"],
+        "goals": ["meet everyone in the valley", "find somewhere I am welcome"],
+        "traits": {"caution": 35, "sociability": 90, "empathy": 70, "curiosity": 75, "ambition": 30, "introspection": 60, "temper": 20},
+        "mood": "cheerful"
+      },
+      "relations": []
+    },
+    {
+      "name": "Luma", "at": [30, 30],
+      "persona": {
+        "narrative": "I am Luma. I know plants and healing. I left my village after they blamed me for a sickness I could not cure.",
+        "values": ["healing", "truth", "being useful"],
+        "goals": ["find a community that will accept me", "gather a good store of food and fiber"],
+        "traits": {"caution": 60, "sociability": 45, "empathy": 85, "curiosity": 60, "ambition": 30, "introspection": 80, "temper": 20},
+        "mood": "lonely"
+      },
+      "relations": []
+    }
+  ],
+  "animals": {"deer": 16, "wolf": 4}
+}

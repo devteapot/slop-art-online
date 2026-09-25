@@ -4,6 +4,8 @@ Slop Art Online is a persistent living-world game built with Rust, SpacetimeDB a
 
 ## Read first
 
+- **[Living core](docs/LIVING_CORE.md)**: the active core since 2026-09-26 (`living/` workspace, `just living-*` recipes). Legacy `simulation/`, `server/` and `client/` remain as historical baseline.
+
 - [Simulation vision](docs/SIMULATION_VISION.md) and [world vision](docs/WORLD_VISION.md): agreed direction and open design choices.
 - [Current state](docs/CURRENT_STATE.md), [world roadmap](docs/WORLD_ROADMAP.md) and [work queue](docs/TODO.md): implementation evidence and remaining work.
 - [Performance contract](docs/PERFORMANCE_CONTRACT.md): locked gameplay, latency, population and resource targets; benchmark acceptance rules.

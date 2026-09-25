@@ -28,3 +28,11 @@ __pycache__/
 *.py[cod]
 
 /client/dist-participant/
+
+# Local API keys
+/.env
+
+# Living core build output and local service data
+/living/target/
+/.local/living/
+/living/viewer/dist/

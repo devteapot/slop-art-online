@@ -1,0 +1,4 @@
+#!/bin/sh
+# SpacetimeDB CLI inside the living core's server container (see living/deploy/compose.yml).
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+exec docker compose --env-file "$ROOT/.local/living/neo4j.env" -f "$ROOT/living/deploy/compose.yml" -p sao-living exec -T spacetimedb spacetime "$@"

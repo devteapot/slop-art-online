@@ -1,0 +1,51 @@
+{
+  "default": "mistral-medium",
+  "profiles": {
+    "luna": {
+      "base_url": "https://codex.carlid.dev/v1",
+      "model": "gpt-6-luna",
+      "key_env": "CARLID_NPC_API_KEY",
+      "reasoning_effort": {
+        "deliberate": "low",
+        "consolidate": "medium"
+      }
+    },
+    "mistral-small": {
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "mistral-small-latest",
+      "key_env": "MISTRAL_API_KEY"
+    },
+    "mistral-medium": {
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "mistral-medium-3-5",
+      "key_env": "MISTRAL_API_KEY"
+    },
+    "glm": {
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "zai-glm-5-3",
+      "key_env": "MISTRAL_API_KEY"
+    },
+    "ministral": {
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "ministral-8b-latest",
+      "key_env": "MISTRAL_API_KEY"
+    }
+  },
+  "assign": {},
+  "rotate": [
+    "mistral-medium",
+    "mistral-small"
+  ],
+  "species": {
+    "deer": {
+      "think": "ministral",
+      "remember": "ministral",
+      "compile": "mistral-small"
+    },
+    "wolf": {
+      "think": "ministral",
+      "remember": "ministral",
+      "compile": "mistral-small"
+    }
+  }
+}

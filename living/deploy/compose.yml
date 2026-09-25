@@ -1,0 +1,40 @@
+# Living core development services. Only Docker and Rust are needed on the host.
+#   just living-up        start both services
+#   just living-reset     build the module and publish a fresh world
+services:
+  spacetimedb:
+    image: docker.io/clockworklabs/spacetime:v2.10.1
+    command: [start, --listen-addr, "0.0.0.0:3000"]
+    user: spacetime
+    ports:
+      - "${LIVING_STDB_BIND:-127.0.0.1}:${LIVING_STDB_PORT:-3300}:3000"
+    volumes:
+      # Server data and the in-container CLI identity (the world's admin).
+      - living-stdb:/home/spacetime
+      # Built module for `spacetime publish` inside the container.
+      - ../target/wasm32-unknown-unknown/release:/wasm:ro
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --max-time, "2", "http://127.0.0.1:3000/v1/ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  # Personal knowledge graphs for the minds (separate from the concept-graph prototype).
+  neo4j:
+    image: neo4j:2026.09.0
+    environment:
+      NEO4J_AUTH: neo4j/${LIVING_NEO4J_PASSWORD:?Set LIVING_NEO4J_PASSWORD}
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 512M
+    ports:
+      - "127.0.0.1:7476:7474"
+      - "127.0.0.1:7689:7687"
+    volumes:
+      - living-neo4j:/data
+    restart: unless-stopped
+
+volumes:
+  living-stdb:
+  living-neo4j:

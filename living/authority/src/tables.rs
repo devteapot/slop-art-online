@@ -1,0 +1,508 @@
+//! Typed tables grouped by access pattern. Hot rows (body, vitals, activity, mind_state)
+//! are small and written only when their state changes; cold rows (character, brain,
+//! persona) change rarely. Percepts and deliberations are private and delivered to
+//! their controller through per-sender views.
+
+use spacetimedb::{Identity, ScheduleAt, SpacetimeType};
+
+#[spacetimedb::table(accessor = world, public)]
+pub struct World {
+    #[primary_key]
+    pub id: u8,
+    pub run: String,
+    pub seed: u64,
+    pub epoch_ms: u64,
+    pub day_ms: u64,
+    /// Publisher; also the default mind controller for AI characters.
+    pub admin: Identity,
+    pub paused: bool,
+}
+
+/// Private tick bookkeeping (not broadcast).
+#[spacetimedb::table(accessor = clock)]
+pub struct Clock {
+    #[primary_key]
+    pub id: u8,
+    pub tick: u64,
+    pub last_ms: u64,
+    pub last_hour: u8,
+    pub scripts_rev: u32,
+    pub max_gap_ms: u32,
+    pub evals: u64,
+    pub motions: u64,
+    pub completions: u64,
+    pub percepts: u64,
+    pub deliberations: u64,
+    /// When set, every tick logs its duration (LogStopwatch) for benchmarking.
+    #[default(false)]
+    pub profile: bool,
+}
+
+#[spacetimedb::table(accessor = script, public)]
+pub struct Script {
+    #[primary_key]
+    pub name: String,
+    pub source: String,
+    pub revision: u32,
+    pub updated_ms: u64,
+}
+
+#[spacetimedb::table(accessor = terrain_chunk, public)]
+pub struct TerrainChunk {
+    #[primary_key]
+    pub id: u32,
+    pub tiles: Vec<u8>,
+}
+
+#[spacetimedb::table(accessor = character, public)]
+pub struct Character {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u32,
+    pub name: String,
+    /// `person`, `deer`, `wolf`.
+    #[index(btree)]
+    pub kind: String,
+    #[index(btree)]
+    pub controller: Identity,
+    /// Driven by an LLM mind (deliberations and percepts are produced).
+    pub ai: bool,
+    pub alive: bool,
+    pub born_ms: u64,
+    pub died_ms: u64,
+    pub cause: String,
+    pub home_x: f32,
+    pub home_y: f32,
+    /// Age in days at `born_ms` (seed adults start grown; newborns at 0).
+    #[default(18.0)]
+    pub birth_age_days: f32,
+    #[default(0u32)]
+    pub parent_a: u32,
+    #[default(0u32)]
+    pub parent_b: u32,
+}
+
+#[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]
+pub struct Waypoint {
+    pub x: f32,
+    pub y: f32,
+}
+
+/// Kinematic body: position `(x, y)` at `t_ms`, moving at `(vx, vy)` tiles/s until
+/// `next_ms` (next waypoint or chunk crossing). Clients extrapolate between writes.
+#[spacetimedb::table(accessor = body, public)]
+pub struct Body {
+    #[primary_key]
+    pub id: u32,
+    /// Denormalized creature kind for spatial queries.
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    pub t_ms: u64,
+    pub vx: f32,
+    pub vy: f32,
+    pub path: Vec<Waypoint>,
+    pub speed: f32,
+    #[index(btree)]
+    pub chunk: u32,
+    #[index(btree)]
+    pub next_ms: u64,
+}
+
+/// Needs anchored at `at_ms` with per-minute rates.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = vitals, public)]
+pub struct Vitals {
+    #[primary_key]
+    pub id: u32,
+    pub hp: f32,
+    pub max_hp: f32,
+    pub hunger: f32,
+    pub energy: f32,
+    pub at_ms: u64,
+    pub hp_rate: f32,
+    pub hunger_rate: f32,
+    pub energy_rate: f32,
+    pub rate_key: u32,
+    pub hurt_ms: u64,
+    pub hurt_by: u32,
+}
+
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct TargetRef {
+    /// 0 none, 1 resource, 2 structure, 3 creature, 4 point.
+    pub class: u8,
+    pub id: u64,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = activity, public)]
+pub struct Activity {
+    #[primary_key]
+    pub id: u32,
+    pub skill: String,
+    /// 0 approaching the target, 1 performing.
+    pub phase: u8,
+    /// Behavior node that owns this activity (u16::MAX when orphaned by a new graph).
+    pub node: u16,
+    pub revision: u32,
+    pub target: TargetRef,
+    pub item: String,
+    pub qty: u32,
+    pub started_ms: u64,
+    #[index(btree)]
+    pub ends_ms: u64,
+    pub label: String,
+}
+
+/// Items held by a creature (`owner = id`) or a structure (`owner = STRUCTURE_BIT | id`).
+#[spacetimedb::table(accessor = inventory, public,
+    index(accessor = by_owner_item, btree(columns = [owner, item])))]
+pub struct Inventory {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub owner: u64,
+    pub item: String,
+    pub qty: u32,
+}
+
+pub const STRUCTURE_BIT: u64 = 1 << 40;
+
+#[spacetimedb::table(accessor = resource_node, public)]
+pub struct ResourceNode {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    #[index(btree)]
+    pub chunk: u32,
+    /// Amount at `at_ms`; regrows at `regen` per minute up to `max`.
+    pub amount: f32,
+    pub max: f32,
+    pub regen: f32,
+    pub at_ms: u64,
+}
+
+#[spacetimedb::table(accessor = structure, public)]
+pub struct Structure {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    #[index(btree)]
+    pub chunk: u32,
+    pub owner: u32,
+    pub built_ms: u64,
+}
+
+/// Installed behavior graph (cold).
+#[spacetimedb::table(accessor = brain, public)]
+pub struct Brain {
+    #[primary_key]
+    pub id: u32,
+    pub graph: String,
+    pub revision: u32,
+    pub plan: String,
+    /// `instinct`, `mind` or `human`.
+    pub source: String,
+    pub installed_ms: u64,
+}
+
+#[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]
+pub struct Cursor {
+    pub node: u16,
+    pub idx: u16,
+}
+
+#[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]
+pub struct Mark {
+    pub node: u16,
+    pub at_ms: u64,
+}
+
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct LeafResult {
+    pub node: u16,
+    pub revision: u32,
+    pub ok: bool,
+    pub why: String,
+}
+
+#[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]
+pub struct Seen {
+    pub id: u32,
+    pub at_ms: u64,
+}
+
+/// Behavior runtime state (warm). Evaluated in slot `id % 60` every second.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = mind_state, public)]
+pub struct MindState {
+    #[primary_key]
+    pub id: u32,
+    #[index(btree)]
+    pub slot: u8,
+    pub revision: u32,
+    pub cursors: Vec<Cursor>,
+    pub marks: Vec<Mark>,
+    pub last: Option<LeafResult>,
+    /// Preorder ids of the currently running branch.
+    pub active: Vec<u16>,
+    pub status: String,
+    pub fails: u16,
+    pub heard_ms: u64,
+    pub speaker: u32,
+    pub spoke_ms: u64,
+    pub deliberated_ms: u64,
+    pub seen: Vec<Seen>,
+    pub alerts: u32,
+}
+
+/// Immediate re-evaluation requests (consumed by the next tick).
+#[spacetimedb::table(accessor = wake)]
+pub struct Wake {
+    #[primary_key]
+    pub id: u32,
+}
+
+/// What reached a character's senses (sights, speech, what happened to them, their own
+/// results). Game state, not knowledge: written only by the authority, never edited, kept
+/// in a bounded per-character window. Minds read it and record how far they consolidated.
+#[spacetimedb::table(accessor = experience, public)]
+pub struct Experience {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    #[index(btree)]
+    pub controller: Identity,
+    pub at_ms: u64,
+    pub kind: String,
+    pub subject: u32,
+    pub object: u32,
+    pub x: f32,
+    pub y: f32,
+    pub text: String,
+    pub salience: f32,
+}
+
+/// Bodily familiarity: regions, creatures and structures a character has encountered.
+/// Recognition, not knowledge: it decides what is new enough to become an experience.
+/// `thing` = FAM_REGION | chunk, FAM_CREATURE | id, or FAM_STRUCTURE | id. Bounded per actor.
+#[derive(Clone, Debug)]
+#[spacetimedb::table(accessor = familiar,
+    index(accessor = by_actor_thing, btree(columns = [actor, thing])))]
+pub struct Familiar {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub thing: u64,
+    pub first_ms: u64,
+    pub last_ms: u64,
+    pub times: u32,
+}
+
+pub const FAM_REGION: u64 = 1 << 40;
+pub const FAM_CREATURE: u64 = 2 << 40;
+pub const FAM_STRUCTURE: u64 = 3 << 40;
+
+/// How far a character's mind has integrated its experiences (ids <= `upto`).
+#[spacetimedb::table(accessor = mind_cursor, public)]
+pub struct MindCursor {
+    #[primary_key]
+    pub actor: u32,
+    pub upto: u64,
+    pub updated_ms: u64,
+}
+
+/// A pending request for the mind to reconsider, with a perceived scene snapshot (JSON).
+#[spacetimedb::table(accessor = deliberation)]
+pub struct Deliberation {
+    #[primary_key]
+    pub actor: u32,
+    #[index(btree)]
+    pub controller: Identity,
+    pub reason: String,
+    pub requested_ms: u64,
+    /// Last time a reason was added (a mind clears only what it has seen).
+    pub updated_ms: u64,
+    pub scene: String,
+    pub revision: u32,
+}
+
+// ---- mind projections (observer and behavior inputs) ----------------------
+
+#[spacetimedb::table(accessor = persona, public)]
+pub struct Persona {
+    #[primary_key]
+    pub id: u32,
+    pub narrative: String,
+    pub values: Vec<String>,
+    pub goals: Vec<String>,
+    /// JSON object of trait → 0..100.
+    pub traits: String,
+    pub mood: String,
+    pub version: u32,
+    pub updated_ms: u64,
+}
+
+#[spacetimedb::table(accessor = relation, public,
+    index(accessor = by_pair, btree(columns = [actor, other])))]
+pub struct Relation {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub other: u32,
+    pub trust: f32,
+    pub affinity: f32,
+    pub label: String,
+    pub note: String,
+    pub updated_ms: u64,
+}
+
+#[spacetimedb::table(accessor = belief, public)]
+pub struct Belief {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub about: String,
+    pub text: String,
+    pub confidence: f32,
+    pub updated_ms: u64,
+}
+
+#[spacetimedb::table(accessor = judgment, public)]
+pub struct Judgment {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub key: String,
+    pub value: f32,
+    pub why: String,
+    pub updated_ms: u64,
+}
+
+#[spacetimedb::table(accessor = place, public)]
+pub struct Place {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[spacetimedb::table(accessor = thought, public)]
+pub struct Thought {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub at_ms: u64,
+    /// `deliberate`, `consolidate`, `error`.
+    pub kind: String,
+    pub summary: String,
+    pub detail: String,
+    pub latency_ms: u32,
+    pub tokens: u32,
+    pub model: String,
+    /// The mind's id for this reasoning episode; knowledge it produced points back to it.
+    pub reference: String,
+}
+
+#[spacetimedb::table(accessor = chronicle, public)]
+pub struct Chronicle {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub at_ms: u64,
+    pub kind: String,
+    pub a: u32,
+    pub b: u32,
+    pub x: f32,
+    pub y: f32,
+    pub text: String,
+}
+
+/// Rolling counters for load measurement (one row, updated by housekeeping).
+#[spacetimedb::table(accessor = stats, public)]
+pub struct Stats {
+    #[primary_key]
+    pub id: u8,
+    pub at_ms: u64,
+    pub ticks: u64,
+    pub evals: u64,
+    pub motions: u64,
+    pub completions: u64,
+    pub percepts: u64,
+    pub deliberations: u64,
+    pub alive_people: u32,
+    pub alive_animals: u32,
+    pub births: u32,
+    pub deaths: u32,
+    /// Largest observed gap between consecutive ticks in the last window (ms).
+    pub max_tick_gap_ms: u32,
+}
+
+/// A standing wish to start a family with someone (expires after two minutes).
+#[spacetimedb::table(accessor = bond_offer, public)]
+pub struct BondOffer {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub from: u32,
+    pub to: u32,
+    pub at_ms: u64,
+}
+
+/// A couple expecting a child, born at `due_ms`.
+#[spacetimedb::table(accessor = expecting, public)]
+pub struct Expecting {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub a: u32,
+    pub b: u32,
+    #[index(btree)]
+    pub due_ms: u64,
+}
+
+// ---- schedules ---------------------------------------------------------------
+
+#[spacetimedb::table(accessor = tick_timer, scheduled(crate::tick::tick))]
+pub struct TickTimer {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+}
+
+#[spacetimedb::table(accessor = slow_timer, scheduled(crate::tick::housekeeping))]
+pub struct SlowTimer {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+}

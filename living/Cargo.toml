@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = ["rules", "authority", "bindings", "mind", "viewer"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rhai = { version = "=1.26.0", default-features = false, features = ["std", "no_time"] }
+spacetimedb = "=2.10.1"
+spacetimedb-sdk = "=2.10.1"
+
+[profile.release]
+opt-level = 3
+
+# Fast-to-build browser profile for the viewer (`just living-web`).
+[profile.wasm-dev]
+inherits = "dev"
+opt-level = 1
+debug = 0
+
+[profile.wasm-dev.package."*"]
+opt-level = 2

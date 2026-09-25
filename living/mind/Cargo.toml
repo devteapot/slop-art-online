@@ -1,0 +1,18 @@
+[package]
+name = "living-mind"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+log = "0.4"
+env_logger = "0.11"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+neo4rs = { version = "0.8", features = ["json"] }
+toml = "0.8"
+spacetimedb-sdk = { workspace = true }
+living-bindings = { path = "../bindings" }
+living-rules = { path = "../rules", default-features = false }
