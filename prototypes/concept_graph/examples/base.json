@@ -1,0 +1,21 @@
+{
+  "run": "concept-pilot-3",
+  "actor": 1,
+  "concepts": [
+    {"id": "concept:entity", "kind": "category", "label": "entity"},
+    {"id": "concept:place", "kind": "category", "label": "place"},
+    {"id": "concept:person", "kind": "category", "label": "person"},
+    {"id": "place:thicket", "kind": "place", "label": "the thicket"},
+    {"id": "person:mira", "kind": "person", "label": "Mira"},
+    {"id": "person:renn", "kind": "person", "label": "Renn"},
+    {"id": "person:tovan", "kind": "person", "label": "Tovan"}
+  ],
+  "links": [
+    {"subject": "concept:place", "relation": "is_a", "object": "concept:entity", "source": "seed:mira"},
+    {"subject": "concept:person", "relation": "is_a", "object": "concept:entity", "source": "seed:mira"},
+    {"subject": "place:thicket", "relation": "instance_of", "object": "concept:place", "source": "seed:mira"},
+    {"subject": "person:mira", "relation": "instance_of", "object": "concept:person", "source": "seed:mira"},
+    {"subject": "person:renn", "relation": "instance_of", "object": "concept:person", "source": "seed:mira"},
+    {"subject": "person:tovan", "relation": "instance_of", "object": "concept:person", "source": "seed:mira"}
+  ]
+}

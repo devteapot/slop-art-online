@@ -1,0 +1,18 @@
+{
+  "run": "concept-pilot-3",
+  "actor": 2,
+  "claims": [
+    {
+      "id": "thicket-safe-personal",
+      "subject": {"id": "place:thicket", "kind": "route", "label": "the eastern trail"},
+      "relation": "safe_for",
+      "object": {"id": "person:tovan", "kind": "person", "label": "Tovan"},
+      "confidence": 80,
+      "polarity": "positive",
+      "note": "Tovan visited at a different time and had no trouble.",
+      "evidence": [
+        {"id": "percept:201", "kind": "personal_visit", "summary": "Tovan crossed the thicket without injury."}
+      ]
+    }
+  ]
+}

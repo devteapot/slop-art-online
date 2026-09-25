@@ -1,0 +1,25 @@
+{
+  "run": "mind-pilot-1",
+  "actor": 1,
+  "events": [
+    {"seq": 46, "op": "concept", "id": "rel:wears", "label": "wears"},
+    {"seq": 47, "op": "concept", "id": "c:mask", "label": "a mask"},
+    {"seq": 48, "op": "concept", "id": "c:tovan", "label": "Tovan"},
+    {"seq": 49, "op": "evidence", "id": "percept:131", "kind": "heard_speech", "tick": 90,
+     "involves": {"speaker": "c:tovan"},
+     "summary": "Tovan told me Renn wears a mask when he hunts in the thicket."},
+    {"seq": 50, "op": "claim", "id": "k:renn-wears-mask", "predicate": "rel:wears",
+     "roles": {"wearer": "c:renn", "thing": "c:mask", "place": "c:thicket"}},
+    {"seq": 51, "op": "claim", "id": "k:tovan-said-mask", "predicate": "core:asserted",
+     "roles": {"speaker": "c:tovan", "content": "k:renn-wears-mask", "audience": "core:self"}},
+    {"seq": 52, "op": "claim", "id": "k:masked-is-renn", "predicate": "core:same_as",
+     "roles": {"a": "c:masked", "b": "c:renn"}},
+    {"seq": 53, "op": "stance", "id": "s:13", "claim": "k:tovan-said-mask", "credence": 90, "tick": 90,
+     "cites": [{"ref": "percept:131", "bearing": "supports"}]},
+    {"seq": 54, "op": "stance", "id": "s:14", "claim": "k:renn-wears-mask", "credence": 60, "tick": 90,
+     "cites": [{"ref": "k:tovan-said-mask", "bearing": "supports"}]},
+    {"seq": 55, "op": "stance", "id": "s:15", "claim": "k:masked-is-renn", "credence": 65, "tick": 90,
+     "cites": [{"ref": "k:renn-wears-mask", "bearing": "supports"}, {"ref": "percept:105", "bearing": "supports"}],
+     "note": "Renn sent me into the thicket, and a masked figure was waiting there."}
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "run": "concept-pilot-3",
+  "actor": 2,
+  "concepts": [
+    {"id": "concept:route", "kind": "category", "label": "route"},
+    {"id": "concept:person", "kind": "category", "label": "person"},
+    {"id": "place:thicket", "kind": "route", "label": "the eastern trail"},
+    {"id": "person:tovan", "kind": "person", "label": "Tovan"}
+  ],
+  "links": [
+    {"subject": "place:thicket", "relation": "instance_of", "object": "concept:route", "source": "seed:tovan"},
+    {"subject": "person:tovan", "relation": "instance_of", "object": "concept:person", "source": "seed:tovan"}
+  ]
+}

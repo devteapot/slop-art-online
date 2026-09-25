@@ -1,0 +1,67 @@
+{
+  "run": "concept-pilot-3",
+  "actor": 1,
+  "claims": [
+    {
+      "id": "thicket-safe-heard",
+      "subject": {"id": "place:thicket", "kind": "place", "label": "the thicket"},
+      "relation": "safe_for",
+      "object": {"id": "person:mira", "kind": "person", "label": "Mira"},
+      "confidence": 55,
+      "polarity": "positive",
+      "note": "Renn said the thicket was safe in daylight; Mira provisionally accepted it.",
+      "evidence": [
+        {"id": "percept:101", "kind": "heard_speech", "summary": "Mira heard Renn claim the thicket was safe in daylight."}
+      ]
+    },
+    {
+      "id": "thicket-unsafe-after-injury",
+      "subject": {"id": "place:thicket", "kind": "place", "label": "the thicket"},
+      "relation": "safe_for",
+      "object": {"id": "person:mira", "kind": "person", "label": "Mira"},
+      "confidence": 92,
+      "polarity": "negative",
+      "note": "Mira was hurt there and revised her earlier belief.",
+      "evidence": [
+        {"id": "percept:102", "kind": "personal_injury", "summary": "Mira experienced an injury in the thicket."}
+      ],
+      "supersedes": "thicket-safe-heard"
+    },
+    {
+      "id": "thicket-guided-by-renn",
+      "subject": {"id": "place:thicket", "kind": "place", "label": "the thicket"},
+      "relation": "guided_by",
+      "object": {"id": "person:renn", "kind": "person", "label": "Renn"},
+      "confidence": 75,
+      "polarity": "positive",
+      "note": "Mira believes Renn guides people through this place.",
+      "evidence": [
+        {"id": "percept:104", "kind": "heard_speech", "summary": "Mira heard Renn offer to guide travelers through the thicket."}
+      ]
+    },
+    {
+      "id": "renn-owes-food",
+      "subject": {"id": "person:renn", "kind": "person", "label": "Renn"},
+      "relation": "owes_food_to",
+      "object": {"id": "person:mira", "kind": "person", "label": "Mira"},
+      "confidence": 65,
+      "polarity": "positive",
+      "note": "Mira interpreted Renn's promise as an obligation, not a completed transfer.",
+      "evidence": [
+        {"id": "percept:103", "kind": "heard_speech", "summary": "Mira heard Renn promise her a meal."}
+      ]
+    },
+    {
+      "id": "masked-stranger-threatens-mira",
+      "subject": {"id": "person:masked-stranger", "kind": "unresolved_person", "label": "the masked stranger"},
+      "relation": "threatens",
+      "object": {"id": "person:mira", "kind": "person", "label": "Mira"},
+      "confidence": 45,
+      "polarity": "uncertain",
+      "note": "Mira cannot yet identify the person she thought she saw.",
+      "evidence": [
+        {"id": "percept:105", "kind": "uncertain_sighting", "summary": "Mira glimpsed an unidentified figure near the thicket."}
+      ]
+    }
+  ]
+}

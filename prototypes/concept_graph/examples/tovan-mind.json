@@ -1,0 +1,22 @@
+{
+  "run": "mind-pilot-1",
+  "actor": 2,
+  "events": [
+    {"seq": 1, "op": "concept", "id": "core:self", "label": "Tovan (me)"},
+    {"seq": 2, "op": "concept", "id": "core:instance_of", "label": "is a kind of"},
+    {"seq": 3, "op": "concept", "id": "c:route", "label": "route"},
+    {"seq": 4, "op": "concept", "id": "rel:safe_for", "label": "is safe for"},
+    {"seq": 5, "op": "concept", "id": "c:thicket", "label": "the eastern trail"},
+    {"seq": 6, "op": "concept", "id": "c:dusk", "label": "dusk"},
+    {"seq": 7, "op": "evidence", "id": "percept:201", "kind": "personal_visit", "tick": 60,
+     "involves": {"place": "c:thicket"}, "summary": "I walked the eastern trail at dusk without trouble."},
+    {"seq": 8, "op": "claim", "id": "k:trail-is-route", "predicate": "core:instance_of",
+     "roles": {"instance": "c:thicket", "category": "c:route"}},
+    {"seq": 9, "op": "claim", "id": "k:trail-safe", "predicate": "rel:safe_for",
+     "roles": {"place": "c:thicket", "for": "core:self", "condition": "c:dusk"}},
+    {"seq": 10, "op": "stance", "id": "s:1", "claim": "k:trail-is-route", "credence": 90, "tick": 60,
+     "cites": [{"ref": "percept:201", "bearing": "supports"}]},
+    {"seq": 11, "op": "stance", "id": "s:2", "claim": "k:trail-safe", "credence": 80, "tick": 60,
+     "cites": [{"ref": "percept:201", "bearing": "supports"}]}
+  ]
+}

@@ -1,0 +1,13 @@
+services:
+  neo4j:
+    image: neo4j:2026.09.0
+    environment:
+      NEO4J_AUTH: neo4j/${CONCEPT_GRAPH_NEO4J_PASSWORD:?Set CONCEPT_GRAPH_NEO4J_PASSWORD}
+    ports:
+      - "127.0.0.1:7475:7474"
+      - "127.0.0.1:7688:7687"
+    volumes:
+      - concept-graph-neo4j:/data
+
+volumes:
+  concept-graph-neo4j:
