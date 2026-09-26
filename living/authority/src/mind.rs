@@ -197,6 +197,9 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
 }
 
 /// Answer without changing behavior: speak, log the thought, clear what was considered.
+/// A conversation turn (`thought.kind == "talk"`) is not a deliberation: it leaves pending
+/// deliberation reasons and the deliberation clock alone, so talking never displaces or
+/// postpones thinking about what to do.
 #[spacetimedb::reducer]
 pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
     let c = authorize(ctx, actor)?;
@@ -204,10 +207,12 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen
         return Err("character is dead".into());
     }
     let now = common::now_ms(ctx);
-    clear_deliberation(ctx, actor, seen_ms, true);
-    if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
-        st.deliberated_ms = now;
-        ctx.db.mind_state().id().update(st);
+    if thought.kind != "talk" {
+        clear_deliberation(ctx, actor, seen_ms, true);
+        if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
+            st.deliberated_ms = now;
+            ctx.db.mind_state().id().update(st);
+        }
     }
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {

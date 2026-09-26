@@ -125,41 +125,20 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) 
         if now.saturating_sub(st.spoke_ms) < 2_000 {
             return Err("speaking too fast".into());
         }
-        // Saying essentially the same thing again within 90 s is not new speech.
-        let words = |t: &str| -> std::collections::HashSet<String> {
-            t.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| w.len() > 2).map(String::from).collect()
-        };
-        let mine = words(&text);
-        let recent = ctx.db.chronicle().at_ms().filter(now.saturating_sub(90_000)..).filter(|c| c.kind == "speech" && c.a == speaker);
-        for c in recent {
-            let said = c.text.split_once('“').map(|(_, t)| t.trim_end_matches('”')).unwrap_or(&c.text);
-            let theirs = words(said);
-            let common = mine.intersection(&theirs).count() as f32;
-            let union = mine.union(&theirs).count().max(1) as f32;
-            if common / union >= 0.6 {
-                return Ok(());
-            }
-        }
-        let mut h: u32 = 2166136261;
-        for b in text.to_lowercase().bytes() {
-            h = (h ^ b as u32).wrapping_mul(16777619);
-        }
-        let key = 0xD000 + (h % 0x1000) as u16;
-        if st.marks.iter().any(|m| m.node == key && now.saturating_sub(m.at_ms) < 90_000) {
-            return Ok(());
-        }
-        st.marks.retain(|m| m.node != key);
-        st.marks.push(Mark { node: key, at_ms: now });
-        if st.marks.len() > 24 {
-            st.marks.remove(0);
-        }
         st.spoke_ms = now;
         ctx.db.mind_state().id().update(st);
     }
+    // Saying nearly the same thing again is still spoken and heard; the speaker notices it
+    // (feedback, not suppression).
+    let echo = said_recently(ctx, speaker, &text, now);
     let at = pos(&b, now);
     let to_name = if to != 0 { common::name_of(ctx, to) } else { String::new() };
     let line = if to != 0 { format!("{} to {}: “{}”", me.name, to_name, text) } else { format!("{}: “{}”", me.name, text) };
     common::chronicle(ctx, now, "speech", speaker, to, at, line);
+    if let Some((ago_s, said)) = echo {
+        let when = if ago_s < 5 { "just now".to_string() } else { format!("{ago_s} s ago") };
+        percept(ctx, &me, now, "repeat", speaker, to, at, format!("You said almost the same thing {when}: “{said}”."), 0.3);
+    }
     // Animals hear a voice, not words.
     for (c, _) in minds_near(ctx, at, common::laws(ctx).hearing, now, &[speaker]).into_iter().filter(|(c, _)| &*c.kind != "person") {
         let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
@@ -181,20 +160,42 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) 
         } else {
             format!("{} said: “{}”", me.name, text)
         };
-        percept(ctx, &c, now, "speech", speaker, to, at, heard.clone(), if addressed { 0.9 } else { 0.45 });
+        percept(ctx, &c, now, "speech", speaker, to, at, heard, if addressed { 0.9 } else { 0.45 });
         if let Some(mut st) = ctx.db.mind_state().id().find(c.id) {
             st.heard_ms = now;
             st.speaker = speaker;
             ctx.db.mind_state().id().update(st);
         }
-        // Only a question invites an immediate reply (and not right after deciding);
-        // other remarks are heard and weighed at the listener's next decision.
-        let recently_decided = ctx.db.mind_state().id().find(c.id).map_or(false, |s| now.saturating_sub(s.deliberated_ms) < 15_000);
-        if addressed && c.ai && text.contains('?') && !recently_decided {
-            request_deliberation(ctx, c.id, &heard, now);
-        }
+        // Whether and how to answer is the listener's mind's affair: its service sees this
+        // experience and gives the listener a conversation turn. Speech no longer requests a
+        // full deliberation.
     }
     Ok(())
+}
+
+/// The most similar line this speaker said within the last 90 s, when nearly the same
+/// (word-set Jaccard >= 0.6): seconds ago and the words.
+fn said_recently(ctx: &ReducerContext, speaker: u32, text: &str, now: u64) -> Option<(u64, String)> {
+    let words = |t: &str| -> std::collections::HashSet<String> {
+        t.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| w.len() > 2).map(String::from).collect()
+    };
+    let mine = words(text);
+    let mut latest: Option<(u64, String)> = None;
+    for c in ctx.db.chronicle().at_ms().filter(now.saturating_sub(90_000)..).filter(|c| c.kind == "speech" && c.a == speaker) {
+        // Chronicle rows count exact repeats as "… (×n)".
+        let base = c.text.rsplit_once(" (×").map_or(c.text.as_str(), |(b, _)| b);
+        let said = base.split_once('“').map(|(_, t)| t.trim_end_matches('”')).unwrap_or(base);
+        let theirs = words(said);
+        let same = if mine.is_empty() || theirs.is_empty() {
+            said.trim().eq_ignore_ascii_case(text.trim())
+        } else {
+            mine.intersection(&theirs).count() as f32 / mine.union(&theirs).count() as f32 >= 0.6
+        };
+        if same && latest.as_ref().map_or(true, |l| c.at_ms >= l.0) {
+            latest = Some((c.at_ms, said.to_string()));
+        }
+    }
+    latest.map(|(at, said)| (now.saturating_sub(at) / 1000, said))
 }
 
 fn mentions(text: &str, name: &str) -> bool {
@@ -213,7 +214,7 @@ pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u6
     if let Some(sp) = common::species(&c.kind) {
         let min = sp.cognition.think_min_s * 1000;
         let recent = ctx.db.mind_state().id().find(id).map_or(false, |s| now.saturating_sub(s.deliberated_ms) < min);
-        let urgent = reason.contains("attacking you") || reason.starts_with("The fight with") || reason.starts_with("Dawn of day") || reason.contains("said to you");
+        let urgent = reason.contains("attacking you") || reason.starts_with("The fight with") || reason.starts_with("Dawn of day");
         if min > 0 && recent && !urgent && ctx.db.deliberation().actor().find(id).is_none() {
             return;
         }
