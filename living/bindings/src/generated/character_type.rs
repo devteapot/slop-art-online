@@ -79,6 +79,8 @@ pub struct CharacterIxCols {
     pub controller: __sdk::__query_builder::IxCol<Character, __sdk::Identity>,
     pub id: __sdk::__query_builder::IxCol<Character, u32>,
     pub kind: __sdk::__query_builder::IxCol<Character, String>,
+    pub parent_a: __sdk::__query_builder::IxCol<Character, u32>,
+    pub parent_b: __sdk::__query_builder::IxCol<Character, u32>,
 }
 
 impl __sdk::__query_builder::HasIxCols for Character {
@@ -88,6 +90,8 @@ impl __sdk::__query_builder::HasIxCols for Character {
             controller: __sdk::__query_builder::IxCol::new(table_name, "controller"),
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
             kind: __sdk::__query_builder::IxCol::new(table_name, "kind"),
+            parent_a: __sdk::__query_builder::IxCol::new(table_name, "parent_a"),
+            parent_b: __sdk::__query_builder::IxCol::new(table_name, "parent_b"),
         }
     }
 }

@@ -272,6 +272,8 @@ pub enum Target {
     Parent,
     /// Whoever has just offered to start a family with me, when in sight.
     Suitor,
+    /// The other parent of my youngest child, when in sight.
+    Partner,
     Nearest(Filter),
     /// A perceived character by name.
     Named(String),
@@ -640,6 +642,7 @@ pub fn describe_target(t: &Target) -> String {
         Target::Wander => "somewhere nearby".into(),
         Target::Parent => "parent".into(),
         Target::Suitor => "suitor".into(),
+        Target::Partner => "partner".into(),
         Target::Nearest(f) => {
             let mut s = format!("nearest {}", f.kind);
             if let Some(r) = &f.relation {

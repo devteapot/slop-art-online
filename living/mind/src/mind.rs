@@ -180,8 +180,15 @@ impl Minds {
     /// "current plan" routine and the top level weighs it among the character's desires.
     /// Replies without one (or with a new top level of their own) pass through unchanged.
     fn plan_into_desires(&self, actor: u32, mut v: Value) -> Option<Value> {
-        let intent = v.get("intent").filter(|i| i.is_object())?.clone();
-        let own_top = v["graph"].is_object();
+        // A top level replaces the character's ways only when it says so ("restructure");
+        // otherwise a graph is what it means to do now, weighed like an intent.
+        let restructure = v["restructure"].as_bool() == Some(true);
+        let intent = match v.get("intent").filter(|i| i.is_object()) {
+            Some(i) => i.clone(),
+            None if v["graph"].is_object() && !restructure => json!({"weight": v.get("weight").cloned().unwrap_or(json!(0.6)), "graph": v["graph"].clone()}),
+            None => return None,
+        };
+        let own_top = v["graph"].is_object() && restructure;
         let weight = match &intent["weight"] {
             Value::Number(n) => living_rules::graph::Weight { base: n.as_f64().unwrap_or(0.6) as f32, ..Default::default() },
             w @ Value::Object(_) => serde_json::from_value(w.clone()).unwrap_or(living_rules::graph::Weight { base: 0.6, ..Default::default() }),

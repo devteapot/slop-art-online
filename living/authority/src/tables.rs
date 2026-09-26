@@ -151,8 +151,10 @@ pub struct Character {
     #[default(18.0)]
     pub birth_age_days: f32,
     #[default(0u32)]
+    #[index(btree)]
     pub parent_a: u32,
     #[default(0u32)]
+    #[index(btree)]
     pub parent_b: u32,
     /// Life stage, kept current by housekeeping: 0 infant, 1 child, 2 adult, 3 elder.
     #[default(2u8)]

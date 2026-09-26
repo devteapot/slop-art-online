@@ -460,6 +460,16 @@ impl<'a> Ev<'a> {
                 let offer = self.ctx.db.bond_offer().to().filter(self.me.id).filter(|o| now.saturating_sub(o.at_ms) <= window).max_by_key(|o| o.at_ms)?;
                 self.visible_creature(offer.from)
             }
+            Target::Partner => {
+                let me = self.me.id;
+                let db = &self.ctx.db;
+                let youngest = db.character().parent_a().filter(me).chain(db.character().parent_b().filter(me)).max_by_key(|c| c.born_ms)?;
+                let other = if youngest.parent_a == me { youngest.parent_b } else { youngest.parent_a };
+                if other == 0 {
+                    return None;
+                }
+                self.visible_creature(other)
+            }
             Target::Parent => {
                 let (a, b) = (self.me.parent_a, self.me.parent_b);
                 let pa = if a != 0 { self.visible_creature(a) } else { None };

@@ -281,6 +281,15 @@
         },
         {
           "if": {
+            "sees": "partner"
+          },
+          "then": {
+            "do": "conceive",
+            "target": "partner"
+          }
+        },
+        {
+          "if": {
             "sees": {
               "nearest": {
                 "kind": "person",

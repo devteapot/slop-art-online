@@ -61,3 +61,8 @@ Evidence, rule changes and decisions per stage, newest last.
   - **People.** The seed never told the family who is whose partner, child or parent, so every relation was a model-invented "family", and the people's starting ways had no family desire at all. Family history now seeds those relations, and people start with a "start a family" routine (answer a suitor, else approach one's partner) weighed as "a family"; like any habit it is theirs to change.
 
   Checks: mechanisms 10/10, rules tests 23. Labs restarted fresh.
+- 14:20 — Courtship works: wolves paired and bred in all three labs within 30 minutes (in the wolves lab they boomed to 41 against 8 deer; left to play out). The scarce lab had no flags. People still never conceived: the minds' memory had relabeled the seeded partners "friend" and "family", and some minds again sent whole top levels, so the family desire was gone.
+  - **Partner as a world fact.** Who had whose children is a world fact, not a belief, so the target `partner` is the other parent of my youngest child, in sight. It is resolved through new indexes on the parent columns (automatic migration: adding indexes is allowed). The family routine answers a suitor, then a partner, then anyone one calls partner.
+  - **Explicit restructuring.** Replacing one's whole top level is now explicit (`"restructure": true`); a graph without it is taken as the current intent and weighed among the desires, so a single thought no longer erases one's ways by accident.
+
+  Checks: mechanisms 10/10, rules tests 23, all builds. Labs restarted fresh.
