@@ -41,3 +41,19 @@ Why survival dominates (diagnosis): hunger itself is modest (5 points a minute, 
 ## Evidence to look for
 
 People spread out and move with purpose (no flickering; idle time measured); cities with walls and gates where someone decides who comes in; trips between cities and first contact within the first days; trade of regional goods; conversations that are about people, not logistics; bands that build toward a village; fights whose reports follow the fight; benchmarks within the performance contract; bounded model load.
+
+## Decided along the way (user, 2026-09-26)
+
+- **No injected behavior.** A character's graph is all its body does; it starts as the species' instincts and belongs to the character. Mistakes get feedback (sensations, failures, fight reports, noticing it keeps turning back), not silent correction; fighting is learned by fighting (the rules text keeps only fighting physics). The movement "commitment" and sticky distance tests planned in item 1 were built and then removed in favor of feedback. See [living core](LIVING_CORE.md#robustness-layers-found-necessary-in-live-runs).
+- **Models:** GPT-6 Luna and Mistral Small for people (Luna is also the default and the retry for unusable replies), Ministral and Mistral Small for animals; Mistral Medium dropped as too expensive; no call budget.
+
+## Progress (2026-09-26)
+
+Built: items 2, 4, 5 (first form), 6 (conversations; shared activities not yet), 7; item 3 as houses that keep households warm and walls that keep wolves out, with body habits removed rather than made silent.
+
+- **Cities** ([city.rs](../living/rules/src/city.rs)): a wall ring with a gate on each side where land continues, main streets through the gates, an inner ring road, side streets every 6 tiles, a paved market square with the hearth, stores and the elders' sign, a house per household along the streets, planted fields outside. Villages are an open crossroads with houses. Walls and roads are terrain (one chunk row changes when someone builds); a gate's open/shut state and keeping community live in their own `gate` table, and a shut gate blocks movement and pathfinding. People can build houses, walls, gates, lay road (faster walking) and open or shut their community's gates.
+- **Regional goods:** stone in the western hills, clay along rivers, wood in forests, fish on the coast; houses need wood, clay and stone, walls and roads need stone; axe and pick halve woodcutting and stone-breaking time; masonry, carpentry and toolmaking know-how, discoverable by experimenting.
+- **Conversations:** being addressed gives the listener a reply turn, a small fast call on its own model with its identity, feelings about the speaker, shared memories and the conversation so far; exchanges run up to 8 turns. Repeating yourself is spoken and fed back to the speaker, not dropped.
+- **Scale:** realm-2/realm-3 seed (512×512, four walled cities of 27, three villages, five bands; 149 people, 70 deer, 12 wolves): seeding under a second; 2,000 characters p99 5.3 ms, 200-fighter battle p99 5.7 ms, no tick over 16.7 ms.
+
+**realm-2, first 30 minutes (then re-seeded as realm-3 with the city layout above):** 134 of 149 people moving at a sample, 1 flickering, three exploring 48–54 tiles from home, a first contact between a band and a village. Speech changed character: people teased each other, made plans to teach one another ("you can show me the spear while I teach you what I know of planting"), argued about how records should "honor the maker", hummed songs, arranged walks. Model load: about 320 calls/min and 1.44M tokens/min (conversation turns 127/min but only 142k tokens; consolidation 99/min; deliberation 94/min), 3 errors in 10 minutes. Houses had been packed around each market inside walls far too large for the town, so the layout was changed and the world re-seeded as realm-3.
