@@ -13,6 +13,8 @@ use spacetimedb::rand::Rng;
 use spacetimedb::{ReducerContext, Table};
 
 pub const ORPHAN: u16 = u16::MAX;
+/// Node of a deliberate act (decided by a mind or a player, outside the graph; see `acts.rs`).
+pub const ACT: u16 = u16::MAX - 1;
 /// How long a `follow` walks alongside its target.
 const FOLLOW_MS: u64 = 12_000;
 
@@ -447,7 +449,7 @@ pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
 
 fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
     if let Some(mut st) = ctx.db.mind_state().id().find(a.id) {
-        if a.node != ORPHAN {
+        if a.node != ORPHAN && a.node != ACT {
             st.last = Some(LeafResult { node: a.node, revision: a.revision, ok, why: why.into() });
         }
         st.fails = if ok { 0 } else { st.fails.saturating_add(1) };
@@ -465,6 +467,13 @@ fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
             }
             ctx.db.mind_state().id().update(st);
         }
+    }
+    // A deliberate act always reports back how it went, and the next one waiting starts.
+    if a.node == ACT {
+        crate::acts::outcome(ctx, a, ok, why, now);
+        common::wake(ctx, a.id);
+        crate::acts::next(ctx, a.id, now);
+        return;
     }
     if let Some(c) = ctx.db.character().id().find(a.id).filter(|_| !repeat) {
         // Routine successes (gathering a berry, arriving somewhere) are not experiences worth
@@ -511,7 +520,7 @@ fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
     if ok {
         common::practise(ctx, a.id, &a.skill);
     }
-    if a.node != ORPHAN {
+    if a.node != ORPHAN && a.node != ACT {
         routine_outcome(ctx, &a, ok, why, now);
     }
     ctx.db.activity().id().delete(a.id);
@@ -1218,6 +1227,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.place().actor().delete(id);
     ctx.db.judgment().actor().delete(id);
     ctx.db.mind_cursor().actor().delete(id);
+    ctx.db.act_queue().actor().delete(id);
 }
 
 pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, now: u64) {

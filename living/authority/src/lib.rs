@@ -4,6 +4,7 @@
 //! `mind_*` reducers; they read only their characters' experiences and deliberations.
 
 mod act;
+mod acts;
 mod brain;
 mod mind;
 mod motion;
@@ -318,10 +319,19 @@ fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
 }
 
 /// Perform one action (behavior graph node JSON, e.g. `{"do":{"skill":"gather","target":{"nearest":"tree"}}}`).
+/// A single deliberate act (give, offer, conceive, teach...) runs through the same act path as
+/// a mind's decisions (see `acts.rs`), replacing whatever the player commanded before; any
+/// other node becomes the character's behavior.
 #[spacetimedb::reducer]
 pub fn human_act(ctx: &ReducerContext, node: String) -> Result<(), String> {
     let me = my_character(ctx)?;
     let g = living_rules::graph::parse(&node)?;
+    if let living_rules::graph::Node::Do(a) = &g.root {
+        if living_rules::acts::not_an_act(&a.skill).is_none() {
+            acts::submit(ctx, me.id, &[g.to_json()], "human", true, common::now_ms(ctx));
+            return Ok(());
+        }
+    }
     let json = format!(r#"{{"seq":[{},{{"wait":60}}]}}"#, g.to_json());
     mind::set_graph(ctx, me.id, &json, "your command", "human", common::now_ms(ctx)).map(|_| ())
 }

@@ -27,7 +27,7 @@ COMBAT: fights are fast. An attack winds up for about 0.6-0.75 s before it lands
 A blow lands only if you are still within reach (about 2 tiles; a wolf's leap about 3) when its windup ends: stepping back or running as it winds up makes it miss, \
 but whoever swings stands still meanwhile. People run 2.6 tiles/s, deer 3.2, wolves 3.4: you can outrun a person who keeps stopping to swing, not a wolf. \
 While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.
-COMMUNITIES: people can found a community ({\"do\": \"found\", \"text\": \"its name\"}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
+COMMUNITIES: people can found a community (the act {\"do\": \"found\", \"text\": \"its name\"}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
 TIME: beyond staying alive, how you spend your days is yours to decide, from who you are and what you want.
 OTHERS: people hear speech within ~9 tiles. You cannot read minds; what others say may be false. You only know what you perceived or were told.";
 
@@ -54,7 +54,7 @@ pub fn set_world(setting: &str, w: u32, h: u32, year_days: f32, pace: f32, life:
     let life_line = format!(
         "LIFE: a person lives about {} years (a year is {} days): a baby until about {}, a child until about {}, old from about {}. \
 Babies cannot walk far or feed themselves; they cry when hungry, cold or alone. Children are slow, cannot build, craft or fight, and depend on others. \
-Old people tire sooner and heal slower. Two adults who both choose `conceive` toward each other within two minutes, while fed and near a shelter, have a child about {} later.",
+Old people tire sooner and heal slower. Two adults who both choose to start a family (the act `conceive` toward each other) within two minutes, while fed and near a shelter, have a child about {} later.",
         life.years.round(),
         year_days.round(),
         years(life.infant),
@@ -81,8 +81,8 @@ pub fn grammar_with(skills: &str, speaks: bool) -> String {
     // example, like seeking the campfire when wolves are near, copies it).
     let (making, examples) = if speaks {
         (
-            " \\\nTrading: {\"do\": \"offer\", \"target\": {\"id\": 6}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3} then they may {\"do\": \"accept\", \"target\": {\"id\": 4}}. \
-Writing: {\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know, to teach readers\"}; teaching: {\"do\": \"teach\", \"target\": {\"id\": 6}, \"item\": \"spear\"}.",
+            " \\\nThe graph is your body's real-time behavior: moving, keeping close, fleeing, fighting, eating, sleeping, keeping warm and work loops. \
+Deliberate one-off interactions (starting a family, trading, giving, teaching, writing, reading, joining) are ACTS you decide in a reply (see ACTS), not graph branches.",
             "{\"if\": {\"believes\": \"wolves_near_home\", \"night\": true}, \"then\": {\"do\": \"goto\", \"target\": {\"nearest\": \"campfire\"}}} or \
 {\"if\": {\"sees\": {\"nearest\": {\"kind\": \"person\", \"relation\": \"enemy\"}}}, \"then\": {\"do\": \"flee\", \"target\": {\"nearest\": {\"kind\": \"person\", \"relation\": \"enemy\"}}}}",
         )
@@ -135,10 +135,24 @@ Every branch must lead to action: a guard whose then-branch can only wait blocks
     }
 }
 
+/// What people are told about deliberate acts (shared by deliberation and conversation).
+pub const ACTS: &str = "\
+ACTS: deliberate one-off interactions you decide on now. Each is carried out once, in order, right after you decide: \
+the body walks to the target, does it by the same rules as anything else (checks, time, effects), and you learn how it went (done, or why not). \
+While an act is under way your graph's work waits; only its reflexes (flee, dodge, block, attack, throw) break it off. \
+Forms: {\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happens when you both choose it toward each other within two minutes), \
+{\"do\": \"give\", \"target\": {\"id\": 4}, \"item\": \"berries\", \"qty\": 3}, \
+{\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}} (take a trade offered to you), \
+{\"do\": \"teach\", \"target\": {\"id\": 6}, \"item\": \"fire\"}, {\"do\": \"tend\", \"target\": {\"id\": 6}}, \
+{\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know\"}, {\"do\": \"read\"}, \
+{\"do\": \"join\"|\"welcome\", \"target\": {\"id\": 6}}, {\"do\": \"found\", \"text\": \"a name\"}, and any other single piece of work (build, craft, cook, store, take, plant). \
+Moving, following, fleeing, fighting, sleeping and resting are not acts: they are your graph. Words change nothing in the world by themselves: \
+if you agree to do something now, do it as an act.";
+
 pub fn deliberate_system(name: &str) -> String {
     format!(
         "You are the mind of {name}, a person living in a persistent simulated world. Stay in character: your personality, values, relationships and memories are yours, \
-and they may change through what you live. Decide what {name} intends now and express it as a behavior graph the body will follow, plus optional speech.\n\n{}\n\n{}\n\n\
+and they may change through what you live. Decide what {name} intends now and express it as a behavior graph the body will follow, deliberate acts to carry out now, and optional speech.\n\n{}\n\n{}\n\n{}\n\n\
 A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"below\": 12}}}}) let you do different things at different times. \
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, what you make of the other person, as well as \
 practical matters. Talk as the person you are, in your own voice; you may also stay silent, deflect or lie. Don't just echo what was \
@@ -147,6 +161,7 @@ Your top level and your routines are all your body does: they began as your habi
 nothing eats, sleeps or keeps you warm unless they do. Change what needs changing: a routine, the top level, or both. \
 Refer to people by the ids you see. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
 {{\"thought\": \"your private interpretation of the situation (1-3 sentences)\", \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
+\"acts\": [ACTS to carry out now, in order] (optional), \
 \"plan\": \"one-line intention\", \"intent\": {{\"weight\": 0.1-1.5, \"graph\": {{...what you mean to do...}}}} (becomes your routine \"current plan\", \
 weighed among your desires as \"the plan\": needs keep their own pull, e.g. strong hunger ≈ 1.0, so a plan of 0.6 yields to it and resumes after), \
 \"graph\": \"keep\", or a new top level {{...}} with \"restructure\": true only to change how you live (what you weigh and how; without it a graph counts as your intent), \
@@ -155,7 +170,8 @@ or instead of graph \"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}} to 
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances your graph can test with believes), \
 \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering, e.g. home, good berry patch)}}",
         world_rules(),
-        grammar()
+        grammar(),
+        ACTS
     )
 }
 
@@ -365,6 +381,10 @@ one of you declined, someone will think it over, or there is simply nothing more
 the conversation for now; don't restate what was already agreed or keep saying goodbye. You don't have to answer everything: \
 silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
 \"say\": \"your words\" or null, \"to\": id of who you speak to, \
+\"acts\": [] or deliberate acts you carry out now, e.g. {{\"do\": \"conceive\", \"target\": {{\"id\": {other_id}}}}} once you both want a child together, \
+{{\"do\": \"accept\", \"target\": {{\"id\": {other_id}}}}} to take a trade they offered, {{\"do\": \"give\", \"target\": {{\"id\": {other_id}}}, \"item\": \"berries\", \"qty\": 2}}, \
+{{\"do\": \"offer\", \"target\": {{\"id\": {other_id}}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}}, {{\"do\": \"teach\", \"target\": {{\"id\": {other_id}}}, \"item\": \"fire\"}} \
+(words change nothing in the world by themselves: what you agree to do now, do here; you will learn how it went), \
 \"settled\": null while the matter is still open, or what is now settled, in a few words (e.g. \"meet at the ford at dawn\", \"she will think about it\", \"I refused\", \"nothing more to say\"), \
 \"until\": null or when to take it up again (\"dawn\", \"morning\", \"noon\", \"evening\", \"night\", \"tomorrow\" or an hour 0-23), \
 \"end\": true if this is your last word for now}}"
@@ -385,6 +405,8 @@ pub struct TalkUser<'a> {
     pub scene: &'a str,
     pub conversation: &'a [String],
     pub heard: &'a str,
+    /// Standing proposals between the two, what one carries and knows (for acts).
+    pub between: &'a [String],
 }
 
 pub fn talk_user(t: &TalkUser) -> String {
@@ -408,7 +430,11 @@ pub fn talk_user(t: &TalkUser) -> String {
     if let Some(e) = t.earlier {
         out.push_str(&format!("\n# Before this\n{e}\n"));
     }
-    out.push_str(&format!("\n# Now\n{}\n\n# The conversation so far\n", t.scene));
+    out.push_str(&format!("\n# Now\n{}\n", t.scene));
+    for b in t.between {
+        out.push_str(&format!("- {b}\n"));
+    }
+    out.push_str("\n# The conversation so far\n");
     for l in t.conversation {
         out.push_str(&format!("{l}\n"));
     }

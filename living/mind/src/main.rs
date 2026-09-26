@@ -129,6 +129,9 @@ async fn main() -> Result<()> {
                     "SELECT * FROM routine",
                     "SELECT * FROM routine_stat",
                     "SELECT * FROM genome",
+                    // Standing proposals (tiny tables): a conversation turn knows what is on offer.
+                    "SELECT * FROM bond_offer",
+                    "SELECT * FROM trade_offer",
                     "SELECT * FROM my_deliberations",
                 ]);
         })

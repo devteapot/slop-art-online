@@ -1,7 +1,7 @@
 //! Reducers used by LLM mind services. A mind may act only for characters it controls.
 //! Graphs are validated here; untrusted model output never changes world facts directly.
 
-use crate::act::ORPHAN;
+use crate::act::{ACT, ORPHAN};
 use crate::tables::*;
 use crate::{common, perceive};
 use spacetimedb::{ReducerContext, SpacetimeType, Table};
@@ -229,7 +229,11 @@ pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, sour
         ctx.db.mind_state().id().update(st);
     }
     if let Some(mut a) = ctx.db.activity().id().find(actor) {
-        a.node = ORPHAN;
+        // A deliberate act in progress stays the act it is; graph work becomes an orphan the
+        // new graph may adopt.
+        if a.node != ACT {
+            a.node = ORPHAN;
+        }
         a.revision = revision;
         ctx.db.activity().id().update(a);
     }
@@ -302,6 +306,22 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen
     if !say.trim().is_empty() {
         perceive::speak(ctx, actor, &say, say_to, now)?;
     }
+    Ok(())
+}
+
+/// Deliberate acts decided by a mind (in a deliberation or a conversation turn): each a
+/// `do` node (`{"do": "conceive", "target": {"id": 6}}`), carried out once, in order, by the
+/// same skill rules as graph leaves, outside the behavior graph. The outcome of each comes
+/// back as an experience. `source` says where it was decided (e.g. "deliberate", "talk").
+#[spacetimedb::reducer]
+pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: String) -> Result<(), String> {
+    let c = authorize(ctx, actor)?;
+    if !c.alive {
+        return Err("character is dead".into());
+    }
+    let now = common::now_ms(ctx);
+    let notes = crate::acts::submit(ctx, actor, &acts, &source, false, now);
+    log::debug!("{} decides: {}", c.name, notes.join("; "));
     Ok(())
 }
 

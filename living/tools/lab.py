@@ -6,6 +6,7 @@ the given time with the watcher reporting, then stops the minds (the database st
 viewer: http://127.0.0.1:8330/?db=<db>).
 
 Usage: living/tools/lab.py lab-lifecycle [--db living-lab] [--minutes 60] [--every 600]
+From a git worktree, set LIVING_WASM_DIR to the directory the server mounts as /wasm.
 """
 import argparse
 import os
@@ -37,7 +38,10 @@ def main():
     subprocess.run(["cargo", "build", "-p", "living-mind", "--release"], cwd=LIVING, check=True)
     src = LIVING / tdir / "wasm32-unknown-unknown/release/living_authority.wasm"
     wasm = f"living_authority_{a.scenario.replace('-', '_')}.wasm"
-    shutil.copy(src, LIVING / "target/wasm32-unknown-unknown/release" / wasm)
+    # The server container mounts one directory as /wasm (the main checkout's release dir);
+    # a lab run from another worktree copies its module there (LIVING_WASM_DIR).
+    wasm_dir = Path(os.environ.get("LIVING_WASM_DIR", LIVING / "target/wasm32-unknown-unknown/release"))
+    shutil.copy(src, wasm_dir / wasm)
     stdb = str(LIVING / "tools/stdb")
     subprocess.run([stdb, "publish", "-s", "local", "-b", f"/wasm/{wasm}", a.db, "--delete-data", "-y"], check=True)
     run = f"{a.scenario}-{int(time.time())}"
