@@ -86,6 +86,52 @@ const NAMES: &[&str] = &[
     "Hollis", "Ione", "Jory", "Kestrel", "Linden", "Marlo", "Nia", "Orrin", "Perrin", "Rook", "Sage", "Teal", "Ulla", "Vesper",
 ];
 
+thread_local! {
+    static LAST_SPOIL: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Food spoils: each minute a share of every perishable stack is lost (rates from the skill
+/// script; a storage keeps food three times longer). Owners notice what they lose.
+/// Prototype cost: one pass over the inventory table per minute.
+fn spoil(ctx: &ReducerContext, now: u64) {
+    if now.saturating_sub(LAST_SPOIL.with(|c| c.get())) < 60_000 {
+        return;
+    }
+    LAST_SPOIL.with(|c| c.set(now));
+    let sc = common::scripts(ctx);
+    let mut rates: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+    let rows: Vec<Inventory> = ctx.db.inventory().iter().filter(|r| r.qty > 0).collect();
+    for mut r in rows {
+        let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.num_of("spoil_rate", &r.item, 0.0) as f32);
+        if rate <= 0.0 {
+            continue;
+        }
+        let rate = if r.owner & STRUCTURE_BIT != 0 { rate / 3.0 } else { rate };
+        let expect = r.qty as f32 * rate;
+        let mut lost = expect.floor() as u32;
+        if ctx.rng().gen::<f32>() < expect.fract() {
+            lost += 1;
+        }
+        let lost = lost.min(r.qty);
+        if lost == 0 {
+            continue;
+        }
+        let (owner, item) = (r.owner, r.item.clone());
+        r.qty -= lost;
+        if r.qty == 0 {
+            ctx.db.inventory().id().delete(r.id);
+        } else {
+            ctx.db.inventory().id().update(r);
+        }
+        if owner & STRUCTURE_BIT == 0 {
+            if let (Some(c), Some(b)) = (ctx.db.character().id().find(owner as u32), ctx.db.body().id().find(owner as u32)) {
+                let at = common::pos(&b, now);
+                crate::perceive::percept(ctx, &c, now, "body", c.id, 0, at, format!("Some of your {item} spoiled ({lost} lost)."), 0.25);
+            }
+        }
+    }
+}
+
 /// A character enters a new stage of life.
 fn grew(ctx: &ReducerContext, c: &Character, stage: u8, now: u64) {
     let Some(mut row) = ctx.db.character().id().find(c.id) else { return };
@@ -190,6 +236,8 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
         }
         k.last_hour = hour;
     }
+
+    spoil(ctx, now);
 
     // Wildlife renewal: animals breed slowly while below their seed population.
     let mut alive_people = 0u32;

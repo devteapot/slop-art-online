@@ -27,6 +27,30 @@ fn inv(a, item) {
     if n == () { 0 } else { n }
 }
 
+// ---- carrying and spoiling -------------------------------------------------
+
+// How many things a body can carry (a person's pack; an animal carries a mouthful).
+fn carry_limit(kind) { switch kind { "person" => 40.0, _ => 6.0 } }
+fn carried(a) {
+    let n = 0;
+    for k in a.actor.inv.keys() { n += a.actor.inv[k]; }
+    n
+}
+fn pack_full(a) { carried(a) >= carry_limit(a.actor.kind) }
+// Share of a food that spoils per real minute (a lab day is 12 minutes): raw meat and fish
+// within about a day, berries in a few days, cooked food more slowly. A storage keeps food
+// three times longer.
+fn spoil_rate(item) {
+    switch item {
+        "meat" => 0.05,
+        "fish" => 0.05,
+        "berries" => 0.02,
+        "cooked_meat" => 0.012,
+        "cooked_fish" => 0.012,
+        _ => 0.0,
+    }
+}
+
 fn nutrition(item) {
     switch item {
         "berries" => 12.0,
@@ -90,6 +114,7 @@ fn gather_check(a) {
     if a.target.amount < 1.0 { return `the ${a.target.kind} is depleted`; }
     if a.actor.kind != "person" { return "only people gather"; }
     if a.actor.stage == "infant" { return "too small to gather"; }
+    if pack_full(a) { return "your pack is full (eat, store or give some away first)"; }
     ""
 }
 fn gather_duration(a) {
@@ -259,6 +284,7 @@ fn take_check(a) {
     if a.target.kind != "storage" && a.target.kind != "remains" { return "nothing to take from"; }
     let have = a.target.inv[a.item];
     if have == () || have < 1 { return `no ${a.item} there`; }
+    if pack_full(a) { return "your pack is full (eat, store or give some away first)"; }
     ""
 }
 fn take_duration(a) { 1000 }

@@ -1296,13 +1296,24 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, now
         fight_report(ctx, attacker, victim, now);
     }
     if dead {
-        let meat = common::scripts(ctx).num_of("carcass_meat", &vc.kind, 0.0) as u32;
-        let hide = common::scripts(ctx).num_of("carcass_hide", &vc.kind, 0.0) as u32;
-        if hide > 0 {
-            common::inv_add(ctx, attacker as u64, "hide", hide);
+        // The killer takes what it can carry; the rest is left to rot.
+        let sc = common::scripts(ctx);
+        let killer_kind = ctx.db.character().id().find(attacker).map(|c| c.kind).unwrap_or_default();
+        let limit = sc.num_of("carry_limit", &killer_kind, 40.0) as u32;
+        let mut room = limit.saturating_sub(common::inv_list(ctx, attacker as u64).iter().map(|(_, q)| *q).sum::<u32>());
+        let mut left = 0;
+        for (item, n) in [("meat", sc.num_of("carcass_meat", &vc.kind, 0.0) as u32), ("hide", sc.num_of("carcass_hide", &vc.kind, 0.0) as u32)] {
+            let take = n.min(room);
+            room -= take;
+            left += n - take;
+            if take > 0 {
+                common::inv_add(ctx, attacker as u64, item, take);
+            }
         }
-        if meat > 0 {
-            common::inv_add(ctx, attacker as u64, "meat", meat);
+        if left > 0 {
+            if let Some(ac) = ctx.db.character().id().find(attacker) {
+                percept(ctx, &ac, now, "body", victim, attacker, at, format!("You could not carry all of the {} (your pack is full); the rest is left to rot.", vc.kind), 0.3);
+            }
         }
         die(ctx, victim, &format!("killed by {an}"), now, attacker);
     }
