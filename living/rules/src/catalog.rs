@@ -46,7 +46,7 @@ pub const SKILLS: &[SkillSpec] = &[
     SkillSpec { name: "follow", needs_target: true, needs_item: false, reach: 2.0, help: "walk alongside a creature for a while" },
     SkillSpec { name: "flee", needs_target: true, needs_item: false, reach: 0.0, help: "run away from a creature or place" },
     SkillSpec { name: "wait", needs_target: false, needs_item: false, reach: 0.0, help: "pause briefly" },
-    SkillSpec { name: "conceive", needs_target: true, needs_item: false, reach: 2.0, help: "start a family with a willing adult partner: both must choose it toward each other within 2 minutes, while fed and near a shelter; a child is born a day later" },
+    SkillSpec { name: "conceive", needs_target: true, needs_item: false, reach: 2.0, help: "start a family with a willing adult partner: both must choose it toward each other within 2 minutes, while fed" },
     SkillSpec { name: "teach", needs_target: true, needs_item: true, reach: 2.0, help: "teach a technique you know to a person beside you (item: technique); takes a while, both must stay close" },
     SkillSpec { name: "experiment", needs_target: false, needs_item: true, reach: 0.0, help: "tinker with a material from your pack (item) hoping to work out a new technique; uses up the material, often fails" },
     SkillSpec { name: "write", needs_target: false, needs_item: true, reach: 0.0, help: "write on a tablet you keep or a sign you leave here (item: tablet|sign; text: your words; topic: a technique you know to describe) — needs writing and 1 wood" },

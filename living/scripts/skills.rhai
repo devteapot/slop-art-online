@@ -323,9 +323,6 @@ fn conceive_check(a) {
     if a.target.id == a.actor.id { return "cannot do that alone"; }
     if a.target.stage != "adult" { return "they are not of an age for it"; }
     if a.actor.hunger > 60.0 { return "too hungry to think of a family"; }
-    if a.actor.kind == "person" {
-        if !a.actor.near_shelter { return "a family needs a shelter nearby"; }
-    }
     ""
 }
 fn conceive_duration(a) { 3000 }
