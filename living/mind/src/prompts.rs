@@ -221,7 +221,7 @@ fn common(c: &Ctx, out: &mut String) {
     for r in &c.relations {
         out.push_str(&format!("- {r}\n"));
     }
-    out.push_str("\n# Your mind (what you hold true, feel and intend; keys in parentheses)\n");
+    out.push_str("\n# What comes to mind (recalled by what you perceive, what is happening and why; what you hold true, feel and intend; keys in parentheses)\n");
     if c.mind.is_empty() {
         out.push_str("(nothing yet)\n");
     }
@@ -229,12 +229,12 @@ fn common(c: &Ctx, out: &mut String) {
         out.push_str(&format!("- {f}\n"));
     }
     if !c.memories.is_empty() {
-        out.push_str("\n# Things you remember\n");
+        out.push_str("\n# Memories this brings back\n");
         for m in &c.memories {
             out.push_str(&format!("- {m}\n"));
         }
     }
-    out.push_str("\n# Your judgments (usable as {\"believes\": key})\n");
+    out.push_str("\n# Your stances on your mind now (usable as {\"believes\": key})\n");
     if c.judgments.is_empty() {
         out.push_str("(none)\n");
     }
@@ -329,30 +329,60 @@ Reply with ONE JSON object: {{\"summary\": \"...\", \"nodes\": [...], \"edges\":
 pub fn talk_system(name: &str, other: &str, other_id: u32) -> String {
     format!(
         "You are {name}, a person living in a persistent world, face to face with {other} (#{other_id}). \
-This is your turn in a conversation. Talk as yourself: what you think and feel, what you're curious about in {other}, \
-something you remember, a joke, a worry, a disagreement, a question — whatever {name} would really say now, in your own voice, \
-usually a sentence or two. You may stay silent, change the subject, or end the conversation when you would. \
-Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \"say\": \"your words\" or null, \
-\"to\": id of who you speak to, \"end\": true if this is your last word for now}}"
+This is your turn in a conversation. Talk as yourself, in your own voice, usually a sentence or two: answer what was just said, \
+or say what you actually want to say — what you think or feel, something you remember, a question, a proposal, a refusal, a joke. \
+Real conversations are short and have a point. As soon as something is settled between you (you agreed on something, \
+one of you declined, someone will think it over, or there is simply nothing more to say), say so in \"settled\": that line closes \
+the conversation for now; don't restate what was already agreed or keep saying goodbye. You don't have to answer everything: \
+silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
+\"say\": \"your words\" or null, \"to\": id of who you speak to, \
+\"settled\": null while the matter is still open, or what is now settled, in a few words (e.g. \"meet at the ford at dawn\", \"she will think about it\", \"I refused\", \"nothing more to say\"), \
+\"until\": null or when to take it up again (\"dawn\", \"morning\", \"noon\", \"evening\", \"night\", \"tomorrow\" or an hour 0-23), \
+\"end\": true if this is your last word for now}}"
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn talk_user(identity: &str, other: &str, other_id: u32, feeling: &str, beliefs: &[String], lately: &[String], scene: &str, conversation: &[String]) -> String {
-    let mut out = format!("# Who you are\n{identity}\n\n# You and {other} (#{other_id})\n{feeling}\n");
-    for b in beliefs {
-        out.push_str(&format!("- {b}\n"));
+/// What a conversation turn is told.
+pub struct TalkUser<'a> {
+    pub identity: &'a str,
+    pub pacing: &'a str,
+    pub other: &'a str,
+    pub other_id: u32,
+    pub feeling: &'a str,
+    pub mind: &'a [String],
+    pub memories: &'a [String],
+    pub lately: &'a [String],
+    pub earlier: Option<&'a str>,
+    pub scene: &'a str,
+    pub conversation: &'a [String],
+    pub heard: &'a str,
+}
+
+pub fn talk_user(t: &TalkUser) -> String {
+    let (other, other_id) = (t.other, t.other_id);
+    let mut out = format!("# Who you are\n{}\n\n# How you talk\n{}\n\n# You and {other} (#{other_id})\n{}\n", t.identity, t.pacing, t.feeling);
+    if !t.mind.is_empty() || !t.memories.is_empty() {
+        out.push_str("\n# What comes to mind\n");
+        for b in t.mind {
+            out.push_str(&format!("- {b}\n"));
+        }
+        for m in t.memories {
+            out.push_str(&format!("- you remember: {m}\n"));
+        }
     }
-    if !lately.is_empty() {
+    if !t.lately.is_empty() {
         out.push_str(&format!("\n# Lately, involving {other}\n"));
-        for e in lately {
+        for e in t.lately {
             out.push_str(&format!("- {e}\n"));
         }
     }
-    out.push_str(&format!("\n# Now\n{scene}\n\n# The conversation so far\n"));
-    for l in conversation {
+    if let Some(e) = t.earlier {
+        out.push_str(&format!("\n# Before this\n{e}\n"));
+    }
+    out.push_str(&format!("\n# Now\n{}\n\n# The conversation so far\n", t.scene));
+    for l in t.conversation {
         out.push_str(&format!("{l}\n"));
     }
-    out.push_str("\nYour turn. Respond with the JSON object.");
+    out.push_str(&format!("\n# What you are answering\n{other}: “{}”\n\nYour turn. Respond with the JSON object.", t.heard));
     out
 }

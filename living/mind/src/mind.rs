@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Semaphore};
 
+mod recall;
 mod talk;
 
 pub enum Event {
@@ -612,20 +613,6 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         self.conn.db.place().iter().filter(|p| p.actor == actor).map(|p| format!("\"{}\" at [{:.0}, {:.0}]", p.name, p.x, p.y)).collect()
     }
 
-    async fn mind_lines(&self, actor: u32, seeds: &[String], limit: usize) -> (Vec<String>, Vec<String>) {
-        let Some(store) = &self.store else { return (Vec::new(), Vec::new()) };
-        let fmt = self.fmt_time();
-        let facts = store.around(actor, seeds, limit).await.unwrap_or_else(|e| {
-            log::warn!("mind query for {actor}: {e:#}");
-            Vec::new()
-        });
-        let memories = store.memories(actor, 8).await.unwrap_or_default();
-        let mut facts: Vec<String> = facts.iter().map(|f| memory::render(f, &fmt)).collect();
-        facts.reverse();
-        let memories = memories.into_iter().rev().map(|(exp, t, gist)| format!("[{}] {gist} (experience {exp})", fmt(t))).collect();
-        (facts, memories)
-    }
-
     // ---- deliberation ------------------------------------------------------------
 
     async fn deliberate(&self, d: &Deliberation) -> Result<()> {
@@ -655,22 +642,9 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         }
         let profile = self.profile(&c);
         let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
-        let mut seeds = vec!["self".to_string()];
-        for cr in scene["creatures"].as_array().cloned().unwrap_or_default() {
-            if cr["kind"] == "person" {
-                seeds.push(format!("person:{}", cr["id"]));
-            } else if let Some(k) = cr["kind"].as_str() {
-                seeds.push(format!("kind:{k}"));
-            }
-        }
-        for key in ["resources", "structures"] {
-            for r in scene[key].as_array().cloned().unwrap_or_default() {
-                if let Some(k) = r["kind"].as_str() {
-                    seeds.push(format!("kind:{k}"));
-                }
-            }
-        }
-        let (mind, memories) = self.mind_lines(actor, &seeds, 30).await;
+        // What this moment brings to mind (see recall.rs).
+        let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 18, 5).await;
+        let (mind, memories) = (recalled.mind, recalled.memories);
         let brain = self.conn.db.brain().id().find(&actor);
         let outline = brain.as_ref().and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
         let plan = brain.as_ref().map(|b| b.plan.clone()).unwrap_or_default();
@@ -692,7 +666,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             relations: self.relations(actor),
             mind,
             memories,
-            judgments: self.judgments(actor),
+            judgments: recalled.judgments,
             places: self.places(actor),
             experiences,
         };
@@ -818,11 +792,9 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         let compile = self.llm.species_profile(&c.kind, "compile").unwrap_or_else(|| self.llm.profile_for(actor, &c.name));
         let fmt = self.fmt_time();
         let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
-        let mut seeds = vec!["self".to_string()];
-        for cr in scene["creatures"].as_array().cloned().unwrap_or_default() {
-            seeds.push(if cr["kind"] == "person" { format!("person:{}", cr["id"]) } else { format!("kind:{}", cr["kind"].as_str().unwrap_or_default()) });
-        }
-        let (mind, _) = self.mind_lines(actor, &seeds, 12).await;
+        let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 10, 0).await;
+        let mut mind = recalled.mind;
+        mind.extend(recalled.judgments.into_iter().filter(|j| !j.starts_with('(')).map(|j| format!("feels sure: {j}")));
         let experiences: Vec<String> = {
             let all = self.experiences(actor);
             let n = all.len();
@@ -896,13 +868,9 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         }
         let profile = self.profile(&c);
         let fmt = self.fmt_time();
-        let mut seeds = vec!["self".to_string()];
-        for e in &meaningful {
-            seeds.extend(self.anchors(e));
-        }
-        seeds.sort();
-        seeds.dedup();
-        let (mind, memories) = self.mind_lines(actor, &seeds, 40).await;
+        // What these experiences bring to mind: what they may confirm, contradict or update.
+        let recalled = self.recall_for(actor, &self.experience_cues(actor, &meaningful), 32, 6).await;
+        let (mind, memories) = (recalled.mind, recalled.memories);
         let ctx = prompts::Ctx {
             name: &c.name,
             clock: fmt(llm::now_ms()),
@@ -910,7 +878,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             relations: self.relations(actor),
             mind,
             memories,
-            judgments: self.judgments(actor),
+            judgments: recalled.judgments,
             places: self.places(actor),
             experiences: meaningful.iter().map(|e| self.exp_line(e, &fmt, true)).collect(),
         };
