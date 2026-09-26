@@ -182,6 +182,7 @@ impl<'a> Ev<'a> {
         let alone = if people == 0.0 { 1.0 } else { 0.0 };
         let company = (people / 5.0).min(1.0);
         let winter = if common::season(self.ctx, now) == "winter" { 1.0 } else { 0.0 };
+        let courted = if ds.iter().any(|d| d.weight.courted != 0.0) && self.resolve(&graph::Target::Suitor).is_some() { 1.0 } else { 0.0 };
         let judgments: Vec<(String, f32)> = if ds.iter().any(|d| !d.weight.believes.is_empty()) {
             self.ctx.db.judgment().actor().filter(me).map(|j| (j.key.to_lowercase(), j.value)).collect()
         } else {
@@ -194,7 +195,7 @@ impl<'a> Ev<'a> {
                 let w = &d.weight;
                 let last = self.st.marks.iter().find(|m| m.node == DESIRE_MARK | ids[i]).map(|m| m.at_ms);
                 let longing = last.map_or(1.0, |t| (now.saturating_sub(t) as f32 / 3_600_000.0).min(1.0));
-                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing;
+                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted;
                 for (k, v) in &w.believes {
                     let j = judgments.iter().find(|(key, _)| key == &k.to_lowercase()).map(|(_, x)| *x).unwrap_or(0.5);
                     s += v * j;
@@ -453,6 +454,11 @@ impl<'a> Ev<'a> {
                 } else {
                     None
                 }
+            }
+            Target::Suitor => {
+                let window = (common::laws(self.ctx).bond_window_s * 1000.0) as u64;
+                let offer = self.ctx.db.bond_offer().to().filter(self.me.id).filter(|o| now.saturating_sub(o.at_ms) <= window).max_by_key(|o| o.at_ms)?;
+                self.visible_creature(offer.from)
             }
             Target::Parent => {
                 let (a, b) = (self.me.parent_a, self.me.parent_b);

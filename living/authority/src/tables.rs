@@ -651,6 +651,7 @@ pub struct BondOffer {
     pub id: u64,
     #[index(btree)]
     pub from: u32,
+    #[index(btree)]
     pub to: u32,
     pub at_ms: u64,
 }

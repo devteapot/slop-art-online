@@ -54,7 +54,7 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 }
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
-const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing"];
+const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted"];
 const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, near, hurt_within, heard_within, night, believes, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
@@ -392,7 +392,7 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
             let l = s.trim().to_lowercase();
             match l.as_str() {
                 "self" | "me" | "myself" => json!("self"),
-                "attacker" | "speaker" | "home" | "wander" | "parent" => json!(l),
+                "attacker" | "speaker" | "home" | "wander" | "parent" | "suitor" => json!(l),
                 _ if catalog::kind_class(&l).is_some() => json!({"nearest": l}),
                 _ => json!({"named": s.trim()}),
             }
@@ -442,7 +442,7 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
             if let (Some(x), Some(y)) = (o.get("x"), o.get("y")) {
                 return Ok(json!({"at": [x, y]}));
             }
-            return Err(format!("{path}: unknown target {:?}; use \"self\", \"attacker\", \"speaker\", \"home\", {{\"nearest\": kind}}, {{\"id\": n}}, {{\"named\": name}}, {{\"place\": name}} or {{\"at\": [x, y]}}", o.keys().collect::<Vec<_>>()));
+            return Err(format!("{path}: unknown target {:?}; use \"self\", \"attacker\", \"speaker\", \"suitor\", \"home\", {{\"nearest\": kind}}, {{\"id\": n}}, {{\"named\": name}}, {{\"place\": name}} or {{\"at\": [x, y]}}", o.keys().collect::<Vec<_>>()));
         }
         other => return Err(format!("{path}: invalid target {other}")),
     })

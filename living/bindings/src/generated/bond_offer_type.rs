@@ -45,6 +45,7 @@ impl __sdk::__query_builder::HasCols for BondOffer {
 pub struct BondOfferIxCols {
     pub from: __sdk::__query_builder::IxCol<BondOffer, u32>,
     pub id: __sdk::__query_builder::IxCol<BondOffer, u64>,
+    pub to: __sdk::__query_builder::IxCol<BondOffer, u32>,
 }
 
 impl __sdk::__query_builder::HasIxCols for BondOffer {
@@ -53,6 +54,7 @@ impl __sdk::__query_builder::HasIxCols for BondOffer {
         BondOfferIxCols {
             from: __sdk::__query_builder::IxCol::new(table_name, "from"),
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+            to: __sdk::__query_builder::IxCol::new(table_name, "to"),
         }
     }
 }

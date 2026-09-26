@@ -764,6 +764,26 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
             }
             ids.push(id);
         }
+        // Who is whose partner, child or parent is part of the family's history.
+        let couple = (adults.first().copied().unwrap_or(0), adults.get(1).copied().unwrap_or(0));
+        for &x in &ids {
+            for &y in &ids {
+                if x == y {
+                    continue;
+                }
+                let child_of = |c: u32, p: u32| ctx.db.character().id().find(c).map_or(false, |c| c.parent_a == p || c.parent_b == p);
+                let label = if (x, y) == couple || (y, x) == couple {
+                    "partner"
+                } else if child_of(y, x) {
+                    "child"
+                } else if child_of(x, y) {
+                    "parent"
+                } else {
+                    "family"
+                };
+                ctx.db.relation().insert(Relation { id: 0, actor: x, other: y, trust: 80.0, affinity: 80.0, label: label.into(), note: "family history".into(), updated_ms: now });
+            }
+        }
     } else {
         let names: Vec<String> = (0..b.size).map(|_| fresh_name(ctx)).collect();
         for (k, name) in names.iter().enumerate() {

@@ -86,6 +86,9 @@ pub struct Weight {
     /// How long since this desire last acted (0 just now .. 1 an hour or more): variety.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub longing: f32,
+    /// Someone in sight has just offered to start a family with me (0 or 1).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub courted: f32,
     /// The character's own stances (judgment value 0..1) by key.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub believes: std::collections::BTreeMap<String, f32>,
@@ -267,6 +270,8 @@ pub enum Target {
     Wander,
     /// My mother or father, when in sight.
     Parent,
+    /// Whoever has just offered to start a family with me, when in sight.
+    Suitor,
     Nearest(Filter),
     /// A perceived character by name.
     Named(String),
@@ -611,7 +616,7 @@ pub fn describe(n: &Node) -> String {
 /// A desire's weight in words, e.g. "0.2 + hunger×1.5 + night×0.4".
 pub fn describe_weight(w: &Weight) -> String {
     let mut parts = vec![format!("{}", w.base)];
-    for (k, v) in [("hunger", w.hunger), ("tired", w.tired), ("hurt", w.hurt), ("night", w.night), ("day", w.day), ("threatened", w.threatened), ("alone", w.alone), ("company", w.company), ("winter", w.winter), ("longing", w.longing)] {
+    for (k, v) in [("hunger", w.hunger), ("tired", w.tired), ("hurt", w.hurt), ("night", w.night), ("day", w.day), ("threatened", w.threatened), ("alone", w.alone), ("company", w.company), ("winter", w.winter), ("longing", w.longing), ("courted", w.courted)] {
         if v != 0.0 {
             parts.push(format!("{k}×{v}"));
         }
@@ -634,6 +639,7 @@ pub fn describe_target(t: &Target) -> String {
         Target::Home => "home".into(),
         Target::Wander => "somewhere nearby".into(),
         Target::Parent => "parent".into(),
+        Target::Suitor => "suitor".into(),
         Target::Nearest(f) => {
             let mut s = format!("nearest {}", f.kind);
             if let Some(r) = &f.relation {

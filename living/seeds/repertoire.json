@@ -267,6 +267,38 @@
           "wait": 2
         }
       ]
+    },
+    "start a family": {
+      "first": [
+        {
+          "if": {
+            "sees": "suitor"
+          },
+          "then": {
+            "do": "conceive",
+            "target": "suitor"
+          }
+        },
+        {
+          "if": {
+            "sees": {
+              "nearest": {
+                "kind": "person",
+                "relation": "partner"
+              }
+            }
+          },
+          "then": {
+            "do": "conceive",
+            "target": {
+              "nearest": {
+                "kind": "person",
+                "relation": "partner"
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "occupations": {
@@ -826,6 +858,19 @@
         }
       },
       {
+        "want": "a family",
+        "weight": {
+          "base": -0.2,
+          "hunger": -0.8,
+          "longing": 0.4,
+          "company": 0.2,
+          "courted": 0.8
+        },
+        "do": {
+          "routine": "start a family"
+        }
+      },
+      {
         "want": "company",
         "weight": {
           "base": 0.15,
@@ -925,10 +970,23 @@
           "do": "sleep"
         },
         "mate": {
-          "do": "conceive",
-          "target": {
-            "nearest": "deer"
-          }
+          "first": [
+            {
+              "if": {
+                "sees": "suitor"
+              },
+              "then": {
+                "do": "conceive",
+                "target": "suitor"
+              }
+            },
+            {
+              "do": "conceive",
+              "target": {
+                "nearest": "deer"
+              }
+            }
+          ]
         },
         "stay with the herd": {
           "first": [
@@ -1030,7 +1088,8 @@
               "base": 0.3,
               "hunger": -1.0,
               "longing": 0.4,
-              "company": 0.2
+              "company": 0.2,
+              "courted": 0.8
             },
             "do": {
               "routine": "mate"
@@ -1187,10 +1246,23 @@
           "do": "sleep"
         },
         "mate": {
-          "do": "conceive",
-          "target": {
-            "nearest": "wolf"
-          }
+          "first": [
+            {
+              "if": {
+                "sees": "suitor"
+              },
+              "then": {
+                "do": "conceive",
+                "target": "suitor"
+              }
+            },
+            {
+              "do": "conceive",
+              "target": {
+                "nearest": "wolf"
+              }
+            }
+          ]
         },
         "stay with the pack": {
           "first": [
@@ -1292,7 +1364,8 @@
               "base": 0.3,
               "hunger": -1.0,
               "longing": 0.4,
-              "company": 0.2
+              "company": 0.2,
+              "courted": 0.8
             },
             "do": {
               "routine": "mate"

@@ -56,3 +56,8 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Needs in the repertoire.** The mind's repertoire shows beside each routine what it serves and how that need stands now, e.g. "eat (serves food: hunger 100/100) — done 332×".
 
   Lab modules were republished in place and their minds restarted.
+- 13:40 — After an hour on the current code the herds grew (baseline 28 deer), but wolves died out in all three labs and no person was born in any lab.
+  - **Wolves.** Many seeded wolves were past breeding age, and the rest courted without answer: conception needs both partners to choose each other within two minutes, and one wolf made 113 unanswered offers because nothing let a body notice being courted. Added the target `suitor` (whoever just offered to start a family with me, while in sight) and the desire signal `courted`; the animals' mate routines answer a suitor first, and courtship raises their wish for a mate.
+  - **People.** The seed never told the family who is whose partner, child or parent, so every relation was a model-invented "family", and the people's starting ways had no family desire at all. Family history now seeds those relations, and people start with a "start a family" routine (answer a suitor, else approach one's partner) weighed as "a family"; like any habit it is theirs to change.
+
+  Checks: mechanisms 10/10, rules tests 23. Labs restarted fresh.
