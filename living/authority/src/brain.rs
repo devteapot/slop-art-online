@@ -31,6 +31,8 @@ const FAMILIAR_LIMIT: usize = 256;
 const DESIRE_MARK: u16 = 0xC000;
 /// Set when the current plan's routine completes; cleared by the next install.
 const PLAN_DONE_MARK: u16 = 0xCFFF;
+/// How long an animal's impulse keeps any pull.
+const IMPULSE_MS: f32 = 60_000.0;
 
 struct Scene {
     creatures: Vec<NearCreature>,
@@ -209,6 +211,16 @@ impl<'a> Ev<'a> {
         } else {
             Vec::new()
         };
+        // An animal's impulse is brief: its pull fades over about a minute after it arises, and
+        // the animal's standing drives (feeding, mating, its herd or pack) take over again.
+        let impulse = if self.me.kind != "person" {
+            let age = self.ctx.db.brain().id().find(self.me.id).map_or(0, |b| self.now.saturating_sub(b.installed_ms));
+            (1.0 - age as f32 / IMPULSE_MS).max(0.0)
+        } else {
+            1.0
+        };
+        let plan_label = format!("routine:{}", graph::PLAN_ROUTINE);
+        let is_plan = |n: &Node| matches!(n, Node::First(c) if c.label.as_deref().is_some_and(|l| l.eq_ignore_ascii_case(&plan_label)));
         let mut order: Vec<(f32, usize)> = ds
             .iter()
             .enumerate()
@@ -221,6 +233,9 @@ impl<'a> Ev<'a> {
                     let j = judgments.iter().find(|(key, _)| key == &k.to_lowercase()).map(|(_, x)| *x).unwrap_or(0.5);
                     s += v * j;
                 }
+                if is_plan(&d.body) {
+                    s *= impulse;
+                }
                 if current == i + 1 {
                     s += 0.1;
                 }
@@ -229,15 +244,14 @@ impl<'a> Ev<'a> {
             .collect();
         order.sort_by(|a, b| b.0.total_cmp(&a.0));
         // A plan that has been carried out is done: it stops competing until the mind makes a new one.
-        let plan_label = format!("routine:{}", graph::PLAN_ROUTINE);
-        let is_plan = |n: &Node| matches!(n, Node::First(c) if c.label.as_deref().is_some_and(|l| l.eq_ignore_ascii_case(&plan_label)));
         let plan_done = self.st.marks.iter().any(|m| m.node == PLAN_DONE_MARK);
+
         for (score, i) in order {
             if score <= 0.0 {
                 break;
             }
             let plan = is_plan(&ds[i].body);
-            if plan && plan_done {
+            if plan && (plan_done || impulse <= 0.0) {
                 continue;
             }
             let r = self.run(&ds[i].body, ids[i]);
