@@ -97,7 +97,10 @@ fn p(v: Value) -> BoltType {
 
 impl Store {
     pub async fn connect(uri: &str, user: &str, password: &str, run: &str) -> Result<Self> {
-        let g = Graph::new(uri, user, password).await?;
+        // More connections than the mind's concurrent tasks: a transaction holds one for its
+        // whole length, and a pool smaller than the task count can starve everyone.
+        let config = neo4rs::ConfigBuilder::default().uri(uri).user(user).password(password).max_connections(128).build()?;
+        let g = Graph::connect(config).await?;
         let s = Self { g, run: run.into() };
         for q in [
             "CREATE CONSTRAINT living_concept IF NOT EXISTS FOR (c:Concept) REQUIRE (c.run, c.actor, c.key) IS UNIQUE",
@@ -117,8 +120,15 @@ impl Store {
         Ok(())
     }
 
-    /// Apply one reasoning episode's patch transactionally.
+    /// Apply one reasoning episode's patch transactionally (given up after a minute rather
+    /// than left to hold a connection forever).
     pub async fn apply(&self, actor: u32, patch: &Patch, thought: &str, t: u64) -> Result<()> {
+        tokio::time::timeout(std::time::Duration::from_secs(60), self.apply_inner(actor, patch, thought, t))
+            .await
+            .map_err(|_| anyhow::anyhow!("memory write for {actor} timed out"))?
+    }
+
+    async fn apply_inner(&self, actor: u32, patch: &Patch, thought: &str, t: u64) -> Result<()> {
         let mut txn = self.g.start_txn().await?;
         for (from, into) in &patch.merges {
             txn.run(
