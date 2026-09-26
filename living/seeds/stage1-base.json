@@ -2,9 +2,7 @@
   "run": "s1-base",
   "seed": 11,
   "map": {
-    "kind": "realm",
-    "w": 96,
-    "h": 96
+    "kind": "valley"
   },
   "year_days": 4,
   "life_pace": 0.0714,

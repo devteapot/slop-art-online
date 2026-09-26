@@ -880,8 +880,14 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         };
         let signals = sp.signals.iter().map(|(k, s)| format!("{k} = {}", s.sound)).collect::<Vec<_>>().join("; ");
         let system = prompts::animal_compile_system(&c.kind, &living_rules::species::skills_help(&sp), &signals, sp.cognition.max_nodes);
-        let user = format!("Impulse of {} the {}: {impulse}\nFeeling: {feeling}\n\nAround it now:\n{}\n\nIts current graph:\n{}", c.name, c.kind, d.scene,
-            self.conn.db.brain().id().find(&actor).and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default());
+        let top = self.conn.db.brain().id().find(&actor).and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
+        let user = format!(
+            "Impulse of {} the {}: {impulse}\nFeeling: {feeling}\n\nAround it now:\n{}\n\nIts top level (what it weighs):\n{top}\n\nIts routines (how each has gone):\n{}",
+            c.name,
+            c.kind,
+            d.scene,
+            self.repertoire_text(actor)
+        );
         let mut messages = vec![Msg { role: "system", content: system }, Msg { role: "user", content: user }];
         let mut last_err = String::new();
         let (mut latency, mut tokens) = (felt.latency_ms, felt.tokens);
@@ -889,6 +895,31 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             let reply = self.llm.chat(&compile, "deliberate", &c.name, &messages).await?;
             latency += reply.latency_ms;
             tokens += reply.tokens;
+            // Routine edits apply whatever else the reply does; without a new top level the
+            // animal carries on with its ways as edited.
+            if let Ok(v) = llm::parse_json(&reply.content) {
+                if let Err(e) = self.apply_routines(c, &v["routines"]).await {
+                    log::warn!("{}: routines not applied: {e:#}", c.name);
+                }
+                if v["graph"].is_null() || v["graph"].as_str().map_or(false, |g| g.trim().eq_ignore_ascii_case("keep")) {
+                    let changed: Vec<String> = v["routines"].as_array().map(|a| a.iter().filter_map(|r| r["name"].as_str().map(String::from)).collect()).unwrap_or_default();
+                    let t = ThoughtIn {
+                        kind: "deliberate".into(),
+                        summary: format!("{feeling} → {impulse}{}", if changed.is_empty() { String::new() } else { format!(" (reworks {})", changed.join(", ")) }),
+                        detail: json!({"reason": d.reason, "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1}).to_string(),
+                        latency_ms: latency,
+                        tokens,
+                        model: format!("{} → {}", felt.model, reply.model),
+                        reference: thought_ref.clone(),
+                    };
+                    log::info!("{} the {} feels: {feeling} → {impulse}", c.name, c.kind);
+                    let (tx, rx) = oneshot::channel();
+                    self.conn.reducers.mind_say_then(actor, String::new(), 0, d.updated_ms, t, move |_, r| {
+                        let _ = tx.send(flatten(r));
+                    })?;
+                    return rx.await?.map_err(|e| anyhow!("mind_say: {e}"));
+                }
+            }
             let parsed = llm::parse_json(&reply.content).and_then(|v| {
                 let (g, pruned) = living_rules::graph::from_value_for(v["graph"].clone(), &sp).map_err(|e| anyhow!(e))?;
                 Ok((v, g, pruned))

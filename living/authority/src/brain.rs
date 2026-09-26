@@ -174,7 +174,9 @@ impl<'a> Ev<'a> {
         let me = self.me.id;
         let now = self.now;
         let threatened = if self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now) { 1.0 } else { 0.0 };
-        let people = self.scene().creatures.iter().filter(|c| &*c.kind == "person").count() as f32;
+        // Company is one's own kind (people for a person, the herd or pack for an animal).
+        let kind = self.me.kind.clone();
+        let people = self.scene().creatures.iter().filter(|c| *c.kind == *kind).count() as f32;
         let alone = if people == 0.0 { 1.0 } else { 0.0 };
         let company = (people / 5.0).min(1.0);
         let winter = if common::season(self.ctx, now) == "winter" { 1.0 } else { 0.0 };
@@ -422,7 +424,8 @@ impl<'a> Ev<'a> {
     fn resolve(&mut self, t: &Target) -> Option<Resolved> {
         let now = self.now;
         match t {
-            Target::Me => Some(Resolved::point(self.at)),
+            // Oneself is a creature like any other (one can tend one's own wounds).
+            Target::Me => Some(Resolved { class: 3, id: self.me.id as u64, at: self.at, kind: self.me.kind.to_string(), name: self.me.name.clone() }),
             Target::Attacker => {
                 if self.vit.hurt_by != 0 && now.saturating_sub(self.vit.hurt_ms) < 60_000 {
                     self.visible_creature(self.vit.hurt_by)

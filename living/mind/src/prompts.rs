@@ -312,11 +312,14 @@ pub fn animal_think_user(mind: &[String], experiences: &[String], scene: &str, r
 
 pub fn animal_compile_system(kind: &str, skills: &str, signals: &str, max_nodes: usize) -> String {
     format!(
-        "You adjust the behavior graph of a {kind} to its current impulse. Its current graph (its instincts and habits so far) is \
-what its body does; change the part the impulse is about and keep the rest (feeding, resting, fleeing) unless the impulse \
-itself changes it. Do not add plans, knowledge or wisdom the animal does not have, and keep it short (at most {max_nodes} nodes). \
-The {kind} cannot speak; it communicates only with its signals: {signals} (as {{\"do\": \"signal\", \"item\": name}}).\n\n{}\n\n\
-Reply with ONE JSON object: {{\"graph\": {{...}}}}",
+        "You adjust the behavior of a {kind} to its current impulse. Its behavior is its ways: routines (named graphs for \
+staying safe, feeding, resting, mating, keeping with its kind, roaming, and whatever it has picked up) and a top level of \
+desires that weighs them. Change only the part the impulse is about, usually one routine or one desire's weight; \
+everything you don't mention stays as it is. Do not add plans, knowledge or wisdom the animal does not have, and keep \
+each graph short (at most {max_nodes} nodes). The {kind} cannot speak; it communicates only with its signals: {signals} \
+(as {{\"do\": \"signal\", \"item\": name}}).\n\n{}\n\n\
+Reply with ONE JSON object: {{\"routines\": [{{\"name\": \"...\", \"graph\": {{...}}}}] (only those you change; \
+\"graph\": null retires one), \"graph\": \"keep\" or a new top level (e.g. desires calling routines by name)}}",
         grammar_with(skills, false)
     )
 }

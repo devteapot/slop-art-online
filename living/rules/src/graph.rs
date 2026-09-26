@@ -780,5 +780,21 @@ mod seed_repertoire_tests {
         }
         let top = serde_json::to_string(&r["top"]).unwrap().replace("WORK", "fishing");
         parse(&top).unwrap();
+        // Animal ways: every routine within the species' body and size, and the desires compile.
+        let species = crate::species::parse(include_str!("../../seeds/species.json")).unwrap();
+        for (kind, ways) in r["species"].as_object().unwrap() {
+            let sp = species.get(kind).unwrap();
+            let mut routines = std::collections::HashMap::new();
+            for (name, g) in ways["routines"].as_object().unwrap() {
+                let (g, pruned) = from_value_for(g.clone(), sp).unwrap_or_else(|e| panic!("{kind} {name}: {e}"));
+                assert!(pruned.is_empty(), "{kind} {name}: {pruned:?}");
+                routines.insert(name.clone(), g.root);
+            }
+            let top = parse(&ways["top"].to_string()).unwrap();
+            for called in routines_called(&top.root) {
+                assert!(routines.contains_key(&called), "{kind}: missing routine {called}");
+            }
+            validate_compiled(expand(&top.root, &|n: &str| routines.get(n).cloned())).unwrap_or_else(|e| panic!("{kind}: {e}"));
+        }
     }
 }

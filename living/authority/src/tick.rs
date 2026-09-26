@@ -95,6 +95,10 @@ fn grew(ctx: &ReducerContext, c: &Character, stage: u8, now: u64) {
     if c.kind == "person" && c.stage == 0 && stage == 1 {
         seed::give_repertoire(ctx, c.id, "child", now);
     }
+    // A grown animal leaves its young instinct for its species' ways.
+    if c.kind != "person" && stage == 2 && c.stage < 2 {
+        seed::give_ways(ctx, c.id, &c.kind, now);
+    }
     let at = ctx.db.body().id().find(c.id).map(|b| common::pos(&b, now)).unwrap_or((0.0, 0.0));
     let (story, feel) = match (c.kind.as_str(), stage) {
         ("person", 1) => (format!("{} is no longer a baby", c.name), "You can walk, talk and do things on your own now, though you are still small."),

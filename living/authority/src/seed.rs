@@ -33,6 +33,18 @@ pub fn give_repertoire(ctx: &ReducerContext, id: u32, occupation: &str, now: u64
         let _ = crate::mind::set_graph(ctx, id, &g.to_json(), &format!("my way of life ({occupation})"), "habit", now);
     }
 }
+
+/// A grown animal's way of life: its species' routines and the desires that weigh them
+/// (its to change, like a person's habits).
+pub fn give_ways(ctx: &ReducerContext, id: u32, kind: &str, now: u64) {
+    let r: serde_json::Value = serde_json::from_str(REPERTOIRE).expect("repertoire json");
+    let Some(ways) = r["species"].get(kind) else { return };
+    let routines: Vec<crate::mind::RoutineIn> = ways["routines"].as_object().map(|m| m.iter().map(|(k, g)| crate::mind::RoutineIn { name: k.clone(), graph: g.to_string() }).collect()).unwrap_or_default();
+    let _ = crate::mind::set_routines(ctx, id, &routines, &format!("{kind} instinct"), now);
+    if let Ok(g) = living_rules::graph::parse(&ways["top"].to_string()) {
+        let _ = crate::mind::set_graph(ctx, id, &g.to_json(), &format!("the ways of a {kind}"), "instinct", now);
+    }
+}
 pub const SKILLS: &str = include_str!("../../scripts/skills.rhai");
 
 #[derive(Deserialize)]
@@ -274,6 +286,15 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
                 band(ctx, &map, b, *site, now);
             }
         }
+    } else {
+        // Without a realm's wild sites, families live where people would: on open
+        // ground with berries and water within reach.
+        let mut taken: Vec<(f32, f32)> = Vec::new();
+        for b in &s.bands {
+            let site = homestead(ctx, &map, &taken);
+            taken.push(site);
+            band(ctx, &map, b, site, now);
+        }
     }
     communities(ctx, now);
     for (kind, count) in [("deer", s.animals.deer), ("wolf", s.animals.wolf)] {
@@ -400,6 +421,9 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
     });
     if kind == "person" && parents.0 == 0 {
         common::chronicle(ctx, now, "arrival", id, 0, at, format!("{name} arrived"));
+    }
+    if kind != "person" && c.stage >= 2 {
+        give_ways(ctx, id, kind, now);
     }
     id
 }
@@ -531,6 +555,33 @@ fn occupation_know_how(occ: &str) -> &'static [&'static str] {
         "trader" => &["writing", "storage"],
         _ => &[],
     }
+}
+
+/// A place a family would choose to live: grass with the most berry bushes within 10
+/// tiles, fish within 14, not on top of another family, nearer the middle on ties.
+fn homestead(ctx: &ReducerContext, map: &living_rules::map::Map, taken: &[(f32, f32)]) -> (f32, f32) {
+    let food: Vec<(String, f32, f32)> = ctx.db.resource_node().iter().filter(|r| r.kind == "berry_bush" || r.kind == "fishing_spot").map(|r| (r.kind, r.x, r.y)).collect();
+    let (cx, cy) = (map.w as f32 / 2.0, map.h as f32 / 2.0);
+    let mut best = ((cx, cy), f32::MIN);
+    for y in (6..map.h as i32 - 6).step_by(2) {
+        for x in (6..map.w as i32 - 6).step_by(2) {
+            if map.get(x, y) != Terrain::Grass {
+                continue;
+            }
+            let p = (x as f32 + 0.5, y as f32 + 0.5);
+            if taken.iter().any(|q| (q.0 - p.0).hypot(q.1 - p.1) < 24.0) {
+                continue;
+            }
+            let d = |r: &(String, f32, f32)| (r.1 - p.0).hypot(r.2 - p.1);
+            let berries = food.iter().filter(|r| r.0 == "berry_bush" && d(r) < 10.0).count() as f32;
+            let fish = food.iter().any(|r| r.0 == "fishing_spot" && d(r) < 14.0);
+            let score = berries.min(6.0) + if fish { 3.0 } else { 0.0 } - (p.0 - cx).hypot(p.1 - cy) / 40.0;
+            if score > best.1 {
+                best = (p, score);
+            }
+        }
+    }
+    best.0
 }
 
 fn walkable_near(map: &living_rules::map::Map, at: (f32, f32)) -> (f32, f32) {
