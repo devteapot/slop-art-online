@@ -8,7 +8,8 @@ and Neo4j minds are untouched. Nothing forces a fight: the minds decide. Samples
 activities and combat counters, then reports what happened: blows, dodges, blocks, whether
 graphs had a combat branch, mid-fight patches and what each said.
 
-Usage: living/tools/duel.py [--db living-duel] [--seconds 360] [--per-min 40] [--out FILE]
+Usage: living/tools/duel.py [--db living-duel] [--seconds 360] [--per-min 40] [--per-side 1] [--out FILE]
+With --per-side N > 1, two groups of N face each other (a group fight).
 """
 import argparse
 import json
@@ -30,7 +31,7 @@ FEUD = [
     },
     {
         "origin": "band",
-        "band": "the ridge people",
+        "band": "the valley raiders",
         "history": "You took the ridge people's winter stores because your own family was starving; {other}'s brother died of it. {other} has sworn revenge. You are proud, you regret nothing and you will not run. You carry a spear.",
     },
 ]
@@ -62,45 +63,57 @@ def main():
     ap.add_argument("--db", default="living-duel")
     ap.add_argument("--seconds", type=int, default=360)
     ap.add_argument("--per-min", type=int, default=40)
+    ap.add_argument("--per-side", type=int, default=1)
     ap.add_argument("--out")
     a = ap.parse_args()
     db, run = a.db, f"duel-{int(time.time())}"
     stdb("publish", "-s", "local", "-b", "/wasm/living_authority.wasm", db, "--delete-data", "-y")
     time.sleep(3)
-    stdb("call", "-s", "local", db, "spawn_crowd", "2", "true")
+    n = max(1, a.per_side)
+    stdb("call", "-s", "local", db, "spawn_crowd", str(2 * n), "true")
     time.sleep(1.5)
-    ids = sorted(int(r["id"]) for r in rows(db, "SELECT id, name FROM character") if r["name"].startswith("Walker"))[:2]
-    names = {i: n for i, n in ((int(r["id"]), r["name"]) for r in rows(db, "SELECT id, name FROM character")) if i in ids}
-    A, B = ids
-    call(db, "place_near", str(B), str(A))
-    for me, other, story in [(A, B, FEUD[0]), (B, A, FEUD[1])]:
-        call(db, "grant_know_how", str(me), "spear")
-        call(db, "grant_items", str(me), "spear", "1")
-        call(db, "grant_items", str(me), "cooked_meat", "4")
-        bg = dict(story, history=story["history"].format(other=f"{names[other]} (#{other})"), companions=[{"id": other, "name": names[other]}])
-        call(db, "set_background", str(me), json.dumps(bg))
+    ids = sorted(int(r["id"]) for r in rows(db, "SELECT id, name FROM character") if r["name"].startswith("Walker"))[: 2 * n]
+    names = {i: n_ for i, n_ in ((int(r["id"]), r["name"]) for r in rows(db, "SELECT id, name FROM character")) if i in ids}
+    sides = [ids[:n], ids[n:]]
+    A, B = sides[0][0], sides[1][0]
+    for side in sides:
+        for i in side:
+            call(db, "place_near", str(i), str(A))
+    for k, side in enumerate(sides):
+        others = sides[1 - k]
+        other_names = " and ".join(f"{names[o]} (#{o})" for o in others)
+        for me in side:
+            call(db, "grant_know_how", str(me), "spear")
+            call(db, "grant_items", str(me), "spear", "1")
+            call(db, "grant_items", str(me), "cooked_meat", "4")
+            story = FEUD[k]
+            friends = [f for f in side if f != me]
+            bg = dict(story, history=story["history"].format(other=other_names), companions=[{"id": f, "name": names[f]} for f in friends])
+            if friends:
+                bg["history"] += " " + ", ".join(names[f] for f in friends) + " stand with you."
+            call(db, "set_background", str(me), json.dumps(bg))
     log = ROOT / f".local/living/{run}.log"
-    env = dict(os.environ, LIVING_DB=db, LIVING_RUN=run, LIVING_ONLY=f"{A},{B}", LIVING_LLM_PER_MIN=str(a.per_min), RUST_LOG="info")
+    env = dict(os.environ, LIVING_DB=db, LIVING_RUN=run, LIVING_ONLY=",".join(str(i) for i in ids), LIVING_LLM_PER_MIN=str(a.per_min), RUST_LOG="info")
     mind = subprocess.Popen([str(MIND)], cwd=ROOT, env=env, stdout=log.open("w"), stderr=subprocess.STDOUT)
     samples = []
     start = time.time()
     try:
         while time.time() - start < a.seconds and mind.poll() is None:
             t = round(time.time() - start)
-            vit = {int(r["id"]): r for r in rows(db, f"SELECT id, hp, hp_rate, at_ms FROM vitals WHERE id = {A} OR id = {B}")}
-            act = {int(r["id"]): r["skill"] for r in rows(db, f"SELECT id, skill FROM activity WHERE id = {A} OR id = {B}")}
-            alive = {int(r["id"]): r["alive"] == "true" for r in rows(db, f"SELECT id, alive FROM character WHERE id = {A} OR id = {B}")}
+            vit = {int(r["id"]): r for r in rows(db, "SELECT id, hp, hp_rate, at_ms, max_hp FROM vitals") if int(r["id"]) in ids}
+            act = {int(r["id"]): r["skill"] for r in rows(db, "SELECT id, skill FROM activity") if int(r["id"]) in ids}
+            alive = {int(r["id"]): r["alive"] == "true" for r in rows(db, "SELECT id, alive FROM character") if int(r["id"]) in ids}
             now = time.time() * 1000
-            hp = {i: round(max(0.0, float(v["hp"]) + float(v["hp_rate"]) * (now - float(v["at_ms"])) / 60000), 1) for i, v in vit.items()}
+            hp = {i: round(min(float(v["max_hp"]), max(0.0, float(v["hp"]) + float(v["hp_rate"]) * (now - float(v["at_ms"])) / 60000)), 1) for i, v in vit.items()}
             samples.append({"t": t, "hp": {names[i]: hp.get(i) for i in ids}, "doing": {names[i]: act.get(i, "idle") for i in ids}, "alive": {names[i]: alive.get(i) for i in ids}})
-            if not all(alive.values()):
+            if any(not any(alive.get(i) for i in side) for side in sides):
                 time.sleep(5)
                 break
             time.sleep(2)
     finally:
         mind.terminate()
         mind.wait(timeout=20)
-    stats = rows(db, "SELECT hits, dodged, blocked FROM stats")
+    stats = rows(db, "SELECT hits, dodged, blocked, missed FROM stats")
     chron = [r["text"] for r in rows(db, "SELECT kind, text, at_ms FROM chronicle") if r["kind"] not in ("arrival", "time")]
     minds = {}
     for i in ids:
@@ -122,7 +135,7 @@ def main():
             "said": [(r.get("say") or {}).get("text") for r in replies if isinstance(r.get("say"), dict) and (r.get("say") or {}).get("text")],
             "latency_ms_p50": sorted(e["latency_ms"] for e in delib)[len(delib) // 2] if delib else None,
         }
-    report = {"db": db, "run": run, "fighters": {names[i]: i for i in ids}, "seconds": round(time.time() - start), "counters": stats[0] if stats else {}, "story": chron[-40:], "minds": minds, "samples": samples[::3]}
+    report = {"db": db, "run": run, "fighters": {names[i]: i for i in ids}, "sides": [[names[i] for i in side] for side in sides], "seconds": round(time.time() - start), "counters": stats[0] if stats else {}, "story": chron[-40:], "minds": minds, "samples": samples[::3]}
     print(json.dumps(report, indent=2, ensure_ascii=False))
     out = Path(a.out) if a.out else ROOT / f".local/living/{run}.json"
     out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")

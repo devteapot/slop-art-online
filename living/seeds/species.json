@@ -144,6 +144,39 @@
             }
           }
         }
+      },
+      {
+        "if": {
+          "cond": {
+            "all": [
+              {
+                "energy": {
+                  "below": 12
+                }
+              },
+              {
+                "not": {
+                  "near": {
+                    "target": {
+                      "nearest": "wolf"
+                    },
+                    "within": 8
+                  }
+                }
+              },
+              {
+                "not": {
+                  "hurt_within": 8
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": {
+              "skill": "sleep"
+            }
+          }
+        }
       }
     ],
     "cognition": {
@@ -318,6 +351,29 @@
               "target": {
                 "nearest": "deer"
               }
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "all": [
+              {
+                "energy": {
+                  "below": 12
+                }
+              },
+              {
+                "not": {
+                  "hurt_within": 8
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": {
+              "skill": "sleep"
             }
           }
         }
