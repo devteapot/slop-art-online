@@ -308,6 +308,19 @@ impl<'de> Deserialize<'de> for Filter {
     }
 }
 
+/// The routine a mind's current intention runs as, and the desire that weighs it.
+pub const PLAN_ROUTINE: &str = "current plan";
+pub const PLAN_WANT: &str = "the plan";
+
+/// A top level of desires with the current plan weighed among them (replacing an earlier
+/// plan desire). `None` when the top level is not desires (a flat graph has no weights).
+pub fn with_plan(top: &Node, weight: Weight) -> Option<Node> {
+    let Node::Desires(ds) = top else { return None };
+    let mut ds: Vec<Desire> = ds.iter().filter(|d| !matches!(&*d.body, Node::Routine(r) if r.eq_ignore_ascii_case(PLAN_ROUTINE))).cloned().collect();
+    ds.insert(0, Desire { want: PLAN_WANT.into(), weight, body: Box::new(Node::Routine(PLAN_ROUTINE.into())) });
+    Some(Node::Desires(ds))
+}
+
 /// A validated graph with preorder node ids (root = 0).
 #[derive(Clone, Debug)]
 pub struct Graph {
@@ -768,6 +781,22 @@ mod repertoire_tests {
 #[cfg(test)]
 mod seed_repertoire_tests {
     use super::*;
+
+    #[test]
+    fn a_plan_is_weighed_among_desires() {
+        let top = parse(r#"{"desires": [{"want": "food", "weight": {"hunger": 1.5}, "do": {"routine": "eat"}}]}"#).unwrap().root;
+        let once = with_plan(&top, Weight { base: 0.6, ..Default::default() }).unwrap();
+        let twice = with_plan(&once, Weight { base: 0.3, ..Default::default() }).unwrap();
+        let Node::Desires(ds) = twice else { panic!() };
+        assert_eq!(ds.len(), 2);
+        assert_eq!(ds[0].weight.base, 0.3);
+        assert!(with_plan(&Node::Wait(1.0), Weight::default()).is_none());
+        // The mind sends it back through the lenient parser: it must survive unchanged.
+        let v = serde_json::to_value(&once).unwrap();
+        let (g, pruned) = from_value_lenient(v).unwrap();
+        assert!(pruned.is_empty(), "{pruned:?}");
+        assert_eq!(g.root, once);
+    }
 
     #[test]
     fn seed_repertoire_is_valid() {

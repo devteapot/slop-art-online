@@ -147,6 +147,31 @@ impl Minds {
         out
     }
 
+    /// A reply's `intent` ({"weight", "graph"}) as ordinary edits: the graph becomes the
+    /// "current plan" routine and the top level weighs it among the character's desires.
+    /// Replies without one (or with a new top level of their own) pass through unchanged.
+    fn plan_into_desires(&self, actor: u32, mut v: Value) -> Option<Value> {
+        let intent = v.get("intent").filter(|i| i.is_object())?.clone();
+        let own_top = v["graph"].is_object();
+        let weight = match &intent["weight"] {
+            Value::Number(n) => living_rules::graph::Weight { base: n.as_f64().unwrap_or(0.6) as f32, ..Default::default() },
+            w @ Value::Object(_) => serde_json::from_value(w.clone()).unwrap_or(living_rules::graph::Weight { base: 0.6, ..Default::default() }),
+            _ => living_rules::graph::Weight { base: 0.6, ..Default::default() },
+        };
+        let top = self.conn.db.brain().id().find(&actor).and_then(|b| living_rules::graph::parse(&b.graph).ok())?;
+        let mut routines = v["routines"].as_array().cloned().unwrap_or_default();
+        routines.push(json!({"name": living_rules::graph::PLAN_ROUTINE, "graph": intent["graph"]}));
+        v["routines"] = Value::Array(routines);
+        if !own_top {
+            match living_rules::graph::with_plan(&top.root, weight) {
+                Some(root) => v["graph"] = serde_json::to_value(&root).ok()?,
+                // A flat top level has nothing to weigh against: the plan is the top level.
+                None => v["graph"] = intent["graph"].clone(),
+            }
+        }
+        Some(v)
+    }
+
     /// Apply routine edits from a reply: add/replace (normalized for this body) or retire.
     async fn apply_routines(&self, c: &Character, v: &Value) -> Result<()> {
         let Some(items) = v.as_array() else { return Ok(()) };
@@ -747,14 +772,17 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             };
             total_latency += reply.latency_ms;
             total_tokens += reply.tokens;
+            // An intention becomes the "current plan" routine, weighed among the desires.
+            let intended = llm::parse_json(&reply.content).ok().and_then(|v| self.plan_into_desires(actor, v));
+            let content = intended.as_ref().map(|v| v.to_string()).unwrap_or_else(|| reply.content.clone());
             // Routine edits apply whatever else the reply does (they are idempotent upserts).
-            if let Ok(v) = llm::parse_json(&reply.content) {
+            if let Ok(v) = llm::parse_json(&content) {
                 if let Err(e) = self.apply_routines(&c, &v["routines"]).await {
                     log::warn!("{}: routines not applied: {e:#}", c.name);
                 }
             }
             // Only talking: keep the current behavior and just speak.
-            if let Ok(v) = llm::parse_json(&reply.content) {
+            if let Ok(v) = llm::parse_json(&content) {
                 if v["graph"].is_null() || v["graph"].as_str().map_or(false, |g| g.trim().eq_ignore_ascii_case("keep")) {
                     let (say, to) = match &v["say"] {
                         Value::String(s) => (s.clone(), 0),
@@ -781,7 +809,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             }
             // A patch replaces one labeled branch (e.g. combat tactics mid-fight) and keeps the rest.
             let current = self.conn.db.brain().id().find(&actor).and_then(|b| serde_json::from_str::<Value>(&b.graph).ok());
-            let parsed = llm::parse_json(&reply.content).and_then(|mut v| {
+            let parsed = llm::parse_json(&content).and_then(|mut v| {
                 if v["patch"].is_object() && (v["graph"].is_null() || v["graph"].is_string()) {
                     let label = v["patch"]["label"].as_str().unwrap_or("combat").to_string();
                     let node = v["patch"]["graph"].clone();

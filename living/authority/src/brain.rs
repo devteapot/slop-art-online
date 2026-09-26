@@ -29,6 +29,8 @@ const WOLF_NEAR: u32 = 1 << 9;
 const FAMILIAR_LIMIT: usize = 256;
 /// Marks at 0xC000 | node: when a desire last began to act.
 const DESIRE_MARK: u16 = 0xC000;
+/// Set when the current plan's routine completes; cleared by the next install.
+const PLAN_DONE_MARK: u16 = 0xCFFF;
 
 struct Scene {
     creatures: Vec<NearCreature>,
@@ -204,11 +206,23 @@ impl<'a> Ev<'a> {
             })
             .collect();
         order.sort_by(|a, b| b.0.total_cmp(&a.0));
+        // A plan that has been carried out is done: it stops competing until the mind makes a new one.
+        let plan_label = format!("routine:{}", graph::PLAN_ROUTINE);
+        let is_plan = |n: &Node| matches!(n, Node::First(c) if c.label.as_deref().is_some_and(|l| l.eq_ignore_ascii_case(&plan_label)));
+        let plan_done = self.st.marks.iter().any(|m| m.node == PLAN_DONE_MARK);
         for (score, i) in order {
             if score <= 0.0 {
                 break;
             }
+            let plan = is_plan(&ds[i].body);
+            if plan && plan_done {
+                continue;
+            }
             let r = self.run(&ds[i].body, ids[i]);
+            if plan && r == St::Ok {
+                self.set_mark(PLAN_DONE_MARK);
+                self.deliberate("I finished my plan.");
+            }
             if r != St::Fail {
                 if current != i + 1 {
                     self.set_cursor(id, i as u16 + 1);

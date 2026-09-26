@@ -135,7 +135,9 @@ Your top level and your routines are all your body does: they began as your habi
 nothing eats, sleeps or keeps you warm unless they do. Change what needs changing: a routine, the top level, or both. \
 Refer to people by the ids you see. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
 {{\"thought\": \"your private interpretation of the situation (1-3 sentences)\", \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
-\"plan\": \"one-line intention\", \"graph\": {{...your top level...}} or \"keep\" to keep your current top level (e.g. when you only change a routine or only talk), \
+\"plan\": \"one-line intention\", \"intent\": {{\"weight\": 0.1-1.5, \"graph\": {{...what you mean to do...}}}} (becomes your routine \"current plan\", \
+weighed among your desires as \"the plan\": needs keep their own pull, e.g. strong hunger ≈ 1.0, so a plan of 0.6 yields to it and resumes after), \
+\"graph\": \"keep\" or a new top level {{...}} only to change how you live (what you weigh and how), \
 \"routines\": [{{\"name\": \"...\", \"graph\": {{...}}}} to add or replace a routine, or {{\"name\": \"...\", \"retire\": true}}] (optional; a few at a time), \
 or instead of graph \"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}} to replace only that labeled branch (e.g. adapt how you fight mid-fight) and keep the rest, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances your graph can test with believes), \
