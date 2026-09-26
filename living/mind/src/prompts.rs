@@ -320,8 +320,10 @@ desires that weighs them. Change only the part the impulse is about, usually one
 everything you don't mention stays as it is. Do not add plans, knowledge or wisdom the animal does not have, and keep \
 each graph short (at most {max_nodes} nodes). The {kind} cannot speak; it communicates only with its signals: {signals} \
 (as {{\"do\": \"signal\", \"item\": name}}).\n\n{}\n\n\
-Reply with ONE JSON object: {{\"routines\": [{{\"name\": \"...\", \"graph\": {{...}}}}] (only those you change; \
-\"graph\": null retires one), \"graph\": \"keep\" or a new top level (e.g. desires calling routines by name)}}",
+Reply with ONE JSON object: {{\"intent\": {{\"weight\": 0.1-1.5, \"graph\": {{...what the impulse makes it do...}}}} \
+(weighed among its desires: hunger, fear and tiredness keep their own pull, e.g. strong hunger ≈ 1.0), \
+\"routines\": [{{\"name\": \"...\", \"graph\": {{...}}}}] (only those you change; \"graph\": null retires one), \
+\"graph\": \"keep\", or a new top level only if the impulse changes its whole way of living}}",
         grammar_with(skills, false)
     )
 }

@@ -923,9 +923,11 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             let reply = self.llm.chat(&compile, "deliberate", &c.name, &messages).await?;
             latency += reply.latency_ms;
             tokens += reply.tokens;
+            // An impulse is weighed among the animal's desires, like a person's plan.
+            let content = llm::parse_json(&reply.content).ok().and_then(|v| self.plan_into_desires(actor, v)).map(|v| v.to_string()).unwrap_or_else(|| reply.content.clone());
             // Routine edits apply whatever else the reply does; without a new top level the
             // animal carries on with its ways as edited.
-            if let Ok(v) = llm::parse_json(&reply.content) {
+            if let Ok(v) = llm::parse_json(&content) {
                 if let Err(e) = self.apply_routines(c, &v["routines"]).await {
                     log::warn!("{}: routines not applied: {e:#}", c.name);
                 }
@@ -948,7 +950,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                     return rx.await?.map_err(|e| anyhow!("mind_say: {e}"));
                 }
             }
-            let parsed = llm::parse_json(&reply.content).and_then(|v| {
+            let parsed = llm::parse_json(&content).and_then(|v| {
                 let (g, pruned) = living_rules::graph::from_value_for(v["graph"].clone(), &sp).map_err(|e| anyhow!(e))?;
                 Ok((v, g, pruned))
             });
