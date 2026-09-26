@@ -84,8 +84,20 @@ impl Minds {
         Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency), slow: Semaphore::new((concurrency / 2).max(1)), talk_sem: Semaphore::new((concurrency / 4).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()) }))
     }
 
+    /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
+    /// run on their instincts until they become children).
     fn mine(&self) -> Vec<Character> {
-        self.conn.db.character().iter().filter(|c| c.ai && c.alive && c.controller == self.me && self.allowed(c.id)).collect()
+        self.conn.db.character().iter().filter(|c| c.ai && c.alive && c.stage != 0 && c.controller == self.me && self.allowed(c.id)).collect()
+    }
+
+    /// A character's model: children think with the "child" stage model when configured.
+    fn profile(&self, c: &Character) -> String {
+        if c.kind == "person" && c.stage <= 1 {
+            if let Some(p) = self.llm.stage_profile("child") {
+                return p;
+            }
+        }
+        self.llm.profile_for(c.id, &c.name)
     }
 
     /// `LIVING_ONLY=3,7` limits this service to those characters (experiments on a seeded
@@ -195,7 +207,7 @@ impl Minds {
         for c in self.mine() {
             let model = match self.llm.species_profile(&c.kind, "think") {
                 Some(t) => format!("{} (compiled by {})", self.llm.model_name(&t), self.llm.model_name(&self.llm.species_profile(&c.kind, "compile").unwrap_or_default())),
-                None => self.llm.model_name(&self.llm.profile_for(c.id, &c.name)),
+                None => self.llm.model_name(&self.profile(&c)),
             };
             log::info!("{} the {} (#{}) thinks with {model}; mind cursor at {}", c.name, c.kind, c.id, self.cursor(c.id));
         }
@@ -266,7 +278,7 @@ impl Minds {
     /// (town, occupation, household or band history). Afterwards it is ordinary identity.
     async fn background_persona(&self, c: &Character) -> Result<()> {
         let bg: Value = self.conn.db.background().id().find(&c.id).and_then(|b| serde_json::from_str(&b.text).ok()).unwrap_or_default();
-        let profile = self.llm.profile_for(c.id, &c.name);
+        let profile = self.profile(&c);
         let system = format!(
             "You create the starting identity of a person in a persistent simulated world. {}\n\n\
 The person has lived before this moment: use their background, but give them an individual temperament, private hopes, worries, \
@@ -327,7 +339,7 @@ family, partner, friend, rival, stranger, and a short note in their words). Repl
         };
         let (an, ap) = parent(c.parent_a);
         let (bn, bp) = parent(c.parent_b);
-        let profile = self.llm.profile_for(c.id, &c.name);
+        let profile = self.profile(&c);
         let system = format!(
             "You create the starting identity of a newborn person in a persistent simulated world. {}\n\nThe child has its own temperament: \
 traits are influenced by the parents but varied (never copied), and the child knows almost nothing yet. Write the narrative in the first person, \
@@ -447,7 +459,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
     }
 
     fn schedule(self: Arc<Self>, actor: u32) {
-        if !self.allowed(actor) {
+        if !self.allowed(actor) || self.conn.db.character().id().find(&actor).map_or(false, |c| c.stage == 0) {
             return;
         }
         {
@@ -641,7 +653,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         if c.kind != "person" {
             return self.deliberate_animal(d, &c).await;
         }
-        let profile = self.llm.profile_for(actor, &c.name);
+        let profile = self.profile(&c);
         let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
         let mut seeds = vec!["self".to_string()];
         for cr in scene["creatures"].as_array().cloned().unwrap_or_default() {
@@ -882,7 +894,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         if meaningful.is_empty() {
             return self.consolidated(actor, upto).await;
         }
-        let profile = self.llm.profile_for(actor, &c.name);
+        let profile = self.profile(&c);
         let fmt = self.fmt_time();
         let mut seeds = vec!["self".to_string()];
         for e in &meaningful {
@@ -1018,7 +1030,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         let concepts = store.concepts(actor, 60).await?;
         let facts = store.around(actor, &[], 120).await?;
         let lines: Vec<String> = facts.iter().map(|f| memory::render_keys(f, &fmt)).collect();
-        let profile = self.llm.profile_for(actor, &c.name);
+        let profile = self.profile(&c);
         let _slow = self.slow.acquire().await?;
         let _permit = self.sem.acquire().await?;
         let reply = self

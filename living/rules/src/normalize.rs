@@ -318,7 +318,7 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
             let l = s.trim().to_lowercase();
             match l.as_str() {
                 "self" | "me" | "myself" => json!("self"),
-                "attacker" | "speaker" | "home" | "wander" => json!(l),
+                "attacker" | "speaker" | "home" | "wander" | "parent" => json!(l),
                 _ if catalog::kind_class(&l).is_some() => json!({"nearest": l}),
                 _ => json!({"named": s.trim()}),
             }

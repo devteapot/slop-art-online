@@ -1,0 +1,83 @@
+{
+  "run": "lab-lifecycle",
+  "seed": 5,
+  "map": {
+    "kind": "realm",
+    "w": 160,
+    "h": 160
+  },
+  "year_days": 2,
+  "life_pace": 0.1,
+  "setting": "A small river country with two small walled towns and a village between them. The years here pass quickly: seasons turn in hours, children grow up within an afternoon, the old die, and babies are born. Deer graze the plains; a few wolves live in the woods.",
+  "towns": [
+    {
+      "name": "Ashby",
+      "character": "a quiet farming town",
+      "occupations": {
+        "farmer": 3,
+        "builder": 1,
+        "hunter": 2,
+        "cook": 1,
+        "healer": 1
+      },
+      "stores": {
+        "berries": 30,
+        "cooked_meat": 6,
+        "wood": 16,
+        "stone": 8,
+        "fiber": 8,
+        "clay": 4
+      },
+      "ledger": "Ashby. Look after your young and your old."
+    },
+    {
+      "name": "Brackwater",
+      "character": "a fishing town by the river",
+      "occupations": {
+        "fisher": 3,
+        "cook": 1,
+        "builder": 1,
+        "hunter": 1,
+        "trader": 1,
+        "healer": 1
+      },
+      "stores": {
+        "cooked_fish": 20,
+        "wood": 12,
+        "stone": 4,
+        "fiber": 8
+      },
+      "ledger": "Brackwater."
+    }
+  ],
+  "villages": [
+    {
+      "name": "Mossford",
+      "walled": false,
+      "character": "a hamlet of three families",
+      "occupations": {
+        "farmer": 3,
+        "hunter": 1
+      },
+      "stores": {
+        "berries": 10,
+        "wood": 6
+      },
+      "ledger": ""
+    }
+  ],
+  "bands": [
+    {
+      "name": "the drifters",
+      "size": 4,
+      "history": "A family with nothing, walking.",
+      "knows": [
+        "fire"
+      ]
+    }
+  ],
+  "animals": {
+    "deer": 16,
+    "wolf": 4
+  }
+}

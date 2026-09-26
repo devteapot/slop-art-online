@@ -2,7 +2,13 @@
   "person": {
     "skills": null,
     "speaks": true,
-    "signals": {},
+    "signals": {
+      "cry": {
+        "sound": "a baby crying",
+        "range": 12,
+        "salience": 0.8
+      }
+    },
     "names": [],
     "cognition": {
       "think_min_s": 20,
@@ -10,6 +16,15 @@
       "consolidate_threshold": 1.0,
       "max_nodes": 64,
       "consolidate_min_s": 90
+    },
+    "life": {
+      "years": 70,
+      "infant": 0.03,
+      "child": 0.23,
+      "elder": 0.85,
+      "old_age": 0.87,
+      "gestation": 0.011,
+      "litter": 1
     }
   },
   "deer": {
@@ -22,7 +37,8 @@
       "rest",
       "wait",
       "follow",
-      "signal"
+      "signal",
+      "conceive"
     ],
     "speaks": false,
     "signals": {
@@ -77,13 +93,22 @@
         95
       ]
     },
-    "nature": "You are a deer: a grazing herd animal and prey. Wolves hunt you and people with spears can kill you. You feel safest near your herd and in open ground where danger can be seen. You eat by grazing grass. You have no words: you think in sensations, drives, smells and associations, never in sentences or long plans, and you communicate only with signals.",
+    "nature": "You are a deer: a grazing herd animal and prey. Wolves hunt you and people with spears can kill you; you keep well away from people and their settlements unless you have learned otherwise. You feel safest near your herd and in open ground where danger can be seen. You eat by grazing grass. You have no words: you think in sensations, drives, smells and associations, never in sentences or long plans, and you communicate only with signals.",
     "cognition": {
       "think_min_s": 60,
       "reflect_s": 600,
       "consolidate_threshold": 3.0,
       "max_nodes": 24,
       "consolidate_min_s": 300
+    },
+    "life": {
+      "years": 12,
+      "infant": 0.04,
+      "child": 0.125,
+      "elder": 0.8,
+      "old_age": 0.85,
+      "gestation": 0.046,
+      "litter": 2
     }
   },
   "wolf": {
@@ -98,7 +123,8 @@
       "wait",
       "follow",
       "signal",
-      "dodge"
+      "dodge",
+      "conceive"
     ],
     "speaks": false,
     "signals": {
@@ -155,13 +181,22 @@
         90
       ]
     },
-    "nature": "You are a wolf: a predator of the forests. You hunt deer, eat meat, and fear fire and people who strike back. You are stronger with other wolves; a pack hunts better and is safer. You have no words: you think in drives, smells, sensations and associations, never in sentences or long plans, and you communicate only with signals.",
+    "nature": "You are a wolf: a predator of the forests. You hunt deer, eat meat, and fear fire, walls and people: you keep away from them and their settlements unless hunger or experience teaches you otherwise. You are stronger with other wolves; a pack hunts better and is safer. You have no words: you think in drives, smells, sensations and associations, never in sentences or long plans, and you communicate only with signals.",
     "cognition": {
       "think_min_s": 60,
       "reflect_s": 600,
       "consolidate_threshold": 3.0,
       "max_nodes": 24,
       "consolidate_min_s": 300
+    },
+    "life": {
+      "years": 10,
+      "infant": 0.05,
+      "child": 0.2,
+      "elder": 0.8,
+      "old_age": 0.85,
+      "gestation": 0.017,
+      "litter": 4
     }
   }
 }

@@ -206,6 +206,9 @@ impl Snap {
     pub fn day_ms(&self) -> u64 {
         self.world.as_ref().map(|w| w.day_ms.max(1)).unwrap_or(living_rules::DEFAULT_DAY_MS)
     }
+    pub fn year_days(&self) -> u64 {
+        self.world.as_ref().map(|w| w.year_days.max(4) as u64).unwrap_or(living_rules::YEAR_DAYS)
+    }
     pub fn epoch_ms(&self) -> u64 {
         self.world.as_ref().map(|w| w.epoch_ms).unwrap_or(self.now)
     }
@@ -230,13 +233,13 @@ impl Snap {
         thread_local! {
             static PREVIEW: Option<usize> = crate::clock::season_override();
         }
-        let i = PREVIEW.with(|p| *p).unwrap_or_else(|| living_rules::season_of(self.now, self.epoch_ms(), self.day_ms()));
+        let i = PREVIEW.with(|p| *p).unwrap_or_else(|| living_rules::season_of(self.now, self.epoch_ms(), self.day_ms(), self.year_days()));
         Season::from_index(i)
     }
 
     /// Resource amount now; plants regrow only in growing (non-winter) time.
     pub fn resource_amount(&self, n: &ResourceNode) -> f32 {
-        let grow = living_rules::growing_ms(n.at_ms, self.now, self.epoch_ms(), self.day_ms());
+        let grow = living_rules::growing_ms(n.at_ms, self.now, self.epoch_ms(), self.day_ms(), self.year_days());
         (n.amount + n.regen * grow as f32 / 60000.0).min(n.max)
     }
 
@@ -246,7 +249,14 @@ impl Snap {
         c.birth_age_days + end.saturating_sub(c.born_ms) as f32 / self.day_ms() as f32
     }
     pub fn is_child(&self, c: &Character) -> bool {
-        c.kind == "person" && self.age_days(c) < 3.0
+        c.kind == "person" && c.stage <= 1
+    }
+
+    /// Age in years and life stage, e.g. "34 years, adult".
+    pub fn age_label(&self, c: &Character) -> String {
+        let year = self.year_days().max(1) as f32 * self.world.as_ref().map(|w| w.life_pace).unwrap_or(1.0);
+        let stage = ["baby", "child", "adult", "elder"].get(c.stage as usize).copied().unwrap_or("adult");
+        format!("{:.0} years, {stage}", (self.age_days(c) / year.max(0.0001)).floor())
     }
 
     pub fn name(&self, id: u32) -> String {

@@ -30,6 +30,8 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         paused: false,
         width: living_rules::map::MAP_W,
         height: living_rules::map::MAP_H,
+        life_pace: 1.0,
+        year_days: living_rules::YEAR_DAYS as u32,
     });
     ctx.db.clock().insert(Clock {
         id: 0,

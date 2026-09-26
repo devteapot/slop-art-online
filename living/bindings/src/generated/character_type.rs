@@ -21,6 +21,7 @@ pub struct Character {
     pub birth_age_days: f32,
     pub parent_a: u32,
     pub parent_b: u32,
+    pub stage: u8,
 }
 
 impl __sdk::InModule for Character {
@@ -45,6 +46,7 @@ pub struct CharacterCols {
     pub birth_age_days: __sdk::__query_builder::Col<Character, f32>,
     pub parent_a: __sdk::__query_builder::Col<Character, u32>,
     pub parent_b: __sdk::__query_builder::Col<Character, u32>,
+    pub stage: __sdk::__query_builder::Col<Character, u8>,
 }
 
 impl __sdk::__query_builder::HasCols for Character {
@@ -65,6 +67,7 @@ impl __sdk::__query_builder::HasCols for Character {
             birth_age_days: __sdk::__query_builder::Col::new(table_name, "birth_age_days"),
             parent_a: __sdk::__query_builder::Col::new(table_name, "parent_a"),
             parent_b: __sdk::__query_builder::Col::new(table_name, "parent_b"),
+            stage: __sdk::__query_builder::Col::new(table_name, "stage"),
         }
     }
 }

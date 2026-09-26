@@ -54,10 +54,13 @@ fn rates(a) {
     if a.actor.energy <= 0.0 {
         hp -= 2.0;
     }
-    // Elders slowly weaken.
-    if a.actor.kind == "person" && a.actor.age > 40.0 {
-        hp -= (a.actor.age - 40.0) * 1.5;
+    // Elders heal slower and tire sooner; infants get hungry more slowly. (Death of old age
+    // comes at each creature's own point late in its lifespan.)
+    if a.actor.stage == "elder" {
+        if hp > 0.0 { hp *= 0.5; }
+        energy *= 1.3;
     }
+    if a.actor.stage == "infant" { hunger *= 0.6; }
     // Cold nights hurt people without a fire, shelter or warm cloak; winter nights are worse.
     if a.night && a.actor.kind == "person" && !a.actor.near_fire && !a.actor.near_shelter && inv(a, "cloak") == 0 {
         hp -= if a.season == "winter" { 5.0 } else { 2.0 };
@@ -67,7 +70,7 @@ fn rates(a) {
 
 fn move_speed(a) {
     let base = switch a.actor.kind { "deer" => 3.2, "wolf" => 3.4, _ => 2.6 };
-    if a.actor.kind == "person" && a.actor.age < 3.0 { base *= 0.75; }
+    if a.actor.stage == "infant" { base *= 0.4; } else if a.actor.stage == "child" { base *= 0.8; } else if a.actor.stage == "elder" { base *= 0.85; }
     if a.actor.energy < 10.0 { base * 0.6 } else { base }
 }
 
@@ -77,6 +80,7 @@ fn gather_check(a) {
     if a.target.class != "resource" { return "that is not something to gather"; }
     if a.target.amount < 1.0 { return `the ${a.target.kind} is depleted`; }
     if a.actor.kind != "person" { return "only people gather"; }
+    if a.actor.stage == "infant" { return "too small to gather"; }
     ""
 }
 fn gather_duration(a) {
@@ -179,7 +183,7 @@ fn pay(kind) {
 }
 
 fn build_check(a) {
-    if a.actor.kind == "person" && a.actor.age < 3.0 { return "too young to build"; }
+    if a.actor.kind == "person" && young(a) { return "too young to build"; }
     let needed = switch a.item {
         "campfire" => "fire",
         "shelter" => "shelter",
@@ -208,7 +212,7 @@ fn build_done(a) {
 }
 
 fn craft_check(a) {
-    if a.actor.age < 3.0 { return "too young to craft"; }
+    if young(a) { return "too young to craft"; }
     if a.item != "spear" && a.item != "cloak" && a.item != "torch" && a.item != "axe" && a.item != "pick" { return `cannot craft ${a.item}`; }
     let needed = if a.item == "axe" || a.item == "pick" { "toolmaking" } else { a.item };
     if !knows(a, needed) { return `you don't know how to make a ${a.item}`; }
@@ -259,7 +263,7 @@ fn take_done(a) {
 // ---- conflict -----------------------------------------------------------
 
 fn attack_check(a) {
-    if a.actor.kind == "person" && a.actor.age < 3.0 { return "too young to fight"; }
+    if a.actor.kind == "person" && young(a) { return "too young to fight"; }
     if a.target.class != "creature" || !a.target.alive { return "nothing to attack"; }
     if a.target.id == a.actor.id { return "cannot attack yourself"; }
     ""
@@ -299,14 +303,18 @@ fn regrow(kind) {
 
 // ---- life course --------------------------------------------------------
 
-fn grown(a) { a.actor.age >= 3.0 }
+fn young(a) { a.actor.stage == "infant" || a.actor.stage == "child" }
+fn grown(a) { !young(a) }
 
 fn conceive_check(a) {
-    if a.actor.kind != "person" || !grown(a) { return "too young to start a family"; }
-    if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no partner"; }
+    if a.actor.stage != "adult" { return "not of an age to start a family"; }
+    if a.target.class != "creature" || a.target.kind != a.actor.kind || !a.target.alive { return "no partner"; }
     if a.target.id == a.actor.id { return "cannot do that alone"; }
+    if a.target.stage != "adult" { return "they are not of an age for it"; }
     if a.actor.hunger > 60.0 { return "too hungry to think of a family"; }
-    if !a.actor.near_shelter { return "a family needs a shelter nearby"; }
+    if a.actor.kind == "person" {
+        if !a.actor.near_shelter { return "a family needs a shelter nearby"; }
+    } else if a.season != "spring" { return "it is not the season"; }
     ""
 }
 fn conceive_duration(a) { 3000 }
@@ -324,7 +332,7 @@ fn requires(t) { switch t { "cooking" => ["fire"], "torch" => ["fire"], "carpent
 // ---- roads and gates ------------------------------------------------------
 
 fn pave_check(a) {
-    if a.actor.kind != "person" || a.actor.age < 3.0 { return "you cannot lay road"; }
+    if a.actor.kind != "person" || young(a) { return "you cannot lay road"; }
     if a.actor.terrain == "road" { return "this is already road"; }
     if a.actor.terrain == "water" || a.actor.terrain == "rock" { return "cannot lay road here"; }
     afford(a, "road")
@@ -364,7 +372,7 @@ fn discoveries(m) {
     }
 }
 fn experiment_check(a) {
-    if a.actor.kind != "person" || a.actor.age < 3.0 { return "you cannot experiment"; }
+    if a.actor.kind != "person" || young(a) { return "you cannot experiment"; }
     if inv(a, a.item) < 1 { return `no ${a.item} to experiment with`; }
     ""
 }
@@ -437,7 +445,7 @@ fn block_done(a) { [#{ op: "vitals", energy: -0.5 }] }
 fn throw_check(a) {
     if inv(a, "spear") < 1 { return "no spear to throw"; }
     if a.target.class != "creature" || !a.target.alive { return "nothing to throw at"; }
-    if a.actor.age < 3.0 { return "too young to fight"; }
+    if young(a) { return "too young to fight"; }
     ""
 }
 fn throw_duration(a) { 800 }
@@ -463,7 +471,7 @@ fn accept_done(a) { [#{ op: "accept" }] }
 // ---- communities (meaning is up to members; the engine keeps membership) ------------------
 
 fn found_check(a) {
-    if a.actor.kind != "person" || a.actor.age < 3.0 { return "only grown people found communities"; }
+    if a.actor.kind != "person" || young(a) { return "only grown people found communities"; }
     if a.text == "" { return "a community needs a name"; }
     ""
 }

@@ -1,12 +1,12 @@
 {
-  "run": "realm-3",
+  "run": "realm-4",
   "seed": 7,
   "map": {
     "kind": "realm",
     "w": 512,
     "h": 512
   },
-  "setting": "A wide land between western mountains and an eastern sea, crossed by rivers. Four walled cities stand in the east and the middle lands, each with streets, houses, a market square and gates; small open villages lie between them, and a few bands live in the western hills and wilds with almost nothing. Stone is plentiful in the western hills and scarce in the east; clay lies along the rivers; forests cover much of the land; the coast has fish. Deer graze the plains; wolves keep to the forests and wilds. A year has four seasons of two days; in winter nothing grows and nights are colder.",
+  "setting": "A wide land between western mountains and an eastern sea, crossed by rivers. Four walled cities stand in the east and the middle lands, each with streets, houses, a market square and gates; small open villages lie between them, and a few bands live in the western hills and wilds with almost nothing. Stone is plentiful in the western hills and scarce in the east; clay lies along the rivers; forests cover much of the land; the coast has fish. Deer graze the plains; wolves keep to the forests and wilds. The year is long (four seasons of many days each); in winter nothing grows and nights are colder. People live about seventy years; every household has its old and its young.",
   "towns": [
     {
       "name": "Harrowgate",
@@ -210,5 +210,7 @@
   "animals": {
     "deer": 70,
     "wolf": 12
-  }
+  },
+  "year_days": 1800,
+  "life_pace": 1.0
 }

@@ -4,7 +4,7 @@
 
 const RULES: &str = "\
 One day lasts 12 real minutes; night is 20:00-06:00 and cuts sight to 6 tiles (11 by day).
-SEASONS: a year is 8 days — spring, summer, autumn, winter (2 days each). In winter nothing regrows and nights are colder: store food before it.
+SEASONS_LINE
 BODY: hunger rises ~5/min (100 = starving, which drains health); energy falls ~3/min awake and recovers while sleeping (faster within 2 tiles of a shelter). \
 At night, people farther than 3 tiles from a campfire and 2 from a shelter or house, and without a warm cloak, lose health to the cold. Health recovers slowly when fed and rested. Death is permanent.
 KNOW-HOW: you can only do techniques you know: fire (campfire), cooking, spear, shelter, storage, cloak (2 hides from hunted deer + 1 fiber; keeps you warm at night), \
@@ -20,8 +20,7 @@ house = 6 wood + 4 clay + 2 stone (a home: warm like a shelter and a fire), gate
 axe = 2 wood + 1 stone (cut wood twice as fast), pick = 2 wood + 2 stone (break stone twice as fast).
 SETTLEMENTS: walls block the way; a gate lets people through while open, and only the members of the community that keeps it may open or shut it. \
 Who is let in, when gates are shut and who keeps watch is for each community to decide.
-LIFE: people age; elders weaken after about 40 days. Two adults who both choose `conceive` toward each other within two minutes, while fed and near a shelter, have a child about a day later. \
-Children grow up in about 3 days; until then they are slow, cannot build, craft or fight, and depend on others for food and warmth.
+LIFE_LINE
 COMBAT: fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming \
 ({\"threatened\": true}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard \
 (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear up to 7 tiles (you lose it). \
@@ -41,9 +40,30 @@ pub fn map_size() -> (u32, u32) {
 }
 
 /// Set once at startup from the active seed: its setting text and map size.
-pub fn set_world(setting: &str, w: u32, h: u32) {
+/// Set once at startup from the active seed: setting, map size, calendar and the people's life table.
+pub fn set_world(setting: &str, w: u32, h: u32, year_days: f32, pace: f32, life: living_rules::life::Life) {
     let _ = SIZE.set((w, h));
-    let _ = SETTING.set(format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}); walking covers about 3 tiles a second.\n{RULES}"));
+    let season_days = year_days / 4.0;
+    let seasons = format!(
+        "SEASONS: a year is {} days — spring, summer, autumn, winter ({} each). In winter nothing regrows and nights are colder: store food before it.",
+        year_days.round(),
+        living_rules::describe_days(season_days)
+    );
+    let years = |f: f32| (f * life.years).round();
+    let t = living_rules::life::Pace { year_days, pace };
+    let life_line = format!(
+        "LIFE: a person lives about {} years (a year is {} days): a baby until about {}, a child until about {}, old from about {}. \
+Babies cannot walk far or feed themselves; they cry when hungry, cold or alone. Children are slow, cannot build, craft or fight, and depend on others. \
+Old people tire sooner and heal slower. Two adults who both choose `conceive` toward each other within two minutes, while fed and near a shelter, have a child about {} later.",
+        life.years.round(),
+        year_days.round(),
+        years(life.infant),
+        years(life.child),
+        years(life.elder),
+        living_rules::describe_days(life.gestation_days(t))
+    );
+    let rules = RULES.replace("SEASONS_LINE", &seasons).replace("LIFE_LINE", &life_line);
+    let _ = SETTING.set(format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}); walking covers about 3 tiles a second.\n{rules}"));
 }
 
 /// The world's rules as every mind is told them.

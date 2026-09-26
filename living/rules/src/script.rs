@@ -24,6 +24,10 @@ pub struct ActorFacts {
     pub inv: Vec<(String, u32)>,
     /// Age in in-world days.
     pub age: f32,
+    /// Life stage: infant, child, adult or elder.
+    pub stage: String,
+    /// Fraction of the lifespan lived (0..1).
+    pub life: f32,
     /// Techniques this character knows how to do.
     pub knows: Vec<String>,
 }
@@ -38,6 +42,8 @@ pub struct TargetFacts {
     pub amount: f32,
     pub hp: f32,
     pub max_hp: f32,
+    /// Life stage of a creature target.
+    pub stage: String,
     /// Milliseconds since the creature was last hurt (large when never).
     pub hurt_ago: f32,
     pub alive: bool,
@@ -325,6 +331,8 @@ fn to_map(c: &SkillCtx) -> Map {
     a.insert("terrain".into(), c.actor.terrain.clone().into());
     a.insert("activity".into(), c.actor.activity.clone().into());
     a.insert("age".into(), f(c.actor.age));
+    a.insert("stage".into(), c.actor.stage.clone().into());
+    a.insert("life".into(), f(c.actor.life));
     a.insert("knows".into(), c.actor.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
     a.insert("inv".into(), inv_map(&c.actor.inv).into());
     let mut t = Map::new();
@@ -335,6 +343,7 @@ fn to_map(c: &SkillCtx) -> Map {
     t.insert("amount".into(), f(c.target.amount));
     t.insert("hp".into(), f(c.target.hp));
     t.insert("max_hp".into(), f(c.target.max_hp));
+    t.insert("stage".into(), c.target.stage.clone().into());
     t.insert("hurt_ago".into(), f(c.target.hurt_ago));
     t.insert("alive".into(), c.target.alive.into());
     t.insert("dist".into(), f(c.target.dist));

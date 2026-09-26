@@ -282,7 +282,7 @@ pub fn inspector(ctx: &egui::Context, view: &mut View, net: &Net, snap: &Snap) {
             let col = if c.kind == "person" { person_color(id) } else { WEAK };
             ui.label(RichText::new("●").size(20.0).color(col));
             ui.label(RichText::new(snap.name(id)).size(20.0).strong());
-            ui.label(RichText::new(format!("{} #{} · age {:.1}", c.kind, c.id, snap.age_days(&c))).color(WEAK));
+            ui.label(RichText::new(format!("{} #{} · {}", c.kind, c.id, snap.age_label(&c))).color(WEAK));
             if snap.is_child(&c) {
                 ui.label(RichText::new("child").color(Color32::from_rgb(160, 240, 200)));
             }
@@ -657,8 +657,8 @@ fn identity(ui: &mut egui::Ui, conn: &DbConnection, snap: &Snap, c: &Character) 
     }
     section(ui, "Life");
     ui.label(RichText::new(format!(
-        "age {:.1} days · born {} · home ({:.0}, {:.0}) · {}",
-        snap.age_days(c),
+        "{} · born {} · home ({:.0}, {:.0}) · {}",
+        snap.age_label(c),
         snap.stamp(c.born_ms),
         c.home_x,
         c.home_y,

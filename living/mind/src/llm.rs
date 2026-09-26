@@ -46,6 +46,9 @@ pub struct ModelsFile {
     /// (turning impulses into behavior graphs) may use different models.
     #[serde(default)]
     pub species: HashMap<String, HashMap<String, String>>,
+    /// Profiles by life stage (e.g. children think with a small model).
+    #[serde(default)]
+    pub stages: HashMap<String, String>,
 }
 
 pub struct Llm {
@@ -128,6 +131,11 @@ impl Llm {
     /// The most reliable profile, used when another produced an unusable reply.
     pub fn default_profile(&self) -> String {
         self.models.default.clone()
+    }
+
+    /// The profile for a life stage, if the configuration names one.
+    pub fn stage_profile(&self, stage: &str) -> Option<String> {
+        self.models.stages.get(stage).filter(|p| self.keys.contains_key(*p)).cloned()
     }
 
     pub fn profile_for(&self, id: u32, name: &str) -> String {

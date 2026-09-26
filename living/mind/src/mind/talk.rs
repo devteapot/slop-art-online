@@ -219,7 +219,7 @@ impl Minds {
         let lines = self.talk.lock().unwrap().pairs.get(&pair(me, other)).map(|c| c.lines.clone()).unwrap_or_default();
         let Some(heard) = lines.iter().rev().find(|l| l.speaker == other).cloned() else { return Ok(()) };
         let (system, user) = self.talk_prompt(&c, other, &lines, &heard).await;
-        let mut profile = self.llm.profile_for(me, &c.name);
+        let mut profile = self.profile(&c);
         let messages = [Msg { role: "system", content: system }, Msg { role: "user", content: user }];
         let (reply, v) = {
             let _talk = self.talk_sem.acquire().await?;

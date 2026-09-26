@@ -201,6 +201,8 @@ pub enum Target {
     Home,
     /// A random reachable spot nearby.
     Wander,
+    /// My mother or father, when in sight.
+    Parent,
     Nearest(Filter),
     /// A perceived character by name.
     Named(String),
@@ -472,6 +474,7 @@ pub fn describe_target(t: &Target) -> String {
         Target::Speaker => "speaker".into(),
         Target::Home => "home".into(),
         Target::Wander => "somewhere nearby".into(),
+        Target::Parent => "parent".into(),
         Target::Nearest(f) => {
             let mut s = format!("nearest {}", f.kind);
             if let Some(r) = &f.relation {

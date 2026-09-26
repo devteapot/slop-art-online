@@ -8,8 +8,9 @@ use serde::Deserialize;
 use spacetimedb::rand::Rng;
 use spacetimedb::{Identity, ReducerContext, Table};
 
-/// The active seed (copy `valley.json` or `realm.json` here: `just living-seed <name>`).
-pub const VALLEY: &str = include_str!("../../seeds/world.json");
+/// The seed compiled into this module: `seeds/world.json` (the active world; `just living-seed
+/// <name>` copies one there) or, for lab scenarios, `seeds/$LIVING_SEED.json` (see build.rs).
+pub const VALLEY: &str = include_str!(concat!(env!("OUT_DIR"), "/seed.json"));
 pub const INSTINCTS: &str = include_str!("../../seeds/instincts.json");
 pub const SKILLS: &str = include_str!("../../scripts/skills.rhai");
 
@@ -45,6 +46,14 @@ fn yes() -> bool {
     true
 }
 
+fn one_f() -> f32 {
+    1.0
+}
+
+fn eight() -> u32 {
+    living_rules::YEAR_DAYS as u32
+}
+
 impl SeedTown {
     fn households(&self) -> usize {
         (self.occupations.values().sum::<u32>() as usize).div_ceil(3).max(1)
@@ -68,6 +77,12 @@ pub struct Seed {
     pub seed: u64,
     #[serde(default)]
     pub map: Option<SeedMap>,
+    /// Lifespans are multiplied by this (1 = a world for play; labs compress lives).
+    #[serde(default = "one_f")]
+    pub life_pace: f32,
+    /// Days in the calendar year (lifespans are counted in years).
+    #[serde(default = "eight")]
+    pub year_days: u32,
     #[serde(default)]
     pub towns: Vec<SeedTown>,
     /// Open villages at the realm's village sites.
@@ -144,6 +159,11 @@ pub struct SeedAnimals {
     pub wolf: u32,
 }
 
+pub fn young_instinct(kind: &str) -> String {
+    let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
+    all.get(format!("{kind}_young").as_str()).map(|v| v.to_string()).unwrap_or_else(|| instinct(kind))
+}
+
 pub fn instinct(kind: &str) -> String {
     let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
     all.get(kind).or_else(|| all.get("person")).map(|v| v.to_string()).unwrap_or_default()
@@ -177,7 +197,10 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         w.seed = s.seed;
         w.width = map.w;
         w.height = map.h;
+        w.life_pace = s.life_pace;
+        w.year_days = s.year_days;
         ctx.db.world().id().update(w);
+        common::invalidate_calendar();
     }
     common::invalidate_map();
     spawn_resources(ctx, &map, now);
@@ -227,6 +250,23 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
 /// An animal is a character like any other: its own name, an LLM mind (via the admin
 /// controller) and a species body. Names come from the species list, then numbered.
 pub fn spawn_animal(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64) -> u32 {
+    let name = animal_name(ctx, kind);
+    let admin = common::world(ctx).admin;
+    // Seeded wildlife spans all ages (fractions of the lifespan).
+    let w = common::world(ctx);
+    let f = ctx.rng().gen_range(0.1f32..0.8);
+    let age = common::life_of(kind).age_at(f, common::pace(&w));
+    spawn_with(ctx, &name, kind, admin, true, at, now, age, (0, 0))
+}
+
+/// A newborn animal: named from its species' list, beside its mother.
+pub fn spawn_young(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64, parents: (u32, u32)) -> u32 {
+    let name = animal_name(ctx, kind);
+    let admin = common::world(ctx).admin;
+    spawn_with(ctx, &name, kind, admin, true, at, now, 0.0, parents)
+}
+
+fn animal_name(ctx: &ReducerContext, kind: &str) -> String {
     let names = common::species(kind).map(|s| s.names).unwrap_or_default();
     let used: Vec<String> = ctx.db.character().kind().filter(kind).map(|c| c.name).collect();
     let name = names
@@ -234,8 +274,7 @@ pub fn spawn_animal(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64) 
         .find(|n| !used.contains(n))
         .cloned()
         .unwrap_or_else(|| format!("{} {}", names.get(used.len() % names.len().max(1)).cloned().unwrap_or_else(|| kind.to_string()), used.len() / names.len().max(1) + 1));
-    let admin = common::world(ctx).admin;
-    spawn_creature(ctx, &name, kind, admin, true, at, now)
+    name
 }
 
 pub fn animal_spot(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str) -> Option<(f32, f32)> {
@@ -254,8 +293,11 @@ pub fn animal_spot(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &st
     None
 }
 
+/// A grown creature (a quarter of the way through life) with no known parents.
 pub fn spawn_creature(ctx: &ReducerContext, name: &str, kind: &str, controller: Identity, ai: bool, at: (f32, f32), now: u64) -> u32 {
-    spawn_with(ctx, name, kind, controller, ai, at, now, if kind == "person" { 18.0 } else { 3.0 }, (0, 0))
+    let w = common::world(ctx);
+    let age = common::life_of(kind).age_at(0.25, common::pace(&w));
+    spawn_with(ctx, name, kind, controller, ai, at, now, age, (0, 0))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -275,6 +317,10 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         birth_age_days: age,
         parent_a: parents.0,
         parent_b: parents.1,
+        stage: {
+            let w = common::world(ctx);
+            common::stage_code(common::life_of(kind).stage(age, common::pace(&w)))
+        },
     });
     let id = c.id;
     motion::spawn_body(ctx, id, kind, at, now);
@@ -293,7 +339,9 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         hurt_ms: 0,
         hurt_by: 0,
     });
-    ctx.db.brain().insert(Brain { id, graph: instinct(kind), revision: 1, plan: "instinct".into(), source: "instinct".into(), installed_ms: now });
+    // The young start from their species' young instinct (a baby cries and follows a parent).
+    let graph = if c.stage == 0 { young_instinct(kind) } else { instinct(kind) };
+    ctx.db.brain().insert(Brain { id, graph, revision: 1, plan: "instinct".into(), source: "instinct".into(), installed_ms: now });
     ctx.db.mind_state().insert(MindState {
         id,
         slot: (id % 60) as u8,
@@ -483,9 +531,12 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
         let home = layout.houses.get(h % layout.houses.len().max(1)).copied().unwrap_or(center);
         let names: Vec<String> = members.iter().map(|_| fresh_name(ctx)).collect();
         let mut household_ids = Vec::new();
+        let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
         for (k, occ) in members.iter().enumerate() {
             let at = (home.0 + (k as f32 - 1.0) * 0.5, home.1 + 0.6);
-            let id = spawn_creature(ctx, &names[k], "person", admin, true, walkable_near(map, at), now);
+            // Working adults of all ages; sometimes a grandparent who still keeps a trade.
+            let f = if k >= 2 && ctx.rng().gen_range(0.0f32..1.0) < 0.4 { ctx.rng().gen_range(0.76f32..0.9) } else { ctx.rng().gen_range(0.18f32..0.6) };
+            let id = spawn_with(ctx, &names[k], "person", admin, true, walkable_near(map, at), now, life.age_at(f, pace), (0, 0));
             common::inv_add(ctx, id as u64, "berries", 4);
             common::learn(ctx, id, "fire", "seed", now);
             for tech in occupation_know_how(occ) {
@@ -497,6 +548,28 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
                 ctx.db.character().id().update(ch);
             }
             household_ids.push((id, occ.clone()));
+        }
+        // Children of the household's first two adults: often a child, sometimes a baby.
+        if household_ids.len() >= 2 {
+            let (pa, pb) = (household_ids[0].0, household_ids[1].0);
+            let mut young = Vec::new();
+            if ctx.rng().gen_range(0.0f32..1.0) < 0.55 {
+                young.push(ctx.rng().gen_range(life.infant * 1.5..life.child * 0.9));
+            }
+            if ctx.rng().gen_range(0.0f32..1.0) < 0.2 {
+                young.push(ctx.rng().gen_range(0.0..life.infant * 0.7));
+            }
+            for f in young {
+                let name = fresh_name(ctx);
+                let at = walkable_near(map, (home.0 + 0.4, home.1 + 0.9));
+                let id = spawn_with(ctx, &name, "person", admin, true, at, now, life.age_at(f, pace), (pa, pb));
+                if let Some(mut ch) = ctx.db.character().id().find(id) {
+                    ch.home_x = home.0;
+                    ch.home_y = home.1;
+                    ctx.db.character().id().update(ch);
+                }
+                household_ids.push((id, "child".into()));
+            }
         }
         if h < layout.houses.len() {
             put(ctx, map, "house", home, household_ids[0].0, now);
@@ -564,7 +637,13 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
     let mut ids = Vec::new();
     for (k, name) in names.iter().enumerate() {
         let p = walkable_near(map, (at.0 + k as f32 * 0.8, at.1 + (k % 2) as f32));
-        let id = spawn_creature(ctx, name, "person", admin, true, p, now);
+        let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
+        let id = if b.size >= 4 && k as u32 == b.size - 1 && ids.len() >= 2 {
+            // Larger bands carry a child of the first two.
+            spawn_with(ctx, name, "person", admin, true, p, now, life.age_at(ctx.rng().gen_range(life.infant * 2.0..life.child * 0.8), pace), (ids[0], ids[1]))
+        } else {
+            spawn_with(ctx, name, "person", admin, true, p, now, life.age_at(ctx.rng().gen_range(0.18f32..0.7), pace), (0, 0))
+        };
         common::inv_add(ctx, id as u64, "berries", 3);
         if k == 0 {
             for tech in &b.knows {

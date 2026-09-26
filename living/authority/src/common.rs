@@ -157,6 +157,30 @@ pub fn night(w: &World, now: u64) -> bool {
     living_rules::is_night(hour(w, now))
 }
 
+/// A species' life table (lifespan and stages).
+pub fn life_of(kind: &str) -> living_rules::life::Life {
+    species(kind).map(|s| s.life).unwrap_or_default()
+}
+
+/// The world's time for lives: days per year and pace.
+pub fn pace(w: &World) -> living_rules::life::Pace {
+    living_rules::life::Pace { year_days: w.year_days.max(1) as f32, pace: w.life_pace }
+}
+
+/// Life stage of a character now, at the world's pace.
+pub fn stage_of(c: &Character, w: &World, now: u64) -> living_rules::life::Stage {
+    life_of(&c.kind).stage(age_days(c, w, now), pace(w))
+}
+
+pub fn stage_code(s: living_rules::life::Stage) -> u8 {
+    match s {
+        living_rules::life::Stage::Infant => 0,
+        living_rules::life::Stage::Child => 1,
+        living_rules::life::Stage::Adult => 2,
+        living_rules::life::Stage::Elder => 3,
+    }
+}
+
 pub fn age_days(c: &Character, w: &World, now: u64) -> f32 {
     c.birth_age_days + now.saturating_sub(c.born_ms) as f32 / w.day_ms.max(1) as f32
 }
@@ -292,28 +316,39 @@ pub fn food_count(ctx: &ReducerContext, owner: u64) -> u32 {
 
 /// Resource amount now: regrowth counts only growing (non-winter) time.
 pub fn amount_now(ctx: &ReducerContext, r: &ResourceNode, now: u64) -> f32 {
-    let (epoch, day) = epoch_day(ctx);
-    (r.amount + r.regen * living_rules::growing_ms(r.at_ms, now, epoch, day) as f32 / 60_000.0).min(r.max)
+    let (epoch, day, year) = calendar(ctx);
+    (r.amount + r.regen * living_rules::growing_ms(r.at_ms, now, epoch, day, year) as f32 / 60_000.0).min(r.max)
 }
 
 thread_local! {
-    static EPOCH_DAY: std::cell::Cell<Option<(u64, u64)>> = const { std::cell::Cell::new(None) };
+    static CALENDAR: std::cell::Cell<Option<(u64, u64, u64)>> = const { std::cell::Cell::new(None) };
 }
 
-pub fn epoch_day(ctx: &ReducerContext) -> (u64, u64) {
-    EPOCH_DAY.with(|c| {
+/// The world's epoch, day length and days per year (cached; cleared when the world row changes).
+pub fn calendar(ctx: &ReducerContext) -> (u64, u64, u64) {
+    CALENDAR.with(|c| {
         if let Some(v) = c.get() {
             return v;
         }
         let w = world(ctx);
-        c.set(Some((w.epoch_ms, w.day_ms)));
-        (w.epoch_ms, w.day_ms)
+        let v = (w.epoch_ms, w.day_ms, w.year_days.max(4) as u64);
+        c.set(Some(v));
+        v
     })
 }
 
+pub fn epoch_day(ctx: &ReducerContext) -> (u64, u64) {
+    let (e, d, _) = calendar(ctx);
+    (e, d)
+}
+
+pub fn invalidate_calendar() {
+    CALENDAR.with(|c| c.set(None));
+}
+
 pub fn season(ctx: &ReducerContext, now: u64) -> &'static str {
-    let (epoch, day) = epoch_day(ctx);
-    living_rules::SEASONS[living_rules::season_of(now, epoch, day)]
+    let (epoch, day, year) = calendar(ctx);
+    living_rules::SEASONS[living_rules::season_of(now, epoch, day, year)]
 }
 
 /// Sight for a particular creature: a torch pushes back the night.

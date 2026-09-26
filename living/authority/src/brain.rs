@@ -369,6 +369,15 @@ impl<'a> Ev<'a> {
                     None
                 }
             }
+            Target::Parent => {
+                let (a, b) = (self.me.parent_a, self.me.parent_b);
+                let pa = if a != 0 { self.visible_creature(a) } else { None };
+                let pb = if b != 0 { self.visible_creature(b) } else { None };
+                match (pa, pb) {
+                    (Some(x), Some(y)) => Some(if dist(self.at, x.at) <= dist(self.at, y.at) { x } else { y }),
+                    (x, y) => x.or(y),
+                }
+            }
             Target::Home => {
                 if let Some(p) = self.place("home") {
                     return Some(p);

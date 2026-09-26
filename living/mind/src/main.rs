@@ -65,11 +65,15 @@ async fn main() -> Result<()> {
     let models: llm::ModelsFile = serde_json::from_str(&std::fs::read_to_string(
         std::env::var("LIVING_MODELS").map(PathBuf::from).unwrap_or_else(|_| root.join("living/configs/models.json")),
     )?)?;
-    let seed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(root.join("living/seeds/world.json"))?)?;
+    let seed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(root.join(format!("living/seeds/{}.json", std::env::var("LIVING_SEED").unwrap_or_else(|_| "world".into()))))?)?;
     // LIVING_RUN separates experiments on other databases (journal and Neo4j minds are per run).
     let run = std::env::var("LIVING_RUN").unwrap_or_else(|_| seed["run"].as_str().unwrap_or("valley").to_string());
     let (mw, mh) = (seed["map"]["w"].as_u64().unwrap_or(96) as u32, seed["map"]["h"].as_u64().unwrap_or(96) as u32);
-    prompts::set_world(seed["setting"].as_str().unwrap_or_default(), mw, mh);
+    let year_days = seed["year_days"].as_f64().unwrap_or(living_rules::YEAR_DAYS as f64) as f32;
+    let pace = seed["life_pace"].as_f64().unwrap_or(1.0) as f32;
+    let species: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(root.join("living/seeds/species.json"))?)?;
+    let life: living_rules::life::Life = serde_json::from_value(species["person"]["life"].clone()).unwrap_or_default();
+    prompts::set_world(seed["setting"].as_str().unwrap_or_default(), mw, mh, year_days, pace, life);
     let journal = root.join(".local/living/journal").join(&run);
     let llm = llm::Llm::new(models, journal)?;
 

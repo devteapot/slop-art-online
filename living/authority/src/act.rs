@@ -63,7 +63,6 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
             near_fire = true;
         }
     }
-    let _ = w;
     ActorFacts {
         id,
         kind,
@@ -77,6 +76,8 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         activity: ctx.db.activity().id().find(id).filter(|a| a.phase == 1).map(|a| a.skill).unwrap_or_default(),
         inv: common::inv_list(ctx, id as u64),
         knows: common::knows(ctx, id),
+        stage: ch.as_ref().map(|c| common::stage_of(c, &w, now).name().to_string()).unwrap_or_else(|| "adult".into()),
+        life: ch.as_ref().map(|c| common::life_of(&c.kind).fraction(age, common::pace(&w))).unwrap_or(0.3),
     }
 }
 
@@ -107,6 +108,7 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
                 f.id = c.id as u64;
                 f.alive = c.alive;
                 f.kind = c.kind.clone();
+                f.stage = common::stage_of(&c, &common::world(ctx), now).name().to_string();
                 f.name = c.name;
                 if let Some(b) = ctx.db.body().id().find(c.id) {
                     f.dist = dist(from, pos(&b, now));
@@ -978,12 +980,14 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
             ctx.db.bond_offer().id().delete(mine);
         }
         let w = common::world(ctx);
-        let gestation = (common::laws(ctx).gestation_days * w.day_ms as f32) as u64;
+        let kind = ctx.db.character().id().find(me).map(|c| c.kind).unwrap_or_default();
+        let days = common::life_of(&kind).gestation_days(common::pace(&w));
+        let gestation = (days * w.day_ms as f32) as u64;
         ctx.db.expecting().insert(Expecting { id: 0, a: other, b: me, due_ms: now + gestation });
         common::chronicle(ctx, now, "family", other, me, at, format!("{other_name} and {my_name} are expecting a child"));
         for (who, partner) in [(me, &other_name), (other, &my_name)] {
             if let Some(c) = ctx.db.character().id().find(who) {
-                percept(ctx, &c, now, "family", who, 0, at, format!("You and {partner} are expecting a child. It will be born in about a day."), 1.0);
+                percept(ctx, &c, now, "family", who, 0, at, format!("You and {partner} are expecting a child. It will be born in about {}.", living_rules::describe_days(days)), 1.0);
             }
         }
         witnessed(ctx, now, at, "family", other, me, "{a} and {b} decided to start a family", 0.5, &[me, other]);

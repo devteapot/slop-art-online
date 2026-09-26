@@ -90,6 +90,30 @@ const NAMES: &[&str] = &[
     "Hollis", "Ione", "Jory", "Kestrel", "Linden", "Marlo", "Nia", "Orrin", "Perrin", "Rook", "Sage", "Teal", "Ulla", "Vesper",
 ];
 
+/// A character enters a new stage of life.
+fn grew(ctx: &ReducerContext, c: &Character, stage: u8, now: u64) {
+    let Some(mut row) = ctx.db.character().id().find(c.id) else { return };
+    row.stage = stage;
+    ctx.db.character().id().update(row);
+    let at = ctx.db.body().id().find(c.id).map(|b| common::pos(&b, now)).unwrap_or((0.0, 0.0));
+    let (story, feel) = match (c.kind.as_str(), stage) {
+        ("person", 1) => (format!("{} is no longer a baby", c.name), "You can walk, talk and do things on your own now, though you are still small."),
+        ("person", 2) => (format!("{} has grown up", c.name), "You have grown up: you are an adult now."),
+        ("person", 3) => (format!("{} has grown old", c.name), "You are growing old: your body tires sooner and heals slower."),
+        (_, 2) => (String::new(), "You are grown."),
+        _ => (String::new(), ""),
+    };
+    if !story.is_empty() {
+        common::chronicle(ctx, now, "life", c.id, 0, at, story);
+    }
+    if !feel.is_empty() {
+        if let Some(fresh) = ctx.db.character().id().find(c.id) {
+            crate::perceive::percept(ctx, &fresh, now, "life", c.id, 0, at, feel.to_string(), 0.8);
+            crate::perceive::request_deliberation(ctx, c.id, feel, now);
+        }
+    }
+}
+
 fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
     let parents: Vec<Character> = [a, b].iter().filter_map(|id| ctx.db.character().id().find(*id)).filter(|c| c.alive).collect();
     let (Some(first), Some(pa), Some(pb)) = (parents.first(), ctx.db.character().id().find(a), ctx.db.character().id().find(b)) else {
@@ -97,21 +121,37 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
         return;
     };
     let Some(at) = ctx.db.body().id().find(first.id).map(|bd| common::pos(&bd, now)) else { return };
-    let used: Vec<String> = ctx.db.character().kind().filter("person").map(|c| c.name).collect();
-    let pick = ctx.rng().gen_range(0..NAMES.len());
-    let name = (0..NAMES.len()).map(|i| NAMES[(pick + i) % NAMES.len()]).find(|n| !used.iter().any(|u| u == n)).map(String::from).unwrap_or_else(|| format!("Child{}", used.len()));
+    let kind = first.kind.clone();
+    let litter = ctx.rng().gen_range(1..=common::life_of(&kind).litter.max(1));
     let controller = if first.ai { first.controller } else { common::world(ctx).admin };
-    let id = seed::spawn_with(ctx, &name, "person", controller, true, at, now, 0.0, (pa.id, pb.id));
-    common::chronicle(ctx, now, "birth", id, first.id, at, format!("{name} was born to {} and {}", pa.name, pb.name));
-    for p in &parents {
-        crate::perceive::percept(ctx, p, now, "birth", id, p.id, at, format!("Your child {name} was born."), 1.0);
+    let mut names = Vec::new();
+    for _ in 0..litter {
+        let id = if kind == "person" {
+            let used: Vec<String> = ctx.db.character().kind().filter("person").map(|c| c.name).collect();
+            let pick = ctx.rng().gen_range(0..NAMES.len());
+            let name = (0..NAMES.len()).map(|i| NAMES[(pick + i) % NAMES.len()]).find(|n| !used.iter().any(|u| u == n)).map(String::from).unwrap_or_else(|| format!("Child{}", used.len()));
+            seed::spawn_with(ctx, &name, "person", controller, true, at, now, 0.0, (pa.id, pb.id))
+        } else {
+            seed::spawn_young(ctx, &kind, at, now, (pa.id, pb.id))
+        };
+        names.push((id, common::name_of(ctx, id)));
     }
-    crate::perceive::witnessed(ctx, now, at, "birth", id, first.id, &format!("{name} was born to {} and {}", pa.name, pb.name), 0.5, &[a, b, id]);
+    let list = names.iter().map(|(_, n)| n.clone()).collect::<Vec<_>>().join(" and ");
+    if kind == "person" {
+        common::chronicle(ctx, now, "birth", names[0].0, first.id, at, format!("{list} was born to {} and {}", pa.name, pb.name));
+        for p in &parents {
+            crate::perceive::percept(ctx, p, now, "birth", names[0].0, p.id, at, format!("Your child {list} was born."), 1.0);
+        }
+        crate::perceive::witnessed(ctx, now, at, "birth", names[0].0, first.id, &format!("{list} was born to {} and {}", pa.name, pb.name), 0.5, &[a, b, names[0].0]);
+    } else {
+        for p in &parents {
+            crate::perceive::percept(ctx, p, now, "birth", names[0].0, p.id, at, format!("Your young were born: {list}."), 1.0);
+        }
+    }
     if let Some(mut s) = ctx.db.stats().id().find(0) {
-        s.births += 1;
+        s.births += names.len() as u32;
         ctx.db.stats().id().update(s);
     }
-    crate::perceive::request_deliberation(ctx, id, "You were just born. You know only your parents' faces.", now);
 }
 
 #[spacetimedb::reducer]
@@ -154,21 +194,19 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             _ => {}
         }
     }
-    let seed: seed::Seed = serde_json::from_str(seed::VALLEY).map_err(|e| e.to_string())?;
-    let map = common::map(ctx);
-    if (deer.len() as u32) < seed.animals.deer && ctx.rng().gen_range(0..40) == 0 {
-        let at = if let Some(parent) = deer.get(ctx.rng().gen_range(0..deer.len().max(1))).and_then(|id| ctx.db.body().id().find(*id)) {
-            map.nearest_walkable(parent.x + 1.0, parent.y + 1.0)
-        } else {
-            seed::animal_spot(ctx, &map, "deer")
-        };
-        if let Some(at) = at {
-            seed::spawn_animal(ctx, "deer", at, now);
+    // No re-spawning: animals breed, age and die like everyone else (a species hunted out
+    // stays gone). Life stages and deaths of old age, at the world's pace.
+    let alive: Vec<Character> = ctx.db.character().iter().filter(|c| c.alive).collect();
+    for c in alive {
+        let life = common::life_of(&c.kind);
+        let age = common::age_days(&c, &w, now);
+        if life.fraction(age, common::pace(&w)) >= life.deathline(c.id) {
+            crate::act::die(ctx, c.id, "old age", now, 0);
+            continue;
         }
-    }
-    if wolves < seed.animals.wolf && ctx.rng().gen_range(0..240) == 0 {
-        if let Some(at) = seed::animal_spot(ctx, &map, "wolf") {
-            seed::spawn_animal(ctx, "wolf", at, now);
+        let stage = common::stage_code(life.stage(age, common::pace(&w)));
+        if stage != c.stage {
+            grew(ctx, &c, stage, now);
         }
     }
 

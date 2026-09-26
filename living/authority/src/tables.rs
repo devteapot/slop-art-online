@@ -21,6 +21,13 @@ pub struct World {
     pub width: u32,
     #[default(96u32)]
     pub height: u32,
+    /// How fast lives run: lifespans are multiplied by this (1 = a world for play; a lab
+    /// scenario compresses lives to watch generations in an evening).
+    #[default(1.0f32)]
+    pub life_pace: f32,
+    /// Days in the calendar year (four equal seasons; lifespans are counted in years).
+    #[default(8u32)]
+    pub year_days: u32,
 }
 
 /// A gate's state, apart from its structure row (which rarely changes): open or shut, and the
@@ -117,6 +124,9 @@ pub struct Character {
     pub parent_a: u32,
     #[default(0u32)]
     pub parent_b: u32,
+    /// Life stage, kept current by housekeeping: 0 infant, 1 child, 2 adult, 3 elder.
+    #[default(2u8)]
+    pub stage: u8,
 }
 
 #[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]

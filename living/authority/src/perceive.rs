@@ -12,7 +12,8 @@ const WINDOW: usize = 400;
 
 pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) {
     // Only minds and human players consume percepts; instinct-only characters have no reader.
-    if !observer.alive || (!observer.ai && observer.controller == ctx.database_identity()) {
+    // Infants have no mind yet to form memories.
+    if !observer.alive || observer.stage == 0 || (!observer.ai && observer.controller == ctx.database_identity()) {
         return;
     }
     let row = ctx.db.experience().insert(Experience {
@@ -207,7 +208,8 @@ fn mentions(text: &str, name: &str) -> bool {
 /// Ask the mind to reconsider. Reasons merge while a request is pending.
 pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u64) {
     let Some(c) = ctx.db.character().id().find(id) else { return };
-    if !c.ai || !c.alive {
+    // Infants run on their instincts; they get a mind when they become children.
+    if !c.ai || !c.alive || c.stage == 0 {
         return;
     }
     // Minds of other species think less often; being attacked is always worth a thought.
@@ -256,6 +258,12 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     you.insert("kind".into(), json!(me.kind));
     you.insert("at".into(), json!([round(at.0), round(at.1)]));
     you.insert("terrain".into(), json!(map.at(at.0, at.1).name()));
+    {
+        let w = common::world(ctx);
+        let life = common::life_of(&me.kind);
+        let years = life.years_old(common::age_days(&me, &w, now), common::pace(&w));
+        you.insert("age".into(), json!(format!("{:.0} years ({})", years.floor(), common::stage_of(&me, &w, now).name())));
+    }
     if let Some(v) = ctx.db.vitals().id().find(id) {
         let n = common::needs(&v, now);
         you.insert("health".into(), json!(n.hp.round()));
@@ -297,6 +305,23 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             o.insert("community".into(), json!("yours"));
         }
         o.insert("kind".into(), json!(ch.kind));
+        match ch.stage {
+            0 => {
+                o.insert("age".into(), json!(if ch.kind == "person" { "baby" } else { "newborn" }));
+            }
+            1 => {
+                o.insert("age".into(), json!(if ch.kind == "person" { "child" } else { "young" }));
+            }
+            3 => {
+                o.insert("age".into(), json!("old"));
+            }
+            _ => {}
+        }
+        if ch.parent_a == id || ch.parent_b == id {
+            o.insert("family".into(), json!("your child"));
+        } else if me.parent_a == ch.id || me.parent_b == ch.id {
+            o.insert("family".into(), json!("your parent"));
+        }
         o.insert("dist".into(), json!(round(c.dist)));
         o.insert("dir".into(), json!(direction(at, c.pos)));
         if let Some(a) = ctx.db.activity().id().find(c.id) {

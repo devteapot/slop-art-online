@@ -49,5 +49,8 @@
       "remember": "ministral",
       "compile": "mistral-small"
     }
+  },
+  "stages": {
+    "child": "ministral"
   }
 }

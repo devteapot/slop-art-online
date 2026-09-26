@@ -247,7 +247,7 @@
               "target": {
                 "nearest": "person"
               },
-              "within": 4
+              "within": 8
             }
           },
           "then": {
@@ -284,6 +284,35 @@
           "then": {
             "do": {
               "skill": "sleep"
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "all": [
+              {
+                "hunger": {
+                  "below": 45
+                }
+              },
+              {
+                "sees": {
+                  "nearest": "deer"
+                }
+              },
+              {
+                "chance": 0.05
+              }
+            ]
+          },
+          "then": {
+            "do": {
+              "skill": "conceive",
+              "target": {
+                "nearest": "deer"
+              }
             }
           }
         }
@@ -386,6 +415,35 @@
       {
         "if": {
           "cond": {
+            "all": [
+              {
+                "near": {
+                  "target": {
+                    "nearest": "person"
+                  },
+                  "within": 7
+                }
+              },
+              {
+                "hunger": {
+                  "below": 90
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": {
+              "skill": "flee",
+              "target": {
+                "nearest": "person"
+              }
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
             "hunger": {
               "above": 50
             }
@@ -443,6 +501,35 @@
         }
       },
       {
+        "if": {
+          "cond": {
+            "all": [
+              {
+                "hunger": {
+                  "below": 45
+                }
+              },
+              {
+                "sees": {
+                  "nearest": "wolf"
+                }
+              },
+              {
+                "chance": 0.05
+              }
+            ]
+          },
+          "then": {
+            "do": {
+              "skill": "conceive",
+              "target": {
+                "nearest": "wolf"
+              }
+            }
+          }
+        }
+      },
+      {
         "seq": [
           {
             "do": {
@@ -455,5 +542,280 @@
         ]
       }
     ]
+  },
+  "person_young": {
+    "first": {
+      "label": "instinct",
+      "children": [
+        {
+          "if": {
+            "cond": {
+              "all": [
+                {
+                  "hunger": {
+                    "above": 60
+                  }
+                },
+                {
+                  "has": {
+                    "item": "food"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": {
+                "skill": "eat",
+                "item": "food"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "any": [
+                {
+                  "hunger": {
+                    "above": 55
+                  }
+                },
+                {
+                  "hurt_within": 5
+                },
+                {
+                  "all": [
+                    {
+                      "night": true
+                    },
+                    {
+                      "not": {
+                        "near": {
+                          "target": "parent",
+                          "within": 3
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "then": {
+              "seq": [
+                {
+                  "do": {
+                    "skill": "signal",
+                    "item": "cry"
+                  }
+                },
+                {
+                  "wait": 6
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "not": {
+                "near": {
+                  "target": "parent",
+                  "within": 4
+                }
+              }
+            },
+            "then": {
+              "first": [
+                {
+                  "do": {
+                    "skill": "follow",
+                    "target": "parent"
+                  }
+                },
+                {
+                  "seq": [
+                    {
+                      "do": {
+                        "skill": "signal",
+                        "item": "cry"
+                      }
+                    },
+                    {
+                      "wait": 8
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "energy": {
+                "below": 50
+              }
+            },
+            "then": {
+              "do": {
+                "skill": "sleep"
+              }
+            }
+          }
+        },
+        {
+          "wait": 4
+        }
+      ]
+    }
+  },
+  "deer_young": {
+    "first": {
+      "label": "instinct",
+      "children": [
+        {
+          "if": {
+            "cond": {
+              "hurt_within": 6
+            },
+            "then": {
+              "do": {
+                "skill": "flee",
+                "target": "attacker"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "not": {
+                "near": {
+                  "target": "parent",
+                  "within": 3
+                }
+              }
+            },
+            "then": {
+              "do": {
+                "skill": "follow",
+                "target": "parent"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "hunger": {
+                "above": 40
+              }
+            },
+            "then": {
+              "do": {
+                "skill": "graze"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "energy": {
+                "below": 30
+              }
+            },
+            "then": {
+              "do": {
+                "skill": "sleep"
+              }
+            }
+          }
+        },
+        {
+          "wait": 3
+        }
+      ]
+    }
+  },
+  "wolf_young": {
+    "first": {
+      "label": "instinct",
+      "children": [
+        {
+          "if": {
+            "cond": {
+              "hurt_within": 6
+            },
+            "then": {
+              "do": {
+                "skill": "flee",
+                "target": "attacker"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "not": {
+                "near": {
+                  "target": "parent",
+                  "within": 3
+                }
+              }
+            },
+            "then": {
+              "do": {
+                "skill": "follow",
+                "target": "parent"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "all": [
+                {
+                  "hunger": {
+                    "above": 60
+                  }
+                },
+                {
+                  "has": {
+                    "item": "meat"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": {
+                "skill": "eat",
+                "item": "meat"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "energy": {
+                "below": 30
+              }
+            },
+            "then": {
+              "do": {
+                "skill": "sleep"
+              }
+            }
+          }
+        },
+        {
+          "wait": 3
+        }
+      ]
+    }
   }
 }
