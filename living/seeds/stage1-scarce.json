@@ -10,7 +10,7 @@
   "bands": [
     {
       "name": "the family",
-      "history": "We have always lived in this valley, one family, three generations. We know how to make fire and build shelters; our shelter and fire stand at our camp.",
+      "history": "We have always lived in this valley, one family, three generations. We know how to make fire and build shelters; our shelter and fire stand at our camp. Our family has always grown: children are our joy and our future, and the couple among us hope for more.",
       "knows": [
         "fire",
         "shelter"
@@ -53,7 +53,7 @@
     }
   ],
   "animals": {
-    "deer": 16,
+    "deer": 40,
     "wolf": 3
   },
   "resource_scale": {
