@@ -99,10 +99,12 @@ pub fn scripts(ctx: &ReducerContext) -> Rc<Scripts> {
     })
 }
 
-/// A validated graph with preorder subtree sizes.
+/// A validated graph with its routines inlined: preorder subtree sizes, and for each node
+/// the routine it belongs to (for attributing outcomes).
 pub struct Compiled {
     pub root: Node,
     pub sizes: Vec<u16>,
+    pub routine_of: Vec<Option<u64>>,
 }
 
 fn sizes(root: &Node) -> Vec<u16> {
@@ -122,6 +124,11 @@ fn sizes(root: &Node) -> Vec<u16> {
                     total += go(e, out);
                 }
             }
+            Node::Desires(ds) => {
+                for d in ds {
+                    total += go(&d.body, out);
+                }
+            }
             _ => {}
         }
         out[me] = total;
@@ -132,13 +139,50 @@ fn sizes(root: &Node) -> Vec<u16> {
     out
 }
 
+/// For each node in preorder, the routine whose inlined branch contains it.
+fn owners(root: &Node, mine: &[Routine]) -> Vec<Option<u64>> {
+    fn go(n: &Node, cur: Option<u64>, mine: &[Routine], out: &mut Vec<Option<u64>>) {
+        let here = match n {
+            Node::First(c) => c.label.as_deref().and_then(|l| l.strip_prefix("routine:")).and_then(|name| mine.iter().find(|r| r.name.eq_ignore_ascii_case(name)).map(|r| r.id)).or(cur),
+            _ => cur,
+        };
+        out.push(here);
+        match n {
+            Node::First(c) | Node::Seq(c) => c.children.iter().for_each(|ch| go(ch, here, mine, out)),
+            Node::If(i) => {
+                go(&i.then, here, mine, out);
+                if let Some(e) = &i.otherwise {
+                    go(e, here, mine, out);
+                }
+            }
+            Node::Desires(ds) => ds.iter().for_each(|d| go(&d.body, here, mine, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    go(root, None, mine, &mut out);
+    out
+}
+
 pub fn compiled(ctx: &ReducerContext, id: u32, revision: u32) -> Option<Rc<Compiled>> {
     if let Some(c) = GRAPHS.with(|g| g.borrow().get(&id).filter(|(r, _)| *r == revision).map(|(_, c)| c.clone())) {
         return Some(c);
     }
     let brain = ctx.db.brain().id().find(id)?;
     let graph = living_rules::graph::parse(&brain.graph).ok()?;
-    let c = Rc::new(Compiled { sizes: sizes(&graph.root), root: graph.root });
+    // Inline the character's routines (only when the graph calls any).
+    let (root, routine_of) = if living_rules::graph::preorder(&graph.root).iter().any(|n| matches!(n, Node::Routine(_))) {
+        let mine: Vec<Routine> = ctx.db.routine().actor().filter(id).collect();
+        let lookup = |name: &str| mine.iter().find(|r| r.name.eq_ignore_ascii_case(name)).and_then(|r| living_rules::graph::parse(&r.graph).ok()).map(|g| g.root);
+        let expanded = living_rules::graph::expand(&graph.root, &lookup);
+        let root = living_rules::graph::validate_compiled(expanded).map(|g| g.root).unwrap_or(graph.root);
+        let owners = owners(&root, &mine);
+        (root, owners)
+    } else {
+        let n = living_rules::graph::preorder(&graph.root).len();
+        (graph.root, vec![None; n])
+    };
+    let c = Rc::new(Compiled { sizes: sizes(&root), root, routine_of });
     GRAPHS.with(|g| g.borrow_mut().insert(id, (brain.revision, c.clone())));
     if brain.revision == revision {
         Some(c)

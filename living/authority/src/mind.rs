@@ -114,6 +114,90 @@ pub fn add_thought(ctx: &ReducerContext, actor: u32, t: ThoughtIn, now: u64) {
 }
 
 /// Install a validated graph; the current activity is kept as an orphan the new graph may adopt.
+/// A routine as a mind sends it: its name and graph (empty graph = retire it).
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct RoutineIn {
+    pub name: String,
+    pub graph: String,
+}
+
+/// Most routines a character keeps.
+pub const MAX_ROUTINES: usize = 40;
+
+/// Add, change or retire routines; the character's graph is recompiled with them.
+pub fn set_routines(ctx: &ReducerContext, actor: u32, routines: &[RoutineIn], source: &str, now: u64) -> Result<Vec<String>, String> {
+    let kind = ctx.db.character().id().find(actor).map(|c| c.kind).unwrap_or_default();
+    let sp = common::species(&kind);
+    let mut notes = Vec::new();
+    for r in routines {
+        let name: String = r.name.trim().chars().take(60).collect();
+        if name.is_empty() {
+            continue;
+        }
+        let existing = ctx.db.routine().actor().filter(actor).find(|x| x.name.eq_ignore_ascii_case(&name));
+        if r.graph.trim().is_empty() {
+            if let Some(x) = existing {
+                ctx.db.routine_stat().id().delete(x.id);
+                ctx.db.routine().id().delete(x.id);
+                notes.push(format!("retired {name}"));
+            }
+            continue;
+        }
+        let g = match living_rules::graph::parse(&r.graph) {
+            Ok(g) => g,
+            Err(e) => {
+                notes.push(format!("{name}: {e}"));
+                continue;
+            }
+        };
+        if let Some(sp) = &sp {
+            if let Some(bad) = living_rules::graph::skills_used(&g.root).into_iter().find(|s| if s == "say" { !sp.speaks } else { !sp.allows(s) }) {
+                notes.push(format!("{name}: a {kind} cannot {bad}"));
+                continue;
+            }
+        }
+        match existing {
+            Some(mut x) => {
+                x.graph = g.to_json();
+                x.revision += 1;
+                x.source = source.into();
+                x.updated_ms = now;
+                ctx.db.routine().id().update(x);
+                notes.push(format!("revised {name}"));
+            }
+            None => {
+                if ctx.db.routine().actor().filter(actor).count() >= MAX_ROUTINES {
+                    notes.push(format!("{name}: already {MAX_ROUTINES} routines; retire one first"));
+                    continue;
+                }
+                ctx.db.routine().insert(Routine { id: 0, actor, name: name.clone(), graph: g.to_json(), revision: 1, source: source.into(), updated_ms: now });
+                notes.push(format!("new {name}"));
+            }
+        }
+    }
+    // Recompile the character's graph with its routines.
+    if let Some(b) = ctx.db.brain().id().find(actor) {
+        let _ = set_graph(ctx, actor, &b.graph, &b.plan, &b.source, now);
+    }
+    Ok(notes)
+}
+
+/// A mind edits its character's routines (one or a few at a time).
+#[spacetimedb::reducer]
+pub fn mind_routines(ctx: &ReducerContext, actor: u32, routines: Vec<RoutineIn>) -> Result<(), String> {
+    authorize(ctx, actor)?;
+    let now = common::now_ms(ctx);
+    let notes = set_routines(ctx, actor, &routines, "mind", now)?;
+    let rejected: Vec<&String> = notes.iter().filter(|n| n.contains(": ")).collect();
+    if !rejected.is_empty() {
+        if let Some(c) = ctx.db.character().id().find(actor) {
+            let at = ctx.db.body().id().find(actor).map(|b| common::pos(&b, now)).unwrap_or((0.0, 0.0));
+            perceive::percept(ctx, &c, now, "self", actor, 0, at, format!("Some of your routines could not be kept: {}", rejected.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("; ")), 0.5);
+        }
+    }
+    Ok(())
+}
+
 pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, source: &str, now: u64) -> Result<u32, String> {
     let g = living_rules::graph::parse(graph)?;
     let kind = ctx.db.character().id().find(actor).map(|c| c.kind).unwrap_or_default();

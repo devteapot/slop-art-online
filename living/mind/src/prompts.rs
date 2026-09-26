@@ -101,8 +101,15 @@ Targets T: \"self\" \"attacker\" \"speaker\" \"home\" {{\"nearest\": \"berry_bus
   People/creature/resource targets resolve only when currently in sight; places and coordinates always resolve. A do-node whose target is missing fails, so \"first\" moves on.
 Skills:
 {}
-Limits: at most 64 nodes, depth 10, 12 children per composite. The root restarts whenever it finishes, so a root \"first\" loops forever.
-Good graphs: urgent guards first (danger, freezing at night), then your current purpose (a seq of concrete steps), then a fallback (e.g. a think node or wander). \
+- {{\"routine\": \"name\"}} runs one of your routines (named graphs you keep; see below).
+- {{\"desires\": [{{\"want\": \"what it is for\", \"weight\": W, \"do\": N}}, ...]}} every check, the strongest desire that can act now wins (a desire whose node fails lets the next one act). \
+W = {{\"base\": number, and any of: \"hunger\", \"tired\", \"hurt\", \"night\", \"day\", \"threatened\", \"alone\", \"company\", \"winter\", \"longing\": factor, \"believes\": {{\"stance_key\": factor}}}}: \
+strength = base + Σ factor × signal, each signal 0..1 (hunger 0 fed..1 starving; tired 0 rested..1 exhausted; hurt; night/day; threatened = an attack is coming; \
+alone = no one in sight; company = people in sight; winter; longing = time since this desire last acted, up to an hour; believes = your stance's value). A desire at or below 0 does not act.
+Limits: each graph (your top level, or one routine) at most 64 nodes, depth 10, 12 children per composite. The root restarts whenever it finishes, so a root \"first\" loops forever.
+REPERTOIRE: your behavior is a repertoire you build over your life: routines (named graphs) for the things you do, called from a top level, usually desires weighed by what you want. \
+Refine one routine at a time as you learn what works (each routine shows how it has gone: successes, failures and why); make new ones for new things; retire what you no longer do. \
+What you know how to do is what you have built, learned or been taught. \
 Make your beliefs act for you: test your judgments and relationships in conditions so you react without having to think again, e.g. \
 {{\"if\": {{\"believes\": \"wolves_near_home\", \"night\": true}}, \"then\": {{\"do\": \"goto\", \"target\": {{\"nearest\": \"campfire\"}}}}}} or \
 {{\"if\": {{\"sees\": {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"enemy\"}}}}}}, \"then\": {{\"do\": \"flee\", \"target\": {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"enemy\"}}}}}}}}. \
@@ -124,12 +131,12 @@ A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"bel
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, what you make of the other person, as well as \
 practical matters. Talk as the person you are, in your own voice; you may also stay silent, deflect or lie. Don't just echo what was \
 already agreed. \
-Your graph is all your body does: it began as your instincts and habits (labeled branches such as \"habits\" or \"instinct\"), \
-and they are yours to keep, change or drop; nothing eats, sleeps or keeps you warm unless your graph does. \
-Replace the whole graph, or patch one labeled branch and keep the rest. \
+Your top level and your routines are all your body does: they began as your habits, and they are yours to keep, change or drop; \
+nothing eats, sleeps or keeps you warm unless they do. Change what needs changing: a routine, the top level, or both. \
 Refer to people by the ids you see. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
 {{\"thought\": \"your private interpretation of the situation (1-3 sentences)\", \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
-\"plan\": \"one-line intention\", \"graph\": {{...behavior graph...}} or \"keep\" to carry on with your current graph (e.g. when you only want to talk), \
+\"plan\": \"one-line intention\", \"graph\": {{...your top level...}} or \"keep\" to keep your current top level (e.g. when you only change a routine or only talk), \
+\"routines\": [{{\"name\": \"...\", \"graph\": {{...}}}} to add or replace a routine, or {{\"name\": \"...\", \"retire\": true}}] (optional; a few at a time), \
 or instead of graph \"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}} to replace only that labeled branch (e.g. adapt how you fight mid-fight) and keep the rest, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances your graph can test with believes), \
 \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering, e.g. home, good berry patch)}}",
@@ -250,7 +257,7 @@ fn common(c: &Ctx, out: &mut String) {
     }
 }
 
-pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, reason: &str) -> String {
+pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, reason: &str, repertoire: &str) -> String {
     let mut out = String::new();
     common(c, &mut out);
     out.push_str("\n# Recent experiences (oldest first)\n");
@@ -258,7 +265,10 @@ pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, re
         out.push_str(&format!("- {e}\n"));
     }
     out.push_str(&format!("\n# What you perceive right now\n{scene}\n"));
-    out.push_str(&format!("\n# Your current behavior graph (plan: {plan})\n{graph_outline}\n"));
+    out.push_str(&format!("\n# Your top level (plan: {plan})\n{graph_outline}\n"));
+    if !repertoire.is_empty() {
+        out.push_str(&format!("\n# Your routines\n{repertoire}\n"));
+    }
     out.push_str(&format!("# Why you are thinking now\n{reason}\n\nRespond with the JSON object."));
     out
 }

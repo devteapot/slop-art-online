@@ -450,7 +450,29 @@ fn failure_mark(label: &str, why: &str) -> u16 {
     0xE000 + (h % 0x1000) as u16
 }
 
+/// Record how a routine's action went (the routine owning the action's node, if any).
+fn routine_outcome(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
+    let Some(g) = common::compiled(ctx, a.id, a.revision) else { return };
+    let Some(Some(rid)) = g.routine_of.get(a.node as usize).copied() else { return };
+    let mut s = ctx.db.routine_stat().id().find(rid).unwrap_or(RoutineStat { id: rid, ok: 0, failed: 0, last_fail: String::new(), last_ms: 0 });
+    if ok {
+        s.ok += 1;
+    } else {
+        s.failed += 1;
+        s.last_fail = why.chars().take(160).collect();
+    }
+    s.last_ms = now;
+    if ctx.db.routine_stat().id().find(rid).is_some() {
+        ctx.db.routine_stat().id().update(s);
+    } else {
+        ctx.db.routine_stat().insert(s);
+    }
+}
+
 fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
+    if a.node != ORPHAN {
+        routine_outcome(ctx, &a, ok, why, now);
+    }
     ctx.db.activity().id().delete(a.id);
     if a.skill == "sleep" || a.skill == "rest" {
         refresh_rates(ctx, a.id);

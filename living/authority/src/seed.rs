@@ -12,6 +12,22 @@ use spacetimedb::{Identity, ReducerContext, Table};
 /// <name>` copies one there) or, for lab scenarios, `seeds/$LIVING_SEED.json` (see build.rs).
 pub const VALLEY: &str = include_str!(concat!(env!("OUT_DIR"), "/seed.json"));
 pub const INSTINCTS: &str = include_str!("../../seeds/instincts.json");
+pub const REPERTOIRE: &str = include_str!("../../seeds/repertoire.json");
+
+/// A person's starting way of life: common routines, one for their work, and weighted desires
+/// that call them. It is theirs: the mind keeps, changes or drops any of it.
+pub fn give_repertoire(ctx: &ReducerContext, id: u32, occupation: &str, now: u64) {
+    let r: serde_json::Value = serde_json::from_str(REPERTOIRE).expect("repertoire json");
+    let occ = r["occupations"].get(occupation).or_else(|| r["occupations"].get("forager")).cloned().unwrap_or_default();
+    let work = occ["routine"].as_str().unwrap_or("forage").to_string();
+    let mut routines: Vec<crate::mind::RoutineIn> = r["common"].as_object().map(|m| m.iter().map(|(k, g)| crate::mind::RoutineIn { name: k.clone(), graph: g.to_string() }).collect()).unwrap_or_default();
+    routines.push(crate::mind::RoutineIn { name: work.clone(), graph: occ["graph"].to_string() });
+    let _ = crate::mind::set_routines(ctx, id, &routines, &format!("habit ({occupation})"), now);
+    let top = r["top"].to_string().replace("\"WORK\"", &serde_json::to_string(&work).unwrap_or_default());
+    if let Ok(g) = living_rules::graph::parse(&top) {
+        let _ = crate::mind::set_graph(ctx, id, &g.to_json(), &format!("my way of life ({occupation})"), "habit", now);
+    }
+}
 pub const SKILLS: &str = include_str!("../../scripts/skills.rhai");
 
 #[derive(Deserialize)]
@@ -542,6 +558,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
             for tech in occupation_know_how(occ) {
                 common::learn(ctx, id, tech, "seed", now);
             }
+            give_repertoire(ctx, id, occ, now);
             if let Some(mut ch) = ctx.db.character().id().find(id) {
                 ch.home_x = home.0;
                 ch.home_y = home.1;
@@ -567,6 +584,9 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
                     ch.home_x = home.0;
                     ch.home_y = home.1;
                     ctx.db.character().id().update(ch);
+                }
+                if ctx.db.character().id().find(id).map_or(false, |c| c.stage >= 1) {
+                    give_repertoire(ctx, id, "child", now);
                 }
                 household_ids.push((id, "child".into()));
             }
@@ -645,6 +665,10 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
             spawn_with(ctx, name, "person", admin, true, p, now, life.age_at(ctx.rng().gen_range(0.18f32..0.7), pace), (0, 0))
         };
         common::inv_add(ctx, id as u64, "berries", 3);
+        let stage = ctx.db.character().id().find(id).map(|c| c.stage).unwrap_or(2);
+        if stage >= 1 {
+            give_repertoire(ctx, id, if stage == 1 { "child" } else { "forager" }, now);
+        }
         if k == 0 {
             for tech in &b.knows {
                 common::learn(ctx, id, tech, "seed", now);

@@ -44,6 +44,36 @@ pub struct Gate {
     pub changed_by: u32,
 }
 
+/// A character's own named behavior (a routine), called from its graph by name and edited
+/// by its mind one at a time, so behavior compounds instead of being rewritten each time.
+/// Written only when a mind (or teaching) changes it.
+#[spacetimedb::table(accessor = routine, public)]
+pub struct Routine {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub name: String,
+    pub graph: String,
+    pub revision: u32,
+    /// "mind", "habit", "taught by <name>", "read <tablet>".
+    pub source: String,
+    pub updated_ms: u64,
+}
+
+/// How a routine has gone in practice (updated as its actions finish; split from the
+/// routine row because it changes far more often).
+#[spacetimedb::table(accessor = routine_stat, public)]
+pub struct RoutineStat {
+    #[primary_key]
+    pub id: u64,
+    pub ok: u32,
+    pub failed: u32,
+    pub last_fail: String,
+    pub last_ms: u64,
+}
+
 /// Where a seeded character comes from (town, household, occupation, history) as JSON.
 /// World fact, not identity: the character's mind builds its identity from it.
 #[spacetimedb::table(accessor = background, public)]

@@ -53,7 +53,8 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
     r.map(|v| (v, warnings))
 }
 
-const NODES: &str = "first, seq, if, do, say, wait, think";
+const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
+const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing"];
 const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, near, hurt_within, heard_within, night, believes, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
@@ -115,6 +116,20 @@ pub fn node(v: Value, path: &str) -> Result<Value, String> {
                     _ => return Err(format!("{path}.wait: expected seconds")),
                 };
                 return Ok(json!({"wait": secs.clamp(0.5, 120.0)}));
+            }
+            if let Some(v) = m.get("routine") {
+                let name = match v {
+                    Value::String(s) => s.trim().to_string(),
+                    Value::Object(o) => o.get("name").and_then(|n| n.as_str()).unwrap_or_default().trim().to_string(),
+                    _ => String::new(),
+                };
+                if name.is_empty() {
+                    return Err(format!("{path}.routine: expected a routine name"));
+                }
+                return Ok(json!({"routine": name}));
+            }
+            if let Some(v) = m.get("desires").or_else(|| m.get("wants")) {
+                return desires(v.clone(), path);
             }
             if let Some(v) = m.get("think") {
                 let reason = match v {
@@ -194,6 +209,65 @@ fn composite(key: &str, v: Value, label: Option<Value>, path: &str) -> Result<Va
         Some(l) => json!({key: {"label": l, "children": children}}),
         None => json!({key: children}),
     })
+}
+
+fn desires(v: Value, path: &str) -> Result<Value, String> {
+    let Value::Array(items) = v else { return Err(format!("{path}.desires: expected a list of desires")) };
+    let mut kept = Vec::new();
+    let mut first_err = None;
+    for (i, d) in items.into_iter().enumerate() {
+        let p = format!("{path}.desires[{i}]");
+        let r = (|| -> Result<Value, String> {
+            let Value::Object(o) = d else { return Err(format!("{p}: expected {{\"want\", \"weight\", \"do\"}}")) };
+            let want = o.get("want").or_else(|| o.get("name")).or_else(|| o.get("label")).and_then(|w| w.as_str()).unwrap_or_default().trim().to_string();
+            if want.is_empty() {
+                return Err(format!("{p}: a desire needs a \"want\" (what it is for)"));
+            }
+            let mut weight = Map::new();
+            match o.get("weight") {
+                Some(Value::Number(n)) => {
+                    weight.insert("base".into(), json!(n.as_f64().unwrap_or(0.5)));
+                }
+                Some(Value::Object(w)) => {
+                    for (k, v) in w {
+                        if k == "believes" {
+                            if let Value::Object(b) = v {
+                                let b: Map<String, Value> = b.iter().filter_map(|(k, v)| v.as_f64().map(|x| (k.clone(), json!(x)))).collect();
+                                weight.insert("believes".into(), Value::Object(b));
+                            }
+                        } else if WEIGHTS.contains(&k.as_str()) {
+                            if let Some(x) = v.as_f64() {
+                                weight.insert(k.clone(), json!(x));
+                            }
+                        } else {
+                            WARNINGS.with(|w| w.borrow_mut().push(format!("{p}.weight: ignored unknown signal `{k}` (signals are {})", WEIGHTS.join(", "))));
+                        }
+                    }
+                }
+                _ => {
+                    weight.insert("base".into(), json!(0.5));
+                }
+            }
+            let body = o.get("do").or_else(|| o.get("then")).or_else(|| o.get("node")).cloned().ok_or_else(|| format!("{p}: a desire needs \"do\" (a node)"))?;
+            let body = match body {
+                Value::String(s) if catalog::skill(&s).is_none() => json!({"routine": s}),
+                other => node(other, &format!("{p}.do"))?,
+            };
+            Ok(json!({"want": want, "weight": weight, "do": body}))
+        })();
+        match r {
+            Ok(v) => kept.push(v),
+            Err(e) => {
+                WARNINGS.with(|w| w.borrow_mut().push(format!("dropped {e}")));
+                first_err.get_or_insert(e);
+            }
+        }
+    }
+    if kept.is_empty() {
+        return Err(first_err.unwrap_or_else(|| format!("{path}.desires: no valid desires")));
+    }
+    kept.truncate(crate::graph::MAX_CHILDREN);
+    Ok(json!({"desires": kept}))
 }
 
 fn if_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {

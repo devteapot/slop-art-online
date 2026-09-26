@@ -6,9 +6,15 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Model graphs are asked to stay within 64 nodes; the rest is headroom for body reflexes.
+/// A graph as a mind writes it (the top level or one routine) stays within these limits;
+/// the compiled graph, with routines inlined, may be much larger.
 pub const MAX_NODES: usize = 80;
 pub const MAX_DEPTH: usize = 11;
+/// Limits for a compiled graph (top level with its routines inlined).
+pub const MAX_COMPILED_NODES: usize = 800;
+pub const MAX_COMPILED_DEPTH: usize = 40;
+/// How deep routines may call routines.
+pub const MAX_ROUTINE_NESTING: usize = 4;
 pub const MAX_CHILDREN: usize = 12;
 pub const MAX_TEXT: usize = 400;
 
@@ -29,6 +35,64 @@ pub enum Node {
     Wait(f32),
     /// Ask the mind to reconsider (non-blocking, throttled per node).
     Think(String),
+    /// Run one of the character's own routines (inlined when the graph is compiled).
+    Routine(String),
+    /// Weighted desires: each check, the strongest desire that can act now wins.
+    Desires(Vec<Desire>),
+}
+
+/// One desire: what it is for, how strongly it is felt, and what it does.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Desire {
+    pub want: String,
+    #[serde(default)]
+    pub weight: Weight,
+    #[serde(rename = "do")]
+    pub body: Box<Node>,
+}
+
+/// Strength of a desire: a base plus what makes it stronger or weaker (each signal is 0..1).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Weight {
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub base: f32,
+    /// Hunger (0 fed .. 1 starving).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub hunger: f32,
+    /// Tiredness (0 rested .. 1 exhausted).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tired: f32,
+    /// Hurt (0 whole .. 1 near death).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub hurt: f32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub night: f32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub day: f32,
+    /// Seeing an attack coming.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub threatened: f32,
+    /// No other person in sight.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub alone: f32,
+    /// People in sight (0 none .. 1 five or more).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub company: f32,
+    /// Winter.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub winter: f32,
+    /// How long since this desire last acted (0 just now .. 1 an hour or more): variety.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub longing: f32,
+    /// The character's own stances (judgment value 0..1) by key.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub believes: std::collections::BTreeMap<String, f32>,
+}
+
+fn is_zero(x: &f32) -> bool {
+    *x == 0.0
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -267,6 +331,50 @@ pub fn from_value_for(v: serde_json::Value, body: &crate::species::Species) -> R
     Ok((validate(root)?, warnings))
 }
 
+/// Routine names a graph calls.
+pub fn routines_called(root: &Node) -> Vec<String> {
+    preorder(root).into_iter().filter_map(|n| if let Node::Routine(r) = n { Some(r.clone()) } else { None }).collect()
+}
+
+/// Inline routine calls (`lookup` gives a routine's graph by name) into one graph. Each call
+/// becomes a `first` labeled `routine:<name>` so actions can be attributed to their routine;
+/// a routine that does not exist (or nests too deep) becomes a request to think about it.
+pub fn expand(root: &Node, lookup: &dyn Fn(&str) -> Option<Node>) -> Node {
+    fn go(n: &Node, lookup: &dyn Fn(&str) -> Option<Node>, stack: &mut Vec<String>) -> Node {
+        match n {
+            Node::Routine(name) => {
+                let body = if stack.len() >= MAX_ROUTINE_NESTING || stack.contains(name) {
+                    Node::Think(format!("my routine \"{name}\" calls itself or nests too deep"))
+                } else {
+                    match lookup(name) {
+                        Some(g) => {
+                            stack.push(name.clone());
+                            let b = go(&g, lookup, stack);
+                            stack.pop();
+                            b
+                        }
+                        None => Node::Think(format!("I have no routine \"{name}\" yet")),
+                    }
+                };
+                Node::First(Composite { label: Some(format!("routine:{name}")), children: vec![body] })
+            }
+            Node::First(c) => Node::First(Composite { label: c.label.clone(), children: c.children.iter().map(|x| go(x, lookup, stack)).collect() }),
+            Node::Seq(c) => Node::Seq(Composite { label: c.label.clone(), children: c.children.iter().map(|x| go(x, lookup, stack)).collect() }),
+            Node::If(i) => Node::If(Box::new(IfNode { cond: i.cond.clone(), then: go(&i.then, lookup, stack), otherwise: i.otherwise.as_ref().map(|e| go(e, lookup, stack)) })),
+            Node::Desires(ds) => Node::Desires(ds.iter().map(|d| Desire { want: d.want.clone(), weight: d.weight.clone(), body: Box::new(go(&d.body, lookup, stack)) }).collect()),
+            other => other.clone(),
+        }
+    }
+    go(root, lookup, &mut Vec::new())
+}
+
+/// Validate a compiled graph (top level with routines inlined) against the larger limits.
+pub fn validate_compiled(root: Node) -> Result<Graph, String> {
+    let mut count = 0;
+    check_with(&root, 1, &mut count, MAX_COMPILED_NODES, MAX_COMPILED_DEPTH)?;
+    Ok(Graph { root, nodes: count })
+}
+
 /// Skills used anywhere in a graph (for authority-side body checks).
 pub fn skills_used(root: &Node) -> Vec<String> {
     preorder(root)
@@ -293,12 +401,17 @@ pub fn validate(root: Node) -> Result<Graph, String> {
 }
 
 fn check(n: &Node, depth: usize, count: &mut usize) -> Result<(), String> {
+    check_with(n, depth, count, MAX_NODES, MAX_DEPTH)
+}
+
+fn check_with(n: &Node, depth: usize, count: &mut usize, max_nodes: usize, max_depth: usize) -> Result<(), String> {
+    let check = |n: &Node, depth: usize, count: &mut usize| check_with(n, depth, count, max_nodes, max_depth);
     *count += 1;
-    if *count > MAX_NODES {
-        return Err(format!("graph has more than {MAX_NODES} nodes"));
+    if *count > max_nodes {
+        return Err(format!("graph has more than {max_nodes} nodes"));
     }
-    if depth > MAX_DEPTH {
-        return Err(format!("graph deeper than {MAX_DEPTH}"));
+    if depth > max_depth {
+        return Err(format!("graph deeper than {max_depth}"));
     }
     match n {
         Node::First(c) | Node::Seq(c) => {
@@ -347,6 +460,22 @@ fn check(n: &Node, depth: usize, count: &mut usize) -> Result<(), String> {
         Node::Think(r) => {
             if r.trim().is_empty() || r.len() > MAX_TEXT {
                 return Err("think reason must be 1..400 bytes".into());
+            }
+        }
+        Node::Routine(name) => {
+            if name.trim().is_empty() || name.len() > 60 {
+                return Err("a routine name is 1..60 bytes".into());
+            }
+        }
+        Node::Desires(ds) => {
+            if ds.is_empty() || ds.len() > MAX_CHILDREN {
+                return Err(format!("desires needs 1..={MAX_CHILDREN} entries"));
+            }
+            for d in ds {
+                if d.want.trim().is_empty() || d.want.len() > 60 {
+                    return Err("a desire's want is 1..60 bytes".into());
+                }
+                check(&d.body, depth + 1, count)?;
             }
         }
     }
@@ -428,6 +557,7 @@ pub fn preorder<'a>(root: &'a Node) -> Vec<&'a Node> {
                     go(e, out);
                 }
             }
+            Node::Desires(ds) => ds.iter().for_each(|d| go(&d.body, out)),
             _ => {}
         }
     }
@@ -460,7 +590,23 @@ pub fn describe(n: &Node) -> String {
         Node::Say(s) => format!("say \"{}\"", s.text),
         Node::Wait(w) => format!("wait {w}s"),
         Node::Think(r) => format!("think: {r}"),
+        Node::Routine(r) => format!("routine: {r}"),
+        Node::Desires(ds) => format!("desires ({})", ds.iter().map(|d| d.want.as_str()).collect::<Vec<_>>().join(", ")),
     }
+}
+
+/// A desire's weight in words, e.g. "0.2 + hunger×1.5 + night×0.4".
+pub fn describe_weight(w: &Weight) -> String {
+    let mut parts = vec![format!("{}", w.base)];
+    for (k, v) in [("hunger", w.hunger), ("tired", w.tired), ("hurt", w.hurt), ("night", w.night), ("day", w.day), ("threatened", w.threatened), ("alone", w.alone), ("company", w.company), ("winter", w.winter), ("longing", w.longing)] {
+        if v != 0.0 {
+            parts.push(format!("{k}×{v}"));
+        }
+    }
+    for (k, v) in &w.believes {
+        parts.push(format!("believes {k}×{v}"));
+    }
+    parts.join(" + ")
 }
 
 fn label(c: &Composite) -> String {
@@ -539,6 +685,12 @@ pub fn outline(root: &Node) -> String {
                     go(e, depth + 1, id, out);
                 }
             }
+            Node::Desires(ds) => {
+                for d in ds {
+                    out.push_str(&format!("   {}want \"{}\" ({})\n", "  ".repeat(depth + 1), d.want, describe_weight(&d.weight)));
+                    go(&d.body, depth + 2, id, out);
+                }
+            }
             _ => {}
         }
     }
@@ -582,5 +734,51 @@ mod tests {
         assert!(parse(r#"{"do":{"skill":"teleport"}}"#).unwrap_err().contains("unknown skill"));
         assert!(parse(r#"{"do":{"skill":"gather"}}"#).unwrap_err().contains("needs a target"));
         assert!(parse(r#"{"do":{"skill":"gather","target":{"nearest":"unicorn"}}}"#).is_err());
+    }
+}
+
+#[cfg(test)]
+mod repertoire_tests {
+    use super::*;
+
+    #[test]
+    fn desires_and_routines_parse_expand_and_validate() {
+        let top = from_value(serde_json::json!({"desires": [
+            {"want": "eat", "weight": {"base": 0.1, "hunger": 1.5}, "do": {"routine": "find food"}},
+            {"want": "company", "weight": 0.4, "do": "visit friends"},
+            {"want": "rest", "weight": {"tired": 1.2, "night": 0.5, "mood": 3}, "do": {"do": "sleep"}}
+        ]}))
+        .unwrap();
+        let routines = |name: &str| -> Option<Node> {
+            match name {
+                "find food" => Some(from_value(serde_json::json!({"first": [{"if": {"has": {"item": "food"}}, "then": {"do": "eat", "item": "food"}}, {"routine": "gather berries"}]})).unwrap().root),
+                "gather berries" => Some(from_value(serde_json::json!({"do": "gather", "target": {"nearest": "berry_bush"}})).unwrap().root),
+                _ => None,
+            }
+        };
+        let g = validate_compiled(expand(&top.root, &routines)).unwrap();
+        let out = outline(&g.root);
+        assert!(out.contains("routine:find food") && out.contains("routine:gather berries"), "{out}");
+        assert!(out.contains("routine:visit friends") && out.contains("no routine"), "{out}");
+        assert!(out.contains("hunger×1.5"), "{out}");
+        assert_eq!(routines_called(&top.root), vec!["find food", "visit friends"]);
+    }
+}
+
+#[cfg(test)]
+mod seed_repertoire_tests {
+    use super::*;
+
+    #[test]
+    fn seed_repertoire_is_valid() {
+        let r: serde_json::Value = serde_json::from_str(include_str!("../../seeds/repertoire.json")).unwrap();
+        for (name, g) in r["common"].as_object().unwrap() {
+            from_value(g.clone()).unwrap_or_else(|e| panic!("{name}: {e}"));
+        }
+        for (occ, o) in r["occupations"].as_object().unwrap() {
+            from_value(o["graph"].clone()).unwrap_or_else(|e| panic!("{occ}: {e}"));
+        }
+        let top = serde_json::to_string(&r["top"]).unwrap().replace("WORK", "fishing");
+        parse(&top).unwrap();
     }
 }

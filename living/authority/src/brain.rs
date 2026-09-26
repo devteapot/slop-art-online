@@ -27,6 +27,8 @@ const REFLECT_MARK: u16 = u16::MAX - 3;
 const IN_CROWD: u32 = 1 << 8;
 const WOLF_NEAR: u32 = 1 << 9;
 const FAMILIAR_LIMIT: usize = 256;
+/// Marks at 0xC000 | node: when a desire last began to act.
+const DESIRE_MARK: u16 = 0xC000;
 
 struct Scene {
     creatures: Vec<NearCreature>,
@@ -154,6 +156,69 @@ impl<'a> Ev<'a> {
         }
     }
 
+    /// Weighted desires: score each from the body's state and the character's stances, try
+    /// the strongest first (the one already acting gets a small bonus, so choices do not
+    /// flicker), and remember when each last acted (for "longing").
+    fn desires(&mut self, ds: &[graph::Desire], id: u16) -> St {
+        let mut ids = Vec::with_capacity(ds.len());
+        let mut next = id + 1;
+        for _ in ds {
+            ids.push(next);
+            next += self.g.sizes.get(next as usize).copied().unwrap_or(1);
+        }
+        let current = self.cursor(id) as usize;
+        let hunger = (self.needs.hunger / 100.0).clamp(0.0, 1.0);
+        let tired = ((100.0 - self.needs.energy) / 100.0).clamp(0.0, 1.0);
+        let hurt = (1.0 - self.needs.hp / self.vit.max_hp.max(1.0)).clamp(0.0, 1.0);
+        let night = if common::night(&self.w, self.now) { 1.0 } else { 0.0 };
+        let me = self.me.id;
+        let now = self.now;
+        let threatened = if self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now) { 1.0 } else { 0.0 };
+        let people = self.scene().creatures.iter().filter(|c| &*c.kind == "person").count() as f32;
+        let alone = if people == 0.0 { 1.0 } else { 0.0 };
+        let company = (people / 5.0).min(1.0);
+        let winter = if common::season(self.ctx, now) == "winter" { 1.0 } else { 0.0 };
+        let judgments: Vec<(String, f32)> = if ds.iter().any(|d| !d.weight.believes.is_empty()) {
+            self.ctx.db.judgment().actor().filter(me).map(|j| (j.key.to_lowercase(), j.value)).collect()
+        } else {
+            Vec::new()
+        };
+        let mut order: Vec<(f32, usize)> = ds
+            .iter()
+            .enumerate()
+            .map(|(i, d)| {
+                let w = &d.weight;
+                let last = self.st.marks.iter().find(|m| m.node == DESIRE_MARK | ids[i]).map(|m| m.at_ms);
+                let longing = last.map_or(1.0, |t| (now.saturating_sub(t) as f32 / 3_600_000.0).min(1.0));
+                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing;
+                for (k, v) in &w.believes {
+                    let j = judgments.iter().find(|(key, _)| key == &k.to_lowercase()).map(|(_, x)| *x).unwrap_or(0.5);
+                    s += v * j;
+                }
+                if current == i + 1 {
+                    s += 0.1;
+                }
+                (s, i)
+            })
+            .collect();
+        order.sort_by(|a, b| b.0.total_cmp(&a.0));
+        for (score, i) in order {
+            if score <= 0.0 {
+                break;
+            }
+            let r = self.run(&ds[i].body, ids[i]);
+            if r != St::Fail {
+                if current != i + 1 {
+                    self.set_cursor(id, i as u16 + 1);
+                    self.set_mark(DESIRE_MARK | ids[i]);
+                }
+                return r;
+            }
+        }
+        self.set_cursor(id, 0);
+        St::Fail
+    }
+
     fn cursor(&self, node: u16) -> u16 {
         self.st.cursors.iter().find(|c| c.node == node).map(|c| c.idx).unwrap_or(0)
     }
@@ -196,6 +261,9 @@ impl<'a> Ev<'a> {
 
     fn run_inner(&mut self, n: &Node, id: u16) -> St {
         match n {
+            Node::Desires(ds) => self.desires(ds, id),
+            // Routines are inlined when the graph is compiled; a stray call does nothing.
+            Node::Routine(_) => St::Fail,
             Node::First(c) => {
                 let ids = self.child_ids(id, c.children.len());
                 for (ch, cid) in c.children.iter().zip(ids) {

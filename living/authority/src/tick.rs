@@ -95,6 +95,10 @@ fn grew(ctx: &ReducerContext, c: &Character, stage: u8, now: u64) {
     let Some(mut row) = ctx.db.character().id().find(c.id) else { return };
     row.stage = stage;
     ctx.db.character().id().update(row);
+    // A person who outgrows infancy starts from a child's way of life (theirs to change).
+    if c.kind == "person" && c.stage == 0 && stage == 1 {
+        seed::give_repertoire(ctx, c.id, "child", now);
+    }
     let at = ctx.db.body().id().find(c.id).map(|b| common::pos(&b, now)).unwrap_or((0.0, 0.0));
     let (story, feel) = match (c.kind.as_str(), stage) {
         ("person", 1) => (format!("{} is no longer a baby", c.name), "You can walk, talk and do things on your own now, though you are still small."),

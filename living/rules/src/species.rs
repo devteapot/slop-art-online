@@ -35,6 +35,9 @@ pub struct Species {
     pub temperament: BTreeMap<String, [f32; 2]>,
     #[serde(default)]
     pub nature: String,
+    /// What the body eats, as the creature knows it (shown in its scene).
+    #[serde(default)]
+    pub eats: String,
     /// Lifespan and stages (see `life`).
     #[serde(default)]
     pub life: crate::life::Life,

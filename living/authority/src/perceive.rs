@@ -258,6 +258,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     you.insert("kind".into(), json!(me.kind));
     you.insert("at".into(), json!([round(at.0), round(at.1)]));
     you.insert("terrain".into(), json!(map.at(at.0, at.1).name()));
+    if let Some(sp) = common::species(&me.kind).filter(|s| !s.eats.is_empty()) {
+        you.insert("you eat".into(), json!(sp.eats));
+    }
     {
         let w = common::world(ctx);
         let life = common::life_of(&me.kind);

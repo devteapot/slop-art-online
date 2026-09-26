@@ -125,6 +125,8 @@ pub fn spawn_crowd(ctx: &ReducerContext, n: u32, minded: bool) -> Result<(), Str
         let controller = if minded { common::world(ctx).admin } else { ctx.database_identity() };
         let id = seed::spawn_creature(ctx, &format!("Walker{}", made + 1), "person", controller, minded, (x, y), now);
         common::inv_add(ctx, id as u64, "berries", 3);
+        // Crowds live by a forager's repertoire, like real people (for representative load).
+        seed::give_repertoire(ctx, id, "forager", now);
         made += 1;
     }
     Ok(())
@@ -157,6 +159,32 @@ pub fn own_habits(ctx: &ReducerContext) -> Result<(), String> {
         }
     }
     log::info!("habit layers now owned by {n} characters");
+    Ok(())
+}
+
+/// Give each living person without routines the starting repertoire for their background
+/// (occupation, band member or child); used when a running world gains repertoires.
+#[spacetimedb::reducer]
+pub fn grant_repertoires(ctx: &ReducerContext) -> Result<(), String> {
+    use crate::tables::routine as _;
+    require_admin(ctx)?;
+    let now = common::now_ms(ctx);
+    let people: Vec<Character> = ctx.db.character().kind().filter("person").filter(|c| c.alive && c.stage >= 1).collect();
+    let mut n = 0;
+    for c in people {
+        if ctx.db.routine().actor().filter(c.id).next().is_some() {
+            continue;
+        }
+        let bg: serde_json::Value = ctx.db.background().id().find(c.id).and_then(|b| serde_json::from_str(&b.text).ok()).unwrap_or_default();
+        let occ = if c.stage == 1 {
+            "child".to_string()
+        } else {
+            bg["occupation"].as_str().filter(|o| *o != "child").unwrap_or("forager").to_string()
+        };
+        seed::give_repertoire(ctx, c.id, &occ, now);
+        n += 1;
+    }
+    log::info!("gave starting repertoires to {n} people");
     Ok(())
 }
 

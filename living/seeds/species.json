@@ -25,7 +25,8 @@
       "old_age": 0.87,
       "gestation": 0.011,
       "litter": 1
-    }
+    },
+    "eats": "berries, fish and meat (cooked is better); food you carry, or from stores"
   },
   "deer": {
     "skills": [
@@ -109,7 +110,8 @@
       "old_age": 0.85,
       "gestation": 0.046,
       "litter": 2
-    }
+    },
+    "eats": "grass: you graze wherever grass or forest floor is underfoot (you cannot eat berries, trees or meat)"
   },
   "wolf": {
     "skills": [
@@ -197,6 +199,7 @@
       "old_age": 0.85,
       "gestation": 0.017,
       "litter": 4
-    }
+    },
+    "eats": "meat: from prey you kill (deer), eaten from what you carry"
   }
 }

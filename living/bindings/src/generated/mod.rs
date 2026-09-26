@@ -39,6 +39,7 @@ pub mod gate_table;
 pub mod gate_type;
 pub mod grant_items_reducer;
 pub mod grant_know_how_reducer;
+pub mod grant_repertoires_reducer;
 pub mod human_act_reducer;
 pub mod human_say_reducer;
 pub mod install_script_reducer;
@@ -60,6 +61,7 @@ pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
 pub mod mind_cursor_type;
 pub mod mind_install_reducer;
+pub mod mind_routines_reducer;
 pub mod mind_say_reducer;
 pub mod mind_skip_reducer;
 pub mod mind_state_table;
@@ -82,6 +84,11 @@ pub mod relation_table;
 pub mod relation_type;
 pub mod resource_node_table;
 pub mod resource_node_type;
+pub mod routine_in_type;
+pub mod routine_stat_table;
+pub mod routine_stat_type;
+pub mod routine_table;
+pub mod routine_type;
 pub mod script_table;
 pub mod script_type;
 pub mod seed_communities_reducer;
@@ -146,6 +153,7 @@ pub use gate_table::*;
 pub use gate_type::Gate;
 pub use grant_items_reducer::grant_items;
 pub use grant_know_how_reducer::grant_know_how;
+pub use grant_repertoires_reducer::grant_repertoires;
 pub use human_act_reducer::human_act;
 pub use human_say_reducer::human_say;
 pub use install_script_reducer::install_script;
@@ -167,6 +175,7 @@ pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
 pub use mind_install_reducer::mind_install;
+pub use mind_routines_reducer::mind_routines;
 pub use mind_say_reducer::mind_say;
 pub use mind_skip_reducer::mind_skip;
 pub use mind_state_table::*;
@@ -189,6 +198,11 @@ pub use relation_table::*;
 pub use relation_type::Relation;
 pub use resource_node_table::*;
 pub use resource_node_type::ResourceNode;
+pub use routine_in_type::RoutineIn;
+pub use routine_stat_table::*;
+pub use routine_stat_type::RoutineStat;
+pub use routine_table::*;
+pub use routine_type::Routine;
 pub use script_table::*;
 pub use script_type::Script;
 pub use seed_communities_reducer::seed_communities;
@@ -237,6 +251,7 @@ pub enum Reducer {
         id: u32,
         technique: String,
     },
+    GrantRepertoires,
     HumanAct {
         node: String,
     },
@@ -262,6 +277,10 @@ pub enum Reducer {
         say_to: u32,
         seen_ms: u64,
         thought: ThoughtIn,
+    },
+    MindRoutines {
+        actor: u32,
+        routines: Vec<RoutineIn>,
     },
     MindSay {
         actor: u32,
@@ -322,12 +341,14 @@ impl __sdk::Reducer for Reducer {
         match self {
             Reducer::GrantItems { .. } => "grant_items",
             Reducer::GrantKnowHow { .. } => "grant_know_how",
+            Reducer::GrantRepertoires => "grant_repertoires",
             Reducer::HumanAct { .. } => "human_act",
             Reducer::HumanSay { .. } => "human_say",
             Reducer::InstallScript { .. } => "install_script",
             Reducer::Join { .. } => "join",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindInstall { .. } => "mind_install",
+            Reducer::MindRoutines { .. } => "mind_routines",
             Reducer::MindSay { .. } => "mind_say",
             Reducer::MindSkip { .. } => "mind_skip",
             Reducer::MindUpdate { .. } => "mind_update",
@@ -360,6 +381,9 @@ impl __sdk::Reducer for Reducer {
                     id: id.clone(),
                     technique: technique.clone(),
                 })
+            }
+            Reducer::GrantRepertoires => {
+                __sats::bsatn::to_vec(&grant_repertoires_reducer::GrantRepertoiresArgs {})
             }
             Reducer::HumanAct { node } => {
                 __sats::bsatn::to_vec(&human_act_reducer::HumanActArgs { node: node.clone() })
@@ -401,6 +425,12 @@ impl __sdk::Reducer for Reducer {
                 seen_ms: seen_ms.clone(),
                 thought: thought.clone(),
             }),
+            Reducer::MindRoutines { actor, routines } => {
+                __sats::bsatn::to_vec(&mind_routines_reducer::MindRoutinesArgs {
+                    actor: actor.clone(),
+                    routines: routines.clone(),
+                })
+            }
             Reducer::MindSay {
                 actor,
                 say,
@@ -509,6 +539,8 @@ pub struct DbUpdate {
     place: __sdk::TableUpdate<Place>,
     relation: __sdk::TableUpdate<Relation>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
+    routine: __sdk::TableUpdate<Routine>,
+    routine_stat: __sdk::TableUpdate<RoutineStat>,
     script: __sdk::TableUpdate<Script>,
     stats: __sdk::TableUpdate<Stats>,
     structure: __sdk::TableUpdate<Structure>,
@@ -600,6 +632,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "resource_node" => db_update
                     .resource_node
                     .append(resource_node_table::parse_table_update(table_update)?),
+                "routine" => db_update
+                    .routine
+                    .append(routine_table::parse_table_update(table_update)?),
+                "routine_stat" => db_update
+                    .routine_stat
+                    .append(routine_stat_table::parse_table_update(table_update)?),
                 "script" => db_update
                     .script
                     .append(script_table::parse_table_update(table_update)?),
@@ -722,6 +760,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.resource_node = cache
             .apply_diff_to_table::<ResourceNode>("resource_node", &self.resource_node)
             .with_updates_by_pk(|row| &row.id);
+        diff.routine = cache
+            .apply_diff_to_table::<Routine>("routine", &self.routine)
+            .with_updates_by_pk(|row| &row.id);
+        diff.routine_stat = cache
+            .apply_diff_to_table::<RoutineStat>("routine_stat", &self.routine_stat)
+            .with_updates_by_pk(|row| &row.id);
         diff.script = cache
             .apply_diff_to_table::<Script>("script", &self.script)
             .with_updates_by_pk(|row| &row.name);
@@ -829,6 +873,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "resource_node" => db_update
                     .resource_node
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "routine" => db_update
+                    .routine
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "routine_stat" => db_update
+                    .routine_stat
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "script" => db_update
                     .script
@@ -942,6 +992,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "resource_node" => db_update
                     .resource_node
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "routine" => db_update
+                    .routine
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "routine_stat" => db_update
+                    .routine_stat
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "script" => db_update
                     .script
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1006,6 +1062,8 @@ pub struct AppliedDiff<'r> {
     place: __sdk::TableAppliedDiff<'r, Place>,
     relation: __sdk::TableAppliedDiff<'r, Relation>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
+    routine: __sdk::TableAppliedDiff<'r, Routine>,
+    routine_stat: __sdk::TableAppliedDiff<'r, RoutineStat>,
     script: __sdk::TableAppliedDiff<'r, Script>,
     stats: __sdk::TableAppliedDiff<'r, Stats>,
     structure: __sdk::TableAppliedDiff<'r, Structure>,
@@ -1062,6 +1120,12 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<ResourceNode>(
             "resource_node",
             &self.resource_node,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Routine>("routine", &self.routine, event);
+        callbacks.invoke_table_row_callbacks::<RoutineStat>(
+            "routine_stat",
+            &self.routine_stat,
             event,
         );
         callbacks.invoke_table_row_callbacks::<Script>("script", &self.script, event);
@@ -1761,6 +1825,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         place_table::register_table(client_cache);
         relation_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
+        routine_table::register_table(client_cache);
+        routine_stat_table::register_table(client_cache);
         script_table::register_table(client_cache);
         stats_table::register_table(client_cache);
         structure_table::register_table(client_cache);
@@ -1796,6 +1862,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "place",
         "relation",
         "resource_node",
+        "routine",
+        "routine_stat",
         "script",
         "stats",
         "structure",

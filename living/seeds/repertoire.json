@@ -1,0 +1,851 @@
+{
+  "common": {
+    "stay safe": {
+      "first": [
+        {
+          "if": {
+            "all": [
+              {
+                "hurt_within": 5
+              },
+              {
+                "health": {
+                  "below": 40
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "flee",
+            "target": "attacker"
+          }
+        },
+        {
+          "if": {
+            "hurt_within": 5
+          },
+          "then": {
+            "do": "attack",
+            "target": "attacker"
+          }
+        },
+        {
+          "if": {
+            "near": {
+              "target": {
+                "nearest": "wolf"
+              },
+              "within": 6
+            }
+          },
+          "then": {
+            "do": "flee",
+            "target": {
+              "nearest": "wolf"
+            }
+          }
+        }
+      ]
+    },
+    "eat": {
+      "first": [
+        {
+          "if": {
+            "has": {
+              "item": "food"
+            }
+          },
+          "then": {
+            "do": "eat",
+            "item": "food"
+          }
+        },
+        {
+          "do": "take",
+          "target": {
+            "nearest": "storage"
+          },
+          "item": "food"
+        },
+        {
+          "do": "gather",
+          "target": {
+            "nearest": "berry_bush"
+          }
+        },
+        {
+          "do": "goto",
+          "target": "home"
+        }
+      ]
+    },
+    "sleep": {
+      "first": [
+        {
+          "if": {
+            "sees": {
+              "nearest": "house"
+            }
+          },
+          "then": {
+            "seq": [
+              {
+                "do": "goto",
+                "target": {
+                  "nearest": "house"
+                }
+              },
+              {
+                "do": "sleep"
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "sees": {
+              "nearest": "shelter"
+            }
+          },
+          "then": {
+            "seq": [
+              {
+                "do": "goto",
+                "target": {
+                  "nearest": "shelter"
+                }
+              },
+              {
+                "do": "sleep"
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "sees": {
+              "nearest": "campfire"
+            }
+          },
+          "then": {
+            "seq": [
+              {
+                "do": "goto",
+                "target": {
+                  "nearest": "campfire"
+                }
+              },
+              {
+                "do": "sleep"
+              }
+            ]
+          }
+        },
+        {
+          "do": "sleep"
+        }
+      ]
+    },
+    "keep warm": {
+      "first": [
+        {
+          "if": {
+            "near": {
+              "target": {
+                "nearest": "house"
+              },
+              "within": 2
+            }
+          },
+          "then": {
+            "do": "rest"
+          }
+        },
+        {
+          "if": {
+            "sees": {
+              "nearest": "house"
+            }
+          },
+          "then": {
+            "do": "goto",
+            "target": {
+              "nearest": "house"
+            }
+          }
+        },
+        {
+          "if": {
+            "sees": {
+              "nearest": "campfire"
+            }
+          },
+          "then": {
+            "do": "goto",
+            "target": {
+              "nearest": "campfire"
+            }
+          }
+        },
+        {
+          "do": "goto",
+          "target": "home"
+        }
+      ]
+    },
+    "be with people": {
+      "first": [
+        {
+          "if": {
+            "sees": {
+              "nearest": {
+                "kind": "person",
+                "relation": "friend"
+              }
+            }
+          },
+          "then": {
+            "do": "follow",
+            "target": {
+              "nearest": {
+                "kind": "person",
+                "relation": "friend"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "sees": {
+              "nearest": {
+                "kind": "person",
+                "relation": "family"
+              }
+            }
+          },
+          "then": {
+            "do": "follow",
+            "target": {
+              "nearest": {
+                "kind": "person",
+                "relation": "family"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "sees": {
+              "nearest": "person"
+            }
+          },
+          "then": {
+            "do": "goto",
+            "target": {
+              "nearest": "person"
+            }
+          }
+        },
+        {
+          "do": "goto",
+          "target": "home"
+        }
+      ]
+    },
+    "explore": {
+      "seq": [
+        {
+          "do": "wander"
+        },
+        {
+          "do": "wander"
+        },
+        {
+          "do": "wander"
+        },
+        {
+          "wait": 2
+        }
+      ]
+    }
+  },
+  "occupations": {
+    "fisher": {
+      "routine": "fishing",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "fish",
+                    "at_least": 3
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "campfire"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "cook",
+              "target": {
+                "nearest": "campfire"
+              },
+              "item": "fish"
+            }
+          },
+          {
+            "if": {
+              "has": {
+                "item": "cooked_fish",
+                "at_least": 4
+              }
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "cooked_fish",
+              "qty": 3
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "fishing_spot"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "farmer": {
+      "routine": "tend the fields",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "has": {
+                "item": "berries",
+                "at_least": 8
+              }
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "berries",
+              "qty": 5
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "berry_bush"
+            }
+          },
+          {
+            "if": {
+              "has": {
+                "item": "berries",
+                "at_least": 2
+              }
+            },
+            "then": {
+              "do": "plant"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "hunter": {
+      "routine": "hunt",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "spear"
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "deer"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "attack",
+              "target": {
+                "nearest": "deer"
+              }
+            }
+          },
+          {
+            "if": {
+              "has": {
+                "item": "meat",
+                "at_least": 2
+              }
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "meat",
+              "qty": 2
+            }
+          },
+          {
+            "seq": [
+              {
+                "do": "wander"
+              },
+              {
+                "do": "wander"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "builder": {
+      "routine": "gather building stuff",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "has": {
+                "item": "wood",
+                "at_least": 8
+              }
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "wood",
+              "qty": 6
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "tree"
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "boulder"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "mason": {
+      "routine": "cut stone",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "has": {
+                "item": "stone",
+                "at_least": 6
+              }
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "stone",
+              "qty": 5
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "boulder"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "carpenter": {
+      "routine": "work wood",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "has": {
+                "item": "wood",
+                "at_least": 8
+              }
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "wood",
+              "qty": 6
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "tree"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "cook": {
+      "routine": "cook for others",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "fish"
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "campfire"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "cook",
+              "target": {
+                "nearest": "campfire"
+              },
+              "item": "fish"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "meat"
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "campfire"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "cook",
+              "target": {
+                "nearest": "campfire"
+              },
+              "item": "meat"
+            }
+          },
+          {
+            "if": {
+              "has": {
+                "item": "cooked_meat",
+                "at_least": 3
+              }
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "cooked_meat",
+              "qty": 2
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "berry_bush"
+            }
+          }
+        ]
+      }
+    },
+    "guard": {
+      "routine": "keep watch",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "sees": {
+                "nearest": "wolf"
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": {
+                "nearest": "gate"
+              }
+            }
+          },
+          {
+            "seq": [
+              {
+                "do": "goto",
+                "target": {
+                  "nearest": "gate"
+                }
+              },
+              {
+                "wait": 20
+              }
+            ]
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "scribe": {
+      "routine": "keep the records",
+      "graph": {
+        "first": [
+          {
+            "seq": [
+              {
+                "do": "goto",
+                "target": {
+                  "nearest": "sign"
+                }
+              },
+              {
+                "do": "read",
+                "target": {
+                  "nearest": "sign"
+                }
+              },
+              {
+                "wait": 20
+              }
+            ]
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "trader": {
+      "routine": "go to market",
+      "graph": {
+        "first": [
+          {
+            "seq": [
+              {
+                "do": "goto",
+                "target": {
+                  "nearest": "storage"
+                }
+              },
+              {
+                "wait": 15
+              },
+              {
+                "do": "wander"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "healer": {
+      "routine": "tend the hurt",
+      "graph": {
+        "first": [
+          {
+            "do": "tend",
+            "target": {
+              "nearest": "person"
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "berry_bush"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "forager": {
+      "routine": "forage",
+      "graph": {
+        "first": [
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "berry_bush"
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "tree"
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "reeds"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "child": {
+      "routine": "play",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "not": {
+                "near": {
+                  "target": "parent",
+                  "within": 6
+                }
+              }
+            },
+            "then": {
+              "do": "follow",
+              "target": "parent"
+            }
+          },
+          {
+            "seq": [
+              {
+                "do": "wander"
+              },
+              {
+                "wait": 4
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "top": {
+    "desires": [
+      {
+        "want": "safety",
+        "weight": {
+          "threatened": 3,
+          "hurt": 1.2
+        },
+        "do": {
+          "routine": "stay safe"
+        }
+      },
+      {
+        "want": "food",
+        "weight": {
+          "base": -0.5,
+          "hunger": 1.5
+        },
+        "do": {
+          "routine": "eat"
+        }
+      },
+      {
+        "want": "sleep",
+        "weight": {
+          "base": -0.7,
+          "tired": 1.3,
+          "night": 0.6
+        },
+        "do": {
+          "routine": "sleep"
+        }
+      },
+      {
+        "want": "warmth",
+        "weight": {
+          "base": -0.1,
+          "night": 0.5,
+          "winter": 0.3
+        },
+        "do": {
+          "routine": "keep warm"
+        }
+      },
+      {
+        "want": "work",
+        "weight": {
+          "base": 0.2,
+          "day": 0.5
+        },
+        "do": {
+          "routine": "WORK"
+        }
+      },
+      {
+        "want": "company",
+        "weight": {
+          "base": 0.15,
+          "alone": 0.3,
+          "longing": 0.3
+        },
+        "do": {
+          "routine": "be with people"
+        }
+      },
+      {
+        "want": "explore",
+        "weight": {
+          "base": 0.05,
+          "longing": 0.35
+        },
+        "do": {
+          "routine": "explore"
+        }
+      }
+    ]
+  }
+}

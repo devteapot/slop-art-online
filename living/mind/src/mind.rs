@@ -122,6 +122,63 @@ impl Minds {
         }
     }
 
+    /// The character's routines as the mind sees them: how each has gone, and its graph.
+    fn repertoire_text(&self, actor: u32) -> String {
+        let top = self.conn.db.brain().id().find(&actor).and_then(|b| living_rules::graph::parse(&b.graph).ok());
+        let called: Vec<String> = top.as_ref().map(|g| living_rules::graph::routines_called(&g.root).into_iter().map(|r| r.to_lowercase()).collect()).unwrap_or_default();
+        let mut rs: Vec<Routine> = self.conn.db.routine().iter().filter(|r| r.actor == actor).collect();
+        rs.sort_by_key(|r| (!called.contains(&r.name.to_lowercase()), std::cmp::Reverse(r.updated_ms)));
+        let mut out = String::new();
+        for (i, r) in rs.iter().enumerate() {
+            let stat = self.conn.db.routine_stat().id().find(&r.id);
+            let how = match &stat {
+                Some(s) if s.failed > 0 && !s.last_fail.is_empty() => format!("done {}×, failed {}× (last: {})", s.ok, s.failed, s.last_fail),
+                Some(s) => format!("done {}×, failed {}×", s.ok, s.failed),
+                None => "not tried yet".into(),
+            };
+            out.push_str(&format!("## {} — {} [{}]\n", r.name, how, r.source));
+            if i < 12 {
+                if let Ok(g) = living_rules::graph::parse(&r.graph) {
+                    out.push_str(&living_rules::graph::outline(&g.root));
+                }
+            }
+        }
+        out
+    }
+
+    /// Apply routine edits from a reply: add/replace (normalized for this body) or retire.
+    async fn apply_routines(&self, c: &Character, v: &Value) -> Result<()> {
+        let Some(items) = v.as_array() else { return Ok(()) };
+        let mut edits = Vec::new();
+        for it in items.iter().take(8) {
+            let name = it["name"].as_str().unwrap_or_default().trim().to_string();
+            if name.is_empty() {
+                continue;
+            }
+            if it["retire"].as_bool() == Some(true) || it["graph"].is_null() {
+                edits.push(RoutineIn { name, graph: String::new() });
+                continue;
+            }
+            let parsed = match self.species.get(&c.kind) {
+                Some(sp) => living_rules::graph::from_value_for(it["graph"].clone(), sp),
+                None => living_rules::graph::from_value_lenient(it["graph"].clone()),
+            };
+            match parsed {
+                Ok((g, _)) => edits.push(RoutineIn { name, graph: g.to_json() }),
+                Err(e) => log::info!("{}: routine {name} not kept: {e}", c.name),
+            }
+        }
+        if edits.is_empty() {
+            return Ok(());
+        }
+        log::info!("{} reworks routines: {}", c.name, edits.iter().map(|e| if e.graph.is_empty() { format!("-{}", e.name) } else { e.name.clone() }).collect::<Vec<_>>().join(", "));
+        let (tx, rx) = oneshot::channel();
+        self.conn.reducers.mind_routines_then(c.id, edits, move |_, r| {
+            let _ = tx.send(flatten(r));
+        })?;
+        rx.await?.map_err(|e| anyhow!("mind_routines: {e}"))
+    }
+
     fn cursor(&self, actor: u32) -> u64 {
         self.conn.db.mind_cursor().actor().find(&actor).map(|c| c.upto).unwrap_or(0)
     }
@@ -697,7 +754,8 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             experiences,
         };
         let system = prompts::deliberate_system(&c.name);
-        let user = prompts::deliberate_user(&ctx, &d.scene, &outline, &plan, &reason);
+        let repertoire = self.repertoire_text(actor);
+        let user = prompts::deliberate_user(&ctx, &d.scene, &outline, &plan, &reason, &repertoire);
         let _permit = self.sem.acquire().await?;
         let mut messages = vec![Msg { role: "system", content: system }, Msg { role: "user", content: user }];
         let mut last_err = String::new();
@@ -715,6 +773,12 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             };
             total_latency += reply.latency_ms;
             total_tokens += reply.tokens;
+            // Routine edits apply whatever else the reply does (they are idempotent upserts).
+            if let Ok(v) = llm::parse_json(&reply.content) {
+                if let Err(e) = self.apply_routines(&c, &v["routines"]).await {
+                    log::warn!("{}: routines not applied: {e:#}", c.name);
+                }
+            }
             // Only talking: keep the current behavior and just speak.
             if let Ok(v) = llm::parse_json(&reply.content) {
                 if v["graph"].is_null() || v["graph"].as_str().map_or(false, |g| g.trim().eq_ignore_ascii_case("keep")) {
