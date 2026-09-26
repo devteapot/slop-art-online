@@ -25,6 +25,8 @@ def rows(db, q):
         for h, v in zip(head, vals):
             if v.startswith('"') and v.endswith('"'):
                 v = v[1:-1]
+            elif v in ("true", "false"):
+                v = v == "true"
             else:
                 try:
                     v = float(v) if "." in v else int(v)

@@ -1,36 +1,459 @@
 {
-  "person": {"first": {"label": "instinct", "children": [
-    {"if": {"cond": {"all": [{"hurt_within": 6}, {"health": {"below": 50}}]}, "then": {"do": {"skill": "flee", "target": "attacker"}}}},
-    {"if": {"cond": {"near": {"target": {"nearest": "wolf"}, "within": 5}}, "then": {"do": {"skill": "flee", "target": {"nearest": "wolf"}}}}},
-    {"if": {"cond": {"hunger": {"above": 55}}, "then": {"first": [
-      {"if": {"cond": {"has": {"item": "food"}}, "then": {"do": {"skill": "eat", "item": "food"}}}},
-      {"do": {"skill": "gather", "target": {"nearest": "berry_bush"}}}
-    ]}}},
-    {"if": {"cond": {"any": [{"energy": {"below": 20}}, {"all": [{"night": true}, {"energy": {"below": 70}}]}]}, "then": {"first": [
-      {"if": {"cond": {"sees": {"nearest": "shelter"}}, "then": {"seq": [{"do": {"skill": "goto", "target": {"nearest": "shelter"}}}, {"do": {"skill": "sleep"}}]}}},
-      {"if": {"cond": {"sees": {"nearest": "campfire"}}, "then": {"seq": [{"do": {"skill": "goto", "target": {"nearest": "campfire"}}}, {"do": {"skill": "sleep"}}]}}},
-      {"do": {"skill": "sleep"}}
-    ]}}},
-    {"if": {"cond": {"not": {"has": {"item": "berries", "at_least": 3}}}, "then": {"do": {"skill": "gather", "target": {"nearest": "berry_bush"}}}}},
-    {"seq": [{"think": "I have food for now. What should I do with my time here?"}, {"do": {"skill": "wander"}}, {"wait": 3}]}
-  ]}},
-  "deer": {"first": [
-    {"if": {"cond": {"near": {"target": {"nearest": "wolf"}, "within": 7}}, "then": {"do": {"skill": "flee", "target": {"nearest": "wolf"}}}}},
-    {"if": {"cond": {"hurt_within": 8}, "then": {"do": {"skill": "flee", "target": "attacker"}}}},
-    {"if": {"cond": {"near": {"target": {"nearest": "person"}, "within": 4}}, "then": {"do": {"skill": "flee", "target": {"nearest": "person"}}}}},
-    {"if": {"cond": {"hunger": {"above": 45}}, "then": {"do": {"skill": "graze"}}}},
-    {"if": {"cond": {"energy": {"below": 25}}, "then": {"do": {"skill": "sleep"}}}},
-    {"seq": [{"do": {"skill": "wander"}}, {"wait": 5}]}
-  ]},
-  "wolf": {"first": [
-    {"if": {"cond": {"all": [{"hurt_within": 8}, {"health": {"below": 25}}]}, "then": {"do": {"skill": "flee", "target": "attacker"}}}},
-    {"if": {"cond": {"has": {"item": "meat"}}, "then": {"if": {"cond": {"hunger": {"above": 15}}, "then": {"do": {"skill": "eat", "item": "meat"}}}}}},
-    {"if": {"cond": {"hurt_within": 5}, "then": {"do": {"skill": "attack", "target": "attacker"}}}},
-    {"if": {"cond": {"hunger": {"above": 50}}, "then": {"first": [
-      {"do": {"skill": "attack", "target": {"nearest": "deer"}}},
-      {"if": {"cond": {"all": [{"night": true}, {"hunger": {"above": 75}}]}, "then": {"do": {"skill": "attack", "target": {"nearest": "person"}}}}}
-    ]}}},
-    {"if": {"cond": {"energy": {"below": 25}}, "then": {"do": {"skill": "sleep"}}}},
-    {"seq": [{"do": {"skill": "wander"}}, {"wait": 6}]}
-  ]}
+  "person": {
+    "first": {
+      "label": "instinct",
+      "children": [
+        {
+          "if": {
+            "cond": {
+              "all": [
+                {
+                  "hurt_within": 6
+                },
+                {
+                  "health": {
+                    "below": 50
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": {
+                "skill": "flee",
+                "target": "attacker"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "near": {
+                "target": {
+                  "nearest": "wolf"
+                },
+                "within": 5
+              }
+            },
+            "then": {
+              "do": {
+                "skill": "flee",
+                "target": {
+                  "nearest": "wolf"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "hunger": {
+                "above": 55
+              }
+            },
+            "then": {
+              "first": [
+                {
+                  "if": {
+                    "cond": {
+                      "has": {
+                        "item": "food"
+                      }
+                    },
+                    "then": {
+                      "do": {
+                        "skill": "eat",
+                        "item": "food"
+                      }
+                    }
+                  }
+                },
+                {
+                  "do": {
+                    "skill": "gather",
+                    "target": {
+                      "nearest": "berry_bush"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "any": [
+                {
+                  "energy": {
+                    "below": 20
+                  }
+                },
+                {
+                  "all": [
+                    {
+                      "night": true
+                    },
+                    {
+                      "energy": {
+                        "below": 70
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "then": {
+              "first": [
+                {
+                  "if": {
+                    "cond": {
+                      "sees": {
+                        "nearest": "shelter"
+                      }
+                    },
+                    "then": {
+                      "seq": [
+                        {
+                          "do": {
+                            "skill": "goto",
+                            "target": {
+                              "nearest": "shelter"
+                            }
+                          }
+                        },
+                        {
+                          "do": {
+                            "skill": "sleep"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "cond": {
+                      "sees": {
+                        "nearest": "campfire"
+                      }
+                    },
+                    "then": {
+                      "seq": [
+                        {
+                          "do": {
+                            "skill": "goto",
+                            "target": {
+                              "nearest": "campfire"
+                            }
+                          }
+                        },
+                        {
+                          "do": {
+                            "skill": "sleep"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "do": {
+                    "skill": "sleep"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "not": {
+                "has": {
+                  "item": "berries",
+                  "at_least": 3
+                }
+              }
+            },
+            "then": {
+              "do": {
+                "skill": "gather",
+                "target": {
+                  "nearest": "berry_bush"
+                }
+              }
+            }
+          }
+        },
+        {
+          "seq": [
+            {
+              "think": "I have food for now. What should I do with my time here?"
+            },
+            {
+              "do": {
+                "skill": "wander"
+              }
+            },
+            {
+              "wait": 3
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "deer": {
+    "first": [
+      {
+        "if": {
+          "cond": {
+            "near": {
+              "target": {
+                "nearest": "wolf"
+              },
+              "within": 7
+            }
+          },
+          "then": {
+            "do": {
+              "skill": "flee",
+              "target": {
+                "nearest": "wolf"
+              }
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "hurt_within": 8
+          },
+          "then": {
+            "do": {
+              "skill": "flee",
+              "target": "attacker"
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "near": {
+              "target": {
+                "nearest": "person"
+              },
+              "within": 4
+            }
+          },
+          "then": {
+            "do": {
+              "skill": "flee",
+              "target": {
+                "nearest": "person"
+              }
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "hunger": {
+              "above": 45
+            }
+          },
+          "then": {
+            "do": {
+              "skill": "graze"
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "energy": {
+              "below": 25
+            }
+          },
+          "then": {
+            "do": {
+              "skill": "sleep"
+            }
+          }
+        }
+      },
+      {
+        "seq": [
+          {
+            "do": {
+              "skill": "wander"
+            }
+          },
+          {
+            "wait": 5
+          }
+        ]
+      }
+    ]
+  },
+  "wolf": {
+    "first": [
+      {
+        "if": {
+          "cond": {
+            "near": {
+              "target": {
+                "nearest": "campfire"
+              },
+              "within": 5
+            }
+          },
+          "then": {
+            "do": {
+              "skill": "flee",
+              "target": {
+                "nearest": "campfire"
+              }
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "all": [
+              {
+                "hurt_within": 8
+              },
+              {
+                "health": {
+                  "below": 25
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": {
+              "skill": "flee",
+              "target": "attacker"
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "has": {
+              "item": "meat"
+            }
+          },
+          "then": {
+            "if": {
+              "cond": {
+                "hunger": {
+                  "above": 15
+                }
+              },
+              "then": {
+                "do": {
+                  "skill": "eat",
+                  "item": "meat"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "hurt_within": 5
+          },
+          "then": {
+            "do": {
+              "skill": "attack",
+              "target": "attacker"
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "hunger": {
+              "above": 50
+            }
+          },
+          "then": {
+            "first": [
+              {
+                "do": {
+                  "skill": "attack",
+                  "target": {
+                    "nearest": "deer"
+                  }
+                }
+              },
+              {
+                "if": {
+                  "cond": {
+                    "all": [
+                      {
+                        "night": true
+                      },
+                      {
+                        "hunger": {
+                          "above": 88
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "do": {
+                      "skill": "attack",
+                      "target": {
+                        "nearest": "person"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "energy": {
+              "below": 25
+            }
+          },
+          "then": {
+            "do": {
+              "skill": "sleep"
+            }
+          }
+        }
+      },
+      {
+        "seq": [
+          {
+            "do": {
+              "skill": "wander"
+            }
+          },
+          {
+            "wait": 6
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -1,12 +1,14 @@
 //! Living world observer: a top-down map of the valley with a story feed and an inspector
 //! for each character's identity, behavior graph, beliefs and model thoughts. Reads public
-//! tables only, anonymously; it never calls reducers.
+//! tables only, anonymously; it never calls reducers (one per-character experience query).
 
+mod art;
 mod clock;
 mod map;
 mod net;
 mod panels;
 mod state;
+mod terrain;
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
@@ -44,11 +46,17 @@ fn draw(mut contexts: EguiContexts, mut net: NonSendMut<net::Net>, mut view: Non
     view.refresh(ctx, net, &snap, time.delta_secs());
     let dt = time.delta_secs().max(1e-4);
     view.fps += (1.0 / dt - view.fps) * 0.05;
-    panels::top_bar(ctx, net, &snap, view.fps, view.frame_ms);
+    panels::top_bar(ctx, net, &snap, &mut view);
     panels::left(ctx, &mut view, &snap);
     panels::inspector(ctx, &mut view, net, &snap);
+    panels::sign_window(ctx, &mut view, &snap);
     map::central(ctx, &mut view, &snap, time.elapsed_secs());
     let ms = started.elapsed().as_secs_f32() * 1000.0;
     view.frame_ms += (ms - view.frame_ms) * 0.05;
+    let secs = time.elapsed_secs() as u32;
+    if secs % 30 == 0 && secs != view.logged_at {
+        view.logged_at = secs;
+        info!("viewer: {:.0} fps, ui {:.1} ms, {} creatures", view.fps, view.frame_ms, snap.bodies.len());
+    }
     Ok(())
 }

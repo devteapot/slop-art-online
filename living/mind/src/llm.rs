@@ -199,9 +199,61 @@ pub fn parse_json(s: &str) -> Result<Value> {
     }
     let start = s.find('{').ok_or_else(|| anyhow!("no JSON object in reply"))?;
     let end = s.rfind('}').ok_or_else(|| anyhow!("no JSON object in reply"))?;
-    let v: Value = serde_json::from_str(&s[start..=end]).context("reply JSON")?;
+    let v: Value = repair(&s[start..=end]).context("reply JSON")?;
     if !v.is_object() {
         return Err(anyhow!("reply is not a JSON object"));
     }
     Ok(v)
+}
+
+/// Parse JSON, repairing the slips small models make: a stray `}`/`]` where a value is
+/// expected, and trailing commas. Uses the parser's own error position; bounded retries.
+fn repair(text: &str) -> serde_json::Result<Value> {
+    let mut t = text.to_string();
+    let mut last = serde_json::from_str::<Value>(&t);
+    for _ in 0..12 {
+        let Err(e) = &last else { break };
+        let msg = e.to_string();
+        // Byte offset of the error from line/column.
+        let (line, col) = (e.line(), e.column());
+        let offset = t.split_inclusive('\n').take(line.saturating_sub(1)).map(|l| l.len()).sum::<usize>() + col.saturating_sub(1);
+        let bytes = t.as_bytes();
+        if offset >= bytes.len() {
+            break;
+        }
+        if msg.contains("expected value") && matches!(bytes[offset], b'}' | b']') {
+            // Drop the stray closer and a comma right after it.
+            let mut end = offset + 1;
+            while end < bytes.len() && (bytes[end] as char).is_whitespace() {
+                end += 1;
+            }
+            if end < bytes.len() && bytes[end] == b',' {
+                end += 1;
+            }
+            t.replace_range(offset..end, "");
+        } else if msg.contains("trailing comma") {
+            // The comma precedes the reported closer.
+            if let Some(i) = t[..offset.min(t.len())].rfind(',') {
+                t.replace_range(i..i + 1, "");
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+        last = serde_json::from_str::<Value>(&t);
+    }
+    last
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repairs_small_model_slips() {
+        let v = parse_json("{\n  \"remember\": [],\n  \"nodes\": [\n    },\n    {\"key\": \"self\"}\n  ],\n  \"edges\": [1, 2,],\n}").unwrap();
+        assert_eq!(v["nodes"][0]["key"], "self");
+        assert_eq!(v["edges"].as_array().unwrap().len(), 2);
+    }
 }

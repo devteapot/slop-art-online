@@ -3,7 +3,64 @@
 use crate::net::Net;
 use bevy_egui::egui;
 use living_bindings::*;
-use living_rules::map::{Map, Terrain, MAP_H, MAP_W};
+use crate::art::{Art, Season};
+use crate::terrain::TerrainArt;
+use living_rules::map::{Map, MAP_H, MAP_W};
+
+/// World size in tiles. The single place the viewer reads the map size from: switch this
+/// to the `world` row when the authority publishes it (larger maps are planned).
+pub fn world_tiles() -> egui::Vec2 {
+    egui::vec2(MAP_W as f32, MAP_H as f32)
+}
+
+/// Camp colours for the minimap and markers (index = camp), and the loner colour.
+pub const CAMP_COLORS: [egui::Color32; 6] = [
+    egui::Color32::from_rgb(236, 96, 84),
+    egui::Color32::from_rgb(84, 164, 244),
+    egui::Color32::from_rgb(244, 196, 64),
+    egui::Color32::from_rgb(170, 120, 240),
+    egui::Color32::from_rgb(90, 206, 146),
+    egui::Color32::from_rgb(244, 140, 200),
+];
+pub const LONER: egui::Color32 = egui::Color32::from_rgb(235, 235, 235);
+
+/// Group living people whose homes lie within a few tiles of each other; groups of two or
+/// more are camps (ordered by their lowest id), everyone else is a loner.
+fn camps_of(chars: &HashMap<u32, Character>) -> HashMap<u32, Option<usize>> {
+    let mut people: Vec<&Character> = chars.values().filter(|c| c.kind == "person").collect();
+    people.sort_by_key(|c| c.id);
+    let n = people.len();
+    let mut group: Vec<usize> = (0..n).collect();
+    fn root(g: &mut Vec<usize>, i: usize) -> usize {
+        let mut i = i;
+        while g[i] != i {
+            g[i] = g[g[i]];
+            i = g[i];
+        }
+        i
+    }
+    for i in 0..n {
+        for j in i + 1..n {
+            let d = ((people[i].home_x - people[j].home_x).powi(2) + (people[i].home_y - people[j].home_y).powi(2)).sqrt();
+            if d <= 10.0 {
+                let (a, b) = (root(&mut group, i), root(&mut group, j));
+                group[a.max(b)] = a.min(b);
+            }
+        }
+    }
+    let mut sizes: HashMap<usize, usize> = HashMap::new();
+    for i in 0..n {
+        *sizes.entry(root(&mut group, i)).or_default() += 1;
+    }
+    let mut order: Vec<usize> = sizes.iter().filter(|(_, s)| **s >= 2).map(|(r, _)| *r).collect();
+    order.sort();
+    (0..n)
+        .map(|i| {
+            let r = root(&mut group, i);
+            (people[i].id, order.iter().position(|o| *o == r))
+        })
+        .collect()
+}
 use spacetimedb_sdk::Table;
 use std::collections::HashMap;
 
@@ -22,6 +79,14 @@ pub struct Snap {
     pub structures: Vec<Structure>,
     pub expecting: Vec<Expecting>,
     pub bond_offers: Vec<BondOffer>,
+    pub artifacts: Vec<Artifact>,
+    /// Characters who know `writing`.
+    pub literate: std::collections::HashSet<u32>,
+    /// Characters carrying a torch.
+    pub torches: std::collections::HashSet<u32>,
+    pub trades: Vec<TradeOffer>,
+    /// Camp index per person (None = loner).
+    pub camps: HashMap<u32, Option<usize>>,
 }
 
 impl Snap {
@@ -43,6 +108,24 @@ impl Snap {
             structures: c.db.structure().iter().collect(),
             expecting: c.db.expecting().iter().collect(),
             bond_offers: c.db.bond_offer().iter().collect(),
+            artifacts: c.db.artifact().iter().collect(),
+            literate: c.db.know_how().iter().filter(|k| k.technique == "writing").map(|k| k.actor).collect(),
+            torches: c.db.inventory().iter().filter(|i| i.item == "torch" && i.qty > 0 && i.owner < (1u64 << 32)).map(|i| i.owner as u32).collect(),
+            trades: c.db.trade_offer().iter().collect(),
+            camps: HashMap::new(),
+        }
+        .with_camps()
+    }
+
+    fn with_camps(mut self) -> Self {
+        self.camps = camps_of(&self.chars);
+        self
+    }
+
+    pub fn camp_color(&self, id: u32) -> egui::Color32 {
+        match self.camps.get(&id).copied().flatten() {
+            Some(i) => CAMP_COLORS[i % CAMP_COLORS.len()],
+            None => LONER,
         }
     }
 
@@ -67,6 +150,20 @@ impl Snap {
     /// Kinematic position at `now` (tile coordinates).
     pub fn body_pos(&self, id: u32) -> Option<egui::Pos2> {
         self.bodies.get(&id).map(|b| body_pos(b, self.now))
+    }
+
+    pub fn season(&self) -> Season {
+        thread_local! {
+            static PREVIEW: Option<usize> = crate::clock::season_override();
+        }
+        let i = PREVIEW.with(|p| *p).unwrap_or_else(|| living_rules::season_of(self.now, self.epoch_ms(), self.day_ms()));
+        Season::from_index(i)
+    }
+
+    /// Resource amount now; plants regrow only in growing (non-winter) time.
+    pub fn resource_amount(&self, n: &ResourceNode) -> f32 {
+        let grow = living_rules::growing_ms(n.at_ms, self.now, self.epoch_ms(), self.day_ms());
+        (n.amount + n.regen * grow as f32 / 60000.0).min(n.max)
     }
 
     /// Age in world days.
@@ -111,6 +208,31 @@ pub fn person_color(id: u32) -> egui::Color32 {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+pub enum StoryFilter {
+    All,
+    LearningTrade,
+}
+
+/// Story kinds shown by the "Learning & trade" filter.
+pub const LEARNING_TRADE: &[&str] = &["trade", "give", "learn", "write", "plant"];
+
+/// Short-lived visual effects that the tables only imply (a finished throw or strike).
+pub struct Effect {
+    pub kind: EffectKind,
+    pub from: egui::Pos2,
+    pub to: u32,
+    pub to_at: egui::Pos2,
+    pub start_ms: u64,
+    pub dur_ms: u64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum EffectKind {
+    Spear,
+    Slash,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Identity,
     Behavior,
@@ -131,8 +253,18 @@ pub struct View {
     /// Experience to highlight (and scroll to once) after following a thought's evidence.
     pub exp_highlight: Option<u64>,
     pub exp_scroll: bool,
+    /// Combat: last seen attack/throw per attacker, recent fights, spears in flight.
+    pub combat: HashMap<u32, Activity>,
+    pub fights: HashMap<(u32, u32), u64>,
+    pub effects: Vec<Effect>,
+    pub story_filter: StoryFilter,
+    /// Sign structure whose text is pinned open.
+    pub open_sign: Option<u64>,
     last_selected: Option<u32>,
-    pub terrain: Option<egui::TextureHandle>,
+    pub terrain: Option<TerrainArt>,
+    pub art: Option<Art>,
+    /// Last horizontal facing per creature (true = left).
+    pub facing: HashMap<u32, bool>,
     pub map: Option<Map>,
     pub chronicle: Vec<Chronicle>,
     pub thoughts: HashMap<u32, Vec<Thought>>,
@@ -143,6 +275,7 @@ pub struct View {
     /// Smoothed frame rate and UI build time (diagnostics in the top bar).
     pub fps: f32,
     pub frame_ms: f32,
+    pub logged_at: u32,
     gens: (u32, u32, u32),
     styled: bool,
 }
@@ -150,7 +283,7 @@ pub struct View {
 impl Default for View {
     fn default() -> Self {
         Self {
-            center: egui::pos2(MAP_W as f32 / 2.0, MAP_H as f32 / 2.0),
+            center: (world_tiles() / 2.0).to_pos2(),
             zoom: 8.0,
             fitted: false,
             selected: None,
@@ -159,8 +292,15 @@ impl Default for View {
             story_only_selected: false,
             exp_highlight: None,
             exp_scroll: false,
+            open_sign: None,
+            combat: HashMap::new(),
+            fights: HashMap::new(),
+            effects: Vec::new(),
+            story_filter: StoryFilter::All,
             last_selected: None,
             terrain: None,
+            art: None,
+            facing: HashMap::new(),
             map: None,
             chronicle: Vec::new(),
             thoughts: HashMap::new(),
@@ -168,6 +308,7 @@ impl Default for View {
             shown: HashMap::new(),
             fps: 60.0,
             frame_ms: 0.0,
+            logged_at: 0,
             gens: (u32::MAX, u32::MAX, u32::MAX),
             styled: false,
         }
@@ -214,14 +355,8 @@ impl View {
         if let Some(c) = &net.conn {
             if gens.0 != self.gens.0 {
                 let chunks: Vec<(u32, Vec<u8>)> = c.db.terrain_chunk().iter().map(|r| (r.id, r.tiles)).collect();
-                if chunks.is_empty() {
-                    self.map = None;
-                    self.terrain = None;
-                } else {
-                    let map = Map::from_chunks(chunks);
-                    self.terrain = Some(ctx.load_texture("terrain", terrain_image(&map), egui::TextureOptions::NEAREST));
-                    self.map = Some(map);
-                }
+                self.terrain = None;
+                self.map = (!chunks.is_empty()).then(|| Map::from_chunks(chunks));
             }
             if gens.1 != self.gens.1 {
                 let mut rows: Vec<Chronicle> = c.db.chronicle().iter().collect();
@@ -250,6 +385,21 @@ impl View {
             }
             self.gens = gens;
         }
+        if self.art.is_none() {
+            self.art = Some(Art::new(ctx));
+        }
+        let season = self.season(snap);
+        if let Some(map) = &self.map {
+            if self.terrain.as_ref().map(|t| t.season) != Some(season) {
+                self.terrain = Some(crate::terrain::build(ctx, map, season));
+            }
+        }
+        for (id, b) in &snap.bodies {
+            if b.vx.abs() > 0.05 && b.next_ms > snap.now {
+                self.facing.insert(*id, b.vx < 0.0);
+            }
+        }
+        self.track_combat(snap);
         if self.selected != self.last_selected {
             self.last_selected = self.selected;
             self.exp_highlight = None;
@@ -273,48 +423,53 @@ impl View {
         }
     }
 
+    /// Remember windups; when one ends (row gone or replaced) near its `ends_ms`, spawn the
+    /// implied projectile or strike so the hit can be seen.
+    fn track_combat(&mut self, snap: &Snap) {
+        let now = snap.now;
+        let mut ended = Vec::new();
+        for (id, prev) in &self.combat {
+            let still = snap.activity.get(id).is_some_and(|a| a.skill == prev.skill && a.victim == prev.victim && a.ends_ms == prev.ends_ms);
+            if !still {
+                ended.push(*id);
+            }
+        }
+        for id in ended {
+            let prev = self.combat.remove(&id).unwrap();
+            if now + 400 < prev.ends_ms || now > prev.ends_ms + 1500 {
+                continue; // cancelled early, or we were not watching
+            }
+            let (Some(from), Some(to_at)) = (self.shown.get(&id).copied(), self.shown.get(&prev.victim).copied()) else { continue };
+            let (kind, dur) = if prev.skill == "throw" {
+                (EffectKind::Spear, ((to_at - from).length() / 18.0 * 1000.0) as u64 + 60)
+            } else {
+                (EffectKind::Slash, 260)
+            };
+            self.effects.push(Effect { kind, from, to: prev.victim, to_at, start_ms: now, dur_ms: dur });
+        }
+        for (id, a) in &snap.activity {
+            if a.victim != 0 && (a.skill == "attack" || a.skill == "throw") {
+                self.combat.insert(*id, a.clone());
+                let key = if *id < a.victim { (*id, a.victim) } else { (a.victim, *id) };
+                self.fights.insert(key, now);
+            }
+        }
+        self.fights.retain(|(a, b), t| now.saturating_sub(*t) < 5000 && snap.bodies.contains_key(a) && snap.bodies.contains_key(b));
+        self.effects.retain(|e| now < e.start_ms + e.dur_ms + 200);
+    }
+
+    /// Midpoint of the most recent fight, if any.
+    pub fn latest_fight(&self) -> Option<egui::Pos2> {
+        let (&(a, b), _) = self.fights.iter().max_by_key(|(_, t)| **t)?;
+        let (pa, pb) = (self.shown.get(&a)?, self.shown.get(&b)?);
+        Some(pa.lerp(*pb, 0.5))
+    }
+
+    pub fn season(&self, snap: &Snap) -> Season {
+        snap.season()
+    }
+
     pub fn model_of(&self, id: u32) -> Option<&str> {
         self.thoughts.get(&id)?.iter().find(|t| !t.model.is_empty()).map(|t| t.model.as_str())
     }
-}
-
-fn terrain_rgb(t: Terrain) -> [u8; 3] {
-    match t {
-        Terrain::Grass => [106, 150, 74],
-        Terrain::Forest => [52, 98, 56],
-        Terrain::Water => [58, 112, 168],
-        Terrain::Sand => [214, 196, 140],
-        Terrain::Rock => [128, 128, 132],
-        Terrain::Dirt => [140, 108, 72],
-    }
-}
-
-fn hash(x: u32, y: u32) -> f32 {
-    let mut h = x.wrapping_mul(374_761_393) ^ y.wrapping_mul(668_265_263);
-    h = (h ^ (h >> 13)).wrapping_mul(1_274_126_177);
-    ((h ^ (h >> 16)) & 0xffff) as f32 / 65535.0
-}
-
-/// One pixel per tile with slight per-tile variation and shoreline shading.
-fn terrain_image(map: &Map) -> egui::ColorImage {
-    let (w, h) = (MAP_W as usize, MAP_H as usize);
-    let mut px = Vec::with_capacity(w * h);
-    for y in 0..h as i32 {
-        for x in 0..w as i32 {
-            let t = map.get(x, y);
-            let [r, g, b] = terrain_rgb(t);
-            let mut f = 0.94 + 0.10 * hash(x as u32, y as u32);
-            if t == Terrain::Water {
-                let shore = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-                    .iter()
-                    .any(|(dx, dy)| x + dx >= 0 && y + dy >= 0 && x + dx < w as i32 && y + dy < h as i32 && map.get(x + dx, y + dy) != Terrain::Water);
-                if shore {
-                    f *= 1.15;
-                }
-            }
-            let c = |v: u8| ((v as f32 * f).round().clamp(0.0, 255.0)) as u8;
-            px.push(egui::Color32::from_rgb(c(r), c(g), c(b)));
-        }
-    }
-    egui::ColorImage::new([w, h], px)
 }

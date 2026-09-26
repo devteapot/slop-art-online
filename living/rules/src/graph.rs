@@ -85,6 +85,17 @@ pub struct Action {
     pub item: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub qty: Option<u32>,
+    /// Words to write (tablets and signs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// A technique a written text describes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub topic: Option<String>,
+    /// For trade offers: what is wanted in return.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub want: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub want_qty: Option<u32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -116,6 +127,10 @@ pub enum Cond {
     /// Heard speech within the last N seconds.
     HeardWithin(f32),
     Night(bool),
+    /// Hour of the day (0..24), e.g. `{"hour": {"above": 6, "below": 12}}`.
+    Hour(Cmp),
+    /// Someone's attack or throw aimed at me is winding up right now.
+    Threatened(bool),
     /// A judgment the mind maintains from its beliefs.
     Believes(Believes),
     Chance(f32),
@@ -307,6 +322,9 @@ fn check(n: &Node, depth: usize, count: &mut usize) -> Result<(), String> {
             if spec.needs_item && a.item.is_none() {
                 return Err(format!("skill `{}` needs an item", a.skill));
             }
+            if a.skill == "write" && a.text.as_deref().map_or(true, |t| t.trim().is_empty() || t.len() > MAX_TEXT) {
+                return Err("write needs text of 1..400 bytes".into());
+            }
             if let Some(t) = &a.target {
                 check_target(t)?;
             }
@@ -354,7 +372,7 @@ fn check_cond(c: &Cond, depth: usize) -> Result<(), String> {
                 return Err(format!("unknown item `{}`", h.item));
             }
         }
-        Cond::Hunger(c) | Cond::Energy(c) | Cond::Health(c) => {
+        Cond::Hunger(c) | Cond::Energy(c) | Cond::Health(c) | Cond::Hour(c) => {
             if c.above.is_none() && c.below.is_none() {
                 return Err("comparison needs above or below".into());
             }
@@ -489,6 +507,9 @@ pub fn describe_cond(c: &Cond) -> String {
         Cond::Near(n) => format!("within {} of {}", n.within, describe_target(&n.target)),
         Cond::HurtWithin(s) => format!("hurt in last {s}s"),
         Cond::HeardWithin(s) => format!("heard speech in last {s}s"),
+        Cond::Hour(x) => cmp("hour", x),
+        Cond::Threatened(true) => "an attack is coming at me".into(),
+        Cond::Threatened(false) => "no attack coming at me".into(),
         Cond::Night(true) => "night".into(),
         Cond::Night(false) => "day".into(),
         Cond::Believes(b) => format!("believes {} > {}", b.key, b.above),

@@ -49,11 +49,12 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
     }).unwrap_or((0.0, 0.0, 0.0));
     let mut near_fire = false;
     let mut near_shelter = false;
-    for (s, d) in common::structures_near(ctx, at, 4.0) {
-        if s.kind == "campfire" && d <= 3.5 {
+    let laws = common::laws(ctx);
+    for (s, d) in common::structures_near(ctx, at, laws.fire_warmth.max(laws.shelter_warmth)) {
+        if s.kind == "campfire" && d <= laws.fire_warmth {
             near_fire = true;
         }
-        if s.kind == "shelter" && d <= 2.5 {
+        if s.kind == "shelter" && d <= laws.shelter_warmth {
             near_shelter = true;
         }
     }
@@ -70,6 +71,7 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         terrain: common::map(ctx).at(at.0, at.1).name().into(),
         activity: ctx.db.activity().id().find(id).filter(|a| a.phase == 1).map(|a| a.skill).unwrap_or_default(),
         inv: common::inv_list(ctx, id as u64),
+        knows: common::knows(ctx, id),
     }
 }
 
@@ -80,7 +82,7 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
             if let Some(n) = ctx.db.resource_node().id().find(t.id) {
                 f.class = "resource".into();
                 f.id = n.id;
-                f.amount = common::amount_now(&n, now);
+                f.amount = common::amount_now(ctx, &n, now);
                 f.dist = dist(from, (n.x, n.y));
                 f.kind = n.kind;
             }
@@ -107,6 +109,7 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
                 if let Some(v) = ctx.db.vitals().id().find(c.id) {
                     f.hp = common::needs(&v, now).hp;
                 }
+                f.knows = common::knows(ctx, c.id);
             }
         }
         4 => {
@@ -123,7 +126,19 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
     let actor = facts(ctx, id, now);
     let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     let hour = common::hour(&w, now);
-    SkillCtx { actor, target: target_facts(ctx, &a.target, from, now), item: a.item.clone(), qty: a.qty, night: living_rules::is_night(hour), hour }
+    let roll: f32 = ctx.rng().gen_range(0.0..1.0);
+    SkillCtx {
+        actor,
+        target: target_facts(ctx, &a.target, from, now),
+        item: a.item.clone(),
+        qty: a.qty,
+        night: living_rules::is_night(hour),
+        hour,
+        season: common::season(ctx, now).into(),
+        text: a.text.clone(),
+        topic: a.topic.clone(),
+        roll,
+    }
 }
 
 fn label(skill: &str, item: &str, t: &Resolved) -> String {
@@ -147,7 +162,7 @@ fn target_pos(ctx: &ReducerContext, t: &TargetRef, now: u64) -> Option<(f32, f32
         3 => ctx.db.body().id().find(t.id as u32).map(|b| pos(&b, now)),
         1 => ctx.db.resource_node().id().find(t.id).map(|n| (n.x, n.y)),
         2 => ctx.db.structure().id().find(t.id).map(|s| (s.x, s.y)),
-        4 => Some((t.x, t.y)),
+        4 | 5 => Some((t.x, t.y)),
         _ => None,
     }
 }
@@ -163,7 +178,8 @@ fn speed(ctx: &ReducerContext, id: u32, now: u64) -> f32 {
 }
 
 /// Start an action for behavior node `node`. `cur` is the current activity, if any.
-pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, now: u64) -> Result<(), String> {
+#[allow(clippy::too_many_arguments)]
+pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), now: u64) -> Result<(), String> {
     let cur = ctx.db.activity().id().find(id);
     if let Some(a) = &cur {
         // A new graph may continue what the character was already doing.
@@ -197,6 +213,31 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             }
             target = Resolved::point(pick.ok_or("nowhere to wander")?);
         }
+        "dodge" => {
+            // Dash sideways/away from whatever is coming, else backwards.
+            let threat = ctx
+                .db
+                .activity()
+                .victim()
+                .filter(id)
+                .find(|a| a.phase == 1)
+                .and_then(|a| ctx.db.body().id().find(a.id))
+                .map(|b| pos(&b, now));
+            let from = threat.unwrap_or((here.0 - 1.0, here.1));
+            let away = (here.1 - from.1).atan2(here.0 - from.0);
+            let map = common::map(ctx);
+            let side: f32 = if ctx.rng().gen_range(0..2) == 0 { 1.2 } else { -1.2 };
+            let mut pick = None;
+            for spread in [side, -side, 0.0, side * 2.0] {
+                let ang = away + spread;
+                let p = (here.0 + ang.cos() * 2.4, here.1 + ang.sin() * 2.4);
+                if map.at(p.0, p.1).walkable() {
+                    pick = Some(p);
+                    break;
+                }
+            }
+            target = Resolved::point(pick.ok_or("no room to dodge")?);
+        }
         "flee" => {
             let from = target.at;
             let d = dist(here, from).max(0.1);
@@ -216,11 +257,21 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         "eat" | "give" | "store" if item == "food" => {
             item = common::best_food(ctx, id as u64).ok_or("no food in pack")?;
         }
+        "take" if item == "food" && target.class == 2 => {
+            item = common::best_food(ctx, STRUCTURE_BIT | target.id).ok_or("no food in there")?;
+        }
+        // Reading without a target means a tablet you carry (one you have not read first).
+        "read" if target.class == 0 => {
+            let mine: Vec<Artifact> = ctx.db.artifact().holder().filter(id as u64).collect();
+            let unread = mine.iter().find(|a| ctx.db.familiar().by_actor_thing().filter((id, FAM_ARTIFACT | a.id)).next().is_none());
+            let pick = unread.or(mine.first()).ok_or("you carry nothing to read")?;
+            target = Resolved { class: 5, id: pick.id, at: here, kind: "tablet".into(), name: pick.author_name.clone() };
+        }
         _ => {}
     }
     let r = reach(skill);
-    let moving_skill = matches!(skill, "goto" | "wander" | "flee" | "follow");
-    let needs_approach = target.class != 0 && (moving_skill || dist(here, target.at) > r);
+    let moving_skill = matches!(skill, "goto" | "wander" | "flee" | "follow" | "dodge");
+    let needs_approach = target.class != 0 && target.class != 5 && (moving_skill || dist(here, target.at) > r);
     let mut act = Activity {
         id,
         skill: skill.into(),
@@ -233,10 +284,19 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         started_ms: now,
         ends_ms: IDLE,
         label: label(skill, &item, &target),
+        text: text.chars().take(400).collect(),
+        topic: topic.to_string(),
+        want: want.0.to_string(),
+        want_qty: want.1,
+        victim: if matches!(skill, "attack" | "throw") && target.class == 3 { target.id as u32 } else { 0 },
     };
     if needs_approach && !(skill == "follow" && dist(here, target.at) <= r) {
         let sp = speed(ctx, id, now);
-        let sp = if skill == "flee" { sp * 1.15 } else { sp };
+        let sp = match skill {
+            "flee" => sp * 1.15,
+            "dodge" => 9.0,
+            _ => sp,
+        };
         motion::start_move(ctx, id, target.at, sp, now)?;
         if target.class == 3 {
             act.ends_ms = now + CHASE_REPATH_MS;
@@ -268,6 +328,11 @@ fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), Stri
     motion::stop(ctx, act.id, now);
     act.ends_ms = now + dur.max(100);
     let id = act.id;
+    if act.victim != 0 {
+        engage(ctx, id, now);
+        engage(ctx, act.victim, now);
+        common::wake(ctx, act.victim);
+    }
     if ctx.db.activity().id().find(id).is_some() {
         ctx.db.activity().id().update(act);
     } else {
@@ -310,7 +375,7 @@ fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
         ctx.db.mind_state().id().update(st);
     }
     // A failure identical to one in the last two minutes is not news.
-    let repeat = !ok && ctx.db.mind_state().id().find(a.id).map_or(false, |st| st.marks.iter().any(|m| m.node == failure_mark(&a.label, why) && now.saturating_sub(m.at_ms) < 120_000));
+    let repeat = !ok && ctx.db.mind_state().id().find(a.id).map_or(false, |st| st.marks.iter().any(|m| m.node == failure_mark(&a.label, why) && (now.saturating_sub(m.at_ms) as f32) < common::laws(ctx).repeat_failure_s * 1000.0));
     if !ok && !repeat {
         if let Some(mut st) = ctx.db.mind_state().id().find(a.id) {
             let key = failure_mark(&a.label, why);
@@ -368,7 +433,7 @@ pub fn progress(ctx: &ReducerContext, a: Activity, now: u64) {
     let here = ctx.db.body().id().find(a.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     let moving = ctx.db.body().id().find(a.id).map_or(false, |b| b.next_ms != IDLE);
     match a.skill.as_str() {
-        "goto" | "wander" | "flee" => {
+        "goto" | "wander" | "flee" | "dodge" => {
             if !moving {
                 finish(ctx, a, true, "", now);
             }
@@ -413,7 +478,7 @@ pub fn progress(ctx: &ReducerContext, a: Activity, now: u64) {
     if a.target.class == 3 {
         // Chasing: re-path toward where the target is now, if still perceivable.
         let w = common::world(ctx);
-        if d > common::sight(&w, now) * 1.4 {
+        if d > common::sight(ctx, &w, now) * 1.4 {
             motion::stop(ctx, a.id, now);
             return finish(ctx, a, false, "lost sight of them", now);
         }
@@ -474,11 +539,15 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 }
                 common::inv_add(ctx, me as u64, &item, qty);
                 notes.push(format!("+{qty} {item}"));
+                if a.skill == "craft" || a.skill == "cook" {
+                    let verb = if a.skill == "craft" { "made" } else { "cooked" };
+                    witnessed(ctx, now, at, "craft", me, 0, &format!("{{a}} {verb} {} {}", if qty == 1 { "a" } else { "some" }, item.replace('_', " ")), 0.3, &[me]);
+                }
             }
             Effect::Remove { item, qty } => common::inv_remove(ctx, me as u64, &item, qty)?,
             Effect::Harvest { qty } => {
                 let mut n = ctx.db.resource_node().id().find(a.target.id).ok_or("resource gone")?;
-                let have = common::amount_now(&n, now);
+                let have = common::amount_now(ctx, &n, now);
                 if have < qty {
                     return Err(format!("the {} is depleted", n.kind));
                 }
@@ -505,6 +574,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 let to = a.target.id as u32;
                 common::inv_remove(ctx, me as u64, &item, qty)?;
                 common::inv_add(ctx, to as u64, &item, qty);
+                move_tablets(ctx, &item, me as u64, to as u64, qty);
                 let to_name = common::name_of(ctx, to);
                 common::chronicle(ctx, now, "give", me, to, at, format!("{my_name} gave {qty} {item} to {to_name}"));
                 if let Some(c) = ctx.db.character().id().find(to) {
@@ -516,14 +586,20 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
             Effect::Store { item, qty } => {
                 common::inv_remove(ctx, me as u64, &item, qty)?;
                 common::inv_add(ctx, STRUCTURE_BIT | a.target.id, &item, qty);
+                move_tablets(ctx, &item, me as u64, STRUCTURE_BIT | a.target.id, qty);
                 notes.push(format!("stored {qty} {item}"));
             }
             Effect::Take { item, qty } => {
                 common::inv_remove(ctx, STRUCTURE_BIT | a.target.id, &item, qty)?;
                 common::inv_add(ctx, me as u64, &item, qty);
+                move_tablets(ctx, &item, STRUCTURE_BIT | a.target.id, me as u64, qty);
                 notes.push(format!("took {qty} {item}"));
                 if let Some(s) = ctx.db.structure().id().find(a.target.id) {
-                    if s.owner != 0 && s.owner != me {
+                    let same_people = |x: u32, y: u32| match (ctx.db.membership().member().find(x), ctx.db.membership().member().find(y)) {
+                        (Some(p), Some(q)) => p.community == q.community,
+                        _ => false,
+                    };
+                    if s.owner != 0 && s.owner != me && !same_people(s.owner, me) {
                         witnessed(ctx, now, at, "took", me, s.owner, &format!("{{a}} took {qty} {item} from {{b}}'s {}", s.kind), 0.5, &[me]);
                         if let Some(owner) = ctx.db.character().id().find(s.owner) {
                             if owner.alive && ctx.db.body().id().find(owner.id).map_or(false, |b| dist(pos(&b, now), at) <= living_rules::SIGHT) {
@@ -539,6 +615,204 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
             Effect::Signal => {
                 notes.push(perceive::signal(ctx, me, &a.item, now)?);
             }
+            Effect::Teach { technique } => {
+                let learner = a.target.id as u32;
+                if living_rules::catalog::technique(&technique).is_none() {
+                    return Err(format!("{technique} is not a technique"));
+                }
+                if !common::learn(ctx, learner, &technique, &format!("taught by {my_name}"), now) {
+                    return Err("they already knew it".into());
+                }
+                let ln = common::name_of(ctx, learner);
+                if let Some(c) = ctx.db.character().id().find(learner) {
+                    percept(ctx, &c, now, "learned", me, learner, at, format!("{my_name} taught you {technique} ({}).", technique_help(&technique)), 0.85);
+                }
+                common::chronicle(ctx, now, "learn", me, learner, at, format!("{my_name} taught {ln} {technique}"));
+                witnessed(ctx, now, at, "taught", me, learner, &format!("{{a}} taught {{b}} {technique}"), 0.4, &[me, learner]);
+                notes.push(format!("taught {ln} {technique}"));
+            }
+            Effect::Learn { technique } => {
+                if living_rules::catalog::technique(&technique).is_some() && common::learn(ctx, me, &technique, "worked it out", now) {
+                    if let Some(c) = ctx.db.character().id().find(me) {
+                        percept(ctx, &c, now, "learned", me, 0, at, format!("While tinkering you worked out {technique}: {}.", technique_help(&technique)), 0.9);
+                    }
+                    common::chronicle(ctx, now, "learn", me, 0, at, format!("{my_name} worked out {technique}"));
+                    notes.push(format!("worked out {technique}"));
+                } else {
+                    notes.push("learned nothing new".into());
+                }
+            }
+            Effect::Write => {
+                let w = common::world(ctx);
+                let _ = w;
+                let holder = if a.item == "sign" {
+                    let s = ctx.db.structure().insert(Structure { id: 0, kind: "sign".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: me, built_ms: now });
+                    STRUCTURE_BIT | s.id
+                } else {
+                    common::inv_add(ctx, me as u64, "tablet", 1);
+                    me as u64
+                };
+                ctx.db.artifact().insert(Artifact { id: 0, kind: a.item.clone(), holder, author: me, author_name: my_name.clone(), written_ms: now, topic: a.topic.clone(), text: a.text.clone() });
+                let what = if a.item == "sign" { "put up a sign" } else { "wrote a tablet" };
+                common::chronicle(ctx, now, "write", me, 0, at, format!("{my_name} {what}: “{}”", a.text.chars().take(120).collect::<String>()));
+                witnessed(ctx, now, at, "wrote", me, 0, &format!("{{a}} {what}"), 0.35, &[me]);
+                notes.push(what.into());
+            }
+            Effect::Read => {
+                let art = match a.target.class {
+                    5 => ctx.db.artifact().id().find(a.target.id),
+                    2 => ctx.db.artifact().holder().filter(STRUCTURE_BIT | a.target.id).next(),
+                    _ => None,
+                }
+                .ok_or("there is nothing written here")?;
+                let (epoch, day) = common::epoch_day(ctx);
+                let written = if art.written_ms == 0 { "long ago".to_string() } else { format!("on day {}", living_rules::day_of(art.written_ms, epoch, day)) };
+                let mut text = format!("You read {}'s {} (written {written}): “{}”", art.author_name, art.kind, art.text);
+                if !art.topic.is_empty() && living_rules::catalog::technique(&art.topic).is_some() {
+                    if common::learn(ctx, me, &art.topic, &format!("read {}'s {}", art.author_name, art.kind), now) {
+                        text.push_str(&format!(" From it you learn {}: {}.", art.topic, technique_help(&art.topic)));
+                        common::chronicle(ctx, now, "learn", me, art.author, at, format!("{my_name} learned {} from {}'s {}", art.topic, art.author_name, art.kind));
+                    }
+                }
+                if ctx.db.familiar().by_actor_thing().filter((me, FAM_ARTIFACT | art.id)).next().is_none() {
+                    ctx.db.familiar().insert(Familiar { id: 0, actor: me, thing: FAM_ARTIFACT | art.id, first_ms: now, last_ms: now, times: 1 });
+                }
+                if let Some(c) = ctx.db.character().id().find(me) {
+                    percept(ctx, &c, now, "read", art.author, me, at, text, 0.8);
+                }
+                notes.push(format!("read {}'s {}", art.author_name, art.kind));
+            }
+            Effect::Offer => {
+                let to = a.target.id as u32;
+                if a.want.is_empty() || living_rules::catalog::item(&a.want).is_none() {
+                    return Err("say what you want in return".into());
+                }
+                let give_qty = a.qty.max(1);
+                for o in ctx.db.trade_offer().from().filter(me).map(|o| o.id).collect::<Vec<_>>() {
+                    ctx.db.trade_offer().id().delete(o);
+                }
+                ctx.db.trade_offer().insert(TradeOffer { id: 0, from: me, to, give_item: a.item.clone(), give_qty, want_item: a.want.clone(), want_qty: a.want_qty.max(1), at_ms: now });
+                let text = format!("{my_name} offers you {give_qty} {} for {} {}.", a.item, a.want_qty.max(1), a.want);
+                if let Some(c) = ctx.db.character().id().find(to) {
+                    percept(ctx, &c, now, "offer", me, to, at, text.clone(), 0.85);
+                    if c.ai {
+                        perceive::request_deliberation(ctx, to, &format!("{text} You may accept or not."), now);
+                    }
+                }
+                notes.push(format!("offered {give_qty} {} for {} {}", a.item, a.want_qty.max(1), a.want));
+            }
+            Effect::Accept => {
+                let from = a.target.id as u32;
+                let offer = ctx
+                    .db
+                    .trade_offer()
+                    .from()
+                    .filter(from)
+                    .find(|o| o.to == me && now.saturating_sub(o.at_ms) <= 180_000)
+                    .ok_or("they have no standing offer for you")?;
+                if common::inv_count(ctx, from as u64, &offer.give_item) < offer.give_qty {
+                    return Err(format!("they no longer have {} {}", offer.give_qty, offer.give_item));
+                }
+                if common::inv_count(ctx, me as u64, &offer.want_item) < offer.want_qty {
+                    return Err(format!("you don't have {} {}", offer.want_qty, offer.want_item));
+                }
+                common::inv_remove(ctx, from as u64, &offer.give_item, offer.give_qty)?;
+                common::inv_add(ctx, me as u64, &offer.give_item, offer.give_qty);
+                common::inv_remove(ctx, me as u64, &offer.want_item, offer.want_qty)?;
+                common::inv_add(ctx, from as u64, &offer.want_item, offer.want_qty);
+                move_tablets(ctx, &offer.give_item, from as u64, me as u64, offer.give_qty);
+                move_tablets(ctx, &offer.want_item, me as u64, from as u64, offer.want_qty);
+                ctx.db.trade_offer().id().delete(offer.id);
+                let fname = common::name_of(ctx, from);
+                let deal = format!("{} {} for {} {}", offer.give_qty, offer.give_item, offer.want_qty, offer.want_item);
+                common::chronicle(ctx, now, "trade", from, me, at, format!("{fname} and {my_name} traded {deal}"));
+                if let Some(c) = ctx.db.character().id().find(from) {
+                    percept(ctx, &c, now, "trade", me, from, at, format!("{my_name} accepted your trade: {deal}."), 0.8);
+                }
+                witnessed(ctx, now, at, "trade", from, me, &format!("{{a}} and {{b}} traded {deal}"), 0.4, &[me, from]);
+                notes.push(format!("traded with {fname}: {deal}"));
+            }
+            Effect::Found => {
+                if ctx.db.membership().member().find(me).is_some() {
+                    return Err("leave your community first".into());
+                }
+                let name: String = a.text.trim().chars().take(40).collect();
+                if ctx.db.community().iter().any(|c| c.name.eq_ignore_ascii_case(&name)) {
+                    return Err(format!("{name} already exists"));
+                }
+                let c = ctx.db.community().insert(Community { id: 0, name: name.clone(), founder: me, founded_ms: now, home_x: at.0, home_y: at.1 });
+                ctx.db.membership().insert(Membership { id: 0, community: c.id, member: me, since_ms: now });
+                common::chronicle(ctx, now, "community", me, 0, at, format!("{my_name} founded {name}"));
+                witnessed(ctx, now, at, "community", me, 0, &format!("{{a}} founded a community called {name}"), 0.6, &[me]);
+                notes.push(format!("founded {name}"));
+            }
+            Effect::Join => {
+                let other = a.target.id as u32;
+                let m = ctx.db.membership().member().find(other).ok_or("they belong to no community")?;
+                if ctx.db.membership().member().find(me).map_or(false, |x| x.community == m.community) {
+                    return Err("you already belong to it".into());
+                }
+                for r in ctx.db.join_request().asker().filter(me).map(|r| r.id).collect::<Vec<_>>() {
+                    ctx.db.join_request().id().delete(r);
+                }
+                ctx.db.join_request().insert(JoinRequest { id: 0, asker: me, community: m.community, at_ms: now });
+                let cname = ctx.db.community().id().find(m.community).map(|c| c.name).unwrap_or_default();
+                if let Some(c) = ctx.db.character().id().find(other) {
+                    percept(ctx, &c, now, "community", me, other, at, format!("{my_name} asks to join {cname}."), 0.85);
+                    if c.ai {
+                        perceive::request_deliberation(ctx, other, &format!("{my_name} asks to join {cname}. You may welcome them or not."), now);
+                    }
+                }
+                notes.push(format!("asked to join {cname}"));
+            }
+            Effect::Welcome => {
+                let asker = a.target.id as u32;
+                let mine = ctx.db.membership().member().find(me).ok_or("you belong to no community")?;
+                let req = ctx
+                    .db
+                    .join_request()
+                    .asker()
+                    .filter(asker)
+                    .find(|r| r.community == mine.community && now.saturating_sub(r.at_ms) <= 300_000)
+                    .ok_or("they have not asked to join")?;
+                ctx.db.join_request().id().delete(req.id);
+                if let Some(old) = ctx.db.membership().member().find(asker) {
+                    ctx.db.membership().id().delete(old.id);
+                }
+                ctx.db.membership().insert(Membership { id: 0, community: mine.community, member: asker, since_ms: now });
+                let cname = ctx.db.community().id().find(mine.community).map(|c| c.name).unwrap_or_default();
+                let an = common::name_of(ctx, asker);
+                common::chronicle(ctx, now, "community", asker, me, at, format!("{an} joined {cname}, welcomed by {my_name}"));
+                if let Some(c) = ctx.db.character().id().find(asker) {
+                    percept(ctx, &c, now, "community", me, asker, at, format!("{my_name} welcomed you into {cname}."), 0.9);
+                }
+                witnessed(ctx, now, at, "community", asker, me, &format!("{{a}} joined {cname}, welcomed by {{b}}"), 0.5, &[me, asker]);
+                notes.push(format!("welcomed {an} into {cname}"));
+            }
+            Effect::Leave => {
+                let m = ctx.db.membership().member().find(me).ok_or("you belong to no community")?;
+                let cname = ctx.db.community().id().find(m.community).map(|c| c.name).unwrap_or_default();
+                ctx.db.membership().id().delete(m.id);
+                common::chronicle(ctx, now, "community", me, 0, at, format!("{my_name} left {cname}"));
+                witnessed(ctx, now, at, "community", me, 0, &format!("{{a}} left {cname}"), 0.6, &[me]);
+                notes.push(format!("left {cname}"));
+            }
+            Effect::Plant => {
+                let sc = common::scripts(ctx);
+                ctx.db.resource_node().insert(ResourceNode {
+                    id: 0,
+                    kind: "berry_bush".into(),
+                    x: at.0,
+                    y: at.1,
+                    chunk: chunk_of(at.0, at.1),
+                    amount: 0.0,
+                    max: 5.0,
+                    regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
+                    at_ms: now,
+                });
+                common::chronicle(ctx, now, "plant", me, 0, at, format!("{my_name} planted a berry bush"));
+                notes.push("planted a berry bush".into());
+            }
             Effect::Build { kind } => {
                 if !catalog::STRUCTURES.contains(&kind.as_str()) {
                     return Err(format!("cannot build {kind}"));
@@ -553,7 +827,21 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
     Ok(notes.join(", "))
 }
 
-const OFFER_MS: u64 = 120_000;
+/// Tablets are both an inventory count (for rules) and individual artifacts (for text).
+fn move_tablets(ctx: &ReducerContext, item: &str, from: u64, to: u64, qty: u32) {
+    if item != "tablet" {
+        return;
+    }
+    for mut t in ctx.db.artifact().holder().filter(from).take(qty as usize).collect::<Vec<_>>() {
+        t.holder = to;
+        ctx.db.artifact().id().update(t);
+    }
+}
+
+fn technique_help(t: &str) -> &'static str {
+    living_rules::catalog::technique(t).map(|t| t.help).unwrap_or("")
+}
+
 
 /// Offer to start a family, or accept a standing offer from the target.
 fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> Result<String, String> {
@@ -563,14 +851,16 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
     if busy(me) || busy(other) {
         return Err("a child is already on the way".into());
     }
-    let accepted = ctx.db.bond_offer().from().filter(other).find(|o| o.to == me && now.saturating_sub(o.at_ms) <= OFFER_MS);
+    let window = (common::laws(ctx).bond_window_s * 1000.0) as u64;
+    let accepted = ctx.db.bond_offer().from().filter(other).find(|o| o.to == me && now.saturating_sub(o.at_ms) <= window);
     if let Some(o) = accepted {
         ctx.db.bond_offer().id().delete(o.id);
         for mine in ctx.db.bond_offer().from().filter(me).map(|o| o.id).collect::<Vec<_>>() {
             ctx.db.bond_offer().id().delete(mine);
         }
         let w = common::world(ctx);
-        ctx.db.expecting().insert(Expecting { id: 0, a: other, b: me, due_ms: now + w.day_ms });
+        let gestation = (common::laws(ctx).gestation_days * w.day_ms as f32) as u64;
+        ctx.db.expecting().insert(Expecting { id: 0, a: other, b: me, due_ms: now + gestation });
         common::chronicle(ctx, now, "family", other, me, at, format!("{other_name} and {my_name} are expecting a child"));
         for (who, partner) in [(me, &other_name), (other, &my_name)] {
             if let Some(c) = ctx.db.character().id().find(who) {
@@ -593,12 +883,53 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
     Ok(format!("asked {other_name} to start a family"))
 }
 
+/// Put a creature on combat cadence for the next few seconds.
+pub fn engage(ctx: &ReducerContext, id: u32, now: u64) {
+    if let Some(mut st) = ctx.db.mind_state().id().find(id) {
+        if st.fast_until < now + 6_000 {
+            st.fast_until = now + 8_000;
+            ctx.db.mind_state().id().update(st);
+        }
+    }
+}
+
 pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, now: u64) {
     let Some(mut v) = ctx.db.vitals().id().find(victim) else { return };
     let Some(vc) = ctx.db.character().id().find(victim) else { return };
     if !vc.alive {
         return;
     }
+    engage(ctx, attacker, now);
+    engage(ctx, victim, now);
+    // Defense in progress: a dodge makes the blow miss, a raised guard takes most of it.
+    let defense = ctx.db.activity().id().find(victim).map(|a| a.skill).unwrap_or_default();
+    let at_v = ctx.db.body().id().find(victim).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+    if let Some(mut k) = ctx.db.clock().id().find(0) {
+        match defense.as_str() {
+            "dodge" => k.dodged += 1,
+            "block" => k.blocked += 1,
+            _ => k.hits += 1,
+        }
+        ctx.db.clock().id().update(k);
+    }
+    if defense == "dodge" {
+        let attacker_c = ctx.db.character().id().find(attacker);
+        percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("You dodged {}'s attack.", common::label_for(ctx, &vc, attacker)), 0.6);
+        if let Some(ac) = attacker_c {
+            percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} dodged your attack.", common::label_for(ctx, &ac, victim)), 0.6);
+        }
+        common::wake(ctx, victim);
+        return;
+    }
+    let amount = if defense == "block" {
+        if let Some(ac) = ctx.db.character().id().find(attacker) {
+            percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} blocked your blow.", common::label_for(ctx, &ac, victim)), 0.5);
+        }
+        percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("You blocked {}'s blow.", common::label_for(ctx, &vc, attacker)), 0.5);
+        amount * 0.25
+    } else {
+        amount
+    };
     let first_blow = now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != attacker;
     common::settle(&mut v, now);
     v.hp = (v.hp - amount).max(0.0);
@@ -624,6 +955,10 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, now
     }
     if dead {
         let meat = common::scripts(ctx).num_of("carcass_meat", &vc.kind, 0.0) as u32;
+        let hide = common::scripts(ctx).num_of("carcass_hide", &vc.kind, 0.0) as u32;
+        if hide > 0 {
+            common::inv_add(ctx, attacker as u64, "hide", hide);
+        }
         if meat > 0 {
             common::inv_add(ctx, attacker as u64, "meat", meat);
         }
@@ -647,14 +982,26 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
     for r in ctx.db.inventory().owner().filter(id as u64).collect::<Vec<_>>() {
         ctx.db.inventory().id().delete(r.id);
     }
+    if let Some(m) = ctx.db.membership().member().find(id) {
+        ctx.db.membership().id().delete(m.id);
+    }
+    // What only this person knew how to do is gone unless they taught or wrote it down.
+    for k in ctx.db.know_how().actor().filter(id).map(|k| k.id).collect::<Vec<_>>() {
+        ctx.db.know_how().id().delete(k);
+    }
     if kind == "person" {
         let s = ctx.db.structure().insert(Structure { id: 0, kind: "remains".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: id, built_ms: now });
         for (item, q) in items {
             common::inv_add(ctx, STRUCTURE_BIT | s.id, &item, q);
         }
+        for mut t in ctx.db.artifact().holder().filter(id as u64).collect::<Vec<_>>() {
+            t.holder = STRUCTURE_BIT | s.id;
+            ctx.db.artifact().id().update(t);
+        }
         common::chronicle(ctx, now, "death", id, killer, at, format!("{name} died ({cause})"));
     }
     ctx.db.body().id().delete(id);
+    common::invalidate_bodies();
     ctx.db.activity().id().delete(id);
     ctx.db.mind_state().id().delete(id);
     ctx.db.vitals().id().delete(id);

@@ -27,6 +27,7 @@ pub struct MindState {
     pub deliberated_ms: u64,
     pub seen: Vec<Seen>,
     pub alerts: u32,
+    pub fast_until: u64,
 }
 
 impl __sdk::InModule for MindState {
@@ -52,6 +53,7 @@ pub struct MindStateCols {
     pub deliberated_ms: __sdk::__query_builder::Col<MindState, u64>,
     pub seen: __sdk::__query_builder::Col<MindState, Vec<Seen>>,
     pub alerts: __sdk::__query_builder::Col<MindState, u32>,
+    pub fast_until: __sdk::__query_builder::Col<MindState, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for MindState {
@@ -73,6 +75,7 @@ impl __sdk::__query_builder::HasCols for MindState {
             deliberated_ms: __sdk::__query_builder::Col::new(table_name, "deliberated_ms"),
             seen: __sdk::__query_builder::Col::new(table_name, "seen"),
             alerts: __sdk::__query_builder::Col::new(table_name, "alerts"),
+            fast_until: __sdk::__query_builder::Col::new(table_name, "fast_until"),
         }
     }
 }
@@ -81,6 +84,7 @@ impl __sdk::__query_builder::HasCols for MindState {
 ///
 /// Provides typed access to indexed columns for query building.
 pub struct MindStateIxCols {
+    pub fast_until: __sdk::__query_builder::IxCol<MindState, u64>,
     pub id: __sdk::__query_builder::IxCol<MindState, u32>,
     pub slot: __sdk::__query_builder::IxCol<MindState, u8>,
 }
@@ -89,6 +93,7 @@ impl __sdk::__query_builder::HasIxCols for MindState {
     type IxCols = MindStateIxCols;
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         MindStateIxCols {
+            fast_until: __sdk::__query_builder::IxCol::new(table_name, "fast_until"),
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
             slot: __sdk::__query_builder::IxCol::new(table_name, "slot"),
         }

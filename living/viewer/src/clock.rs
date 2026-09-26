@@ -18,6 +18,18 @@ pub fn now_ms() -> u64 {
     }
 }
 
+/// Optional season preview (`?season=winter` on the web, `LIVING_SEASON` natively).
+pub fn season_override() -> Option<usize> {
+    #[cfg(target_arch = "wasm32")]
+    let v = web_sys::window()
+        .and_then(|w| w.location().search().ok())
+        .and_then(|s| web_sys::UrlSearchParams::new_with_str(&s).ok())
+        .and_then(|p| p.get("season"));
+    #[cfg(not(target_arch = "wasm32"))]
+    let v = std::env::var("LIVING_SEASON").ok();
+    v.and_then(|s| living_rules::SEASONS.iter().position(|n| *n == s.to_ascii_lowercase()))
+}
+
 /// Server URL and database: `LIVING_SERVER`/`LIVING_DB` natively, `?server=…&db=…` on the web.
 pub fn endpoint() -> (String, String) {
     #[cfg(target_arch = "wasm32")]

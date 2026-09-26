@@ -17,6 +17,9 @@ pub struct Cognition {
     pub reflect_s: u64,
     pub consolidate_threshold: f32,
     pub max_nodes: usize,
+    /// Minimum seconds between consolidations (unless experiences pile up).
+    #[serde(default)]
+    pub consolidate_min_s: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]

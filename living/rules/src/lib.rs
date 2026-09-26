@@ -4,6 +4,7 @@
 pub mod catalog;
 pub mod graph;
 pub mod map;
+pub mod realm;
 pub mod normalize;
 #[cfg(feature = "scripting")]
 pub mod script;
@@ -33,3 +34,51 @@ pub const HEARING: f32 = 9.0;
 
 /// Days after which a newborn counts as grown (can build, craft, fight, conceive).
 pub const ADULT_DAYS: f32 = 3.0;
+
+/// In-world days per year: spring, summer, autumn, winter (two days each), from day 1.
+pub const YEAR_DAYS: u64 = 8;
+pub const SEASONS: [&str; 4] = ["spring", "summer", "autumn", "winter"];
+
+pub fn season_of(now_ms: u64, epoch_ms: u64, day_ms: u64) -> usize {
+    (((day_of(now_ms, epoch_ms, day_ms) - 1) % YEAR_DAYS) / 2) as usize
+}
+
+/// Milliseconds of growing time (not winter) between `t0` and `t1`; plants regrow only then.
+pub fn growing_ms(t0: u64, t1: u64, epoch_ms: u64, day_ms: u64) -> u64 {
+    if t1 <= t0 {
+        return 0;
+    }
+    let offset = day_ms * 7 / 24; // the world starts at 07:00 on day 1
+    let year = day_ms * YEAR_DAYS;
+    let winter_start = day_ms * 6;
+    // Growing time from the epoch-aligned origin to `t`.
+    let grown = |t: u64| -> u64 {
+        let x = t.saturating_sub(epoch_ms) + offset;
+        let whole = x / year;
+        let rest = x % year;
+        whole * winter_start + rest.min(winter_start)
+    };
+    grown(t1).saturating_sub(grown(t0))
+}
+
+#[cfg(test)]
+mod season_tests {
+    use super::*;
+
+    #[test]
+    fn winter_stops_growth() {
+        let day = DEFAULT_DAY_MS;
+        let epoch = 1_000_000;
+        let start = epoch + day * 17 / 24; // day 1, 07:00 == epoch
+        assert_eq!(season_of(epoch, epoch, day), 0);
+        assert_eq!(season_of(epoch + day * 6, epoch, day), 3);
+        assert_eq!(growing_ms(epoch, epoch + day, epoch, day), day);
+        let w0 = epoch + day * 6 - day * 7 / 24; // start of day 7 (winter)
+        assert_eq!(growing_ms(w0, w0 + day * 2, epoch, day), 0);
+        assert_eq!(growing_ms(w0 - day, w0 + day, epoch, day), day);
+        let _ = start;
+    }
+}
+
+/// Sight at night while carrying a torch.
+pub const TORCH_SIGHT: f32 = 9.0;

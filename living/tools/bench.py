@@ -46,6 +46,7 @@ def main():
     ap.add_argument("--seconds", type=int, default=60)
     ap.add_argument("--crowd", type=int, default=0)
     ap.add_argument("--minded", action="store_true", help="crowd produces experiences and deliberation requests like LLM characters")
+    ap.add_argument("--battle", type=int, default=0, help="add N spear fighters packed in one locality")
     ap.add_argument("--subscribe", action="store_true", help="attach a live subscriber to all admin-controlled experiences")
     ap.add_argument("--fresh", action="store_true")
     ap.add_argument("--settle", type=int, default=5)
@@ -55,6 +56,8 @@ def main():
         stdb("publish", "-s", "local", "-b", "/wasm/living_authority.wasm", a.db, "--delete-data", "-y")
     if a.crowd:
         stdb("call", "-s", "local", a.db, "spawn_crowd", str(a.crowd), "true" if a.minded else "false")
+    if a.battle:
+        stdb("call", "-s", "local", a.db, "spawn_battle", str(a.battle))
     sub = None
     if a.subscribe:
         admin = stdb("sql", "-s", "local", a.db, "SELECT admin FROM world").strip().splitlines()[-1].strip()
@@ -88,6 +91,7 @@ def main():
         "experiences_per_s": rate("percepts"),
         "deliberation_requests_per_s": rate("deliberations"),
         "max_tick_gap_ms_last_s": s1["max_tick_gap_ms"],
+        "combat": {"hits": s1.get("hits", 0) - s0.get("hits", 0), "dodged": s1.get("dodged", 0) - s0.get("dodged", 0), "blocked": s1.get("blocked", 0) - s0.get("blocked", 0), "people_left": s1["alive_people"]},
         "tick_ms": {
             "samples": len(durs),
             "p50": round(pct(durs, 50), 3),

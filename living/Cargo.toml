@@ -17,6 +17,11 @@ opt-level = 3
 inherits = "dev"
 opt-level = 1
 debug = 0
+strip = true
 
 [profile.wasm-dev.package."*"]
+opt-level = 2
+
+# The viewer generates its pixel art at startup; keep that fast in the browser build.
+[profile.wasm-dev.package.living-viewer]
 opt-level = 2

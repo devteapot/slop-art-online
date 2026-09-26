@@ -51,6 +51,7 @@ struct Ev<'a> {
     status: String,
     visits: u32,
     last_fail: String,
+    want: (String, u32),
 }
 
 pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
@@ -71,7 +72,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         log::warn!("character {id} has no valid graph at revision {}", st.revision);
         return;
     };
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new() };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0) };
     ev.alerts();
     let root = ev.g.clone();
     let result = ev.run(&root.root, 0);
@@ -125,7 +126,7 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
 impl<'a> Ev<'a> {
     fn scene(&mut self) -> &Scene {
         if self.scene.is_none() {
-            let r = common::sight(&self.w, self.now);
+            let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             let creatures = common::creatures_near(self.ctx, self.at, r, self.now).into_iter().filter(|c| c.id != self.me.id).collect();
             let resources = common::resources_near(self.ctx, self.at, r);
             let structures = common::structures_near(self.ctx, self.at, r);
@@ -240,9 +241,10 @@ impl<'a> Ev<'a> {
                     },
                     None => Resolved::none(),
                 };
-                self.leaf(id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), graph::describe(n))
+                self.want = (a.want.clone().unwrap_or_default(), a.want_qty.unwrap_or(0));
+                self.leaf(id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), graph::describe(n))
             }
-            Node::Wait(s) => self.leaf(id, "wait", Resolved::none(), "", s.round().max(1.0) as u32, graph::describe(n)),
+            Node::Wait(s) => self.leaf(id, "wait", Resolved::none(), "", s.round().max(1.0) as u32, "", "", graph::describe(n)),
             Node::Say(s) => {
                 if self.mark_recent(id, 45_000) {
                     return St::Ok;
@@ -279,7 +281,8 @@ impl<'a> Ev<'a> {
         St::Fail
     }
 
-    fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, desc: String) -> St {
+    #[allow(clippy::too_many_arguments)]
+    fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
         let rev = self.st.revision;
         if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
             if a.node == id && a.revision == rev {
@@ -298,7 +301,8 @@ impl<'a> Ev<'a> {
                 return St::Fail;
             }
         }
-        match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, self.now) {
+        let want = std::mem::take(&mut self.want);
+        match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), self.now) {
             Ok(()) => {
                 self.running = Some(id);
                 self.status = self.ctx.db.activity().id().find(self.me.id).map(|a| a.label).unwrap_or(desc);
@@ -333,7 +337,7 @@ impl<'a> Ev<'a> {
     fn visible_creature(&mut self, id: u32) -> Option<Resolved> {
         let c = self.scene().creatures.iter().find(|c| c.id == id)?.clone();
         let ch = self.ctx.db.character().id().find(id)?;
-        Some(Resolved { class: 3, id: id as u64, at: c.pos, kind: c.kind, name: ch.name })
+        Some(Resolved { class: 3, id: id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name })
     }
 
     fn resolve(&mut self, t: &Target) -> Option<Resolved> {
@@ -365,7 +369,7 @@ impl<'a> Ev<'a> {
             Target::At([x, y]) => Some(Resolved::point((*x, *y))),
             Target::Id(id) => self.visible_creature(*id),
             Target::Named(name) => {
-                let ids: Vec<u32> = self.scene().creatures.iter().filter(|c| c.kind == "person").map(|c| c.id).collect();
+                let ids: Vec<u32> = self.scene().creatures.iter().filter(|c| &*c.kind == "person").map(|c| c.id).collect();
                 let id = ids.into_iter().find(|id| self.ctx.db.character().id().find(*id).map_or(false, |c| c.name.eq_ignore_ascii_case(name)))?;
                 self.visible_creature(id)
             }
@@ -388,7 +392,7 @@ impl<'a> Ev<'a> {
             living_rules::catalog::KindClass::Creature => {
                 let cands: Vec<NearCreature> = self.scene().creatures.clone();
                 for c in cands {
-                    if f.kind != "creature" && c.kind != f.kind {
+                    if f.kind != "creature" && *c.kind != *f.kind {
                         continue;
                     }
                     if let Some(rel) = &f.relation {
@@ -404,10 +408,11 @@ impl<'a> Ev<'a> {
             }
             living_rules::catalog::KindClass::Resource => {
                 let now = self.now;
+                let ctx = self.ctx;
                 self.scene()
                     .resources
                     .iter()
-                    .find(|(n, _)| n.kind == f.kind && common::amount_now(n, now) >= 1.0)
+                    .find(|(n, _)| n.kind == f.kind && common::amount_now(ctx, n, now) >= 1.0)
                     .map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
             }
             living_rules::catalog::KindClass::Structure => {
@@ -434,7 +439,7 @@ impl<'a> Ev<'a> {
             }
             Cond::Sees(t) => match t {
                 Target::Place(_) | Target::At(_) | Target::Home => {
-                    let r = common::sight(&self.w, self.now);
+                    let r = common::sight(self.ctx, &self.w, self.now);
                     self.resolve(t).map_or(false, |p| dist(self.at, p.at) <= r)
                 }
                 _ => self.resolve(t).is_some(),
@@ -443,6 +448,13 @@ impl<'a> Ev<'a> {
             Cond::HurtWithin(s) => self.vit.hurt_ms != 0 && self.now.saturating_sub(self.vit.hurt_ms) as f32 <= s * 1000.0,
             Cond::HeardWithin(s) => self.st.heard_ms != 0 && self.now.saturating_sub(self.st.heard_ms) as f32 <= s * 1000.0,
             Cond::Night(b) => common::night(&self.w, self.now) == *b,
+            Cond::Hour(x) => x.test(common::hour(&self.w, self.now)),
+            Cond::Threatened(b) => {
+                let me = self.me.id;
+                let now = self.now;
+                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && (a.skill == "attack" || a.skill == "throw"));
+                coming == *b
+            }
             Cond::Believes(b) => self
                 .ctx
                 .db
@@ -473,6 +485,29 @@ impl<'a> Ev<'a> {
             (4, facts_fire, "You are freezing in the night air; you need a fire or shelter.", 0.6),
             (8, self.needs.energy < 12.0, "You are exhausted.", 0.4),
         ];
+        // Psychological drives: an uneventful stretch makes curious people restless; time without
+        // company makes sociable people lonely. They are felt, not prescribed: the mind decides.
+        let traits: serde_json::Value = self.ctx.db.persona().id().find(self.me.id).and_then(|p| serde_json::from_str(&p.traits).ok()).unwrap_or_default();
+        let trait_of = |k: &str| traits[k].as_f64().unwrap_or(50.0) as f32;
+        let calm = self.needs.hunger < 60.0 && self.needs.energy > 35.0 && self.needs.hp > 60.0;
+        let quiet_ms = self.now.saturating_sub(self.st.deliberated_ms);
+        let restless_after = 60_000.0 * (12.0 - trait_of("curiosity") / 12.0);
+        let lonely_after = 60_000.0 * (14.0 - trait_of("sociability") / 10.0);
+        let alone_ms = self.now.saturating_sub(self.st.heard_ms.max(self.st.spoke_ms));
+        let drives: [(u32, bool, &str); 2] = [
+            (16, calm && quiet_ms as f32 > restless_after, "You feel restless: your days have been the same for a while."),
+            (32, calm && self.st.heard_ms > 0 && alone_ms as f32 > lonely_after, "You feel lonely: it has been a long time since you spoke with anyone."),
+        ];
+        for (bit, on, text) in drives {
+            let was = self.st.alerts & bit != 0;
+            if on && !was {
+                self.st.alerts |= bit;
+                percept(self.ctx, &self.me, self.now, "feeling", self.me.id, 0, self.at, text.into(), 0.5);
+                self.deliberate(&format!("You feel something: {text}"));
+            } else if !on && was {
+                self.st.alerts &= !bit;
+            }
+        }
         for (bit, on, text, sal) in checks {
             let was = self.st.alerts & bit != 0;
             if on && !was {
@@ -559,9 +594,10 @@ impl<'a> Ev<'a> {
 
         // Creatures.
         let me_kind = self.me.kind.clone();
-        let cands: Vec<NearCreature> = self.scene().creatures.iter().filter(|c| c.kind != "deer" || me_kind != "person").cloned().collect();
-        let people = cands.iter().filter(|c| c.kind == "person").count();
-        let crowded = people > 6;
+        let cands: Vec<NearCreature> = self.scene().creatures.iter().filter(|c| &*c.kind != "deer" || me_kind != "person").cloned().collect();
+        let people = cands.iter().filter(|c| &*c.kind == "person").count();
+        let laws = common::laws(self.ctx);
+        let crowded = people as f32 > laws.crowd;
         // Crowds and nearby danger are noticed when they begin, not re-announced while they last.
         if crowded && self.st.alerts & IN_CROWD == 0 {
             percept(self.ctx, &self.me, now, "saw", 0, 0, at, format!("You are among a crowd of about {people} people."), 0.3);
@@ -569,7 +605,7 @@ impl<'a> Ev<'a> {
         self.st.alerts = if crowded { self.st.alerts | IN_CROWD } else { self.st.alerts & !IN_CROWD };
         // Hysteresis: danger begins inside 8 tiles and ends beyond 12.
         let was_near = self.st.alerts & WOLF_NEAR != 0;
-        let wolf_near = cands.iter().any(|c| c.kind == "wolf" && c.dist <= if was_near { 12.0 } else { 8.0 });
+        let wolf_near = cands.iter().any(|c| &*c.kind == "wolf" && c.dist <= if was_near { laws.danger_far } else { laws.danger_near });
         let wolf_arrived = wolf_near && self.st.alerts & WOLF_NEAR == 0;
         self.st.alerts = if wolf_near { self.st.alerts | WOLF_NEAR } else { self.st.alerts & !WOLF_NEAR };
         let mut announced = 0;
@@ -577,10 +613,10 @@ impl<'a> Ev<'a> {
             if announced >= 2 {
                 break;
             }
-            if crowded && c.kind == "person" && self.relation(c.id).is_none() {
+            if crowded && &*c.kind == "person" && self.relation(c.id).is_none() {
                 continue;
             }
-            let danger = wolf_arrived && c.kind == "wolf" && c.dist <= 8.0;
+            let danger = wolf_arrived && &*c.kind == "wolf" && c.dist <= laws.danger_near;
             if self.recently_seen(c.id) && !danger {
                 continue;
             }
@@ -622,8 +658,9 @@ impl<'a> Ev<'a> {
         let at = self.at;
         let now = self.now;
         let mut kinds: Vec<(String, u32)> = Vec::new();
+        let ctx = self.ctx;
         for (n, _) in &self.scene().resources {
-            if common::amount_now(n, now) < 0.0 {
+            if common::amount_now(ctx, n, now) < 0.0 {
                 continue;
             }
             match kinds.iter_mut().find(|k| k.0 == n.kind) {
@@ -729,7 +766,11 @@ impl<'a> Ev<'a> {
         cur.active = self.path.clone();
         cur.status = self.status.clone();
         cur.cursors = self.st.cursors.clone();
-        cur.marks = self.st.marks.clone();
+        // Marks at 0xD000 and above are written by speech, signals and failures (possibly during
+        // this evaluation); keep those from the stored row, the rest are the evaluator's.
+        let mut marks: Vec<Mark> = self.st.marks.iter().filter(|m| m.node < 0xD000).cloned().collect();
+        marks.extend(cur.marks.iter().filter(|m| m.node >= 0xD000).cloned());
+        cur.marks = marks;
         cur.seen = self.st.seen.clone();
         cur.alerts = self.st.alerts;
         if self.st.last != self.orig.last && cur.last == self.orig.last {

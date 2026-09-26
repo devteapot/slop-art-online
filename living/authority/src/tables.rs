@@ -36,6 +36,12 @@ pub struct Clock {
     /// When set, every tick logs its duration (LogStopwatch) for benchmarking.
     #[default(false)]
     pub profile: bool,
+    #[default(0u64)]
+    pub hits: u64,
+    #[default(0u64)]
+    pub dodged: u64,
+    #[default(0u64)]
+    pub blocked: u64,
 }
 
 #[spacetimedb::table(accessor = script, public)]
@@ -155,6 +161,18 @@ pub struct Activity {
     #[index(btree)]
     pub ends_ms: u64,
     pub label: String,
+    /// Words to write (write) and the technique a text describes.
+    pub text: String,
+    pub topic: String,
+    /// The creature an attack or throw is aimed at (0 if none), for `threatened`.
+    #[index(btree)]
+    #[default(0u32)]
+    pub victim: u32,
+    /// Trade offers: what is asked in return.
+    #[default("")]
+    pub want: String,
+    #[default(0u32)]
+    pub want_qty: u32,
 }
 
 /// Items held by a creature (`owner = id`) or a structure (`owner = STRUCTURE_BIT | id`).
@@ -264,6 +282,10 @@ pub struct MindState {
     pub deliberated_ms: u64,
     pub seen: Vec<Seen>,
     pub alerts: u32,
+    /// While in a fight, evaluated at combat cadence (about 15 Hz) until this time.
+    #[index(btree)]
+    #[default(0u64)]
+    pub fast_until: u64,
 }
 
 /// Immediate re-evaluation requests (consumed by the next tick).
@@ -294,6 +316,42 @@ pub struct Experience {
     pub text: String,
     pub salience: f32,
 }
+
+/// Practical know-how: a technique this character can perform. World state (a capability),
+/// not belief; it dies with the character unless taught or written down first.
+#[spacetimedb::table(accessor = know_how, public,
+    index(accessor = by_actor_technique, btree(columns = [actor, technique])))]
+pub struct KnowHow {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub technique: String,
+    /// How it was acquired: `seed`, `taught by X`, `worked out`, `read X's tablet`.
+    pub source: String,
+    pub since_ms: u64,
+}
+
+/// A written thing in the world: a tablet (held by a creature or structure) or a sign
+/// (held by its `sign` structure). Its text is the author's, true or not.
+#[spacetimedb::table(accessor = artifact, public)]
+pub struct Artifact {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub kind: String,
+    /// Creature id, or STRUCTURE_BIT | structure id.
+    #[index(btree)]
+    pub holder: u64,
+    pub author: u32,
+    pub author_name: String,
+    pub written_ms: u64,
+    pub topic: String,
+    pub text: String,
+}
+
+pub const FAM_ARTIFACT: u64 = 4 << 40;
 
 /// Bodily familiarity: regions, creatures and structures a character has encountered.
 /// Recognition, not knowledge: it decides what is new enough to become an experience.
@@ -463,6 +521,12 @@ pub struct Stats {
     pub deaths: u32,
     /// Largest observed gap between consecutive ticks in the last window (ms).
     pub max_tick_gap_ms: u32,
+    #[default(0u64)]
+    pub hits: u64,
+    #[default(0u64)]
+    pub dodged: u64,
+    #[default(0u64)]
+    pub blocked: u64,
 }
 
 /// A standing wish to start a family with someone (expires after two minutes).
@@ -474,6 +538,60 @@ pub struct BondOffer {
     #[index(btree)]
     pub from: u32,
     pub to: u32,
+    pub at_ms: u64,
+}
+
+/// A community: a named group with a home, founded and joined by consent. A social fact,
+/// not an assigned role: what it means is up to its members.
+#[spacetimedb::table(accessor = community, public)]
+pub struct Community {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u32,
+    pub name: String,
+    pub founder: u32,
+    pub founded_ms: u64,
+    pub home_x: f32,
+    pub home_y: f32,
+}
+
+#[spacetimedb::table(accessor = membership, public)]
+pub struct Membership {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub community: u32,
+    #[unique]
+    pub member: u32,
+    pub since_ms: u64,
+}
+
+/// A request to join a community, granted when a member welcomes the asker.
+#[spacetimedb::table(accessor = join_request, public)]
+pub struct JoinRequest {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub asker: u32,
+    pub community: u32,
+    pub at_ms: u64,
+}
+
+/// A standing trade proposal (expires after three minutes).
+#[spacetimedb::table(accessor = trade_offer, public)]
+pub struct TradeOffer {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub from: u32,
+    pub to: u32,
+    pub give_item: String,
+    pub give_qty: u32,
+    pub want_item: String,
+    pub want_qty: u32,
     pub at_ms: u64,
 }
 

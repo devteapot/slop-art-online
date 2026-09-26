@@ -8,6 +8,8 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 pub mod activity_table;
 pub mod activity_type;
+pub mod artifact_table;
+pub mod artifact_type;
 pub mod belief_in_type;
 pub mod belief_table;
 pub mod belief_type;
@@ -22,6 +24,8 @@ pub mod character_type;
 pub mod chronicle_table;
 pub mod chronicle_type;
 pub mod clock_type;
+pub mod community_table;
+pub mod community_type;
 pub mod cursor_type;
 pub mod deliberation_type;
 pub mod expecting_table;
@@ -35,15 +39,22 @@ pub mod install_script_reducer;
 pub mod inventory_table;
 pub mod inventory_type;
 pub mod join_reducer;
+pub mod join_request_table;
+pub mod join_request_type;
 pub mod judgment_in_type;
 pub mod judgment_table;
 pub mod judgment_type;
+pub mod know_how_table;
+pub mod know_how_type;
 pub mod leaf_result_type;
 pub mod mark_type;
+pub mod membership_table;
+pub mod membership_type;
 pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
 pub mod mind_cursor_type;
 pub mod mind_install_reducer;
+pub mod mind_say_reducer;
 pub mod mind_skip_reducer;
 pub mod mind_state_table;
 pub mod mind_state_type;
@@ -63,10 +74,12 @@ pub mod resource_node_table;
 pub mod resource_node_type;
 pub mod script_table;
 pub mod script_type;
+pub mod seed_communities_reducer;
 pub mod seen_type;
 pub mod set_paused_reducer;
 pub mod set_profile_reducer;
 pub mod slow_timer_type;
+pub mod spawn_battle_reducer;
 pub mod spawn_crowd_reducer;
 pub mod stats_table;
 pub mod stats_type;
@@ -79,6 +92,8 @@ pub mod thought_in_type;
 pub mod thought_table;
 pub mod thought_type;
 pub mod tick_timer_type;
+pub mod trade_offer_table;
+pub mod trade_offer_type;
 pub mod vitals_table;
 pub mod vitals_type;
 pub mod wake_type;
@@ -88,6 +103,8 @@ pub mod world_type;
 
 pub use activity_table::*;
 pub use activity_type::Activity;
+pub use artifact_table::*;
+pub use artifact_type::Artifact;
 pub use belief_in_type::BeliefIn;
 pub use belief_table::*;
 pub use belief_type::Belief;
@@ -102,6 +119,8 @@ pub use character_type::Character;
 pub use chronicle_table::*;
 pub use chronicle_type::Chronicle;
 pub use clock_type::Clock;
+pub use community_table::*;
+pub use community_type::Community;
 pub use cursor_type::Cursor;
 pub use deliberation_type::Deliberation;
 pub use expecting_table::*;
@@ -115,15 +134,22 @@ pub use install_script_reducer::install_script;
 pub use inventory_table::*;
 pub use inventory_type::Inventory;
 pub use join_reducer::join;
+pub use join_request_table::*;
+pub use join_request_type::JoinRequest;
 pub use judgment_in_type::JudgmentIn;
 pub use judgment_table::*;
 pub use judgment_type::Judgment;
+pub use know_how_table::*;
+pub use know_how_type::KnowHow;
 pub use leaf_result_type::LeafResult;
 pub use mark_type::Mark;
+pub use membership_table::*;
+pub use membership_type::Membership;
 pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
 pub use mind_install_reducer::mind_install;
+pub use mind_say_reducer::mind_say;
 pub use mind_skip_reducer::mind_skip;
 pub use mind_state_table::*;
 pub use mind_state_type::MindState;
@@ -143,10 +169,12 @@ pub use resource_node_table::*;
 pub use resource_node_type::ResourceNode;
 pub use script_table::*;
 pub use script_type::Script;
+pub use seed_communities_reducer::seed_communities;
 pub use seen_type::Seen;
 pub use set_paused_reducer::set_paused;
 pub use set_profile_reducer::set_profile;
 pub use slow_timer_type::SlowTimer;
+pub use spawn_battle_reducer::spawn_battle;
 pub use spawn_crowd_reducer::spawn_crowd;
 pub use stats_table::*;
 pub use stats_type::Stats;
@@ -159,6 +187,8 @@ pub use thought_in_type::ThoughtIn;
 pub use thought_table::*;
 pub use thought_type::Thought;
 pub use tick_timer_type::TickTimer;
+pub use trade_offer_table::*;
+pub use trade_offer_type::TradeOffer;
 pub use vitals_table::*;
 pub use vitals_type::Vitals;
 pub use wake_type::Wake;
@@ -200,6 +230,13 @@ pub enum Reducer {
         seen_ms: u64,
         thought: ThoughtIn,
     },
+    MindSay {
+        actor: u32,
+        say: String,
+        say_to: u32,
+        seen_ms: u64,
+        thought: ThoughtIn,
+    },
     MindSkip {
         actor: u32,
         seen_ms: u64,
@@ -209,11 +246,15 @@ pub enum Reducer {
         actor: u32,
         update: MindUpdate,
     },
+    SeedCommunities,
     SetPaused {
         paused: bool,
     },
     SetProfile {
         on: bool,
+    },
+    SpawnBattle {
+        n: u32,
     },
     SpawnCrowd {
         n: u32,
@@ -234,10 +275,13 @@ impl __sdk::Reducer for Reducer {
             Reducer::Join { .. } => "join",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindInstall { .. } => "mind_install",
+            Reducer::MindSay { .. } => "mind_say",
             Reducer::MindSkip { .. } => "mind_skip",
             Reducer::MindUpdate { .. } => "mind_update",
+            Reducer::SeedCommunities => "seed_communities",
             Reducer::SetPaused { .. } => "set_paused",
             Reducer::SetProfile { .. } => "set_profile",
+            Reducer::SpawnBattle { .. } => "spawn_battle",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
             _ => unreachable!(),
         }
@@ -285,6 +329,19 @@ impl __sdk::Reducer for Reducer {
                 seen_ms: seen_ms.clone(),
                 thought: thought.clone(),
             }),
+            Reducer::MindSay {
+                actor,
+                say,
+                say_to,
+                seen_ms,
+                thought,
+            } => __sats::bsatn::to_vec(&mind_say_reducer::MindSayArgs {
+                actor: actor.clone(),
+                say: say.clone(),
+                say_to: say_to.clone(),
+                seen_ms: seen_ms.clone(),
+                thought: thought.clone(),
+            }),
             Reducer::MindSkip {
                 actor,
                 seen_ms,
@@ -300,6 +357,9 @@ impl __sdk::Reducer for Reducer {
                     update: update.clone(),
                 })
             }
+            Reducer::SeedCommunities => {
+                __sats::bsatn::to_vec(&seed_communities_reducer::SeedCommunitiesArgs {})
+            }
             Reducer::SetPaused { paused } => {
                 __sats::bsatn::to_vec(&set_paused_reducer::SetPausedArgs {
                     paused: paused.clone(),
@@ -307,6 +367,9 @@ impl __sdk::Reducer for Reducer {
             }
             Reducer::SetProfile { on } => {
                 __sats::bsatn::to_vec(&set_profile_reducer::SetProfileArgs { on: on.clone() })
+            }
+            Reducer::SpawnBattle { n } => {
+                __sats::bsatn::to_vec(&spawn_battle_reducer::SpawnBattleArgs { n: n.clone() })
             }
             Reducer::SpawnCrowd { n, minded } => {
                 __sats::bsatn::to_vec(&spawn_crowd_reducer::SpawnCrowdArgs {
@@ -324,16 +387,21 @@ impl __sdk::Reducer for Reducer {
 #[doc(hidden)]
 pub struct DbUpdate {
     activity: __sdk::TableUpdate<Activity>,
+    artifact: __sdk::TableUpdate<Artifact>,
     belief: __sdk::TableUpdate<Belief>,
     body: __sdk::TableUpdate<Body>,
     bond_offer: __sdk::TableUpdate<BondOffer>,
     brain: __sdk::TableUpdate<Brain>,
     character: __sdk::TableUpdate<Character>,
     chronicle: __sdk::TableUpdate<Chronicle>,
+    community: __sdk::TableUpdate<Community>,
     expecting: __sdk::TableUpdate<Expecting>,
     experience: __sdk::TableUpdate<Experience>,
     inventory: __sdk::TableUpdate<Inventory>,
+    join_request: __sdk::TableUpdate<JoinRequest>,
     judgment: __sdk::TableUpdate<Judgment>,
+    know_how: __sdk::TableUpdate<KnowHow>,
+    membership: __sdk::TableUpdate<Membership>,
     mind_cursor: __sdk::TableUpdate<MindCursor>,
     mind_state: __sdk::TableUpdate<MindState>,
     my_deliberations: __sdk::TableUpdate<Deliberation>,
@@ -346,6 +414,7 @@ pub struct DbUpdate {
     structure: __sdk::TableUpdate<Structure>,
     terrain_chunk: __sdk::TableUpdate<TerrainChunk>,
     thought: __sdk::TableUpdate<Thought>,
+    trade_offer: __sdk::TableUpdate<TradeOffer>,
     vitals: __sdk::TableUpdate<Vitals>,
     world: __sdk::TableUpdate<World>,
 }
@@ -359,6 +428,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "activity" => db_update
                     .activity
                     .append(activity_table::parse_table_update(table_update)?),
+                "artifact" => db_update
+                    .artifact
+                    .append(artifact_table::parse_table_update(table_update)?),
                 "belief" => db_update
                     .belief
                     .append(belief_table::parse_table_update(table_update)?),
@@ -377,6 +449,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "chronicle" => db_update
                     .chronicle
                     .append(chronicle_table::parse_table_update(table_update)?),
+                "community" => db_update
+                    .community
+                    .append(community_table::parse_table_update(table_update)?),
                 "expecting" => db_update
                     .expecting
                     .append(expecting_table::parse_table_update(table_update)?),
@@ -386,9 +461,18 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "inventory" => db_update
                     .inventory
                     .append(inventory_table::parse_table_update(table_update)?),
+                "join_request" => db_update
+                    .join_request
+                    .append(join_request_table::parse_table_update(table_update)?),
                 "judgment" => db_update
                     .judgment
                     .append(judgment_table::parse_table_update(table_update)?),
+                "know_how" => db_update
+                    .know_how
+                    .append(know_how_table::parse_table_update(table_update)?),
+                "membership" => db_update
+                    .membership
+                    .append(membership_table::parse_table_update(table_update)?),
                 "mind_cursor" => db_update
                     .mind_cursor
                     .append(mind_cursor_table::parse_table_update(table_update)?),
@@ -425,6 +509,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "thought" => db_update
                     .thought
                     .append(thought_table::parse_table_update(table_update)?),
+                "trade_offer" => db_update
+                    .trade_offer
+                    .append(trade_offer_table::parse_table_update(table_update)?),
                 "vitals" => db_update
                     .vitals
                     .append(vitals_table::parse_table_update(table_update)?),
@@ -460,6 +547,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.activity = cache
             .apply_diff_to_table::<Activity>("activity", &self.activity)
             .with_updates_by_pk(|row| &row.id);
+        diff.artifact = cache
+            .apply_diff_to_table::<Artifact>("artifact", &self.artifact)
+            .with_updates_by_pk(|row| &row.id);
         diff.belief = cache
             .apply_diff_to_table::<Belief>("belief", &self.belief)
             .with_updates_by_pk(|row| &row.id);
@@ -478,6 +568,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.chronicle = cache
             .apply_diff_to_table::<Chronicle>("chronicle", &self.chronicle)
             .with_updates_by_pk(|row| &row.id);
+        diff.community = cache
+            .apply_diff_to_table::<Community>("community", &self.community)
+            .with_updates_by_pk(|row| &row.id);
         diff.expecting = cache
             .apply_diff_to_table::<Expecting>("expecting", &self.expecting)
             .with_updates_by_pk(|row| &row.id);
@@ -487,8 +580,17 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.inventory = cache
             .apply_diff_to_table::<Inventory>("inventory", &self.inventory)
             .with_updates_by_pk(|row| &row.id);
+        diff.join_request = cache
+            .apply_diff_to_table::<JoinRequest>("join_request", &self.join_request)
+            .with_updates_by_pk(|row| &row.id);
         diff.judgment = cache
             .apply_diff_to_table::<Judgment>("judgment", &self.judgment)
+            .with_updates_by_pk(|row| &row.id);
+        diff.know_how = cache
+            .apply_diff_to_table::<KnowHow>("know_how", &self.know_how)
+            .with_updates_by_pk(|row| &row.id);
+        diff.membership = cache
+            .apply_diff_to_table::<Membership>("membership", &self.membership)
             .with_updates_by_pk(|row| &row.id);
         diff.mind_cursor = cache
             .apply_diff_to_table::<MindCursor>("mind_cursor", &self.mind_cursor)
@@ -523,6 +625,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.thought = cache
             .apply_diff_to_table::<Thought>("thought", &self.thought)
             .with_updates_by_pk(|row| &row.id);
+        diff.trade_offer = cache
+            .apply_diff_to_table::<TradeOffer>("trade_offer", &self.trade_offer)
+            .with_updates_by_pk(|row| &row.id);
         diff.vitals = cache
             .apply_diff_to_table::<Vitals>("vitals", &self.vitals)
             .with_updates_by_pk(|row| &row.id);
@@ -540,6 +645,9 @@ impl __sdk::DbUpdate for DbUpdate {
             match &table_rows.table[..] {
                 "activity" => db_update
                     .activity
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "artifact" => db_update
+                    .artifact
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "belief" => db_update
                     .belief
@@ -559,6 +667,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "chronicle" => db_update
                     .chronicle
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "community" => db_update
+                    .community
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "expecting" => db_update
                     .expecting
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -568,8 +679,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "inventory" => db_update
                     .inventory
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "join_request" => db_update
+                    .join_request
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "judgment" => db_update
                     .judgment
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "know_how" => db_update
+                    .know_how
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "membership" => db_update
+                    .membership
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "mind_cursor" => db_update
                     .mind_cursor
@@ -606,6 +726,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "thought" => db_update
                     .thought
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "trade_offer" => db_update
+                    .trade_offer
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "vitals" => db_update
                     .vitals
@@ -629,6 +752,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "activity" => db_update
                     .activity
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "artifact" => db_update
+                    .artifact
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "belief" => db_update
                     .belief
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -647,6 +773,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "chronicle" => db_update
                     .chronicle
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "community" => db_update
+                    .community
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "expecting" => db_update
                     .expecting
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -656,8 +785,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "inventory" => db_update
                     .inventory
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "join_request" => db_update
+                    .join_request
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "judgment" => db_update
                     .judgment
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "know_how" => db_update
+                    .know_how
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "membership" => db_update
+                    .membership
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "mind_cursor" => db_update
                     .mind_cursor
@@ -695,6 +833,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "thought" => db_update
                     .thought
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "trade_offer" => db_update
+                    .trade_offer
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "vitals" => db_update
                     .vitals
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -717,16 +858,21 @@ impl __sdk::DbUpdate for DbUpdate {
 #[doc(hidden)]
 pub struct AppliedDiff<'r> {
     activity: __sdk::TableAppliedDiff<'r, Activity>,
+    artifact: __sdk::TableAppliedDiff<'r, Artifact>,
     belief: __sdk::TableAppliedDiff<'r, Belief>,
     body: __sdk::TableAppliedDiff<'r, Body>,
     bond_offer: __sdk::TableAppliedDiff<'r, BondOffer>,
     brain: __sdk::TableAppliedDiff<'r, Brain>,
     character: __sdk::TableAppliedDiff<'r, Character>,
     chronicle: __sdk::TableAppliedDiff<'r, Chronicle>,
+    community: __sdk::TableAppliedDiff<'r, Community>,
     expecting: __sdk::TableAppliedDiff<'r, Expecting>,
     experience: __sdk::TableAppliedDiff<'r, Experience>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
+    join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
+    know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
+    membership: __sdk::TableAppliedDiff<'r, Membership>,
     mind_cursor: __sdk::TableAppliedDiff<'r, MindCursor>,
     mind_state: __sdk::TableAppliedDiff<'r, MindState>,
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
@@ -739,6 +885,7 @@ pub struct AppliedDiff<'r> {
     structure: __sdk::TableAppliedDiff<'r, Structure>,
     terrain_chunk: __sdk::TableAppliedDiff<'r, TerrainChunk>,
     thought: __sdk::TableAppliedDiff<'r, Thought>,
+    trade_offer: __sdk::TableAppliedDiff<'r, TradeOffer>,
     vitals: __sdk::TableAppliedDiff<'r, Vitals>,
     world: __sdk::TableAppliedDiff<'r, World>,
     __unused: std::marker::PhantomData<&'r ()>,
@@ -755,16 +902,25 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks: &mut __sdk::DbCallbacks<RemoteModule>,
     ) {
         callbacks.invoke_table_row_callbacks::<Activity>("activity", &self.activity, event);
+        callbacks.invoke_table_row_callbacks::<Artifact>("artifact", &self.artifact, event);
         callbacks.invoke_table_row_callbacks::<Belief>("belief", &self.belief, event);
         callbacks.invoke_table_row_callbacks::<Body>("body", &self.body, event);
         callbacks.invoke_table_row_callbacks::<BondOffer>("bond_offer", &self.bond_offer, event);
         callbacks.invoke_table_row_callbacks::<Brain>("brain", &self.brain, event);
         callbacks.invoke_table_row_callbacks::<Character>("character", &self.character, event);
         callbacks.invoke_table_row_callbacks::<Chronicle>("chronicle", &self.chronicle, event);
+        callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
         callbacks.invoke_table_row_callbacks::<Expecting>("expecting", &self.expecting, event);
         callbacks.invoke_table_row_callbacks::<Experience>("experience", &self.experience, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
+        callbacks.invoke_table_row_callbacks::<JoinRequest>(
+            "join_request",
+            &self.join_request,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Judgment>("judgment", &self.judgment, event);
+        callbacks.invoke_table_row_callbacks::<KnowHow>("know_how", &self.know_how, event);
+        callbacks.invoke_table_row_callbacks::<Membership>("membership", &self.membership, event);
         callbacks.invoke_table_row_callbacks::<MindCursor>("mind_cursor", &self.mind_cursor, event);
         callbacks.invoke_table_row_callbacks::<MindState>("mind_state", &self.mind_state, event);
         callbacks.invoke_table_row_callbacks::<Deliberation>(
@@ -789,6 +945,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Thought>("thought", &self.thought, event);
+        callbacks.invoke_table_row_callbacks::<TradeOffer>("trade_offer", &self.trade_offer, event);
         callbacks.invoke_table_row_callbacks::<Vitals>("vitals", &self.vitals, event);
         callbacks.invoke_table_row_callbacks::<World>("world", &self.world, event);
     }
@@ -1452,16 +1609,21 @@ impl __sdk::SpacetimeModule for RemoteModule {
 
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
         activity_table::register_table(client_cache);
+        artifact_table::register_table(client_cache);
         belief_table::register_table(client_cache);
         body_table::register_table(client_cache);
         bond_offer_table::register_table(client_cache);
         brain_table::register_table(client_cache);
         character_table::register_table(client_cache);
         chronicle_table::register_table(client_cache);
+        community_table::register_table(client_cache);
         expecting_table::register_table(client_cache);
         experience_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
+        join_request_table::register_table(client_cache);
         judgment_table::register_table(client_cache);
+        know_how_table::register_table(client_cache);
+        membership_table::register_table(client_cache);
         mind_cursor_table::register_table(client_cache);
         mind_state_table::register_table(client_cache);
         my_deliberations_table::register_table(client_cache);
@@ -1474,21 +1636,27 @@ impl __sdk::SpacetimeModule for RemoteModule {
         structure_table::register_table(client_cache);
         terrain_chunk_table::register_table(client_cache);
         thought_table::register_table(client_cache);
+        trade_offer_table::register_table(client_cache);
         vitals_table::register_table(client_cache);
         world_table::register_table(client_cache);
     }
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
         "activity",
+        "artifact",
         "belief",
         "body",
         "bond_offer",
         "brain",
         "character",
         "chronicle",
+        "community",
         "expecting",
         "experience",
         "inventory",
+        "join_request",
         "judgment",
+        "know_how",
+        "membership",
         "mind_cursor",
         "mind_state",
         "my_deliberations",
@@ -1501,6 +1669,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "structure",
         "terrain_chunk",
         "thought",
+        "trade_offer",
         "vitals",
         "world",
     ];

@@ -51,7 +51,7 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
 pub fn people_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64, exclude: &[u32]) -> Vec<(Character, f32)> {
     common::creatures_near(ctx, at, r, now)
         .into_iter()
-        .filter(|c| c.kind == "person" && !exclude.contains(&c.id))
+        .filter(|c| &*c.kind == "person" && !exclude.contains(&c.id))
         .filter_map(|c| ctx.db.character().id().find(c.id).map(|ch| (ch, c.dist)))
         .collect()
 }
@@ -70,11 +70,11 @@ pub fn minds_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64, exclud
 /// each observer refers to `subject` and `object` (names for people and their own kind).
 pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, subject: u32, object: u32, template: &str, salience: f32, exclude: &[u32]) {
     let w = common::world(ctx);
-    let r = common::sight(&w, now);
+    let r = common::sight(ctx, &w, now);
     for (c, _) in minds_near(ctx, at, r, now, exclude) {
         let text = template.replace("{a}", &common::label_for(ctx, &c, subject)).replace("{b}", &common::label_for(ctx, &c, object));
         // Animals notice people's and other species' affairs less keenly than their own kind's.
-        let sal = if c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
+        let sal = if &*c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
         percept(ctx, &c, now, kind, subject, object, at, text, sal);
     }
 }
@@ -85,6 +85,19 @@ pub fn signal(ctx: &ReducerContext, from: u32, name: &str, now: u64) -> Result<S
     let sp = common::species(&me.kind).ok_or("unknown species")?;
     let sig = sp.signals.get(name).ok_or_else(|| format!("a {} has no `{name}` signal", me.kind))?;
     let at = ctx.db.body().id().find(from).map(|b| pos(&b, now)).ok_or("no body")?;
+    // Calling the same call again within 45 s is still the same call, not news.
+    if let Some(mut st) = ctx.db.mind_state().id().find(from) {
+        let key = 0xD000 + (name.bytes().fold(7u32, |h, b| h.wrapping_mul(31) ^ b as u32) % 0x1000) as u16;
+        if st.marks.iter().any(|m| m.node == key && now.saturating_sub(m.at_ms) < 45_000) {
+            return Ok(format!("kept making {}", sig.sound));
+        }
+        st.marks.retain(|m| m.node != key);
+        st.marks.push(Mark { node: key, at_ms: now });
+        if st.marks.len() > 24 {
+            st.marks.remove(0);
+        }
+        ctx.db.mind_state().id().update(st);
+    }
     for (c, _) in minds_near(ctx, at, sig.range, now, &[from]) {
         let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
         let (text, sal) = if c.kind == me.kind {
@@ -112,6 +125,34 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) 
         if now.saturating_sub(st.spoke_ms) < 2_000 {
             return Err("speaking too fast".into());
         }
+        // Saying essentially the same thing again within 90 s is not new speech.
+        let words = |t: &str| -> std::collections::HashSet<String> {
+            t.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| w.len() > 2).map(String::from).collect()
+        };
+        let mine = words(&text);
+        let recent = ctx.db.chronicle().at_ms().filter(now.saturating_sub(90_000)..).filter(|c| c.kind == "speech" && c.a == speaker);
+        for c in recent {
+            let said = c.text.split_once('“').map(|(_, t)| t.trim_end_matches('”')).unwrap_or(&c.text);
+            let theirs = words(said);
+            let common = mine.intersection(&theirs).count() as f32;
+            let union = mine.union(&theirs).count().max(1) as f32;
+            if common / union >= 0.6 {
+                return Ok(());
+            }
+        }
+        let mut h: u32 = 2166136261;
+        for b in text.to_lowercase().bytes() {
+            h = (h ^ b as u32).wrapping_mul(16777619);
+        }
+        let key = 0xD000 + (h % 0x1000) as u16;
+        if st.marks.iter().any(|m| m.node == key && now.saturating_sub(m.at_ms) < 90_000) {
+            return Ok(());
+        }
+        st.marks.retain(|m| m.node != key);
+        st.marks.push(Mark { node: key, at_ms: now });
+        if st.marks.len() > 24 {
+            st.marks.remove(0);
+        }
         st.spoke_ms = now;
         ctx.db.mind_state().id().update(st);
     }
@@ -120,11 +161,11 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) 
     let line = if to != 0 { format!("{} to {}: “{}”", me.name, to_name, text) } else { format!("{}: “{}”", me.name, text) };
     common::chronicle(ctx, now, "speech", speaker, to, at, line);
     // Animals hear a voice, not words.
-    for (c, _) in minds_near(ctx, at, living_rules::HEARING, now, &[speaker]).into_iter().filter(|(c, _)| c.kind != "person") {
+    for (c, _) in minds_near(ctx, at, common::laws(ctx).hearing, now, &[speaker]).into_iter().filter(|(c, _)| &*c.kind != "person") {
         let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
         percept(ctx, &c, now, "signal", speaker, 0, at, format!("You hear a person's voice, {dir}."), 0.25);
     }
-    let hearers = people_near(ctx, at, living_rules::HEARING, now, &[speaker]);
+    let hearers = people_near(ctx, at, common::laws(ctx).hearing, now, &[speaker]);
     // Silence is information: calling someone out of earshot (far away, or dead) gets no answer.
     if to != 0 && !hearers.iter().any(|(c, _)| c.id == to) {
         let who = common::label_for(ctx, &me, to);
@@ -172,7 +213,8 @@ pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u6
     if let Some(sp) = common::species(&c.kind) {
         let min = sp.cognition.think_min_s * 1000;
         let recent = ctx.db.mind_state().id().find(id).map_or(false, |s| now.saturating_sub(s.deliberated_ms) < min);
-        if min > 0 && recent && !reason.contains("attacking you") && ctx.db.deliberation().actor().find(id).is_none() {
+        let urgent = reason.contains("attacking you") || reason.starts_with("Dawn of day") || reason.contains("said to you");
+        if min > 0 && recent && !urgent && ctx.db.deliberation().actor().find(id).is_none() {
             return;
         }
     }
@@ -207,7 +249,6 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let Some(b) = ctx.db.body().id().find(id) else { return "{}".into() };
     let at = pos(&b, now);
     let map = common::map(ctx);
-    let r = common::sight(&w, now);
     let mut you = JMap::new();
     you.insert("id".into(), json!(id));
     you.insert("name".into(), json!(me.name));
@@ -222,11 +263,23 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     let pack: JMap<String, Value> = common::inv_list(ctx, id as u64).into_iter().map(|(k, q)| (k, json!(q))).collect();
     you.insert("pack".into(), Value::Object(pack));
+    let my_community = ctx.db.membership().member().find(id).map(|m| m.community);
+    if let Some(c) = my_community.and_then(|c| ctx.db.community().id().find(c)) {
+        you.insert("community".into(), json!({"name": c.name, "home": [round(c.home_x), round(c.home_y)]}));
+    }
+    if me.kind == "person" {
+        you.insert("knows_how_to".into(), json!(common::knows(ctx, id)));
+        let tablets: Vec<Value> = ctx.db.artifact().holder().filter(id as u64).map(|a| json!({"by": a.author_name, "topic": a.topic})).collect();
+        if !tablets.is_empty() {
+            you.insert("tablets".into(), Value::Array(tablets));
+        }
+    }
     if let Some(a) = ctx.db.activity().id().find(id) {
         you.insert("doing".into(), json!(a.label));
     }
     let hour = common::hour(&w, now);
-    let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": living_rules::is_night(hour), "sight": r});
+    let r = common::sight_for(ctx, id, &w, now);
+    let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": living_rules::is_night(hour), "season": common::season(ctx, now), "sight": r});
 
     let mut creatures = Vec::new();
     for c in common::creatures_near(ctx, at, r, now) {
@@ -238,6 +291,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         o.insert("id".into(), json!(c.id));
         if ch.kind == "person" || ch.kind == me.kind {
             o.insert("name".into(), json!(ch.name));
+        }
+        if my_community.is_some() && ctx.db.membership().member().find(c.id).map(|m| m.community) == my_community {
+            o.insert("community".into(), json!("yours"));
         }
         o.insert("kind".into(), json!(ch.kind));
         o.insert("dist".into(), json!(round(c.dist)));
@@ -259,7 +315,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
 
     let mut groups: Vec<(String, u32, Value)> = Vec::new();
     for (n, d) in common::resources_near(ctx, at, r) {
-        let amount = common::amount_now(&n, now).floor();
+        let amount = common::amount_now(ctx, &n, now).floor();
         if let Some(g) = groups.iter_mut().find(|g| g.0 == n.kind) {
             g.1 += 1;
             continue;
@@ -273,6 +329,12 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         let mut o = json!({"id": s.id, "kind": s.kind, "at": [round(s.x), round(s.y)], "dist": round(d), "dir": direction(at, (s.x, s.y))});
         if s.owner != 0 {
             o["by"] = json!(common::name_of(ctx, s.owner));
+        }
+        if s.kind == "sign" {
+            if let Some(a) = ctx.db.artifact().holder().filter(STRUCTURE_BIT | s.id).next() {
+                o["by"] = json!(a.author_name);
+                o["note"] = json!("a written sign; read it to know what it says");
+            }
         }
         if s.kind == "storage" || s.kind == "remains" {
             let inv: JMap<String, Value> = common::inv_list(ctx, STRUCTURE_BIT | s.id).into_iter().map(|(k, q)| (k, json!(q))).collect();

@@ -404,7 +404,9 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                 let mut a = self.actors.lock().unwrap();
                 let m = a.entry(c.id).or_default();
                 let stale = m.last_consolidated.map_or(true, |t| t.elapsed() > Duration::from_secs(240));
-                let wanted = salience >= self.consolidation_threshold(c.id) || meaningful.len() >= 30 || (stale && meaningful.len() >= 4) || pending.len() >= 120;
+                let min_gap = self.species.get(&c.kind).map(|s| s.cognition.consolidate_min_s).unwrap_or(90);
+                let rested = m.last_consolidated.map_or(true, |t| t.elapsed() > Duration::from_secs(min_gap));
+                let wanted = (rested && (salience >= self.consolidation_threshold(c.id) || meaningful.len() >= 30 || (stale && meaningful.len() >= 4))) || pending.len() >= 120;
                 let allowed = !m.consolidating && m.retry_after.map_or(true, |t| Instant::now() >= t);
                 let sleepy = m.since_sleep >= 6 || (m.since_sleep >= 2 && m.last_sleep.map_or(true, |t| t.elapsed() > Duration::from_secs(20 * 60)));
                 if allowed && (wanted || sleepy) {
@@ -452,7 +454,20 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
 
     fn persona_text(&self, actor: u32) -> String {
         match self.conn.db.persona().id().find(&actor) {
-            Some(p) => format!("{}\nValues: {}\nGoals: {}\nTraits: {}\nMood: {}", p.narrative, p.values.join("; "), p.goals.join("; "), p.traits, p.mood),
+            Some(p) => {
+                let mut knows: Vec<String> = self.conn.db.know_how().iter().filter(|k| k.actor == actor).map(|k| k.technique).collect();
+                knows.sort();
+                let know = if knows.is_empty() { "nothing yet".to_string() } else { knows.join(", ") };
+                let belong = match self.conn.db.membership().member().find(&actor) {
+                    Some(m) => {
+                        let name = self.conn.db.community().id().find(&m.community).map(|c| c.name).unwrap_or_default();
+                        let others: Vec<String> = self.conn.db.membership().iter().filter(|x| x.community == m.community && x.member != actor).map(|x| self.name(x.member)).collect();
+                        format!("\nYou belong to {name}{}", if others.is_empty() { String::new() } else { format!(" (with {})", others.join(", ")) })
+                    }
+                    None => "\nYou belong to no community.".into(),
+                };
+                format!("{}\nValues: {}\nGoals: {}\nTraits: {}\nMood: {}\nYou know how to: {know}{belong}", p.narrative, p.values.join("; "), p.goals.join("; "), p.traits, p.mood)
+            }
             None => "(no persona yet)".into(),
         }
     }
@@ -586,7 +601,40 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             };
             total_latency += reply.latency_ms;
             total_tokens += reply.tokens;
-            let parsed = llm::parse_json(&reply.content).and_then(|v| {
+            // Only talking: keep the current behavior and just speak.
+            if let Ok(v) = llm::parse_json(&reply.content) {
+                if v["graph"].is_null() || v["graph"].as_str().map_or(false, |g| g.trim().eq_ignore_ascii_case("keep")) {
+                    let (say, to) = match &v["say"] {
+                        Value::String(s) => (s.clone(), 0),
+                        Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(|t| t.as_u64()).unwrap_or(0) as u32),
+                        _ => (String::new(), 0),
+                    };
+                    let thought = v["thought"].as_str().unwrap_or_default().to_string();
+                    let t = ThoughtIn {
+                        kind: "deliberate".into(),
+                        summary: format!("{thought} → (carries on){}", if say.is_empty() { String::new() } else { format!(" and says “{say}”") }),
+                        detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1}).to_string(),
+                        latency_ms: total_latency,
+                        tokens: total_tokens,
+                        model: reply.model.clone(),
+                        reference: thought_ref.clone(),
+                    };
+                    log::info!("{} carries on{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
+                    let (tx, rx) = oneshot::channel();
+                    self.conn.reducers.mind_say_then(actor, say, to, d.updated_ms, t, move |_, r| {
+                        let _ = tx.send(flatten(r));
+                    })?;
+                    return rx.await?.map_err(|e| anyhow!("mind_say: {e}"));
+                }
+            }
+            // A patch replaces one labeled branch (e.g. combat tactics mid-fight) and keeps the rest.
+            let current = self.conn.db.brain().id().find(&actor).and_then(|b| serde_json::from_str::<Value>(&b.graph).ok());
+            let parsed = llm::parse_json(&reply.content).and_then(|mut v| {
+                if v["patch"].is_object() && (v["graph"].is_null() || v["graph"].is_string()) {
+                    let label = v["patch"]["label"].as_str().unwrap_or("combat").to_string();
+                    let node = v["patch"]["graph"].clone();
+                    v["graph"] = patch_branch(current.clone().unwrap_or(json!({"wait": 3})), &label, node);
+                }
                 let (g, pruned) = living_rules::graph::from_value_lenient(v["graph"].clone()).map_err(|e| anyhow!(e))?;
                 Ok((v, g, pruned))
             });
@@ -949,5 +997,84 @@ fn flat(v: &Value) -> String {
         Value::String(s) => s.clone(),
         Value::Null => String::new(),
         other => other.to_string().chars().take(400).collect(),
+    }
+}
+
+/// Replace the branch labeled `label` in a graph (outside the reflex layer) with `node`,
+/// labeling the new branch; if no such branch exists, add it at top priority.
+fn patch_branch(graph: Value, label: &str, node: Value) -> Value {
+    let inner = match &graph["first"] {
+        Value::Object(o) if o.get("label").and_then(|l| l.as_str()) == Some("reflexes") => o["children"].as_array().and_then(|c| c.last()).cloned().unwrap_or(json!({"wait": 3})),
+        _ => graph,
+    };
+    let labeled = label_node(node, label);
+    fn replace(v: &mut Value, label: &str, with: &Value) -> bool {
+        match v {
+            Value::Object(o) => {
+                for key in ["first", "seq"] {
+                    if let Some(Value::Object(c)) = o.get(key) {
+                        if c.get("label").and_then(|l| l.as_str()) == Some(label) {
+                            *v = with.clone();
+                            return true;
+                        }
+                    }
+                }
+                o.values_mut().any(|x| replace(x, label, with))
+            }
+            Value::Array(a) => a.iter_mut().any(|x| replace(x, label, with)),
+            _ => false,
+        }
+    }
+    let mut inner = inner;
+    if replace(&mut inner, label, &labeled) {
+        return inner;
+    }
+    // Not found: the new branch takes priority over the existing behavior.
+    match inner.get("first") {
+        Some(Value::Array(children)) => {
+            let mut c = vec![labeled];
+            c.extend(children.iter().cloned());
+            json!({"first": c})
+        }
+        Some(Value::Object(o)) => {
+            let mut c = vec![labeled];
+            c.extend(o.get("children").and_then(|x| x.as_array()).cloned().unwrap_or_default());
+            json!({"first": {"label": o.get("label").cloned().unwrap_or(json!("plan")), "children": c}})
+        }
+        _ => json!({"first": [labeled, inner]}),
+    }
+}
+
+/// Ensure a patched branch carries its label (wrapping non-composite nodes).
+fn label_node(node: Value, label: &str) -> Value {
+    for key in ["first", "seq"] {
+        match node.get(key) {
+            Some(Value::Array(children)) => return json!({key: {"label": label, "children": children}}),
+            Some(Value::Object(o)) => {
+                let mut o = o.clone();
+                o.insert("label".into(), json!(label));
+                return json!({key: o});
+            }
+            _ => {}
+        }
+    }
+    json!({"first": {"label": label, "children": [node]}})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn patches_replace_labeled_branch_or_take_priority() {
+        let g = json!({"first": {"label": "reflexes", "children": [{"wait": 1}, {"first": [
+            {"first": {"label": "combat", "children": [{"do": "attack", "target": "attacker"}]}},
+            {"do": "wander"}]}]}});
+        let p = patch_branch(g, "combat", json!({"first": [{"if": {"threatened": true}, "then": {"do": "dodge"}}, {"do": "attack", "target": "attacker"}]}));
+        let s = p.to_string();
+        assert!(s.contains("dodge") && s.contains("wander") && !s.contains("reflexes"), "{s}");
+        let q = patch_branch(json!({"first": [{"do": "wander"}]}), "combat", json!({"do": "flee", "target": "attacker"}));
+        assert_eq!(q["first"][0]["first"]["label"], "combat");
+        assert!(living_rules::graph::from_value(q).is_ok());
     }
 }

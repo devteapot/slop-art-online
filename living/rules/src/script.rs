@@ -24,6 +24,8 @@ pub struct ActorFacts {
     pub inv: Vec<(String, u32)>,
     /// Age in in-world days.
     pub age: f32,
+    /// Techniques this character knows how to do.
+    pub knows: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -38,6 +40,7 @@ pub struct TargetFacts {
     pub alive: bool,
     pub dist: f32,
     pub inv: Vec<(String, u32)>,
+    pub knows: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -48,6 +51,11 @@ pub struct SkillCtx {
     pub qty: u32,
     pub night: bool,
     pub hour: f32,
+    pub season: String,
+    pub text: String,
+    pub topic: String,
+    /// A fresh random number in [0, 1) from the authority (for chances).
+    pub roll: f32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -74,6 +82,61 @@ pub enum Effect {
     Bond,
     /// Make the species signal named by the action's item.
     Signal,
+    /// The target person learns a technique from the actor.
+    Teach { technique: String },
+    /// The actor works out a technique.
+    Learn { technique: String },
+    /// Create the tablet or sign described by the action.
+    Write,
+    /// Read the tablet or sign the action resolved.
+    Read,
+    /// Grow a new berry bush where the actor stands.
+    Plant,
+    /// Propose a trade to the target.
+    Offer,
+    /// Accept the target's standing offer.
+    Accept,
+    Found,
+    Join,
+    Welcome,
+    Leave,
+}
+
+/// World laws that parameterize the engine. Read once per script revision (the `laws()`
+/// function), so they cost nothing per tick; defaults apply to anything a script omits.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Laws {
+    pub sight_day: f32,
+    pub sight_night: f32,
+    pub sight_torch: f32,
+    pub hearing: f32,
+    pub fire_warmth: f32,
+    pub shelter_warmth: f32,
+    pub gestation_days: f32,
+    pub bond_window_s: f32,
+    pub crowd: f32,
+    pub danger_near: f32,
+    pub danger_far: f32,
+    pub repeat_failure_s: f32,
+}
+
+impl Default for Laws {
+    fn default() -> Self {
+        Self {
+            sight_day: crate::SIGHT,
+            sight_night: crate::NIGHT_SIGHT,
+            sight_torch: crate::TORCH_SIGHT,
+            hearing: crate::HEARING,
+            fire_warmth: 3.5,
+            shelter_warmth: 2.5,
+            gestation_days: 1.0,
+            bond_window_s: 120.0,
+            crowd: 6.0,
+            danger_near: 8.0,
+            danger_far: 12.0,
+            repeat_failure_s: 120.0,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -178,6 +241,30 @@ impl Scripts {
         Ok((v as f32).clamp(0.2, 12.0))
     }
 
+    pub fn laws(&self) -> Laws {
+        let mut l = Laws::default();
+        if !self.has("laws") {
+            return l;
+        }
+        let Ok(m) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws", ()).map(|d| d.try_cast::<Map>().unwrap_or_default()) else { return l };
+        let g = |k: &str, d: f32| m.get(k).and_then(number).map(|v| v as f32).unwrap_or(d);
+        l = Laws {
+            sight_day: g("sight_day", l.sight_day),
+            sight_night: g("sight_night", l.sight_night),
+            sight_torch: g("sight_torch", l.sight_torch),
+            hearing: g("hearing", l.hearing),
+            fire_warmth: g("fire_warmth", l.fire_warmth),
+            shelter_warmth: g("shelter_warmth", l.shelter_warmth),
+            gestation_days: g("gestation_days", l.gestation_days),
+            bond_window_s: g("bond_window_s", l.bond_window_s),
+            crowd: g("crowd", l.crowd),
+            danger_near: g("danger_near", l.danger_near),
+            danger_far: g("danger_far", l.danger_far),
+            repeat_failure_s: g("repeat_failure_s", l.repeat_failure_s),
+        };
+        l
+    }
+
     /// Numeric function of one string argument, e.g. `max_hp("deer")`.
     pub fn num_of(&self, f: &str, arg: &str, default: f64) -> f64 {
         if !self.has(f) {
@@ -227,6 +314,7 @@ fn to_map(c: &SkillCtx) -> Map {
     a.insert("terrain".into(), c.actor.terrain.clone().into());
     a.insert("activity".into(), c.actor.activity.clone().into());
     a.insert("age".into(), f(c.actor.age));
+    a.insert("knows".into(), c.actor.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
     a.insert("inv".into(), inv_map(&c.actor.inv).into());
     let mut t = Map::new();
     t.insert("class".into(), c.target.class.clone().into());
@@ -238,6 +326,7 @@ fn to_map(c: &SkillCtx) -> Map {
     t.insert("alive".into(), c.target.alive.into());
     t.insert("dist".into(), f(c.target.dist));
     t.insert("inv".into(), inv_map(&c.target.inv).into());
+    t.insert("knows".into(), c.target.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
     let mut m = Map::new();
     m.insert("actor".into(), a.into());
     m.insert("target".into(), t.into());
@@ -245,6 +334,10 @@ fn to_map(c: &SkillCtx) -> Map {
     m.insert("qty".into(), Dynamic::from_int(c.qty as i64));
     m.insert("night".into(), c.night.into());
     m.insert("hour".into(), f(c.hour));
+    m.insert("season".into(), c.season.clone().into());
+    m.insert("text".into(), c.text.clone().into());
+    m.insert("topic".into(), c.topic.clone().into());
+    m.insert("roll".into(), f(c.roll));
     m
 }
 
@@ -272,6 +365,17 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "build" => Effect::Build { kind: s("kind") },
         "bond" => Effect::Bond,
         "signal" => Effect::Signal,
+        "teach" => Effect::Teach { technique: s("technique") },
+        "learn" => Effect::Learn { technique: s("technique") },
+        "write" => Effect::Write,
+        "read" => Effect::Read,
+        "plant" => Effect::Plant,
+        "offer" => Effect::Offer,
+        "accept" => Effect::Accept,
+        "found" => Effect::Found,
+        "join" => Effect::Join,
+        "welcome" => Effect::Welcome,
+        "leave" => Effect::Leave,
         other => return Err(format!("unknown effect op `{other}`")),
     })
 }
@@ -325,6 +429,7 @@ mod tests {
         c.actor.activity = "sleep".into();
         assert!(s.rates(&c).unwrap().energy_per_min > 0.0);
         c.actor.activity = String::new();
+        c.actor.hunger = 80.0; // no regeneration, so the cold alone shows
         c.night = true;
         assert!(s.rates(&c).unwrap().hp_per_min < 0.0, "cold nights hurt without fire or shelter");
         c.actor.near_fire = true;

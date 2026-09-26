@@ -5,13 +5,25 @@
 pub const WORLD_RULES: &str = "\
 WORLD: a wooded river valley enclosed by rocky ridges; a river runs north-south west of center with two sandy fords; a lake lies northeast. \
 Coordinates are tiles (x east, y south, map 96x96). One day lasts 12 real minutes; night is 20:00-06:00 and cuts sight to 6 tiles (11 by day).
-BODY: hunger rises ~7/min (100 = starving, which drains health); energy falls ~4/min awake and recovers while sleeping (faster within 2 tiles of a shelter). \
-At night, people farther than 3 tiles from a campfire and 2 from a shelter lose health to the cold. Health recovers slowly when fed and rested. Death is permanent.
-FOOD: berries 12, raw fish 16, raw meat 20, cooked fish 34, cooked meat 42 (hunger points). Cook raw fish/meat at a campfire. \
+SEASONS: a year is 8 days — spring, summer, autumn, winter (2 days each). In winter nothing regrows and nights are colder: store food before it.
+BODY: hunger rises ~5/min (100 = starving, which drains health); energy falls ~3/min awake and recovers while sleeping (faster within 2 tiles of a shelter). \
+At night, people farther than 3 tiles from a campfire and 2 from a shelter, and without a warm cloak, lose health to the cold. Health recovers slowly when fed and rested. Death is permanent.
+KNOW-HOW: you can only do techniques you know: fire (campfire), cooking, spear, shelter, storage, cloak (2 hides from hunted deer + 1 fiber; keeps you warm at night), \
+torch (lights the night, you see farther), planting (grow new berry bushes), writing (write and read tablets and signs). Others may know what you don't: \
+ask them to teach you (teach takes time beside each other), read what someone wrote, or experiment with materials to work something out yourself. \
+What only one person knows dies with them unless they teach it or write it down.
+FOOD: berries 12, raw fish 16, raw meat 20, cooked fish 34, cooked meat 42 (hunger points). Cook raw fish/meat at a campfire (needs cooking). \
 Berry bushes, reeds, fishing spots, trees and boulders regrow slowly after harvesting. Deer can be hunted (3 meat); wolves roam forests, hunt deer and attack people at night when hungry.
-MAKING: campfire = 3 wood, shelter = 6 wood + 3 fiber, storage = 4 wood (anyone can take from a storage), spear = 2 wood + 1 stone (hits much harder, faster fishing).
+MAKING: campfire = 3 wood, shelter = 6 wood + 3 fiber, storage = 4 wood (anyone can take from a storage), spear = 2 wood + 1 stone (hits much harder, faster fishing), \
+cloak = 2 hide + 1 fiber, torch = 1 wood + 1 fiber, tablet or sign = 1 wood (write).
 LIFE: people age; elders weaken after about 40 days. Two adults who both choose `conceive` toward each other within two minutes, while fed and near a shelter, have a child about a day later. \
 Children grow up in about 3 days; until then they are slow, cannot build, craft or fight, and depend on others for food and warmth.
+COMBAT: fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming \
+({{\"threatened\": true}}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard \
+(hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear up to 7 tiles (you lose it). \
+While fighting, your graph is checked about 15 times a second, so encode how you fight (e.g. a branch labeled \"combat\"), not one blow.
+COMMUNITIES: people can found a community ({{\"do\": \"found\", \"text\": \"its name\"}}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
+TIME: beyond staying alive, how you spend your days is yours to decide, from who you are and what you want.
 OTHERS: people hear speech within ~9 tiles. You cannot read minds; what others say may be false. You only know what you perceived or were told.";
 
 pub fn grammar() -> String {
@@ -27,14 +39,16 @@ Nodes:
 - {{\"first\": [N, ...]}} priority: every check, the first child that is running or succeeds wins; higher children interrupt lower ones. Optional label: {{\"first\": [...], \"label\": \"...\"}}.
 - {{\"seq\": [N, ...]}} steps in order, remembering progress; fails when a step fails.
 - {{\"if\": C, \"then\": N, \"else\": N}} guard (else optional): the branch runs only while C holds.
-- {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically.
+- {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically. \
+Trading: {{\"do\": \"offer\", \"target\": {{\"id\": 6}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}} then they may {{\"do\": \"accept\", \"target\": {{\"id\": 4}}}}. \
+Writing: {{\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know, to teach readers\"}}; teaching: {{\"do\": \"teach\", \"target\": {{\"id\": 6}}, \"item\": \"spear\"}}.
 - {{\"say\": \"text\", \"to\": T}} speak (each say node speaks at most once per 45 s).
 - {{\"wait\": seconds}}
 - {{\"think\": \"reason\"}} ask yourself to reconsider (non-blocking; ignored within 45 s of a decision, then at most once per 90 s). Put it where your plan runs out (e.g. last in a seq or as the final fallback), not where it is reached on every check.
 Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"above\": 60}}, \"has\": {{\"item\": \"food\"}}}}, \"then\": {{\"do\": \"eat\", \"item\": \"food\"}}}}
 Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100)
   {{\"has\": {{\"item\": \"berries\", \"at_least\": 2}}}} (item \"food\" = any food) {{\"sees\": T}} {{\"near\": {{\"target\": T, \"within\": 3}}}}
-  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"night\": true}} {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}
+  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
 Targets T: \"self\" \"attacker\" \"speaker\" \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family)
   {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"name of a place you remember\"}} {{\"at\": [x, y]}}
@@ -61,13 +75,16 @@ pub fn deliberate_system(name: &str) -> String {
     format!(
         "You are the mind of {name}, a person living in a persistent simulated world. Stay in character: your personality, values, relationships and memories are yours, \
 and they may change through what you live. Decide what {name} intends now and express it as a behavior graph the body will follow, plus optional speech.\n\n{WORLD_RULES}\n\n{}\n\n\
-Speak naturally and briefly, in {name}'s own voice, only when there is a reason (answer questions, coordinate, trade, warn, ask, lie if it suits you). \
-Do not reply just to acknowledge or repeat an agreement: once agreed, act. \
+A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"below\": 12}}}}) let you do different things at different times. \
+Speech is how you share yourself: what you think, feel, remember, hope or suspect, what you make of the other person, as well as \
+practical matters. Talk as the person you are, in your own voice; you may also stay silent, deflect or lie. Don't just echo what was \
+already agreed. \
 Your body has reflexes (label \"reflexes\") that run before your graph: eat carried food when starving, gather berries in sight when starving, flee when badly hurt, sleep when exhausted. \
 Write only your own graph; reflexes are added for you. \
 Refer to people by the ids you see. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
 {{\"thought\": \"your private interpretation of the situation (1-3 sentences)\", \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
-\"plan\": \"one-line intention\", \"graph\": {{...behavior graph...}}, \
+\"plan\": \"one-line intention\", \"graph\": {{...behavior graph...}} or \"keep\" to carry on with your current graph (e.g. when you only want to talk), \
+or instead of graph \"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}} to replace only that labeled branch (e.g. adapt how you fight mid-fight) and keep the rest, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances your graph can test with believes), \
 \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering, e.g. home, good berry patch)}}",
         grammar()

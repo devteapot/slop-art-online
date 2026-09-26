@@ -42,6 +42,9 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         percepts: 0,
         deliberations: 0,
         profile: false,
+        hits: 0,
+        dodged: 0,
+        blocked: 0,
     });
     living_rules::script::Scripts::new(seed::SKILLS)?;
     ctx.db.script().insert(Script { name: "skills".into(), source: seed::SKILLS.into(), revision: 1, updated_ms: now });
@@ -117,6 +120,99 @@ pub fn spawn_crowd(ctx: &ReducerContext, n: u32, minded: bool) -> Result<(), Str
         let controller = if minded { common::world(ctx).admin } else { ctx.database_identity() };
         let id = seed::spawn_creature(ctx, &format!("Walker{}", made + 1), "person", controller, minded, (x, y), now);
         common::inv_add(ctx, id as u64, "berries", 3);
+        made += 1;
+    }
+    Ok(())
+}
+
+/// Test support: give a character know-how.
+#[spacetimedb::reducer]
+pub fn grant_know_how(ctx: &ReducerContext, id: u32, technique: String) -> Result<(), String> {
+    require_admin(ctx)?;
+    common::learn(ctx, id, &technique, "granted", common::now_ms(ctx));
+    Ok(())
+}
+
+/// Test support: give a character items.
+#[spacetimedb::reducer]
+pub fn grant_items(ctx: &ReducerContext, id: u32, item: String, qty: u32) -> Result<(), String> {
+    require_admin(ctx)?;
+    common::inv_add(ctx, id as u64, &item, qty);
+    Ok(())
+}
+
+/// Test support: place a structure beside a character.
+#[spacetimedb::reducer]
+pub fn place_structure(ctx: &ReducerContext, near: u32, kind: String) -> Result<(), String> {
+    require_admin(ctx)?;
+    let now = common::now_ms(ctx);
+    let b = ctx.db.body().id().find(near).ok_or("no such body")?;
+    let p = common::pos(&b, now);
+    ctx.db.structure().insert(Structure { id: 0, kind, x: p.0 + 0.8, y: p.1, chunk: living_rules::map::chunk_of(p.0 + 0.8, p.1), owner: near, built_ms: now });
+    Ok(())
+}
+
+/// Test support: install a graph on any character.
+#[spacetimedb::reducer]
+pub fn set_behavior(ctx: &ReducerContext, id: u32, graph: String) -> Result<(), String> {
+    require_admin(ctx)?;
+    mind::set_graph(ctx, id, &graph, "test", "test", common::now_ms(ctx)).map(|_| ())
+}
+
+/// Test support: move a character next to another.
+#[spacetimedb::reducer]
+pub fn place_near(ctx: &ReducerContext, id: u32, near: u32) -> Result<(), String> {
+    require_admin(ctx)?;
+    let now = common::now_ms(ctx);
+    let t = ctx.db.body().id().find(near).ok_or("no such body")?;
+    let p = common::pos(&t, now);
+    let mut b = ctx.db.body().id().find(id).ok_or("no such body")?;
+    b.x = p.0 + 1.0;
+    b.y = p.1;
+    b.t_ms = now;
+    b.vx = 0.0;
+    b.vy = 0.0;
+    b.path.clear();
+    b.next_ms = u64::MAX;
+    b.chunk = living_rules::map::chunk_of(b.x, b.y);
+    ctx.db.body().id().update(b);
+    common::invalidate_bodies();
+    Ok(())
+}
+
+/// Create the seed's communities (if missing) and their members, on a running world.
+#[spacetimedb::reducer]
+pub fn seed_communities(ctx: &ReducerContext) -> Result<(), String> {
+    require_admin(ctx)?;
+    seed::communities(ctx, common::now_ms(ctx));
+    Ok(())
+}
+
+/// Benchmark support: `n` spear-armed people packed into one small area, fighting the
+/// nearest person. Even ids dodge incoming windups, odd ids block.
+#[spacetimedb::reducer]
+pub fn spawn_battle(ctx: &ReducerContext, n: u32) -> Result<(), String> {
+    use spacetimedb::rand::Rng;
+    require_admin(ctx)?;
+    let now = common::now_ms(ctx);
+    let map = common::map(ctx);
+    let center = map.nearest_walkable(55.0, 60.0).ok_or("no room")?;
+    let mut made = 0;
+    for _ in 0..n * 30 {
+        if made >= n {
+            break;
+        }
+        let p = (center.0 + ctx.rng().gen_range(-7.0f32..7.0), center.1 + ctx.rng().gen_range(-7.0f32..7.0));
+        if !map.at(p.0, p.1).walkable() {
+            continue;
+        }
+        let id = seed::spawn_creature(ctx, &format!("Fighter{}", made + 1), "person", ctx.database_identity(), false, p, now);
+        common::inv_add(ctx, id as u64, "spear", 1);
+        let defend = if id % 2 == 0 { "dodge" } else { "block" };
+        let graph = format!(
+            r#"{{"first":{{"label":"combat","children":[{{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},{{"do":{{"skill":"attack","target":{{"nearest":"person"}}}}}}]}}}}"#
+        );
+        mind::set_graph(ctx, id, &graph, "fight", "battle", now)?;
         made += 1;
     }
     Ok(())

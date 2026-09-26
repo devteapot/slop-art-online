@@ -20,6 +20,9 @@ pub struct Stats {
     pub births: u32,
     pub deaths: u32,
     pub max_tick_gap_ms: u32,
+    pub hits: u64,
+    pub dodged: u64,
+    pub blocked: u64,
 }
 
 impl __sdk::InModule for Stats {
@@ -43,6 +46,9 @@ pub struct StatsCols {
     pub births: __sdk::__query_builder::Col<Stats, u32>,
     pub deaths: __sdk::__query_builder::Col<Stats, u32>,
     pub max_tick_gap_ms: __sdk::__query_builder::Col<Stats, u32>,
+    pub hits: __sdk::__query_builder::Col<Stats, u64>,
+    pub dodged: __sdk::__query_builder::Col<Stats, u64>,
+    pub blocked: __sdk::__query_builder::Col<Stats, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for Stats {
@@ -62,6 +68,9 @@ impl __sdk::__query_builder::HasCols for Stats {
             births: __sdk::__query_builder::Col::new(table_name, "births"),
             deaths: __sdk::__query_builder::Col::new(table_name, "deaths"),
             max_tick_gap_ms: __sdk::__query_builder::Col::new(table_name, "max_tick_gap_ms"),
+            hits: __sdk::__query_builder::Col::new(table_name, "hits"),
+            dodged: __sdk::__query_builder::Col::new(table_name, "dodged"),
+            blocked: __sdk::__query_builder::Col::new(table_name, "blocked"),
         }
     }
 }

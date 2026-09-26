@@ -115,6 +115,9 @@ async fn main() -> Result<()> {
                     "SELECT * FROM relation",
                     "SELECT * FROM judgment",
                     "SELECT * FROM place",
+                    "SELECT * FROM know_how",
+                    "SELECT * FROM community",
+                    "SELECT * FROM membership",
                     "SELECT * FROM my_deliberations",
                 ]);
         })

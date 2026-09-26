@@ -31,6 +31,9 @@ const QUERIES: &[&str] = &[
     "SELECT * FROM bond_offer",
     "SELECT * FROM expecting",
     "SELECT * FROM mind_cursor",
+    "SELECT * FROM know_how",
+    "SELECT * FROM artifact",
+    "SELECT * FROM trade_offer",
 ];
 
 /// A per-character experience subscription (only the inspected character's rows).
@@ -246,6 +249,7 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 bump(&net.gens.thought);
             }
             Signal::Applied => {
+                info!("world subscribed after {:.1} s", now);
                 net.status = Status::Live;
                 bump(&net.gens.terrain);
                 bump(&net.gens.chronicle);

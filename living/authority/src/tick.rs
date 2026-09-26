@@ -25,6 +25,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     k.tick += 1;
     k.last_ms = now;
     let slot = (k.tick % 60) as u8;
+    let k_tick = k.tick;
     let _timer = k.profile.then(|| spacetimedb::log_stopwatch::LogStopwatch::new("tick"));
     ctx.db.clock().id().update(k);
 
@@ -59,6 +60,14 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
             if done.insert(id) {
                 brain::evaluate(ctx, id, now);
             }
+        }
+    }
+    // Combat cadence: creatures in a fight are evaluated about 15 times per second,
+    // staggered across ticks so a battle does not land in one tick.
+    let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (*id as u64 + k_tick) % 4 == 0).collect();
+    for id in fighting {
+        if done.insert(id) {
+            brain::evaluate(ctx, id, now);
         }
     }
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();
@@ -123,6 +132,12 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             common::chronicle(ctx, now, "time", 0, 0, (0.0, 0.0), format!("Night falls on day {day}."));
         } else if hour == 6 {
             common::chronicle(ctx, now, "time", 0, 0, (0.0, 0.0), format!("Dawn of day {day}."));
+            // Each person plans the day ahead (work, meals, learning, time with others).
+            let season = common::season(ctx, now);
+            let planners: Vec<u32> = ctx.db.character().kind().filter("person").filter(|c| c.alive && c.ai).map(|c| c.id).collect();
+            for id in planners {
+                crate::perceive::request_deliberation(ctx, id, &format!("Dawn of day {day} ({season}). A new day."), now);
+            }
         }
         k.last_hour = hour;
     }
@@ -166,6 +181,9 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     for o in ctx.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > 180_000).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.bond_offer().id().delete(o);
     }
+    for o in ctx.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > 240_000).map(|o| o.id).collect::<Vec<_>>() {
+        ctx.db.trade_offer().id().delete(o);
+    }
 
     // Bound the story feed.
     let n = ctx.db.chronicle().count();
@@ -192,6 +210,9 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
         births: prev.as_ref().map(|p| p.births).unwrap_or(0),
         deaths,
         max_tick_gap_ms: k.max_gap_ms,
+        hits: k.hits,
+        dodged: k.dodged,
+        blocked: k.blocked,
     };
     k.max_gap_ms = 0;
     ctx.db.clock().id().update(k);

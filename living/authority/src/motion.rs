@@ -109,13 +109,18 @@ pub fn advance(ctx: &ReducerContext, mut b: Body, now: u64) -> bool {
             b.path.remove(0);
         }
     }
+    let before = b.chunk;
     begin_segment(&mut b, now);
+    if b.chunk != before {
+        common::invalidate_bodies();
+    }
     let arrived = b.path.is_empty();
     ctx.db.body().id().update(b);
     arrived
 }
 
 pub fn spawn_body(ctx: &ReducerContext, id: u32, kind: &str, at: (f32, f32), now: u64) {
+    common::invalidate_bodies();
     ctx.db.body().insert(Body {
         id,
         kind: kind.into(),

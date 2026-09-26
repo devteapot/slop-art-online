@@ -20,6 +20,11 @@ pub struct Activity {
     pub started_ms: u64,
     pub ends_ms: u64,
     pub label: String,
+    pub text: String,
+    pub topic: String,
+    pub victim: u32,
+    pub want: String,
+    pub want_qty: u32,
 }
 
 impl __sdk::InModule for Activity {
@@ -41,6 +46,11 @@ pub struct ActivityCols {
     pub started_ms: __sdk::__query_builder::Col<Activity, u64>,
     pub ends_ms: __sdk::__query_builder::Col<Activity, u64>,
     pub label: __sdk::__query_builder::Col<Activity, String>,
+    pub text: __sdk::__query_builder::Col<Activity, String>,
+    pub topic: __sdk::__query_builder::Col<Activity, String>,
+    pub victim: __sdk::__query_builder::Col<Activity, u32>,
+    pub want: __sdk::__query_builder::Col<Activity, String>,
+    pub want_qty: __sdk::__query_builder::Col<Activity, u32>,
 }
 
 impl __sdk::__query_builder::HasCols for Activity {
@@ -58,6 +68,11 @@ impl __sdk::__query_builder::HasCols for Activity {
             started_ms: __sdk::__query_builder::Col::new(table_name, "started_ms"),
             ends_ms: __sdk::__query_builder::Col::new(table_name, "ends_ms"),
             label: __sdk::__query_builder::Col::new(table_name, "label"),
+            text: __sdk::__query_builder::Col::new(table_name, "text"),
+            topic: __sdk::__query_builder::Col::new(table_name, "topic"),
+            victim: __sdk::__query_builder::Col::new(table_name, "victim"),
+            want: __sdk::__query_builder::Col::new(table_name, "want"),
+            want_qty: __sdk::__query_builder::Col::new(table_name, "want_qty"),
         }
     }
 }
@@ -68,6 +83,7 @@ impl __sdk::__query_builder::HasCols for Activity {
 pub struct ActivityIxCols {
     pub ends_ms: __sdk::__query_builder::IxCol<Activity, u64>,
     pub id: __sdk::__query_builder::IxCol<Activity, u32>,
+    pub victim: __sdk::__query_builder::IxCol<Activity, u32>,
 }
 
 impl __sdk::__query_builder::HasIxCols for Activity {
@@ -76,6 +92,7 @@ impl __sdk::__query_builder::HasIxCols for Activity {
         ActivityIxCols {
             ends_ms: __sdk::__query_builder::IxCol::new(table_name, "ends_ms"),
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+            victim: __sdk::__query_builder::IxCol::new(table_name, "victim"),
         }
     }
 }

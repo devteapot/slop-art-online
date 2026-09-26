@@ -18,12 +18,64 @@ pub struct Seed {
     pub seed: u64,
     pub people: Vec<SeedPerson>,
     pub animals: SeedAnimals,
+    #[serde(default)]
+    pub artifacts: Vec<SeedArtifact>,
+    #[serde(default)]
+    pub structures: Vec<SeedStructure>,
+    #[serde(default)]
+    pub communities: Vec<SeedCommunity>,
+}
+
+pub fn communities(ctx: &ReducerContext, now: u64) {
+    let Ok(s) = serde_json::from_str::<Seed>(VALLEY) else { return };
+    for sc in &s.communities {
+        if ctx.db.community().iter().any(|c| c.name == sc.name) {
+            continue;
+        }
+        let ids: Vec<u32> = sc.members.iter().filter_map(|n| ctx.db.character().iter().find(|c| &c.name == n && c.alive).map(|c| c.id)).collect();
+        let founder = ids.first().copied().unwrap_or(0);
+        let c = ctx.db.community().insert(Community { id: 0, name: sc.name.clone(), founder, founded_ms: 0, home_x: sc.home[0], home_y: sc.home[1] });
+        for id in ids {
+            if ctx.db.membership().member().find(id).is_none() {
+                ctx.db.membership().insert(Membership { id: 0, community: c.id, member: id, since_ms: now });
+            }
+        }
+    }
 }
 
 #[derive(Deserialize)]
 pub struct SeedPerson {
     pub name: String,
     pub at: [f32; 2],
+    #[serde(default)]
+    pub knows: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct SeedCommunity {
+    pub name: String,
+    pub home: [f32; 2],
+    pub members: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct SeedStructure {
+    pub kind: String,
+    pub at: [f32; 2],
+    #[serde(default)]
+    pub owner: String,
+    #[serde(default)]
+    pub contents: std::collections::BTreeMap<String, u32>,
+}
+
+#[derive(Deserialize)]
+pub struct SeedArtifact {
+    pub kind: String,
+    pub at: [f32; 2],
+    pub author_name: String,
+    #[serde(default)]
+    pub topic: String,
+    pub text: String,
 }
 
 #[derive(Deserialize)]
@@ -54,9 +106,26 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     for p in &s.people {
         let at = map.nearest_walkable(p.at[0], p.at[1]).unwrap_or((48.0, 48.0));
         let id = spawn_creature(ctx, &p.name, "person", admin, true, at, now);
-        common::inv_add(ctx, id as u64, "berries", 3);
+        common::inv_add(ctx, id as u64, "berries", 5);
+        for t in &p.knows {
+            common::learn(ctx, id, t, "seed", now);
+        }
         crate::perceive::request_deliberation(ctx, id, "You have just arrived in the valley and are taking in your surroundings.", now);
     }
+    for st in &s.structures {
+        let at = map.nearest_walkable(st.at[0], st.at[1]).unwrap_or((48.0, 48.0));
+        let owner = ctx.db.character().iter().find(|c| c.name == st.owner).map(|c| c.id).unwrap_or(0);
+        let row = ctx.db.structure().insert(Structure { id: 0, kind: st.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now });
+        for (item, q) in &st.contents {
+            common::inv_add(ctx, STRUCTURE_BIT | row.id, item, *q);
+        }
+    }
+    for a in &s.artifacts {
+        let at = map.nearest_walkable(a.at[0], a.at[1]).unwrap_or((48.0, 48.0));
+        let st = ctx.db.structure().insert(Structure { id: 0, kind: a.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: 0, built_ms: 0 });
+        ctx.db.artifact().insert(Artifact { id: 0, kind: a.kind.clone(), holder: STRUCTURE_BIT | st.id, author: 0, author_name: a.author_name.clone(), written_ms: 0, topic: a.topic.clone(), text: a.text.clone() });
+    }
+    communities(ctx, now);
     for (kind, count) in [("deer", s.animals.deer), ("wolf", s.animals.wolf)] {
         for _ in 0..count {
             if let Some(at) = animal_spot(ctx, &map, kind) {
@@ -152,6 +221,7 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         deliberated_ms: now,
         seen: Vec::new(),
         alerts: 0,
+        fast_until: 0,
     });
     if kind == "person" && parents.0 == 0 {
         common::chronicle(ctx, now, "arrival", id, 0, at, format!("{name} arrived in the valley"));

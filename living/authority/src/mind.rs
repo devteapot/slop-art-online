@@ -119,7 +119,10 @@ pub fn add_thought(ctx: &ReducerContext, actor: u32, t: ThoughtIn, now: u64) {
 pub const REFLEXES: &str = r#"[
   {"if": {"cond": {"all": [{"health": {"below": 30}}, {"hurt_within": 5}]}, "then": {"do": {"skill": "flee", "target": "attacker"}}}},
   {"if": {"cond": {"all": [{"hunger": {"above": 85}}, {"has": {"item": "food"}}]}, "then": {"do": {"skill": "eat", "item": "food"}}}},
-  {"if": {"cond": {"hunger": {"above": 92}}, "then": {"do": {"skill": "gather", "target": {"nearest": "berry_bush"}}}}},
+  {"if": {"cond": {"hunger": {"above": 92}}, "then": {"first": [
+    {"do": {"skill": "gather", "target": {"nearest": "berry_bush"}}},
+    {"do": {"skill": "take", "target": {"nearest": "storage"}, "item": "food"}}
+  ]}}},
   {"if": {"cond": {"energy": {"below": 4}}, "then": {"do": {"skill": "sleep"}}}}
 ]"#;
 
@@ -161,7 +164,7 @@ pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, sour
     if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
         st.revision = revision;
         st.cursors.clear();
-        st.marks.retain(|m| m.node >= 0xE000);
+        st.marks.retain(|m| m.node >= 0xD000);
         st.last = None;
         st.active.clear();
         st.fails = 0;
@@ -205,6 +208,26 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {
         let _ = perceive::speak(ctx, actor, &say, say_to, now);
+    }
+    Ok(())
+}
+
+/// Answer without changing behavior: speak, log the thought, clear what was considered.
+#[spacetimedb::reducer]
+pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    let c = authorize(ctx, actor)?;
+    if !c.alive {
+        return Err("character is dead".into());
+    }
+    let now = common::now_ms(ctx);
+    clear_deliberation(ctx, actor, seen_ms);
+    if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
+        st.deliberated_ms = now;
+        ctx.db.mind_state().id().update(st);
+    }
+    add_thought(ctx, actor, thought, now);
+    if !say.trim().is_empty() {
+        perceive::speak(ctx, actor, &say, say_to, now)?;
     }
     Ok(())
 }

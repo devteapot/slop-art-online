@@ -54,7 +54,7 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 }
 
 const NODES: &str = "first, seq, if, do, say, wait, think";
-const CONDS: &str = "hunger, energy, health, has, sees, near, hurt_within, heard_within, night, believes, chance, all, any, not";
+const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, near, hurt_within, heard_within, night, believes, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -185,6 +185,10 @@ fn composite(key: &str, v: Value, label: Option<Value>, path: &str) -> Result<Va
     if kept.is_empty() {
         return Err(first_err.unwrap_or_else(|| format!("{path}.{key}: no valid children")));
     }
+    if kept.len() > crate::graph::MAX_CHILDREN {
+        WARNINGS.with(|w| w.borrow_mut().push(format!("dropped {path}.{key}[{}..]: at most {} children per composite", crate::graph::MAX_CHILDREN, crate::graph::MAX_CHILDREN)));
+        kept.truncate(crate::graph::MAX_CHILDREN);
+    }
     let children = kept;
     Ok(match label.and_then(|l| l.as_str().map(String::from)) {
         Some(l) => json!({key: {"label": l, "children": children}}),
@@ -250,7 +254,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     let item = action.get("item").or_else(|| action.get("what")).or_else(|| action.get("object")).or_else(|| action.get("kind")).cloned();
     if let Some(Value::String(i)) = item {
         if spec.needs_item {
-            out.insert("item".into(), json!(if skill == "signal" { i.trim().to_lowercase() } else { fix_item(&i) }));
+            out.insert("item".into(), json!(if matches!(skill.as_str(), "signal" | "teach") { i.trim().to_lowercase().replace(' ', "_") } else { fix_item(&i) }));
         }
     }
     if spec.needs_item && !out.contains_key("item") {
@@ -260,6 +264,17 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         if let Some(n) = q.as_f64() {
             out.insert("qty".into(), json!(n.max(0.0).round() as u64));
         }
+    }
+    if let Some(Value::String(t)) = action.get("text").or_else(|| action.get("words")).or_else(|| action.get("message")) {
+        out.insert("text".into(), json!(t.chars().take(400).collect::<String>()));
+    }
+    if let Some(Value::String(t)) = action.get("topic").or_else(|| action.get("technique")).or_else(|| action.get("about")) {
+        out.insert("topic".into(), json!(t.trim().to_lowercase()));
+    }
+    if let Some(Value::String(w)) = action.get("want").or_else(|| action.get("for")).or_else(|| action.get("in_return")) {
+        out.insert("want".into(), json!(fix_item(w)));
+        let q = action.get("want_qty").or_else(|| action.get("for_qty")).and_then(|q| q.as_f64()).unwrap_or(1.0);
+        out.insert("want_qty".into(), json!(q.max(1.0).round() as u64));
     }
     if let Some(t) = action.get("target").or_else(|| action.get("to")).or_else(|| action.get("from")).cloned() {
         if spec.needs_target || matches!(skill.as_str(), "goto" | "flee" | "follow" | "attack") {
@@ -271,7 +286,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         return Err(format!("{path}.do: skill `{skill}` needs a target"));
     }
     if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal") {
-        let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i);
+        let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::technique(i).is_some();
         if !known {
             return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::ITEMS.iter().map(|x| x.name).collect::<Vec<_>>().join(", ")));
         }
@@ -310,15 +325,31 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
         Value::Array(a) if a.len() == 2 && a.iter().all(|x| x.is_number()) => json!({"at": a}),
         Value::Object(o) => {
             let o = strip_nulls(o);
-            if let Some(n) = o.get("nearest") {
+            let filter = |n: &Value| -> Result<Value, String> {
                 let f = match n {
-                    Value::Object(f) => Value::Object(strip_nulls(f.clone())),
+                    Value::Object(f) => {
+                        let f = strip_nulls(f.clone());
+                        let mut out = Map::new();
+                        for k in ["kind", "relation", "mine"] {
+                            if let Some(v) = f.get(k) {
+                                out.insert(k.into(), v.clone());
+                            }
+                        }
+                        Value::Object(out)
+                    }
                     other => other.clone(),
                 };
-                return Ok(json!({"nearest": f}));
+                let kind = f.as_str().or_else(|| f.get("kind").and_then(|k| k.as_str())).unwrap_or_default();
+                if catalog::kind_class(kind).is_none() {
+                    return Err(format!("{path}: unknown kind `{kind}`"));
+                }
+                Ok(f)
+            };
+            if let Some(n) = o.get("nearest") {
+                return Ok(json!({"nearest": filter(n)?}));
             }
             if o.contains_key("kind") {
-                return Ok(json!({"nearest": o}));
+                return Ok(json!({"nearest": filter(&Value::Object(o.clone()))?}));
             }
             if let Some(n) = o.get("name").or_else(|| o.get("named")) {
                 return Ok(json!({"named": n}));
@@ -400,6 +431,10 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     };
                     json!({"not": cond(inner, &p)?})
                 }
+                "hour" | "time" | "time_of_day" => {
+                    let c = cmp(v, path, "hour")?;
+                    json!({"hour": c})
+                }
                 "hunger" | "energy" | "health" => {
                     let c = cmp(v, path, &key)?;
                     json!({key: c})
@@ -415,10 +450,14 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     json!({"near": {"target": target(t, &p)?, "within": within}})
                 }
                 "has" => match v {
+                    Value::String(s) if fix_item(&s) != "food" && catalog::item(&fix_item(&s)).is_none() => return Err(format!("{p}: `{s}` is not something you can carry")),
                     Value::String(s) => json!({"has": {"item": fix_item(&s)}}),
                     Value::Object(o) => {
                         let o = strip_nulls(o);
                         let item = o.get("item").and_then(|i| i.as_str()).map(fix_item).ok_or_else(|| format!("{p}: missing item"))?;
+                        if item != "food" && catalog::item(&item).is_none() {
+                            return Err(format!("{p}: `{item}` is not something you can carry"));
+                        }
                         let n = o.get("at_least").or_else(|| o.get("count")).or_else(|| o.get("qty")).or_else(|| o.get("min")).and_then(|n| n.as_u64()).unwrap_or(1);
                         json!({"has": {"item": item, "at_least": n}})
                     }
@@ -426,7 +465,12 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                 },
                 "believes" => match v {
                     Value::String(s) => json!({"believes": s}),
-                    Value::Object(o) => json!({"believes": strip_nulls(o)}),
+                    Value::Object(o) => {
+                        let o = strip_nulls(o);
+                        let key = o.get("key").or_else(|| o.get("judgment")).cloned().ok_or_else(|| format!("{p}: missing key"))?;
+                        let above = o.get("above").or_else(|| o.get("value")).cloned().unwrap_or(json!(0.5));
+                        json!({"believes": {"key": key, "above": above}})
+                    }
                     _ => return Err(format!("{p}: expected a judgment key")),
                 },
                 "hurt_within" | "heard_within" | "chance" => {
@@ -438,6 +482,7 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                 }
                 "within" => return cond(json!({"near": v}), path),
                 "night" => json!({"night": v.as_bool().unwrap_or(true)}),
+                "threatened" | "under_attack" | "incoming_attack" => json!({"threatened": v.as_bool().unwrap_or(true)}),
                 "day" => json!({"night": !v.as_bool().unwrap_or(true)}),
                 other => return Err(format!("{path}: unknown condition `{other}`; conditions are {CONDS}")),
             })

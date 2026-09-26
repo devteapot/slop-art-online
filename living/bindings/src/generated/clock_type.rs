@@ -19,6 +19,9 @@ pub struct Clock {
     pub percepts: u64,
     pub deliberations: u64,
     pub profile: bool,
+    pub hits: u64,
+    pub dodged: u64,
+    pub blocked: u64,
 }
 
 impl __sdk::InModule for Clock {
@@ -41,6 +44,9 @@ pub struct ClockCols {
     pub percepts: __sdk::__query_builder::Col<Clock, u64>,
     pub deliberations: __sdk::__query_builder::Col<Clock, u64>,
     pub profile: __sdk::__query_builder::Col<Clock, bool>,
+    pub hits: __sdk::__query_builder::Col<Clock, u64>,
+    pub dodged: __sdk::__query_builder::Col<Clock, u64>,
+    pub blocked: __sdk::__query_builder::Col<Clock, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for Clock {
@@ -59,6 +65,9 @@ impl __sdk::__query_builder::HasCols for Clock {
             percepts: __sdk::__query_builder::Col::new(table_name, "percepts"),
             deliberations: __sdk::__query_builder::Col::new(table_name, "deliberations"),
             profile: __sdk::__query_builder::Col::new(table_name, "profile"),
+            hits: __sdk::__query_builder::Col::new(table_name, "hits"),
+            dodged: __sdk::__query_builder::Col::new(table_name, "dodged"),
+            blocked: __sdk::__query_builder::Col::new(table_name, "blocked"),
         }
     }
 }

@@ -2,6 +2,20 @@
 // action start (check, duration) and completion (done), and when need rates change.
 // `a.actor`, `a.target`, `a.item`, `a.qty`, `a.night`, `a.hour` — see rules/src/script.rs.
 
+// ---- world laws (read once per script revision; parameters for the engine) ----------
+
+fn laws() {
+    #{
+        sight_day: 11.0, sight_night: 6.0, sight_torch: 9.0, hearing: 9.0,
+        fire_warmth: 3.5, shelter_warmth: 2.5,
+        gestation_days: 1.0, bond_window_s: 120.0,
+        crowd: 6, danger_near: 8.0, danger_far: 12.0,
+        repeat_failure_s: 120.0,
+    }
+}
+
+fn knows(a, t) { a.actor.knows.contains(t) }
+
 fn inv(a, item) {
     let n = a.actor.inv[item];
     if n == () { 0 } else { n }
@@ -21,8 +35,8 @@ fn nutrition(item) {
 // ---- needs -------------------------------------------------------------
 
 fn rates(a) {
-    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 5.0, _ => 7.0 };
-    let energy = -4.0;
+    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 5.0, _ => 5.0 };
+    let energy = -3.0;
     let hp = 0.0;
     let act = a.actor.activity;
     if act == "sleep" {
@@ -43,9 +57,9 @@ fn rates(a) {
     if a.actor.kind == "person" && a.actor.age > 40.0 {
         hp -= (a.actor.age - 40.0) * 1.5;
     }
-    // Cold nights hurt people without a fire or shelter nearby.
-    if a.night && a.actor.kind == "person" && !a.actor.near_fire && !a.actor.near_shelter {
-        hp -= 5.0;
+    // Cold nights hurt people without a fire, shelter or warm cloak; winter nights are worse.
+    if a.night && a.actor.kind == "person" && !a.actor.near_fire && !a.actor.near_shelter && inv(a, "cloak") == 0 {
+        hp -= if a.season == "winter" { 5.0 } else { 2.0 };
     }
     #{ hunger: hunger, energy: energy, hp: hp }
 }
@@ -97,6 +111,7 @@ fn eat_done(a) {
 }
 
 fn cook_check(a) {
+    if !knows(a, "cooking") { return "you don't know how to cook"; }
     if a.target.kind != "campfire" { return "cooking needs a campfire"; }
     if a.item != "fish" && a.item != "meat" { return "only raw fish or meat can be cooked"; }
     if inv(a, a.item) < 1 { return `no ${a.item} in pack`; }
@@ -124,7 +139,7 @@ fn sleep_duration(a) {
     if ms < 5000.0 { 5000 } else if ms > 150000.0 { 150000 } else { ms.to_int() }
 }
 fn rest_duration(a) { 8000 }
-fn wait_duration(a) { if a.qty > 0 && a.qty <= 60 { a.qty * 1000 } else { 3000 } }
+fn wait_duration(a) { if a.qty > 0 { if a.qty > 120 { 120000 } else { a.qty * 1000 } } else { 3000 } }
 
 // ---- building and crafting --------------------------------------------
 
@@ -134,6 +149,8 @@ fn cost(kind) {
         "shelter" => #{ wood: 6, fiber: 3 },
         "storage" => #{ wood: 4 },
         "spear" => #{ wood: 2, stone: 1 },
+        "cloak" => #{ hide: 2, fiber: 1 },
+        "torch" => #{ wood: 1, fiber: 1 },
         _ => (),
     }
 }
@@ -155,6 +172,8 @@ fn pay(kind) {
 fn build_check(a) {
     if a.actor.kind == "person" && a.actor.age < 3.0 { return "too young to build"; }
     if a.item != "campfire" && a.item != "shelter" && a.item != "storage" { return `cannot build ${a.item}`; }
+    let needed = if a.item == "campfire" { "fire" } else { a.item };
+    if !knows(a, needed) { return `you don't know how to build a ${a.item}`; }
     if a.actor.terrain == "water" || a.actor.terrain == "rock" { return "cannot build here"; }
     if a.item == "campfire" && a.actor.near_fire { return "a campfire already burns right here"; }
     if a.item == "shelter" && a.actor.near_shelter { return "there is already a shelter right here"; }
@@ -170,7 +189,8 @@ fn build_done(a) {
 
 fn craft_check(a) {
     if a.actor.age < 3.0 { return "too young to craft"; }
-    if a.item != "spear" { return `cannot craft ${a.item}`; }
+    if a.item != "spear" && a.item != "cloak" && a.item != "torch" { return `cannot craft ${a.item}`; }
+    if !knows(a, a.item) { return `you don't know how to make a ${a.item}`; }
     afford(a, a.item)
 }
 fn craft_duration(a) { 8000 }
@@ -223,7 +243,8 @@ fn attack_check(a) {
     if a.target.id == a.actor.id { return "cannot attack yourself"; }
     ""
 }
-fn attack_duration(a) { switch a.actor.kind { "wolf" => 900, _ => 1100 } }
+// The windup: time the target has to see it coming and react.
+fn attack_duration(a) { switch a.actor.kind { "wolf" => 550, _ => if inv(a, "spear") > 0 { 750 } else { 650 } } }
 fn attack_done(a) {
     let dmg = switch a.actor.kind {
         "wolf" => 13.0,
@@ -235,6 +256,7 @@ fn attack_done(a) {
 
 // Meat left when a creature dies at someone's hand.
 fn carcass_meat(kind) { switch kind { "deer" => 3, "wolf" => 2, _ => 0 } }
+fn carcass_hide(kind) { switch kind { "deer" => 1, "wolf" => 1, _ => 0 } }
 
 fn max_hp(kind) { switch kind { "deer" => 40.0, "wolf" => 55.0, _ => 100.0 } }
 
@@ -269,3 +291,133 @@ fn conceive_done(a) { [#{ op: "bond" }] }
 
 fn signal_duration(a) { 800 }
 fn signal_done(a) { [#{ op: "signal" }] }
+
+// ---- know-how -----------------------------------------------------------------
+
+fn requires(t) { switch t { "cooking" => ["fire"], "torch" => ["fire"], _ => [] } }
+
+fn teach_check(a) {
+    if !knows(a, a.item) { return `you don't know ${a.item} yourself`; }
+    if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to teach"; }
+    if a.target.knows.contains(a.item) { return `they already know ${a.item}`; }
+    for r in requires(a.item) { if !a.target.knows.contains(r) { return `they must first learn ${r}`; } }
+    ""
+}
+fn teach_duration(a) { 15000 }
+fn teach_done(a) { [#{ op: "teach", technique: a.item }] }
+
+// What tinkering with a material can reveal.
+fn discoveries(m) {
+    switch m {
+        "stone" => ["spear", "fire"],
+        "wood" => ["fire", "storage", "writing", "torch"],
+        "fiber" => ["shelter", "torch", "cloak"],
+        "hide" => ["cloak"],
+        "berries" => ["planting"],
+        "meat" => ["cooking"],
+        "fish" => ["cooking"],
+        _ => [],
+    }
+}
+fn experiment_check(a) {
+    if a.actor.kind != "person" || a.actor.age < 3.0 { return "you cannot experiment"; }
+    if inv(a, a.item) < 1 { return `no ${a.item} to experiment with`; }
+    ""
+}
+fn experiment_duration(a) { 10000 }
+fn experiment_done(a) {
+    let fx = [#{ op: "remove", item: a.item, qty: 1 }];
+    let open = [];
+    for t in discoveries(a.item) {
+        if knows(a, t) { continue; }
+        let ok = true;
+        for r in requires(t) { if !knows(a, r) { ok = false; } }
+        if t == "cooking" && !a.actor.near_fire { ok = false; }
+        if ok { open.push(t); }
+    }
+    if open.len() > 0 && a.roll < 0.3 {
+        let i = (a.roll / 0.3 * open.len()).to_int();
+        if i >= open.len() { i = open.len() - 1; }
+        fx.push(#{ op: "learn", technique: open[i] });
+    }
+    fx
+}
+
+fn write_check(a) {
+    if !knows(a, "writing") { return "you don't know how to write"; }
+    if a.item != "tablet" && a.item != "sign" { return "you can write a tablet or a sign"; }
+    if inv(a, "wood") < 1 { return "writing needs 1 wood"; }
+    if a.text == "" { return "nothing to write"; }
+    if a.topic != "" && !knows(a, a.topic) { return `you can't describe ${a.topic}: you don't know it`; }
+    ""
+}
+fn write_duration(a) { 12000 }
+fn write_done(a) { [#{ op: "remove", item: "wood", qty: 1 }, #{ op: "write" }] }
+
+fn read_check(a) {
+    if !knows(a, "writing") { return "you can't read"; }
+    ""
+}
+fn read_duration(a) { 6000 }
+fn read_done(a) { [#{ op: "read" }] }
+
+fn plant_check(a) {
+    if !knows(a, "planting") { return "you don't know how to plant"; }
+    if inv(a, "berries") < 2 { return "planting needs 2 berries"; }
+    if a.actor.terrain != "grass" && a.actor.terrain != "dirt" { return "nothing grows here"; }
+    if a.season == "winter" { return "the ground is frozen"; }
+    ""
+}
+fn plant_duration(a) { 5000 }
+fn plant_done(a) { [#{ op: "remove", item: "berries", qty: 2 }, #{ op: "plant" }] }
+
+// ---- combat moves ---------------------------------------------------------------
+
+fn dodge_check(a) { if a.actor.energy < 5.0 { "too exhausted to dodge" } else { "" } }
+fn dodge_done(a) { [#{ op: "vitals", energy: -2.0 }] }
+
+fn block_check(a) { if a.actor.kind != "person" { "only people can block" } else { "" } }
+fn block_duration(a) { 1200 }
+fn block_done(a) { [#{ op: "vitals", energy: -0.5 }] }
+
+fn throw_check(a) {
+    if inv(a, "spear") < 1 { return "no spear to throw"; }
+    if a.target.class != "creature" || !a.target.alive { return "nothing to throw at"; }
+    if a.actor.age < 3.0 { return "too young to fight"; }
+    ""
+}
+fn throw_duration(a) { 800 }
+fn throw_done(a) { [#{ op: "remove", item: "spear", qty: 1 }, #{ op: "damage", amount: 24.0 }, #{ op: "vitals", energy: -2.0 }] }
+
+// ---- trade ------------------------------------------------------------------------
+
+fn offer_check(a) {
+    if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to trade with"; }
+    if inv(a, a.item) < amount(a) { return `not enough ${a.item} to offer`; }
+    ""
+}
+fn offer_duration(a) { 1500 }
+fn offer_done(a) { [#{ op: "offer" }] }
+
+fn accept_check(a) {
+    if a.target.class != "creature" || a.target.kind != "person" { return "no one to trade with"; }
+    ""
+}
+fn accept_duration(a) { 1500 }
+fn accept_done(a) { [#{ op: "accept" }] }
+
+// ---- communities (meaning is up to members; the engine keeps membership) ------------------
+
+fn found_check(a) {
+    if a.actor.kind != "person" || a.actor.age < 3.0 { return "only grown people found communities"; }
+    if a.text == "" { return "a community needs a name"; }
+    ""
+}
+fn found_duration(a) { 3000 }
+fn found_done(a) { [#{ op: "found" }] }
+fn join_duration(a) { 2000 }
+fn join_done(a) { [#{ op: "join" }] }
+fn welcome_duration(a) { 2000 }
+fn welcome_done(a) { [#{ op: "welcome" }] }
+fn leave_duration(a) { 1000 }
+fn leave_done(a) { [#{ op: "leave" }] }
