@@ -27,3 +27,8 @@ Principles that hold throughout: behavior belongs to the characters ([living cor
 ## Log
 
 Evidence, rule changes and decisions per stage, newest last.
+
+### Stage 1
+
+- 2026-09-26 09:10 — Three labs started (baseline, scarce food, more wolves): one family of eight (elder, four adults, two children, a baby) in a 96×96 valley, lives of about 4 hours, seasons of 12 minutes, 16 deer and 3 (or 8) wolves.
+- 09:40 — First review. Fixed at their causes: the baseline's mind service had exited and was never restarted (lab.py now supervises it); walks to where a body already stood never reported arrival and stayed "going" for up to 12 minutes; animals died of old age before their first spring because labs compress aging but not the calendar (mating no longer waits for a season). Seeded young had the elder as a parent (now the adults). All three labs restarted.
