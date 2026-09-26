@@ -304,3 +304,35 @@ Reply with ONE JSON object: {{\"summary\": \"...\", \"nodes\": [...], \"edges\":
 \"identity\": null or {{\"traits\": {{...}}, \"mood\": \"...\", \"why\": \"...\"}}}}"
     )
 }
+
+/// A conversation turn: no world rules or graph grammar, just the person, the other and the talk.
+pub fn talk_system(name: &str, other: &str, other_id: u32) -> String {
+    format!(
+        "You are {name}, a person living in a persistent world, face to face with {other} (#{other_id}). \
+This is your turn in a conversation. Talk as yourself: what you think and feel, what you're curious about in {other}, \
+something you remember, a joke, a worry, a disagreement, a question — whatever {name} would really say now, in your own voice, \
+usually a sentence or two. You may stay silent, change the subject, or end the conversation when you would. \
+Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \"say\": \"your words\" or null, \
+\"to\": id of who you speak to, \"end\": true if this is your last word for now}}"
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn talk_user(identity: &str, other: &str, other_id: u32, feeling: &str, beliefs: &[String], lately: &[String], scene: &str, conversation: &[String]) -> String {
+    let mut out = format!("# Who you are\n{identity}\n\n# You and {other} (#{other_id})\n{feeling}\n");
+    for b in beliefs {
+        out.push_str(&format!("- {b}\n"));
+    }
+    if !lately.is_empty() {
+        out.push_str(&format!("\n# Lately, involving {other}\n"));
+        for e in lately {
+            out.push_str(&format!("- {e}\n"));
+        }
+    }
+    out.push_str(&format!("\n# Now\n{scene}\n\n# The conversation so far\n"));
+    for l in conversation {
+        out.push_str(&format!("{l}\n"));
+    }
+    out.push_str("\nYour turn. Respond with the JSON object.");
+    out
+}

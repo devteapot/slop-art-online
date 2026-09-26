@@ -34,7 +34,7 @@ Why survival dominates (diagnosis): hunger itself is modest (5 points a minute, 
    - Building rules in the Rhai script, with know-how (masonry for walls, carpentry for houses and gates) so bands can grow toward cities.
 5. **Reasons to move and trade.** Regional resources (stone and ore in the hills, fish and salt on the coast, clay by rivers, wood in forests, game on plains), crafted goods with uses (tools that speed work, clothing, pottery, preserved food), so towns want what others have and people travel.
 6. **Social life as a mechanic.**
-   - Conversations: when two people talk, a short multi-turn exchange between both minds (not one line per deliberation), grounded in their memories and relationship.
+   - Conversations: when two people talk, a short multi-turn exchange between both minds (not one line per deliberation), grounded in their memories and relationship. First part built 2026-09-26 (reply turns, no silent repeat drop): see [living core: conversations](LIVING_CORE.md#conversations-checkpoint-4-item-6-first-part).
    - Shared activities with effects (a meal together, a story by the fire, work side by side) that feed relationships and mood.
 7. **Scale.** 512×512 realm, about 150 people, benchmarked (2,000 characters and a 200-character battle on the larger map) before minds are added; LLM budget and pacing measured per character.
 

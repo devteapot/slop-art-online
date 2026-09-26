@@ -134,7 +134,9 @@ async fn main() -> Result<()> {
     {
         let tx = tx.clone();
         conn.db.experience().on_insert(move |_, e| {
-            let _ = (e, tx.send(mind::Event::Experience));
+            if e.kind == "speech" || e.kind == "silence" {
+                let _ = tx.send(mind::Event::Speech(e.clone()));
+            }
         });
     }
     {

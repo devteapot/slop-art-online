@@ -21,8 +21,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Semaphore};
 
+mod talk;
+
 pub enum Event {
-    Experience,
+    /// Speech heard (or unanswered) by one of this service's characters.
+    Speech(Experience),
     Deliberation(u32),
 }
 
@@ -53,6 +56,9 @@ pub struct Minds {
     /// Deferrable work (consolidation, reorganization, identities) may hold at most half of the
     /// model slots, so deliberation (being attacked, spoken to, a plan failing) always gets one.
     slow: Semaphore,
+    /// Conversation turns may hold at most a quarter of the model slots.
+    talk_sem: Semaphore,
+    talk: Mutex<talk::Talks>,
     only: Option<std::collections::HashSet<u32>>,
 }
 
@@ -75,7 +81,7 @@ impl Minds {
     pub fn new(conn: DbConnection, llm: Llm, store: Option<Store>, seed: Value, concurrency: usize) -> Result<Arc<Self>> {
         let me = conn.try_identity().ok_or_else(|| anyhow!("not connected"))?;
         let species = living_rules::species::parse(&std::fs::read_to_string(crate::root().join("living/seeds/species.json"))?).map_err(|e| anyhow!(e))?;
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency), slow: Semaphore::new((concurrency / 2).max(1)), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency), slow: Semaphore::new((concurrency / 2).max(1)), talk_sem: Semaphore::new((concurrency / 4).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()) }))
     }
 
     fn mine(&self) -> Vec<Character> {
@@ -431,7 +437,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         loop {
             tokio::select! {
                 ev = rx.recv() => match ev {
-                    Some(Event::Experience) => {}
+                    Some(Event::Speech(e)) => self.clone().on_speech(e),
                     Some(Event::Deliberation(actor)) => self.clone().schedule(actor),
                     None => return Err(anyhow!("event channel closed")),
                 },
