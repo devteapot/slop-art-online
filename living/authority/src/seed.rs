@@ -802,6 +802,10 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
             let parents = if young && adults.len() >= 2 { (adults[0], adults[1]) } else { (0, 0) };
             let id = spawn_with(ctx, &fresh_name(ctx), "person", admin, true, p, now, life.age_at(f, pace), parents);
             common::inv_add(ctx, id as u64, "berries", if young { 1 } else { 3 });
+            // A hunter carries a spear.
+            if m.occupation == "hunter" && !young {
+                common::inv_add(ctx, id as u64, "spear", 1);
+            }
             if !young {
                 // Parents of the young are the family's (non-elder) adults.
                 if m.stage != "elder" {
