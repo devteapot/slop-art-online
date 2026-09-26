@@ -7,7 +7,8 @@
       "key_env": "CARLID_NPC_API_KEY",
       "reasoning_effort": {
         "deliberate": "low",
-        "consolidate": "medium"
+        "consolidate": "medium",
+        "talk": "low"
       },
       "max_tokens": null
     },
