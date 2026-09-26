@@ -198,7 +198,7 @@ pub fn left(ctx: &egui::Context, view: &mut View, net: &Net, snap: &Snap) {
                 .iter()
                 .filter(|r| filter.map_or(true, |id| r.a == id || r.b == id))
                 .filter(|r| kinds == StoryFilter::All || LEARNING_TRADE.contains(&r.kind.as_str()))
-                .take(400);
+                .take(150);
             for row in rows {
                 let (icon, col) = kind_style(&row.kind, &row.text);
                 let fresh = snap.now.saturating_sub(row.at_ms) < 8000;

@@ -374,6 +374,10 @@ pub struct View {
     pub fps: f32,
     pub frame_ms: f32,
     pub logged_at: u32,
+    /// Smoothed per-section frame costs (ms): snapshot, refresh, left, inspector, map.
+    pub splits: [f32; 5],
+    pub frames: u32,
+    pub worst_ms: f32,
     gens: (u32, u32, u32, u32),
     styled: bool,
 }
@@ -416,6 +420,9 @@ impl Default for View {
             fps: 60.0,
             frame_ms: 0.0,
             logged_at: 0,
+            splits: [0.0; 5],
+            frames: 0,
+            worst_ms: 0.0,
             gens: (u32::MAX, u32::MAX, u32::MAX, u32::MAX),
             styled: false,
         }
@@ -489,11 +496,18 @@ impl View {
                 (self.communities, self.community_of) = communities_of(&snap.chars, &self.backgrounds);
             }
             if gens.1 != self.gens.1 {
+                net.gens.fresh_chronicle.lock().unwrap().clear();
                 let mut rows: Vec<Chronicle> = c.db.chronicle().iter().collect();
                 rows.sort_by(|a, b| b.at_ms.cmp(&a.at_ms).then(b.id.cmp(&a.id)));
                 self.chronicle = rows;
+            } else {
+                for r in std::mem::take(&mut *net.gens.fresh_chronicle.lock().unwrap()) {
+                    let at = self.chronicle.partition_point(|x| (x.at_ms, x.id) > (r.at_ms, r.id));
+                    self.chronicle.insert(at, r);
+                }
             }
             if gens.2 != self.gens.2 {
+                net.gens.fresh_thoughts.lock().unwrap().clear();
                 let mut by: HashMap<u32, Vec<Thought>> = HashMap::new();
                 for t in c.db.thought().iter() {
                     by.entry(t.actor).or_default().push(t);
@@ -502,16 +516,16 @@ impl View {
                     v.sort_by(|a, b| b.at_ms.cmp(&a.at_ms).then(b.id.cmp(&a.id)));
                 }
                 for t in by.values().flatten() {
-                    if self.thought_exps.contains_key(&t.id) || t.kind != "consolidate" {
-                        continue;
-                    }
-                    let ids = serde_json::from_str::<serde_json::Value>(&t.detail)
-                        .ok()
-                        .and_then(|v| v.get("experiences").and_then(|e| e.as_array()).map(|a| a.iter().filter_map(|x| x.as_u64()).collect()))
-                        .unwrap_or_default();
-                    self.thought_exps.insert(t.id, ids);
+                    self.note_thought(t);
                 }
                 self.thoughts = by;
+            } else {
+                for t in std::mem::take(&mut *net.gens.fresh_thoughts.lock().unwrap()) {
+                    self.note_thought(&t);
+                    let v = self.thoughts.entry(t.actor).or_default();
+                    let at = v.partition_point(|x| (x.at_ms, x.id) > (t.at_ms, t.id));
+                    v.insert(at, t);
+                }
             }
             self.gens = gens;
         }
@@ -587,7 +601,7 @@ impl View {
         let mut ended = Vec::new();
         for (id, w) in &self.combat {
             let prev = &w.act;
-            let still = snap.activity.get(id).is_some_and(|a| a.skill == prev.skill && a.victim == prev.victim && a.ends_ms == prev.ends_ms);
+            let still = snap.activity.get(id).is_some_and(|a| a.phase == 1 && a.skill == prev.skill && a.victim == prev.victim && a.ends_ms == prev.ends_ms);
             if !still {
                 ended.push(*id);
             }
@@ -635,7 +649,10 @@ impl View {
         self.pending = keep;
         for (id, a) in &snap.activity {
             if a.victim != 0 && (a.skill == "attack" || a.skill == "throw") {
-                self.combat.entry(*id).or_insert_with(|| Windup { act: a.clone(), blocked: false, dodged: false }).act = a.clone();
+                // Only a windup (phase 1) can land or miss; the approach just marks a fight.
+                if a.phase == 1 {
+                    self.combat.entry(*id).or_insert_with(|| Windup { act: a.clone(), blocked: false, dodged: false }).act = a.clone();
+                }
                 let key = if *id < a.victim { (*id, a.victim) } else { (a.victim, *id) };
                 self.fights.insert(key, now);
             }
@@ -669,6 +686,18 @@ impl View {
         let (&(a, b), _) = self.fights.iter().max_by_key(|(_, t)| **t)?;
         let person = |x: u32| snap.chars.get(&x).is_some_and(|c| c.kind == "person");
         Some(if person(a) || !person(b) { a } else { b })
+    }
+
+    /// Cache the experience ids a consolidate thought integrated.
+    fn note_thought(&mut self, t: &Thought) {
+        if t.kind != "consolidate" || self.thought_exps.contains_key(&t.id) {
+            return;
+        }
+        let ids = serde_json::from_str::<serde_json::Value>(&t.detail)
+            .ok()
+            .and_then(|v| v.get("experiences").and_then(|e| e.as_array()).map(|a| a.iter().filter_map(|x| x.as_u64()).collect()))
+            .unwrap_or_default();
+        self.thought_exps.insert(t.id, ids);
     }
 
     pub fn season(&self, snap: &Snap) -> Season {

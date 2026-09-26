@@ -46,6 +46,10 @@ struct ExpSub {
 /// Change generations for rows the viewer derives caches from.
 #[derive(Clone, Default)]
 pub struct Generations {
+    /// New thought/chronicle rows, applied incrementally (a full rebuild happens only on
+    /// deletes, updates and resubscription).
+    pub fresh_thoughts: Arc<Mutex<Vec<Thought>>>,
+    pub fresh_chronicle: Arc<Mutex<Vec<Chronicle>>>,
     pub terrain: Arc<AtomicU32>,
     pub chronicle: Arc<AtomicU32>,
     pub thought: Arc<AtomicU32>,
@@ -188,8 +192,18 @@ impl Net {
                     }};
                 }
                 watch!(terrain_chunk, terrain);
-                watch!(chronicle, chronicle);
-                watch!(thought, thought);
+                macro_rules! incremental {
+                    ($table:ident, $gen:ident, $queue:ident) => {{
+                        let q = gens.$queue.clone();
+                        conn.db.$table().on_insert(move |_, r| q.lock().unwrap().push(r.clone()));
+                        let g = gens.$gen.clone();
+                        conn.db.$table().on_delete(move |_, _| bump(&g));
+                        let g = gens.$gen.clone();
+                        conn.db.$table().on_update(move |_, _, _| bump(&g));
+                    }};
+                }
+                incremental!(chronicle, chronicle, fresh_chronicle);
+                incremental!(thought, thought, fresh_thoughts);
                 watch!(background, background);
                 let inbox = applied.clone();
                 let err = applied.clone();

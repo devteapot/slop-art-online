@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 pub const TILE_PX: i32 = 16;
 /// Overview resolution (pixels per tile).
-pub const OVERVIEW_PX: i32 = 2;
+pub const OVERVIEW_PX: i32 = 4;
 /// Most chunk textures kept at once (each is ~0.35 MB of GPU memory across its levels).
 const MAX_CHUNKS: usize = 160;
 

@@ -266,8 +266,19 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         "read" if target.class == 0 => {
             let mine: Vec<Artifact> = ctx.db.artifact().holder().filter(id as u64).collect();
             let unread = mine.iter().find(|a| ctx.db.familiar().by_actor_thing().filter((id, FAM_ARTIFACT | a.id)).next().is_none());
-            let pick = unread.or(mine.first()).ok_or("you carry nothing to read")?;
-            target = Resolved { class: 5, id: pick.id, at: here, kind: "tablet".into(), name: pick.author_name.clone() };
+            match unread.or(mine.first()) {
+                Some(pick) => target = Resolved { class: 5, id: pick.id, at: here, kind: "tablet".into(), name: pick.author_name.clone() },
+                // Carrying nothing, "read" means the sign right here (the nearest within 8 tiles).
+                None => {
+                    let sign = living_rules::map::chunks_around(here.0, here.1, 8.0)
+                        .into_iter()
+                        .flat_map(|c| ctx.db.structure().chunk().filter(c).collect::<Vec<_>>())
+                        .filter(|s| s.kind == "sign" && dist(here, (s.x, s.y)) <= 8.0)
+                        .min_by(|a, b| dist(here, (a.x, a.y)).total_cmp(&dist(here, (b.x, b.y))))
+                        .ok_or("you carry nothing to read and there is no sign here")?;
+                    target = Resolved { class: 2, id: sign.id, at: (sign.x, sign.y), kind: "sign".into(), name: String::new() };
+                }
+            }
         }
         _ => {}
     }

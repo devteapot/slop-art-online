@@ -42,22 +42,44 @@ fn draw(mut contexts: EguiContexts, mut net: NonSendMut<net::Net>, mut view: Non
     view.style(ctx);
     net.watch_experiences(view.selected);
     let net = &*net;
+    let mut lap = started;
+    let mut split = |i: usize, view: &mut state::View| {
+        let t = bevy::platform::time::Instant::now();
+        let ms = (t - lap).as_secs_f32() * 1000.0;
+        view.splits[i] += ms;
+        lap = t;
+    };
     let snap = state::Snap::take(net);
+    split(0, &mut view);
     view.refresh(ctx, net, &snap, time.delta_secs());
+    split(1, &mut view);
     let dt = time.delta_secs().max(1e-4);
     view.fps += (1.0 / dt - view.fps) * 0.05;
     panels::top_bar(ctx, net, &snap, &mut view);
     panels::left(ctx, &mut view, net, &snap);
+    split(2, &mut view);
     panels::inspector(ctx, &mut view, net, &snap);
     panels::sign_window(ctx, &mut view, &snap);
     panels::fight_panel(ctx, &mut view, &snap);
+    split(3, &mut view);
     map::central(ctx, &mut view, &snap, time.elapsed_secs());
+    split(4, &mut view);
     let ms = started.elapsed().as_secs_f32() * 1000.0;
     view.frame_ms += (ms - view.frame_ms) * 0.05;
+    view.frames += 1;
+    view.worst_ms = view.worst_ms.max(ms);
     let secs = time.elapsed_secs() as u32;
-    if secs % 30 == 0 && secs != view.logged_at {
+    if secs >= view.logged_at + 10 {
         view.logged_at = secs;
-        info!("viewer: {:.0} fps, ui {:.1} ms, {} creatures", view.fps, view.frame_ms, snap.bodies.len());
+        let n = view.frames.max(1) as f32;
+        let s = view.splits.map(|x| x / n);
+        info!(
+            "viewer: {:.0} fps, {} frames, ui avg {:.1} ms worst {:.1} ms (snapshot {:.1}, refresh {:.1}, left {:.1}, inspector {:.1}, map {:.1}), zoom {:.1}, {} creatures, {} resources, terrain chunks drawn/cached {}/{} (last build {:.1} ms)",
+            view.fps, view.frames, s.iter().sum::<f32>(), view.worst_ms, s[0], s[1], s[2], s[3], s[4], view.zoom, snap.bodies.len(), snap.resources.len(), view.terrain_stats.0, view.terrain_stats.1, view.terrain_stats.2
+        );
+        view.splits = [0.0; 5];
+        view.frames = 0;
+        view.worst_ms = 0.0;
     }
     Ok(())
 }
