@@ -186,11 +186,24 @@ pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, sour
     Ok(revision)
 }
 
-/// Remove the pending deliberation unless reasons arrived after `seen_ms`.
-fn clear_deliberation(ctx: &ReducerContext, actor: u32, seen_ms: u64) {
-    if let Some(d) = ctx.db.deliberation().actor().find(actor) {
+/// Reasons about the plan being replaced; a new plan makes them obsolete.
+const PLAN_STATE: &[&str] = &["Nothing in my current plan works", "My actions keep failing", "I finished my plan", "A quiet moment to take stock"];
+
+/// Remove the pending deliberation unless reasons arrived after `seen_ms`. When a new plan
+/// is installed (`new_plan`), reasons about the old plan failing that piled up while the mind
+/// was thinking are dropped; otherwise they re-triggered thinking at once, every few seconds.
+fn clear_deliberation(ctx: &ReducerContext, actor: u32, seen_ms: u64, new_plan: bool) {
+    if let Some(mut d) = ctx.db.deliberation().actor().find(actor) {
         if d.updated_ms <= seen_ms {
             ctx.db.deliberation().actor().delete(actor);
+        } else if new_plan {
+            let rest: Vec<&str> = d.reason.lines().filter(|l| !l.trim().is_empty() && !PLAN_STATE.iter().any(|p| l.starts_with(p))).collect();
+            if rest.is_empty() {
+                ctx.db.deliberation().actor().delete(actor);
+            } else {
+                d.reason = rest.join("\n");
+                ctx.db.deliberation().actor().update(d);
+            }
         }
     }
 }
@@ -204,7 +217,7 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
         return Err("character is dead".into());
     }
     let now = common::now_ms(ctx);
-    clear_deliberation(ctx, actor, seen_ms);
+    clear_deliberation(ctx, actor, seen_ms, true);
     if let Err(e) = set_graph(ctx, actor, &graph, &plan, "mind", now) {
         add_thought(ctx, actor, ThoughtIn { kind: "error".into(), summary: format!("rejected graph: {e}"), ..thought }, now);
         return Err(e);
@@ -224,7 +237,7 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen
         return Err("character is dead".into());
     }
     let now = common::now_ms(ctx);
-    clear_deliberation(ctx, actor, seen_ms);
+    clear_deliberation(ctx, actor, seen_ms, true);
     if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
         st.deliberated_ms = now;
         ctx.db.mind_state().id().update(st);
@@ -241,7 +254,7 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen
 pub fn mind_skip(ctx: &ReducerContext, actor: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
     authorize(ctx, actor)?;
     let now = common::now_ms(ctx);
-    clear_deliberation(ctx, actor, seen_ms);
+    clear_deliberation(ctx, actor, seen_ms, false);
     if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
         st.deliberated_ms = now;
         ctx.db.mind_state().id().update(st);
