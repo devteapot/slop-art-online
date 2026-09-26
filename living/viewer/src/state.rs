@@ -290,10 +290,31 @@ pub struct Effect {
     pub dur_ms: u64,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum EffectKind {
     Spear,
     Slash,
+    /// Floating damage number.
+    Damage(f32),
+    /// A windup that ended without the victim losing health: "miss", "blocked", "dodged".
+    Whiff(&'static str),
+}
+
+/// What the viewer saw of one character's fighting (derived from row changes only).
+#[derive(Clone, Copy, Default)]
+pub struct Tally {
+    pub hits: u32,
+    pub blocks: u32,
+    pub dodges: u32,
+    pub misses: u32,
+}
+
+/// A windup being watched: the attack row plus whether the victim blocked or dodged
+/// during it.
+pub struct Windup {
+    pub act: Activity,
+    pub blocked: bool,
+    pub dodged: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -318,7 +339,13 @@ pub struct View {
     pub exp_highlight: Option<u64>,
     pub exp_scroll: bool,
     /// Combat: last seen attack/throw per attacker, recent fights, spears in flight.
-    pub combat: HashMap<u32, Activity>,
+    pub combat: HashMap<u32, Windup>,
+    /// Windups that ended; resolved to hit or whiff once the victim's vitals had time to
+    /// arrive: (attacker, victim, ends_ms, blocked, dodged).
+    pending: Vec<(u32, u32, u64, bool, bool)>,
+    /// Last seen (hurt_ms, hp) per creature, to detect hits.
+    hp_seen: HashMap<u32, (u64, f32)>,
+    pub tally: HashMap<u32, Tally>,
     pub fights: HashMap<(u32, u32), u64>,
     pub effects: Vec<Effect>,
     pub story_filter: StoryFilter,
@@ -365,6 +392,9 @@ impl Default for View {
             exp_scroll: false,
             open_sign: None,
             combat: HashMap::new(),
+            pending: Vec::new(),
+            hp_seen: HashMap::new(),
+            tally: HashMap::new(),
             fights: HashMap::new(),
             effects: Vec::new(),
             story_filter: StoryFilter::All,
@@ -527,18 +557,48 @@ impl View {
     /// implied projectile or strike so the hit can be seen.
     fn track_combat(&mut self, snap: &Snap) {
         let now = snap.now;
+        // Hits: a new `hurt_ms` with lower health.
+        for (id, v) in &snap.vitals {
+            let hp = need(v.hp, v.hp_rate, v.at_ms, now, v.max_hp);
+            if let Some((hurt, prev)) = self.hp_seen.get(id).copied() {
+                if v.hurt_ms != hurt && v.hurt_ms > 0 {
+                    let dmg = prev - hp;
+                    if dmg > 0.2 {
+                        if let Some(at) = self.shown.get(id).copied() {
+                            self.effects.push(Effect { kind: EffectKind::Damage(dmg), from: at, to: *id, to_at: at, start_ms: now, dur_ms: 1100 });
+                        }
+                        if v.hurt_by != 0 {
+                            self.tally.entry(v.hurt_by).or_default().hits += 1;
+                            let key = if *id < v.hurt_by { (*id, v.hurt_by) } else { (v.hurt_by, *id) };
+                            self.fights.insert(key, now);
+                        }
+                    }
+                }
+            }
+            self.hp_seen.insert(*id, (v.hurt_ms, hp));
+        }
+        // Windups: note blocks/dodges by the victim while they run.
+        for w in self.combat.values_mut() {
+            if let Some(a) = snap.activity.get(&w.act.victim) {
+                w.blocked |= a.skill == "block";
+                w.dodged |= a.skill == "dodge";
+            }
+        }
         let mut ended = Vec::new();
-        for (id, prev) in &self.combat {
+        for (id, w) in &self.combat {
+            let prev = &w.act;
             let still = snap.activity.get(id).is_some_and(|a| a.skill == prev.skill && a.victim == prev.victim && a.ends_ms == prev.ends_ms);
             if !still {
                 ended.push(*id);
             }
         }
         for id in ended {
-            let prev = self.combat.remove(&id).unwrap();
+            let w = self.combat.remove(&id).unwrap();
+            let prev = w.act;
             if now + 400 < prev.ends_ms || now > prev.ends_ms + 1500 {
                 continue; // cancelled early, or we were not watching
             }
+            self.pending.push((id, prev.victim, prev.ends_ms, w.blocked, w.dodged));
             let (Some(from), Some(to_at)) = (self.shown.get(&id).copied(), self.shown.get(&prev.victim).copied()) else { continue };
             let (kind, dur) = if prev.skill == "throw" {
                 (EffectKind::Spear, ((to_at - from).length() / 18.0 * 1000.0) as u64 + 60)
@@ -547,22 +607,68 @@ impl View {
             };
             self.effects.push(Effect { kind, from, to: prev.victim, to_at, start_ms: now, dur_ms: dur });
         }
+        // Resolve ended windups that did not draw blood.
+        let mut keep = Vec::new();
+        for (att, vic, ends, blocked, dodged) in std::mem::take(&mut self.pending) {
+            let hurt = snap.vitals.get(&vic).is_some_and(|v| v.hurt_ms + 300 >= ends && v.hurt_by == att);
+            if hurt {
+                continue;
+            }
+            if now < ends + 700 {
+                keep.push((att, vic, ends, blocked, dodged));
+                continue;
+            }
+            let word = if blocked {
+                self.tally.entry(vic).or_default().blocks += 1;
+                "blocked"
+            } else if dodged {
+                self.tally.entry(vic).or_default().dodges += 1;
+                "dodged"
+            } else {
+                self.tally.entry(att).or_default().misses += 1;
+                "miss"
+            };
+            if let Some(at) = self.shown.get(&vic).copied() {
+                self.effects.push(Effect { kind: EffectKind::Whiff(word), from: at, to: vic, to_at: at, start_ms: now, dur_ms: 900 });
+            }
+        }
+        self.pending = keep;
         for (id, a) in &snap.activity {
             if a.victim != 0 && (a.skill == "attack" || a.skill == "throw") {
-                self.combat.insert(*id, a.clone());
+                self.combat.entry(*id).or_insert_with(|| Windup { act: a.clone(), blocked: false, dodged: false }).act = a.clone();
                 let key = if *id < a.victim { (*id, a.victim) } else { (a.victim, *id) };
                 self.fights.insert(key, now);
             }
         }
-        self.fights.retain(|(a, b), t| now.saturating_sub(*t) < 5000 && snap.bodies.contains_key(a) && snap.bodies.contains_key(b));
+        self.fights.retain(|(a, b), t| now.saturating_sub(*t) < 12_000 && snap.bodies.contains_key(a) && snap.bodies.contains_key(b));
         self.effects.retain(|e| now < e.start_ms + e.dur_ms + 200);
     }
 
-    /// Midpoint of the most recent fight, if any.
-    pub fn latest_fight(&self) -> Option<egui::Pos2> {
+    /// Everyone connected to `id` through recent fights (including `id`), or empty.
+    pub fn fight_group(&self, id: u32) -> Vec<u32> {
+        let mut group = vec![id];
+        let mut i = 0;
+        while i < group.len() {
+            let x = group[i];
+            for (a, b) in self.fights.keys() {
+                let other = if *a == x { *b } else if *b == x { *a } else { continue };
+                if !group.contains(&other) {
+                    group.push(other);
+                }
+            }
+            i += 1;
+        }
+        if group.len() == 1 {
+            group.clear();
+        }
+        group
+    }
+
+    /// The most recent fight: its midpoint and a fighter to follow (people first).
+    pub fn latest_fighter(&self, snap: &Snap) -> Option<u32> {
         let (&(a, b), _) = self.fights.iter().max_by_key(|(_, t)| **t)?;
-        let (pa, pb) = (self.shown.get(&a)?, self.shown.get(&b)?);
-        Some(pa.lerp(*pb, 0.5))
+        let person = |x: u32| snap.chars.get(&x).is_some_and(|c| c.kind == "person");
+        Some(if person(a) || !person(b) { a } else { b })
     }
 
     pub fn season(&self, snap: &Snap) -> Season {

@@ -37,6 +37,9 @@ pub struct TargetFacts {
     pub name: String,
     pub amount: f32,
     pub hp: f32,
+    pub max_hp: f32,
+    /// Milliseconds since the creature was last hurt (large when never).
+    pub hurt_ago: f32,
     pub alive: bool,
     pub dist: f32,
     pub inv: Vec<(String, u32)>,
@@ -70,6 +73,8 @@ pub enum Effect {
     Vitals { hp: f32, hunger: f32, energy: f32 },
     /// Damage the target creature.
     Damage { amount: f32 },
+    /// Restore the target creature's health (tending wounds).
+    Heal { amount: f32 },
     /// Move items from the actor to the target creature.
     Give { item: String, qty: u32 },
     /// Move items from the actor into the target structure.
@@ -323,6 +328,8 @@ fn to_map(c: &SkillCtx) -> Map {
     t.insert("name".into(), c.target.name.clone().into());
     t.insert("amount".into(), f(c.target.amount));
     t.insert("hp".into(), f(c.target.hp));
+    t.insert("max_hp".into(), f(c.target.max_hp));
+    t.insert("hurt_ago".into(), f(c.target.hurt_ago));
     t.insert("alive".into(), c.target.alive.into());
     t.insert("dist".into(), f(c.target.dist));
     t.insert("inv".into(), inv_map(&c.target.inv).into());
@@ -359,6 +366,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "harvest" => Effect::Harvest { qty: n("qty") as f32 },
         "vitals" => Effect::Vitals { hp: n("hp") as f32, hunger: n("hunger") as f32, energy: n("energy") as f32 },
         "damage" => Effect::Damage { amount: n("amount") as f32 },
+        "heal" => Effect::Heal { amount: n("amount") as f32 },
         "give" => Effect::Give { item: s("item"), qty: qty()? },
         "store" => Effect::Store { item: s("item"), qty: qty()? },
         "take" => Effect::Take { item: s("item"), qty: qty()? },

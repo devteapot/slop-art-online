@@ -441,8 +441,27 @@ fn labels(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed,
         let person = c.kind == "person";
         let selected = Some(*id) == view.selected;
         let w = ((feet.y - top) * 0.9).max(16.0);
+        // Anyone engaged gets a large health bar above the head in their community colour.
+        let engaged = snap.vitals.get(id).is_some_and(|v| v.hurt_ms > 0 && snap.now.saturating_sub(v.hurt_ms) < 10_000)
+            || snap.activity.get(id).is_some_and(|a| matches!(a.skill.as_str(), "attack" | "block" | "dodge" | "throw"));
+        if engaged {
+            if let Some(v) = snap.vitals.get(id) {
+                let hp = need(v.hp, v.hp_rate, v.at_ms, snap.now, v.max_hp);
+                let frac = if v.max_hp > 0.0 { (hp / v.max_hp).clamp(0.0, 1.0) } else { 0.0 };
+                let col = if person { view.community_color(*id) } else if c.kind == "wolf" { Color32::from_rgb(200, 70, 60) } else { Color32::from_rgb(210, 170, 110) };
+                let bw = 40.0;
+                let lift = if person { 20.0 } else { 6.0 };
+                let bar = Rect::from_min_size(egui::pos2(feet.x - bw / 2.0, top - lift - 8.0), egui::vec2(bw, 5.0));
+                p.rect_filled(bar.expand(1.5), 2.0, Color32::from_black_alpha(200));
+                p.rect_filled(bar, 1.0, Color32::from_rgb(70, 20, 20));
+                p.rect_filled(Rect::from_min_size(bar.min, egui::vec2(bw * frac, 5.0)), 1.0, col);
+                if selected || xf.zoom >= 20.0 {
+                    p.text(bar.right_center() + egui::vec2(4.0, 0.0), Align2::LEFT_CENTER, format!("{hp:.0}"), FontId::proportional(10.0), Color32::WHITE);
+                }
+            }
+        }
         // Health bar under the feet.
-        if let Some(v) = snap.vitals.get(id) {
+        if let Some(v) = snap.vitals.get(id).filter(|_| !engaged) {
             let hp = need(v.hp, v.hp_rate, v.at_ms, snap.now, v.max_hp);
             let frac = if v.max_hp > 0.0 { hp / v.max_hp } else { 0.0 };
             if (person && (selected || frac < 0.999 || xf.zoom >= 6.0)) || frac < 0.999 {
@@ -665,19 +684,35 @@ fn combat(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed,
         } else {
             (Color32::from_rgb(255, 140, 90), Color32::from_rgb(255, 60, 50))
         };
-        dashed(p, from, to, Stroke::new(1.2, a_(base, 0.45)));
-        p.line_segment([from, from.lerp(to, k)], Stroke::new(2.5, a_(hot, 0.9)));
-        // Filling ring around the attacker.
-        let r = placed.get(id).map(|(f, top)| (f.y - top) * 0.62).unwrap_or(12.0).max(9.0);
-        let n = 28;
-        let pts: Vec<Pos2> = (0..=((n as f32 * k) as usize))
-            .map(|i| {
-                let ang = -std::f32::consts::FRAC_PI_2 + i as f32 / n as f32 * std::f32::consts::TAU;
-                from + egui::vec2(ang.cos(), ang.sin()) * r
-            })
-            .collect();
-        if pts.len() > 1 {
-            p.add(egui::Shape::line(pts, Stroke::new(3.0, a_(hot, 0.95))));
+        if a.skill == "attack" {
+            // A wedge toward the victim, as long as the blow's reach, filling until it lands.
+            let reach = if snap.chars.get(id).is_some_and(|c| c.kind == "wolf") { 3.0 } else { 2.0 };
+            let full = xf.r(reach, 22.0);
+            let dir = (to - from).normalized();
+            let ang0 = dir.y.atan2(dir.x);
+            let half = 0.55f32;
+            let arc = |r: f32| -> Vec<Pos2> {
+                (0..=12).map(|i| {
+                    let ang = ang0 - half + i as f32 / 12.0 * 2.0 * half;
+                    from + egui::vec2(ang.cos(), ang.sin()) * r
+                }).collect()
+            };
+            let mut outline = vec![from];
+            outline.extend(arc(full));
+            p.add(egui::Shape::convex_polygon(outline.clone(), a_(hot, 0.10), Stroke::new(1.0, a_(base, 0.5))));
+            let r = full * (0.15 + 0.85 * k);
+            let mut fill = vec![from];
+            fill.extend(arc(r));
+            p.add(egui::Shape::convex_polygon(fill, a_(hot, 0.25 + 0.3 * k), Stroke::NONE));
+            p.add(egui::Shape::line(arc(r), Stroke::new(2.5 + k, a_(hot, 0.95))));
+            // In reach or not (the blow only lands within reach at ends_ms).
+            let in_reach = (to - from).length() <= full * 1.05;
+            if !in_reach {
+                dashed(p, from, to, Stroke::new(1.0, a_(base, 0.4)));
+            }
+        } else {
+            dashed(p, from, to, Stroke::new(1.2, a_(base, 0.45)));
+            p.line_segment([from, from.lerp(to, k)], Stroke::new(2.5, a_(hot, 0.9)));
         }
         if a.skill == "throw" {
             let rr = 6.0 + (1.0 - k) * 14.0;
@@ -704,6 +739,35 @@ fn combat(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed,
                     Color32::from_rgb(210, 210, 220),
                     Stroke::new(1.0, Color32::from_rgb(40, 40, 50)),
                 ));
+            }
+            EffectKind::Damage(d) => {
+                let rise = k * 26.0;
+                let alpha = (1.0 - k).powf(0.6);
+                let at = to - egui::vec2(-8.0, 18.0 + rise);
+                let text = format!("-{:.0}", d.max(1.0));
+                p.text(at + egui::vec2(1.5, 1.5), Align2::CENTER_CENTER, &text, FontId::proportional(17.0), Color32::from_black_alpha((alpha * 220.0) as u8));
+                p.text(at, Align2::CENTER_CENTER, &text, FontId::proportional(17.0), Color32::from_rgba_unmultiplied(255, 70, 60, (alpha * 255.0) as u8));
+                if k < 0.3 {
+                    // Hit flash ring.
+                    p.circle_stroke(to, 8.0 + k * 40.0, Stroke::new(3.0 * (1.0 - k / 0.3), Color32::from_rgba_unmultiplied(255, 240, 200, 220)));
+                }
+            }
+            EffectKind::Whiff(word) => {
+                let alpha = 1.0 - k;
+                // A puff of air where the blow found nothing.
+                for j in 0..5 {
+                    let ang = j as f32 * 1.25 + e.start_ms as f32 * 0.001;
+                    let c = to + egui::vec2(ang.cos(), ang.sin()) * (6.0 + k * 16.0);
+                    p.circle_filled(c, 3.5 * (1.0 - k) + 1.0, Color32::from_white_alpha((alpha * 150.0) as u8));
+                }
+                let col = match word {
+                    "blocked" => Color32::from_rgb(170, 200, 255),
+                    "dodged" => Color32::from_rgb(170, 255, 190),
+                    _ => Color32::from_rgb(230, 230, 230),
+                };
+                let at = to - egui::vec2(0.0, 22.0 + k * 18.0);
+                p.text(at + egui::vec2(1.0, 1.0), Align2::CENTER_CENTER, word, FontId::proportional(13.0), Color32::from_black_alpha((alpha * 200.0) as u8));
+                p.text(at, Align2::CENTER_CENTER, word, FontId::proportional(13.0), a_(col, alpha));
             }
             EffectKind::Slash => {
                 let alpha = 1.0 - k;

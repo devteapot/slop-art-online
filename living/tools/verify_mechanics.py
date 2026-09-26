@@ -135,6 +135,19 @@ def main():
     call(db, "set_behavior", str(B), seq(eat, eat, {"wait": 2}, {"do": {"skill": "conceive", "target": {"id": A}}}))
     expecting = wait_for(lambda: rows(db, "SELECT * FROM expecting"), timeout=30)
     results["consensual conception"] = bool(expecting)
+    # 7. Tending wounds: A strikes B once, lets the fight cool down, then tends B.
+    def hp(i):
+        v = rows(db, f"SELECT hp, hp_rate, at_ms FROM vitals WHERE id = {i}")[0]
+        return float(v["hp"]) + float(v["hp_rate"]) * (time.time() * 1000 - float(v["at_ms"])) / 60000
+    call(db, "set_behavior", str(B), idle)
+    call(db, "set_behavior", str(A), seq({"do": {"skill": "attack", "target": {"id": B}}}))
+    hurt = wait_for(lambda: hp(B) < 95, timeout=20)
+    call(db, "set_behavior", str(A), idle)
+    time.sleep(11)
+    before_hp = hp(B)
+    call(db, "set_behavior", str(A), seq({"do": {"skill": "tend", "target": {"id": B}}}))
+    healed = wait_for(lambda: hp(B) >= min(before_hp + 8, 99.5), timeout=20)
+    results["tending wounds"] = bool(hurt) and bool(healed)
     ok = all(results.values())
     for k, v in results.items():
         print(("PASS " if v else "FAIL ") + k)

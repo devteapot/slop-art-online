@@ -357,6 +357,16 @@ fn write_check(a) {
 fn write_duration(a) { 12000 }
 fn write_done(a) { [#{ op: "remove", item: "wood", qty: 1 }, #{ op: "write" }] }
 
+// Tending wounds: anyone can do it; it takes a while and needs the patient to hold still.
+fn tend_check(a) {
+    if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to tend"; }
+    if a.target.hp >= a.target.max_hp - 1.0 { return "they are not hurt"; }
+    if a.target.hurt_ago < 10000 { return "they won't hold still in a fight"; }
+    ""
+}
+fn tend_duration(a) { 6000 }
+fn tend_done(a) { [#{ op: "heal", amount: 10.0 }, #{ op: "vitals", energy: -1.0 }] }
+
 fn read_check(a) {
     if !knows(a, "writing") { return "you can't read"; }
     ""

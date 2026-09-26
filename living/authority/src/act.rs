@@ -108,6 +108,8 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
                 }
                 if let Some(v) = ctx.db.vitals().id().find(c.id) {
                     f.hp = common::needs(&v, now).hp;
+                    f.max_hp = v.max_hp;
+                    f.hurt_ago = if v.hurt_ms == 0 { 1e9 } else { now.saturating_sub(v.hurt_ms) as f32 };
                 }
                 f.knows = common::knows(ctx, c.id);
             }
@@ -571,6 +573,22 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                     v.rate_key = 0;
                     ctx.db.vitals().id().update(v);
                 }
+            }
+            Effect::Heal { amount } => {
+                let patient = a.target.id as u32;
+                if let Some(mut v) = ctx.db.vitals().id().find(patient) {
+                    common::settle(&mut v, now);
+                    v.hp = (v.hp + amount).min(v.max_hp);
+                    v.rate_key = 0;
+                    ctx.db.vitals().id().update(v);
+                }
+                if patient != me {
+                    if let Some(pc) = ctx.db.character().id().find(patient) {
+                        percept(ctx, &pc, now, "care", me, patient, at, format!("{} tended your wounds.", common::label_for(ctx, &pc, me)), 0.6);
+                    }
+                    witnessed(ctx, now, at, "care", me, patient, "{a} tended {b}'s wounds", 0.3, &[me, patient]);
+                }
+                notes.push(format!("healed {amount:.0}"));
             }
             Effect::Damage { amount } => {
                 let victim = a.target.id as u32;

@@ -63,15 +63,18 @@ pub fn top_bar(ctx: &egui::Context, net: &Net, snap: &Snap, view: &mut View) {
                 ui.label(RichText::new(format!("evals {}", s.evals)).color(WEAK));
                 ui.label(RichText::new(format!("deliberations {}", s.deliberations)).color(WEAK));
             }
-            if let Some(at) = view.latest_fight() {
+            if let Some(fighter) = view.latest_fighter(snap) {
                 ui.separator();
                 let n = view.fights.len();
                 let b = egui::Button::new(RichText::new(format!("⚔ {n} fight{} — jump", if n == 1 { "" } else { "s" })).color(Color32::WHITE))
                     .fill(Color32::from_rgb(130, 30, 30));
-                if ui.add(b).on_hover_text("centre the map on the most recent fight").clicked() {
-                    view.follow = false;
-                    view.center = at;
-                    view.zoom = view.zoom.max(18.0);
+                if ui.add(b).on_hover_text("zoom in on the most recent fight and follow a fighter").clicked() {
+                    view.selected = Some(fighter);
+                    view.follow = true;
+                    view.zoom = 28.0;
+                    if let Some(p) = view.shown.get(&fighter) {
+                        view.center = *p;
+                    }
                 }
             }
             ui.separator();
@@ -346,6 +349,73 @@ fn technique_style(t: &str) -> (&'static str, Color32) {
         "planting" => ("🌱", Color32::from_rgb(140, 210, 110)),
         "writing" => ("✍", Color32::from_rgb(230, 210, 170)),
         _ => ("•", Color32::from_rgb(170, 180, 200)),
+    }
+}
+
+/// The selected character's fight: participants, their health and actions, what the
+/// viewer saw (hits, blocks, dodges, misses) and what they said.
+pub fn fight_panel(ctx: &egui::Context, view: &mut View, snap: &Snap) {
+    let Some(sel) = view.selected else { return };
+    let group = view.fight_group(sel);
+    if group.is_empty() {
+        return;
+    }
+    let area = ctx.available_rect();
+    let mut go = None;
+    egui::Window::new("⚔ Fight")
+        .id(egui::Id::new("fight-panel"))
+        .default_pos(area.left_top() + egui::vec2(12.0, 12.0))
+        .default_width(300.0)
+        .resizable(false)
+        .collapsible(true)
+        .show(ctx, |ui| {
+            let mut total = crate::state::Tally::default();
+            for id in &group {
+                let t = view.tally.get(id).copied().unwrap_or_default();
+                total.hits += t.hits;
+                total.blocks += t.blocks;
+                total.dodges += t.dodges;
+                total.misses += t.misses;
+                let Some(c) = snap.chars.get(id) else { continue };
+                let col = if c.kind == "person" { view.community_color(*id) } else { WEAK };
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("■").color(col));
+                    let name = RichText::new(snap.name(*id)).strong();
+                    if ui.link(name).clicked() {
+                        go = Some(*id);
+                    }
+                    if let Some(k) = view.community_of.get(id) {
+                        ui.label(RichText::new(&view.communities[*k].name).small().color(col));
+                    }
+                });
+                ui.horizontal(|ui| {
+                    if let Some(v) = snap.vitals.get(id) {
+                        let hp = need(v.hp, v.hp_rate, v.at_ms, snap.now, v.max_hp);
+                        ui.add_sized(
+                            [120.0, 12.0],
+                            egui::ProgressBar::new((hp / v.max_hp.max(1.0)).clamp(0.0, 1.0)).fill(col).desired_height(10.0).text(RichText::new(format!("{hp:.0}/{:.0}", v.max_hp)).small()),
+                        );
+                    } else {
+                        ui.label(RichText::new("down").color(Color32::from_rgb(230, 90, 80)));
+                    }
+                    let act = snap.activity.get(id).map(|a| a.label.clone()).unwrap_or_else(|| "—".into());
+                    ui.label(RichText::new(act).small().color(Color32::from_rgb(235, 225, 160)));
+                });
+                ui.label(RichText::new(format!("hits {} · blocks {} · dodges {} · misses {}", t.hits, t.blocks, t.dodges, t.misses)).small().color(WEAK));
+                ui.add_space(3.0);
+            }
+            ui.separator();
+            ui.label(RichText::new(format!("seen: {} hits · {} blocked · {} dodged · {} missed", total.hits, total.blocks, total.dodges, total.misses)).strong());
+            let said: Vec<&Chronicle> = view.chronicle.iter().filter(|r| r.kind == "speech" && group.contains(&r.a)).take(3).collect();
+            if !said.is_empty() {
+                ui.separator();
+                for r in said {
+                    ui.add(egui::Label::new(RichText::new(format!("{} {}", snap.stamp(r.at_ms), r.text)).small().italics()).wrap());
+                }
+            }
+        });
+    if let Some(id) = go {
+        view.select(id, snap, true);
     }
 }
 

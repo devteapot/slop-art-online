@@ -50,6 +50,7 @@ fn draw(mut contexts: EguiContexts, mut net: NonSendMut<net::Net>, mut view: Non
     panels::left(ctx, &mut view, net, &snap);
     panels::inspector(ctx, &mut view, net, &snap);
     panels::sign_window(ctx, &mut view, &snap);
+    panels::fight_panel(ctx, &mut view, &snap);
     map::central(ctx, &mut view, &snap, time.elapsed_secs());
     let ms = started.elapsed().as_secs_f32() * 1000.0;
     view.frame_ms += (ms - view.frame_ms) * 0.05;

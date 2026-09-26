@@ -47,6 +47,7 @@ pub const SKILLS: &[SkillSpec] = &[
     SkillSpec { name: "teach", needs_target: true, needs_item: true, reach: 2.0, help: "teach a technique you know to a person beside you (item: technique); takes a while, both must stay close" },
     SkillSpec { name: "experiment", needs_target: false, needs_item: true, reach: 0.0, help: "tinker with a material from your pack (item) hoping to work out a new technique; uses up the material, often fails" },
     SkillSpec { name: "write", needs_target: false, needs_item: true, reach: 0.0, help: "write on a tablet you keep or a sign you leave here (item: tablet|sign; text: your words; topic: a technique you know to describe) — needs writing and 1 wood" },
+    SkillSpec { name: "tend", needs_target: true, needs_item: false, reach: 1.5, help: "tend someone's wounds (target a person, or \"self\"); slow, and not while they are fighting" },
     SkillSpec { name: "read", needs_target: false, needs_item: false, reach: 1.5, help: "read a tablet you carry, or a sign (target: {\"nearest\": \"sign\"}) — needs writing; a tablet describing a technique can teach it" },
     SkillSpec { name: "plant", needs_target: false, needs_item: false, reach: 0.0, help: "plant 2 berries here to grow a new berry bush (needs planting; open grass or dirt)" },
     SkillSpec { name: "signal", needs_target: false, needs_item: true, reach: 0.0, help: "make one of your species' signals (item: its name); others nearby hear it" },
