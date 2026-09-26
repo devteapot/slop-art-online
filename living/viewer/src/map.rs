@@ -8,7 +8,7 @@ use crate::terrain::TILE_PX;
 use bevy_egui::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke, StrokeKind, Vec2};
 use std::collections::HashMap;
 
-const SPEECH_MS: u64 = 6000;
+const SPEECH_MS: u64 = 5000;
 /// `artifact.holder` for items held by a structure (STRUCTURE_BIT | structure id).
 pub const SIGN_BIT: u64 = 1 << 40;
 
@@ -152,7 +152,9 @@ pub fn central(ctx: &egui::Context, view: &mut View, snap: &Snap, t: f32) {
                 }
             }
         }
-        labels(&painter, &xf, view, snap, &placed, t);
+        let hover_early = resp.hover_pos().and_then(|p| pick(&placed, snap, p));
+        let talking = speakers(view, snap);
+        labels(&painter, &xf, view, snap, &placed, t, hover_early, &talking);
         combat(&painter, &xf, view, snap, &placed, t);
         let trade_tip = trades(&painter, snap, &placed, resp.hover_pos());
         speech(&painter, &xf, view, snap, &placed);
@@ -284,7 +286,10 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
             items.push((w.y, Item::Creature(*id)));
         }
     }
-    items.sort_by(|a, b| a.0.total_cmp(&b.0));
+    // Ground things (plants, homes, gates, stores) first, then creatures on top, each
+    // back to front, so buildings are never hidden behind a neighbour's roof or a crowd.
+    let layer = |i: &Item| if matches!(i, Item::Creature(_)) { 1 } else { 0 };
+    items.sort_by(|a, b| layer(&a.1).cmp(&layer(&b.1)).then(a.0.total_cmp(&b.0)));
     let mut placed = Placed::new();
     let mut signs = Vec::new();
     let shadow = |p: &egui::Painter, feet: Pos2, w: f32| {
@@ -352,7 +357,7 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                         art.remains.draw(p, 0, feet, s, false, Color32::WHITE);
                     }
                     "house" => {
-                        let s = xf.px(1.35, 0.8);
+                        let s = xf.px(1.8, 1.25);
                         shadow(p, feet, art.house.w as f32 * s * 1.1);
                         let r = art.house.draw(p, (st.id % 4) as usize, feet, s, false, Color32::WHITE);
                         if st.owner != 0 {
@@ -430,7 +435,7 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                 let rect = match c.kind.as_str() {
                     "person" => {
                         let asleep = snap.activity.get(&id).is_some_and(|a| a.skill == "sleep");
-                        let s = xf.px(1.15, 1.35) * if snap.is_child(c) { 0.72 } else { 1.0 };
+                        let s = xf.px(1.15, 1.05) * if snap.is_child(c) { 0.72 } else { 1.0 };
                         let frame = if asleep {
                             5
                         } else if moving {
@@ -481,9 +486,10 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
     (placed, signs)
 }
 
-fn labels(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed, t: f32) {
+fn labels(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed, t: f32, hovered: Option<u32>, talking: &std::collections::HashSet<u32>) {
     let name_alpha = ((xf.zoom - 1.8) / 3.0).clamp(0.0, 1.0);
-    let act_alpha = ((xf.zoom - 8.0) / 3.0).clamp(0.0, 1.0);
+    let act_alpha = ((xf.zoom - 20.0) / 4.0).clamp(0.0, 1.0);
+    let mut names: Vec<(u8, f32, u32, Pos2, f32)> = Vec::new();
     for (id, (feet, top)) in placed {
         let Some(c) = snap.chars.get(id) else { continue };
         let person = c.kind == "person";
@@ -522,17 +528,42 @@ fn labels(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed,
         if !person {
             continue;
         }
-        let alpha = if selected { 1.0 } else { name_alpha };
+        // Names: always for the selected and hovered, for fighters, and for everyone only
+        // when zoomed in close; crowded labels are skipped (see below).
+        let prio = if selected {
+            0
+        } else if hovered == Some(*id) {
+            1
+        } else if engaged || talking.contains(id) {
+            2
+        } else if xf.zoom >= 14.0 {
+            3
+        } else {
+            continue;
+        };
+        names.push((prio, (*feet - xf.rect.center()).length(), *id, *feet, *top));
+    }
+    names.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    let mut taken: Vec<Rect> = Vec::new();
+    for (prio, _, id, feet, top) in names {
+        let Some(c) = snap.chars.get(&id) else { continue };
+        let selected = prio == 0;
+        let alpha = if prio <= 1 { 1.0 } else { name_alpha };
         if alpha <= 0.01 {
             continue;
         }
+        let (id, feet, top) = (&id, &feet, top);
         let name = p.layout_no_wrap(c.name.clone(), FontId::proportional(if selected { 14.0 } else { 12.5 }), a(Color32::WHITE, alpha));
         let at = egui::pos2(feet.x - name.size().x / 2.0, top - 3.0 - name.size().y);
         let bg = Rect::from_min_size(at, name.size()).expand2(egui::vec2(4.0, 1.0));
+        if prio > 1 && taken.iter().any(|r| r.intersects(bg)) {
+            continue;
+        }
+        taken.push(bg);
         p.rect_filled(bg, 3.0, Color32::from_black_alpha(((if selected { 200.0 } else { 140.0 }) * alpha) as u8));
         p.rect_filled(Rect::from_min_size(bg.left_top(), egui::vec2(3.0, bg.height())), 2.0, a(person_color(*id), alpha));
         p.galley(at, name, Color32::WHITE);
-        let aa = if selected { 1.0 } else { act_alpha };
+        let aa = if selected || prio == 1 { 1.0 } else if xf.zoom >= 20.0 { act_alpha } else { 0.0 };
         if aa > 0.0 {
             if let Some(act) = snap.activity.get(id) {
                 let g = p.layout_no_wrap(act.label.clone(), FontId::proportional(11.0), a(Color32::from_rgb(235, 235, 210), aa));
@@ -545,32 +576,95 @@ fn labels(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed,
     let _ = t;
 }
 
+/// Speakers with a line in the last few seconds.
+fn speakers(view: &View, snap: &Snap) -> std::collections::HashSet<u32> {
+    view.chronicle
+        .iter()
+        .take_while(|r| snap.now.saturating_sub(r.at_ms) < SPEECH_MS * 2)
+        .filter(|r| r.kind == "speech" && snap.now.saturating_sub(r.at_ms) < SPEECH_MS)
+        .map(|r| r.a)
+        .collect()
+}
+
+/// Close in (≥ 10 px per tile): at most `MAX_BUBBLES` speech bubbles — the selected
+/// character and whoever they talk to first, then the most recent near the view centre —
+/// stacked so they never overlap, fading out. Farther out: a small speech glyph over each
+/// speaker (the story feed carries the text).
 fn speech(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed) {
-    let mut done = std::collections::HashSet::new();
-    for row in view.chronicle.iter().take_while(|r| snap.now.saturating_sub(r.at_ms) < SPEECH_MS * 3) {
+    const MAX_BUBBLES: usize = 6;
+    let sel = view.selected;
+    let mut latest: Vec<&living_bindings::Chronicle> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for row in view.chronicle.iter().take_while(|r| snap.now.saturating_sub(r.at_ms) < SPEECH_MS * 2) {
+        if row.kind == "speech" && snap.now.saturating_sub(row.at_ms) < SPEECH_MS && seen.insert(row.a) {
+            latest.push(row);
+        }
+    }
+    if xf.zoom < 10.0 {
+        for row in latest {
+            let Some((feet, top)) = placed.get(&row.a) else { continue };
+            if !xf.rect.contains(*feet) {
+                continue;
+            }
+            let age = snap.now.saturating_sub(row.at_ms) as f32 / SPEECH_MS as f32;
+            let at = egui::pos2(feet.x + 6.0, top - 4.0);
+            let alpha = (1.0 - age).clamp(0.2, 1.0);
+            p.circle_filled(at, 7.5, Color32::from_rgba_unmultiplied(30, 30, 36, (alpha * 200.0) as u8));
+            p.circle_filled(at, 6.5, Color32::from_rgba_unmultiplied(250, 248, 238, (alpha * 235.0) as u8));
+            p.text(at, Align2::CENTER_CENTER, "…", FontId::proportional(10.0), Color32::from_rgba_unmultiplied(30, 30, 36, (alpha * 255.0) as u8));
+        }
+        return;
+    }
+    let centre = xf.rect.center();
+    let mut ranked: Vec<(u8, f32, &living_bindings::Chronicle)> = latest
+        .into_iter()
+        .filter(|r| placed.get(&r.a).is_some_and(|(f, _)| xf.rect.contains(*f)))
+        .map(|r| {
+            let prio = if sel == Some(r.a) || sel == Some(r.b) { 0 } else { 1 };
+            let dist = (placed[&r.a].0 - centre).length();
+            let age = snap.now.saturating_sub(r.at_ms) as f32;
+            (prio, dist + age * 0.05, r)
+        })
+        .collect();
+    ranked.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    let mut taken: Vec<Rect> = Vec::new();
+    for (_, _, row) in ranked {
+        if taken.len() >= MAX_BUBBLES {
+            break;
+        }
+        let (feet, top) = placed[&row.a];
         let age = snap.now.saturating_sub(row.at_ms);
-        if row.kind != "speech" || age >= SPEECH_MS || !done.insert(row.a) {
-            continue;
-        }
-        let Some((feet, top)) = placed.get(&row.a) else { continue };
-        if !xf.rect.contains(*feet) {
-            continue;
-        }
-        let fade = (1.0 - (age as f32 - (SPEECH_MS as f32 - 1000.0)) / 1000.0).clamp(0.0, 1.0);
+        let fade = (1.0 - (age as f32 - (SPEECH_MS as f32 - 1200.0)) / 1200.0).clamp(0.0, 1.0);
         let mut text = spoken(&row.text).to_string();
         if row.b != 0 {
             text = format!("→ {}: {text}", snap.name(row.b));
         }
         let g = p.layout(text, FontId::proportional(12.5), a(Color32::from_rgb(25, 25, 30), fade), 220.0);
         let size = g.size() + egui::vec2(12.0, 8.0);
-        let bottom = egui::pos2(feet.x, top - 22.0);
-        let rect = Rect::from_min_size(bottom - egui::vec2(size.x / 2.0, size.y), size);
+        let anchor = egui::pos2(feet.x, top - 22.0);
+        // Stack upwards until it no longer overlaps an earlier bubble (or give up).
+        let mut rect = Rect::from_min_size(anchor - egui::vec2(size.x / 2.0, size.y), size);
+        let mut ok = false;
+        for _ in 0..4 {
+            match taken.iter().find(|r| r.expand(3.0).intersects(rect)) {
+                None => {
+                    ok = true;
+                    break;
+                }
+                Some(r) => rect = rect.translate(egui::vec2(0.0, r.top() - 4.0 - rect.bottom())),
+            }
+        }
+        if !ok || !xf.rect.expand(40.0).contains(rect.center()) {
+            continue;
+        }
+        taken.push(rect);
         let fill = a(Color32::from_rgb(250, 248, 238), 0.95 * fade);
-        p.add(egui::Shape::convex_polygon(
-            vec![bottom + egui::vec2(-6.0, -1.0), bottom + egui::vec2(6.0, -1.0), bottom + egui::vec2(0.0, 8.0)],
-            fill,
-            Stroke::NONE,
-        ));
+        let tail_top = egui::pos2(anchor.x.clamp(rect.left() + 8.0, rect.right() - 8.0), rect.bottom() - 1.0);
+        if (rect.bottom() - anchor.y).abs() < 1.0 {
+            p.add(egui::Shape::convex_polygon(vec![tail_top + egui::vec2(-6.0, 0.0), tail_top + egui::vec2(6.0, 0.0), anchor + egui::vec2(0.0, 8.0)], fill, Stroke::NONE));
+        } else {
+            p.line_segment([tail_top, anchor + egui::vec2(0.0, 8.0)], Stroke::new(1.5, fill));
+        }
         p.rect_filled(rect, 6.0, fill);
         p.rect_stroke(rect, 6.0, Stroke::new(1.0, a(person_color(row.a), fade)), StrokeKind::Inside);
         p.galley(rect.min + egui::vec2(6.0, 4.0), g, Color32::BLACK);
