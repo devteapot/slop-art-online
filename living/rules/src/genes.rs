@@ -18,7 +18,7 @@ pub type Genes = BTreeMap<String, f32>;
 /// Body genes every creature has.
 pub const BODY: [&str; 4] = ["speed", "strength", "endurance", "vitality"];
 /// Person temperament traits (animals take theirs from their species).
-pub const PERSON_TRAITS: [&str; 7] = ["caution", "sociability", "empathy", "curiosity", "ambition", "introspection", "temper"];
+pub const PERSON_TRAITS: [&str; 8] = ["caution", "sociability", "empathy", "curiosity", "ambition", "introspection", "temper", "nurture"];
 /// Skills whose pace is set by something else (walking speed, the body's needs, a signal).
 const UNSKILLED: [&str; 9] = ["wait", "sleep", "rest", "eat", "signal", "goto", "follow", "wander", "flee"];
 

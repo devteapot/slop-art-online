@@ -672,9 +672,20 @@ impl<'a> Ev<'a> {
         let restless_after = 60_000.0 * (12.0 - trait_of("curiosity") / 12.0);
         let lonely_after = 60_000.0 * (14.0 - trait_of("sociability") / 10.0);
         let alone_ms = self.now.saturating_sub(self.st.heard_ms.max(self.st.spoke_ms));
-        let drives: [(u32, bool, &str); 2] = [
+        // Grown people long for a child of their own, sooner the more nurturing they were born.
+        let broody = self.me.kind == "person" && self.me.stage == 2 && calm && {
+            let me = self.me.id;
+            let db = &self.ctx.db;
+            let expecting = db.expecting().iter().any(|e| e.a == me || e.b == me);
+            let rearing = db.rearing().id().find(me).map_or(false, |r| r.until_ms > self.now);
+            let last = db.character().parent_a().filter(me).chain(db.character().parent_b().filter(me)).map(|c| c.born_ms).max().unwrap_or(self.me.born_ms);
+            let wait = 60_000.0 * (20.0 - trait_of("nurture") / 6.0);
+            !expecting && !rearing && self.now.saturating_sub(last) as f32 > wait
+        };
+        let drives: [(u32, bool, &str); 3] = [
             (16, calm && quiet_ms as f32 > restless_after, "You feel restless: your days have been the same for a while."),
             (32, calm && self.st.heard_ms > 0 && alone_ms as f32 > lonely_after, "You feel lonely: it has been a long time since you spoke with anyone."),
+            (128, broody, "You long for a child of your own."),
         ];
         for (bit, on, text) in drives {
             let was = self.st.alerts & bit != 0;

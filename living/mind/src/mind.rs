@@ -439,7 +439,7 @@ The person has lived before this moment: use their background, but give them an 
 likes and grudges of their own (not a job description; what they did so far is history, not destiny). Write the narrative in the first person, \
 2-4 sentences. Relations: how they feel about each person named in the background (trust and affinity -100..100, a label such as \
 family, partner, friend, rival, stranger, and a short note in their words). Reply with ONE JSON object: {{\"narrative\": \"...\", \"values\": [...], \"goals\": [...], \
-\"traits\": {{\"caution\": 0-100, \"sociability\": 0-100, \"empathy\": 0-100, \"curiosity\": 0-100, \"ambition\": 0-100, \"introspection\": 0-100, \"temper\": 0-100}}, \"mood\": \"...\", \
+\"traits\": {{\"caution\": 0-100, \"sociability\": 0-100, \"empathy\": 0-100, \"curiosity\": 0-100, \"ambition\": 0-100, \"introspection\": 0-100, \"temper\": 0-100, \"nurture\": 0-100}}, \"mood\": \"...\", \
 \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"...\", \"note\": \"...\"}}]}}",
             prompts::world_rules()
         );
@@ -509,7 +509,7 @@ family, partner, friend, rival, stranger, and a short note in their words). Repl
             "You create the starting identity of a newborn person in a persistent simulated world. {}\n\nThe child has its own temperament: \
 traits are influenced by the parents but varied (never copied), and the child knows almost nothing yet. Write the narrative in the first person, \
 simple and short, as a very young child. Reply with ONE JSON object: {{\"narrative\": \"...\", \"values\": [...], \"goals\": [...], \
-\"traits\": {{\"caution\": 0-100, \"sociability\": 0-100, \"empathy\": 0-100, \"curiosity\": 0-100, \"ambition\": 0-100, \"introspection\": 0-100, \"temper\": 0-100}}, \"mood\": \"...\"}}",
+\"traits\": {{\"caution\": 0-100, \"sociability\": 0-100, \"empathy\": 0-100, \"curiosity\": 0-100, \"ambition\": 0-100, \"introspection\": 0-100, \"temper\": 0-100, \"nurture\": 0-100}}, \"mood\": \"...\"}}",
             prompts::world_rules()
         );
         let born = self.born_temperament(c.id);
