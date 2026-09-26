@@ -2,10 +2,9 @@
 """Replay recorded model requests from lab journals, to test prompt changes in minutes.
 
 Picks deliberation (or talk) requests from `.local/living/journal/<run>/` whose reason for
-thinking contains `--reason` (and optionally only by day), sends them again to the model as
-recorded, or with the current mind's deliberation prompt rebuilt is out of scope: this sends
-the recorded messages, optionally transformed by `--variant`, and counts replies matching
-`--count` (a regex), e.g. acts of a kind.
+thinking contains `--reason` (optionally only by day), sends the recorded messages again,
+optionally transformed by a `--variant`, and counts replies matching `--count` (a regex),
+e.g. acts of a kind. It does not rebuild prompts from the current mind code.
 
   living/tools/replay.py --reason "long for" --day --count '"do"\\s*:\\s*"conceive"' --n 12
   living/tools/replay.py --purpose talk --reason "family" --variant why_first
