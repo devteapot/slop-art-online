@@ -393,8 +393,14 @@ pub fn expand(root: &Node, lookup: &dyn Fn(&str) -> Option<Node>) -> Node {
     fn go(n: &Node, lookup: &dyn Fn(&str) -> Option<Node>, stack: &mut Vec<String>) -> Node {
         match n {
             Node::Routine(name) => {
+                // A routine that cannot run says so once in a while and fails, so whatever
+                // comes next (the next desire, the next branch) acts instead of standing idle.
+                let broken = |why: String| {
+                    let never = Node::If(Box::new(IfNode { cond: Cond::Not(Box::new(Cond::Chance(1.0))), then: Node::Wait(1.0), otherwise: None }));
+                    Node::Seq(Composite { label: None, children: vec![Node::Think(why), never] })
+                };
                 let body = if stack.len() >= MAX_ROUTINE_NESTING || stack.contains(name) {
-                    Node::Think(format!("my routine \"{name}\" calls itself or nests too deep"))
+                    broken(format!("my routine \"{name}\" calls itself or nests too deep: it cannot run"))
                 } else {
                     match lookup(name) {
                         Some(g) => {
@@ -403,7 +409,7 @@ pub fn expand(root: &Node, lookup: &dyn Fn(&str) -> Option<Node>) -> Node {
                             stack.pop();
                             b
                         }
-                        None => Node::Think(format!("I have no routine \"{name}\" yet")),
+                        None => broken(format!("my top level calls the routine \"{name}\", which I don't have (retired or never made): make it, or change what calls it")),
                     }
                 };
                 Node::First(Composite { label: Some(format!("routine:{name}")), children: vec![body] })
@@ -845,7 +851,7 @@ mod repertoire_tests {
         let g = validate_compiled(expand(&top.root, &routines)).unwrap();
         let out = outline(&g.root);
         assert!(out.contains("routine:find food") && out.contains("routine:gather berries"), "{out}");
-        assert!(out.contains("routine:visit friends") && out.contains("no routine"), "{out}");
+        assert!(out.contains("routine:visit friends") && out.contains("which I don't have"), "{out}");
         assert!(out.contains("hunger×1.5"), "{out}");
         assert_eq!(routines_called(&top.root), vec!["find food", "visit friends"]);
     }

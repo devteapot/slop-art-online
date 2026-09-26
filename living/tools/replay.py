@@ -56,7 +56,16 @@ def think_only(msgs):
     return msgs
 
 
-VARIANTS = {"as_recorded": lambda m: m, "why_first": why_first, "think_only": think_only}
+def quiet(msgs):
+    """Speech framed as the exception: most moments pass without a word."""
+    msgs[0]["content"] = msgs[0]["content"].replace(
+        "you may also stay silent.",
+        "most moments pass without a word: speak only to someone within earshot, when you have something to tell or ask them that they don't already know.",
+    )
+    return msgs
+
+
+VARIANTS = {"as_recorded": lambda m: m, "why_first": why_first, "think_only": think_only, "quiet": quiet}
 
 
 def reason_of(u):
