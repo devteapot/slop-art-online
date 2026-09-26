@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
 """Measure the living authority's tick cost and cadence on a benchmark database.
 
-Usage: living/tools/bench.py [--db living-bench] [--seconds 60] [--crowd N] [--fresh]
+Usage: living/tools/bench.py [--db living-bench] [--seconds 60] [--crowd N] [--fresh] [--wasm NAME]
 
 --fresh republishes the database from the seed (deletes its data); --crowd adds N
 instinct-driven people (no LLM). Tick durations come from the module's LogStopwatch
 (enabled only during the window); cadence and work counters from the `stats` row.
+--body-writes subscribes to the `body` table during the window and reports delivered row
+updates per second and their JSON volume (what an observer subscribed to bodies receives).
+LIVING_STDB overrides the CLI wrapper (e.g. the main checkout's, from a worktree).
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-STDB = str(ROOT / "living/tools/stdb")
+STDB = os.environ.get("LIVING_STDB", str(ROOT / "living/tools/stdb"))
 
 
 def stdb(*args, check=True):
@@ -50,10 +55,12 @@ def main():
     ap.add_argument("--subscribe", action="store_true", help="attach a live subscriber to all admin-controlled experiences")
     ap.add_argument("--fresh", action="store_true")
     ap.add_argument("--settle", type=int, default=5)
+    ap.add_argument("--wasm", default="living_authority.wasm", help="module file in the server's /wasm mount")
+    ap.add_argument("--body-writes", action="store_true", help="count body row updates delivered to a subscriber")
     ap.add_argument("--out")
     a = ap.parse_args()
     if a.fresh:
-        stdb("publish", "-s", "local", "-b", "/wasm/living_authority.wasm", a.db, "--delete-data", "-y")
+        stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", a.db, "--delete-data", "-y")
     if a.crowd:
         stdb("call", "-s", "local", a.db, "spawn_crowd", str(a.crowd), "true" if a.minded else "false")
     if a.battle:
@@ -63,6 +70,25 @@ def main():
         admin = stdb("sql", "-s", "local", a.db, "SELECT admin FROM world").strip().splitlines()[-1].strip()
         sub = subprocess.Popen([STDB, "subscribe", "-s", "local", a.db, f"SELECT * FROM experience WHERE controller = {admin}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(a.settle + 1.2)
+    bodies = None
+    counts = {"rows": 0, "tx": 0, "bytes": 0}
+    if a.body_writes:
+        bodies = subprocess.Popen([STDB, "subscribe", "-s", "local", a.db, "SELECT * FROM body", "-t", str(a.seconds + 1)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+
+        def drain():
+            for line in bodies.stdout:
+                if not line.startswith("{"):
+                    continue
+                try:
+                    u = json.loads(line).get("body", {})
+                except ValueError:
+                    continue
+                counts["tx"] += 1
+                counts["bytes"] += len(line)
+                counts["rows"] += len(u.get("inserts", []))
+
+        reader = threading.Thread(target=drain, daemon=True)
+        reader.start()
     s0, t0 = stats(a.db), time.time()
     stdb("call", "-s", "local", a.db, "set_profile", "true")
     time.sleep(a.seconds)
@@ -70,6 +96,12 @@ def main():
     s1, t1 = stats(a.db), time.time()
     if sub:
         sub.terminate()
+    body_report = None
+    if bodies:
+        bodies.wait()
+        reader.join(timeout=5)
+        span = a.seconds + 1
+        body_report = {"row_updates_per_s": round(counts["rows"] / span, 1), "transactions_per_s": round(counts["tx"] / span, 1), "json_kb_per_s": round(counts["bytes"] / span / 1024, 1)}
     logs = stdb("logs", "-s", "local", a.db, "-n", str(a.seconds * 70 + 500))
     durs = []
     for m in re.finditer(r'^(\S+Z)\s.*Timing span "tick": ([\d.]+)(µs|ms|s)\b', logs, re.M):
@@ -92,6 +124,7 @@ def main():
         "deliberation_requests_per_s": rate("deliberations"),
         "max_tick_gap_ms_last_s": s1["max_tick_gap_ms"],
         "combat": {"hits": s1.get("hits", 0) - s0.get("hits", 0), "dodged": s1.get("dodged", 0) - s0.get("dodged", 0), "blocked": s1.get("blocked", 0) - s0.get("blocked", 0), "people_left": s1["alive_people"]},
+        "body_writes": body_report,
         "tick_ms": {
             "samples": len(durs),
             "p50": round(pct(durs, 50), 3),
