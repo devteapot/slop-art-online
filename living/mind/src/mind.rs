@@ -654,7 +654,19 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         }
         let (mind, memories) = self.mind_lines(actor, &seeds, 30).await;
         let brain = self.conn.db.brain().id().find(&actor);
-        let outline = brain.as_ref().and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
+        // Show the mind its own graph; the body habits are described, not repeated (models
+        // copied the layer back into their graphs, making them deeper and longer).
+        let outline = brain
+            .as_ref()
+            .and_then(|b| living_rules::graph::parse(&b.graph).ok())
+            .map(|g| match g.root {
+                living_rules::graph::Node::First(c) if c.label.as_deref() == Some("reflexes") => {
+                    let own = c.children.last().map(living_rules::graph::outline).unwrap_or_default();
+                    format!("(your body habits run before this)\n{own}")
+                }
+                root => living_rules::graph::outline(&root),
+            })
+            .unwrap_or_default();
         let plan = brain.as_ref().map(|b| b.plan.clone()).unwrap_or_default();
         let fmt = self.fmt_time();
         let experiences: Vec<String> = {
@@ -686,6 +698,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         let mut total_latency = 0u32;
         let mut total_tokens = 0u32;
         let thought_ref = reference(actor, "deliberate");
+        let mut profile = profile;
         for attempt in 0..3 {
             let reply = match self.llm.chat(&profile, "deliberate", &c.name, &messages).await {
                 Ok(r) => r,
@@ -765,7 +778,15 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                 }
                 Err(e) => {
                     last_err = format!("{e:#}");
-                    messages.push(Msg { role: "assistant", content: reply.content });
+                    // A reply that is not JSON at all is usually a degenerate generation (runs of
+                    // whitespace or brackets): retry with the most reliable model, and don't
+                    // send the runaway text back.
+                    let unusable = llm::parse_json(&reply.content).is_err();
+                    if unusable && profile != self.llm.default_profile() {
+                        log::warn!("{}: unusable reply from {} ({} chars); retrying with {}", c.name, reply.model, reply.content.len(), self.llm.default_profile());
+                        profile = self.llm.default_profile();
+                    }
+                    messages.push(Msg { role: "assistant", content: reply.content.chars().take(3000).collect() });
                     messages.push(Msg { role: "user", content: format!("That reply was rejected: {last_err}. Return the complete corrected JSON object.") });
                 }
             }

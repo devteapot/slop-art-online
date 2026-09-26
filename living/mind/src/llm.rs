@@ -124,6 +124,11 @@ impl Llm {
     }
 
     /// Profile for a character: explicit assignment, then rotation, then default.
+    /// The most reliable profile, used when another produced an unusable reply.
+    pub fn default_profile(&self) -> String {
+        self.models.default.clone()
+    }
+
     pub fn profile_for(&self, id: u32, name: &str) -> String {
         let pick = self
             .models
