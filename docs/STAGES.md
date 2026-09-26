@@ -94,3 +94,4 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Otherwise.** Gifts and hunting with spears seen; still no human pregnancy.
 
   Labs updated in place.
+- 20:30 — Still no human pregnancy in about four hours. Offline replays of 12 real daytime "longing" deliberations against Mistral Small (`scratchpad` replay, same prompts): as sent, 0/12 chose to conceive and every thought turned to the fire and the wolves. With the reason for the thought placed first and the instruction "start from why you are thinking now", thoughts took the longing up ("I ache for a child…"), and the minds went to their partner or proposed (1/12 conceived outright). The deliberation prompt now leads with why one is thinking. Ecology: wolves died out in the baseline and deer in the scarce lab; wolf litters were capped at two just before. Labs restarted fresh.

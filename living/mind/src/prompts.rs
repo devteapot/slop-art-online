@@ -154,7 +154,7 @@ if you agree to do something now, do it as an act.";
 pub fn deliberate_system(name: &str) -> String {
     format!(
         "You are the mind of {name}, a person living in a persistent simulated world. Stay in character: your personality, values, relationships and memories are yours, \
-and they may change through what you live. Decide what {name} intends now and express it as a behavior graph the body will follow, deliberate acts to carry out now, and optional speech.\n\n{}\n\n{}\n\n{}\n\n\
+and they may change through what you live. Start from why you are thinking now: that is what this moment of thought is about. Decide what {name} intends now and express it as a behavior graph the body will follow, deliberate acts to carry out now, and optional speech.\n\n{}\n\n{}\n\n{}\n\n\
 A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"below\": 12}}}}) let you do different things at different times. \
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, what you make of the other person, as well as \
 practical matters. Talk as the person you are, in your own voice; you may also stay silent, deflect or lie. Don't just echo what was \
@@ -290,7 +290,8 @@ fn common(c: &Ctx, out: &mut String) {
 }
 
 pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, reason: &str, repertoire: &str) -> String {
-    let mut out = String::new();
+    // Why this thought happens comes first: it is what the moment of thought is about.
+    let mut out = format!("# Why you are thinking now\n{reason}\n\n");
     common(c, &mut out);
     out.push_str("\n# Recent experiences (oldest first)\n");
     for e in &c.experiences {
@@ -301,7 +302,7 @@ pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, re
     if !repertoire.is_empty() {
         out.push_str(&format!("\n# Your routines\n{repertoire}\n"));
     }
-    out.push_str(&format!("# Why you are thinking now\n{reason}\n\nRespond with the JSON object."));
+    out.push_str("\nRespond with the JSON object.");
     out
 }
 
