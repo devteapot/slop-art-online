@@ -219,6 +219,13 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     for e in due {
         ctx.db.expecting().id().delete(e.id);
         birth(ctx, e.a, e.b, now);
+        let w = common::world(ctx);
+        let kind = ctx.db.character().id().find(e.a).map(|c| c.kind).unwrap_or_default();
+        let until = now + (common::life_of(&kind).interbirth_days(common::pace(&w)) * w.day_ms as f32) as u64;
+        for id in [e.a, e.b] {
+            ctx.db.rearing().id().delete(id);
+            ctx.db.rearing().insert(Rearing { id, until_ms: until });
+        }
     }
     for o in ctx.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > 180_000).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.bond_offer().id().delete(o);

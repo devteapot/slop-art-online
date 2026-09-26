@@ -721,6 +721,14 @@ pub struct Expecting {
     pub due_ms: u64,
 }
 
+/// Parents raising a recent birth: no new conception until `until_ms`.
+#[spacetimedb::table(accessor = rearing)]
+pub struct Rearing {
+    #[primary_key]
+    pub id: u32,
+    pub until_ms: u64,
+}
+
 // ---- schedules ---------------------------------------------------------------
 
 #[spacetimedb::table(accessor = tick_timer, scheduled(crate::tick::tick))]

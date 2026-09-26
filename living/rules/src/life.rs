@@ -26,6 +26,10 @@ pub struct Life {
     /// Young born at once (the upper bound; at least one).
     #[serde(default = "one")]
     pub litter: u32,
+    /// After a birth, the parents raise their young before another can be conceived
+    /// (a fraction of the lifespan; about a year for deer and wolves).
+    #[serde(default)]
+    pub interbirth: f32,
 }
 
 fn infant() -> f32 {
@@ -49,7 +53,7 @@ fn one() -> u32 {
 
 impl Default for Life {
     fn default() -> Self {
-        Self { years: 70.0, infant: infant(), child: child(), elder: elder(), old_age: old_age(), gestation: gestation(), litter: 1 }
+        Self { years: 70.0, infant: infant(), child: child(), elder: elder(), old_age: old_age(), gestation: gestation(), litter: 1, interbirth: 0.0 }
     }
 }
 
@@ -117,6 +121,10 @@ impl Life {
     /// Age in world days for a given fraction of the lifespan (for seeding).
     pub fn age_at(&self, fraction: f32, t: Pace) -> f32 {
         fraction * self.span(t.year_days, t.pace)
+    }
+
+    pub fn interbirth_days(&self, t: Pace) -> f32 {
+        self.interbirth * self.span(t.year_days, t.pace)
     }
 
     pub fn gestation_days(&self, t: Pace) -> f32 {

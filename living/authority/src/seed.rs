@@ -108,6 +108,9 @@ pub struct SeedBand {
     /// (elder, adult, child, infant) and trade; the young are children of the first two adults.
     #[serde(default)]
     pub family: Vec<SeedMember>,
+    /// What already stands at the band's camp (e.g. a shelter and a campfire), owned by its first member.
+    #[serde(default)]
+    pub camp: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -789,5 +792,10 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
         let text = serde_json::json!({"origin": "band", "band": b.name, "history": b.history, "companions": kin, "camp": [at.0.round(), at.1.round()]});
         ctx.db.background().insert(Background { id: *id, text: text.to_string() });
     }
-    common::chronicle(ctx, now, "arrival", 0, 0, at, format!("{} ({} people) came to the wilds at ({:.0}, {:.0})", b.name, ids.len(), at.0, at.1));
+    let owner = ids.first().copied().unwrap_or(0);
+    for (k, kind) in b.camp.iter().enumerate() {
+        put(ctx, map, kind, (at.0 + 1.5 + k as f32 * 1.5, at.1 - 1.0), owner, now);
+    }
+    let what = if b.camp.is_empty() { "came to the wilds" } else { "live" };
+    common::chronicle(ctx, now, "arrival", 0, 0, at, format!("{} ({} people) {what} at ({:.0}, {:.0})", b.name, ids.len(), at.0, at.1));
 }

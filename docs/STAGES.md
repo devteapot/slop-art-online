@@ -41,3 +41,10 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Self as target.** Targeting oneself (tending one's own wounds) resolved to a point and always failed; it now resolves to the character itself.
 
   Checks: mechanisms 10/10, steering 5/5, the repertoire test validates the animal routines against their bodies. All three labs restarted.
+- 11:40 — Third review. Animals now breed: seven deer pairs and one wolf pair were expecting within 30 minutes, and the baby grew into a child. Findings:
+  - **People could never conceive.** Conception needs a shelter nearby, and the family didn't know how to build one. By their history they have lived here for three generations, so stage 1 families now know shelters and start with a shelter and a campfire at their camp. Making things is stage 2's subject.
+  - **Predators boomed.** With eight wolves, the pack grew to 16 and ate all but 3 deer: nothing but pregnancy limited breeding. Parents now raise their young for a species' interbirth interval before conceiving again (about a year for deer and wolves, two for people), in a new private `rearing` table (automatic migration: adding tables is allowed, <https://spacetimedb.com/docs/databases/automatic-migrations>). The failure reads "still raising your young".
+  - **Viewer builds.** `just living-check` now keeps the observer compiling.
+  - **lab.py cleanup.** A stopped lab now takes its mind and watcher down with it.
+
+  All three labs restarted.

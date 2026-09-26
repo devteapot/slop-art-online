@@ -10,6 +10,7 @@ Usage: living/tools/lab.py lab-lifecycle [--db living-lab] [--minutes 60] [--eve
 import argparse
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -41,6 +42,9 @@ def main():
     log = open(ROOT / f".local/living/{run}.log", "a")
     start_mind = lambda: subprocess.Popen([str(LIVING / "target/release/living-mind")], cwd=ROOT, env=mind_env, stdout=log, stderr=subprocess.STDOUT)
     mind = start_mind()
+    # A stopped lab (SIGTERM, SIGHUP) takes its mind and watcher down with it.
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda *_: sys.exit(0))
     watch = subprocess.Popen([sys.executable, str(LIVING / "tools/watch.py"), "--db", a.db, "--every", str(a.every), "--review", "--llm-run", run], cwd=ROOT)
     print(f"lab {a.scenario}: db {a.db}, run {run}; viewer http://127.0.0.1:8330/?db={a.db}; reports in .local/living/watch/", flush=True)
     end = time.time() + a.minutes * 60

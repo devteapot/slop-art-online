@@ -10,9 +10,10 @@
   "bands": [
     {
       "name": "the family",
-      "history": "We have always lived in this valley, one family, three generations. We know how to make fire.",
+      "history": "We have always lived in this valley, one family, three generations. We know how to make fire and build shelters; our shelter and fire stand at our camp.",
       "knows": [
-        "fire"
+        "fire",
+        "shelter"
       ],
       "family": [
         {
@@ -44,6 +45,10 @@
         {
           "stage": "infant"
         }
+      ],
+      "camp": [
+        "shelter",
+        "campfire"
       ]
     }
   ],

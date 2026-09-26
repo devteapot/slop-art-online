@@ -1021,6 +1021,10 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
     if busy(me) || busy(other) {
         return Err("a child is already on the way".into());
     }
+    let rearing = |id: u32| ctx.db.rearing().id().find(id).map_or(false, |r| r.until_ms > now);
+    if rearing(me) || rearing(other) {
+        return Err(if rearing(me) { "you are still raising your young".into() } else { format!("{other_name} is still raising their young") });
+    }
     let window = (common::laws(ctx).bond_window_s * 1000.0) as u64;
     let accepted = ctx.db.bond_offer().from().filter(other).find(|o| o.to == me && now.saturating_sub(o.at_ms) <= window);
     if let Some(o) = accepted {
