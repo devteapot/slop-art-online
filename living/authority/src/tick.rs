@@ -29,18 +29,14 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let _timer = k.profile.then(|| spacetimedb::log_stopwatch::LogStopwatch::new("tick"));
     ctx.db.clock().id().update(k);
 
-    // 1. Bodies reaching a waypoint or chunk boundary.
+    // 1. Steering updates that are due (events and cadence of moving bodies).
     let due: Vec<Body> = ctx.db.body().next_ms().filter(..=now).collect();
     let mut motions = 0u64;
     for b in due {
         let id = b.id;
         motions += 1;
-        if motion::advance(ctx, b, now) {
-            if let Some(a) = ctx.db.activity().id().find(id) {
-                if a.phase == 0 {
-                    act::progress(ctx, a, now);
-                }
-            }
+        if let Some(ev) = motion::advance(ctx, b, now) {
+            act::on_motion(ctx, id, ev, now);
         }
     }
     // 2. Activity timers.

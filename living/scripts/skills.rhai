@@ -12,6 +12,11 @@ fn laws() {
         crowd: 6, danger_near: 8.0, danger_far: 12.0,
         repeat_failure_s: 120.0,
         road_speed: 1.4,
+        // Steering: how bodies turn, slow, keep apart and how often they look again.
+        turn_rate: 6.0, turn_slow: 0.4, slow_radius: 1.2, corner_radius: 0.9,
+        separation: 0.8, separation_weight: 0.9,
+        steer_s: 2.0, crowd_hz: 3.0, chase_hz: 4.0, combat_hz: 8.0,
+        run_speed: 1.5, input_hz: 30.0, input_burst: 15.0,
     }
 }
 

@@ -2,7 +2,7 @@
 //! damage, death and remains. Every outcome is reported back to the behavior node that
 //! requested it (`mind_state.last`) and to perceiving witnesses.
 
-use crate::motion::{self, IDLE};
+use crate::motion::{self, Event, Goal, IDLE};
 use crate::perceive::{self, percept, witnessed};
 use crate::tables::*;
 use crate::common::{self, dist, pos};
@@ -13,7 +13,14 @@ use spacetimedb::rand::Rng;
 use spacetimedb::{ReducerContext, Table};
 
 pub const ORPHAN: u16 = u16::MAX;
-const CHASE_REPATH_MS: u64 = 1_200;
+/// How long a `follow` walks alongside its target.
+const FOLLOW_MS: u64 = 12_000;
+
+/// Skills done while the body keeps whatever motion it has (a glide to a stop, a player's
+/// walk); every other skill stands still to perform.
+fn rooted(skill: &str) -> bool {
+    !matches!(skill, "wait" | "eat" | "signal")
+}
 
 /// A resolved target at the moment an action starts.
 #[derive(Clone, Debug)]
@@ -180,6 +187,11 @@ fn reach(skill: &str) -> f32 {
     catalog::skill(skill).map(|s| s.reach).unwrap_or(0.0)
 }
 
+/// Walking speed from the rules (species, age, tiredness).
+pub fn walk_speed(ctx: &ReducerContext, id: u32, now: u64) -> f32 {
+    speed(ctx, id, now)
+}
+
 fn speed(ctx: &ReducerContext, id: u32, now: u64) -> f32 {
     let sc = common::scripts(ctx);
     let c = SkillCtx { actor: facts(ctx, id, now), ..Default::default() };
@@ -211,8 +223,10 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         "wander" => {
             let map = common::map(ctx);
             let mut pick = None;
-            for _ in 0..12 {
-                let ang: f32 = ctx.rng().gen_range(0.0..std::f32::consts::TAU);
+            // A stroll carries on roughly the way it was going, when it was going anywhere.
+            let moving = me.vx != 0.0 || me.vy != 0.0;
+            for k in 0..12 {
+                let ang: f32 = if moving && k < 6 { me.heading + ctx.rng().gen_range(-1.2f32..1.2) } else { ctx.rng().gen_range(0.0..std::f32::consts::TAU) };
                 let r: f32 = ctx.rng().gen_range(3.0..9.0);
                 let p = (here.0 + ang.cos() * r, here.1 + ang.sin() * r);
                 if map.free(p.0, p.1) {
@@ -320,38 +334,55 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         }
         cancel(ctx, a, now, None);
     }
-    if needs_approach && !(skill == "follow" && dist(here, target.at) <= r) {
-        // Aimed work (building beside, gathering from, reading a sign) stops at the edge of
-        // reach instead of walking onto the spot.
-        let aimed = r >= 1.0 && !moving_skill && target.class != 3;
-        let goal = if aimed {
-            let d = dist(here, target.at).max(0.01);
-            let k = (r * 0.7).min(d) / d;
-            let p = (target.at.0 + (here.0 - target.at.0) * k, target.at.1 + (here.1 - target.at.1) * k);
-            if common::map(ctx).free(p.0, p.1) { p } else { target.at }
-        } else {
-            target.at
-        };
+    if needs_approach {
         let sp = speed(ctx, id, now);
-        let sp = match skill {
-            "flee" => sp * 1.15,
-            "dodge" => 9.0,
-            _ => sp,
+        let creature = target.class == 3;
+        let goal = match skill {
+            "dodge" => Goal::point(target.at, 9.0, motion::FLAG_AGILE),
+            "flee" => Goal {
+                kind: motion::GOAL_FLEE,
+                target: if creature { target.id as u32 } else { 0 },
+                at: target.at,
+                keep: dist(here, target.at) + 9.0,
+                speed: sp * 1.15,
+                flags: 0,
+            },
+            "follow" if creature => Goal::creature(target.id as u32, r, sp, 0),
+            "goto" if creature => Goal::creature(target.id as u32, r, sp, motion::FLAG_EARLY),
+            "goto" | "wander" | "follow" => Goal::point(target.at, sp, motion::FLAG_EARLY),
+            // Closing in on a creature: every look checks whether it is within reach.
+            _ if creature => Goal::creature(target.id as u32, (r - 0.25).max(0.4), sp, motion::FLAG_EACH),
+            _ => {
+                // Aimed work (building beside, gathering from, reading a sign) stops at the
+                // edge of reach instead of walking onto the spot.
+                let aimed = r >= 1.0;
+                let at = if aimed {
+                    let d = dist(here, target.at).max(0.01);
+                    let k = (r * 0.7).min(d) / d;
+                    let p = (target.at.0 + (here.0 - target.at.0) * k, target.at.1 + (here.1 - target.at.1) * k);
+                    if common::map(ctx).free(p.0, p.1) { p } else { target.at }
+                } else {
+                    target.at
+                };
+                Goal::point(at, sp, 0)
+            }
         };
-        motion::start_move(ctx, id, goal, sp, now)?;
-        if target.class == 3 {
-            act.ends_ms = now + CHASE_REPATH_MS;
-        }
         if skill == "follow" {
-            act.ends_ms = now + CHASE_REPATH_MS;
+            act.ends_ms = now + FOLLOW_MS;
         }
-        ctx.db.activity().insert(act);
-        return Ok(());
-    }
-    if skill == "follow" {
-        act.ends_ms = now + CHASE_REPATH_MS;
-        ctx.db.activity().insert(act);
-        return Ok(());
+        if let Some(first) = motion::start(ctx, id, goal, now)? {
+            ctx.db.activity().insert(act);
+            if let Some(ev) = first {
+                on_motion(ctx, id, ev, now);
+            }
+            return Ok(());
+        }
+        if moving_skill {
+            // Already there: done at the next tick.
+            act.ends_ms = now;
+            ctx.db.activity().insert(act);
+            return Ok(());
+        }
     }
     if moving_skill {
         return Err("already there".into());
@@ -366,7 +397,9 @@ fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), Stri
     let sctx = skill_ctx(ctx, act.id, &act, now);
     sc.check(&act.skill, &sctx)?;
     let dur = sc.duration_ms(&act.skill, &sctx)?;
-    motion::stop(ctx, act.id, now);
+    if rooted(&act.skill) {
+        motion::stop(ctx, act.id, now);
+    }
     act.ends_ms = now + dur.max(100);
     let id = act.id;
     if act.victim != 0 {
@@ -397,7 +430,8 @@ pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
     let id = a.id;
     ctx.db.activity().id().delete(id);
     if a.phase == 0 {
-        motion::stop(ctx, id, now);
+        // Keep momentum: a movement that replaces this one takes over from the glide.
+        motion::brake(ctx, id, now);
     }
     if a.skill == "sleep" || a.skill == "rest" {
         refresh_rates(ctx, id);
@@ -462,7 +496,7 @@ fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
     report(ctx, &a, ok, why, now);
 }
 
-/// Advance an activity that is due (timer) or whose approach arrived.
+/// Advance an activity whose timer is due.
 pub fn progress(ctx: &ReducerContext, a: Activity, now: u64) {
     if ctx.db.character().id().find(a.id).map_or(true, |c| !c.alive) {
         ctx.db.activity().id().delete(a.id);
@@ -471,76 +505,65 @@ pub fn progress(ctx: &ReducerContext, a: Activity, now: u64) {
     if a.phase == 1 {
         return complete(ctx, a, now);
     }
-    let here = ctx.db.body().id().find(a.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
-    let moving = ctx.db.body().id().find(a.id).map_or(false, |b| b.next_ms != IDLE);
     match a.skill.as_str() {
-        "goto" | "wander" | "flee" | "dodge" => {
-            if !moving {
-                finish(ctx, a, true, "", now);
-            }
-            return;
-        }
         "follow" => {
-            if now.saturating_sub(a.started_ms) > 12_000 {
-                motion::stop(ctx, a.id, now);
-                return finish(ctx, a, true, "", now);
-            }
-            let Some(tp) = target_pos(ctx, &a.target, now) else { return finish(ctx, a, false, "lost them", now) };
+            motion::brake(ctx, a.id, now);
+            finish(ctx, a, true, "", now);
+        }
+        // A movement that found itself already there.
+        "goto" | "wander" | "flee" | "dodge" => finish(ctx, a, true, "", now),
+        // Approaches are driven by steering events.
+        _ => {
             let mut a = a;
-            if dist(here, tp) > reach("follow") {
-                let sp = speed(ctx, a.id, now);
-                if motion::start_move(ctx, a.id, tp, sp, now).is_err() {
-                    return finish(ctx, a, false, "cannot keep up", now);
-                }
-            } else {
-                motion::stop(ctx, a.id, now);
-            }
-            a.ends_ms = now + CHASE_REPATH_MS;
+            a.ends_ms = IDLE;
             ctx.db.activity().id().update(a);
-            return;
         }
-        _ => {}
     }
-    let Some(tp) = target_pos(ctx, &a.target, now) else { return finish(ctx, a, false, "it is gone", now) };
-    if a.target.class == 3 && ctx.db.character().id().find(a.target.id as u32).map_or(true, |c| !c.alive) {
-        motion::stop(ctx, a.id, now);
-        return finish(ctx, a, false, "they are dead", now);
-    }
-    let r = reach(&a.skill);
-    let d = dist(here, tp);
-    if d <= r + 0.25 {
-        let act = Activity { phase: 1, ..a.clone() };
-        if let Err(why) = perform(ctx, act, now) {
-            motion::stop(ctx, a.id, now);
-            finish(ctx, a, false, &why, now);
-        }
+}
+
+/// Steering reports on the movement of an activity that is still on its way.
+pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
+    let Some(a) = ctx.db.activity().id().find(id) else { return };
+    if a.phase != 0 {
         return;
     }
-    if a.target.class == 3 {
-        // Chasing: re-path toward where the target is now, if still perceivable.
-        let w = common::world(ctx);
-        if d > common::sight(ctx, &w, now) * 1.4 {
-            motion::stop(ctx, a.id, now);
-            return finish(ctx, a, false, "lost sight of them", now);
-        }
-        let sp = speed(ctx, a.id, now);
-        if motion::start_move(ctx, a.id, tp, sp, now).is_err() {
-            return finish(ctx, a, false, "cannot reach them", now);
-        }
-        let mut a = a;
-        a.ends_ms = now + CHASE_REPATH_MS;
-        ctx.db.activity().id().update(a);
+    if ctx.db.character().id().find(id).map_or(true, |c| !c.alive) {
+        ctx.db.activity().id().delete(id);
         return;
     }
-    if !moving {
-        if d <= r + 1.2 {
-            let act = Activity { phase: 1, ..a.clone() };
-            if let Err(why) = perform(ctx, act, now) {
-                finish(ctx, a, false, &why, now);
+    match ev {
+        Event::Lost(why) => {
+            let why = match a.skill.as_str() {
+                "follow" => "lost them".to_string(),
+                "goto" | "wander" if why == "the way is blocked" => "could not get there".to_string(),
+                _ => why,
+            };
+            finish(ctx, a, false, &why, now)
+        }
+        Event::Arrived => match a.skill.as_str() {
+            "goto" | "wander" | "flee" | "dodge" => finish(ctx, a, true, "", now),
+            "follow" => {}
+            _ => {
+                let here = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+                let Some(tp) = target_pos(ctx, &a.target, now) else {
+                    motion::stop(ctx, id, now);
+                    return finish(ctx, a, false, "it is gone", now);
+                };
+                let r = reach(&a.skill);
+                let d = dist(here, tp);
+                // A creature's reach is checked on every look; a place's once the walk ends.
+                let close = if a.target.class == 3 { d <= r + 0.25 } else { d <= r + 1.2 };
+                if close {
+                    let act = Activity { phase: 1, ..a.clone() };
+                    if let Err(why) = perform(ctx, act, now) {
+                        motion::stop(ctx, id, now);
+                        finish(ctx, a, false, &why, now);
+                    }
+                } else if a.target.class != 3 {
+                    finish(ctx, a, false, "could not get there", now);
+                }
             }
-        } else {
-            finish(ctx, a, false, "could not get there", now);
-        }
+        },
     }
 }
 
@@ -905,6 +928,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                         return Err("someone is standing there".into());
                     }
                     common::set_tile(ctx, tx, ty, living_rules::map::Terrain::Wall)?;
+                    motion::resteer_near(ctx, (tx as f32 + 0.5, ty as f32 + 0.5), 6.0, now);
                     notes.push(format!("built wall at ({tx},{ty})"));
                 } else {
                     let p = (tx as f32 + 0.5, ty as f32 + 0.5);
@@ -931,6 +955,9 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 let p = (g.x as f32 + 0.5, g.y as f32 + 0.5);
                 ctx.db.gate().id().update(g);
                 common::invalidate_map();
+                if !open {
+                    motion::resteer_near(ctx, p, 6.0, now);
+                }
                 witnessed(ctx, now, p, "gate", me, 0, if open { "{a} opened the gate" } else { "{a} shut the gate" }, 0.3, &[me]);
                 notes.push(if open { "opened the gate".into() } else { "shut the gate".into() });
             }
@@ -1273,6 +1300,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
         common::chronicle(ctx, now, "death", id, killer, at, format!("{name} died ({cause})"));
     }
     ctx.db.body().id().delete(id);
+    motion::remove(ctx, id);
     common::invalidate_bodies();
     ctx.db.activity().id().delete(id);
     ctx.db.mind_state().id().delete(id);

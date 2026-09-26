@@ -135,8 +135,11 @@ pub struct Waypoint {
     pub y: f32,
 }
 
-/// Kinematic body: position `(x, y)` at `t_ms`, moving at `(vx, vy)` tiles/s until
-/// `next_ms` (next waypoint or chunk crossing). Clients extrapolate between writes.
+/// A body's current motion segment: from `(x, y)` facing `heading` at `t_ms`, moving at
+/// speed `|(vx, vy)|` (tiles/s; `(vx, vy)` is the velocity at `t_ms`), turning at `turn`
+/// rad/s for the first `turn_s` seconds (a circular arc) and straight afterwards, until
+/// `next_ms`, when steering looks again (see `living_rules::steer::pose`). Clients
+/// extrapolate between writes; the row changes only at steering updates.
 #[spacetimedb::table(accessor = body, public)]
 pub struct Body {
     #[primary_key]
@@ -148,12 +151,49 @@ pub struct Body {
     pub t_ms: u64,
     pub vx: f32,
     pub vy: f32,
+    /// Remaining corners of the coarse path being followed (empty when steering directly).
     pub path: Vec<Waypoint>,
+    /// Desired (cruising) speed of the current movement, before roads.
     pub speed: f32,
     #[index(btree)]
     pub chunk: u32,
     #[index(btree)]
     pub next_ms: u64,
+    /// Facing at `t_ms`, radians (+x east, +y south); kept while standing.
+    #[default(0.0f32)]
+    pub heading: f32,
+    /// Turn rate at the start of the segment, rad/s.
+    #[default(0.0f32)]
+    pub turn: f32,
+    /// How long the turn lasts from `t_ms`, seconds (then straight on).
+    #[default(0.0f32)]
+    pub turn_s: f32,
+}
+
+/// What a body is steering for (private; written when the goal changes, not per update).
+#[derive(Clone, Debug)]
+#[spacetimedb::table(accessor = steer)]
+pub struct Steer {
+    #[primary_key]
+    pub id: u32,
+    /// `GOAL_*` in motion.rs: none, a point, a creature, a direction, away from something.
+    pub goal: u8,
+    /// Creature pursued, followed or fled from.
+    pub target: u32,
+    /// Destination; unit direction; or the point fled from.
+    pub gx: f32,
+    pub gy: f32,
+    /// Distance to keep from a creature, or the distance at which a flight is safe.
+    pub keep: f32,
+    /// `FLAG_*` in motion.rs.
+    pub flags: u8,
+    /// Arrival already reported to the activity.
+    pub reported: bool,
+    /// Last coarse path plan (re-planning is throttled).
+    pub plan_ms: u64,
+    /// Movement input bucket of a player (tokens refill at the `input_hz` law).
+    pub tokens: f32,
+    pub input_ms: u64,
 }
 
 /// Needs anchored at `at_ms` with per-minute rates.

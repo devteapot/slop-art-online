@@ -133,6 +133,37 @@ pub struct Laws {
     pub repeat_failure_s: f32,
     /// Walking speed multiplier on road tiles.
     pub road_speed: f32,
+    // ---- steering (see `steer.rs`) ----
+    /// Turn rate while moving, rad/s.
+    pub turn_rate: f32,
+    /// Share of speed kept in the sharpest turns.
+    pub turn_slow: f32,
+    /// Distance from a destination where walkers start slowing down, tiles.
+    pub slow_radius: f32,
+    /// Distance from a path corner where steering already aims past it, tiles.
+    pub corner_radius: f32,
+    /// Walkers keep this far from other bodies when they can, tiles.
+    pub separation: f32,
+    /// How strongly separation bends the way (relative to the goal direction).
+    pub separation_weight: f32,
+    /// Longest a walker goes without looking again when alone, seconds.
+    pub steer_s: f32,
+    /// Steering rate among other bodies, while chasing or following, and in a fight (Hz).
+    pub crowd_hz: f32,
+    pub chase_hz: f32,
+    pub combat_hz: f32,
+    /// Running speed multiplier (a player's run, a flight).
+    pub run_speed: f32,
+    /// Movement input a player may send per second (sustained) and in a burst.
+    pub input_hz: f32,
+    pub input_burst: f32,
+}
+
+impl Laws {
+    /// Steering constants for [`crate::steer::plan`].
+    pub fn tuning(&self) -> crate::steer::Tuning {
+        crate::steer::Tuning { turn_rate: self.turn_rate, turn_slow: self.turn_slow, road_speed: self.road_speed, ..Default::default() }
+    }
 }
 
 impl Default for Laws {
@@ -151,6 +182,19 @@ impl Default for Laws {
             danger_far: 12.0,
             repeat_failure_s: 120.0,
             road_speed: 1.4,
+            turn_rate: 6.0,
+            turn_slow: 0.4,
+            slow_radius: 1.2,
+            corner_radius: 0.9,
+            separation: 0.8,
+            separation_weight: 0.9,
+            steer_s: 2.0,
+            crowd_hz: 3.0,
+            chase_hz: 4.0,
+            combat_hz: 8.0,
+            run_speed: 1.5,
+            input_hz: 30.0,
+            input_burst: 15.0,
         }
     }
 }
@@ -278,6 +322,19 @@ impl Scripts {
             danger_far: g("danger_far", l.danger_far),
             repeat_failure_s: g("repeat_failure_s", l.repeat_failure_s),
             road_speed: g("road_speed", l.road_speed),
+            turn_rate: g("turn_rate", l.turn_rate).clamp(0.5, 50.0),
+            turn_slow: g("turn_slow", l.turn_slow).clamp(0.05, 1.0),
+            slow_radius: g("slow_radius", l.slow_radius).clamp(0.0, 8.0),
+            corner_radius: g("corner_radius", l.corner_radius).clamp(0.0, 4.0),
+            separation: g("separation", l.separation).clamp(0.0, 4.0),
+            separation_weight: g("separation_weight", l.separation_weight).clamp(0.0, 5.0),
+            steer_s: g("steer_s", l.steer_s).clamp(0.1, 10.0),
+            crowd_hz: g("crowd_hz", l.crowd_hz).clamp(0.5, 30.0),
+            chase_hz: g("chase_hz", l.chase_hz).clamp(0.5, 30.0),
+            combat_hz: g("combat_hz", l.combat_hz).clamp(0.5, 30.0),
+            run_speed: g("run_speed", l.run_speed).clamp(1.0, 4.0),
+            input_hz: g("input_hz", l.input_hz).clamp(1.0, 120.0),
+            input_burst: g("input_burst", l.input_burst).clamp(1.0, 240.0),
         };
         l
     }

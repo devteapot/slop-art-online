@@ -11,6 +11,7 @@ pub mod normalize;
 #[cfg(feature = "scripting")]
 pub mod script;
 pub mod species;
+pub mod steer;
 
 /// Real milliseconds per in-world day.
 pub const DEFAULT_DAY_MS: u64 = 12 * 60 * 1000;

@@ -196,12 +196,17 @@ pub fn sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
 
 // ---- bodies ---------------------------------------------------------------------
 
+/// Where a body is at `now`: along its segment (straight or an arc) until `next_ms`.
 pub fn pos(b: &Body, now: u64) -> (f32, f32) {
     if b.vx == 0.0 && b.vy == 0.0 {
         return (b.x, b.y);
     }
     let t = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
-    (b.x + b.vx * t, b.y + b.vy * t)
+    if b.turn == 0.0 || b.turn_s <= 0.0 {
+        return (b.x + b.vx * t, b.y + b.vy * t);
+    }
+    let (x, y, _) = living_rules::steer::pose(b.x, b.y, b.heading, (b.vx * b.vx + b.vy * b.vy).sqrt(), b.turn, b.turn_s, t);
+    (x, y)
 }
 
 pub fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
