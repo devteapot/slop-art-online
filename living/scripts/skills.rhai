@@ -77,7 +77,7 @@ fn rates(a) {
 }
 
 fn move_speed(a) {
-    let base = switch a.actor.kind { "deer" => 3.2, "wolf" => 3.4, _ => 2.6 };
+    let base = switch a.actor.kind { "deer" => 3.7, "wolf" => 3.4, _ => 2.6 };
     if a.actor.stage == "infant" { base *= 0.4; } else if a.actor.stage == "child" { base *= 0.8; } else if a.actor.stage == "elder" { base *= 0.85; }
     base *= a.actor.speed;
     if a.actor.energy < 10.0 { base * 0.6 } else { base }

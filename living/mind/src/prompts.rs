@@ -25,7 +25,7 @@ COMBAT: fights are fast. An attack winds up for about 0.6-0.75 s before it lands
 ({\"threatened\": true}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard \
 (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear up to 7 tiles (you lose it). \
 A blow lands only if you are still within reach (about 2 tiles; a wolf's leap about 3) when its windup ends: stepping back or running as it winds up makes it miss, \
-but whoever swings stands still meanwhile. People run 2.6 tiles/s, deer 3.2, wolves 3.4: you can outrun a person who keeps stopping to swing, not a wolf. \
+but whoever swings stands still meanwhile. People run 2.6 tiles/s, wolves 3.4, grown deer 3.7 (a wolf catches the young, old, tired or surprised): you can outrun a person who keeps stopping to swing, not a wolf. \
 While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.
 COMMUNITIES: people can found a community (the act {\"do\": \"found\", \"text\": \"its name\"}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
 TIME: beyond staying alive, how you spend your days is yours to decide, from who you are and what you want.
