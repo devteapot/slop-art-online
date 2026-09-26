@@ -123,3 +123,4 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Stage 2 report.** `stage1_report.py` shows know-how held by the living and food in storages.
 
   Plan: `living` (stage1-base) and `stage1-wolves` soak without code changes; changes go only to `stage2-base`.
+- 03:10 — First 24 minutes after the restart: the model load fell from ≈550 to 35–38 calls per minute per lab. But hunters again emptied the herds (two people killed 32 deer in 24 minutes; the seeded hunter habit attacked any deer in sight, whatever they carried), and in stage 2 the grandmother, seeded near the end of life, died within 15 minutes with the know-how untaught. The seeded hunter habit now hunts when carrying under 3 meat and stores meat when a storage is in sight (seed culture, theirs to change); in stage 2 the eldest adult hunter holds cooking, storage and planting. All labs restarted; the stage 1 soak begins now.

@@ -423,6 +423,14 @@
                   }
                 },
                 {
+                  "not": {
+                    "has": {
+                      "item": "meat",
+                      "at_least": 3
+                    }
+                  }
+                },
+                {
                   "sees": {
                     "nearest": "deer"
                   }
@@ -438,10 +446,19 @@
           },
           {
             "if": {
-              "has": {
-                "item": "meat",
-                "at_least": 2
-              }
+              "all": [
+                {
+                  "has": {
+                    "item": "meat",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
             },
             "then": {
               "do": "store",
@@ -458,7 +475,7 @@
                 "do": "wander"
               },
               {
-                "do": "wander"
+                "wait": 3
               }
             ]
           }

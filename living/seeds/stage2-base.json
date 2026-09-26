@@ -10,7 +10,7 @@
   "bands": [
     {
       "name": "the family",
-      "history": "We have always lived in this valley, one family, three generations. We know how to make fire, build shelters and make spears; our hunters hunt deer with them; our shelter and fire stand at our camp. Our family has always grown: children are our joy and our future. There are two couples among us: the parents of our children, and a young couple who hope for children of their own. Our grandmother alone knows how to cook meat and fish, build a storage and plant berry bushes; what she knows lives only as long as she does, unless she teaches it.",
+      "history": "We have always lived in this valley, one family, three generations. We know how to make fire, build shelters and make spears; our hunters hunt deer with them; our shelter and fire stand at our camp. Our family has always grown: children are our joy and our future. There are two couples among us: the parents of our children, and a young couple who hope for children of their own. Only our eldest hunter knows how to cook meat and fish, build a storage and plant berry bushes; what one person knows lives only as long as they do, unless they teach it.",
       "knows": [
         "fire",
         "shelter",
@@ -19,16 +19,16 @@
       "family": [
         {
           "stage": "elder",
-          "occupation": "healer",
+          "occupation": "healer"
+        },
+        {
+          "stage": "adult",
+          "occupation": "hunter",
           "knows": [
             "cooking",
             "storage",
             "planting"
           ]
-        },
-        {
-          "stage": "adult",
-          "occupation": "hunter"
         },
         {
           "stage": "adult",
