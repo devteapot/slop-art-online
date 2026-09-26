@@ -819,14 +819,15 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
             ids.push(id);
         }
         // Who is whose partner, child or parent is part of the family's history.
-        let couple = (adults.first().copied().unwrap_or(0), adults.get(1).copied().unwrap_or(0));
+        // The grown (non-elder) adults pair off in order: the first couple are the parents.
+        let couples: Vec<(u32, u32)> = adults.chunks(2).filter(|c| c.len() == 2).map(|c| (c[0], c[1])).collect();
         for &x in &ids {
             for &y in &ids {
                 if x == y {
                     continue;
                 }
                 let child_of = |c: u32, p: u32| ctx.db.character().id().find(c).map_or(false, |c| c.parent_a == p || c.parent_b == p);
-                let label = if (x, y) == couple || (y, x) == couple {
+                let label = if couples.iter().any(|&(a, b)| (x, y) == (a, b) || (y, x) == (a, b)) {
                     "partner"
                 } else if child_of(y, x) {
                     "child"

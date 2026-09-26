@@ -687,8 +687,13 @@ impl<'a> Ev<'a> {
             let me = self.me.id;
             let db = &self.ctx.db;
             let partner = db.character().parent_a().filter(me).chain(db.character().parent_b().filter(me)).max_by_key(|c| c.born_ms).map(|c| if c.parent_a == me { c.parent_b } else { c.parent_a }).filter(|p| *p != 0 && db.character().id().find(*p).map_or(false, |c| c.alive));
-            match partner {
-                Some(p) => format!("You long for another child with {} (#{p}).", common::name_of(self.ctx, p)),
+            // Without a child yet, whoever one calls one's partner.
+            let named = partner.map(|p| (p, true)).or_else(|| {
+                db.relation().actor().filter(me).find(|r| r.label.to_lowercase().contains("partner") && db.character().id().find(r.other).map_or(false, |c| c.alive)).map(|r| (r.other, false))
+            });
+            match named {
+                Some((p, true)) => format!("You long for another child with {} (#{p}).", common::name_of(self.ctx, p)),
+                Some((p, false)) => format!("You long for a child with {} (#{p}).", common::name_of(self.ctx, p)),
                 None => "You long for a child of your own.".to_string(),
             }
         } else {
