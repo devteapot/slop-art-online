@@ -79,6 +79,14 @@ pub struct Store {
 
 /// Belief half-life: confidence decays as `c · exp(-age / TAU_MS)` unless reinforced.
 pub const TAU_MS: f64 = 40.0 * 60_000.0;
+/// A stance whose relaxed lean `|value - 0.5| · exp(-age / TAU_MS)` falls below this is no
+/// longer held (e.g. a 0.95 stance, unreinforced, for about 80 minutes).
+const STANCE_LEAN: f64 = 0.05;
+/// Memories fade more slowly than beliefs, from when they were formed or last recalled:
+/// `salience · exp(-age / MEMORY_TAU_MS)`; below `MEMORY_FLOOR` they are forgotten
+/// (a salience-0.9 memory never recalled lasts about 5 hours, a 0.4 one about 3).
+const MEMORY_TAU_MS: f64 = 3.0 * 3_600_000.0;
+const MEMORY_FLOOR: f64 = 0.15;
 /// Relationships that describe structure, not belief; they never fade.
 const DURABLE: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "CHILD_OF", "PARENT_OF", "MERGED_INTO"];
 const FIXED_LABELS: &[&str] = &["Concept", "Self", "Memory", "IdentityVersion", "Merged"];
@@ -299,7 +307,9 @@ impl Store {
         Ok(out)
     }
 
-    /// Close beliefs whose decayed confidence fell below `floor`; returns how many faded.
+    /// Close beliefs whose decayed confidence fell below `floor`, stances that have relaxed to
+    /// indifference, and forget memories that were neither salient nor recalled; returns how
+    /// many beliefs and stances faded (forgotten memories are logged).
     pub async fn fade(&self, actor: u32, floor: f64, t: u64) -> Result<i64> {
         let mut rows = self
             .g
@@ -318,19 +328,68 @@ impl Store {
                 .param("floor", floor),
             )
             .await?;
-        Ok(match rows.next().await? {
+        let beliefs = match rows.next().await? {
             Some(r) => r.get::<i64>("n").unwrap_or(0),
             None => 0,
-        })
+        };
+        // A stance relaxes toward 0.5 unless reinforced (the projection shows the relaxed
+        // value); once it no longer leans either way it is no longer held.
+        let mut rows = self
+            .g
+            .execute(
+                self.q(
+                    "MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:JUDGES {open: true}]->(:Concept)
+                     WHERE abs(toFloat(coalesce(r.value, 0.5)) - 0.5) * exp(-toFloat($t - coalesce(r.t, $t)) / $tau) < $lean
+                     SET r.open = false, r.valid_to = $t, r.retracted_by = 'faded'
+                     RETURN count(r) AS n",
+                    actor,
+                )
+                .param("t", t as i64)
+                .param("tau", TAU_MS)
+                .param("lean", STANCE_LEAN),
+            )
+            .await?;
+        let stances = match rows.next().await? {
+            Some(r) => r.get::<i64>("n").unwrap_or(0),
+            None => 0,
+        };
+        // Memories fade with time unless salient or brought back by recall (rehearsal); a
+        // forgotten memory is kept as history (`:Forgotten`) but no longer comes to mind.
+        let mut rows = self
+            .g
+            .execute(
+                self.q(
+                    "MATCH (m:Concept {run: $run, actor: $actor}) WHERE m:Memory AND NOT m:Forgotten
+                       AND coalesce(m.salience, 0.5) * exp(-toFloat($t - coalesce(m.recalled_t, m.t, $t)) / $tau) < $floor
+                     SET m:Forgotten, m.forgotten_t = $t
+                     RETURN count(m) AS n",
+                    actor,
+                )
+                .param("t", t as i64)
+                .param("tau", MEMORY_TAU_MS)
+                .param("floor", MEMORY_FLOOR),
+            )
+            .await?;
+        let forgotten = match rows.next().await? {
+            Some(r) => r.get::<i64>("n").unwrap_or(0),
+            None => 0,
+        };
+        if forgotten > 0 || stances > 0 {
+            log::info!("mind {actor}: {beliefs} beliefs and {stances} stances faded, {forgotten} memories forgotten");
+        }
+        Ok(beliefs + stances)
     }
 
-    /// Size of the living part of a mind: (concepts, open edges).
+    /// Size of the living part of a mind: (concepts with at least one open link, open edges).
     pub async fn size(&self, actor: u32) -> Result<(i64, i64)> {
         let mut rows = self
             .g
             .execute(self.q(
-                "MATCH (c:Concept {run: $run, actor: $actor}) WHERE NOT c:Merged AND NOT c:IdentityVersion
-                 OPTIONAL MATCH (c)-[r {open: true}]->() RETURN count(DISTINCT c) AS nodes, count(r) AS edges",
+                "MATCH (c:Concept {run: $run, actor: $actor}) WHERE NOT c:Merged AND NOT c:IdentityVersion AND NOT c:Forgotten
+                 OPTIONAL MATCH (c)-[r {open: true}]->()
+                 WITH c, count(r) AS out
+                 WHERE out > 0 OR EXISTS { (c)<-[{open: true}]-() } OR c.key = 'self'
+                 RETURN count(c) AS nodes, sum(out) AS edges",
                 actor,
             ))
             .await?;
@@ -379,7 +438,7 @@ impl Store {
     pub async fn memories(&self, actor: u32, limit: usize) -> Result<Vec<(u64, u64, String)>> {
         let mut rows = self
             .g
-            .execute(self.q("MATCH (m:Memory {run: $run, actor: $actor}) RETURN m.exp AS exp, m.t AS t, m.gist AS gist ORDER BY m.t DESC LIMIT $limit", actor).param("limit", limit as i64))
+            .execute(self.q("MATCH (m:Concept {run: $run, actor: $actor}) WHERE m:Memory AND NOT m:Forgotten RETURN m.exp AS exp, m.t AS t, m.gist AS gist ORDER BY m.t DESC LIMIT $limit", actor).param("limit", limit as i64))
             .await?;
         let mut out = Vec::new();
         while let Some(r) = rows.next().await? {
@@ -454,6 +513,400 @@ impl Store {
             out.places.push((r.get("name").unwrap_or_default(), r.get("x").unwrap_or(0.0), r.get("y").unwrap_or(0.0)));
         }
         Ok(out)
+    }
+}
+
+// ---- situational recall ---------------------------------------------------------------
+
+/// What the current situation offers the mind as cues: anchor keys (people and creatures
+/// perceived, places nearby, people named) and words (the reason for thinking, what was said,
+/// what happened, the plan), each weighted by how present it is.
+#[derive(Clone, Debug, Default)]
+pub struct Cues {
+    pub keys: Vec<(String, f64)>,
+    pub words: Vec<(String, f64)>,
+}
+
+impl Cues {
+    pub fn key(&mut self, k: impl Into<String>, w: f64) {
+        let k = k.into();
+        match self.keys.iter_mut().find(|x| x.0 == k) {
+            Some(x) => x.1 = x.1.max(w),
+            None => self.keys.push((k, w)),
+        }
+    }
+
+    pub fn text(&mut self, text: &str, w: f64) {
+        for s in cue_words(text) {
+            match self.words.iter_mut().find(|x| x.0 == s) {
+                Some(x) => x.1 = x.1.max(w),
+                None => self.words.push((s, w)),
+            }
+        }
+    }
+
+    /// Keep the strongest cues (a small, fixed budget per recall).
+    pub fn bounded(mut self) -> Self {
+        self.keys.sort_by(|a, b| b.1.total_cmp(&a.1));
+        self.keys.truncate(24);
+        self.words.sort_by(|a, b| b.1.total_cmp(&a.1));
+        self.words.truncate(20);
+        self
+    }
+}
+
+const STOP: &[&str] = &[
+    "that", "this", "with", "from", "have", "your", "will", "what", "they", "them", "their", "there", "been", "into", "about", "were", "just", "only", "more",
+    "some", "than", "then", "also", "like", "over", "after", "before", "where", "while", "which", "would", "could", "should", "very", "much", "still", "here",
+    "ever", "each", "other", "need", "make", "made", "back", "want", "know", "think", "maybe", "when", "said", "says", "tell", "come", "going", "does", "doing",
+    "done", "take", "well", "even", "keep", "let's", "lets", "yours", "mine", "ours", "these", "those", "because", "again", "right", "now", "tiles", "tile",
+    "someone", "something", "thing", "things", "feel", "feels", "felt", "look", "looks", "away", "around", "near", "nearest", "north", "south", "east", "west",
+    "northeast", "northwest", "southeast", "southwest", "first", "time", "respond", "json", "object", "you're", "we're", "i'll", "we'll",
+    // The engine's own vocabulary in reasons and feedback says nothing about the world.
+    "note", "parts", "previous", "graph", "invalid", "dropped", "branch", "applies", "apply", "skill", "goto", "target", "composite", "current",
+    "plan", "nothing", "works", "action", "actions", "failing", "fails", "failed", "sight", "reply", "node", "nodes", "most", "least", "wait",
+];
+
+/// Content words of a text as match stems: lowercase, at least 4 letters, no stopwords,
+/// simple plurals folded (wolves → wolf and wolv, berries → berr, stores → store).
+pub fn cue_words(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for w in text.to_lowercase().split(|c: char| !c.is_alphabetic()) {
+        if w.chars().count() < 4 || STOP.contains(&w) {
+            continue;
+        }
+        let s = if let Some(b) = w.strip_suffix("ves").filter(|b| b.len() >= 3) {
+            format!("{b}f")
+        } else if let Some(b) = w.strip_suffix("ies").filter(|b| b.len() >= 3) {
+            b.to_string()
+        } else if let Some(b) = w.strip_suffix("ing").filter(|b| b.len() >= 4) {
+            b.to_string()
+        } else if w.ends_with('s') && !w.ends_with("ss") {
+            w[..w.len() - 1].to_string()
+        } else {
+            w.to_string()
+        };
+        if s.chars().count() >= 4 && !STOP.contains(&s.as_str()) && !out.contains(&s) {
+            // wolf also matches "wolves", leaf "leaves".
+            if let Some(b) = s.strip_suffix('f') {
+                let v = format!("{b}v");
+                if !out.contains(&v) {
+                    out.push(v);
+                }
+            }
+            out.push(s);
+        }
+    }
+    out
+}
+
+/// What a situation brought back: the most activated beliefs (excluding feelings about
+/// people and stances, which prompts list in their own sections), the stances and people it
+/// touched, and memories.
+#[derive(Clone, Debug, Default)]
+pub struct Recalled {
+    pub facts: Vec<Fact>,
+    pub stances: Vec<(String, f64)>,
+    pub people: Vec<(u32, f64)>,
+    pub memories: Vec<(u64, u64, String)>,
+    /// Cued memories to rehearse (see [`Store::rehearse`]).
+    pub rehearse: Vec<u64>,
+    pub seeds: usize,
+    pub considered: usize,
+    pub ms: u64,
+}
+
+struct Hit {
+    fact: Fact,
+    score: f64,
+    /// The cue this belief was reached from (for variety across cues).
+    via: String,
+}
+
+/// Recency of reinforcement as a mild bonus: fresh beliefs are more present.
+fn recency(now: u64, t: u64) -> f64 {
+    0.6 + 0.4 * (-(now.saturating_sub(t) as f64) / (30.0 * 60_000.0)).exp()
+}
+
+fn memory_strength(now: u64, t: u64, recalled: u64, salience: f64) -> f64 {
+    salience * (-(now.saturating_sub(t.max(recalled)) as f64) / MEMORY_TAU_MS).exp()
+}
+
+/// Minimum activation for a belief to come to mind.
+const RECALL_FLOOR: f64 = 0.12;
+/// Words matching more of a mind's concepts than this say nothing specific.
+const WORD_SPREAD: usize = 8;
+
+impl Store {
+    /// Recall by association: cues from the situation activate the concepts they name (anchor
+    /// keys directly, words through concept keys, names and memory gists), activation spreads
+    /// one step along open edges (weighted by effective confidence and recency) and a second,
+    /// damped step from the ideas, plans and places reached. Only what clears a floor comes
+    /// to mind, best first, within `budget`; memories within `mem_budget` (plus the two most
+    /// recent, as working memory). Read-only: the caller rehearses what came back. All queries
+    /// start from indexed `(run, actor[, key])` lookups and touch only this mind's concepts.
+    pub async fn recall(&self, actor: u32, cues: &Cues, budget: usize, mem_budget: usize) -> Result<Recalled> {
+        let started = std::time::Instant::now();
+        let now = crate::llm::now_ms();
+        let mut seeds: Vec<(String, f64)> = Vec::new();
+        let mut mem_cands: Vec<(u64, u64, String, f64)> = Vec::new();
+        // Anchor keys that exist in this mind.
+        if !cues.keys.is_empty() {
+            let rows: Vec<Value> = cues.keys.iter().map(|(k, w)| json!({"key": k, "w": w})).collect();
+            let mut r = self
+                .g
+                .execute(
+                    self.q(
+                        "UNWIND $rows AS k
+                         MATCH (c:Concept {run: $run, actor: $actor, key: k.key}) WHERE NOT c:Merged
+                         RETURN c.key AS key, k.w AS w",
+                        actor,
+                    )
+                    .param("rows", p(Value::Array(rows))),
+                )
+                .await?;
+            while let Some(row) = r.next().await? {
+                seeds.push((row.get("key").unwrap_or_default(), row.get("w").unwrap_or(0.5)));
+            }
+        }
+        // Words: concepts whose key, name or gist contains them; a word that matches many
+        // concepts is uninformative and is dropped.
+        if !cues.words.is_empty() {
+            let words: Vec<String> = cues.words.iter().map(|(w, _)| w.clone()).collect();
+            let mut r = self
+                .g
+                .execute(
+                    self.q(
+                        "MATCH (c:Concept {run: $run, actor: $actor})
+                         WHERE NOT c:Merged AND NOT c:IdentityVersion AND NOT c:Forgotten AND c.key <> 'self'
+                         WITH c, toLower(c.key + ' ' + coalesce(c.name, '') + ' ' + coalesce(c.gist, '')) AS text
+                         WITH c, [w IN $words WHERE text CONTAINS w] AS hit
+                         WHERE size(hit) > 0
+                         RETURN c.key AS key, hit, c:Memory AS memory, c.exp AS exp, c.t AS t, c.gist AS gist,
+                                toFloat(coalesce(c.salience, 0.5)) AS sal, coalesce(c.recalled_t, 0) AS rt",
+                        actor,
+                    )
+                    .param("words", words),
+                )
+                .await?;
+            let mut found: Vec<(String, Vec<String>, bool, u64, u64, String, f64, u64)> = Vec::new();
+            while let Some(row) = r.next().await? {
+                found.push((
+                    row.get("key").unwrap_or_default(),
+                    row.get("hit").unwrap_or_default(),
+                    row.get("memory").unwrap_or(false),
+                    row.get::<i64>("exp").unwrap_or(0) as u64,
+                    row.get::<i64>("t").unwrap_or(0) as u64,
+                    row.get("gist").unwrap_or_default(),
+                    row.get("sal").unwrap_or(0.5),
+                    row.get::<i64>("rt").unwrap_or(0) as u64,
+                ));
+            }
+            let freq = |w: &str| found.iter().filter(|f| f.1.iter().any(|h| h == w)).count();
+            let mut word_seeds: Vec<(String, f64)> = Vec::new();
+            for (key, hit, memory, exp, t, gist, sal, rt) in &found {
+                let ws: Vec<f64> = hit
+                    .iter()
+                    .filter_map(|h| {
+                        let n = freq(h);
+                        (n <= WORD_SPREAD).then(|| cues.words.iter().find(|(w, _)| w == h).map_or(0.5, |x| x.1) / (1.0 + (n as f64).ln()))
+                    })
+                    .collect();
+                let Some(best) = ws.iter().cloned().reduce(f64::max) else { continue };
+                // Several matching words are stronger evidence than one.
+                let w = (best * (1.0 + 0.25 * (ws.len() as f64 - 1.0))).min(1.5) * 0.8;
+                if *memory {
+                    mem_cands.push((*exp, *t, gist.clone(), w * memory_strength(now, *t, *rt, *sal)));
+                } else if !seeds.iter().any(|s| &s.0 == key) {
+                    word_seeds.push((key.clone(), w));
+                }
+            }
+            word_seeds.sort_by(|a, b| b.1.total_cmp(&a.1));
+            seeds.extend(word_seeds.into_iter().take(10));
+        }
+        let mut out = Recalled { seeds: seeds.len(), ..Default::default() };
+        let mut hits: Vec<Hit> = Vec::new();
+        let mut stances: Vec<(String, f64)> = Vec::new();
+        let mut people: Vec<(u32, f64)> = Vec::new();
+        let mut next: Vec<(String, f64)> = Vec::new();
+        for hop in 0..2 {
+            let from = if hop == 0 { seeds.clone() } else { std::mem::take(&mut next) };
+            if from.is_empty() {
+                break;
+            }
+            let rows: Vec<Value> = from.iter().map(|(k, w)| json!({"key": k, "w": w})).collect();
+            let mut r = self
+                .g
+                .execute(
+                    self.q(
+                        "UNWIND $rows AS s
+                         MATCH (c:Concept {run: $run, actor: $actor, key: s.key})-[r]-(n:Concept)
+                         WHERE (r.open = true OR type(r) = 'INVOLVES') AND NOT n:Merged
+                         WITH s, r, n, startNode(r) AS a, endNode(r) AS b
+                         RETURN s.key AS seed, s.w AS w, n.key AS other, n:Memory AS memory, n:Forgotten AS forgotten,
+                                a.key AS a, coalesce(a.name, a.key) AS an, labels(a) AS al, type(r) AS rel,
+                                b.key AS b, coalesce(b.name, b.key) AS bn, labels(b) AS bl,
+                                toFloat(coalesce(r.confidence, 0.5)) AS c0, coalesce(r.t, 0) AS t,
+                                [k IN keys(r) WHERE NOT k IN ['open', 't', 'since', 'because', 'thought', 'confidence', 'valid_to', 'retracted_by'] | k + ': ' + toString(r[k])] AS extra,
+                                n.exp AS exp, n.t AS mt, n.gist AS gist, toFloat(coalesce(n.salience, 0.5)) AS sal, coalesce(n.recalled_t, 0) AS rt
+                         LIMIT 800",
+                        actor,
+                    )
+                    .param("rows", p(Value::Array(rows))),
+                )
+                .await?;
+            let damp = if hop == 0 { 1.0 } else { 0.5 };
+            while let Some(row) = r.next().await? {
+                out.considered += 1;
+                let w: f64 = row.get::<f64>("w").unwrap_or(0.5) * damp;
+                let rel: String = row.get("rel").unwrap_or_default();
+                let other: String = row.get("other").unwrap_or_default();
+                if row.get::<bool>("memory").unwrap_or(false) {
+                    if !row.get::<bool>("forgotten").unwrap_or(false) {
+                        let (exp, mt) = (row.get::<i64>("exp").unwrap_or(0) as u64, row.get::<i64>("mt").unwrap_or(0) as u64);
+                        let s = w * memory_strength(now, mt, row.get::<i64>("rt").unwrap_or(0) as u64, row.get("sal").unwrap_or(0.5));
+                        mem_cands.push((exp, mt, row.get("gist").unwrap_or_default(), s));
+                    }
+                    continue;
+                }
+                if rel == "INVOLVES" {
+                    continue;
+                }
+                let t = row.get::<i64>("t").unwrap_or(0) as u64;
+                let c0: f64 = row.get("c0").unwrap_or(0.5);
+                let eff = if DURABLE.contains(&rel.as_str()) { c0 } else { c0 * (-(now.saturating_sub(t) as f64) / TAU_MS).exp() };
+                if eff < 0.15 {
+                    continue;
+                }
+                let mut score = w * eff * recency(now, t);
+                if let Some((_, w2)) = seeds.iter().find(|s| s.0 == other) {
+                    score += 0.5 * w2 * eff;
+                }
+                let (a, b): (String, String) = (row.get("a").unwrap_or_default(), row.get("b").unwrap_or_default());
+                // Feelings and stances have their own prompt sections: note what was touched.
+                if a == "self" && rel == "FEELS" {
+                    if let Some(id) = b.strip_prefix("person:").and_then(|x| x.parse::<u32>().ok()) {
+                        people.push((id, score));
+                    }
+                    continue;
+                }
+                if a == "self" && rel == "JUDGES" {
+                    stances.push((b.strip_prefix("stance:").unwrap_or(&b).to_string(), score));
+                    continue;
+                }
+                // Ideas, plans and places reached lead one step further.
+                if hop == 0 && other != "self" && !other.starts_with("person:") && !other.starts_with("kind:") && !other.starts_with("stance:") && !seeds.iter().any(|s| s.0 == other) {
+                    match next.iter_mut().find(|x| x.0 == other) {
+                        Some(x) => x.1 = x.1.max(w * eff),
+                        None => next.push((other.clone(), w * eff)),
+                    }
+                }
+                let seed: String = row.get("seed").unwrap_or_default();
+                if let Some(h) = hits.iter_mut().find(|h| h.fact.a == a && h.fact.rel == rel && h.fact.b == b) {
+                    if score > h.score {
+                        h.score = score;
+                        h.via = seed;
+                    }
+                    continue;
+                }
+                let strip = |v: Vec<String>| v.into_iter().filter(|l| !FIXED_LABELS.contains(&l.as_str()) || l == "Memory").collect::<Vec<_>>();
+                hits.push(Hit {
+                    fact: Fact {
+                        a,
+                        a_name: row.get("an").unwrap_or_default(),
+                        a_labels: strip(row.get("al").unwrap_or_default()),
+                        rel,
+                        b,
+                        b_name: row.get("bn").unwrap_or_default(),
+                        b_labels: strip(row.get("bl").unwrap_or_default()),
+                        confidence: eff,
+                        t,
+                        extra: row.get("extra").unwrap_or_default(),
+                    },
+                    score,
+                    via: seed,
+                });
+            }
+            next.sort_by(|a, b| b.1.total_cmp(&a.1));
+            next.retain(|x| x.1 >= 0.3);
+            next.truncate(5);
+        }
+        hits.retain(|h| h.score >= RECALL_FLOOR);
+        hits.sort_by(|a, b| b.score.total_cmp(&a.score));
+        // Several cues share the budget: one busy concept (a person everyone talks about)
+        // does not crowd out the rest.
+        let per_cue = (budget / 4).max(3);
+        let mut used: Vec<(String, usize)> = Vec::new();
+        let mut chosen = Vec::new();
+        let mut spill = Vec::new();
+        for h in hits {
+            let n = match used.iter_mut().find(|u| u.0 == h.via) {
+                Some(u) => {
+                    u.1 += 1;
+                    u.1
+                }
+                None => {
+                    used.push((h.via.clone(), 1));
+                    1
+                }
+            };
+            if n <= per_cue { chosen.push(h) } else { spill.push(h) }
+        }
+        chosen.extend(spill);
+        chosen.truncate(budget);
+        out.facts = chosen.into_iter().map(|h| h.fact).collect();
+        let merge = |v: Vec<(String, f64)>| {
+            let mut m: Vec<(String, f64)> = Vec::new();
+            for (k, s) in v {
+                match m.iter_mut().find(|x| x.0 == k) {
+                    Some(x) => x.1 = x.1.max(s),
+                    None => m.push((k, s)),
+                }
+            }
+            m.sort_by(|a, b| b.1.total_cmp(&a.1));
+            m
+        };
+        out.stances = merge(stances).into_iter().filter(|s| s.1 >= RECALL_FLOOR).collect();
+        out.people = merge(people.into_iter().map(|(id, s)| (id.to_string(), s)).collect()).into_iter().filter_map(|(k, s)| k.parse().ok().map(|id| (id, s))).collect();
+        // Memories: the cued ones, strongest first, plus the two most recent as working memory.
+        mem_cands.sort_by(|a, b| b.3.total_cmp(&a.3));
+        let mut mems: Vec<(u64, u64, String)> = Vec::new();
+        for (exp, t, gist, s) in mem_cands {
+            if mems.len() >= mem_budget {
+                break;
+            }
+            if s >= RECALL_FLOOR * 0.5 && !mems.iter().any(|m| m.0 == exp) && !gist.is_empty() {
+                mems.push((exp, t, gist));
+            }
+        }
+        out.rehearse = mems.iter().map(|m| m.0).collect();
+        for m in self.memories(actor, 2).await? {
+            if !mems.iter().any(|x| x.0 == m.0) {
+                mems.push(m);
+            }
+        }
+        mems.sort_by_key(|m| m.1);
+        out.memories = mems;
+        out.ms = started.elapsed().as_millis() as u64;
+        Ok(out)
+    }
+}
+
+impl Store {
+    /// Recalling a memory rehearses it: it fades from this moment again.
+    pub async fn rehearse(&self, actor: u32, exps: &[u64]) -> Result<()> {
+        if exps.is_empty() {
+            return Ok(());
+        }
+        let exps: Vec<i64> = exps.iter().map(|e| *e as i64).collect();
+        self.g
+            .run(
+                self.q("UNWIND $exps AS e MATCH (m:Concept {run: $run, actor: $actor, key: 'exp:' + toString(e)}) SET m.recalled_t = $now", actor)
+                    .param("exps", exps)
+                    .param("now", crate::llm::now_ms() as i64),
+            )
+            .await?;
+        Ok(())
     }
 }
 
@@ -696,6 +1149,101 @@ mod tests {
         let (nodes, edges) = s.size(1).await.unwrap();
         assert!(nodes >= 3 && edges >= 2);
         s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
+    }
+
+    /// Situational recall and forgetting against a live Neo4j (a throwaway run, deleted after).
+    #[tokio::test]
+    #[ignore]
+    async fn recall_by_cues_and_forgetting() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-recall-{}", crate::llm::now_ms());
+        let s = Store::connect("127.0.0.1:7689", "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Fen").await.unwrap();
+        let now = crate::llm::now_ms();
+        let old = now - 3 * 3_600_000;
+        let v = json!({
+            "nodes": [{"key": "person:7", "labels": ["Person"], "name": "Kael"}, {"key": "person:8", "labels": ["Person"], "name": "Oda"},
+                      {"key": "idea:wolves_hunt_at_the_ford", "labels": ["Danger"]}],
+            "edges": [{"from": "person:7", "rel": "PROMISED_TO_MEET", "to": "place:ford", "confidence": 0.9, "because": [1]},
+                      {"from": "person:8", "rel": "CLAIMED", "to": "idea:wolves_hunt_at_the_ford", "confidence": 0.7, "because": [1]},
+                      {"from": "idea:wolves_hunt_at_the_ford", "rel": "NEAR", "to": "place:ford", "confidence": 0.7, "because": [1]},
+                      {"from": "self", "rel": "LIKES", "to": "idea:sunny_days", "confidence": 0.9, "because": [1]}],
+            "remember": [{"exp": 1, "gist": "Kael swore he would wait for me at the ford."}, {"exp": 2, "gist": "A dull morning of gathering reeds."}]
+        });
+        let (p, _) = patch_from(&v, &[1, 2], &|id| Some((if id == 1 { now } else { old }, if id == 1 { 0.9 } else { 0.3 }, vec!["person:7".to_string()])));
+        s.apply(1, &p, "t1", now).await.unwrap();
+        let mut j = Patch::default();
+        sugar_into(&json!({"judgments": [{"key": "wolves_are_near", "value": 0.95, "why": "howls"}, {"key": "old_worry", "value": 0.7, "why": "long ago"}]}), &mut j, &[]);
+        s.apply(1, &j, "t2", now).await.unwrap();
+        // The old worry was last reinforced long ago.
+        s.g.run(query("MATCH (:Concept {run: $run, key: 'self'})-[r:JUDGES]->(:Concept {key: 'stance:old_worry'}) SET r.t = $old").param("run", run.clone()).param("old", old as i64)).await.unwrap();
+        // Seeing Kael brings back his promise and the kept memory; wolves are not on the mind.
+        let mut cues = Cues::default();
+        cues.key("person:7", 1.0);
+        let r = s.recall(1, &cues.clone().bounded(), 8, 3).await.unwrap();
+        let rels: Vec<String> = r.facts.iter().map(|f| format!("{} {} {}", f.a, f.rel, f.b)).collect();
+        assert!(rels.contains(&"person:7 PROMISED_TO_MEET place:ford".to_string()), "{rels:?}");
+        assert!(!rels.iter().any(|x| x.contains("sunny")), "uncued: {rels:?}");
+        assert!(r.memories.iter().any(|m| m.2.contains("Kael swore")), "{:?}", r.memories);
+        // Hearing about wolves brings the claim, the idea's place and the stance.
+        let mut cues = Cues::default();
+        cues.text("Did you hear the wolves last night?", 1.0);
+        let r = s.recall(1, &cues.bounded(), 8, 3).await.unwrap();
+        let rels: Vec<String> = r.facts.iter().map(|f| format!("{} {} {}", f.a, f.rel, f.b)).collect();
+        assert!(rels.iter().any(|x| x == "person:8 CLAIMED idea:wolves_hunt_at_the_ford"), "{rels:?}");
+        assert!(r.stances.iter().any(|(k, _)| k == "wolves_are_near"), "{:?}", r.stances);
+        assert!(r.ms < 500, "recall took {} ms", r.ms);
+        // Sleep: the old stance has relaxed to indifference and the dull old memory is forgotten.
+        s.fade(1, 0.2, now).await.unwrap();
+        let proj = s.projection(1).await.unwrap();
+        assert!(proj.judgments.iter().any(|j| j.0 == "wolves_are_near") && !proj.judgments.iter().any(|j| j.0 == "old_worry"), "{:?}", proj.judgments);
+        let mems = s.memories(1, 10).await.unwrap();
+        assert!(mems.iter().any(|m| m.0 == 1) && !mems.iter().any(|m| m.0 == 2), "{mems:?}");
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
+    }
+
+    /// Replays recall on an existing run, read-only (for audits):
+    /// `LIVING_RECALL_CASES=cases.json LIVING_NEO4J_PASSWORD=… cargo test -p living-mind recall_replay -- --ignored --nocapture`
+    /// where each case is `{"run", "actor", "keys": [[key, w]], "texts": [[text, w]], "budget"}`.
+    #[tokio::test]
+    #[ignore]
+    async fn recall_replay() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let cases: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(std::env::var("LIVING_RECALL_CASES").expect("cases")).unwrap()).unwrap();
+        let mut stores: std::collections::HashMap<String, Store> = Default::default();
+        for case in cases {
+            let run = case["run"].as_str().unwrap().to_string();
+            if !stores.contains_key(&run) {
+                stores.insert(run.clone(), Store::connect("127.0.0.1:7689", "neo4j", &pw, &run).await.unwrap());
+            }
+            let s = &stores[&run];
+            let mut cues = Cues::default();
+            for k in case["keys"].as_array().unwrap() {
+                cues.key(k[0].as_str().unwrap(), k[1].as_f64().unwrap());
+            }
+            for t in case["texts"].as_array().unwrap() {
+                cues.text(t[0].as_str().unwrap(), t[1].as_f64().unwrap());
+            }
+            let cues = cues.bounded();
+            let budget = case["budget"].as_u64().unwrap_or(24) as usize;
+            let actor = case["actor"].as_u64().unwrap() as u32;
+            let r = s.recall(actor, &cues, budget, 6).await.unwrap();
+            let t = |t: u64| format!("{t}");
+            println!(
+                "{}",
+                json!({"id": case["id"], "actor": actor, "ms": r.ms, "seeds": r.seeds, "considered": r.considered,
+                       "words": cues.words.iter().map(|w| &w.0).collect::<Vec<_>>(),
+                       "facts": r.facts.iter().map(|f| render_keys(f, &t)).collect::<Vec<_>>(),
+                       "stances": r.stances, "people": r.people,
+                       "memories": r.memories.iter().map(|m| &m.2).collect::<Vec<_>>()})
+            );
+        }
+    }
+
+    #[test]
+    fn cue_words_fold_plurals_and_skip_filler() {
+        assert_eq!(cue_words("Wolves near the ford! Berries, stores and the fishing spot."), vec!["wolv", "wolf", "ford", "berr", "store", "fish", "spot"]);
+        assert!(cue_words("that this with from").is_empty());
     }
 
     #[test]
