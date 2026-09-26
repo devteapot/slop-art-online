@@ -592,9 +592,16 @@ impl<'a> Ev<'a> {
                 let r = sight as i32;
                 let (cx, cy) = (self.at.0.floor() as i32, self.at.1.floor() as i32);
                 let mut best: Option<((f32, f32), f32)> = None;
+                // Grazed-bare ground doesn't count as grass to go to.
+                let mut bare: std::collections::HashMap<u32, bool> = std::collections::HashMap::new();
                 for dy in -r..=r {
                     for dx in -r..=r {
                         if map.get(cx + dx, cy + dy).name() != f.kind {
+                            continue;
+                        }
+                        let chunk = living_rules::map::chunk_of((cx + dx) as f32, (cy + dy) as f32);
+                        let (ctx, now) = (self.ctx, self.now);
+                        if *bare.entry(chunk).or_insert_with(|| common::pasture_now(ctx, chunk, now) < 1.0) {
                             continue;
                         }
                         let p = ((cx + dx) as f32 + 0.5, (cy + dy) as f32 + 0.5);

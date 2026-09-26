@@ -56,6 +56,15 @@ def report(db, window_min):
     born_here = [i for i, c in people.items() if c["parent_a"] != "0" and int(c["born_ms"]) > t0 + 60_000]
     gens = collections.Counter(gen(i) for i, c in people.items() if c["alive"] == "true")
     print(f"  people born in the world: {len(born_here)}; generations alive: {dict(sorted(gens.items()))}; deepest: {max((gen(i) for i in people), default=0)}")
+    # Stage 2: know-how held by the living, and food kept in storages.
+    alive_ids = {i for i, c in people.items() if c["alive"] == "true"}
+    know = collections.Counter(k["technique"] for k in rows(db, "SELECT actor, technique FROM know_how") if k["actor"] in alive_ids)
+    stores = [s["id"] for s in rows(db, "SELECT id, kind FROM structure") if s["kind"] == "storage"]
+    stored = collections.Counter()
+    for r in rows(db, "SELECT owner, item, qty FROM inventory"):
+        if int(r["owner"]) >= (1 << 40) and str(int(r["owner"]) - (1 << 40)) in stores:
+            stored[r["item"]] += int(r["qty"])
+    print(f"  know-how among the living: {dict(know.most_common())}; storages: {len(stores)} holding {dict(stored)}")
 
 
 def main():

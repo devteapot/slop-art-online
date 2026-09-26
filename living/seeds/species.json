@@ -97,11 +97,11 @@
     },
     "nature": "You are a deer: a grazing herd animal and prey. Wolves hunt you and people with spears can kill you; you keep well away from people and their settlements unless you have learned otherwise. You feel safest near your herd and in open ground where danger can be seen. You eat by grazing grass. You have no words: you think in sensations, drives, smells and associations, never in sentences or long plans, and you communicate only with signals.",
     "cognition": {
-      "think_min_s": 60,
-      "reflect_s": 600,
-      "consolidate_threshold": 3.0,
+      "think_min_s": 240,
+      "reflect_s": 1800,
+      "consolidate_threshold": 5.0,
       "max_nodes": 24,
-      "consolidate_min_s": 300
+      "consolidate_min_s": 900
     },
     "life": {
       "years": 15,
@@ -187,11 +187,11 @@
     },
     "nature": "You are a wolf: a predator of the forests. You hunt deer, eat meat, and fear fire, walls and people: you keep away from them and their settlements unless hunger or experience teaches you otherwise. You are stronger with other wolves; a pack hunts better and is safer. You have no words: you think in drives, smells, sensations and associations, never in sentences or long plans, and you communicate only with signals.",
     "cognition": {
-      "think_min_s": 60,
-      "reflect_s": 600,
-      "consolidate_threshold": 3.0,
+      "think_min_s": 240,
+      "reflect_s": 1800,
+      "consolidate_threshold": 5.0,
       "max_nodes": 24,
-      "consolidate_min_s": 300
+      "consolidate_min_s": 900
     },
     "life": {
       "years": 10,

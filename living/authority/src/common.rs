@@ -398,6 +398,49 @@ pub fn food_count(ctx: &ReducerContext, owner: u64) -> u32 {
 // ---- resources ----------------------------------------------------------------
 
 /// Resource amount now: regrowth counts only growing (non-winter) time.
+/// Grazing per grassy tile a chunk holds, and its regrowth per minute of growing time.
+const PASTURE_PER_TILE: f32 = 0.1;
+const PASTURE_REGEN_PER_TILE: f32 = 0.006;
+
+fn pasture_row(ctx: &ReducerContext, chunk: u32, now: u64) -> Pasture {
+    if let Some(p) = ctx.db.pasture().chunk().find(chunk) {
+        return p;
+    }
+    let map = map(ctx);
+    let (cx, cy) = living_rules::map::chunk_xy(chunk);
+    let n = living_rules::map::CHUNK as i32;
+    let mut tiles = 0u32;
+    for y in 0..n {
+        for x in 0..n {
+            if matches!(map.get(cx as i32 * n + x, cy as i32 * n + y), living_rules::map::Terrain::Grass | living_rules::map::Terrain::Forest) {
+                tiles += 1;
+            }
+        }
+    }
+    let max = tiles as f32 * PASTURE_PER_TILE;
+    Pasture { chunk, amount: max, max, regen: tiles as f32 * PASTURE_REGEN_PER_TILE, at_ms: now }
+}
+
+/// Grazing left in a chunk now.
+pub fn pasture_now(ctx: &ReducerContext, chunk: u32, now: u64) -> f32 {
+    let p = pasture_row(ctx, chunk, now);
+    let (epoch, day, year) = calendar(ctx);
+    (p.amount + p.regen * living_rules::growing_ms(p.at_ms, now, epoch, day, year) as f32 / 60_000.0).min(p.max)
+}
+
+/// One grazing eaten from a chunk.
+pub fn graze_pasture(ctx: &ReducerContext, chunk: u32, now: u64) {
+    let amount = (pasture_now(ctx, chunk, now) - 1.0).max(0.0);
+    let mut p = pasture_row(ctx, chunk, now);
+    p.amount = amount;
+    p.at_ms = now;
+    if ctx.db.pasture().chunk().find(chunk).is_some() {
+        ctx.db.pasture().chunk().update(p);
+    } else {
+        ctx.db.pasture().insert(p);
+    }
+}
+
 pub fn amount_now(ctx: &ReducerContext, r: &ResourceNode, now: u64) -> f32 {
     let (epoch, day, year) = calendar(ctx);
     (r.amount + r.regen * living_rules::growing_ms(r.at_ms, now, epoch, day, year) as f32 / 60_000.0).min(r.max)

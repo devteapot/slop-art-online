@@ -90,6 +90,7 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         genes: (*common::genes_of(ctx, id)).clone(),
         practice: Default::default(),
         kin_near: 0,
+        pasture: 0.0,
     }
 }
 
@@ -148,6 +149,9 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
     actor.practice = common::practice_of(ctx, id);
     let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     actor.kin_near = common::creatures_near(ctx, from, 4.0, now).iter().filter(|c| c.id != id && *c.kind == *actor.kind).count() as u32;
+    if a.skill == "graze" {
+        actor.pasture = common::pasture_now(ctx, chunk_of(from.0, from.1), now);
+    }
     let hour = common::hour(&w, now);
     let roll: f32 = ctx.rng().gen_range(0.0..1.0);
     SkillCtx {
@@ -521,6 +525,13 @@ fn routine_outcome(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now:
 fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
     if ok {
         common::practise(ctx, a.id, &a.skill);
+        // Grazing eats the grass where it happens.
+        if a.skill == "graze" {
+            if let Some(b) = ctx.db.body().id().find(a.id) {
+                let p = pos(&b, now);
+                common::graze_pasture(ctx, chunk_of(p.0, p.1), now);
+            }
+        }
     }
     if a.node != ORPHAN && a.node != ACT {
         routine_outcome(ctx, &a, ok, why, now);

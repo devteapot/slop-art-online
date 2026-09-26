@@ -157,6 +157,9 @@ pub struct SeedMember {
     pub stage: String,
     #[serde(default)]
     pub occupation: String,
+    /// Know-how of this member beyond the band's.
+    #[serde(default)]
+    pub knows: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -813,7 +816,7 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
                 if m.stage != "elder" {
                     adults.push(id);
                 }
-                for tech in &b.knows {
+                for tech in b.knows.iter().chain(m.knows.iter()) {
                     common::learn(ctx, id, tech, "seed", now);
                 }
             }

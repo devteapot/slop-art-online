@@ -36,6 +36,8 @@ pub struct ActorFacts {
     pub practice: std::collections::BTreeMap<String, u32>,
     /// Others of one's own kind within 4 tiles (filled for actions: crowding).
     pub kin_near: u32,
+    /// Grazing left where one stands (filled for actions).
+    pub pasture: f32,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -403,6 +405,7 @@ fn to_map(c: &SkillCtx) -> Map {
     a.insert("knows".into(), c.actor.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
     a.insert("inv".into(), inv_map(&c.actor.inv).into());
     a.insert("kin_near".into(), Dynamic::from_int(c.actor.kin_near as i64));
+    a.insert("pasture".into(), f(c.actor.pasture));
     for g in crate::genes::BODY {
         a.insert(g.into(), f(crate::genes::gene(&c.actor.genes, g)));
     }

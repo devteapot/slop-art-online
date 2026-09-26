@@ -773,6 +773,19 @@ pub struct Practice {
     pub uses: u32,
 }
 
+/// Grass left to graze in a map chunk: grazing eats it, it regrows outside winter
+/// (a herd's carrying capacity). Rows appear when a chunk is first grazed.
+#[spacetimedb::table(accessor = pasture)]
+pub struct Pasture {
+    #[primary_key]
+    pub chunk: u32,
+    pub amount: f32,
+    pub max: f32,
+    /// Regrowth per minute of growing time.
+    pub regen: f32,
+    pub at_ms: u64,
+}
+
 // ---- schedules ---------------------------------------------------------------
 
 #[spacetimedb::table(accessor = tick_timer, scheduled(crate::tick::tick))]

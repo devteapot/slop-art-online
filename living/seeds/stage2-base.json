@@ -1,0 +1,65 @@
+{
+  "run": "s2-base",
+  "seed": 11,
+  "map": {
+    "kind": "valley"
+  },
+  "year_days": 4,
+  "life_pace": 0.1428,
+  "setting": "A small valley between hills and the sea, with streams, woods and grassland. One family lives here alone: the old, the grown, the young and a baby. Berries grow in the grass by the woods, fish swim in the streams, deer graze the meadows and a few wolves live in the woods. Seasons turn quickly; in winter nothing grows and nights are colder: food that is not stored or cooked spoils. People live about seventy years here, but the years pass very fast.",
+  "bands": [
+    {
+      "name": "the family",
+      "history": "We have always lived in this valley, one family, three generations. We know how to make fire, build shelters and make spears; our hunters hunt deer with them; our shelter and fire stand at our camp. Our family has always grown: children are our joy and our future. There are two couples among us: the parents of our children, and a young couple who hope for children of their own. Our grandmother alone knows how to cook meat and fish, build a storage and plant berry bushes; what she knows lives only as long as she does, unless she teaches it.",
+      "knows": [
+        "fire",
+        "shelter",
+        "spear"
+      ],
+      "family": [
+        {
+          "stage": "elder",
+          "occupation": "healer",
+          "knows": [
+            "cooking",
+            "storage",
+            "planting"
+          ]
+        },
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "child"
+        },
+        {
+          "stage": "child"
+        },
+        {
+          "stage": "infant"
+        }
+      ],
+      "camp": [
+        "shelter",
+        "campfire"
+      ]
+    }
+  ],
+  "animals": {
+    "deer": 40,
+    "wolf": 3
+  }
+}

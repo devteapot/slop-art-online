@@ -166,11 +166,12 @@ fn cook_done(a) {
 fn graze_check(a) {
     if a.actor.kind != "deer" { return "only deer graze"; }
     if a.actor.terrain != "grass" && a.actor.terrain != "forest" { return "no grass here"; }
+    if a.actor.pasture < 1.0 { return "the grass here is grazed bare"; }
     ""
 }
 fn graze_duration(a) { 4000 }
-// Grazing feeds less where many graze together (a herd shares the grass).
-fn graze_done(a) { [#{ op: "vitals", hunger: -14.0 / (1.0 + a.actor.kin_near / 3.0) }] }
+// Each grazing eats a share of the chunk's grass (see pasture); bare ground feeds nothing.
+fn graze_done(a) { [#{ op: "vitals", hunger: -14.0 }] }
 
 // ---- rest ---------------------------------------------------------------
 

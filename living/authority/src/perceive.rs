@@ -213,10 +213,18 @@ pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u6
         return;
     }
     // Minds of other species think less often; being attacked is always worth a thought.
+    let urgent = reason.contains("attacking you") || reason.starts_with("The fight with") || reason.starts_with("Dawn of day");
+    // Away from people an animal lives by its instincts: its mind is for encounters
+    // (and for being attacked). Keeps thinking where the world is being lived and watched.
+    if c.kind != "person" && !urgent {
+        let at = ctx.db.body().id().find(id).map(|b| common::pos(&b, now)).unwrap_or((0.0, 0.0));
+        if !common::creatures_near(ctx, at, 25.0, now).iter().any(|x| &*x.kind == "person") {
+            return;
+        }
+    }
     if let Some(sp) = common::species(&c.kind) {
         let min = sp.cognition.think_min_s * 1000;
         let recent = ctx.db.mind_state().id().find(id).map_or(false, |s| now.saturating_sub(s.deliberated_ms) < min);
-        let urgent = reason.contains("attacking you") || reason.starts_with("The fight with") || reason.starts_with("Dawn of day");
         if min > 0 && recent && !urgent && ctx.db.deliberation().actor().find(id).is_none() {
             return;
         }
