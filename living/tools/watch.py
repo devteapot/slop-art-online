@@ -218,6 +218,10 @@ def round_once(a, state):
     if flicker >= 3:
         flags.append(f"{flicker} people flickering back and forth")
     tracked = max(1, len([p for p in tracks if p in people]))
+    # A mind service that has stopped thinking (all people's last thought long ago).
+    last_thought = [float(r["deliberated_ms"]) for r in rows(db, "SELECT id, deliberated_ms FROM mind_state") if r["id"] in people]
+    if last_thought and now - max(last_thought) > 15 * 60_000:
+        flags.append(f"minds stalled: no person has thought for {(now - max(last_thought)) / 60000:.0f} minutes")
     free_gb = shutil.disk_usage(str(ROOT)).free / 1e9
     if free_gb < 10:
         flags.append(f"host disk nearly full ({free_gb:.1f} GB free): Docker's VM goes read-only when it fills")
