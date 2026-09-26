@@ -122,7 +122,7 @@ pub const REFLEXES: &str = r#"[
   {"if": {"cond": {"hunger": {"above": 88}}, "then": {"first": [
     {"do": {"skill": "take", "target": {"nearest": "storage"}, "item": "food"}},
     {"do": {"skill": "gather", "target": {"nearest": "berry_bush"}}},
-    {"do": {"skill": "goto", "target": "home"}}
+    {"if": {"cond": {"not": {"near": {"target": "home", "within": 8}}}, "then": {"do": {"skill": "goto", "target": "home"}}}}
   ]}}},
   {"if": {"cond": {"all": [{"energy": {"below": 12}}, {"not": {"threatened": true}}, {"not": {"hurt_within": 10}}]}, "then": {"do": {"skill": "sleep"}}}},
   {"if": {"cond": {"all": [{"night": true}, {"energy": {"below": 35}}, {"not": {"hurt_within": 10}},
