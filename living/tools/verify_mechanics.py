@@ -145,12 +145,13 @@ def main():
         return float(v["hp"]) + float(v["hp_rate"]) * (time.time() * 1000 - float(v["at_ms"])) / 60000
     call(db, "set_behavior", str(B), idle)
     call(db, "set_behavior", str(A), seq({"do": {"skill": "attack", "target": {"id": B}}}))
-    hurt = wait_for(lambda: hp(B) < 95, timeout=20)
+    max_b = float(rows(db, f"SELECT id, max_hp FROM vitals WHERE id = {B}")[0]["max_hp"])  # varies with vitality genes
+    hurt = wait_for(lambda: hp(B) < max_b - 5, timeout=20)
     call(db, "set_behavior", str(A), idle)
     time.sleep(11)
     before_hp = hp(B)
     call(db, "set_behavior", str(A), seq({"do": {"skill": "tend", "target": {"id": B}}}))
-    healed = wait_for(lambda: hp(B) >= min(before_hp + 8, 99.5), timeout=20)
+    healed = wait_for(lambda: hp(B) >= min(before_hp + 8, max_b - 0.5), timeout=20)
     results["tending wounds"] = bool(hurt) and bool(healed)
     # 8. Settlements: lay road underfoot, build a wall and a gate beside, shut and open the gate.
     for t in ["masonry", "carpentry", "shelter"]:
