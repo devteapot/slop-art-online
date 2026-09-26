@@ -75,6 +75,8 @@ pub enum Effect {
     Damage { amount: f32 },
     /// Restore the target creature's health (tending wounds).
     Heal { amount: f32 },
+    /// Open or close the target gate (its community decides who may).
+    Gate { open: bool },
     /// Move items from the actor to the target creature.
     Give { item: String, qty: u32 },
     /// Move items from the actor into the target structure.
@@ -123,6 +125,8 @@ pub struct Laws {
     pub danger_near: f32,
     pub danger_far: f32,
     pub repeat_failure_s: f32,
+    /// Walking speed multiplier on road tiles.
+    pub road_speed: f32,
 }
 
 impl Default for Laws {
@@ -140,6 +144,7 @@ impl Default for Laws {
             danger_near: 8.0,
             danger_far: 12.0,
             repeat_failure_s: 120.0,
+            road_speed: 1.4,
         }
     }
 }
@@ -266,6 +271,7 @@ impl Scripts {
             danger_near: g("danger_near", l.danger_near),
             danger_far: g("danger_far", l.danger_far),
             repeat_failure_s: g("repeat_failure_s", l.repeat_failure_s),
+            road_speed: g("road_speed", l.road_speed),
         };
         l
     }
@@ -367,6 +373,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "vitals" => Effect::Vitals { hp: n("hp") as f32, hunger: n("hunger") as f32, energy: n("energy") as f32 },
         "damage" => Effect::Damage { amount: n("amount") as f32 },
         "heal" => Effect::Heal { amount: n("amount") as f32 },
+        "gate" => Effect::Gate { open: n("open") > 0.0 },
         "give" => Effect::Give { item: s("item"), qty: qty()? },
         "store" => Effect::Store { item: s("item"), qty: qty()? },
         "take" => Effect::Take { item: s("item"), qty: qty()? },

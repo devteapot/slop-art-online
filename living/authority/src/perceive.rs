@@ -336,6 +336,17 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
                 o["note"] = json!("a written sign; read it to know what it says");
             }
         }
+        if s.kind == "gate" {
+            if let Some(g) = ctx.db.gate().id().find(s.id) {
+                o["state"] = json!(if g.open { "open" } else { "shut" });
+                if let Some(c) = ctx.db.community().id().find(g.community) {
+                    o["kept_by"] = json!(c.name);
+                }
+            }
+        }
+        if s.kind == "house" && s.owner != 0 {
+            o["home_of"] = json!(common::name_of(ctx, s.owner));
+        }
         if s.kind == "storage" || s.kind == "remains" {
             let inv: JMap<String, Value> = common::inv_list(ctx, STRUCTURE_BIT | s.id).into_iter().map(|(k, q)| (k, json!(q))).collect();
             o["contents"] = Value::Object(inv);
@@ -350,7 +361,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let mut terrain = JMap::new();
     let (tx, ty) = (at.0.floor() as i32, at.1.floor() as i32);
     let ri = r as i32;
-    for kind in [living_rules::map::Terrain::Water, living_rules::map::Terrain::Forest, living_rules::map::Terrain::Rock] {
+    for kind in [living_rules::map::Terrain::Water, living_rules::map::Terrain::Forest, living_rules::map::Terrain::Rock, living_rules::map::Terrain::Road, living_rules::map::Terrain::Wall] {
         let mut best: Option<(f32, (f32, f32))> = None;
         for dy in -ri..=ri {
             for dx in -ri..=ri {

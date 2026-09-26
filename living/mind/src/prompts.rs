@@ -6,15 +6,20 @@ const RULES: &str = "\
 One day lasts 12 real minutes; night is 20:00-06:00 and cuts sight to 6 tiles (11 by day).
 SEASONS: a year is 8 days — spring, summer, autumn, winter (2 days each). In winter nothing regrows and nights are colder: store food before it.
 BODY: hunger rises ~5/min (100 = starving, which drains health); energy falls ~3/min awake and recovers while sleeping (faster within 2 tiles of a shelter). \
-At night, people farther than 3 tiles from a campfire and 2 from a shelter, and without a warm cloak, lose health to the cold. Health recovers slowly when fed and rested. Death is permanent.
+At night, people farther than 3 tiles from a campfire and 2 from a shelter or house, and without a warm cloak, lose health to the cold. Health recovers slowly when fed and rested. Death is permanent.
 KNOW-HOW: you can only do techniques you know: fire (campfire), cooking, spear, shelter, storage, cloak (2 hides from hunted deer + 1 fiber; keeps you warm at night), \
-torch (lights the night, you see farther), planting (grow new berry bushes), writing (write and read tablets and signs). Others may know what you don't: \
+torch (lights the night, you see farther), planting (grow new berry bushes), writing (write and read tablets and signs), \
+masonry (walls), carpentry (houses and gates; needs shelter), toolmaking (axe, pick). Others may know what you don't: \
 ask them to teach you (teach takes time beside each other), read what someone wrote, or experiment with materials to work something out yourself. \
 What only one person knows dies with them unless they teach it or write it down.
 FOOD: berries 12, raw fish 16, raw meat 20, cooked fish 34, cooked meat 42 (hunger points). Cook raw fish/meat at a campfire (needs cooking). \
-Berry bushes, reeds, fishing spots, trees and boulders regrow slowly after harvesting. Deer can be hunted (3 meat); wolves roam forests, hunt deer and attack people at night when hungry.
+Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (3 meat); wolves roam forests, hunt deer and attack people at night when hungry.
 MAKING: campfire = 3 wood, shelter = 6 wood + 3 fiber, storage = 4 wood (anyone can take from a storage), spear = 2 wood + 1 stone (hits much harder, faster fishing), \
-cloak = 2 hide + 1 fiber, torch = 1 wood + 1 fiber, tablet or sign = 1 wood (write).
+cloak = 2 hide + 1 fiber, torch = 1 wood + 1 fiber, tablet or sign = 1 wood (write), \
+house = 6 wood + 4 clay + 2 stone (a home: warm like a shelter and a fire), gate = 4 wood, wall = 2 stone per tile, road = 1 stone per tile (pave where you stand; walking on road is faster), \
+axe = 2 wood + 1 stone (cut wood twice as fast), pick = 2 wood + 2 stone (break stone twice as fast).
+SETTLEMENTS: walls block the way; a gate lets people through while open, and only the members of the community that keeps it may open or shut it. \
+Who is let in, when gates are shut and who keeps watch is for each community to decide.
 LIFE: people age; elders weaken after about 40 days. Two adults who both choose `conceive` toward each other within two minutes, while fed and near a shelter, have a child about a day later. \
 Children grow up in about 3 days; until then they are slow, cannot build, craft or fight, and depend on others for food and warmth.
 COMBAT: fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming \
@@ -72,7 +77,7 @@ Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
 Targets T: \"self\" \"attacker\" \"speaker\" \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
   {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"name of a place you remember\"}} {{\"at\": [x, y]}}
-  Kinds: berry_bush tree boulder reeds fishing_spot | campfire shelter storage sign remains | person deer wolf.
+  Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf.
   People/creature/resource targets resolve only when currently in sight; places and coordinates always resolve. A do-node whose target is missing fails, so \"first\" moves on.
 Skills:
 {}

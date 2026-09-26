@@ -65,12 +65,29 @@ pub fn start_move(ctx: &ReducerContext, id: u32, to: (f32, f32), speed: f32, now
     };
     let map = common::map(ctx);
     let p = pos(&b, now);
-    let dest = if map.at(to.0, to.1).walkable() {
+    let dest = if map.free(to.0, to.1) {
         to
     } else {
         map.nearest_walkable(to.0, to.1).ok_or("destination unreachable")?
     };
     let path = map.path(p, dest, 6_000).ok_or("no path there")?;
+    // Roads are faster: the walk's speed rises with the share of it on road (sampled per tile).
+    let (mut on_road, mut total) = (0u32, 0u32);
+    let mut from = p;
+    for w in &path {
+        let d = ((w.0 - from.0).powi(2) + (w.1 - from.1).powi(2)).sqrt();
+        let n = d.ceil().max(1.0) as u32;
+        for k in 0..n {
+            let t = (k as f32 + 0.5) / n as f32;
+            total += 1;
+            if map.at(from.0 + (w.0 - from.0) * t, from.1 + (w.1 - from.1) * t) == living_rules::map::Terrain::Road {
+                on_road += 1;
+            }
+        }
+        from = *w;
+    }
+    let road = if total > 0 { on_road as f32 / total as f32 } else { 0.0 };
+    let speed = if road > 0.0 { speed * (1.0 + (common::laws(ctx).road_speed - 1.0) * road) } else { speed };
     b.x = p.0;
     b.y = p.1;
     b.t_ms = now;

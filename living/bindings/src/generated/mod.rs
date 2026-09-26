@@ -35,6 +35,8 @@ pub mod expecting_type;
 pub mod experience_table;
 pub mod experience_type;
 pub mod familiar_type;
+pub mod gate_table;
+pub mod gate_type;
 pub mod grant_items_reducer;
 pub mod grant_know_how_reducer;
 pub mod human_act_reducer;
@@ -140,6 +142,8 @@ pub use expecting_type::Expecting;
 pub use experience_table::*;
 pub use experience_type::Experience;
 pub use familiar_type::Familiar;
+pub use gate_table::*;
+pub use gate_type::Gate;
 pub use grant_items_reducer::grant_items;
 pub use grant_know_how_reducer::grant_know_how;
 pub use human_act_reducer::human_act;
@@ -492,6 +496,7 @@ pub struct DbUpdate {
     community: __sdk::TableUpdate<Community>,
     expecting: __sdk::TableUpdate<Expecting>,
     experience: __sdk::TableUpdate<Experience>,
+    gate: __sdk::TableUpdate<Gate>,
     inventory: __sdk::TableUpdate<Inventory>,
     join_request: __sdk::TableUpdate<JoinRequest>,
     judgment: __sdk::TableUpdate<Judgment>,
@@ -556,6 +561,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "experience" => db_update
                     .experience
                     .append(experience_table::parse_table_update(table_update)?),
+                "gate" => db_update
+                    .gate
+                    .append(gate_table::parse_table_update(table_update)?),
                 "inventory" => db_update
                     .inventory
                     .append(inventory_table::parse_table_update(table_update)?),
@@ -678,6 +686,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.experience = cache
             .apply_diff_to_table::<Experience>("experience", &self.experience)
             .with_updates_by_pk(|row| &row.id);
+        diff.gate = cache
+            .apply_diff_to_table::<Gate>("gate", &self.gate)
+            .with_updates_by_pk(|row| &row.id);
         diff.inventory = cache
             .apply_diff_to_table::<Inventory>("inventory", &self.inventory)
             .with_updates_by_pk(|row| &row.id);
@@ -779,6 +790,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "experience" => db_update
                     .experience
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "gate" => db_update
+                    .gate
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "inventory" => db_update
                     .inventory
@@ -889,6 +903,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "experience" => db_update
                     .experience
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "gate" => db_update
+                    .gate
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "inventory" => db_update
                     .inventory
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -976,6 +993,7 @@ pub struct AppliedDiff<'r> {
     community: __sdk::TableAppliedDiff<'r, Community>,
     expecting: __sdk::TableAppliedDiff<'r, Expecting>,
     experience: __sdk::TableAppliedDiff<'r, Experience>,
+    gate: __sdk::TableAppliedDiff<'r, Gate>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
@@ -1021,6 +1039,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
         callbacks.invoke_table_row_callbacks::<Expecting>("expecting", &self.expecting, event);
         callbacks.invoke_table_row_callbacks::<Experience>("experience", &self.experience, event);
+        callbacks.invoke_table_row_callbacks::<Gate>("gate", &self.gate, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
         callbacks.invoke_table_row_callbacks::<JoinRequest>(
             "join_request",
@@ -1729,6 +1748,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         community_table::register_table(client_cache);
         expecting_table::register_table(client_cache);
         experience_table::register_table(client_cache);
+        gate_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
         join_request_table::register_table(client_cache);
         judgment_table::register_table(client_cache);
@@ -1763,6 +1783,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "community",
         "expecting",
         "experience",
+        "gate",
         "inventory",
         "join_request",
         "judgment",

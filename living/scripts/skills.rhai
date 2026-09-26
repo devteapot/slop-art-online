@@ -11,6 +11,7 @@ fn laws() {
         gestation_days: 1.0, bond_window_s: 120.0,
         crowd: 6, danger_near: 8.0, danger_far: 12.0,
         repeat_failure_s: 120.0,
+        road_speed: 1.4,
     }
 }
 
@@ -82,8 +83,9 @@ fn gather_duration(a) {
     switch a.target.kind {
         "berry_bush" => 2000,
         "reeds" => 2500,
-        "tree" => 4000,
-        "boulder" => 5000,
+        "tree" => if inv(a, "axe") > 0 { 2000 } else { 4000 },
+        "boulder" => if inv(a, "pick") > 0 { 2500 } else { 5000 },
+        "clay_bank" => 3000,
         "fishing_spot" => if inv(a, "spear") > 0 { 3000 } else { 6500 },
         _ => 3000,
     }
@@ -95,6 +97,7 @@ fn gather_done(a) {
         "boulder" => "stone",
         "reeds" => "fiber",
         "fishing_spot" => "fish",
+        "clay_bank" => "clay",
         _ => "",
     };
     [#{ op: "harvest", qty: 1 }, #{ op: "add", item: item, qty: 1 }, #{ op: "vitals", energy: -1.0 }]
@@ -151,6 +154,12 @@ fn cost(kind) {
         "spear" => #{ wood: 2, stone: 1 },
         "cloak" => #{ hide: 2, fiber: 1 },
         "torch" => #{ wood: 1, fiber: 1 },
+        "house" => #{ wood: 6, clay: 4, stone: 2 },
+        "gate" => #{ wood: 4 },
+        "wall" => #{ stone: 2 },
+        "road" => #{ stone: 1 },
+        "axe" => #{ wood: 2, stone: 1 },
+        "pick" => #{ wood: 2, stone: 2 },
         _ => (),
     }
 }
@@ -171,26 +180,38 @@ fn pay(kind) {
 
 fn build_check(a) {
     if a.actor.kind == "person" && a.actor.age < 3.0 { return "too young to build"; }
-    if a.item != "campfire" && a.item != "shelter" && a.item != "storage" { return `cannot build ${a.item}`; }
-    let needed = if a.item == "campfire" { "fire" } else { a.item };
+    let needed = switch a.item {
+        "campfire" => "fire",
+        "shelter" => "shelter",
+        "storage" => "storage",
+        "house" => "carpentry",
+        "gate" => "carpentry",
+        "wall" => "masonry",
+        _ => (),
+    };
+    if needed == () { return `cannot build ${a.item}`; }
     if !knows(a, needed) { return `you don't know how to build a ${a.item}`; }
-    if a.actor.terrain == "water" || a.actor.terrain == "rock" { return "cannot build here"; }
+    if a.item == "wall" || a.item == "gate" {
+        if a.target.class != "place" { return `point at the tile beside you where the ${a.item} goes`; }
+    } else if a.actor.terrain == "water" || a.actor.terrain == "rock" || a.actor.terrain == "wall" { return "cannot build here"; }
     if a.item == "campfire" && a.actor.near_fire { return "a campfire already burns right here"; }
     if a.item == "shelter" && a.actor.near_shelter { return "there is already a shelter right here"; }
     afford(a, a.item)
 }
-fn build_duration(a) { switch a.item { "campfire" => 6000, "shelter" => 20000, _ => 10000 } }
+fn build_duration(a) { switch a.item { "campfire" => 6000, "shelter" => 20000, "house" => 40000, "wall" => 6000, "gate" => 15000, _ => 10000 } }
 fn build_done(a) {
-    let fx = pay(a.item);
-    fx.push(#{ op: "build", kind: a.item });
+    // Place first: if the spot turns out unusable, nothing is spent.
+    let fx = [#{ op: "build", kind: a.item }];
+    fx += pay(a.item);
     fx.push(#{ op: "vitals", energy: -4.0 });
     fx
 }
 
 fn craft_check(a) {
     if a.actor.age < 3.0 { return "too young to craft"; }
-    if a.item != "spear" && a.item != "cloak" && a.item != "torch" { return `cannot craft ${a.item}`; }
-    if !knows(a, a.item) { return `you don't know how to make a ${a.item}`; }
+    if a.item != "spear" && a.item != "cloak" && a.item != "torch" && a.item != "axe" && a.item != "pick" { return `cannot craft ${a.item}`; }
+    let needed = if a.item == "axe" || a.item == "pick" { "toolmaking" } else { a.item };
+    if !knows(a, needed) { return `you don't know how to make a ${a.item}`; }
     afford(a, a.item)
 }
 fn craft_duration(a) { 8000 }
@@ -271,6 +292,7 @@ fn regrow(kind) {
         "tree" => 0.5,
         "boulder" => 0.2,
         "fishing_spot" => 1.4,
+        "clay_bank" => 0.6,
         _ => 0.0,
     }
 }
@@ -297,7 +319,25 @@ fn signal_done(a) { [#{ op: "signal" }] }
 
 // ---- know-how -----------------------------------------------------------------
 
-fn requires(t) { switch t { "cooking" => ["fire"], "torch" => ["fire"], _ => [] } }
+fn requires(t) { switch t { "cooking" => ["fire"], "torch" => ["fire"], "carpentry" => ["shelter"], _ => [] } }
+
+// ---- roads and gates ------------------------------------------------------
+
+fn pave_check(a) {
+    if a.actor.kind != "person" || a.actor.age < 3.0 { return "you cannot lay road"; }
+    if a.actor.terrain == "road" { return "this is already road"; }
+    if a.actor.terrain == "water" || a.actor.terrain == "rock" { return "cannot lay road here"; }
+    afford(a, "road")
+}
+fn pave_duration(a) { 4000 }
+fn pave_done(a) { let fx = [#{ op: "build", kind: "road" }]; fx += pay("road"); fx }
+
+fn open_check(a) { if a.target.kind != "gate" { return "that is not a gate"; } "" }
+fn open_duration(a) { 1500 }
+fn open_done(a) { [#{ op: "gate", open: 1.0 }] }
+fn close_check(a) { if a.target.kind != "gate" { return "that is not a gate"; } "" }
+fn close_duration(a) { 1500 }
+fn close_done(a) { [#{ op: "gate", open: 0.0 }] }
 
 fn teach_check(a) {
     if !knows(a, a.item) { return `you don't know ${a.item} yourself`; }
@@ -312,8 +352,9 @@ fn teach_done(a) { [#{ op: "teach", technique: a.item }] }
 // What tinkering with a material can reveal.
 fn discoveries(m) {
     switch m {
-        "stone" => ["spear", "fire"],
-        "wood" => ["fire", "storage", "writing", "torch"],
+        "stone" => ["spear", "fire", "masonry", "toolmaking"],
+        "wood" => ["fire", "storage", "writing", "torch", "carpentry", "toolmaking"],
+        "clay" => ["carpentry", "masonry"],
         "fiber" => ["shelter", "torch", "cloak"],
         "hide" => ["cloak"],
         "berries" => ["planting"],

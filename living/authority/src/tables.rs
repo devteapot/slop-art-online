@@ -23,6 +23,20 @@ pub struct World {
     pub height: u32,
 }
 
+/// A gate's state, apart from its structure row (which rarely changes): open or shut, and the
+/// community whose members may open and close it (0 = anyone).
+#[spacetimedb::table(accessor = gate, public)]
+pub struct Gate {
+    #[primary_key]
+    pub id: u64,
+    pub x: i32,
+    pub y: i32,
+    pub open: bool,
+    pub community: u32,
+    pub changed_ms: u64,
+    pub changed_by: u32,
+}
+
 /// Where a seeded character comes from (town, household, occupation, history) as JSON.
 /// World fact, not identity: the character's mind builds its identity from it.
 #[spacetimedb::table(accessor = background, public)]

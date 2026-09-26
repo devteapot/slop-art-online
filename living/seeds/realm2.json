@@ -1,0 +1,214 @@
+{
+  "run": "realm-2",
+  "seed": 7,
+  "map": {
+    "kind": "realm",
+    "w": 512,
+    "h": 512
+  },
+  "setting": "A wide land between western mountains and an eastern sea, crossed by rivers. Four walled cities stand in the east and the middle lands, each with streets, houses, a market square and gates; small open villages lie between them, and a few bands live in the western hills and wilds with almost nothing. Stone is plentiful in the western hills and scarce in the east; clay lies along the rivers; forests cover much of the land; the coast has fish. Deer graze the plains; wolves keep to the forests and wilds. A year has four seasons of two days; in winter nothing grows and nights are colder.",
+  "towns": [
+    {
+      "name": "Harrowgate",
+      "character": "the oldest city, proud of its walls and its records; its people argue about everything and keep long memories of who owes whom",
+      "occupations": {
+        "farmer": 5,
+        "builder": 2,
+        "mason": 2,
+        "carpenter": 3,
+        "hunter": 4,
+        "cook": 2,
+        "guard": 3,
+        "scribe": 2,
+        "trader": 3,
+        "healer": 1,
+        "fisher": 2
+      },
+      "stores": {
+        "berries": 40,
+        "cooked_meat": 12,
+        "wood": 30,
+        "stone": 16,
+        "fiber": 12,
+        "clay": 8,
+        "hide": 4
+      },
+      "ledger": "Harrowgate. Our gates are kept by our own. Stone comes from the western hills, clay from the river; we trade for what we lack. Every household keeps its house, and the market is for all."
+    },
+    {
+      "name": "Saltmere",
+      "character": "a fishing city on the coast; loud, generous at the table, proud of its boats and songs, suspicious of inland folk",
+      "occupations": {
+        "fisher": 7,
+        "cook": 3,
+        "builder": 2,
+        "carpenter": 2,
+        "hunter": 2,
+        "guard": 2,
+        "scribe": 1,
+        "trader": 3,
+        "healer": 1,
+        "farmer": 3,
+        "mason": 1
+      },
+      "stores": {
+        "cooked_fish": 30,
+        "fish": 10,
+        "wood": 24,
+        "stone": 6,
+        "fiber": 14,
+        "clay": 4
+      },
+      "ledger": "Saltmere. The sea feeds us. Fish the shallows, cook what you catch, and bring stone home when you can: the walls need it."
+    },
+    {
+      "name": "Oakhollow",
+      "character": "a farming city among forests; patient, close-knit, fond of stories by the hearth, wary of strangers until they have eaten together",
+      "occupations": {
+        "farmer": 7,
+        "builder": 2,
+        "carpenter": 3,
+        "hunter": 4,
+        "cook": 2,
+        "guard": 2,
+        "scribe": 1,
+        "healer": 2,
+        "trader": 2,
+        "mason": 2
+      },
+      "stores": {
+        "berries": 50,
+        "cooked_meat": 10,
+        "wood": 40,
+        "stone": 8,
+        "fiber": 16,
+        "clay": 6,
+        "hide": 4
+      },
+      "ledger": "Oakhollow. We plant before the cold and gather after it. Wood is ours in plenty; stone and salt we must trade for."
+    },
+    {
+      "name": "Ridgemark",
+      "character": "a young city at the edge of the hills, built by stonecutters; blunt, hardworking, quick to quarrel and quick to help",
+      "occupations": {
+        "mason": 4,
+        "builder": 2,
+        "carpenter": 1,
+        "hunter": 5,
+        "farmer": 5,
+        "cook": 2,
+        "guard": 3,
+        "scribe": 1,
+        "trader": 3,
+        "healer": 1
+      },
+      "stores": {
+        "berries": 24,
+        "cooked_meat": 14,
+        "wood": 16,
+        "stone": 40,
+        "fiber": 8,
+        "clay": 4,
+        "hide": 6
+      },
+      "ledger": "Ridgemark. We cut the stone the other cities need. Food is dearer here; trade stone for it."
+    }
+  ],
+  "villages": [
+    {
+      "name": "Fernbrook",
+      "walled": false,
+      "character": "a hamlet of farmers by a brook",
+      "occupations": {
+        "farmer": 4,
+        "hunter": 1,
+        "builder": 1,
+        "cook": 1
+      },
+      "stores": {
+        "berries": 16,
+        "wood": 8
+      },
+      "ledger": ""
+    },
+    {
+      "name": "Millstead",
+      "walled": false,
+      "character": "a hamlet of woodcutters and potters",
+      "occupations": {
+        "farmer": 2,
+        "carpenter": 2,
+        "hunter": 2,
+        "cook": 1
+      },
+      "stores": {
+        "berries": 10,
+        "wood": 16,
+        "clay": 6
+      },
+      "ledger": ""
+    },
+    {
+      "name": "Cairnwell",
+      "walled": false,
+      "character": "a hamlet around an old well, half-deserted",
+      "occupations": {
+        "farmer": 3,
+        "hunter": 2,
+        "healer": 1
+      },
+      "stores": {
+        "berries": 12,
+        "wood": 6
+      },
+      "ledger": ""
+    }
+  ],
+  "bands": [
+    {
+      "name": "the hill band",
+      "size": 4,
+      "history": "We fled a burnt valley beyond the mountains with nothing but what we carried. We remember how to make fire.",
+      "knows": [
+        "fire"
+      ]
+    },
+    {
+      "name": "the river strays",
+      "size": 3,
+      "history": "We were driven off by our own people for reasons we argue about. We have to start again.",
+      "knows": []
+    },
+    {
+      "name": "the southern family",
+      "size": 5,
+      "history": "A family who lost the rest of their people to a hard winter. The eldest remembers stories of cities in the east.",
+      "knows": [
+        "fire",
+        "shelter"
+      ]
+    },
+    {
+      "name": "the stonecutters' kin",
+      "size": 4,
+      "history": "We left Ridgemark after a quarrel over a death. We know stone better than anyone.",
+      "knows": [
+        "fire",
+        "masonry"
+      ]
+    },
+    {
+      "name": "the wanderers",
+      "size": 3,
+      "history": "We never stayed anywhere long. We trade what we find and move on.",
+      "knows": [
+        "fire",
+        "writing"
+      ]
+    }
+  ],
+  "animals": {
+    "deer": 70,
+    "wolf": 12
+  }
+}

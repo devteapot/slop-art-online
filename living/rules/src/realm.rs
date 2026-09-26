@@ -15,6 +15,8 @@ pub struct Realm {
     pub towns: Vec<(f32, f32)>,
     /// Suggested wild starting spots (west, away from towns).
     pub wilds: Vec<(f32, f32)>,
+    /// Suggested village sites (the middle lands, between towns and wilds).
+    pub villages: Vec<(f32, f32)>,
 }
 
 fn hash(seed: u64, x: i64, y: i64) -> f32 {
@@ -48,7 +50,7 @@ fn fbm(seed: u64, x: f32, y: f32, base: f32) -> f32 {
 
 impl Realm {
     pub fn to_map(&self) -> crate::map::Map {
-        crate::map::Map { w: self.w, h: self.h, tiles: self.tiles.clone() }
+        crate::map::Map { w: self.w, h: self.h, tiles: self.tiles.clone(), blocked: Default::default() }
     }
 }
 
@@ -152,36 +154,48 @@ pub fn generate(seed: u64, w: u32, h: u32) -> Realm {
             nx >= 0 && ny >= 0 && nx < wi && ny < hi && tiles[idx(nx, ny)] == t as u8
         }))
     };
-    let mut towns: Vec<(f32, f32)> = Vec::new();
-    let want_towns = (w / 90).clamp(2, 4) as usize;
-    let mut candidates: Vec<(f32, i32, i32)> = Vec::new();
-    for y in (12..hi - 12).step_by(3) {
-        for x in ((wi as f32 * 0.52) as i32..wi - 12).step_by(3) {
-            if tiles[idx(x, y)] != Terrain::Grass as u8 {
-                continue;
-            }
-            let water = near(&tiles, x, y, Terrain::Water, 6);
-            let forest = near(&tiles, x, y, Terrain::Forest, 10);
-            if !water || !forest {
-                continue;
-            }
-            let grass = (-6..=6).flat_map(|dy| (-6..=6).map(move |dx| (dx, dy))).filter(|(dx, dy)| tiles[idx(x + dx, y + dy)] == Terrain::Grass as u8).count();
-            candidates.push((grass as f32 + hash(seed, x as i64, y as i64) * 10.0, x, y));
-        }
-    }
-    candidates.sort_by(|a, b| b.0.total_cmp(&a.0));
-    for (_, x, y) in candidates {
-        let p = (x as f32 + 0.5, y as f32 + 0.5);
-        if towns.iter().all(|t| ((t.0 - p.0).powi(2) + (t.1 - p.1).powi(2)).sqrt() > h as f32 / (want_towns as f32 + 0.5)) {
-            towns.push(p);
-            if towns.len() == want_towns {
-                break;
+    // Town sites: roomy grass (a walled city needs about 30×30 tiles) near water and forest,
+    // in the east; village sites the same in the middle lands, smaller.
+    let pick = |x0: f32, x1: f32, room: i32, want: usize, spacing: f32, avoid: &[(f32, f32)]| -> Vec<(f32, f32)> {
+        let mut out: Vec<(f32, f32)> = Vec::new();
+        let mut candidates: Vec<(f32, i32, i32)> = Vec::new();
+        let (lo, hi_x) = (((wi as f32 * x0) as i32).max(room + 4), ((wi as f32 * x1) as i32).min(wi - room - 4));
+        for y in (room + 4..hi - room - 4).step_by(3) {
+            for x in (lo..hi_x).step_by(3) {
+                if tiles[idx(x, y)] != Terrain::Grass as u8 {
+                    continue;
+                }
+                if !near(&tiles, x, y, Terrain::Water, room / 2 + 6) || !near(&tiles, x, y, Terrain::Forest, room + 6) {
+                    continue;
+                }
+                let land = (-room..=room).flat_map(|dy| (-room..=room).map(move |dx| (dx, dy))).filter(|(dx, dy)| walkable(tiles[idx(x + dx, y + dy)])).count();
+                let area = ((2 * room + 1) * (2 * room + 1)) as f32;
+                if (land as f32) < area * 0.85 {
+                    continue;
+                }
+                candidates.push((land as f32 + hash(seed, x as i64, y as i64) * area * 0.05, x, y));
             }
         }
-    }
+        candidates.sort_by(|a, b| b.0.total_cmp(&a.0));
+        for (_, x, y) in candidates {
+            let p = (x as f32 + 0.5, y as f32 + 0.5);
+            let far = |q: &(f32, f32)| ((q.0 - p.0).powi(2) + (q.1 - p.1).powi(2)).sqrt() > spacing;
+            if out.iter().all(far) && avoid.iter().all(far) {
+                out.push(p);
+                if out.len() == want {
+                    break;
+                }
+            }
+        }
+        out
+    };
+    let want_towns = (w / 128).clamp(2, 4) as usize;
+    let towns = pick(0.55, 1.0, 14, want_towns, h as f32 / (want_towns as f32 + 0.5), &[]);
+    let villages = pick(0.3, 0.6, 6, (w / 128).clamp(1, 4) as usize, h as f32 / 5.0, &towns);
     let mut wilds: Vec<(f32, f32)> = Vec::new();
-    for k in 0..400 {
-        if wilds.len() >= 4 {
+    let want_wilds = (w / 100).clamp(4, 8) as usize;
+    for k in 0..800 {
+        if wilds.len() >= want_wilds {
             break;
         }
         let x = (hash(seed ^ 0xABCD, k, 1) * (w as f32 * 0.35)) as i32 + 8;
@@ -190,11 +204,11 @@ pub fn generate(seed: u64, w: u32, h: u32) -> Realm {
             continue;
         }
         let p = (x as f32 + 0.5, y as f32 + 0.5);
-        if wilds.iter().all(|q| ((q.0 - p.0).powi(2) + (q.1 - p.1).powi(2)).sqrt() > h as f32 / 5.0) {
+        if wilds.iter().all(|q| ((q.0 - p.0).powi(2) + (q.1 - p.1).powi(2)).sqrt() > h as f32 / (want_wilds as f32 + 1.0)) {
             wilds.push(p);
         }
     }
-    Realm { w, h, tiles, towns, wilds }
+    Realm { w, h, tiles, towns, wilds, villages }
 }
 
 /// Make all land one connected region by converting the shortest water/rock gap to sand.

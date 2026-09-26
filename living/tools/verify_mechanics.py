@@ -148,6 +148,31 @@ def main():
     call(db, "set_behavior", str(A), seq({"do": {"skill": "tend", "target": {"id": B}}}))
     healed = wait_for(lambda: hp(B) >= min(before_hp + 8, 99.5), timeout=20)
     results["tending wounds"] = bool(hurt) and bool(healed)
+    # 8. Settlements: lay road underfoot, build a wall and a gate beside, shut and open the gate.
+    for t in ["masonry", "carpentry", "shelter"]:
+        call(db, "grant_know_how", str(A), t)
+    call(db, "grant_items", str(A), "stone", "6")
+    call(db, "grant_items", str(A), "wood", "6")
+    body = rows(db, f"SELECT x, y FROM body WHERE id = {A}")[0]
+    ax, ay = float(body["x"]), float(body["y"])
+    wall_at = [int(ax) + 2 + 0.5, int(ay) + 0.5]
+    gate_at = [int(ax) + 2 + 0.5, int(ay) + 1.5]
+    call(db, "set_behavior", str(B), idle)
+    call(db, "set_behavior", str(A), seq(
+        {"first": [{"do": {"skill": "pave"}}, {"wait": 1}]},
+        {"do": {"skill": "build", "item": "wall", "target": {"at": wall_at}}},
+        {"do": {"skill": "build", "item": "gate", "target": {"at": gate_at}}},
+    ))
+    built = wait_for(lambda: rows(db, f"SELECT * FROM gate WHERE changed_by = {A}"), timeout=60)
+    story = [r["text"] for r in rows(db, "SELECT kind, text FROM chronicle") if r["kind"] == "build"]
+    results["road, wall and gate built"] = bool(built)
+    if built:
+        gid = int(built[0]["id"])
+        call(db, "set_behavior", str(A), seq({"do": {"skill": "close", "target": {"nearest": "gate"}}}))
+        shut = wait_for(lambda: [g for g in rows(db, f"SELECT id, open FROM gate WHERE id = {gid}") if g["open"] == "false"], timeout=20)
+        call(db, "set_behavior", str(A), seq({"do": {"skill": "open", "target": {"nearest": "gate"}}}))
+        reopened = wait_for(lambda: [g for g in rows(db, f"SELECT id, open FROM gate WHERE id = {gid}") if g["open"] == "true"], timeout=20)
+        results["gate shut and opened"] = bool(shut) and bool(reopened)
     ok = all(results.values())
     for k, v in results.items():
         print(("PASS " if v else "FAIL ") + k)

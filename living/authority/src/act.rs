@@ -57,6 +57,11 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         if s.kind == "shelter" && d <= laws.shelter_warmth {
             near_shelter = true;
         }
+        // A house is a home: a roof and a hearth.
+        if s.kind == "house" && d <= laws.shelter_warmth {
+            near_shelter = true;
+            near_fire = true;
+        }
     }
     let _ = w;
     ActorFacts {
@@ -208,7 +213,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                 let ang: f32 = ctx.rng().gen_range(0.0..std::f32::consts::TAU);
                 let r: f32 = ctx.rng().gen_range(3.0..9.0);
                 let p = (here.0 + ang.cos() * r, here.1 + ang.sin() * r);
-                if map.at(p.0, p.1).walkable() {
+                if map.free(p.0, p.1) {
                     pick = Some(p);
                     break;
                 }
@@ -233,7 +238,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             for spread in [side, -side, 0.0, side * 2.0] {
                 let ang = away + spread;
                 let p = (here.0 + ang.cos() * 2.4, here.1 + ang.sin() * 2.4);
-                if map.at(p.0, p.1).walkable() {
+                if map.free(p.0, p.1) {
                     pick = Some(p);
                     break;
                 }
@@ -248,7 +253,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             for spread in [0.0f32, 0.6, -0.6, 1.2, -1.2] {
                 let base = (here.1 - from.1).atan2(here.0 - from.0) + spread;
                 let p = (here.0 + base.cos() * 9.0, here.1 + base.sin() * 9.0);
-                if map.at(p.0, p.1).walkable() {
+                if map.free(p.0, p.1) {
                     pick = Some(p);
                     break;
                 }
@@ -314,13 +319,24 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         cancel(ctx, a, now, None);
     }
     if needs_approach && !(skill == "follow" && dist(here, target.at) <= r) {
+        // Aimed work (building beside, gathering from, reading a sign) stops at the edge of
+        // reach instead of walking onto the spot.
+        let aimed = r >= 1.0 && !moving_skill && target.class != 3;
+        let goal = if aimed {
+            let d = dist(here, target.at).max(0.01);
+            let k = (r * 0.7).min(d) / d;
+            let p = (target.at.0 + (here.0 - target.at.0) * k, target.at.1 + (here.1 - target.at.1) * k);
+            if common::map(ctx).free(p.0, p.1) { p } else { target.at }
+        } else {
+            target.at
+        };
         let sp = speed(ctx, id, now);
         let sp = match skill {
             "flee" => sp * 1.15,
             "dodge" => 9.0,
             _ => sp,
         };
-        motion::start_move(ctx, id, target.at, sp, now)?;
+        motion::start_move(ctx, id, goal, sp, now)?;
         if target.class == 3 {
             act.ends_ms = now + CHASE_REPATH_MS;
         }
@@ -864,6 +880,57 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 });
                 common::chronicle(ctx, now, "plant", me, 0, at, format!("{my_name} planted a berry bush"));
                 notes.push("planted a berry bush".into());
+            }
+            Effect::Build { kind } if kind == "road" => {
+                common::set_tile(ctx, at.0.floor() as i32, at.1.floor() as i32, living_rules::map::Terrain::Road)?;
+                notes.push("laid road".into());
+            }
+            Effect::Build { kind } if kind == "wall" || kind == "gate" => {
+                let (tx, ty) = (a.target.x.floor() as i32, a.target.y.floor() as i32);
+                if (at.0.floor() as i32, at.1.floor() as i32) == (tx, ty) {
+                    return Err(format!("stand beside the tile where the {kind} goes"));
+                }
+                let map = common::map(ctx);
+                if !map.walkable(tx, ty) {
+                    return Err(format!("cannot build a {kind} there"));
+                }
+                if kind == "wall" {
+                    let occupied = ctx.db.body().chunk().filter(chunk_of(tx as f32, ty as f32)).any(|b| {
+                        let p = pos(&b, now);
+                        (p.0.floor() as i32, p.1.floor() as i32) == (tx, ty)
+                    });
+                    if occupied {
+                        return Err("someone is standing there".into());
+                    }
+                    common::set_tile(ctx, tx, ty, living_rules::map::Terrain::Wall)?;
+                    notes.push(format!("built wall at ({tx},{ty})"));
+                } else {
+                    let p = (tx as f32 + 0.5, ty as f32 + 0.5);
+                    let s = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: me, built_ms: now });
+                    let community = ctx.db.membership().member().find(me).map(|m| m.community).unwrap_or(0);
+                    ctx.db.gate().insert(Gate { id: s.id, x: tx, y: ty, open: true, community, changed_ms: now, changed_by: me });
+                    common::chronicle(ctx, now, "build", me, 0, p, format!("{my_name} built a gate"));
+                    witnessed(ctx, now, p, "built", me, 0, &format!("{{a}} built a gate at ({tx},{ty})"), 0.4, &[me]);
+                    notes.push(format!("built gate #{}", s.id));
+                }
+            }
+            Effect::Gate { open } => {
+                let mut g = ctx.db.gate().id().find(a.target.id).ok_or("that is not a gate")?;
+                if g.community != 0 && ctx.db.membership().member().find(me).map_or(true, |m| m.community != g.community) {
+                    let keepers = ctx.db.community().id().find(g.community).map(|c| c.name).unwrap_or_else(|| "its community".into());
+                    return Err(format!("only {keepers} may open or close this gate"));
+                }
+                if g.open == open {
+                    return Err(format!("the gate is already {}", if open { "open" } else { "shut" }));
+                }
+                g.open = open;
+                g.changed_ms = now;
+                g.changed_by = me;
+                let p = (g.x as f32 + 0.5, g.y as f32 + 0.5);
+                ctx.db.gate().id().update(g);
+                common::invalidate_map();
+                witnessed(ctx, now, p, "gate", me, 0, if open { "{a} opened the gate" } else { "{a} shut the gate" }, 0.3, &[me]);
+                notes.push(if open { "opened the gate".into() } else { "shut the gate".into() });
             }
             Effect::Build { kind } => {
                 if !catalog::STRUCTURES.contains(&kind.as_str()) {

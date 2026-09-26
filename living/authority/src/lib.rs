@@ -117,7 +117,7 @@ pub fn spawn_crowd(ctx: &ReducerContext, n: u32, minded: bool) -> Result<(), Str
         }
         let x = ctx.rng().gen_range(4.0f32..(map.w as f32 - 4.0));
         let y = ctx.rng().gen_range(4.0f32..(map.h as f32 - 4.0));
-        if !map.at(x, y).walkable() {
+        if !map.free(x, y) {
             continue;
         }
         let controller = if minded { common::world(ctx).admin } else { ctx.database_identity() };
@@ -253,7 +253,7 @@ pub fn spawn_battle(ctx: &ReducerContext, n: u32) -> Result<(), String> {
             break;
         }
         let p = (center.0 + ctx.rng().gen_range(-7.0f32..7.0), center.1 + ctx.rng().gen_range(-7.0f32..7.0));
-        if !map.at(p.0, p.1).walkable() {
+        if !map.free(p.0, p.1) {
             continue;
         }
         let id = seed::spawn_creature(ctx, &format!("Fighter{}", made + 1), "person", ctx.database_identity(), false, p, now);

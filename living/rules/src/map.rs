@@ -20,6 +20,10 @@ pub enum Terrain {
     Sand = 3,
     Rock = 4,
     Dirt = 5,
+    /// Laid by people: walkable, faster to walk on.
+    Road = 6,
+    /// Built by people: blocks movement.
+    Wall = 7,
 }
 
 impl Terrain {
@@ -30,11 +34,13 @@ impl Terrain {
             3 => Self::Sand,
             4 => Self::Rock,
             5 => Self::Dirt,
+            6 => Self::Road,
+            7 => Self::Wall,
             _ => Self::Grass,
         }
     }
     pub fn walkable(self) -> bool {
-        !matches!(self, Self::Water | Self::Rock)
+        !matches!(self, Self::Water | Self::Rock | Self::Wall)
     }
     pub fn name(self) -> &'static str {
         match self {
@@ -44,6 +50,8 @@ impl Terrain {
             Self::Sand => "sand",
             Self::Rock => "rock",
             Self::Dirt => "dirt",
+            Self::Road => "road",
+            Self::Wall => "wall",
         }
     }
 }
@@ -84,6 +92,8 @@ pub struct Map {
     pub w: u32,
     pub h: u32,
     pub tiles: Vec<u8>,
+    /// Tiles closed by structures (a shut gate), by tile index; rebuilt when they change.
+    pub blocked: std::collections::HashSet<u32>,
 }
 
 impl Map {
@@ -102,7 +112,19 @@ impl Map {
         self.get(x.floor() as i32, y.floor() as i32)
     }
     pub fn walkable(&self, x: i32, y: i32) -> bool {
-        self.get(x, y).walkable()
+        self.get(x, y).walkable() && (self.blocked.is_empty() || !self.blocked.contains(&(y as u32 * self.w + x as u32)))
+    }
+
+    /// Whether a body can stand at a continuous position (terrain and closed gates).
+    pub fn free(&self, x: f32, y: f32) -> bool {
+        self.walkable(x.floor() as i32, y.floor() as i32)
+    }
+
+    /// Change one tile (roads, walls); callers persist the chunk.
+    pub fn set(&mut self, x: i32, y: i32, t: Terrain) {
+        if x >= 0 && y >= 0 && x < self.w as i32 && y < self.h as i32 {
+            self.tiles[(y as u32 * self.w + x as u32) as usize] = t as u8;
+        }
     }
 
     /// Terrain bytes for one chunk, row-major within the chunk.
@@ -131,7 +153,7 @@ impl Map {
                 }
             }
         }
-        Self { w, h, tiles }
+        Self { w, h, tiles, blocked: Default::default() }
     }
 
     /// Nearest walkable tile center to a point, searching outward.
@@ -162,7 +184,7 @@ impl Map {
             let y = a.1 + (b.1 - a.1) * t;
             // Keep a small clearance so bodies do not clip corners.
             for (ox, oy) in [(0.0, 0.0), (0.2, 0.2), (-0.2, 0.2), (0.2, -0.2), (-0.2, -0.2)] {
-                if !self.at(x + ox, y + oy).walkable() {
+                if !self.free(x + ox, y + oy) {
                     return false;
                 }
             }
@@ -373,7 +395,7 @@ pub fn generate(seed: u64) -> Map {
             }
         }
     }
-    Map { w: MAP_W, h: MAP_H, tiles }
+    Map { w: MAP_W, h: MAP_H, tiles, blocked: Default::default() }
 }
 
 #[cfg(test)]

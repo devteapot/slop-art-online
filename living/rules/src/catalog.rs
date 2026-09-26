@@ -24,8 +24,11 @@ pub const SKILLS: &[SkillSpec] = &[
     SkillSpec { name: "eat", needs_target: false, needs_item: true, reach: 0.0, help: "eat a food item from your pack" },
     SkillSpec { name: "sleep", needs_target: false, needs_item: false, reach: 0.0, help: "sleep until rested; faster and safe from cold near a shelter" },
     SkillSpec { name: "rest", needs_target: false, needs_item: false, reach: 0.0, help: "sit and recover a little energy" },
-    SkillSpec { name: "build", needs_target: false, needs_item: true, reach: 0.0, help: "build a structure here (item: campfire|shelter|storage)" },
-    SkillSpec { name: "craft", needs_target: false, needs_item: true, reach: 0.0, help: "craft a tool (item: spear)" },
+    SkillSpec { name: "build", needs_target: false, needs_item: true, reach: 1.5, help: "build a structure where you stand (item: campfire|shelter|storage|house), or a wall or gate on the tile you point at beside you (target {\"at\": [x, y]})" },
+    SkillSpec { name: "pave", needs_target: false, needs_item: false, reach: 0.0, help: "lay road on the tile you stand on (1 stone); walking on roads is faster" },
+    SkillSpec { name: "open", needs_target: true, needs_item: false, reach: 1.8, help: "open a gate (only its community may)" },
+    SkillSpec { name: "close", needs_target: true, needs_item: false, reach: 1.8, help: "close a gate (only its community may); a closed gate blocks the way like a wall" },
+    SkillSpec { name: "craft", needs_target: false, needs_item: true, reach: 0.0, help: "craft an item (item: spear|cloak|torch|axe|pick)" },
     SkillSpec { name: "cook", needs_target: true, needs_item: true, reach: 1.5, help: "cook raw fish or meat at a campfire" },
     SkillSpec { name: "give", needs_target: true, needs_item: true, reach: 1.8, help: "hand items to another creature" },
     SkillSpec { name: "store", needs_target: true, needs_item: true, reach: 1.5, help: "put items into a storage" },
@@ -77,6 +80,9 @@ pub const ITEMS: &[ItemSpec] = &[
     ItemSpec { name: "cloak", food: false },
     ItemSpec { name: "torch", food: false },
     ItemSpec { name: "tablet", food: false },
+    ItemSpec { name: "clay", food: false },
+    ItemSpec { name: "axe", food: false },
+    ItemSpec { name: "pick", food: false },
 ];
 
 /// Practical techniques: must be known (world state, not belief) before use.
@@ -96,6 +102,9 @@ pub const TECHNIQUES: &[TechniqueSpec] = &[
     TechniqueSpec { name: "torch", help: "craft a torch (1 wood, 1 fiber) that lights the night", requires: &["fire"] },
     TechniqueSpec { name: "planting", help: "plant berries to grow new berry bushes", requires: &[] },
     TechniqueSpec { name: "writing", help: "write and read tablets and signs", requires: &[] },
+    TechniqueSpec { name: "masonry", help: "build walls (2 stone per tile)", requires: &[] },
+    TechniqueSpec { name: "carpentry", help: "build houses (6 wood, 4 clay, 2 stone; warm like a shelter and a fire) and gates (4 wood)", requires: &["shelter"] },
+    TechniqueSpec { name: "toolmaking", help: "craft an axe (2 wood, 1 stone; cuts wood twice as fast) or a pick (2 wood, 2 stone; breaks stone twice as fast)", requires: &[] },
 ];
 
 pub fn technique(name: &str) -> Option<&'static TechniqueSpec> {
@@ -112,10 +121,13 @@ pub const RESOURCES: &[(&str, &str)] = &[
     ("boulder", "stone"),
     ("reeds", "fiber"),
     ("fishing_spot", "fish"),
+    ("clay_bank", "clay"),
 ];
 
-pub const STRUCTURES: &[&str] = &["campfire", "shelter", "storage", "remains", "sign", "bush_patch"];
+pub const STRUCTURES: &[&str] = &["campfire", "shelter", "storage", "remains", "sign", "bush_patch", "house", "gate"];
 pub const CREATURES: &[&str] = &["person", "deer", "wolf"];
+/// Things built into the terrain itself rather than as structures.
+pub const TERRAIN_BUILDS: &[&str] = &["wall", "road"];
 
 pub fn kind_class(kind: &str) -> Option<KindClass> {
     if RESOURCES.iter().any(|(k, _)| *k == kind) {

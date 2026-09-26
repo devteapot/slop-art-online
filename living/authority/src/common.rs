@@ -33,7 +33,14 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
             return map.clone();
         }
         let w = world(ctx);
-        let map = Rc::new(Map::from_chunks(w.width, w.height, ctx.db.terrain_chunk().iter().map(|c| (c.id, c.tiles))));
+        let mut map = Map::from_chunks(w.width, w.height, ctx.db.terrain_chunk().iter().map(|c| (c.id, c.tiles)));
+        // Shut gates block like walls (few rows; rebuilt only when a gate or tile changes).
+        for g in ctx.db.gate().iter().filter(|g| !g.open) {
+            if g.x >= 0 && g.y >= 0 && (g.x as u32) < w.width && (g.y as u32) < w.height {
+                map.blocked.insert(g.y as u32 * w.width + g.x as u32);
+            }
+        }
+        let map = Rc::new(map);
         *m.borrow_mut() = Some(map.clone());
         map
     })
@@ -41,6 +48,25 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
 
 pub fn invalidate_map() {
     MAP.with(|m| *m.borrow_mut() = None);
+}
+
+/// Change one terrain tile (a road laid, a wall built) and persist its chunk row.
+pub fn set_tile(ctx: &ReducerContext, x: i32, y: i32, t: living_rules::map::Terrain) -> Result<(), String> {
+    let w = world(ctx);
+    if x < 0 || y < 0 || x as u32 >= w.width || y as u32 >= w.height {
+        return Err("outside the world".into());
+    }
+    let chunk = living_rules::map::chunk_of(x as f32, y as f32);
+    let mut row = ctx.db.terrain_chunk().id().find(chunk).ok_or("no terrain there")?;
+    let (lx, ly) = (x as u32 % living_rules::map::CHUNK, y as u32 % living_rules::map::CHUNK);
+    let i = (ly * living_rules::map::CHUNK + lx) as usize;
+    if i >= row.tiles.len() {
+        return Err("no terrain there".into());
+    }
+    row.tiles[i] = t as u8;
+    ctx.db.terrain_chunk().id().update(row);
+    invalidate_map();
+    Ok(())
 }
 
 /// World laws from the installed scripts (cached with them).

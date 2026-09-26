@@ -36,6 +36,19 @@ pub struct SeedTown {
     pub stores: std::collections::BTreeMap<String, u32>,
     #[serde(default)]
     pub ledger: String,
+    /// A walled city (wall ring, gates) or an open village.
+    #[serde(default = "yes")]
+    pub walled: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl SeedTown {
+    fn households(&self) -> usize {
+        (self.occupations.values().sum::<u32>() as usize).div_ceil(3).max(1)
+    }
 }
 
 /// A small band starting from almost nothing in the wilds.
@@ -57,6 +70,9 @@ pub struct Seed {
     pub map: Option<SeedMap>,
     #[serde(default)]
     pub towns: Vec<SeedTown>,
+    /// Open villages at the realm's village sites.
+    #[serde(default)]
+    pub villages: Vec<SeedTown>,
     #[serde(default)]
     pub bands: Vec<SeedBand>,
     #[serde(default)]
@@ -135,13 +151,24 @@ pub fn instinct(kind: &str) -> String {
 
 pub fn seed(ctx: &ReducerContext, now: u64) {
     let s: Seed = serde_json::from_str(VALLEY).expect("seed json");
-    let (map, realm) = match &s.map {
+    let (mut map, realm) = match &s.map {
         Some(m) if m.kind == "realm" => {
             let r = living_rules::realm::generate(s.seed, m.w.max(64), m.h.max(64));
             (r.to_map(), Some(r))
         }
         _ => (living_rules::map::generate(s.seed), None),
     };
+    // Settlements are laid out first: their walls and roads are part of the terrain.
+    let mut settlements: Vec<(&SeedTown, living_rules::city::Layout)> = Vec::new();
+    if let Some(r) = &realm {
+        for (t, site) in s.towns.iter().zip(r.towns.iter()).chain(s.villages.iter().zip(r.villages.iter())) {
+            let n = t.households();
+            let radius = if t.walled { (9 + n as i32).clamp(10, 18) } else { 5 };
+            let layout = living_rules::city::lay_out(&mut map, *site, n, radius, t.walled);
+            settlements.push((t, layout));
+        }
+    }
+    let map = map;
     for id in map.chunks().collect::<Vec<_>>() {
         ctx.db.terrain_chunk().insert(TerrainChunk { id, tiles: map.chunk_bytes(id) });
     }
@@ -177,12 +204,10 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         let st = ctx.db.structure().insert(Structure { id: 0, kind: a.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: 0, built_ms: 0 });
         ctx.db.artifact().insert(Artifact { id: 0, kind: a.kind.clone(), holder: STRUCTURE_BIT | st.id, author: 0, author_name: a.author_name.clone(), written_ms: 0, topic: a.topic.clone(), text: a.text.clone() });
     }
+    for (t, layout) in &settlements {
+        town(ctx, &map, t, layout, now);
+    }
     if let Some(r) = &realm {
-        for (i, t) in s.towns.iter().enumerate() {
-            if let Some(site) = r.towns.get(i) {
-                town(ctx, &map, t, *site, now);
-            }
-        }
         for (i, b) in s.bands.iter().enumerate() {
             if let Some(site) = r.wilds.get(i) {
                 band(ctx, &map, b, *site, now);
@@ -347,6 +372,7 @@ fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64)
         let (kind, max, spacing, cap) = match t {
             Terrain::Forest if near(x, y, Terrain::Grass, 2) => ("tree", 8.0, 2.5, cap(70)),
             Terrain::Forest => ("tree", 8.0, 4.0, cap(90)),
+            Terrain::Grass if near(x, y, Terrain::Water, 1) && (x * 7 + y * 3) % 5 == 0 => ("clay_bank", 6.0, 6.0, cap(25)),
             Terrain::Grass if near(x, y, Terrain::Forest, 3) => ("berry_bush", 5.0, 3.0, cap(60)),
             Terrain::Grass if near(x, y, Terrain::Rock, 2) => ("boulder", 6.0, 4.0, cap(25)),
             Terrain::Sand if near(x, y, Terrain::Water, 1) => {
@@ -406,7 +432,10 @@ fn occupation_know_how(occ: &str) -> &'static [&'static str] {
     match occ {
         "fisher" => &["spear", "cooking"],
         "farmer" => &["planting", "storage"],
-        "builder" => &["shelter", "storage"],
+        "builder" => &["shelter", "storage", "carpentry", "masonry"],
+        "mason" => &["masonry", "toolmaking"],
+        "carpenter" => &["shelter", "carpentry", "toolmaking"],
+        "guard" => &["spear", "torch"],
         "hunter" => &["spear", "cloak", "torch"],
         "cook" => &["cooking", "storage"],
         "scribe" => &["writing"],
@@ -425,12 +454,19 @@ fn put(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32,
     ctx.db.structure().insert(Structure { id: 0, kind: kind.into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now }).id
 }
 
-/// An established town: a meeting fire, households in shelters around it, stocked stores,
-/// planted berry fields, a ledger sign, residents with histories and a community.
-fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, site: (f32, f32), now: u64) {
+/// An established settlement laid out by `living_rules::city`: a hearth, stores and a sign on
+/// the market square, a house per household along the streets, gates in the wall kept by the
+/// settlement's community, planted fields outside; residents with histories.
+fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) {
     let admin = common::world(ctx).admin;
-    let center = walkable_near(map, site);
-    put(ctx, map, "campfire", center, 0, now);
+    let center = layout.center;
+    let c = ctx.db.community().insert(Community { id: 0, name: t.name.clone(), founder: 0, founded_ms: 0, home_x: center.0, home_y: center.1 });
+    put(ctx, map, "campfire", layout.market[0], 0, now);
+    for &(gx, gy) in &layout.gates {
+        let p = (gx as f32 + 0.5, gy as f32 + 0.5);
+        let sid = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: 0, built_ms: 0 }).id;
+        ctx.db.gate().insert(Gate { id: sid, x: gx, y: gy, open: true, community: c.id, changed_ms: now, changed_by: 0 });
+    }
     // Residents by occupation, grouped into households of 2-4.
     let mut roles: Vec<String> = t.occupations.iter().flat_map(|(o, n)| std::iter::repeat(o.clone()).take(*n as usize)).collect();
     for i in (1..roles.len()).rev() {
@@ -442,30 +478,36 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, site: 
         let n = ctx.rng().gen_range(2..=4).min(roles.len());
         households.push(roles.drain(..n).collect());
     }
-    let total = households.len().max(1) as f32;
     let mut ids = Vec::new();
     for (h, members) in households.iter().enumerate() {
-        let ang = h as f32 / total * std::f32::consts::TAU;
-        let home = walkable_near(map, (center.0 + ang.cos() * 7.0, center.1 + ang.sin() * 7.0));
+        let home = layout.houses.get(h % layout.houses.len().max(1)).copied().unwrap_or(center);
         let names: Vec<String> = members.iter().map(|_| fresh_name(ctx)).collect();
         let mut household_ids = Vec::new();
         for (k, occ) in members.iter().enumerate() {
-            let at = (home.0 + k as f32 * 0.6, home.1 + 0.4);
+            let at = (home.0 + (k as f32 - 1.0) * 0.5, home.1 + 0.6);
             let id = spawn_creature(ctx, &names[k], "person", admin, true, walkable_near(map, at), now);
             common::inv_add(ctx, id as u64, "berries", 4);
             common::learn(ctx, id, "fire", "seed", now);
             for tech in occupation_know_how(occ) {
                 common::learn(ctx, id, tech, "seed", now);
             }
+            if let Some(mut ch) = ctx.db.character().id().find(id) {
+                ch.home_x = home.0;
+                ch.home_y = home.1;
+                ctx.db.character().id().update(ch);
+            }
             household_ids.push((id, occ.clone()));
         }
-        put(ctx, map, "shelter", home, household_ids[0].0, now);
+        if h < layout.houses.len() {
+            put(ctx, map, "house", home, household_ids[0].0, now);
+        }
         for (id, occ) in &household_ids {
             let kin: Vec<serde_json::Value> = household_ids.iter().filter(|(o, _)| o != id).map(|(o, oc)| serde_json::json!({"id": o, "name": common::name_of(ctx, *o), "occupation": oc})).collect();
             let text = serde_json::json!({
-                "origin": "town",
+                "origin": if t.walled { "town" } else { "village" },
                 "town": t.name,
                 "town_character": t.character,
+                "walled": t.walled,
                 "occupation": occ,
                 "household": kin,
                 "home": [home.0.round(), home.1.round()],
@@ -475,41 +517,43 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, site: 
             ids.push(*id);
         }
     }
-    // Stores and fields.
-    for k in 0..2 {
-        let at = (center.0 + if k == 0 { 2.5 } else { -2.5 }, center.1 + 1.5);
+    // Stores on the market square.
+    let stores = if t.walled { 2 } else { 1 };
+    for k in 0..stores {
+        let at = layout.market.get(2 + k).copied().unwrap_or(center);
         let sid = put(ctx, map, "storage", at, ids.get(k).copied().unwrap_or(0), now);
         for (item, q) in &t.stores {
-            common::inv_add(ctx, STRUCTURE_BIT | sid, item, (*q).div_ceil(2));
+            common::inv_add(ctx, STRUCTURE_BIT | sid, item, (*q).div_ceil(stores as u32));
         }
     }
     let sc = common::scripts(ctx);
-    for k in 0..10 {
-        let ang = k as f32 / 10.0 * std::f32::consts::TAU + 0.3;
-        let p = walkable_near(map, (center.0 + ang.cos() * 11.0, center.1 + ang.sin() * 11.0));
-        if matches!(map.at(p.0, p.1), Terrain::Grass | Terrain::Dirt | Terrain::Forest) {
-            ctx.db.resource_node().insert(ResourceNode {
-                id: 0,
-                kind: "berry_bush".into(),
-                x: p.0,
-                y: p.1,
-                chunk: chunk_of(p.0, p.1),
-                amount: 5.0,
-                max: 5.0,
-                regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
-                at_ms: now,
-            });
-        }
+    for p in &layout.fields {
+        ctx.db.resource_node().insert(ResourceNode {
+            id: 0,
+            kind: "berry_bush".into(),
+            x: p.0,
+            y: p.1,
+            chunk: chunk_of(p.0, p.1),
+            amount: 5.0,
+            max: 5.0,
+            regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
+            at_ms: now,
+        });
     }
     if !t.ledger.is_empty() {
-        let sid = put(ctx, map, "sign", (center.0 + 1.5, center.1 - 2.0), 0, now);
+        let at = layout.market.get(1).copied().unwrap_or(center);
+        let sid = put(ctx, map, "sign", at, 0, now);
         ctx.db.artifact().insert(Artifact { id: 0, kind: "sign".into(), holder: STRUCTURE_BIT | sid, author: 0, author_name: format!("the elders of {}", t.name), written_ms: 0, topic: String::new(), text: t.ledger.clone() });
     }
-    let c = ctx.db.community().insert(Community { id: 0, name: t.name.clone(), founder: ids.first().copied().unwrap_or(0), founded_ms: 0, home_x: center.0, home_y: center.1 });
+    if let Some(mut com) = ctx.db.community().id().find(c.id) {
+        com.founder = ids.first().copied().unwrap_or(0);
+        ctx.db.community().id().update(com);
+    }
     for id in &ids {
         ctx.db.membership().insert(Membership { id: 0, community: c.id, member: *id, since_ms: now });
     }
-    common::chronicle(ctx, now, "arrival", 0, 0, center, format!("{} stands at ({:.0}, {:.0}) with {} people", t.name, center.0, center.1, ids.len()));
+    let what = if t.walled { format!("{} stands walled at ({:.0}, {:.0}) with {} people and {} gates", t.name, center.0, center.1, ids.len(), layout.gates.len()) } else { format!("the village of {} lies at ({:.0}, {:.0}) with {} people", t.name, center.0, center.1, ids.len()) };
+    common::chronicle(ctx, now, "arrival", 0, 0, center, what);
 }
 
 /// A band of survivors with almost nothing: no structures, a little food, little know-how.

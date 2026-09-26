@@ -277,7 +277,9 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         out.insert("want_qty".into(), json!(q.max(1.0).round() as u64));
     }
     if let Some(t) = action.get("target").or_else(|| action.get("to")).or_else(|| action.get("from")).cloned() {
-        if spec.needs_target || matches!(skill.as_str(), "goto" | "flee" | "follow" | "attack") {
+        // Any skill may be aimed (read a sign, build a wall there, sleep in a shelter: the body
+        // walks there first); only wandering and waiting ignore a target.
+        if !matches!(skill.as_str(), "wander" | "wait") {
             out.insert("target".into(), target(t, &format!("{path}.do.target"))?);
         }
     }
@@ -286,7 +288,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         return Err(format!("{path}.do: skill `{skill}` needs a target"));
     }
     if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal") {
-        let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::technique(i).is_some();
+        let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some();
         if !known {
             return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::ITEMS.iter().map(|x| x.name).collect::<Vec<_>>().join(", ")));
         }

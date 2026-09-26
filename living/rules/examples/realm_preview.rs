@@ -36,5 +36,5 @@ fn main() {
         counts[*t as usize % 8] += 1;
     }
     println!("tiles by kind: {counts:?}");
-    println!("towns: {:?}\nwilds: {:?}", r.towns, r.wilds);
+    println!("towns: {:?}\nvillages: {:?}\nwilds: {:?}", r.towns, r.villages, r.wilds);
 }
