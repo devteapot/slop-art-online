@@ -33,7 +33,30 @@ def why_first(msgs):
     return msgs
 
 
-VARIANTS = {"as_recorded": lambda m: m, "why_first": why_first}
+THINK_REPLY = (
+    "\n\nThink as yourself about this moment. Do not write any behavior graph. Reply with ONE JSON object: "
+    '{"thought": "what you make of this moment (1-3 sentences)", '
+    '"intend": ["each thing you mean to do, in plain words, in order, e.g. ask Borno to start a family with me, give Galy 2 berries, relight the fire"], '
+    '"say": {"text": "...", "to": id} or null}'
+)
+
+
+def think_only(msgs):
+    """The decision without the graph grammar: world and self, why, what one perceives and recalls."""
+    sysm = msgs[0]["content"]
+    cut = min([i for i in (sysm.find("BEHAVIOR GRAPH"), sysm.find("ACTS:")) if i > 0] or [len(sysm)])
+    msgs[0]["content"] = sysm[:cut].rstrip() + THINK_REPLY
+    u = why_first(msgs)[-1]["content"]
+    for sec in ("# Your top level", "# Your routines"):
+        if sec in u:
+            head, rest = u.split(sec, 1)
+            nxt = rest.find("\n# ")
+            u = head + (rest[nxt + 1:] if nxt >= 0 else "\nRespond with the JSON object.")
+    msgs[-1]["content"] = u
+    return msgs
+
+
+VARIANTS = {"as_recorded": lambda m: m, "why_first": why_first, "think_only": think_only}
 
 
 def reason_of(u):
@@ -47,6 +70,7 @@ def main():
     ap.add_argument("--reason", default="", help="substring of the reason for thinking")
     ap.add_argument("--day", action="store_true", help="only requests made by day")
     ap.add_argument("--count", default=r'"do"\s*:\s*"conceive"', help="regex counted in replies")
+    ap.add_argument("--in", dest="field", default="", help="count only within these reply fields (comma-separated, e.g. acts,intend)")
     ap.add_argument("--variant", action="append", help="variant(s) to run (default as_recorded)")
     ap.add_argument("--n", type=int, default=12)
     ap.add_argument("--model", default="mistral-small-latest")
@@ -78,12 +102,21 @@ def main():
     for v in a.variant or ["as_recorded"]:
         with cf.ThreadPoolExecutor(8) as ex:
             outs = list(ex.map(lambda m: call(VARIANTS[v]([dict(x) for x in m])), reqs))
-        hits = sum(1 for o in outs if re.search(a.count, o))
+        def part(o):
+            if not a.field:
+                return o
+            try:
+                j = json.loads(o)
+            except ValueError:
+                return ""
+            return json.dumps([j.get(f) for f in a.field.split(",")])
+
+        hits = sum(1 for o in outs if re.search(a.count, part(o)))
         print(f"{v}: {hits}/{len(outs)} match {a.count!r}")
         for o in outs[:3]:
             try:
                 j = json.loads(o)
-                print("   ", (j.get("thought") or "")[:220], "| acts:", j.get("acts"))
+                print("   ", (j.get("thought") or "")[:160], "| acts:", j.get("acts"), "| intend:", j.get("intend"))
             except ValueError:
                 print("   ", o[:220])
 

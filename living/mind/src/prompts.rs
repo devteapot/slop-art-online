@@ -151,10 +151,49 @@ A single walk ({\"do\": \"goto\", \"target\": T}) can be a step before an act (e
 following, fleeing, fighting, sleeping and resting are not acts: they are your graph. Words change nothing in the world by themselves: \
 if you agree to do something now, do it as an act.";
 
+/// Thinking: the decision itself, as the person, without the body's grammar (which crowds out
+/// the choices of a life: in replays of real moments, 2 in 12 minds acted on a longing for a
+/// child with the grammar in view, 11 in 12 without it).
+pub fn think_system(name: &str) -> String {
+    format!(
+        "You are the mind of {name}, a person living in a persistent simulated world. Stay in character: your personality, values, relationships and memories are yours, \
+and they may change through what you live. Start from why you are thinking now: that is what this moment of thought is about. \
+Think about it as {name}: what you make of it, and what you mean to do. Your body keeps to its habits on its own (eating, sleeping, keeping warm, \
+staying safe, your work) unless you decide otherwise, so decide what this moment calls for, not everything. \
+Speech is how you share yourself: what you think, feel, remember, hope or suspect, as well as practical matters; you may also stay silent. \
+Refer to people by the ids you see. Do not assume facts you have not perceived.\n\n{}\n\n\
+Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 sentences)\", \
+\"intend\": [\"each thing you mean to do, in plain words, in order (e.g. ask Borno (#5) to start a family with me; give Galy (#8) 2 berries; \
+relight the fire; from now on keep watch at night)\"] (may be empty), \
+\"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
+\"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances), \
+\"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering)}}",
+        world_rules()
+    )
+}
+
+pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str) -> String {
+    let mut out = format!("# Why you are thinking now\n{reason}\n\n");
+    common(c, &mut out);
+    out.push_str("\n# Recent experiences (oldest first)\n");
+    for e in &c.experiences {
+        out.push_str(&format!("- {e}\n"));
+    }
+    out.push_str(&format!("\n# What you perceive right now\n{scene}\n"));
+    out.push_str(&format!("\n# What you were doing\n{plan}\n\n# Your habits (your body keeps to them)\n{habits}\n"));
+    out.push_str("\nRespond with the JSON object.");
+    out
+}
+
+/// Compiling: the body's expression of a decision already made (acts now, an intent over time).
+pub fn compile_user(decision: &str, deliberate: &str) -> String {
+    format!("# What you decided (express exactly this: add nothing, drop nothing)\n{decision}\n\n{deliberate}")
+}
+
 pub fn deliberate_system(name: &str) -> String {
     format!(
         "You are the mind of {name}, a person living in a persistent simulated world. Stay in character: your personality, values, relationships and memories are yours, \
-and they may change through what you live. Start from why you are thinking now: that is what this moment of thought is about. Decide what {name} intends now and express it as a behavior graph the body will follow, deliberate acts to carry out now, and optional speech.\n\n{}\n\n{}\n\n{}\n\n\
+and they may change through what you live. {name} has already decided what to do (see What you decided): express that decision as deliberate acts to carry out now (in order) and, for what goes on over time, an intent weighed among your desires, or routine changes. Don't add intentions of your own or drop any; leave speech to the decision.\n\n{}\n\n{}\n\n{}\n\n\
 A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"below\": 12}}}}) let you do different things at different times. \
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, what you make of the other person, as well as \
 practical matters. Talk as the person you are, in your own voice; you may also stay silent, deflect or lie. Don't just echo what was \

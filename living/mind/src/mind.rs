@@ -859,15 +859,54 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             places: self.places(actor),
             experiences,
         };
-        let system = prompts::deliberate_system(&c.name);
         let repertoire = self.repertoire_text(actor);
-        let user = prompts::deliberate_user(&ctx, &d.scene, &outline, &plan, &reason, &repertoire);
         let _permit = self.sem.acquire().await?;
+        // Think first, as the person and without the grammar; then compile the decision.
+        let habits: String = self.conn.db.routine().iter().filter(|r| r.actor == actor).map(|r| r.name).collect::<Vec<_>>().join(", ");
+        let think_msgs = vec![
+            Msg { role: "system", content: prompts::think_system(&c.name) },
+            Msg { role: "user", content: prompts::think_user(&ctx, &d.scene, &plan, &reason, &habits) },
+        ];
+        let mut decision = Value::Null;
+        let (mut think_latency, mut think_tokens) = (0u32, 0u32);
+        for p in [profile.clone(), self.llm.default_profile()] {
+            if let Ok(r) = self.llm.chat(&p, "think", &c.name, &think_msgs).await {
+                think_latency += r.latency_ms;
+                think_tokens += r.tokens;
+                if let Ok(v) = llm::parse_json(&r.content) {
+                    decision = v;
+                    break;
+                }
+            }
+        }
+        let intend: Vec<String> = decision["intend"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+        let decided = format!(
+            "{}\nIntentions (in order): {}",
+            decision["thought"].as_str().unwrap_or_default(),
+            if intend.is_empty() { "(nothing new: carry on)".to_string() } else { intend.join("; ") }
+        );
+        let system = prompts::deliberate_system(&c.name);
+        let user = prompts::compile_user(&decided, &prompts::deliberate_user(&ctx, &d.scene, &outline, &plan, &reason, &repertoire));
         let mut messages = vec![Msg { role: "system", content: system }, Msg { role: "user", content: user }];
         let mut last_err = String::new();
-        let mut total_latency = 0u32;
-        let mut total_tokens = 0u32;
+        let mut total_latency = think_latency;
+        let mut total_tokens = think_tokens;
         let thought_ref = reference(actor, "deliberate");
+        // The decision's own words (thought, speech, stances, places) are kept whatever the compiler says.
+        let keep = |raw: &str| -> String {
+            match (llm::parse_json(raw), decision.is_object()) {
+                (Ok(mut v), true) => {
+                    for k in ["thought", "say", "judgments", "places"] {
+                        v[k] = decision[k].clone();
+                    }
+                    if v["plan"].as_str().map_or(true, |p| p.is_empty()) && !intend.is_empty() {
+                        v["plan"] = json!(intend.join("; "));
+                    }
+                    v.to_string()
+                }
+                _ => raw.to_string(),
+            }
+        };
         let mut profile = profile;
         for attempt in 0..3 {
             let reply = match self.llm.chat(&profile, "deliberate", &c.name, &messages).await {
@@ -879,9 +918,10 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             };
             total_latency += reply.latency_ms;
             total_tokens += reply.tokens;
+            let raw = keep(&reply.content);
             // An intention becomes the "current plan" routine, weighed among the desires.
-            let intended = llm::parse_json(&reply.content).ok().and_then(|v| self.plan_into_desires(actor, v));
-            let content = intended.as_ref().map(|v| v.to_string()).unwrap_or_else(|| reply.content.clone());
+            let intended = llm::parse_json(&raw).ok().and_then(|v| self.plan_into_desires(actor, v));
+            let content = intended.as_ref().map(|v| v.to_string()).unwrap_or_else(|| raw.clone());
             // Routine edits apply whatever else the reply does (they are idempotent upserts).
             if let Ok(v) = llm::parse_json(&content) {
                 if let Err(e) = self.apply_routines(&c, &v["routines"]).await {
