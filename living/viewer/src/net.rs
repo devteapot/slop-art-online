@@ -156,7 +156,12 @@ impl Net {
                 let handle = conn
                     .subscription_builder()
                     .on_error(|_, e| warn!("experience subscription failed: {e}"))
-                    .subscribe([format!("SELECT * FROM experience WHERE observer = {actor}")]);
+                    .subscribe([
+                        format!("SELECT * FROM experience WHERE observer = {actor}"),
+                        // Its routines and how each has gone (two-table join on primary keys).
+                        format!("SELECT * FROM routine WHERE actor = {actor}"),
+                        format!("SELECT s.* FROM routine_stat s JOIN routine r ON s.id = r.id WHERE r.actor = {actor}"),
+                    ]);
                 self.exp_pending = Some(ExpSub { actor, handle });
             }
             None => {

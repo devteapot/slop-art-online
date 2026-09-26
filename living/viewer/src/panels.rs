@@ -749,19 +749,61 @@ fn behavior(ui: &mut egui::Ui, conn: &DbConnection, snap: &Snap, c: &Character) 
             ui.label(RichText::new(format!("last deliberation {}", snap.stamp(s.deliberated_ms))).small().color(WEAK));
         }
     }
+    // Routines inline into the graph the body runs (as on the authority), so node numbers
+    // and the highlighted active path match what is executing.
+    let mut routines: Vec<Routine> = conn.db.routine().iter().filter(|r| r.actor == c.id).collect();
+    routines.sort_by(|a, b| a.name.cmp(&b.name));
     section(ui, "Behavior graph");
     match graph::parse(&brain.graph) {
         Ok(g) => {
+            let root = if graph::preorder(&g.root).iter().any(|n| matches!(n, Node::Routine(_))) {
+                let lookup = |name: &str| routines.iter().find(|r| r.name.eq_ignore_ascii_case(name)).and_then(|r| graph::parse(&r.graph).ok()).map(|g| g.root);
+                graph::validate_compiled(graph::expand(&g.root, &lookup)).map(|g| g.root).unwrap_or(g.root)
+            } else {
+                g.root
+            };
             egui::Frame::new().fill(Color32::from_rgb(16, 19, 24)).corner_radius(4.0).inner_margin(egui::Margin::same(6)).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 let mut id = 0u16;
-                outline(ui, &g.root, 0, &mut id, &active);
+                outline(ui, &root, 0, &mut id, &active);
             });
         }
         Err(e) => {
             ui.label(RichText::new(format!("unparsed graph: {e}")).color(Color32::from_rgb(240, 110, 90)));
             ui.add(egui::Label::new(RichText::new(&brain.graph).monospace().small()).wrap());
         }
+    }
+    section(ui, &format!("Routines ({})", routines.len()));
+    if routines.is_empty() {
+        ui.label(RichText::new("none (or still loading)").color(WEAK));
+    }
+    for r in &routines {
+        let stat = conn.db.routine_stat().id().find(&r.id);
+        let head = egui::RichText::new(format!("{} · {}", r.name, r.source)).strong().color(Color32::from_rgb(140, 220, 210));
+        egui::CollapsingHeader::new(head).id_salt(("routine", r.id)).show(ui, |ui| {
+            match &stat {
+                Some(s) => {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new(format!("✔ {}", s.ok)).color(Color32::from_rgb(120, 210, 120)));
+                        ui.label(RichText::new(format!("✘ {}", s.failed)).color(Color32::from_rgb(240, 110, 90)));
+                        if s.last_ms > 0 {
+                            ui.label(RichText::new(format!("last {}", snap.stamp(s.last_ms))).small().color(WEAK));
+                        }
+                    });
+                    if !s.last_fail.is_empty() {
+                        ui.label(RichText::new(format!("last failure: {}", s.last_fail)).small().color(Color32::from_rgb(240, 150, 120)));
+                    }
+                }
+                None => {
+                    ui.label(RichText::new("not tried yet").small().color(WEAK));
+                }
+            }
+            ui.label(RichText::new(format!("revision {} · updated {}", r.revision, snap.stamp(r.updated_ms))).small().color(WEAK));
+            if let Ok(g) = graph::parse(&r.graph) {
+                let mut id = 0u16;
+                outline(ui, &g.root, 0, &mut id, &[]);
+            }
+        });
     }
 }
 
