@@ -112,7 +112,7 @@ Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
 Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
   {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"name of a place you remember\"}} {{\"at\": [x, y]}}
-  Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf.
+  Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf | grass forest (the nearest tile of that ground in sight).
   People/creature/resource targets resolve only when currently in sight; places and coordinates always resolve. A do-node whose target is missing fails, so \"first\" moves on.
 Skills:
 {}
@@ -384,16 +384,15 @@ pub fn animal_think_user(mind: &[String], experiences: &[String], scene: &str, r
 
 pub fn animal_compile_system(kind: &str, skills: &str, signals: &str, max_nodes: usize) -> String {
     format!(
-        "You adjust the behavior of a {kind} to its current impulse. Its behavior is its ways: routines (named graphs for \
-staying safe, feeding, resting, mating, keeping with its kind, roaming, and whatever it has picked up) and a top level of \
-desires that weighs them. Change only the part the impulse is about, usually one routine or one desire's weight; \
-everything you don't mention stays as it is. Do not add plans, knowledge or wisdom the animal does not have, and keep \
-each graph short (at most {max_nodes} nodes). The {kind} cannot speak; it communicates only with its signals: {signals} \
+        "You turn the current impulse of a {kind} into what it does now. Its instincts (routines for staying safe, feeding, \
+resting, mating, keeping with its kind and roaming, weighed by a top level of desires) are inherited: they change over \
+generations, not by one animal's impulse, and they keep working underneath. The impulse is one more pull among them, \
+lasting about a minute. Do not add plans, knowledge or wisdom the animal does not have, and keep the graph short \
+(at most {max_nodes} nodes). The {kind} cannot speak; it communicates only with its signals: {signals} \
 (as {{\"do\": \"signal\", \"item\": name}}).\n\n{}\n\n\
 Reply with ONE JSON object: {{\"intent\": {{\"weight\": 0.1-1.5, \"graph\": {{...what the impulse makes it do...}}}} \
 (weighed among its desires, whose weights its top level shows: an intent weighed above its safety desire outweighs fleeing danger while it lasts), \
-\"routines\": [{{\"name\": \"...\", \"graph\": {{...}}}}] (only those you change; \"graph\": null retires one), \
-\"graph\": \"keep\", or a new top level with \"restructure\": true only if the impulse changes its whole way of living (without it a graph counts as the intent)}}",
+or {{\"graph\": \"keep\"}} when the impulse needs nothing its instincts don't already do}}",
         grammar_with(skills, false)
     )
 }

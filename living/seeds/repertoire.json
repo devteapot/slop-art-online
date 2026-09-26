@@ -966,6 +966,12 @@
               "do": "graze"
             },
             {
+              "do": "goto",
+              "target": {
+                "nearest": "grass"
+              }
+            },
+            {
               "seq": [
                 {
                   "do": "wander"

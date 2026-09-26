@@ -1078,14 +1078,22 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             let reply = self.llm.chat(&compile, "deliberate", &c.name, &messages).await?;
             latency += reply.latency_ms;
             tokens += reply.tokens;
-            // An impulse is weighed among the animal's desires, like a person's plan.
-            let content = llm::parse_json(&reply.content).ok().and_then(|v| self.plan_into_desires(actor, v)).map(|v| v.to_string()).unwrap_or_else(|| reply.content.clone());
-            // Routine edits apply whatever else the reply does; without a new top level the
-            // animal carries on with its ways as edited.
+            // An impulse is weighed among the animal's desires, like a person's plan. Its
+            // instincts are inherited and not rewritten by an impulse: routine edits and new top
+            // levels from the compiler are not taken.
+            let content = llm::parse_json(&reply.content)
+                .ok()
+                .map(|mut v| {
+                    if let Some(o) = v.as_object_mut() {
+                        o.remove("routines");
+                        o.remove("restructure");
+                    }
+                    v
+                })
+                .and_then(|v| self.plan_into_desires(actor, v))
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| reply.content.clone());
             if let Ok(v) = llm::parse_json(&content) {
-                if let Err(e) = self.apply_routines(c, &v["routines"]).await {
-                    log::warn!("{}: routines not applied: {e:#}", c.name);
-                }
                 if v["graph"].is_null() || v["graph"].as_str().map_or(false, |g| g.trim().eq_ignore_ascii_case("keep")) {
                     let changed: Vec<String> = v["routines"].as_array().map(|a| a.iter().filter_map(|r| r["name"].as_str().map(String::from)).collect()).unwrap_or_default();
                     let t = ThoughtIn {

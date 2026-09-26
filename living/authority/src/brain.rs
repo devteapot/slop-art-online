@@ -585,6 +585,27 @@ impl<'a> Ev<'a> {
                     .find(|(n, _)| n.kind == f.kind && common::amount_now(ctx, n, now) >= 1.0)
                     .map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
             }
+            living_rules::catalog::KindClass::Terrain => {
+                // The nearest tile of that ground within sight.
+                let map = common::map(self.ctx);
+                let sight = if common::night(&self.w, self.now) { living_rules::NIGHT_SIGHT } else { living_rules::SIGHT };
+                let r = sight as i32;
+                let (cx, cy) = (self.at.0.floor() as i32, self.at.1.floor() as i32);
+                let mut best: Option<((f32, f32), f32)> = None;
+                for dy in -r..=r {
+                    for dx in -r..=r {
+                        if map.get(cx + dx, cy + dy).name() != f.kind {
+                            continue;
+                        }
+                        let p = ((cx + dx) as f32 + 0.5, (cy + dy) as f32 + 0.5);
+                        let d = dist(self.at, p);
+                        if d <= sight && best.map_or(true, |(_, bd)| d < bd) {
+                            best = Some((p, d));
+                        }
+                    }
+                }
+                best.map(|(p, _)| Resolved { class: 4, id: 0, at: p, kind: f.kind.clone(), name: String::new() })
+            }
             living_rules::catalog::KindClass::Structure => {
                 let me = self.me.id;
                 self.scene()

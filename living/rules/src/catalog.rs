@@ -6,7 +6,12 @@ pub enum KindClass {
     Resource,
     Structure,
     Creature,
+    /// Ground one can walk to: the nearest tile of it in sight.
+    Terrain,
 }
+
+/// Terrain kinds usable as targets (`{"nearest": "grass"}`).
+pub const TERRAINS: &[&str] = &["grass", "forest"];
 
 pub struct SkillSpec {
     pub name: &'static str,
@@ -136,6 +141,8 @@ pub fn kind_class(kind: &str) -> Option<KindClass> {
         Some(KindClass::Structure)
     } else if CREATURES.contains(&kind) || kind == "creature" {
         Some(KindClass::Creature)
+    } else if TERRAINS.contains(&kind) {
+        Some(KindClass::Terrain)
     } else {
         None
     }
