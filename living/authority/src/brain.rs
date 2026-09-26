@@ -58,6 +58,8 @@ struct Ev<'a> {
     want: (String, u32),
     /// Node of the activity in progress if it is work that completes on its own (see `latches`).
     latched: Option<u16>,
+    /// A deliberate act holds the body: graph leaves wait, except reflexes (see `acts.rs`).
+    acting: bool,
 }
 
 /// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
@@ -82,12 +84,31 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         log::warn!("character {id} has no valid graph at revision {}", st.revision);
         return;
     };
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None };
+    // A deliberate act that cannot reach its target gives up after a while.
+    if let Some(a) = ctx.db.activity().id().find(id).filter(|a| crate::acts::overdue(a, now)) {
+        act::cancel(ctx, a, now, Some("you could not get to it in time"));
+    }
+    let acting = ctx.db.activity().id().find(id).map_or(false, |a| a.node == act::ACT);
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting };
     ev.latched = ctx.db.activity().id().find(id).filter(|a| a.revision == ev.st.revision && LATCHES.contains(&a.skill.as_str())).map(|a| a.node);
     ev.alerts();
     let root = ev.g.clone();
     let result = ev.run(&root.root, 0);
     ev.after(result, &root.root);
+}
+
+/// Resolve a target for a deliberate act exactly as a graph leaf would (only what the
+/// character perceives, its own places and remembered people).
+pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Option<Resolved> {
+    let me = ctx.db.character().id().find(id)?;
+    let st = ctx.db.mind_state().id().find(id)?;
+    let body = ctx.db.body().id().find(id)?;
+    let vit = ctx.db.vitals().id().find(id)?;
+    let g = common::compiled(ctx, id, st.revision)?;
+    let at = pos(&body, now);
+    let needs = common::needs(&vit, now);
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting: false };
+    ev.resolve(t)
 }
 
 /// Re-anchor needs when their rate inputs change; handles death from needs.
@@ -378,6 +399,18 @@ impl<'a> Ev<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
+        if self.acting {
+            // A deliberate act holds the body: the graph's work waits for it, but a reflex
+            // (flee, dodge, block, attack, throw) takes the body back at once.
+            match self.ctx.db.activity().id().find(self.me.id).filter(|a| a.node == act::ACT) {
+                Some(a) if living_rules::acts::REFLEXES.contains(&skill) => {
+                    crate::acts::interrupt(self.ctx, a, skill, self.now);
+                    self.acting = false;
+                }
+                Some(_) => return St::Run,
+                None => self.acting = false,
+            }
+        }
         let rev = self.st.revision;
         if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
             if a.node == id && a.revision == rev {
@@ -858,9 +891,14 @@ impl<'a> Ev<'a> {
     fn after(mut self, result: St, root: &Node) {
         let ctx = self.ctx;
         let id = self.me.id;
-        // Interrupt an activity no running leaf owns anymore (the branch lost priority).
+        // Interrupt an activity no running leaf owns anymore (the branch lost priority);
+        // a deliberate act is not the graph's to interrupt (only a reflex does, in `leaf`).
         if let Some(a) = ctx.db.activity().id().find(id) {
-            if self.running != Some(a.node) || a.revision != self.st.revision {
+            if a.node == act::ACT {
+                self.running = Some(act::ACT);
+                self.status = format!("{} (decided)", a.label);
+                self.path.clear();
+            } else if self.running != Some(a.node) || a.revision != self.st.revision {
                 act::cancel(ctx, a, self.now, None);
             }
         }
@@ -893,7 +931,7 @@ impl<'a> Ev<'a> {
             }
             self.noticed();
         }
-        if result != St::Run {
+        if result != St::Run && self.running != Some(act::ACT) {
             self.status = match result {
                 St::Ok => "done".into(),
                 _ => {

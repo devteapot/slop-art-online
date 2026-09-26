@@ -305,7 +305,40 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         }
     }
     if let Some(a) = ctx.db.activity().id().find(id) {
-        you.insert("doing".into(), json!(a.label));
+        let decided = if a.node == crate::act::ACT { " (as you decided)" } else { "" };
+        you.insert("doing".into(), json!(format!("{}{decided}", a.label)));
+    }
+    let waiting: Vec<String> = ctx.db.act_queue().actor().filter(id).filter_map(|p| living_rules::acts::from_json(&p.node).ok()).map(|a| living_rules::graph::describe(&living_rules::graph::Node::Do(a))).collect();
+    if !waiting.is_empty() {
+        you.insert("decided, not yet done".into(), json!(waiting));
+    }
+    // Standing proposals between you and others (social facts both sides know).
+    let ago = |t: u64| format!("{}s ago", now.saturating_sub(t) / 1000);
+    let window = (common::laws(ctx).bond_window_s * 1000.0) as u64;
+    let mut asked = Vec::new();
+    for o in ctx.db.bond_offer().to().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
+        asked.push(json!({"from": o.from, "name": common::name_of(ctx, o.from), "asks": "to start a family with you (it happens if you also choose conceive toward them in time)", "when": ago(o.at_ms)}));
+    }
+    for o in ctx.db.trade_offer().iter().filter(|o| o.to == id && now.saturating_sub(o.at_ms) <= 180_000) {
+        asked.push(json!({"from": o.from, "name": common::name_of(ctx, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange)", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
+    }
+    if let Some(m) = ctx.db.membership().member().find(id) {
+        for r in ctx.db.join_request().iter().filter(|r| r.community == m.community && now.saturating_sub(r.at_ms) <= 300_000) {
+            asked.push(json!({"from": r.asker, "name": common::name_of(ctx, r.asker), "asks": "to join your community (welcome them to let them in)", "when": ago(r.at_ms)}));
+        }
+    }
+    if !asked.is_empty() {
+        you.insert("asked of you".into(), Value::Array(asked));
+    }
+    let mut mine = Vec::new();
+    for o in ctx.db.bond_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
+        mine.push(json!({"to": o.to, "name": common::name_of(ctx, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
+    }
+    for o in ctx.db.trade_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= 180_000) {
+        mine.push(json!({"to": o.to, "name": common::name_of(ctx, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
+    }
+    if !mine.is_empty() {
+        you.insert("you are waiting on".into(), Value::Array(mine));
     }
     let hour = common::hour(&w, now);
     let r = common::sight_for(ctx, id, &w, now);

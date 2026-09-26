@@ -1,6 +1,7 @@
 //! Shared rules for the living core: map, behavior graph grammar, vocabulary and the
 //! Rhai skill runtime. Used by the authority module, the mind service and the viewer.
 
+pub mod acts;
 pub mod catalog;
 pub mod graph;
 pub mod map;

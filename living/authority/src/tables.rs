@@ -732,6 +732,24 @@ pub struct Rearing {
     pub until_ms: u64,
 }
 
+/// Deliberate acts a controller decided on (a mind's deliberation or conversation turn, a
+/// player's command) waiting for the body: one `do` node each, carried out once, in order,
+/// one at a time, outside the behavior graph (see `acts.rs`). Private: only the authority
+/// reads it; the outcome reaches the actor as an experience.
+#[spacetimedb::table(accessor = act_queue)]
+pub struct PlannedAct {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    /// The act as a canonical `do` node (JSON).
+    pub node: String,
+    /// Where it was decided ("deliberate", "talk", "human").
+    pub source: String,
+    pub at_ms: u64,
+}
+
 /// Inborn genes (JSON: name → value; see `living_rules::genes`) and, for the young, the ways
 /// of life they grow into (a top level from a parent, varied). Written once at birth.
 #[spacetimedb::table(accessor = genome, public)]

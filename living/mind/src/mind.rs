@@ -74,6 +74,32 @@ fn strings(x: &Value) -> Vec<String> {
     x.as_array().map(|a| a.iter().filter_map(|s| s.as_str().map(String::from)).collect()).unwrap_or_default()
 }
 
+/// A reply's deliberate acts (`acts`, or a single `act`), as JSON for `mind_act`; the
+/// authority normalizes each for the body and tells back any it cannot do.
+pub(crate) fn acts_of(v: &Value) -> Vec<String> {
+    let list = match (&v["acts"], &v["act"]) {
+        (Value::Array(a), _) => a.clone(),
+        (o @ Value::Object(_), _) => vec![o.clone()],
+        (_, o @ Value::Object(_)) => vec![o.clone()],
+        _ => Vec::new(),
+    };
+    list.into_iter().filter(|x| x.is_object()).take(living_rules::acts::MAX_QUEUED).map(|x| x.to_string()).collect()
+}
+
+/// A short description of acts for logs and thought summaries.
+pub(crate) fn acts_text(acts: &[String]) -> String {
+    acts.iter()
+        .map(|a| {
+            serde_json::from_str::<Value>(a)
+                .ok()
+                .and_then(|v| living_rules::acts::parse(v, None).ok())
+                .map(|x| living_rules::graph::describe(&living_rules::graph::Node::Do(x)))
+                .unwrap_or_else(|| a.chars().take(80).collect())
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 fn reference(actor: u32, kind: &str) -> String {
     format!("{kind}-{actor}-{}", llm::now_ms())
 }
@@ -582,6 +608,19 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         rx.await?.map_err(|e| anyhow!("mind_install: {e}"))
     }
 
+    /// Hand deliberate acts to the authority (carried out once each, in order).
+    pub(crate) async fn act(&self, actor: u32, acts: Vec<String>, source: &str) -> Result<()> {
+        if acts.is_empty() {
+            return Ok(());
+        }
+        log::info!("{} acts ({source}): {}", self.name(actor), acts_text(&acts));
+        let (tx, rx) = oneshot::channel();
+        self.conn.reducers.mind_act_then(actor, acts, source.to_string(), move |_, r| {
+            let _ = tx.send(flatten(r));
+        })?;
+        rx.await?.map_err(|e| anyhow!("mind_act: {e}"))
+    }
+
     async fn skip(&self, actor: u32, seen: u64, t: ThoughtIn) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         self.conn.reducers.mind_skip_then(actor, seen, t, move |_, r| {
@@ -858,9 +897,14 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                         _ => (String::new(), 0),
                     };
                     let thought = v["thought"].as_str().unwrap_or_default().to_string();
+                    let acts = acts_of(&v);
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
-                        summary: format!("{thought} → (carries on){}", if say.is_empty() { String::new() } else { format!(" and says “{say}”") }),
+                        summary: format!(
+                            "{thought} → (carries on){}{}",
+                            if acts.is_empty() { String::new() } else { format!(" and acts: {}", acts_text(&acts)) },
+                            if say.is_empty() { String::new() } else { format!(" and says “{say}”") }
+                        ),
                         detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1}).to_string(),
                         latency_ms: total_latency,
                         tokens: total_tokens,
@@ -872,7 +916,8 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                     self.conn.reducers.mind_say_then(actor, say, to, d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
-                    return rx.await?.map_err(|e| anyhow!("mind_say: {e}"));
+                    rx.await?.map_err(|e| anyhow!("mind_say: {e}"))?;
+                    return self.act(actor, acts, "deliberate").await;
                 }
             }
             // A patch replaces one labeled branch (e.g. combat tactics mid-fight) and keeps the rest.
@@ -904,9 +949,10 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                         }
                         self.project(actor, None, None).await?;
                     }
+                    let acts = acts_of(&v);
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
-                        summary: format!("{thought} → {plan}"),
+                        summary: format!("{thought} → {plan}{}", if acts.is_empty() { String::new() } else { format!(" (acts: {})", acts_text(&acts)) }),
                         detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1, "pruned": pruned}).to_string(),
                         latency_ms: total_latency,
                         tokens: total_tokens,
@@ -914,7 +960,8 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                         reference: thought_ref.clone(),
                     };
                     log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
-                    return self.install(actor, g.to_json(), plan, say, to, d.updated_ms, t).await;
+                    self.install(actor, g.to_json(), plan, say, to, d.updated_ms, t).await?;
+                    return self.act(actor, acts, "deliberate").await;
                 }
                 Err(e) => {
                     last_err = format!("{e:#}");

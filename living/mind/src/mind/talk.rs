@@ -25,7 +25,7 @@
 //! memory). The authority remains the record: every line is a `speak` (chronicle and
 //! experiences), so consolidation integrates conversations like anything else lived.
 
-use super::{flatten, reference, Minds};
+use super::{acts_of, acts_text, flatten, reference, Minds};
 use crate::llm::{self, Msg};
 use crate::memory::{self, Cues};
 use crate::prompts;
@@ -494,6 +494,8 @@ impl Minds {
         // "Nothing more to say" closes without anything to remember.
         let outcome = if outcome.to_lowercase().starts_with("nothing") { String::new() } else { outcome };
         let thought = flat(&v["thought"]);
+        // Deliberate acts decided in this turn (e.g. both choosing to start a family).
+        let acts = acts_of(&v);
         let other_name = self.name(other);
         let now = llm::now_ms();
         let (epoch, day_ms) = self.conn.db.world().id().find(&0).map(|w| (w.epoch_ms, w.day_ms)).unwrap_or((0, living_rules::DEFAULT_DAY_MS));
@@ -507,8 +509,9 @@ impl Minds {
         });
         let fmt = self.fmt_time();
         let summary = format!(
-            "{thought} → {}{}",
+            "{thought} → {}{}{}",
             if say.is_empty() { format!("says nothing to {other_name}") } else { format!("says to {}: “{say}”", self.name(to)) },
+            if acts.is_empty() { String::new() } else { format!(" and acts: {}", acts_text(&acts)) },
             match &settled {
                 Some(s) if !s.outcome.is_empty() => format!(" (settled: {} — until {})", s.outcome, fmt(s.until_ms)),
                 Some(_) if !say.is_empty() => " (and ends the conversation)".to_string(),
@@ -599,6 +602,9 @@ impl Minds {
             if let Some(c) = tk.pairs.get_mut(&pair(me, to)) {
                 c.lines.retain(|l| !(l.turn && l.speaker == me && l.at_ms == now));
             }
+        }
+        if let Err(e) = self.act(me, acts, "talk").await {
+            log::warn!("{}: acts from a conversation not taken: {e:#}", c.name);
         }
         log::info!(
             "{} {}",
@@ -721,6 +727,22 @@ impl Minds {
             pacing.push_str(" You have said about as much as you want to for now: make this your last word (end: true), and say what was settled, if anything.");
         }
         let earlier = ctx.reopened.map(|(s, why)| format!("Earlier you two settled{} ({}). Now {why}.", if s.outcome.is_empty() { " nothing in particular and parted".to_string() } else { format!(": “{}”", s.outcome) }, fmt(s.at_ms)));
+        // What stands between them now: proposals either way (answerable with an act).
+        let mut between = Vec::new();
+        for o in self.conn.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) <= 120_000) {
+            if o.from == other && o.to == me {
+                between.push(format!("{other_name} has asked to start a family with you ({}s ago); it happens if you also choose it (the act conceive toward them) within two minutes of their asking.", now.saturating_sub(o.at_ms) / 1000));
+            } else if o.from == me && o.to == other {
+                between.push(format!("You asked {other_name} to start a family ({}s ago); they have not chosen it yet.", now.saturating_sub(o.at_ms) / 1000));
+            }
+        }
+        for o in self.conn.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) <= 180_000) {
+            if o.from == other && o.to == me {
+                between.push(format!("{other_name} offers you {} {} for {} {} (accept to exchange).", o.give_qty, o.give_item, o.want_qty, o.want_item));
+            } else if o.from == me && o.to == other {
+                between.push(format!("You offered {other_name} {} {} for {} {}; they have not accepted yet.", o.give_qty, o.give_item, o.want_qty, o.want_item));
+            }
+        }
         let t = prompts::TalkUser {
             identity: &identity,
             pacing: &pacing,
@@ -734,6 +756,7 @@ impl Minds {
             scene: &scene,
             conversation: &convo,
             heard: &heard.text,
+            between: &between,
         };
         (prompts::talk_system(&c.name, &other_name, other), prompts::talk_user(&t))
     }

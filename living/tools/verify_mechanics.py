@@ -3,7 +3,9 @@
 
 Two scripted characters (installed behavior graphs, no LLM) exercise writing and reading a
 tablet that teaches a technique, crafting with the learned technique, an atomic trade,
-planting, teaching and consensual conception. Each check reads the authority's tables.
+planting, teaching and consensual conception, then the same kind of interactions as
+deliberate acts decided outside the graph (`mind_act`: a gift, conception chosen by both, a
+failure reported back). Each check reads the authority's tables.
 
 Usage: living/tools/verify_mechanics.py [--db living-verify] [--wasm NAME] [--out FILE]
 Publishes the database fresh (deletes its data).
@@ -72,10 +74,10 @@ def main():
     db = a.db
     stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", db, "--delete-data", "-y")
     time.sleep(3)
-    stdb("call", "-s", "local", db, "spawn_crowd", "2", "true")
+    stdb("call", "-s", "local", db, "spawn_crowd", "4", "true")
     time.sleep(1.5)
     walkers = sorted(int(r["id"]) for r in rows(db, "SELECT id, name FROM character") if r["name"].startswith("Walker"))
-    A, B = walkers[:2]
+    A, B, C, D = walkers[:4]
     name_a = f"Walker1"
     call(db, "place_near", str(B), str(A))
     for t in ["writing", "spear", "planting"]:
@@ -175,6 +177,37 @@ def main():
         call(db, "set_behavior", str(A), seq({"do": {"skill": "open", "target": {"nearest": "gate"}}}))
         reopened = wait_for(lambda: [g for g in rows(db, f"SELECT id, open FROM gate WHERE id = {gid}") if g["open"] == "true"], timeout=20)
         results["gate shut and opened"] = bool(shut) and bool(reopened)
+    # 9. Deliberate acts (decided by a mind, outside the graph; the walkers are controlled by
+    # this admin identity like minds). C and D rest in a loop: if the graph could take the
+    # body back, rest would cancel the acts. C gives D berries, then both choose each other.
+    call(db, "place_near", str(C), str(A))
+    call(db, "place_near", str(D), str(C))
+    call(db, "grant_items", str(C), "cooked_meat", "3")
+    call(db, "grant_items", str(D), "cooked_meat", "3")
+    call(db, "grant_items", str(C), "berries", "4")
+    rest = json.dumps({"first": [{"do": {"skill": "rest"}}]})
+    call(db, "set_behavior", str(C), rest)
+    call(db, "set_behavior", str(D), rest)
+    time.sleep(1.5)
+    act = lambda who, *nodes: stdb("call", "-s", "local", db, "mind_act", str(who), json.dumps([json.dumps(n) for n in nodes]), json.dumps("test"))
+    act(C, {"do": "eat", "item": "food"}, {"do": "give", "target": {"id": D}, "item": "berries", "qty": 2})
+    act(D, {"do": "eat", "item": "food"})
+    gave = wait_for(lambda: [r for r in rows(db, f"SELECT item, qty FROM inventory WHERE owner = {D}") if r["item"] == "berries"], timeout=30)
+    told = lambda who, words: [r for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {who}") if r["kind"] == "act" and words in r["text"]]
+    results["act: a gift decided outside the graph, reported back"] = bool(gave) and bool(wait_for(lambda: told(C, "You did what you had decided"), timeout=10))
+    call(db, "place_structure", str(C), "shelter")
+    time.sleep(1)
+    act(C, {"do": "conceive", "target": {"id": D}})
+    time.sleep(2)
+    act(D, {"do": "conceive", "target": {"id": C}})
+    both = wait_for(lambda: [r for r in rows(db, "SELECT a, b FROM expecting") if {int(r["a"]), int(r["b"])} == {C, D}], timeout=30)
+    results["act: conception chosen by both as acts"] = bool(both)
+    # A cannot teach what A does not know: the act fails, and A is told why.
+    act(A, {"do": "teach", "target": {"id": B}, "item": "cloak"})
+    results["act: a failed act is reported with its reason"] = bool(wait_for(lambda: told(A, "did not work out"), timeout=30))
+    # Real-time behavior is not an act: it is refused with feedback.
+    act(A, {"do": "flee", "target": {"nearest": "wolf"}})
+    results["act: real-time behavior refused as an act"] = bool(wait_for(lambda: told(A, "behavior graph"), timeout=10))
     ok = all(results.values())
     for k, v in results.items():
         print(("PASS " if v else "FAIL ") + k)

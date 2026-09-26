@@ -106,6 +106,21 @@ A small reactive behavior tree the mind writes as JSON and the authority validat
 
 Selectors only resolve entities within the character's current perception radius or its own remembered places, so the graph cannot act on observer truth.
 
+### Deliberate acts (experiment, 2026-09-26)
+
+The behavior graph is the body's real-time layer (moving, keeping close, fleeing, fighting, eating, sleeping, work loops). Deliberate one-off interactions that need no sub-second reaction (starting a family, trading, giving, teaching, writing, reading, joining a community, a single piece of work, a single walk as the step before one) are *acts* a mind decides in its slow loop, like speech ([acts.rs](../living/authority/src/acts.rs), shared rules in [rules acts.rs](../living/rules/src/acts.rs)):
+
+- A deliberation or conversation-turn reply may carry `"acts": [{"do": "conceive", "target": {"id": 6}}, ...]`, delivered through the `mind_act` reducer (authorized like the other `mind_*` reducers). Players' single `do` commands (`human_act`) take the same path.
+- The authority queues them in the private `act_queue` table (at most 4) and carries each out once, in order, through `act::begin` with a dedicated `ACT` node: the same skill rules, walking into reach, checks, durations and effects as graph leaves.
+- While an act runs the graph is still evaluated, but its work waits; only a reflex (flee, dodge, block, attack, throw) takes the body back and interrupts the act (what was still queued is set aside). An act gives up after 90 s without reaching its target; a queued act older than 2 minutes is dropped.
+- Every outcome comes back as an `act` experience ("You did what you had decided: …", "What you had decided did not work out: …: why"); failures also prompt a thought. Ongoing or real-time skills (wander, follow, flee, fighting, wait, sleep, rest) are refused as acts with feedback.
+- The deliberation scene lists what others have asked of you (a wish to start a family, a trade, a join request) and what you are waiting on; a conversation turn sees the proposals between the two speakers (the mind subscribes to `bond_offer` and `trade_offer`).
+- Graph support for these skills stays (animals mate from their graph). People's starting "start a family" routine no longer conceives: it is "keep close to my partner" (approach a suitor, follow the partner).
+
+SpacetimeDB documentation consulted: [tables](https://spacetimedb.com/docs/tables/) (private tables; split by access pattern) and [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) (adding a table and a reducer is allowed). `act_queue` is written and read only by the authority, indexed by actor, a few rows per character at most; no subscriber receives it.
+
+First lab evidence is in the [stage log](STAGES.md#stage-1).
+
 ### Mind loop
 
 1. **Experience.** Percepts become episodes (with salience) in the actor's own Neo4j subgraph, linked to subjective concepts (people, places, things).

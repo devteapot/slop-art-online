@@ -60,6 +60,7 @@ pub mod leaf_result_type;
 pub mod mark_type;
 pub mod membership_table;
 pub mod membership_type;
+pub mod mind_act_reducer;
 pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
 pub mod mind_cursor_type;
@@ -81,6 +82,7 @@ pub mod place_near_reducer;
 pub mod place_structure_reducer;
 pub mod place_table;
 pub mod place_type;
+pub mod planned_act_type;
 pub mod practice_table;
 pub mod practice_type;
 pub mod purge_dead_reducer;
@@ -181,6 +183,7 @@ pub use leaf_result_type::LeafResult;
 pub use mark_type::Mark;
 pub use membership_table::*;
 pub use membership_type::Membership;
+pub use mind_act_reducer::mind_act;
 pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
@@ -202,6 +205,7 @@ pub use place_near_reducer::place_near;
 pub use place_structure_reducer::place_structure;
 pub use place_table::*;
 pub use place_type::Place;
+pub use planned_act_type::PlannedAct;
 pub use practice_table::*;
 pub use practice_type::Practice;
 pub use purge_dead_reducer::purge_dead;
@@ -283,6 +287,11 @@ pub enum Reducer {
     },
     Join {
         name: String,
+    },
+    MindAct {
+        actor: u32,
+        acts: Vec<String>,
+        source: String,
     },
     MindConsolidated {
         actor: u32,
@@ -366,6 +375,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::HumanSay { .. } => "human_say",
             Reducer::InstallScript { .. } => "install_script",
             Reducer::Join { .. } => "join",
+            Reducer::MindAct { .. } => "mind_act",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindInstall { .. } => "mind_install",
             Reducer::MindRoutines { .. } => "mind_routines",
@@ -429,6 +439,15 @@ impl __sdk::Reducer for Reducer {
             Reducer::Join { name } => {
                 __sats::bsatn::to_vec(&join_reducer::JoinArgs { name: name.clone() })
             }
+            Reducer::MindAct {
+                actor,
+                acts,
+                source,
+            } => __sats::bsatn::to_vec(&mind_act_reducer::MindActArgs {
+                actor: actor.clone(),
+                acts: acts.clone(),
+                source: source.clone(),
+            }),
             Reducer::MindConsolidated { actor, upto } => {
                 __sats::bsatn::to_vec(&mind_consolidated_reducer::MindConsolidatedArgs {
                     actor: actor.clone(),
