@@ -652,7 +652,7 @@ pub fn describe(n: &Node) -> String {
         Node::Wait(w) => format!("wait {w}s"),
         Node::Think(r) => format!("think: {r}"),
         Node::Routine(r) => format!("routine: {r}"),
-        Node::Desires(ds) => format!("desires ({})", ds.iter().map(|d| d.want.as_str()).collect::<Vec<_>>().join(", ")),
+        Node::Desires(ds) => format!("desires: {}", ds.iter().map(|d| format!("{} [{}]", d.want, describe_weight(&d.weight))).collect::<Vec<_>>().join("; ")),
     }
 }
 

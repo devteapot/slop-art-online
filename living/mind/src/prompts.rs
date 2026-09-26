@@ -204,7 +204,7 @@ Refer to people by the ids you see. Do not assume facts you have not perceived. 
 {{\"thought\": \"your private interpretation of the situation (1-3 sentences)\", \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
 \"acts\": [ACTS to carry out now, in order] (optional), \
 \"plan\": \"one-line intention\", \"intent\": {{\"weight\": 0.1-1.5, \"graph\": {{...what you mean to do...}}}} (becomes your routine \"current plan\", \
-weighed among your desires as \"the plan\": needs keep their own pull, e.g. strong hunger ≈ 1.0, so a plan of 0.6 yields to it and resumes after), \
+weighed among your desires as \"the plan\": your top level shows each desire's weight; a plan weighed above your safety desire outweighs staying safe while it lasts, and needs keep their own pull, e.g. strong hunger ≈ 1.0, so a plan of 0.6 yields to it and resumes after), \
 \"graph\": \"keep\", or a new top level {{...}} with \"restructure\": true only to change how you live (what you weigh and how; without it a graph counts as your intent), \
 \"routines\": [{{\"name\": \"...\", \"graph\": {{...}}}} to add or replace a routine, or {{\"name\": \"...\", \"retire\": true}}] (optional; a few at a time), \
 or instead of graph \"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}} to replace only that labeled branch (e.g. adapt how you fight mid-fight) and keep the rest, \
@@ -391,7 +391,7 @@ everything you don't mention stays as it is. Do not add plans, knowledge or wisd
 each graph short (at most {max_nodes} nodes). The {kind} cannot speak; it communicates only with its signals: {signals} \
 (as {{\"do\": \"signal\", \"item\": name}}).\n\n{}\n\n\
 Reply with ONE JSON object: {{\"intent\": {{\"weight\": 0.1-1.5, \"graph\": {{...what the impulse makes it do...}}}} \
-(weighed among its desires: hunger, fear and tiredness keep their own pull, e.g. strong hunger ≈ 1.0), \
+(weighed among its desires, whose weights its top level shows: an intent weighed above its safety desire outweighs fleeing danger while it lasts), \
 \"routines\": [{{\"name\": \"...\", \"graph\": {{...}}}}] (only those you change; \"graph\": null retires one), \
 \"graph\": \"keep\", or a new top level with \"restructure\": true only if the impulse changes its whole way of living (without it a graph counts as the intent)}}",
         grammar_with(skills, false)
