@@ -150,12 +150,16 @@ def round_once(a, state):
             budget[stage][group_of_activity(skill, label)] += 1
     budget = {s: {k: round(v / sum(cnt.values()), 2) for k, v in cnt.most_common()} for s, cnt in budget.items()}
     still = flicker = 0
+    idle = []  # still and doing nothing (no action, or only waiting) the whole sample
     far = []
     for pid, tr in tracks.items():
         if pid not in people or len(tr) < 3:
             continue
         span = max(math.dist(p, tr[0]) for p in tr)
         still += span < 0.5
+        doing = [s for s, _ in acts.get(pid, []) if s and s != "wait"]
+        if span < 0.5 and not doing:
+            idle.append(people[pid]["name"])
         steps = [(q[0] - p[0], q[1] - p[1]) for p, q in zip(tr, tr[1:])]
         rev = sum(1 for s1, s2 in zip(steps, steps[1:]) if s1[0] * s2[0] + s1[1] * s2[1] < -0.01)
         if rev >= 3 and span < 6:
@@ -213,8 +217,8 @@ def round_once(a, state):
     if flicker >= 3:
         flags.append(f"{flicker} people flickering back and forth")
     tracked = max(1, len([p for p in tracks if p in people]))
-    if still / tracked > 0.5:
-        flags.append(f"{still} of {tracked} people did not move during the sample")
+    if len(idle) / tracked > 0.25:
+        flags.append(f"{len(idle)} of {tracked} people stood idle (no movement, no action) during the sample: {', '.join(idle[:8])}")
     if len(stuck) > len(people) * 0.15:
         flags.append(f"{len(stuck)} people stuck on a failing action, e.g. {stuck[0]['status'][:100]}")
     if repeats:
@@ -266,7 +270,7 @@ def round_once(a, state):
         "population": {f"{k} {s}": n for (k, s), n in sorted(pop.items())},
         "births_total": stats.get("births"),
         "deaths_since_last": {f"{k}: {c}": n for (k, c), n in death_causes.items()},
-        "movement": {"people": tracked, "still": still, "flickering": flicker, "far_from_home": far[:10]},
+        "movement": {"people": tracked, "still": still, "idle": len(idle), "flickering": flicker, "far_from_home": far[:10]},
         "time_budget_by_stage": budget,
         "speech_lines": len(speech),
         "speech_topics": topics(speech),
