@@ -32,6 +32,9 @@ def main():
     # Each scenario builds in its own target dir, so labs can be (re)built side by side.
     tdir = f"target/lab-{a.scenario}"
     subprocess.run(["cargo", "build", "-p", "living-authority", "--target", "wasm32-unknown-unknown", "--release", "--target-dir", tdir], cwd=LIVING, env=env, check=True)
+    # The mind service is shared by all labs (the seed is read at run time): build it too,
+    # so a lab never runs a stale mind against a new module.
+    subprocess.run(["cargo", "build", "-p", "living-mind", "--release"], cwd=LIVING, check=True)
     src = LIVING / tdir / "wasm32-unknown-unknown/release/living_authority.wasm"
     wasm = f"living_authority_{a.scenario.replace('-', '_')}.wasm"
     shutil.copy(src, LIVING / "target/wasm32-unknown-unknown/release" / wasm)
