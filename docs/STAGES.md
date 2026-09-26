@@ -9,6 +9,7 @@ Principles that hold throughout: behavior belongs to the characters ([living cor
 - Labs are small worlds built from `living/seeds/<scenario>.json` with `living/tools/lab.py`, each on its own database and mind service. Up to three run at once, each varying one factor from a baseline (food, predators, pace, group size).
 - Lives last about 4 real hours in labs (a generation in about an hour); the play world keeps one game year per 15 real days.
 - All minds use Mistral Small. No call budget.
+- Every change keeps the whole living core compiling, observer included: `just living-check` (authority, mind, native and browser viewer, rules tests) runs before each commit.
 - `living/tools/watch.py` reports every 10–15 minutes per lab (population by stage, births, deaths and causes, movement, time budget, speech and goal topics, flags, a model review). Stage criteria are computed from these reports and the databases.
 
 ## Stages

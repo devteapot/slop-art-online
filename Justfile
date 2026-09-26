@@ -186,3 +186,10 @@ living-web:
 
 living-test:
     cargo test --manifest-path living/Cargo.toml -p living-rules
+
+# Everything that must keep compiling after any change: authority (wasm), mind, the native
+# and browser observer, and the rules tests. Run before every commit.
+living-check: living-build
+    cargo build --manifest-path living/Cargo.toml -p living-mind -p living-viewer
+    cargo build --manifest-path living/viewer/Cargo.toml --target wasm32-unknown-unknown --profile wasm-dev --bin living-viewer
+    cargo test --manifest-path living/Cargo.toml -p living-rules
