@@ -42,6 +42,8 @@ def main():
     # a lab run from another worktree copies its module there (LIVING_WASM_DIR).
     wasm_dir = Path(os.environ.get("LIVING_WASM_DIR", LIVING / "target/wasm32-unknown-unknown/release"))
     shutil.copy(src, wasm_dir / wasm)
+    # Old replicas pile up with every fresh publish; reclaim them (and the VM's disk) first.
+    subprocess.run([str(LIVING / "tools/reclaim_disk.sh")], check=False)
     stdb = str(LIVING / "tools/stdb")
     subprocess.run([stdb, "publish", "-s", "local", "-b", f"/wasm/{wasm}", a.db, "--delete-data", "-y"], check=True)
     run = f"{a.scenario}-{int(time.time())}"

@@ -94,6 +94,15 @@ pub fn gene(g: &Genes, name: &str) -> f32 {
     g.get(name).copied().unwrap_or(if is_trait(name) { 50.0 } else { 1.0 })
 }
 
+/// Combat moves: their timing is the other side's chance to react, so skill makes them hit
+/// harder (in the scripts), not faster.
+const TIMED: [&str; 4] = ["attack", "throw", "dodge", "block"];
+
+/// Whether skill makes a skill's work quicker.
+pub fn paced(skill: &str) -> bool {
+    is_skilled(skill) && !TIMED.contains(&skill)
+}
+
 /// Whether a skill improves with a knack and practice.
 pub fn is_skilled(skill: &str) -> bool {
     !UNSKILLED.contains(&skill)

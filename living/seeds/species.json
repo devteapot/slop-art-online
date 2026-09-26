@@ -200,7 +200,7 @@
       "elder": 0.8,
       "old_age": 0.85,
       "gestation": 0.017,
-      "litter": 4,
+      "litter": 2,
       "interbirth": 0.1
     },
     "eats": "meat: from prey you kill (deer), eaten from what you carry"

@@ -284,7 +284,7 @@ impl Scripts {
         }
         let v = number(&self.call(&f, ctx)?).ok_or_else(|| format!("{f} must return a number"))?;
         // A knack and practice make skilled work quicker.
-        let v = v / crate::genes::skill_factor(&ctx.actor.genes, &ctx.actor.practice, skill) as f64;
+        let v = if crate::genes::paced(skill) { v / crate::genes::skill_factor(&ctx.actor.genes, &ctx.actor.practice, skill) as f64 } else { v };
         Ok(v.clamp(0.0, 600_000.0) as u64)
     }
 
