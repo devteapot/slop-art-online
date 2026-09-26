@@ -129,6 +129,34 @@ impl Minds {
         let called: Vec<String> = top.as_ref().map(|g| living_rules::graph::routines_called(&g.root).into_iter().map(|r| r.to_lowercase()).collect()).unwrap_or_default();
         let mut rs: Vec<Routine> = self.conn.db.routine().iter().filter(|r| r.actor == actor).collect();
         rs.sort_by_key(|r| (!called.contains(&r.name.to_lowercase()), std::cmp::Reverse(r.updated_ms)));
+        // What each routine is for, and how that need stands now (so a routine that "succeeds"
+        // while its need goes unmet shows as such).
+        let vit = self.conn.db.vitals().id().find(&actor);
+        let serves: Vec<(String, String)> = match top.as_ref().map(|g| &g.root) {
+            Some(living_rules::graph::Node::Desires(ds)) => ds
+                .iter()
+                .filter_map(|d| {
+                    let living_rules::graph::Node::Routine(name) = &*d.body else { return None };
+                    let w = &d.weight;
+                    let state = vit.as_ref().map(|v| {
+                        let mut parts = Vec::new();
+                        if w.hunger > 0.0 {
+                            parts.push(format!("hunger {:.0}/100", v.hunger));
+                        }
+                        if w.tired > 0.0 {
+                            parts.push(format!("energy {:.0}/100", v.energy));
+                        }
+                        if w.hurt > 0.0 {
+                            parts.push(format!("health {:.0}/{:.0}", v.hp, v.max_hp));
+                        }
+                        parts.join(", ")
+                    });
+                    let state = state.filter(|s| !s.is_empty()).map(|s| format!(": {s}")).unwrap_or_default();
+                    Some((name.to_lowercase(), format!("serves {}{state}", d.want)))
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
         let mut out = String::new();
         for (i, r) in rs.iter().enumerate() {
             let stat = self.conn.db.routine_stat().id().find(&r.id);
@@ -137,7 +165,8 @@ impl Minds {
                 Some(s) => format!("done {}×, failed {}×", s.ok, s.failed),
                 None => "not tried yet".into(),
             };
-            out.push_str(&format!("## {} — {} [{}]\n", r.name, how, r.source));
+            let serve = serves.iter().filter(|(n, _)| *n == r.name.to_lowercase()).map(|(_, t)| format!(" ({t})")).collect::<String>();
+            out.push_str(&format!("## {}{serve} — {} [{}]\n", r.name, how, r.source));
             if i < 12 {
                 if let Ok(g) = living_rules::graph::parse(&r.graph) {
                     out.push_str(&living_rules::graph::outline(&g.root));

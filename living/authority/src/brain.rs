@@ -584,8 +584,9 @@ impl<'a> Ev<'a> {
         }
         let night = common::night(&self.w, self.now);
         let facts_fire = self.vit.hp_rate < 0.0 && night && self.needs.hunger < 100.0;
-        let checks: [(u32, bool, &str, f32); 4] = [
+        let checks: [(u32, bool, &str, f32); 5] = [
             (1, self.needs.hunger >= 80.0, "You are very hungry.", 0.5),
+            (64, self.needs.hunger >= 97.0, "You are starving: your body is wasting away.", 0.8),
             (2, self.needs.hp < 40.0, "You are badly hurt.", 0.7),
             (4, facts_fire, "You are freezing in the night air; you need a fire or shelter.", 0.6),
             (8, self.needs.energy < 12.0, "You are exhausted.", 0.4),
@@ -620,7 +621,7 @@ impl<'a> Ev<'a> {
                 percept(self.ctx, &self.me, self.now, "body", self.me.id, 0, self.at, text.into(), sal);
                 let urgent = match bit {
                     1 => common::food_count(self.ctx, self.me.id as u64) == 0,
-                    2 | 4 => true,
+                    2 | 4 | 64 => true,
                     _ => false,
                 };
                 if urgent {
