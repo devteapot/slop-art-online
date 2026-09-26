@@ -191,9 +191,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             return Ok(());
         }
     }
-    if let Some(a) = cur {
-        cancel(ctx, a, now, None);
-    }
+    // Work out whether the new action can start at all before abandoning the current one:
+    // a higher-priority option that cannot start (e.g. taking food from an empty store) must
+    // not cancel the lower-priority work that is actually happening.
     let me = ctx.db.body().id().find(id).ok_or("no body")?;
     let here = pos(&me, now);
     let mut target = target;
@@ -290,6 +290,13 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         want_qty: want.1,
         victim: if matches!(skill, "attack" | "throw") && target.class == 3 { target.id as u32 } else { 0 },
     };
+    // An action that would start right here must pass its rules first, too.
+    if !needs_approach {
+        common::scripts(ctx).check(&act.skill, &skill_ctx(ctx, id, &act, now))?;
+    }
+    if let Some(a) = cur {
+        cancel(ctx, a, now, None);
+    }
     if needs_approach && !(skill == "follow" && dist(here, target.at) <= r) {
         let sp = speed(ctx, id, now);
         let sp = match skill {

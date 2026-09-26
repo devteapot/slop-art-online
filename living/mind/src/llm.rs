@@ -18,10 +18,18 @@ pub struct Profile {
     pub reasoning_effort: HashMap<String, String>,
     #[serde(default = "yes")]
     pub json_mode: bool,
+    /// Output cap: a reply is a few thousand tokens at most; a runaway generation is cut off
+    /// (and then repaired or retried) instead of running to tens of thousands of tokens.
+    #[serde(default = "max_tokens")]
+    pub max_tokens: u32,
 }
 
 fn yes() -> bool {
     true
+}
+
+fn max_tokens() -> u32 {
+    4000
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -161,6 +169,7 @@ impl Llm {
             "model": p.model,
             "messages": messages.iter().map(|m| json!({"role": m.role, "content": m.content})).collect::<Vec<_>>(),
         });
+        body["max_tokens"] = json!(p.max_tokens);
         if p.json_mode {
             body["response_format"] = json!({"type": "json_object"});
         }
