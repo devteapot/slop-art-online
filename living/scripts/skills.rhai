@@ -169,7 +169,8 @@ fn graze_check(a) {
     ""
 }
 fn graze_duration(a) { 4000 }
-fn graze_done(a) { [#{ op: "vitals", hunger: -14.0 }] }
+// Grazing feeds less where many graze together (a herd shares the grass).
+fn graze_done(a) { [#{ op: "vitals", hunger: -14.0 / (1.0 + a.actor.kin_near / 3.0) }] }
 
 // ---- rest ---------------------------------------------------------------
 

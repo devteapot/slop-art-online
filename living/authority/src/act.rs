@@ -89,6 +89,7 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         life: ch.as_ref().map(|c| common::life_of(&c.kind).fraction(age, common::pace(&w))).unwrap_or(0.3),
         genes: (*common::genes_of(ctx, id)).clone(),
         practice: Default::default(),
+        kin_near: 0,
     }
 }
 
@@ -146,6 +147,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
     let mut actor = facts(ctx, id, now);
     actor.practice = common::practice_of(ctx, id);
     let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+    actor.kin_near = common::creatures_near(ctx, from, 4.0, now).iter().filter(|c| c.id != id && *c.kind == *actor.kind).count() as u32;
     let hour = common::hour(&w, now);
     let roll: f32 = ctx.rng().gen_range(0.0..1.0);
     SkillCtx {
