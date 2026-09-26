@@ -111,7 +111,7 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
         s.births += 1;
         ctx.db.stats().id().update(s);
     }
-    crate::perceive::request_deliberation(ctx, id, "You were just born into the valley. You know only your parents' faces.", now);
+    crate::perceive::request_deliberation(ctx, id, "You were just born. You know only your parents' faces.", now);
 }
 
 #[spacetimedb::reducer]
@@ -213,6 +213,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
         hits: k.hits,
         dodged: k.dodged,
         blocked: k.blocked,
+        missed: k.missed,
     };
     k.max_gap_ms = 0;
     ctx.db.clock().id().update(k);

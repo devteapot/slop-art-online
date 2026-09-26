@@ -6,7 +6,7 @@
     "names": [],
     "cognition": {
       "think_min_s": 20,
-      "reflect_s": 150,
+      "reflect_s": 240,
       "consolidate_threshold": 1.0,
       "max_nodes": 64,
       "consolidate_min_s": 90

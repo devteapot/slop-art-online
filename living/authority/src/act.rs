@@ -567,6 +567,19 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
             }
             Effect::Damage { amount } => {
                 let victim = a.target.id as u32;
+                // A melee blow lands only on someone still within reach when the windup ends:
+                // stepping back or running during a telegraphed swing makes it miss.
+                if a.skill == "attack" {
+                    let p = |id: u32| ctx.db.body().id().find(id).map(|b| pos(&b, now));
+                    if let (Some(pa), Some(pv)) = (p(me), p(victim)) {
+                        let kind = ctx.db.character().id().find(me).map(|c| c.kind).unwrap_or_default();
+                        if dist(pa, pv) > reach("attack") + common::scripts(ctx).num_of("lunge", &kind, 0.6) as f32 {
+                            missed(ctx, me, victim, pv, now);
+                            notes.push("missed".into());
+                            continue;
+                        }
+                    }
+                }
                 damage(ctx, me, victim, amount, now);
                 notes.push(format!("hit for {amount:.0}"));
             }
@@ -893,6 +906,68 @@ pub fn engage(ctx: &ReducerContext, id: u32, now: u64) {
     }
 }
 
+/// While people fight, their minds get a short account of the exchange every few seconds
+/// (only when no thought is pending and the last one is at least 7 s old), so tactics can be
+/// patched mid-fight from what actually happened rather than decided once at the first blow.
+pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
+    let Some(c) = ctx.db.character().id().find(id) else { return };
+    if !c.ai || !c.alive || c.kind != "person" || ctx.db.deliberation().actor().find(id).is_some() {
+        return;
+    }
+    if ctx.db.mind_state().id().find(id).map_or(true, |s| now.saturating_sub(s.deliberated_ms) < 7_000) {
+        return;
+    }
+    let (mut hit, mut blocked, mut dodged, mut evaded, mut they_blocked, mut they_dodged, mut whiffed) = (0, 0, 0, 0, 0, 0, 0);
+    for e in ctx.db.experience().observer().filter(id) {
+        if now.saturating_sub(e.at_ms) > 20_000 || (e.kind != "attacked" && e.kind != "combat") {
+            continue;
+        }
+        let t = e.text.as_str();
+        if e.kind == "attacked" {
+            hit += 1;
+        } else if t.starts_with("You blocked") {
+            blocked += 1;
+        } else if t.starts_with("You dodged") {
+            dodged += 1;
+        } else if t.contains("missed: you were out of reach") {
+            evaded += 1;
+        } else if t.contains("blocked your blow") {
+            they_blocked += 1;
+        } else if t.contains("dodged your attack") {
+            they_dodged += 1;
+        } else if t.starts_with("Your blow missed") {
+            whiffed += 1;
+        }
+    }
+    let label = common::label_for(ctx, &c, other);
+    let hp = ctx.db.vitals().id().find(id).map(|v| common::needs(&v, now).hp).unwrap_or(0.0);
+    let their_hp = ctx.db.vitals().id().find(other).map(|v| (common::needs(&v, now).hp / v.max_hp * 100.0).round()).unwrap_or(0.0);
+    let text = format!(
+        "The fight with {label} goes on (your health {hp:.0}, theirs looks about {their_hp:.0}%). In the last 20 s: you were hit {hit}×, blocked {blocked}, dodged {dodged}, stepped out of reach {evaded}; they blocked {they_blocked} and dodged {they_dodged} of your blows, {whiffed} of yours found only air. \
+If your way of fighting isn't working, patch your \"combat\" branch now; otherwise keep it."
+    );
+    perceive::request_deliberation(ctx, id, &text, now);
+}
+
+/// A blow that found only air: both sides perceive it, and the fight stays engaged.
+fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), now: u64) {
+    engage(ctx, attacker, now);
+    engage(ctx, victim, now);
+    if let Some(mut k) = ctx.db.clock().id().find(0) {
+        k.missed += 1;
+        ctx.db.clock().id().update(k);
+    }
+    if let Some(vc) = ctx.db.character().id().find(victim) {
+        percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("{}'s blow missed: you were out of reach.", common::label_for(ctx, &vc, attacker)), 0.6);
+        common::wake(ctx, victim);
+    }
+    if let Some(ac) = ctx.db.character().id().find(attacker) {
+        percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("Your blow missed: {} was out of reach.", common::label_for(ctx, &ac, victim)), 0.6);
+    }
+    fight_report(ctx, victim, attacker, now);
+    fight_report(ctx, attacker, victim, now);
+}
+
 pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, now: u64) {
     let Some(mut v) = ctx.db.vitals().id().find(victim) else { return };
     let Some(vc) = ctx.db.character().id().find(victim) else { return };
@@ -919,6 +994,8 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, now
             percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} dodged your attack.", common::label_for(ctx, &ac, victim)), 0.6);
         }
         common::wake(ctx, victim);
+        fight_report(ctx, victim, attacker, now);
+        fight_report(ctx, attacker, victim, now);
         return;
     }
     let amount = if defense == "block" {
@@ -952,6 +1029,9 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, now
         if vc.ai {
             perceive::request_deliberation(ctx, victim, &format!("{label} is attacking you!"), now);
         }
+    } else if !dead {
+        fight_report(ctx, victim, attacker, now);
+        fight_report(ctx, attacker, victim, now);
     }
     if dead {
         let meat = common::scripts(ctx).num_of("carcass_meat", &vc.kind, 0.0) as u32;

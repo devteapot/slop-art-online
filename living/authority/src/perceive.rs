@@ -213,7 +213,7 @@ pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u6
     if let Some(sp) = common::species(&c.kind) {
         let min = sp.cognition.think_min_s * 1000;
         let recent = ctx.db.mind_state().id().find(id).map_or(false, |s| now.saturating_sub(s.deliberated_ms) < min);
-        let urgent = reason.contains("attacking you") || reason.starts_with("Dawn of day") || reason.contains("said to you");
+        let urgent = reason.contains("attacking you") || reason.starts_with("The fight with") || reason.starts_with("Dawn of day") || reason.contains("said to you");
         if min > 0 && recent && !urgent && ctx.db.deliberation().actor().find(id).is_none() {
             return;
         }

@@ -398,7 +398,9 @@ fn check_target(t: &Target) -> Result<(), String> {
             return Err(format!("unknown kind `{}`", f.kind));
         }
         if let Some(r) = &f.relation {
-            if !matches!(r.as_str(), "friend" | "enemy" | "stranger" | "family" | "any") {
+            // friend|enemy|stranger|family have broad meanings; any other word matches the
+            // label a person gave that relationship (e.g. "partner", "ally", "rival").
+            if r.trim().is_empty() || r.len() > 32 {
                 return Err(format!("unknown relation `{r}`"));
             }
         }

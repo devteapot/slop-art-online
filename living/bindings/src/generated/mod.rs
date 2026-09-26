@@ -82,6 +82,7 @@ pub mod script_table;
 pub mod script_type;
 pub mod seed_communities_reducer;
 pub mod seen_type;
+pub mod set_background_reducer;
 pub mod set_behavior_reducer;
 pub mod set_paused_reducer;
 pub mod set_profile_reducer;
@@ -184,6 +185,7 @@ pub use script_table::*;
 pub use script_type::Script;
 pub use seed_communities_reducer::seed_communities;
 pub use seen_type::Seen;
+pub use set_background_reducer::set_background;
 pub use set_behavior_reducer::set_behavior;
 pub use set_paused_reducer::set_paused;
 pub use set_profile_reducer::set_profile;
@@ -278,6 +280,10 @@ pub enum Reducer {
         kind: String,
     },
     SeedCommunities,
+    SetBackground {
+        id: u32,
+        text: String,
+    },
     SetBehavior {
         id: u32,
         graph: String,
@@ -318,6 +324,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::PlaceNear { .. } => "place_near",
             Reducer::PlaceStructure { .. } => "place_structure",
             Reducer::SeedCommunities => "seed_communities",
+            Reducer::SetBackground { .. } => "set_background",
             Reducer::SetBehavior { .. } => "set_behavior",
             Reducer::SetPaused { .. } => "set_paused",
             Reducer::SetProfile { .. } => "set_profile",
@@ -424,6 +431,12 @@ impl __sdk::Reducer for Reducer {
             }
             Reducer::SeedCommunities => {
                 __sats::bsatn::to_vec(&seed_communities_reducer::SeedCommunitiesArgs {})
+            }
+            Reducer::SetBackground { id, text } => {
+                __sats::bsatn::to_vec(&set_background_reducer::SetBackgroundArgs {
+                    id: id.clone(),
+                    text: text.clone(),
+                })
             }
             Reducer::SetBehavior { id, graph } => {
                 __sats::bsatn::to_vec(&set_behavior_reducer::SetBehaviorArgs {

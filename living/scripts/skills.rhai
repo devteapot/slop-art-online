@@ -245,6 +245,9 @@ fn attack_check(a) {
 }
 // The windup: time the target has to see it coming and react.
 fn attack_duration(a) { switch a.actor.kind { "wolf" => 550, _ => if inv(a, "spear") > 0 { 750 } else { 650 } } }
+// How far a blow still carries at the end of its windup, beyond the attack's reach (tiles):
+// a wolf leaps, a person steps into a thrust. Out of reach by more than this, it misses.
+fn lunge(kind) { switch kind { "wolf" => 1.8, "deer" => 0.6, _ => 0.6 } }
 fn attack_done(a) {
     let dmg = switch a.actor.kind {
         "wolf" => 13.0,

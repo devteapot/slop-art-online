@@ -118,12 +118,15 @@ pub fn add_thought(ctx: &ReducerContext, actor: u32, t: ThoughtIn, now: u64) {
 /// character alive when its plan neglects the body; the mind sees them in its outline.
 pub const REFLEXES: &str = r#"[
   {"if": {"cond": {"all": [{"health": {"below": 30}}, {"hurt_within": 5}]}, "then": {"do": {"skill": "flee", "target": "attacker"}}}},
-  {"if": {"cond": {"all": [{"hunger": {"above": 85}}, {"has": {"item": "food"}}]}, "then": {"do": {"skill": "eat", "item": "food"}}}},
-  {"if": {"cond": {"hunger": {"above": 92}}, "then": {"first": [
-    {"do": {"skill": "gather", "target": {"nearest": "berry_bush"}}},
-    {"do": {"skill": "take", "target": {"nearest": "storage"}, "item": "food"}}
+  {"if": {"cond": {"all": [{"hunger": {"above": 65}}, {"has": {"item": "food"}}, {"not": {"threatened": true}}, {"not": {"hurt_within": 8}}]}, "then": {"do": {"skill": "eat", "item": "food"}}}},
+  {"if": {"cond": {"hunger": {"above": 88}}, "then": {"first": [
+    {"do": {"skill": "take", "target": {"nearest": "storage"}, "item": "food"}},
+    {"do": {"skill": "gather", "target": {"nearest": "berry_bush"}}}
   ]}}},
-  {"if": {"cond": {"energy": {"below": 4}}, "then": {"do": {"skill": "sleep"}}}}
+  {"if": {"cond": {"all": [{"energy": {"below": 12}}, {"not": {"threatened": true}}, {"not": {"hurt_within": 10}}]}, "then": {"do": {"skill": "sleep"}}}},
+  {"if": {"cond": {"all": [{"night": true}, {"energy": {"below": 35}}, {"not": {"hurt_within": 10}},
+      {"any": [{"near": {"target": {"nearest": "campfire"}, "within": 3}}, {"near": {"target": {"nearest": "shelter"}, "within": 2}}]}]},
+    "then": {"do": {"skill": "sleep"}}}}
 ]"#;
 
 /// Wrap a graph with its species' reflex layer (idempotent: an existing layer is replaced).

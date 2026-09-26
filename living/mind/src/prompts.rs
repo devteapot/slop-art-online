@@ -20,15 +20,24 @@ Children grow up in about 3 days; until then they are slow, cannot build, craft 
 COMBAT: fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming \
 ({\"threatened\": true}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard \
 (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear up to 7 tiles (you lose it). \
-While fighting, your graph is checked about 15 times a second, so encode how you fight (e.g. a branch labeled \"combat\"), not one blow.
+A blow lands only if you are still within reach (about 2 tiles; a wolf's leap about 3) when its windup ends: stepping back or running as it winds up makes it miss, \
+but whoever swings stands still meanwhile. People run 2.6 tiles/s, deer 3.2, wolves 3.4: you can outrun a person who keeps stopping to swing, not a wolf. \
+While fighting, your graph is checked about 15 times a second, so encode how you fight (a branch labeled \"combat\"), not one blow: reactions must come before the strike or they never get a chance, e.g. {\"first\": [{\"if\": {\"threatened\": true}, \"then\": {\"do\": \"dodge\"}}, {\"do\": \"attack\", \"target\": \"attacker\"}], \"label\": \"combat\"} is only a sketch. How you fight (block or dodge, step back and throw, wear them down, flee, talk) is yours, and mid-fight you can patch just that branch.
 COMMUNITIES: people can found a community ({\"do\": \"found\", \"text\": \"its name\"}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
 TIME: beyond staying alive, how you spend your days is yours to decide, from who you are and what you want.
 OTHERS: people hear speech within ~9 tiles. You cannot read minds; what others say may be false. You only know what you perceived or were told.";
 
 static SETTING: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static SIZE: std::sync::OnceLock<(u32, u32)> = std::sync::OnceLock::new();
+
+/// The world's size in tiles (from the active seed).
+pub fn map_size() -> (u32, u32) {
+    SIZE.get().copied().unwrap_or((96, 96))
+}
 
 /// Set once at startup from the active seed: its setting text and map size.
 pub fn set_world(setting: &str, w: u32, h: u32) {
+    let _ = SIZE.set((w, h));
     let _ = SETTING.set(format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}); walking covers about 3 tiles a second.\n{RULES}"));
 }
 
@@ -61,7 +70,7 @@ Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}
   {{\"has\": {{\"item\": \"berries\", \"at_least\": 2}}}} (item \"food\" = any food) {{\"sees\": T}} {{\"near\": {{\"target\": T, \"within\": 3}}}}
   {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
-Targets T: \"self\" \"attacker\" \"speaker\" \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family)
+Targets T: \"self\" \"attacker\" \"speaker\" \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
   {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"name of a place you remember\"}} {{\"at\": [x, y]}}
   Kinds: berry_bush tree boulder reeds fishing_spot | campfire shelter storage remains | person deer wolf.
   People/creature/resource targets resolve only when currently in sight; places and coordinates always resolve. A do-node whose target is missing fails, so \"first\" moves on.
@@ -90,7 +99,7 @@ A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"bel
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, what you make of the other person, as well as \
 practical matters. Talk as the person you are, in your own voice; you may also stay silent, deflect or lie. Don't just echo what was \
 already agreed. \
-Your body has reflexes (label \"reflexes\") that run before your graph: eat carried food when starving, gather berries in sight when starving, flee when badly hurt, sleep when exhausted. \
+Your body has reflexes (label \"reflexes\") that run before your graph: eat carried food when hungry (above 65), take from a storage or gather berries when starving, flee when badly hurt, sleep when exhausted (energy below 12) or when tired at night beside a fire or shelter; begun work such as sleeping is finished, not dropped. \
 Write only your own graph; reflexes are added for you. \
 Refer to people by the ids you see. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
 {{\"thought\": \"your private interpretation of the situation (1-3 sentences)\", \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \

@@ -53,6 +53,7 @@ pub struct Minds {
     /// Deferrable work (consolidation, reorganization, identities) may hold at most half of the
     /// model slots, so deliberation (being attacked, spoken to, a plan failing) always gets one.
     slow: Semaphore,
+    only: Option<std::collections::HashSet<u32>>,
 }
 
 fn flatten<E: std::fmt::Debug>(r: Result<Result<(), String>, E>) -> Result<(), String> {
@@ -74,11 +75,17 @@ impl Minds {
     pub fn new(conn: DbConnection, llm: Llm, store: Option<Store>, seed: Value, concurrency: usize) -> Result<Arc<Self>> {
         let me = conn.try_identity().ok_or_else(|| anyhow!("not connected"))?;
         let species = living_rules::species::parse(&std::fs::read_to_string(crate::root().join("living/seeds/species.json"))?).map_err(|e| anyhow!(e))?;
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency), slow: Semaphore::new((concurrency / 2).max(1)) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency), slow: Semaphore::new((concurrency / 2).max(1)), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()) }))
     }
 
     fn mine(&self) -> Vec<Character> {
-        self.conn.db.character().iter().filter(|c| c.ai && c.alive && c.controller == self.me).collect()
+        self.conn.db.character().iter().filter(|c| c.ai && c.alive && c.controller == self.me && self.allowed(c.id)).collect()
+    }
+
+    /// `LIVING_ONLY=3,7` limits this service to those characters (experiments on a seeded
+    /// world); the rest keep running on their instincts.
+    fn allowed(&self, id: u32) -> bool {
+        self.only.as_ref().map_or(true, |o| o.contains(&id))
     }
 
     fn name(&self, id: u32) -> String {
@@ -169,6 +176,15 @@ impl Minds {
         }
         for p in pending {
             let _ = p.await;
+        }
+        // Re-publish what bodies read from minds (places, relations, judgments), so world state
+        // matches the minds after repairs or a restart instead of waiting for each consolidation.
+        if self.store.is_some() {
+            for c in self.mine() {
+                if let Err(e) = self.project(c.id, None, None).await {
+                    log::warn!("{}: projection at start failed: {e:#}", c.name);
+                }
+            }
         }
         for c in self.mine() {
             let model = match self.llm.species_profile(&c.kind, "think") {
@@ -425,6 +441,9 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
     }
 
     fn schedule(self: Arc<Self>, actor: u32) {
+        if !self.allowed(actor) {
+            return;
+        }
         {
             let mut a = self.actors.lock().unwrap();
             let m = a.entry(actor).or_default();

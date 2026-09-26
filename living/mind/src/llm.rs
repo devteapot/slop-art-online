@@ -44,6 +44,42 @@ pub struct Llm {
     models: ModelsFile,
     keys: HashMap<String, String>,
     journal: PathBuf,
+    budget: Budget,
+}
+
+/// A global calls-per-minute budget (token bucket, ~15 s of burst). Deliberation may use the
+/// whole bucket; deferrable work (consolidation, reorganization, identities) only runs while
+/// more than a quarter of it is left, so thinking in the moment keeps priority under load.
+struct Budget {
+    per_min: f64,
+    state: std::sync::Mutex<(f64, std::time::Instant)>,
+}
+
+impl Budget {
+    fn new(per_min: f64) -> Self {
+        Self { per_min, state: std::sync::Mutex::new((per_min / 4.0, std::time::Instant::now())) }
+    }
+
+    async fn admit(&self, purpose: &str) {
+        if self.per_min <= 0.0 {
+            return;
+        }
+        let cap = (self.per_min / 4.0).max(2.0);
+        let reserve = if purpose == "deliberate" { 0.0 } else { cap * 0.25 };
+        loop {
+            {
+                let mut s = self.state.lock().unwrap();
+                let now = std::time::Instant::now();
+                s.0 = (s.0 + now.duration_since(s.1).as_secs_f64() * self.per_min / 60.0).min(cap);
+                s.1 = now;
+                if s.0 >= 1.0 + reserve {
+                    s.0 -= 1.0;
+                    return;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+    }
 }
 
 pub struct Reply {
@@ -74,7 +110,9 @@ impl Llm {
         }
         std::fs::create_dir_all(&journal)?;
         let http = reqwest::Client::builder().timeout(Duration::from_secs(180)).user_agent("sao-living-mind/0.1").build()?;
-        Ok(Self { http, models, keys, journal })
+        let per_min = std::env::var("LIVING_LLM_PER_MIN").ok().and_then(|v| v.parse().ok()).unwrap_or(60.0);
+        log::info!("LLM budget: {per_min} calls/min (LIVING_LLM_PER_MIN; 0 = unlimited)");
+        Ok(Self { http, models, keys, journal, budget: Budget::new(per_min) })
     }
 
     /// Profile for a character: explicit assignment, then rotation, then default.
@@ -105,6 +143,7 @@ impl Llm {
     /// Call the character's model; if it fails, retry once on the default model so a provider
     /// outage does not stall minds (both attempts are journaled).
     pub async fn chat(&self, profile: &str, purpose: &str, actor: &str, messages: &[Msg]) -> Result<Reply> {
+        self.budget.admit(purpose).await;
         match self.chat_once(profile, purpose, actor, messages).await {
             Ok(r) => Ok(r),
             Err(e) if profile != self.models.default => {

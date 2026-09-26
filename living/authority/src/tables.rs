@@ -56,6 +56,9 @@ pub struct Clock {
     pub dodged: u64,
     #[default(0u64)]
     pub blocked: u64,
+    /// Blows that landed on air: the target got out of reach during the windup.
+    #[default(0u64)]
+    pub missed: u64,
 }
 
 #[spacetimedb::table(accessor = script, public)]
@@ -541,6 +544,9 @@ pub struct Stats {
     pub dodged: u64,
     #[default(0u64)]
     pub blocked: u64,
+    /// Blows that landed on air: the target got out of reach during the windup.
+    #[default(0u64)]
+    pub missed: u64,
 }
 
 /// A standing wish to start a family with someone (expires after two minutes).

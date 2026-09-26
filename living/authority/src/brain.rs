@@ -52,7 +52,13 @@ struct Ev<'a> {
     visits: u32,
     last_fail: String,
     want: (String, u32),
+    /// Node of the activity in progress if it is work that completes on its own (see `latches`).
+    latched: Option<u16>,
 }
+
+/// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
+/// holding (sleeping until rested, not until barely awake). Movement and combat stay reactive.
+const LATCHES: &[&str] = &["sleep", "rest", "eat", "gather", "build", "craft", "cook", "teach", "experiment", "write", "read", "plant", "store", "take", "give"];
 
 pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let Some(me) = ctx.db.character().id().find(id) else { return };
@@ -72,7 +78,8 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         log::warn!("character {id} has no valid graph at revision {}", st.revision);
         return;
     };
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0) };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None };
+    ev.latched = ctx.db.activity().id().find(id).filter(|a| a.revision == ev.st.revision && LATCHES.contains(&a.skill.as_str())).map(|a| a.node);
     ev.alerts();
     let root = ev.g.clone();
     let result = ev.run(&root.root, 0);
@@ -224,7 +231,9 @@ impl<'a> Ev<'a> {
             }
             Node::If(i) => {
                 let then_id = id + 1;
-                if self.cond(&i.cond) {
+                let then_end = then_id + self.g.sizes.get(then_id as usize).copied().unwrap_or(1);
+                let latched = self.latched.map_or(false, |n| n >= then_id && n < then_end);
+                if latched || self.cond(&i.cond) {
                     self.run(&i.then, then_id)
                 } else if let Some(e) = &i.otherwise {
                     let else_id = then_id + self.g.sizes.get(then_id as usize).copied().unwrap_or(1);
@@ -330,7 +339,8 @@ impl<'a> Ev<'a> {
             "enemy" => r.is_some() && (trust <= -25.0 || ["enemy", "rival", "threat", "thief"].iter().any(|l| label.contains(l))),
             "family" => ["family", "partner", "kin", "child", "parent", "sibling"].iter().any(|l| label.contains(l)),
             "stranger" => r.is_none() || label.contains("stranger"),
-            _ => true,
+            "any" | "" => true,
+            other => label.contains(&other.to_lowercase()),
         }
     }
 
@@ -697,7 +707,7 @@ impl<'a> Ev<'a> {
                 terrain.push(format!("{word} to the {}", direction(at, p)));
             }
         }
-        let mut parts = vec![format!("You come to a part of the valley new to you, around ({:.0}, {:.0})", at.0, at.1)];
+        let mut parts = vec![format!("You come to a place new to you, around ({:.0}, {:.0})", at.0, at.1)];
         if !res.is_empty() {
             parts.push(format!("here: {res}"));
         }
@@ -721,7 +731,9 @@ impl<'a> Ev<'a> {
         }
         if self.me.ai {
             match result {
-                St::Fail if !self.mark_recent(ROOT_MARK, 25_000) => {
+                // A plan with nothing applicable backs off longer than one that hit a concrete
+                // obstacle, so an all-guards graph doesn't re-think several times a minute.
+                St::Fail if !self.mark_recent(ROOT_MARK, if self.last_fail.is_empty() { 60_000 } else { 40_000 }) => {
                     self.set_mark(ROOT_MARK);
                     let why = if self.last_fail.is_empty() { "no branch applies".to_string() } else { self.last_fail.clone() };
                     self.deliberate(&format!("Nothing in my current plan works right now ({why})."));

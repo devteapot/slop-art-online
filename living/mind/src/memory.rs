@@ -483,8 +483,9 @@ pub fn sugar_into(v: &Value, patch: &mut Patch, because: &[u64]) {
         let (Some(name), Some(x), Some(y)) = (p["name"].as_str(), p["x"].as_f64(), p["y"].as_f64()) else { continue };
         let Some(k) = key(name) else { continue };
         let mut props = serde_json::Map::new();
-        props.insert("x".into(), json!(x.clamp(0.0, 96.0)));
-        props.insert("y".into(), json!(y.clamp(0.0, 96.0)));
+        let (w, h) = crate::prompts::map_size();
+        props.insert("x".into(), json!(x.clamp(0.0, w as f64)));
+        props.insert("y".into(), json!(y.clamp(0.0, h as f64)));
         let k = k.trim_start_matches("place:").to_string();
         patch.nodes.push(NodeOp { key: format!("place:{k}"), labels: vec!["Place".into()], name: Some(name.chars().take(48).collect()), props });
     }

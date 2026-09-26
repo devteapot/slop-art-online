@@ -1,6 +1,6 @@
 # Checkpoint 3: a larger world of towns and settlers
 
-Direction from the user (2026-09-26), to build after [checkpoint 2](CHECKPOINT_2.md) is committed. Plan, not implementation evidence.
+Direction from the user (2026-09-26), built after [checkpoint 2](CHECKPOINT_2.md). Plan below; progress and evidence at the end.
 
 ## Goals
 
@@ -35,3 +35,13 @@ While it runs: a status/evidence snapshot about every 15 minutes (population and
 4. **LLM budget and priority.** A global rate limit with priority (being attacked, being spoken to > dawn and plan failures > consolidation), per-species pacing (already in `species.json`), and measurement of calls, tokens and latency per character type. Measured on valley-5 (12 people, 19 animals): 41.6 calls/min and ~220k tokens/min before consolidation pacing; animals dominated because of alarm-call noise, since fixed.
 5. **Benchmarks** on the realm before minds: 2,000 characters across 256×256 and a 200-character battle, within the performance contract.
 6. **Viewer**: chunked terrain, a realm-scale minimap, a community panel (members, stores, standing), and follow/jump-to-event controls.
+
+## Progress (2026-09-26)
+
+Implemented: plan items 1–6 in their first form — map size as data, the realm generator, the realm seed ([realm.json](../living/seeds/realm.json): Oakhollow inland and Saltmere on the coast with 14 residents each, three wild bands of 3–4, 36 deer, 6 wolves), background-generated identities, the LLM budget with priority, realm benchmarks (see [living core](LIVING_CORE.md#measured-authority-load)) and the chunked viewer with minimap and community panel. Mechanism checks pass on the realm (7/7). The live world `realm-1` started 2026-09-26 02:17 UTC.
+
+Problems found by watching realm-1 and fixed at their cause:
+
+- Remembered places were clamped to the old 96-tile valley, so townspeople walked to (96, 96) instead of home; 733 corrupted place coordinates were cleared in the minds and homes, town centers and camps restored from world state.
+- Minds called everything "valley": the authority's novelty experience and birth text said so; now neutral.
+- Graphs were rejected for filtering people by the relationship labels minds use (`partner`, `ally`); any label is now matched against the relationship's own label.

@@ -47,6 +47,7 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         hits: 0,
         dodged: 0,
         blocked: 0,
+        missed: 0,
     });
     living_rules::script::Scripts::new(seed::SKILLS)?;
     ctx.db.script().insert(Script { name: "skills".into(), source: seed::SKILLS.into(), revision: 1, updated_ms: now });
@@ -132,6 +133,19 @@ pub fn spawn_crowd(ctx: &ReducerContext, n: u32, minded: bool) -> Result<(), Str
 pub fn grant_know_how(ctx: &ReducerContext, id: u32, technique: String) -> Result<(), String> {
     require_admin(ctx)?;
     common::learn(ctx, id, &technique, "granted", common::now_ms(ctx));
+    Ok(())
+}
+
+/// Test support: set a character's background (read by its mind when it first forms an identity).
+#[spacetimedb::reducer]
+pub fn set_background(ctx: &ReducerContext, id: u32, text: String) -> Result<(), String> {
+    require_admin(ctx)?;
+    serde_json::from_str::<serde_json::Value>(&text).map_err(|e| format!("background must be JSON: {e}"))?;
+    if ctx.db.background().id().find(id).is_some() {
+        ctx.db.background().id().update(Background { id, text });
+    } else {
+        ctx.db.background().insert(Background { id, text });
+    }
     Ok(())
 }
 

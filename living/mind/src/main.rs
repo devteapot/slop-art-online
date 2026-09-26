@@ -66,7 +66,8 @@ async fn main() -> Result<()> {
         std::env::var("LIVING_MODELS").map(PathBuf::from).unwrap_or_else(|_| root.join("living/configs/models.json")),
     )?)?;
     let seed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(root.join("living/seeds/world.json"))?)?;
-    let run = seed["run"].as_str().unwrap_or("valley").to_string();
+    // LIVING_RUN separates experiments on other databases (journal and Neo4j minds are per run).
+    let run = std::env::var("LIVING_RUN").unwrap_or_else(|_| seed["run"].as_str().unwrap_or("valley").to_string());
     let (mw, mh) = (seed["map"]["w"].as_u64().unwrap_or(96) as u32, seed["map"]["h"].as_u64().unwrap_or(96) as u32);
     prompts::set_world(seed["setting"].as_str().unwrap_or_default(), mw, mh);
     let journal = root.join(".local/living/journal").join(&run);
