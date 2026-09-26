@@ -154,6 +154,18 @@ pub fn refresh_reflexes(ctx: &ReducerContext) -> Result<(), String> {
     Ok(())
 }
 
+/// Apply the death cleanup to characters who died before it existed.
+#[spacetimedb::reducer]
+pub fn purge_dead(ctx: &ReducerContext) -> Result<(), String> {
+    require_admin(ctx)?;
+    let dead: Vec<u32> = ctx.db.character().iter().filter(|c| !c.alive).map(|c| c.id).collect();
+    for id in &dead {
+        act::forget_dead(ctx, *id);
+    }
+    log::info!("purged mind-serving rows of {} dead characters", dead.len());
+    Ok(())
+}
+
 /// Test support: set a character's background (read by its mind when it first forms an identity).
 #[spacetimedb::reducer]
 pub fn set_background(ctx: &ReducerContext, id: u32, text: String) -> Result<(), String> {

@@ -73,6 +73,7 @@ pub mod place_near_reducer;
 pub mod place_structure_reducer;
 pub mod place_table;
 pub mod place_type;
+pub mod purge_dead_reducer;
 pub mod refresh_reflexes_reducer;
 pub mod relation_in_type;
 pub mod relation_table;
@@ -177,6 +178,7 @@ pub use place_near_reducer::place_near;
 pub use place_structure_reducer::place_structure;
 pub use place_table::*;
 pub use place_type::Place;
+pub use purge_dead_reducer::purge_dead;
 pub use refresh_reflexes_reducer::refresh_reflexes;
 pub use relation_in_type::RelationIn;
 pub use relation_table::*;
@@ -281,6 +283,7 @@ pub enum Reducer {
         near: u32,
         kind: String,
     },
+    PurgeDead,
     RefreshReflexes,
     SeedCommunities,
     SetBackground {
@@ -326,6 +329,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindUpdate { .. } => "mind_update",
             Reducer::PlaceNear { .. } => "place_near",
             Reducer::PlaceStructure { .. } => "place_structure",
+            Reducer::PurgeDead => "purge_dead",
             Reducer::RefreshReflexes => "refresh_reflexes",
             Reducer::SeedCommunities => "seed_communities",
             Reducer::SetBackground { .. } => "set_background",
@@ -433,6 +437,7 @@ impl __sdk::Reducer for Reducer {
                     kind: kind.clone(),
                 })
             }
+            Reducer::PurgeDead => __sats::bsatn::to_vec(&purge_dead_reducer::PurgeDeadArgs {}),
             Reducer::RefreshReflexes => {
                 __sats::bsatn::to_vec(&refresh_reflexes_reducer::RefreshReflexesArgs {})
             }

@@ -975,6 +975,17 @@ fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), no
     fight_report(ctx, attacker, victim, now);
 }
 
+/// Drop what only served a living mind: familiarity, undelivered experiences, the places and
+/// stances the body read, the inbox cursor. Identity, thoughts, relations and beliefs stay
+/// (bounded per character) for the record; the mind's graph in Neo4j keeps its history.
+pub fn forget_dead(ctx: &ReducerContext, id: u32) {
+    ctx.db.familiar().actor().delete(id);
+    ctx.db.experience().observer().delete(id);
+    ctx.db.place().actor().delete(id);
+    ctx.db.judgment().actor().delete(id);
+    ctx.db.mind_cursor().actor().delete(id);
+}
+
 pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, now: u64) {
     let Some(mut v) = ctx.db.vitals().id().find(victim) else { return };
     let Some(vc) = ctx.db.character().id().find(victim) else { return };
@@ -1094,6 +1105,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
     ctx.db.vitals().id().delete(id);
     ctx.db.wake().id().delete(id);
     ctx.db.deliberation().actor().delete(id);
+    forget_dead(ctx, id);
     let text = if killer != 0 { "{a} was killed by {b}".to_string() } else { format!("{{a}} died ({cause})") };
     witnessed(ctx, now, at, "death", id, killer, &text, if kind == "person" { 1.0 } else { 0.5 }, &[id]);
 }
