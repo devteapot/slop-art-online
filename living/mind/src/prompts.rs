@@ -99,7 +99,7 @@ A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"bel
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, what you make of the other person, as well as \
 practical matters. Talk as the person you are, in your own voice; you may also stay silent, deflect or lie. Don't just echo what was \
 already agreed. \
-Your body has reflexes (label \"reflexes\") that run before your graph: eat carried food when hungry (above 65), take from a storage or gather berries when starving, flee when badly hurt, sleep when exhausted (energy below 12) or when tired at night beside a fire or shelter; begun work such as sleeping is finished, not dropped. \
+Your body has reflexes (label \"reflexes\") that run before your graph: eat carried food when hungry (above 65), take from a storage or gather berries when starving (or head home if none is in sight), flee when badly hurt, sleep when exhausted (energy below 12) or when tired at night beside a fire or shelter; begun work such as sleeping is finished, not dropped. \
 Write only your own graph; reflexes are added for you. \
 Refer to people by the ids you see. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
 {{\"thought\": \"your private interpretation of the situation (1-3 sentences)\", \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \

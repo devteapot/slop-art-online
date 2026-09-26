@@ -111,6 +111,39 @@
             }
           }
         }
+      },
+      {
+        "if": {
+          "cond": {
+            "all": [
+              {
+                "hunger": {
+                  "above": 70
+                }
+              },
+              {
+                "not": {
+                  "near": {
+                    "target": {
+                      "nearest": "wolf"
+                    },
+                    "within": 6
+                  }
+                }
+              },
+              {
+                "not": {
+                  "hurt_within": 6
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": {
+              "skill": "graze"
+            }
+          }
+        }
       }
     ],
     "cognition": {
@@ -254,6 +287,37 @@
             "do": {
               "skill": "eat",
               "item": "meat"
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "cond": {
+            "all": [
+              {
+                "hunger": {
+                  "above": 80
+                }
+              },
+              {
+                "sees": {
+                  "nearest": "deer"
+                }
+              },
+              {
+                "not": {
+                  "hurt_within": 6
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": {
+              "skill": "attack",
+              "target": {
+                "nearest": "deer"
+              }
             }
           }
         }

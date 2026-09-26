@@ -136,6 +136,24 @@ pub fn grant_know_how(ctx: &ReducerContext, id: u32, technique: String) -> Resul
     Ok(())
 }
 
+/// After the species' reflexes (body habits) change: re-wrap every living character's
+/// mind-written graph with the current reflex layer, keeping the mind's own graph.
+#[spacetimedb::reducer]
+pub fn refresh_reflexes(ctx: &ReducerContext) -> Result<(), String> {
+    use crate::tables::brain as _;
+    require_admin(ctx)?;
+    let now = common::now_ms(ctx);
+    let brains: Vec<Brain> = ctx.db.brain().iter().filter(|b| b.source == "mind").collect();
+    let mut n = 0;
+    for b in brains {
+        if ctx.db.character().id().find(b.id).map_or(false, |c| c.alive) && mind::set_graph(ctx, b.id, &b.graph, &b.plan, "mind", now).is_ok() {
+            n += 1;
+        }
+    }
+    log::info!("refreshed reflexes on {n} graphs");
+    Ok(())
+}
+
 /// Test support: set a character's background (read by its mind when it first forms an identity).
 #[spacetimedb::reducer]
 pub fn set_background(ctx: &ReducerContext, id: u32, text: String) -> Result<(), String> {

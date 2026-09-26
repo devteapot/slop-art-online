@@ -73,6 +73,7 @@ pub mod place_near_reducer;
 pub mod place_structure_reducer;
 pub mod place_table;
 pub mod place_type;
+pub mod refresh_reflexes_reducer;
 pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
@@ -176,6 +177,7 @@ pub use place_near_reducer::place_near;
 pub use place_structure_reducer::place_structure;
 pub use place_table::*;
 pub use place_type::Place;
+pub use refresh_reflexes_reducer::refresh_reflexes;
 pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
@@ -279,6 +281,7 @@ pub enum Reducer {
         near: u32,
         kind: String,
     },
+    RefreshReflexes,
     SeedCommunities,
     SetBackground {
         id: u32,
@@ -323,6 +326,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindUpdate { .. } => "mind_update",
             Reducer::PlaceNear { .. } => "place_near",
             Reducer::PlaceStructure { .. } => "place_structure",
+            Reducer::RefreshReflexes => "refresh_reflexes",
             Reducer::SeedCommunities => "seed_communities",
             Reducer::SetBackground { .. } => "set_background",
             Reducer::SetBehavior { .. } => "set_behavior",
@@ -428,6 +432,9 @@ impl __sdk::Reducer for Reducer {
                     near: near.clone(),
                     kind: kind.clone(),
                 })
+            }
+            Reducer::RefreshReflexes => {
+                __sats::bsatn::to_vec(&refresh_reflexes_reducer::RefreshReflexesArgs {})
             }
             Reducer::SeedCommunities => {
                 __sats::bsatn::to_vec(&seed_communities_reducer::SeedCommunitiesArgs {})
