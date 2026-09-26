@@ -78,3 +78,6 @@ Evidence, rule changes and decisions per stage, newest last.
   - Born animals no longer get a person's identity.
   - Animal compilers no longer see people's grammar examples: a wolf had copied "go to the campfire" as its way of staying safe.
   - The people's family desire had a weight that never rose above zero (base now 0.2).
+- 15:05 — Reading a situation (asked for by the user: many people against one wolf, a wounded animal). Graphs can test `count` (how many of a kind, optionally of a relation, are in sight within a distance: `at_least` / `at_most`) and `health_of` (how healthy a creature in sight is, as a percentage). Others' wounds were already graded in the scene. Nothing prescribes what to do with this; it is the foundation for learned tactics (outnumbering, finishing off the weak, sparing or tending).
+
+  An experiment runs in parallel: deliberate interactions (family, trade, teaching) as acts issued by the mind instead of graph nodes, graph kept for real-time behavior.

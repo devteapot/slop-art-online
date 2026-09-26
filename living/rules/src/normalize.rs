@@ -55,7 +55,7 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
 const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted"];
-const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, near, hurt_within, heard_within, night, believes, chance, all, any, not";
+const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, near, count, health_of, hurt_within, heard_within, night, believes, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -557,6 +557,37 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     json!({key: n})
                 }
                 "within" => return cond(json!({"near": v}), path),
+                "count" | "number_of" | "how_many" => {
+                    let Value::Object(o) = v else { return Err(format!("{p}: expected {{\"of\": kind, \"within\": n, \"at_least\": n}}")) };
+                    let o = strip_nulls(o);
+                    let kind = o.get("of").or_else(|| o.get("kind")).cloned().ok_or_else(|| format!("{p}: missing of"))?;
+                    let of = match (kind, o.get("relation")) {
+                        (Value::String(k), Some(r)) => json!({"kind": k.to_lowercase(), "relation": r}),
+                        (Value::String(k), None) => json!(k.to_lowercase()),
+                        (other, _) => other,
+                    };
+                    let num = |k: &str| o.get(k).and_then(|x| x.as_u64());
+                    let mut c = json!({"of": of, "within": o.get("within").and_then(|w| w.as_f64()).unwrap_or(crate::SIGHT as f64)});
+                    if let Some(a) = num("at_least").or_else(|| num("min")) {
+                        c["at_least"] = json!(a);
+                    }
+                    if let Some(b) = num("at_most").or_else(|| num("max")) {
+                        c["at_most"] = json!(b);
+                    }
+                    json!({"count": c})
+                }
+                "health_of" | "target_health" | "their_health" => {
+                    let Value::Object(o) = v else { return Err(format!("{p}: expected {{\"target\": T, \"below\": 40}}")) };
+                    let o = strip_nulls(o);
+                    let t = o.get("target").cloned().ok_or_else(|| format!("{p}: missing target"))?;
+                    let mut c = json!({"target": target(t, &p)?});
+                    for k in ["above", "below"] {
+                        if let Some(x) = o.get(k).and_then(|x| x.as_f64()) {
+                            c[k] = json!(x);
+                        }
+                    }
+                    json!({"health_of": c})
+                }
                 "night" => json!({"night": v.as_bool().unwrap_or(true)}),
                 "threatened" | "under_attack" | "incoming_attack" => json!({"threatened": v.as_bool().unwrap_or(true)}),
                 "day" => json!({"night": !v.as_bool().unwrap_or(true)}),
@@ -571,6 +602,19 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
 mod tests {
     use crate::graph::{from_value, outline};
     use serde_json::json;
+
+    #[test]
+    fn situational_conditions_normalize() {
+        let g = from_value(json!({"first": [
+            {"if": {"count": {"kind": "person", "relation": "friend", "min": 3}, "health_of": {"target": {"nearest": "wolf"}, "below": 40}},
+             "then": {"do": "attack", "target": {"nearest": "wolf"}}},
+            {"if": {"count": {"of": "wolf", "at_most": 1}}, "then": {"do": "wander"}}
+        ]})).unwrap();
+        let o = outline(&g.root);
+        assert!(o.contains("at least 3 person (friend)"), "{o}");
+        assert!(o.contains("health of nearest wolf < 40%"), "{o}");
+        assert!(o.contains("at most 1 wolf"), "{o}");
+    }
 
     #[test]
     fn accepts_flat_and_slipped_forms() {

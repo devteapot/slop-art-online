@@ -198,6 +198,10 @@ pub enum Cond {
     Hour(Cmp),
     /// Someone's attack or throw aimed at me is winding up right now.
     Threatened(bool),
+    /// How many creatures of a kind (and relation) are in sight within a distance.
+    Count(CountCond),
+    /// How healthy a creature in sight is, as a percentage of its full health.
+    HealthOf(HealthOfCond),
     /// A judgment the mind maintains from its beliefs.
     Believes(Believes),
     Chance(f32),
@@ -216,6 +220,32 @@ pub struct HasCond {
 
 fn one() -> u32 {
     1
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct CountCond {
+    pub of: Filter,
+    #[serde(default = "count_within")]
+    pub within: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at_least: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at_most: Option<u32>,
+}
+
+fn count_within() -> f32 {
+    crate::SIGHT
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct HealthOfCond {
+    pub target: Target,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub above: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub below: Option<f32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -518,6 +548,17 @@ fn check_cond(c: &Cond, depth: usize) -> Result<(), String> {
         Cond::Not(x) => check_cond(x, depth + 1)?,
         Cond::Sees(t) => check_target(t)?,
         Cond::Near(n) => check_target(&n.target)?,
+        Cond::HealthOf(h) => {
+            check_target(&h.target)?;
+            if h.above.is_none() && h.below.is_none() {
+                return Err("health_of needs above or below".into());
+            }
+        }
+        Cond::Count(c) => {
+            if c.at_least.is_none() && c.at_most.is_none() {
+                return Err("count needs at_least or at_most".into());
+            }
+        }
         Cond::Has(h) => {
             if h.item != "food" && crate::catalog::item(&h.item).is_none() {
                 return Err(format!("unknown item `{}`", h.item));
@@ -683,6 +724,29 @@ pub fn describe_cond(c: &Cond) -> String {
         Cond::Hour(x) => cmp("hour", x),
         Cond::Threatened(true) => "an attack is coming at me".into(),
         Cond::Threatened(false) => "no attack coming at me".into(),
+        Cond::Count(c) => {
+            let who = match &c.of.relation {
+                Some(r) => format!("{} ({r})", c.of.kind),
+                None => c.of.kind.clone(),
+            };
+            let n = match (c.at_least, c.at_most) {
+                (Some(a), Some(b)) => format!("{a} to {b}"),
+                (Some(a), None) => format!("at least {a}"),
+                (None, Some(b)) => format!("at most {b}"),
+                _ => "any".into(),
+            };
+            format!("{n} {who} within {}", c.within)
+        }
+        Cond::HealthOf(h) => {
+            let mut s = format!("health of {}", describe_target(&h.target));
+            if let Some(a) = h.above {
+                s.push_str(&format!(" > {a}%"));
+            }
+            if let Some(b) = h.below {
+                s.push_str(&format!(" < {b}%"));
+            }
+            s
+        }
         Cond::Night(true) => "night".into(),
         Cond::Night(false) => "day".into(),
         Cond::Believes(b) => format!("believes {} > {}", b.key, b.above),

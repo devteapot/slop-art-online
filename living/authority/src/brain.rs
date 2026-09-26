@@ -566,6 +566,29 @@ impl<'a> Ev<'a> {
                 _ => self.resolve(t).is_some(),
             },
             Cond::Near(n) => self.resolve(&n.target).map_or(false, |p| dist(self.at, p.at) <= n.within),
+            Cond::Count(c) => {
+                let at = self.at;
+                let cands: Vec<NearCreature> = self.scene().creatures.clone();
+                let mut n = 0u32;
+                for x in cands {
+                    if dist(at, x.pos) > c.within || (c.of.kind != "creature" && *x.kind != *c.of.kind) {
+                        continue;
+                    }
+                    if let Some(rel) = &c.of.relation {
+                        if !self.relation_ok(x.id, rel) {
+                            continue;
+                        }
+                    }
+                    n += 1;
+                }
+                c.at_least.map_or(true, |a| n >= a) && c.at_most.map_or(true, |b| n <= b)
+            }
+            Cond::HealthOf(h) => {
+                let Some(r) = self.resolve(&h.target).filter(|r| r.class == 3) else { return false };
+                let Some(v) = self.ctx.db.vitals().id().find(r.id as u32) else { return false };
+                let pct = common::needs(&v, self.now).hp / v.max_hp.max(1.0) * 100.0;
+                h.above.map_or(true, |a| pct > a) && h.below.map_or(true, |b| pct < b)
+            }
             Cond::HurtWithin(s) => self.vit.hurt_ms != 0 && self.now.saturating_sub(self.vit.hurt_ms) as f32 <= s * 1000.0,
             Cond::HeardWithin(s) => self.st.heard_ms != 0 && self.now.saturating_sub(self.st.heard_ms) as f32 <= s * 1000.0,
             Cond::Night(b) => common::night(&self.w, self.now) == *b,
