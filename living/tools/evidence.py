@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Checkpoint 2 evidence from the live world (docs/CHECKPOINT_2.md).
+"""Checkpoint evidence from the live world (docs/CHECKPOINT_2.md, docs/CHECKPOINT_3.md).
 
 Usage: living/tools/evidence.py [--db living] [--out FILE]
 
 Reports how know-how spread (by source), tablets written and read, plantings, births and
-deaths, exchanges between camps (camp = nearest seeded camp to a person's home), the
-current season/day and population. Observational: counts what happened, judges nothing.
+deaths, exchanges between groups (group = the town or band in a person's background, else
+the community they belong to, else the nearest valley camp), trades, thefts, fights,
+community membership, the current season/day and population. Observational: counts what happened, judges nothing.
 """
 import argparse
 import json
@@ -16,6 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 STDB = str(ROOT / "living/tools/stdb")
 CAMPS = {"west": (19, 81), "lake": (61, 45), "ridge": (48, 13)}
+CAMPS_ACTIVE = True
 
 
 def rows(db, q):
@@ -42,9 +44,20 @@ def rows(db, q):
     return res
 
 
+BACKGROUND = {}
+MEMBER = {}
+
+
 def camp_of(c):
     if c.get("kind") != "person":
         return None
+    bg = BACKGROUND.get(c["id"])
+    if bg:
+        return bg.get("town") or bg.get("band")
+    if c["id"] in MEMBER:
+        return MEMBER[c["id"]]
+    if not CAMPS_ACTIVE:
+        return "loner"
     x, y = c["home_x"], c["home_y"]
     name, (cx, cy) = min(CAMPS.items(), key=lambda kv: (kv[1][0] - x) ** 2 + (kv[1][1] - y) ** 2)
     return name if (cx - x) ** 2 + (cy - y) ** 2 < 15 ** 2 else "loner"
@@ -55,6 +68,16 @@ def main():
     ap.add_argument("--db", default="living")
     ap.add_argument("--out")
     a = ap.parse_args()
+    global CAMPS_ACTIVE
+    for r in rows(a.db, "SELECT * FROM background"):
+        try:
+            BACKGROUND[r["id"]] = json.loads(r["text"].replace('\\"', '"'))
+        except ValueError:
+            pass
+    comm = {r["id"]: r["name"] for r in rows(a.db, "SELECT * FROM community")}
+    for m in rows(a.db, "SELECT * FROM membership"):
+        MEMBER[m["member"]] = comm.get(m["community"], "?")
+    CAMPS_ACTIVE = not BACKGROUND
     chars = {c["id"]: c for c in rows(a.db, "SELECT * FROM character")}
     camp = {i: camp_of(c) for i, c in chars.items()}
     know = rows(a.db, "SELECT * FROM know_how")
@@ -72,7 +95,7 @@ def main():
     # Learning events survive in the story even when the learner (and their know-how) died.
     learned_story = [r["text"] for r in chron if r["kind"] == "learn"]
     kinds = Counter(r["kind"] for r in chron)
-    exchanges = [r for r in chron if r["kind"] in ("give", "learn") and r["a"] and r["b"] and camp.get(r["a"]) and camp.get(r["b"]) and camp.get(r["a"]) != camp.get(r["b"])]
+    exchanges = [r for r in chron if r["kind"] in ("give", "learn", "trade", "teach") and r["a"] and r["b"] and camp.get(r["a"]) and camp.get(r["b"]) and camp.get(r["a"]) != camp.get(r["b"])]
     arts = rows(a.db, "SELECT kind, author_name, topic, text FROM artifact")
     people = [c for c in chars.values() if c["kind"] == "person"]
     deaths = [(c["name"], c["cause"]) for c in people if not c["alive"]]
@@ -92,7 +115,11 @@ def main():
         "learning_events": learned_story,
         "artifacts": [{"kind": x["kind"], "by": x["author_name"], "topic": x["topic"], "text": x["text"][:120]} for x in arts],
         "story_counts": dict(kinds),
-        "cross_camp_exchanges": [r["text"] for r in exchanges][-20:],
+        "cross_group_exchanges": [r["text"] for r in exchanges][-20:],
+        "trades": [r["text"] for r in chron if r["kind"] == "trade"][-10:],
+        "fights": [r["text"] for r in chron if r["kind"] in ("attack", "kill", "death", "fight")][-10:],
+        "communities": {name: sorted(chars[m]["name"] for m, n in MEMBER.items() if n == name and m in chars and chars[m]["alive"]) for name in comm.values()},
+        "people_by_group": dict(Counter(camp.get(c["id"]) for c in people if c["alive"])),
     }
     print(json.dumps(report, indent=2, ensure_ascii=False))
     if a.out:

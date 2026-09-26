@@ -50,6 +50,9 @@ pub struct Minds {
     me: Identity,
     actors: Mutex<HashMap<u32, ActorMind>>,
     sem: Semaphore,
+    /// Deferrable work (consolidation, reorganization, identities) may hold at most half of the
+    /// model slots, so deliberation (being attacked, spoken to, a plan failing) always gets one.
+    slow: Semaphore,
 }
 
 fn flatten<E: std::fmt::Debug>(r: Result<Result<(), String>, E>) -> Result<(), String> {
@@ -71,7 +74,7 @@ impl Minds {
     pub fn new(conn: DbConnection, llm: Llm, store: Option<Store>, seed: Value, concurrency: usize) -> Result<Arc<Self>> {
         let me = conn.try_identity().ok_or_else(|| anyhow!("not connected"))?;
         let species = living_rules::species::parse(&std::fs::read_to_string(crate::root().join("living/seeds/species.json"))?).map_err(|e| anyhow!(e))?;
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency), slow: Semaphore::new((concurrency / 2).max(1)) }))
     }
 
     fn mine(&self) -> Vec<Character> {
@@ -141,6 +144,9 @@ impl Minds {
     // ---- bootstrap -------------------------------------------------------------
 
     pub async fn bootstrap(self: &Arc<Self>) -> Result<()> {
+        // Identities that need a model call (residents with only a background) are made
+        // concurrently, bounded by the shared LLM semaphore.
+        let mut pending = Vec::new();
         for c in self.mine() {
             if let Some(store) = &self.store {
                 store.ensure_self(c.id, &c.name).await?;
@@ -148,10 +154,23 @@ impl Minds {
             if self.conn.db.persona().id().find(&c.id).is_none() {
                 if c.parent_a != 0 {
                     self.birth_persona(&c).await?;
+                } else if c.kind == "person" && self.conn.db.background().id().find(&c.id).is_some() {
+                    let me = self.clone();
+                    let c = c.clone();
+                    pending.push(tokio::spawn(async move {
+                        if let Err(e) = me.background_persona(&c).await {
+                            log::warn!("{}: no identity from background yet: {e:#}", c.name);
+                        }
+                    }));
                 } else {
                     self.seed_persona(&c).await?;
                 }
             }
+        }
+        for p in pending {
+            let _ = p.await;
+        }
+        for c in self.mine() {
             let model = match self.llm.species_profile(&c.kind, "think") {
                 Some(t) => format!("{} (compiled by {})", self.llm.model_name(&t), self.llm.model_name(&self.llm.species_profile(&c.kind, "compile").unwrap_or_default())),
                 None => self.llm.model_name(&self.llm.profile_for(c.id, &c.name)),
@@ -209,7 +228,7 @@ impl Minds {
         if let Some(store) = &self.store {
             store.ensure_self(c.id, &c.name).await?;
             store.apply(c.id, &patch, &thought, now).await?;
-            store.set_identity(c.id, 1, &persona, "who I was when I came to the valley", &thought, now).await?;
+            store.set_identity(c.id, 1, &persona, "who I was when this began", &thought, now).await?;
         }
         let persona = PersonaIn {
             narrative: persona["narrative"].as_str().unwrap_or_default().into(),
@@ -219,6 +238,62 @@ impl Minds {
             mood: persona["mood"].as_str().unwrap_or_default().into(),
         };
         self.project(c.id, Some(persona), None).await
+    }
+
+    /// A seeded resident's starting identity, written by their mind from their background
+    /// (town, occupation, household or band history). Afterwards it is ordinary identity.
+    async fn background_persona(&self, c: &Character) -> Result<()> {
+        let bg: Value = self.conn.db.background().id().find(&c.id).and_then(|b| serde_json::from_str(&b.text).ok()).unwrap_or_default();
+        let profile = self.llm.profile_for(c.id, &c.name);
+        let system = format!(
+            "You create the starting identity of a person in a persistent simulated world. {}\n\n\
+The person has lived before this moment: use their background, but give them an individual temperament, private hopes, worries, \
+likes and grudges of their own (not a job description; what they did so far is history, not destiny). Write the narrative in the first person, \
+2-4 sentences. Relations: how they feel about each person named in the background (trust and affinity -100..100, a label such as \
+family, partner, friend, rival, stranger, and a short note in their words). Reply with ONE JSON object: {{\"narrative\": \"...\", \"values\": [...], \"goals\": [...], \
+\"traits\": {{\"caution\": 0-100, \"sociability\": 0-100, \"empathy\": 0-100, \"curiosity\": 0-100, \"ambition\": 0-100, \"introspection\": 0-100, \"temper\": 0-100}}, \"mood\": \"...\", \
+\"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"...\", \"note\": \"...\"}}]}}",
+            prompts::world_rules()
+        );
+        let knows: Vec<String> = self.conn.db.know_how().iter().filter(|k| k.actor == c.id).map(|k| k.technique).collect();
+        let user = format!("Person: {} (#{}). Knows how to: {}.\nBackground: {}", c.name, c.id, if knows.is_empty() { "nothing special".into() } else { knows.join(", ") }, bg);
+        let reply = {
+            let _slow = self.slow.acquire().await?;
+            let _permit = self.sem.acquire().await?;
+            self.llm.chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?
+        };
+        let v = llm::parse_json(&reply.content)?;
+        let thought = reference(c.id, "background");
+        let now = llm::now_ms();
+        let known: Vec<u32> = ["household", "companions"].iter().flat_map(|k| bg[*k].as_array().cloned().unwrap_or_default()).filter_map(|p| p["id"].as_u64().map(|i| i as u32)).collect();
+        let mut places = vec![json!({"name": "home", "x": c.home_x, "y": c.home_y})];
+        if let Some([x, y]) = bg["town_center"].as_array().map(|a| [a[0].as_f64().unwrap_or(0.0), a[1].as_f64().unwrap_or(0.0)]) {
+            places.push(json!({"name": format!("{} center", bg["town"].as_str().unwrap_or("town")), "x": x, "y": y}));
+        }
+        if let Some([x, y]) = bg["camp"].as_array().map(|a| [a[0].as_f64().unwrap_or(0.0), a[1].as_f64().unwrap_or(0.0)]) {
+            places.push(json!({"name": "camp", "x": x, "y": y}));
+        }
+        let relations: Vec<Value> = v["relations"].as_array().cloned().unwrap_or_default().into_iter().filter(|r| r["id"].as_u64().map_or(false, |i| known.contains(&(i as u32)))).collect();
+        if let Some(store) = &self.store {
+            let mut patch = memory::Patch::default();
+            for id in &known {
+                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.name(*id)), props: Default::default() });
+            }
+            memory::sugar_into(&json!({"relations": relations, "places": places}), &mut patch, &[]);
+            store.ensure_self(c.id, &c.name).await?;
+            store.apply(c.id, &patch, &thought, now).await?;
+            store.set_identity(c.id, 1, &v, "who I was when this began", &thought, now).await?;
+        }
+        log::info!("{} (#{}) from background: {}", c.name, c.id, v["narrative"].as_str().unwrap_or_default());
+        let persona = PersonaIn {
+            narrative: v["narrative"].as_str().unwrap_or_default().into(),
+            values: strings(&v["values"]),
+            goals: strings(&v["goals"]),
+            traits: v["traits"].to_string(),
+            mood: v["mood"].as_str().unwrap_or("settled").into(),
+        };
+        let t = ThoughtIn { kind: "consolidate".into(), summary: "Who I am, from where I come from.".into(), detail: v.to_string(), latency_ms: reply.latency_ms, tokens: reply.tokens, model: reply.model, reference: thought };
+        self.project(c.id, Some(persona), Some(t)).await
     }
 
     /// A newborn's starting identity: its own temperament, raised by its parents.
@@ -236,9 +311,10 @@ impl Minds {
 traits are influenced by the parents but varied (never copied), and the child knows almost nothing yet. Write the narrative in the first person, \
 simple and short, as a very young child. Reply with ONE JSON object: {{\"narrative\": \"...\", \"values\": [...], \"goals\": [...], \
 \"traits\": {{\"caution\": 0-100, \"sociability\": 0-100, \"empathy\": 0-100, \"curiosity\": 0-100, \"ambition\": 0-100, \"introspection\": 0-100, \"temper\": 0-100}}, \"mood\": \"...\"}}",
-            prompts::WORLD_RULES
+            prompts::world_rules()
         );
         let user = format!("Newborn: {} (#{}).\nParent {} (#{}): {}\nParent {} (#{}): {}", c.name, c.id, an, c.parent_a, ap, bn, c.parent_b, bp);
+        let _slow = self.slow.acquire().await?;
         let _permit = self.sem.acquire().await?;
         let reply = self.llm.chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?;
         let v = llm::parse_json(&reply.content)?;
@@ -799,6 +875,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         };
         let user = prompts::consolidate_user(&ctx);
         let remember = if animal { self.llm.species_profile(&c.kind, "remember").unwrap_or(profile.clone()) } else { profile.clone() };
+        let _slow = self.slow.acquire().await?;
         let _permit = self.sem.acquire().await?;
         let msgs = [Msg { role: "system", content: system }, Msg { role: "user", content: user }];
         let mut reply = self.llm.chat(&remember, "consolidate", &c.name, &msgs).await?;
@@ -908,6 +985,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         let facts = store.around(actor, &[], 120).await?;
         let lines: Vec<String> = facts.iter().map(|f| memory::render_keys(f, &fmt)).collect();
         let profile = self.llm.profile_for(actor, &c.name);
+        let _slow = self.slow.acquire().await?;
         let _permit = self.sem.acquire().await?;
         let reply = self
             .llm

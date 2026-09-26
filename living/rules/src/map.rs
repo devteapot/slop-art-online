@@ -4,11 +4,12 @@
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
+/// Size of the classic valley map (the realm generator makes maps of any size).
 pub const MAP_W: u32 = 96;
 pub const MAP_H: u32 = 96;
 pub const CHUNK: u32 = 16;
-pub const CHUNKS_X: u32 = MAP_W / CHUNK;
-pub const CHUNKS_Y: u32 = MAP_H / CHUNK;
+/// Largest supported map side (chunk coordinates are packed in 16 bits each).
+pub const MAX_SIDE: u32 = 4096;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -47,22 +48,27 @@ impl Terrain {
     }
 }
 
+/// Chunk ids pack chunk coordinates, so they do not depend on the map's width.
 pub fn chunk_id(cx: u32, cy: u32) -> u32 {
-    cy * CHUNKS_X + cx
+    (cy << 16) | cx
+}
+
+pub fn chunk_xy(id: u32) -> (u32, u32) {
+    (id & 0xFFFF, id >> 16)
 }
 
 pub fn chunk_of(x: f32, y: f32) -> u32 {
-    let cx = ((x.max(0.0) as u32) / CHUNK).min(CHUNKS_X - 1);
-    let cy = ((y.max(0.0) as u32) / CHUNK).min(CHUNKS_Y - 1);
+    let cx = (x.max(0.0) as u32 / CHUNK).min(MAX_SIDE / CHUNK - 1);
+    let cy = (y.max(0.0) as u32 / CHUNK).min(MAX_SIDE / CHUNK - 1);
     chunk_id(cx, cy)
 }
 
-/// Chunks overlapping the square of half-size `r` around a point.
+/// Chunks overlapping the square of half-size `r` around a point (callers filter to the map).
 pub fn chunks_around(x: f32, y: f32, r: f32) -> Vec<u32> {
-    let lo_x = (((x - r).max(0.0)) as u32 / CHUNK).min(CHUNKS_X - 1);
-    let hi_x = (((x + r).max(0.0)) as u32 / CHUNK).min(CHUNKS_X - 1);
-    let lo_y = (((y - r).max(0.0)) as u32 / CHUNK).min(CHUNKS_Y - 1);
-    let hi_y = (((y + r).max(0.0)) as u32 / CHUNK).min(CHUNKS_Y - 1);
+    let lo_x = ((x - r).max(0.0)) as u32 / CHUNK;
+    let hi_x = ((x + r).max(0.0)) as u32 / CHUNK;
+    let lo_y = ((y - r).max(0.0)) as u32 / CHUNK;
+    let hi_y = ((y + r).max(0.0)) as u32 / CHUNK;
     let mut out = Vec::with_capacity(9);
     for cy in lo_y..=hi_y {
         for cx in lo_x..=hi_x {
@@ -72,18 +78,25 @@ pub fn chunks_around(x: f32, y: f32, r: f32) -> Vec<u32> {
     out
 }
 
-/// Whole-map terrain, row-major `y * MAP_W + x`.
+/// Whole-map terrain, row-major `y * w + x`.
 #[derive(Clone, Debug)]
 pub struct Map {
+    pub w: u32,
+    pub h: u32,
     pub tiles: Vec<u8>,
 }
 
 impl Map {
+    pub fn chunks(&self) -> impl Iterator<Item = u32> + '_ {
+        let (cw, ch) = (self.w.div_ceil(CHUNK), self.h.div_ceil(CHUNK));
+        (0..ch).flat_map(move |cy| (0..cw).map(move |cx| chunk_id(cx, cy)))
+    }
+
     pub fn get(&self, x: i32, y: i32) -> Terrain {
-        if x < 0 || y < 0 || x >= MAP_W as i32 || y >= MAP_H as i32 {
+        if x < 0 || y < 0 || x >= self.w as i32 || y >= self.h as i32 {
             return Terrain::Rock;
         }
-        Terrain::from_u8(self.tiles[(y as u32 * MAP_W + x as u32) as usize])
+        Terrain::from_u8(self.tiles[(y as u32 * self.w + x as u32) as usize])
     }
     pub fn at(&self, x: f32, y: f32) -> Terrain {
         self.get(x.floor() as i32, y.floor() as i32)
@@ -94,35 +107,31 @@ impl Map {
 
     /// Terrain bytes for one chunk, row-major within the chunk.
     pub fn chunk_bytes(&self, id: u32) -> Vec<u8> {
-        let cx = id % CHUNKS_X;
-        let cy = id / CHUNKS_X;
+        let (cx, cy) = chunk_xy(id);
         let mut out = Vec::with_capacity((CHUNK * CHUNK) as usize);
         for j in 0..CHUNK {
             for i in 0..CHUNK {
-                let x = cx * CHUNK + i;
-                let y = cy * CHUNK + j;
-                out.push(self.tiles[(y * MAP_W + x) as usize]);
+                out.push(self.get((cx * CHUNK + i) as i32, (cy * CHUNK + j) as i32) as u8);
             }
         }
         out
     }
 
-    pub fn from_chunks(chunks: impl IntoIterator<Item = (u32, Vec<u8>)>) -> Self {
-        let mut tiles = vec![0u8; (MAP_W * MAP_H) as usize];
+    pub fn from_chunks(w: u32, h: u32, chunks: impl IntoIterator<Item = (u32, Vec<u8>)>) -> Self {
+        let mut tiles = vec![0u8; (w * h) as usize];
         for (id, bytes) in chunks {
-            let cx = id % CHUNKS_X;
-            let cy = id / CHUNKS_X;
+            let (cx, cy) = chunk_xy(id);
             for (k, b) in bytes.iter().enumerate() {
                 let i = k as u32 % CHUNK;
                 let j = k as u32 / CHUNK;
                 let x = cx * CHUNK + i;
                 let y = cy * CHUNK + j;
-                if x < MAP_W && y < MAP_H {
-                    tiles[(y * MAP_W + x) as usize] = *b;
+                if x < w && y < h {
+                    tiles[(y * w + x) as usize] = *b;
                 }
             }
         }
-        Self { tiles }
+        Self { w, h, tiles }
     }
 
     /// Nearest walkable tile center to a point, searching outward.
@@ -172,9 +181,9 @@ impl Map {
         if self.line_clear(from, to) {
             return Some(vec![to]);
         }
-        let w = MAP_W as i32;
+        let w = self.w as i32;
         let idx = |p: (i32, i32)| (p.1 * w + p.0) as usize;
-        let n = (MAP_W * MAP_H) as usize;
+        let n = (self.w * self.h) as usize;
         let mut g = vec![u32::MAX; n];
         let mut came = vec![u32::MAX; n];
         let h = |p: (i32, i32)| {
@@ -364,7 +373,7 @@ pub fn generate(seed: u64) -> Map {
             }
         }
     }
-    Map { tiles }
+    Map { w: MAP_W, h: MAP_H, tiles }
 }
 
 #[cfg(test)]
@@ -387,9 +396,10 @@ mod tests {
     #[test]
     fn chunk_roundtrip() {
         let m = generate(3);
-        let chunks: Vec<_> = (0..CHUNKS_X * CHUNKS_Y).map(|id| (id, m.chunk_bytes(id))).collect();
-        assert_eq!(Map::from_chunks(chunks).tiles, m.tiles);
+        let chunks: Vec<_> = m.chunks().map(|id| (id, m.chunk_bytes(id))).collect();
+        assert_eq!(Map::from_chunks(m.w, m.h, chunks).tiles, m.tiles);
         assert_eq!(chunk_of(17.0, 1.0), 1);
+        assert_eq!(chunk_of(1.0, 17.0), 1 << 16);
         assert_eq!(chunks_around(1.0, 1.0, 8.0), vec![0]);
     }
 }

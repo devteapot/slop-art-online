@@ -14,6 +14,8 @@ pub struct World {
     pub day_ms: u64,
     pub admin: __sdk::Identity,
     pub paused: bool,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl __sdk::InModule for World {
@@ -31,6 +33,8 @@ pub struct WorldCols {
     pub day_ms: __sdk::__query_builder::Col<World, u64>,
     pub admin: __sdk::__query_builder::Col<World, __sdk::Identity>,
     pub paused: __sdk::__query_builder::Col<World, bool>,
+    pub width: __sdk::__query_builder::Col<World, u32>,
+    pub height: __sdk::__query_builder::Col<World, u32>,
 }
 
 impl __sdk::__query_builder::HasCols for World {
@@ -44,6 +48,8 @@ impl __sdk::__query_builder::HasCols for World {
             day_ms: __sdk::__query_builder::Col::new(table_name, "day_ms"),
             admin: __sdk::__query_builder::Col::new(table_name, "admin"),
             paused: __sdk::__query_builder::Col::new(table_name, "paused"),
+            width: __sdk::__query_builder::Col::new(table_name, "width"),
+            height: __sdk::__query_builder::Col::new(table_name, "height"),
         }
     }
 }

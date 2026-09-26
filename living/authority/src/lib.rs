@@ -28,6 +28,8 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         day_ms: living_rules::DEFAULT_DAY_MS,
         admin: ctx.sender(),
         paused: false,
+        width: living_rules::map::MAP_W,
+        height: living_rules::map::MAP_H,
     });
     ctx.db.clock().insert(Clock {
         id: 0,
@@ -112,8 +114,8 @@ pub fn spawn_crowd(ctx: &ReducerContext, n: u32, minded: bool) -> Result<(), Str
         if made >= n {
             break;
         }
-        let x = ctx.rng().gen_range(4.0f32..(living_rules::map::MAP_W as f32 - 4.0));
-        let y = ctx.rng().gen_range(4.0f32..(living_rules::map::MAP_H as f32 - 4.0));
+        let x = ctx.rng().gen_range(4.0f32..(map.w as f32 - 4.0));
+        let y = ctx.rng().gen_range(4.0f32..(map.h as f32 - 4.0));
         if !map.at(x, y).walkable() {
             continue;
         }

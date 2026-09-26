@@ -46,6 +46,12 @@ fn fbm(seed: u64, x: f32, y: f32, base: f32) -> f32 {
     0.5 * noise(seed, x, y, base) + 0.28 * noise(seed ^ 0xA5, x, y, base / 2.3) + 0.14 * noise(seed ^ 0x5A, x, y, base / 5.0) + 0.08 * noise(seed ^ 0x3C, x, y, base / 11.0)
 }
 
+impl Realm {
+    pub fn to_map(&self) -> crate::map::Map {
+        crate::map::Map { w: self.w, h: self.h, tiles: self.tiles.clone() }
+    }
+}
+
 pub fn generate(seed: u64, w: u32, h: u32) -> Realm {
     let (wi, hi) = (w as i32, h as i32);
     let idx = |x: i32, y: i32| (y * wi + x) as usize;
@@ -273,8 +279,8 @@ mod tests {
         assert_eq!(r.tiles.len(), 256 * 256);
         assert!(r.towns.len() >= 2, "towns: {:?}", r.towns);
         assert!(r.wilds.len() >= 2, "wilds: {:?}", r.wilds);
-        let map = crate::map::Map { tiles: vec![] };
-        let _ = map;
+        let map = r.to_map();
+        assert_eq!(map.chunks().count(), 256);
         let water = r.tiles.iter().filter(|t| **t == Terrain::Water as u8).count();
         assert!(water > 2000 && water < 256 * 256 / 2, "water {water}");
     }

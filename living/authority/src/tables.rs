@@ -16,6 +16,20 @@ pub struct World {
     /// Publisher; also the default mind controller for AI characters.
     pub admin: Identity,
     pub paused: bool,
+    /// Map size in tiles.
+    #[default(96u32)]
+    pub width: u32,
+    #[default(96u32)]
+    pub height: u32,
+}
+
+/// Where a seeded character comes from (town, household, occupation, history) as JSON.
+/// World fact, not identity: the character's mind builds its identity from it.
+#[spacetimedb::table(accessor = background, public)]
+pub struct Background {
+    #[primary_key]
+    pub id: u32,
+    pub text: String,
 }
 
 /// Private tick bookkeeping (not broadcast).

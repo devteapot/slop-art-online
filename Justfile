@@ -161,6 +161,10 @@ living-publish: living-build
     {{living_stdb}} call -s local {{living_db}} install_script "$(python3 -c 'import json,sys; print(json.dumps(open("living/scripts/skills.rhai").read()))')"
     just living-token
 
+# Choose the active seed (living/seeds/<name>.json → world.json); takes effect at the next reset.
+living-seed name:
+    cp living/seeds/{{name}}.json living/seeds/world.json
+
 # Fresh world from the seed (DELETES the living world's data).
 living-reset: living-build
     {{living_stdb}} publish -s local -b /wasm/living_authority.wasm {{living_db}} --delete-data -y

@@ -2,7 +2,7 @@
 
 use crate::map::darkness;
 use crate::net::{Net, Status};
-use crate::state::{hhmm, need, person_color, Snap, StoryFilter, Tab, View, LEARNING_TRADE};
+use crate::state::{hhmm, need, person_color, LeftTab, Snap, StoryFilter, Tab, View, LEARNING_TRADE};
 use bevy_egui::egui::{self, Color32, RichText};
 use living_bindings::*;
 use living_rules::graph::{self, Node};
@@ -104,14 +104,25 @@ fn kind_style(kind: &str, text: &str) -> (&'static str, Color32) {
     }
 }
 
-pub fn left(ctx: &egui::Context, view: &mut View, snap: &Snap) {
+pub fn left(ctx: &egui::Context, view: &mut View, net: &Net, snap: &Snap) {
     egui::SidePanel::left("left").resizable(true).default_width(330.0).min_width(240.0).show(ctx, |ui| {
         ui.add_space(4.0);
-        ui.label(RichText::new("People").strong().size(15.0));
+        let alive = snap.chars.values().filter(|c| c.kind == "person" && c.alive).count();
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut view.left_tab, LeftTab::People, RichText::new(format!("People ({alive})")).strong().size(15.0));
+            ui.selectable_value(&mut view.left_tab, LeftTab::Communities, RichText::new(format!("Communities ({})", view.communities.len())).strong().size(15.0));
+        });
+        if view.left_tab == LeftTab::Communities {
+            communities(ui, view, net, snap);
+        }
         let mut people: Vec<&Character> = snap.chars.values().filter(|c| c.kind == "person").collect();
         people.sort_by_key(|c| (!c.alive, c.id));
+        if view.left_tab != LeftTab::People {
+            people.clear();
+        }
         let mut clicked = None;
-        egui::ScrollArea::vertical().id_salt("people").max_height(ui.available_height() * 0.42).auto_shrink([false, true]).show(ui, |ui| {
+        let height = if view.left_tab == LeftTab::People { ui.available_height() * 0.42 } else { 0.0 };
+        egui::ScrollArea::vertical().id_salt("people").max_height(height).auto_shrink([false, true]).show(ui, |ui| {
             for c in people {
                 let sel = view.selected == Some(c.id);
                 let frame = egui::Frame::new()
@@ -128,6 +139,10 @@ pub fn left(ctx: &egui::Context, view: &mut View, snap: &Snap) {
                                 name = name.strikethrough().color(Color32::GRAY);
                             }
                             ui.label(name);
+                            if let Some(k) = view.community_of.get(&c.id) {
+                                let com = &view.communities[*k];
+                                ui.label(RichText::new(&com.name).small().color(com.color));
+                            }
                             if !c.alive {
                                 ui.label(RichText::new("dead").color(Color32::from_rgb(230, 100, 90)).small());
                             }
@@ -305,7 +320,9 @@ pub fn inspector(ctx: &egui::Context, view: &mut View, net: &Net, snap: &Snap) {
         ui.separator();
         egui::ScrollArea::vertical().id_salt(("insp", view.tab as u8)).auto_shrink([false, false]).show(ui, |ui| match view.tab {
             Tab::Identity => {
-                if let Some(o) = identity(ui, conn, snap, &c) {
+                let bg = view.backgrounds.get(&c.id).cloned();
+                let a = bg.as_ref().and_then(|b| background(ui, snap, b));
+                if let Some(o) = identity(ui, conn, snap, &c).or(a) {
                     view.select(o, snap, true);
                 }
             }
@@ -350,6 +367,118 @@ pub fn sign_window(ctx: &egui::Context, view: &mut View, snap: &Snap) {
     if !open {
         view.open_sign = None;
     }
+}
+
+/// Communities: members alive, home, and what their stores hold; click to jump there.
+fn communities(ui: &mut egui::Ui, view: &mut View, net: &Net, snap: &Snap) {
+    let Some(conn) = &net.conn else { return };
+    if view.communities.is_empty() {
+        ui.label(RichText::new("No communities yet.").color(WEAK));
+        return;
+    }
+    let storages: Vec<&Structure> = snap.structures.iter().filter(|s| s.kind == "storage").collect();
+    let mut stock: std::collections::HashMap<u64, Vec<(String, u32)>> = std::collections::HashMap::new();
+    for i in conn.db.inventory().iter() {
+        if i.owner >= crate::map::SIGN_BIT && i.qty > 0 {
+            stock.entry(i.owner - crate::map::SIGN_BIT).or_default().push((i.item, i.qty));
+        }
+    }
+    let mut jump = None;
+    egui::ScrollArea::vertical().id_salt("communities").max_height(ui.available_height() * 0.42).auto_shrink([false, true]).show(ui, |ui| {
+        for (k, com) in view.communities.iter().enumerate() {
+            let alive = com.members.iter().filter(|m| snap.chars.get(m).is_some_and(|c| c.alive)).count();
+            let mut totals: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+            let mut n_stores = 0;
+            for s in &storages {
+                let near = (egui::pos2(s.x, s.y) - com.home).length() < 14.0;
+                if near || com.members.contains(&s.owner) {
+                    n_stores += 1;
+                    for (item, q) in stock.get(&s.id).into_iter().flatten() {
+                        *totals.entry(item.clone()).or_default() += q;
+                    }
+                }
+            }
+            let r = egui::Frame::new()
+                .fill(Color32::from_rgb(28, 32, 40))
+                .stroke(egui::Stroke::new(1.0, com.color.gamma_multiply(0.5)))
+                .corner_radius(5.0)
+                .inner_margin(egui::Margin::symmetric(8, 5))
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("■").color(com.color));
+                        ui.label(RichText::new(&com.name).strong());
+                        ui.label(RichText::new(com.kind).small().color(WEAK));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(RichText::new(format!("{alive}/{} alive", com.members.len())).small());
+                        });
+                    });
+                    ui.label(RichText::new(format!("home ({:.0}, {:.0}) · {n_stores} store{}", com.home.x, com.home.y, if n_stores == 1 { "" } else { "s" })).small().color(WEAK));
+                    if totals.is_empty() {
+                        ui.label(RichText::new("stores empty").small().color(WEAK));
+                    } else {
+                        let line = totals.iter().map(|(i, q)| format!("{i} {q}")).collect::<Vec<_>>().join(" · ");
+                        ui.add(egui::Label::new(RichText::new(line).small().color(Color32::from_rgb(230, 214, 170))).wrap());
+                    }
+                })
+                .response
+                .interact(egui::Sense::click())
+                .on_hover_cursor(egui::CursorIcon::PointingHand);
+            if r.clicked() {
+                jump = Some(k);
+            }
+            ui.add_space(3.0);
+        }
+    });
+    if let Some(k) = jump {
+        view.follow = false;
+        view.center = view.communities[k].home;
+        view.zoom = view.zoom.max(12.0);
+    }
+    ui.separator();
+}
+
+/// Origin and household (towns) or band history, from the `background` row.
+fn background(ui: &mut egui::Ui, snap: &Snap, b: &serde_json::Value) -> Option<u32> {
+    let mut go = None;
+    let s = |k: &str| b.get(k).and_then(|v| v.as_str()).unwrap_or("");
+    section(ui, "Background");
+    let mut people = |ui: &mut egui::Ui, label: &str, key: &str| {
+        if let Some(list) = b.get(key).and_then(|v| v.as_array()).filter(|l| !l.is_empty()) {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(label).color(WEAK));
+                for p in list {
+                    let id = p.get("id").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                    let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                    let occ = p.get("occupation").and_then(|v| v.as_str()).map(|o| format!(" ({o})")).unwrap_or_default();
+                    if ui.link(RichText::new(format!("{name}{occ}")).color(person_color(id))).clicked() && id != 0 {
+                        go = Some(id);
+                    }
+                }
+            });
+        }
+    };
+    match s("origin") {
+        "town" => {
+            ui.label(RichText::new(format!("{} of {}", if s("occupation").is_empty() { "townsperson" } else { s("occupation") }, s("town"))).strong());
+            if !s("town_character").is_empty() {
+                ui.add(egui::Label::new(RichText::new(s("town_character")).italics().small().color(Color32::from_rgb(210, 200, 180))).wrap());
+            }
+            people(ui, "household", "household");
+        }
+        "band" => {
+            ui.label(RichText::new(format!("of {}", s("band"))).strong());
+            if !s("history").is_empty() {
+                ui.add(egui::Label::new(RichText::new(s("history")).italics().small().color(Color32::from_rgb(210, 200, 180))).wrap());
+            }
+            people(ui, "companions", "companions");
+        }
+        other => {
+            ui.label(RichText::new(if other.is_empty() { "unknown origin" } else { other }).color(WEAK));
+        }
+    }
+    let _ = snap;
+    go
 }
 
 fn section(ui: &mut egui::Ui, title: &str) {

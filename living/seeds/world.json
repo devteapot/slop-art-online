@@ -1,0 +1,86 @@
+{
+  "run": "realm-1",
+  "seed": 3,
+  "map": {
+    "kind": "realm",
+    "w": 256,
+    "h": 256
+  },
+  "setting": "A wide land between western mountains and an eastern sea. Hills and rock in the west give way to forests and open plains, crossed by streams running east to the coast. Two towns stand in the east: Saltmere on the coast (in the north-east) and Oakhollow inland beside a river (near the middle). Their people have lived there for years, with homes, stores and fields, but food, wood and stone still have to be fetched from the land around them. In the western wilds, a few small bands with almost nothing are trying to survive; the towns barely know they exist. Deer graze the plains and wolves roam the forests. A year has four seasons of two days; in winter nothing grows and nights are colder.",
+  "towns": [
+    {
+      "name": "Oakhollow",
+      "character": "an inland farming town by a river among forests; patient, close-knit, grows berry fields and keeps careful records; distrusts the sea folk's boasting",
+      "occupations": {
+        "farmer": 4,
+        "builder": 2,
+        "hunter": 3,
+        "cook": 1,
+        "scribe": 1,
+        "healer": 1,
+        "trader": 1,
+        "fisher": 1
+      },
+      "stores": {
+        "berries": 24,
+        "cooked_meat": 8,
+        "wood": 24,
+        "stone": 8,
+        "fiber": 12,
+        "hide": 4
+      },
+      "ledger": "Oakhollow. We plant before the cold and gather after it. Berry fields ring the town; plant new bushes when old ones tire. Wolves come out of the forest at night: stay near a fire. The sea town, Saltmere, lies to the north-east along the coast."
+    },
+    {
+      "name": "Saltmere",
+      "character": "a fishing town on the coast; proud, talkative, trades salt fish and tells long stories; wary of inland people who come asking for things",
+      "occupations": {
+        "fisher": 4,
+        "cook": 2,
+        "builder": 2,
+        "hunter": 2,
+        "scribe": 1,
+        "trader": 2,
+        "healer": 1
+      },
+      "stores": {
+        "cooked_fish": 16,
+        "wood": 20,
+        "fiber": 10,
+        "stone": 6,
+        "berries": 10,
+        "hide": 2
+      },
+      "ledger": "Saltmere. Our fires never go out. Fish the shallows by the sand and cook what you catch; keep the stores full before winter, when nothing grows. Oakhollow lies south-west, inland by the river. Take from the stores what you need, and put back what you can."
+    }
+  ],
+  "bands": [
+    {
+      "name": "the hill band",
+      "size": 4,
+      "history": "We fled a burnt valley beyond the mountains with nothing but what we carried. We remember how to make fire; nothing else is certain.",
+      "knows": [
+        "fire"
+      ]
+    },
+    {
+      "name": "the river strays",
+      "size": 3,
+      "history": "We were driven off by our own people for reasons we argue about. We have to start again.",
+      "knows": []
+    },
+    {
+      "name": "the southern family",
+      "size": 4,
+      "history": "A family who lost the rest of their people to a hard winter. The eldest remembers stories of towns by the sea.",
+      "knows": [
+        "fire",
+        "shelter"
+      ]
+    }
+  ],
+  "animals": {
+    "deer": 36,
+    "wolf": 6
+  }
+}

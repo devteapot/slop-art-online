@@ -47,7 +47,7 @@ fn draw(mut contexts: EguiContexts, mut net: NonSendMut<net::Net>, mut view: Non
     let dt = time.delta_secs().max(1e-4);
     view.fps += (1.0 / dt - view.fps) * 0.05;
     panels::top_bar(ctx, net, &snap, &mut view);
-    panels::left(ctx, &mut view, &snap);
+    panels::left(ctx, &mut view, net, &snap);
     panels::inspector(ctx, &mut view, net, &snap);
     panels::sign_window(ctx, &mut view, &snap);
     map::central(ctx, &mut view, &snap, time.elapsed_secs());

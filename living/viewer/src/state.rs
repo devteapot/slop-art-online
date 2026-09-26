@@ -7,10 +7,18 @@ use crate::art::{Art, Season};
 use crate::terrain::TerrainArt;
 use living_rules::map::{Map, MAP_H, MAP_W};
 
-/// World size in tiles. The single place the viewer reads the map size from: switch this
-/// to the `world` row when the authority publishes it (larger maps are planned).
+static WORLD_DIMS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(((MAP_W as u64) << 32) | MAP_H as u64);
+
+/// World size in tiles, from the `world` row (valley defaults until it arrives).
 pub fn world_tiles() -> egui::Vec2 {
-    egui::vec2(MAP_W as f32, MAP_H as f32)
+    let v = WORLD_DIMS.load(std::sync::atomic::Ordering::Relaxed);
+    egui::vec2((v >> 32) as f32, (v & 0xffff_ffff) as f32)
+}
+
+fn set_world_tiles(w: u32, h: u32) {
+    if w > 0 && h > 0 {
+        WORLD_DIMS.store(((w as u64) << 32) | h as u64, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 /// Camp colours for the minimap and markers (index = camp), and the loner colour.
@@ -24,42 +32,108 @@ pub const CAMP_COLORS: [egui::Color32; 6] = [
 ];
 pub const LONER: egui::Color32 = egui::Color32::from_rgb(235, 235, 235);
 
-/// Group living people whose homes lie within a few tiles of each other; groups of two or
-/// more are camps (ordered by their lowest id), everyone else is a loner.
-fn camps_of(chars: &HashMap<u32, Character>) -> HashMap<u32, Option<usize>> {
+/// A community: a town or band from the characters' backgrounds, or (without
+/// backgrounds) a cluster of nearby homes.
+pub struct Community {
+    pub name: String,
+    pub kind: &'static str,
+    pub home: egui::Pos2,
+    pub members: Vec<u32>,
+    pub color: egui::Color32,
+}
+
+/// Build communities from background JSON (town/band), assigning people without one to a
+/// parent's community or the nearest home within 25 tiles; falls back to clustering homes
+/// within 10 tiles when no backgrounds exist.
+fn communities_of(chars: &HashMap<u32, Character>, backgrounds: &HashMap<u32, serde_json::Value>) -> (Vec<Community>, HashMap<u32, usize>) {
     let mut people: Vec<&Character> = chars.values().filter(|c| c.kind == "person").collect();
     people.sort_by_key(|c| c.id);
-    let n = people.len();
-    let mut group: Vec<usize> = (0..n).collect();
-    fn root(g: &mut Vec<usize>, i: usize) -> usize {
-        let mut i = i;
-        while g[i] != i {
-            g[i] = g[g[i]];
-            i = g[i];
-        }
-        i
+    let mut list: Vec<Community> = Vec::new();
+    let mut of: HashMap<u32, usize> = HashMap::new();
+    let pos = |v: &serde_json::Value| -> Option<egui::Pos2> {
+        let a = v.as_array()?;
+        Some(egui::pos2(a.first()?.as_f64()? as f32, a.get(1)?.as_f64()? as f32))
+    };
+    for c in &people {
+        let Some(b) = backgrounds.get(&c.id) else { continue };
+        let (name, kind, home) = if let Some(t) = b.get("town").and_then(|t| t.as_str()) {
+            (t.to_string(), "town", b.get("town_center").and_then(pos))
+        } else if let Some(t) = b.get("band").and_then(|t| t.as_str()) {
+            (t.to_string(), "band", b.get("camp").and_then(pos))
+        } else {
+            continue;
+        };
+        let k = match list.iter().position(|x| x.name == name) {
+            Some(k) => k,
+            None => {
+                list.push(Community { name, kind, home: home.unwrap_or(egui::pos2(c.home_x, c.home_y)), members: Vec::new(), color: egui::Color32::WHITE });
+                list.len() - 1
+            }
+        };
+        list[k].members.push(c.id);
+        of.insert(c.id, k);
     }
-    for i in 0..n {
-        for j in i + 1..n {
-            let d = ((people[i].home_x - people[j].home_x).powi(2) + (people[i].home_y - people[j].home_y).powi(2)).sqrt();
-            if d <= 10.0 {
-                let (a, b) = (root(&mut group, i), root(&mut group, j));
-                group[a.max(b)] = a.min(b);
+    if list.is_empty() {
+        // No backgrounds: cluster homes (union-find within 10 tiles).
+        let n = people.len();
+        let mut group: Vec<usize> = (0..n).collect();
+        fn root(g: &mut [usize], mut i: usize) -> usize {
+            while g[i] != i {
+                g[i] = g[g[i]];
+                i = g[i];
+            }
+            i
+        }
+        for i in 0..n {
+            for j in i + 1..n {
+                let d = ((people[i].home_x - people[j].home_x).powi(2) + (people[i].home_y - people[j].home_y).powi(2)).sqrt();
+                if d <= 10.0 {
+                    let (a, b) = (root(&mut group, i), root(&mut group, j));
+                    group[a.max(b)] = a.min(b);
+                }
+            }
+        }
+        let mut by_root: Vec<(usize, Vec<usize>)> = Vec::new();
+        for i in 0..n {
+            let r = root(&mut group, i);
+            match by_root.iter_mut().find(|(k, _)| *k == r) {
+                Some((_, v)) => v.push(i),
+                None => by_root.push((r, vec![i])),
+            }
+        }
+        for (_, idx) in by_root.into_iter().filter(|(_, v)| v.len() >= 2) {
+            let k = list.len();
+            let home = idx.iter().fold(egui::Vec2::ZERO, |a, i| a + egui::vec2(people[*i].home_x, people[*i].home_y)) / idx.len() as f32;
+            list.push(Community { name: format!("camp {}", k + 1), kind: "camp", home: home.to_pos2(), members: Vec::new(), color: egui::Color32::WHITE });
+            for i in idx {
+                list[k].members.push(people[i].id);
+                of.insert(people[i].id, k);
+            }
+        }
+    } else {
+        // Newcomers without a background: a parent's community, else the nearest home.
+        for c in &people {
+            if of.contains_key(&c.id) {
+                continue;
+            }
+            let via_parent = [c.parent_a, c.parent_b].iter().find_map(|p| of.get(p).copied());
+            let nearest = list
+                .iter()
+                .enumerate()
+                .map(|(k, x)| (k, (x.home - egui::pos2(c.home_x, c.home_y)).length()))
+                .filter(|(_, d)| *d < 25.0)
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+                .map(|(k, _)| k);
+            if let Some(k) = via_parent.or(nearest) {
+                list[k].members.push(c.id);
+                of.insert(c.id, k);
             }
         }
     }
-    let mut sizes: HashMap<usize, usize> = HashMap::new();
-    for i in 0..n {
-        *sizes.entry(root(&mut group, i)).or_default() += 1;
+    for (k, x) in list.iter_mut().enumerate() {
+        x.color = CAMP_COLORS[k % CAMP_COLORS.len()];
     }
-    let mut order: Vec<usize> = sizes.iter().filter(|(_, s)| **s >= 2).map(|(r, _)| *r).collect();
-    order.sort();
-    (0..n)
-        .map(|i| {
-            let r = root(&mut group, i);
-            (people[i].id, order.iter().position(|o| *o == r))
-        })
-        .collect()
+    (list, of)
 }
 use spacetimedb_sdk::Table;
 use std::collections::HashMap;
@@ -85,8 +159,6 @@ pub struct Snap {
     /// Characters carrying a torch.
     pub torches: std::collections::HashSet<u32>,
     pub trades: Vec<TradeOffer>,
-    /// Camp index per person (None = loner).
-    pub camps: HashMap<u32, Option<usize>>,
 }
 
 impl Snap {
@@ -112,20 +184,6 @@ impl Snap {
             literate: c.db.know_how().iter().filter(|k| k.technique == "writing").map(|k| k.actor).collect(),
             torches: c.db.inventory().iter().filter(|i| i.item == "torch" && i.qty > 0 && i.owner < (1u64 << 32)).map(|i| i.owner as u32).collect(),
             trades: c.db.trade_offer().iter().collect(),
-            camps: HashMap::new(),
-        }
-        .with_camps()
-    }
-
-    fn with_camps(mut self) -> Self {
-        self.camps = camps_of(&self.chars);
-        self
-    }
-
-    pub fn camp_color(&self, id: u32) -> egui::Color32 {
-        match self.camps.get(&id).copied().flatten() {
-            Some(i) => CAMP_COLORS[i % CAMP_COLORS.len()],
-            None => LONER,
         }
     }
 
@@ -208,6 +266,12 @@ pub fn person_color(id: u32) -> egui::Color32 {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+pub enum LeftTab {
+    People,
+    Communities,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum StoryFilter {
     All,
     LearningTrade,
@@ -258,6 +322,13 @@ pub struct View {
     pub fights: HashMap<(u32, u32), u64>,
     pub effects: Vec<Effect>,
     pub story_filter: StoryFilter,
+    pub communities: Vec<Community>,
+    pub community_of: HashMap<u32, usize>,
+    pub backgrounds: HashMap<u32, serde_json::Value>,
+    community_key: (u32, usize),
+    pub left_tab: LeftTab,
+    /// Chunk build budget per frame (ms) and the last frame's terrain stats.
+    pub terrain_stats: (usize, usize, f32),
     /// Sign structure whose text is pinned open.
     pub open_sign: Option<u64>,
     last_selected: Option<u32>,
@@ -276,7 +347,7 @@ pub struct View {
     pub fps: f32,
     pub frame_ms: f32,
     pub logged_at: u32,
-    gens: (u32, u32, u32),
+    gens: (u32, u32, u32, u32),
     styled: bool,
 }
 
@@ -297,6 +368,12 @@ impl Default for View {
             fights: HashMap::new(),
             effects: Vec::new(),
             story_filter: StoryFilter::All,
+            communities: Vec::new(),
+            community_of: HashMap::new(),
+            backgrounds: HashMap::new(),
+            community_key: (u32::MAX, usize::MAX),
+            left_tab: LeftTab::People,
+            terrain_stats: (0, 0, 0.0),
             last_selected: None,
             terrain: None,
             art: None,
@@ -309,7 +386,7 @@ impl Default for View {
             fps: 60.0,
             frame_ms: 0.0,
             logged_at: 0,
-            gens: (u32::MAX, u32::MAX, u32::MAX),
+            gens: (u32::MAX, u32::MAX, u32::MAX, u32::MAX),
             styled: false,
         }
     }
@@ -351,12 +428,35 @@ impl View {
     }
 
     pub fn refresh(&mut self, ctx: &egui::Context, net: &Net, snap: &Snap, dt: f32) {
+        if let Some(w) = &snap.world {
+            let before = world_tiles();
+            set_world_tiles(w.width, w.height);
+            if world_tiles() != before {
+                // A different world: rebuild the terrain at the new size and refit.
+                self.gens.0 = u32::MAX;
+                self.fitted = false;
+            }
+        }
         let gens = net.gens.get();
         if let Some(c) = &net.conn {
             if gens.0 != self.gens.0 {
                 let chunks: Vec<(u32, Vec<u8>)> = c.db.terrain_chunk().iter().map(|r| (r.id, r.tiles)).collect();
+                let dims = world_tiles();
                 self.terrain = None;
-                self.map = (!chunks.is_empty()).then(|| Map::from_chunks(chunks));
+                self.map = (!chunks.is_empty()).then(|| Map::from_chunks(dims.x as u32, dims.y as u32, chunks));
+            }
+            if gens.3 != self.gens.3 {
+                self.backgrounds = c
+                    .db
+                    .background()
+                    .iter()
+                    .filter_map(|b| serde_json::from_str(&b.text).ok().map(|v| (b.id, v)))
+                    .collect();
+            }
+            let key = (gens.3, snap.chars.len());
+            if key != self.community_key {
+                self.community_key = key;
+                (self.communities, self.community_of) = communities_of(&snap.chars, &self.backgrounds);
             }
             if gens.1 != self.gens.1 {
                 let mut rows: Vec<Chronicle> = c.db.chronicle().iter().collect();
@@ -389,10 +489,10 @@ impl View {
             self.art = Some(Art::new(ctx));
         }
         let season = self.season(snap);
-        if let Some(map) = &self.map {
-            if self.terrain.as_ref().map(|t| t.season) != Some(season) {
-                self.terrain = Some(crate::terrain::build(ctx, map, season));
-            }
+        match (&mut self.terrain, &self.map) {
+            (Some(t), _) => t.set_season(ctx, season),
+            (None, Some(map)) => self.terrain = Some(crate::terrain::TerrainArt::new(ctx, map.clone(), season)),
+            _ => {}
         }
         for (id, b) in &snap.bodies {
             if b.vx.abs() > 0.05 && b.next_ms > snap.now {
@@ -467,6 +567,10 @@ impl View {
 
     pub fn season(&self, snap: &Snap) -> Season {
         snap.season()
+    }
+
+    pub fn community_color(&self, id: u32) -> egui::Color32 {
+        self.community_of.get(&id).map(|k| self.communities[*k].color).unwrap_or(LONER)
     }
 
     pub fn model_of(&self, id: u32) -> Option<&str> {

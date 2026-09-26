@@ -10,6 +10,8 @@ pub mod activity_table;
 pub mod activity_type;
 pub mod artifact_table;
 pub mod artifact_type;
+pub mod background_table;
+pub mod background_type;
 pub mod belief_in_type;
 pub mod belief_table;
 pub mod belief_type;
@@ -33,6 +35,8 @@ pub mod expecting_type;
 pub mod experience_table;
 pub mod experience_type;
 pub mod familiar_type;
+pub mod grant_items_reducer;
+pub mod grant_know_how_reducer;
 pub mod human_act_reducer;
 pub mod human_say_reducer;
 pub mod install_script_reducer;
@@ -65,6 +69,8 @@ pub mod persona_in_type;
 pub mod persona_table;
 pub mod persona_type;
 pub mod place_in_type;
+pub mod place_near_reducer;
+pub mod place_structure_reducer;
 pub mod place_table;
 pub mod place_type;
 pub mod relation_in_type;
@@ -76,6 +82,7 @@ pub mod script_table;
 pub mod script_type;
 pub mod seed_communities_reducer;
 pub mod seen_type;
+pub mod set_behavior_reducer;
 pub mod set_paused_reducer;
 pub mod set_profile_reducer;
 pub mod slow_timer_type;
@@ -105,6 +112,8 @@ pub use activity_table::*;
 pub use activity_type::Activity;
 pub use artifact_table::*;
 pub use artifact_type::Artifact;
+pub use background_table::*;
+pub use background_type::Background;
 pub use belief_in_type::BeliefIn;
 pub use belief_table::*;
 pub use belief_type::Belief;
@@ -128,6 +137,8 @@ pub use expecting_type::Expecting;
 pub use experience_table::*;
 pub use experience_type::Experience;
 pub use familiar_type::Familiar;
+pub use grant_items_reducer::grant_items;
+pub use grant_know_how_reducer::grant_know_how;
 pub use human_act_reducer::human_act;
 pub use human_say_reducer::human_say;
 pub use install_script_reducer::install_script;
@@ -160,6 +171,8 @@ pub use persona_in_type::PersonaIn;
 pub use persona_table::*;
 pub use persona_type::Persona;
 pub use place_in_type::PlaceIn;
+pub use place_near_reducer::place_near;
+pub use place_structure_reducer::place_structure;
 pub use place_table::*;
 pub use place_type::Place;
 pub use relation_in_type::RelationIn;
@@ -171,6 +184,7 @@ pub use script_table::*;
 pub use script_type::Script;
 pub use seed_communities_reducer::seed_communities;
 pub use seen_type::Seen;
+pub use set_behavior_reducer::set_behavior;
 pub use set_paused_reducer::set_paused;
 pub use set_profile_reducer::set_profile;
 pub use slow_timer_type::SlowTimer;
@@ -204,6 +218,15 @@ pub use world_type::World;
 /// to indicate which reducer caused the event.
 
 pub enum Reducer {
+    GrantItems {
+        id: u32,
+        item: String,
+        qty: u32,
+    },
+    GrantKnowHow {
+        id: u32,
+        technique: String,
+    },
     HumanAct {
         node: String,
     },
@@ -246,7 +269,19 @@ pub enum Reducer {
         actor: u32,
         update: MindUpdate,
     },
+    PlaceNear {
+        id: u32,
+        near: u32,
+    },
+    PlaceStructure {
+        near: u32,
+        kind: String,
+    },
     SeedCommunities,
+    SetBehavior {
+        id: u32,
+        graph: String,
+    },
     SetPaused {
         paused: bool,
     },
@@ -269,6 +304,8 @@ impl __sdk::InModule for Reducer {
 impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
+            Reducer::GrantItems { .. } => "grant_items",
+            Reducer::GrantKnowHow { .. } => "grant_know_how",
             Reducer::HumanAct { .. } => "human_act",
             Reducer::HumanSay { .. } => "human_say",
             Reducer::InstallScript { .. } => "install_script",
@@ -278,7 +315,10 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindSay { .. } => "mind_say",
             Reducer::MindSkip { .. } => "mind_skip",
             Reducer::MindUpdate { .. } => "mind_update",
+            Reducer::PlaceNear { .. } => "place_near",
+            Reducer::PlaceStructure { .. } => "place_structure",
             Reducer::SeedCommunities => "seed_communities",
+            Reducer::SetBehavior { .. } => "set_behavior",
             Reducer::SetPaused { .. } => "set_paused",
             Reducer::SetProfile { .. } => "set_profile",
             Reducer::SpawnBattle { .. } => "spawn_battle",
@@ -289,6 +329,19 @@ impl __sdk::Reducer for Reducer {
     #[allow(clippy::clone_on_copy)]
     fn args_bsatn(&self) -> Result<Vec<u8>, __sats::bsatn::EncodeError> {
         match self {
+            Reducer::GrantItems { id, item, qty } => {
+                __sats::bsatn::to_vec(&grant_items_reducer::GrantItemsArgs {
+                    id: id.clone(),
+                    item: item.clone(),
+                    qty: qty.clone(),
+                })
+            }
+            Reducer::GrantKnowHow { id, technique } => {
+                __sats::bsatn::to_vec(&grant_know_how_reducer::GrantKnowHowArgs {
+                    id: id.clone(),
+                    technique: technique.clone(),
+                })
+            }
             Reducer::HumanAct { node } => {
                 __sats::bsatn::to_vec(&human_act_reducer::HumanActArgs { node: node.clone() })
             }
@@ -357,8 +410,26 @@ impl __sdk::Reducer for Reducer {
                     update: update.clone(),
                 })
             }
+            Reducer::PlaceNear { id, near } => {
+                __sats::bsatn::to_vec(&place_near_reducer::PlaceNearArgs {
+                    id: id.clone(),
+                    near: near.clone(),
+                })
+            }
+            Reducer::PlaceStructure { near, kind } => {
+                __sats::bsatn::to_vec(&place_structure_reducer::PlaceStructureArgs {
+                    near: near.clone(),
+                    kind: kind.clone(),
+                })
+            }
             Reducer::SeedCommunities => {
                 __sats::bsatn::to_vec(&seed_communities_reducer::SeedCommunitiesArgs {})
+            }
+            Reducer::SetBehavior { id, graph } => {
+                __sats::bsatn::to_vec(&set_behavior_reducer::SetBehaviorArgs {
+                    id: id.clone(),
+                    graph: graph.clone(),
+                })
             }
             Reducer::SetPaused { paused } => {
                 __sats::bsatn::to_vec(&set_paused_reducer::SetPausedArgs {
@@ -388,6 +459,7 @@ impl __sdk::Reducer for Reducer {
 pub struct DbUpdate {
     activity: __sdk::TableUpdate<Activity>,
     artifact: __sdk::TableUpdate<Artifact>,
+    background: __sdk::TableUpdate<Background>,
     belief: __sdk::TableUpdate<Belief>,
     body: __sdk::TableUpdate<Body>,
     bond_offer: __sdk::TableUpdate<BondOffer>,
@@ -431,6 +503,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "artifact" => db_update
                     .artifact
                     .append(artifact_table::parse_table_update(table_update)?),
+                "background" => db_update
+                    .background
+                    .append(background_table::parse_table_update(table_update)?),
                 "belief" => db_update
                     .belief
                     .append(belief_table::parse_table_update(table_update)?),
@@ -550,6 +625,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.artifact = cache
             .apply_diff_to_table::<Artifact>("artifact", &self.artifact)
             .with_updates_by_pk(|row| &row.id);
+        diff.background = cache
+            .apply_diff_to_table::<Background>("background", &self.background)
+            .with_updates_by_pk(|row| &row.id);
         diff.belief = cache
             .apply_diff_to_table::<Belief>("belief", &self.belief)
             .with_updates_by_pk(|row| &row.id);
@@ -648,6 +726,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "artifact" => db_update
                     .artifact
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "background" => db_update
+                    .background
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "belief" => db_update
                     .belief
@@ -755,6 +836,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "artifact" => db_update
                     .artifact
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "background" => db_update
+                    .background
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "belief" => db_update
                     .belief
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -859,6 +943,7 @@ impl __sdk::DbUpdate for DbUpdate {
 pub struct AppliedDiff<'r> {
     activity: __sdk::TableAppliedDiff<'r, Activity>,
     artifact: __sdk::TableAppliedDiff<'r, Artifact>,
+    background: __sdk::TableAppliedDiff<'r, Background>,
     belief: __sdk::TableAppliedDiff<'r, Belief>,
     body: __sdk::TableAppliedDiff<'r, Body>,
     bond_offer: __sdk::TableAppliedDiff<'r, BondOffer>,
@@ -903,6 +988,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
     ) {
         callbacks.invoke_table_row_callbacks::<Activity>("activity", &self.activity, event);
         callbacks.invoke_table_row_callbacks::<Artifact>("artifact", &self.artifact, event);
+        callbacks.invoke_table_row_callbacks::<Background>("background", &self.background, event);
         callbacks.invoke_table_row_callbacks::<Belief>("belief", &self.belief, event);
         callbacks.invoke_table_row_callbacks::<Body>("body", &self.body, event);
         callbacks.invoke_table_row_callbacks::<BondOffer>("bond_offer", &self.bond_offer, event);
@@ -1610,6 +1696,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
         activity_table::register_table(client_cache);
         artifact_table::register_table(client_cache);
+        background_table::register_table(client_cache);
         belief_table::register_table(client_cache);
         body_table::register_table(client_cache);
         bond_offer_table::register_table(client_cache);
@@ -1643,6 +1730,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
         "activity",
         "artifact",
+        "background",
         "belief",
         "body",
         "bond_offer",

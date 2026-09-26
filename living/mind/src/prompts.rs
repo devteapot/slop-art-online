@@ -2,9 +2,8 @@
 //! relations, beliefs, judgments, places, episodes and the scene it currently perceives.
 
 
-pub const WORLD_RULES: &str = "\
-WORLD: a wooded river valley enclosed by rocky ridges; a river runs north-south west of center with two sandy fords; a lake lies northeast. \
-Coordinates are tiles (x east, y south, map 96x96). One day lasts 12 real minutes; night is 20:00-06:00 and cuts sight to 6 tiles (11 by day).
+const RULES: &str = "\
+One day lasts 12 real minutes; night is 20:00-06:00 and cuts sight to 6 tiles (11 by day).
 SEASONS: a year is 8 days — spring, summer, autumn, winter (2 days each). In winter nothing regrows and nights are colder: store food before it.
 BODY: hunger rises ~5/min (100 = starving, which drains health); energy falls ~3/min awake and recovers while sleeping (faster within 2 tiles of a shelter). \
 At night, people farther than 3 tiles from a campfire and 2 from a shelter, and without a warm cloak, lose health to the cold. Health recovers slowly when fed and rested. Death is permanent.
@@ -19,12 +18,24 @@ cloak = 2 hide + 1 fiber, torch = 1 wood + 1 fiber, tablet or sign = 1 wood (wri
 LIFE: people age; elders weaken after about 40 days. Two adults who both choose `conceive` toward each other within two minutes, while fed and near a shelter, have a child about a day later. \
 Children grow up in about 3 days; until then they are slow, cannot build, craft or fight, and depend on others for food and warmth.
 COMBAT: fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming \
-({{\"threatened\": true}}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard \
+({\"threatened\": true}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard \
 (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear up to 7 tiles (you lose it). \
 While fighting, your graph is checked about 15 times a second, so encode how you fight (e.g. a branch labeled \"combat\"), not one blow.
-COMMUNITIES: people can found a community ({{\"do\": \"found\", \"text\": \"its name\"}}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
+COMMUNITIES: people can found a community ({\"do\": \"found\", \"text\": \"its name\"}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
 TIME: beyond staying alive, how you spend your days is yours to decide, from who you are and what you want.
 OTHERS: people hear speech within ~9 tiles. You cannot read minds; what others say may be false. You only know what you perceived or were told.";
+
+static SETTING: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Set once at startup from the active seed: its setting text and map size.
+pub fn set_world(setting: &str, w: u32, h: u32) {
+    let _ = SETTING.set(format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}); walking covers about 3 tiles a second.\n{RULES}"));
+}
+
+/// The world's rules as every mind is told them.
+pub fn world_rules() -> &'static str {
+    SETTING.get().map(|s| s.as_str()).unwrap_or(RULES)
+}
 
 pub fn grammar() -> String {
     grammar_with(&living_rules::catalog::skills_help(), true)
@@ -74,7 +85,7 @@ Every branch must lead to action: a guard whose then-branch can only wait blocks
 pub fn deliberate_system(name: &str) -> String {
     format!(
         "You are the mind of {name}, a person living in a persistent simulated world. Stay in character: your personality, values, relationships and memories are yours, \
-and they may change through what you live. Decide what {name} intends now and express it as a behavior graph the body will follow, plus optional speech.\n\n{WORLD_RULES}\n\n{}\n\n\
+and they may change through what you live. Decide what {name} intends now and express it as a behavior graph the body will follow, plus optional speech.\n\n{}\n\n{}\n\n\
 A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"below\": 12}}}}) let you do different things at different times. \
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, what you make of the other person, as well as \
 practical matters. Talk as the person you are, in your own voice; you may also stay silent, deflect or lie. Don't just echo what was \
@@ -87,6 +98,7 @@ Refer to people by the ids you see. Do not assume facts you have not perceived. 
 or instead of graph \"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}} to replace only that labeled branch (e.g. adapt how you fight mid-fight) and keep the rest, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances your graph can test with believes), \
 \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering, e.g. home, good berry patch)}}",
+        world_rules(),
         grammar()
     )
 }
@@ -104,7 +116,7 @@ that fit it now (labels you give REPLACE its old ones, e.g. a Stranger who becam
 merge concepts that turn out to be the same thing. Prefer connecting to existing concepts over inventing new ones. \
 History is kept automatically. Keep as memories only the \
 few experiences {name} would still remember tomorrow (at most 3, often none), each with a gist in {name}'s own words. Identity (narrative, values, goals, traits 0-100, \
-mood) changes only when experiences genuinely warrant it; otherwise identity is null.\n\n{WORLD_RULES}\n\n\
+mood) changes only when experiences genuinely warrant it; otherwise identity is null.\n\n{}\n\n\
 KEYS: anchors connect your mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \"kind:<wolf|deer|berry_bush|campfire|...>\". \
 Any other key is yours to invent (\"idea:shared_storage\", \"plan:river_camp\"). Reuse existing keys shown in your mind.\n\
 The body acts on three parts of the mind without thinking: how {name} feels about people (self -FEELS {{trust, affinity -100..100, label, note}}-> person:<id>), \
@@ -121,7 +133,8 @@ Reply with ONE JSON object:\n\
  \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"friend|family|partner|ally|rival|enemy|stranger|...\", \"note\": \"short\"}}],\n\
  \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\"}}],\n\
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
- \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}"
+ \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}",
+        world_rules()
     )
 }
 

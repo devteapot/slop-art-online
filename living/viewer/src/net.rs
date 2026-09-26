@@ -34,6 +34,7 @@ const QUERIES: &[&str] = &[
     "SELECT * FROM know_how",
     "SELECT * FROM artifact",
     "SELECT * FROM trade_offer",
+    "SELECT * FROM background",
 ];
 
 /// A per-character experience subscription (only the inspected character's rows).
@@ -48,14 +49,16 @@ pub struct Generations {
     pub terrain: Arc<AtomicU32>,
     pub chronicle: Arc<AtomicU32>,
     pub thought: Arc<AtomicU32>,
+    pub background: Arc<AtomicU32>,
 }
 
 impl Generations {
-    pub fn get(&self) -> (u32, u32, u32) {
+    pub fn get(&self) -> (u32, u32, u32, u32) {
         (
             self.terrain.load(Ordering::Relaxed),
             self.chronicle.load(Ordering::Relaxed),
             self.thought.load(Ordering::Relaxed),
+            self.background.load(Ordering::Relaxed),
         )
     }
 }
@@ -187,6 +190,7 @@ impl Net {
                 watch!(terrain_chunk, terrain);
                 watch!(chronicle, chronicle);
                 watch!(thought, thought);
+                watch!(background, background);
                 let inbox = applied.clone();
                 let err = applied.clone();
                 conn.subscription_builder()
@@ -247,6 +251,7 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 bump(&net.gens.terrain);
                 bump(&net.gens.chronicle);
                 bump(&net.gens.thought);
+                bump(&net.gens.background);
             }
             Signal::Applied => {
                 info!("world subscribed after {:.1} s", now);
@@ -254,6 +259,7 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 bump(&net.gens.terrain);
                 bump(&net.gens.chronicle);
                 bump(&net.gens.thought);
+                bump(&net.gens.background);
             }
         }
     }

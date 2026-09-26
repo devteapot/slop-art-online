@@ -32,7 +32,8 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
         if let Some(map) = m.borrow().as_ref() {
             return map.clone();
         }
-        let map = Rc::new(Map::from_chunks(ctx.db.terrain_chunk().iter().map(|c| (c.id, c.tiles))));
+        let w = world(ctx);
+        let map = Rc::new(Map::from_chunks(w.width, w.height, ctx.db.terrain_chunk().iter().map(|c| (c.id, c.tiles))));
         *m.borrow_mut() = Some(map.clone());
         map
     })

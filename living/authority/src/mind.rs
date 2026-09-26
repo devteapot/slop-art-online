@@ -350,7 +350,8 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
     }
     for p in update.places.into_iter().take(16) {
         let name = clip(p.name.trim(), 48);
-        if name.is_empty() || !(0.0..living_rules::map::MAP_W as f32).contains(&p.x) || !(0.0..living_rules::map::MAP_H as f32).contains(&p.y) {
+        let w = common::world(ctx);
+        if name.is_empty() || !(0.0..w.width as f32).contains(&p.x) || !(0.0..w.height as f32).contains(&p.y) {
             continue;
         }
         let existing = ctx.db.place().actor().filter(actor).find(|x| x.name.eq_ignore_ascii_case(&name));

@@ -115,10 +115,16 @@ def main():
     results["teaching"] = bool(taught) and taught[0]["source"].startswith("taught by")
     # 5. Planting a berry bush (off-winter: a fresh world starts in spring).
     before = len(rows(db, "SELECT id, kind FROM resource_node"))
-    call(db, "set_behavior", str(A), seq({"do": {"skill": "plant"}}))
-    planted = wait_for(lambda: len(rows(db, "SELECT id, kind FROM resource_node")) > before)
+    # Planting needs arable ground: walk onto the nearest berry bush's tile first (bushes grow on grass).
+    body = rows(db, f"SELECT x, y FROM body WHERE id = {A}")[0]
+    ax, ay = float(body["x"]), float(body["y"])
+    bushes = [(float(r["x"]), float(r["y"])) for r in rows(db, "SELECT x, y FROM resource_node WHERE kind = 'berry_bush'")]
+    bush = min(bushes, key=lambda p: (p[0] - ax) ** 2 + (p[1] - ay) ** 2)
+    call(db, "set_behavior", str(A), seq({"do": {"skill": "goto", "target": {"at": [bush[0], bush[1]]}}}, {"do": {"skill": "plant"}}))
+    planted = wait_for(lambda: len(rows(db, "SELECT id, kind FROM resource_node")) > before, timeout=90)
     results["planting"] = bool(planted)
-    # 6. Consensual conception beside a shelter.
+    # 6. Consensual conception beside a shelter (B joins A, who walked off to plant).
+    call(db, "place_near", str(B), str(A))
     call(db, "place_structure", str(A), "shelter")
     time.sleep(1)
     # Both must be fed ("too hungry to think of a family" otherwise).

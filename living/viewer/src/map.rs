@@ -84,7 +84,7 @@ pub fn central(ctx: &egui::Context, view: &mut View, snap: &Snap, t: f32) {
         // Fit the whole valley once the terrain has arrived (and on request).
         let fit = ui.input(|i| i.key_pressed(egui::Key::Home)) && !ui.ctx().wants_keyboard_input();
         if (!view.fitted && view.terrain.is_some() && rect.width() > 50.0) || fit {
-            view.zoom = (rect.width().min(rect.height()) / world_tiles().max_elem() * 0.96).max(2.0);
+            view.zoom = (rect.width().min(rect.height()) / world_tiles().max_elem() * 0.96).max(0.8);
             view.center = (world_tiles() / 2.0).to_pos2();
             view.follow = false;
             view.fitted = true;
@@ -94,14 +94,26 @@ pub fn central(ctx: &egui::Context, view: &mut View, snap: &Snap, t: f32) {
         let painter = ui.painter_at(rect);
         let season = view.season(snap);
 
-        // Terrain: the coarsest level that still has about one texel per screen point.
-        if let Some(terrain) = &view.terrain {
+        // Terrain: the whole-map overview underneath, then chunk textures for the view at
+        // the coarsest level that still has about one texel per screen point.
+        if let Some(terrain) = view.terrain.as_mut() {
             let r = Rect::from_min_max(xf.s(Pos2::ZERO), xf.s(world_tiles().to_pos2()));
-            let level = terrain.levels.iter().rev().find(|(_, s)| *s as f32 >= xf.zoom * 0.9).unwrap_or(&terrain.levels[0]);
-            painter.image(level.0.id(), r, Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0)), Color32::WHITE);
+            let uv = Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0));
+            painter.image(terrain.overview.id(), r, uv, Color32::WHITE);
+            let mut drawn = 0;
+            if xf.zoom > crate::terrain::OVERVIEW_PX as f32 * 1.5 {
+                let world_view = Rect::from_min_max(xf.w(rect.min), xf.w(rect.max));
+                for chunk in terrain.visible(ctx, world_view, 6.0) {
+                    let level = chunk.levels.iter().rev().find(|(_, s)| *s as f32 >= xf.zoom * 0.9).unwrap_or(&chunk.levels[0]);
+                    let cr = Rect::from_min_max(xf.s(chunk.tiles.min), xf.s(chunk.tiles.max));
+                    painter.image(level.0.id(), cr, uv, Color32::WHITE);
+                    drawn += 1;
+                }
+            }
+            view.terrain_stats = (drawn, terrain.cached(), terrain.last_chunk_ms);
             painter.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::from_black_alpha(160)), StrokeKind::Outside);
             if xf.zoom >= 8.0 {
-                glints(&painter, &xf, &terrain.water, t, season);
+                glints(&painter, &xf, &terrain.map, t, season);
             }
         } else {
             painter.text(rect.center(), Align2::CENTER_CENTER, "waiting for the world…", FontId::proportional(18.0), Color32::GRAY);
@@ -207,15 +219,15 @@ pub fn central(ctx: &egui::Context, view: &mut View, snap: &Snap, t: f32) {
 }
 
 /// Brief sparkles on visible water tiles.
-fn glints(p: &egui::Painter, xf: &Xf, water: &[(u16, u16)], t: f32, season: Season) {
+fn glints(p: &egui::Painter, xf: &Xf, map: &living_rules::map::Map, t: f32, season: Season) {
     let texel = xf.zoom / TILE_PX as f32;
-    let vis = xf.rect.expand(xf.zoom);
     let col = if season == Season::Winter { (235, 245, 255) } else { (225, 242, 255) };
-    for &(tx, ty) in water {
+    let (a, b) = (xf.w(xf.rect.min), xf.w(xf.rect.max));
+    let (x0, y0) = ((a.x.floor() as i32 - 1).max(0), (a.y.floor() as i32 - 1).max(0));
+    let (x1, y1) = ((b.x.ceil() as i32 + 1).min(map.w as i32), (b.y.ceil() as i32 + 1).min(map.h as i32));
+    let water = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|(x, y)| map.get(*x, *y) == living_rules::map::Terrain::Water);
+    for (tx, ty) in water {
         let base = xf.s(egui::pos2(tx as f32, ty as f32));
-        if !vis.contains(base) {
-            continue;
-        }
         for k in 0..2 {
             let h = hash2(tx as i32, ty as i32, 40 + k);
             let phase = t * 1.4 + h * 40.0;
@@ -253,8 +265,10 @@ enum Item {
 fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &mut Art, snap: &Snap, t: f32, season: Season) -> (Placed, Vec<(u64, Rect)>) {
     let vis = xf.rect.expand(60.0);
     let mut items: Vec<(f32, Item)> = Vec::with_capacity(snap.resources.len() + snap.bodies.len() + snap.structures.len());
+    // Far out, individual plants are noise on the overview; skip them.
+    let show_resources = xf.zoom >= 3.0;
     for (i, n) in snap.resources.iter().enumerate() {
-        if vis.contains(xf.s(egui::pos2(n.x, n.y))) {
+        if show_resources && vis.contains(xf.s(egui::pos2(n.x, n.y))) {
             items.push((n.y, Item::Resource(i)));
         }
     }
@@ -420,7 +434,7 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
 }
 
 fn labels(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed, t: f32) {
-    let name_alpha = ((xf.zoom - 2.0) / 3.0).clamp(0.45, 1.0);
+    let name_alpha = ((xf.zoom - 1.8) / 3.0).clamp(0.0, 1.0);
     let act_alpha = ((xf.zoom - 8.0) / 3.0).clamp(0.0, 1.0);
     for (id, (feet, top)) in placed {
         let Some(c) = snap.chars.get(id) else { continue };
@@ -442,6 +456,9 @@ fn labels(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed,
             continue;
         }
         let alpha = if selected { 1.0 } else { name_alpha };
+        if alpha <= 0.01 {
+            continue;
+        }
         let name = p.layout_no_wrap(c.name.clone(), FontId::proportional(if selected { 14.0 } else { 12.5 }), a(Color32::WHITE, alpha));
         let at = egui::pos2(feet.x - name.size().x / 2.0, top - 3.0 - name.size().y);
         let bg = Rect::from_min_size(at, name.size()).expand2(egui::vec2(4.0, 1.0));
@@ -506,7 +523,7 @@ fn input(ui: &egui::Ui, resp: &egui::Response, view: &mut View, rect: Rect) {
         let factor = ((scroll * 0.0015).clamp(-0.25, 0.25)).exp() * zoom_delta;
         if (factor - 1.0).abs() > 1e-4 {
             let old = view.zoom;
-            view.zoom = (view.zoom * factor).clamp(2.0, 90.0);
+            view.zoom = (view.zoom * factor).clamp(0.8, 90.0);
             // Keep the world point under the cursor fixed (unless following).
             if let (Some(p), false) = (pointer, view.follow) {
                 let xf = Xf { rect, center: view.center, zoom: old };
@@ -761,10 +778,24 @@ fn minimap(ui: &egui::Ui, p: &egui::Painter, rect: Rect, xf: &Xf, view: &mut Vie
     let resp = ui.interact(mm, egui::Id::new("minimap"), egui::Sense::click_and_drag());
     let to_mm = |w: Pos2| mm.min + (w.to_vec2() / tiles) * size;
     p.rect_filled(mm.expand(3.0), 4.0, Color32::from_rgba_unmultiplied(10, 12, 16, 230));
-    let level = terrain.levels.last().unwrap();
-    p.image(level.0.id(), mm, Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0)), Color32::from_gray(225));
+    p.image(terrain.overview.id(), mm, Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0)), Color32::from_gray(225));
     for s in snap.structures.iter().filter(|s| s.kind == "campfire" || s.kind == "shelter") {
         p.rect_filled(Rect::from_center_size(to_mm(egui::pos2(s.x, s.y)), egui::vec2(2.0, 2.0)), 0.0, Color32::from_rgb(255, 170, 60));
+    }
+    // Community homes.
+    let hover = resp.hover_pos();
+    for c in &view.communities {
+        let at = to_mm(c.home);
+        let r = Rect::from_center_size(at, egui::vec2(9.0, 9.0));
+        p.rect_filled(r.expand(1.0), 2.0, Color32::from_rgb(16, 16, 20));
+        p.rect_filled(r, 2.0, c.color);
+        p.text(at, Align2::CENTER_CENTER, if c.kind == "town" { "⌂" } else { "△" }, FontId::proportional(8.0), Color32::from_rgb(20, 20, 24));
+        if hover.is_some_and(|h| r.expand(3.0).contains(h)) {
+            let g = p.layout_no_wrap(format!("{} ({}, {} people)", c.name, c.kind, c.members.len()), FontId::proportional(12.0), Color32::WHITE);
+            let tr = Rect::from_min_size(egui::pos2(mm.left(), mm.top() - g.size().y - 8.0), g.size()).expand(3.0);
+            p.rect_filled(tr, 3.0, Color32::from_black_alpha(210));
+            p.galley(tr.min + egui::vec2(3.0, 3.0), g, Color32::WHITE);
+        }
     }
     for (id, w) in &view.shown {
         let Some(c) = snap.chars.get(id) else { continue };
@@ -772,7 +803,7 @@ fn minimap(ui: &egui::Ui, p: &egui::Painter, rect: Rect, xf: &Xf, view: &mut Vie
         match c.kind.as_str() {
             "person" => {
                 p.circle_filled(at, 3.0, Color32::from_rgb(16, 16, 20));
-                p.circle_filled(at, 2.2, snap.camp_color(*id));
+                p.circle_filled(at, 2.2, view.community_color(*id));
                 if Some(*id) == view.selected {
                     p.circle_stroke(at, 5.0 + (t * 4.0).sin(), Stroke::new(1.5, Color32::from_rgb(255, 230, 120)));
                 }
