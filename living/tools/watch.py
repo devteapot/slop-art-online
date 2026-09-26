@@ -22,6 +22,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import time
 import urllib.request
@@ -217,6 +218,9 @@ def round_once(a, state):
     if flicker >= 3:
         flags.append(f"{flicker} people flickering back and forth")
     tracked = max(1, len([p for p in tracks if p in people]))
+    free_gb = shutil.disk_usage(str(ROOT)).free / 1e9
+    if free_gb < 10:
+        flags.append(f"host disk nearly full ({free_gb:.1f} GB free): Docker's VM goes read-only when it fills")
     if len(idle) / tracked > 0.25:
         flags.append(f"{len(idle)} of {tracked} people stood idle (no movement, no action) during the sample: {', '.join(idle[:8])}")
     if len(stuck) > len(people) * 0.15:
