@@ -14,6 +14,11 @@ pub const VALLEY: &str = include_str!(concat!(env!("OUT_DIR"), "/seed.json"));
 pub const INSTINCTS: &str = include_str!("../../seeds/instincts.json");
 pub const REPERTOIRE: &str = include_str!("../../seeds/repertoire.json");
 
+thread_local! {
+    /// The seed's resource abundance while the land is generated.
+    static RESOURCE_SCALE: std::cell::RefCell<std::collections::BTreeMap<String, f32>> = const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
+}
+
 /// A person's starting way of life: common routines, one for their work, and weighted desires
 /// that call them. It is theirs: the mind keeps, changes or drops any of it.
 pub fn give_repertoire(ctx: &ReducerContext, id: u32, occupation: &str, now: u64) {
@@ -80,11 +85,24 @@ impl SeedTown {
 #[derive(Deserialize)]
 pub struct SeedBand {
     pub name: String,
+    #[serde(default)]
     pub size: u32,
     #[serde(default)]
     pub history: String,
+    /// Know-how of the band's first member (or of every adult, with `family`).
     #[serde(default)]
     pub knows: Vec<String>,
+    /// A family of all ages instead of `size` adults: each member's stage
+    /// (elder, adult, child, infant) and trade; the young are children of the first two adults.
+    #[serde(default)]
+    pub family: Vec<SeedMember>,
+}
+
+#[derive(Deserialize)]
+pub struct SeedMember {
+    pub stage: String,
+    #[serde(default)]
+    pub occupation: String,
 }
 
 #[derive(Deserialize)]
@@ -101,6 +119,9 @@ pub struct Seed {
     pub year_days: u32,
     #[serde(default)]
     pub towns: Vec<SeedTown>,
+    /// Multiplies how many of each resource kind the land grows (1 = normal).
+    #[serde(default)]
+    pub resource_scale: std::collections::BTreeMap<String, f32>,
     /// Open villages at the realm's village sites.
     #[serde(default)]
     pub villages: Vec<SeedTown>,
@@ -219,6 +240,7 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         common::invalidate_calendar();
     }
     common::invalidate_map();
+    RESOURCE_SCALE.with(|r| *r.borrow_mut() = s.resource_scale.clone());
     spawn_resources(ctx, &map, now);
     let admin = common::world(ctx).admin;
     for p in &s.people {
@@ -423,6 +445,7 @@ fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64)
         true
     };
     let scale = ((map.w * map.h) as f32 / (96.0 * 96.0)).max(1.0);
+    let abundance = |kind: &str| RESOURCE_SCALE.with(|r| r.borrow().get(kind).copied().unwrap_or(1.0));
     let cap = |n: u32| (n as f32 * scale) as u32;
     let mut rng_tiles: Vec<(i32, i32)> = (0..map.h as i32).flat_map(|y| (0..map.w as i32).map(move |x| (x, y))).collect();
     // Deterministic shuffle from the reducer RNG.
@@ -449,6 +472,7 @@ fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64)
             Terrain::Dirt => ("boulder", 6.0, 5.0, cap(25)),
             _ => continue,
         };
+        let cap = (cap as f32 * abundance(kind)) as u32;
         let n = counts.entry(kind).or_insert(0);
         if *n >= cap {
             continue;
@@ -458,7 +482,7 @@ fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64)
         }
     }
     // Sparse berry bushes in open grassland too.
-    for _ in 0..cap(25) {
+    for _ in 0..(cap(25) as f32 * abundance("berry_bush")) as u32 {
         let x = ctx.rng().gen_range(4..map.w as i32 - 4);
         let y = ctx.rng().gen_range(4..map.h as i32 - 4);
         if map.get(x, y) == Terrain::Grass {
@@ -653,28 +677,58 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
 fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: (f32, f32), now: u64) {
     let admin = common::world(ctx).admin;
     let at = walkable_near(map, site);
-    let names: Vec<String> = (0..b.size).map(|_| fresh_name(ctx)).collect();
+    let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
     let mut ids = Vec::new();
-    for (k, name) in names.iter().enumerate() {
-        let p = walkable_near(map, (at.0 + k as f32 * 0.8, at.1 + (k % 2) as f32));
-        let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
-        let id = if b.size >= 4 && k as u32 == b.size - 1 && ids.len() >= 2 {
-            // Larger bands carry a child of the first two.
-            spawn_with(ctx, name, "person", admin, true, p, now, life.age_at(ctx.rng().gen_range(life.infant * 2.0..life.child * 0.8), pace), (ids[0], ids[1]))
-        } else {
-            spawn_with(ctx, name, "person", admin, true, p, now, life.age_at(ctx.rng().gen_range(0.18f32..0.7), pace), (0, 0))
-        };
-        common::inv_add(ctx, id as u64, "berries", 3);
-        let stage = ctx.db.character().id().find(id).map(|c| c.stage).unwrap_or(2);
-        if stage >= 1 {
-            give_repertoire(ctx, id, if stage == 1 { "child" } else { "forager" }, now);
-        }
-        if k == 0 {
-            for tech in &b.knows {
-                common::learn(ctx, id, tech, "seed", now);
+    if !b.family.is_empty() {
+        // A family of all ages; the young are children of the first two adults.
+        let mut adults: Vec<u32> = Vec::new();
+        for (k, m) in b.family.iter().enumerate() {
+            let p = walkable_near(map, (at.0 + (k % 4) as f32 * 0.8, at.1 + (k / 4) as f32 * 0.8));
+            let f = match m.stage.as_str() {
+                "elder" => ctx.rng().gen_range(life.elder + 0.01..life.old_age),
+                "child" => ctx.rng().gen_range(life.infant * 1.5..life.child * 0.9),
+                "infant" => ctx.rng().gen_range(0.0..life.infant * 0.6),
+                _ => ctx.rng().gen_range(life.child + 0.02..0.55),
+            };
+            let young = matches!(m.stage.as_str(), "child" | "infant");
+            let parents = if young && adults.len() >= 2 { (adults[0], adults[1]) } else { (0, 0) };
+            let id = spawn_with(ctx, &fresh_name(ctx), "person", admin, true, p, now, life.age_at(f, pace), parents);
+            common::inv_add(ctx, id as u64, "berries", if young { 1 } else { 3 });
+            if !young {
+                adults.push(id);
+                for tech in &b.knows {
+                    common::learn(ctx, id, tech, "seed", now);
+                }
             }
+            let stage = ctx.db.character().id().find(id).map(|c| c.stage).unwrap_or(2);
+            if stage >= 1 {
+                let occ = if stage == 1 { "child".to_string() } else if m.occupation.is_empty() { "forager".to_string() } else { m.occupation.clone() };
+                give_repertoire(ctx, id, &occ, now);
+            }
+            ids.push(id);
         }
-        ids.push(id);
+    } else {
+        let names: Vec<String> = (0..b.size).map(|_| fresh_name(ctx)).collect();
+        for (k, name) in names.iter().enumerate() {
+            let p = walkable_near(map, (at.0 + k as f32 * 0.8, at.1 + (k % 2) as f32));
+            let id = if b.size >= 4 && k as u32 == b.size - 1 && ids.len() >= 2 {
+                // Larger bands carry a child of the first two.
+                spawn_with(ctx, name, "person", admin, true, p, now, life.age_at(ctx.rng().gen_range(life.infant * 2.0..life.child * 0.8), pace), (ids[0], ids[1]))
+            } else {
+                spawn_with(ctx, name, "person", admin, true, p, now, life.age_at(ctx.rng().gen_range(0.18f32..0.7), pace), (0, 0))
+            };
+            common::inv_add(ctx, id as u64, "berries", 3);
+            let stage = ctx.db.character().id().find(id).map(|c| c.stage).unwrap_or(2);
+            if stage >= 1 {
+                give_repertoire(ctx, id, if stage == 1 { "child" } else { "forager" }, now);
+            }
+            if k == 0 {
+                for tech in &b.knows {
+                    common::learn(ctx, id, tech, "seed", now);
+                }
+            }
+            ids.push(id);
+        }
     }
     for id in &ids {
         let kin: Vec<serde_json::Value> = ids.iter().filter(|o| *o != id).map(|o| serde_json::json!({"id": o, "name": common::name_of(ctx, *o)})).collect();

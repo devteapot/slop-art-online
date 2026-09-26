@@ -22,17 +22,20 @@ LIVING = ROOT / "living"
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("scenario")
-    ap.add_argument("--db", default="living-lab")
-    ap.add_argument("--minutes", type=float, default=60)
+    ap.add_argument("--db", default=None, help="database (default: the scenario name)")
+    ap.add_argument("--minutes", type=float, default=240)
     ap.add_argument("--every", type=int, default=600)
     a = ap.parse_args()
+    a.db = a.db or a.scenario
     env = dict(os.environ, LIVING_SEED=a.scenario)
-    subprocess.run(["cargo", "build", "-p", "living-authority", "--target", "wasm32-unknown-unknown", "--release", "--target-dir", "target/lab"], cwd=LIVING, env=env, check=True)
-    src = LIVING / "target/lab/wasm32-unknown-unknown/release/living_authority.wasm"
-    dst = LIVING / "target/wasm32-unknown-unknown/release/living_authority_lab.wasm"
-    shutil.copy(src, dst)
+    # Each scenario builds in its own target dir, so labs can be (re)built side by side.
+    tdir = f"target/lab-{a.scenario}"
+    subprocess.run(["cargo", "build", "-p", "living-authority", "--target", "wasm32-unknown-unknown", "--release", "--target-dir", tdir], cwd=LIVING, env=env, check=True)
+    src = LIVING / tdir / "wasm32-unknown-unknown/release/living_authority.wasm"
+    wasm = f"living_authority_{a.scenario.replace('-', '_')}.wasm"
+    shutil.copy(src, LIVING / "target/wasm32-unknown-unknown/release" / wasm)
     stdb = str(LIVING / "tools/stdb")
-    subprocess.run([stdb, "publish", "-s", "local", "-b", "/wasm/living_authority_lab.wasm", a.db, "--delete-data", "-y"], check=True)
+    subprocess.run([stdb, "publish", "-s", "local", "-b", f"/wasm/{wasm}", a.db, "--delete-data", "-y"], check=True)
     run = f"{a.scenario}-{int(time.time())}"
     mind_env = dict(os.environ, LIVING_DB=a.db, LIVING_RUN=run, LIVING_SEED=a.scenario, RUST_LOG="info")
     log = open(ROOT / f".local/living/{run}.log", "w")

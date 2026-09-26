@@ -121,7 +121,7 @@ def round_once(a, state):
     db = a.db
     w = rows(db, "SELECT * FROM world")[0]
     stats = (rows(db, "SELECT * FROM stats") or [{}])[0]
-    chars = {r["id"]: r for r in rows(db, "SELECT id, name, kind, alive, stage, cause, died_ms, home_x, home_y, parent_a, parent_b FROM character")}
+    chars = {r["id"]: r for r in rows(db, "SELECT id, name, kind, alive, stage, cause, died_ms, born_ms, home_x, home_y, parent_a, parent_b FROM character")}
     alive = {i: c for i, c in chars.items() if c["alive"] == "true"}
     now = time.time() * 1000
     since = state.get("last_ms", now - a.every * 1000)
@@ -234,8 +234,33 @@ def round_once(a, state):
         flags.append(f"deer nearly gone ({deer} left)")
     if wolves < 3:
         flags.append(f"wolves nearly gone ({wolves} left)")
+    # Generations: depth of the parent chain (seeded people without parents are generation 1).
+    gen_cache = {}
+
+    def generation(i):
+        if i in gen_cache:
+            return gen_cache[i]
+        c = chars.get(i)
+        if not c:
+            return 0
+        ps = [p for p in (c["parent_a"], c["parent_b"]) if p and p != "0"]
+        gen_cache[i] = 1 + max((generation(p) for p in ps), default=0)
+        return gen_cache[i]
+
+    persons = [i for i, c in chars.items() if c["kind"] == "person"]
+    epoch = float(w["epoch_ms"])
+    born_here = [i for i in persons if float(chars[i]["born_ms"]) > epoch + 60000]
+    window_min = max(0.1, (now - since) / 60000)
+    report_life = {
+        "generations_alive": sorted(collections.Counter(generation(i) for i in persons if chars[i]["alive"] == "true").items()),
+        "deepest_generation": max((generation(i) for i in persons), default=0),
+        "born_in_world": len(born_here),
+        "people_alive": len(people),
+        "speech_per_person_per_min": round(len(speech) / max(1, len(people)) / window_min, 2),
+    }
     report = {
         "time": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+        "life": report_life,
         "run": w["run"],
         "day": int((now - float(w["epoch_ms"]) + float(w["day_ms"]) * 7 / 24) // float(w["day_ms"])) + 1,
         "population": {f"{k} {s}": n for (k, s), n in sorted(pop.items())},
@@ -264,7 +289,7 @@ def to_md(r):
     out = [f"# Watch {r['time']} — {r['run']}, day {r['day']}", ""]
     out.append("**Flags:** " + ("; ".join(r["flags"]) if r["flags"] else "none"))
     out.append("")
-    for k in ("population", "deaths_since_last", "movement", "time_budget_by_stage", "speech_topics", "goal_topics", "story_counts", "animals_near_settlements", "llm"):
+    for k in ("life", "population", "deaths_since_last", "movement", "time_budget_by_stage", "speech_topics", "goal_topics", "story_counts", "animals_near_settlements", "llm"):
         out.append(f"- **{k.replace('_', ' ')}**: {json.dumps(r[k], ensure_ascii=False)}")
     out.append(f"- **speech lines**: {r['speech_lines']}")
     if r["notable_events"]:

@@ -1,0 +1,56 @@
+{
+  "run": "s1-wolves",
+  "seed": 11,
+  "map": {
+    "kind": "realm",
+    "w": 96,
+    "h": 96
+  },
+  "year_days": 4,
+  "life_pace": 0.0714,
+  "setting": "A small valley between hills and the sea, with streams, woods and grassland. One family lives here alone: the old, the grown, the young and a baby. Berries grow in the grass by the woods, fish swim in the streams, deer graze the meadows and a few wolves live in the woods. Seasons turn quickly; in winter nothing grows and nights are colder. People live about seventy years here, but the years pass fast.",
+  "bands": [
+    {
+      "name": "the family",
+      "history": "We have always lived in this valley, one family, three generations. We know how to make fire.",
+      "knows": [
+        "fire"
+      ],
+      "family": [
+        {
+          "stage": "elder",
+          "occupation": "healer"
+        },
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "child"
+        },
+        {
+          "stage": "child"
+        },
+        {
+          "stage": "infant"
+        }
+      ]
+    }
+  ],
+  "animals": {
+    "deer": 16,
+    "wolf": 8
+  }
+}
