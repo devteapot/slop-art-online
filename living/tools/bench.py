@@ -72,11 +72,15 @@ def main():
         sub.terminate()
     logs = stdb("logs", "-s", "local", a.db, "-n", str(a.seconds * 70 + 500))
     durs = []
+    slow = []
     for m in re.finditer(r'^(\S+Z)\s.*Timing span "tick": ([\d.]+)(µs|ms|s)\b', logs, re.M):
         at = datetime.strptime(m.group(1)[:26].rstrip("Z"), "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc).timestamp()
         if at < t0 - 1:
             continue
-        durs.append(float(m.group(2)) * {"µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(3)])
+        d = float(m.group(2)) * {"µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(3)]
+        durs.append(d)
+        if d > 16.667:
+            slow.append((round(at - t0, 1), round(d, 1)))
     dt = t1 - t0
     rate = lambda k: round((s1[k] - s0[k]) / dt, 1)
     report = {
@@ -99,6 +103,7 @@ def main():
             "p99": round(pct(durs, 99), 3),
             "max": round(max(durs, default=0), 3),
             "over_16_7ms": sum(d > 16.667 for d in durs),
+            "over_budget_at_s": slow[:20],
         },
     }
     print(json.dumps(report, indent=2))

@@ -1,5 +1,5 @@
 {
-  "default": "luna",
+  "default": "mistral-small",
   "profiles": {
     "luna": {
       "base_url": "https://codex.carlid.dev/v1",
@@ -35,22 +35,21 @@
   },
   "assign": {},
   "rotate": [
-    "luna",
     "mistral-small"
   ],
   "species": {
     "deer": {
-      "think": "ministral",
-      "remember": "ministral",
+      "think": "mistral-small",
+      "remember": "mistral-small",
       "compile": "mistral-small"
     },
     "wolf": {
-      "think": "ministral",
-      "remember": "ministral",
+      "think": "mistral-small",
+      "remember": "mistral-small",
       "compile": "mistral-small"
     }
   },
   "stages": {
-    "child": "ministral"
+    "child": "mistral-small"
   }
 }
