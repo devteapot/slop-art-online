@@ -41,6 +41,7 @@ pub mod grant_items_reducer;
 pub mod grant_know_how_reducer;
 pub mod grant_repertoires_reducer;
 pub mod human_act_reducer;
+pub mod human_move_reducer;
 pub mod human_say_reducer;
 pub mod install_script_reducer;
 pub mod inventory_table;
@@ -102,6 +103,7 @@ pub mod spawn_battle_reducer;
 pub mod spawn_crowd_reducer;
 pub mod stats_table;
 pub mod stats_type;
+pub mod steer_type;
 pub mod structure_table;
 pub mod structure_type;
 pub mod target_ref_type;
@@ -155,6 +157,7 @@ pub use grant_items_reducer::grant_items;
 pub use grant_know_how_reducer::grant_know_how;
 pub use grant_repertoires_reducer::grant_repertoires;
 pub use human_act_reducer::human_act;
+pub use human_move_reducer::human_move;
 pub use human_say_reducer::human_say;
 pub use install_script_reducer::install_script;
 pub use inventory_table::*;
@@ -216,6 +219,7 @@ pub use spawn_battle_reducer::spawn_battle;
 pub use spawn_crowd_reducer::spawn_crowd;
 pub use stats_table::*;
 pub use stats_type::Stats;
+pub use steer_type::Steer;
 pub use structure_table::*;
 pub use structure_type::Structure;
 pub use target_ref_type::TargetRef;
@@ -254,6 +258,11 @@ pub enum Reducer {
     GrantRepertoires,
     HumanAct {
         node: String,
+    },
+    HumanMove {
+        dx: f32,
+        dy: f32,
+        run: bool,
     },
     HumanSay {
         text: String,
@@ -343,6 +352,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::GrantKnowHow { .. } => "grant_know_how",
             Reducer::GrantRepertoires => "grant_repertoires",
             Reducer::HumanAct { .. } => "human_act",
+            Reducer::HumanMove { .. } => "human_move",
             Reducer::HumanSay { .. } => "human_say",
             Reducer::InstallScript { .. } => "install_script",
             Reducer::Join { .. } => "join",
@@ -387,6 +397,13 @@ impl __sdk::Reducer for Reducer {
             }
             Reducer::HumanAct { node } => {
                 __sats::bsatn::to_vec(&human_act_reducer::HumanActArgs { node: node.clone() })
+            }
+            Reducer::HumanMove { dx, dy, run } => {
+                __sats::bsatn::to_vec(&human_move_reducer::HumanMoveArgs {
+                    dx: dx.clone(),
+                    dy: dy.clone(),
+                    run: run.clone(),
+                })
             }
             Reducer::HumanSay { text, to } => {
                 __sats::bsatn::to_vec(&human_say_reducer::HumanSayArgs {

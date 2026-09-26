@@ -20,6 +20,9 @@ pub struct Body {
     pub speed: f32,
     pub chunk: u32,
     pub next_ms: u64,
+    pub heading: f32,
+    pub turn: f32,
+    pub turn_s: f32,
 }
 
 impl __sdk::InModule for Body {
@@ -41,6 +44,9 @@ pub struct BodyCols {
     pub speed: __sdk::__query_builder::Col<Body, f32>,
     pub chunk: __sdk::__query_builder::Col<Body, u32>,
     pub next_ms: __sdk::__query_builder::Col<Body, u64>,
+    pub heading: __sdk::__query_builder::Col<Body, f32>,
+    pub turn: __sdk::__query_builder::Col<Body, f32>,
+    pub turn_s: __sdk::__query_builder::Col<Body, f32>,
 }
 
 impl __sdk::__query_builder::HasCols for Body {
@@ -58,6 +64,9 @@ impl __sdk::__query_builder::HasCols for Body {
             speed: __sdk::__query_builder::Col::new(table_name, "speed"),
             chunk: __sdk::__query_builder::Col::new(table_name, "chunk"),
             next_ms: __sdk::__query_builder::Col::new(table_name, "next_ms"),
+            heading: __sdk::__query_builder::Col::new(table_name, "heading"),
+            turn: __sdk::__query_builder::Col::new(table_name, "turn"),
+            turn_s: __sdk::__query_builder::Col::new(table_name, "turn_s"),
         }
     }
 }

@@ -5,18 +5,19 @@ Two scripted characters (installed behavior graphs, no LLM) exercise writing and
 tablet that teaches a technique, crafting with the learned technique, an atomic trade,
 planting, teaching and consensual conception. Each check reads the authority's tables.
 
-Usage: living/tools/verify_mechanics.py [--db living-verify] [--out FILE]
+Usage: living/tools/verify_mechanics.py [--db living-verify] [--wasm NAME] [--out FILE]
 Publishes the database fresh (deletes its data).
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-STDB = str(ROOT / "living/tools/stdb")
+STDB = os.environ.get("LIVING_STDB", str(ROOT / "living/tools/stdb"))
 
 
 def stdb(*args):
@@ -65,10 +66,11 @@ def wait_for(pred, timeout=40, every=1.0):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default="living-verify")
+    ap.add_argument("--wasm", default="living_authority.wasm", help="module file in the server's /wasm mount")
     ap.add_argument("--out")
     a = ap.parse_args()
     db = a.db
-    stdb("publish", "-s", "local", "-b", "/wasm/living_authority.wasm", db, "--delete-data", "-y")
+    stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", db, "--delete-data", "-y")
     time.sleep(3)
     stdb("call", "-s", "local", db, "spawn_crowd", "2", "true")
     time.sleep(1.5)

@@ -274,10 +274,25 @@ pub fn hhmm(h: f32) -> String {
     format!("{:02}:{:02}", (m / 60) % 24, m % 60)
 }
 
+/// Where a body is at `now` on its steering segment (a turn, then straight; see
+/// `living_rules::steer::pose`), held at `next_ms` until the authority writes the next one.
 pub fn body_pos(b: &Body, now: u64) -> egui::Pos2 {
     let t = now.min(b.next_ms);
     let dt = t.saturating_sub(b.t_ms) as f32 / 1000.0;
-    egui::pos2(b.x + b.vx * dt, b.y + b.vy * dt)
+    if b.turn == 0.0 || b.turn_s <= 0.0 {
+        return egui::pos2(b.x + b.vx * dt, b.y + b.vy * dt);
+    }
+    let (x, y, _) = living_rules::steer::pose(b.x, b.y, b.heading, b.vx.hypot(b.vy), b.turn, b.turn_s, dt);
+    egui::pos2(x, y)
+}
+
+/// Direction of travel at `now`, when moving.
+pub fn body_heading(b: &Body, now: u64) -> Option<f32> {
+    if (b.vx == 0.0 && b.vy == 0.0) || b.next_ms <= now {
+        return None;
+    }
+    let dt = now.saturating_sub(b.t_ms) as f32 / 1000.0;
+    Some(if b.turn == 0.0 { b.vy.atan2(b.vx) } else { b.heading + b.turn * dt.min(b.turn_s) })
 }
 
 /// A need anchored at `at_ms` changing at `rate` per minute.
@@ -565,8 +580,10 @@ impl View {
             _ => {}
         }
         for (id, b) in &snap.bodies {
-            if b.vx.abs() > 0.05 && b.next_ms > snap.now {
-                self.facing.insert(*id, b.vx < 0.0);
+            if let Some(h) = body_heading(b, snap.now) {
+                if h.cos().abs() > 0.05 {
+                    self.facing.insert(*id, h.cos() < 0.0);
+                }
             }
         }
         self.track_combat(snap);

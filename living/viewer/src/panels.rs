@@ -777,12 +777,20 @@ fn outline(ui: &mut egui::Ui, n: &Node, depth: usize, id: &mut u16, active: &[u1
         Node::Say(_) => Color32::from_rgb(170, 210, 255),
         Node::Wait(_) => Color32::from_rgb(180, 180, 180),
         Node::Think(_) => Color32::from_rgb(240, 200, 140),
+        Node::Routine(_) => Color32::from_rgb(140, 220, 210),
+        Node::Desires(_) => Color32::from_rgb(240, 170, 170),
     };
     let mut rt = RichText::new(text).monospace().size(12.5);
     rt = if on { rt.background_color(Color32::from_rgb(86, 74, 20)).color(Color32::from_rgb(255, 235, 140)).strong() } else { rt.color(col) };
     ui.add(egui::Label::new(rt).wrap());
     match n {
         Node::First(c) | Node::Seq(c) => c.children.iter().for_each(|ch| outline(ui, ch, depth + 1, id, active)),
+        Node::Desires(ds) => {
+            for d in ds {
+                ui.label(RichText::new(format!("   {}want \"{}\" ({})", "  ".repeat(depth + 1), d.want, graph::describe_weight(&d.weight))).monospace().size(12.5).color(WEAK));
+                outline(ui, &d.body, depth + 2, id, active);
+            }
+        }
         Node::If(i) => {
             outline(ui, &i.then, depth + 1, id, active);
             if let Some(e) = &i.otherwise {

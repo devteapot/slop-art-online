@@ -246,18 +246,7 @@ pub fn place_near(ctx: &ReducerContext, id: u32, near: u32) -> Result<(), String
     let now = common::now_ms(ctx);
     let t = ctx.db.body().id().find(near).ok_or("no such body")?;
     let p = common::pos(&t, now);
-    let mut b = ctx.db.body().id().find(id).ok_or("no such body")?;
-    b.x = p.0 + 1.0;
-    b.y = p.1;
-    b.t_ms = now;
-    b.vx = 0.0;
-    b.vy = 0.0;
-    b.path.clear();
-    b.next_ms = u64::MAX;
-    b.chunk = living_rules::map::chunk_of(b.x, b.y);
-    ctx.db.body().id().update(b);
-    common::invalidate_bodies();
-    Ok(())
+    motion::place(ctx, id, (p.0 + 1.0, p.1), now)
 }
 
 /// Create the seed's communities (if missing) and their members, on a running world.
@@ -336,6 +325,34 @@ pub fn human_act(ctx: &ReducerContext, node: String) -> Result<(), String> {
     let json = format!(r#"{{"seq":[{},{{"wait":60}}]}}"#, g.to_json());
     mind::set_graph(ctx, me.id, &json, "your command", "human", common::now_ms(ctx)).map(|_| ())
 }
+
+/// Move in a direction (screen axes: +x east, +y south; any length) or stop (`0, 0`), at a
+/// walk or a run. Steering carries it out with the same physics as everyone's movement;
+/// it replaces whatever the character was doing. Send it when the intent changes (a key
+/// pressed or released, the stick turned); repeats of the current intent are free, and
+/// changes are rate-limited by the `input_hz`/`input_burst` laws.
+#[spacetimedb::reducer]
+pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(), String> {
+    use crate::tables::brain as _;
+    let me = my_character(ctx)?;
+    if !dx.is_finite() || !dy.is_finite() {
+        return Err("direction must be finite".into());
+    }
+    let now = common::now_ms(ctx);
+    let dir = (dx != 0.0 || dy != 0.0).then_some((dx, dy));
+    if dir.is_some() {
+        // Taking the controls: what was going on stops, and the plan becomes "wait".
+        if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill != "wait") {
+            act::cancel(ctx, a, now, Some("you moved"));
+        }
+        if ctx.db.brain().id().find(me.id).map_or(true, |b| b.plan != MOVING) {
+            mind::set_graph(ctx, me.id, r#"{"wait":60}"#, MOVING, "human", now)?;
+        }
+    }
+    motion::intent(ctx, me.id, dir, run, || act::walk_speed(ctx, me.id, now), now)
+}
+
+const MOVING: &str = "moving yourself";
 
 #[spacetimedb::reducer]
 pub fn human_say(ctx: &ReducerContext, text: String, to: u32) -> Result<(), String> {
