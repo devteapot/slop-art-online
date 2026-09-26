@@ -34,6 +34,45 @@ pub fn give_repertoire(ctx: &ReducerContext, id: u32, occupation: &str, now: u64
     }
 }
 
+/// A newborn's inheritance of ways: its parents' routines (each from one parent or the other)
+/// and, for when it grows up, a parent's top level with its weights varied.
+pub fn inherit_ways(ctx: &ReducerContext, child: u32, a: u32, b: u32, now: u64) {
+    let plan = living_rules::graph::PLAN_ROUTINE;
+    let mut names: Vec<String> = Vec::new();
+    for p in [a, b] {
+        for r in ctx.db.routine().actor().filter(p) {
+            if !r.name.eq_ignore_ascii_case(plan) && !names.iter().any(|n| n.eq_ignore_ascii_case(&r.name)) {
+                names.push(r.name);
+            }
+        }
+    }
+    let mut routines = Vec::new();
+    for name in names {
+        let first = if ctx.rng().gen::<bool>() { [a, b] } else { [b, a] };
+        if let Some(r) = first.iter().find_map(|p| ctx.db.routine().actor().filter(*p).find(|r| r.name.eq_ignore_ascii_case(&name))) {
+            routines.push(crate::mind::RoutineIn { name: r.name, graph: r.graph });
+        }
+    }
+    let _ = crate::mind::set_routines(ctx, child, &routines, "from my parents", now);
+    let first = if ctx.rng().gen::<bool>() { [a, b] } else { [b, a] };
+    let ways = first.iter().find_map(|p| {
+        let top = ctx.db.brain().id().find(*p).and_then(|br| living_rules::graph::parse(&br.graph).ok())?;
+        let mut u = || ctx.rng().gen::<f32>();
+        living_rules::genes::vary_ways(&top.root, &mut u)
+    });
+    if let (Some(ways), Some(mut g)) = (ways, ctx.db.genome().id().find(child)) {
+        g.ways = serde_json::to_string(&ways).unwrap_or_default();
+        ctx.db.genome().id().update(g);
+    }
+}
+
+/// A young one takes on the ways it inherited; false when it has none (then its species' or
+/// its people's usual ways apply).
+pub fn grow_into_ways(ctx: &ReducerContext, id: u32, now: u64) -> bool {
+    let Some(ways) = ctx.db.genome().id().find(id).map(|g| g.ways).filter(|w| !w.is_empty()) else { return false };
+    crate::mind::set_graph(ctx, id, &ways, "the ways I grew up with", "habit", now).is_ok()
+}
+
 /// A grown animal's way of life: its species' routines and the desires that weigh them
 /// (its to change, like a person's habits).
 pub fn give_ways(ctx: &ReducerContext, id: u32, kind: &str, now: u64) {
@@ -386,7 +425,22 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
     });
     let id = c.id;
     motion::spawn_body(ctx, id, kind, at, now);
-    let max_hp = common::scripts(ctx).num_of("max_hp", kind, 100.0) as f32;
+    // Genes: a founder's are drawn for its species, a child's come from its parents.
+    let genes = {
+        let mut u = || ctx.rng().gen::<f32>();
+        if parents.0 != 0 && parents.1 != 0 {
+            living_rules::genes::inherit(&common::genes_of(ctx, parents.0), &common::genes_of(ctx, parents.1), &mut u)
+        } else {
+            let sp = common::species(kind);
+            let temperament = sp.as_ref().map(|s| s.temperament.clone()).filter(|t| !t.is_empty()).unwrap_or_else(living_rules::genes::person_temperament);
+            let skills: Vec<String> = sp
+                .and_then(|s| s.skills)
+                .unwrap_or_else(|| living_rules::catalog::SKILLS.iter().map(|s| s.name.to_string()).collect());
+            living_rules::genes::founder(&temperament, &skills, &mut u)
+        }
+    };
+    ctx.db.genome().insert(Genome { id, genes: serde_json::to_string(&genes).unwrap_or_default(), ways: String::new() });
+    let max_hp = common::scripts(ctx).num_of("max_hp", kind, 100.0) as f32 * living_rules::genes::gene(&genes, "vitality");
     ctx.db.vitals().insert(Vitals {
         id,
         hp: max_hp,
@@ -808,7 +862,14 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
         }
     }
     for id in &ids {
-        let kin: Vec<serde_json::Value> = ids.iter().filter(|o| *o != id).map(|o| serde_json::json!({"id": o, "name": common::name_of(ctx, *o)})).collect();
+        let kin: Vec<serde_json::Value> = ids
+            .iter()
+            .filter(|o| *o != id)
+            .map(|o| {
+                let tie = ctx.db.relation().by_pair().filter((*id, *o)).next().map(|r| r.label).unwrap_or_default();
+                serde_json::json!({"id": o, "name": common::name_of(ctx, *o), "tie": tie})
+            })
+            .collect();
         let text = serde_json::json!({"origin": "band", "band": b.name, "history": b.history, "companions": kin, "camp": [at.0.round(), at.1.round()]});
         ctx.db.background().insert(Background { id: *id, text: text.to_string() });
     }

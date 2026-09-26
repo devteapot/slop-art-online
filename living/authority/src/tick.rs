@@ -93,11 +93,15 @@ fn grew(ctx: &ReducerContext, c: &Character, stage: u8, now: u64) {
     ctx.db.character().id().update(row);
     // A person who outgrows infancy starts from a child's way of life (theirs to change).
     if c.kind == "person" && c.stage == 0 && stage == 1 {
-        seed::give_repertoire(ctx, c.id, "child", now);
+        if !seed::grow_into_ways(ctx, c.id, now) {
+            seed::give_repertoire(ctx, c.id, "child", now);
+        }
     }
     // A grown animal leaves its young instinct for its species' ways.
     if c.kind != "person" && stage == 2 && c.stage < 2 {
-        seed::give_ways(ctx, c.id, &c.kind, now);
+        if !seed::grow_into_ways(ctx, c.id, now) {
+            seed::give_ways(ctx, c.id, &c.kind, now);
+        }
     }
     let at = ctx.db.body().id().find(c.id).map(|b| common::pos(&b, now)).unwrap_or((0.0, 0.0));
     let (story, feel) = match (c.kind.as_str(), stage) {
@@ -138,6 +142,7 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
         } else {
             seed::spawn_young(ctx, &kind, at, now, (pa.id, pb.id))
         };
+        seed::inherit_ways(ctx, id, pa.id, pb.id, now);
         names.push((id, common::name_of(ctx, id)));
     }
     let list = names.iter().map(|(_, n)| n.clone()).collect::<Vec<_>>().join(" and ");

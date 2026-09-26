@@ -869,7 +869,7 @@
       {
         "want": "a family",
         "weight": {
-          "base": -0.2,
+          "base": 0.2,
           "hunger": -0.8,
           "longing": 0.4,
           "company": 0.2,

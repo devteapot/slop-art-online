@@ -732,6 +732,29 @@ pub struct Rearing {
     pub until_ms: u64,
 }
 
+/// Inborn genes (JSON: name → value; see `living_rules::genes`) and, for the young, the ways
+/// of life they grow into (a top level from a parent, varied). Written once at birth.
+#[spacetimedb::table(accessor = genome, public)]
+pub struct Genome {
+    #[primary_key]
+    pub id: u32,
+    pub genes: String,
+    pub ways: String,
+}
+
+/// Successful uses of a skill (practice makes one better at it).
+#[spacetimedb::table(accessor = practice, public,
+    index(accessor = by_actor_skill, btree(columns = [actor, skill])))]
+pub struct Practice {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub skill: String,
+    pub uses: u32,
+}
+
 // ---- schedules ---------------------------------------------------------------
 
 #[spacetimedb::table(accessor = tick_timer, scheduled(crate::tick::tick))]

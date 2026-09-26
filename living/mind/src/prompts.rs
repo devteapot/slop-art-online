@@ -77,6 +77,22 @@ pub fn grammar() -> String {
 
 /// Graph grammar for a body with the given skills (and whether it can speak).
 pub fn grammar_with(skills: &str, speaks: bool) -> String {
+    // People and animals get examples of their own kind of life (an animal shown a person's
+    // example, like seeking the campfire when wolves are near, copies it).
+    let (making, examples) = if speaks {
+        (
+            " \\\nTrading: {\"do\": \"offer\", \"target\": {\"id\": 6}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3} then they may {\"do\": \"accept\", \"target\": {\"id\": 4}}. \
+Writing: {\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know, to teach readers\"}; teaching: {\"do\": \"teach\", \"target\": {\"id\": 6}, \"item\": \"spear\"}.",
+            "{\"if\": {\"believes\": \"wolves_near_home\", \"night\": true}, \"then\": {\"do\": \"goto\", \"target\": {\"nearest\": \"campfire\"}}} or \
+{\"if\": {\"sees\": {\"nearest\": {\"kind\": \"person\", \"relation\": \"enemy\"}}}, \"then\": {\"do\": \"flee\", \"target\": {\"nearest\": {\"kind\": \"person\", \"relation\": \"enemy\"}}}}",
+        )
+    } else {
+        (
+            "",
+            "{\"if\": {\"believes\": \"wolves_at_the_stream\", \"night\": true}, \"then\": {\"do\": \"flee\", \"target\": {\"nearest\": \"wolf\"}}} or \
+{\"if\": {\"sees\": {\"nearest\": \"person\"}}, \"then\": {\"do\": \"flee\", \"target\": {\"nearest\": \"person\"}}}",
+        )
+    };
     let g = format!(
         "\
 BEHAVIOR GRAPH (JSON) — it runs continuously (~1 check per second, instantly on events) while you think slowly, so encode how to react, not just one action.
@@ -84,9 +100,7 @@ Nodes:
 - {{\"first\": [N, ...]}} priority: every check, the first child that is running or succeeds wins; higher children interrupt lower ones. Optional label: {{\"first\": [...], \"label\": \"...\"}}.
 - {{\"seq\": [N, ...]}} steps in order, remembering progress; fails when a step fails.
 - {{\"if\": C, \"then\": N, \"else\": N}} guard (else optional): the branch runs only while C holds, except that work already begun under it (sleep, rest, eat, gather, build, craft, cook, teach, write, read, plant...) is finished; walking, fleeing and fighting stop as soon as C no longer holds.
-- {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically. \
-Trading: {{\"do\": \"offer\", \"target\": {{\"id\": 6}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}} then they may {{\"do\": \"accept\", \"target\": {{\"id\": 4}}}}. \
-Writing: {{\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know, to teach readers\"}}; teaching: {{\"do\": \"teach\", \"target\": {{\"id\": 6}}, \"item\": \"spear\"}}.
+- {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically.{making}
 - {{\"say\": \"text\", \"to\": T}} speak (each say node speaks at most once per 45 s).
 - {{\"wait\": seconds}}
 - {{\"think\": \"reason\"}} ask yourself to reconsider (non-blocking; ignored within 45 s of a decision, then at most once per 90 s). Put it where your plan runs out (e.g. last in a seq or as the final fallback), not where it is reached on every check.
@@ -110,9 +124,7 @@ Limits: each graph (your top level, or one routine) at most 64 nodes, depth 10, 
 REPERTOIRE: your behavior is a repertoire you build over your life: routines (named graphs) for the things you do, called from a top level, usually desires weighed by what you want. \
 Refine one routine at a time as you learn what works (each routine shows how it has gone: successes, failures and why); make new ones for new things; retire what you no longer do. \
 What you know how to do is what you have built, learned or been taught. \
-Make your beliefs act for you: test your judgments and relationships in conditions so you react without having to think again, e.g. \
-{{\"if\": {{\"believes\": \"wolves_near_home\", \"night\": true}}, \"then\": {{\"do\": \"goto\", \"target\": {{\"nearest\": \"campfire\"}}}}}} or \
-{{\"if\": {{\"sees\": {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"enemy\"}}}}}}, \"then\": {{\"do\": \"flee\", \"target\": {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"enemy\"}}}}}}}}. \
+Make your beliefs act for you: test your judgments and relationships in conditions so you react without having to think again, e.g. {examples}. \
 Every branch must lead to action: a guard whose then-branch can only wait blocks everything below it.",
         skills
     );

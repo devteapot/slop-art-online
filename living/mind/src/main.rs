@@ -128,6 +128,7 @@ async fn main() -> Result<()> {
                     "SELECT * FROM background",
                     "SELECT * FROM routine",
                     "SELECT * FROM routine_stat",
+                    "SELECT * FROM genome",
                     "SELECT * FROM my_deliberations",
                 ]);
         })

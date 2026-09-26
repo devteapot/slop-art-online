@@ -85,6 +85,8 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         knows: common::knows(ctx, id),
         stage: ch.as_ref().map(|c| common::stage_of(c, &w, now).name().to_string()).unwrap_or_else(|| "adult".into()),
         life: ch.as_ref().map(|c| common::life_of(&c.kind).fraction(age, common::pace(&w))).unwrap_or(0.3),
+        genes: (*common::genes_of(ctx, id)).clone(),
+        practice: Default::default(),
     }
 }
 
@@ -139,7 +141,8 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
 
 fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx {
     let w = common::world(ctx);
-    let actor = facts(ctx, id, now);
+    let mut actor = facts(ctx, id, now);
+    actor.practice = common::practice_of(ctx, id);
     let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     let hour = common::hour(&w, now);
     let roll: f32 = ctx.rng().gen_range(0.0..1.0);
@@ -154,6 +157,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         text: a.text.clone(),
         topic: a.topic.clone(),
         roll,
+        skill: a.skill.clone(),
     }
 }
 
@@ -504,6 +508,9 @@ fn routine_outcome(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now:
 }
 
 fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
+    if ok {
+        common::practise(ctx, a.id, &a.skill);
+    }
     if a.node != ORPHAN {
         routine_outcome(ctx, &a, ok, why, now);
     }

@@ -30,6 +30,10 @@ pub struct ActorFacts {
     pub life: f32,
     /// Techniques this character knows how to do.
     pub knows: Vec<String>,
+    /// Inborn genes (see `genes`): body factors, knacks and temperament.
+    pub genes: crate::genes::Genes,
+    /// Successful uses per skill (practice).
+    pub practice: std::collections::BTreeMap<String, u32>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -65,6 +69,8 @@ pub struct SkillCtx {
     pub topic: String,
     /// A fresh random number in [0, 1) from the authority (for chances).
     pub roll: f32,
+    /// The skill being performed (empty for rates and speed).
+    pub skill: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -277,6 +283,8 @@ impl Scripts {
             return Ok(1_000);
         }
         let v = number(&self.call(&f, ctx)?).ok_or_else(|| format!("{f} must return a number"))?;
+        // A knack and practice make skilled work quicker.
+        let v = v / crate::genes::skill_factor(&ctx.actor.genes, &ctx.actor.practice, skill) as f64;
         Ok(v.clamp(0.0, 600_000.0) as u64)
     }
 
@@ -392,6 +400,11 @@ fn to_map(c: &SkillCtx) -> Map {
     a.insert("life".into(), f(c.actor.life));
     a.insert("knows".into(), c.actor.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
     a.insert("inv".into(), inv_map(&c.actor.inv).into());
+    for g in crate::genes::BODY {
+        a.insert(g.into(), f(crate::genes::gene(&c.actor.genes, g)));
+    }
+    // How good the actor is at the skill being performed (knack × practice).
+    a.insert("factor".into(), f(crate::genes::skill_factor(&c.actor.genes, &c.actor.practice, &c.skill)));
     let mut t = Map::new();
     t.insert("class".into(), c.target.class.clone().into());
     t.insert("id".into(), Dynamic::from_int(c.target.id as i64));

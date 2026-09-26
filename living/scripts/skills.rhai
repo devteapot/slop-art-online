@@ -66,6 +66,9 @@ fn rates(a) {
         energy *= 1.3;
     }
     if a.actor.stage == "infant" { hunger *= 0.6; }
+    // Inborn endurance slows tiring; vitality speeds healing.
+    if energy < 0.0 { energy /= a.actor.endurance; }
+    if hp > 0.0 { hp *= a.actor.vitality; }
     // Cold nights hurt people without a fire, shelter or warm cloak; winter nights are worse.
     if a.night && a.actor.kind == "person" && !a.actor.near_fire && !a.actor.near_shelter && inv(a, "cloak") == 0 {
         hp -= if a.season == "winter" { 5.0 } else { 2.0 };
@@ -76,6 +79,7 @@ fn rates(a) {
 fn move_speed(a) {
     let base = switch a.actor.kind { "deer" => 3.2, "wolf" => 3.4, _ => 2.6 };
     if a.actor.stage == "infant" { base *= 0.4; } else if a.actor.stage == "child" { base *= 0.8; } else if a.actor.stage == "elder" { base *= 0.85; }
+    base *= a.actor.speed;
     if a.actor.energy < 10.0 { base * 0.6 } else { base }
 }
 
@@ -284,6 +288,8 @@ fn attack_done(a) {
         "deer" => 4.0,
         _ => if inv(a, "spear") > 0 { 18.0 } else { 7.0 },
     };
+    // Strength and skill at fighting (knack × practice) make blows count.
+    let dmg = dmg * a.actor.strength * a.actor.factor;
     [#{ op: "damage", amount: dmg }, #{ op: "vitals", energy: -1.5 }]
 }
 
@@ -419,7 +425,7 @@ fn tend_check(a) {
     ""
 }
 fn tend_duration(a) { 6000 }
-fn tend_done(a) { [#{ op: "heal", amount: 10.0 }, #{ op: "vitals", energy: -1.0 }] }
+fn tend_done(a) { [#{ op: "heal", amount: 10.0 * a.actor.factor }, #{ op: "vitals", energy: -1.0 }] }
 
 fn read_check(a) {
     if !knows(a, "writing") { return "you can't read"; }

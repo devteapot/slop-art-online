@@ -37,6 +37,8 @@ pub mod experience_type;
 pub mod familiar_type;
 pub mod gate_table;
 pub mod gate_type;
+pub mod genome_table;
+pub mod genome_type;
 pub mod grant_items_reducer;
 pub mod grant_know_how_reducer;
 pub mod grant_repertoires_reducer;
@@ -79,6 +81,8 @@ pub mod place_near_reducer;
 pub mod place_structure_reducer;
 pub mod place_table;
 pub mod place_type;
+pub mod practice_table;
+pub mod practice_type;
 pub mod purge_dead_reducer;
 pub mod rearing_type;
 pub mod relation_in_type;
@@ -154,6 +158,8 @@ pub use experience_type::Experience;
 pub use familiar_type::Familiar;
 pub use gate_table::*;
 pub use gate_type::Gate;
+pub use genome_table::*;
+pub use genome_type::Genome;
 pub use grant_items_reducer::grant_items;
 pub use grant_know_how_reducer::grant_know_how;
 pub use grant_repertoires_reducer::grant_repertoires;
@@ -196,6 +202,8 @@ pub use place_near_reducer::place_near;
 pub use place_structure_reducer::place_structure;
 pub use place_table::*;
 pub use place_type::Place;
+pub use practice_table::*;
+pub use practice_type::Practice;
 pub use purge_dead_reducer::purge_dead;
 pub use rearing_type::Rearing;
 pub use relation_in_type::RelationIn;
@@ -546,6 +554,7 @@ pub struct DbUpdate {
     expecting: __sdk::TableUpdate<Expecting>,
     experience: __sdk::TableUpdate<Experience>,
     gate: __sdk::TableUpdate<Gate>,
+    genome: __sdk::TableUpdate<Genome>,
     inventory: __sdk::TableUpdate<Inventory>,
     join_request: __sdk::TableUpdate<JoinRequest>,
     judgment: __sdk::TableUpdate<Judgment>,
@@ -556,6 +565,7 @@ pub struct DbUpdate {
     my_deliberations: __sdk::TableUpdate<Deliberation>,
     persona: __sdk::TableUpdate<Persona>,
     place: __sdk::TableUpdate<Place>,
+    practice: __sdk::TableUpdate<Practice>,
     relation: __sdk::TableUpdate<Relation>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
     routine: __sdk::TableUpdate<Routine>,
@@ -615,6 +625,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "gate" => db_update
                     .gate
                     .append(gate_table::parse_table_update(table_update)?),
+                "genome" => db_update
+                    .genome
+                    .append(genome_table::parse_table_update(table_update)?),
                 "inventory" => db_update
                     .inventory
                     .append(inventory_table::parse_table_update(table_update)?),
@@ -645,6 +658,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "place" => db_update
                     .place
                     .append(place_table::parse_table_update(table_update)?),
+                "practice" => db_update
+                    .practice
+                    .append(practice_table::parse_table_update(table_update)?),
                 "relation" => db_update
                     .relation
                     .append(relation_table::parse_table_update(table_update)?),
@@ -746,6 +762,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.gate = cache
             .apply_diff_to_table::<Gate>("gate", &self.gate)
             .with_updates_by_pk(|row| &row.id);
+        diff.genome = cache
+            .apply_diff_to_table::<Genome>("genome", &self.genome)
+            .with_updates_by_pk(|row| &row.id);
         diff.inventory = cache
             .apply_diff_to_table::<Inventory>("inventory", &self.inventory)
             .with_updates_by_pk(|row| &row.id);
@@ -772,6 +791,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.place = cache
             .apply_diff_to_table::<Place>("place", &self.place)
+            .with_updates_by_pk(|row| &row.id);
+        diff.practice = cache
+            .apply_diff_to_table::<Practice>("practice", &self.practice)
             .with_updates_by_pk(|row| &row.id);
         diff.relation = cache
             .apply_diff_to_table::<Relation>("relation", &self.relation)
@@ -857,6 +879,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "gate" => db_update
                     .gate
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "genome" => db_update
+                    .genome
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "inventory" => db_update
                     .inventory
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -886,6 +911,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "place" => db_update
                     .place
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "practice" => db_update
+                    .practice
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "relation" => db_update
                     .relation
@@ -975,6 +1003,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "gate" => db_update
                     .gate
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "genome" => db_update
+                    .genome
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "inventory" => db_update
                     .inventory
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1004,6 +1035,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "place" => db_update
                     .place
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "practice" => db_update
+                    .practice
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "relation" => db_update
                     .relation
@@ -1069,6 +1103,7 @@ pub struct AppliedDiff<'r> {
     expecting: __sdk::TableAppliedDiff<'r, Expecting>,
     experience: __sdk::TableAppliedDiff<'r, Experience>,
     gate: __sdk::TableAppliedDiff<'r, Gate>,
+    genome: __sdk::TableAppliedDiff<'r, Genome>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
@@ -1079,6 +1114,7 @@ pub struct AppliedDiff<'r> {
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
     persona: __sdk::TableAppliedDiff<'r, Persona>,
     place: __sdk::TableAppliedDiff<'r, Place>,
+    practice: __sdk::TableAppliedDiff<'r, Practice>,
     relation: __sdk::TableAppliedDiff<'r, Relation>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
     routine: __sdk::TableAppliedDiff<'r, Routine>,
@@ -1117,6 +1153,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Expecting>("expecting", &self.expecting, event);
         callbacks.invoke_table_row_callbacks::<Experience>("experience", &self.experience, event);
         callbacks.invoke_table_row_callbacks::<Gate>("gate", &self.gate, event);
+        callbacks.invoke_table_row_callbacks::<Genome>("genome", &self.genome, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
         callbacks.invoke_table_row_callbacks::<JoinRequest>(
             "join_request",
@@ -1135,6 +1172,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<Persona>("persona", &self.persona, event);
         callbacks.invoke_table_row_callbacks::<Place>("place", &self.place, event);
+        callbacks.invoke_table_row_callbacks::<Practice>("practice", &self.practice, event);
         callbacks.invoke_table_row_callbacks::<Relation>("relation", &self.relation, event);
         callbacks.invoke_table_row_callbacks::<ResourceNode>(
             "resource_node",
@@ -1832,6 +1870,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         expecting_table::register_table(client_cache);
         experience_table::register_table(client_cache);
         gate_table::register_table(client_cache);
+        genome_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
         join_request_table::register_table(client_cache);
         judgment_table::register_table(client_cache);
@@ -1842,6 +1881,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_deliberations_table::register_table(client_cache);
         persona_table::register_table(client_cache);
         place_table::register_table(client_cache);
+        practice_table::register_table(client_cache);
         relation_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
         routine_table::register_table(client_cache);
@@ -1869,6 +1909,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "expecting",
         "experience",
         "gate",
+        "genome",
         "inventory",
         "join_request",
         "judgment",
@@ -1879,6 +1920,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_deliberations",
         "persona",
         "place",
+        "practice",
         "relation",
         "resource_node",
         "routine",

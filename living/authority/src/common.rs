@@ -13,6 +13,40 @@ thread_local! {
     static MAP: RefCell<Option<Rc<Map>>> = const { RefCell::new(None) };
     static SCRIPTS: RefCell<Option<(u32, Rc<Scripts>)>> = const { RefCell::new(None) };
     static GRAPHS: RefCell<HashMap<u32, (u32, Rc<Compiled>)>> = RefCell::new(HashMap::new());
+    /// Genes never change after birth.
+    static GENES: RefCell<HashMap<u32, Rc<living_rules::genes::Genes>>> = RefCell::new(HashMap::new());
+}
+
+/// A character's genes (cached; empty, i.e. all ordinary, when it has none).
+pub fn genes_of(ctx: &ReducerContext, id: u32) -> Rc<living_rules::genes::Genes> {
+    if let Some(g) = GENES.with(|c| c.borrow().get(&id).cloned()) {
+        return g;
+    }
+    let Some(row) = ctx.db.genome().id().find(id) else { return Rc::new(Default::default()) };
+    let g: Rc<living_rules::genes::Genes> = Rc::new(serde_json::from_str(&row.genes).unwrap_or_default());
+    GENES.with(|c| c.borrow_mut().insert(id, g.clone()));
+    g
+}
+
+/// Uses per skill.
+pub fn practice_of(ctx: &ReducerContext, id: u32) -> std::collections::BTreeMap<String, u32> {
+    ctx.db.practice().actor().filter(id).map(|p| (p.skill, p.uses)).collect()
+}
+
+/// One more successful use of a skill.
+pub fn practise(ctx: &ReducerContext, id: u32, skill: &str) {
+    if !living_rules::genes::is_skilled(skill) {
+        return;
+    }
+    match ctx.db.practice().by_actor_skill().filter((id, skill)).next() {
+        Some(mut p) => {
+            p.uses += 1;
+            ctx.db.practice().id().update(p);
+        }
+        None => {
+            ctx.db.practice().insert(Practice { id: 0, actor: id, skill: skill.into(), uses: 1 });
+        }
+    }
 }
 
 pub fn now_ms(ctx: &ReducerContext) -> u64 {

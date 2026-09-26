@@ -267,6 +267,24 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         let years = life.years_old(common::age_days(&me, &w, now), common::pace(&w));
         you.insert("age".into(), json!(format!("{:.0} years ({})", years.floor(), common::stage_of(&me, &w, now).name())));
     }
+    // What one knows of one's own body and skill (inborn and practised).
+    let body = living_rules::genes::notable(&common::genes_of(ctx, id));
+    if !body.is_empty() {
+        you.insert("your body".into(), json!(body.join(", ")));
+    }
+    let skills: JMap<String, Value> = common::practice_of(ctx, id).into_iter().filter(|(_, n)| *n >= 10).map(|(s, n)| (s, json!(living_rules::genes::practised(n)))).collect();
+    if !skills.is_empty() {
+        you.insert("your skills".into(), Value::Object(skills));
+    }
+    let partner = ctx
+        .db
+        .character()
+        .parent_a()
+        .filter(id)
+        .chain(ctx.db.character().parent_b().filter(id))
+        .max_by_key(|c| c.born_ms)
+        .map(|c| if c.parent_a == id { c.parent_b } else { c.parent_a })
+        .filter(|p| *p != 0);
     if let Some(v) = ctx.db.vitals().id().find(id) {
         let n = common::needs(&v, now);
         you.insert("health".into(), json!(n.hp.round()));
@@ -324,6 +342,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             o.insert("family".into(), json!("your child"));
         } else if me.parent_a == ch.id || me.parent_b == ch.id {
             o.insert("family".into(), json!("your parent"));
+        } else if partner == Some(ch.id) {
+            o.insert("family".into(), json!("your partner (you have children together)"));
         }
         o.insert("dist".into(), json!(round(c.dist)));
         o.insert("dir".into(), json!(direction(at, c.pos)));
@@ -332,8 +352,10 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         }
         if let Some(v) = ctx.db.vitals().id().find(c.id) {
             let n = common::needs(&v, now);
-            if n.hp < v.max_hp * 0.6 {
-                o.insert("looks".into(), json!("hurt"));
+            let f = n.hp / v.max_hp.max(1.0);
+            let looks = if f < 0.15 { "barely alive" } else if f < 0.35 { "badly wounded" } else if f < 0.6 { "hurt" } else { "" };
+            if !looks.is_empty() {
+                o.insert("looks".into(), json!(looks));
             }
         }
         creatures.push(Value::Object(o));

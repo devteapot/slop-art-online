@@ -5,6 +5,7 @@ pub mod catalog;
 pub mod graph;
 pub mod map;
 pub mod city;
+pub mod genes;
 pub mod life;
 pub mod realm;
 pub mod normalize;

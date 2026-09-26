@@ -66,3 +66,15 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Explicit restructuring.** Replacing one's whole top level is now explicit (`"restructure": true`); a graph without it is taken as the current intent and weighed among the desires, so a single thought no longer erases one's ways by accident.
 
   Checks: mechanisms 10/10, rules tests 23, all builds. Labs restarted fresh.
+- 14:50 — Heredity and practice (asked for by the user). Genes are an open set, so every species and skill has them: temperament traits, body genes (speed, strength, endurance, vitality) and a knack for every skill.
+  - **Inheritance.** A child takes its parents' midpoint, pulled 10% toward the norm, plus a mutation that is usually small and occasionally six times larger in either direction. Weak parents can have a gifted child and strong parents a weak one; talents spread only if they help their bearers live and breed.
+  - **Genes in the body.** Speed scales walking, endurance tiring, vitality health and healing, strength with skill the damage a blow does, and knack times practice how quickly skilled work is done.
+  - **Practice.** Each successful use of a skill makes one better at it (up to +60%, diminishing), not inherited.
+  - **Ways.** The young inherit their parents' routines (each from one parent or the other) and grow into a parent's top level with its weights varied, so ways of life vary and evolve too.
+  - **Self-knowledge.** People see notable traits of their own body and their practised skills in their scene, and personas use the inborn temperament.
+
+  Also:
+  - Others' wounds are graded ("hurt", "badly wounded", "barely alive"), and one's partner is marked in the scene.
+  - Born animals no longer get a person's identity.
+  - Animal compilers no longer see people's grammar examples: a wolf had copied "go to the campfire" as its way of staying safe.
+  - The people's family desire had a weight that never rose above zero (base now 0.2).

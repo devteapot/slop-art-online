@@ -343,6 +343,7 @@ impl Minds {
             let t = (h % 1000) as f32 / 1000.0;
             traits.insert(k.clone(), json!((lo + (hi - lo) * t).round()));
         }
+        let traits = self.born_temperament(c.id).and_then(|t| t.as_object().cloned()).unwrap_or(traits);
         let persona = json!({
             "narrative": format!("I am {}, a {}.", c.name, c.kind),
             "values": [], "goals": [],
@@ -360,6 +361,14 @@ impl Minds {
         }
         let p = PersonaIn { narrative: persona["narrative"].as_str().unwrap_or_default().into(), values: Vec::new(), goals: Vec::new(), traits: persona["traits"].to_string(), mood: "alert".into() };
         self.project(c.id, Some(p), None).await
+    }
+
+    /// Inborn temperament (trait → 0..100) from the character's genes, if any.
+    fn born_temperament(&self, id: u32) -> Option<Value> {
+        let g = self.conn.db.genome().id().find(&id)?;
+        let genes: living_rules::genes::Genes = serde_json::from_str(&g.genes).ok()?;
+        let t = living_rules::genes::temperament(&genes);
+        (!t.is_empty()).then(|| json!(t))
     }
 
     async fn seed_persona(&self, c: &Character) -> Result<()> {
@@ -409,7 +418,15 @@ family, partner, friend, rival, stranger, and a short note in their words). Repl
             prompts::world_rules()
         );
         let knows: Vec<String> = self.conn.db.know_how().iter().filter(|k| k.actor == c.id).map(|k| k.technique).collect();
-        let user = format!("Person: {} (#{}). Knows how to: {}.\nBackground: {}", c.name, c.id, if knows.is_empty() { "nothing special".into() } else { knows.join(", ") }, bg);
+        let born = self.born_temperament(c.id);
+        let user = format!(
+            "Person: {} (#{}). Knows how to: {}.\nBackground: {}{}",
+            c.name,
+            c.id,
+            if knows.is_empty() { "nothing special".into() } else { knows.join(", ") },
+            bg,
+            born.as_ref().map(|t| format!("\nInborn temperament (0-100, use these traits as given): {t}")).unwrap_or_default()
+        );
         let reply = {
             let _slow = self.slow.acquire().await?;
             let _permit = self.sem.acquire().await?;
@@ -442,7 +459,7 @@ family, partner, friend, rival, stranger, and a short note in their words). Repl
             narrative: v["narrative"].as_str().unwrap_or_default().into(),
             values: strings(&v["values"]),
             goals: strings(&v["goals"]),
-            traits: v["traits"].to_string(),
+            traits: born.clone().unwrap_or_else(|| v["traits"].clone()).to_string(),
             mood: v["mood"].as_str().unwrap_or("settled").into(),
         };
         let t = ThoughtIn { kind: "consolidate".into(), summary: "Who I am, from where I come from.".into(), detail: v.to_string(), latency_ms: reply.latency_ms, tokens: reply.tokens, model: reply.model, reference: thought };
@@ -451,6 +468,9 @@ family, partner, friend, rival, stranger, and a short note in their words). Repl
 
     /// A newborn's starting identity: its own temperament, raised by its parents.
     async fn birth_persona(&self, c: &Character) -> Result<()> {
+        if c.kind != "person" {
+            return self.animal_persona(c).await;
+        }
         let parent = |id: u32| {
             let name = self.name(id);
             let p = self.conn.db.persona().id().find(&id).map(|p| format!("{} Values: {}. Traits: {}", p.narrative, p.values.join("; "), p.traits)).unwrap_or_default();
@@ -466,7 +486,19 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
 \"traits\": {{\"caution\": 0-100, \"sociability\": 0-100, \"empathy\": 0-100, \"curiosity\": 0-100, \"ambition\": 0-100, \"introspection\": 0-100, \"temper\": 0-100}}, \"mood\": \"...\"}}",
             prompts::world_rules()
         );
-        let user = format!("Newborn: {} (#{}).\nParent {} (#{}): {}\nParent {} (#{}): {}", c.name, c.id, an, c.parent_a, ap, bn, c.parent_b, bp);
+        let born = self.born_temperament(c.id);
+        let user = format!(
+            "Newborn: {} (#{}).\nParent {} (#{}): {}\nParent {} (#{}): {}{}",
+            c.name,
+            c.id,
+            an,
+            c.parent_a,
+            ap,
+            bn,
+            c.parent_b,
+            bp,
+            born.as_ref().map(|t| format!("\nThe child's inborn temperament (0-100, use these traits as given): {t}")).unwrap_or_default()
+        );
         let _slow = self.slow.acquire().await?;
         let _permit = self.sem.acquire().await?;
         let reply = self.llm.chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?;
@@ -495,7 +527,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             narrative: v["narrative"].as_str().unwrap_or_default().into(),
             values: strings(&v["values"]),
             goals: strings(&v["goals"]),
-            traits: v["traits"].to_string(),
+            traits: born.clone().unwrap_or_else(|| v["traits"].clone()).to_string(),
             mood: v["mood"].as_str().unwrap_or("curious").into(),
         };
         let t = ThoughtIn { kind: "consolidate".into(), summary: format!("Born to {an} and {bn}."), detail: v.to_string(), latency_ms: reply.latency_ms, tokens: reply.tokens, model: reply.model, reference: thought };
