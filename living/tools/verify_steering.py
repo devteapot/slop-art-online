@@ -227,6 +227,8 @@ def main():
     ok = all(results.values())
     for k, v in results.items():
         print(("PASS " if v else "FAIL ") + k)
+    # The scratch world would otherwise keep ticking (and writing its log) forever.
+    subprocess.run([STDB, "delete", "-s", "local", db, "-y"], capture_output=True)
     sys.exit(0 if ok else 1)
 
 

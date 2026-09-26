@@ -215,6 +215,8 @@ def main():
     report = {"db": db, "results": results, "story": [r["text"] for r in rows(db, "SELECT kind, text FROM chronicle") if r["kind"] not in ("arrival", "time", "speech")]}
     if a.out:
         Path(a.out).write_text(json.dumps(report, indent=2) + "\n")
+    # The scratch world would otherwise keep ticking (and writing its log) forever.
+    stdb("delete", "-s", "local", db, "-y")
     sys.exit(0 if ok else 1)
 
 

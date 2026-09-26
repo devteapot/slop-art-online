@@ -68,6 +68,9 @@ def main():
     finally:
         watch.terminate()
         mind.terminate()
+        # A stopped lab's world stops too (otherwise it keeps ticking, breeding and writing
+        # its commit log with nobody watching).
+        subprocess.run([stdb, "call", "-s", "local", a.db, "set_paused", "true"], check=False)
         mind.wait(timeout=30)
     subprocess.run([sys.executable, str(LIVING / "tools/watch.py"), "--db", a.db, "--once", "--review", "--llm-run", run], cwd=ROOT)
 
