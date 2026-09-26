@@ -30,6 +30,9 @@ pub struct Life {
     /// (a fraction of the lifespan; about a year for deer and wolves).
     #[serde(default)]
     pub interbirth: f32,
+    /// Only one pair breeds within this many tiles (a pack's breeding pair; 0 = no such limit).
+    #[serde(default)]
+    pub breeding_radius: f32,
 }
 
 fn infant() -> f32 {
@@ -53,7 +56,7 @@ fn one() -> u32 {
 
 impl Default for Life {
     fn default() -> Self {
-        Self { years: 70.0, infant: infant(), child: child(), elder: elder(), old_age: old_age(), gestation: gestation(), litter: 1, interbirth: 0.0 }
+        Self { years: 70.0, infant: infant(), child: child(), elder: elder(), old_age: old_age(), gestation: gestation(), litter: 1, interbirth: 0.0, breeding_radius: 0.0 }
     }
 }
 

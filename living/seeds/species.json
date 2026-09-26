@@ -201,7 +201,8 @@
       "old_age": 0.85,
       "gestation": 0.017,
       "litter": 2,
-      "interbirth": 0.1
+      "interbirth": 0.1,
+      "breeding_radius": 15.0
     },
     "eats": "meat: from prey you kill (deer), eaten from what you carry"
   }

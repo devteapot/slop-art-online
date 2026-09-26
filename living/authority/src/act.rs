@@ -1054,6 +1054,15 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
     if rearing(me) || rearing(other) {
         return Err(if rearing(me) { "you are still raising your young".into() } else { format!("{other_name} is still raising their young") });
     }
+    // In a pack only one pair breeds: none while another pair nearby is expecting or raising young.
+    let kind = ctx.db.character().id().find(me).map(|c| c.kind).unwrap_or_default();
+    let radius = common::life_of(&kind).breeding_radius;
+    if radius > 0.0 {
+        let breeding = |id: u32| id != me && id != other && (ctx.db.expecting().iter().any(|e| e.a == id || e.b == id) || rearing(id));
+        if common::creatures_near(ctx, at, radius, now).iter().any(|c| *c.kind == *kind && breeding(c.id)) {
+            return Err("another pair here is raising young".into());
+        }
+    }
     let window = (common::laws(ctx).bond_window_s * 1000.0) as u64;
     let accepted = ctx.db.bond_offer().from().filter(other).find(|o| o.to == me && now.saturating_sub(o.at_ms) <= window);
     if let Some(o) = accepted {

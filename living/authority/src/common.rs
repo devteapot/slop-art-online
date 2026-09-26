@@ -399,7 +399,7 @@ pub fn food_count(ctx: &ReducerContext, owner: u64) -> u32 {
 
 /// Resource amount now: regrowth counts only growing (non-winter) time.
 /// Grazing per grassy tile a chunk holds, and its regrowth per minute of growing time.
-const PASTURE_PER_TILE: f32 = 0.1;
+const PASTURE_PER_TILE: f32 = 0.02;
 const PASTURE_REGEN_PER_TILE: f32 = 0.006;
 
 fn pasture_row(ctx: &ReducerContext, chunk: u32, now: u64) -> Pasture {
