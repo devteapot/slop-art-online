@@ -673,7 +673,7 @@ impl<'a> Ev<'a> {
         let lonely_after = 60_000.0 * (14.0 - trait_of("sociability") / 10.0);
         let alone_ms = self.now.saturating_sub(self.st.heard_ms.max(self.st.spoke_ms));
         // Grown people long for a child of their own, sooner the more nurturing they were born.
-        let broody = self.me.kind == "person" && self.me.stage == 2 && calm && {
+        let broody = self.me.kind == "person" && self.me.stage == 2 && calm && !common::night(&self.w, self.now) && {
             let me = self.me.id;
             let db = &self.ctx.db;
             let expecting = db.expecting().iter().any(|e| e.a == me || e.b == me);
@@ -682,16 +682,28 @@ impl<'a> Ev<'a> {
             let wait = 60_000.0 * (20.0 - trait_of("nurture") / 6.0);
             !expecting && !rearing && self.now.saturating_sub(last) as f32 > wait
         };
-        let drives: [(u32, bool, &str); 3] = [
-            (16, calm && quiet_ms as f32 > restless_after, "You feel restless: your days have been the same for a while."),
-            (32, calm && self.st.heard_ms > 0 && alone_ms as f32 > lonely_after, "You feel lonely: it has been a long time since you spoke with anyone."),
-            (128, broody, "You long for a child of your own."),
+        // Who one would have a child with, when there is someone: the other parent of one's youngest.
+        let longing = if broody {
+            let me = self.me.id;
+            let db = &self.ctx.db;
+            let partner = db.character().parent_a().filter(me).chain(db.character().parent_b().filter(me)).max_by_key(|c| c.born_ms).map(|c| if c.parent_a == me { c.parent_b } else { c.parent_a }).filter(|p| *p != 0 && db.character().id().find(*p).map_or(false, |c| c.alive));
+            match partner {
+                Some(p) => format!("You long for another child with {} (#{p}).", common::name_of(self.ctx, p)),
+                None => "You long for a child of your own.".to_string(),
+            }
+        } else {
+            String::new()
+        };
+        let drives: [(u32, bool, String); 3] = [
+            (16, calm && quiet_ms as f32 > restless_after, "You feel restless: your days have been the same for a while.".into()),
+            (32, calm && self.st.heard_ms > 0 && alone_ms as f32 > lonely_after, "You feel lonely: it has been a long time since you spoke with anyone.".into()),
+            (128, broody, longing),
         ];
         for (bit, on, text) in drives {
             let was = self.st.alerts & bit != 0;
             if on && !was {
                 self.st.alerts |= bit;
-                percept(self.ctx, &self.me, self.now, "feeling", self.me.id, 0, self.at, text.into(), 0.5);
+                percept(self.ctx, &self.me, self.now, "feeling", self.me.id, 0, self.at, text.clone(), 0.5);
                 self.deliberate(&format!("You feel something: {text}"));
             } else if !on && was {
                 self.st.alerts &= !bit;
