@@ -146,7 +146,7 @@ async fn main() -> Result<()> {
     conn.run_threaded();
     ready_rx.await.map_err(|_| anyhow!("subscription never applied"))?;
     log::info!("world subscribed: {} characters", conn.db.character().count());
-    let concurrency = std::env::var("LIVING_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(16);
+    let concurrency = std::env::var("LIVING_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(32);
     let minds = mind::Minds::new(conn, llm, store, seed, concurrency)?;
     minds.bootstrap().await?;
     minds.run(rx).await

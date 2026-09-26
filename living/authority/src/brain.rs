@@ -233,7 +233,8 @@ impl<'a> Ev<'a> {
                 let then_id = id + 1;
                 let then_end = then_id + self.g.sizes.get(then_id as usize).copied().unwrap_or(1);
                 let latched = self.latched.map_or(false, |n| n >= then_id && n < then_end);
-                if latched || self.cond(&i.cond) {
+                let holds = latched || self.cond(&i.cond);
+                if holds {
                     self.run(&i.then, then_id)
                 } else if let Some(e) = &i.otherwise {
                     let else_id = then_id + self.g.sizes.get(then_id as usize).copied().unwrap_or(1);

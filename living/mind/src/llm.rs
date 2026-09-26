@@ -20,16 +20,17 @@ pub struct Profile {
     pub json_mode: bool,
     /// Output cap: a reply is a few thousand tokens at most; a runaway generation is cut off
     /// (and then repaired or retried) instead of running to tens of thousands of tokens.
+    /// `null` for endpoints that reject output limits.
     #[serde(default = "max_tokens")]
-    pub max_tokens: u32,
+    pub max_tokens: Option<u32>,
 }
 
 fn yes() -> bool {
     true
 }
 
-fn max_tokens() -> u32 {
-    4000
+fn max_tokens() -> Option<u32> {
+    Some(4000)
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -118,8 +119,8 @@ impl Llm {
         }
         std::fs::create_dir_all(&journal)?;
         let http = reqwest::Client::builder().timeout(Duration::from_secs(180)).user_agent("sao-living-mind/0.1").build()?;
-        let per_min = std::env::var("LIVING_LLM_PER_MIN").ok().and_then(|v| v.parse().ok()).unwrap_or(60.0);
-        log::info!("LLM budget: {per_min} calls/min (LIVING_LLM_PER_MIN; 0 = unlimited)");
+        let per_min = std::env::var("LIVING_LLM_PER_MIN").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+        log::info!("LLM budget: {} (LIVING_LLM_PER_MIN; 0 = unlimited)", if per_min > 0.0 { format!("{per_min} calls/min") } else { "unlimited".into() });
         Ok(Self { http, models, keys, journal, budget: Budget::new(per_min) })
     }
 
@@ -174,7 +175,9 @@ impl Llm {
             "model": p.model,
             "messages": messages.iter().map(|m| json!({"role": m.role, "content": m.content})).collect::<Vec<_>>(),
         });
-        body["max_tokens"] = json!(p.max_tokens);
+        if let Some(m) = p.max_tokens {
+            body["max_tokens"] = json!(m);
+        }
         if p.json_mode {
             body["response_format"] = json!({"type": "json_object"});
         }

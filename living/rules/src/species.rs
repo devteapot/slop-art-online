@@ -35,8 +35,6 @@ pub struct Species {
     pub temperament: BTreeMap<String, [f32; 2]>,
     #[serde(default)]
     pub nature: String,
-    #[serde(default)]
-    pub reflexes: Vec<serde_json::Value>,
     pub cognition: Cognition,
 }
 

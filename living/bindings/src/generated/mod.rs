@@ -65,6 +65,7 @@ pub mod mind_state_type;
 pub mod mind_update_reducer;
 pub mod mind_update_type;
 pub mod my_deliberations_table;
+pub mod own_habits_reducer;
 pub mod persona_in_type;
 pub mod persona_table;
 pub mod persona_type;
@@ -74,7 +75,6 @@ pub mod place_structure_reducer;
 pub mod place_table;
 pub mod place_type;
 pub mod purge_dead_reducer;
-pub mod refresh_reflexes_reducer;
 pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
@@ -170,6 +170,7 @@ pub use mind_state_type::MindState;
 pub use mind_update_reducer::mind_update;
 pub use mind_update_type::MindUpdate;
 pub use my_deliberations_table::*;
+pub use own_habits_reducer::own_habits;
 pub use persona_in_type::PersonaIn;
 pub use persona_table::*;
 pub use persona_type::Persona;
@@ -179,7 +180,6 @@ pub use place_structure_reducer::place_structure;
 pub use place_table::*;
 pub use place_type::Place;
 pub use purge_dead_reducer::purge_dead;
-pub use refresh_reflexes_reducer::refresh_reflexes;
 pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
@@ -275,6 +275,7 @@ pub enum Reducer {
         actor: u32,
         update: MindUpdate,
     },
+    OwnHabits,
     PlaceNear {
         id: u32,
         near: u32,
@@ -284,7 +285,6 @@ pub enum Reducer {
         kind: String,
     },
     PurgeDead,
-    RefreshReflexes,
     SeedCommunities,
     SetBackground {
         id: u32,
@@ -327,10 +327,10 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindSay { .. } => "mind_say",
             Reducer::MindSkip { .. } => "mind_skip",
             Reducer::MindUpdate { .. } => "mind_update",
+            Reducer::OwnHabits => "own_habits",
             Reducer::PlaceNear { .. } => "place_near",
             Reducer::PlaceStructure { .. } => "place_structure",
             Reducer::PurgeDead => "purge_dead",
-            Reducer::RefreshReflexes => "refresh_reflexes",
             Reducer::SeedCommunities => "seed_communities",
             Reducer::SetBackground { .. } => "set_background",
             Reducer::SetBehavior { .. } => "set_behavior",
@@ -425,6 +425,7 @@ impl __sdk::Reducer for Reducer {
                     update: update.clone(),
                 })
             }
+            Reducer::OwnHabits => __sats::bsatn::to_vec(&own_habits_reducer::OwnHabitsArgs {}),
             Reducer::PlaceNear { id, near } => {
                 __sats::bsatn::to_vec(&place_near_reducer::PlaceNearArgs {
                     id: id.clone(),
@@ -438,9 +439,6 @@ impl __sdk::Reducer for Reducer {
                 })
             }
             Reducer::PurgeDead => __sats::bsatn::to_vec(&purge_dead_reducer::PurgeDeadArgs {}),
-            Reducer::RefreshReflexes => {
-                __sats::bsatn::to_vec(&refresh_reflexes_reducer::RefreshReflexesArgs {})
-            }
             Reducer::SeedCommunities => {
                 __sats::bsatn::to_vec(&seed_communities_reducer::SeedCommunitiesArgs {})
             }

@@ -654,19 +654,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         }
         let (mind, memories) = self.mind_lines(actor, &seeds, 30).await;
         let brain = self.conn.db.brain().id().find(&actor);
-        // Show the mind its own graph; the body habits are described, not repeated (models
-        // copied the layer back into their graphs, making them deeper and longer).
-        let outline = brain
-            .as_ref()
-            .and_then(|b| living_rules::graph::parse(&b.graph).ok())
-            .map(|g| match g.root {
-                living_rules::graph::Node::First(c) if c.label.as_deref() == Some("reflexes") => {
-                    let own = c.children.last().map(living_rules::graph::outline).unwrap_or_default();
-                    format!("(your body habits run before this)\n{own}")
-                }
-                root => living_rules::graph::outline(&root),
-            })
-            .unwrap_or_default();
+        let outline = brain.as_ref().and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
         let plan = brain.as_ref().map(|b| b.plan.clone()).unwrap_or_default();
         let fmt = self.fmt_time();
         let experiences: Vec<String> = {

@@ -22,7 +22,7 @@ COMBAT: fights are fast. An attack winds up for about 0.6-0.75 s before it lands
 (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear up to 7 tiles (you lose it). \
 A blow lands only if you are still within reach (about 2 tiles; a wolf's leap about 3) when its windup ends: stepping back or running as it winds up makes it miss, \
 but whoever swings stands still meanwhile. People run 2.6 tiles/s, deer 3.2, wolves 3.4: you can outrun a person who keeps stopping to swing, not a wolf. \
-While fighting, your graph is checked about 15 times a second, so encode how you fight (a branch labeled \"combat\"), not one blow: reactions must come before the strike or they never get a chance, e.g. {\"first\": [{\"if\": {\"threatened\": true}, \"then\": {\"do\": \"dodge\"}}, {\"do\": \"attack\", \"target\": \"attacker\"}], \"label\": \"combat\"} is only a sketch. How you fight (block or dodge, step back and throw, wear them down, flee, talk) is yours, and mid-fight you can patch just that branch.
+While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.
 COMMUNITIES: people can found a community ({\"do\": \"found\", \"text\": \"its name\"}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
 TIME: beyond staying alive, how you spend your days is yours to decide, from who you are and what you want.
 OTHERS: people hear speech within ~9 tiles. You cannot read minds; what others say may be false. You only know what you perceived or were told.";
@@ -58,7 +58,7 @@ BEHAVIOR GRAPH (JSON) — it runs continuously (~1 check per second, instantly o
 Nodes:
 - {{\"first\": [N, ...]}} priority: every check, the first child that is running or succeeds wins; higher children interrupt lower ones. Optional label: {{\"first\": [...], \"label\": \"...\"}}.
 - {{\"seq\": [N, ...]}} steps in order, remembering progress; fails when a step fails.
-- {{\"if\": C, \"then\": N, \"else\": N}} guard (else optional): the branch runs only while C holds.
+- {{\"if\": C, \"then\": N, \"else\": N}} guard (else optional): the branch runs only while C holds, except that work already begun under it (sleep, rest, eat, gather, build, craft, cook, teach, write, read, plant...) is finished; walking, fleeing and fighting stop as soon as C no longer holds.
 - {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically. \
 Trading: {{\"do\": \"offer\", \"target\": {{\"id\": 6}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}} then they may {{\"do\": \"accept\", \"target\": {{\"id\": 4}}}}. \
 Writing: {{\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know, to teach readers\"}}; teaching: {{\"do\": \"teach\", \"target\": {{\"id\": 6}}, \"item\": \"spear\"}}.
@@ -99,8 +99,9 @@ A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"bel
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, what you make of the other person, as well as \
 practical matters. Talk as the person you are, in your own voice; you may also stay silent, deflect or lie. Don't just echo what was \
 already agreed. \
-Your body has reflexes (label \"reflexes\") that run before your graph: eat carried food when hungry (above 65), take from a storage or gather berries when starving (or head home if none is in sight and you are far from home; at home with nothing to eat, finding food is up to you), flee when badly hurt, sleep when exhausted (energy below 12) or when tired at night beside a fire or shelter; begun work such as sleeping is finished, not dropped. \
-Write only your own graph; reflexes are added for you. \
+Your graph is all your body does: it began as your instincts and habits (labeled branches such as \"habits\" or \"instinct\"), \
+and they are yours to keep, change or drop; nothing eats, sleeps or keeps you warm unless your graph does. \
+Replace the whole graph, or patch one labeled branch and keep the rest. \
 Refer to people by the ids you see. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
 {{\"thought\": \"your private interpretation of the situation (1-3 sentences)\", \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
 \"plan\": \"one-line intention\", \"graph\": {{...behavior graph...}} or \"keep\" to carry on with your current graph (e.g. when you only want to talk), \
@@ -276,8 +277,9 @@ pub fn animal_think_user(mind: &[String], experiences: &[String], scene: &str, r
 
 pub fn animal_compile_system(kind: &str, skills: &str, signals: &str, max_nodes: usize) -> String {
     format!(
-        "You translate the impulse of a {kind} into a behavior graph its body will follow. Express exactly that impulse: \
-do not add plans, knowledge or wisdom the animal does not have, and keep it short (at most {max_nodes} nodes). \
+        "You adjust the behavior graph of a {kind} to its current impulse. Its current graph (its instincts and habits so far) is \
+what its body does; change the part the impulse is about and keep the rest (feeding, resting, fleeing) unless the impulse \
+itself changes it. Do not add plans, knowledge or wisdom the animal does not have, and keep it short (at most {max_nodes} nodes). \
 The {kind} cannot speak; it communicates only with its signals: {signals} (as {{\"do\": \"signal\", \"item\": name}}).\n\n{}\n\n\
 Reply with ONE JSON object: {{\"graph\": {{...}}}}",
         grammar_with(skills, false)

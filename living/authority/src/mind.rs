@@ -114,38 +114,6 @@ pub fn add_thought(ctx: &ReducerContext, actor: u32, t: ThoughtIn, now: u64) {
 }
 
 /// Install a validated graph; the current activity is kept as an orphan the new graph may adopt.
-/// Body reflexes placed ahead of every mind-written graph for people. They keep a
-/// character alive when its plan neglects the body; the mind sees them in its outline.
-pub const REFLEXES: &str = r#"[
-  {"if": {"cond": {"all": [{"health": {"below": 30}}, {"hurt_within": 5}]}, "then": {"do": {"skill": "flee", "target": "attacker"}}}},
-  {"if": {"cond": {"all": [{"hunger": {"above": 65}}, {"has": {"item": "food"}}, {"not": {"threatened": true}}, {"not": {"hurt_within": 8}}]}, "then": {"do": {"skill": "eat", "item": "food"}}}},
-  {"if": {"cond": {"hunger": {"above": 88}}, "then": {"first": [
-    {"do": {"skill": "take", "target": {"nearest": "storage"}, "item": "food"}},
-    {"do": {"skill": "gather", "target": {"nearest": "berry_bush"}}},
-    {"if": {"cond": {"not": {"near": {"target": "home", "within": 8}}}, "then": {"do": {"skill": "goto", "target": "home"}}}}
-  ]}}},
-  {"if": {"cond": {"all": [{"energy": {"below": 12}}, {"not": {"threatened": true}}, {"not": {"hurt_within": 10}}]}, "then": {"do": {"skill": "sleep"}}}},
-  {"if": {"cond": {"all": [{"night": true}, {"energy": {"below": 35}}, {"not": {"hurt_within": 10}},
-      {"any": [{"near": {"target": {"nearest": "campfire"}, "within": 3}}, {"near": {"target": {"nearest": "shelter"}, "within": 2}}]}]},
-    "then": {"do": {"skill": "sleep"}}}}
-]"#;
-
-/// Wrap a graph with its species' reflex layer (idempotent: an existing layer is replaced).
-fn with_reflexes(g: living_rules::graph::Graph, kind: &str) -> Result<living_rules::graph::Graph, String> {
-    use living_rules::graph::{Composite, Node};
-    let inner = match g.root {
-        Node::First(c) if c.label.as_deref() == Some("reflexes") => c.children.into_iter().last().ok_or("empty reflex layer")?,
-        other => other,
-    };
-    let reflexes = match common::species(kind) {
-        Some(sp) if !sp.reflexes.is_empty() => serde_json::Value::Array(sp.reflexes),
-        _ => serde_json::from_str(REFLEXES).map_err(|e| e.to_string())?,
-    };
-    let mut children: Vec<Node> = serde_json::from_value(reflexes).map_err(|e| e.to_string())?;
-    children.push(inner);
-    living_rules::graph::validate(Node::First(Composite { label: Some("reflexes".into()), children }))
-}
-
 pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, source: &str, now: u64) -> Result<u32, String> {
     let g = living_rules::graph::parse(graph)?;
     let kind = ctx.db.character().id().find(actor).map(|c| c.kind).unwrap_or_default();
@@ -157,7 +125,6 @@ pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, sour
             }
         }
     }
-    let g = if source == "mind" { with_reflexes(g, &kind)? } else { g };
     let revision = ctx.db.brain().id().find(actor).map(|b| b.revision + 1).unwrap_or(1);
     let row = Brain { id: actor, graph: g.to_json(), revision, plan: clip(plan, 600), source: source.into(), installed_ms: now };
     if ctx.db.brain().id().find(actor).is_some() {

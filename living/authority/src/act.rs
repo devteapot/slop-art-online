@@ -308,6 +308,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         common::scripts(ctx).check(&act.skill, &skill_ctx(ctx, id, &act, now))?;
     }
     if let Some(a) = cur {
+        if matches!(a.skill.as_str(), "goto" | "follow") && matches!(skill, "goto" | "follow") && now.saturating_sub(a.started_ms) < 3_000 && a.label != act.label {
+            turned_back(ctx, id, &a.label, &act.label, now);
+        }
         cancel(ctx, a, now, None);
     }
     if needs_approach && !(skill == "follow" && dist(here, target.at) <= r) {
@@ -942,22 +945,60 @@ pub fn engage(ctx: &ReducerContext, id: u32, now: u64) {
     }
 }
 
-/// While people fight, their minds get a short account of the exchange every few seconds
-/// (only when no thought is pending and the last one is at least 7 s old), so tactics can be
-/// patched mid-fight from what actually happened rather than decided once at the first blow.
+/// Marks counting walks abandoned for another walk (0xD300 + count, at the window start).
+const TURN_MARK: u16 = 0xD300;
+
+/// Nothing stops a character from changing its mind every second, but it notices when it
+/// keeps turning back and forth, and that is worth a thought.
+fn turned_back(ctx: &ReducerContext, id: u32, from: &str, to: &str, now: u64) {
+    let Some(mut st) = ctx.db.mind_state().id().find(id) else { return };
+    let (count, start) = st.marks.iter().find(|m| (TURN_MARK..TURN_MARK + 16).contains(&m.node)).map(|m| (m.node - TURN_MARK, m.at_ms)).unwrap_or((0, now));
+    let (count, start) = if now.saturating_sub(start) > 20_000 { (0, now) } else { (count, start) };
+    st.marks.retain(|m| !(TURN_MARK..TURN_MARK + 16).contains(&m.node));
+    let count = count + 1;
+    if count >= 6 {
+        ctx.db.mind_state().id().update(st);
+        if let Some(c) = ctx.db.character().id().find(id) {
+            let text = format!("You keep turning back and forth ({from}, then {to}, over and over) without getting anywhere.");
+            let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+            percept(ctx, &c, now, "self", id, 0, at, text.clone(), 0.5);
+            perceive::request_deliberation(ctx, id, &text, now);
+        }
+        return;
+    }
+    st.marks.push(Mark { node: TURN_MARK + count, at_ms: start });
+    while st.marks.len() > 24 {
+        st.marks.remove(0);
+    }
+    ctx.db.mind_state().id().update(st);
+}
+
+/// Marks remembering the last fight report and the health quarter it reported.
+const REPORT_MARK: u16 = 0xD200;
+const BAND_MARK: u16 = 0xD210;
+
+/// While people fight, their minds hear how the exchange is going when something changes:
+/// their health drops into a new quarter, three of their blows are blocked, dodged or miss,
+/// they take three hits, or their own defense works three times; otherwise after 12 s of
+/// fighting. At least 3 s apart, and never while a thought is already pending.
 pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
     let Some(c) = ctx.db.character().id().find(id) else { return };
     if !c.ai || !c.alive || c.kind != "person" || ctx.db.deliberation().actor().find(id).is_some() {
         return;
     }
-    if ctx.db.mind_state().id().find(id).map_or(true, |s| now.saturating_sub(s.deliberated_ms) < 7_000) {
+    let Some(mut st) = ctx.db.mind_state().id().find(id) else { return };
+    let last = st.marks.iter().find(|m| m.node == REPORT_MARK).map(|m| m.at_ms).unwrap_or(0);
+    let last = if now.saturating_sub(last) > 30_000 { 0 } else { last };
+    if now.saturating_sub(last) < 3_000 || now.saturating_sub(st.deliberated_ms) < 3_000 {
         return;
     }
-    let (mut hit, mut blocked, mut dodged, mut evaded, mut they_blocked, mut they_dodged, mut whiffed) = (0, 0, 0, 0, 0, 0, 0);
+    let since = if last == 0 { now.saturating_sub(20_000) } else { last };
+    let (mut hit, mut blocked, mut dodged, mut evaded, mut they_blocked, mut they_dodged, mut whiffed, mut first) = (0, 0, 0, 0, 0, 0, 0, now);
     for e in ctx.db.experience().observer().filter(id) {
-        if now.saturating_sub(e.at_ms) > 20_000 || (e.kind != "attacked" && e.kind != "combat") {
+        if e.at_ms <= since || (e.kind != "attacked" && e.kind != "combat") {
             continue;
         }
+        first = first.min(e.at_ms);
         let t = e.text.as_str();
         if e.kind == "attacked" {
             hit += 1;
@@ -975,13 +1016,46 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
             whiffed += 1;
         }
     }
+    let Some(v) = ctx.db.vitals().id().find(id) else { return };
+    let hp = common::needs(&v, now).hp;
+    let band = ((hp / v.max_hp.max(1.0)) * 4.0).floor().clamp(0.0, 3.0) as u16;
+    let last_band = st.marks.iter().find(|m| (BAND_MARK..BAND_MARK + 5).contains(&m.node)).map(|m| m.node - BAND_MARK).unwrap_or(4);
+    let their_defense = they_blocked + they_dodged + whiffed;
+    let my_defense = blocked + dodged + evaded;
+    let mut what = Vec::new();
+    if band < last_band {
+        what.push(format!("your health has fallen to {hp:.0}"));
+    }
+    if their_defense >= 3 {
+        what.push(format!("{their_defense} of your blows came to nothing (they blocked {they_blocked}, dodged {they_dodged}, {whiffed} found only air)"));
+    }
+    if hit >= 3 {
+        what.push(format!("you have been hit {hit} times"));
+    }
+    if my_defense >= 3 {
+        what.push(format!("your defense is working (blocked {blocked}, dodged {dodged}, stepped out of reach {evaded})"));
+    }
+    let long = now.saturating_sub(if last == 0 { first } else { last }) >= 12_000 && hit + my_defense + their_defense > 0;
+    if what.is_empty() && !long {
+        return;
+    }
     let label = common::label_for(ctx, &c, other);
-    let hp = ctx.db.vitals().id().find(id).map(|v| common::needs(&v, now).hp).unwrap_or(0.0);
-    let their_hp = ctx.db.vitals().id().find(other).map(|v| (common::needs(&v, now).hp / v.max_hp * 100.0).round()).unwrap_or(0.0);
+    let their_hp = ctx.db.vitals().id().find(other).map(|o| (common::needs(&o, now).hp / o.max_hp * 100.0).round()).unwrap_or(0.0);
+    let change = if what.is_empty() {
+        format!("since then you were hit {hit}×, defended {my_defense}×, and {their_defense} of your blows came to nothing")
+    } else {
+        what.join("; ")
+    };
     let text = format!(
-        "The fight with {label} goes on (your health {hp:.0}, theirs looks about {their_hp:.0}%). In the last 20 s: you were hit {hit}×, blocked {blocked}, dodged {dodged}, stepped out of reach {evaded}; they blocked {they_blocked} and dodged {they_dodged} of your blows, {whiffed} of yours found only air. \
-If your way of fighting isn't working, patch your \"combat\" branch now; otherwise keep it."
+        "The fight with {label}: {change}. Your health {hp:.0}; theirs looks about {their_hp:.0}%."
     );
+    st.marks.retain(|m| m.node != REPORT_MARK && !(BAND_MARK..BAND_MARK + 5).contains(&m.node));
+    st.marks.push(Mark { node: REPORT_MARK, at_ms: now });
+    st.marks.push(Mark { node: BAND_MARK + band, at_ms: now });
+    while st.marks.len() > 24 {
+        st.marks.remove(0);
+    }
+    ctx.db.mind_state().id().update(st);
     perceive::request_deliberation(ctx, id, &text, now);
 }
 

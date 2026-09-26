@@ -136,21 +136,25 @@ pub fn grant_know_how(ctx: &ReducerContext, id: u32, technique: String) -> Resul
     Ok(())
 }
 
-/// After the species' reflexes (body habits) change: re-wrap every living character's
-/// mind-written graph with the current reflex layer, keeping the mind's own graph.
+/// Migration: the body-habit layer that used to be injected ahead of mind-written graphs
+/// becomes an ordinary branch the character owns ("habits"), to keep, change or drop.
 #[spacetimedb::reducer]
-pub fn refresh_reflexes(ctx: &ReducerContext) -> Result<(), String> {
+pub fn own_habits(ctx: &ReducerContext) -> Result<(), String> {
     use crate::tables::brain as _;
     require_admin(ctx)?;
     let now = common::now_ms(ctx);
-    let brains: Vec<Brain> = ctx.db.brain().iter().filter(|b| b.source == "mind").collect();
+    let brains: Vec<Brain> = ctx.db.brain().iter().filter(|b| b.graph.contains("\"label\":\"reflexes\"")).collect();
     let mut n = 0;
     for b in brains {
-        if ctx.db.character().id().find(b.id).map_or(false, |c| c.alive) && mind::set_graph(ctx, b.id, &b.graph, &b.plan, "mind", now).is_ok() {
+        if !ctx.db.character().id().find(b.id).map_or(false, |c| c.alive) {
+            continue;
+        }
+        let graph = b.graph.replace("\"label\":\"reflexes\"", "\"label\":\"habits\"");
+        if mind::set_graph(ctx, b.id, &graph, &b.plan, &b.source, now).is_ok() {
             n += 1;
         }
     }
-    log::info!("refreshed reflexes on {n} graphs");
+    log::info!("habit layers now owned by {n} characters");
     Ok(())
 }
 

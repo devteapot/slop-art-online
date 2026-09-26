@@ -6,40 +6,40 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
-pub(super) struct RefreshReflexesArgs {}
+pub(super) struct OwnHabitsArgs {}
 
-impl From<RefreshReflexesArgs> for super::Reducer {
-    fn from(args: RefreshReflexesArgs) -> Self {
-        Self::RefreshReflexes
+impl From<OwnHabitsArgs> for super::Reducer {
+    fn from(args: OwnHabitsArgs) -> Self {
+        Self::OwnHabits
     }
 }
 
-impl __sdk::InModule for RefreshReflexesArgs {
+impl __sdk::InModule for OwnHabitsArgs {
     type Module = super::RemoteModule;
 }
 
 #[allow(non_camel_case_types)]
-/// Extension trait for access to the reducer `refresh_reflexes`.
+/// Extension trait for access to the reducer `own_habits`.
 ///
 /// Implemented for [`super::RemoteReducers`].
-pub trait refresh_reflexes {
-    /// Request that the remote module invoke the reducer `refresh_reflexes` to run as soon as possible.
+pub trait own_habits {
+    /// Request that the remote module invoke the reducer `own_habits` to run as soon as possible.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
-    /// /// Use [`refresh_reflexes:refresh_reflexes_then`] to run a callback after the reducer completes.
-    fn refresh_reflexes(&self) -> __sdk::Result<()> {
-        self.refresh_reflexes_then(|_, _| {})
+    /// /// Use [`own_habits:own_habits_then`] to run a callback after the reducer completes.
+    fn own_habits(&self) -> __sdk::Result<()> {
+        self.own_habits_then(|_, _| {})
     }
 
-    /// Request that the remote module invoke the reducer `refresh_reflexes` to run as soon as possible,
+    /// Request that the remote module invoke the reducer `own_habits` to run as soon as possible,
     /// registering `callback` to run when we are notified that the reducer completed.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and its status can be observed with the `callback`.
-    fn refresh_reflexes_then(
+    fn own_habits_then(
         &self,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
@@ -48,8 +48,8 @@ pub trait refresh_reflexes {
     ) -> __sdk::Result<()>;
 }
 
-impl refresh_reflexes for super::RemoteReducers {
-    fn refresh_reflexes_then(
+impl own_habits for super::RemoteReducers {
+    fn own_habits_then(
         &self,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
@@ -57,6 +57,6 @@ impl refresh_reflexes for super::RemoteReducers {
             + 'static,
     ) -> __sdk::Result<()> {
         self.imp
-            .invoke_reducer_with_callback(RefreshReflexesArgs {}, callback)
+            .invoke_reducer_with_callback(OwnHabitsArgs {}, callback)
     }
 }
