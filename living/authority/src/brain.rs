@@ -205,6 +205,8 @@ impl<'a> Ev<'a> {
         let alone = if people == 0.0 { 1.0 } else { 0.0 };
         let company = (people / 5.0).min(1.0);
         let winter = if common::season(self.ctx, now) == "winter" { 1.0 } else { 0.0 };
+        let starving = if self.needs.hunger >= 90.0 { 1.0 } else { 0.0 };
+        let exhausted = if self.needs.energy <= 10.0 { 1.0 } else { 0.0 };
         let courted = if ds.iter().any(|d| d.weight.courted != 0.0) && self.resolve(&graph::Target::Suitor).is_some() { 1.0 } else { 0.0 };
         let judgments: Vec<(String, f32)> = if ds.iter().any(|d| !d.weight.believes.is_empty()) {
             self.ctx.db.judgment().actor().filter(me).map(|j| (j.key.to_lowercase(), j.value)).collect()
@@ -228,7 +230,7 @@ impl<'a> Ev<'a> {
                 let w = &d.weight;
                 let last = self.st.marks.iter().find(|m| m.node == DESIRE_MARK | ids[i]).map(|m| m.at_ms);
                 let longing = last.map_or(1.0, |t| (now.saturating_sub(t) as f32 / 3_600_000.0).min(1.0));
-                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted;
+                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted;
                 for (k, v) in &w.believes {
                     let j = judgments.iter().find(|(key, _)| key == &k.to_lowercase()).map(|(_, x)| *x).unwrap_or(0.5);
                     s += v * j;

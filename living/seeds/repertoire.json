@@ -828,7 +828,8 @@
         "want": "food",
         "weight": {
           "base": -0.5,
-          "hunger": 1.5
+          "hunger": 1.5,
+          "starving": 1.5
         },
         "do": {
           "routine": "eat"
@@ -839,7 +840,8 @@
         "weight": {
           "base": -0.7,
           "tired": 1.3,
-          "night": 0.6
+          "night": 0.6,
+          "exhausted": 1.0
         },
         "do": {
           "routine": "sleep"
@@ -946,7 +948,7 @@
                   "target": {
                     "nearest": "person"
                   },
-                  "within": 8
+                  "within": 5
                 }
               },
               "then": {
@@ -1074,7 +1076,8 @@
             "want": "food",
             "weight": {
               "base": -0.3,
-              "hunger": 1.5
+              "hunger": 1.5,
+              "starving": 1.5
             },
             "do": {
               "routine": "graze"
@@ -1085,7 +1088,8 @@
             "weight": {
               "base": -0.6,
               "tired": 1.3,
-              "night": 0.3
+              "night": 0.3,
+              "exhausted": 1.0
             },
             "do": {
               "routine": "rest"
@@ -1350,7 +1354,8 @@
             "want": "food",
             "weight": {
               "base": -0.4,
-              "hunger": 1.6
+              "hunger": 1.6,
+              "starving": 1.5
             },
             "do": {
               "routine": "hunt"
@@ -1361,7 +1366,8 @@
             "weight": {
               "base": -0.6,
               "tired": 1.3,
-              "day": 0.2
+              "day": 0.2,
+              "exhausted": 1.0
             },
             "do": {
               "routine": "rest"

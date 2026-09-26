@@ -189,6 +189,8 @@ pub fn vary_ways(top: &Node, u: &mut dyn FnMut() -> f32) -> Option<Node> {
                 winter: vary(w.winter, u),
                 longing: vary(w.longing, u),
                 courted: vary(w.courted, u),
+                starving: vary(w.starving, u),
+                exhausted: vary(w.exhausted, u),
                 believes: w.believes.clone(),
             };
             Desire { want: d.want.clone(), weight, body: d.body.clone() }

@@ -355,7 +355,9 @@ pub fn spawn_animal(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64) 
     let admin = common::world(ctx).admin;
     // Seeded wildlife spans all ages (fractions of the lifespan).
     let w = common::world(ctx);
-    let f = ctx.rng().gen_range(0.1f32..0.8);
+    // A living population has more young than old: ages skew young.
+    let u: f32 = ctx.rng().gen_range(0.0f32..1.0);
+    let f = 0.05 + 0.75 * u * u;
     let age = common::life_of(kind).age_at(f, common::pace(&w));
     spawn_with(ctx, &name, kind, admin, true, at, now, age, (0, 0))
 }

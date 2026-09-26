@@ -89,6 +89,12 @@ pub struct Weight {
     /// Someone in sight has just offered to start a family with me (0 or 1).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub courted: f32,
+    /// The body is starving (hunger 90 or more: 0 or 1).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub starving: f32,
+    /// The body is exhausted (energy 10 or less: 0 or 1).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub exhausted: f32,
     /// The character's own stances (judgment value 0..1) by key.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub believes: std::collections::BTreeMap<String, f32>,
@@ -665,7 +671,7 @@ pub fn describe(n: &Node) -> String {
 /// A desire's weight in words, e.g. "0.2 + hunger×1.5 + night×0.4".
 pub fn describe_weight(w: &Weight) -> String {
     let mut parts = vec![format!("{}", w.base)];
-    for (k, v) in [("hunger", w.hunger), ("tired", w.tired), ("hurt", w.hurt), ("night", w.night), ("day", w.day), ("threatened", w.threatened), ("alone", w.alone), ("company", w.company), ("winter", w.winter), ("longing", w.longing), ("courted", w.courted)] {
+    for (k, v) in [("hunger", w.hunger), ("tired", w.tired), ("hurt", w.hurt), ("night", w.night), ("day", w.day), ("threatened", w.threatened), ("alone", w.alone), ("company", w.company), ("winter", w.winter), ("longing", w.longing), ("courted", w.courted), ("starving", w.starving), ("exhausted", w.exhausted)] {
         if v != 0.0 {
             parts.push(format!("{k}×{v}"));
         }

@@ -54,7 +54,7 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 }
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
-const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted"];
+const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted"];
 const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, near, count, health_of, hurt_within, heard_within, night, believes, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
