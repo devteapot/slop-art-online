@@ -345,6 +345,10 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         if skill == "follow" {
             act.ends_ms = now + CHASE_REPATH_MS;
         }
+        // Already there (a zero-length walk never reports an arrival): advance next tick.
+        if ctx.db.body().id().find(id).map_or(true, |b| b.next_ms == IDLE) {
+            act.ends_ms = now;
+        }
         ctx.db.activity().insert(act);
         return Ok(());
     }

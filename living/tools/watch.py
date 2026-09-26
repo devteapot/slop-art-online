@@ -200,7 +200,7 @@ def round_once(a, state):
     for b in babies:
         if hunger(b) > 75:
             neglected.append(f'{people[b]["name"]} (hunger {hunger(b):.0f})')
-    load = subprocess.run(["python3", str(ROOT / "living/tools/llm_load.py"), "--run", w["run"], "--minutes", str(max(1, a.every // 60))], capture_output=True, text=True).stdout
+    load = subprocess.run(["python3", str(ROOT / "living/tools/llm_load.py"), "--run", a.llm_run or w["run"], "--minutes", str(max(1, a.every // 60))], capture_output=True, text=True).stdout
     try:
         load = json.loads(load).get("all", {})
     except ValueError:
@@ -308,6 +308,7 @@ def main():
     ap.add_argument("--sample", type=int, default=20)
     ap.add_argument("--review", action="store_true")
     ap.add_argument("--once", action="store_true")
+    ap.add_argument("--llm-run", default=None, help="journal run name (default: the world's run)")
     a = ap.parse_args()
     state = {}
     while True:

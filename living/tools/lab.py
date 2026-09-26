@@ -38,17 +38,25 @@ def main():
     subprocess.run([stdb, "publish", "-s", "local", "-b", f"/wasm/{wasm}", a.db, "--delete-data", "-y"], check=True)
     run = f"{a.scenario}-{int(time.time())}"
     mind_env = dict(os.environ, LIVING_DB=a.db, LIVING_RUN=run, LIVING_SEED=a.scenario, RUST_LOG="info")
-    log = open(ROOT / f".local/living/{run}.log", "w")
-    mind = subprocess.Popen([str(LIVING / "target/release/living-mind")], cwd=ROOT, env=mind_env, stdout=log, stderr=subprocess.STDOUT)
-    watch = subprocess.Popen([sys.executable, str(LIVING / "tools/watch.py"), "--db", a.db, "--every", str(a.every), "--review"], cwd=ROOT)
+    log = open(ROOT / f".local/living/{run}.log", "a")
+    start_mind = lambda: subprocess.Popen([str(LIVING / "target/release/living-mind")], cwd=ROOT, env=mind_env, stdout=log, stderr=subprocess.STDOUT)
+    mind = start_mind()
+    watch = subprocess.Popen([sys.executable, str(LIVING / "tools/watch.py"), "--db", a.db, "--every", str(a.every), "--review", "--llm-run", run], cwd=ROOT)
     print(f"lab {a.scenario}: db {a.db}, run {run}; viewer http://127.0.0.1:8330/?db={a.db}; reports in .local/living/watch/", flush=True)
+    end = time.time() + a.minutes * 60
     try:
-        time.sleep(a.minutes * 60)
+        # Keep the minds connected: restart the mind service whenever it exits.
+        while time.time() < end:
+            if mind.poll() is not None:
+                print(f"[{time.strftime('%H:%M:%S')}] mind service exited ({mind.returncode}); restarting", flush=True)
+                time.sleep(3)
+                mind = start_mind()
+            time.sleep(5)
     finally:
         watch.terminate()
         mind.terminate()
         mind.wait(timeout=30)
-    subprocess.run([sys.executable, str(LIVING / "tools/watch.py"), "--db", a.db, "--once", "--review"], cwd=ROOT)
+    subprocess.run([sys.executable, str(LIVING / "tools/watch.py"), "--db", a.db, "--once", "--review", "--llm-run", run], cwd=ROOT)
 
 
 if __name__ == "__main__":

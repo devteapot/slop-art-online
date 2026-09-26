@@ -314,7 +314,7 @@ fn conceive_check(a) {
     if a.actor.hunger > 60.0 { return "too hungry to think of a family"; }
     if a.actor.kind == "person" {
         if !a.actor.near_shelter { return "a family needs a shelter nearby"; }
-    } else if a.season != "spring" { return "it is not the season"; }
+    }
     ""
 }
 fn conceive_duration(a) { 3000 }
