@@ -11,7 +11,9 @@ use crate::graph::{self, Action, Node};
 use serde_json::Value;
 
 /// Skills that are ongoing or real-time: they belong in the behavior graph, not in an act.
-pub const REAL_TIME: &[&str] = &["goto", "wander", "flee", "follow", "dodge", "block", "attack", "throw", "wait", "sleep", "rest", "graze"];
+/// A single walk (`goto`) may be an act: minds use it as the step before an interaction
+/// ("go to the child, then teach"); in the first lab minutes 16 of 29 acts were such walks.
+pub const REAL_TIME: &[&str] = &["wander", "flee", "follow", "dodge", "block", "attack", "throw", "wait", "sleep", "rest", "graze"];
 
 /// Graph skills that interrupt an act in progress: reflexes win over deliberate acts.
 pub const REFLEXES: &[&str] = &["flee", "dodge", "block", "attack", "throw"];
@@ -19,7 +21,7 @@ pub const REFLEXES: &[&str] = &["flee", "dodge", "block", "attack", "throw"];
 /// Most acts waiting for one body at a time.
 pub const MAX_QUEUED: usize = 4;
 /// An act that has not reached its target after this long gives up.
-pub const APPROACH_MS: u64 = 60_000;
+pub const APPROACH_MS: u64 = 90_000;
 /// An act still waiting for the body after this long is dropped.
 pub const QUEUE_MS: u64 = 120_000;
 
@@ -71,6 +73,7 @@ mod tests {
         assert_eq!(t.want.as_deref(), Some("wood"));
         assert_eq!(from_json(&to_json(&t)).unwrap(), t);
         assert!(parse(json!({"do": "flee", "target": {"nearest": "wolf"}}), None).unwrap_err().contains("behavior graph"));
+        assert!(parse(json!({"do": "goto", "target": {"place": "camp"}}), None).is_ok());
         assert!(parse(json!({"first": [{"do": "eat", "item": "food"}]}), None).is_err());
     }
 }

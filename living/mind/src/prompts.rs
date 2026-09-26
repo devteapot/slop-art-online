@@ -146,7 +146,8 @@ Forms: {\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happe
 {\"do\": \"teach\", \"target\": {\"id\": 6}, \"item\": \"fire\"}, {\"do\": \"tend\", \"target\": {\"id\": 6}}, \
 {\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know\"}, {\"do\": \"read\"}, \
 {\"do\": \"join\"|\"welcome\", \"target\": {\"id\": 6}}, {\"do\": \"found\", \"text\": \"a name\"}, and any other single piece of work (build, craft, cook, store, take, plant). \
-Moving, following, fleeing, fighting, sleeping and resting are not acts: they are your graph. Words change nothing in the world by themselves: \
+A single walk ({\"do\": \"goto\", \"target\": T}) can be a step before an act (e.g. goto a place, then build there); \
+following, fleeing, fighting, sleeping and resting are not acts: they are your graph. Words change nothing in the world by themselves: \
 if you agree to do something now, do it as an act.";
 
 pub fn deliberate_system(name: &str) -> String {
