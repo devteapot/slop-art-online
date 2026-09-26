@@ -23,6 +23,7 @@ pub struct Stats {
     pub hits: u64,
     pub dodged: u64,
     pub blocked: u64,
+    pub missed: u64,
 }
 
 impl __sdk::InModule for Stats {
@@ -49,6 +50,7 @@ pub struct StatsCols {
     pub hits: __sdk::__query_builder::Col<Stats, u64>,
     pub dodged: __sdk::__query_builder::Col<Stats, u64>,
     pub blocked: __sdk::__query_builder::Col<Stats, u64>,
+    pub missed: __sdk::__query_builder::Col<Stats, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for Stats {
@@ -71,6 +73,7 @@ impl __sdk::__query_builder::HasCols for Stats {
             hits: __sdk::__query_builder::Col::new(table_name, "hits"),
             dodged: __sdk::__query_builder::Col::new(table_name, "dodged"),
             blocked: __sdk::__query_builder::Col::new(table_name, "blocked"),
+            missed: __sdk::__query_builder::Col::new(table_name, "missed"),
         }
     }
 }

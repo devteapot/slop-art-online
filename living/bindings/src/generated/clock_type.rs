@@ -22,6 +22,7 @@ pub struct Clock {
     pub hits: u64,
     pub dodged: u64,
     pub blocked: u64,
+    pub missed: u64,
 }
 
 impl __sdk::InModule for Clock {
@@ -47,6 +48,7 @@ pub struct ClockCols {
     pub hits: __sdk::__query_builder::Col<Clock, u64>,
     pub dodged: __sdk::__query_builder::Col<Clock, u64>,
     pub blocked: __sdk::__query_builder::Col<Clock, u64>,
+    pub missed: __sdk::__query_builder::Col<Clock, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for Clock {
@@ -68,6 +70,7 @@ impl __sdk::__query_builder::HasCols for Clock {
             hits: __sdk::__query_builder::Col::new(table_name, "hits"),
             dodged: __sdk::__query_builder::Col::new(table_name, "dodged"),
             blocked: __sdk::__query_builder::Col::new(table_name, "blocked"),
+            missed: __sdk::__query_builder::Col::new(table_name, "missed"),
         }
     }
 }
