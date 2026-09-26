@@ -65,7 +65,26 @@ def quiet(msgs):
     return msgs
 
 
-VARIANTS = {"as_recorded": lambda m: m, "why_first": why_first, "think_only": think_only, "quiet": quiet}
+def talk_length(msgs):
+    """A conversation turn told how long the conversation has gone on."""
+    u = msgs[-1]["content"]
+    m = re.search(r"# The conversation so far\n(.*?)(\n# |\Z)", u, re.S)
+    n = len([x for x in (m.group(1).splitlines() if m else []) if x.strip()])
+    if n:
+        u = u.replace("# The conversation so far\n", f"# The conversation so far ({n} lines already; real talks settle in a few)\n", 1)
+    msgs[-1]["content"] = u
+    return msgs
+
+
+def talked_out(msgs):
+    """A felt state after many lines: one feels one has said what one needed to, for now."""
+    u = msgs[-1]["content"]
+    u = u.replace("# The conversation so far\n", "# How you feel about this talk\nYou feel you have said what you needed to for now; there is other life to get on with.\n\n# The conversation so far\n", 1)
+    msgs[-1]["content"] = u
+    return msgs
+
+
+VARIANTS = {"talked_out": talked_out, "as_recorded": lambda m: m, "why_first": why_first, "think_only": think_only, "quiet": quiet, "talk_length": talk_length}
 
 
 def reason_of(u):
@@ -82,6 +101,7 @@ def main():
     ap.add_argument("--in", dest="field", default="", help="count only within these reply fields (comma-separated, e.g. acts,intend)")
     ap.add_argument("--variant", action="append", help="variant(s) to run (default as_recorded)")
     ap.add_argument("--n", type=int, default=12)
+    ap.add_argument("--min-lines", type=int, default=0, help="talk: only turns with at least this many lines so far")
     ap.add_argument("--model", default="mistral-small-latest")
     a = ap.parse_args()
     key = next(l.split("=", 1)[1].strip().strip('"') for l in open(ROOT / ".env") if l.startswith("MISTRAL_API_KEY="))
@@ -96,6 +116,10 @@ def main():
                     u = r["request"]["messages"][-1]["content"]
                     if a.reason not in reason_of(u) or (a.day and '"night":false' not in u.replace(" ", "")):
                         continue
+                    if a.min_lines:
+                        m = re.search(r"# The conversation so far\n(.*?)(\n# |\Z)", u, re.S)
+                        if len([x for x in (m.group(1).splitlines() if m else []) if x.strip()]) < a.min_lines:
+                            continue
                     reqs.append(r["request"]["messages"])
     reqs = reqs[: a.n]
     print(f"{len(reqs)} requests")
