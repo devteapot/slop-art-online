@@ -225,6 +225,9 @@ def round_once(a, state):
         flags.append(f"{len(idle)} of {tracked} people stood idle (no movement, no action) during the sample: {', '.join(idle[:8])}")
     if len(stuck) > len(people) * 0.15:
         flags.append(f"{len(stuck)} people stuck on a failing action, e.g. {stuck[0]['status'][:100]}")
+    rate = len(speech) / max(1, len(people)) / max(1e-9, (now - since) / 60000)
+    if rate > 3:
+        flags.append(f"runaway talk: {rate:.1f} lines per person per minute")
     if repeats:
         flags.append(f"{len(repeats)} lines said 3+ times, e.g. “{repeats[0]}”")
     starved = sum(n for (k, cause), n in death_causes.items() if k == "person" and "starv" in cause)
