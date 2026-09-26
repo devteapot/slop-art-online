@@ -562,6 +562,108 @@ fn sign() -> Canvas {
     c
 }
 
+/// A small home; `variant` picks roof and wall materials. The door (x 7..=8, y 11..=15) is
+/// left neutral so the map can paint it in the owner's community colour.
+fn house(variant: u32) -> Canvas {
+    let mut c = Canvas::new(16, 16);
+    let roofs = [rgb(196, 164, 92), rgb(170, 72, 52), rgb(92, 98, 116), rgb(132, 92, 58)];
+    let walls = [rgb(222, 210, 178), rgb(170, 128, 84), rgb(206, 196, 180), rgb(190, 170, 130)];
+    let roof = roofs[variant as usize % 4];
+    let wall = walls[(variant as usize / 2 + variant as usize) % 4];
+    // Walls.
+    c.rect(2, 8, 12, 8, wall);
+    c.rect(2, 8, 1, 8, shade(wall, 0.8));
+    c.rect(13, 8, 1, 8, shade(wall, 0.8));
+    if variant % 2 == 1 {
+        // Timber framing.
+        for x in [5, 10] {
+            c.rect(x, 8, 1, 8, shade(wall, 0.6));
+        }
+    }
+    // Windows.
+    for x in [4, 10] {
+        c.rect(x, 10, 2, 2, rgb(64, 78, 96));
+        c.set(x, 10, rgb(150, 180, 210));
+    }
+    // Door.
+    c.rect(7, 11, 2, 5, rgb(110, 76, 46));
+    c.set(8, 13, rgb(220, 200, 120));
+    // Roof: a gable with shaded courses.
+    for y in 1..9 {
+        let half = (y as f32 * 0.95 + 0.5) as i32;
+        for x in 8 - half..8 + half {
+            let col = if x < 8 { roof } else { shade(roof, 0.8) };
+            let col = if (y + 1) % 3 == 0 { shade(col, 0.85) } else { col };
+            c.set(x, y, col);
+        }
+    }
+    c.rect(0, 8, 16, 1, shade(roof, 0.6));
+    c.set(11, 2, rgb(90, 80, 76));
+    c.set(11, 1, rgb(90, 80, 76));
+    c.outline(OUTLINE);
+    c
+}
+
+/// Gate frames: 0 open / 1 shut in a horizontal wall run, 2 open / 3 shut in a vertical one.
+fn gate(frame: usize) -> Canvas {
+    let mut c = Canvas::new(16, 16);
+    let stone = rgb(150, 146, 138);
+    let cap = rgb(196, 192, 184);
+    let wood = rgb(126, 86, 50);
+    let band = rgb(70, 66, 64);
+    let shut = frame % 2 == 1;
+    if frame < 2 {
+        for x0 in [0, 13] {
+            c.rect(x0, 0, 3, 16, stone);
+            c.rect(x0, 0, 3, 3, cap);
+            c.rect(x0, 13, 3, 3, shade(stone, 0.7));
+        }
+        if shut {
+            c.rect(3, 3, 10, 12, wood);
+            for x in (4..13).step_by(2) {
+                c.rect(x, 3, 1, 12, shade(wood, 0.8));
+            }
+            c.rect(3, 5, 10, 1, band);
+            c.rect(3, 12, 10, 1, band);
+            c.rect(8, 3, 1, 12, rgb(60, 40, 26));
+        } else {
+            c.rect(3, 3, 2, 10, wood);
+            c.rect(11, 3, 2, 10, wood);
+        }
+    } else {
+        for y0 in [0, 12] {
+            c.rect(0, y0, 16, 4, stone);
+            c.rect(0, y0, 16, 2, cap);
+        }
+        if shut {
+            c.rect(5, 4, 6, 8, wood);
+            for y in (5..12).step_by(2) {
+                c.rect(5, y, 6, 1, shade(wood, 0.8));
+            }
+            c.rect(6, 4, 1, 8, band);
+            c.rect(9, 4, 1, 8, band);
+        } else {
+            c.rect(5, 4, 1, 3, wood);
+            c.rect(10, 9, 1, 3, wood);
+        }
+    }
+    c.outline(OUTLINE);
+    c
+}
+
+fn clay_bank() -> Canvas {
+    let mut c = Canvas::new(16, 16);
+    c.blob(8.0, 11.0, 6.5, 3.8, |x, y, dx, dy| {
+        let l = -(dx * 0.5 + dy) + (hash2(x, y, 90) - 0.5) * 0.5;
+        Some(if l > 0.55 { rgb(214, 140, 100) } else if l < -0.35 { rgb(130, 70, 48) } else { rgb(176, 104, 72) })
+    });
+    for (x, y) in [(5, 10), (6, 10), (10, 12), (11, 12)] {
+        c.set(x, y, rgb(236, 190, 160));
+    }
+    c.outline([40, 24, 18, 220]);
+    c
+}
+
 /// All static sheets, generated once.
 pub struct Art {
     pub deer: Sheet,
@@ -577,6 +679,9 @@ pub struct Art {
     pub storage: Sheet,
     pub remains: Sheet,
     pub sign: Sheet,
+    pub house: Sheet,
+    pub gate: Sheet,
+    pub clay: Sheet,
     pub people: HashMap<u32, Sheet>,
 }
 
@@ -608,6 +713,9 @@ impl Art {
             storage: Sheet::new(ctx, "storage", &[storage()]),
             remains: Sheet::new(ctx, "remains", &[remains()]),
             sign: Sheet::new(ctx, "sign", &[sign()]),
+            house: Sheet::new(ctx, "house", &(0..4).map(house).collect::<Vec<_>>()),
+            gate: Sheet::new(ctx, "gate", &(0..4).map(gate).collect::<Vec<_>>()),
+            clay: Sheet::new(ctx, "clay", &[clay_bank()]),
             people: HashMap::new(),
         }
     }

@@ -57,7 +57,14 @@ fn communities_of(chars: &HashMap<u32, Character>, backgrounds: &HashMap<u32, se
     for c in &people {
         let Some(b) = backgrounds.get(&c.id) else { continue };
         let (name, kind, home) = if let Some(t) = b.get("town").and_then(|t| t.as_str()) {
-            (t.to_string(), "town", b.get("town_center").and_then(pos))
+            let kind = if b.get("origin").and_then(|o| o.as_str()) == Some("village") {
+                "village"
+            } else if b.get("walled").and_then(|w| w.as_bool()) == Some(true) {
+                "city"
+            } else {
+                "town"
+            };
+            (t.to_string(), kind, b.get("town_center").and_then(pos))
         } else if let Some(t) = b.get("band").and_then(|t| t.as_str()) {
             (t.to_string(), "band", b.get("camp").and_then(pos))
         } else {
@@ -149,7 +156,7 @@ pub struct Snap {
     pub vitals: HashMap<u32, Vitals>,
     pub activity: HashMap<u32, Activity>,
     pub personas: HashMap<u32, Persona>,
-    pub resources: Vec<ResourceNode>,
+    pub resources: std::sync::Arc<Vec<ResourceNode>>,
     pub structures: Vec<Structure>,
     pub expecting: Vec<Expecting>,
     pub bond_offers: Vec<BondOffer>,
@@ -159,6 +166,7 @@ pub struct Snap {
     /// Characters carrying a torch.
     pub torches: std::collections::HashSet<u32>,
     pub trades: Vec<TradeOffer>,
+    pub gates: HashMap<u64, Gate>,
 }
 
 impl Snap {
@@ -176,7 +184,14 @@ impl Snap {
             vitals: c.db.vitals().iter().map(|r| (r.id, r)).collect(),
             activity: c.db.activity().iter().map(|r| (r.id, r)).collect(),
             personas: c.db.persona().iter().map(|r| (r.id, r)).collect(),
-            resources: c.db.resource_node().iter().collect(),
+            resources: {
+                let gen = net.gens.resources.load(std::sync::atomic::Ordering::Relaxed);
+                let mut cache = net.resource_cache.borrow_mut();
+                if cache.0 != gen {
+                    *cache = (gen, std::sync::Arc::new(c.db.resource_node().iter().collect()));
+                }
+                cache.1.clone()
+            },
             structures: c.db.structure().iter().collect(),
             expecting: c.db.expecting().iter().collect(),
             bond_offers: c.db.bond_offer().iter().collect(),
@@ -184,6 +199,7 @@ impl Snap {
             literate: c.db.know_how().iter().filter(|k| k.technique == "writing").map(|k| k.actor).collect(),
             torches: c.db.inventory().iter().filter(|i| i.item == "torch" && i.qty > 0 && i.owner < (1u64 << 32)).map(|i| i.owner as u32).collect(),
             trades: c.db.trade_offer().iter().collect(),
+            gates: c.db.gate().iter().map(|g| (g.id, g)).collect(),
         }
     }
 

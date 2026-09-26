@@ -16,7 +16,11 @@ use std::collections::HashMap;
 
 pub const TILE_PX: i32 = 16;
 /// Overview resolution (pixels per tile).
-pub const OVERVIEW_PX: i32 = 4;
+/// Overview resolution (pixels per tile): 4 for small maps, 2 above 300 tiles (a 512-tile
+/// realm is then a 1024² texture instead of 2048²).
+pub fn overview_px(map: &Map) -> i32 {
+    if map.w.max(map.h) > 300 { 2 } else { 4 }
+}
 /// Most chunk textures kept at once (each is ~0.35 MB of GPU memory across its levels).
 const MAX_CHUNKS: usize = 160;
 
@@ -159,8 +163,47 @@ fn dirt(x: i32, y: i32, season: Season) -> Rgba {
     c
 }
 
+/// Cobbled road: 4×4 stones with mortar, jittered per stone; worn earth between.
+fn road(x: i32, y: i32, season: Season) -> Rgba {
+    let row = y.div_euclid(4);
+    let off = if row % 2 == 0 { 0 } else { 2 };
+    let (cx, cy) = ((x + off).div_euclid(4), row);
+    let (lx, ly) = ((x + off).rem_euclid(4), y.rem_euclid(4));
+    let mut c = if lx == 0 || ly == 0 {
+        rgb(104, 92, 76)
+    } else {
+        let v = hash2(cx, cy, 70);
+        let stone = mix(rgb(150, 140, 124), rgb(182, 170, 150), v);
+        if ly == 1 && lx == 1 { shade(stone, 1.12) } else if ly == 3 { shade(stone, 0.9) } else { stone }
+    };
+    if hash2(cx, cy, 71) < 0.08 && lx != 0 && ly != 0 {
+        c = rgb(140, 116, 84); // a missing stone, packed earth
+    }
+    if season == Season::Winter {
+        c = mix(c, rgb(228, 232, 238), if lx == 0 || ly == 0 { 0.6 } else { 0.25 });
+    }
+    c
+}
+
+/// Dressed stone wall: 6×4 blocks in a running bond.
+fn wall(x: i32, y: i32, season: Season) -> Rgba {
+    let row = y.div_euclid(4);
+    let off = if row % 2 == 0 { 0 } else { 3 };
+    let (bx, lx, ly) = ((x + off).div_euclid(6), (x + off).rem_euclid(6), y.rem_euclid(4));
+    let _ = season;
+    if lx == 0 || ly == 0 {
+        rgb(70, 68, 66)
+    } else {
+        let v = hash2(bx, row, 72);
+        let stone = mix(rgb(128, 126, 120), rgb(160, 156, 148), v);
+        if ly == 1 { shade(stone, 1.1) } else { stone }
+    }
+}
+
 fn base(t: Terrain, x: i32, y: i32, depth: u8, season: Season) -> Rgba {
     match t {
+        Terrain::Road => road(x, y, season),
+        Terrain::Wall => wall(x, y, season),
         Terrain::Grass => grass(x, y, season),
         Terrain::Forest => forest_floor(x, y, season),
         Terrain::Water => water(x, y, depth, season),
@@ -168,6 +211,11 @@ fn base(t: Terrain, x: i32, y: i32, depth: u8, season: Season) -> Rgba {
         Terrain::Rock => rock(x, y, season),
         Terrain::Dirt => dirt(x, y, season),
     }
+}
+
+/// Tiles built by people keep crisp borders (no dithered blending).
+fn built(t: Terrain) -> bool {
+    matches!(t, Terrain::Road | Terrain::Wall)
 }
 
 /// Distance (in tiles, capped at 3) from each water tile to the nearest land.
@@ -240,7 +288,7 @@ fn render(map: &Map, depth: &[u8], season: Season, tx0: i32, ty0: i32, tw: i32, 
                     if t == Terrain::Water && e == 0 && hash2(x, y, 21) < 0.35 {
                         kind = n;
                     }
-                } else if e < 4 && hash2(x, y, 22 + e as u32) < (4 - e) as f32 / 9.0 {
+                } else if e < 4 && !built(t) && !built(n) && hash2(x, y, 22 + e as u32) < (4 - e) as f32 / 9.0 {
                     kind = n;
                 }
             }
@@ -253,6 +301,39 @@ fn render(map: &Map, depth: &[u8], season: Season, tx0: i32, ty0: i32, tw: i32, 
             }
             if t != Terrain::Rock && terrain_at(map, tx, ty - 1) == Terrain::Rock && ly < 3 {
                 c = shade(c, 0.74 + ly as f32 * 0.07);
+            }
+            if t == Terrain::Road {
+                // Worn edges where the road meets open ground.
+                let edge = [
+                    (lx, terrain_at(map, tx - 1, ty)),
+                    (TILE_PX - 1 - lx, terrain_at(map, tx + 1, ty)),
+                    (ly, terrain_at(map, tx, ty - 1)),
+                    (TILE_PX - 1 - ly, terrain_at(map, tx, ty + 1)),
+                ]
+                .iter()
+                .filter(|(_, n)| !built(*n))
+                .map(|(e, _)| *e)
+                .min()
+                .unwrap_or(99);
+                if edge < 2 || (edge < 3 && hash2(x, y, 73) < 0.5) {
+                    c = mix(rgb(128, 102, 70), c, 0.25);
+                }
+            }
+            if t == Terrain::Wall {
+                let above = terrain_at(map, tx, ty - 1) == Terrain::Wall;
+                let below = terrain_at(map, tx, ty + 1) == Terrain::Wall;
+                if !above && ly < 4 {
+                    // Coping stones on top.
+                    c = if ly == 0 { rgb(60, 58, 56) } else if season == Season::Winter { rgb(236, 240, 246) } else { mix(rgb(196, 192, 184), c, 0.3) };
+                } else if !below && ly >= TILE_PX - 4 {
+                    // The wall's face, in shade.
+                    c = shade(c, if ly == TILE_PX - 1 { 0.45 } else { 0.72 });
+                }
+                if (lx == 0 && terrain_at(map, tx - 1, ty) != Terrain::Wall) || (lx == TILE_PX - 1 && terrain_at(map, tx + 1, ty) != Terrain::Wall) {
+                    c = rgb(52, 50, 48);
+                }
+            } else if terrain_at(map, tx, ty - 1) == Terrain::Wall && ly < 5 {
+                c = shade(c, 0.6 + ly as f32 * 0.08);
             }
             if t == Terrain::Rock && terrain_at(map, tx, ty - 1) != Terrain::Rock && ly == 0 {
                 c = shade(c, 1.2);
@@ -349,6 +430,9 @@ pub struct TerrainArt {
     depth: Vec<u8>,
     pub season: Season,
     pub overview: TextureHandle,
+    pub overview_px: i32,
+    /// Wall tiles (for the minimap).
+    pub walls: Vec<(u16, u16)>,
     chunks: HashMap<u32, ChunkArt>,
     frame: u64,
     /// Build time of the last chunk (ms), for diagnostics.
@@ -359,7 +443,16 @@ impl TerrainArt {
     pub fn new(ctx: &egui::Context, map: Map, season: Season) -> Self {
         let depth = depths(&map);
         let overview = overview(ctx, &map, &depth, season);
-        Self { map, depth, season, overview, chunks: HashMap::new(), frame: 0, last_chunk_ms: 0.0 }
+        let overview_px = overview_px(&map);
+        let mut walls = Vec::new();
+        for y in 0..map.h as i32 {
+            for x in 0..map.w as i32 {
+                if map.get(x, y) == Terrain::Wall {
+                    walls.push((x as u16, y as u16));
+                }
+            }
+        }
+        Self { map, depth, season, overview, overview_px, walls, chunks: HashMap::new(), frame: 0, last_chunk_ms: 0.0 }
     }
 
     pub fn set_season(&mut self, ctx: &egui::Context, season: Season) {
@@ -446,11 +539,11 @@ impl TerrainArt {
     }
 }
 
-/// Whole map at `OVERVIEW_PX` per tile: each output pixel averages a few samples of the
+/// Whole map at `overview_px` per tile: each output pixel averages a few samples of the
 /// full-resolution pixel functions, plus the canopy colour on forest tiles.
 fn overview(ctx: &egui::Context, map: &Map, depth: &[u8], season: Season) -> TextureHandle {
     let (tw, th) = (map.w as i32, map.h as i32);
-    let s = OVERVIEW_PX;
+    let s = overview_px(map);
     let (w, h) = (tw * s, th * s);
     let sub = TILE_PX / s;
     let mut px = vec![[0u8; 4]; (w * h) as usize];
@@ -464,6 +557,11 @@ fn overview(ctx: &egui::Context, map: &Map, depth: &[u8], season: Season) -> Tex
                 for sx in 0..s {
                     let (x, y) = (tx * TILE_PX + sx * sub + sub / 2, ty * TILE_PX + sy * sub + sub / 2);
                     let mut c = base(t, x, y, d, season);
+                    if t == Terrain::Wall {
+                        c = if sy == 0 { rgb(150, 146, 140) } else { rgb(64, 62, 60) };
+                    } else if t == Terrain::Road {
+                        c = rgb(184, 164, 126);
+                    }
                     if t == Terrain::Forest {
                         let tones = foliage(season, crown(tx, ty).3);
                         c = if season == Season::Winter && sy == 0 { tones[2] } else { tones[if (sx + sy) % 2 == 0 { 1 } else { 0 }] };

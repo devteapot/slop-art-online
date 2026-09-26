@@ -529,8 +529,13 @@ fn background(ui: &mut egui::Ui, snap: &Snap, b: &serde_json::Value) -> Option<u
         }
     };
     match s("origin") {
-        "town" => {
-            ui.label(RichText::new(format!("{} of {}", if s("occupation").is_empty() { "townsperson" } else { s("occupation") }, s("town"))).strong());
+        "town" | "village" => {
+            let place = match (s("origin"), b.get("walled").and_then(|w| w.as_bool())) {
+                ("village", _) => "the village of",
+                (_, Some(true)) => "the walled city of",
+                _ => "",
+            };
+            ui.label(RichText::new(format!("{} of {place} {}", if s("occupation").is_empty() { "townsperson" } else { s("occupation") }, s("town"))).strong());
             if !s("town_character").is_empty() {
                 ui.add(egui::Label::new(RichText::new(s("town_character")).italics().small().color(Color32::from_rgb(210, 200, 180))).wrap());
             }

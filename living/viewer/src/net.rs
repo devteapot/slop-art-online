@@ -35,6 +35,7 @@ const QUERIES: &[&str] = &[
     "SELECT * FROM artifact",
     "SELECT * FROM trade_offer",
     "SELECT * FROM background",
+    "SELECT * FROM gate",
 ];
 
 /// A per-character experience subscription (only the inspected character's rows).
@@ -46,6 +47,7 @@ struct ExpSub {
 /// Change generations for rows the viewer derives caches from.
 #[derive(Clone, Default)]
 pub struct Generations {
+    pub resources: Arc<AtomicU32>,
     /// New thought/chronicle rows, applied incrementally (a full rebuild happens only on
     /// deletes, updates and resubscription).
     pub fresh_thoughts: Arc<Mutex<Vec<Thought>>>,
@@ -93,6 +95,8 @@ pub struct Net {
     retry_at: f64,
     exp_live: Option<ExpSub>,
     exp_pending: Option<ExpSub>,
+    /// Resource rows (thousands on a realm) are copied only when the table changes.
+    pub resource_cache: std::cell::RefCell<(u32, Arc<Vec<ResourceNode>>)>,
 }
 
 impl Default for Net {
@@ -110,6 +114,7 @@ impl Default for Net {
             retry_at: 0.0,
             exp_live: None,
             exp_pending: None,
+            resource_cache: std::cell::RefCell::new((u32::MAX, Arc::new(Vec::new()))),
         }
     }
 }
@@ -192,6 +197,7 @@ impl Net {
                     }};
                 }
                 watch!(terrain_chunk, terrain);
+                watch!(resource_node, resources);
                 macro_rules! incremental {
                     ($table:ident, $gen:ident, $queue:ident) => {{
                         let q = gens.$queue.clone();
@@ -266,6 +272,7 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 bump(&net.gens.chronicle);
                 bump(&net.gens.thought);
                 bump(&net.gens.background);
+                bump(&net.gens.resources);
             }
             Signal::Applied => {
                 info!("world subscribed after {:.1} s", now);
@@ -274,6 +281,7 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 bump(&net.gens.chronicle);
                 bump(&net.gens.thought);
                 bump(&net.gens.background);
+                bump(&net.gens.resources);
             }
         }
     }

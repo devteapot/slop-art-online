@@ -61,6 +61,16 @@ pub fn lay_out(map: &mut Map, center: (f32, f32), households: usize, radius: i32
                 paint(map, x, y, Terrain::Road);
             }
         }
+        // Side streets every 6 tiles, so houses line streets across the whole city.
+        let mut k = 6;
+        while k < r - 3 {
+            for d in -(r - 2)..=(r - 2) {
+                for (x, y) in [(cx + d, cy - k), (cx + d, cy + k), (cx - k, cy + d), (cx + k, cy + d)] {
+                    paint(map, x, y, Terrain::Road);
+                }
+            }
+            k += 6;
+        }
     }
     // Market square.
     let m = if walled { 2 } else { 1 };
@@ -87,15 +97,26 @@ pub fn lay_out(map: &mut Map, center: (f32, f32), households: usize, radius: i32
             }
         }
     }
+    // Spread homes through the whole settlement: fill rings outward from the market with
+    // wide spacing first, then tighten the spacing only if there is not enough room.
     spots.sort();
     let mut houses: Vec<(f32, f32)> = Vec::new();
-    for (_, x, y) in spots {
-        let p = at(x, y);
-        if houses.iter().all(|h| (h.0 - p.0).abs().max((h.1 - p.1).abs()) >= 3.0) {
-            houses.push(p);
+    let min_ring = if walled { m + 4 } else { m + 2 };
+    for spacing in [5.0f32, 4.0, 3.0] {
+        for &(d2, x, y) in &spots {
             if houses.len() >= households {
                 break;
             }
+            if d2 < min_ring * min_ring {
+                continue;
+            }
+            let p = at(x, y);
+            if houses.iter().all(|h| (h.0 - p.0).abs().max((h.1 - p.1).abs()) >= spacing) {
+                houses.push(p);
+            }
+        }
+        if houses.len() >= households {
+            break;
         }
     }
     // Fields outside the walls (or around the village).

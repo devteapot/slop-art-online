@@ -101,7 +101,7 @@ pub fn central(ctx: &egui::Context, view: &mut View, snap: &Snap, t: f32) {
             let uv = Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0));
             painter.image(terrain.overview.id(), r, uv, Color32::WHITE);
             let mut drawn = 0;
-            if xf.zoom > crate::terrain::OVERVIEW_PX as f32 * 1.5 {
+            if xf.zoom > terrain.overview_px as f32 * 1.5 {
                 let world_view = Rect::from_min_max(xf.w(rect.min), xf.w(rect.max));
                 for chunk in terrain.visible(ctx, world_view, 6.0) {
                     let level = chunk.levels.iter().rev().find(|(_, s)| *s as f32 >= xf.zoom * 0.9).unwrap_or(&chunk.levels[0]);
@@ -272,8 +272,10 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
             items.push((n.y, Item::Resource(i)));
         }
     }
+    // Far out, a realm is read from terrain, walls and dots: skip structure sprites.
+    let far = xf.zoom < 2.5;
     for (i, s) in snap.structures.iter().enumerate() {
-        if vis.contains(xf.s(egui::pos2(s.x, s.y))) {
+        if !far && vis.contains(xf.s(egui::pos2(s.x, s.y))) {
             items.push((s.y, Item::Structure(i)));
         }
     }
@@ -316,6 +318,10 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                         let frame = ((t * 1.5 + n.id as f32 * 0.7) as usize) % 2;
                         art.reeds.draw(p, frame, feet, s, false, tint(0.5 + 0.5 * f));
                     }
+                    "clay_bank" => {
+                        shadow(p, feet, art.clay.w as f32 * s * 0.8);
+                        art.clay.draw(p, 0, feet, s * (0.75 + 0.25 * f), n.id % 2 == 0, tint(0.55 + 0.45 * f));
+                    }
                     "fishing_spot" => {
                         let frame = ((t * 2.5 + n.id as f32) as usize) % 4;
                         art.ripples.draw(p, frame, feet, s.max(0.8), false, tint(0.35 + 0.65 * f));
@@ -345,6 +351,33 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                     "remains" => {
                         art.remains.draw(p, 0, feet, s, false, Color32::WHITE);
                     }
+                    "house" => {
+                        let s = xf.px(1.35, 0.8);
+                        shadow(p, feet, art.house.w as f32 * s * 1.1);
+                        let r = art.house.draw(p, (st.id % 4) as usize, feet, s, false, Color32::WHITE);
+                        if st.owner != 0 {
+                            // Door in the owner's community colour.
+                            let px = r.width() / art.house.w as f32;
+                            let door = Rect::from_min_size(r.min + egui::vec2(7.0 * px, 11.0 * px), egui::vec2(2.0 * px, 5.0 * px));
+                            p.rect_filled(door, 0.0, view.community_color(st.owner));
+                            p.rect_filled(Rect::from_min_size(door.min + egui::vec2(px, 2.0 * px), egui::vec2(px * 0.8, px * 0.8)), 0.0, Color32::from_rgb(230, 210, 130));
+                        }
+                    }
+                    "gate" => {
+                        // Tile-locked: it sits in the wall ring on a road tile.
+                        let (tx, ty) = (st.x.floor(), st.y.floor());
+                        let open = snap.gates.get(&st.id).map(|g| g.open).unwrap_or(true);
+                        let horizontal = view.terrain.as_ref().is_some_and(|t| {
+                            use living_rules::map::Terrain;
+                            t.map.get(tx as i32 - 1, ty as i32) == Terrain::Wall || t.map.get(tx as i32 + 1, ty as i32) == Terrain::Wall
+                        });
+                        let frame = if horizontal { 0 } else { 2 } + if open { 0 } else { 1 };
+                        let bottom = xf.s(egui::pos2(tx + 0.5, ty + 1.0));
+                        art.gate.draw(p, frame, bottom, xf.zoom / TILE_PX as f32, false, Color32::WHITE);
+                        if !open && xf.zoom >= 6.0 {
+                            p.text(xf.s(egui::pos2(tx + 0.5, ty - 0.2)), Align2::CENTER_BOTTOM, "shut", FontId::proportional(10.0), Color32::from_rgb(255, 210, 150));
+                        }
+                    }
                     "sign" => {
                         shadow(p, feet, art.sign.w as f32 * s * 0.6);
                         let r = art.sign.draw(p, 0, feet, s, false, Color32::WHITE);
@@ -354,6 +387,21 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                         p.rect_filled(Rect::from_center_size(feet, egui::vec2(6.0, 6.0)), 1.0, Color32::WHITE);
                     }
                 }
+            }
+            Item::Creature(id) if far => {
+                let c = &snap.chars[&id];
+                let at = xf.s(view.shown[&id]);
+                let (r, col) = match c.kind.as_str() {
+                    "person" => (3.2, view.community_color(id)),
+                    "wolf" => (2.2, Color32::from_rgb(170, 40, 36)),
+                    _ => (1.6, Color32::from_rgb(200, 160, 110)),
+                };
+                p.circle_filled(at, r + 1.0, Color32::from_rgb(16, 16, 20));
+                p.circle_filled(at, r, col);
+                if Some(id) == view.selected {
+                    p.circle_stroke(at, r + 4.0 + (t * 4.0).sin(), Stroke::new(2.0, Color32::from_rgb(255, 230, 120)));
+                }
+                placed.insert(id, (at + egui::vec2(0.0, r), at.y - r - 4.0));
             }
             Item::Creature(id) => {
                 let c = &snap.chars[&id];
@@ -846,6 +894,15 @@ fn minimap(ui: &egui::Ui, p: &egui::Painter, rect: Rect, xf: &Xf, view: &mut Vie
     for s in snap.structures.iter().filter(|s| s.kind == "campfire" || s.kind == "shelter") {
         p.rect_filled(Rect::from_center_size(to_mm(egui::pos2(s.x, s.y)), egui::vec2(2.0, 2.0)), 0.0, Color32::from_rgb(255, 170, 60));
     }
+    // City walls (tile dots) and gates.
+    let dot = (size.x / tiles.x).max(1.2);
+    for &(x, y) in &terrain.walls {
+        p.rect_filled(Rect::from_min_size(to_mm(egui::pos2(x as f32, y as f32)), egui::vec2(dot, dot)), 0.0, Color32::from_rgb(40, 38, 36));
+    }
+    for g in snap.gates.values() {
+        let col = if g.open { Color32::from_rgb(200, 180, 120) } else { Color32::from_rgb(230, 80, 60) };
+        p.rect_filled(Rect::from_center_size(to_mm(egui::pos2(g.x as f32 + 0.5, g.y as f32 + 0.5)), egui::vec2(3.0, 3.0)), 0.0, col);
+    }
     // Community homes.
     let hover = resp.hover_pos();
     for c in &view.communities {
@@ -853,7 +910,12 @@ fn minimap(ui: &egui::Ui, p: &egui::Painter, rect: Rect, xf: &Xf, view: &mut Vie
         let r = Rect::from_center_size(at, egui::vec2(9.0, 9.0));
         p.rect_filled(r.expand(1.0), 2.0, Color32::from_rgb(16, 16, 20));
         p.rect_filled(r, 2.0, c.color);
-        p.text(at, Align2::CENTER_CENTER, if c.kind == "town" { "⌂" } else { "△" }, FontId::proportional(8.0), Color32::from_rgb(20, 20, 24));
+        let glyph = match c.kind {
+            "city" | "town" => "⌂",
+            "village" => "•",
+            _ => "△",
+        };
+        p.text(at, Align2::CENTER_CENTER, glyph, FontId::proportional(8.0), Color32::from_rgb(20, 20, 24));
         if hover.is_some_and(|h| r.expand(3.0).contains(h)) {
             let g = p.layout_no_wrap(format!("{} ({}, {} people)", c.name, c.kind, c.members.len()), FontId::proportional(12.0), Color32::WHITE);
             let tr = Rect::from_min_size(egui::pos2(mm.left(), mm.top() - g.size().y - 8.0), g.size()).expand(3.0);
