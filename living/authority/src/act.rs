@@ -1081,6 +1081,10 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
     ctx.db.bond_offer().insert(BondOffer { id: 0, from: me, to: other, at_ms: now });
     if let Some(c) = ctx.db.character().id().find(other) {
         percept(ctx, &c, now, "family", me, other, at, format!("{my_name} wants to start a family with you (you would both have to choose it within two minutes)."), 0.9);
+        // Being asked is worth a thought (an animal answers by its instincts).
+        if c.kind == "person" {
+            crate::perceive::request_deliberation(ctx, other, &format!("{my_name} (#{me}) asks to start a family with you; it happens if you choose it toward them within two minutes."), now);
+        }
         if c.ai {
             perceive::request_deliberation(ctx, other, &format!("{my_name} asked to start a family with you."), now);
         }
