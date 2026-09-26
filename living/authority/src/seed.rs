@@ -695,7 +695,10 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
             let id = spawn_with(ctx, &fresh_name(ctx), "person", admin, true, p, now, life.age_at(f, pace), parents);
             common::inv_add(ctx, id as u64, "berries", if young { 1 } else { 3 });
             if !young {
-                adults.push(id);
+                // Parents of the young are the family's (non-elder) adults.
+                if m.stage != "elder" {
+                    adults.push(id);
+                }
                 for tech in &b.knows {
                     common::learn(ctx, id, tech, "seed", now);
                 }
