@@ -221,3 +221,17 @@ Evidence, rule changes and decisions per stage, newest last.
 
   Minds read "eat" as consuming, not finding food. The seeded routine is now "find food and eat", and the starving sensation shows whichever routine the food desire calls. Stage 4 restarted fresh; the others were updated in place.
 - 17:40 — Know-how dies with its holders (stage 2 lost four techniques over four generations; in the village only cooking spread beyond its family). A grown person who knows something no one else alive knows now feels it: "You alone know how to cooking and storage: when you are gone, it goes with you." It is checked about once a minute, felt at most every 15 minutes while still true, and the mind decides what to do, like loneliness or the longing for a child. Labs updated in place.
+- 09:35 — Routines are rebuilt from skills whose inputs and outputs come from the world rules. Minds kept rewriting their routines into ones that could not work:
+  - "keep warm" as a one-second wait;
+  - eating berries with no step that gets berries;
+  - "gather berries if I already have 3";
+  - sleep that never goes to a shelter.
+
+  Routines stay theirs to rewrite; the blocks are skills, and each skill now says what it takes and what it gives. For example, `eat` takes 1 food item from your pack and gives hunger down by its worth (berries 12 … cooked_meat 42).
+  - **Where the descriptions live.** The rule script `living/scripts/skills.rhai` holds them in `skill_io(skill)`, built from the same numbers the rules use (nutrition, costs, warmth radii). When the rules change, or become editable, the descriptions follow.
+  - **Failures name the source of a missing input.** For example: "no berries in your pack (berries: gather it at a berry_bush, or take it from a storage)".
+  - **How minds read them.** Each mind subscribes to the one-row `script` table and rebuilds the skill reference whenever its revision changes (native rules crate with scripting). This follows the official guidance to group lifetime subscriptions and avoid overlapping queries: https://spacetimedb.com/docs/clients/subscriptions/. There is no schema change.
+  - **Prompt wording.** The grammar says a routine works only if its earlier steps get what its later steps take, and that waiting gives nothing toward a need.
+  - **Cost.** The skill reference grows from about 3.8k to 6.3k characters per prompt.
+
+  Updated in place: stage2-base, stage3-village and stage4-two.

@@ -363,6 +363,18 @@ impl Scripts {
             .unwrap_or(default)
     }
 
+    /// What a skill takes and gives, as the rules describe it (`skill_io(name)`), for minds
+    /// composing routines. None when the script does not describe it.
+    pub fn skill_io(&self, skill: &str) -> Option<(String, String)> {
+        if !self.has("skill_io") {
+            return None;
+        }
+        let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "skill_io", (skill.to_string(),)).ok()?.try_cast::<Map>()?;
+        let text = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
+        let (takes, gives) = (text("takes"), text("gives"));
+        (!takes.is_empty() || !gives.is_empty()).then_some((takes, gives))
+    }
+
     /// Generic numeric query, e.g. `attack_cooldown`.
     pub fn number(&self, f: &str, ctx: &SkillCtx, default: f64) -> f64 {
         if !self.has(f) {
@@ -493,6 +505,32 @@ mod tests {
             actor: ActorFacts { id: 1, kind: "person".into(), hp: 100.0, hunger: 50.0, energy: 80.0, terrain: "grass".into(), ..Default::default() },
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn skills_say_what_they_take_and_give() {
+        let s = scripts();
+        let (takes, gives) = s.skill_io("eat").unwrap();
+        assert!(takes.contains("food") && gives.contains("berries 12"), "{takes} / {gives}");
+        assert!(s.skill_io("build").unwrap().0.contains("campfire 3 wood"));
+        for sk in crate::catalog::SKILLS {
+            if !matches!(sk.name, "open" | "close" | "found" | "join" | "welcome" | "leave" | "dodge" | "block" | "follow" | "flee" | "offer" | "accept" | "signal") {
+                assert!(s.skill_io(sk.name).is_some(), "{} undescribed", sk.name);
+            }
+        }
+        let mut c = ctx();
+        c.item = "berries".into();
+        let err = s.check("eat", &c).unwrap_err();
+        assert!(err.contains("berry_bush"), "{err}");
+    }
+
+    /// `cargo test -p living-rules --lib print_skill_reference -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn print_skill_reference() {
+        let s = scripts();
+        let text = crate::catalog::skills_help_io(&|n| s.skill_io(n));
+        println!("{text}\n({} chars)", text.len());
     }
 
     #[test]

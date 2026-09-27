@@ -128,8 +128,9 @@ fn gather_duration(a) {
         _ => 3000,
     }
 }
-fn gather_done(a) {
-    let item = switch a.target.kind {
+// What one gathering at each resource yields.
+fn yield_of(kind) {
+    switch kind {
         "berry_bush" => "berries",
         "tree" => "wood",
         "boulder" => "stone",
@@ -137,13 +138,15 @@ fn gather_done(a) {
         "fishing_spot" => "fish",
         "clay_bank" => "clay",
         _ => "",
-    };
-    [#{ op: "harvest", qty: 1 }, #{ op: "add", item: item, qty: 1 }, #{ op: "vitals", energy: -1.0 }]
+    }
+}
+fn gather_done(a) {
+    [#{ op: "harvest", qty: 1 }, #{ op: "add", item: yield_of(a.target.kind), qty: 1 }, #{ op: "vitals", energy: -1.0 }]
 }
 
 fn eat_check(a) {
     if nutrition(a.item) <= 0.0 { return `${a.item} is not food`; }
-    if inv(a, a.item) < 1 { return `no ${a.item} in pack`; }
+    if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
     ""
 }
 fn eat_duration(a) { 1500 }
@@ -155,7 +158,7 @@ fn cook_check(a) {
     if !knows(a, "cooking") { return "you don't know how to cook"; }
     if a.target.kind != "campfire" { return "cooking needs a campfire"; }
     if a.item != "fish" && a.item != "meat" { return "only raw fish or meat can be cooked"; }
-    if inv(a, a.item) < 1 { return `no ${a.item} in pack`; }
+    if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
     ""
 }
 fn cook_duration(a) { 4000 }
@@ -207,7 +210,7 @@ fn afford(a, kind) {
     let c = cost(kind);
     if c == () { return `cannot make ${kind}`; }
     for k in c.keys() {
-        if inv(a, k) < c[k] { return `need ${c[k]} ${k} for a ${kind}`; }
+        if inv(a, k) < c[k] { return `need ${c[k]} ${k} for a ${kind} (${k}: ${source_of(k)})`; }
     }
     ""
 }
@@ -280,7 +283,7 @@ fn drop_done(a) {
 fn give_check(a) {
     if a.target.class != "creature" || !a.target.alive { return "no one to give to"; }
     if a.target.id == a.actor.id { return "cannot give to yourself"; }
-    if inv(a, a.item) < amount(a) { return `not enough ${a.item}`; }
+    if inv(a, a.item) < amount(a) { return `not enough ${a.item} (${a.item}: ${source_of(a.item)})`; }
     ""
 }
 fn give_duration(a) { 1000 }
@@ -288,7 +291,7 @@ fn give_done(a) { [#{ op: "give", item: a.item, qty: amount(a) }] }
 
 fn store_check(a) {
     if a.target.kind != "storage" { return "can only store in a storage"; }
-    if inv(a, a.item) < amount(a) { return `not enough ${a.item}`; }
+    if inv(a, a.item) < amount(a) { return `not enough ${a.item} (${a.item}: ${source_of(a.item)})`; }
     ""
 }
 fn store_duration(a) { 1000 }
@@ -446,7 +449,7 @@ fn experiment_done(a) {
 fn write_check(a) {
     if !knows(a, "writing") { return "you don't know how to write"; }
     if a.item != "tablet" && a.item != "sign" { return "you can write a tablet or a sign"; }
-    if inv(a, "wood") < 1 { return "writing needs 1 wood"; }
+    if inv(a, "wood") < 1 { return `writing needs 1 wood (wood: ${source_of("wood")})`; }
     if a.text == "" { return "nothing to write"; }
     if a.topic != "" && !knows(a, a.topic) { return `you can't describe ${a.topic}: you don't know it`; }
     ""
@@ -473,7 +476,7 @@ fn read_done(a) { [#{ op: "read" }] }
 
 fn plant_check(a) {
     if !knows(a, "planting") { return "you don't know how to plant"; }
-    if inv(a, "berries") < 2 { return "planting needs 2 berries"; }
+    if inv(a, "berries") < 2 { return `planting needs 2 berries (berries: ${source_of("berries")})`; }
     if a.actor.terrain != "grass" && a.actor.terrain != "dirt" { return "nothing grows here"; }
     if a.season == "winter" { return "the ground is frozen"; }
     ""
@@ -531,3 +534,73 @@ fn welcome_duration(a) { 2000 }
 fn welcome_done(a) { [#{ op: "welcome" }] }
 fn leave_duration(a) { 1000 }
 fn leave_done(a) { [#{ op: "leave" }] }
+
+// ---- what each skill takes and gives -------------------------------------------------
+// Read by minds to compose routines from skills: keep these beside the rules above, and
+// build them from the same numbers so they change when the rules do.
+
+fn list(parts) {
+    let out = "";
+    for p in parts { if out != "" { out += ", "; } out += p; }
+    out
+}
+fn cost_text(kind) {
+    let c = cost(kind);
+    if c == () { return ""; }
+    let parts = [];
+    for k in c.keys() { parts.push(`${c[k]} ${k}`); }
+    list(parts)
+}
+fn foods_text() {
+    let parts = [];
+    for f in ["berries", "fish", "meat", "cooked_fish", "cooked_meat"] { parts.push(`${f} ${nutrition(f).to_int()}`); }
+    list(parts)
+}
+// Where an item comes from (shown when a skill lacks it).
+fn source_of(item) {
+    for r in ["berry_bush", "tree", "boulder", "reeds", "fishing_spot", "clay_bank"] {
+        if yield_of(r) == item { return `gather it at a ${r}, or take it from a storage`; }
+    }
+    switch item {
+        "food" => "gather berries at a berry_bush or fish at a fishing_spot, take food from a storage, or hunt",
+        "meat" => "kill game (attack), then take it from the remains, or take it from a storage",
+        "hide" => "kill game (attack), then take it from the remains",
+        "cooked_fish" => "cook fish at a campfire",
+        "cooked_meat" => "cook meat at a campfire",
+        _ => if cost(item) == () { "someone who has it can give or trade it to you" } else { `craft it (${cost_text(item)})` },
+    }
+}
+fn skill_io(skill) {
+    let l = laws();
+    switch skill {
+        "goto" => #{ takes: "a target in sight or a known place", gives: `you there; within ${l.fire_warmth} tiles of a campfire or ${l.shelter_warmth} of a shelter or house the night cold can't hurt you` },
+        "wander" => #{ takes: "", gives: "you at a nearby spot you may not have seen" },
+        "gather" => #{ takes: "a resource in reach with some left, room in your pack, a little energy",
+            gives: "1 unit into your pack: berry_bush→berries, tree→wood (faster with an axe), boulder→stone (faster with a pick), reeds→fiber, fishing_spot→fish (faster with a spear), clay_bank→clay" },
+        "eat" => #{ takes: "1 food item from your own pack (item: its name, or \"food\" for your best)", gives: `hunger down by its worth (${foods_text()}), a little health` },
+        "cook" => #{ takes: "1 raw fish or meat from your pack, a campfire in reach, knowing cooking", gives: "1 cooked_fish or cooked_meat: about twice as filling, keeps longer" },
+        "graze" => #{ takes: "grass where you stand, not grazed bare", gives: "hunger down by 14" },
+        "sleep" => #{ takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" },
+        "rest" => #{ takes: "8 seconds", gives: "a little energy" },
+        "wait" => #{ takes: "time", gives: "nothing: time passes" },
+        "build" => #{ takes: `its materials from your pack (campfire ${cost_text("campfire")}; shelter ${cost_text("shelter")}; storage ${cost_text("storage")}; house ${cost_text("house")}; wall ${cost_text("wall")}; gate ${cost_text("gate")}) and knowing its technique`,
+            gives: `the structure here: a campfire warms within ${l.fire_warmth} tiles at night, a shelter or house within ${l.shelter_warmth} and makes sleep restful, a storage keeps items (food spoils slower)` },
+        "pave" => #{ takes: cost_text("road"), gives: "road under you (faster walking)" },
+        "craft" => #{ takes: `its materials from your pack (spear ${cost_text("spear")}; cloak ${cost_text("cloak")}; torch ${cost_text("torch")}; axe ${cost_text("axe")}; pick ${cost_text("pick")}) and knowing how`,
+            gives: "the item in your pack: a spear hits harder, a cloak keeps the night cold off, a torch lights the night, an axe or pick gathers faster" },
+        "give" => #{ takes: "the items from your pack", gives: "the items in their pack" },
+        "store" => #{ takes: "the items from your pack, a storage in reach", gives: "the items in the storage, for anyone to take" },
+        "take" => #{ takes: "items in a storage or remains in reach, room in your pack", gives: "the items in your pack" },
+        "drop" => #{ takes: "the items from your pack", gives: "room in your pack; the items are left behind" },
+        "attack" => #{ takes: "a creature in reach, a little energy", gives: "a blow (harder with a spear, strength and practice); a creature killed leaves remains with meat and hide to take" },
+        "throw" => #{ takes: "your spear", gives: "a hard hit at range; the spear is gone" },
+        "tend" => #{ takes: "a hurt person in reach who is not fighting, a little energy", gives: "their wounds healed some" },
+        "plant" => #{ takes: "2 berries, open grass or dirt outside winter, knowing planting", gives: "a new berry bush in time" },
+        "experiment" => #{ takes: "1 of the material", gives: "sometimes a new technique" },
+        "teach" => #{ takes: "a technique you know, a person beside you staying close for a while", gives: "they know it too" },
+        "write" => #{ takes: "1 wood, knowing writing", gives: "a tablet you keep or a sign left here, with your words" },
+        "read" => #{ takes: "a tablet you carry or a sign here, knowing writing", gives: "its words; a tablet describing a technique can teach it" },
+        "conceive" => #{ takes: "a willing adult partner choosing it too, both fed", gives: "a child in time" },
+        _ => #{ takes: "", gives: "" },
+    }
+}

@@ -295,7 +295,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             target = Resolved { class: 4, id: target.id, at: pick.ok_or("cornered")?, kind: target.kind, name: target.name };
         }
         "eat" | "give" | "store" if item == "food" => {
-            item = common::best_food(ctx, id as u64).ok_or("no food in pack")?;
+            item = common::best_food(ctx, id as u64).ok_or("no food in your pack (food: gather berries at a berry_bush or fish at a fishing_spot, take food from a storage, or hunt)")?;
         }
         "take" if item == "food" && target.class == 2 => {
             item = common::best_food(ctx, STRUCTURE_BIT | target.id).ok_or("no food in there")?;

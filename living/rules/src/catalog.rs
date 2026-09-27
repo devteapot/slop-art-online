@@ -25,7 +25,7 @@ pub struct SkillSpec {
 pub const SKILLS: &[SkillSpec] = &[
     SkillSpec { name: "goto", needs_target: true, needs_item: false, reach: 0.8, help: "walk to a target" },
     SkillSpec { name: "wander", needs_target: false, needs_item: false, reach: 0.0, help: "stroll to a random nearby spot (explore)" },
-    SkillSpec { name: "gather", needs_target: true, needs_item: false, reach: 1.3, help: "harvest one unit from a resource (berry_bush→berries, tree→wood, boulder→stone, reeds→fiber, fishing_spot→fish)" },
+    SkillSpec { name: "gather", needs_target: true, needs_item: false, reach: 1.3, help: "harvest one unit from a resource" },
     SkillSpec { name: "eat", needs_target: false, needs_item: true, reach: 0.0, help: "eat a food item from your pack" },
     SkillSpec { name: "sleep", needs_target: false, needs_item: false, reach: 0.0, help: "sleep until rested; faster and safe from cold near a shelter" },
     SkillSpec { name: "rest", needs_target: false, needs_item: false, reach: 0.0, help: "sit and recover a little energy" },
@@ -155,19 +155,34 @@ pub fn resource_yield(kind: &str) -> Option<&'static str> {
 
 /// Compact skill reference for prompts.
 pub fn skills_help() -> String {
-    SKILLS
-        .iter()
-        .filter(|s| s.name != "graze")
-        .map(|s| {
-            let mut args = Vec::new();
-            if s.needs_target {
-                args.push("target");
-            }
-            if s.needs_item {
-                args.push("item");
-            }
-            format!("- {}({}): {}", s.name, args.join(", "), s.help)
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    skills_help_io(&|_| None)
+}
+
+/// What a skill takes and gives, from the world rules (see `script::Scripts::skill_io`).
+pub type SkillIo<'a> = &'a dyn Fn(&str) -> Option<(String, String)>;
+
+/// One skill's prompt line: its arguments, what it is, and what it takes and gives.
+pub fn skill_line(s: &SkillSpec, item_arg: &str, io: SkillIo) -> String {
+    let mut args = Vec::new();
+    if s.needs_target {
+        args.push("target");
+    }
+    if s.needs_item {
+        args.push(item_arg);
+    }
+    let mut line = format!("- {}({}): {}", s.name, args.join(", "), s.help);
+    if let Some((takes, gives)) = io(s.name) {
+        if !takes.is_empty() {
+            line.push_str(&format!("\n    takes: {takes}"));
+        }
+        if !gives.is_empty() {
+            line.push_str(&format!("\n    gives: {gives}"));
+        }
+    }
+    line
+}
+
+/// Skill reference with each skill's inputs and outputs.
+pub fn skills_help_io(io: SkillIo) -> String {
+    SKILLS.iter().filter(|s| s.name != "graze").map(|s| skill_line(s, "item", io)).collect::<Vec<_>>().join("\n")
 }

@@ -1,6 +1,8 @@
 //! Prompt construction. Context is assembled only from the character's own persona,
 //! relations, beliefs, judgments, places, episodes and the scene it currently perceives.
 
+use std::collections::HashMap;
+use std::sync::Arc;
 
 const RULES: &str = "\
 One day lasts 12 real minutes; night is 20:00-06:00 and cuts sight to 6 tiles (11 by day).
@@ -32,6 +34,41 @@ TIME: beyond staying alive, how you spend your days is yours to decide, from who
 OTHERS: people hear speech within ~9 tiles. You cannot read minds; what others say may be false. You only know what you perceived or were told.";
 
 static SETTING: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+type SkillIoTable = HashMap<String, (String, String)>;
+/// What each skill takes and gives, from the world's rule script (revision, table).
+static SKILL_IO: std::sync::RwLock<Option<(u32, Arc<SkillIoTable>)>> = std::sync::RwLock::new(None);
+
+/// Read what each skill takes and gives from the world's rule script (once per revision).
+pub fn set_rules(revision: u32, source: &str) {
+    if SKILL_IO.read().unwrap().as_ref().is_some_and(|(r, _)| *r == revision) {
+        return;
+    }
+    match living_rules::script::Scripts::new(source) {
+        Ok(s) => {
+            let table: SkillIoTable = living_rules::catalog::SKILLS.iter().filter_map(|k| s.skill_io(k.name).map(|io| (k.name.to_string(), io))).collect();
+            log::info!("rules revision {revision}: {} skills describe what they take and give", table.len());
+            *SKILL_IO.write().unwrap() = Some((revision, Arc::new(table)));
+        }
+        Err(e) => log::warn!("rules revision {revision} unreadable: {e}"),
+    }
+}
+
+fn skill_io() -> Arc<SkillIoTable> {
+    SKILL_IO.read().unwrap().as_ref().map(|(_, t)| t.clone()).unwrap_or_default()
+}
+
+/// A person's skill reference: each skill with what it takes and gives under the current rules.
+pub fn skills_help() -> String {
+    let t = skill_io();
+    living_rules::catalog::skills_help_io(&|n| t.get(n).cloned())
+}
+
+/// A species' skill reference, with what each skill takes and gives.
+pub fn species_skills_help(sp: &living_rules::species::Species) -> String {
+    let t = skill_io();
+    living_rules::species::skills_help_io(sp, &|n| t.get(n).cloned())
+}
 static SIZE: std::sync::OnceLock<(u32, u32)> = std::sync::OnceLock::new();
 
 /// The world's size in tiles (from the active seed).
@@ -72,7 +109,7 @@ pub fn world_rules() -> &'static str {
 }
 
 pub fn grammar() -> String {
-    grammar_with(&living_rules::catalog::skills_help(), true)
+    grammar_with(&skills_help(), true)
 }
 
 /// Graph grammar for a body with the given skills (and whether it can speak).
@@ -116,13 +153,15 @@ Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to sta
   People/creature/resource targets resolve only when currently in sight; places and coordinates always resolve. A do-node whose target is missing fails, so \"first\" moves on.
 Skills:
 {}
-- {{\"routine\": \"name\"}} runs one of your routines (named graphs you keep; see below).
+- {{\"routine\": \"name\"}} runs one of your routines (named graphs you keep and can rewrite; see below).
 - {{\"desires\": [{{\"want\": \"what it is for\", \"weight\": W, \"do\": N}}, ...]}} every check, the strongest desire that can act now wins (a desire whose node fails lets the next one act). \
 W = {{\"base\": number, and any of: \"hunger\", \"tired\", \"hurt\", \"night\", \"day\", \"threatened\", \"alone\", \"company\", \"winter\", \"longing\", \"courted\", \"starving\", \"exhausted\": factor, \"believes\": {{\"stance_key\": factor}}}}: \
 strength = base + Σ factor × signal, each signal 0..1 (hunger 0 fed..1 starving; tired 0 rested..1 exhausted; hurt; night/day; threatened = an attack is coming; \
 alone = no one in sight; company = people in sight; winter; longing = time since this desire last acted, up to an hour; courted = someone in sight just offered to start a family with you; starving = hunger 90+; exhausted = energy 10 or less; believes = your stance's value). A desire at or below 0 does not act.
 Limits: each graph (your top level, or one routine) at most 64 nodes, depth 10, 12 children per composite. The root restarts whenever it finishes, so a root \"first\" loops forever.
 REPERTOIRE: your behavior is a repertoire you build over your life: routines (named graphs) for the things you do, called from a top level, usually desires weighed by what you want. \
+Routines are built from skills, and each skill takes something and gives something (see takes/gives above): a routine works only if its earlier steps get what its later steps take, \
+e.g. a skill that takes an item from your pack needs a way to get that item when you have none. Waiting gives nothing toward a need. \
 Refine one routine at a time as you learn what works (each routine shows how it has gone: successes, failures and why); make new ones for new things; retire what you no longer do. \
 What you know how to do is what you have built, learned or been taught. \
 Make your beliefs act for you: test your judgments and relationships in conditions so you react without having to think again, e.g. {examples}. \

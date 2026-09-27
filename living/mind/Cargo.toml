@@ -15,4 +15,4 @@ neo4rs = { version = "0.8", features = ["json"] }
 toml = "0.8"
 spacetimedb-sdk = { workspace = true }
 living-bindings = { path = "../bindings" }
-living-rules = { path = "../rules", default-features = false }
+living-rules = { path = "../rules", default-features = false, features = ["scripting"] }

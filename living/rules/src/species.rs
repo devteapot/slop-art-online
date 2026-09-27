@@ -56,20 +56,16 @@ pub fn parse(json: &str) -> Result<BTreeMap<String, Species>, String> {
 
 /// Skill reference limited to what this body can do.
 pub fn skills_help(sp: &Species) -> String {
+    skills_help_io(sp, &|_| None)
+}
+
+/// Skill reference limited to what this body can do, with what each skill takes and gives.
+pub fn skills_help_io(sp: &Species, io: crate::catalog::SkillIo) -> String {
     crate::catalog::SKILLS
         .iter()
         .filter(|s| sp.allows(s.name) && (sp.skills.is_some() || s.name != "graze"))
         .filter(|s| s.name != "signal" || !sp.signals.is_empty())
-        .map(|s| {
-            let mut args = Vec::new();
-            if s.needs_target {
-                args.push("target");
-            }
-            if s.needs_item {
-                args.push(if s.name == "signal" { "item: signal name" } else { "item" });
-            }
-            format!("- {}({}): {}", s.name, args.join(", "), s.help)
-        })
+        .map(|s| crate::catalog::skill_line(s, if s.name == "signal" { "item: signal name" } else { "item" }, io))
         .collect::<Vec<_>>()
         .join("\n")
 }

@@ -713,6 +713,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             }
             self.clone().schedule(actor);
         }
+        self.refresh_rules();
         loop {
             tokio::select! {
                 ev = rx.recv() => match ev {
@@ -732,8 +733,18 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                     }
                     None => return Err(anyhow!("event channel closed")),
                 },
-                _ = tick.tick() => self.clone().check_consolidation(),
+                _ = tick.tick() => {
+                    self.refresh_rules();
+                    self.clone().check_consolidation()
+                }
             }
+        }
+    }
+
+    /// Keep the skills' takes and gives in prompts in step with the world's rule script.
+    fn refresh_rules(&self) {
+        if let Some(s) = self.conn.db.script().iter().find(|s| s.name == "skills") {
+            prompts::set_rules(s.revision, &s.source);
         }
     }
 
@@ -1213,7 +1224,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             Err(_) => (String::new(), felt.content.chars().take(400).collect()),
         };
         let signals = sp.signals.iter().map(|(k, s)| format!("{k} = {}", s.sound)).collect::<Vec<_>>().join("; ");
-        let system = prompts::animal_compile_system(&c.kind, &living_rules::species::skills_help(&sp), &signals, sp.cognition.max_nodes);
+        let system = prompts::animal_compile_system(&c.kind, &prompts::species_skills_help(&sp), &signals, sp.cognition.max_nodes);
         let top = self.conn.db.brain().id().find(&actor).and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
         let user = format!(
             "Impulse of {} the {}: {impulse}\nFeeling: {feeling}\n\nAround it now:\n{}\n\nIts top level (what it weighs):\n{top}\n\nIts routines (how each has gone):\n{}",

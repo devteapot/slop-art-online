@@ -129,6 +129,8 @@ async fn main() -> Result<()> {
                     "SELECT * FROM routine",
                     "SELECT * FROM routine_stat",
                     "SELECT * FROM genome",
+                    // The world's rules (one row): what each skill takes and gives, for prompts.
+                    "SELECT * FROM script",
                     // Standing proposals (tiny tables): a conversation turn knows what is on offer.
                     "SELECT * FROM bond_offer",
                     "SELECT * FROM trade_offer",
