@@ -23,6 +23,11 @@ pub struct Profile {
     /// `null` for endpoints that reject output limits.
     #[serde(default = "max_tokens")]
     pub max_tokens: Option<u32>,
+    /// A profile to send calls to when this one is at its rate limit: calls in flight are
+    /// kept within a window that grows while calls succeed and shrinks on each HTTP 429, so
+    /// this profile runs just below its provider's limit and the rest overflow.
+    #[serde(default)]
+    pub overflow: Option<String>,
 }
 
 fn yes() -> bool {
@@ -57,6 +62,29 @@ pub struct Llm {
     keys: HashMap<String, String>,
     journal: PathBuf,
     budget: Budget,
+    windows: std::sync::Mutex<HashMap<String, Window>>,
+}
+
+/// Adaptive in-flight limit for a profile with an overflow (additive increase while calls
+/// succeed, multiplicative decrease on a rate limit). Separate mind processes sharing one
+/// provider key each back off on their own 429s and settle on a fair share of the limit.
+struct Window {
+    limit: f64,
+    in_flight: u32,
+    sent: u64,
+    overflowed: u64,
+    limited: u64,
+    logged: Instant,
+}
+
+const WINDOW_START: f64 = 8.0;
+const WINDOW_MIN: f64 = 1.0;
+const WINDOW_MAX: f64 = 128.0;
+
+impl Window {
+    fn new() -> Self {
+        Self { limit: WINDOW_START, in_flight: 0, sent: 0, overflowed: 0, limited: 0, logged: Instant::now() }
+    }
 }
 
 /// A global calls-per-minute budget (token bucket, ~15 s of burst). Deliberation may use the
@@ -124,7 +152,7 @@ impl Llm {
         let http = reqwest::Client::builder().timeout(Duration::from_secs(180)).user_agent("sao-living-mind/0.1").build()?;
         let per_min = std::env::var("LIVING_LLM_PER_MIN").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
         log::info!("LLM budget: {} (LIVING_LLM_PER_MIN; 0 = unlimited)", if per_min > 0.0 { format!("{per_min} calls/min") } else { "unlimited".into() });
-        Ok(Self { http, models, keys, journal, budget: Budget::new(per_min) })
+        Ok(Self { http, models, keys, journal, budget: Budget::new(per_min), windows: Default::default() })
     }
 
     /// Profile for a character: explicit assignment, then rotation, then default.
@@ -166,6 +194,69 @@ impl Llm {
     /// outage does not stall minds (both attempts are journaled).
     pub async fn chat(&self, profile: &str, purpose: &str, actor: &str, messages: &[Msg]) -> Result<Reply> {
         self.budget.admit(purpose).await;
+        // A profile with an overflow runs within its window; beyond it, or on a rate limit,
+        // the call goes to the overflow at once instead of waiting.
+        if let Some(over) = self.overflow_of(profile) {
+            if !self.window_enter(profile) {
+                return self.chat_routed(&over, purpose, actor, messages).await;
+            }
+            let r = self.chat_once(profile, purpose, actor, messages).await;
+            let limited = matches!(&r, Err(e) if format!("{e:#}").contains("HTTP 429"));
+            self.window_leave(profile, limited);
+            return match r {
+                Err(_) if limited => self.chat_routed(&over, purpose, actor, messages).await,
+                Err(e) => {
+                    log::warn!("{actor}: {profile} failed ({e:#}); trying {over}");
+                    self.chat_routed(&over, purpose, actor, messages).await
+                }
+                ok => ok,
+            };
+        }
+        self.chat_routed(profile, purpose, actor, messages).await
+    }
+
+    fn overflow_of(&self, profile: &str) -> Option<String> {
+        self.models.profiles.get(profile)?.overflow.clone().filter(|o| o != profile && self.keys.contains_key(o))
+    }
+
+    /// Take a place in the profile's window, or say it is full (the call overflows).
+    fn window_enter(&self, profile: &str) -> bool {
+        let mut ws = self.windows.lock().unwrap();
+        let w = ws.entry(profile.to_string()).or_insert_with(Window::new);
+        if w.logged.elapsed() >= Duration::from_secs(60) {
+            log::info!(
+                "{profile}: window {:.1} calls in flight; last minute {} sent, {} rate-limited, {} overflowed",
+                w.limit, w.sent, w.limited, w.overflowed
+            );
+            (w.sent, w.limited, w.overflowed, w.logged) = (0, 0, 0, Instant::now());
+        }
+        if (w.in_flight as f64) < w.limit.floor().max(WINDOW_MIN) {
+            w.in_flight += 1;
+            w.sent += 1;
+            true
+        } else {
+            w.overflowed += 1;
+            false
+        }
+    }
+
+    fn window_leave(&self, profile: &str, limited: bool) {
+        let mut ws = self.windows.lock().unwrap();
+        let Some(w) = ws.get_mut(profile) else { return };
+        // Grow only while the window is in use; an idle window would drift above the limit.
+        let full = w.in_flight as f64 + 1.0 >= w.limit.floor();
+        w.in_flight = w.in_flight.saturating_sub(1);
+        if limited {
+            w.limited += 1;
+            w.overflowed += 1;
+            w.limit = (w.limit * 0.7).max(WINDOW_MIN);
+        } else if full {
+            w.limit = (w.limit + 1.0 / w.limit).min(WINDOW_MAX);
+        }
+    }
+
+    /// One call on a given profile, with rate-limit retries and the default as fallback.
+    async fn chat_routed(&self, profile: &str, purpose: &str, actor: &str, messages: &[Msg]) -> Result<Reply> {
         // A rate limit (HTTP 429) passes: wait with growing, jittered pauses and try again on
         // the same model before giving up or falling back.
         let mut first = self.chat_once(profile, purpose, actor, messages).await;

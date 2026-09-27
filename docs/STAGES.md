@@ -235,3 +235,13 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Cost.** The skill reference grows from about 3.8k to 6.3k characters per prompt.
 
   Updated in place: stage2-base, stage3-village and stage4-two.
+- 09:55 — Mistral runs just below its rate limit and the rest overflow to Luna.
+  - **Before.** Mistral carried 213 calls and 1M tokens a minute, with bursts up to 528 calls a minute, and 6% of its calls were rate limited. The 429 body does not say which limit binds.
+  - **Change.**
+    - A profile can name an `overflow` (`mistral-small` → `luna` in `configs/models.json`); the half-Luna rotation is removed.
+    - Calls in flight to the profile are kept within a window. It grows while calls succeed and the window is in use, and shrinks by 30% on each 429.
+    - When the window is full, or a call is rate limited, the call goes to the overflow at once instead of waiting.
+    - The three lab minds share one key and each backs off on its own 429s, so together they settle on a fair share (AIMD).
+    - Each mind logs its window every minute.
+  - **First 8 minutes.** Mistral carried 298 calls a minute with 0 rate limits (p50 2.9 s); windows reached 20–27 calls in flight, and about 1 call a minute overflowed to Luna. The earlier 429s came from bursts and retry storms, not the average load.
+  - **Caveat.** Comparisons between models per person no longer hold: one person's calls can go to either model.

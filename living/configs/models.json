@@ -16,7 +16,8 @@
   "mistral-small": {
    "base_url": "https://api.mistral.ai/v1",
    "model": "mistral-small-latest",
-   "key_env": "MISTRAL_API_KEY"
+   "key_env": "MISTRAL_API_KEY",
+   "overflow": "luna"
   },
   "mistral-medium": {
    "base_url": "https://api.mistral.ai/v1",
@@ -35,10 +36,7 @@
   }
  },
  "assign": {},
- "rotate": [
-  "mistral-small",
-  "luna"
- ],
+ "rotate": [],
  "species": {
   "deer": {
    "think": "mistral-small",
