@@ -208,3 +208,15 @@ Evidence, rule changes and decisions per stage, newest last.
   Speech per person is about the same. Luna people act fewer times and more purposefully, eat better, repeat nothing and have about twice the children per person; they teach less and each call is slower. Mistral people roam more and teach more. Still small samples; the comparison continues.
 
   The two-town lab had 327 model errors in one window, almost all Mistral HTTP 429 (three labs share the account). Rate-limited calls now wait with growing, jittered pauses and retry on the same model (up to three times) before falling back. Disk: the paused stage 1 and ecology databases were deleted (replicas 22 GB → 10 GB). Village and towns so far: little between groups (the village's families exchanged 11 lines of speech and one gift across families against about 900 lines within), no storage or community yet in the village, no contact between the towns.
+- 17:20 — Merged the scale work (branch from an agent):
+  - **Benchmarks.** The authority meets the 60 Hz budget at 2,000 characters (p50 5.0–5.3 ms, p99 8.6 ms) and in a 200-fighter battle (p99 5.1–5.9 ms). With both together (1,600 walkers and 200 fighters) p99 is ≈11 ms of 16.7, so the margin is thin; the per-second evaluation of every character dominates.
+  - **Changes, behavior unchanged.** Need rates are recomputed from a few inputs; stats are batched per tick; per-transaction and cross-transaction caches were added; food spoilage runs in sixtieths per second instead of a full pass each minute.
+  - **Model load.** People make about 2.1–2.7 calls and 16k tokens per minute, which at 2,000 people is ≈80 calls/s and ≈2 billion tokens an hour.
+  - **Opt-in mind level of detail (`LIVING_LOD=1`).** A person is off stage unless a human player is in their scene or recent experience; off stage they think at most every 10 minutes, with urgent reasons at once. It cuts calls about 5× in replay and in a live test with a stand-in model. Off in the labs.
+
+  Labs at 95 minutes:
+  - **Village.** Families mostly keep to themselves: speech across families is 28 lines against 1,900 within. Cooking spread to one person outside the river family; no storage built although the grove family knows how; no community.
+  - **Towns.** Eastmere is steady at 17; Stonewatch fell from 12 to 6. Five adults starved beside 18 berry bushes and 31 animals: each had rewritten `eat` as eating from the pack or a storage without gathering (four on Mistral, one on Luna); first words between the towns (7 lines).
+  - **Stage 2 canary.** Reached a fourth generation but lost cooking, storage, planting and carpentry: know-how did not outlive its first holders.
+
+  Minds read "eat" as consuming, not finding food. The seeded routine is now "find food and eat", and the starving sensation shows whichever routine the food desire calls. Stage 4 restarted fresh; the others were updated in place.

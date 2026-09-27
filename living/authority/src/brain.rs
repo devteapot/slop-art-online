@@ -779,10 +779,19 @@ impl<'a> Ev<'a> {
                     // Starving: show what one's hunger actually runs, so a way of eating that
                     // cannot feed (e.g. one that only waits) can be seen and changed.
                     if bit == 64 {
-                        if let Some(r) = self.ctx.db.routine().actor().filter(self.me.id).find(|r| r.name.eq_ignore_ascii_case("eat")) {
+                        // The routine one's food desire calls (seeded as "find food and eat").
+                        let food_routine = self.ctx.db.brain().id().find(self.me.id).and_then(|b| living_rules::graph::parse(&b.graph).ok()).and_then(|g| match g.root {
+                            Node::Desires(ds) => ds.iter().find(|d| d.want.eq_ignore_ascii_case("food")).and_then(|d| match &*d.body {
+                                Node::Routine(r) => Some(r.clone()),
+                                _ => None,
+                            }),
+                            _ => None,
+                        });
+                        let name = food_routine.unwrap_or_else(|| "eat".to_string());
+                        if let Some(r) = self.ctx.db.routine().actor().filter(self.me.id).find(|r| r.name.eq_ignore_ascii_case(&name)) {
                             if let Ok(g) = living_rules::graph::parse(&r.graph) {
                                 let how: String = living_rules::graph::outline(&g.root).lines().map(|l| l.trim()).collect::<Vec<_>>().join("; ");
-                                why.push_str(&format!(" Your hunger runs your routine \"eat\", which does: {}. It has not fed you.", how.chars().take(300).collect::<String>()));
+                                why.push_str(&format!(" Your hunger runs your routine \"{}\", which does: {}. It has not fed you.", r.name, how.chars().take(300).collect::<String>()));
                             }
                         }
                     }

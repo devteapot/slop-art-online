@@ -47,38 +47,6 @@
         }
       ]
     },
-    "eat": {
-      "first": [
-        {
-          "if": {
-            "has": {
-              "item": "food"
-            }
-          },
-          "then": {
-            "do": "eat",
-            "item": "food"
-          }
-        },
-        {
-          "do": "take",
-          "target": {
-            "nearest": "storage"
-          },
-          "item": "food"
-        },
-        {
-          "do": "gather",
-          "target": {
-            "nearest": "berry_bush"
-          }
-        },
-        {
-          "do": "goto",
-          "target": "home"
-        }
-      ]
-    },
     "sleep": {
       "first": [
         {
@@ -306,6 +274,38 @@
               }
             }
           }
+        }
+      ]
+    },
+    "find food and eat": {
+      "first": [
+        {
+          "if": {
+            "has": {
+              "item": "food"
+            }
+          },
+          "then": {
+            "do": "eat",
+            "item": "food"
+          }
+        },
+        {
+          "do": "take",
+          "target": {
+            "nearest": "storage"
+          },
+          "item": "food"
+        },
+        {
+          "do": "gather",
+          "target": {
+            "nearest": "berry_bush"
+          }
+        },
+        {
+          "do": "goto",
+          "target": "home"
         }
       ]
     }
@@ -849,7 +849,7 @@
           "starving": 1.5
         },
         "do": {
-          "routine": "eat"
+          "routine": "find food and eat"
         }
       },
       {
