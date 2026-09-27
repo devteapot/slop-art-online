@@ -220,3 +220,4 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Stage 2 canary.** Reached a fourth generation but lost cooking, storage, planting and carpentry: know-how did not outlive its first holders.
 
   Minds read "eat" as consuming, not finding food. The seeded routine is now "find food and eat", and the starving sensation shows whichever routine the food desire calls. Stage 4 restarted fresh; the others were updated in place.
+- 17:40 — Know-how dies with its holders (stage 2 lost four techniques over four generations; in the village only cooking spread beyond its family). A grown person who knows something no one else alive knows now feels it: "You alone know how to cooking and storage: when you are gone, it goes with you." It is checked about once a minute, felt at most every 15 minutes while still true, and the mind decides what to do, like loneliness or the longing for a child. Labs updated in place.

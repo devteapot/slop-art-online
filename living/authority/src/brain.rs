@@ -23,6 +23,11 @@ const MAX_VISITS: u32 = 160;
 const ROOT_MARK: u16 = u16::MAX - 1;
 const FAIL_MARK: u16 = u16::MAX - 2;
 const REFLECT_MARK: u16 = u16::MAX - 3;
+thread_local! {
+    /// When each person last checked for, and last felt, knowing something alone (kept here:
+    /// evaluator marks are reset when a new plan is installed).
+    static LEGACY: std::cell::RefCell<std::collections::HashMap<u32, (u64, u64)>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
 /// Alert bits for ongoing situations (bits 1..8 are bodily alarms).
 const IN_CROWD: u32 = 1 << 8;
 const WOLF_NEAR: u32 = 1 << 9;
@@ -749,6 +754,30 @@ impl<'a> Ev<'a> {
         } else {
             String::new()
         };
+        // Knowing something no one else alive knows weighs on a grown person now and then
+        // (checked about once a minute): it dies with them unless they pass it on.
+        let mut sole = String::new();
+        let (checked, felt) = LEGACY.with(|l| l.borrow().get(&self.me.id).copied().unwrap_or((0, 0)));
+        if self.me.kind == "person" && self.me.stage >= 2 && calm && self.now.saturating_sub(checked) >= 60_000 {
+            LEGACY.with(|l| l.borrow_mut().insert(self.me.id, (self.now, felt)));
+            let me = self.me.id;
+            let db = &self.ctx.db;
+            let mine: Vec<String> = db.know_how().actor().filter(me).map(|k| k.technique).collect();
+            let alone: Vec<String> = mine
+                .into_iter()
+                .filter(|t| !db.know_how().iter().any(|k| k.actor != me && &k.technique == t && db.character().id().find(k.actor).map_or(false, |c| c.alive)))
+                .collect();
+            if !alone.is_empty() {
+                sole = format!("You alone know how to {}: when you are gone, it goes with you.", alone.join(" and "));
+            }
+        }
+        // Felt again at most every 15 minutes while it stays true.
+        if !sole.is_empty() && self.now.saturating_sub(felt) >= 15 * 60_000 {
+            let now = self.now;
+            LEGACY.with(|l| l.borrow_mut().insert(self.me.id, (now, now)));
+            percept(self.ctx, &self.me, self.now, "feeling", self.me.id, 0, self.at, sole.clone(), 0.5);
+            self.deliberate(&format!("You feel something: {sole}"));
+        }
         let drives: [(u32, bool, String); 3] = [
             (16, calm && quiet_ms as f32 > restless_after, "You feel restless: your days have been the same for a while.".into()),
             (32, calm && self.st.heard_ms > 0 && alone_ms as f32 > lonely_after, "You feel lonely: it has been a long time since you spoke with anyone.".into()),
