@@ -105,6 +105,31 @@ pub(crate) fn acts_of(v: &Value) -> Vec<String> {
     list.into_iter().filter(|x| x.is_object()).take(living_rules::acts::MAX_QUEUED).map(|x| x.to_string()).collect()
 }
 
+/// Real-time moves a mind decided on as acts (dodge, block, attack, flee...) are its body's
+/// behavior, not one-off acts: they become what it means to do now (its intent), weighed
+/// above staying safe since it chose them in the moment, instead of being refused. In the
+/// village, minds decided "dodge, block, throw my spear" while a wolf killed them one by one,
+/// and every such decision was refused as an act.
+fn real_time_into_intent(v: &mut Value) {
+    let skill_of = |a: &Value| match &a["do"] {
+        Value::String(s) => Some(s.to_lowercase()),
+        Value::Object(o) => o.get("skill").and_then(|s| s.as_str()).map(|s| s.to_lowercase()),
+        _ => a["skill"].as_str().map(|s| s.to_lowercase()),
+    };
+    let Some(acts) = v.get("acts").and_then(|a| a.as_array()).cloned() else { return };
+    let (moves, rest): (Vec<Value>, Vec<Value>) = acts.into_iter().partition(|a| skill_of(a).is_some_and(|s| living_rules::acts::REAL_TIME.contains(&s.as_str())));
+    if moves.is_empty() {
+        return;
+    }
+    v["acts"] = Value::Array(rest);
+    let fight = if moves.len() == 1 { moves[0].clone() } else { json!({"seq": moves}) };
+    let graph = match v.get("intent").and_then(|i| i.get("graph")).filter(|g| g.is_object()) {
+        Some(g) => json!({"first": [fight, g.clone()]}),
+        None => fight,
+    };
+    v["intent"] = json!({"weight": {"base": 3.5}, "graph": graph});
+}
+
 /// A short description of acts for logs and thought summaries.
 pub(crate) fn acts_text(acts: &[String]) -> String {
     acts.iter()
@@ -1096,6 +1121,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                         o.remove("routines");
                         o.remove("restructure");
                     }
+                    real_time_into_intent(&mut v);
                     v
                 })
                 .and_then(|v| self.plan_into_desires(actor, v));

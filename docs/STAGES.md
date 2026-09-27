@@ -294,3 +294,10 @@ Evidence, rule changes and decisions per stage, newest last.
     - People still do not defend each other: 20 people against a few wolves fell one by one. This is the stage 1 foundation that "many against one should attack" was meant to allow.
 
   The village restarted fresh with 20 deer and 3 wolves. Stage 2 (11 hours, one person left, four generations reached) was retired.
+- 13:40 — Why the villagers did not fight back. Their minds did decide to fight ("dodge the wolf's attack, block if it closes in, throw my spear"), but the compiler sent those moves as acts, and acts refuse real-time moves ("it belongs in your behavior graph"). Every such decision was dropped while the wolf killed them one by one; meanwhile their seeded "stay safe" habit fled a faster wolf and struck back only once hit.
+  - **Real-time moves become the intent.** Moves a mind decides as acts (dodge, block, attack, flee, and so on) now become its intent, weighed above staying safe (base 3.5), instead of being refused.
+  - **Seeded "stay safe" (a starting habit; people can rework it).**
+    - With two or more others within 6 tiles, a person faces a wolf instead of fleeing.
+    - A person flees a wolf that is hurting them only when alone and badly hurt.
+
+  The village restarted with it; stage 4 got the mind change in place.

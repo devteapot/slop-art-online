@@ -12,6 +12,13 @@
                 "health": {
                   "below": 40
                 }
+              },
+              {
+                "count": {
+                  "of": "person",
+                  "within": 5,
+                  "at_most": 0
+                }
               }
             ]
           },
@@ -27,6 +34,33 @@
           "then": {
             "do": "attack",
             "target": "attacker"
+          }
+        },
+        {
+          "if": {
+            "all": [
+              {
+                "near": {
+                  "target": {
+                    "nearest": "wolf"
+                  },
+                  "within": 6
+                }
+              },
+              {
+                "count": {
+                  "of": "person",
+                  "within": 6,
+                  "at_least": 2
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "attack",
+            "target": {
+              "nearest": "wolf"
+            }
           }
         },
         {
