@@ -416,6 +416,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         if s.owner != 0 {
             o["by"] = json!(common::name_of(ctx, s.owner));
         }
+        if s.kind == "campfire" {
+            o["state"] = json!("burning");
+        }
         if s.kind == "sign" {
             if let Some(a) = ctx.db.artifact().holder().filter(STRUCTURE_BIT | s.id).next() {
                 o["by"] = json!(a.author_name);

@@ -208,7 +208,7 @@ Speech is how you share yourself: what you think, feel, remember, hope or suspec
 Refer to people by the ids you see. Do not assume facts you have not perceived.\n\n{}\n\n\
 Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 sentences)\", \
 \"intend\": [\"each thing you mean to do, in plain words, in order (e.g. ask Borno (#5) to start a family with me; give Galy (#8) 2 berries; \
-relight the fire; from now on keep watch at night)\"] (may be empty), \
+meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be empty), \
 \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances), \
 \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering)}}",
