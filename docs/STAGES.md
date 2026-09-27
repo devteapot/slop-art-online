@@ -301,3 +301,10 @@ Evidence, rule changes and decisions per stage, newest last.
     - A person flees a wolf that is hurting them only when alone and badly hurt.
 
   The village restarted with it; stage 4 got the mind change in place.
+- 14:20 — Storages have room (world rule). Stage 4's storages held 966 wood and 90 stone. Seeded work habits (builder, carpenter, mason) gather and store forever, nothing ever made them fail, and so nothing prompted a rework: nearly everyone's main work was gathering.
+  - **The rule.** A storage now holds 120 things in all (`storage_holds` in the rules script). A full one refuses more, with a reason. The habit then fails, and its failures prompt a rework; what people turn to is theirs to decide.
+  - **Other early signs** (stage 4 at 90 minutes):
+    - Nine people are more than 40 tiles from home, two near the other town, with the first 24 lines of speech between the towns.
+    - The three trades are odd (berries for berries).
+    - Medicine, cloak, storage and fire were taught; one salve was made.
+    - No nets, baskets, bows, smoked food or traps yet.

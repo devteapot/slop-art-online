@@ -350,8 +350,13 @@ fn give_check(a) {
 fn give_duration(a) { 1000 }
 fn give_done(a) { [#{ op: "give", item: a.item, qty: amount(a) }] }
 
+// A storage holds this many things in all; a full one takes no more.
+fn storage_holds(x) { 120 }
 fn store_check(a) {
     if a.target.kind != "storage" { return "can only store in a storage"; }
+    let held = 0;
+    for k in a.target.inv.keys() { held += a.target.inv[k]; }
+    if held + amount(a) > storage_holds(0) { return `the storage is full (it holds ${held} of ${storage_holds(0)} things)`; }
     if inv(a, a.item) < amount(a) { return `not enough ${a.item} (${a.item}: ${source_of(a.item)})`; }
     ""
 }
@@ -694,7 +699,7 @@ fn skill_io(skill) {
         "craft" => #{ takes: `its materials from your pack (spear ${cost_text("spear")}; cloak ${cost_text("cloak")}; torch ${cost_text("torch")}; axe ${cost_text("axe")}; pick ${cost_text("pick")}; net ${cost_text("net")}; basket ${cost_text("basket")}; bow ${cost_text("bow")}; arrow ${cost_text("arrow")} for 3; salve ${cost_text("salve")}; leather ${cost_text("leather")}; armor ${cost_text("armor")}) and knowing how`,
             gives: "the item in your pack: a spear hits harder, a cloak keeps the night cold off, a torch lights the night, an axe or pick gathers faster, a net catches two fish at a time, a basket carries 20 more, a bow shoots arrows, a salve helps tending, armor softens blows" },
         "give" => #{ takes: "the items from your pack", gives: "the items in their pack" },
-        "store" => #{ takes: "the items from your pack, a storage in reach", gives: "the items in the storage, for anyone to take" },
+        "store" => #{ takes: `the items from your pack, a storage in reach with room (a storage holds ${storage_holds(0)} things in all)`, gives: "the items in the storage, for anyone to take" },
         "take" => #{ takes: "items in a storage, remains or a trap in reach, room in your pack", gives: "the items in your pack" },
         "drop" => #{ takes: "the items from your pack", gives: "room in your pack; the items are left behind" },
         "attack" => #{ takes: "a creature in reach, a little energy", gives: "a blow (harder with a spear, strength and practice); a creature killed leaves remains with meat and hide to take" },
