@@ -13,10 +13,10 @@ use serde_json::Value;
 /// Skills that are ongoing or real-time: they belong in the behavior graph, not in an act.
 /// A single walk (`goto`) may be an act: minds use it as the step before an interaction
 /// ("go to the child, then teach"); in the first lab minutes 16 of 29 acts were such walks.
-pub const REAL_TIME: &[&str] = &["wander", "flee", "follow", "dodge", "block", "attack", "throw", "wait", "sleep", "rest", "graze"];
+pub const REAL_TIME: &[&str] = &["wander", "flee", "follow", "dodge", "block", "attack", "throw", "shoot", "wait", "sleep", "rest", "graze"];
 
 /// Graph skills that interrupt an act in progress: reflexes win over deliberate acts.
-pub const REFLEXES: &[&str] = &["flee", "dodge", "block", "attack", "throw"];
+pub const REFLEXES: &[&str] = &["flee", "dodge", "block", "attack", "throw", "shoot"];
 
 /// Most acts waiting for one body at a time.
 pub const MAX_QUEUED: usize = 4;

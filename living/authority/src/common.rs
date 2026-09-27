@@ -830,3 +830,26 @@ pub fn wake(ctx: &ReducerContext, id: u32) {
 pub fn same_routine(a: &str, b: &str) -> bool {
     living_rules::normalize::routine_name(a) == living_rules::normalize::routine_name(b)
 }
+
+/// A trap's catch: meat gathers in it over time (the rules say how often and how much it
+/// holds). `built_ms` marks the last catch counted.
+pub fn trap_catch(ctx: &ReducerContext, s: &Structure, now: u64) {
+    let sc = scripts(ctx);
+    let every = (sc.num_of("trap_every_s", "meat", 240.0) * 1000.0) as u64;
+    if every == 0 {
+        return;
+    }
+    let n = now.saturating_sub(s.built_ms) / every;
+    if n == 0 {
+        return;
+    }
+    let holds = sc.num_of("trap_holds", "meat", 3.0) as u32;
+    let owner = crate::tables::STRUCTURE_BIT | s.id;
+    let add = (n as u32).min(holds.saturating_sub(inv_count(ctx, owner, "meat")));
+    if add > 0 {
+        inv_add(ctx, owner, "meat", add);
+    }
+    let mut t = s.clone();
+    t.built_ms += n * every;
+    ctx.db.structure().id().update(t);
+}

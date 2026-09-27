@@ -330,6 +330,23 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     for (t, layout) in &settlements {
         town(ctx, &map, t, layout, now);
     }
+    // Townsfolk know where their own town and the other towns stand (they grew up hearing of
+    // them); what is there and how the way goes, they learn by going.
+    for (_, layout) in &settlements {
+        let (cx, cy) = layout.center;
+        let residents: Vec<u32> = ctx
+            .db
+            .character()
+            .iter()
+            .filter(|c| c.kind == "person" && ((c.home_x - cx).powi(2) + (c.home_y - cy).powi(2)).sqrt() < 30.0)
+            .map(|c| c.id)
+            .collect();
+        for id in residents {
+            for (o, ol) in &settlements {
+                ctx.db.place().insert(Place { id: 0, actor: id, name: o.name.clone(), x: ol.center.0, y: ol.center.1 });
+            }
+        }
+    }
     if let Some(r) = &realm {
         for (i, b) in s.bands.iter().enumerate() {
             if let Some(site) = r.wilds.get(i) {
@@ -610,17 +627,17 @@ fn fresh_name(ctx: &ReducerContext) -> String {
 /// Know-how that goes with a history in an occupation (plus fire for everyone in a town).
 fn occupation_know_how(occ: &str) -> &'static [&'static str] {
     match occ {
-        "fisher" => &["spear", "cooking"],
+        "fisher" => &["spear", "cooking", "fishing"],
         "farmer" => &["planting", "storage"],
         "builder" => &["shelter", "storage", "carpentry", "masonry"],
         "mason" => &["masonry", "toolmaking"],
         "carpenter" => &["shelter", "carpentry", "toolmaking"],
         "guard" => &["spear", "torch"],
-        "hunter" => &["spear", "cloak", "torch"],
+        "hunter" => &["spear", "cloak", "torch", "trapping"],
         "cook" => &["cooking", "storage"],
         "scribe" => &["writing"],
-        "healer" => &["cooking", "planting"],
-        "trader" => &["writing", "storage"],
+        "healer" => &["cooking", "planting", "medicine"],
+        "trader" => &["writing", "storage", "basketry"],
         _ => &[],
     }
 }

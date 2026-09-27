@@ -217,6 +217,40 @@ def main():
     results["act: rework makes a new way, refuses one not yet lived with"] = bool(made) and bool(wait_for(lambda: told(B, "hardly lived with"), timeout=40))
     if not results["act: rework makes a new way, refuses one not yet lived with"]:
         print("  rework: made", bool(made), [r["text"][:160] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {B}")][-6:])
+    # Know-how for trade and a longer life: a net brings in two fish at once, smoked fish
+    # keeps, bows and arrows, leather, and clearing forest into open ground.
+    for t in ["fishing", "smoking", "fire", "archery", "tanning"]:
+        call(db, "grant_know_how", str(D), t)
+    for item, n in [("fiber", 5), ("wood", 4), ("stone", 1), ("hide", 1)]:
+        call(db, "grant_items", str(D), item, str(n))
+    have = lambda who, item: sum(int(r["qty"]) for r in rows(db, f"SELECT item, qty FROM inventory WHERE owner = {who}") if r["item"] == item)
+    fish0 = have(D, "fish")
+    body = rows(db, f"SELECT x, y FROM body WHERE id = {D}")[0]
+    dx, dy = float(body["x"]), float(body["y"])
+    nearest = lambda kind: min(((float(r["x"]), float(r["y"])) for r in rows(db, f"SELECT x, y FROM resource_node WHERE kind = '{kind}'")), key=lambda p: (p[0] - dx) ** 2 + (p[1] - dy) ** 2)
+    spot = nearest("fishing_spot")
+    # Earlier checks left D with a full pack: set the berries down first.
+    call(db, "set_behavior", str(D), seq(
+        {"do": {"skill": "drop", "item": "berries", "qty": 60}},
+        {"do": {"skill": "craft", "item": "net"}},
+        {"do": {"skill": "goto", "target": {"at": [spot[0], spot[1]]}}},
+        {"do": {"skill": "gather", "target": {"nearest": "fishing_spot"}}},
+    ))
+    results["a net brings in two fish at once"] = bool(wait_for(lambda: have(D, "fish") >= fish0 + 2, timeout=150))
+    if not results["a net brings in two fish at once"]:
+        print("  net:", [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {D}")][-6:], rows(db, f"SELECT item, qty FROM inventory WHERE owner = {D}"))
+    call(db, "place_structure", str(D), "campfire")
+    time.sleep(1)
+    call(db, "set_behavior", str(D), seq({"do": {"skill": "smoke", "target": {"nearest": "campfire"}, "item": "fish"}}, {"do": {"skill": "craft", "item": "bow"}}, {"do": {"skill": "craft", "item": "arrow"}}, {"do": {"skill": "craft", "item": "leather"}}))
+    results["smoking, bow, arrows and leather"] = bool(wait_for(lambda: have(D, "smoked_fish") >= 1 and have(D, "bow") >= 1 and have(D, "arrow") >= 3 and have(D, "leather") >= 1, timeout=90))
+    if not results["smoking, bow, arrows and leather"]:
+        print("  craft:", [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {D}")][-6:], rows(db, f"SELECT item, qty FROM inventory WHERE owner = {D}"))
+    wood0 = have(D, "wood")
+    tree = nearest("tree")
+    call(db, "set_behavior", str(D), seq({"do": {"skill": "goto", "target": {"at": [tree[0], tree[1]]}}}, {"do": {"skill": "goto", "target": {"nearest": "forest"}}}, {"do": {"skill": "clear"}}))
+    results["clearing forest yields wood"] = bool(wait_for(lambda: have(D, "wood") >= wood0 + 2, timeout=150))
+    if not results["clearing forest yields wood"]:
+        print("  clear:", [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {D}")][-6:])
     ok = all(results.values())
     for k, v in results.items():
         print(("PASS " if v else "FAIL ") + k)

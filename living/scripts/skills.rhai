@@ -39,7 +39,8 @@ fn carried(a) {
     for k in a.actor.inv.keys() { n += a.actor.inv[k]; }
     n
 }
-fn pack_full(a) { carried(a) >= carry_limit(a.actor.kind) }
+// A basket carries 20 more.
+fn pack_full(a) { carried(a) >= carry_limit(a.actor.kind) + if inv(a, "basket") > 0 { 20.0 } else { 0.0 } }
 // Share of a food that spoils per real minute (a lab day is 12 minutes): raw meat and fish
 // within about a day, berries in a few days, cooked food more slowly. A storage keeps food
 // three times longer.
@@ -50,6 +51,9 @@ fn spoil_rate(item) {
         "berries" => 0.02,
         "cooked_meat" => 0.012,
         "cooked_fish" => 0.012,
+        // Smoked food keeps for weeks: something to carry to another town.
+        "smoked_meat" => 0.002,
+        "smoked_fish" => 0.002,
         _ => 0.0,
     }
 }
@@ -61,6 +65,8 @@ fn nutrition(item) {
         "meat" => 20.0,
         "cooked_fish" => 34.0,
         "cooked_meat" => 42.0,
+        "smoked_fish" => 24.0,
+        "smoked_meat" => 30.0,
         _ => 0.0,
     }
 }
@@ -144,7 +150,9 @@ fn yield_of(kind) {
     }
 }
 fn gather_done(a) {
-    [#{ op: "harvest", qty: 1 }, #{ op: "add", item: yield_of(a.target.kind), qty: 1 }, #{ op: "vitals", energy: -1.0 }]
+    // A net brings in two fish at a time.
+    let n = if a.target.kind == "fishing_spot" && inv(a, "net") > 0 { 2 } else { 1 };
+    [#{ op: "harvest", qty: n }, #{ op: "add", item: yield_of(a.target.kind), qty: n }, #{ op: "vitals", energy: -1.0 }]
 }
 
 fn eat_check(a) {
@@ -168,6 +176,28 @@ fn cook_duration(a) { 4000 }
 fn cook_done(a) {
     [#{ op: "remove", item: a.item, qty: 1 }, #{ op: "add", item: "cooked_" + a.item, qty: 1 }]
 }
+
+fn smoke_check(a) {
+    if !knows(a, "smoking") { return "you don't know how to smoke food"; }
+    if a.target.kind != "campfire" { return "smoking needs a campfire"; }
+    if a.item != "fish" && a.item != "meat" { return "only raw fish or meat can be smoked"; }
+    if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
+    ""
+}
+fn smoke_duration(a) { 10000 }
+fn smoke_done(a) {
+    [#{ op: "remove", item: a.item, qty: 1 }, #{ op: "add", item: "smoked_" + a.item, qty: 1 }]
+}
+
+// Clearing forest: the tile becomes open ground, and yields wood.
+fn clear_check(a) {
+    if a.actor.kind != "person" || young(a) { return "you cannot clear land"; }
+    if a.actor.terrain != "forest" { return "there is no forest to clear where you stand"; }
+    if pack_full(a) { return "your pack is full (eat, store, give or drop some first)"; }
+    ""
+}
+fn clear_duration(a) { if inv(a, "axe") > 0 { 6000 } else { 12000 } }
+fn clear_done(a) { [#{ op: "build", kind: "clearing" }, #{ op: "add", item: "wood", qty: 2 }, #{ op: "vitals", energy: -3.0 }] }
 
 fn graze_check(a) {
     if a.actor.kind != "deer" { return "only deer graze"; }
@@ -206,6 +236,15 @@ fn cost(kind) {
         "road" => #{ stone: 1 },
         "axe" => #{ wood: 2, stone: 1 },
         "pick" => #{ wood: 2, stone: 2 },
+        "net" => #{ fiber: 3 },
+        "basket" => #{ fiber: 2, wood: 1 },
+        "bow" => #{ wood: 2, fiber: 1 },
+        "arrow" => #{ wood: 1, stone: 1 },
+        "salve" => #{ berries: 2, fiber: 1 },
+        "leather" => #{ hide: 1 },
+        "armor" => #{ leather: 3, fiber: 1 },
+        "trap" => #{ wood: 2, fiber: 2 },
+        "bridge" => #{ wood: 4, stone: 2 },
         _ => (),
     }
 }
@@ -233,18 +272,24 @@ fn build_check(a) {
         "house" => "carpentry",
         "gate" => "carpentry",
         "wall" => "masonry",
+        "trap" => "trapping",
+        "bridge" => "bridging",
         _ => (),
     };
     if needed == () { return `cannot build ${a.item}`; }
     if !knows(a, needed) { return `you don't know how to build a ${a.item}`; }
-    if a.item == "wall" || a.item == "gate" {
+    if a.item == "wall" || a.item == "gate" || a.item == "bridge" {
         if a.target.class != "place" { return `point at the tile beside you where the ${a.item} goes`; }
     } else if a.actor.terrain == "water" || a.actor.terrain == "rock" || a.actor.terrain == "wall" { return "cannot build here"; }
     if a.item == "campfire" && a.actor.near_fire { return "a campfire already burns right here"; }
     if a.item == "shelter" && a.actor.near_shelter { return "there is already a shelter right here"; }
     afford(a, a.item)
 }
-fn build_duration(a) { switch a.item { "campfire" => 6000, "shelter" => 20000, "house" => 40000, "wall" => 6000, "gate" => 15000, _ => 10000 } }
+fn build_duration(a) { switch a.item { "campfire" => 6000, "shelter" => 20000, "house" => 40000, "wall" => 6000, "gate" => 15000, "trap" => 8000, "bridge" => 20000, _ => 10000 } }
+
+// A trap catches small game over time: one meat about every 4 minutes, holding at most 3.
+fn trap_every_s(x) { 240.0 }
+fn trap_holds(x) { 3.0 }
 fn build_done(a) {
     // Place first: if the spot turns out unusable, nothing is spent.
     let fx = [#{ op: "build", kind: a.item }];
@@ -253,17 +298,30 @@ fn build_done(a) {
     fx
 }
 
+// The technique each crafted thing needs.
+fn made_by(item) {
+    switch item {
+        "spear" => "spear", "cloak" => "cloak", "torch" => "torch",
+        "axe" => "toolmaking", "pick" => "toolmaking",
+        "net" => "fishing", "basket" => "basketry",
+        "bow" => "archery", "arrow" => "archery",
+        "salve" => "medicine",
+        "leather" => "tanning", "armor" => "tanning",
+        _ => (),
+    }
+}
 fn craft_check(a) {
     if young(a) { return "too young to craft"; }
-    if a.item != "spear" && a.item != "cloak" && a.item != "torch" && a.item != "axe" && a.item != "pick" { return `cannot craft ${a.item}`; }
-    let needed = if a.item == "axe" || a.item == "pick" { "toolmaking" } else { a.item };
+    let needed = made_by(a.item);
+    if needed == () { return `cannot craft ${a.item}`; }
     if !knows(a, needed) { return `you don't know how to make a ${a.item}`; }
     afford(a, a.item)
 }
 fn craft_duration(a) { 8000 }
 fn craft_done(a) {
     let fx = pay(a.item);
-    fx.push(#{ op: "add", item: a.item, qty: 1 });
+    // Arrows come three at a time.
+    fx.push(#{ op: "add", item: a.item, qty: if a.item == "arrow" { 3 } else { 1 } });
     fx
 }
 
@@ -301,7 +359,7 @@ fn store_duration(a) { 1000 }
 fn store_done(a) { [#{ op: "store", item: a.item, qty: amount(a) }] }
 
 fn take_check(a) {
-    if a.target.kind != "storage" && a.target.kind != "remains" { return "nothing to take from"; }
+    if a.target.kind != "storage" && a.target.kind != "remains" && a.target.kind != "trap" { return "nothing to take from"; }
     let have = a.target.inv[a.item];
     if have == () || have < 1 { return `no ${a.item} there`; }
     if pack_full(a) { return "your pack is full (eat, store, give or drop some first)"; }
@@ -335,9 +393,11 @@ fn attack_done(a) {
         _ => if inv(a, "spear") > 0 { 18.0 } else { 7.0 },
     };
     // Strength and skill at fighting (knack × practice) make blows count.
-    let dmg = dmg * a.actor.strength * a.actor.factor;
+    let dmg = dmg * a.actor.strength * a.actor.factor * armor(a);
     [#{ op: "damage", amount: dmg }, #{ op: "vitals", energy: -1.5 }]
 }
+// Leather armor takes the edge off a blow.
+fn armor(a) { let n = a.target.inv["armor"]; if n == () || n < 1 { 1.0 } else { 0.65 } }
 
 // Meat left when a creature dies at someone's hand.
 fn carcass_meat(kind) { switch kind { "deer" => 3, "wolf" => 2, _ => 0 } }
@@ -381,7 +441,7 @@ fn signal_done(a) { [#{ op: "signal" }] }
 
 // ---- know-how -----------------------------------------------------------------
 
-fn requires(t) { switch t { "cooking" => ["fire"], "torch" => ["fire"], "carpentry" => ["shelter"], _ => [] } }
+fn requires(t) { switch t { "cooking" => ["fire"], "torch" => ["fire"], "carpentry" => ["shelter"], "smoking" => ["fire"], "bridging" => ["carpentry"], _ => [] } }
 
 // ---- roads and gates ------------------------------------------------------
 
@@ -415,13 +475,13 @@ fn teach_done(a) { [#{ op: "teach", technique: a.item }] }
 fn discoveries(m) {
     switch m {
         "stone" => ["spear", "fire", "masonry", "toolmaking"],
-        "wood" => ["fire", "storage", "writing", "torch", "carpentry", "toolmaking"],
+        "wood" => ["fire", "storage", "writing", "torch", "carpentry", "toolmaking", "archery", "trapping", "bridging"],
         "clay" => ["carpentry", "masonry"],
-        "fiber" => ["shelter", "torch", "cloak"],
-        "hide" => ["cloak"],
-        "berries" => ["planting"],
-        "meat" => ["cooking"],
-        "fish" => ["cooking"],
+        "fiber" => ["shelter", "torch", "cloak", "fishing", "basketry"],
+        "hide" => ["cloak", "tanning"],
+        "berries" => ["planting", "medicine"],
+        "meat" => ["cooking", "smoking"],
+        "fish" => ["cooking", "smoking"],
         _ => [],
     }
 }
@@ -438,7 +498,7 @@ fn experiment_done(a) {
         if knows(a, t) { continue; }
         let ok = true;
         for r in requires(t) { if !knows(a, r) { ok = false; } }
-        if t == "cooking" && !a.actor.near_fire { ok = false; }
+        if (t == "cooking" || t == "smoking") && !a.actor.near_fire { ok = false; }
         if ok { open.push(t); }
     }
     if open.len() > 0 && a.roll < 0.3 {
@@ -468,7 +528,13 @@ fn tend_check(a) {
     ""
 }
 fn tend_duration(a) { 6000 }
-fn tend_done(a) { [#{ op: "heal", amount: 10.0 * a.actor.factor }, #{ op: "vitals", energy: -1.0 }] }
+fn tend_done(a) {
+    // Knowing medicine, a salve heals far more (and is used up).
+    if knows(a, "medicine") && inv(a, "salve") > 0 {
+        return [#{ op: "remove", item: "salve", qty: 1 }, #{ op: "heal", amount: 25.0 * a.actor.factor }, #{ op: "vitals", energy: -1.0 }];
+    }
+    [#{ op: "heal", amount: 10.0 * a.actor.factor }, #{ op: "vitals", energy: -1.0 }]
+}
 
 fn read_check(a) {
     if !knows(a, "writing") { return "you can't read"; }
@@ -525,7 +591,17 @@ fn throw_check(a) {
     ""
 }
 fn throw_duration(a) { 800 }
-fn throw_done(a) { [#{ op: "remove", item: "spear", qty: 1 }, #{ op: "damage", amount: 24.0 }, #{ op: "vitals", energy: -2.0 }] }
+fn throw_done(a) { [#{ op: "remove", item: "spear", qty: 1 }, #{ op: "damage", amount: 24.0 * armor(a) }, #{ op: "vitals", energy: -2.0 }] }
+
+fn shoot_check(a) {
+    if inv(a, "bow") < 1 { return "no bow to shoot with"; }
+    if inv(a, "arrow") < 1 { return `no arrows (arrow: ${source_of("arrow")})`; }
+    if a.target.class != "creature" || !a.target.alive { return "nothing to shoot at"; }
+    if young(a) { return "too young to fight"; }
+    ""
+}
+fn shoot_duration(a) { 700 }
+fn shoot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "damage", amount: 16.0 * a.actor.strength * a.actor.factor * armor(a) }, #{ op: "vitals", energy: -1.0 }] }
 
 // ---- trade ------------------------------------------------------------------------
 
@@ -578,7 +654,7 @@ fn cost_text(kind) {
 }
 fn foods_text() {
     let parts = [];
-    for f in ["berries", "fish", "meat", "cooked_fish", "cooked_meat"] { parts.push(`${f} ${nutrition(f).to_int()}`); }
+    for f in ["berries", "fish", "meat", "cooked_fish", "cooked_meat", "smoked_fish", "smoked_meat"] { parts.push(`${f} ${nutrition(f).to_int()}`); }
     list(parts)
 }
 // Where an item comes from (shown when a skill lacks it).
@@ -588,10 +664,12 @@ fn source_of(item) {
     }
     switch item {
         "food" => "gather berries at a berry_bush or fish at a fishing_spot, take food from a storage, or hunt",
-        "meat" => "kill game (attack), then take it from the remains, or take it from a storage",
         "hide" => "kill game (attack), then take it from the remains",
+        "meat" => "kill game (attack) and take it from the remains, take it from a trap or a storage",
         "cooked_fish" => "cook fish at a campfire",
         "cooked_meat" => "cook meat at a campfire",
+        "smoked_fish" => "smoke fish at a campfire (knowing smoking), or trade for it",
+        "smoked_meat" => "smoke meat at a campfire (knowing smoking), or trade for it",
         _ => if cost(item) == () { "someone who has it can give or trade it to you" } else { `craft it (${cost_text(item)})` },
     }
 }
@@ -601,25 +679,28 @@ fn skill_io(skill) {
         "goto" => #{ takes: "a target in sight or a known place", gives: `you there; within ${l.fire_warmth} tiles of a campfire or ${l.shelter_warmth} of a shelter or house the night cold can't hurt you` },
         "wander" => #{ takes: "", gives: "you at a nearby spot you may not have seen" },
         "gather" => #{ takes: "a resource in reach with some left, room in your pack, a little energy",
-            gives: "1 unit into your pack: berry_bush→berries, tree→wood (faster with an axe), boulder→stone (faster with a pick), reeds→fiber, fishing_spot→fish (faster with a spear), clay_bank→clay" },
+            gives: "1 unit into your pack: berry_bush→berries, tree→wood (faster with an axe), boulder→stone (faster with a pick), reeds→fiber, fishing_spot→fish (faster with a spear, two at a time with a net), clay_bank→clay" },
         "eat" => #{ takes: "1 food item from your own pack (item: its name, or \"food\" for your best)", gives: `hunger down by its worth (${foods_text()}), a little health` },
         "cook" => #{ takes: "1 raw fish or meat from your pack, a campfire in reach, knowing cooking", gives: "1 cooked_fish or cooked_meat: about twice as filling, keeps longer" },
+        "smoke" => #{ takes: "1 raw fish or meat from your pack, a campfire in reach, knowing smoking, 10 seconds", gives: "1 smoked_fish or smoked_meat: more filling than raw, keeps for weeks (food to carry far or trade)" },
+        "clear" => #{ takes: "forest where you stand, room in your pack, some energy (faster with an axe)", gives: "open ground where the forest was, and 2 wood" },
         "graze" => #{ takes: "grass where you stand, not grazed bare", gives: "hunger down by 14" },
         "sleep" => #{ takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" },
         "rest" => #{ takes: "8 seconds", gives: "a little energy" },
         "wait" => #{ takes: "time", gives: "nothing: time passes" },
-        "build" => #{ takes: `its materials from your pack (campfire ${cost_text("campfire")}; shelter ${cost_text("shelter")}; storage ${cost_text("storage")}; house ${cost_text("house")}; wall ${cost_text("wall")}; gate ${cost_text("gate")}) and knowing its technique`,
-            gives: `the structure here: a campfire warms within ${l.fire_warmth} tiles at night, a shelter or house within ${l.shelter_warmth} and makes sleep restful, a storage keeps items (food spoils slower)` },
+        "build" => #{ takes: `its materials from your pack (campfire ${cost_text("campfire")}; shelter ${cost_text("shelter")}; storage ${cost_text("storage")}; house ${cost_text("house")}; wall ${cost_text("wall")}; gate ${cost_text("gate")}; trap ${cost_text("trap")}; bridge ${cost_text("bridge")}) and knowing its technique`,
+            gives: `the structure here: a campfire warms within ${l.fire_warmth} tiles at night, a shelter or house within ${l.shelter_warmth} and makes sleep restful, a storage keeps items (food spoils slower), a trap catches game over time (take the meat from it), a bridge makes the water tile beside you a way across` },
         "pave" => #{ takes: cost_text("road"), gives: "road under you (faster walking)" },
-        "craft" => #{ takes: `its materials from your pack (spear ${cost_text("spear")}; cloak ${cost_text("cloak")}; torch ${cost_text("torch")}; axe ${cost_text("axe")}; pick ${cost_text("pick")}) and knowing how`,
-            gives: "the item in your pack: a spear hits harder, a cloak keeps the night cold off, a torch lights the night, an axe or pick gathers faster" },
+        "craft" => #{ takes: `its materials from your pack (spear ${cost_text("spear")}; cloak ${cost_text("cloak")}; torch ${cost_text("torch")}; axe ${cost_text("axe")}; pick ${cost_text("pick")}; net ${cost_text("net")}; basket ${cost_text("basket")}; bow ${cost_text("bow")}; arrow ${cost_text("arrow")} for 3; salve ${cost_text("salve")}; leather ${cost_text("leather")}; armor ${cost_text("armor")}) and knowing how`,
+            gives: "the item in your pack: a spear hits harder, a cloak keeps the night cold off, a torch lights the night, an axe or pick gathers faster, a net catches two fish at a time, a basket carries 20 more, a bow shoots arrows, a salve helps tending, armor softens blows" },
         "give" => #{ takes: "the items from your pack", gives: "the items in their pack" },
         "store" => #{ takes: "the items from your pack, a storage in reach", gives: "the items in the storage, for anyone to take" },
-        "take" => #{ takes: "items in a storage or remains in reach, room in your pack", gives: "the items in your pack" },
+        "take" => #{ takes: "items in a storage, remains or a trap in reach, room in your pack", gives: "the items in your pack" },
         "drop" => #{ takes: "the items from your pack", gives: "room in your pack; the items are left behind" },
         "attack" => #{ takes: "a creature in reach, a little energy", gives: "a blow (harder with a spear, strength and practice); a creature killed leaves remains with meat and hide to take" },
         "throw" => #{ takes: "your spear", gives: "a hard hit at range; the spear is gone" },
-        "tend" => #{ takes: "a hurt person in reach who is not fighting, a little energy", gives: "their wounds healed some" },
+        "shoot" => #{ takes: "a bow and 1 arrow, a creature within 9 tiles", gives: "a hit at range (softened by armor); the arrow is spent" },
+        "tend" => #{ takes: "a hurt person in reach who is not fighting, a little energy (and a salve, if you know medicine)", gives: "their wounds healed some (far more with a salve)" },
         "plant" => #{ takes: "2 berries, open grass or dirt outside winter, knowing planting", gives: "a new berry bush in time" },
         "experiment" => #{ takes: "1 of the material", gives: "sometimes a new technique" },
         "teach" => #{ takes: "a technique you know, a person beside you staying close for a while", gives: "they know it too" },

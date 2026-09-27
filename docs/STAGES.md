@@ -266,3 +266,23 @@ Evidence, rule changes and decisions per stage, newest last.
     - Wild animals' health bars show only up close, when selected or when fighting; far out they had covered the land in green.
 
   Stage 4 restarted fresh on the new map. The village and stage 2 were updated in place: their grass now regrows at the new rate, so the deer will thin out.
+- 12:30 — Know-how for trade and a longer life; changing the land.
+  - **New techniques.** Each can be discovered by experimenting with a material, taught, or written on a tablet. Rules and takes/gives live in the skill script.
+
+    | Technique | What it gives |
+    |---|---|
+    | fishing | a net (3 fiber) catches two fish at a time |
+    | smoking | smoked fish or meat at a campfire keeps for weeks |
+    | basketry | a basket carries 20 more |
+    | archery | bow, arrows and the new `shoot` skill (9 tiles) |
+    | tanning | leather; armor that takes a third off blows |
+    | medicine | a salve that makes tending heal 25 instead of 10 |
+    | trapping | a trap that catches a meat about every 4 minutes, holding 3 |
+    | bridging | a bridge (4 wood, 2 stone) on the water beside you |
+  - **Changing the land.** A new `clear` skill turns the forest one stands on into open ground (2 wood).
+  - **Seeded know-how.** Fishers start knowing fishing, hunters trapping, healers medicine, traders basketry.
+  - **Towns know each other.** Townsfolk start knowing where each town stands (a remembered place); what is there and how the way goes, they learn by going.
+  - **Privacy.** Onlookers see a rework only as someone "sitting deep in thought".
+  - **Checks.** Mechanics checks added: a net's double catch; smoking, bow, arrows and leather; clearing forest.
+
+  Stage 4 restarted fresh; the village and stage 2 were updated in place.

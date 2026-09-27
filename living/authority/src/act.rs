@@ -113,6 +113,9 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
         }
         2 => {
             if let Some(s) = ctx.db.structure().id().find(t.id) {
+                if s.kind == "trap" {
+                    common::trap_catch(ctx, &s, now);
+                }
                 f.class = "structure".into();
                 f.id = s.id;
                 f.dist = dist(from, (s.x, s.y));
@@ -137,6 +140,8 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
                     f.hurt_ago = if v.hurt_ms == 0 { 1e9 } else { now.saturating_sub(v.hurt_ms) as f32 };
                 }
                 f.knows = common::knows(ctx, c.id);
+                // What they carry (armor softens blows).
+                f.inv = common::inv_list(ctx, c.id as u64);
             }
         }
         4 => {
@@ -177,6 +182,10 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
 }
 
 fn label(skill: &str, item: &str, t: &Resolved) -> String {
+    // Others see someone reworking their ways only as someone deep in thought.
+    if skill == "rework" {
+        return "sitting deep in thought".into();
+    }
     let mut s = skill.to_string();
     if !item.is_empty() {
         s.push(' ');
@@ -372,7 +381,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         topic: topic.to_string(),
         want: want.0.to_string(),
         want_qty: want.1,
-        victim: if matches!(skill, "attack" | "throw") && target.class == 3 { target.id as u32 } else { 0 },
+        victim: if matches!(skill, "attack" | "throw" | "shoot") && target.class == 3 { target.id as u32 } else { 0 },
     };
     // An action that would start right here must pass its rules first, too.
     if !needs_approach {
@@ -1005,6 +1014,28 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
             Effect::Build { kind } if kind == "road" => {
                 common::set_tile(ctx, at.0.floor() as i32, at.1.floor() as i32, living_rules::map::Terrain::Road)?;
                 notes.push("laid road".into());
+            }
+            Effect::Build { kind } if kind == "clearing" => {
+                let (x, y) = (at.0.floor() as i32, at.1.floor() as i32);
+                if common::map(ctx).get(x, y) != living_rules::map::Terrain::Forest {
+                    return Err("there is no forest here any more".into());
+                }
+                common::set_tile(ctx, x, y, living_rules::map::Terrain::Grass)?;
+                notes.push("cleared the forest here".into());
+            }
+            Effect::Build { kind } if kind == "bridge" => {
+                let (tx, ty) = (a.target.x.floor() as i32, a.target.y.floor() as i32);
+                if (at.0.floor() as i32, at.1.floor() as i32) == (tx, ty) {
+                    return Err("stand beside the water where the bridge goes".into());
+                }
+                if common::map(ctx).get(tx, ty) != living_rules::map::Terrain::Water {
+                    return Err("a bridge goes on water".into());
+                }
+                common::set_tile(ctx, tx, ty, living_rules::map::Terrain::Road)?;
+                let p = (tx as f32 + 0.5, ty as f32 + 0.5);
+                common::chronicle(ctx, now, "build", me, 0, p, format!("{my_name} built a bridge"));
+                witnessed(ctx, now, p, "built", me, 0, &format!("{{a}} built a bridge at ({tx},{ty})"), 0.4, &[me]);
+                notes.push(format!("built bridge at ({tx},{ty})"));
             }
             Effect::Build { kind } if kind == "wall" || kind == "gate" => {
                 let (tx, ty) = (a.target.x.floor() as i32, a.target.y.floor() as i32);

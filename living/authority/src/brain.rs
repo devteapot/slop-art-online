@@ -680,7 +680,7 @@ impl<'a> Ev<'a> {
             Cond::Threatened(b) => {
                 let me = self.me.id;
                 let now = self.now;
-                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && (a.skill == "attack" || a.skill == "throw"));
+                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && (a.skill == "attack" || a.skill == "throw" || a.skill == "shoot"));
                 coming == *b
             }
             Cond::Believes(b) => self

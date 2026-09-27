@@ -393,6 +393,15 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                         let r = art.sign.draw(p, 0, feet, s, false, Color32::WHITE);
                         signs.push((st.id, r));
                     }
+                    "trap" => {
+                        // A small snare of sticks on the ground.
+                        let w = xf.r(0.6, 5.0);
+                        let c = feet - egui::vec2(0.0, w * 0.4);
+                        let wood = Stroke::new((w * 0.12).max(1.0), Color32::from_rgb(120, 84, 50));
+                        p.rect_stroke(Rect::from_center_size(c, egui::vec2(w, w * 0.6)), 1.0, wood, egui::StrokeKind::Middle);
+                        p.line_segment([c - egui::vec2(w * 0.5, w * 0.3), c + egui::vec2(w * 0.5, w * 0.3)], wood);
+                        p.line_segment([c + egui::vec2(-w * 0.5, w * 0.3), c + egui::vec2(w * 0.5, -w * 0.3)], wood);
+                    }
                     _ => {
                         p.rect_filled(Rect::from_center_size(feet, egui::vec2(6.0, 6.0)), 1.0, Color32::WHITE);
                     }
