@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Semaphore};
 
+pub mod lod;
 mod recall;
 mod talk;
 
@@ -28,6 +29,12 @@ pub enum Event {
     /// Speech heard (or unanswered) by one of this service's characters.
     Speech(Experience),
     Deliberation(u32),
+    /// With the level of detail on: a pending deliberation as it now stands (inserted or
+    /// merged), and one that is gone (actor, `updated_ms`).
+    Pending(Deliberation),
+    PendingGone(u32, u64),
+    /// With the level of detail on: a human player was part of what this character experienced.
+    Contact(u32),
 }
 
 #[derive(Default)]
@@ -43,6 +50,14 @@ struct ActorMind {
     /// Integrations since the last reorganization ("sleep") of the mind.
     since_sleep: u32,
     last_sleep: Option<Instant>,
+    /// Level of detail (see lod.rs): when the last deliberation ended, until when the
+    /// character is on stage, and when it last took a conversation turn.
+    last_deliberated: Option<Instant>,
+    onstage_until: Option<Instant>,
+    last_talk: Option<Instant>,
+    /// A pending deliberation is being held back off stage (it does not keep the character
+    /// from conversation turns meanwhile).
+    deferring: bool,
 }
 
 pub struct Minds {
@@ -61,6 +76,10 @@ pub struct Minds {
     talk_sem: Semaphore,
     talk: Mutex<talk::Talks>,
     only: Option<std::collections::HashSet<u32>>,
+    lod: lod::Lod,
+    /// Pending deliberations by actor (kept only with the level of detail on, when many
+    /// requests wait at once and scanning the view for each would be costly).
+    pending: Mutex<HashMap<u32, Deliberation>>,
 }
 
 fn flatten<E: std::fmt::Debug>(r: Result<Result<(), String>, E>) -> Result<(), String> {
@@ -108,7 +127,7 @@ impl Minds {
     pub fn new(conn: DbConnection, llm: Llm, store: Option<Store>, seed: Value, concurrency: usize) -> Result<Arc<Self>> {
         let me = conn.try_identity().ok_or_else(|| anyhow!("not connected"))?;
         let species = living_rules::species::parse(&std::fs::read_to_string(crate::root().join("living/seeds/species.json"))?).map_err(|e| anyhow!(e))?;
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency), slow: Semaphore::new((concurrency / 2).max(1)), talk_sem: Semaphore::new((concurrency / 4).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency), slow: Semaphore::new((concurrency / 2).max(1)), talk_sem: Semaphore::new((concurrency / 4).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -684,14 +703,33 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
 
     pub async fn run(self: Arc<Self>, mut rx: tokio::sync::mpsc::UnboundedReceiver<Event>) -> Result<()> {
         let mut tick = tokio::time::interval(Duration::from_millis(2000));
+        if self.lod.on {
+            log::info!("level of detail on: {:?}", self.lod);
+        }
         for d in self.conn.db.my_deliberations().iter() {
-            self.clone().schedule(d.actor);
+            let actor = d.actor;
+            if self.lod.on {
+                self.pending.lock().unwrap().insert(actor, d);
+            }
+            self.clone().schedule(actor);
         }
         loop {
             tokio::select! {
                 ev = rx.recv() => match ev {
                     Some(Event::Speech(e)) => self.clone().on_speech(e),
                     Some(Event::Deliberation(actor)) => self.clone().schedule(actor),
+                    Some(Event::Pending(d)) => {
+                        self.pending.lock().unwrap().insert(d.actor, d);
+                    }
+                    Some(Event::PendingGone(actor, updated_ms)) => {
+                        let mut p = self.pending.lock().unwrap();
+                        if p.get(&actor).is_some_and(|d| d.updated_ms == updated_ms) {
+                            p.remove(&actor);
+                        }
+                    }
+                    Some(Event::Contact(actor)) => {
+                        self.actors.lock().unwrap().entry(actor).or_default().onstage_until = Some(Instant::now() + self.lod.sticky);
+                    }
                     None => return Err(anyhow!("event channel closed")),
                 },
                 _ = tick.tick() => self.clone().check_consolidation(),
@@ -716,19 +754,73 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             tokio::time::sleep(Duration::from_millis(400)).await;
             let mut seen = 0u64;
             loop {
-                let pending = self.conn.db.my_deliberations().iter().find(|d| d.actor == actor && d.updated_ms > seen);
+                let pending = if self.lod.on {
+                    self.pending.lock().unwrap().get(&actor).filter(|d| d.updated_ms > seen).cloned()
+                } else {
+                    self.conn.db.my_deliberations().iter().find(|d| d.actor == actor && d.updated_ms > seen)
+                };
                 let Some(d) = pending else { break };
+                // Off stage, routine reasons wait (and gather) until the mind is due again.
+                let wait = self.lod_wait(&d);
+                if self.lod.on {
+                    self.actors.lock().unwrap().entry(actor).or_default().deferring = wait.is_some();
+                }
+                if let Some(wait) = wait {
+                    tokio::time::sleep(wait.min(Duration::from_secs(3))).await;
+                    continue;
+                }
                 seen = d.updated_ms;
                 if let Err(e) = self.deliberate(&d).await {
                     log::warn!("deliberation for {} failed: {e:#}", self.name(actor));
+                }
+                if self.lod.on {
+                    self.actors.lock().unwrap().entry(actor).or_default().last_deliberated = Some(Instant::now());
                 }
                 let again = std::mem::take(&mut self.actors.lock().unwrap().entry(actor).or_default().again);
                 if !again {
                     tokio::time::sleep(Duration::from_millis(300)).await;
                 }
             }
-            self.actors.lock().unwrap().entry(actor).or_default().deliberating = false;
+            let mut a = self.actors.lock().unwrap();
+            let m = a.entry(actor).or_default();
+            m.deliberating = false;
+            m.deferring = false;
         });
+    }
+
+    /// A character controlled by a human (not by a mind service; benchmark characters on
+    /// instinct also count).
+    fn is_player(&self, id: u32) -> bool {
+        id != 0 && self.conn.db.character().id().find(&id).is_some_and(|c| !c.ai && c.controller != self.me)
+    }
+
+    /// Whether a person is on stage (see lod.rs): always, with the level of detail off; while a
+    /// human player is in the scene of a pending request (`scene`) or was recently part of
+    /// what they experienced.
+    fn onstage(&self, actor: u32, scene: Option<&str>) -> bool {
+        if !self.lod.on {
+            return true;
+        }
+        let now = Instant::now();
+        if self.actors.lock().unwrap().get(&actor).and_then(|m| m.onstage_until).is_some_and(|t| t > now) {
+            return true;
+        }
+        let seen = scene.and_then(|s| serde_json::from_str::<Value>(s).ok()).and_then(|v| v["creatures"].as_array().map(|cs| cs.iter().filter_map(|c| c["id"].as_u64()).any(|id| self.is_player(id as u32)))).unwrap_or(false);
+        if seen {
+            self.actors.lock().unwrap().entry(actor).or_default().onstage_until = Some(now + self.lod.sticky);
+        }
+        seen
+    }
+
+    /// How much longer a pending deliberation waits under the level of detail (people, and
+    /// animals, which the authority already lets think only near a person).
+    fn lod_wait(&self, d: &Deliberation) -> Option<Duration> {
+        if !self.lod.on {
+            return None;
+        }
+        let last = self.actors.lock().unwrap().get(&d.actor).and_then(|m| m.last_deliberated);
+        let onstage = self.onstage(d.actor, Some(&d.scene));
+        self.lod.wait(&d.reason, onstage, last)
     }
 
     fn consolidation_threshold(&self, actor: u32) -> f32 {
@@ -749,16 +841,24 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
 
     /// Start consolidation for characters whose unintegrated experiences matter enough.
     fn check_consolidation(self: Arc<Self>) {
+        // One pass over the experience inbox for everyone (a scan per character would cost
+        // characters × experiences every two seconds).
+        let mut inbox: HashMap<u32, Vec<Experience>> = HashMap::new();
+        for e in self.conn.db.experience().iter() {
+            inbox.entry(e.observer).or_default().push(e);
+        }
         for c in self.mine() {
+            // Off stage, a person integrates experience less often (see lod.rs).
+            let offstage = self.lod.on && c.kind == "person" && !self.onstage(c.id, None);
             let cursor = self.cursor(c.id);
-            let pending: Vec<Experience> = self.experiences(c.id).into_iter().filter(|e| e.id > cursor).collect();
+            let pending: Vec<Experience> = inbox.remove(&c.id).unwrap_or_default().into_iter().filter(|e| e.id > cursor).collect();
             let meaningful: Vec<&Experience> = pending.iter().filter(|e| e.salience >= 0.2).collect();
             let salience: f32 = meaningful.iter().map(|e| e.salience).sum();
             let due = {
                 let mut a = self.actors.lock().unwrap();
                 let m = a.entry(c.id).or_default();
                 let stale = m.last_consolidated.map_or(true, |t| t.elapsed() > Duration::from_secs(240));
-                let min_gap = self.species.get(&c.kind).map(|s| s.cognition.consolidate_min_s).unwrap_or(90);
+                let min_gap = if offstage { self.lod.consolidate.as_secs() } else { self.species.get(&c.kind).map(|s| s.cognition.consolidate_min_s).unwrap_or(90) };
                 let rested = m.last_consolidated.map_or(true, |t| t.elapsed() > Duration::from_secs(min_gap));
                 let wanted = (rested && (salience >= self.consolidation_threshold(c.id) || meaningful.len() >= 30 || (stale && meaningful.len() >= 4))) || pending.len() >= 120;
                 let allowed = !m.consolidating && m.retry_after.map_or(true, |t| Instant::now() >= t);

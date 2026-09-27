@@ -141,9 +141,18 @@ async fn main() -> Result<()> {
         })
         .build()
         .with_context(|| format!("connect to {server}/{db}"))?;
+    let lod = mind::lod::enabled();
     {
         let tx = tx.clone();
-        conn.db.experience().on_insert(move |_, e| {
+        conn.db.experience().on_insert(move |ctx, e| {
+            // Level of detail: a human player in what a character experiences puts it on stage.
+            if lod {
+                let me = ctx.identity();
+                let player = |id: u32| id != 0 && ctx.db.character().id().find(&id).is_some_and(|c| !c.ai && c.controller != me);
+                if player(e.subject) || player(e.object) {
+                    let _ = tx.send(mind::Event::Contact(e.observer));
+                }
+            }
             if e.kind == "speech" || e.kind == "silence" {
                 let _ = tx.send(mind::Event::Speech(e.clone()));
             }
@@ -152,7 +161,16 @@ async fn main() -> Result<()> {
     {
         let tx = tx.clone();
         conn.db.my_deliberations().on_insert(move |_, d| {
+            if lod {
+                let _ = tx.send(mind::Event::Pending(d.clone()));
+            }
             let _ = tx.send(mind::Event::Deliberation(d.actor));
+        });
+    }
+    if lod {
+        let tx = tx.clone();
+        conn.db.my_deliberations().on_delete(move |_, d| {
+            let _ = tx.send(mind::Event::PendingGone(d.actor, d.updated_ms));
         });
     }
     conn.run_threaded();
