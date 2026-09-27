@@ -393,6 +393,7 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
             version,
             updated_ms: now,
         };
+        common::invalidate_traits(ctx, actor);
         if ctx.db.persona().id().find(actor).is_some() {
             ctx.db.persona().id().update(row);
         } else {

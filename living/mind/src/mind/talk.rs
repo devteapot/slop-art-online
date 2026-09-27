@@ -298,6 +298,8 @@ impl Minds {
         let settled_at = self.talk.lock().unwrap().pairs.get(&key).and_then(|c| c.settled.as_ref().map(|s| s.at_ms));
         let names: Vec<String> = [listener, speaker].iter().flat_map(|id| memory::cue_words(&self.name(*id))).collect();
         let happened = settled_at.map(|at| self.happened_since(listener, speaker, at)).unwrap_or_default();
+        // Level of detail (lod.rs): off stage, at most one turn per `LIVING_LOD_TALK_S`.
+        let lod_hold = self.lod.on && !self.onstage(listener, None) && self.actors.lock().unwrap().get(&listener).and_then(|m| m.last_talk).is_some_and(|t| t.elapsed() < self.lod.talk);
         let go = {
             let mut t = self.talk.lock().unwrap();
             t.prune(now);
@@ -382,6 +384,10 @@ impl Minds {
                 log::debug!("{} lets {}'s remark pass", me.name, self.name(speaker));
                 return;
             }
+            if lod_hold {
+                log::debug!("{} is off stage and talked recently: no turn", me.name);
+                return;
+            }
             match t.busy.get_mut(&listener) {
                 Some(waiting) => {
                     *waiting = Some(speaker);
@@ -395,6 +401,9 @@ impl Minds {
         };
         if !go {
             return;
+        }
+        if self.lod.on {
+            self.actors.lock().unwrap().entry(listener).or_default().last_talk = Some(std::time::Instant::now());
         }
         log::debug!("{} gets a reply turn for {}", me.name, self.name(speaker));
         tokio::spawn(async move {
@@ -438,6 +447,11 @@ impl Minds {
 
     /// Full deliberations take priority over conversation turns.
     fn thinking(&self, actor: u32) -> bool {
+        if self.lod.on {
+            // A request held back off stage is not a deliberation under way (lod.rs).
+            let (deliberating, deferring) = self.actors.lock().unwrap().get(&actor).map_or((false, false), |m| (m.deliberating, m.deferring));
+            return !deferring && (deliberating || self.pending.lock().unwrap().contains_key(&actor));
+        }
         self.actors.lock().unwrap().get(&actor).map_or(false, |m| m.deliberating) || self.conn.db.my_deliberations().iter().any(|d| d.actor == actor)
     }
 

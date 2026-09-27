@@ -29,10 +29,7 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
         text,
         salience,
     });
-    if let Some(mut c) = ctx.db.clock().id().find(0) {
-        c.percepts += 1;
-        ctx.db.clock().id().update(c);
-    }
+    common::count(|k| k.percepts += 1);
     // Bound the per-character window (checked periodically, not on every insert).
     if row.id % 32 == 0 {
         let mut ids: Vec<u64> = ctx.db.experience().observer().filter(observer.id).map(|p| p.id).collect();
@@ -242,10 +239,7 @@ pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u6
         ctx.db.deliberation().actor().update(d);
     } else {
         ctx.db.deliberation().insert(Deliberation { actor: id, controller: c.controller, reason: reason.into(), requested_ms: now, updated_ms: now, scene, revision });
-        if let Some(mut k) = ctx.db.clock().id().find(0) {
-            k.deliberations += 1;
-            ctx.db.clock().id().update(k);
-        }
+        common::count(|k| k.deliberations += 1);
     }
 }
 

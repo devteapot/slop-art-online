@@ -226,6 +226,38 @@ The world row carries its width and height; chunk ids are packed `(cy << 16) | c
 
 An optional global budget (`LIVING_LLM_PER_MIN`, off by default since the user moved to cheap models on 2026-09-26; token bucket with ~15 s burst) admits every model call. Deliberation may use the whole bucket; deferrable work (consolidation, reorganization, identities) waits while less than a quarter is left and may hold at most half of the concurrent slots (`LIVING_CONCURRENCY`, default 32). People rotate between GPT-6 Luna (also the default, and the retry for unusable replies) and Mistral Small; animals feel with Ministral and build their graphs with Mistral Small. [llm_load.py](../living/tools/llm_load.py) reports calls, tokens and latency per purpose, model and purpose × model (e.g. `purpose:talk/model:…`) from the journal; `--span` rates short experiments over their own time span. Measured on realm-1 in its first 10 minutes, before the budget (39 people, 42 animals): 79 calls/min, 456k tokens/min, deliberation p50 4.4 s; the largest sources were plans with no applicable branch re-deliberating every 25 s and reflections every 150 s, since slowed to 60 s and 240 s.
 
+### Minds at scale: level of detail (stage 6 design note, 2026-09-27)
+
+**Measured load per person** ([mind_load.py](../living/tools/mind_load.py), journals of the running labs, last 50–60 minutes, read-only; lab days are 12 minutes and lives compressed, so dawn planning and life events come often):
+
+| Lab (people) | think | compile (`deliberate`) | talk | consolidate | All calls/person/min | Tokens/person/min |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| stage3-village (20) | 0.77 (4.8k tok, p50 2.9 s) | 0.84 (9.9k, 5.1 s) | 0.42 (1.7k, 1.1 s) | 0.63 (6.8k, 10.6 s) | 2.66 | 17.0k |
+| stage4-two (28) | 0.71 (5.3k) | 0.74 (10.3k) | 0.28 (1.6k) | 0.63 (7.1k) | 2.35 | 16.3k |
+| stage2-base (4–7) | 0.71 | 0.73 | 0.29 | 0.41 | 2.13 | 15.7k |
+
+Animals near those people add 0.14–0.34 calls per animal per minute (stage3: 122 animals, 55 calls/min, about as many as its 20 people). Why people think (share of 4,901 think steps across the three labs whose request lists the reason; a request often merges several): a decided act that did not work out 42%, other reasons (a graph's own `think` nodes, missing or runaway routines, turning back and forth, growing up) 38%, dawn 23%, bodily alarms 16% (mostly freezing at night), feelings 13%, a finished plan 12%, being attacked or a fight 1%. Only 0.2% of think steps decide nothing new, so skipping the compile step would save almost nothing.
+
+**Extrapolated linearly to 2,000 people:** 4,300–5,300 calls/min (71–89 per second), 31–34M tokens/min (about 2 billion tokens an hour), and 480–570 calls in flight at the measured mean latency of 6.4–7.0 s, before animals. The service would also need 60+ concurrent slots (default 64) and the authority would receive the resulting `mind_*` reducer calls (tens per second, each a transaction beside the 60 Hz tick; not yet measured).
+
+**Level of detail (implemented, opt-in, mind service):** `LIVING_LOD=1` makes the mind service grade attention like the authority already does for animals (which think only with a person within 25 tiles), with human players as the audience ([lod.rs](../living/mind/src/mind/lod.rs)):
+
+- **On stage** (a human player is in the scene of the pending request, or was the subject or object of an experience within `LIVING_LOD_STICKY_S`, 600 s): unchanged.
+- **Off stage:** a pending deliberation waits until `LIVING_LOD_THINK_S` (600 s) after the character's last one; the authority keeps merging new reasons and refreshing the scene into the one pending request, so the thought that follows sees them all. Other bodily alarms (freezing, very hungry with no food) and calls of one's own kind wait `LIVING_LOD_PROMPT_S` (120 s); being attacked, a fight report, starving, being badly hurt and what others ask (a trade, a family, joining) are taken at once, as is the first thought after the service starts. Consolidation waits at least `LIVING_LOD_CONSOLIDATE_S` (900 s) between integrations (the 120-experience backlog still forces one); a person takes at most one conversation turn per `LIVING_LOD_TALK_S` (120 s), and a request being held back does not count as a deliberation under way (which would leave lines to it). Animals' requests wait the same way.
+- The body keeps running its own graph in real time; when a mind does think, the prompts, models and context are the same, so what minds decide is unchanged. Nothing decides for the character; only how often its mind is consulted changes. Players are characters with `ai = false` not controlled by the mind service (instinct-only benchmark characters also count). Off by default: the running labs are unaffected.
+
+Replaying the labs' journals under this policy with nobody on stage (the case of a large world with few players; `mind_load.py` prints it) gives 0.41–0.50 calls/person/min (think and compile 0.12–0.13 each, talk 0.12–0.16, consolidation 0.05–0.07), about **5× fewer calls and, at the measured tokens per call, about 6× fewer tokens** (fewer but larger consolidation batches make the real token saving somewhat smaller): at 2,000 people 815–1,005 calls/min (14–17 per second), 5.1–5.5M tokens/min, about 100 calls in flight. Urgent and prompt reasons dominate what remains (freezing at night and a baby's cry in the labs' short days).
+
+Checked live without spending tokens (2026-09-27): two fresh scratch worlds on the stage3-village module (18 people, about 120 animals), each with its own mind service pointed at a local stand-in endpoint that answers every call instantly with "carry on, keep the graph, say nothing, integrate nothing" (so the triggers are real but no plan ever changes, and there are no conversations), one with `LIVING_LOD=1`, measured over the same 24 minutes after the first 3: people 1.81 → 0.35 calls/person/min (think and compile 0.71 → 0.15 each, consolidation 0.39 → 0.05), animals' deliberations 32 → 24 per minute. Synthetic replies: this checks the gating, not what minds do with fewer thoughts; a lab with real models and `LIVING_LOD=1` (and a player walking in and out of a village) is the next step before relying on it.
+
+**Proposed next steps (not implemented):**
+
+- *Cheaper tiers off stage.* An off-stage compile or consolidation with a smaller model (e.g. `mistral-small` or `ministral` instead of Luna) would cut cost further but changes what minds decide; it belongs behind its own switch and a model comparison like `compare_models.py`.
+- *Prompt caching.* A person's compile request is about 27–30k characters, of which the system prompt (the grammar and rules, about 17k) is the same for everyone except the character's name in its first sentence; moving the name after the shared text would make that prefix identical across calls, which providers with prefix caching bill as cached input.
+- *Batching.* Several off-stage members of one household or work group could share one planning call (their shared situation once, each person's own context and reply). This changes the prompt, so it needs its own evaluation.
+- *Authority side.* With the level of detail on, off-stage characters leave requests pending for minutes; every merged reason rebuilds the request's scene (about 0.15 ms). If that becomes visible, rebuild it only when the request is taken. The authority's animal rule could move to the same notion of stage.
+- *Mind service scans.* The SDK client cache has no secondary indexes, so per-call context (experiences, relations, judgments, places, routines, know-how) scans whole tables. `check_consolidation` scanned the experience inbox once per character every two seconds (characters × experiences); it now groups it in one pass. The per-call scans need per-character indexes maintained from row callbacks before 2,000 people.
+
 ### Life course
 
 People age (`birth_age_days` + elapsed days). Children (< 3 days) are slower and cannot build, craft, fight or conceive; elders weaken after 40 days. Two adults who both choose `conceive` toward each other within two minutes, fed and near a shelter, have a child a day later. A newborn's persona is generated by its mind from its own temperament and its parents' identities, without copying their memories. Wildlife renews while below the seed population.
@@ -260,6 +292,46 @@ Each fresh 2,000-character benchmark writes gigabytes of commit log, and `--dele
 
 The legacy path missed ≈48% of 60 Hz slots at 200 characters. These runs do not yet include the performance contract's full workload (sustained 30 min/8 h, 200-character battle, human clients, observer subscriptions); they establish that the per-tick work now scales with due events rather than with world size.
 
+### Stage 6 check: 2,000 characters and a 200-character battle (2026-09-27)
+
+Re-benchmarked after genes, practice, pasture, acts, desires with routines, perception additions, deliberate acts and scene building. Workload, all on scratch database `living-bench-agent` (deleted afterwards) on the same Docker SpacetimeDB 2.10.1 service and laptop, module built with the realm-4 seed (512×512, 176 seeded people, 82 animals), 60 s windows via [bench.py](../living/tools/bench.py), no LLM answering; the host was shared with three running labs and their mind services (load average 6–17):
+
+- **2,000:** `--crowd 1800 --minded --subscribe --body-writes`, 30 s settle: about 1,980 people (1,800 foragers on their repertoire, controlled like LLM characters: experiences and deliberation requests, a live subscriber to their experiences) and 82 animals; about 2,450 evaluations/s, 1,560–1,580 steering updates/s, 410–420 completions/s, 300–310 experiences/s, 10 deliberation requests/s; a subscriber to all `body` rows received 1,960–2,050 row updates/s (950–990 kB/s JSON).
+- **Battle:** `--battle 200` (spear fighters in a 14×14-tile area) beside the seed world: about 280 people, 2,500 evaluations/s, about 1,220 blocks, 25–30 hits and 15 dodges a minute.
+- **Combined (the contract's shape):** `--crowd 1600 --minded --battle 200`: about 1,870 people (200 of them fighting) and 82 animals, 4,070–4,130 evaluations/s, 2,160–2,250 `body` row updates/s.
+
+| Scenario | Build | Tick p50 | p95 | p99 | Max | Ticks > 16.7 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2,000 | before, no spans (two windows) | 5.35–5.39 ms | 6.78–7.00 | 7.37–7.99 | 9.1–12.6 | 0, 0 of 3,606 |
+| 2,000 | before, phase spans (two runs) | 5.87–5.97 | 7.56–7.76 | 8.70–11.23 | 15.8–81.4 | 0, 17 (all in one host stall in the first 1.6 s) |
+| 2,000 | after (two runs) | 4.98–5.34 | 6.80–7.46 | 8.60–8.64 | 11.2–21.4 | 2, 0 |
+| Battle | before, no spans | 3.88 | 5.72 | 6.77 | 9.5 | 0 of 3,605 |
+| Battle | before, phase spans (two runs) | 3.76–3.84 | 5.46–5.47 | 6.44–6.78 | 9.4–17.8 | 1, 0 |
+| Battle | after (two runs) | 2.49–2.61 | 4.12–4.32 | 5.09–5.88 | 9.7–16.1 | 0, 0 |
+| Combined | before, no spans | 7.38 | 9.96 | 11.47 | 15.7 | 0 of 3,603 |
+| Combined | before, phase spans (two runs) | 7.81–7.94 | 10.91–11.14 | 12.55–13.32 | 18.2–21.1 | 1, 3 |
+| Combined | after (two runs) | 6.55–6.72 | 9.25–9.52 | 10.96–11.31 | 23.0–40.4 | 1, 2 (host stalls: every phase spikes at once) |
+
+"Before" is `living-core` at 1a30fdd; "phase spans" adds only the profiling spans below. Runs of each pair were interleaved (before, after) so both saw similar host load.
+
+Against 2026-09-26 (2,000 characters p50 3.57, p99 5.30 ms; battle p50 3.07–3.16, p99 5.92–6.53 ms) the features added since cost about 1.8 ms at p50 and 2–3 ms at p99 at 2,000. Every tick stays inside the 16.7 ms budget except isolated ones that coincide with stalls across all phases at once (host), but the combined workload's p99 of 11–12.5 ms leaves little headroom on a shared host. A 120 s combined window before the changes, under heavier host load (7.5), reached p99 15.8 ms with 51 ticks over budget, clustered in two stalls.
+
+Where the time goes ([bench.py](../living/tools/bench.py) now reports named spans: `tick.motion`, `tick.activity`, `tick.wakes`, `tick.combat`, `tick.slots`, `housekeeping`, `housekeeping.spoil`; combined workload before → after, ms of tick work per second of world time): 1 Hz evaluations 188–197 → 178–179, combat cadence 113–114 → 58–60, steering 57–73, wakes 54–58, activity timers 39–41; housekeeping 2.5–2.6 → 1.9 ms once a second. An evaluation costs 60–90 µs, almost all of it row reads (each a host call and decode) and Rhai calls. A sampled per-evaluation profile (every eighth character, spans inside `evaluate`) put 22% in computing the need-rate key (full actor facts: inventory, know-how, genes, structures), 27% in building the scene (19% resource nodes), 21% in starting actions (a Rhai check or duration is 50–60 µs, the context map rebuilt for each call), and a clock-row rewrite in every evaluation, experience and deliberation request.
+
+Changes (behavior unchanged; `verify_mechanics.py` 14/14, `verify_steering.py` 5/5, `cargo test -p living-rules --features scripting` pass):
+
+- **Rate key from what it depends on.** `settle_needs` computes night, needs, fire/shelter nearby and the current activity directly and gathers the full actor facts only when the key changes (it rarely does); the activity row is read once per evaluation.
+- **Counters off the hot row.** Evaluation, experience, deliberation, completion and combat counters accumulate in the module and are added to the `clock` row once per tick (and by housekeeping), instead of a read and rewrite of that row per event.
+- **Per-transaction caches** for the world row and the script revision (`laws()` and `scripts()` read the clock row on every call before).
+- **Chunk caches for resource nodes and structures, kept across transactions** and dropped for a chunk when it is written (every write site invalidates first; rows loaded after a write in the same transaction are trusted only by that transaction, so a rolled-back reducer cannot leave uncommitted rows behind; like the map cache this assumes one module instance runs the reducers). The persona traits the evaluator reads (curiosity, sociability, nurture) are cached the same way instead of decoding the persona row and parsing its JSON on every evaluation of a mind-controlled character (not exercised by the benchmark crowd, which has no personas).
+- **Nearest-creature and count conditions** no longer clone the whole list of perceived creatures (200 per fighter in the battle).
+- **Spoilage rolls through the inventory.** The once-a-minute pass over the whole `inventory` table (7.6 ms with about 2,000 30-berry stacks; growing with every stack in the world) is spread over the minute's 60 housekeeping calls by owner (`inventory.owner` btree range), so each stack is still checked once a minute; a call takes 0.4 ms (max 0.9) in the combined workload.
+- **Housekeeping reads the characters once** instead of three full passes a second.
+
+SpacetimeDB documentation consulted: [indexes](https://spacetimedb.com/docs/tables/indexes/) (btree range filters; unique primary-key accessors have no range filter, hence the owner index for spoilage), [table performance](https://spacetimedb.com/docs/tables/performance/) (prefer indexed lookups over scans; keep hot data in focused rows), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) and the [SQL reference](https://spacetimedb.com/docs/reference/sql) (subscription joins return one table, need indexed join columns). No table, index, reducer or subscription changed; the caches are module-internal.
+
+**What remains for the authority at stage 6:** everyone is still evaluated once a second (2,000 evaluations/s) and fighters 15 times a second; per-evaluation cost is dominated by row reads, so the next steps are evaluating only characters whose situation changed (event-driven evaluation while latched work runs), caching character and brain rows the same way, and reusing the Rhai context between the check, duration and speed calls of one action. A database runs its reducers on one core, so beyond this headroom a world of 2,000 must be split (regions as databases). The `mind_*` reducers that 2,000 thinking people would call (tens per second, each a transaction between ticks) and spatially scoped subscriptions for players (a full `body` subscription is about 1 MB/s of JSON at 2,000) are not yet measured; nor are the 30-minute and 8-hour runs, memory growth (dead characters are kept, the `experience` window holds up to 400 rows per character when no mind consumes it: 74k rows after two minutes of the unanswered benchmark crowd) and client-side costs.
+
 ## Running
 
 ```bash
@@ -269,6 +341,8 @@ just living-mind        # LLM minds (supervised; reconnects after module updates
 just living-web         # Bevy observer in the browser
 python3 living/tools/status.py   # text snapshot of people and the story
 python3 living/tools/bench.py --db living-bench --fresh --crowd 206 --seconds 60
+LIVING_LOD=1 just living-mind                          # minds with the level of detail (see Minds at scale)
+python3 living/tools/mind_load.py <db> <run>           # model load per person, extrapolated, and off stage
 ```
 
 `just living-publish` updates the module in place and installs the current skill rules. LLM exchanges are journaled to `.local/living/journal/<run>/<name>.jsonl`.
