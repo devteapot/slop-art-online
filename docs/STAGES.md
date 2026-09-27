@@ -2,13 +2,15 @@
 
 Decided with the user on 2026-09-26 after the large realm worlds collapsed (mass starvation, stillness, repetitive talk) in ways that made it unclear which layer had failed. The world now grows one layer at a time in small lab worlds. A stage passes only when its measured criteria hold, and only then does the next layer go on top. Work proceeds autonomously; evidence and every rule change are recorded here, and each passing stage is committed and pushed to `living-core`.
 
+**Latest handoff:** [LIVING_HANDOFF.md](LIVING_HANDOFF.md) (2026-09-27: experiments stopped, state and findings).
+
 Principles that hold throughout: behavior belongs to the characters ([living core](LIVING_CORE.md#robustness-layers-found-necessary-in-live-runs)); mistakes get feedback, not injected corrections; world rules, balance and mechanics may change freely.
 
 ## Lab protocol
 
 - Labs are small worlds built from `living/seeds/<scenario>.json` with `living/tools/lab.py`, each on its own database and mind service. Up to three run at once, each varying one factor from a baseline (food, predators, pace, group size).
 - Lives last about 4 real hours in labs (a generation in about an hour); the play world keeps one game year per 15 real days.
-- All minds use Mistral Small. No call budget.
+- Minds use Mistral Small within an adaptive rate-limit window, overflowing to GPT-6 Luna (`living/configs/models.json`). No call budget.
 - Every change keeps the whole living core compiling, observer included: `just living-check` (authority, mind, native and browser viewer, rules tests) runs before each commit.
 - `living/tools/watch.py` reports every 10–15 minutes per lab (population by stage, births, deaths and causes, movement, time budget, speech and goal topics, flags, a model review). Stage criteria are computed from these reports and the databases.
 
@@ -308,3 +310,9 @@ Evidence, rule changes and decisions per stage, newest last.
     - The three trades are odd (berries for berries).
     - Medicine, cloak, storage and fire were taught; one salve was made.
     - No nets, baskets, bows, smoked food or traps yet.
+- 21:10 — Experiments stopped on request. Both labs are paused with their data kept; the analysis and where to pick up are in [LIVING_HANDOFF.md](LIVING_HANDOFF.md). Main findings:
+  - Dead characters' routines, stats and practice rows are never removed (unbounded growth).
+  - People learn and teach the new know-how but make nothing; gathering dominates.
+  - Contact between groups grew to about 400 lines of speech per lab, with the first real trades and the first killings with readable causes.
+  - Wolves died out in both labs.
+  - Consolidation sometimes merges other people into `self`.
