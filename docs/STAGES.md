@@ -191,3 +191,20 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Outcomes.** One starvation death on each side.
 
   Too few people to conclude. The canary (stage 2) shows starvation from minds' own eating routines. Four second-generation people starved with 279 berries on the bushes; the child Ash's `eat` read "if hungry and carrying food, eat; otherwise wait 1 s" (never gathering, and waiting counts as success), among 39 routines. The starving sensation now shows the `eat` routine one's hunger runs and says it has not fed them. Labs updated in place.
+- 16:10 — **Model comparison** (village and two towns, about 45 minutes; 17 people on GPT-6 Luna, 31 on Mistral Small; per person):
+
+  | | Luna | Mistral |
+  |---|---|---|
+  | calls | 84–98 | 115–131 |
+  | tokens | ≈0.5M | ≈0.9M |
+  | median latency | ≈6.0 s | 3.2–3.8 s |
+  | errors | 0 | 87 in total, mostly rate limits |
+  | walks | 6–12 | 60–65 |
+  | teach acts | 1.3–1.5 | 4.3–7.3 |
+  | children | 16 for 17 people | 16 for 31 people |
+  | highest hunger now | 79 | 100 |
+  | lines repeated 3+ times | 0 | 1–4 |
+
+  Speech per person is about the same. Luna people act fewer times and more purposefully, eat better, repeat nothing and have about twice the children per person; they teach less and each call is slower. Mistral people roam more and teach more. Still small samples; the comparison continues.
+
+  The two-town lab had 327 model errors in one window, almost all Mistral HTTP 429 (three labs share the account). Rate-limited calls now wait with growing, jittered pauses and retry on the same model (up to three times) before falling back. Disk: the paused stage 1 and ecology databases were deleted (replicas 22 GB → 10 GB). Village and towns so far: little between groups (the village's families exchanged 11 lines of speech and one gift across families against about 900 lines within), no storage or community yet in the village, no contact between the towns.

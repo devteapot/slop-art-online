@@ -166,7 +166,20 @@ impl Llm {
     /// outage does not stall minds (both attempts are journaled).
     pub async fn chat(&self, profile: &str, purpose: &str, actor: &str, messages: &[Msg]) -> Result<Reply> {
         self.budget.admit(purpose).await;
-        match self.chat_once(profile, purpose, actor, messages).await {
+        // A rate limit (HTTP 429) passes: wait with growing, jittered pauses and try again on
+        // the same model before giving up or falling back.
+        let mut first = self.chat_once(profile, purpose, actor, messages).await;
+        for attempt in 0..3u32 {
+            match &first {
+                Err(e) if format!("{e:#}").contains("HTTP 429") => {
+                    let jitter = now_ms() % 1000;
+                    tokio::time::sleep(Duration::from_millis(1500 * 2u64.pow(attempt) + jitter)).await;
+                    first = self.chat_once(profile, purpose, actor, messages).await;
+                }
+                _ => break,
+            }
+        }
+        match first {
             Ok(r) => Ok(r),
             Err(e) if profile != self.models.default => {
                 log::warn!("{actor}: {profile} failed ({e:#}); falling back to {}", self.models.default);
