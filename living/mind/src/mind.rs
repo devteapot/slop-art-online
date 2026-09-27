@@ -205,14 +205,60 @@ impl Minds {
     /// A reply's `intent` ({"weight", "graph"}) as ordinary edits: the graph becomes the
     /// "current plan" routine and the top level weighs it among the character's desires.
     /// Replies without one (or with a new top level of their own) pass through unchanged.
-    fn plan_into_desires(&self, actor: u32, mut v: Value) -> Option<Value> {
-        // A top level replaces the character's ways only when it says so ("restructure");
-        // otherwise a graph is what it means to do now, weighed like an intent.
-        let restructure = v["restructure"].as_bool() == Some(true);
+    fn plan_into_desires(&self, actor: u32, v: Value) -> Option<Value> {
+        let person = self.conn.db.character().id().find(&actor).map_or(false, |c| c.kind == "person");
+        let v = self.plan_as_intent(actor, v, person)?;
+        Some(if person { self.keep_needs(actor, v) } else { v })
+    }
+
+    /// A person's needs (food, sleep, safety, warmth) belong to the body: however a top level
+    /// is rewritten, those desires stay among it (their weights remain the person's to set), and
+    /// their routines are restored from the person's first habits if retired. A top level that
+    /// is not desires at all is rebuilt around them.
+    fn keep_needs(&self, actor: u32, mut v: Value) -> Value {
+        let rep: Value = serde_json::from_str(include_str!("../../seeds/repertoire.json")).unwrap_or_default();
+        let seed: Vec<Value> = rep["top"]["desires"].as_array().cloned().unwrap_or_default();
+        let needs: Vec<Value> = seed.into_iter().filter(|d| matches!(d["want"].as_str(), Some("food" | "sleep" | "safety" | "warmth"))).collect();
+        let routine_of = |d: &Value| d["do"]["routine"].as_str().unwrap_or_default().to_lowercase();
+        let current_is_desires = self.conn.db.brain().id().find(&actor).map_or(false, |b| b.graph.trim_start().starts_with("{\"desires\""));
+        if !v["graph"].is_object() && !current_is_desires {
+            // Repair a top level that lost its desires (the plan, if any, stays as a desire).
+            let mut ds = needs.clone();
+            if self.conn.db.routine().iter().any(|r| r.actor == actor && r.name.eq_ignore_ascii_case(living_rules::graph::PLAN_ROUTINE)) {
+                ds.insert(0, json!({"want": living_rules::graph::PLAN_WANT, "weight": {"base": 0.6}, "do": {"routine": living_rules::graph::PLAN_ROUTINE}}));
+            }
+            v["graph"] = json!({"desires": ds});
+        }
+        if let Some(ds) = v["graph"].get_mut("desires").and_then(|d| d.as_array_mut()) {
+            for n in &needs {
+                if !ds.iter().any(|d| routine_of(d) == routine_of(n) || d["want"] == n["want"]) {
+                    ds.push(n.clone());
+                }
+            }
+            let mut routines = v["routines"].as_array().cloned().unwrap_or_default();
+            for n in &needs {
+                let name = routine_of(n);
+                let have = self.conn.db.routine().iter().any(|r| r.actor == actor && r.name.to_lowercase() == name)
+                    || routines.iter().any(|r| r["name"].as_str().map_or(false, |x| x.to_lowercase() == name) && !r["graph"].is_null());
+                if !have {
+                    if let Some(g) = rep["common"].get(name.as_str()) {
+                        routines.push(json!({"name": name, "graph": g}));
+                    }
+                }
+            }
+            v["routines"] = Value::Array(routines);
+        }
+        v
+    }
+
+    fn plan_as_intent(&self, actor: u32, mut v: Value, person: bool) -> Option<Value> {
+        // A top level replaces the character's ways only when it says so ("restructure"), and
+        // only as desires; otherwise a graph is what it means to do now, weighed like an intent.
+        let restructure = v["restructure"].as_bool() == Some(true) && (!person || v["graph"].get("desires").is_some());
         let intent = match v.get("intent").filter(|i| i.is_object()) {
             Some(i) => i.clone(),
             None if v["graph"].is_object() && !restructure => json!({"weight": v.get("weight").cloned().unwrap_or(json!(0.6)), "graph": v["graph"].clone()}),
-            None => return None,
+            None => return Some(v),
         };
         let own_top = v["graph"].is_object() && restructure;
         let weight = match &intent["weight"] {
@@ -225,9 +271,14 @@ impl Minds {
         routines.push(json!({"name": living_rules::graph::PLAN_ROUTINE, "graph": intent["graph"]}));
         v["routines"] = Value::Array(routines);
         if !own_top {
-            match living_rules::graph::with_plan(&top.root, weight) {
+            match living_rules::graph::with_plan(&top.root, weight.clone()) {
                 Some(root) => v["graph"] = serde_json::to_value(&root).ok()?,
-                // A flat top level has nothing to weigh against: the plan is the top level.
+                // A flat top level has nothing to weigh against: for a person it is rebuilt
+                // around their needs (see keep_needs) with the plan among them; an animal's
+                // plan is its top level.
+                None if person => {
+                    v["graph"] = json!({"desires": [{"want": living_rules::graph::PLAN_WANT, "weight": serde_json::to_value(&weight).ok()?, "do": {"routine": living_rules::graph::PLAN_ROUTINE}}]});
+                }
                 None => v["graph"] = intent["graph"].clone(),
             }
         }

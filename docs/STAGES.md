@@ -143,3 +143,9 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Species overrides in seeds.** A seed may carry a `species` object merged over `species.json` at build time.
   - **`--no-mind` labs.** `lab.py --no-mind` runs a lab without a mind service. With no people, animals never think (their minds wake only near people), so an ecology lab makes no model calls.
   - **Two ecology labs.** `eco-a` has the current wolf rules; `eco-b` has one pair per 50 tiles, single pups and a third of a life between litters. They run for up to four hours to find settings where deer and wolves persist before the stage 1 labs restart.
+- 09:00 — Ecology labs at 44 minutes, no people and no model calls: deer grow toward the grass's capacity (eco-a 113, eco-b 116) with wolves few (3–4) and killing modestly; too early to judge whether wolves persist. Stage 2 failed again:
+  - **Starvation.** Three people starved among 244 berries on 50 bushes; one (Moro) had rewritten the top level as a flat plan with no eating and sat at hunger 100 carrying wood.
+  - **Untaught know-how.** The holder of cooking, storage and planting starved with them untaught.
+  - **Teaching loops.** 387 teach acts were almost all "teach torch", 810 refused with "you don't know torch yourself" and repeated regardless.
+
+  Needs are now kept as the body's. However a person rewrites the top level, desires for food, sleep, safety and warmth stay among it (their weights still theirs), their routines come back if retired, and a top level that is not desires at all becomes an intent weighed among those needs (existing flat top levels are repaired at the next thought). Stage 2 restarted fresh; the teaching loop is noted for the next review.
