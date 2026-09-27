@@ -137,3 +137,4 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Pack breeding.** Only one wolf pair breeds within 15 tiles: a pair cannot conceive while another pair nearby is expecting or raising young (species `breeding_radius`).
 
   Mechanisms 14/14. Stage 2 updated in place (its existing grass rows keep the old reserve); both stage 1 labs, which had failed, restarted fresh.
+- 06:15 — With pack breeding and the smaller grass reserve, both fresh stage 1 labs show no flags at 40 minutes: baseline 104 deer and 12 wolves, wolves lab 72 deer and 15 wolves, both still growing; a birth in each (Juno; Fern). Stage 2, whose wolves had boomed to 77 before the change, collapsed: the pack ate every deer, then killed all nine people within ten minutes, then starved; the know-how died untaught. Stage 2 restarted fresh on the new rules.
