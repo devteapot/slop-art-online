@@ -484,6 +484,28 @@ fn plant_check(a) {
 fn plant_duration(a) { 5000 }
 fn plant_done(a) { [#{ op: "remove", item: "berries", qty: 2 }, #{ op: "plant" }] }
 
+// ---- reworking one's ways ------------------------------------------------------
+// A way (routine) is changed by sitting down to rework it, and only once it has been lived
+// with: tried a few times, failed a couple of times, or kept for a while. A new way can be
+// worked out at any time. The top level (what one weighs) changes more slowly still.
+
+fn rework_check(a) {
+    if a.actor.kind != "person" { return "only people rework their ways"; }
+    if young(a) && a.actor.stage == "infant" { return "too small to change your ways"; }
+    if a.text == "" { return "no new way in mind"; }
+    let r = a.routine;
+    if !r.exists { return if a.text == "retire" { `you have no way called "${a.item}"` } else { "" }; }
+    if a.item == "top level" {
+        if r.changed_s < 1440.0 { return `you changed how you live only ${(r.changed_s / 60.0).to_int()} minutes ago: live with it for about two days first`; }
+        return "";
+    }
+    let tried = r.ok + r.failed;
+    if tried >= 4 || r.failed >= 2 || r.changed_s >= 900.0 { return ""; }
+    `you have hardly lived with "${a.item}" since you last changed it (tried ${tried} times, failed ${r.failed}): see how it goes first`
+}
+fn rework_duration(a) { if a.item == "top level" { 30000 } else if a.routine.exists { 15000 } else { 10000 } }
+fn rework_done(a) { [#{ op: "rework" }, #{ op: "vitals", energy: -1.0 }] }
+
 // ---- combat moves ---------------------------------------------------------------
 
 fn dodge_check(a) { if a.actor.energy < 5.0 { "too exhausted to dodge" } else { "" } }
@@ -600,6 +622,8 @@ fn skill_io(skill) {
         "teach" => #{ takes: "a technique you know, a person beside you staying close for a while", gives: "they know it too" },
         "write" => #{ takes: "1 wood, knowing writing", gives: "a tablet you keep or a sign left here, with your words" },
         "read" => #{ takes: "a tablet you carry or a sign here, knowing writing", gives: "its words; a tablet describing a technique can teach it" },
+        "rework" => #{ takes: "a while sitting still; an old way must have been tried about 4 times, failed twice or kept 15 minutes (the top level: about two days)",
+            gives: "that way replaced by your new version (or dropped); how it goes starts counting afresh" },
         "conceive" => #{ takes: "a willing adult partner choosing it too, both fed", gives: "a child in time" },
         _ => #{ takes: "", gives: "" },
     }

@@ -209,6 +209,14 @@ def main():
     # Real-time behavior is not an act: it is refused with feedback.
     act(A, {"do": "flee", "target": {"nearest": "wolf"}})
     results["act: real-time behavior refused as an act"] = bool(wait_for(lambda: told(A, "behavior graph"), timeout=10))
+    # Ways change through the rework skill: a new way at once, an existing one only once it
+    # has been lived with (the rules script decides).
+    act(B, {"do": "rework", "item": "Watch_The_Fire", "graph": {"first": [{"do": "rest"}]}})
+    made = wait_for(lambda: [r for r in rows(db, f"SELECT actor, name FROM routine WHERE actor = {B}") if r["name"] == "watch the fire"], timeout=40)
+    act(B, {"do": "rework", "item": "watch the fire", "graph": {"first": [{"do": "wait"}]}})
+    results["act: rework makes a new way, refuses one not yet lived with"] = bool(made) and bool(wait_for(lambda: told(B, "hardly lived with"), timeout=40))
+    if not results["act: rework makes a new way, refuses one not yet lived with"]:
+        print("  rework: made", bool(made), [r["text"][:160] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {B}")][-6:])
     ok = all(results.values())
     for k, v in results.items():
         print(("PASS " if v else "FAIL ") + k)

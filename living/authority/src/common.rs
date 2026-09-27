@@ -278,7 +278,7 @@ fn sizes(root: &Node) -> Vec<u16> {
 fn owners(root: &Node, mine: &[Routine]) -> Vec<Option<u64>> {
     fn go(n: &Node, cur: Option<u64>, mine: &[Routine], out: &mut Vec<Option<u64>>) {
         let here = match n {
-            Node::First(c) => c.label.as_deref().and_then(|l| l.strip_prefix("routine:")).and_then(|name| mine.iter().find(|r| r.name.eq_ignore_ascii_case(name)).map(|r| r.id)).or(cur),
+            Node::First(c) => c.label.as_deref().and_then(|l| l.strip_prefix("routine:")).and_then(|name| mine.iter().find(|r| same_routine(&r.name, name)).map(|r| r.id)).or(cur),
             _ => cur,
         };
         out.push(here);
@@ -308,7 +308,7 @@ pub fn compiled(ctx: &ReducerContext, id: u32, revision: u32) -> Option<Rc<Compi
     // Inline the character's routines (only when the graph calls any).
     let (root, routine_of) = if living_rules::graph::preorder(&graph.root).iter().any(|n| matches!(n, Node::Routine(_))) {
         let mine: Vec<Routine> = ctx.db.routine().actor().filter(id).collect();
-        let lookup = |name: &str| mine.iter().find(|r| r.name.eq_ignore_ascii_case(name)).and_then(|r| living_rules::graph::parse(&r.graph).ok()).map(|g| g.root);
+        let lookup = |name: &str| mine.iter().find(|r| same_routine(&r.name, name)).and_then(|r| living_rules::graph::parse(&r.graph).ok()).map(|g| g.root);
         let expanded = living_rules::graph::expand(&graph.root, &lookup);
         let root = living_rules::graph::validate_compiled(expanded).map(|g| g.root).unwrap_or(graph.root);
         let owners = owners(&root, &mine);
@@ -822,4 +822,9 @@ pub fn wake(ctx: &ReducerContext, id: u32) {
     if ctx.db.wake().id().find(id).is_none() {
         ctx.db.wake().insert(Wake { id });
     }
+}
+
+/// Whether two routine names mean the same routine ("stay_safe" is "Stay safe").
+pub fn same_routine(a: &str, b: &str) -> bool {
+    living_rules::normalize::routine_name(a) == living_rules::normalize::routine_name(b)
 }

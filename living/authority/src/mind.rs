@@ -130,11 +130,11 @@ pub fn set_routines(ctx: &ReducerContext, actor: u32, routines: &[RoutineIn], so
     let sp = common::species(&kind);
     let mut notes = Vec::new();
     for r in routines {
-        let name: String = r.name.trim().chars().take(60).collect();
+        let name = living_rules::normalize::routine_name(&r.name);
         if name.is_empty() {
             continue;
         }
-        let existing = ctx.db.routine().actor().filter(actor).find(|x| x.name.eq_ignore_ascii_case(&name));
+        let existing = ctx.db.routine().actor().filter(actor).find(|x| living_rules::normalize::routine_name(&x.name) == name);
         if r.graph.trim().is_empty() {
             if let Some(x) = existing {
                 ctx.db.routine_stat().id().delete(x.id);
@@ -158,6 +158,9 @@ pub fn set_routines(ctx: &ReducerContext, actor: u32, routines: &[RoutineIn], so
         }
         match existing {
             Some(mut x) => {
+                // How a routine has gone describes this version: a new one starts afresh.
+                ctx.db.routine_stat().id().delete(x.id);
+                x.name = name.clone();
                 x.graph = g.to_json();
                 x.revision += 1;
                 x.source = source.into();
@@ -180,6 +183,66 @@ pub fn set_routines(ctx: &ReducerContext, actor: u32, routines: &[RoutineIn], so
         let _ = set_graph(ctx, actor, &b.graph, &b.plan, &b.source, now);
     }
     Ok(notes)
+}
+
+/// The top level (the desires that call routines) as a rework's item.
+pub const TOP_LEVEL: &str = "top level";
+
+/// How the current version of a routine (or the top level) has gone, for the rework rules.
+pub fn routine_facts(ctx: &ReducerContext, actor: u32, name: &str, now: u64) -> living_rules::script::RoutineFacts {
+    let name = living_rules::normalize::routine_name(name);
+    if name == TOP_LEVEL {
+        return match ctx.db.brain().id().find(actor) {
+            Some(b) => living_rules::script::RoutineFacts { exists: true, ok: 0, failed: 0, changed_s: now.saturating_sub(b.installed_ms) as f32 / 1000.0 },
+            None => Default::default(),
+        };
+    }
+    match ctx.db.routine().actor().filter(actor).find(|r| living_rules::normalize::routine_name(&r.name) == name) {
+        Some(r) => {
+            let st = ctx.db.routine_stat().id().find(r.id);
+            living_rules::script::RoutineFacts {
+                exists: true,
+                ok: st.as_ref().map_or(0, |s| s.ok),
+                failed: st.as_ref().map_or(0, |s| s.failed),
+                changed_s: now.saturating_sub(r.updated_ms) as f32 / 1000.0,
+            }
+        }
+        None => Default::default(),
+    }
+}
+
+/// Carry out a finished rework: the routine (or the top level) becomes the new version, or
+/// is retired. Returns what the person feels came of it.
+pub fn rework(ctx: &ReducerContext, actor: u32, name: &str, graph: &str, now: u64) -> String {
+    let name = living_rules::normalize::routine_name(name);
+    if name == living_rules::normalize::routine_name(living_rules::graph::PLAN_ROUTINE) {
+        return "Your plan is what you decide, not a habit to rework.".into();
+    }
+    if name == TOP_LEVEL {
+        if graph == "retire" {
+            return "You cannot live without any ways at all.".into();
+        }
+        let person = ctx.db.character().id().find(actor).map_or(false, |c| c.kind == "person");
+        if person && !graph.trim_start().starts_with("{\"desires\"") {
+            return "You could not settle on a new way of living: your top level has to weigh desires.".into();
+        }
+        let plan = ctx.db.brain().id().find(actor).map(|b| b.plan).unwrap_or_default();
+        return match set_graph(ctx, actor, graph, &plan, "mind", now) {
+            Ok(_) => "You reworked how you live: what you weigh and how.".into(),
+            Err(e) => format!("You could not settle on a new way of living: {e}"),
+        };
+    }
+    let edit = RoutineIn { name: name.clone(), graph: if graph == "retire" { String::new() } else { graph.to_string() } };
+    match set_routines(ctx, actor, &[edit], "mind", now) {
+        Ok(notes) => match notes.first() {
+            Some(n) if n.contains(": ") => format!("You could not rework \"{name}\": {}", n.split_once(": ").map(|x| x.1).unwrap_or(n)),
+            Some(n) if n.starts_with("revised") => format!("You reworked \"{name}\": now see how the new way goes."),
+            Some(n) if n.starts_with("retired") => format!("You gave up \"{name}\"."),
+            Some(_) => format!("You worked out a new way: \"{name}\"."),
+            None => format!("There was no \"{name}\" to give up."),
+        },
+        Err(e) => format!("You could not rework \"{name}\": {e}"),
+    }
 }
 
 /// A mind edits its character's routines (one or a few at a time).

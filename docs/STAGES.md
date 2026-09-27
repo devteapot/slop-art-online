@@ -245,3 +245,11 @@ Evidence, rule changes and decisions per stage, newest last.
     - Each mind logs its window every minute.
   - **First 8 minutes.** Mistral carried 298 calls a minute with 0 rate limits (p50 2.9 s); windows reached 20–27 calls in flight, and about 1 call a minute overflowed to Luna. The earlier 429s came from bursts and retry storms, not the average load.
   - **Caveat.** Comparisons between models per person no longer hold: one person's calls can go to either model.
+- 10:40 — Ways change through a skill; skills can be conditions. Minds had rewritten about 430 habits in 40 minutes (about 8 per person), plus near-duplicates such as "stay safe" beside "stay_safe".
+  - **Rework is a skill.** `{"do": "rework", "item": "<routine>", "graph": {...}}` is an act (or `"retire": true`; item `"top level"` with a desires graph changes what one weighs). The body sits still for 15 s (10 s for a new way, 30 s for the top level). The rules script decides when enough has been lived: an existing way must have been tried 4 times, failed twice or kept 15 minutes; the top level about two days.
+  - **Direct edits removed.** Mind replies no longer change routines or restructure the top level; the plan still changes by deciding.
+  - **Stats and names.** Routine stats now describe the current version (reset when it changes), and routine names are canonical (lower case, words apart).
+  - **Skills as conditions.** `{"can": {"do": "eat", "item": "food"}}` holds when the skill could go ahead now by the world's rules (the same check an action passes when it starts), with its target in sight.
+  - **Checks.** Mechanics check added (a new way is made; a way just changed cannot be reworked yet). Rules tests cover rework acts and `can`.
+
+  Updated in place: stage2-base, stage3-village and stage4-two.

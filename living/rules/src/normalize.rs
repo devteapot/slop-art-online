@@ -342,6 +342,18 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     if let Some(Value::String(t)) = action.get("text").or_else(|| action.get("words")).or_else(|| action.get("message")) {
         out.insert("text".into(), json!(t.chars().take(400).collect::<String>()));
     }
+    if skill == "rework" {
+        let name = out.get("item").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+        let raw = action.get("item").or_else(|| action.get("what")).and_then(|i| i.as_str()).unwrap_or(&name);
+        out.insert("item".into(), json!(routine_name(raw)));
+        let text = if action.get("retire").and_then(|r| r.as_bool()) == Some(true) {
+            "retire".to_string()
+        } else {
+            let g = action.get("graph").or_else(|| action.get("routine")).or_else(|| action.get("new")).cloned().ok_or_else(|| format!("{path}.do: rework needs the new version as \"graph\" (or \"retire\": true)"))?;
+            node(g, &format!("{path}.do.graph"))?.to_string()
+        };
+        out.insert("text".into(), json!(text));
+    }
     if let Some(Value::String(t)) = action.get("topic").or_else(|| action.get("technique")).or_else(|| action.get("about")) {
         out.insert("topic".into(), json!(t.trim().to_lowercase()));
     }
@@ -361,7 +373,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     if spec.needs_target && !out.contains_key("target") {
         return Err(format!("{path}.do: skill `{skill}` needs a target"));
     }
-    if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal") {
+    if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework") {
         let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some();
         if !known {
             return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::ITEMS.iter().map(|x| x.name).collect::<Vec<_>>().join(", ")));
@@ -371,6 +383,11 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
 }
 
 /// Map loose item names onto the catalog (`raw meat` → `meat`, `Cooked Fish` → `cooked_fish`).
+/// A routine's name as kept: trimmed, lower case, words apart ("Stay_Safe" → "stay safe").
+pub fn routine_name(n: &str) -> String {
+    n.trim().to_lowercase().replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ").chars().take(60).collect()
+}
+
 pub fn fix_item(i: &str) -> String {
     let mut s = i.trim().to_lowercase().replace([' ', '-'], "_");
     if let Some(rest) = s.strip_prefix("raw_") {
@@ -557,6 +574,17 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     json!({key: n})
                 }
                 "within" => return cond(json!({"near": v}), path),
+                "can" | "able" | "can_do" => {
+                    let inner = match v {
+                        Value::String(s) => json!({"do": s}),
+                        Value::Object(o) if o.contains_key("do") || o.contains_key("skill") && o.len() == 1 => Value::Object(o),
+                        Value::Object(o) => json!({"do": Value::Object(o)}),
+                        _ => return Err(format!("{p}: expected {{\"do\": skill, ...}}")),
+                    };
+                    let n = node(inner, &p)?;
+                    let a = n.get("do").cloned().ok_or_else(|| format!("{p}: expected a single skill"))?;
+                    json!({"can": a})
+                }
                 "count" | "number_of" | "how_many" => {
                     let Value::Object(o) = v else { return Err(format!("{p}: expected {{\"of\": kind, \"within\": n, \"at_least\": n}}")) };
                     let o = strip_nulls(o);
@@ -663,6 +691,24 @@ mod tests {
         assert!(o.contains("signal howl") && o.contains("attack"), "{o}");
         assert!(crate::species::skills_help(wolf).contains("signal"));
         assert!(!crate::species::skills_help(wolf).contains("build"));
+    }
+
+    #[test]
+    fn skills_can_be_conditions() {
+        let (g, _) = super::graph(json!({"if": {"can": {"do": "eat", "item": "food"}}, "then": {"do": "eat", "item": "food"}, "else": {"do": "rest"}})).unwrap();
+        let g = crate::graph::from_value_lenient(g).unwrap().0;
+        assert!(crate::graph::outline(&g.root).contains("can eat food"), "{}", crate::graph::outline(&g.root));
+        assert!(super::graph(json!({"if": {"can": {"do": "gather"}}, "then": {"do": "rest"}})).is_err(), "gather needs a target");
+    }
+
+    #[test]
+    fn rework_carries_its_new_version() {
+        let a = crate::acts::parse(json!({"do": "rework", "item": "Watch_The_Fire", "graph": {"first": [{"do": "rest"}]}}), None).unwrap();
+        assert_eq!(a.item.as_deref(), Some("watch the fire"));
+        assert!(a.text.as_deref().unwrap().contains("rest"));
+        let r = crate::acts::parse(json!({"do": "rework", "item": "explore", "retire": true}), None).unwrap();
+        assert_eq!(r.text.as_deref(), Some("retire"));
+        assert!(crate::acts::parse(json!({"do": "rework", "item": "explore"}), None).is_err());
     }
 
     #[test]

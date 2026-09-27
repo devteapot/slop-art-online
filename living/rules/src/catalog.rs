@@ -60,6 +60,7 @@ pub const SKILLS: &[SkillSpec] = &[
     SkillSpec { name: "read", needs_target: false, needs_item: false, reach: 1.5, help: "read a tablet you carry, or a sign (target: {\"nearest\": \"sign\"}) — needs writing; a tablet describing a technique can teach it" },
     SkillSpec { name: "plant", needs_target: false, needs_item: false, reach: 0.0, help: "plant 2 berries here to grow a new berry bush (needs planting; open grass or dirt)" },
     SkillSpec { name: "signal", needs_target: false, needs_item: true, reach: 0.0, help: "make one of your species' signals (item: its name); others nearby hear it" },
+    SkillSpec { name: "rework", needs_target: false, needs_item: true, reach: 0.0, help: "sit and rework one of your ways (item: a routine's name, or \"top level\" for your desires; graph: the new version, or \"retire\": true to drop a routine); takes a while, and the old way must have been lived with first" },
     SkillSpec { name: "graze", needs_target: false, needs_item: false, reach: 0.0, help: "(animals) eat grass where you stand" },
 ];
 

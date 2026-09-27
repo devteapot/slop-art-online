@@ -1081,8 +1081,18 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             total_latency += reply.latency_ms;
             total_tokens += reply.tokens;
             let raw = keep(&reply.content);
-            // An intention becomes the "current plan" routine, weighed among the desires.
-            let intended = llm::parse_json(&raw).ok().and_then(|v| self.plan_into_desires(actor, v));
+            // An intention becomes the "current plan" routine, weighed among the desires. Ways
+            // change only through the rework skill (an act), not by a reply rewriting them.
+            let intended = llm::parse_json(&raw)
+                .ok()
+                .map(|mut v| {
+                    if let Some(o) = v.as_object_mut() {
+                        o.remove("routines");
+                        o.remove("restructure");
+                    }
+                    v
+                })
+                .and_then(|v| self.plan_into_desires(actor, v));
             let content = intended.as_ref().map(|v| v.to_string()).unwrap_or_else(|| raw.clone());
             // Routine edits apply whatever else the reply does (they are idempotent upserts).
             if let Ok(v) = llm::parse_json(&content) {

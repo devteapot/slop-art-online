@@ -691,6 +691,16 @@ impl<'a> Ev<'a> {
                 .filter(self.me.id)
                 .find(|j| j.key.eq_ignore_ascii_case(&b.key))
                 .map_or(false, |j| j.value > b.above),
+            Cond::Can(a) => {
+                let target = match &a.target {
+                    Some(t) => match self.resolve(t) {
+                        Some(r) => r,
+                        None => return false,
+                    },
+                    None => act::Resolved::none(),
+                };
+                act::can(self.ctx, self.me.id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), self.now)
+            }
             Cond::Chance(p) => self.ctx.rng().gen_range(0.0f32..1.0) < *p,
             Cond::All(v) => v.iter().all(|x| self.cond(x)),
             Cond::Any(v) => v.iter().any(|x| self.cond(x)),
@@ -817,7 +827,7 @@ impl<'a> Ev<'a> {
                             _ => None,
                         });
                         let name = food_routine.unwrap_or_else(|| "eat".to_string());
-                        if let Some(r) = self.ctx.db.routine().actor().filter(self.me.id).find(|r| r.name.eq_ignore_ascii_case(&name)) {
+                        if let Some(r) = self.ctx.db.routine().actor().filter(self.me.id).find(|r| crate::common::same_routine(&r.name, &name)) {
                             if let Ok(g) = living_rules::graph::parse(&r.graph) {
                                 let how: String = living_rules::graph::outline(&g.root).lines().map(|l| l.trim()).collect::<Vec<_>>().join("; ");
                                 why.push_str(&format!(" Your hunger runs your routine \"{}\", which does: {}. It has not fed you.", r.name, how.chars().take(300).collect::<String>()));

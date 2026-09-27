@@ -210,6 +210,9 @@ pub enum Cond {
     HealthOf(HealthOfCond),
     /// A judgment the mind maintains from its beliefs.
     Believes(Believes),
+    /// Whether a skill could go ahead now by the world's rules (the same check it passes when
+    /// it starts), e.g. `{"can": {"do": "eat", "item": "food"}}`; its target must be in sight.
+    Can(Action),
     Chance(f32),
     All(Vec<Cond>),
     Any(Vec<Cond>),
@@ -762,6 +765,7 @@ pub fn describe_cond(c: &Cond) -> String {
         Cond::Night(true) => "night".into(),
         Cond::Night(false) => "day".into(),
         Cond::Believes(b) => format!("believes {} > {}", b.key, b.above),
+        Cond::Can(a) => format!("can {}", describe(&Node::Do(a.clone())).trim_start_matches("do ")),
         Cond::Chance(p) => format!("chance {p}"),
         Cond::All(v) => v.iter().map(describe_cond).collect::<Vec<_>>().join(" and "),
         Cond::Any(v) => format!("({})", v.iter().map(describe_cond).collect::<Vec<_>>().join(" or ")),

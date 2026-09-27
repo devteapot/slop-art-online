@@ -75,6 +75,19 @@ pub struct SkillCtx {
     pub roll: f32,
     /// The skill being performed (empty for rates and speed).
     pub skill: String,
+    /// The routine being reworked (rework only).
+    pub routine: RoutineFacts,
+}
+
+/// How the actor's current version of a routine has gone (for `rework`).
+#[derive(Clone, Debug, Default)]
+pub struct RoutineFacts {
+    pub exists: bool,
+    /// Its actions that finished well and that failed, since it was last changed.
+    pub ok: u32,
+    pub failed: u32,
+    /// Seconds since it was last changed.
+    pub changed_s: f32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -99,6 +112,9 @@ pub enum Effect {
     Store { item: String, qty: u32 },
     /// Move items from the target structure to the actor.
     Take { item: String, qty: u32 },
+    /// Replace (or retire) one of the actor's routines, or its top level, with the reworked
+    /// version the act carries.
+    Rework,
     /// Create a structure at the actor's position.
     Build { kind: String },
     /// Offer (or accept) starting a family with the target person.
@@ -437,9 +453,15 @@ fn to_map(c: &SkillCtx) -> Map {
     t.insert("dist".into(), f(c.target.dist));
     t.insert("inv".into(), inv_map(&c.target.inv).into());
     t.insert("knows".into(), c.target.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
+    let mut r = Map::new();
+    r.insert("exists".into(), c.routine.exists.into());
+    r.insert("ok".into(), Dynamic::from_int(c.routine.ok as i64));
+    r.insert("failed".into(), Dynamic::from_int(c.routine.failed as i64));
+    r.insert("changed_s".into(), f(c.routine.changed_s));
     let mut m = Map::new();
     m.insert("actor".into(), a.into());
     m.insert("target".into(), t.into());
+    m.insert("routine".into(), r.into());
     m.insert("item".into(), c.item.clone().into());
     m.insert("qty".into(), Dynamic::from_int(c.qty as i64));
     m.insert("night".into(), c.night.into());
@@ -480,6 +502,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "teach" => Effect::Teach { technique: s("technique") },
         "learn" => Effect::Learn { technique: s("technique") },
         "write" => Effect::Write,
+        "rework" => Effect::Rework,
         "read" => Effect::Read,
         "plant" => Effect::Plant,
         "offer" => Effect::Offer,

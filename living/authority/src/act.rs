@@ -159,6 +159,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
     }
     let hour = common::hour(&w, now);
     let roll: f32 = ctx.rng().gen_range(0.0..1.0);
+    let routine = if a.skill == "rework" { crate::mind::routine_facts(ctx, id, &a.item, now) } else { Default::default() };
     SkillCtx {
         actor,
         target: target_facts(ctx, &a.target, from, now),
@@ -171,6 +172,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         topic: a.topic.clone(),
         roll,
         skill: a.skill.clone(),
+        routine,
     }
 }
 
@@ -217,6 +219,36 @@ fn speed(ctx: &ReducerContext, id: u32, now: u64) -> f32 {
 
 /// Start an action for behavior node `node`. `cur` is the current activity, if any.
 #[allow(clippy::too_many_arguments)]
+/// Whether the rules would let a skill go ahead now (the `can` condition): the check an action
+/// passes when it starts, without starting it.
+pub fn can(ctx: &ReducerContext, id: u32, skill: &str, target: Resolved, item: &str, qty: u32, now: u64) -> bool {
+    let item = match (skill, item) {
+        ("take", "food") if target.class == 2 => common::best_food(ctx, STRUCTURE_BIT | target.id),
+        (_, "food") => common::best_food(ctx, id as u64),
+        (_, i) => Some(i.to_string()),
+    };
+    let Some(item) = item else { return false };
+    let act = Activity {
+        id,
+        skill: skill.into(),
+        phase: 0,
+        node: 0,
+        revision: 0,
+        target: target.to_ref(),
+        item,
+        qty,
+        started_ms: now,
+        ends_ms: IDLE,
+        label: String::new(),
+        text: String::new(),
+        topic: String::new(),
+        victim: 0,
+        want: String::new(),
+        want_qty: 0,
+    };
+    common::scripts(ctx).check(skill, &skill_ctx(ctx, id, &act, now)).is_ok()
+}
+
 pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), now: u64) -> Result<(), String> {
     let cur = ctx.db.activity().id().find(id);
     if let Some(a) = &cur {
@@ -335,7 +367,8 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         started_ms: now,
         ends_ms: IDLE,
         label: label(skill, &item, &target),
-        text: text.chars().take(400).collect(),
+        // A rework carries a whole graph; other texts are a sign's or tablet's words.
+        text: text.chars().take(if skill == "rework" { 32_000 } else { 400 }).collect(),
         topic: topic.to_string(),
         want: want.0.to_string(),
         want_qty: want.1,
@@ -788,6 +821,13 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 } else {
                     notes.push("learned nothing new".into());
                 }
+            }
+            Effect::Rework => {
+                let note = crate::mind::rework(ctx, me, &a.item, &a.text, now);
+                if let Some(c) = ctx.db.character().id().find(me) {
+                    percept(ctx, &c, now, "self", me, 0, at, note.clone(), 0.6);
+                }
+                notes.push(note);
             }
             Effect::Write => {
                 let w = common::world(ctx);
