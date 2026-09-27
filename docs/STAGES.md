@@ -172,3 +172,13 @@ Evidence, rule changes and decisions per stage, newest last.
 
   Stage 2 is storing food for the first time (8 storages, 15 meat). Know-how is spread: storage and cloak three people each, writing and carpentry two, cooking and planting still one, and toolmaking discovered. Its wolves died out. The baseline lost its wolves before the change and cannot pass; restarted fresh on the current settings to serve as the second stage-1 lab.
 - 14:10 — Model comparison (asked for by the user): half of the people now think with GPT-6 Luna and half with Mistral Small, alternating by character id (odd ids Luna); children and animals stay on Mistral Small. Luna answers through its gateway with low reasoning effort for thinking, compiling and talk, and medium for memory. `living/tools/compare_models.py <db> --since-min N` groups people by the model their mind runs on and reports calls, latency, tokens, errors, acts by kind, speech and repeated lines, hunger, deaths, children and teaching. Started in all three running labs at once.
+
+**Stage 1 closed — mechanics pass, balance caveat (decided with the user, 2026-09-27).** Evidence: people eat, rest, keep warm, pair, have children and die of old age; births in every lab and a third generation in two (wolves lab and stage 2); infants fed (no neglected-baby flags since the fixes); speech without repeats or runaway; deer and wolves coexist for four hours and about fourteen generations without people (eco-a), and for hours alongside people in the wolves lab (≈100 deer, 9–13 wolves at 4 hours). Caveat: the balance between hunters, wolves and deer near people is sensitive — packs dwindled in two of three people labs — and is left as tuning rather than a gate. The stage 2 lab keeps running as a canary for regressions in eating, births and teaching.
+
+### Stages 3 and 4 (started 2026-09-27)
+
+- 14:40 — Labs started in parallel:
+  - **Stage 3 (`stage3-village`).** Three families of six in the valley (two couples and two children each), each knowing different crafts: the river family cooking, the grove family storage and planting, the stone family carpentry. Measures: roles (practice concentrating in different people), shared stores, houses, a community founded, rules kept or changed, exchange between families.
+  - **Stage 4 (`stage4-two`).** Two towns of ten on a 192-tile realm, about 110 tiles apart. Eastmere is lakeside (fishers and cooks; wood plentiful, stone scarce); Stonewatch is in the hills (hunters and masons; stone plentiful, fish scarce). Measures: travel between towns, trade, teaching or conflict, and their causes.
+
+  Both use two-hour lives and half the people think with GPT-6 Luna.

@@ -1,0 +1,130 @@
+{
+  "run": "s3-village",
+  "seed": 11,
+  "map": {
+    "kind": "valley"
+  },
+  "year_days": 4,
+  "life_pace": 0.1428,
+  "setting": "A valley between hills and the sea, with streams, woods and grassland, where three families live within a morning's walk of each other. Berries grow by the woods, fish swim in the streams, deer graze the meadows and a few wolves live in the woods. Seasons turn quickly; in winter nothing grows, nights are colder, and food that is not cooked or stored spoils. People live about seventy years here, but the years pass very fast.",
+  "bands": [
+    {
+      "name": "the river family",
+      "history": "We fish and hunt by the river and cook what we catch; the grove family and the stone family live nearby in the valley. There are two couples among us.",
+      "knows": [
+        "fire",
+        "shelter",
+        "spear",
+        "cooking"
+      ],
+      "camp": [
+        "shelter",
+        "campfire"
+      ],
+      "family": [
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "child"
+        },
+        {
+          "stage": "child"
+        }
+      ]
+    },
+    {
+      "name": "the grove family",
+      "history": "We gather and plant berries by the woods and keep stores for winter; the river family and the stone family live nearby in the valley. There are two couples among us.",
+      "knows": [
+        "fire",
+        "shelter",
+        "storage",
+        "planting"
+      ],
+      "camp": [
+        "shelter",
+        "campfire"
+      ],
+      "family": [
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "child"
+        },
+        {
+          "stage": "child"
+        }
+      ]
+    },
+    {
+      "name": "the stone family",
+      "history": "We work wood and stone on the hillside and build well; the river family and the grove family live nearby in the valley. There are two couples among us.",
+      "knows": [
+        "fire",
+        "shelter",
+        "spear",
+        "carpentry"
+      ],
+      "camp": [
+        "shelter",
+        "campfire"
+      ],
+      "family": [
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "child"
+        },
+        {
+          "stage": "child"
+        }
+      ]
+    }
+  ],
+  "animals": {
+    "deer": 60,
+    "wolf": 4
+  }
+}
