@@ -106,7 +106,13 @@ impl Store {
             "CREATE CONSTRAINT living_concept IF NOT EXISTS FOR (c:Concept) REQUIRE (c.run, c.actor, c.key) IS UNIQUE",
             "CREATE INDEX living_concept_mind IF NOT EXISTS FOR (c:Concept) ON (c.run, c.actor)",
         ] {
-            s.g.run(query(q)).await?;
+            // Two mind services starting together can race on `IF NOT EXISTS`; the loser is
+            // told the equivalent rule already exists, which is what it wanted.
+            if let Err(e) = s.g.run(query(q)).await {
+                if !format!("{e:#}").contains("EquivalentSchemaRuleAlreadyExists") {
+                    return Err(e.into());
+                }
+            }
         }
         Ok(s)
     }
@@ -1042,14 +1048,21 @@ fn props(v: &Value) -> serde_json::Map<String, Value> {
     out
 }
 
+/// Anchors tie concepts to the world: oneself and a person cannot be merged away, and nothing
+/// is merged into oneself (that would make someone else's ties one's own). Checked again after
+/// name-style person keys become ids.
+pub fn merge_refused(from: &str, into: &str) -> bool {
+    let anchored = |k: &str| k == "self" || k.strip_prefix("person:").map_or(false, |r| r.parse::<u32>().is_ok());
+    from == into || anchored(from) || into == "self"
+}
+
 /// Build a sanitized patch from a model reply; ids in `because` must be known experiences.
 pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u64, f64, Vec<String>)>) -> (Patch, Vec<String>) {
     let mut patch = Patch::default();
     let mut notes = Vec::new();
-    let anchored = |k: &str| k == "self" || k.strip_prefix("person:").map_or(false, |r| r.parse::<u32>().is_ok());
     for m in v["merge"].as_array().cloned().unwrap_or_default().into_iter().take(12) {
         let (Some(from), Some(into)) = (m["from"].as_str().and_then(key), m["into"].as_str().and_then(key)) else { continue };
-        if from == into || anchored(&from) {
+        if merge_refused(&from, &into) {
             notes.push(format!("merge {from} → {into} refused"));
             continue;
         }
@@ -1277,5 +1290,22 @@ mod tests {
         assert_eq!(p.retract, vec![("self".into(), "TRUSTS".into(), "person:4".into())]);
         assert_eq!(p.remember.len(), 1);
         assert_eq!(notes.len(), 1);
+    }
+
+    #[test]
+    fn anchors_are_not_merged_away_or_into_self() {
+        let v = json!({"merge": [
+            {"from": "person:11", "into": "self"},
+            {"from": "idea:my_strength", "into": "self"},
+            {"from": "self", "into": "idea:me"},
+            {"from": "person:kael", "into": "person:5"},
+            {"from": "idea:kael_seems_kind", "into": "idea:kael_is_friendly"}
+        ]});
+        let (p, notes) = patch_from(&v, &[], &|_| None);
+        assert_eq!(p.merges, vec![("person:kael".into(), "person:5".into()), ("idea:kael_seems_kind".into(), "idea:kael_is_friendly".into())]);
+        assert_eq!(notes.len(), 3);
+        // A name-style person key becomes an id later; the check holds for the result too.
+        assert!(merge_refused("person:11", "person:5"));
+        assert!(merge_refused("person:11", "self"));
     }
 }

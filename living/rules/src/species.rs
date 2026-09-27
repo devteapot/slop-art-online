@@ -42,6 +42,13 @@ pub struct Species {
     #[serde(default)]
     pub life: crate::life::Life,
     pub cognition: Cognition,
+    /// How many of them a new world places together (a herd, a pack); 1 = alone.
+    #[serde(default = "one")]
+    pub group: u32,
+}
+
+fn one() -> u32 {
+    1
 }
 
 impl Species {

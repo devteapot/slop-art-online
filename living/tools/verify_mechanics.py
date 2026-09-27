@@ -74,10 +74,10 @@ def main():
     db = a.db
     stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", db, "--delete-data", "-y")
     time.sleep(3)
-    stdb("call", "-s", "local", db, "spawn_crowd", "4", "true")
+    stdb("call", "-s", "local", db, "spawn_crowd", "5", "true")
     time.sleep(1.5)
     walkers = sorted(int(r["id"]) for r in rows(db, "SELECT id, name FROM character") if r["name"].startswith("Walker"))
-    A, B, C, D = walkers[:4]
+    A, B, C, D, E = walkers[:5]
     name_a = f"Walker1"
     call(db, "place_near", str(B), str(A))
     for t in ["writing", "spear", "planting"]:
@@ -251,6 +251,24 @@ def main():
     results["clearing forest yields wood"] = bool(wait_for(lambda: have(D, "wood") >= wood0 + 2, timeout=150))
     if not results["clearing forest yields wood"]:
         print("  clear:", [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {D}")][-6:])
+    # Death: what only a living body uses goes with it (routines, their stats, practice, the
+    # graph, genes); a parent of a child still expected keeps it until the birth.
+    act(E, {"do": "rework", "item": "keep watch", "graph": {"first": [{"do": "rest"}]}})
+    reworked = wait_for(lambda: rows(db, f"SELECT id, name FROM routine WHERE actor = {E}"), timeout=40)
+    call(db, "set_behavior", str(E), seq({"do": {"skill": "gather", "target": {"nearest": "berry_bush"}}}))
+    lived = reworked and wait_for(lambda: rows(db, f"SELECT id, skill FROM practice WHERE actor = {E}"), timeout=60)
+    routine_ids = [int(r["id"]) for r in rows(db, f"SELECT id, name FROM routine WHERE actor = {E}")]
+    call(db, "kill", str(E), "test")
+    # A walker expecting a child (A with B, or C with D, from the checks above).
+    expecting_walkers = [int(r[k]) for r in rows(db, "SELECT a, b FROM expecting") for k in ("a", "b") if int(r[k]) in (A, B, C, D)]
+    P = expecting_walkers[0] if expecting_walkers else C
+    call(db, "kill", str(P), "test")
+    left = {t: rows(db, f"SELECT id, {c2} FROM {t} WHERE {col} = {E}") for t, col, c2 in [("routine", "actor", "name"), ("practice", "actor", "skill"), ("brain", "id", "revision"), ("genome", "id", "ways")]}
+    left["routine_stat"] = [r for r in rows(db, "SELECT id, ok FROM routine_stat") if int(r["id"]) in routine_ids]
+    kept = bool(expecting_walkers) and rows(db, f"SELECT id, ways FROM genome WHERE id = {P}") and rows(db, f"SELECT id, revision FROM brain WHERE id = {P}")
+    results["death clears the body's rows; an expecting parent keeps its genes"] = bool(lived) and not any(left.values()) and bool(kept)
+    if not results["death clears the body's rows; an expecting parent keeps its genes"]:
+        print("  death: lived", bool(lived), "left", {k: len(v) for k, v in left.items()}, "parent kept", bool(kept))
     ok = all(results.values())
     for k, v in results.items():
         print(("PASS " if v else "FAIL ") + k)

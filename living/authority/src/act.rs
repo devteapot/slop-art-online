@@ -1331,6 +1331,32 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.act_queue().actor().delete(id);
 }
 
+/// What only a living body uses goes with it, so active tables stay proportional to the
+/// living: routines and how they went, practice, the installed graph, genes, rearing and the
+/// mind's projections (animals' personas and thoughts too; people's stay for the story). A
+/// parent of a child still expected keeps what the child inherits until the birth.
+pub fn retire(ctx: &ReducerContext, id: u32) {
+    if ctx.db.expecting().iter().any(|e| e.a == id || e.b == id) {
+        return;
+    }
+    for r in ctx.db.routine().actor().filter(id).map(|r| r.id).collect::<Vec<_>>() {
+        ctx.db.routine_stat().id().delete(r);
+        ctx.db.routine().id().delete(r);
+    }
+    ctx.db.practice().actor().delete(id);
+    ctx.db.brain().id().delete(id);
+    ctx.db.genome().id().delete(id);
+    ctx.db.rearing().id().delete(id);
+    ctx.db.relation().actor().delete(id);
+    ctx.db.belief().actor().delete(id);
+    if ctx.db.character().id().find(id).is_some_and(|c| c.kind != "person") {
+        common::invalidate_traits(ctx, id);
+        ctx.db.persona().id().delete(id);
+        ctx.db.thought().actor().delete(id);
+    }
+    common::forget_cached(id);
+}
+
 pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, now: u64) {
     let Some(mut v) = ctx.db.vitals().id().find(victim) else { return };
     let Some(vc) = ctx.db.character().id().find(victim) else { return };
@@ -1461,6 +1487,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
     ctx.db.wake().id().delete(id);
     ctx.db.deliberation().actor().delete(id);
     forget_dead(ctx, id);
-    let text = if killer != 0 { "{a} was killed by {b}".to_string() } else { format!("{{a}} died ({cause})") };
+    retire(ctx, id);
+    let text =if killer != 0 { "{a} was killed by {b}".to_string() } else { format!("{{a}} died ({cause})") };
     witnessed(ctx, now, at, "death", id, killer, &text, if kind == "person" { 1.0 } else { 0.5 }, &[id]);
 }

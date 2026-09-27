@@ -362,12 +362,33 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         }
     }
     communities(ctx, now);
+    // Animals start in their species' groups (herds, packs), so a few wolves on a large map
+    // are a pack that can breed rather than strangers who never meet.
     for (kind, count) in [("deer", s.animals.deer), ("wolf", s.animals.wolf)] {
-        for _ in 0..count {
-            if let Some(at) = animal_spot(ctx, &map, kind) {
-                spawn_animal(ctx, kind, at, now);
+        let group = common::species(kind).map_or(1, |sp| sp.group.max(1));
+        let mut left = count;
+        while left > 0 {
+            let Some(at) = animal_spot(ctx, &map, kind) else { break };
+            for _ in 0..group.min(left) {
+                let spot = (0..20)
+                    .map(|_| (at.0 + ctx.rng().gen_range(-3.0f32..3.0), at.1 + ctx.rng().gen_range(-3.0f32..3.0)))
+                    .find(|p| animal_ground(&map, kind, p.0 as i32, p.1 as i32))
+                    .unwrap_or(at);
+                spawn_animal(ctx, kind, spot, now);
             }
+            left -= group.min(left);
         }
+    }
+}
+
+fn animal_ground(map: &living_rules::map::Map, kind: &str, x: i32, y: i32) -> bool {
+    if x < 1 || y < 1 || x >= map.w as i32 - 1 || y >= map.h as i32 - 1 {
+        return false;
+    }
+    let t = map.get(x, y);
+    match kind {
+        "wolf" => t == Terrain::Forest,
+        _ => t == Terrain::Grass,
     }
 }
 
@@ -407,12 +428,7 @@ pub fn animal_spot(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &st
     for _ in 0..200 {
         let x = ctx.rng().gen_range(4..map.w as i32 - 4);
         let y = ctx.rng().gen_range(4..map.h as i32 - 4);
-        let t = map.get(x, y);
-        let ok = match kind {
-            "wolf" => t == Terrain::Forest,
-            _ => t == Terrain::Grass,
-        };
-        if ok {
+        if animal_ground(map, kind, x, y) {
             return Some((x as f32 + 0.5, y as f32 + 0.5));
         }
     }

@@ -198,8 +198,17 @@ pub fn purge_dead(ctx: &ReducerContext) -> Result<(), String> {
     let dead: Vec<u32> = ctx.db.character().iter().filter(|c| !c.alive).map(|c| c.id).collect();
     for id in &dead {
         act::forget_dead(ctx, *id);
+        act::retire(ctx, *id);
     }
     log::info!("purged mind-serving rows of {} dead characters", dead.len());
+    Ok(())
+}
+
+/// Test support: a character dies on the spot.
+#[spacetimedb::reducer]
+pub fn kill(ctx: &ReducerContext, id: u32, cause: String) -> Result<(), String> {
+    require_admin(ctx)?;
+    act::die(ctx, id, &cause, common::now_ms(ctx), 0);
     Ok(())
 }
 

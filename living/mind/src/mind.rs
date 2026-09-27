@@ -1556,7 +1556,13 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             fix(&mut m.0);
             fix(&mut m.1);
         }
-        patch.merges.retain(|(a, b)| a != b);
+        patch.merges.retain(|(a, b)| {
+            let refused = memory::merge_refused(a, b);
+            if refused && a != b {
+                log::info!("merge {a} → {b} refused once people were named");
+            }
+            !refused
+        });
         // Merge duplicate node ops created by the rewrite.
         let mut seen = std::collections::HashSet::new();
         patch.nodes.retain(|n| seen.insert(n.key.clone()));

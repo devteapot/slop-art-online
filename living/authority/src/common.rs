@@ -17,6 +17,12 @@ thread_local! {
     static GENES: RefCell<HashMap<u32, Rc<living_rules::genes::Genes>>> = RefCell::new(HashMap::new());
 }
 
+/// Drop a dead character's cached genes and compiled graph.
+pub fn forget_cached(id: u32) {
+    GENES.with(|c| c.borrow_mut().remove(&id));
+    GRAPHS.with(|g| g.borrow_mut().remove(&id));
+}
+
 /// A character's genes (cached; empty, i.e. all ordinary, when it has none).
 pub fn genes_of(ctx: &ReducerContext, id: u32) -> Rc<living_rules::genes::Genes> {
     if let Some(g) = GENES.with(|c| c.borrow().get(&id).cloned()) {

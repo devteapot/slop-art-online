@@ -9,7 +9,8 @@
 # fresh afterwards. Usage: living/tools/reclaim_disk.sh [minutes-idle, default 120]
 set -e
 IDLE="${1:-120}"
-C=sao-living-spacetimedb-1
+# Docker Compose names it sao-living-spacetimedb-1, podman-compose sao-living_spacetimedb_1.
+C=$(docker ps --format '{{.Names}}' | grep -E '^sao-living[-_]spacetimedb[-_]1$' | head -1)
 docker exec "$C" sh -c "
 cd /home/spacetime/.local/share/spacetime/data/replicas || exit 1
 for r in *; do

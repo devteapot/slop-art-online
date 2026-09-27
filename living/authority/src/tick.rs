@@ -202,6 +202,9 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
     let parents: Vec<Character> = [a, b].iter().filter_map(|id| ctx.db.character().id().find(*id)).filter(|c| c.alive).collect();
     let (Some(first), Some(pa), Some(pb)) = (parents.first(), ctx.db.character().id().find(a), ctx.db.character().id().find(b)) else {
         common::chronicle(ctx, now, "family", a, b, (0.0, 0.0), format!("The child of {} and {} was never born", common::name_of(ctx, a), common::name_of(ctx, b)));
+        for id in [a, b] {
+            crate::act::retire(ctx, id);
+        }
         return;
     };
     let Some(at) = ctx.db.body().id().find(first.id).map(|bd| common::pos(&bd, now)) else { return };
@@ -220,6 +223,10 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
         };
         seed::inherit_ways(ctx, id, pa.id, pb.id, now);
         names.push((id, common::name_of(ctx, id)));
+    }
+    // A parent who died before the birth kept what the child inherits until now.
+    for p in [&pa, &pb].into_iter().filter(|p| !p.alive) {
+        crate::act::retire(ctx, p.id);
     }
     let list = names.iter().map(|(_, n)| n.clone()).collect::<Vec<_>>().join(" and ");
     if kind == "person" {
@@ -316,7 +323,9 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
         let until = now + (common::life_of(&kind).interbirth_days(common::pace(&w)) * w.day_ms as f32) as u64;
         for id in [e.a, e.b] {
             ctx.db.rearing().id().delete(id);
-            ctx.db.rearing().insert(Rearing { id, until_ms: until });
+            if ctx.db.character().id().find(id).is_some_and(|c| c.alive) {
+                ctx.db.rearing().insert(Rearing { id, until_ms: until });
+            }
         }
     }
     for o in ctx.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > 180_000).map(|o| o.id).collect::<Vec<_>>() {
