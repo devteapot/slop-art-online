@@ -12,3 +12,6 @@ log = "0.4"
 serde = { workspace = true }
 serde_json = { workspace = true }
 living-rules = { path = "../rules" }
+
+[build-dependencies]
+serde_json = { workspace = true }

@@ -602,7 +602,7 @@ pub fn display(ctx: &ReducerContext, id: u32) -> String {
 
 thread_local! {
     static SPECIES: std::collections::BTreeMap<String, living_rules::species::Species> =
-        living_rules::species::parse(include_str!("../../seeds/species.json")).expect("species.json");
+        living_rules::species::parse(include_str!(concat!(env!("OUT_DIR"), "/species.json"))).expect("species.json");
 }
 
 pub fn species(kind: &str) -> Option<living_rules::species::Species> {

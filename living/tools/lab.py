@@ -27,6 +27,7 @@ def main():
     ap.add_argument("--db", default=None, help="database (default: the scenario name)")
     ap.add_argument("--minutes", type=float, default=240)
     ap.add_argument("--every", type=int, default=600)
+    ap.add_argument("--no-mind", action="store_true", help="no mind service (an ecology lab without people makes no model calls)")
     a = ap.parse_args()
     a.db = a.db or a.scenario
     env = dict(os.environ, LIVING_SEED=a.scenario)
@@ -49,12 +50,25 @@ def main():
     run = f"{a.scenario}-{int(time.time())}"
     mind_env = dict(os.environ, LIVING_DB=a.db, LIVING_RUN=run, LIVING_SEED=a.scenario, RUST_LOG="info")
     log = open(ROOT / f".local/living/{run}.log", "a")
-    start_mind = lambda: subprocess.Popen([str(LIVING / "target/release/living-mind")], cwd=ROOT, env=mind_env, stdout=log, stderr=subprocess.STDOUT)
+    class NoMind:
+        returncode = 0
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout=None):
+            return 0
+
+    start_mind = (lambda: NoMind()) if a.no_mind else (lambda: subprocess.Popen([str(LIVING / "target/release/living-mind")], cwd=ROOT, env=mind_env, stdout=log, stderr=subprocess.STDOUT))
     mind = start_mind()
     # A stopped lab (SIGTERM, SIGHUP) takes its mind and watcher down with it.
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(0))
-    watch = subprocess.Popen([sys.executable, str(LIVING / "tools/watch.py"), "--db", a.db, "--every", str(a.every), "--review", "--llm-run", run], cwd=ROOT)
+    review = [] if a.no_mind else ["--review"]
+    watch = subprocess.Popen([sys.executable, str(LIVING / "tools/watch.py"), "--db", a.db, "--every", str(a.every), *review, "--llm-run", run], cwd=ROOT)
     print(f"lab {a.scenario}: db {a.db}, run {run}; viewer http://127.0.0.1:8330/?db={a.db}; reports in .local/living/watch/", flush=True)
     end = time.time() + a.minutes * 60
     try:
@@ -72,7 +86,7 @@ def main():
         # its commit log with nobody watching).
         subprocess.run([stdb, "call", "-s", "local", a.db, "set_paused", "true"], check=False)
         mind.wait(timeout=30)
-    subprocess.run([sys.executable, str(LIVING / "tools/watch.py"), "--db", a.db, "--once", "--review", "--llm-run", run], cwd=ROOT)
+    subprocess.run([sys.executable, str(LIVING / "tools/watch.py"), "--db", a.db, "--once", *review, "--llm-run", run], cwd=ROOT)
 
 
 if __name__ == "__main__":
