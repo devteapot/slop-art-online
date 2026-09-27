@@ -286,3 +286,11 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Checks.** Mechanics checks added: a net's double catch; smoking, bow, arrows and leather; clearing forest.
 
   Stage 4 restarted fresh; the village and stage 2 were updated in place.
+- 13:10 — The village died out, and the cause was my in-place rule change.
+  - **What happened.** Grass regrowth was cut 4× while about 100 deer were on the land. The deer starved or were hunted out, the wolf packs grew on easy prey and then turned on people.
+  - **Human deaths.** All 21 villagers died; 18 were killed by wolves, 12 of them within 10 minutes. One wolf (Storm 3) killed six people one after another.
+  - **Lessons.**
+    - Changing the land's carrying capacity in a running world causes overshoot and collapse; such changes need a fresh world, or a gradual change.
+    - People still do not defend each other: 20 people against a few wolves fell one by one. This is the stage 1 foundation that "many against one should attack" was meant to allow.
+
+  The village restarted fresh with 20 deer and 3 wolves. Stage 2 (11 hours, one person left, four generations reached) was retired.
