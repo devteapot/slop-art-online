@@ -182,3 +182,12 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Stage 4 (`stage4-two`).** Two towns of ten on a 192-tile realm, about 110 tiles apart. Eastmere is lakeside (fishers and cooks; wood plentiful, stone scarce); Stonewatch is in the hills (hunters and masons; stone plentiful, fish scarce). Measures: travel between towns, trade, teaching or conflict, and their causes.
 
   Both use two-hour lives and half the people think with GPT-6 Luna.
+- 15:40 — First model comparison (45 minutes). Only stage 2 yielded Luna data: the stage 1 labs stopped about 30 minutes after the switch; stages 3 and 4 run the split from the start. In stage 2, over 45 minutes with four people per model:
+  - **Model calls.** Luna made 278 calls against Mistral's 665.
+  - **Tokens.** 1.8M against 5.3M.
+  - **Latency.** Median 5.8 s against 3.3 s.
+  - **Acts.** Luna's are mostly eating, gathering and taking from stores; Mistral walks far more (443 walks) and gives and builds more.
+  - **Reliability.** Luna occasionally returns non-JSON, retried on Mistral.
+  - **Outcomes.** One starvation death on each side.
+
+  Too few people to conclude. The canary (stage 2) shows starvation from minds' own eating routines. Four second-generation people starved with 279 berries on the bushes; the child Ash's `eat` read "if hungry and carrying food, eat; otherwise wait 1 s" (never gathering, and waiting counts as success), among 39 routines. The starving sensation now shows the `eat` routine one's hunger runs and says it has not fed them. Labs updated in place.

@@ -769,7 +769,18 @@ impl<'a> Ev<'a> {
                     _ => false,
                 };
                 if urgent {
-                    self.deliberate(&format!("Your body: {text}"));
+                    let mut why = format!("Your body: {text}");
+                    // Starving: show what one's hunger actually runs, so a way of eating that
+                    // cannot feed (e.g. one that only waits) can be seen and changed.
+                    if bit == 64 {
+                        if let Some(r) = self.ctx.db.routine().actor().filter(self.me.id).find(|r| r.name.eq_ignore_ascii_case("eat")) {
+                            if let Ok(g) = living_rules::graph::parse(&r.graph) {
+                                let how: String = living_rules::graph::outline(&g.root).lines().map(|l| l.trim()).collect::<Vec<_>>().join("; ");
+                                why.push_str(&format!(" Your hunger runs your routine \"eat\", which does: {}. It has not fed you.", how.chars().take(300).collect::<String>()));
+                            }
+                        }
+                    }
+                    self.deliberate(&why);
                 }
             } else if !on && was {
                 self.st.alerts &= !bit;
