@@ -202,7 +202,7 @@
       "gestation": 0.017,
       "litter": 2,
       "interbirth": 0.25,
-      "breeding_radius": 35.0
+      "breeding_radius": 25.0
     },
     "eats": "meat: from prey you kill (deer), eaten from what you carry"
   }

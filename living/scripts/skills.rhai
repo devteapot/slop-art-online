@@ -114,7 +114,7 @@ fn gather_check(a) {
     if a.target.amount < 1.0 { return `the ${a.target.kind} is depleted`; }
     if a.actor.kind != "person" { return "only people gather"; }
     if a.actor.stage == "infant" { return "too small to gather"; }
-    if pack_full(a) { return "your pack is full (eat, store or give some away first)"; }
+    if pack_full(a) { return "your pack is full (eat, store, give or drop some first)"; }
     ""
 }
 fn gather_duration(a) {
@@ -265,6 +265,18 @@ fn craft_done(a) {
 
 fn amount(a) { if a.qty < 1 { 1 } else { a.qty } }
 
+fn drop_check(a) {
+    if inv(a, a.item) < 1 { return `you carry no ${a.item}`; }
+    ""
+}
+fn drop_duration(a) { 500 }
+fn drop_done(a) {
+    let n = amount(a);
+    let have = inv(a, a.item);
+    if n > have { n = have; }
+    [#{ op: "remove", item: a.item, qty: n }]
+}
+
 fn give_check(a) {
     if a.target.class != "creature" || !a.target.alive { return "no one to give to"; }
     if a.target.id == a.actor.id { return "cannot give to yourself"; }
@@ -286,7 +298,7 @@ fn take_check(a) {
     if a.target.kind != "storage" && a.target.kind != "remains" { return "nothing to take from"; }
     let have = a.target.inv[a.item];
     if have == () || have < 1 { return `no ${a.item} there`; }
-    if pack_full(a) { return "your pack is full (eat, store or give some away first)"; }
+    if pack_full(a) { return "your pack is full (eat, store, give or drop some first)"; }
     ""
 }
 fn take_duration(a) { 1000 }

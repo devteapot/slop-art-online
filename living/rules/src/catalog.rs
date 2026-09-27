@@ -37,6 +37,7 @@ pub const SKILLS: &[SkillSpec] = &[
     SkillSpec { name: "cook", needs_target: true, needs_item: true, reach: 1.5, help: "cook raw fish or meat at a campfire" },
     SkillSpec { name: "give", needs_target: true, needs_item: true, reach: 1.8, help: "hand items to another creature" },
     SkillSpec { name: "store", needs_target: true, needs_item: true, reach: 1.5, help: "put items into a storage" },
+    SkillSpec { name: "drop", needs_target: false, needs_item: true, reach: 0.0, help: "set items down where you stand (they are left behind), e.g. to free your pack" },
     SkillSpec { name: "take", needs_target: true, needs_item: true, reach: 1.5, help: "take items from a storage or remains" },
     SkillSpec { name: "attack", needs_target: true, needs_item: false, reach: 1.4, help: "strike a creature (spear hits harder); killing game yields meat" },
     SkillSpec { name: "offer", needs_target: true, needs_item: true, reach: 3.0, help: "offer a trade to a person beside you: item + qty you give, want + want_qty you ask in return; they may accept" },

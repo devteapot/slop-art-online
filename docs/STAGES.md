@@ -157,3 +157,10 @@ Evidence, rule changes and decisions per stage, newest last.
   - **eco-a.** Deer and wolves have coexisted for over three hours, through winters (no fawns and no regrowth in winter, recovery in spring).
 
   A hidden failure: about 40% of memory consolidations failed. People's replies ran past the 4,000-token cap and were cut off; the same 40-experience batch was then retried and failed again (over 130 times per person in stage 2), so people's memories, relations and beliefs mostly stopped updating. The consolidation prompt now asks for at most 12 nodes and 20 edges, a failed batch is retried smaller (40, 20, 13… down to 6 experiences), and the reply cap is 8,000 tokens. Minds restarted in place.
+- 12:30 — **Third generation reached** in the wolves lab and in stage 2; births steady (baseline 12 people, wolves lab 11, stage 2 10).
+  - **Stage 2 know-how is spreading.** Storage is held by three, carpentry and cloak by two each, and there is writing; three storages were built but hold nothing.
+  - **Memory fix confirmed.** Consolidation truncations fell from ≈40% to 5–10%.
+  - **A missing capability.** Five people starved in stage 2 among 267 berries: their packs were full of wood (35–50 pieces) and a full pack refuses gathering, while the only ways to empty it were eating, storing (near a storage) or giving (to someone near). There was no way to put anything down. New skill `drop` (set items down where you stand); the full-pack message names it.
+  - **Wolves near people.** They dwindle (baseline extinct, stage 2 one, wolves lab six); the no-people valley keeps about ten. Mating fails almost always on "another pair here is raising young": with wolves roaming the whole valley, one pair per 35 tiles means one or two litters at a time anywhere. The radius is now 25 in the people labs (15 had boomed with shorter intervals; eco-a keeps 35 as a control).
+
+  Labs updated in place.
