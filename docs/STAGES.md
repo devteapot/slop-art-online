@@ -150,3 +150,10 @@ Evidence, rule changes and decisions per stage, newest last.
 
   Needs are now kept as the body's. However a person rewrites the top level, desires for food, sleep, safety and warmth stay among it (their weights still theirs), their routines come back if retired, and a top level that is not desires at all becomes an intent weighed among those needs (existing flat top levels are repaired at the next thought). Stage 2 restarted fresh; the teaching loop is noted for the next review.
 - 09:50 — Ecology result (no people, 90 minutes): with the current wolf rules (one breeding pair per 35 tiles, a quarter-life between litters of up to two) deer settle near the grass's capacity (≈135, some starving) and wolves hold at about 6, births matching deaths of old age: `eco-a` is stable so far and keeps running as a long check (no model calls). `eco-b` (one pair per 50 tiles, single pups, a third of a life) let wolves dwindle to one: too strict, stopped. Stage 2 with needs kept: no flags at 44 minutes, a birth, the knowledge holder alive. Both stage 1 labs restarted on these settings.
+- 11:30 — Soak at 90 minutes (stage 1) and 137 (stage 2):
+  - **Baseline.** 11 people after four births (one couple has had three children), 141 deer, but its wolves are down to one (old age, few litters).
+  - **Wolves lab.** Balanced with no flags: 81 deer, 9 wolves, two births.
+  - **Stage 2.** The first taught know-how (storage, now held by two people), someone discovered writing, and two births.
+  - **eco-a.** Deer and wolves have coexisted for over three hours, through winters (no fawns and no regrowth in winter, recovery in spring).
+
+  A hidden failure: about 40% of memory consolidations failed. People's replies ran past the 4,000-token cap and were cut off; the same 40-experience batch was then retried and failed again (over 130 times per person in stage 2), so people's memories, relations and beliefs mostly stopped updating. The consolidation prompt now asks for at most 12 nodes and 20 edges, a failed batch is retried smaller (40, 20, 13… down to 6 experiences), and the reply cap is 8,000 tokens. Minds restarted in place.

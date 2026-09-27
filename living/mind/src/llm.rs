@@ -30,7 +30,7 @@ fn yes() -> bool {
 }
 
 fn max_tokens() -> Option<u32> {
-    Some(4000)
+    Some(8000)
 }
 
 #[derive(Clone, Debug, Deserialize)]

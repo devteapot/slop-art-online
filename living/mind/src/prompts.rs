@@ -237,6 +237,7 @@ stances the behavior graph can test (self -JUDGES {{value 0..1, why}}-> stance:<
 and places with coordinates (place:<name> with props x, y). You can write those edges directly, or use the shorthand arrays below \
 (relations, judgments, places), which become exactly those edges. Keep stance keys stable.\n\n\
 Reply with ONE JSON object:\n\
+Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not every event).\n\
 {{\"summary\": \"what this meant to {name} (1-2 sentences)\",\n\
  \"remember\": [{{\"exp\": experience id, \"gist\": \"...\"}}],\n\
  \"nodes\": [{{\"key\": \"person:4\", \"labels\": [\"Person\", \"Rival\"], \"name\": \"Bram\", \"props\": {{...}}}}],\n\

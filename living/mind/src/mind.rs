@@ -1198,7 +1198,10 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
     async fn consolidate(&self, actor: u32) -> Result<()> {
         let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
         let cursor = self.cursor(actor);
-        let batch: Vec<Experience> = self.experiences(actor).into_iter().filter(|e| e.id > cursor).take(40).collect();
+        // A reply that ran too long failed: take fewer experiences at a time until it fits.
+        let failures = self.actors.lock().unwrap().get(&actor).map_or(0, |m| m.failures);
+        let take = (40 / (1 + failures as usize)).max(6);
+        let batch: Vec<Experience> = self.experiences(actor).into_iter().filter(|e| e.id > cursor).take(take).collect();
         let Some(upto) = batch.last().map(|e| e.id) else { return Ok(()) };
         // Only experiences that carry meaning go to the model; routine results are passed over.
         let meaningful: Vec<&Experience> = batch.iter().filter(|e| e.salience >= 0.2).collect();
