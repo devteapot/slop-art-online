@@ -183,6 +183,9 @@ pub struct Laws {
     /// Movement input a player may send per second (sustained) and in a burst.
     pub input_hz: f32,
     pub input_burst: f32,
+    /// Grass regrowth per grassy tile per minute of growing time (grazing units): it sets how
+    /// many grazers the land feeds.
+    pub pasture_regen: f32,
 }
 
 impl Laws {
@@ -221,6 +224,7 @@ impl Default for Laws {
             run_speed: 1.5,
             input_hz: 30.0,
             input_burst: 15.0,
+            pasture_regen: 0.006,
         }
     }
 }
@@ -363,6 +367,7 @@ impl Scripts {
             run_speed: g("run_speed", l.run_speed).clamp(1.0, 4.0),
             input_hz: g("input_hz", l.input_hz).clamp(1.0, 120.0),
             input_burst: g("input_burst", l.input_burst).clamp(1.0, 240.0),
+            pasture_regen: g("pasture_regen", l.pasture_regen).clamp(0.0, 1.0),
         };
         l
     }

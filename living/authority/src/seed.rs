@@ -128,7 +128,7 @@ fn eight() -> u32 {
 
 impl SeedTown {
     fn households(&self) -> usize {
-        (self.occupations.values().sum::<u32>() as usize).div_ceil(3).max(1)
+        (self.occupations.values().sum::<u32>() as usize).div_ceil(2).max(1)
     }
 }
 
@@ -277,7 +277,9 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     if let Some(r) = &realm {
         for (t, site) in s.towns.iter().zip(r.towns.iter()).chain(s.villages.iter().zip(r.villages.iter())) {
             let n = t.households();
-            let radius = if t.walled { (3 + n as i32).clamp(9, 16) } else { 5 };
+            // Room to live: an open town spreads with its households (it was 11 tiles across
+            // for ten households, and everyone lived on top of each other).
+            let radius = if t.walled { (3 + n as i32).clamp(9, 16) } else { (3 + n as i32).clamp(8, 14) };
             let layout = living_rules::city::lay_out(&mut map, *site, n, radius, t.walled);
             settlements.push((t, layout));
         }

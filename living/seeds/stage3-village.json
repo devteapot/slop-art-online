@@ -124,7 +124,7 @@
     }
   ],
   "animals": {
-    "deer": 60,
-    "wolf": 4
+    "deer": 20,
+    "wolf": 3
   }
 }

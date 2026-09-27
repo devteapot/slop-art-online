@@ -52,6 +52,11 @@ impl Xf {
     }
 }
 
+/// Smallest screen points per sprite pixel when zoomed out, for a thing of true size 1: every
+/// sprite keeps the same floor relative to its true size, so people, animals, plants and
+/// buildings stay in proportion at every zoom (people used to be drawn 2–4× too large).
+const FLOOR: f32 = 0.45;
+
 fn a(c: Color32, alpha: f32) -> Color32 {
     let [r, g, b, _] = c.to_array();
     Color32::from_rgba_unmultiplied(r, g, b, (alpha.clamp(0.0, 1.0) * 255.0) as u8)
@@ -302,7 +307,7 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                 let feet = xf.s(egui::pos2(n.x, n.y + 0.4));
                 let amount = snap.resource_amount(n);
                 let f = if n.max > 0.0 { (amount / n.max).clamp(0.0, 1.0) } else { 1.0 };
-                let s = xf.px(1.0, 0.45);
+                let s = xf.px(1.0, FLOOR);
                 match n.kind.as_str() {
                     "berry_bush" => {
                         let sheet = &art.bushes[&season];
@@ -311,7 +316,7 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                     }
                     "tree" => {
                         let sheet = &art.trees[&season];
-                        let s = xf.px(1.25, 0.6) * (0.75 + 0.25 * f);
+                        let s = xf.px(1.25, 1.25 * FLOOR) * (0.75 + 0.25 * f);
                         shadow(p, feet, sheet.w as f32 * s * 1.2);
                         sheet.draw(p, n.id as usize % 4, feet, s, n.id % 3 == 0, tint(0.55 + 0.45 * f));
                     }
@@ -339,7 +344,7 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
             Item::Structure(i) => {
                 let st = &snap.structures[i];
                 let feet = xf.s(egui::pos2(st.x, st.y + 0.45));
-                let s = xf.px(1.1, 0.9);
+                let s = xf.px(1.1, 1.1 * FLOOR);
                 match st.kind.as_str() {
                     "campfire" => {
                         let frame = ((t * 8.0 + st.id as f32) as usize) % 4;
@@ -357,7 +362,7 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                         art.remains.draw(p, 0, feet, s, false, Color32::WHITE);
                     }
                     "house" => {
-                        let s = xf.px(1.8, 1.25);
+                        let s = xf.px(1.8, 1.8 * FLOOR);
                         shadow(p, feet, art.house.w as f32 * s * 1.1);
                         let r = art.house.draw(p, (st.id % 4) as usize, feet, s, false, Color32::WHITE);
                         if st.owner != 0 {
@@ -397,9 +402,9 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                 let c = &snap.chars[&id];
                 let at = xf.s(view.shown[&id]);
                 let (r, col) = match c.kind.as_str() {
-                    "person" => (3.2, view.community_color(id)),
-                    "wolf" => (2.2, Color32::from_rgb(170, 40, 36)),
-                    _ => (1.6, Color32::from_rgb(200, 160, 110)),
+                    "person" => (2.6, view.community_color(id)),
+                    "wolf" => (1.6, Color32::from_rgb(170, 40, 36)),
+                    _ => (1.1, Color32::from_rgb(200, 160, 110)),
                 };
                 p.circle_filled(at, r + 1.0, Color32::from_rgb(16, 16, 20));
                 p.circle_filled(at, r, col);
@@ -421,7 +426,7 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                 if act.is_some_and(|a| a.skill == "dodge") {
                     if let Some(b) = snap.bodies.get(&id).filter(|b| b.next_ms > snap.now) {
                         let dir = egui::vec2(b.vx, b.vy).normalized();
-                        let h = xf.px(1.15, 1.35) * 16.0;
+                        let h = xf.px(1.15, 1.15 * FLOOR) * 16.0;
                         for k in 1..=4 {
                             let at = feet - dir * (k as f32 * h * 0.28) - egui::vec2(0.0, h * 0.45);
                             p.add(egui::Shape::ellipse_filled(at, egui::vec2(h * 0.22, h * 0.3), Color32::from_white_alpha((70 - k * 14) as u8)));
@@ -435,7 +440,7 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                 let rect = match c.kind.as_str() {
                     "person" => {
                         let asleep = snap.activity.get(&id).is_some_and(|a| a.skill == "sleep");
-                        let s = xf.px(1.15, 1.05) * if snap.is_child(c) { 0.72 } else { 1.0 };
+                        let s = xf.px(1.15, 1.15 * FLOOR) * if snap.is_child(c) { 0.72 } else { 1.0 };
                         let frame = if asleep {
                             5
                         } else if moving {
@@ -454,7 +459,7 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                         r
                     }
                     kind => {
-                        let s = xf.px(1.0, 1.0);
+                        let s = xf.px(1.0, FLOOR);
                         let sheet = if kind == "wolf" {
                             &art.wolf
                         } else if hash2(id as i32, 1, 78) > 0.5 {
@@ -494,7 +499,7 @@ fn labels(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed,
         let Some(c) = snap.chars.get(id) else { continue };
         let person = c.kind == "person";
         let selected = Some(*id) == view.selected;
-        let w = ((feet.y - top) * 0.9).max(16.0);
+        let w = ((feet.y - top) * 0.9).max(8.0);
         // Anyone engaged gets a large health bar above the head in their community colour.
         let engaged = snap.vitals.get(id).is_some_and(|v| v.hurt_ms > 0 && snap.now.saturating_sub(v.hurt_ms) < 10_000)
             || snap.activity.get(id).is_some_and(|a| matches!(a.skill.as_str(), "attack" | "block" | "dodge" | "throw"));
@@ -518,7 +523,10 @@ fn labels(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed,
         if let Some(v) = snap.vitals.get(id).filter(|_| !engaged) {
             let hp = need(v.hp, v.hp_rate, v.at_ms, snap.now, v.max_hp);
             let frac = if v.max_hp > 0.0 { hp / v.max_hp } else { 0.0 };
-            if (person && (selected || frac < 0.999 || xf.zoom >= 6.0)) || frac < 0.999 {
+            // Wild animals' wear shows only up close: far out, bars on every grazing deer hid the land.
+            let shown = if person { selected || frac < 0.999 || xf.zoom >= 6.0 } else { selected || (frac < 0.999 && xf.zoom >= 8.0) };
+            if shown {
+                let w = w.min(xf.r(1.0, 8.0)).max(8.0);
                 let bar = Rect::from_min_size(*feet + egui::vec2(-w / 2.0, 3.0), egui::vec2(w, 3.0));
                 p.rect_filled(bar.expand(1.0), 1.0, Color32::from_black_alpha(170));
                 let col = if frac > 0.6 { Color32::from_rgb(90, 210, 90) } else if frac > 0.3 { Color32::from_rgb(230, 190, 60) } else { Color32::from_rgb(230, 70, 60) };
@@ -871,7 +879,7 @@ fn combat(p: &egui::Painter, xf: &Xf, view: &View, snap: &Snap, placed: &Placed,
                 if now > e.start_ms + e.dur_ms {
                     continue;
                 }
-                let from = xf.s(e.from) - egui::vec2(0.0, xf.px(1.15, 1.35) * 8.0);
+                let from = xf.s(e.from) - egui::vec2(0.0, xf.px(1.15, 1.15 * FLOOR) * 8.0);
                 let at = from.lerp(to, k);
                 let dir = (to - from).normalized();
                 let len = xf.r(1.0, 16.0);

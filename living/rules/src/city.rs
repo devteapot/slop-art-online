@@ -55,12 +55,15 @@ pub fn lay_out(map: &mut Map, center: (f32, f32), households: usize, radius: i32
             }
         }
     }
-    if walled {
+    // A ring road inside the wall, or around a larger open town, so homes line streets.
+    if walled || r >= 8 {
         for d in -(r - 2)..=(r - 2) {
             for (x, y) in [(cx + d, cy - r + 2), (cx + d, cy + r - 2), (cx - r + 2, cy + d), (cx + r - 2, cy + d)] {
                 paint(map, x, y, Terrain::Road);
             }
         }
+    }
+    if walled {
         // Side streets every 6 tiles, so houses line streets across the whole city.
         let mut k = 6;
         while k < r - 3 {
@@ -101,8 +104,8 @@ pub fn lay_out(map: &mut Map, center: (f32, f32), households: usize, radius: i32
     // wide spacing first, then tighten the spacing only if there is not enough room.
     spots.sort();
     let mut houses: Vec<(f32, f32)> = Vec::new();
-    let min_ring = if walled { m + 4 } else { m + 2 };
-    for spacing in [5.0f32, 4.0, 3.0] {
+    let min_ring = if walled { m + 4 } else { m + 4 };
+    for spacing in [8.0f32, 6.0, 5.0, 4.0, 3.0] {
         for &(d2, x, y) in &spots {
             if houses.len() >= households {
                 break;

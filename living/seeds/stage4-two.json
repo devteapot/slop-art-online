@@ -3,16 +3,16 @@
   "seed": 5,
   "map": {
     "kind": "realm",
-    "w": 192,
-    "h": 192
+    "w": 320,
+    "h": 320
   },
   "year_days": 4,
   "life_pace": 0.1428,
   "setting": "A land of hills, woods, rivers and a lake, where two small towns stand half a day's walk apart. Deer graze the open land and wolves roam the woods. Seasons turn quickly; in winter nothing grows, nights are colder, and food that is not cooked or stored spoils. People live about seventy years here, but the years pass very fast.",
   "bands": [],
   "animals": {
-    "deer": 90,
-    "wolf": 6
+    "deer": 50,
+    "wolf": 5
   },
   "towns": [
     {

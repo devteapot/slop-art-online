@@ -253,3 +253,16 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Checks.** Mechanics check added (a new way is made; a way just changed cannot be reworked yet). Rules tests cover rework acts and `can`.
 
   Updated in place: stage2-base, stage3-village and stage4-two.
+- 11:30 — A less crowded world, and an observer drawn to scale.
+  - **Wild animals.** Grass regrowth is a world law in the rules script (`pasture_regen`), cut from 0.006 to 0.0015 per grassy tile per growing minute. The land now feeds about one grazer per 300 grassy tiles; it was one per 70, and stage 4 had grown to 442 deer. Seeds start with fewer animals: stage 4 has 50 deer and 5 wolves, the village 20 and 3.
+  - **Towns.**
+    - Stage 4's realm is 320 tiles across (it was 192).
+    - Towns are placed at least 1.25× further apart, closer only where the land leaves no room; the new towns stand 150 tiles apart.
+    - Open towns spread with their households (radius 8–14; it was 5, 11 tiles across), with a ring road, and houses 8 tiles apart first (5 and 4 houses, about 20 tiles across).
+    - A household is two workers and their families (it was three).
+  - **Observer.**
+    - Every sprite keeps the same minimum scale relative to its true size, so people, animals, plants and buildings stay in proportion at every zoom. At mid zoom, people had been drawn 2–4× too large next to trees.
+    - Overview dots are smaller.
+    - Wild animals' health bars show only up close, when selected or when fighting; far out they had covered the land in green.
+
+  Stage 4 restarted fresh on the new map. The village and stage 2 were updated in place: their grass now regrows at the new rate, so the deer will thin out.

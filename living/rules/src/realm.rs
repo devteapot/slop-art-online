@@ -190,7 +190,14 @@ pub fn generate(seed: u64, w: u32, h: u32) -> Realm {
         out
     };
     let want_towns = (w / 128).clamp(2, 4) as usize;
-    let towns = pick(0.55, 1.0, 14, want_towns, h as f32 / (want_towns as f32 + 0.5), &[]);
+    // Towns well apart: their people should have to travel to meet.
+    let mut spacing = h as f32 / (want_towns as f32 - 0.2);
+    let mut towns = pick(0.55, 1.0, 14, want_towns, spacing, &[]);
+    // Closer only where the land leaves no room.
+    while towns.len() < want_towns && spacing > h as f32 / (want_towns as f32 + 0.5) {
+        spacing *= 0.9;
+        towns = pick(0.55, 1.0, 14, want_towns, spacing, &[]);
+    }
     let villages = pick(0.3, 0.6, 6, (w / 128).clamp(1, 4) as usize, h as f32 / 5.0, &towns);
     let mut wilds: Vec<(f32, f32)> = Vec::new();
     let want_wilds = (w / 100).clamp(4, 8) as usize;
@@ -286,6 +293,17 @@ fn connect(tiles: &mut [u8], w: u32, h: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn two_towns_stand_far_apart() {
+        for seed in 1..8u64 {
+            let r = generate(seed, 320, 320);
+            assert!(r.towns.len() >= 2, "seed {seed}: towns {:?}", r.towns);
+            let (a, b) = (r.towns[0], r.towns[1]);
+            let d = ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt();
+            assert!(d > 120.0, "seed {seed}: towns {d:.0} apart");
+        }
+    }
 
     #[test]
     fn realm_is_connected_with_towns_and_wilds() {

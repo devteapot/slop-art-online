@@ -17,6 +17,9 @@ fn laws() {
         separation: 0.8, separation_weight: 0.9,
         steer_s: 2.0, crowd_hz: 3.0, chase_hz: 4.0, combat_hz: 8.0,
         run_speed: 1.5, input_hz: 30.0, input_burst: 15.0,
+        // Grass regrowth per grassy tile per growing minute: about one grazer per 300 grassy
+        // tiles (it was one per 70, and the wilds filled with deer).
+        pasture_regen: 0.0015,
     }
 }
 
