@@ -49,16 +49,117 @@ pub fn practise(ctx: &ReducerContext, id: u32, skill: &str) {
     }
 }
 
+thread_local! {
+    /// Benchmark profiling (the clock's `profile` flag, read at the start of each scheduled reducer).
+    static PROFILE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub fn set_profiling(on: bool) {
+    PROFILE.with(|p| p.set(on));
+}
+
+/// A named timing span logged by the host while profiling is on (see `tools/bench.py`).
+pub fn span(name: &str) -> Option<spacetimedb::log_stopwatch::LogStopwatch> {
+    PROFILE.with(|p| p.get()).then(|| spacetimedb::log_stopwatch::LogStopwatch::new(name))
+}
+
 pub fn now_ms(ctx: &ReducerContext) -> u64 {
     (ctx.timestamp.to_micros_since_unix_epoch() / 1000) as u64
 }
 
+/// The transaction's timestamp in microseconds: the key of caches that are valid only
+/// within one reducer call (a later call, or one rolled back, has another timestamp).
+fn stamp(ctx: &ReducerContext) -> i64 {
+    ctx.timestamp.to_micros_since_unix_epoch()
+}
+
+thread_local! {
+    /// The world row, read once per transaction (it changes only through admin reducers,
+    /// which call `invalidate_world`).
+    static WORLD: RefCell<Option<(i64, World)>> = const { RefCell::new(None) };
+    /// The installed script revision, read once per transaction.
+    static SCRIPTS_REV: std::cell::Cell<Option<(i64, u32)>> = const { std::cell::Cell::new(None) };
+    /// Work counters for the `stats` row, added to the clock row once per tick instead of
+    /// rewriting it for every evaluation and experience.
+    static COUNTS: std::cell::Cell<Counts> = const { std::cell::Cell::new(Counts::ZERO) };
+}
+
 pub fn world(ctx: &ReducerContext) -> World {
-    ctx.db.world().id().find(0).expect("world initialized")
+    let t = stamp(ctx);
+    if let Some(w) = WORLD.with(|c| c.borrow().as_ref().filter(|(s, _)| *s == t).map(|(_, w)| w.clone())) {
+        return w;
+    }
+    let w = ctx.db.world().id().find(0).expect("world initialized");
+    WORLD.with(|c| *c.borrow_mut() = Some((t, w.clone())));
+    w
+}
+
+/// Call after writing the world row.
+pub fn invalidate_world() {
+    WORLD.with(|c| *c.borrow_mut() = None);
 }
 
 pub fn clock(ctx: &ReducerContext) -> Clock {
     ctx.db.clock().id().find(0).expect("clock initialized")
+}
+
+/// Revision of the installed skill script (cached for the transaction).
+fn scripts_rev(ctx: &ReducerContext) -> u32 {
+    let t = stamp(ctx);
+    if let Some((_, rev)) = SCRIPTS_REV.with(|c| c.get()).filter(|(s, _)| *s == t) {
+        return rev;
+    }
+    let rev = clock(ctx).scripts_rev;
+    SCRIPTS_REV.with(|c| c.set(Some((t, rev))));
+    rev
+}
+
+/// Call after writing the clock's `scripts_rev`.
+pub fn invalidate_scripts_rev() {
+    SCRIPTS_REV.with(|c| c.set(None));
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct Counts {
+    pub evals: u64,
+    pub motions: u64,
+    pub completions: u64,
+    pub percepts: u64,
+    pub deliberations: u64,
+    pub hits: u64,
+    pub dodged: u64,
+    pub blocked: u64,
+    pub missed: u64,
+}
+
+impl Counts {
+    const ZERO: Counts = Counts { evals: 0, motions: 0, completions: 0, percepts: 0, deliberations: 0, hits: 0, dodged: 0, blocked: 0, missed: 0 };
+}
+
+/// Count work for the stats row (flushed into the clock by `flush_counts`).
+pub fn count(f: impl FnOnce(&mut Counts)) {
+    COUNTS.with(|c| {
+        let mut v = c.get();
+        f(&mut v);
+        c.set(v);
+    });
+}
+
+/// Add pending counters to a clock row about to be written; false if there were none.
+/// (Counts from a reducer call that later failed are kept: they are diagnostics.)
+pub fn flush_counts(k: &mut Clock) -> bool {
+    let c = COUNTS.with(|c| c.replace(Counts::ZERO));
+    let any = c.evals | c.motions | c.completions | c.percepts | c.deliberations | c.hits | c.dodged | c.blocked | c.missed != 0;
+    k.evals += c.evals;
+    k.motions += c.motions;
+    k.completions += c.completions;
+    k.percepts += c.percepts;
+    k.deliberations += c.deliberations;
+    k.hits += c.hits;
+    k.dodged += c.dodged;
+    k.blocked += c.blocked;
+    k.missed += c.missed;
+    any
 }
 
 pub fn map(ctx: &ReducerContext) -> Rc<Map> {
@@ -105,7 +206,7 @@ pub fn set_tile(ctx: &ReducerContext, x: i32, y: i32, t: living_rules::map::Terr
 
 /// World laws from the installed scripts (cached with them).
 pub fn laws(ctx: &ReducerContext) -> living_rules::script::Laws {
-    let rev = clock(ctx).scripts_rev;
+    let rev = scripts_rev(ctx);
     if let Some(l) = LAWS.with(|l| l.get().filter(|(r, _)| *r == rev).map(|(_, l)| l)) {
         return l;
     }
@@ -119,7 +220,7 @@ thread_local! {
 }
 
 pub fn scripts(ctx: &ReducerContext) -> Rc<Scripts> {
-    let rev = clock(ctx).scripts_rev;
+    let rev = scripts_rev(ctx);
     SCRIPTS.with(|s| {
         if let Some((r, sc)) = s.borrow().as_ref() {
             if *r == rev {
@@ -549,13 +650,105 @@ pub fn creatures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) ->
     out
 }
 
+/// Values derived from rows that change rarely (resource nodes change on a gather, structures
+/// on a build, a persona when the mind revises it), kept across transactions and dropped for a
+/// key when its rows are written.
+///
+/// Every write goes through `invalidate` first (in the same transaction). Values loaded after
+/// a write in the same transaction may include uncommitted changes, so they are tagged with
+/// that transaction's timestamp and not trusted by any other transaction (a failed reducer
+/// rolls its writes back; the next one reloads). Values loaded in a transaction that has
+/// written nothing are committed state and stay valid until a later write to their key. Like
+/// the map cache, this assumes the database runs its reducers one at a time in this module
+/// instance.
+struct WriteCache<V> {
+    rows: HashMap<u32, (V, i64)>,
+    /// Timestamp of the last transaction that wrote.
+    wrote: i64,
+}
+
+impl<V: Clone> WriteCache<V> {
+    fn new() -> Self {
+        Self { rows: HashMap::new(), wrote: 0 }
+    }
+
+    fn get(&mut self, t: i64, key: u32, load: impl FnOnce() -> V) -> V {
+        if let Some((v, tag)) = self.rows.get(&key) {
+            if *tag == 0 || *tag == t {
+                return v.clone();
+            }
+        }
+        let v = load();
+        let tag = if self.wrote == t { t } else { 0 };
+        self.rows.insert(key, (v.clone(), tag));
+        v
+    }
+
+    fn invalidate(&mut self, t: i64, key: Option<u32>) {
+        self.wrote = t;
+        match key {
+            Some(k) => {
+                self.rows.remove(&k);
+            }
+            None => self.rows.clear(),
+        }
+    }
+}
+
+thread_local! {
+    static CHUNK_RESOURCES: RefCell<WriteCache<Rc<Vec<ResourceNode>>>> = RefCell::new(WriteCache::new());
+    static CHUNK_STRUCTURES: RefCell<WriteCache<Rc<Vec<Structure>>>> = RefCell::new(WriteCache::new());
+    /// Temperament a persona states (curiosity, sociability, nurture; 50 when not stated).
+    static TRAITS: RefCell<WriteCache<[f32; 3]>> = RefCell::new(WriteCache::new());
+}
+
+/// The temperament traits the evaluator reads from a character's persona (cached).
+pub fn traits_of(ctx: &ReducerContext, id: u32) -> [f32; 3] {
+    let t = stamp(ctx);
+    TRAITS.with(|c| {
+        c.borrow_mut().get(t, id, || {
+            let traits: serde_json::Value = ctx.db.persona().id().find(id).and_then(|p| serde_json::from_str(&p.traits).ok()).unwrap_or_default();
+            let of = |k: &str| traits[k].as_f64().unwrap_or(50.0) as f32;
+            [of("curiosity"), of("sociability"), of("nurture")]
+        })
+    })
+}
+
+/// Call before writing a persona.
+pub fn invalidate_traits(ctx: &ReducerContext, id: u32) {
+    let t = stamp(ctx);
+    TRAITS.with(|c| c.borrow_mut().invalidate(t, Some(id)));
+}
+
+fn chunk_resources(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<ResourceNode>> {
+    let t = stamp(ctx);
+    CHUNK_RESOURCES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.resource_node().chunk().filter(chunk).collect())))
+}
+
+fn chunk_structures(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
+    let t = stamp(ctx);
+    CHUNK_STRUCTURES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.structure().chunk().filter(chunk).collect())))
+}
+
+/// Call before inserting (`None`: any chunk) or updating (`Some(chunk)`) a resource node.
+pub fn invalidate_resources(ctx: &ReducerContext, chunk: Option<u32>) {
+    let t = stamp(ctx);
+    CHUNK_RESOURCES.with(|c| c.borrow_mut().invalidate(t, chunk));
+}
+
+/// Call before inserting a structure.
+pub fn invalidate_structures(ctx: &ReducerContext) {
+    let t = stamp(ctx);
+    CHUNK_STRUCTURES.with(|c| c.borrow_mut().invalidate(t, None));
+}
+
 pub fn resources_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(ResourceNode, f32)> {
     let mut out = Vec::new();
     for c in chunks_around(at.0, at.1, r) {
-        for n in ctx.db.resource_node().chunk().filter(c) {
+        for n in chunk_resources(ctx, c).iter() {
             let d = dist(at, (n.x, n.y));
             if d <= r {
-                out.push((n, d));
+                out.push((n.clone(), d));
             }
         }
     }
@@ -566,10 +759,10 @@ pub fn resources_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(Reso
 pub fn structures_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(Structure, f32)> {
     let mut out = Vec::new();
     for c in chunks_around(at.0, at.1, r) {
-        for s in ctx.db.structure().chunk().filter(c) {
+        for s in chunk_structures(ctx, c).iter() {
             let d = dist(at, (s.x, s.y));
             if d <= r {
-                out.push((s, d));
+                out.push((s.clone(), d));
             }
         }
     }

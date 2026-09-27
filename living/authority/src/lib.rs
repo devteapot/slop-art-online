@@ -76,6 +76,7 @@ pub fn set_paused(ctx: &ReducerContext, paused: bool) -> Result<(), String> {
     let mut w = require_admin(ctx)?;
     w.paused = paused;
     ctx.db.world().id().update(w);
+    common::invalidate_world();
     Ok(())
 }
 
@@ -91,6 +92,7 @@ pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String
     let mut k = common::clock(ctx);
     k.scripts_rev = rev;
     ctx.db.clock().id().update(k);
+    common::invalidate_scripts_rev();
     Ok(())
 }
 
@@ -229,6 +231,7 @@ pub fn place_structure(ctx: &ReducerContext, near: u32, kind: String) -> Result<
     let now = common::now_ms(ctx);
     let b = ctx.db.body().id().find(near).ok_or("no such body")?;
     let p = common::pos(&b, now);
+    common::invalidate_structures(ctx);
     ctx.db.structure().insert(Structure { id: 0, kind, x: p.0 + 0.8, y: p.1, chunk: living_rules::map::chunk_of(p.0 + 0.8, p.1), owner: near, built_ms: now });
     Ok(())
 }

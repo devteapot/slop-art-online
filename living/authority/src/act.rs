@@ -46,16 +46,8 @@ impl Resolved {
     }
 }
 
-pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
-    let w = common::world(ctx);
-    let ch = ctx.db.character().id().find(id);
-    let kind = ch.as_ref().map(|c| c.kind.clone()).unwrap_or_default();
-    let age = ch.as_ref().map(|c| common::age_days(c, &w, now)).unwrap_or(20.0);
-    let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
-    let (hp, hunger, energy) = ctx.db.vitals().id().find(id).map(|v| {
-        let n = common::needs(&v, now);
-        (n.hp, n.hunger, n.energy)
-    }).unwrap_or((0.0, 0.0, 0.0));
+/// Whether a spot is near a fire and near a shelter (a house is both: a roof and a hearth).
+pub fn warmth(ctx: &ReducerContext, at: (f32, f32)) -> (bool, bool) {
     let mut near_fire = false;
     let mut near_shelter = false;
     let laws = common::laws(ctx);
@@ -66,12 +58,25 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         if s.kind == "shelter" && d <= laws.shelter_warmth {
             near_shelter = true;
         }
-        // A house is a home: a roof and a hearth.
         if s.kind == "house" && d <= laws.shelter_warmth {
             near_shelter = true;
             near_fire = true;
         }
     }
+    (near_fire, near_shelter)
+}
+
+pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
+    let w = common::world(ctx);
+    let ch = ctx.db.character().id().find(id);
+    let kind = ch.as_ref().map(|c| c.kind.clone()).unwrap_or_default();
+    let age = ch.as_ref().map(|c| common::age_days(c, &w, now)).unwrap_or(20.0);
+    let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+    let (hp, hunger, energy) = ctx.db.vitals().id().find(id).map(|v| {
+        let n = common::needs(&v, now);
+        (n.hp, n.hunger, n.energy)
+    }).unwrap_or((0.0, 0.0, 0.0));
+    let (near_fire, near_shelter) = warmth(ctx, at);
     ActorFacts {
         id,
         kind,
@@ -540,10 +545,7 @@ fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
     if a.skill == "sleep" || a.skill == "rest" {
         refresh_rates(ctx, a.id);
     }
-    if let Some(mut k) = ctx.db.clock().id().find(0) {
-        k.completions += 1;
-        ctx.db.clock().id().update(k);
-    }
+    common::count(|k| k.completions += 1);
     report(ctx, &a, ok, why, now);
 }
 
@@ -668,6 +670,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 }
                 n.amount = have - qty;
                 n.at_ms = now;
+                common::invalidate_resources(ctx, Some(n.chunk));
                 ctx.db.resource_node().id().update(n);
             }
             Effect::Vitals { hp, hunger, energy } => {
@@ -790,6 +793,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 let w = common::world(ctx);
                 let _ = w;
                 let holder = if a.item == "sign" {
+                    common::invalidate_structures(ctx);
                     let s = ctx.db.structure().insert(Structure { id: 0, kind: "sign".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: me, built_ms: now });
                     STRUCTURE_BIT | s.id
                 } else {
@@ -943,6 +947,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
             }
             Effect::Plant => {
                 let sc = common::scripts(ctx);
+                common::invalidate_resources(ctx, None);
                 ctx.db.resource_node().insert(ResourceNode {
                     id: 0,
                     kind: "berry_bush".into(),
@@ -983,6 +988,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                     notes.push(format!("built wall at ({tx},{ty})"));
                 } else {
                     let p = (tx as f32 + 0.5, ty as f32 + 0.5);
+                    common::invalidate_structures(ctx);
                     let s = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: me, built_ms: now });
                     let community = ctx.db.membership().member().find(me).map(|m| m.community).unwrap_or(0);
                     ctx.db.gate().insert(Gate { id: s.id, x: tx, y: ty, open: true, community, changed_ms: now, changed_by: me });
@@ -1016,6 +1022,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 if !catalog::STRUCTURES.contains(&kind.as_str()) {
                     return Err(format!("cannot build {kind}"));
                 }
+                common::invalidate_structures(ctx);
                 let s = ctx.db.structure().insert(Structure { id: 0, kind: kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: me, built_ms: now });
                 common::chronicle(ctx, now, "build", me, 0, at, format!("{my_name} built a {kind}"));
                 witnessed(ctx, now, at, "built", me, 0, &format!("{{a}} built a {kind} at ({:.0},{:.0})", at.0, at.1), 0.4, &[me]);
@@ -1229,10 +1236,7 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
 fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), now: u64) {
     engage(ctx, attacker, now);
     engage(ctx, victim, now);
-    if let Some(mut k) = ctx.db.clock().id().find(0) {
-        k.missed += 1;
-        ctx.db.clock().id().update(k);
-    }
+    common::count(|k| k.missed += 1);
     if let Some(vc) = ctx.db.character().id().find(victim) {
         percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("{}'s blow missed: you were out of reach.", common::label_for(ctx, &vc, attacker)), 0.6);
         common::wake(ctx, victim);
@@ -1267,14 +1271,11 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, now
     // Defense in progress: a dodge makes the blow miss, a raised guard takes most of it.
     let defense = ctx.db.activity().id().find(victim).map(|a| a.skill).unwrap_or_default();
     let at_v = ctx.db.body().id().find(victim).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
-    if let Some(mut k) = ctx.db.clock().id().find(0) {
-        match defense.as_str() {
-            "dodge" => k.dodged += 1,
-            "block" => k.blocked += 1,
-            _ => k.hits += 1,
-        }
-        ctx.db.clock().id().update(k);
-    }
+    common::count(|k| match defense.as_str() {
+        "dodge" => k.dodged += 1,
+        "block" => k.blocked += 1,
+        _ => k.hits += 1,
+    });
     if defense == "dodge" {
         let attacker_c = ctx.db.character().id().find(attacker);
         percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("You dodged {}'s attack.", common::label_for(ctx, &vc, attacker)), 0.6);
@@ -1369,6 +1370,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
         ctx.db.know_how().id().delete(k);
     }
     if kind == "person" {
+        common::invalidate_structures(ctx);
         let s = ctx.db.structure().insert(Structure { id: 0, kind: "remains".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: id, built_ms: now });
         for (item, q) in items {
             common::inv_add(ctx, STRUCTURE_BIT | s.id, &item, q);

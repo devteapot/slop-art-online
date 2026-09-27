@@ -5,6 +5,7 @@
 
 use spacetimedb::{Identity, ScheduleAt, SpacetimeType};
 
+#[derive(Clone)]
 #[spacetimedb::table(accessor = world, public)]
 pub struct World {
     #[primary_key]
@@ -303,6 +304,7 @@ pub struct Inventory {
 
 pub const STRUCTURE_BIT: u64 = 1 << 40;
 
+#[derive(Clone)]
 #[spacetimedb::table(accessor = resource_node, public)]
 pub struct ResourceNode {
     #[primary_key]
@@ -320,6 +322,7 @@ pub struct ResourceNode {
     pub at_ms: u64,
 }
 
+#[derive(Clone)]
 #[spacetimedb::table(accessor = structure, public)]
 pub struct Structure {
     #[primary_key]

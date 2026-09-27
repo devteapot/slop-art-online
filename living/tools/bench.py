@@ -6,6 +6,10 @@ Usage: living/tools/bench.py [--db living-bench] [--seconds 60] [--crowd N] [--f
 --fresh republishes the database from the seed (deletes its data); --crowd adds N
 instinct-driven people (no LLM). Tick durations come from the module's LogStopwatch
 (enabled only during the window); cadence and work counters from the `stats` row.
+`spans_ms` reports every named span the module logs while profiling (the tick's phases
+`tick.motion`, `tick.activity`, `tick.wakes`, `tick.combat`, `tick.slots`, and
+`housekeeping`, `housekeeping.spoil`): count, p50/p99/max and ms of work per second.
+--log-lines raises how many module log lines are read (for extra, temporary spans).
 --body-writes subscribes to the `body` table during the window and reports delivered row
 updates per second and their JSON volume (what an observer subscribed to bodies receives).
 LIVING_STDB overrides the CLI wrapper (e.g. the main checkout's, from a worktree).
@@ -58,6 +62,7 @@ def main():
     ap.add_argument("--wasm", default="living_authority.wasm", help="module file in the server's /wasm mount")
     ap.add_argument("--body-writes", action="store_true", help="count body row updates delivered to a subscriber")
     ap.add_argument("--out")
+    ap.add_argument("--log-lines", type=int, default=0, help="module log lines to read (default: enough for the tick and its phases)")
     a = ap.parse_args()
     if a.fresh:
         stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", a.db, "--delete-data", "-y")
@@ -102,14 +107,19 @@ def main():
         reader.join(timeout=5)
         span = a.seconds + 1
         body_report = {"row_updates_per_s": round(counts["rows"] / span, 1), "transactions_per_s": round(counts["tx"] / span, 1), "json_kb_per_s": round(counts["bytes"] / span / 1024, 1)}
-    logs = stdb("logs", "-s", "local", a.db, "-n", str(a.seconds * 70 + 500))
+    # Every profiled span (the tick, its phases, housekeeping) logs one line per run.
+    logs = stdb("logs", "-s", "local", a.db, "-n", str(a.log_lines or a.seconds * 60 * 8 + 2000))
     durs = []
     slow = []
-    for m in re.finditer(r'^(\S+Z)\s.*Timing span "tick": ([\d.]+)(µs|ms|s)\b', logs, re.M):
+    spans = {}
+    for m in re.finditer(r'^(\S+Z)\s.*Timing span "([^"]+)": ([\d.]+)(µs|ms|s)\b', logs, re.M):
         at = datetime.strptime(m.group(1)[:26].rstrip("Z"), "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc).timestamp()
         if at < t0 - 1:
             continue
-        d = float(m.group(2)) * {"µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(3)]
+        d = float(m.group(3)) * {"µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(4)]
+        spans.setdefault(m.group(2), []).append(d)
+        if m.group(2) != "tick":
+            continue
         durs.append(d)
         if d > 16.667:
             slow.append((round(at - t0, 1), round(d, 1)))
@@ -129,6 +139,10 @@ def main():
         "max_tick_gap_ms_last_s": s1["max_tick_gap_ms"],
         "combat": {"hits": s1.get("hits", 0) - s0.get("hits", 0), "dodged": s1.get("dodged", 0) - s0.get("dodged", 0), "blocked": s1.get("blocked", 0) - s0.get("blocked", 0), "people_left": s1["alive_people"]},
         "body_writes": body_report,
+        "spans_ms": {
+            name: {"n": len(xs), "p50": round(pct(xs, 50), 3), "p99": round(pct(xs, 99), 3), "max": round(max(xs), 3), "ms_per_s": round(sum(xs) / max(dt, 1e-9), 2)}
+            for name, xs in sorted(spans.items())
+        },
         "tick_ms": {
             "samples": len(durs),
             "p50": round(pct(durs, 50), 3),

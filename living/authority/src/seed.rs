@@ -294,6 +294,7 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         w.life_pace = s.life_pace;
         w.year_days = s.year_days;
         ctx.db.world().id().update(w);
+        common::invalidate_world();
         common::invalidate_calendar();
     }
     common::invalidate_map();
@@ -312,6 +313,7 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     for st in &s.structures {
         let at = map.nearest_walkable(st.at[0], st.at[1]).unwrap_or((48.0, 48.0));
         let owner = ctx.db.character().iter().find(|c| c.name == st.owner).map(|c| c.id).unwrap_or(0);
+        common::invalidate_structures(ctx);
         let row = ctx.db.structure().insert(Structure { id: 0, kind: st.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now });
         for (item, q) in &st.contents {
             common::inv_add(ctx, STRUCTURE_BIT | row.id, item, *q);
@@ -319,6 +321,7 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     }
     for a in &s.artifacts {
         let at = map.nearest_walkable(a.at[0], a.at[1]).unwrap_or((48.0, 48.0));
+        common::invalidate_structures(ctx);
         let st = ctx.db.structure().insert(Structure { id: 0, kind: a.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: 0, built_ms: 0 });
         ctx.db.artifact().insert(Artifact { id: 0, kind: a.kind.clone(), holder: STRUCTURE_BIT | st.id, author: 0, author_name: a.author_name.clone(), written_ms: 0, topic: a.topic.clone(), text: a.text.clone() });
     }
@@ -517,6 +520,7 @@ fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64)
             }
         }
         placed.entry(cell).or_default().push(p);
+        common::invalidate_resources(ctx, None);
         ctx.db.resource_node().insert(ResourceNode {
             id: 0,
             kind: kind.into(),
@@ -652,6 +656,7 @@ fn walkable_near(map: &living_rules::map::Map, at: (f32, f32)) -> (f32, f32) {
 
 fn put(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32, f32), owner: u32, now: u64) -> u64 {
     let at = walkable_near(map, at);
+    common::invalidate_structures(ctx);
     ctx.db.structure().insert(Structure { id: 0, kind: kind.into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now }).id
 }
 
@@ -665,6 +670,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
     put(ctx, map, "campfire", layout.market[0], 0, now);
     for &(gx, gy) in &layout.gates {
         let p = (gx as f32 + 0.5, gy as f32 + 0.5);
+        common::invalidate_structures(ctx);
         let sid = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: 0, built_ms: 0 }).id;
         ctx.db.gate().insert(Gate { id: sid, x: gx, y: gy, open: true, community: c.id, changed_ms: now, changed_by: 0 });
     }
@@ -758,6 +764,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
     }
     let sc = common::scripts(ctx);
     for p in &layout.fields {
+        common::invalidate_resources(ctx, None);
         ctx.db.resource_node().insert(ResourceNode {
             id: 0,
             kind: "berry_bush".into(),

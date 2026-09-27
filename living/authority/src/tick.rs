@@ -24,12 +24,15 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     }
     k.tick += 1;
     k.last_ms = now;
+    common::flush_counts(&mut k);
     let slot = (k.tick % 60) as u8;
     let k_tick = k.tick;
-    let _timer = k.profile.then(|| spacetimedb::log_stopwatch::LogStopwatch::new("tick"));
+    common::set_profiling(k.profile);
+    let _timer = common::span("tick");
     ctx.db.clock().id().update(k);
 
     // 1. Steering updates that are due (events and cadence of moving bodies).
+    let phase = common::span("tick.motion");
     let due: Vec<Body> = ctx.db.body().next_ms().filter(..=now).collect();
     let mut motions = 0u64;
     for b in due {
@@ -39,12 +42,16 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
             act::on_motion(ctx, id, ev, now);
         }
     }
+    drop(phase);
     // 2. Activity timers.
+    let phase = common::span("tick.activity");
     let due: Vec<Activity> = ctx.db.activity().ends_ms().filter(..=now).collect();
     for a in due {
         act::progress(ctx, a, now);
     }
+    drop(phase);
     // 3. Wakes and this slot's evaluations.
+    let phase = common::span("tick.wakes");
     let mut done = HashSet::new();
     for _ in 0..3 {
         let wakes: Vec<u32> = ctx.db.wake().iter().map(|w| w.id).collect();
@@ -58,23 +65,28 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
             }
         }
     }
+    drop(phase);
     // Combat cadence: creatures in a fight are evaluated about 15 times per second,
     // staggered across ticks so a battle does not land in one tick.
+    let phase = common::span("tick.combat");
     let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (*id as u64 + k_tick) % 4 == 0).collect();
     for id in fighting {
         if done.insert(id) {
             brain::evaluate(ctx, id, now);
         }
     }
+    drop(phase);
+    let phase = common::span("tick.slots");
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();
     for id in slot_ids {
         if done.insert(id) {
             brain::evaluate(ctx, id, now);
         }
     }
-    if motions > 0 {
-        let mut k = common::clock(ctx);
-        k.motions += motions;
+    drop(phase);
+    common::count(|k| k.motions += motions);
+    let mut k = common::clock(ctx);
+    if common::flush_counts(&mut k) {
         ctx.db.clock().id().update(k);
     }
     Ok(())
@@ -86,22 +98,40 @@ const NAMES: &[&str] = &[
     "Hollis", "Ione", "Jory", "Kestrel", "Linden", "Marlo", "Nia", "Orrin", "Perrin", "Rook", "Sage", "Teal", "Ulla", "Vesper",
 ];
 
+/// Housekeeping calls (one a second) in which every stack is checked once for spoilage.
+const SPOIL_SLICES: u32 = 60;
+
 thread_local! {
-    static LAST_SPOIL: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Rolling spoilage pass: the owner to resume from, the call within the current minute
+    /// and the rows to take per call (fixed at the start of each minute).
+    static SPOIL: std::cell::Cell<(u64, u32, u64)> = const { std::cell::Cell::new((0, 0, 0)) };
 }
 
 /// Food spoils: each minute a share of every perishable stack is lost (rates from the skill
 /// script; a storage keeps food three times longer). Owners notice what they lose.
-/// Prototype cost: one pass over the inventory table per minute.
+/// The pass rolls through the inventory by owner over the minute's 60 housekeeping calls
+/// (an owner's stacks together), so each stack is still checked once a minute but no call
+/// walks the whole table; the minute's last call takes whatever is left.
 fn spoil(ctx: &ReducerContext, now: u64) {
-    if now.saturating_sub(LAST_SPOIL.with(|c| c.get())) < 60_000 {
-        return;
+    let _timer = common::span("housekeeping.spoil");
+    let (cursor, call, mut quota) = SPOIL.with(|c| c.get());
+    if call == 0 || quota == 0 {
+        quota = ctx.db.inventory().count().div_ceil(SPOIL_SLICES as u64).max(1);
     }
-    LAST_SPOIL.with(|c| c.set(now));
+    let last = call + 1 >= SPOIL_SLICES;
+    let mut rows: Vec<Inventory> = Vec::new();
+    let mut resume = u64::MAX;
+    for r in ctx.db.inventory().owner().filter(cursor..) {
+        if !last && rows.len() as u64 >= quota && rows.last().map_or(true, |p| p.owner != r.owner) {
+            resume = r.owner;
+            break;
+        }
+        rows.push(r);
+    }
+    SPOIL.with(|c| c.set(if last { (0, 0, quota) } else { (resume, call + 1, quota) }));
     let sc = common::scripts(ctx);
     let mut rates: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
-    let rows: Vec<Inventory> = ctx.db.inventory().iter().filter(|r| r.qty > 0).collect();
-    for mut r in rows {
+    for mut r in rows.into_iter().filter(|r| r.qty > 0) {
         let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.num_of("spoil_rate", &r.item, 0.0) as f32);
         if rate <= 0.0 {
             continue;
@@ -220,6 +250,8 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     }
     let now = common::now_ms(ctx);
     let mut k = common::clock(ctx);
+    common::set_profiling(k.profile);
+    let _timer = common::span("housekeeping");
     let hour = common::hour(&w, now) as u8;
     if hour != k.last_hour {
         let day = living_rules::day_of(now, w.epoch_ms, w.day_ms);
@@ -239,26 +271,33 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
 
     spoil(ctx, now);
 
-    // Wildlife renewal: animals breed slowly while below their seed population.
+    // One pass over the characters: population counts for the stats row, and the living.
     let mut alive_people = 0u32;
-    let mut deer = Vec::new();
+    let mut deer = 0u32;
     let mut wolves = 0u32;
-    for c in ctx.db.character().iter().filter(|c| c.alive) {
+    let mut dead_people = 0u32;
+    let mut alive: Vec<Character> = Vec::new();
+    for c in ctx.db.character().iter() {
+        if !c.alive {
+            dead_people += (c.kind == "person") as u32;
+            continue;
+        }
         match c.kind.as_str() {
             "person" => alive_people += 1,
-            "deer" => deer.push(c.id),
+            "deer" => deer += 1,
             "wolf" => wolves += 1,
             _ => {}
         }
+        alive.push(c);
     }
     // No re-spawning: animals breed, age and die like everyone else (a species hunted out
     // stays gone). Life stages and deaths of old age, at the world's pace.
-    let alive: Vec<Character> = ctx.db.character().iter().filter(|c| c.alive).collect();
     for c in alive {
         let life = common::life_of(&c.kind);
         let age = common::age_days(&c, &w, now);
         if life.fraction(age, common::pace(&w)) >= life.deathline(c.id) {
             crate::act::die(ctx, c.id, "old age", now, 0);
+            dead_people += (c.kind == "person") as u32;
             continue;
         }
         let stage = common::stage_code(life.stage(age, common::pace(&w)));
@@ -296,8 +335,9 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
         }
     }
 
+    common::flush_counts(&mut k);
     let prev = ctx.db.stats().id().find(0);
-    let deaths = ctx.db.character().iter().filter(|c| !c.alive && c.kind == "person").count() as u32;
+    let deaths = dead_people;
     let row = Stats {
         id: 0,
         at_ms: now,
@@ -308,7 +348,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
         percepts: k.percepts,
         deliberations: k.deliberations,
         alive_people,
-        alive_animals: deer.len() as u32 + wolves,
+        alive_animals: deer + wolves,
         births: prev.as_ref().map(|p| p.births).unwrap_or(0),
         deaths,
         max_tick_gap_ms: k.max_gap_ms,

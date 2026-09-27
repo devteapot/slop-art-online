@@ -74,25 +74,25 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         return;
     }
     let (Some(st), Some(body), Some(vit)) = (ctx.db.mind_state().id().find(id), ctx.db.body().id().find(id), ctx.db.vitals().id().find(id)) else { return };
-    if let Some(mut k) = ctx.db.clock().id().find(0) {
-        k.evals += 1;
-        ctx.db.clock().id().update(k);
-    }
+    common::count(|k| k.evals += 1);
     let w = common::world(ctx);
     let at = pos(&body, now);
-    let Some(vit) = settle_needs(ctx, &me, vit, at, &w, now) else { return };
+    let mut cur = ctx.db.activity().id().find(id);
+    let Some(vit) = settle_needs(ctx, &me, vit, at, &w, cur.as_ref(), now) else { return };
     let needs = common::needs(&vit, now);
     let Some(g) = common::compiled(ctx, id, st.revision) else {
         log::warn!("character {id} has no valid graph at revision {}", st.revision);
         return;
     };
-    // A deliberate act that cannot reach its target gives up after a while.
-    if let Some(a) = ctx.db.activity().id().find(id).filter(|a| crate::acts::overdue(a, now)) {
+    // A deliberate act that cannot reach its target gives up after a while (and the next
+    // one waiting may start in its place).
+    if let Some(a) = cur.clone().filter(|a| crate::acts::overdue(a, now)) {
         act::cancel(ctx, a, now, Some("you could not get to it in time"));
+        cur = ctx.db.activity().id().find(id);
     }
-    let acting = ctx.db.activity().id().find(id).map_or(false, |a| a.node == act::ACT);
+    let acting = cur.as_ref().map_or(false, |a| a.node == act::ACT);
     let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting };
-    ev.latched = ctx.db.activity().id().find(id).filter(|a| a.revision == ev.st.revision && LATCHES.contains(&a.skill.as_str())).map(|a| a.node);
+    ev.latched = cur.filter(|a| a.revision == ev.st.revision && LATCHES.contains(&a.skill.as_str())).map(|a| a.node);
     ev.alerts();
     let root = ev.g.clone();
     let result = ev.run(&root.root, 0);
@@ -113,8 +113,10 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
     ev.resolve(t)
 }
 
-/// Re-anchor needs when their rate inputs change; handles death from needs.
-fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f32), w: &World, now: u64) -> Option<Vitals> {
+/// Re-anchor needs when their rate inputs change; handles death from needs. `cur` is the
+/// character's activity. The rate key is computed from the few facts the rates depend on;
+/// the full facts are gathered only when it changes.
+fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f32), w: &World, cur: Option<&Activity>, now: u64) -> Option<Vitals> {
     let n = common::needs(&v, now);
     if n.hp <= 0.0 {
         let cause = if n.hunger >= 100.0 {
@@ -127,21 +129,23 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
         act::die(ctx, me.id, cause, now, 0);
         return None;
     }
-    let facts = act::facts(ctx, me.id, now);
     let night = common::night(w, now);
+    let (near_fire, near_shelter) = act::warmth(ctx, at);
+    let activity = cur.filter(|a| a.phase == 1).map_or("", |a| a.skill.as_str());
     let key = 1
         | (night as u32) << 1
         | ((n.hunger >= 100.0) as u32) << 2
         | ((n.hunger < 70.0) as u32) << 3
         | ((n.energy > 15.0) as u32) << 4
         | ((n.energy <= 0.0) as u32) << 5
-        | (facts.near_fire as u32) << 6
-        | (facts.near_shelter as u32) << 7
-        | ((facts.activity == "sleep") as u32) << 8
-        | ((facts.activity == "rest") as u32) << 9;
+        | (near_fire as u32) << 6
+        | (near_shelter as u32) << 7
+        | ((activity == "sleep") as u32) << 8
+        | ((activity == "rest") as u32) << 9;
     if key == v.rate_key {
         return Some(v);
     }
+    let facts = act::facts(ctx, me.id, now);
     let sc = common::scripts(ctx);
     let hour = common::hour(w, now);
     let sctx = living_rules::script::SkillCtx { actor: facts, night, hour, ..Default::default() };
@@ -560,17 +564,14 @@ impl<'a> Ev<'a> {
     fn nearest(&mut self, f: &Filter) -> Option<Resolved> {
         match living_rules::catalog::kind_class(&f.kind)? {
             living_rules::catalog::KindClass::Creature => {
-                let cands: Vec<NearCreature> = self.scene().creatures.clone();
-                for c in cands {
-                    if f.kind != "creature" && *c.kind != *f.kind {
-                        continue;
-                    }
+                let cands: Vec<u32> = self.scene().creatures.iter().filter(|c| f.kind == "creature" || *c.kind == *f.kind).map(|c| c.id).collect();
+                for id in cands {
                     if let Some(rel) = &f.relation {
-                        if !self.relation_ok(c.id, rel) {
+                        if !self.relation_ok(id, rel) {
                             continue;
                         }
                     }
-                    if let Some(r) = self.visible_creature(c.id) {
+                    if let Some(r) = self.visible_creature(id) {
                         return Some(r);
                     }
                 }
@@ -645,9 +646,10 @@ impl<'a> Ev<'a> {
             Cond::Near(n) => self.resolve(&n.target).map_or(false, |p| dist(self.at, p.at) <= n.within),
             Cond::Count(c) => {
                 let at = self.at;
-                let cands: Vec<NearCreature> = self.scene().creatures.clone();
+                self.scene();
+                let scene = self.scene.as_ref().expect("scene built");
                 let mut n = 0u32;
-                for x in cands {
+                for x in &scene.creatures {
                     if dist(at, x.pos) > c.within || (c.of.kind != "creature" && *x.kind != *c.of.kind) {
                         continue;
                     }
@@ -709,8 +711,12 @@ impl<'a> Ev<'a> {
         ];
         // Psychological drives: an uneventful stretch makes curious people restless; time without
         // company makes sociable people lonely. They are felt, not prescribed: the mind decides.
-        let traits: serde_json::Value = self.ctx.db.persona().id().find(self.me.id).and_then(|p| serde_json::from_str(&p.traits).ok()).unwrap_or_default();
-        let trait_of = |k: &str| traits[k].as_f64().unwrap_or(50.0) as f32;
+        let traits = common::traits_of(self.ctx, self.me.id);
+        let trait_of = |k: &str| match k {
+            "curiosity" => traits[0],
+            "sociability" => traits[1],
+            _ => traits[2],
+        };
         let calm = self.needs.hunger < 60.0 && self.needs.energy > 35.0 && self.needs.hp > 60.0;
         let quiet_ms = self.now.saturating_sub(self.st.deliberated_ms);
         let restless_after = 60_000.0 * (12.0 - trait_of("curiosity") / 12.0);
