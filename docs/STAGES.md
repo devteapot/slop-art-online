@@ -165,3 +165,9 @@ Evidence, rule changes and decisions per stage, newest last.
 
   Labs updated in place.
 - 13:00 — **Ecology holds without people**: eco-a ran its full four hours (about 14 generations of deer and of wolves at these lifespans). Per 30 minutes, deer were born/died +57/−16, +47/−38, +82/−33, +25/−92 (winter), +33/−41, +64/−35, +37/−47, +54/−42, oscillating between ≈95 and ≈140 with winters. Wolves went from 3 to 11 with births matching deaths. The animal side of stage 1 is met without people; with people, packs have dwindled in two of three labs (addressed at 12:30).
+- 13:40 — **The wolves lab is on track for stage 1** at 188 minutes. It has 12 people and a third generation, 122 deer and 9 wolves, and wolf births have resumed since the radius change (+2 per 10 minutes). Open items there:
+  - two people starving
+  - five of twelve idle in the sample
+  - talk at 3.2 lines per person per minute, just over the runaway line, with no repeats
+
+  Stage 2 is storing food for the first time (8 storages, 15 meat). Know-how is spread: storage and cloak three people each, writing and carpentry two, cooking and planting still one, and toolmaking discovered. Its wolves died out. The baseline lost its wolves before the change and cannot pass; restarted fresh on the current settings to serve as the second stage-1 lab.
