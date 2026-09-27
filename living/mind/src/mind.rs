@@ -539,6 +539,12 @@ family, partner, friend, rival, stranger, and a short note in their words). Repl
         if let Some([x, y]) = bg["camp"].as_array().map(|a| [a[0].as_f64().unwrap_or(0.0), a[1].as_f64().unwrap_or(0.0)]) {
             places.push(json!({"name": "camp", "x": x, "y": y}));
         }
+        // Other towns one has heard of since childhood.
+        for t in bg["towns_known"].as_array().cloned().unwrap_or_default() {
+            if let (Some(name), Some(at)) = (t["name"].as_str(), t["at"].as_array()) {
+                places.push(json!({"name": name, "x": at[0].as_f64().unwrap_or(0.0), "y": at[1].as_f64().unwrap_or(0.0)}));
+            }
+        }
         let relations: Vec<Value> = v["relations"].as_array().cloned().unwrap_or_default().into_iter().filter(|r| r["id"].as_u64().map_or(false, |i| known.contains(&(i as u32)))).collect();
         if let Some(store) = &self.store {
             let mut patch = memory::Patch::default();

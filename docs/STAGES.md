@@ -281,7 +281,7 @@ Evidence, rule changes and decisions per stage, newest last.
     | bridging | a bridge (4 wood, 2 stone) on the water beside you |
   - **Changing the land.** A new `clear` skill turns the forest one stands on into open ground (2 wood).
   - **Seeded know-how.** Fishers start knowing fishing, hunters trapping, healers medicine, traders basketry.
-  - **Towns know each other.** Townsfolk start knowing where each town stands (a remembered place); what is there and how the way goes, they learn by going.
+  - **Towns know each other.** Townsfolk start knowing where the other towns stand. It is part of their background, which their mind turns into remembered places when it forms their identity; a first attempt that wrote the places directly was erased by that step. What is there and how the way goes, they learn by going.
   - **Privacy.** Onlookers see a rework only as someone "sitting deep in thought".
   - **Checks.** Mechanics checks added: a net's double catch; smoking, bow, arrows and leather; clearing forest.
 

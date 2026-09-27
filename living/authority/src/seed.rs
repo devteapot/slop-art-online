@@ -330,21 +330,19 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     for (t, layout) in &settlements {
         town(ctx, &map, t, layout, now);
     }
-    // Townsfolk know where their own town and the other towns stand (they grew up hearing of
-    // them); what is there and how the way goes, they learn by going.
-    for (_, layout) in &settlements {
-        let (cx, cy) = layout.center;
-        let residents: Vec<u32> = ctx
-            .db
-            .character()
-            .iter()
-            .filter(|c| c.kind == "person" && ((c.home_x - cx).powi(2) + (c.home_y - cy).powi(2)).sqrt() < 30.0)
-            .map(|c| c.id)
-            .collect();
-        for id in residents {
-            for (o, ol) in &settlements {
-                ctx.db.place().insert(Place { id: 0, actor: id, name: o.name.clone(), x: ol.center.0, y: ol.center.1 });
+    // Townsfolk know where the other towns stand (they grew up hearing of them); what is
+    // there and how the way goes, they learn by going. It is part of their background, which
+    // their minds turn into remembered places.
+    if settlements.len() > 1 {
+        let towns: Vec<serde_json::Value> = settlements.iter().map(|(t, l)| serde_json::json!({"name": t.name, "at": [l.center.0.round(), l.center.1.round()]})).collect();
+        for mut bg in ctx.db.background().iter().collect::<Vec<_>>() {
+            let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&bg.text) else { continue };
+            if v.get("town").is_none() {
+                continue;
             }
+            v["towns_known"] = serde_json::Value::Array(towns.iter().filter(|t| t["name"] != v["town"]).cloned().collect());
+            bg.text = v.to_string();
+            ctx.db.background().id().update(bg);
         }
     }
     if let Some(r) = &realm {
