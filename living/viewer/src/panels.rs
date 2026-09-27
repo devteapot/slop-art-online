@@ -10,12 +10,46 @@ use spacetimedb_sdk::Table;
 
 const WEAK: Color32 = Color32::from_rgb(140, 148, 160);
 
+/// Labs usually running (a lab's database is its scenario name; the baseline uses `living`).
+const LABS: &[&str] = &["stage3-village", "stage4-two", "stage2-base", "stage1-wolves", "living"];
+
+/// Which world to watch: pick a lab or type a database name. On the web the page reloads on
+/// that database (`?db=`); natively set `LIVING_DB` and restart.
+fn lab_picker(ui: &mut egui::Ui, net: &Net, view: &mut View) {
+    if view.lab_input.is_empty() {
+        view.lab_input = net.db.clone();
+    }
+    let mut go: Option<String> = None;
+    egui::ComboBox::from_id_salt("lab").selected_text(RichText::new(format!("lab: {}", net.db)).strong()).show_ui(ui, |ui| {
+        for l in LABS {
+            if ui.selectable_label(net.db == *l, *l).clicked() {
+                go = Some(l.to_string());
+            }
+        }
+    });
+    let edit = ui.add(egui::TextEdit::singleline(&mut view.lab_input).desired_width(110.0).hint_text("database"));
+    if edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+        go = Some(view.lab_input.trim().to_string());
+    }
+    if let Some(db) = go.filter(|d| !d.is_empty() && *d != net.db) {
+        #[cfg(target_arch = "wasm32")]
+        if let Some(w) = web_sys::window() {
+            let _ = w.location().set_search(&format!("?db={db}&server={}", net.server));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            view.lab_input = format!("restart with LIVING_DB={db}");
+        }
+    }
+}
+
 pub fn top_bar(ctx: &egui::Context, net: &Net, snap: &Snap, view: &mut View) {
     let (fps, frame_ms) = (view.fps, view.frame_ms);
     egui::TopBottomPanel::top("top").show(ctx, |ui| {
         ui.add_space(3.0);
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("Living world").strong().size(16.0));
+            lab_picker(ui, net, view);
             let (col, text) = match net.status {
                 Status::Live => (Color32::from_rgb(90, 210, 110), "live".to_string()),
                 Status::Syncing => (Color32::from_rgb(230, 200, 70), "syncing…".to_string()),

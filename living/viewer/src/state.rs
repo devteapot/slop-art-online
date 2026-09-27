@@ -368,6 +368,8 @@ pub enum Tab {
 }
 
 pub struct View {
+    /// The lab picker's text (a database name).
+    pub lab_input: String,
     pub center: egui::Pos2,
     /// Screen points per tile.
     pub zoom: f32,
@@ -426,6 +428,7 @@ pub struct View {
 impl Default for View {
     fn default() -> Self {
         Self {
+            lab_input: String::new(),
             center: (world_tiles() / 2.0).to_pos2(),
             zoom: 8.0,
             fitted: false,
