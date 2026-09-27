@@ -23,7 +23,15 @@ thread_local! {
 /// that call them. It is theirs: the mind keeps, changes or drops any of it.
 pub fn give_repertoire(ctx: &ReducerContext, id: u32, occupation: &str, now: u64) {
     let r: serde_json::Value = serde_json::from_str(REPERTOIRE).expect("repertoire json");
-    let occ = r["occupations"].get(occupation).or_else(|| r["occupations"].get("forager")).cloned().unwrap_or_default();
+    // A seed may start its people on another set of work habits (e.g. `makers`).
+    let habits = serde_json::from_str::<Seed>(VALLEY).map(|s| s.habits).unwrap_or_default();
+    let occ = (!habits.is_empty())
+        .then(|| r[habits.as_str()].get(occupation))
+        .flatten()
+        .or_else(|| r["occupations"].get(occupation))
+        .or_else(|| r["occupations"].get("forager"))
+        .cloned()
+        .unwrap_or_default();
     let work = occ["routine"].as_str().unwrap_or("forage").to_string();
     let mut routines: Vec<crate::mind::RoutineIn> = r["common"].as_object().map(|m| m.iter().map(|(k, g)| crate::mind::RoutineIn { name: k.clone(), graph: g.to_string() }).collect()).unwrap_or_default();
     routines.push(crate::mind::RoutineIn { name: work.clone(), graph: occ["graph"].to_string() });
@@ -193,6 +201,10 @@ pub struct Seed {
     pub structures: Vec<SeedStructure>,
     #[serde(default)]
     pub communities: Vec<SeedCommunity>,
+    /// Which work habits people start with: `occupations` (default) or another set in
+    /// `repertoire.json` (e.g. `makers`), falling back to `occupations` per occupation.
+    #[serde(default)]
+    pub habits: String,
 }
 
 pub fn communities(ctx: &ReducerContext, now: u64) {

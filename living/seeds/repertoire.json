@@ -863,6 +863,847 @@
       }
     }
   },
+  "makers": {
+    "fisher": {
+      "routine": "fishing",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "net",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "net"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "net"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "net",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "not": {
+                    "has": {
+                      "item": "fiber",
+                      "at_least": 3
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "reeds"
+              }
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "fish",
+                    "at_least": 3
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "campfire"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "cook",
+              "target": {
+                "nearest": "campfire"
+              },
+              "item": "fish"
+            }
+          },
+          {
+            "if": {
+              "has": {
+                "item": "cooked_fish",
+                "at_least": 4
+              }
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "cooked_fish",
+              "qty": 3
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "fishing_spot"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "hunter": {
+      "routine": "hunt",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "spear",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "spear"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "spear"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "spear",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "not": {
+                    "has": {
+                      "item": "stone",
+                      "at_least": 1
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "boulder"
+              }
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "spear",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "not": {
+                    "has": {
+                      "item": "wood",
+                      "at_least": 2
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "tree"
+              }
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "cloak",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "cloak"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "cloak"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "near": {
+                    "target": "home",
+                    "within": 12
+                  }
+                },
+                {
+                  "not": {
+                    "sees": {
+                      "nearest": "trap"
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "build",
+                    "item": "trap"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "build",
+              "item": "trap"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "spear"
+                  }
+                },
+                {
+                  "not": {
+                    "has": {
+                      "item": "meat",
+                      "at_least": 3
+                    }
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "deer"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "attack",
+              "target": {
+                "nearest": "deer"
+              }
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "meat",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "meat",
+              "qty": 2
+            }
+          },
+          {
+            "seq": [
+              {
+                "do": "wander"
+              },
+              {
+                "wait": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "builder": {
+      "routine": "gather building stuff",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "near": {
+                    "target": "home",
+                    "within": 8
+                  }
+                },
+                {
+                  "not": {
+                    "sees": {
+                      "nearest": "storage"
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "build",
+                    "item": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "build",
+              "item": "storage"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "near": {
+                    "target": "home",
+                    "within": 8
+                  }
+                },
+                {
+                  "not": {
+                    "near": {
+                      "target": {
+                        "nearest": "shelter"
+                      },
+                      "within": 3
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "build",
+                    "item": "shelter"
+                  }
+                },
+                {
+                  "has": {
+                    "item": "wood",
+                    "at_least": 10
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "build",
+              "item": "shelter"
+            }
+          },
+          {
+            "if": {
+              "has": {
+                "item": "wood",
+                "at_least": 8
+              }
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "wood",
+              "qty": 6
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "tree"
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "boulder"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "mason": {
+      "routine": "cut stone",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "pick",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "pick"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "pick"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "near": {
+                    "target": "home",
+                    "within": 10
+                  }
+                },
+                {
+                  "has": {
+                    "item": "stone",
+                    "at_least": 3
+                  }
+                },
+                {
+                  "can": {
+                    "do": "pave"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "pave"
+            }
+          },
+          {
+            "if": {
+              "has": {
+                "item": "stone",
+                "at_least": 6
+              }
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "stone",
+              "qty": 5
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "boulder"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "carpenter": {
+      "routine": "work wood",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "axe",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "axe"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "axe"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "axe"
+                  }
+                },
+                {
+                  "has": {
+                    "item": "wood",
+                    "at_least": 4
+                  }
+                },
+                {
+                  "has": {
+                    "item": "stone",
+                    "at_least": 1
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "axe"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "seq": [
+                {
+                  "do": "craft",
+                  "item": "axe"
+                },
+                {
+                  "do": "store",
+                  "target": {
+                    "nearest": "storage"
+                  },
+                  "item": "axe",
+                  "qty": 1
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "has": {
+                "item": "wood",
+                "at_least": 8
+              }
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "wood",
+              "qty": 6
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "tree"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "guard": {
+      "routine": "keep watch",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "spear",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "spear"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "spear"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "torch",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "torch"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "torch"
+            }
+          },
+          {
+            "if": {
+              "sees": {
+                "nearest": "wolf"
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": {
+                "nearest": "gate"
+              }
+            }
+          },
+          {
+            "seq": [
+              {
+                "do": "goto",
+                "target": {
+                  "nearest": "gate"
+                }
+              },
+              {
+                "wait": 20
+              }
+            ]
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "healer": {
+      "routine": "tend the hurt",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "salve",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "salve"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "salve"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "salve",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "not": {
+                    "has": {
+                      "item": "fiber",
+                      "at_least": 1
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "reeds"
+              }
+            }
+          },
+          {
+            "do": "tend",
+            "target": {
+              "nearest": "person"
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "berry_bush"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "trader": {
+      "routine": "go to market",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "basket",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "basket"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "basket"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "basket",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "not": {
+                    "has": {
+                      "item": "fiber",
+                      "at_least": 2
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "reeds"
+              }
+            }
+          },
+          {
+            "seq": [
+              {
+                "do": "goto",
+                "target": {
+                  "nearest": "storage"
+                }
+              },
+              {
+                "wait": 15
+              },
+              {
+                "do": "wander"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
   "top": {
     "desires": [
       {

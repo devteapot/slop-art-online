@@ -11,7 +11,7 @@ use spacetimedb_sdk::Table;
 const WEAK: Color32 = Color32::from_rgb(140, 148, 160);
 
 /// Labs usually running (a lab's database is its scenario name; the baseline uses `living`).
-const LABS: &[&str] = &["stage3-village", "stage4-two"];
+const LABS: &[&str] = &["stage3-village", "stage4-two", "stage4-makers"];
 
 /// Which world to watch: pick a lab or type a database name. On the web the page reloads on
 /// that database (`?db=`); natively set `LIVING_DB` and restart.

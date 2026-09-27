@@ -893,8 +893,12 @@ mod seed_repertoire_tests {
         for (name, g) in r["common"].as_object().unwrap() {
             from_value(g.clone()).unwrap_or_else(|e| panic!("{name}: {e}"));
         }
-        for (occ, o) in r["occupations"].as_object().unwrap() {
-            from_value(o["graph"].clone()).unwrap_or_else(|e| panic!("{occ}: {e}"));
+        let person = crate::species::parse(include_str!("../../seeds/species.json")).unwrap().remove("person").unwrap();
+        for set in ["occupations", "makers"] {
+            for (occ, o) in r[set].as_object().unwrap() {
+                let (_, pruned) = from_value_for(o["graph"].clone(), &person).unwrap_or_else(|e| panic!("{set} {occ}: {e}"));
+                assert!(pruned.is_empty(), "{set} {occ}: {pruned:?}");
+            }
         }
         let top = serde_json::to_string(&r["top"]).unwrap().replace("WORK", "fishing");
         parse(&top).unwrap();
