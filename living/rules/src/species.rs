@@ -9,6 +9,14 @@ pub struct Signal {
     pub sound: String,
     pub range: f32,
     pub salience: f32,
+    /// How one's own kind hears it, when "{name} makes {sound}" would mislead
+    /// (`{name}` is the signaller), e.g. "{name}, a baby, is crying".
+    #[serde(default)]
+    pub heard: String,
+    /// Only those who care about the signaller (parents, siblings, anyone with feelings
+    /// about them) are prompted to think by it; everyone in range still hears it.
+    #[serde(default)]
+    pub kin_only: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

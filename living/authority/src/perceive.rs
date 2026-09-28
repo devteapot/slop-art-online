@@ -96,16 +96,24 @@ pub fn signal(ctx: &ReducerContext, from: u32, name: &str, now: u64) -> Result<S
         }
         ctx.db.mind_state().id().update(st);
     }
+    let heard = if sig.heard.is_empty() { format!("{} makes {}", me.name, sig.sound) } else { sig.heard.replace("{name}", &me.name) };
+    // Who cares about the signaller: its parents, its siblings, anyone with feelings about it.
+    let cares = |c: &Character| {
+        me.parent_a == c.id
+            || me.parent_b == c.id
+            || (me.parent_a != 0 && (c.parent_a == me.parent_a || c.parent_b == me.parent_a))
+            || ctx.db.relation().by_pair().filter((c.id, from)).next().is_some()
+    };
     for (c, _) in minds_near(ctx, at, sig.range, now, &[from]) {
         let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
         let (text, sal) = if c.kind == me.kind {
-            (format!("{} makes {} ({name}), {dir}.", me.name, sig.sound), sig.salience)
+            (format!("{heard} ({name}), {dir}."), sig.salience)
         } else {
             (format!("You hear {} from a {}, {dir}.", sig.sound, me.kind), (sig.salience * 0.8).min(0.7))
         };
         percept(ctx, &c, now, "signal", from, 0, at, text, sal);
-        if c.kind == me.kind && sig.salience >= 0.7 && c.ai {
-            request_deliberation(ctx, c.id, &format!("{} gave {} ({name}).", me.name, sig.sound), now);
+        if c.kind == me.kind && sig.salience >= 0.7 && c.ai && (!sig.kin_only || cares(&c)) {
+            request_deliberation(ctx, c.id, &format!("{heard} ({name}), {dir}."), now);
         }
     }
     Ok(format!("made {}", sig.sound))

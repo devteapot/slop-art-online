@@ -5,6 +5,8 @@
     "signals": {
       "cry": {
         "sound": "a baby crying",
+        "heard": "{name}, a baby, is crying",
+        "kin_only": true,
         "range": 12,
         "salience": 0.8
       }
