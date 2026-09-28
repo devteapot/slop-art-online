@@ -393,3 +393,21 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Wildlife.** 17 deer (8 fawns born) and 5 wolves. Wolves took 47 deer in all, but only 14 after the 15:58 metabolism change (about a third of the rate). 6 wolves died, 5 of starvation before the change. Grey attacked Pell; no one died.
   - **Talk.** 1.8 lines per person per minute over the last 15 minutes; baby talk down from 46% to 30% after the cry fix.
 - 17:42 — `aske-coast-2`: **babies were carrying the food.** `give` never checked the receiver's pack. Adults heaped gifts on babies (221 gifts in the first 40 minutes, many to babies): Linnet held 235 berries, Ylva 134 berries and 2 cloaks, Mira 70 berries, 32 smoked fish and 45 fiber. Food sat where nobody else could use it, which likely added to the winter hunger. Meanwhile baby Tove, lost about 40 tiles from her parents, had received nothing (hunger 83). Rule changed, installed live at 17:42: a gift must fit the receiver's pack (40 things, 60 with a basket), and a baby holds only 4, with feedback to give food a little at a time. The piles already on babies stay, and the babies eat from them.
+- 19:37 — `aske-coast-2` at 4 h 20 m, left to evolve (user, 17:55: "let's see how the world evolves", including the model load). Trends are recorded every 15 minutes by `living/tools/pulse.py`:
+
+  | time | people | dead | hunger B/O/S | deer | wolves | talk | calls/min | error share | Mtok/min |
+  |---|---:|---:|---|---:|---:|---:|---:|---:|---:|
+  | 17:56 | 73 | 1 | 55/53/38 | 12 | 5 | 2.10 | 436 | 0.12 | 3.27 |
+  | 18:41 | 75 | 2 | 54/50/47 | 4 | 5 | 2.05 | 505 | 0.21 | 3.57 |
+  | 19:27 | 73 | 4 | 50/46/54 | 0 | 4 | 2.42 | 623 | 0.30 | 4.00 |
+
+  - **The deer are extinct.** Wolves still took about 2 deer each per hour after the metabolism change: raw meat spoils about 5% a minute, so much of each kill rots, and deer breed slowly at this pace. Four wolves are left with no prey.
+  - **Three babies starved:**
+    - Tove, lost far from her parents;
+    - Cove, a newborn whose hunger runs 3 a minute, fed too late (she died holding 4 smoked fish);
+    - Mira, who turned two at about 17:50; the food she carried was gone by the time she starved (possibly given or stored away by her new child mind, unconfirmed).
+
+    The six babies alive now hold a few items of food each and are fed.
+  - **Pell** was killed by the wolf Grey.
+  - **Life goes on otherwise:** births (Cove, Ember, Linden, Zev, Moss, Perrin, Teal), teaching (torches, cloaks, storage, cooking), Hakon worked out medicine, and the settlements hold at hunger about 50. Norms are visible: "the sign says no trade from there without Ilse's say-so". Brann gives orders in Brandholm during a cloak emergency for the newborns Zev and Linden.
+  - **Load** grows with population and with rejected calls: 436 → 623 calls a minute, errors 12% → 30%, 3.3 → 4.0M tokens a minute.
