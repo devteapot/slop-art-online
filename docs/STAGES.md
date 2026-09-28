@@ -452,3 +452,8 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Two traps found on the way:**
     - `lab.py` reclaimed disk by deleting any database idle for 2 hours, paused reference worlds included; it is now opt-in (`--reclaim`);
     - Neo4j reached its limit of 65,535 relationship types (minds invent free-form types; a day of runs used them all). Minds now store only the types code relies on as real types and all others as `RELATES {rel}` (0f0b42d). New runs use a second, fresh Neo4j on :7690 (`LIVING_NEO4J_URI` in `.env`); the first keeps the paused worlds' minds.
+- 23:41 — `aske-coast-3` at 45 minutes: all 72 alive, nobody starving, hunger about 50.
+  - **Force without blood.** Four threats, three yields, no assaults or killings. Aud, Keeper of the Stone, threatened Colm to "confront his defiance of the Elders' sign and the Oath renewal", and he yielded. Brann threatened Siv, and she yielded. One misfire: Wenna's thought was to *ask* Corin about learning stores, but the compile step (Mistral Small) wrote a `threaten` act.
+  - **Knowledge through institutions.** Maelis taught Ness writing, and Ness then learned storage from Maelis's sign.
+  - **Wildlife.** 47 deer (hunters and wolves) and 11 wolves (3 pups).
+  - **Load.** About 300 calls a minute with a 4% error share, half of v2's at the same population.
