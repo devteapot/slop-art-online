@@ -486,7 +486,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     // routine that repeats it every second otherwise floods them with threats).
     if skill == "threaten" && act.victim != 0 {
         if let Some(mut st) = ctx.db.mind_state().id().find(id) {
-            let key = 0xE000 | (act.victim % 0x100) as u16;
+            let key = 0xF000 | (act.victim % 0x100) as u16; // 0xF000-0xF0FF: threats (failures use 0xE000-0xEFFF)
             if st.marks.iter().any(|m| m.node == key && now.saturating_sub(m.at_ms) < 30_000) {
                 return Err("you are already threatening them; to ask or urge someone, speak (say)".into());
             }
