@@ -466,3 +466,4 @@ Evidence, rule changes and decisions per stage, newest last.
   - **The wolf Moon killed Oriel,** a Saltreach smokehouse hand. Her daughter Rhea was born to Fen afterwards.
   - **Wildlife:** 54 deer, 9 wolves.
   - **Load:** 536 calls a minute, error share 0.21.
+- 01:58 — `aske-coast-3` at 3 h 5 m. **Load is saturating** as the population grows (78 people, from births): calls rose from 536 to 796 a minute in 45 minutes, and the rejected share from 0.21 to 0.45. Nearly half of all model calls are refused and retried, so minds respond much later. Hunger rises at the same time (Saltreach mean 70 with 5 starving, Brandholm 68 with 2), and baby Tove starved. Force stays sub-lethal: 14 threats, 11 yields, 1 assault in the last window. But 6-year-old Bo threatened adults (Egil, Ake) and Egil yielded to him three times. Rule installed live: a child's threat is refused unless the target is a child or a baby.
