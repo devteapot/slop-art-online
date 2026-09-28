@@ -114,9 +114,13 @@ pub fn warmth(ctx: &ReducerContext, at: (f32, f32)) -> (bool, bool) {
         if s.kind == "shelter" && d <= laws.shelter_warmth {
             near_shelter = true;
         }
-        if s.kind == "house" && d <= laws.shelter_warmth {
+        // Houses, halls and inns have a roof and a hearth; a workshop has a roof.
+        if matches!(s.kind.as_str(), "house" | "hall" | "inn") && d <= laws.shelter_warmth {
             near_shelter = true;
             near_fire = true;
+        }
+        if s.kind == "workshop" && d <= laws.shelter_warmth {
+            near_shelter = true;
         }
     }
     (near_fire, near_shelter)

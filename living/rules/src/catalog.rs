@@ -104,6 +104,8 @@ pub const ITEMS: &[ItemSpec] = &[
     ItemSpec { name: "salve", food: false },
     ItemSpec { name: "leather", food: false },
     ItemSpec { name: "armor", food: false },
+    // Money where a settlement uses it: stamped clay tallies, worth what people agree.
+    ItemSpec { name: "mark", food: false },
 ];
 
 /// Practical techniques: must be known (world state, not belief) before use.
@@ -153,7 +155,7 @@ pub const RESOURCES: &[(&str, &str)] = &[
     ("clay_bank", "clay"),
 ];
 
-pub const STRUCTURES: &[&str] = &["campfire", "shelter", "storage", "remains", "sign", "bush_patch", "house", "gate", "trap"];
+pub const STRUCTURES: &[&str] = &["campfire", "shelter", "storage", "remains", "sign", "bush_patch", "house", "gate", "trap", "hall", "workshop", "market", "inn"];
 pub const CREATURES: &[&str] = &["person", "deer", "wolf"];
 /// Things built into the terrain itself rather than as structures.
 pub const TERRAIN_BUILDS: &[&str] = &["wall", "road", "bridge"];

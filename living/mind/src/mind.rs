@@ -674,7 +674,8 @@ family, partner, friend, rival, stranger, and a short note in their words). Repl
         if let Some([x, y]) = bg["town_center"].as_array().map(|a| [a[0].as_f64().unwrap_or(0.0), a[1].as_f64().unwrap_or(0.0)]) {
             places.push(json!({"name": format!("{} center", bg["town"].as_str().unwrap_or("town")), "x": x, "y": y}));
         }
-        for t in bg["towns_known"].as_array().cloned().unwrap_or_default() {
+        // Other towns one has heard of, and the named buildings of one's own settlement.
+        for t in bg["towns_known"].as_array().into_iter().chain(bg["places"].as_array()).flatten() {
             if let (Some(name), Some(at)) = (t["name"].as_str(), t["at"].as_array()) {
                 places.push(json!({"name": name, "x": at[0].as_f64().unwrap_or(0.0), "y": at[1].as_f64().unwrap_or(0.0)}));
             }

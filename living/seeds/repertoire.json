@@ -1502,6 +1502,225 @@
           }
         ]
       }
+    },
+    "watchman": {
+      "routine": "keep the watch",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "sees": {
+                "nearest": "market"
+              }
+            },
+            "then": {
+              "seq": [
+                {
+                  "do": "goto",
+                  "target": {
+                    "nearest": "market"
+                  }
+                },
+                {
+                  "wait": 15
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "sees": {
+                "nearest": "storage"
+              }
+            },
+            "then": {
+              "seq": [
+                {
+                  "do": "goto",
+                  "target": {
+                    "nearest": "storage"
+                  }
+                },
+                {
+                  "wait": 15
+                }
+              ]
+            }
+          },
+          {
+            "seq": [
+              {
+                "do": "goto",
+                "target": "home"
+              },
+              {
+                "do": "wander"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "steward": {
+      "routine": "keep the storehouse",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                },
+                {
+                  "not": {
+                    "near": {
+                      "target": {
+                        "nearest": "storage"
+                      },
+                      "within": 3
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "goto",
+              "target": {
+                "nearest": "storage"
+              }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "sees": {
+                  "nearest": "storage"
+                }
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": "home"
+            }
+          },
+          {
+            "wait": 20
+          }
+        ]
+      }
+    },
+    "laborer": {
+      "routine": "work for hire",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "fish",
+                    "at_least": 5
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "fish",
+              "qty": 4
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "fishing_spot"
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "reeds"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "innkeeper": {
+      "routine": "keep the inn",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "fish",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "campfire"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "cook",
+              "target": {
+                "nearest": "campfire"
+              },
+              "item": "fish"
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "near": {
+                  "target": "home",
+                  "within": 4
+                }
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": "home"
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "berries",
+                  "at_least": 4
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "berry_bush"
+              }
+            }
+          },
+          {
+            "wait": 15
+          }
+        ]
+      }
     }
   },
   "makers": {
@@ -2837,6 +3056,225 @@
                   "wait": 20
                 }
               ]
+            }
+          },
+          {
+            "wait": 15
+          }
+        ]
+      }
+    },
+    "watchman": {
+      "routine": "keep the watch",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "sees": {
+                "nearest": "market"
+              }
+            },
+            "then": {
+              "seq": [
+                {
+                  "do": "goto",
+                  "target": {
+                    "nearest": "market"
+                  }
+                },
+                {
+                  "wait": 15
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "sees": {
+                "nearest": "storage"
+              }
+            },
+            "then": {
+              "seq": [
+                {
+                  "do": "goto",
+                  "target": {
+                    "nearest": "storage"
+                  }
+                },
+                {
+                  "wait": 15
+                }
+              ]
+            }
+          },
+          {
+            "seq": [
+              {
+                "do": "goto",
+                "target": "home"
+              },
+              {
+                "do": "wander"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "steward": {
+      "routine": "keep the storehouse",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                },
+                {
+                  "not": {
+                    "near": {
+                      "target": {
+                        "nearest": "storage"
+                      },
+                      "within": 3
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "goto",
+              "target": {
+                "nearest": "storage"
+              }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "sees": {
+                  "nearest": "storage"
+                }
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": "home"
+            }
+          },
+          {
+            "wait": 20
+          }
+        ]
+      }
+    },
+    "laborer": {
+      "routine": "work for hire",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "fish",
+                    "at_least": 5
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "fish",
+              "qty": 4
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "fishing_spot"
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "reeds"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "innkeeper": {
+      "routine": "keep the inn",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "fish",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "campfire"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "cook",
+              "target": {
+                "nearest": "campfire"
+              },
+              "item": "fish"
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "near": {
+                  "target": "home",
+                  "within": 4
+                }
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": "home"
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "berries",
+                  "at_least": 4
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "berry_bush"
+              }
             }
           },
           {
