@@ -115,12 +115,18 @@
     "life": {
       "years": 15,
       "infant": 0.04,
-      "child": 0.125,
+      "child": 0.1,
       "elder": 0.8,
       "old_age": 0.85,
-      "gestation": 0.046,
+      "gestation": 0.037,
       "litter": 2,
-      "interbirth": 0.083
+      "interbirth": 0.04
+    },
+    "migrate": {
+      "below": 15,
+      "group": 5,
+      "every_min": 20,
+      "text": "A small herd of deer came in from the {dir}"
     },
     "eats": "grass: you graze wherever grass or forest floor is underfoot (you cannot eat berries, trees or meat)"
   },
@@ -220,6 +226,12 @@
       "litter": 2,
       "interbirth": 0.25,
       "breeding_radius": 25.0
+    },
+    "migrate": {
+      "below": 3,
+      "group": 3,
+      "every_min": 30,
+      "text": "A few wolves came in from the {dir}"
     },
     "eats": "meat: from prey you kill (deer), eaten from what you carry"
   }

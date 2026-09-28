@@ -1,0 +1,17 @@
+{
+  "run": "wildlife-test",
+  "seed": 3,
+  "map": {
+    "kind": "realm",
+    "w": 256,
+    "h": 256
+  },
+  "year_days": 8,
+  "life_pace": 1.5,
+  "setting": "Wildlife lab: the Aske Coast's land and pace (realm seed 3, 256x256, 12-minute days, 8-day years, life_pace 1.5) with no people, 60 deer and 8 wolves.",
+  "bands": [],
+  "animals": {
+    "deer": 60,
+    "wolf": 8
+  }
+}

@@ -56,6 +56,65 @@ pub struct Species {
     /// Kinds of creatures this body senses farther than it sees (none = sight only).
     #[serde(default)]
     pub scent: Option<Scent>,
+    /// The wilds beyond the map: newcomers of this kind arrive when few are left (none = never).
+    #[serde(default)]
+    pub migrate: Option<Migrate>,
+}
+
+/// A floor under a population, supplied by the world beyond the map: while fewer than `below`
+/// of the kind live, a group of `group` grown ones comes in at a map edge on fitting ground,
+/// at most once every `every_min` real minutes. `text` is the chronicle line (`{dir}` is the
+/// side they came from).
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct Migrate {
+    pub below: u32,
+    pub group: u32,
+    pub every_min: f32,
+    #[serde(default)]
+    pub text: String,
+}
+
+impl Migrate {
+    /// Whether a group comes in now: few enough alive, and none came within the interval
+    /// (`last_ms`: when the last newcomers of the kind arrived, or the world began).
+    pub fn due(&self, alive: u32, last_ms: u64, now_ms: u64) -> bool {
+        alive < self.below && now_ms.saturating_sub(last_ms) as f32 >= self.every_min * 60_000.0
+    }
+
+    /// The chronicle line for newcomers of `kind` from `dir`.
+    pub fn story(&self, kind: &str, dir: &str) -> String {
+        if self.text.is_empty() {
+            format!("Some {kind} came in from the {dir}")
+        } else {
+            self.text.replace("{dir}", dir)
+        }
+    }
+}
+
+/// Where newcomers from beyond a `w`×`h` map come in: a tile on fitting `ground` within a few
+/// tiles of a random edge (sides without such ground, like a sea coast, are never chosen), and
+/// the side it is on. `rand` gives uniform numbers in [0, 1).
+pub fn edge_spot(w: u32, h: u32, ground: impl Fn(i32, i32) -> bool, mut rand: impl FnMut() -> f32) -> Option<((f32, f32), &'static str)> {
+    let (w, h) = (w as i32, h as i32);
+    let mut pick = |n: i32| ((rand() * n as f32) as i32).clamp(0, n - 1);
+    // Close to the edge first; deeper in only if the edges are poor in fitting ground.
+    for (tries, depth) in [(400, 12), (400, 40)] {
+        for _ in 0..tries {
+            let side = pick(4);
+            let d = 1 + pick(depth);
+            let along = 1 + pick(if side < 2 { w - 2 } else { h - 2 });
+            let (x, y, dir) = match side {
+                0 => (along, d, "north"),
+                1 => (along, h - 1 - d, "south"),
+                2 => (d, along, "west"),
+                _ => (w - 1 - d, along, "east"),
+            };
+            if ground(x, y) {
+                return Some(((x as f32 + 0.5, y as f32 + 0.5), dir));
+            }
+        }
+    }
+    None
 }
 
 /// Smell: some kinds of creatures are sensed within `radius` tiles, coarsely (kind, rough
@@ -143,6 +202,52 @@ mod tests {
         assert!(parse(bare).unwrap()["x"].scent.is_none());
         let with = bare.replace("\"speaks\": false", "\"speaks\": false, \"scent\": {\"radius\": 40, \"kinds\": [\"deer\"]}");
         assert_eq!(parse(&with).unwrap()["x"].scent, Some(Scent { radius: 40.0, kinds: vec!["deer".into()] }));
+    }
+
+    #[test]
+    fn migration_is_an_optional_floor() {
+        let species = parse(include_str!("../../seeds/species.json")).unwrap();
+        assert!(species["person"].migrate.is_none());
+        let deer = species["deer"].migrate.clone().expect("deer come in from the wilds");
+        let wolf = species["wolf"].migrate.clone().expect("wolves come in from the wilds");
+        // A group big enough to breed, arriving only while the population is low.
+        assert!(deer.group >= 2 && wolf.group >= 2 && deer.below > deer.group / 2);
+        let min = 60_000u64;
+        let every = (deer.every_min * 60_000.0) as u64;
+        assert!(deer.due(deer.below - 1, 0, every));
+        assert!(!deer.due(deer.below, 0, every), "not while the population is healthy");
+        assert!(!deer.due(0, every, every + min), "at most once per interval");
+        assert!(deer.due(0, every, 2 * every));
+        assert!(deer.story("deer", "west").contains("west"));
+        let bare = Migrate { below: 3, group: 3, every_min: 30.0, text: String::new() };
+        assert_eq!(bare.story("wolf", "north"), "Some wolf came in from the north");
+    }
+
+    #[test]
+    fn newcomers_arrive_at_an_edge_on_fitting_ground() {
+        let mut seed = 7u64;
+        let mut rand = move || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (seed >> 40) as f32 / (1u64 << 24) as f32
+        };
+        // A 64×64 map whose east half is sea: newcomers never come from the east.
+        let land = |x: i32, _y: i32| x < 32;
+        for _ in 0..50 {
+            let ((x, y), dir) = edge_spot(64, 64, land, &mut rand).expect("land along three sides");
+            assert!(land(x as i32, y as i32));
+            assert_ne!(dir, "east");
+            let edge = match dir {
+                "north" => y,
+                "south" => 64.0 - y,
+                "west" => x,
+                _ => unreachable!(),
+            };
+            assert!(edge <= 13.0, "near the edge when the edge has fitting ground");
+        }
+        // Only a pocket 17-27 tiles in from the south edge: found on the deeper pass.
+        let pocket = |x: i32, y: i32| (60..68).contains(&x) && (100..=110).contains(&y);
+        assert!(edge_spot(128, 128, pocket, &mut rand).is_some_and(|(_, d)| d == "south"));
+        assert!(edge_spot(64, 64, |_, _| false, &mut rand).is_none());
     }
 
     #[test]

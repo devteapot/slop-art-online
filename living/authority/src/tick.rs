@@ -107,6 +107,41 @@ thread_local! {
     static SPOIL: std::cell::Cell<(u64, u32, u64)> = const { std::cell::Cell::new((0, 0, 0)) };
 }
 
+thread_local! {
+    /// Species kept from dying out by newcomers from beyond the map (`migrate` in species.json).
+    static MIGRANTS: Vec<(String, living_rules::species::Migrate)> =
+        living_rules::species::parse(include_str!(concat!(env!("OUT_DIR"), "/species.json")))
+            .map(|all| all.into_iter().filter_map(|(k, s)| s.migrate.map(|m| (k, m))).collect())
+            .unwrap_or_default();
+    /// The minute in which migration was last considered.
+    static MIGRATION_MINUTE: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// The wilds beyond the map: once a minute, a species that has lived here and is down to
+/// fewer than its floor gets a group of newcomers at an edge, unless newcomers (or the
+/// world's first animals) came within its interval. When they last came is read from the
+/// characters themselves (animals without parents are founders or newcomers), so it
+/// survives module updates without a table. Scans the kind's rows only while below the floor.
+fn migration(ctx: &ReducerContext, alive: &[(String, u32)], now: u64) {
+    let minute = now / 60_000;
+    if MIGRATION_MINUTE.with(|m| m.replace(minute)) == minute {
+        return;
+    }
+    MIGRANTS.with(|all| {
+        for (kind, m) in all {
+            let n = alive.iter().find(|(k, _)| k == kind).map_or(0, |(_, n)| *n);
+            if n >= m.below {
+                continue;
+            }
+            // A kind that never lived in this world does not start arriving.
+            let Some(last) = ctx.db.character().kind().filter(kind.as_str()).filter(|c| c.parent_a == 0 && c.parent_b == 0).map(|c| c.born_ms).max() else { continue };
+            if m.due(n, last, now) {
+                crate::seed::migrate(ctx, kind, m, now);
+            }
+        }
+    });
+}
+
 /// Food spoils: each minute a share of every perishable stack is lost (rates from the skill
 /// script; a storage keeps food three times longer). Owners notice what they lose.
 /// The pass rolls through the inventory by owner over the minute's 60 housekeeping calls
@@ -131,12 +166,24 @@ fn spoil(ctx: &ReducerContext, now: u64) {
     SPOIL.with(|c| c.set(if last { (0, 0, quota) } else { (resume, call + 1, quota) }));
     let sc = common::scripts(ctx);
     let mut rates: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+    // A carrier's share of the rate by kind (an animal keeps its kill by it), looked up once
+    // per owner with something perishable (an owner's stacks come together).
+    let mut shares: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+    let mut carrier: (u64, f32) = (u64::MAX, 1.0);
     for mut r in rows.into_iter().filter(|r| r.qty > 0) {
         let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.num_of("spoil_rate", &r.item, 0.0) as f32);
         if rate <= 0.0 {
             continue;
         }
-        let rate = if r.owner & STRUCTURE_BIT != 0 { rate / 3.0 } else { rate };
+        let rate = if r.owner & STRUCTURE_BIT != 0 {
+            rate / 3.0
+        } else {
+            if carrier.0 != r.owner {
+                let share = ctx.db.character().id().find(r.owner as u32).map_or(1.0, |c| *shares.entry(c.kind.clone()).or_insert_with(|| sc.num_of("carried_spoil", &c.kind, 1.0) as f32));
+                carrier = (r.owner, share);
+            }
+            rate * carrier.1
+        };
         let expect = r.qty as f32 * rate;
         let mut lost = expect.floor() as u32;
         if ctx.rng().gen::<f32>() < expect.fract() {
@@ -173,8 +220,9 @@ fn grew(ctx: &ReducerContext, c: &Character, stage: u8, now: u64) {
             seed::give_repertoire(ctx, c.id, "child", now);
         }
     }
-    // A grown animal leaves its young instinct for its species' ways.
-    if c.kind != "person" && stage == 2 && c.stage < 2 {
+    // A weaned animal leaves its young instinct (follow a parent, eat what it holds) for its
+    // species' ways, so a young wolf hunts before it can breed; grown, it takes them afresh.
+    if c.kind != "person" && stage >= 1 && stage <= 2 && c.stage < stage {
         if !seed::grow_into_ways(ctx, c.id, now) {
             seed::give_ways(ctx, c.id, &c.kind, now);
         }
@@ -284,6 +332,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     let mut wolves = 0u32;
     let mut dead_people = 0u32;
     let mut alive: Vec<Character> = Vec::new();
+    let mut kinds: Vec<(String, u32)> = Vec::new();
     for c in ctx.db.character().iter() {
         if !c.alive {
             dead_people += (c.kind == "person") as u32;
@@ -295,10 +344,16 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             "wolf" => wolves += 1,
             _ => {}
         }
+        match kinds.iter_mut().find(|(k, _)| *k == c.kind) {
+            Some((_, n)) => *n += 1,
+            None => kinds.push((c.kind.clone(), 1)),
+        }
         alive.push(c);
     }
-    // No re-spawning: animals breed, age and die like everyone else (a species hunted out
-    // stays gone). Life stages and deaths of old age, at the world's pace.
+    // Animals breed, age and die like everyone else; only a species down to its floor gets
+    // newcomers from beyond the map (the living are counted before this second's deaths).
+    migration(ctx, &kinds, now);
+    // Life stages and deaths of old age, at the world's pace.
     for c in alive {
         let life = common::life_of(&c.kind);
         let age = common::age_days(&c, &w, now);

@@ -59,6 +59,9 @@ fn spoil_rate(item) {
         _ => 0.0,
     }
 }
+// Share of that rate for food an animal carries: a predator gorges at its kill and keeps the
+// rest by it, so a deer feeds a wolf for about an hour instead of mostly rotting.
+fn carried_spoil(kind) { switch kind { "person" => 1.0, _ => 0.25 } }
 
 fn nutrition(item) {
     switch item {
@@ -101,7 +104,8 @@ fn rates(a) {
         if hp > 0.0 { hp *= 0.5; }
         energy *= 1.3;
     }
-    if a.actor.stage == "infant" { hunger *= 0.6; }
+    // A suckling animal lives mostly on its mother's milk (not modelled on the mother).
+    if a.actor.stage == "infant" { hunger *= if a.actor.kind == "person" { 0.6 } else { 0.3 }; }
     // Inborn endurance slows tiring; vitality speeds healing.
     if energy < 0.0 { energy /= a.actor.endurance; }
     if hp > 0.0 { hp *= a.actor.vitality; }

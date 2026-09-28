@@ -579,6 +579,32 @@ pub fn spawn_young(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64, p
     spawn_with(ctx, &name, kind, admin, true, at, now, 0.0, parents)
 }
 
+/// Newcomers from the wilds beyond the map: a group of grown ones of `kind` comes in near an
+/// edge on fitting ground (see `Migrate`), with a line in the chronicle. False when the map
+/// has no such ground.
+pub fn migrate(ctx: &ReducerContext, kind: &str, m: &living_rules::species::Migrate, now: u64) -> bool {
+    let map = common::map(ctx);
+    let Some((at, dir)) = living_rules::species::edge_spot(map.w, map.h, |x, y| animal_ground(&map, kind, x, y), || ctx.rng().gen::<f32>()) else {
+        log::warn!("no {kind} could come in: no fitting ground near the map's edges");
+        return false;
+    };
+    let admin = common::world(ctx).admin;
+    let w = common::world(ctx);
+    let life = common::life_of(kind);
+    for _ in 0..m.group.max(1) {
+        let spot = (0..20)
+            .map(|_| (at.0 + ctx.rng().gen_range(-3.0f32..3.0), at.1 + ctx.rng().gen_range(-3.0f32..3.0)))
+            .find(|p| animal_ground(&map, kind, p.0 as i32, p.1 as i32))
+            .unwrap_or(at);
+        // Grown, and young enough to breed for a while.
+        let f = ctx.rng().gen_range(life.child + 0.01..(life.child + life.elder) / 2.0);
+        let name = animal_name(ctx, kind);
+        spawn_with(ctx, &name, kind, admin, true, spot, now, life.age_at(f, common::pace(&w)), (0, 0));
+    }
+    common::chronicle(ctx, now, "arrival", 0, 0, at, m.story(kind, dir));
+    true
+}
+
 fn animal_name(ctx: &ReducerContext, kind: &str) -> String {
     let names = common::species(kind).map(|s| s.names).unwrap_or_default();
     let used: Vec<String> = ctx.db.character().kind().filter(kind).map(|c| c.name).collect();
