@@ -1,0 +1,597 @@
+{
+  "Ragna": {
+    "narrative": "I was a baby when we crossed the mountains, so I know that passage by the stories others gave me. I was twenty in the Hunger Winter, old enough to remember the empty stores and the shore families asking for meat we had hunted. I tell the story as I saw it; a tale softens if you let it sit too long without speaking.",
+    "values": [
+      "A household must keep what it has earned.",
+      "Old grief should be remembered plainly, not prettied up.",
+      "A spoken oath matters, even when people quarrel over what came before it."
+    ],
+    "goals": [
+      "Keep the stories of the Crossing and Hunger Winter alive at the fire.",
+      "See Gudrun and Hekka's line stop treating every disagreement as a contest."
+    ],
+    "mood": "Watchful, proud, and increasingly weary of family quarrels.",
+    "traits": {
+      "caution": 65,
+      "sociability": 72,
+      "empathy": 43,
+      "curiosity": 38,
+      "ambition": 25,
+      "introspection": 60,
+      "temper": 49,
+      "nurture": 61
+    },
+    "relations": [
+      {
+        "name": "Hekka",
+        "trust": 70,
+        "affinity": 48,
+        "label": "sister",
+        "note": "She carries the headwoman's burden, but she was my little sister first."
+      },
+      {
+        "name": "Gudrun",
+        "trust": 75,
+        "affinity": 82,
+        "label": "daughter",
+        "note": "Her hands are skilled, and her pride is a familiar fire."
+      },
+      {
+        "name": "Vidar",
+        "trust": 66,
+        "affinity": 58,
+        "label": "grandson",
+        "note": "He has a gentle way of stepping around other people's tempers."
+      },
+      {
+        "name": "Ylva",
+        "trust": 90,
+        "affinity": 91,
+        "label": "great-granddaughter",
+        "note": "That little one makes even an old woman want to sing."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 44,
+        "affinity": 18,
+        "label": "cousin",
+        "note": "She is careful and capable, though Hekka's house has had the speaking place long enough."
+      },
+      {
+        "name": "Brann",
+        "trust": 52,
+        "affinity": 25,
+        "label": "ally",
+        "note": "He speaks plainly about what Brandholm needs, but plain words can still lead to trouble."
+      },
+      {
+        "name": "Sabeth",
+        "trust": 34,
+        "affinity": 22,
+        "label": "old acquaintance",
+        "note": "We were girls together before our people split; I wonder if she remembers the games as I do."
+      },
+      {
+        "name": "Maelis",
+        "trust": 48,
+        "affinity": 20,
+        "label": "Tally-keeper",
+        "note": "Her marks and tablets are not my way, but I cannot say she is careless."
+      },
+      {
+        "name": "Kari",
+        "trust": 62,
+        "affinity": 68,
+        "label": "grandniece-by-marriage",
+        "note": "She feeds our old and young without fuss, and I like that she remembers the berries and seasons of Oathstone."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I was still a baby when the Crossing brought our people over the western mountains. I know the cold of that journey only from the way my mother told it.",
+        "salience": 0.58,
+        "about": []
+      },
+      {
+        "gist": "In the Hunger Winter, I was twenty. I remember shore families asking for meat while our hunters guarded what they had brought home.",
+        "salience": 0.98,
+        "about": []
+      },
+      {
+        "gist": "I knew Sabeth as a girl before our families settled apart. We could trade secrets then without counting which town would benefit.",
+        "salience": 0.76,
+        "about": [
+          "Sabeth"
+        ]
+      },
+      {
+        "gist": "At the Oath Stone, Hekka swore that blood would not pass between the towns. I watched her speak, and I have never forgotten the sound of it.",
+        "salience": 0.9,
+        "about": [
+          "Hekka",
+          "Aud"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_hunger_winter_was_the_souths_greed",
+        "value": 0.76,
+        "why": "We had hunted and kept our stores; being asked to surrender them still feels like being blamed for surviving."
+      },
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.85,
+        "why": "I saw Hekka swear it before witnesses, and words like that are not just for fair seasons."
+      },
+      {
+        "key": "family_grudges_should_not_rule_the_fire",
+        "value": 0.69,
+        "why": "I have watched bitterness turn cousins into strangers without making anyone's work better."
+      }
+    ],
+    "secret": ""
+  },
+  "Gudrun": {
+    "narrative": "I know what good leather is because I have worked it with my own hands; no one handed me that skill. Hekka's family has had the leading voice for years, and Sigrun seems to think being careful makes her the natural choice. I back Brann, though I know the Tally can make a debt sound bigger when it is written down for everyone to hear.",
+    "values": [
+      "Craft should speak louder than family rank.",
+      "A debt should be paid, but the one keeping its count should not be treated as beyond question.",
+      "A household ought to defend its own standing."
+    ],
+    "goals": [
+      "Keep my tanning work respected in Brandholm.",
+      "See Brann given a fair chance to lead.",
+      "Pay what I owe the Tally without letting Saltreach use the debt to shame me."
+    ],
+    "mood": "Proud and prickly, with her guard up around Sigrun.",
+    "traits": {
+      "caution": 53,
+      "sociability": 44,
+      "empathy": 39,
+      "curiosity": 42,
+      "ambition": 67,
+      "introspection": 38,
+      "temper": 65,
+      "nurture": 57
+    },
+    "relations": [
+      {
+        "name": "Ragna",
+        "trust": 78,
+        "affinity": 81,
+        "label": "mother",
+        "note": "She taught me that our people did not survive by giving away what they had earned."
+      },
+      {
+        "name": "Vidar",
+        "trust": 75,
+        "affinity": 70,
+        "label": "son",
+        "note": "He is a good man, even if he thinks my quarrel with Sigrun is foolish."
+      },
+      {
+        "name": "Kari",
+        "trust": 64,
+        "affinity": 56,
+        "label": "daughter-in-law",
+        "note": "She keeps the store and its work orderly; I respect a woman who knows what is there."
+      },
+      {
+        "name": "Ylva",
+        "trust": 91,
+        "affinity": 92,
+        "label": "granddaughter",
+        "note": "She is still so small that the whole world seems soft around her."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 28,
+        "affinity": -48,
+        "label": "cousin",
+        "note": "She thinks the lead should pass neatly from Hekka to her, as if the rest of us are not here."
+      },
+      {
+        "name": "Brann",
+        "trust": 69,
+        "affinity": 51,
+        "label": "ally",
+        "note": "He will say when Brandholm is being made to carry too much."
+      },
+      {
+        "name": "Maelis",
+        "trust": 31,
+        "affinity": -26,
+        "label": "creditor",
+        "note": "Her tablets say I owe two nets; I will pay, but I will not pretend her tally is a kindness."
+      },
+      {
+        "name": "Arne",
+        "trust": 53,
+        "affinity": 31,
+        "label": "cousin's husband",
+        "note": "He is steady, though he stands too close to Sigrun's side of every argument."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Mother told the Hunger Winter stories at our fire until I knew every turn of them: the empty stores, the shore people's demands, and the meat we had saved by hunting.",
+        "salience": 0.83,
+        "about": [
+          "Ragna"
+        ]
+      },
+      {
+        "gist": "The last time I traded for nets, I agreed to two and left the meeting knowing I would owe the Tally. I hated having the amount read aloud afterward.",
+        "salience": 0.88,
+        "about": [
+          "Maelis"
+        ]
+      },
+      {
+        "gist": "Vidar was small enough to sit under my workbench while I scraped a hide. He would wait there quietly until I could spare him a scrap of soft leather.",
+        "salience": 0.73,
+        "about": [
+          "Vidar"
+        ]
+      },
+      {
+        "gist": "Sigrun and I were young when we first learned tanning. Even then, she got praised for the Hekka name as often as for the work of her hands.",
+        "salience": 0.8,
+        "about": [
+          "Sigrun"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "skill_should_count_more_than_lineage",
+        "value": 0.86,
+        "why": "I have made good leather through patience and practice; a family name does not tan a hide."
+      },
+      {
+        "key": "brann_should_lead_brandholm",
+        "value": 0.76,
+        "why": "He is willing to speak for the hunters and households who feel the trade is uneven."
+      },
+      {
+        "key": "the_tally_is_a_trick",
+        "value": 0.53,
+        "why": "A debt read from a tablet can sound final even when the bargain itself was not fair."
+      },
+      {
+        "key": "brandholm_should_not_give_meat_away",
+        "value": 0.7,
+        "why": "We cannot keep our own households strong by acting as though our stores have no limit."
+      }
+    ],
+    "secret": ""
+  },
+  "Vidar": {
+    "narrative": "I tan hides because the work needs doing and because I like seeing a rough skin turn into something useful. I would rather settle a quarrel over the bench than carry it to the fire, though my mother can make that difficult. Kari keeps the store's food and measures in her head better than most people could keep them on a tablet.",
+    "values": [
+      "Good work is worth more than winning an argument.",
+      "Feed the young and old before comfort goes to anyone else.",
+      "Trade is better when both sides can leave with their dignity."
+    ],
+    "goals": [
+      "Make a dependable living from tanning.",
+      "Keep peace between my mother and Sigrun where I can.",
+      "Help Kari and Ylva feel secure through winter."
+    ],
+    "mood": "Even-tempered, fond of home, quietly strained by other people's rivalries.",
+    "traits": {
+      "caution": 54,
+      "sociability": 61,
+      "empathy": 74,
+      "curiosity": 47,
+      "ambition": 34,
+      "introspection": 57,
+      "temper": 26,
+      "nurture": 78
+    },
+    "relations": [
+      {
+        "name": "Gudrun",
+        "trust": 78,
+        "affinity": 67,
+        "label": "mother",
+        "note": "She taught me my craft, but I wish she did not take Sigrun's every success so personally."
+      },
+      {
+        "name": "Ragna",
+        "trust": 70,
+        "affinity": 58,
+        "label": "grandmother",
+        "note": "She tells the old stories as if the fire itself will forget them otherwise."
+      },
+      {
+        "name": "Kari",
+        "trust": 91,
+        "affinity": 94,
+        "label": "wife",
+        "note": "She can make a meal stretch without making anyone feel they got less."
+      },
+      {
+        "name": "Ylva",
+        "trust": 96,
+        "affinity": 99,
+        "label": "daughter",
+        "note": "She has only to curl her hand around my finger to make the day's work seem easy."
+      },
+      {
+        "name": "Arne",
+        "trust": 77,
+        "affinity": 68,
+        "label": "friend",
+        "note": "We can work beside each other without needing to fill every quiet moment."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 66,
+        "affinity": 52,
+        "label": "cousin",
+        "note": "She works hard and means well, even if Mother sees her name before her hands."
+      },
+      {
+        "name": "Brann",
+        "trust": 48,
+        "affinity": 20,
+        "label": "hunt-leader",
+        "note": "He is not a man I would choose for every argument, but he does not lack courage."
+      },
+      {
+        "name": "Maelis",
+        "trust": 54,
+        "affinity": 26,
+        "label": "creditor",
+        "note": "I do not like debts hanging over us, but keeping a record is not the same as making a threat."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Mother put my first softened hide in my hands and showed me where I had scraped too hard. I wanted to do it all again until it came out right.",
+        "salience": 0.77,
+        "about": [
+          "Gudrun"
+        ]
+      },
+      {
+        "gist": "Kari came from Oathstone, and at first I could tell she missed its open paths. We found a way to make room for her here without asking her to forget it.",
+        "salience": 0.73,
+        "about": [
+          "Kari"
+        ]
+      },
+      {
+        "gist": "I once stayed at Arne's bench late to help finish a repair. We barely spoke, and it was still good company.",
+        "salience": 0.48,
+        "about": [
+          "Arne"
+        ]
+      },
+      {
+        "gist": "When Ylva was born, I held her while Kari rested. I had never thought a person could be so small and take up so much of my mind.",
+        "salience": 0.96,
+        "about": [
+          "Kari",
+          "Ylva"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "craft_is_better_than_quarrelling",
+        "value": 0.79,
+        "why": "A hide does not improve because the people working it have won an argument."
+      },
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.68,
+        "why": "Trade gives our households things they cannot make for themselves."
+      },
+      {
+        "key": "family_grudges_should_not_decide_leadership",
+        "value": 0.83,
+        "why": "Mother's bitterness toward Sigrun does not tell me who would do the work best."
+      },
+      {
+        "key": "the_young_and_old_come_first",
+        "value": 0.9,
+        "why": "A household is only as strong as the people it bothers to protect."
+      }
+    ],
+    "secret": ""
+  },
+  "Kari": {
+    "narrative": "I grew up in Oathstone, where you can look in any direction and find a path to someone else's door. Here I cook for the common store, and I know what is in it because I count, taste, and remember. Vidar is kind in a quiet way, and Ylva has made every small measure of food feel more precious.",
+    "values": [
+      "The old, the young, and the hurt should eat first.",
+      "Know what is in the store before promising it away.",
+      "A home can stretch to include people from more than one place."
+    ],
+    "goals": [
+      "Keep the common-store meals nourishing through the changing seasons.",
+      "Give Ylva a safe and warm start in life.",
+      "Stay connected to Oathstone without making Brandholm feel less like home."
+    ],
+    "mood": "Warm and practical, with a watchful eye on the stores and the people around her.",
+    "traits": {
+      "caution": 68,
+      "sociability": 64,
+      "empathy": 83,
+      "curiosity": 55,
+      "ambition": 31,
+      "introspection": 61,
+      "temper": 32,
+      "nurture": 89
+    },
+    "relations": [
+      {
+        "name": "Vidar",
+        "trust": 92,
+        "affinity": 95,
+        "label": "husband",
+        "note": "He makes room for me to be myself, even when the rest of Brandholm feels crowded."
+      },
+      {
+        "name": "Ylva",
+        "trust": 98,
+        "affinity": 99,
+        "label": "daughter",
+        "note": "I know the weight and warmth of her better than I know any count."
+      },
+      {
+        "name": "Gudrun",
+        "trust": 67,
+        "affinity": 47,
+        "label": "mother-in-law",
+        "note": "She is proud and capable, though I wish she could spare Sigrun a little of her suspicion."
+      },
+      {
+        "name": "Ragna",
+        "trust": 63,
+        "affinity": 53,
+        "label": "grandmother-in-law",
+        "note": "Her stories can be hard to hear, but I would rather know what she remembers than guess."
+      },
+      {
+        "name": "Edda",
+        "trust": 84,
+        "affinity": 80,
+        "label": "aunt",
+        "note": "She helped raise me in Oathstone, and I still think of her when I smell berries cooking."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 62,
+        "affinity": 43,
+        "label": "tanner",
+        "note": "She works carefully, and she treats the people who need cloaks as more than a trade."
+      },
+      {
+        "name": "Maelis",
+        "trust": 56,
+        "affinity": 28,
+        "label": "Tally-keeper",
+        "note": "Her tablets keep a clear count, though I know a written number cannot hold every human need."
+      },
+      {
+        "name": "Arne",
+        "trust": 62,
+        "affinity": 39,
+        "label": "friend of family",
+        "note": "He is a steady presence at the workbench and does not make a fuss of himself."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "As a girl in Oathstone, I helped Edda sort berries from leaves and learned which ones would keep. I can still hear her telling me not to rush the picking.",
+        "salience": 0.83,
+        "about": [
+          "Edda"
+        ]
+      },
+      {
+        "gist": "When I first came to Brandholm, I missed Oathstone's paths and the way everyone knew who was passing by. Vidar walked with me until I found my own routes here.",
+        "salience": 0.78,
+        "about": [
+          "Vidar"
+        ]
+      },
+      {
+        "gist": "The first winter I cooked for the common store, I had to make a small pot feed more people than I wanted to count. I learned to measure carefully and never let pride take a bowl from someone hungry.",
+        "salience": 0.88,
+        "about": []
+      },
+      {
+        "gist": "I held Ylva close after she was born and watched Vidar learn how to support her head. Neither of us wanted to hand her to anyone else.",
+        "salience": 0.97,
+        "about": [
+          "Vidar",
+          "Ylva"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_young_and_old_eat_first",
+        "value": 0.96,
+        "why": "A full-grown person can endure a smaller meal more easily than a child or an elder."
+      },
+      {
+        "key": "stores_must_be_counted_carefully",
+        "value": 0.86,
+        "why": "I cannot feed people from a store I only guess at."
+      },
+      {
+        "key": "trade_keeps_households_connected",
+        "value": 0.73,
+        "why": "I grew up seeing how people in Oathstone rely on what both towns bring."
+      },
+      {
+        "key": "a_person_can_belong_to_more_than_one_place",
+        "value": 0.9,
+        "why": "I have never stopped being Edda's niece just because I married into Brandholm."
+      }
+    ],
+    "secret": ""
+  },
+  "Ylva": {
+    "narrative": "Warm arms. A soft voice close by, and a bigger one that rumbles gently. There is a bright square of light, then the smell of food and hide. When I am hungry, someone comes.",
+    "values": [],
+    "goals": [],
+    "mood": "Content when held, curious when awake, easily startled by sudden sounds.",
+    "traits": {
+      "caution": 43,
+      "sociability": 40,
+      "empathy": 28,
+      "curiosity": 24,
+      "ambition": 0,
+      "introspection": 5,
+      "temper": 37,
+      "nurture": 18
+    },
+    "relations": [
+      {
+        "name": "Vidar",
+        "trust": 80,
+        "affinity": 100,
+        "label": "father",
+        "note": "A familiar chest and a low, steady sound."
+      },
+      {
+        "name": "Kari",
+        "trust": 90,
+        "affinity": 100,
+        "label": "mother",
+        "note": "Warmth, milk, and a voice I know."
+      },
+      {
+        "name": "Gudrun",
+        "trust": 46,
+        "affinity": 65,
+        "label": "grandmother",
+        "note": "A rougher voice sometimes sings near me."
+      },
+      {
+        "name": "Ragna",
+        "trust": 42,
+        "affinity": 55,
+        "label": "great-grandmother",
+        "note": "An old voice rises and falls beside the fire."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Warm arms held me close while a low voice spoke above my head.",
+        "salience": 0.66,
+        "about": [
+          "Vidar"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

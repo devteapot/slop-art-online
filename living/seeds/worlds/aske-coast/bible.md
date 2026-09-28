@@ -32,55 +32,108 @@ The Oath is renewed every midsummer at the stone. The keeper of Oathstone witnes
 
 ## Brandholm (the north)
 
-A timber town of about thirty, behind a palisade with gates, in the edge of the forest by the sea.
+A timber town of about thirty behind a palisade with two gates, where the forest meets the sea. Brandholm has plenty of timber and hides, little fish and few berries.
 
-- **Work.** Hunters, trappers, carpenters, tanners and toolmakers. They know wood, stone tools, hides, spears and bows, traps, torches and cloaks. Brandholm has plenty of timber and hides, little fish and few berries.
-- **Food.** They eat meat and trade for the rest. Their stores lean to wood, hides and meat.
-- **Rule.** Household heads meet at the fire in the square. The **Headwoman** speaks last and decides when they cannot agree. Oaths are spoken aloud before witnesses and remembered, not written; few in Brandholm can read.
-- **Values.** Keeping one's word, skill of hand, courage in the hunt and loyalty to one's household. Waste, begging, and people who "count things instead of making them" are despised.
-- **Law, cut on a board by the gate:**
-  - What a household hunts is the household's.
-  - The common store feeds the old, the young and the hurt first.
-  - Whoever takes from the common store without the Headwoman's word is shamed at the fire.
-  - The gates close at dark.
+- **Places.**
+  - The **Longhall**, where the council fire burns and household heads meet.
+  - The **Tannery** by the stream, which stinks.
+  - The **Carpenters' Yard**, where the palisade timber is cut.
+  - Egil's **Toolshop**.
+  - The **Common Store** (two storehouses by the square).
+  - The gate board, where the law is cut.
+- **Offices** (held by custom and by the council's word, not written):
+  - The **Headwoman** (Hekka) speaks last at the council fire and decides when the heads cannot agree. She alone may open the Common Store to anyone outside the old, the young and the hurt.
+  - The **Hunt-leader** (Brann) leads the hunts and shares out the meat.
+  - The **Master of the Palisade** (Halvard) keeps the walls and gates and commands the building work.
+  - The **Keeper of the Common Store** (Kari) knows what is in it and hands it out on the Headwoman's word.
+  - The **Gate-ward** (Jorund) keeps the gates and the night watch, with the right to turn anyone away at dark.
+- **Trades.** They pass from master to apprentice:
+  - hunters and trappers under the Hunt-leader;
+  - tanners (Gudrun's tannery; Sigrun and Maren make cloaks);
+  - carpenters (Halvard's yard: Arne, and the apprentice Pell from Saltreach);
+  - the toolmaker and bowyer (Egil).
+- **Standing.** The old hunting households (Brann's, Hekka's) carry the most weight. Tanners are needed but looked down on for the smell. Grim's household is poor and in debt.
+- **Values.** Keeping one's word, skill of hand, courage in the hunt and loyalty to one's household. Waste, begging and "counting things instead of making them" are despised.
+- **Law, cut in the gate board** (oral law; few can read it, everyone knows it):
+  - What a household hunts is the household's, but a tenth of every kill goes to the Common Store.
+  - The Common Store feeds the old, the young and the hurt first.
+  - Whoever takes from the Common Store without the Headwoman's word is shamed at the council fire and owes twice back.
+  - Blood spilled inside the palisade is judged at the council fire. Killing a townsperson means exile into the forest.
+  - The gates close at dark; the Gate-ward may refuse anyone.
 - **Now.**
-  - The Headwoman, Hekka, is old and ailing. Two people want to follow her:
+  - Hekka is old and ailing. Two people want to follow her:
     - her daughter Sigrun, a careful tanner who wants the Oath kept and trade widened;
     - Brann, the hunt-leader, who says Brandholm feeds the south for too little and should hunt the middle lands freely.
   - The deer near Brandholm are thinning, and the wolves are bolder.
-  - Several households owe Saltreach's Tally for nets and smoked fish taken last winter. Some say the Tally is a trick.
+  - Several households owe Saltreach's Tally for nets and smoked fish taken last winter, and some say the Tally is a trick. Brandholm does not use Saltreach's marks, except for Dunstan's trading partners.
 
 ## Saltreach (the south)
 
-A fishing town of about thirty on the southern shore, open (no wall), with reed beds, drying racks and a large common storehouse.
+The largest settlement on the coast: a fishing city of about thirty on the southern shore, open to the sea (no wall), with reed beds, drying racks, and streets between the net-houses. Saltreach has plenty of fish and reeds (fiber), little wood and few hides. It trades for timber and hides and goes cold in hard winters without them.
 
-- **Work.** Fishers, net-makers, basket-weavers, smokers, cooks, a healer and a scribe. They know fishing with nets, smoking fish, basketry, cooking, medicine and writing. Saltreach has plenty of fish and reeds (fiber), little wood and few hides.
-- **Food.** They trade for timber and hides and go cold in hard winters without them.
-- **Rule.** The **Tally** is a written record of every share, debt and trade, kept on tablets by the **Tally-keeper** and read aloud at the storehouse. The "net-houses" (the fishing households) decide together. The Tally-keeper keeps the record and the peace, but has no power to command.
-- **Values.** Fairness made visible (write it down), hospitality to travellers, clever bargaining and care for children. Their grief from the Hunger Winter is still told to children.
-- **Law, on the sign at the storehouse:**
-  - Everything taken from the storehouse is told to the Tally-keeper and written.
-  - What is owed is paid before the next winter.
-  - Strangers are fed once and asked their business.
+- **Places.**
+  - The **Tally House**, where the tablets are kept and the Net-Council meets.
+  - The **Storehouse** (two stores) under the Steward.
+  - The **Smokehouse**, run by its master with hired hands.
+  - The **Net-loft** where the net-makers work.
+  - The **Market**, a square with stalls where goods change hands for marks on market mornings.
+  - The **Watch-fire** at the edge of town.
+  - Dunstan's **Trading House**.
+- **Rule.** The **Net-Council** governs: the heads of the net-houses (the fishing households) and the office holders, meeting at the Tally House and deciding by agreement. Its offices:
+  - The **Tally-keeper** (Maelis) keeps the written Tally of every share, debt, trade and fine, reads it aloud, chairs the council, and issues the **marks**. She cannot command, but nothing is valid until it is written.
+  - The **Steward of the Storehouse** (Corin) guards and hands out the stores, and only by the Tally.
+  - The **Captain of the Watch** (Orrin) keeps order with two watchmen (Tobin, Jory). He may warn, seize thieves, hold a wrongdoer for the council, and enforce its judgments: fines, a day in the stocks at the market, exile. The Watch is hot-headed and several members of the council fear it.
+  - The **Market-warden** (Dunstan) keeps the market fair, settles disputes over marks and weights, and deals with Brandholm and Oathstone.
+- **Money.** **Marks** are small stamped clay tallies. Each is worth about one smoked fish at the market, and wages, fines and prices are paid in them. The Tally-keeper issues them against what the Storehouse holds; counterfeiting is theft from everyone. Households keep marks at home. Some people have many (Dunstan's trading house), some almost none (the hired hands).
+- **Trades and standing.**
+  - The **net-houses**: fishing households, with a head, grown children and sometimes a hired hand. Anselm's is the most respected.
+  - The **Net-loft**: master net-maker Gwen, with the apprentices Wenna and Rook.
+  - The **Smokehouse**: master Bea, with Oriel and Lark as hands paid in marks and fish.
+  - The **Trading House**: Dunstan and Hild; rich, envied.
+  - The **healer** (Fen), whom everyone owes.
+  - **Hired hands** (Cade and Lark, Mara) own no net-house and work for wages; they want a share of the council's voice.
+- **Values.** Fairness made visible (write it down), hospitality to travellers, clever bargaining, care for children, and respect for the Tally. Their grief from the Hunger Winter is still told to children.
+- **Law, the Written Code, on the sign at the Tally House:**
+  - Everything taken from the Storehouse is written in the Tally. Taking unwritten is theft.
+  - Theft is repaid threefold in marks or goods, or with a day in the stocks for those who cannot pay.
+  - Striking a Saltreacher is fined in marks. Drawing blood is judged by the Net-Council. Killing means exile.
+  - Debts are paid before the next winter; the Tally names the debtors on market mornings.
+  - Hired hands are paid each market morning in marks or fish, as agreed before the Tally-keeper.
+  - Strangers are fed once and asked their business; they trade only at the market.
   - No one goes north of the stone alone after dark.
+  - The Watch may seize anyone caught in wrongdoing and hold them for the Net-Council.
 - **Now.**
-  - The Tally-keeper, Maelis, has found the storehouse short of smoked fish three times this season, and the Tally does not explain it.
-  - The reed beds near town are thinning. The net-makers must walk further.
-  - Two households are angry that Brandholm's debts are not paid. Orrin, a hot-tempered fisher, wants Saltreach to stop trading until they are.
-  - Eight years ago Saltreach's best fisher, Tomas, went north to trade and was found dead in the forest. Brandholm said wolves. His widow Ilse says it was a Brandholm spear. Nobody has proved anything.
+  - Maelis has found the Storehouse short of smoked fish three times this season. The Tally does not explain it, and the Watch has been told to find the thief.
+  - The reed beds near town are thinning, so the net-makers must walk further.
+  - Two net-houses are angry that Brandholm's debts are not paid. Orrin, now Captain of the Watch, wants Saltreach to stop trading until they are, and to seize Brandholm goods at the market as payment.
+  - The hired hands grumble that the council is only net-house heads.
+  - Eight years ago Saltreach's best fisher, Tomas, went north to trade and was found dead in the forest. Brandholm said wolves. His widow Ilse says it was a Brandholm spear, and her son Tobin, now of the Watch, has not let it go.
 
 ## Oathstone (the middle lands)
 
-A hamlet of about ten people in three households, around the Oath Stone and a ring of planted berry bushes.
+A village of about twelve around the Oath Stone and its ring of planted berry fields, half a day's walk from each town, on the path between them.
 
-- **Work.** Planters, a stoneworker who knows masonry, and a healer. They know planting, storage, shelters, masonry and medicine.
+- **Places.**
+  - The **Oath Stone** and its paved ring.
+  - The **Waystone Inn**, where traders from both towns eat and sleep on trade days, run by Ansgar and Bryn.
+  - Tamsin's **Stoneyard**.
+  - The **Seed Store** (the village storage).
+  - The berry fields.
+- **Offices.**
+  - The **Keeper of the Stone** (Old Aud) witnesses oaths and trades, settles disputes between the towns on neutral ground, and renews the Oath every midsummer.
+  - Anything sworn at the stone before the Keeper binds both towns.
+- **Trades.** Planters (Edda's household, Hakon), the stoneworker (Tamsin, who cuts picks and paving), the healer (Rose), and the innkeepers. The inn takes marks, meat and fish alike, and so does everyone in Oathstone.
 - **People.** Most came from both towns. One household is a marriage between a Brandholm man and a Saltreach woman, which both towns still gossip about.
-- **The keeper.** The **Keeper of the Stone** is Old Aud, who witnessed the Oath twenty years ago. She is trusted, more or less, by both sides. Traders from both towns meet at Oathstone and sometimes sleep there.
 - **Values.** Neutrality, patience, the land and good harvests. They are welcome in both towns and fully trusted by neither.
+- **Law, spoken at the stone:**
+  - No weapon is raised within sight of the stone.
+  - A dispute between the towns is heard here.
+  - A guest at the inn is safe.
 - **Now.**
   - Old Aud is very old and has no apprentice.
   - Brann's hunters have started crossing the middle lands after deer, trampling planted bushes.
   - Midsummer, and the Oath's renewal, is coming.
+  - The inn does good business on trade days and knows everyone's gossip.
 
 ## Threads that run through the cast (for sheet writers)
 
@@ -92,6 +145,12 @@ A hamlet of about ten people in three households, around the Oath Stone and a ri
 - **The cross-town marriage** in Oathstone, and its children, who belong to both and neither.
 - **Old Aud's succession:** who will keep the stone and witness the Oath.
 - **Knowledge that one town has and the other needs.** Brandholm's cloaks need the fiber Saltreach has. Saltreach's winter needs the hides and timber Brandholm has. Saltreach can write and Brandholm cannot. Brandholm makes tools and bows that Saltreach cannot.
+
+- **The Watch and the thief:** Saltreach's Watch (Orrin, Tobin, Jory) has been told to find whoever takes smoked fish. Jory is Rafe's friend.
+- **Hired hands against the net-houses:** Cade, Lark and Mara work for marks and want a voice on the Net-Council. Orrin, Cade's own brother, sits on it as Captain.
+- **Seizing Brandholm goods:** Orrin wants the Watch to take Brandholm goods at the market to cover the debts. Dunstan, the Market-warden, thinks that would end the trade and the Oath with it.
+- **Offices and who holds them:** people know who holds which office, and some hope to hold one (Colm wants to be Keeper; Sigrun and Brann want to be Headwoman or Head; Cade wants the hired hands on the council).
+- **The inn:** Ansgar and Bryn hear everything on trade days and profit from peace.
 
 ## Guidance for character sheets
 

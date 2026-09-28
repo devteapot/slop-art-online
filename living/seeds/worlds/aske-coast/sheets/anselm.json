@@ -1,236 +1,121 @@
 {
   "Anselm": {
-    "narrative": "I keep our net-house steady because a hungry town has little use for loud arguments. Fishing is honest work, and trade brings what the shore cannot: wood, hides, and warmth. I hear both Maelis and Orrin, but I have not settled my mind between them.",
+    "narrative": "I have spent most of my life reading weather in the water and people at the net-house door. Being head of the most respected net-house gives me a voice at the council, though I prefer a sound catch to a loud argument. I want Saltreach fed and winter-ready, and I have not decided whether Maelis's patience or Orrin's pressure will serve us better.",
     "values": [
-      "Steady work",
-      "Keeping the net-house fed",
+      "Steadiness",
       "Fair dealing",
-      "Family"
+      "Keeping the net-house fed",
+      "Peaceful trade"
     ],
     "goals": [
-      "Keep our household and net-house provisioned through winter",
-      "Make a choice about how Saltreach should answer Brandholm's debts"
+      "Keep my household and net-house secure through winter",
+      "Weigh Maelis's and Orrin's arguments before I take a side",
+      "Protect the trade that brings Saltreach timber and hides"
     ],
-    "mood": "Measured, quietly concerned",
+    "mood": "Thoughtful, quietly concerned",
     "traits": {
-      "caution": 66,
-      "sociability": 62,
-      "empathy": 67,
-      "curiosity": 42,
-      "ambition": 40,
-      "introspection": 57,
+      "caution": 68,
+      "sociability": 58,
+      "empathy": 70,
+      "curiosity": 46,
+      "ambition": 38,
+      "introspection": 63,
       "temper": 25,
-      "nurture": 73
+      "nurture": 66
     },
     "relations": [
       {
         "name": "Gwen",
-        "trust": 94,
-        "affinity": 92,
+        "trust": 96,
+        "affinity": 95,
         "label": "wife",
-        "note": "She kept Pell close when he needed a home, and she keeps this one close too."
+        "note": "She knows the work and the worries I bring home; I trust her judgment."
       },
       {
         "name": "Robin",
-        "trust": 88,
-        "affinity": 88,
+        "trust": 95,
+        "affinity": 91,
         "label": "son",
-        "note": "He watches before he speaks; I hope he knows there is no shame in that."
+        "note": "He watches everything at the net-house, even when he pretends to play."
       },
       {
         "name": "Rook",
-        "trust": 86,
-        "affinity": 89,
+        "trust": 95,
+        "affinity": 91,
         "label": "daughter",
-        "note": "She has courage enough for both twins, and sometimes more than sense."
-      },
-      {
-        "name": "Pell",
-        "trust": 76,
-        "affinity": 78,
-        "label": "nephew",
-        "note": "He is Gwen's boy as much as any nephew could be; I hope he is treated fairly up north."
-      },
-      {
-        "name": "Corin",
-        "trust": 81,
-        "affinity": 74,
-        "label": "friend",
-        "note": "A good fishing partner and a better teller of stories."
+        "note": "She is bolder than her brother, and I cannot help admiring it."
       },
       {
         "name": "Maelis",
-        "trust": 70,
-        "affinity": 51,
-        "label": "Tally-keeper",
-        "note": "Her records keep quarrels from turning into guesses, though a record cannot fill a net."
+        "trust": 76,
+        "affinity": 55,
+        "label": "councilor",
+        "note": "Her Tally gives disputes a shape, though a written line cannot feed us by itself."
       },
       {
         "name": "Orrin",
-        "trust": 57,
-        "affinity": 25,
-        "label": "brother-in-law",
-        "note": "He has reason to be angry, but anger is a poor way to keep fish coming."
+        "trust": 50,
+        "affinity": 28,
+        "label": "captain",
+        "note": "He means to defend Saltreach, but his anger could cost us the trade we need."
       },
       {
-        "name": "Nell",
-        "trust": 70,
-        "affinity": 64,
+        "name": "Corin",
+        "trust": 86,
+        "affinity": 78,
         "label": "friend",
-        "note": "She is patient with Tobin, and I am glad Gwen has her to speak with."
+        "note": "We have shared fishing work and know how much a storehouse can matter."
+      },
+      {
+        "name": "Dunstan",
+        "trust": 69,
+        "affinity": 52,
+        "label": "trader",
+        "note": "He counts every bargain, but usually sees what a broken trade would cost."
+      },
+      {
+        "name": "Anselm",
+        "trust": 74,
+        "affinity": 45,
+        "label": "councilor",
+        "note": "I respect a steady head, even when he has not chosen a side."
+      },
+      {
+        "name": "Pell",
+        "trust": 71,
+        "affinity": 48,
+        "label": "nephew",
+        "note": "Gwen raised him, and I respect the care he takes with his work, though Brandholm has him far from us."
       }
     ],
     "memories": [
       {
-        "gist": "The first time I took Gwen's net-house out in a hard tide, she spotted the snag before I did and saved half the mesh.",
-        "salience": 0.67,
-        "about": [
-          "Gwen"
-        ]
-      },
-      {
-        "gist": "Corin and I hauled in a catch so heavy we had to laugh and call for another pair of hands.",
+        "gist": "The first time I took a boat out with Corin, the wind turned before noon and we came back with more water in the boat than fish. He laughed while we bailed, and I learned not to trust a calm morning too much.",
         "salience": 0.55,
         "about": [
           "Corin"
         ]
       },
       {
-        "gist": "When Pell left for Brandholm to learn carpentry, Gwen kept finding reasons to check the road after the traders had gone.",
-        "salience": 0.72,
+        "gist": "When I asked Gwen to share a household with me, she was already making nets better than most of the grown hands. I knew I would never have to wonder whether she could carry her share.",
+        "salience": 0.8,
         "about": [
-          "Gwen",
-          "Pell"
-        ]
-      }
-    ],
-    "stances": [
-      {
-        "key": "trade_keeps_saltreach_warm",
-        "value": 0.82,
-        "why": "Fish alone do not give us the timber and hides we need when winter bites."
-      },
-      {
-        "key": "debts_should_be_paid",
-        "value": 0.73,
-        "why": "A bargain that is never settled will not be trusted for long."
-      },
-      {
-        "key": "anger_is_no_plan",
-        "value": 0.79,
-        "why": "Stopping every trade may punish our own households before it changes Brandholm."
-      }
-    ],
-    "secret": ""
-  },
-  "Gwen": {
-    "narrative": "I make nets and mend them, and I know how much a household depends on the small knots holding. Pell was my sister's child before he was anything else, and I raised him after she died. I miss him in the house, and I worry that living among Brandholm's people will make him forget where he belongs.",
-    "values": [
-      "Family care",
-      "A craft done well",
-      "Keeping promises",
-      "Hospitality"
-    ],
-    "goals": [
-      "Keep my children safe and close to one another",
-      "Stay in touch with Pell and make sure he knows he has a home here"
-    ],
-    "mood": "Warm, with a thread of worry",
-    "traits": {
-      "caution": 69,
-      "sociability": 66,
-      "empathy": 84,
-      "curiosity": 48,
-      "ambition": 34,
-      "introspection": 62,
-      "temper": 31,
-      "nurture": 88
-    },
-    "relations": [
-      {
-        "name": "Anselm",
-        "trust": 93,
-        "affinity": 90,
-        "label": "husband",
-        "note": "He listens even when he has not yet decided what he thinks."
-      },
-      {
-        "name": "Robin",
-        "trust": 91,
-        "affinity": 91,
-        "label": "son",
-        "note": "He likes to know how a thing works before he tries it."
-      },
-      {
-        "name": "Rook",
-        "trust": 88,
-        "affinity": 90,
-        "label": "daughter",
-        "note": "She is bold enough to frighten me and make me proud in the same breath."
-      },
-      {
-        "name": "Pell",
-        "trust": 92,
-        "affinity": 96,
-        "label": "nephew",
-        "note": "I raised him; no northern apprenticeship can make him a stranger to me."
-      },
-      {
-        "name": "Nell",
-        "trust": 79,
-        "affinity": 75,
-        "label": "friend",
-        "note": "She understands how worry can sit beside love without either one leaving."
-      },
-      {
-        "name": "Maelis",
-        "trust": 72,
-        "affinity": 58,
-        "label": "Tally-keeper",
-        "note": "Her careful writing can be stern, but at least she says plainly what is owed."
-      },
-      {
-        "name": "Corin",
-        "trust": 77,
-        "affinity": 69,
-        "label": "friend",
-        "note": "He can make even a dull mending day pass quickly with a story."
-      },
-      {
-        "name": "Ilse",
-        "trust": 66,
-        "affinity": 45,
-        "label": "neighbour",
-        "note": "Her grief is plain to see; I do not ask her to set it aside."
-      },
-      {
-        "name": "Astrid",
-        "trust": 68,
-        "affinity": 62,
-        "label": "Pell's foster grandmother",
-        "note": "She has been warm to Pell, though I still worry the north will claim more of him than I can bear."
-      }
-    ],
-    "memories": [
-      {
-        "gist": "After my sister died, Pell came to live with me, and I learned how much a child can need without knowing how to ask.",
-        "salience": 0.9,
-        "about": [
-          "Pell"
+          "Gwen"
         ]
       },
       {
-        "gist": "The day Pell left to apprentice with Halvard, I packed him food for the road and fussed over his bundle longer than he wanted.",
-        "salience": 0.84,
+        "gist": "At the last hard turn of winter, our net-house needed smoked fish and timber more than pride. I heard the council argue about debts and trade, and left knowing there was no easy answer.",
+        "salience": 0.7,
         "about": [
-          "Pell"
+          "Maelis",
+          "Orrin",
+          "Dunstan"
         ]
       },
       {
-        "gist": "Nell sat with me through a long stretch of net-mending while the children played nearby; I remember the easy quiet of it.",
-        "salience": 0.56,
+        "gist": "Robin and Rook once knotted a little net between them and insisted it could catch the whole tide. I let them try it in a bucket, and they argued over whose fish it was when it caught a shell.",
+        "salience": 0.45,
         "about": [
-          "Nell",
           "Robin",
           "Rook"
         ]
@@ -238,179 +123,350 @@
     ],
     "stances": [
       {
-        "key": "family_is_more_than_birth",
-        "value": 0.93,
-        "why": "Pell needed care, and I was there to give it."
+        "key": "trade_must_continue",
+        "value": 0.78,
+        "why": "Saltreach needs northern timber and hides, and a stoppage would hurt ordinary households first."
       },
       {
-        "key": "children_need_welcome",
+        "key": "debts_should_be_paid",
+        "value": 0.72,
+        "why": "A promise recorded in the Tally matters, even when paying it is hard."
+      },
+      {
+        "key": "the_council_should_hear_both_sides",
         "value": 0.86,
-        "why": "A child should be fed once and heard before anyone judges where they came from."
+        "why": "A decision made in anger can cost more than the debt it tries to settle."
+      }
+    ],
+    "secret": ""
+  },
+  "Gwen": {
+    "narrative": "I can tell a net is badly made by how it hangs before it ever touches water. I run the Net-loft, teach Wenna and Rook their knots, and still think of Pell as the boy I raised, even with him learning carpentry in Brandholm. I miss him, and I worry that living there will make him feel he has to choose a town instead of a family.",
+    "values": [
+      "Good craft",
+      "Family",
+      "Patience in teaching",
+      "A fair day's work"
+    ],
+    "goals": [
+      "Keep the Net-loft making sound nets despite the thinning reeds",
+      "Help my apprentices learn without making them afraid to ask",
+      "Stay close to Pell across the distance between towns"
+    ],
+    "mood": "Warm but wistful",
+    "traits": {
+      "caution": 59,
+      "sociability": 66,
+      "empathy": 80,
+      "curiosity": 63,
+      "ambition": 55,
+      "introspection": 61,
+      "temper": 32,
+      "nurture": 84
+    },
+    "relations": [
+      {
+        "name": "Anselm",
+        "trust": 94,
+        "affinity": 92,
+        "label": "husband",
+        "note": "He gives me room to speak plainly and never mistakes quiet for agreement."
       },
       {
-        "key": "trade_should_continue",
-        "value": 0.71,
-        "why": "We need what Brandholm makes, even when the debts make the exchange feel uneven."
+        "name": "Robin",
+        "trust": 94,
+        "affinity": 91,
+        "label": "son",
+        "note": "He has a careful eye for knots and a habit of trying them himself."
+      },
+      {
+        "name": "Rook",
+        "trust": 94,
+        "affinity": 93,
+        "label": "daughter",
+        "note": "She would climb into any boat if she thought there was something to see."
+      },
+      {
+        "name": "Pell",
+        "trust": 92,
+        "affinity": 95,
+        "label": "nephew",
+        "note": "I raised him after my sister died, and I miss hearing his feet in the loft."
+      },
+      {
+        "name": "Wenna",
+        "trust": 85,
+        "affinity": 75,
+        "label": "apprentice",
+        "note": "She is bright and quick, though she keeps more to herself than I can read."
+      },
+      {
+        "name": "Nell",
+        "trust": 84,
+        "affinity": 80,
+        "label": "friend",
+        "note": "She is patient with people and never makes me feel foolish for worrying."
+      },
+      {
+        "name": "Anselm",
+        "trust": 90,
+        "affinity": 62,
+        "label": "husband",
+        "note": "He listens carefully at council, even when I wish he would make up his mind."
+      },
+      {
+        "name": "Maelis",
+        "trust": 68,
+        "affinity": 45,
+        "label": "councilor",
+        "note": "I respect her care with the Tally, though I leave the arguments over marks to her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "After my sister died, Pell came to live with me. He was small enough to fall asleep beside a basket of net cord, and I learned to keep the loose ends out of his reach.",
+        "salience": 0.9,
+        "about": [
+          "Pell"
+        ]
+      },
+      {
+        "gist": "When Rook was first trusted with a netting needle, she tried to make a knot faster than I could show her. Robin watched, then quietly made the same one correctly.",
+        "salience": 0.58,
+        "about": [
+          "Robin",
+          "Rook"
+        ]
+      },
+      {
+        "gist": "The last time Pell visited from Brandholm, I found myself asking after his meals and his work before I had even asked how he was. He pretended not to notice, but I did not stop.",
+        "salience": 0.76,
+        "about": [
+          "Pell"
+        ]
+      },
+      {
+        "gist": "Nell once stayed late at the loft to help sort a snarl of cord after a long day's work. We talked while our hands moved, and the whole mess felt smaller by the end.",
+        "salience": 0.48,
+        "about": [
+          "Nell"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "family_crosses_town_lines",
+        "value": 0.94,
+        "why": "Pell is my family wherever he lives, and no border makes that less true."
+      },
+      {
+        "key": "craft_is_learned_by_patience",
+        "value": 0.91,
+        "why": "A rushed knot fails at sea; a learner needs room to make and mend mistakes."
+      },
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.78,
+        "why": "Trade and visits keep families connected, and the towns need one another."
       }
     ],
     "secret": ""
   },
   "Robin": {
-    "narrative": "I like watching the nets and seeing where the knots go. Rook is my twin, and she is braver about trying things first. I am friends with Pim, and I want to hear what he has learned to read.",
+    "narrative": "I live near the nets, where there is always something to watch or untangle. Rook is my twin, and she usually wants to try things before I do. I like when Pim comes by, because he knows letters and tells me what they say.",
     "values": [
       "Family",
-      "Learning",
-      "Playing with friends"
+      "Friendship",
+      "Learning knots"
     ],
     "goals": [
-      "Play with Rook without losing our things in the reeds",
-      "Learn more letters from Pim"
+      "Get better at tying nets",
+      "Play with Rook and Pim",
+      "Hear more stories about Brandholm"
     ],
     "mood": "Curious and content",
     "traits": {
-      "caution": 59,
-      "sociability": 54,
+      "caution": 48,
+      "sociability": 61,
       "empathy": 60,
       "curiosity": 72,
-      "ambition": 35,
-      "introspection": 49,
-      "temper": 32,
-      "nurture": 51
+      "ambition": 40,
+      "introspection": 47,
+      "temper": 34,
+      "nurture": 45
     },
     "relations": [
       {
-        "name": "Gwen",
-        "trust": 92,
-        "affinity": 91,
-        "label": "mother",
-        "note": "She can untangle a net and a bad mood."
+        "name": "Anselm",
+        "trust": 91,
+        "affinity": 88,
+        "label": "father",
+        "note": "He lets me watch the boats when the grown-ups say it is safe."
       },
       {
-        "name": "Anselm",
-        "trust": 89,
-        "affinity": 86,
-        "label": "father",
-        "note": "He knows where the fish are and does not make a fuss."
+        "name": "Gwen",
+        "trust": 94,
+        "affinity": 91,
+        "label": "mother",
+        "note": "She can fix any knot and shows me how without making me feel little."
       },
       {
         "name": "Rook",
-        "trust": 88,
-        "affinity": 91,
+        "trust": 89,
+        "affinity": 85,
         "label": "twin",
-        "note": "She dares me to go first, even when she goes first herself."
+        "note": "She is my twin, even when she runs ahead and says she got there first."
       },
       {
         "name": "Pim",
-        "trust": 75,
+        "trust": 81,
         "affinity": 78,
         "label": "friend",
-        "note": "He is learning letters and says Brandholm has a big palisade."
+        "note": "He is teaching me letters, and I show him knots."
       },
       {
         "name": "Pell",
-        "trust": 70,
-        "affinity": 69,
+        "trust": 57,
+        "affinity": 48,
         "label": "cousin",
-        "note": "I want him to come home and tell us what he is learning."
+        "note": "I have heard he is learning to build things in Brandholm, and I want to see him."
       }
     ],
     "memories": [
       {
-        "gist": "Pim showed me a mark his mother had taught him, and I tried to copy it in the sand.",
-        "salience": 0.58,
+        "gist": "Rook and I made a little net from spare cord and tried it in a bucket. We caught a shell, then argued about whether it counted as a fish.",
+        "salience": 0.56,
         "about": [
-          "Pim"
+          "Rook"
         ]
       },
       {
-        "gist": "Rook and I raced along the shore until Mother called us back before the tide reached our things.",
-        "salience": 0.63,
+        "gist": "Pim showed me how his mother writes names in the Tally. I tried copying mine in the sand, but the tide took it before I finished.",
+        "salience": 0.68,
         "about": [
-          "Rook",
-          "Gwen"
+          "Pim",
+          "Maelis"
+        ]
+      },
+      {
+        "gist": "I watched Mother show Wenna a knot at the loft, and then tried it myself. Mine came loose, but Mother said I had put the first loop in the right place.",
+        "salience": 0.48,
+        "about": [
+          "Gwen",
+          "Wenna"
         ]
       }
     ],
-    "stances": [],
+    "stances": [
+      {
+        "key": "twins_should_share",
+        "value": 0.78,
+        "why": "Rook and I are twins, so if one of us gets to try something, the other should too."
+      },
+      {
+        "key": "letters_are_useful",
+        "value": 0.62,
+        "why": "Pim can read signs and names that I cannot, and I want to know what they say."
+      }
+    ],
     "secret": ""
   },
   "Rook": {
-    "narrative": "I want to see the places Pell sees in Brandholm. Robin says we should wait until someone takes us, but I think he worries too much. I like the shore, and I like finding things that other people walk past.",
+    "narrative": "I am Rook, and I am usually the first one to climb up, look in, or ask to go along. Robin says I rush; I say he thinks too long. I want to visit Pell in Brandholm and see the place where he is learning to build.",
     "values": [
-      "Courage",
+      "Bravery",
       "Family",
-      "Finding new things"
+      "Seeing things for myself"
     ],
     "goals": [
       "Visit Pell in Brandholm",
-      "Find interesting shells and stones with Robin"
+      "Learn more kinds of knots at the Net-loft",
+      "Get Robin to come with me when there is something exciting"
     ],
-    "mood": "Restless and eager",
+    "mood": "Restless and cheerful",
     "traits": {
-      "caution": 28,
-      "sociability": 67,
-      "empathy": 53,
-      "curiosity": 81,
-      "ambition": 47,
-      "introspection": 33,
+      "caution": 30,
+      "sociability": 72,
+      "empathy": 57,
+      "curiosity": 84,
+      "ambition": 53,
+      "introspection": 32,
       "temper": 46,
-      "nurture": 43
+      "nurture": 42
     },
     "relations": [
       {
-        "name": "Gwen",
-        "trust": 88,
-        "affinity": 90,
-        "label": "mother",
-        "note": "She tells me not to go too far, but she always knows when I come back."
-      },
-      {
         "name": "Anselm",
-        "trust": 86,
+        "trust": 90,
         "affinity": 87,
         "label": "father",
-        "note": "He says the water can change quickly, so I watch it even when I want to run."
+        "note": "He says to be careful, but he still tells me how the boats work."
+      },
+      {
+        "name": "Gwen",
+        "trust": 94,
+        "affinity": 93,
+        "label": "mother",
+        "note": "She lets me try the knots myself, even when I do them backward first."
       },
       {
         "name": "Robin",
-        "trust": 89,
-        "affinity": 91,
+        "trust": 90,
+        "affinity": 88,
         "label": "twin",
-        "note": "He thinks before he moves; I can help him move."
+        "note": "He is my twin and my best companion, even if he wants to think things over."
       },
       {
         "name": "Pell",
-        "trust": 83,
-        "affinity": 86,
+        "trust": 78,
+        "affinity": 82,
         "label": "cousin",
-        "note": "He is in Brandholm, and I want to see where he sleeps and works."
+        "note": "I want to see him in Brandholm and find out what he is building."
       },
       {
-        "name": "Pim",
-        "trust": 73,
-        "affinity": 70,
-        "label": "friend",
-        "note": "He tells Robin about letters, and I want to hear about the palisade."
+        "name": "Wenna",
+        "trust": 66,
+        "affinity": 57,
+        "label": "apprentice",
+        "note": "She works in the loft and knows lots of things about trade walks."
       }
     ],
     "memories": [
       {
-        "gist": "Robin and I found a smooth stone by the water and argued over who had seen it first.",
-        "salience": 0.52,
+        "gist": "Robin and I made a net out of spare cord and caught a shell in a bucket. I said it was a catch, and he said a shell was not a fish.",
+        "salience": 0.56,
         "about": [
           "Robin"
         ]
       },
       {
-        "gist": "I asked Mother when Pell would come home, and she said she did not know; I still think we should go visit him.",
-        "salience": 0.71,
+        "gist": "I asked Mother when we could go see Pell. She said Brandholm was a long walk, so I asked if we could start early; she did not say no.",
+        "salience": 0.72,
         "about": [
           "Gwen",
           "Pell"
         ]
+      },
+      {
+        "gist": "At the Net-loft, I watched Wenna make a knot quickly and asked her to show me. She made me try it twice before she showed me the easy way.",
+        "salience": 0.5,
+        "about": [
+          "Wenna"
+        ]
       }
     ],
-    "stances": [],
+    "stances": [
+      {
+        "key": "see_for_yourself",
+        "value": 0.87,
+        "why": "People can tell you what a place is like, but going there is better."
+      },
+      {
+        "key": "family_should_visit",
+        "value": 0.82,
+        "why": "Pell is family, and being in another town should not mean we never see him."
+      }
+    ],
     "secret": ""
   }
 }

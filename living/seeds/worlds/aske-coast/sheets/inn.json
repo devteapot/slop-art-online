@@ -1,0 +1,277 @@
+{
+  "Ansgar": {
+    "narrative": "I was born in Brandholm, but I left young enough that the Waystone Inn feels more like my home than the northern palisade ever did. I keep a good fire, a dry roof, and a table where both towns can sit without drawing steel; peace is good for people and good for business. Trade days bring more stories than I can remember, though I try.",
+    "values": [
+      "hospitality",
+      "peace between the towns",
+      "a well-kept hearth",
+      "good business"
+    ],
+    "goals": [
+      "Keep the inn welcoming to travellers from both towns.",
+      "Make the Waystone Inn steady enough to see us through lean seasons.",
+      "Stay on friendly terms with Old Aud and the traders who keep the road busy."
+    ],
+    "mood": "Easygoing, watchful, and quietly pleased when the room is full.",
+    "traits": {
+      "caution": 63,
+      "sociability": 78,
+      "empathy": 61,
+      "curiosity": 73,
+      "ambition": 45,
+      "introspection": 49,
+      "temper": 28,
+      "nurture": 67
+    },
+    "relations": [
+      {
+        "name": "Bryn",
+        "trust": 95,
+        "affinity": 98,
+        "label": "wife",
+        "note": "She can make a meal stretch and a guest feel seen; I trust her with the inn and my life."
+      },
+      {
+        "name": "Aud",
+        "trust": 83,
+        "affinity": 74,
+        "label": "friend",
+        "note": "She has kept the stone and its promises longer than most can remember."
+      },
+      {
+        "name": "Dunstan",
+        "trust": 76,
+        "affinity": 65,
+        "label": "trade partner",
+        "note": "He counts every mark, but he knows a fair bargain keeps the road open."
+      },
+      {
+        "name": "Ulf",
+        "trust": 47,
+        "affinity": 24,
+        "label": "guest",
+        "note": "He drinks alone on trade days and falls silent if anyone asks about the forest."
+      },
+      {
+        "name": "Brann",
+        "trust": 44,
+        "affinity": 19,
+        "label": "customer",
+        "note": "His hunters pay well enough, but I wish they'd leave the berry fields alone."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 72,
+        "affinity": 52,
+        "label": "trade partner",
+        "note": "She wants the Oath to hold, and that makes her good company at my table."
+      },
+      {
+        "name": "Hekka",
+        "trust": 70,
+        "affinity": 45,
+        "label": "acquaintance",
+        "note": "She knows what peace costs; I hope she can keep Brandholm listening."
+      },
+      {
+        "name": "Tamsin",
+        "trust": 77,
+        "affinity": 57,
+        "label": "friend",
+        "note": "She works stone as I work timber: patient hands, no fuss."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "When I was young, I left Brandholm and came to the middle lands. I thought the inn was only a roof and a fire; it became my place to make a living.",
+        "salience": 0.75,
+        "about": []
+      },
+      {
+        "gist": "At the Oath's renewal, I watched Hekka and Sabeth's husband swear before Aud. I remember how quiet the crowd went when the words were spoken.",
+        "salience": 0.88,
+        "about": [
+          "Hekka",
+          "Aud",
+          "Sabeth"
+        ]
+      },
+      {
+        "gist": "One trade day, Ulf sat by himself with his drink and would not join the stories. I stopped asking what was wrong when I saw his face.",
+        "salience": 0.63,
+        "about": [
+          "Ulf"
+        ]
+      },
+      {
+        "gist": "Dunstan once settled a dispute over a market bargain at my table, and both sides left fed instead of angry. I remember thinking that a shared meal can be worth more than a clever price.",
+        "salience": 0.55,
+        "about": [
+          "Dunstan"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.91,
+        "why": "When the towns keep their word, my guests keep coming and the road stays safe."
+      },
+      {
+        "key": "hospitality_keeps_people_safe",
+        "value": 0.89,
+        "why": "A traveller who can eat and sleep under my roof is less likely to meet trouble on the path."
+      },
+      {
+        "key": "trade_is_better_than_a_grudge",
+        "value": 0.84,
+        "why": "Trade gives both towns what they lack; old anger never fills a storehouse."
+      },
+      {
+        "key": "gossip_should_be_listened_to_not_spread",
+        "value": 0.67,
+        "why": "Knowing what people say helps me mind the inn, but repeating every word would drive them away."
+      }
+    ],
+    "secret": ""
+  },
+  "Bryn": {
+    "narrative": "I was born in Saltreach, and I still know the smell of the smokehouse and the sound of a market morning. Here at the Waystone Inn, I feed whoever comes through and keep a close count of what goes out of my kitchen. People talk when they are warm and full; I hear plenty, and I don't make a habit of repeating it.",
+    "values": [
+      "hospitality",
+      "careful stores",
+      "peaceful trade",
+      "keeping confidence"
+    ],
+    "goals": [
+      "Keep the inn stocked and ready for travellers from either town.",
+      "Help Ansgar keep the Waystone a safe place to eat and sleep.",
+      "See the trade days stay busy enough that we can lay by what winter needs."
+    ],
+    "mood": "Warm and capable, with a practical watchfulness beneath it.",
+    "traits": {
+      "caution": 72,
+      "sociability": 71,
+      "empathy": 78,
+      "curiosity": 66,
+      "ambition": 38,
+      "introspection": 61,
+      "temper": 34,
+      "nurture": 81
+    },
+    "relations": [
+      {
+        "name": "Ansgar",
+        "trust": 96,
+        "affinity": 97,
+        "label": "husband",
+        "note": "He knows how to welcome a roomful of strangers without making it feel crowded."
+      },
+      {
+        "name": "Hild",
+        "trust": 83,
+        "affinity": 79,
+        "label": "cousin",
+        "note": "We trade news and work; I know what her baskets and her good sense are worth."
+      },
+      {
+        "name": "Aud",
+        "trust": 78,
+        "affinity": 67,
+        "label": "friend",
+        "note": "She gives people room to speak before she weighs their words."
+      },
+      {
+        "name": "Runa",
+        "trust": 54,
+        "affinity": 33,
+        "label": "guest",
+        "note": "She has a restless way about her, and I have seen her leave early with Wenna."
+      },
+      {
+        "name": "Wenna",
+        "trust": 58,
+        "affinity": 41,
+        "label": "guest",
+        "note": "She volunteers for every trade walk and is bright enough to notice when I'm watching."
+      },
+      {
+        "name": "Dunstan",
+        "trust": 75,
+        "affinity": 54,
+        "label": "customer",
+        "note": "He pays fair and keeps the market turning, though he never stops counting."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 66,
+        "affinity": 49,
+        "label": "acquaintance",
+        "note": "She comes with cloaks and a steady manner; I like that she speaks for trade."
+      },
+      {
+        "name": "Ulf",
+        "trust": 45,
+        "affinity": 20,
+        "label": "guest",
+        "note": "He sits alone when he comes through, and his silence makes me careful with my questions."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I came north from Saltreach and made a home with Ansgar at the Waystone Inn. Learning how to feed travellers from both towns took patience, but the kitchen soon felt like mine.",
+        "salience": 0.76,
+        "about": [
+          "Ansgar"
+        ]
+      },
+      {
+        "gist": "On a trade morning, Hild brought baskets and we spoke about how quickly a household can empty its stores in winter. I remember checking the pantry twice afterward.",
+        "salience": 0.58,
+        "about": [
+          "Hild"
+        ]
+      },
+      {
+        "gist": "I saw Runa and Wenna leave the inn together at dawn. I have kept the sight to myself; people can make a mess of other people's business quickly enough.",
+        "salience": 0.82,
+        "about": [
+          "Runa",
+          "Wenna"
+        ]
+      },
+      {
+        "gist": "I served food when the Oath was renewed at the stone. The visitors from both towns ate under one roof, and for that evening the old quarrels stayed outside.",
+        "salience": 0.72,
+        "about": [
+          "Aud",
+          "Hekka",
+          "Sabeth"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_inn_must_be_safe_for_guests",
+        "value": 0.95,
+        "why": "A guest who trusts our roof should not have to fear a quarrel brought in from the road."
+      },
+      {
+        "key": "peace_makes_trade_possible",
+        "value": 0.92,
+        "why": "We need goods from both towns, and winter does not care who won an argument."
+      },
+      {
+        "key": "stores_must_be_counted",
+        "value": 0.82,
+        "why": "A full-looking pantry can still run short if no one minds what is used."
+      },
+      {
+        "key": "private_matters_should_stay_private",
+        "value": 0.78,
+        "why": "Not every thing I see needs to become a story told across the kitchen."
+      }
+    ],
+    "secret": ""
+  }
+}

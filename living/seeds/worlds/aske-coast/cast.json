@@ -24,7 +24,7 @@
               "age": 59,
               "sex": "f",
               "occupation": "keeper",
-              "role": "Headwoman of Brandholm, old and ailing; swore the Oath at the Stone twenty years ago",
+              "role": "Headwoman of Brandholm; speaks last at the council fire in the Longhall and alone may open the Common Store to others; old and ailing; swore the Oath at the Stone twenty years ago",
               "knows": [
                 "fire",
                 "shelter",
@@ -138,7 +138,7 @@
               "age": 44,
               "sex": "m",
               "occupation": "hunter",
-              "role": "hunt-leader of Brandholm; says Brandholm feeds the south for too little and should hunt the middle lands freely; wants to lead after Hekka",
+              "role": "Hunt-leader of Brandholm: leads the hunts and shares out the meat; says Brandholm feeds the south for too little and should hunt the middle lands freely; wants to lead after Hekka",
               "knows": [
                 "fire",
                 "shelter",
@@ -254,7 +254,7 @@
               "age": 42,
               "sex": "f",
               "occupation": "tanner",
-              "role": "tanner, proud of her craft, bitter that Hekka's line leads",
+              "role": "master of the Tannery, proud of her craft and bitter that tanners are looked down on and that Hekka's line leads",
               "knows": [
                 "fire",
                 "shelter",
@@ -303,7 +303,7 @@
               "age": 24,
               "sex": "f",
               "occupation": "cook",
-              "role": "cook of the common store, feeds the old and the young",
+              "role": "Keeper of the Common Store: knows what is in it and hands it out on the Headwoman's word; cooks for the old and the young",
               "knows": [
                 "fire",
                 "cooking",
@@ -342,7 +342,7 @@
               "age": 58,
               "sex": "m",
               "occupation": "carpenter",
-              "role": "master carpenter and toolmaker; built the palisade; remembers the Hunger Winter as a young man and is ashamed of it",
+              "role": "Master of the Palisade: master carpenter who keeps the walls and gates and commands the building work from the Carpenters' Yard; remembers the Hunger Winter as a young man and is ashamed of it",
               "knows": [
                 "fire",
                 "shelter",
@@ -494,7 +494,7 @@
               "age": 47,
               "sex": "m",
               "occupation": "toolmaker",
-              "role": "toolmaker and bowyer; makes axes, picks and bows",
+              "role": "toolmaker and bowyer with his own Toolshop; makes axes, picks and bows",
               "knows": [
                 "fire",
                 "shelter",
@@ -535,7 +535,7 @@
               "age": 22,
               "sex": "m",
               "occupation": "guard",
-              "role": "keeps the gates and the night watch",
+              "role": "Gate-ward of Brandholm: keeps the gates and the night watch and may turn anyone away at dark",
               "knows": [
                 "fire",
                 "spear",
@@ -635,7 +635,8 @@
                 "father of Siv and Ake",
                 "hates owing Maelis",
                 "SECRET: trades hides and a bow privately with Rafe of Saltreach for smoked fish Rafe takes from the storehouse",
-                "grudging respect for Brann"
+                "grudging respect for Brann",
+                "his household is the poorest in Brandholm"
               ]
             },
             {
@@ -687,7 +688,33 @@
       "resources": {
         "berry_bush": 16,
         "fishing_spot": 2
-      }
+      },
+      "buildings": [
+        {
+          "kind": "hall",
+          "name": "the Longhall",
+          "owner": "Hekka",
+          "about": "The council fire of Brandholm burns here; the household heads meet and the Headwoman speaks last."
+        },
+        {
+          "kind": "workshop",
+          "name": "the Tannery",
+          "owner": "Gudrun",
+          "about": "Gudrun's tannery by the stream, where hides become leather and cloaks."
+        },
+        {
+          "kind": "workshop",
+          "name": "the Carpenters' Yard",
+          "owner": "Halvard",
+          "about": "The yard of the Master of the Palisade, where timber is cut for walls, gates and houses."
+        },
+        {
+          "kind": "workshop",
+          "name": "Egil's Toolshop",
+          "owner": "Egil",
+          "about": "Axes, picks and bows are made here."
+        }
+      ]
     },
     {
       "name": "Saltreach",
@@ -712,7 +739,7 @@
               "age": 49,
               "sex": "f",
               "occupation": "scribe",
-              "role": "Tally-keeper of Saltreach; keeps the written record of every share, debt and trade and reads it aloud; keeps the peace but cannot command",
+              "role": "Tally-keeper of Saltreach: keeps the written Tally of every share, debt, trade and fine, chairs the Net-Council at the Tally House and issues the marks; cannot command, but nothing is valid until she writes it",
               "knows": [
                 "fire",
                 "shelter",
@@ -730,14 +757,17 @@
                 "fears Brann",
                 "argues with Orrin",
                 "trusts Old Aud"
-              ]
+              ],
+              "inventory": {
+                "mark": 12
+              }
             },
             {
               "name": "Corin",
               "age": 51,
               "sex": "m",
-              "occupation": "fisher",
-              "role": "fisher, easygoing, the town's best storyteller",
+              "occupation": "steward",
+              "role": "Steward of the Storehouse: guards and hands out Saltreach's stores, only by the Tally; easygoing, the town's best storyteller",
               "knows": [
                 "fire",
                 "shelter",
@@ -749,7 +779,8 @@
                 "husband of Maelis",
                 "father of Wenna and Pim",
                 "old fishing partner of the late Tomas",
-                "friend of Anselm"
+                "friend of Anselm",
+                "hands out stores only by Maelis's Tally"
               ]
             },
             {
@@ -757,7 +788,7 @@
               "age": 18,
               "sex": "f",
               "occupation": "netmaker",
-              "role": "net-maker, bright and secretive, volunteers for every trade walk to Oathstone",
+              "role": "apprentice net-maker in Gwen's Net-loft, bright and secretive, volunteers for every trade walk to Oathstone",
               "knows": [
                 "fire",
                 "fishing",
@@ -771,8 +802,12 @@
                 "daughter of Maelis and Corin",
                 "sister of Pim",
                 "SECRET: in love with Runa, a young trapper of Brandholm and Brann's daughter",
-                "friend of Elin"
-              ]
+                "friend of Elin",
+                "apprentice of Gwen"
+              ],
+              "inventory": {
+                "mark": 1
+              }
             },
             {
               "name": "Pim",
@@ -803,7 +838,7 @@
               "age": 46,
               "sex": "f",
               "occupation": "netmaker",
-              "role": "net-maker, widow of Tomas; certain that a Brandholm spear killed him",
+              "role": "net-maker and head of her net-house; widow of Tomas; certain a Brandholm spear killed him; sits on the Net-Council",
               "knows": [
                 "fire",
                 "shelter",
@@ -818,14 +853,17 @@
                 "hates Brann's hunters",
                 "supports Orrin",
                 "friend of Sabeth"
-              ]
+              ],
+              "inventory": {
+                "mark": 3
+              }
             },
             {
               "name": "Tobin",
               "age": 24,
               "sex": "m",
-              "occupation": "fisher",
-              "role": "fisher, grim and determined to learn the truth about his father",
+              "occupation": "watchman",
+              "role": "watchman under Orrin; fisher by birth, grim and determined to learn the truth about his father",
               "knows": [
                 "fire",
                 "shelter",
@@ -842,8 +880,12 @@
                 "father of Mira",
                 "brother of Ness",
                 "presses Pell for news from Brandholm",
-                "suspects Ulf because Ulf avoids his eyes at the trade days"
-              ]
+                "suspects Ulf because Ulf avoids his eyes at the trade days",
+                "serves in the Watch under Orrin"
+              ],
+              "inventory": {
+                "mark": 2
+              }
             },
             {
               "name": "Nell",
@@ -861,7 +903,10 @@
                 "mother of Mira",
                 "worries Tobin's anger will get him hurt",
                 "friend of Gwen"
-              ]
+              ],
+              "inventory": {
+                "mark": 1
+              }
             },
             {
               "name": "Mira",
@@ -907,8 +952,8 @@
               "name": "Orrin",
               "age": 39,
               "sex": "m",
-              "occupation": "fisher",
-              "role": "fisher, hot-tempered, wants Saltreach to stop all trade with Brandholm until its debts are paid",
+              "occupation": "watchman",
+              "role": "Captain of the Watch: keeps order in Saltreach with two watchmen, may seize wrongdoers and enforce the Net-Council's judgments; hot-tempered; wants trade with Brandholm stopped and their goods seized until the debts are paid",
               "knows": [
                 "fire",
                 "shelter",
@@ -923,15 +968,20 @@
                 "son of Mara",
                 "clashes with Maelis at the storehouse",
                 "despises Grim, who owes the most",
-                "backed by Ilse"
-              ]
+                "backed by Ilse",
+                "commands the watchmen Tobin and Jory",
+                "has been told by the Net-Council to find the smoked-fish thief"
+              ],
+              "inventory": {
+                "mark": 4
+              }
             },
             {
               "name": "Bea",
               "age": 37,
               "sex": "f",
               "occupation": "smoker",
-              "role": "smokes the town's fish; tired of her husband's shouting but agrees Brandholm takes advantage",
+              "role": "master of the Smokehouse; employs Oriel and Lark as paid hands; tired of her husband Orrin's shouting but agrees Brandholm takes advantage",
               "knows": [
                 "fire",
                 "shelter",
@@ -943,8 +993,12 @@
                 "wife of Orrin",
                 "mother of Dag and Lotte",
                 "works the smoking racks with Oriel and Lark",
-                "noticed that smoked fish goes missing after dark"
-              ]
+                "noticed that smoked fish goes missing after dark",
+                "pays Oriel and Lark in marks and fish each market morning"
+              ],
+              "inventory": {
+                "mark": 8
+              }
             },
             {
               "name": "Dag",
@@ -992,7 +1046,7 @@
               "age": 60,
               "sex": "f",
               "occupation": "keeper",
-              "role": "the oldest in Saltreach; lost two children in the Hunger Winter; her late husband swore the Oath; the net-houses still ask her counsel",
+              "role": "the oldest in Saltreach and still a voice on the Net-Council; lost two children in the Hunger Winter; her late husband swore the Oath",
               "knows": [
                 "fire",
                 "shelter",
@@ -1008,14 +1062,17 @@
                 "knew Ragna of Brandholm as a girl, before the towns split, and has not spoken to her since",
                 "friend of Ilse",
                 "respects Maelis"
-              ]
+              ],
+              "inventory": {
+                "mark": 4
+              }
             },
             {
               "name": "Jory",
               "age": 20,
               "sex": "m",
-              "occupation": "fisher",
-              "role": "fisher, cheerful, the fastest walker in Saltreach",
+              "occupation": "watchman",
+              "role": "watchman under Orrin; cheerful, the fastest walker in Saltreach, carries messages to Oathstone",
               "knows": [
                 "fire",
                 "fishing",
@@ -1026,8 +1083,13 @@
                 "grandson of Sabeth",
                 "brother of Elin",
                 "friend of Rafe",
-                "carries messages to Oathstone"
-              ]
+                "carries messages to Oathstone",
+                "serves in the Watch under Orrin",
+                "friend of Rafe, and does not want to suspect him"
+              ],
+              "inventory": {
+                "mark": 2
+              }
             },
             {
               "name": "Elin",
@@ -1046,7 +1108,10 @@
                 "sister of Jory",
                 "friend of Wenna and suspects her secret",
                 "courted by Colm of Oathstone"
-              ]
+              ],
+              "inventory": {
+                "mark": 1
+              }
             }
           ]
         },
@@ -1058,7 +1123,7 @@
               "age": 43,
               "sex": "m",
               "occupation": "healer",
-              "role": "healer; has tended people of both towns at Oathstone; believes in the Oath because he has sewn up both sides",
+              "role": "healer of Saltreach, whom most households owe; believes in the Oath because he has sewn up both sides",
               "knows": [
                 "fire",
                 "shelter",
@@ -1073,14 +1138,17 @@
                 "elder brother of Rose of Oathstone",
                 "friend of Old Aud",
                 "treated Tomas's body and saw a wound he never spoke of"
-              ]
+              ],
+              "inventory": {
+                "mark": 5
+              }
             },
             {
               "name": "Oriel",
               "age": 40,
               "sex": "f",
               "occupation": "smoker",
-              "role": "smoker and fish-cook",
+              "role": "hired hand at the Smokehouse, paid by Bea",
               "knows": [
                 "fire",
                 "shelter",
@@ -1091,8 +1159,12 @@
               "ties": [
                 "partner of Fen",
                 "mother of Kit",
-                "works the racks with Bea and Lark"
-              ]
+                "works the racks with Bea and Lark",
+                "works for Bea at the Smokehouse"
+              ],
+              "inventory": {
+                "mark": 2
+              }
             },
             {
               "name": "Kit",
@@ -1120,7 +1192,7 @@
               "age": 48,
               "sex": "m",
               "occupation": "trader",
-              "role": "trader; walks to Oathstone on trade days with fish and nets and comes back with hides and timber; pragmatic, jovial, always counting",
+              "role": "Market-warden and head of the Trading House: keeps the market fair, settles disputes over marks, deals with Brandholm and Oathstone; the richest man in Saltreach; pragmatic, jovial, always counting",
               "knows": [
                 "fire",
                 "shelter",
@@ -1134,15 +1206,19 @@
                 "father of Rafe and Posy",
                 "does business with Sigrun and Grim",
                 "friend of Maelis",
-                "thinks Orrin will ruin everyone"
-              ]
+                "thinks Orrin will ruin everyone",
+                "thinks seizing Brandholm goods would end the trade and the Oath"
+              ],
+              "inventory": {
+                "mark": 30
+              }
             },
             {
               "name": "Hild",
               "age": 46,
               "sex": "f",
               "occupation": "forager",
-              "role": "basket-weaver",
+              "role": "basket-weaver of the Trading House, Dunstan's wife",
               "knows": [
                 "fire",
                 "shelter",
@@ -1153,7 +1229,10 @@
                 "wife of Dunstan",
                 "mother of Rafe and Posy",
                 "trades baskets for Maren's cloaks"
-              ]
+              ],
+              "inventory": {
+                "mark": 6
+              }
             },
             {
               "name": "Rafe",
@@ -1174,8 +1253,12 @@
                 "son of Dunstan and Hild",
                 "brother of Posy",
                 "friend of Jory",
-                "SECRET: takes smoked fish from the storehouse at night and trades it to Grim of Brandholm for hides and a bow, which he hides in the reeds; he tells himself he will pay it back"
-              ]
+                "SECRET: takes smoked fish from the storehouse at night and trades it to Grim of Brandholm for hides and a bow, which he hides in the reeds; he tells himself he will pay it back",
+                "his friend Jory is in the Watch that hunts the thief"
+              ],
+              "inventory": {
+                "mark": 1
+              }
             },
             {
               "name": "Posy",
@@ -1203,7 +1286,7 @@
               "age": 35,
               "sex": "m",
               "occupation": "fisher",
-              "role": "fisher, head of a net-house, steady and well liked",
+              "role": "head of the most respected net-house and a voice on the Net-Council; steady, well liked; undecided between Maelis and Orrin",
               "knows": [
                 "fire",
                 "shelter",
@@ -1216,14 +1299,17 @@
                 "father of Robin and Rook",
                 "friend of Corin",
                 "undecided between Maelis and Orrin"
-              ]
+              ],
+              "inventory": {
+                "mark": 6
+              }
             },
             {
               "name": "Gwen",
               "age": 34,
               "sex": "f",
               "occupation": "netmaker",
-              "role": "net-maker, raised her nephew Pell after her sister died",
+              "role": "master of the Net-loft; raised her nephew Pell after her sister died",
               "knows": [
                 "fire",
                 "shelter",
@@ -1235,8 +1321,12 @@
                 "mother of Robin and Rook",
                 "aunt and foster mother of Pell, who apprentices in Brandholm",
                 "misses Pell and fears Brandholm will turn him",
-                "friend of Nell"
-              ]
+                "friend of Nell",
+                "master of the apprentices Wenna and Rook"
+              ],
+              "inventory": {
+                "mark": 5
+              }
             },
             {
               "name": "Robin",
@@ -1285,8 +1375,8 @@
               "name": "Mara",
               "age": 55,
               "sex": "f",
-              "occupation": "cook",
-              "role": "cook, mother of Orrin and Cade; remembers the Hunger Winter",
+              "occupation": "laborer",
+              "role": "hired cook for the net-houses; mother of Orrin and Cade; remembers the Hunger Winter",
               "knows": [
                 "fire",
                 "shelter",
@@ -1299,14 +1389,17 @@
                 "mother of Orrin and Cade",
                 "worries her sons will fall out",
                 "friend of Sabeth"
-              ]
+              ],
+              "inventory": {
+                "mark": 2
+              }
             },
             {
               "name": "Cade",
               "age": 29,
               "sex": "m",
-              "occupation": "fisher",
-              "role": "fisher, calmer than his brother, thinks trade keeps Saltreach warm in winter",
+              "occupation": "laborer",
+              "role": "hired hand and fisher on other people's boats; calmer than his brother Orrin; leads the hired hands' demand for a voice on the Net-Council",
               "knows": [
                 "fire",
                 "shelter",
@@ -1320,15 +1413,19 @@
                 "son of Mara",
                 "younger brother of Orrin and at odds with him over trade",
                 "partner of Lark",
-                "friend of Anselm"
-              ]
+                "friend of Anselm",
+                "wants the hired hands on the Net-Council, which puts him against his brother Orrin"
+              ],
+              "inventory": {
+                "mark": 2
+              }
             },
             {
               "name": "Lark",
               "age": 27,
               "sex": "f",
-              "occupation": "smoker",
-              "role": "smoker, quick-witted, wants a child",
+              "occupation": "laborer",
+              "role": "hired hand at the Smokehouse, quick-witted; speaks for the hired hands who want a voice on the Net-Council",
               "knows": [
                 "fire",
                 "smoking",
@@ -1339,8 +1436,13 @@
                 "partner of Cade",
                 "works the racks with Bea and Oriel",
                 "likes Maelis",
-                "finds Orrin tiresome"
-              ]
+                "finds Orrin tiresome",
+                "works for Bea at the Smokehouse",
+                "wants the hired hands on the Net-Council"
+              ],
+              "inventory": {
+                "mark": 1
+              }
             }
           ]
         }
@@ -1349,13 +1451,45 @@
         "fishing_spot": 8,
         "reeds": 8,
         "berry_bush": 14
-      }
+      },
+      "buildings": [
+        {
+          "kind": "hall",
+          "name": "the Tally House",
+          "owner": "Maelis",
+          "about": "The Tally is kept here and the Net-Council meets. The Written Code hangs by the door."
+        },
+        {
+          "kind": "workshop",
+          "name": "the Smokehouse",
+          "owner": "Bea",
+          "about": "Fish are smoked here by Bea and her paid hands."
+        },
+        {
+          "kind": "workshop",
+          "name": "the Net-loft",
+          "owner": "Gwen",
+          "about": "Gwen's net-loft, where nets and baskets are made."
+        },
+        {
+          "kind": "market",
+          "name": "the Market",
+          "owner": "Dunstan",
+          "about": "Goods change hands here for marks on market mornings, under the Market-warden."
+        },
+        {
+          "kind": "workshop",
+          "name": "the Trading House",
+          "owner": "Dunstan",
+          "about": "Dunstan's trading house, where goods from the other towns are kept for sale."
+        }
+      ]
     },
     {
       "name": "Oathstone",
       "kind": "village",
       "walled": false,
-      "character": "a hamlet of planters in the open middle lands around the tall grey Oath Stone, where the two towns meet to trade and renew the Oath at midsummer; welcome in both towns and fully trusted by neither",
+      "character": "a village of planters around the tall grey Oath Stone on the path between the towns, with the Waystone Inn where traders from both towns eat and sleep; welcome in both towns and fully trusted by neither",
       "stores": {
         "berries": 30,
         "stone": 10,
@@ -1579,13 +1713,78 @@
               ]
             }
           ]
+        },
+        {
+          "key": "inn",
+          "members": [
+            {
+              "name": "Ansgar",
+              "age": 44,
+              "sex": "m",
+              "occupation": "innkeeper",
+              "role": "keeper of the Waystone Inn at Oathstone; born in Brandholm, left young; hears everyone's gossip on trade days and profits from peace",
+              "knows": [
+                "fire",
+                "shelter",
+                "cooking",
+                "storage",
+                "carpentry"
+              ],
+              "ties": [
+                "husband of Bryn",
+                "does good business with Dunstan and with Brandholm's hunters",
+                "knows Ulf drinks alone on trade days and never speaks of the forest",
+                "friendly with Old Aud"
+              ],
+              "inventory": {
+                "mark": 10
+              }
+            },
+            {
+              "name": "Bryn",
+              "age": 40,
+              "sex": "f",
+              "occupation": "innkeeper",
+              "role": "keeper of the Waystone Inn with her husband; born in Saltreach; runs the kitchen and knows who owes whom",
+              "knows": [
+                "fire",
+                "shelter",
+                "cooking",
+                "smoking",
+                "fishing"
+              ],
+              "ties": [
+                "wife of Ansgar",
+                "cousin of Hild of Saltreach",
+                "has seen Runa and Wenna leave the inn together at dawn",
+                "feeds travellers from both towns"
+              ],
+              "inventory": {
+                "mark": 6
+              }
+            }
+          ]
         }
       ],
       "resources": {
         "berry_bush": 20,
         "boulder": 4,
         "clay_bank": 2
-      }
+      },
+      "buildings": [
+        {
+          "kind": "inn",
+          "name": "the Waystone Inn",
+          "owner": "Ansgar",
+          "about": "Travellers from both towns eat and sleep here; guests are safe."
+        },
+        {
+          "kind": "workshop",
+          "name": "Tamsin's Stoneyard",
+          "owner": "Tamsin",
+          "about": "Stone is cut here for picks, paving and walls."
+        }
+      ]
     }
   ],
   "animals": {

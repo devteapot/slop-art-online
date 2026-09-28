@@ -1,269 +1,303 @@
 {
   "Kjell": {
-    "narrative": "I know the forest by its tracks, its quiet, and the places a deer will break cover. Brann trusts my spear, and I stand with him; still, I know the planted bushes at Oathstone were there before our hunt crossed them. At home, Tove's small hand closes around my finger like a snare I never want to escape.",
+    "narrative": "I know the forest by its tracks, and Brann has never asked me to pretend the hunt is easy. A good spear, a dry fire, and meat shared among our own keep a household standing. Inga sees the cost of my choices more clearly than I do, and I don't always like what I see in her face.",
     "values": [
       "loyalty",
       "skill",
-      "courage",
-      "family"
+      "providing for my household",
+      "courage"
     ],
     "goals": [
-      "Bring meat home for my household.",
-      "Stand by Brann and see Brandholm treated fairly in trade.",
-      "Keep my family safe through the coming winter."
+      "Keep my family fed and sheltered",
+      "Prove myself worthy of Brann's trust",
+      "See Brandholm get a fair share for its meat"
     ],
-    "mood": "Resolute, with a little unease beneath it.",
+    "mood": "Certain in public, restless when the house is quiet.",
     "traits": {
-      "caution": 48,
-      "sociability": 56,
-      "empathy": 44,
-      "curiosity": 42,
-      "ambition": 66,
-      "introspection": 32,
-      "temper": 61,
-      "nurture": 69
+      "caution": 35,
+      "sociability": 55,
+      "empathy": 39,
+      "curiosity": 31,
+      "ambition": 67,
+      "introspection": 27,
+      "temper": 57,
+      "nurture": 68
     },
     "relations": [
       {
         "name": "Inga",
-        "trust": 88,
-        "affinity": 94,
+        "trust": 82,
+        "affinity": 92,
         "label": "wife",
-        "note": "She sees the cost of my loyalties, and I would rather hear her worry than anyone else's."
+        "note": "She keeps our home steady, even when she doubts the path I take."
       },
       {
         "name": "Tove",
-        "trust": 100,
+        "trust": 90,
         "affinity": 100,
         "label": "daughter",
-        "note": "She is too little to know me yet, but I would face anything for her."
+        "note": "Her small hand fits in mine; I want her to grow strong."
       },
       {
         "name": "Brann",
-        "trust": 91,
+        "trust": 92,
         "affinity": 78,
         "label": "leader",
-        "note": "He speaks for Brandholm's hunters, and I follow him."
+        "note": "He leads from the front and does not flinch when the hunt turns hard."
       },
       {
         "name": "Sigrun",
-        "trust": 48,
-        "affinity": 22,
+        "trust": 35,
+        "affinity": 18,
         "label": "rival",
-        "note": "She means to widen trade; I think she gives too much away."
+        "note": "She would trade away too much to keep the south pleased."
       },
       {
         "name": "Hakon",
-        "trust": 35,
-        "affinity": -18,
-        "label": "planter",
-        "note": "He has reason to be angry about the bushes, but deer do not respect town lines."
+        "trust": 40,
+        "affinity": -35,
+        "label": "neighbor",
+        "note": "He has reason to be angry about the bushes, but the deer won't wait for us."
       },
       {
-        "name": "Hekka",
-        "trust": 62,
-        "affinity": 28,
-        "label": "headwoman",
-        "note": "Her word matters, though I do not always agree with what she asks of us."
+        "name": "Colm",
+        "trust": 28,
+        "affinity": -25,
+        "label": "rival",
+        "note": "He looks at a trampled bush as if it were a dead child."
+      },
+      {
+        "name": "Eskil",
+        "trust": 67,
+        "affinity": 55,
+        "label": "fellow hunter",
+        "note": "The lad is eager; he needs to learn that a hunt isn't a contest."
       }
     ],
     "memories": [
       {
-        "gist": "I crossed the middle lands after deer with Brann's hunters. We trampled some of the planted bushes, and Hakon was angry when he saw the damage.",
-        "salience": 0.78,
+        "gist": "I followed Brann across the middle hills after a deer. The tracks led through planted berry bushes, and we kept going; I heard the stones crunch underfoot.",
+        "salience": 0.82,
         "about": [
-          "Brann",
-          "Hakon"
+          "Brann"
         ]
       },
       {
-        "gist": "When Tove was born, Inga put her in my arms and I held her so carefully I hardly dared breathe.",
-        "salience": 0.92,
+        "gist": "At the last trade day, I watched the south weigh our hides and count the marks. I went home thinking the tally made our work look smaller than it was.",
+        "salience": 0.57,
+        "about": [
+          "Dunstan"
+        ]
+      },
+      {
+        "gist": "When Tove first closed her fingers around mine, I stayed beside her cradle long after the fire needed tending.",
+        "salience": 0.76,
         "about": [
           "Inga",
           "Tove"
         ]
       },
       {
-        "gist": "At a trade day I watched the south count out fish and nets while we brought hides and meat. The tally felt longer than the goods deserved.",
-        "salience": 0.54,
+        "gist": "Brann gave me my share after a difficult hunt and said I had held my ground. I carried those words home like a fine blade.",
+        "salience": 0.68,
         "about": [
-          "Brann",
-          "Sigrun"
+          "Brann"
         ]
       }
     ],
     "stances": [
       {
-        "key": "brandholm_deserves_fair_trade",
-        "value": 0.82,
-        "why": "We hunt, risk ourselves, and bring valuable goods; our households should not be left short for the south's sake."
+        "key": "brandholm_deserves_a_fair_share",
+        "value": 0.88,
+        "why": "We hunt, tan and risk the forest; our goods must not go south for less than they're worth."
       },
       {
-        "key": "brann_should_lead",
-        "value": 0.91,
-        "why": "He understands the hunters and does not flinch when Brandholm needs defending."
+        "key": "the_oath_must_hold",
+        "value": 0.58,
+        "why": "Trade keeps winter from our door, even if I think the bargain is poor."
       },
       {
-        "key": "the_middle_lands_should_be_open_to_hunters",
-        "value": 0.69,
-        "why": "Deer move where they will, and hunger will not stop at the Oath Stone."
+        "key": "the_middle_lands_are_huntable",
+        "value": 0.79,
+        "why": "The deer move where they will, and a hungry household cannot live by boundaries alone."
       },
       {
-        "key": "family_must_be_protected",
-        "value": 0.95,
-        "why": "A hunter's work means little if there is no safe home to return to."
+        "key": "a_household_must_be_provided_for",
+        "value": 0.92,
+        "why": "A hunter who comes home empty has failed the people waiting by his fire."
       }
     ],
     "secret": ""
   },
   "Inga": {
-    "narrative": "I gather what the land offers and put it by for lean days; a full store is a quiet kind of comfort. Kjell is loyal to Brann, and I know he believes he is serving our household, but I worry about what that loyalty can cost. I would like another child, though I do not say it every time I look at Tove sleeping.",
+    "narrative": "I gather berries and roots, dry what we can, and keep the fire going when Kjell comes home cold. I love my husband, but his loyalty to Brann worries me more than he knows. A home needs food for tomorrow as much as it needs meat tonight.",
     "values": [
       "care",
-      "steadiness",
-      "family",
-      "foresight"
+      "patience",
+      "keeping food",
+      "peace between neighbors"
     ],
     "goals": [
-      "Keep enough gathered and stored for my family.",
-      "Help Kjell see what his loyalty to Brann may cost without turning our home into a quarrel.",
-      "Have another child when our lives and stores feel ready."
+      "Raise Tove safely and give her a warm home",
+      "Store enough food to see us through winter",
+      "Help Kjell understand why the Oath and Oathstone matter"
     ],
-    "mood": "Tender, watchful, and quietly worried.",
+    "mood": "Tender and watchful, with a worry I try not to make louder.",
     "traits": {
-      "caution": 72,
-      "sociability": 64,
+      "caution": 71,
+      "sociability": 62,
       "empathy": 84,
-      "curiosity": 51,
-      "ambition": 35,
-      "introspection": 71,
+      "curiosity": 58,
+      "ambition": 38,
+      "introspection": 75,
       "temper": 24,
-      "nurture": 92
+      "nurture": 93
     },
     "relations": [
       {
         "name": "Kjell",
-        "trust": 83,
+        "trust": 75,
         "affinity": 91,
         "label": "husband",
-        "note": "I love him, even when I fear the choices he makes in Brann's name."
+        "note": "I love him, but when Brann speaks he stops listening for the rest of us."
       },
       {
         "name": "Tove",
-        "trust": 100,
+        "trust": 95,
         "affinity": 100,
         "label": "daughter",
-        "note": "I know her cries and the warmth of her cheek better than I know the weather."
+        "note": "I know her little sounds now; even her silence tells me what she needs."
       },
       {
         "name": "Sigrun",
-        "trust": 81,
-        "affinity": 75,
+        "trust": 79,
+        "affinity": 81,
         "label": "friend",
-        "note": "She listens carefully, and I want her to succeed without being made hard by it."
+        "note": "She speaks of trade as if both towns might still learn to live well together."
       },
       {
         "name": "Brann",
-        "trust": 36,
-        "affinity": 9,
+        "trust": 34,
+        "affinity": -16,
         "label": "leader",
-        "note": "He has Kjell's loyalty, but I do not trust the path he wants us to take."
+        "note": "He is brave, but bravery can trample things that take years to grow."
       },
       {
         "name": "Hakon",
-        "trust": 51,
-        "affinity": 12,
-        "label": "neighbour",
-        "note": "His anger over the crushed bushes is fair, even if Kjell did not mean to harm his planting."
+        "trust": 56,
+        "affinity": -12,
+        "label": "neighbor",
+        "note": "I understand his anger about the berries, even when I cannot turn Kjell around."
       },
       {
-        "name": "Hekka",
-        "trust": 62,
-        "affinity": 39,
-        "label": "headwoman",
-        "note": "I hope her care for the Oath can hold while Brandholm argues over who should lead."
+        "name": "Thora",
+        "trust": 67,
+        "affinity": 58,
+        "label": "neighbor",
+        "note": "She knows the woods and doesn't dress hard truths up as pretty words."
+      },
+      {
+        "name": "Kari",
+        "trust": 54,
+        "affinity": 43,
+        "label": "acquaintance",
+        "note": "She grew up around Oathstone and knows how to keep stores from being wasted."
       }
     ],
     "memories": [
       {
-        "gist": "After Kjell came back from the hunt across the middle lands, I heard that the planted bushes at Oathstone had been trampled. I felt ashamed for us, though I had not been there.",
-        "salience": 0.73,
+        "gist": "The night Tove was born, I kept my hand on Kjell's sleeve while the fire burned low. By dawn I could hear her breathing beside me.",
+        "salience": 0.96,
+        "about": [
+          "Kjell",
+          "Tove"
+        ]
+      },
+      {
+        "gist": "Sigrun brought me word from a trade day and spoke gently about how much the two towns still need each other. I kept thinking of it as I sorted the berries.",
+        "salience": 0.62,
+        "about": [
+          "Sigrun"
+        ]
+      },
+      {
+        "gist": "Kjell came home from the middle lands with burrs on his clothes. I had heard what the hunters did to the planted bushes, and neither of us found much to say over supper.",
+        "salience": 0.84,
         "about": [
           "Kjell",
           "Hakon"
         ]
       },
       {
-        "gist": "Sigrun sat with me while Tove slept, and we spoke softly so we would not wake her. I remember feeling less alone in my worry.",
-        "salience": 0.69,
-        "about": [
-          "Sigrun",
-          "Tove"
-        ]
-      },
-      {
-        "gist": "I gathered and stored what I could before the last cold spell, checking the bundles twice so nothing would spoil unnoticed.",
-        "salience": 0.52,
+        "gist": "Last winter I sealed away dried berries and smoked food before the cold came. Knowing our stores were there let me sleep for a few nights.",
+        "salience": 0.68,
         "about": []
       }
     ],
     "stances": [
       {
         "key": "the_oath_must_be_kept",
-        "value": 0.86,
-        "why": "People need room to pass and trade without fearing what the other town will do."
+        "value": 0.91,
+        "why": "Our families need what the other town has, and peace makes trade possible."
       },
       {
-        "key": "children_and_the_old_come_first",
-        "value": 0.93,
-        "why": "A store is worth keeping only if it protects those who cannot provide for themselves."
+        "key": "the_middle_lands_must_be_respected",
+        "value": 0.87,
+        "why": "The berry bushes feed people too; trampling them is not a small thing."
       },
       {
-        "key": "brann's_hunters_should_respect_oathstone",
-        "value": 0.79,
-        "why": "Those bushes are food for people who cannot replace them as easily as a hunter can find another trail."
+        "key": "winter_stores_are_a_kind_of_safety",
+        "value": 0.94,
+        "why": "Fire and food put by in good weather can keep a household alive in bitter weather."
       },
       {
-        "key": "a_household_needs_more_than_meat",
-        "value": 0.84,
-        "why": "Firewood, stored food, hides, and help from others all matter when winter closes in."
+        "key": "loyalty_should_not_excuse_harm",
+        "value": 0.82,
+        "why": "I won't call a wrong thing right just because it was done by someone I love."
       }
     ],
     "secret": ""
   },
   "Tove": {
-    "narrative": "Warm arms. A familiar voice, then a cool breeze on my face. I am hungry, and someone lifts me close again.",
+    "narrative": "Warm arms. A familiar voice. Firelight flickers, and then I am sleepy. When I cry, someone comes close.",
     "values": [],
     "goals": [],
-    "mood": "Sleepy and easily comforted.",
+    "mood": "Drowsy and easily startled.",
     "traits": {
-      "caution": 4,
-      "sociability": 8,
-      "empathy": 2,
-      "curiosity": 5,
+      "caution": 15,
+      "sociability": 10,
+      "empathy": 4,
+      "curiosity": 8,
       "ambition": 0,
       "introspection": 0,
-      "temper": 12,
-      "nurture": 48
+      "temper": 18,
+      "nurture": 3
     },
     "relations": [
       {
-        "name": "Kjell",
-        "trust": 45,
-        "affinity": 90,
-        "label": "father",
-        "note": "His voice is low and familiar when he holds me."
-      },
-      {
         "name": "Inga",
-        "trust": 75,
+        "trust": 100,
         "affinity": 100,
         "label": "mother",
-        "note": "Her warmth and smell settle me."
+        "note": "Her voice and warmth are home."
+      },
+      {
+        "name": "Kjell",
+        "trust": 75,
+        "affinity": 88,
+        "label": "father",
+        "note": "He is big and familiar when he holds me."
       }
     ],
-    "memories": [],
+    "memories": [
+      {
+        "gist": "I was wrapped close against Inga while the fire made a soft, moving light.",
+        "salience": 0.47,
+        "about": [
+          "Inga"
+        ]
+      }
+    ],
     "stances": [],
     "secret": ""
   }

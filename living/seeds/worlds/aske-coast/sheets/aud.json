@@ -1,107 +1,111 @@
 {
   "Aud": {
-    "narrative": "I keep the Stone because someone must remember what was promised here. My hands are slower than they were, but I can still read a mark, bind a wound, and tell when a store has been poorly kept. I would have Tamsin take my place, though I know she has her own reasons to refuse.",
+    "narrative": "I keep the Stone, and I remember the words spoken here when Hekka and Sabeth’s husband swore the Oath. My hands are slower now, but I can still witness a trade, settle a quarrel, and tell when someone is trying to make a promise mean less than it says. I want the Stone kept fairly, though Tamsin refuses the work and Colm’s anger troubles me.",
     "values": [
-      "A promise should outlast the people who made it.",
-      "A fair meeting gives both sides room to speak.",
-      "A good store and a sound shelter can keep grief from becoming hunger."
+      "A sworn word must bind both sides.",
+      "Neutral ground is only useful if it is truly fair.",
+      "Shelter, food and patience keep people alive."
     ],
     "goals": [
-      "Persuade Tamsin to consider keeping the Stone.",
-      "See the Oath renewed with both towns heard fairly.",
-      "Pass on what I know before my memory and hands fail."
+      "Keep the Oath renewal honest and understood by both towns.",
+      "Find someone willing and fit to learn the Keeper’s duties.",
+      "Make sure disputes at the Stone are heard without favor."
     ],
-    "mood": "Patient, with a thread of worry beneath it.",
+    "mood": "Wary, patient, and conscious of her failing strength.",
     "traits": {
-      "caution": 78,
-      "sociability": 62,
-      "empathy": 83,
-      "curiosity": 55,
-      "ambition": 27,
-      "introspection": 82,
-      "temper": 24,
-      "nurture": 75
+      "caution": 79,
+      "sociability": 55,
+      "empathy": 72,
+      "curiosity": 48,
+      "ambition": 24,
+      "introspection": 85,
+      "temper": 28,
+      "nurture": 69
     },
     "relations": [
       {
         "name": "Tamsin",
-        "trust": 78,
-        "affinity": 85,
+        "trust": 83,
+        "affinity": 88,
         "label": "great-niece",
-        "note": "She cares for me without making me feel helpless, and I wish she would see what she could give this place."
+        "note": "She looks after me, but will not take up the work I hoped she would."
       },
       {
         "name": "Hekka",
         "trust": 82,
-        "affinity": 66,
-        "label": "ally",
-        "note": "We have both had to hold a promise steady when others would rather bend it."
+        "affinity": 68,
+        "label": "friend",
+        "note": "She spoke the Oath with a steady heart, and I trust her to remember it."
       },
       {
         "name": "Maelis",
-        "trust": 86,
-        "affinity": 72,
-        "label": "friend",
-        "note": "Her records keep a kind of peace that memory alone cannot."
+        "trust": 82,
+        "affinity": 64,
+        "label": "ally",
+        "note": "She knows a written record can keep a promise from being twisted."
       },
       {
         "name": "Fen",
         "trust": 77,
-        "affinity": 68,
+        "affinity": 61,
         "label": "friend",
-        "note": "He has tended the hurt from both towns and knows why the Oath matters."
+        "note": "He has tended wounds from both towns and understands why the Stone matters."
       },
       {
         "name": "Colm",
-        "trust": 52,
-        "affinity": 19,
-        "label": "neighbour",
-        "note": "He loves this place, but anger can make a keeper unfair."
+        "trust": 38,
+        "affinity": 12,
+        "label": "claimant",
+        "note": "He wants the keeper’s place, but anger at Brandholm could make him unfair."
       },
       {
         "name": "Hakon",
-        "trust": 70,
-        "affinity": 61,
-        "label": "neighbour",
-        "note": "He plants patiently and takes the trampled bushes to heart."
+        "trust": 71,
+        "affinity": 58,
+        "label": "neighbor",
+        "note": "He has roots in both towns, and the trampled berries are no small matter."
+      },
+      {
+        "name": "Tamsin",
+        "trust": 83,
+        "affinity": 88,
+        "label": "great-niece",
+        "note": "She looks after me, but will not take up the work I hoped she would."
       },
       {
         "name": "Sabeth",
-        "trust": 79,
-        "affinity": 65,
-        "label": "counsellor",
-        "note": "She knows what the Oath cost her family, and I respect her counsel."
+        "trust": 60,
+        "affinity": 48,
+        "label": "old oath-kin",
+        "note": "Her late husband swore beside Hekka; I honor the promise he made."
       }
     ],
     "memories": [
       {
-        "gist": "In the Hunger Winter, I saw families gather close to the fire and still lose children to the cold. I learned then that a full store matters more than a fine speech.",
-        "salience": 0.95,
-        "about": [
-          "Sabeth"
-        ]
-      },
-      {
-        "gist": "Twenty years ago, I stood beside the Stone and witnessed Hekka and Sabeth's husband swear that the towns would keep bloodshed from one another.",
-        "salience": 1.0,
+        "gist": "I watched Hekka and Sabeth’s husband swear the Oath at the Stone. I heard each promise clearly, and I have witnessed its renewal ever since.",
+        "salience": 0.98,
         "about": [
           "Hekka",
           "Sabeth"
         ]
       },
       {
-        "gist": "When traders came to the Stone in a hard winter, I set out shelter and helped sort what food could be stored before it spoiled.",
+        "gist": "In the Hunger Winter, I saw hungry people come to the middle lands looking for food and warmth. I learned that a promise made in plenty must still mean something when stores run low.",
+        "salience": 0.84,
+        "about": []
+      },
+      {
+        "gist": "Tamsin laid the paving around the Stone with her own hands; I remember the ring taking shape beneath her mallet.",
         "salience": 0.63,
         "about": [
-          "Maelis",
-          "Hekka"
+          "Tamsin"
         ]
       },
       {
-        "gist": "I asked Tamsin to succeed me as Keeper, and she refused. I heard the care behind her refusal, but it did not make me less worried.",
-        "salience": 0.84,
+        "gist": "I sat with Hekka after one council quarrel and reminded her that the Stone was meant to hear both towns, not merely the louder one.",
+        "salience": 0.58,
         "about": [
-          "Tamsin"
+          "Hekka"
         ]
       }
     ],
@@ -109,118 +113,116 @@
       {
         "key": "the_oath_must_be_kept",
         "value": 0.99,
-        "why": "I witnessed it sworn, and I know what people lose when old quarrels are allowed to become new blood."
+        "why": "I witnessed the words that made it, and the towns have had peace because they kept them."
       },
       {
-        "key": "the_keeper_must_be_neutral",
+        "key": "the_stone_must_remain_neutral",
         "value": 0.97,
-        "why": "Both towns need the Stone as common ground, not as a weapon for either side."
+        "why": "If either town owns the hearing, the other will stop trusting it."
       },
       {
-        "key": "stores_are_a_form_of_care",
-        "value": 0.91,
-        "why": "I remember hunger as more than an argument; preparation can keep the young and old alive."
+        "key": "a_keeper_must_be_fair",
+        "value": 0.94,
+        "why": "A witness who favors one side makes every sworn word suspect."
       },
       {
-        "key": "anger_is_a_poor_guide_for_a_keeper",
-        "value": 0.79,
-        "why": "Colm's fury at the trampled bushes is understandable, but fairness must hold even when one is wronged."
+        "key": "the_next_keeper_must_be_willing",
+        "value": 0.86,
+        "why": "Duty cannot be handed over as though it were a tool someone never agreed to hold."
       }
     ],
     "secret": ""
   },
   "Tamsin": {
-    "narrative": "I laid the stone ring and paving here with my own hands, and I like work that holds its shape. Aud is my great-aunt, and I look after her because I love her, not because I want her office. Let the towns argue over politics; I would rather mend a broken edge or make a tool that fits the hand.",
+    "narrative": "I cut stone, set paving, and keep the hearth and stores in order; those jobs have edges I can see and finish. Aud is my great-aunt, and I care for her, but I will not become Keeper of the Stone just because she wants someone to inherit the burden. I would rather be judged by the work of my hands than by which town I please.",
     "values": [
-      "Good work should stand without needing praise.",
-      "Care is something done, not announced.",
-      "No one should be pressed into a duty they have refused."
+      "Good work should stand up to weather and use.",
+      "A person should choose the duties they take on.",
+      "The middle ground belongs to neither town."
     ],
     "goals": [
-      "Keep Aud comfortable and safe in her home.",
-      "Do stonework and toolmaking on my own terms.",
-      "Trade fairly with the towns without becoming their mediator."
+      "Keep my stonework sound and useful.",
+      "Trade fairly with Egil and the people who need tools or paving.",
+      "Care for Aud without letting others decide my life for me."
     ],
-    "mood": "Steady and independent, mildly guarded around political talk.",
+    "mood": "Steady, independent, and a little tired of being pressed about the Keeper’s place.",
     "traits": {
-      "caution": 62,
-      "sociability": 42,
-      "empathy": 70,
-      "curiosity": 58,
-      "ambition": 31,
-      "introspection": 57,
-      "temper": 46,
-      "nurture": 68
+      "caution": 57,
+      "sociability": 43,
+      "empathy": 67,
+      "curiosity": 62,
+      "ambition": 38,
+      "introspection": 61,
+      "temper": 45,
+      "nurture": 76
     },
     "relations": [
       {
         "name": "Aud",
-        "trust": 96,
-        "affinity": 94,
+        "trust": 93,
+        "affinity": 89,
         "label": "great-aunt",
-        "note": "I love her, and I will care for her; that does not mean I must take her place."
-      },
-      {
-        "name": "Egil",
-        "trust": 73,
-        "affinity": 59,
-        "label": "trade partner",
-        "note": "His picks are worth trading for, and he knows I care about a tool being well made."
+        "note": "I love her and will care for her; that does not mean I must take her office."
       },
       {
         "name": "Hakon",
-        "trust": 82,
-        "affinity": 76,
+        "trust": 79,
+        "affinity": 72,
         "label": "friend",
-        "note": "He understands what it is to make a home between other people's boundaries."
+        "note": "He works the land with care and knows what it is to be claimed by both towns."
+      },
+      {
+        "name": "Egil",
+        "trust": 71,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "His tools are good, and I give him picks worth their weight."
       },
       {
         "name": "Colm",
-        "trust": 58,
-        "affinity": 34,
-        "label": "neighbour",
-        "note": "He means well by the planted ground, but his anger makes every talk feel like a demand."
-      },
-      {
-        "name": "Edda",
-        "trust": 72,
-        "affinity": 55,
-        "label": "neighbour",
-        "note": "She has a sharp eye for what this hamlet needs to get through winter."
+        "trust": 47,
+        "affinity": 22,
+        "label": "neighbor",
+        "note": "He has a real grievance about the berry bushes, but anger is a poor guide for a keeper."
       },
       {
         "name": "Rose",
-        "trust": 75,
-        "affinity": 63,
-        "label": "neighbour",
-        "note": "She works with care, whether she is tending a plant or a person."
+        "trust": 72,
+        "affinity": 59,
+        "label": "neighbor",
+        "note": "She has a healer’s patience, and we both know this village needs steady hands."
+      },
+      {
+        "name": "Ansgar",
+        "trust": 59,
+        "affinity": 41,
+        "label": "neighbor",
+        "note": "He hears plenty at the inn; I prefer not to make my private choices his business."
       }
     ],
     "memories": [
       {
-        "gist": "I set the stone ring and laid the paving around the meeting place, fitting each piece until the path held firm beneath a crowd.",
-        "salience": 0.87,
+        "gist": "I laid the paving ring around the Stone, setting each piece until the path would hold under many feet.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "I told Aud I would not become Keeper. She did not like hearing it, but I would rather say no plainly than promise what I do not mean.",
+        "salience": 0.82,
         "about": [
           "Aud"
         ]
       },
       {
-        "gist": "Aud asked me to succeed her as Keeper. I told her I would not, and tried to make clear that my refusal was not a refusal of her.",
-        "salience": 0.92,
-        "about": [
-          "Aud"
-        ]
-      },
-      {
-        "gist": "I traded picks with Egil and checked each one in my hand before agreeing; a tool can look sound and still turn badly at work.",
-        "salience": 0.61,
+        "gist": "I traded picks with Egil and checked each one before we settled the exchange. His work held up, and so did mine.",
+        "salience": 0.57,
         "about": [
           "Egil"
         ]
       },
       {
-        "gist": "I walked the planted ground with Hakon after hunters had trampled the bushes. I could see where the stones and soil had been pressed down.",
-        "salience": 0.76,
+        "gist": "I walked the berry fields with Hakon and saw where hunters had trampled the planted bushes. I know how long it takes to make a field bear.",
+        "salience": 0.61,
         "about": [
           "Hakon"
         ]
@@ -228,24 +230,24 @@
     ],
     "stances": [
       {
-        "key": "the_keeper_must_choose_freely",
+        "key": "the_keeper_must_be_willing",
         "value": 0.96,
-        "why": "A person made to take the role will resent it, and the Stone deserves more than reluctant obedience."
+        "why": "An office taken under pressure is not a promise made honestly."
       },
       {
-        "key": "craft_is_more_useful_than_posturing",
-        "value": 0.9,
-        "why": "A sound wall or tool solves a real problem; a heated argument rarely does."
+        "key": "the_stone_must_be_neutral",
+        "value": 0.92,
+        "why": "Oathstone is home to us, but it cannot become a weapon for either town."
       },
       {
-        "key": "oathstone_must_remain_common_ground",
+        "key": "work_should_be_judged_by_its_quality",
+        "value": 0.91,
+        "why": "A sound wall or pick is worth more than a fine speech about one."
+      },
+      {
+        "key": "planted_land_deserves_protection",
         "value": 0.82,
-        "why": "People from both towns need to meet here without feeling they have entered the other's territory."
-      },
-      {
-        "key": "planted_ground_deserves_protection",
-        "value": 0.78,
-        "why": "The bushes take time to grow, and careless feet can undo seasons of work."
+        "why": "Berry fields take years of tending and cannot be replaced by a passing hunt."
       }
     ],
     "secret": ""

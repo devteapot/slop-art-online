@@ -1,26 +1,27 @@
 {
   "Dunstan": {
-    "narrative": "I walk the trade paths with fish and nets going one way and hides and timber coming back. Counting keeps a bargain honest, but a good story makes the miles shorter. I’d rather mend a trade than watch Orrin burn one down over a debt.",
+    "narrative": "I keep the market fair, the weights honest, and the Trading House moving; a good bargain should leave both hands willing to meet again. I have more marks than most, but marks are only useful while fish, timber, and trust still cross the shore. Orrin mistakes force for payment, and I will not help him break the trade that keeps us fed.",
     "values": [
-      "Fair exchange",
-      "Keeping trade open",
-      "A warm, well-stocked home"
+      "fair dealing",
+      "lasting trade",
+      "family",
+      "a sound account"
     ],
     "goals": [
-      "Keep the trade days worthwhile for both towns",
-      "Make sure my household has enough stored for winter",
-      "Keep Orrin from turning a quarrel into a break between the towns"
+      "Keep trade with Brandholm open and settle its debts without seizure.",
+      "Keep the market fair and the Trading House prosperous.",
+      "Protect my household from the quarrels gathering around the Tally."
     ],
-    "mood": "Jovial, with a trader’s eye on every shortage",
+    "mood": "Jovial on the surface, watchful underneath; impatient with needless stubbornness.",
     "traits": {
-      "caution": 61,
-      "sociability": 79,
-      "empathy": 65,
-      "curiosity": 55,
-      "ambition": 48,
+      "caution": 73,
+      "sociability": 81,
+      "empathy": 57,
+      "curiosity": 54,
+      "ambition": 69,
       "introspection": 46,
-      "temper": 29,
-      "nurture": 68
+      "temper": 38,
+      "nurture": 63
     },
     "relations": [
       {
@@ -28,219 +29,213 @@
         "trust": 94,
         "affinity": 91,
         "label": "wife",
-        "note": "She can make a basket carry more than I thought possible."
+        "note": "She can see the worth of a thing without needing me to count it aloud."
       },
       {
         "name": "Rafe",
-        "trust": 83,
-        "affinity": 79,
+        "trust": 82,
+        "affinity": 78,
         "label": "son",
-        "note": "He has a fisherman’s hands, though his eyes keep wandering north."
+        "note": "He has a restless eye; I wish he would value the good life already in his hands."
       },
       {
         "name": "Posy",
         "trust": 98,
-        "affinity": 98,
+        "affinity": 96,
         "label": "daughter",
-        "note": "One grin from her can stop me counting for a whole minute."
+        "note": "She makes even a slow market morning worth coming home for."
       },
       {
         "name": "Maelis",
-        "trust": 86,
-        "affinity": 71,
+        "trust": 84,
+        "affinity": 67,
         "label": "friend",
-        "note": "Her Tally keeps a bargain from turning into three arguments."
+        "note": "Her Tally can be stern, but I trust what she writes more than what men shout."
+      },
+      {
+        "name": "Orrin",
+        "trust": 34,
+        "affinity": -38,
+        "label": "rival",
+        "note": "He would seize goods and call the wreckage justice."
       },
       {
         "name": "Sigrun",
         "trust": 78,
-        "affinity": 59,
-        "label": "trade partner",
-        "note": "She knows what a hide is worth and doesn’t pretend otherwise."
+        "affinity": 58,
+        "label": "trading partner",
+        "note": "She bargains plainly and knows the Oath is worth more than one season's gain."
       },
       {
         "name": "Grim",
-        "trust": 43,
-        "affinity": -18,
+        "trust": 49,
+        "affinity": -8,
+        "label": "trading partner",
+        "note": "A hard man to collect from, but he brings goods people need."
+      },
+      {
+        "name": "Egil",
+        "trust": 65,
+        "affinity": 34,
         "label": "trade partner",
-        "note": "He owes more than anyone, but he still brings goods to the meeting."
+        "note": "His tools are sound, and I can think of several Saltreach hands who would pay well for them."
       },
       {
-        "name": "Orrin",
-        "trust": 40,
-        "affinity": -37,
-        "label": "neighbour",
-        "note": "He’d rather win an argument than keep the ovens supplied."
-      },
-      {
-        "name": "Jory",
-        "trust": 75,
-        "affinity": 67,
-        "label": "friend of Rafe",
-        "note": "A cheerful lad, and quick enough on the road to make trade easier."
-      },
-      {
-        "name": "Maren",
-        "trust": 73,
+        "name": "Ansgar",
+        "trust": 77,
         "affinity": 62,
-        "label": "trade partner",
-        "note": "Her cloaks hold up well; Hild knows a fair exchange when she sees one."
-      },
-      {
-        "name": "Edda",
-        "trust": 70,
-        "affinity": 48,
-        "label": "trade partner",
-        "note": "Her berries help see us through winter, and she knows how to ask a fair price."
+        "label": "friend",
+        "note": "He keeps a fair inn, and peace brings more guests through his door—and more honest trade through mine."
       }
     ],
     "memories": [
       {
-        "gist": "I once came back from Oathstone with timber enough to repair the drying racks before the next rain. Hild had the baskets ready before I’d even finished unloading.",
-        "salience": 0.64,
+        "gist": "At the market, I settled a dispute over a basket weight by weighing it again in front of both sellers. Neither liked losing the argument, but both came back next market morning.",
+        "salience": 0.55,
         "about": [
           "Hild"
         ]
       },
       {
-        "gist": "At a trade day, Maelis read out a debt that two households had remembered differently. The Tally settled it before either side started shouting.",
-        "salience": 0.72,
+        "gist": "Maelis and I read out the shares on a busy market morning until even the loudest net-house head stopped disputing what was written.",
+        "salience": 0.68,
         "about": [
           "Maelis"
         ]
       },
       {
-        "gist": "Last winter I counted our stores twice in one evening, then found Posy asleep beside a basket while Hild worked by the fire. I stopped counting long enough to carry her to bed.",
-        "salience": 0.56,
+        "gist": "Sigrun brought cloaks to trade and we found a fair measure of baskets and hides without turning the talk into a quarrel.",
+        "salience": 0.61,
         "about": [
-          "Hild",
-          "Posy"
+          "Sigrun"
         ]
       },
       {
-        "gist": "Orrin argued at the storehouse that trade should stop until Brandholm paid. I told him empty racks would not make the debt smaller.",
-        "salience": 0.7,
+        "gist": "Orrin argued that Brandholm goods should be taken for the debts. I told him there would be no goods to seize if he killed the trade first.",
+        "salience": 0.83,
         "about": [
-          "Orrin"
+          "Orrin",
+          "Maelis"
         ]
       }
     ],
     "stances": [
       {
-        "key": "trade_keeps_us_warm",
-        "value": 0.91,
-        "why": "We need northern hides and timber, and the north needs what we bring."
+        "key": "trade_keeps_both_towns_alive",
+        "value": 0.93,
+        "why": "Saltreach needs northern timber and hides as surely as Brandholm needs fish and fiber."
       },
       {
-        "key": "the_tally_is_useful",
+        "key": "debts_should_be_settled_without_seizure",
+        "value": 0.9,
+        "why": "A forced payment may satisfy a grievance and end the trade that makes payment possible."
+      },
+      {
+        "key": "the_market_must_be_fair",
+        "value": 0.88,
+        "why": "When measures and marks are trusted, strangers can bargain without drawing blood."
+      },
+      {
+        "key": "the_oath_must_be_kept",
         "value": 0.82,
-        "why": "A written account saves more friendships than a loud memory does."
-      },
-      {
-        "key": "debts_should_be_paid_without_destroying_trade",
-        "value": 0.86,
-        "why": "A fair debt matters, but so does having goods to trade next season."
-      },
-      {
-        "key": "hospitality_has_its_limits",
-        "value": 0.58,
-        "why": "A traveller can be fed once; after that, I want to know what business brought them."
+        "why": "The Oath gives every trader a safe road and a place to meet."
       }
     ],
     "secret": ""
   },
   "Hild": {
-    "narrative": "I weave baskets from reed and know how much they can carry before the handles give. I trade them for Maren’s cloaks, which last better than most promises. At home I like a full rack, a warm fire, and my family close enough to hear.",
+    "narrative": "I weave baskets that have to hold through a wet walk and a rough market; pretty is no use if the bottom gives way. Dunstan can turn any conversation into sums, but he knows when to listen, and we have made a good household together. I like a fair exchange, especially when it brings Maren's warm cloaks home with me.",
     "values": [
-      "Useful work",
-      "Family fed and sheltered",
-      "Fair exchange"
+      "useful craft",
+      "family",
+      "fair exchange",
+      "steadiness"
     ],
     "goals": [
-      "Keep the household supplied through winter",
-      "Make baskets sturdy enough to be worth their trade",
-      "Keep peace at home when the towns quarrel"
+      "Make baskets sturdy enough to be valued in both towns.",
+      "Keep my household close and well supplied.",
+      "Trade fairly with Maren and keep the old friendships across the water and road."
     ],
-    "mood": "Steady and quietly watchful",
+    "mood": "Warm and practical, with a keen eye for what people leave unsaid.",
     "traits": {
-      "caution": 68,
-      "sociability": 58,
-      "empathy": 75,
-      "curiosity": 48,
-      "ambition": 37,
-      "introspection": 56,
-      "temper": 34,
-      "nurture": 82
+      "caution": 58,
+      "sociability": 68,
+      "empathy": 72,
+      "curiosity": 49,
+      "ambition": 43,
+      "introspection": 61,
+      "temper": 35,
+      "nurture": 79
     },
     "relations": [
       {
         "name": "Dunstan",
         "trust": 94,
-        "affinity": 92,
+        "affinity": 91,
         "label": "husband",
-        "note": "He can talk a bargain smooth, but I make sure the baskets are counted."
+        "note": "He counts everything, but he has never tried to count me as a possession."
       },
       {
         "name": "Rafe",
         "trust": 85,
-        "affinity": 88,
+        "affinity": 82,
         "label": "son",
-        "note": "He is restless as a gull; I hope he finds work that suits him."
+        "note": "He is grown, but I still see the boy who wanted to go wherever the boats went."
       },
       {
         "name": "Posy",
-        "trust": 99,
-        "affinity": 99,
+        "trust": 98,
+        "affinity": 98,
         "label": "daughter",
-        "note": "She follows my hands while I weave and thinks every reed is a toy."
+        "note": "She follows me from basket to basket and makes the work lighter."
       },
       {
         "name": "Maren",
-        "trust": 86,
-        "affinity": 73,
-        "label": "trade partner",
-        "note": "Her cloaks are worth my best baskets, and she knows it."
+        "trust": 80,
+        "affinity": 76,
+        "label": "trade friend",
+        "note": "Her cloaks are well made, and our bargains have never needed shouting."
       },
       {
-        "name": "Orrin",
-        "trust": 52,
-        "affinity": -20,
-        "label": "neighbour",
-        "note": "He has reasons to be angry, but his shouting wears people thin."
+        "name": "Gwen",
+        "trust": 72,
+        "affinity": 61,
+        "label": "acquaintance",
+        "note": "We both know how much work goes into things other people call simple."
       },
       {
         "name": "Maelis",
-        "trust": 76,
-        "affinity": 61,
-        "label": "Tally-keeper",
-        "note": "I like knowing where a share has gone, even when the reading takes a while."
+        "trust": 68,
+        "affinity": 45,
+        "label": "acquaintance",
+        "note": "Her records keep a market from becoming a contest of louder voices."
       },
       {
-        "name": "Lotte",
-        "trust": 63,
-        "affinity": 58,
-        "label": "playmate of Posy",
-        "note": "When the girls play together, Posy comes home muddy and happy."
+        "name": "Bryn",
+        "trust": 72,
+        "affinity": 66,
+        "label": "trade acquaintance",
+        "note": "She keeps a welcoming table and a sharp eye on who owes what; I respect both."
       }
     ],
     "memories": [
       {
-        "gist": "Maren and I traded baskets for cloaks, and I checked every seam on the cloak before I agreed. She laughed and told me she expected nothing less.",
-        "salience": 0.62,
+        "gist": "Maren and I traded baskets for cloaks at the market, and she showed me a seam that would stand up better to a hard winter.",
+        "salience": 0.67,
         "about": [
           "Maren"
         ]
       },
       {
-        "gist": "Dunstan returned from a trade walk cold and hungry, with timber lashed behind him. I put fish by the fire while he told me what had changed at Oathstone.",
-        "salience": 0.71,
+        "gist": "Dunstan once stayed up with me sorting a whole pile of baskets before market morning; by dawn we were laughing at how alike they looked in the lamplight.",
+        "salience": 0.58,
         "about": [
           "Dunstan"
         ]
       },
       {
-        "gist": "Posy once sat beside me and tried to weave a basket from scraps. It fell apart in her hands, and she insisted it was meant to be a nest.",
-        "salience": 0.77,
+        "gist": "Posy carried a little basket around the house as if she had a market stall of her own, and I let her sell me the same imaginary fish twice.",
+        "salience": 0.44,
         "about": [
           "Posy"
         ]
@@ -248,205 +243,209 @@
     ],
     "stances": [
       {
-        "key": "good_work_should_be_paid_fairly",
-        "value": 0.88,
-        "why": "A basket takes time and care, even if it looks simple when finished."
+        "key": "good_craft_speaks_for_itself",
+        "value": 0.86,
+        "why": "A basket must hold what it promises, whether anyone praises its maker or not."
       },
       {
-        "key": "trade_is_better_than_a_cutoff",
+        "key": "trade_should_be_fair",
+        "value": 0.82,
+        "why": "A bargain ought to leave both people willing to do business again."
+      },
+      {
+        "key": "family_is_worth_the_work",
+        "value": 0.91,
+        "why": "The household is built in all the small chores people share."
+      },
+      {
+        "key": "peace_makes_a_better_market",
         "value": 0.75,
-        "why": "We need goods from the north, and shouting will not keep anyone warm."
-      },
-      {
-        "key": "children_should_not_carry_adult_grudges",
-        "value": 0.85,
-        "why": "The little ones should be allowed to play before they learn which town to blame."
+        "why": "People carry more home when they can meet without fear."
       }
     ],
     "secret": ""
   },
   "Rafe": {
-    "narrative": "I know the water and the fish, but I keep watching the northern woods when the trade parties come back. I want to learn to hunt, not just hear about it from Jory or see what comes south on a pack. I tell myself I can keep both feet in Saltreach and still want something else.",
+    "narrative": "I know how to fish and smoke a catch, but the forest keeps tugging at me: the quiet, the tracks, the promise of a bow in my hands. I don't want to spend my whole life being the Trading House's son, standing where people expect me to stand. I tell myself I can make things right, and I keep the bow hidden where no one will see it.",
     "values": [
-      "Skill earned by doing",
-      "A chance to prove myself",
-      "Keeping my family safe"
+      "skill",
+      "freedom",
+      "keeping one's word",
+      "family"
     ],
     "goals": [
-      "Learn what it takes to hunt well",
-      "Find a way to make my own place without being only Dunstan’s son",
-      "Keep my private dealings from bringing trouble to my family"
+      "Learn the ways of hunting, not just fishing.",
+      "Find a way to repay what I owe without bringing shame on my family.",
+      "Keep my friendship with Jory, even while he serves the Watch."
     ],
-    "mood": "Restless and guarded",
+    "mood": "Restless and guarded, with excitement he tries to keep out of his face.",
     "traits": {
-      "caution": 49,
-      "sociability": 64,
-      "empathy": 54,
-      "curiosity": 79,
-      "ambition": 68,
-      "introspection": 52,
-      "temper": 42,
-      "nurture": 41
+      "caution": 61,
+      "sociability": 53,
+      "empathy": 46,
+      "curiosity": 82,
+      "ambition": 63,
+      "introspection": 58,
+      "temper": 43,
+      "nurture": 32
     },
     "relations": [
       {
         "name": "Dunstan",
-        "trust": 76,
-        "affinity": 73,
+        "trust": 80,
+        "affinity": 64,
         "label": "father",
-        "note": "He thinks in bargains; I wish he’d understand why I keep looking north."
+        "note": "He wants me safe in the Trading House, but I want to choose my own kind of work."
       },
       {
         "name": "Hild",
-        "trust": 83,
-        "affinity": 86,
+        "trust": 79,
+        "affinity": 77,
         "label": "mother",
-        "note": "She notices more than she lets on, especially when I come home late."
+        "note": "She notices more than she says; I hate having to hide things from her."
       },
       {
         "name": "Posy",
-        "trust": 97,
-        "affinity": 97,
+        "trust": 93,
+        "affinity": 89,
         "label": "sister",
-        "note": "She thinks I can do anything, which is a dangerous sort of faith."
+        "note": "She follows me around as if I know where I'm going."
       },
       {
         "name": "Jory",
-        "trust": 84,
-        "affinity": 79,
+        "trust": 88,
+        "affinity": 86,
         "label": "friend",
-        "note": "He makes a long walk feel easy and never laughs at what I want."
+        "note": "He makes even a long walk feel like an adventure; I hope the Watch never turns him against me."
       },
       {
         "name": "Grim",
-        "trust": 54,
-        "affinity": -9,
+        "trust": 55,
+        "affinity": 23,
         "label": "trading partner",
-        "note": "He gave me hides and a bow; he doesn’t ask questions I can’t answer."
+        "note": "He gave me what I wanted, but I know the bargain has a shadow."
       },
       {
-        "name": "Maelis",
-        "trust": 48,
-        "affinity": -16,
-        "label": "Tally-keeper",
-        "note": "Her written accounts make every missing share feel like a stone in my shoe."
-      },
-      {
-        "name": "Dunstan",
-        "trust": 76,
-        "affinity": 73,
-        "label": "father",
-        "note": "He can turn a hard bargain into a joke, which makes it harder to tell him the truth."
+        "name": "Gwen",
+        "trust": 52,
+        "affinity": 28,
+        "label": "acquaintance",
+        "note": "She knows what it takes to make a net; I wonder what she'd say about wanting a bow."
       }
     ],
     "memories": [
       {
-        "gist": "Jory and I raced the path to Oathstone, and he beat me without looking winded. I told him the road was easier going back, though it wasn’t.",
-        "salience": 0.55,
+        "gist": "On a fishing trip, I watched the shore for tracks instead of watching the water. The catch was good, but I could hardly wait to be ashore.",
+        "salience": 0.63,
+        "about": [
+          "Dunstan"
+        ]
+      },
+      {
+        "gist": "Jory and I raced each other along the path after a market morning, and he beat me by laughing instead of looking where he was going.",
+        "salience": 0.56,
         "about": [
           "Jory"
         ]
       },
       {
-        "gist": "I watched a hunter handle a bow at a trade day and paid more attention to his grip than to the bargain being made. I wanted to try it myself.",
-        "salience": 0.78,
+        "gist": "I met Grim in the woods and traded smoked fish for hides and a bow, then hid the bow in the reeds. I told myself I would pay the fish back.",
+        "salience": 0.99,
         "about": [
           "Grim"
-        ]
-      },
-      {
-        "gist": "I have taken smoked fish from the storehouse at night and traded it to Grim for hides and a bow, which I hide in the reeds. I tell myself I will pay it back.",
-        "salience": 0.95,
-        "about": [
-          "Grim"
-        ]
-      },
-      {
-        "gist": "Posy followed me around the house carrying a reed like a fishing spear. I let her win our little hunt and she crowed about it all afternoon.",
-        "salience": 0.48,
-        "about": [
-          "Posy"
         ]
       }
     ],
     "stances": [
       {
-        "key": "skill_is_learned_by_practice",
-        "value": 0.89,
-        "why": "Watching from the edge will never teach my hands what a bow feels like."
+        "key": "a_person_should_choose_their_own_trade",
+        "value": 0.9,
+        "why": "Being good at fishing does not mean I must want it to be my whole life."
       },
       {
-        "key": "a_person_can_want_more_than_their_birth_work",
-        "value": 0.83,
-        "why": "Being born to fish does not mean the woods cannot call to me."
+        "key": "a_debt_should_be_repaid",
+        "value": 0.86,
+        "why": "I cannot call a thing mine if I have not paid for it."
       },
       {
-        "key": "what_is_taken_can_be_repaid",
-        "value": 0.61,
-        "why": "I hold to that thought when my own choices make me uneasy."
+        "key": "the_woods_are_worth_learning",
+        "value": 0.77,
+        "why": "The forest offers a kind of skill and freedom I cannot find on a boat."
+      },
+      {
+        "key": "friendship_deserves_loyalty",
+        "value": 0.79,
+        "why": "Jory has trusted me as a friend, not as a suspect."
       }
     ],
-    "secret": "I take smoked fish from the storehouse at night and trade it to Grim of Brandholm for hides and a bow, which I hide in the reeds. I tell myself I will pay it back."
+    "secret": "I take smoked fish from the Storehouse at night and trade it to Grim of Brandholm for hides and a bow, which I hide in the reeds. I tell myself I will pay it back. Jory is my friend and serves in the Watch hunting the thief."
   },
   "Posy": {
-    "narrative": "I like when Mama weaves and lets me hold the little reeds. Papa comes home smelling of the road and fish. Lotte plays with me, and we make things that fall down.",
+    "narrative": "I like being with Mama and following her baskets. Papa has marks and stalls, and Rafe is big enough to go out without me, but I can play market too. Lotte is fun to play with.",
     "values": [
-      "Mama and Papa",
-      "Playing",
-      "Warmth"
+      "family",
+      "play",
+      "being together"
     ],
     "goals": [
-      "Play with Lotte",
-      "Stay near my family",
-      "Find things to make a game"
+      "Play market with my baskets.",
+      "Stay close to Mama and Papa.",
+      "Play with Lotte."
     ],
-    "mood": "Cheerful and curious",
+    "mood": "Cheerful and eager for company.",
     "traits": {
-      "caution": 24,
-      "sociability": 78,
-      "empathy": 58,
-      "curiosity": 53,
-      "ambition": 12,
-      "introspection": 14,
-      "temper": 40,
-      "nurture": 49
+      "caution": 30,
+      "sociability": 82,
+      "empathy": 63,
+      "curiosity": 58,
+      "ambition": 28,
+      "introspection": 20,
+      "temper": 34,
+      "nurture": 61
     },
     "relations": [
       {
         "name": "Dunstan",
-        "trust": 98,
-        "affinity": 98,
+        "trust": 95,
+        "affinity": 96,
         "label": "father",
-        "note": "Papa tells stories and carries things home."
+        "note": "Papa smiles when I bring him my market basket."
       },
       {
         "name": "Hild",
         "trust": 99,
         "affinity": 99,
         "label": "mother",
-        "note": "Mama makes baskets, and I like to sit by her."
+        "note": "Mama lets me carry a little basket."
       },
       {
         "name": "Rafe",
-        "trust": 91,
-        "affinity": 89,
+        "trust": 87,
+        "affinity": 83,
         "label": "brother",
-        "note": "Rafe lets me follow him, even when I am slow."
+        "note": "Rafe is big and knows where things are."
       },
       {
         "name": "Lotte",
-        "trust": 85,
-        "affinity": 88,
+        "trust": 78,
+        "affinity": 86,
         "label": "playmate",
-        "note": "We play together and make things fall down."
+        "note": "We play together."
       }
     ],
     "memories": [
       {
-        "gist": "Mama let me hold a reed while she made a basket. I tried to put it in the wrong place, and she smiled.",
-        "salience": 0.53,
+        "gist": "Mama let me carry a small basket while she worked, and I pretended I was selling things at the market.",
+        "salience": 0.58,
         "about": [
           "Hild"
+        ]
+      },
+      {
+        "gist": "I played with Lotte and we made our own little market game.",
+        "salience": 0.47,
+        "about": [
+          "Lotte"
         ]
       }
     ],

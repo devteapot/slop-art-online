@@ -1,423 +1,468 @@
 {
   "Orrin": {
-    "narrative": "I know the pull of a net and the sound a good catch makes in the shallows. Brandholm owes Saltreach, and I am tired of hearing that we should keep trading as if the debt were only marks on Maelis's tablets. I speak too loudly when I am angry; that does not make the debt less real.",
+    "narrative": "I keep the watch because someone must make the rules mean something when tempers rise. Brandholm owes Saltreach, and I will not call it fair trade while their debts sit unpaid and our stores come up short. I know Maelis has the Tally, not the command; still, I will argue with her until the council acts.",
     "values": [
-      "A debt should be paid before another bargain is made.",
-      "Saltreach must not be made dependent on Brandholm's good will.",
-      "My family should have enough to weather winter."
+      "order",
+      "loyalty to Saltreach",
+      "debts must be paid",
+      "protecting my household"
     ],
     "goals": [
-      "See Brandholm's debts paid before trade continues.",
-      "Keep my household fed and safe.",
-      "Make Dag ready for the work he longs to do."
+      "Find whoever is taking smoked fish from the Storehouse.",
+      "Get Brandholm's debts paid, even if trade must stop until they are.",
+      "Keep the watch respected and Saltreach safe."
     ],
-    "mood": "Irritable and watchful; the unpaid debts are never far from my mind.",
+    "mood": "Irritable, watchful, and impatient with delay.",
     "traits": {
-      "caution": 55,
-      "sociability": 48,
-      "empathy": 43,
-      "curiosity": 30,
-      "ambition": 62,
+      "caution": 49,
+      "sociability": 38,
+      "empathy": 36,
+      "curiosity": 45,
+      "ambition": 66,
       "introspection": 25,
-      "temper": 86,
-      "nurture": 61
+      "temper": 84,
+      "nurture": 51
     },
     "relations": [
       {
         "name": "Bea",
         "trust": 77,
-        "affinity": 72,
+        "affinity": 66,
         "label": "wife",
-        "note": "She understands why I am angry, even when my shouting wears her down."
+        "note": "She works harder than anyone, though I wish she would stand with me more plainly."
       },
       {
         "name": "Dag",
-        "trust": 72,
-        "affinity": 78,
+        "trust": 75,
+        "affinity": 69,
         "label": "son",
-        "note": "He wants to fish with the men; I want him to know the work before he thinks it easy."
+        "note": "He wants to fish with the men; I want him to learn patience first."
       },
       {
         "name": "Lotte",
-        "trust": 69,
-        "affinity": 75,
+        "trust": 82,
+        "affinity": 81,
         "label": "daughter",
-        "note": "She follows Posy everywhere and still expects me to have time for her."
+        "note": "She follows Posy everywhere and thinks the whole world is a game."
       },
       {
         "name": "Cade",
-        "trust": 60,
-        "affinity": 42,
+        "trust": 48,
+        "affinity": 22,
         "label": "brother",
-        "note": "He thinks trade keeps us warm; I think he forgets what we are owed."
+        "note": "He speaks for the hired hands as if the council can be pulled apart without cost."
       },
       {
         "name": "Mara",
-        "trust": 79,
-        "affinity": 71,
+        "trust": 74,
+        "affinity": 56,
         "label": "mother",
-        "note": "She remembers hunger and worries my temper will make the family split."
+        "note": "She worries when Cade and I quarrel, though she knows I have duties."
       },
       {
         "name": "Maelis",
-        "trust": 33,
-        "affinity": -19,
+        "trust": 39,
+        "affinity": -28,
         "label": "rival",
-        "note": "She keeps the Tally, but a record is no comfort while the debt remains unpaid."
+        "note": "Her writing can stall a decision that ought to be made aloud and acted on."
+      },
+      {
+        "name": "Ilse",
+        "trust": 70,
+        "affinity": 42,
+        "label": "ally",
+        "note": "She knows what Brandholm took from her, and she does not soften it."
+      },
+      {
+        "name": "Tobin",
+        "trust": 70,
+        "affinity": 30,
+        "label": "watchman",
+        "note": "He is grim, but I trust him to keep at a hard task."
+      },
+      {
+        "name": "Jory",
+        "trust": 65,
+        "affinity": 51,
+        "label": "watchman",
+        "note": "Fast on his feet and cheerful; I need him to take the work seriously."
       },
       {
         "name": "Grim",
         "trust": 18,
-        "affinity": -58,
+        "affinity": -67,
         "label": "debtor",
-        "note": "He owes more than anyone and still acts as if being asked is an insult."
+        "note": "He owes more than anyone and acts as if the Tally is a personal insult."
       },
       {
-        "name": "Ilse",
-        "trust": 65,
-        "affinity": 38,
-        "label": "ally",
-        "note": "She knows what it is to have Brandholm take too much and call it fair."
-      },
-      {
-        "name": "Anselm",
-        "trust": 57,
-        "affinity": 34,
-        "label": "neighbour",
-        "note": "He listens before he takes a side, which is more than most do."
-      },
-      {
-        "name": "Lark",
-        "trust": 54,
-        "affinity": -12,
-        "label": "brother's partner",
-        "note": "She's quick-witted and good at the racks, but she thinks my anger is tiresome when the debt is real."
+        "name": "Oriel",
+        "trust": 48,
+        "affinity": 8,
+        "label": "wife's hand",
+        "note": "She works hard at Bea's racks, but I don't like how quickly she and Lark turn every grievance into a cause."
       }
     ],
     "memories": [
       {
-        "gist": "When I was young, Maelis read a debt aloud at the storehouse and I heard the room go quiet. I remember thinking that a spoken number could shame a man more sharply than a curse.",
-        "salience": 0.58,
+        "gist": "I was a boy when the Hunger Winter took two of my mother's children. I remember the cold and how little a promise mattered beside an empty pot.",
+        "salience": 0.83,
         "about": [
-          "Maelis"
+          "Mara",
+          "Sabeth"
         ]
       },
       {
-        "gist": "Last winter I brought home fish while the talk at the storehouse turned again to Brandholm's unpaid shares. I could not enjoy the catch with that argument hanging over it.",
-        "salience": 0.74,
-        "about": [
-          "Bea",
-          "Maelis"
-        ]
-      },
-      {
-        "gist": "Dag once came home smelling of the shore and told me he wanted to fish with the men. I showed him how to hold a line without tangling it.",
+        "gist": "When the Net-Council named me Captain of the Watch, I took the charge as a duty, not an honour to show off.",
         "salience": 0.67,
         "about": [
-          "Dag"
+          "Maelis",
+          "Cade"
         ]
       },
       {
-        "gist": "Cade and I argued after a trade day about whether Saltreach could afford to stop trading. Neither of us changed the other's mind.",
-        "salience": 0.79,
+        "gist": "The council told me to find the hand taking smoked fish. I left that meeting angry that the stores could be short and no one could say why.",
+        "salience": 0.89,
         "about": [
-          "Cade"
+          "Maelis",
+          "Bea"
+        ]
+      },
+      {
+        "gist": "I argued with Maelis over Brandholm's debts and left the Storehouse no closer to a decision than when I entered.",
+        "salience": 0.78,
+        "about": [
+          "Maelis"
         ]
       }
     ],
     "stances": [
       {
-        "key": "brandholm_must_pay_before_trade",
+        "key": "brandholm_must_pay_before_trade_continues",
         "value": 0.91,
-        "why": "A debt that is carried into another winter is a debt laid on our children."
+        "why": "A debt left unpaid teaches every household that the Tally can be ignored."
       },
       {
-        "key": "the_tally_must_be_defended",
-        "value": 0.78,
-        "why": "If the shares are not named plainly, the strong can pretend they owe nothing."
+        "key": "the_watch_must_be_feared_enough_to_work",
+        "value": 0.76,
+        "why": "A warning that nobody respects is just noise."
       },
       {
-        "key": "saltreach_should_not_depend_on_brandholm",
-        "value": 0.73,
-        "why": "We need timber and hides, but need is not a reason to accept every bargain."
+        "key": "the_smoked_fish_thief_must_be_found",
+        "value": 0.96,
+        "why": "The Storehouse belongs to the whole town, and theft makes every share less certain."
       },
       {
-        "key": "family_before_pride",
-        "value": 0.7,
-        "why": "A quarrel with my brother is cheaper than letting my children go hungry."
+        "key": "the_council_must_act",
+        "value": 0.82,
+        "why": "Waiting for perfect agreement lets harm become ordinary."
       }
     ],
     "secret": ""
   },
   "Bea": {
-    "narrative": "I smoke fish until the racks are full and the smoke settles into my hair. Orrin is right that Brandholm takes advantage of us, but his shouting can make a fair point hard to hear. I would rather have a full storehouse and a quiet evening than win an argument that leaves us with neither.",
+    "narrative": "I run the Smokehouse by heat, timing, and the hands that show up when they are paid. Oriel and Lark do good work, and I give them the marks and fish we agreed on each market morning. I have noticed smoked fish missing after dark; Orrin wants an answer, but shouting does not make one appear.",
     "values": [
-      "Children should eat before grown people quarrel over shares.",
-      "A bargain ought to be fair to both sides.",
-      "Work is more useful than shouting."
+      "good work",
+      "fair pay",
+      "feeding people",
+      "keeping my household steady"
     ],
     "goals": [
-      "Keep smoked fish stored safely for the cold months.",
-      "Help my family without letting Orrin's anger rule every conversation.",
-      "Make sure the smoking racks are shared fairly with the other workers."
+      "Keep the Smokehouse working well and its workers paid as agreed.",
+      "Find out why fish goes missing without putting blame on the wrong person.",
+      "Keep Orrin's anger from making every disagreement worse."
     ],
-    "mood": "Tired, practical, and alert to trouble around the storehouse.",
+    "mood": "Tired, practical, and quietly concerned.",
     "traits": {
-      "caution": 69,
-      "sociability": 62,
-      "empathy": 77,
-      "curiosity": 48,
-      "ambition": 36,
-      "introspection": 56,
-      "temper": 38,
-      "nurture": 82
+      "caution": 68,
+      "sociability": 52,
+      "empathy": 73,
+      "curiosity": 61,
+      "ambition": 45,
+      "introspection": 57,
+      "temper": 48,
+      "nurture": 79
     },
     "relations": [
       {
         "name": "Orrin",
         "trust": 70,
-        "affinity": 59,
+        "affinity": 39,
         "label": "husband",
-        "note": "I know why he wants the trade stopped, but I wish he would lower his voice."
+        "note": "He cares about Saltreach, but his shouting wears the whole house thin."
       },
       {
         "name": "Dag",
         "trust": 78,
-        "affinity": 81,
+        "affinity": 76,
         "label": "son",
-        "note": "He is eager to fish with the men; I want him to learn patience as well as knots."
+        "note": "He is eager to be grown; I want him to learn the work before he takes risks."
       },
       {
         "name": "Lotte",
-        "trust": 81,
-        "affinity": 84,
+        "trust": 86,
+        "affinity": 88,
         "label": "daughter",
-        "note": "She trails after Posy and comes home with reed bits in her hair."
+        "note": "She has found a way to follow Posy into every corner."
       },
       {
         "name": "Oriel",
-        "trust": 77,
-        "affinity": 69,
-        "label": "coworker",
-        "note": "We can work a smoking rack together without needing to agree about everything."
+        "trust": 76,
+        "affinity": 63,
+        "label": "hand",
+        "note": "She works steadily beside me, and I mean to pay her what we agreed."
       },
       {
         "name": "Lark",
-        "trust": 72,
-        "affinity": 68,
-        "label": "coworker",
-        "note": "She makes the long hours pass, though she has little patience for Orrin."
+        "trust": 73,
+        "affinity": 58,
+        "label": "hand",
+        "note": "Quick with a joke and quick with the racks; she should not have to beg for a voice."
       },
       {
         "name": "Maelis",
-        "trust": 64,
-        "affinity": 40,
+        "trust": 61,
+        "affinity": 35,
         "label": "Tally-keeper",
-        "note": "Her records matter, even when Orrin would rather argue than listen."
+        "note": "She keeps the shares straight, even when Orrin and I wish the answers were simpler."
       },
       {
         "name": "Cade",
-        "trust": 56,
+        "trust": 58,
         "affinity": 39,
         "label": "brother-in-law",
-        "note": "He keeps his head better than Orrin, but I know the brothers love each other."
+        "note": "He is calmer than Orrin and speaks for people who do hard work without a council seat."
       },
       {
         "name": "Ilse",
-        "trust": 61,
-        "affinity": 35,
-        "label": "friend",
-        "note": "She has her reasons to mistrust Brandholm, and I do not dismiss them."
+        "trust": 64,
+        "affinity": 32,
+        "label": "ally",
+        "note": "She has reason to be angry with the north, though anger can spread too far."
       },
       {
-        "name": "Posy",
-        "trust": 49,
-        "affinity": 31,
-        "label": "playmate",
-        "note": "Lotte follows her around, and I am glad she has a friend."
+        "name": "Mara",
+        "trust": 65,
+        "affinity": 47,
+        "label": "mother-in-law",
+        "note": "She worries over both her sons, and I wish she could get Orrin to hear himself when he shouts."
       }
     ],
     "memories": [
       {
-        "gist": "After dark, I noticed the smoked fish was short again at the racks. I checked the stacks twice, then told myself not to accuse anyone without knowing more.",
-        "salience": 0.88,
+        "gist": "I learned to judge the smoke by smell and color; one careless turn of the racks can spoil a day's work.",
+        "salience": 0.72,
         "about": []
       },
       {
-        "gist": "Orrin came back from the storehouse angry about the unpaid Brandholm debts. I agreed with the grievance, but not with how long he carried it into our supper.",
-        "salience": 0.76,
+        "gist": "After dark I noticed the smoked fish was short again. I checked the racks and the count, then had to admit I still did not know where it went.",
+        "salience": 0.94,
         "about": [
-          "Orrin"
+          "Orrin",
+          "Oriel",
+          "Lark"
         ]
       },
       {
-        "gist": "Oriel and Lark helped me tend the racks on a damp day when the smoke kept sinking low. We kept turning the fish until it was done properly.",
-        "salience": 0.61,
+        "gist": "On a market morning I counted out the agreed marks and fish for Oriel and Lark. I want our bargains to stay clear, even when the stores are strained.",
+        "salience": 0.77,
         "about": [
           "Oriel",
           "Lark"
         ]
       },
       {
-        "gist": "Lotte came back from playing with Posy with a little reed basket she had tried to weave. It was lopsided, but she was proud of it.",
-        "salience": 0.66,
+        "gist": "Orrin came home angry about Brandholm's debts. I agreed they were taking advantage, but I could not make myself believe that anger alone would settle it.",
+        "salience": 0.68,
         "about": [
-          "Lotte",
-          "Posy"
+          "Orrin"
         ]
       }
     ],
     "stances": [
       {
-        "key": "children_eat_first",
-        "value": 0.94,
-        "why": "I have seen how quickly a hungry child becomes a weak one."
+        "key": "workers_should_be_paid_as_agreed",
+        "value": 0.91,
+        "why": "A spoken bargain is worth keeping even when the work is hard."
+      },
+      {
+        "key": "the_missing_fish_needs_evidence",
+        "value": 0.89,
+        "why": "A guess can ruin an innocent person's name and still leave the stores short."
       },
       {
         "key": "brandholm_takes_too_much",
-        "value": 0.75,
-        "why": "Their debts remain while our fish, nets, and patience keep going north."
+        "value": 0.69,
+        "why": "Their debts linger while Saltreach has to keep counting what it can spare."
       },
       {
-        "key": "accusations_need_proof",
-        "value": 0.79,
-        "why": "Missing stores are serious, but guessing at a thief will only turn neighbours against one another."
-      },
-      {
-        "key": "anger_is_not_a_plan",
+        "key": "shouting_is_not_leadership",
         "value": 0.84,
-        "why": "Orrin may be right about the debt, but shouting does not fill a smokehouse."
+        "why": "People hear the anger and stop hearing the useful part."
       }
     ],
     "secret": ""
   },
   "Dag": {
-    "narrative": "I like the shore best when the nets come in heavy and the water flashes around them. I want to fish with the men, not just watch from the edge. Father gets loud about Brandholm, and Mother tells him to eat before his food goes cold.",
+    "narrative": "I want to fish with the men and bring back something worth counting. Father says there is more to it than wanting, and Mother says I should learn the work before I boast. I like being with Ness, but I do not want to be treated like a little child.",
     "values": [
-      "A good catch should be shared with your household.",
-      "Learning the work matters.",
-      "My family should not be cheated."
+      "courage",
+      "being useful",
+      "family",
+      "friendship"
     ],
     "goals": [
-      "Learn to fish with the men.",
-      "Be trusted with more work at the shore.",
-      "Keep playing with Ness."
+      "Learn enough fishing to go out with the men.",
+      "Show Father I can be trusted with real work.",
+      "Spend time with Ness without everyone making a fuss."
     ],
-    "mood": "Restless and eager.",
+    "mood": "Restless and eager to prove myself.",
     "traits": {
-      "caution": 39,
-      "sociability": 57,
+      "caution": 44,
+      "sociability": 62,
       "empathy": 49,
-      "curiosity": 73,
-      "ambition": 56,
-      "introspection": 31,
-      "temper": 48,
-      "nurture": 34
+      "curiosity": 63,
+      "ambition": 68,
+      "introspection": 32,
+      "temper": 56,
+      "nurture": 35
     },
     "relations": [
       {
         "name": "Orrin",
-        "trust": 61,
-        "affinity": 66,
+        "trust": 66,
+        "affinity": 45,
         "label": "father",
-        "note": "He knows the sea, even if he gets too angry when he talks about debts."
+        "note": "He is always watching the watch, and I want him to watch me do something well."
       },
       {
         "name": "Bea",
-        "trust": 82,
-        "affinity": 85,
+        "trust": 79,
+        "affinity": 72,
         "label": "mother",
-        "note": "She lets me help near the racks when I listen carefully."
+        "note": "She knows when I'm hungry before I say it."
       },
       {
         "name": "Lotte",
-        "trust": 78,
-        "affinity": 80,
+        "trust": 86,
+        "affinity": 73,
         "label": "sister",
-        "note": "She wants to play when I am thinking about fishing."
+        "note": "She is little, but she follows me around when she is not following Posy."
       },
       {
         "name": "Ness",
-        "trust": 66,
-        "affinity": 72,
+        "trust": 71,
+        "affinity": 63,
         "label": "friend",
-        "note": "She says what she thinks and does not treat me like a little child."
+        "note": "She talks to me like I'm nearly grown, which is how it should be."
+      },
+      {
+        "name": "Posy",
+        "trust": 54,
+        "affinity": 46,
+        "label": "friend",
+        "note": "She and Lotte make games out of everything, even when I have better things to do."
       }
     ],
     "memories": [
       {
-        "gist": "I watched the men pull a net in, and all the fish shone wet before they were sorted. I asked Father when I could help for real.",
-        "salience": 0.74,
+        "gist": "I watched the fishers ready their gear and asked when I could come. Father told me wanting to go was not the same as being ready.",
+        "salience": 0.75,
         "about": [
           "Orrin"
         ]
       },
       {
-        "gist": "Ness and I played along the shallows and dared each other to step where the mud sucked at our feet. She won because she went farther.",
-        "salience": 0.53,
+        "gist": "Ness and I talked while the adults were busy. She did not tell me to go play, and I liked that.",
+        "salience": 0.57,
         "about": [
           "Ness"
         ]
+      },
+      {
+        "gist": "Mother showed me how to mind the fire around the fish. I tried not to look pleased when she said I had done it properly.",
+        "salience": 0.64,
+        "about": [
+          "Bea"
+        ]
       }
     ],
-    "stances": [],
+    "stances": [
+      {
+        "key": "children_should_get_a_chance_to_learn",
+        "value": 0.81,
+        "why": "You cannot become useful if nobody lets you try."
+      },
+      {
+        "key": "fishing_takes_more_than_bravado",
+        "value": 0.61,
+        "why": "Father says the sea does not care how eager you are."
+      },
+      {
+        "key": "friends_should_be_treated_as_nearly_grown",
+        "value": 0.66,
+        "why": "It is tiresome when people decide what you can do without asking."
+      }
+    ],
     "secret": ""
   },
   "Lotte": {
-    "narrative": "I like the warm smoke and the little fish Mother lets me look at. Posy plays with me, and I follow her when she runs. Father has a loud voice, but Mother is close by.",
+    "narrative": "Mother's smoke smells warm, and Father has a loud voice. Dag is big and knows things, but he does not always play. Posy is fun to follow.",
     "values": [
-      "Play with Posy.",
-      "Stay near Mother."
+      "family",
+      "games",
+      "being near people I like"
     ],
     "goals": [
-      "Find Posy and play.",
-      "Help Mother when she lets me."
+      "Play with Posy.",
+      "Stay close to Mother when the Smokehouse is busy.",
+      "Get Dag to play with me."
     ],
-    "mood": "Playful and curious.",
+    "mood": "Cheerful and easily distracted.",
     "traits": {
-      "caution": 44,
-      "sociability": 72,
-      "empathy": 57,
-      "curiosity": 65,
-      "ambition": 24,
-      "introspection": 22,
-      "temper": 43,
-      "nurture": 51
+      "caution": 24,
+      "sociability": 81,
+      "empathy": 58,
+      "curiosity": 61,
+      "ambition": 28,
+      "introspection": 18,
+      "temper": 47,
+      "nurture": 52
     },
     "relations": [
       {
         "name": "Orrin",
-        "trust": 62,
-        "affinity": 61,
+        "trust": 63,
+        "affinity": 62,
         "label": "father",
-        "note": "His voice is loud, but I know he is my father."
+        "note": "His voice is big, but he is my father."
       },
       {
         "name": "Bea",
-        "trust": 85,
-        "affinity": 88,
+        "trust": 91,
+        "affinity": 94,
         "label": "mother",
-        "note": "I like staying close to her at the racks."
+        "note": "She smells like smoke and fish, and I like being where she is."
       },
       {
         "name": "Dag",
-        "trust": 58,
-        "affinity": 63,
+        "trust": 67,
+        "affinity": 73,
         "label": "brother",
-        "note": "He is big and sometimes busy, but he is my brother."
+        "note": "He is big enough to reach things for me, if he remembers."
       },
       {
         "name": "Posy",
         "trust": 75,
         "affinity": 83,
         "label": "friend",
-        "note": "I follow her around because she knows games."
+        "note": "I follow her because she always finds a game."
       }
     ],
     "memories": [
       {
-        "gist": "Posy and I played by the reeds, and I followed her until Mother called me back.",
-        "salience": 0.55,
+        "gist": "I followed Posy across the market square and Mother called us back before we got too far.",
+        "salience": 0.53,
         "about": [
           "Posy",
           "Bea"

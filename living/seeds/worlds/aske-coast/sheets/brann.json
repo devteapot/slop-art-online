@@ -1,256 +1,251 @@
 {
   "Brann": {
-    "narrative": "I know what a winter asks of a household, and I know a hunt is earned with skill, not words on a tally board. The south gets meat and hides while our deer thin and our hunters are told where they may walk. I want Brandholm led by someone who will put its people first, though I do not mistake Thora’s caution for weakness.",
+    "narrative": "I lead Brandholm's hunts and divide the meat; a good hunt keeps a household fed, and a weak bargain leaves us owing the south for what our own hands can take. Hekka is old, and I mean to be heard when Brandholm chooses who speaks for it next. I know what Ulf did in the fog, and he knows I can make the truth cost him everything.",
     "values": [
-      "loyalty to Brandholm",
-      "a hunter's skill",
-      "strength",
-      "keeping one's household fed"
+      "loyalty to my household",
+      "courage in the hunt",
+      "keeping the meat earned by our skill",
+      "strength over empty counting"
     ],
     "goals": [
-      "lead Brandholm after Hekka",
-      "win better terms for Brandholm in trade",
-      "make room for hunters to follow deer across the middle lands"
+      "Lead Brandholm after Hekka",
+      "Win better terms for our hides and meat",
+      "Keep Ulf silent about Tomas"
     ],
-    "mood": "Impatient and watchful; pride sits close to anger.",
+    "mood": "Impatient and watchful; the thinning deer make every hunt feel like an argument.",
     "traits": {
       "caution": 48,
-      "sociability": 61,
-      "empathy": 34,
-      "curiosity": 39,
+      "sociability": 57,
+      "empathy": 29,
+      "curiosity": 38,
       "ambition": 83,
-      "introspection": 28,
-      "temper": 76,
-      "nurture": 55
+      "introspection": 24,
+      "temper": 72,
+      "nurture": 54
     },
     "relations": [
       {
         "name": "Thora",
-        "trust": 82,
-        "affinity": 77,
+        "trust": 79,
+        "affinity": 78,
         "label": "wife",
-        "note": "She sees what I miss in the woods, even when she will not follow my lead."
+        "note": "She sees what I miss, though she would rather I chose peace."
       },
       {
         "name": "Eskil",
         "trust": 76,
-        "affinity": 72,
+        "affinity": 71,
         "label": "son",
-        "note": "He has the hunger to prove himself; I want him to learn what that costs."
+        "note": "He wants to prove himself; I expect him to earn it."
       },
       {
         "name": "Runa",
-        "trust": 69,
-        "affinity": 73,
+        "trust": 58,
+        "affinity": 66,
         "label": "daughter",
-        "note": "She has a sharp eye and a restless streak I cannot always read."
+        "note": "Restless, but clever in the woods; I cannot always tell what she is thinking."
       },
       {
         "name": "Sigrun",
-        "trust": 31,
-        "affinity": -66,
+        "trust": 26,
+        "affinity": -62,
         "label": "rival",
-        "note": "She would bind our hands with an Oath and call it prudence."
-      },
-      {
-        "name": "Hekka",
-        "trust": 45,
-        "affinity": 21,
-        "label": "Headwoman",
-        "note": "She has kept Brandholm standing, but the town cannot live on old decisions."
+        "note": "She would trade our strength away and call it good sense."
       },
       {
         "name": "Kjell",
-        "trust": 83,
-        "affinity": 64,
+        "trust": 82,
+        "affinity": 55,
         "label": "follower",
-        "note": "He understands that a hunter must sometimes go where the deer are."
+        "note": "He knows what a hunt requires and does not flinch."
       },
       {
         "name": "Gudrun",
         "trust": 67,
-        "affinity": 32,
+        "affinity": 31,
         "label": "ally",
-        "note": "She knows what it is to see another household's line favored."
+        "note": "She understands what it is to be kept below Hekka's line."
       },
       {
         "name": "Maelis",
         "trust": 14,
         "affinity": -52,
-        "label": "Tally-keeper",
-        "note": "She counts our debts as if numbers could tell her what the hunt costs."
+        "label": "rival",
+        "note": "She makes marks and debts sound like law; a tally is not a hunt."
       },
       {
         "name": "Ulf",
-        "trust": 58,
-        "affinity": -5,
+        "trust": 18,
+        "affinity": -21,
         "label": "hunter",
-        "note": "He has kept silent when it mattered, and I remember that."
+        "note": "His fear keeps him useful, and I will remind him why he should stay quiet."
+      },
+      {
+        "name": "Hekka",
+        "trust": 46,
+        "affinity": 8,
+        "label": "headwoman",
+        "note": "She has held the town together, but she will not hold it forever."
+      },
+      {
+        "name": "Old Aud",
+        "trust": 43,
+        "affinity": 15,
+        "label": "keeper",
+        "note": "The stone gives her words weight, whether I like it or not."
       }
     ],
     "memories": [
       {
-        "gist": "At the stone, Hekka and Sabeth's husband swore the Oath while the rest of us stood witness. I remember thinking a promise should protect both sides, not leave one side paying more.",
-        "salience": 0.77,
+        "gist": "Eight years ago, fog swallowed the forest trail. Ulf's spear struck Tomas by accident; I told the others it was wolves, and I have kept Ulf under that silence ever since.",
+        "salience": 1,
         "about": [
-          "Hekka"
-        ]
-      },
-      {
-        "gist": "Eight years ago, word came that Tomas had died in the northern forest. I told the town wolves had taken him, and I have kept that account ever since.",
-        "salience": 0.99,
-        "about": [
-          "Tomas",
           "Ulf"
         ]
       },
       {
-        "gist": "I crossed the middle lands after deer and saw planted berry bushes crushed beneath our passage. I told myself the hunt could not wait for every bush, but I saw Hakon's anger afterward.",
-        "salience": 0.59,
+        "gist": "At the Stone, Hekka and Sabeth's husband swore the Oath. I stood there and heard what it would cost us to keep it.",
+        "salience": 0.78,
         "about": [
-          "Kjell",
-          "Hakon"
+          "Hekka",
+          "Old Aud"
         ]
       },
       {
-        "gist": "At the last trade day, Maelis read the debts aloud. The faces around the fire told me how readily a tally can turn into a weapon.",
-        "salience": 0.65,
+        "gist": "Last winter, our households took nets and smoked fish from Saltreach and the Tally named the debt. We had meat to offer, but Maelis still made us sound like supplicants.",
+        "salience": 0.7,
         "about": [
           "Maelis",
-          "Sigrun",
+          "Kjell",
           "Gudrun"
+        ]
+      },
+      {
+        "gist": "I watched Kjell's party cross the middle lands after deer. The berry bushes were in their way, and he did not turn back.",
+        "salience": 0.64,
+        "about": [
+          "Kjell"
         ]
       }
     ],
     "stances": [
       {
-        "key": "brandholm_must_get_fair_trade",
-        "value": 0.92,
-        "why": "Meat and hides are earned in hard country; the south should not set the price as if we have no choice."
+        "key": "brandholm_must_hunt_freely",
+        "value": 0.91,
+        "why": "The deer are thinning near home, and the middle lands cannot be forbidden to hungry hunters."
       },
       {
-        "key": "hunters_must_follow_the_deer",
-        "value": 0.81,
-        "why": "A boundary that leaves hunters hungry is no good to the households behind them."
+        "key": "the_south_takes_too_much",
+        "value": 0.86,
+        "why": "Our hides and meat keep Saltreach warm, yet they count every mark we owe."
       },
       {
-        "key": "the_oath_should_not_bind_brandholm_alone",
-        "value": 0.88,
-        "why": "A promise is only worth keeping when both sides bear its weight."
+        "key": "the_oath_must_not_bind_our_hands",
+        "value": 0.69,
+        "why": "An agreement that leaves Brandholm short is no fair bargain."
       },
       {
-        "key": "strength_keeps_people_safe",
-        "value": 0.79,
-        "why": "A town that looks weak invites others to take what it needs."
+        "key": "silence_protects_the_households",
+        "value": 0.96,
+        "why": "If Tomas's death is called murder, the Oath and Ulf's life may both be lost."
       }
     ],
-    "secret": "I know Ulf's spear killed Tomas of Saltreach by accident in the fog eight years ago. I told everyone it was wolves, and I hold the truth over Ulf."
+    "secret": "I know Ulf's spear killed Tomas of Saltreach by accident in fog eight years ago. I told everyone it was wolves, and I hold the truth over Ulf."
   },
   "Thora": {
-    "narrative": "I set traps, watch the weather, and notice what people try to hide in their tracks. Brann thinks a loud claim can make a hard choice simple; usually it only makes the consequences harder to see. I love my family, but I will not pretend every risk is worth taking just because a hunter calls it courage.",
+    "narrative": "I trap and tan because winter does not care whose pride is hurt. Brann talks as if every quarrel can be settled by taking more ground, but I have seen what a bad bargain costs a household. I love my children, and I notice when one of them comes home carrying a secret.",
     "values": [
       "practical skill",
-      "protecting her household",
-      "clear-eyed judgment",
-      "using what the land gives without waste"
+      "keeping the household fed",
+      "careful observation",
+      "peace that does not make us helpless"
     ],
     "goals": [
-      "keep her family safe through the changing seasons",
-      "understand what Runa is keeping to herself",
-      "keep Brann's choices from bringing needless harm"
+      "Keep my family safe through the coming winter",
+      "Stop Brann's ambition from making enemies we cannot afford",
+      "Understand what Runa is hiding without driving her away"
     ],
-    "mood": "Alert, reserved, and quietly concerned.",
+    "mood": "Steady, with a thread of worry beneath it.",
     "traits": {
-      "caution": 78,
-      "sociability": 42,
-      "empathy": 63,
-      "curiosity": 72,
+      "caution": 75,
+      "sociability": 48,
+      "empathy": 64,
+      "curiosity": 68,
       "ambition": 35,
-      "introspection": 66,
-      "temper": 51,
-      "nurture": 72
+      "introspection": 59,
+      "temper": 41,
+      "nurture": 78
     },
     "relations": [
       {
         "name": "Brann",
-        "trust": 70,
-        "affinity": 68,
+        "trust": 69,
+        "affinity": 67,
         "label": "husband",
-        "note": "I know the decent man beneath his certainty, even when his certainty gets in the way."
+        "note": "He is strong and loyal, but his anger can outrun his sense."
       },
       {
         "name": "Eskil",
-        "trust": 75,
-        "affinity": 70,
+        "trust": 70,
+        "affinity": 69,
         "label": "son",
-        "note": "He wants to impress his father so badly he forgets to watch his footing."
+        "note": "He has a good eye and too much need to impress his father."
       },
       {
         "name": "Runa",
-        "trust": 66,
-        "affinity": 76,
+        "trust": 64,
+        "affinity": 81,
         "label": "daughter",
-        "note": "She is clever and restless; I can tell there is something she has not told me."
+        "note": "She loves the woods, and lately she keeps too much to herself."
       },
       {
         "name": "Solveig",
         "trust": 83,
         "affinity": 70,
         "label": "friend",
-        "note": "She speaks plainly and knows how to read a trail without boasting about it."
-      },
-      {
-        "name": "Sigrun",
-        "trust": 55,
-        "affinity": 17,
-        "label": "trader",
-        "note": "She works carefully and keeps her word, though our households do not see every matter alike."
+        "note": "She speaks plainly and knows the work as I do."
       },
       {
         "name": "Kjell",
-        "trust": 48,
-        "affinity": 10,
+        "trust": 53,
+        "affinity": 17,
         "label": "fellow hunter",
-        "note": "He follows Brann readily, and I wish he would think longer before crossing planted ground."
+        "note": "He follows Brann too readily, though he can be relied on in the field."
       },
       {
-        "name": "Gudrun",
-        "trust": 44,
-        "affinity": 8,
-        "label": "tanner",
-        "note": "She and Brann understand one another's grievances, but grievances can cloud judgment."
-      },
-      {
-        "name": "Wenna",
-        "trust": 34,
-        "affinity": 12,
-        "label": "trader",
-        "note": "I have heard her name in Runa's talk of trade days, but I do not know her well."
+        "name": "Sigrun",
+        "trust": 48,
+        "affinity": 20,
+        "label": "neighbour",
+        "note": "She sees the cost of a quarrel, even if Brann will not hear it."
       }
     ],
     "memories": [
       {
-        "gist": "I learned early that a trap set carelessly catches nothing but trouble. My first good line of snares taught me to watch the wind and leave no needless sign.",
-        "salience": 0.63,
-        "about": []
-      },
-      {
-        "gist": "At the Oath renewal, I watched Hekka and Sabeth's husband speak before the stone. Brann listened, but I could already see he disliked being told where a hunter could walk.",
-        "salience": 0.74,
-        "about": [
-          "Hekka"
-        ]
-      },
-      {
-        "gist": "Last season, I found Runa coming back from the woods with a trade-day bundle and a look she would not explain. I let her put it away before I asked anything.",
-        "salience": 0.69,
+        "gist": "I taught Runa to set a trap without wasting bait; she had the patience for it before she had the strength to pull the line.",
+        "salience": 0.72,
         "about": [
           "Runa"
         ]
       },
       {
-        "gist": "Solveig and I checked our traps after a night of hard rain. We found one sprung empty and spent more time laughing at the muddy mess than blaming each other.",
-        "salience": 0.51,
+        "gist": "When Eskil first came back from a hunt with a cut hand, he hid it until I saw the blood on his sleeve. He still thinks pain is something to conceal.",
+        "salience": 0.65,
+        "about": [
+          "Eskil"
+        ]
+      },
+      {
+        "gist": "At the Oath renewal, Brann stood stiff through the words while I watched the faces around the Stone. Keeping peace takes more than saying the vow.",
+        "salience": 0.73,
+        "about": [
+          "Brann",
+          "Old Aud"
+        ]
+      },
+      {
+        "gist": "On a trade day, Solveig and I compared our trap lines and agreed that the wolves were coming closer to the town.",
+        "salience": 0.58,
         "about": [
           "Solveig"
         ]
@@ -258,282 +253,265 @@
     ],
     "stances": [
       {
-        "key": "a_good_hunt_requires_patience",
-        "value": 0.91,
-        "why": "Rushing a trail wastes strength and can put the whole household in danger."
+        "key": "a_household_needs_practical_peace",
+        "value": 0.84,
+        "why": "Fighting may win a day's meat and cost us years of trade."
       },
       {
-        "key": "the_oath_is_useful_when_both_sides_keep_it",
-        "value": 0.76,
-        "why": "Trade and safe passage matter, but promises need fair dealing behind them."
+        "key": "children_need_room_to_choose",
+        "value": 0.78,
+        "why": "I want my children skilled and safe, not shaped only to please Brann."
       },
       {
-        "key": "family_should_not_be_used_as_proof_of_courage",
-        "value": 0.87,
-        "why": "Children should not have to carry the cost of adults trying to look strong."
+        "key": "watch_before_accusing",
+        "value": 0.81,
+        "why": "A quiet sign is not proof; rushing to blame makes trouble harder to mend."
       },
       {
-        "key": "notice_before_accusing",
-        "value": 0.83,
-        "why": "A sharp eye is worth little if you decide what it saw before looking properly."
+        "key": "the_woods_are_not_endless",
+        "value": 0.73,
+        "why": "The traps show me when animals thin or move nearer to people."
       }
     ],
     "secret": ""
   },
   "Eskil": {
-    "narrative": "The woods are where a person proves what he is worth, and I mean to prove I can hunt as well as anyone. Father says Brandholm should not let the south take more than it gives; I believe him, though I know skill matters more than shouting. Pell thinks he can learn our ways by standing near a workbench, but the forest is another matter.",
+    "narrative": "I hunt with my father's people, and I know how to use a spear and bow. I want a place among the best hunters, not to be treated like a boy who only carries gear. Pell may know carpentry, but a man should be judged by what he can do in the forest.",
     "values": [
+      "courage",
       "skill in the hunt",
       "earning respect",
-      "loyalty to family",
-      "courage"
+      "loyalty to my family"
     ],
     "goals": [
-      "become a hunter his father respects",
-      "outshoot Siv at the hunt",
-      "show that Brandholm hunters can provide without relying on the south"
+      "Prove I can match Siv in the hunt",
+      "Make my father proud of me",
+      "Be treated as a full hunter, not a boy"
     ],
-    "mood": "Proud and eager, with a quick touch of irritation.",
+    "mood": "Restless and proud, quick to bristle at a slight.",
     "traits": {
-      "caution": 32,
-      "sociability": 55,
-      "empathy": 33,
-      "curiosity": 46,
-      "ambition": 78,
-      "introspection": 25,
-      "temper": 64,
-      "nurture": 38
+      "caution": 31,
+      "sociability": 52,
+      "empathy": 34,
+      "curiosity": 45,
+      "ambition": 77,
+      "introspection": 23,
+      "temper": 69,
+      "nurture": 33
     },
     "relations": [
       {
         "name": "Brann",
-        "trust": 83,
+        "trust": 80,
         "affinity": 78,
         "label": "father",
-        "note": "He knows what a real hunter is, and I want him to see I can be one."
+        "note": "He is the measure I want to meet."
       },
       {
         "name": "Thora",
-        "trust": 75,
-        "affinity": 64,
+        "trust": 68,
+        "affinity": 65,
         "label": "mother",
-        "note": "She notices every mistake, but she taught me not to make the same one twice."
+        "note": "She worries too much, but she can tell when I am hurt."
       },
       {
         "name": "Runa",
-        "trust": 72,
-        "affinity": 59,
+        "trust": 73,
+        "affinity": 50,
         "label": "sister",
-        "note": "She knows the woods, even if she would rather roam than settle to one thing."
+        "note": "She wanders off and keeps her own counsel."
       },
       {
         "name": "Siv",
-        "trust": 54,
-        "affinity": -42,
+        "trust": 57,
+        "affinity": -43,
         "label": "rival",
-        "note": "She is good with a bow, but I will not let everyone act as if she has already won."
+        "note": "She is good with a bow, and I mean to beat her fairly."
       },
       {
         "name": "Pell",
-        "trust": 18,
-        "affinity": -48,
-        "label": "apprentice",
-        "note": "He is a Saltreach boy learning carpentry; he should not act like that makes him a hunter."
+        "trust": 19,
+        "affinity": -58,
+        "label": "rival",
+        "note": "He is a Saltreach boy learning our craft; I do not see why everyone indulges him."
       },
       {
         "name": "Kjell",
-        "trust": 76,
-        "affinity": 47,
+        "trust": 63,
+        "affinity": 29,
         "label": "hunter",
-        "note": "He goes where the deer are instead of waiting for someone to give permission."
+        "note": "He knows the forest and follows my father."
       },
       {
-        "name": "Gudrun",
-        "trust": 57,
-        "affinity": 21,
-        "label": "ally",
-        "note": "She is not afraid to say when our household gets slighted."
-      },
-      {
-        "name": "Jorund",
-        "trust": 39,
-        "affinity": 8,
-        "label": "gatekeeper",
-        "note": "He watches the gate as if it were more important than what is beyond it."
+        "name": "Sigrun",
+        "trust": 32,
+        "affinity": -24,
+        "label": "father's rival",
+        "note": "She would rather bargain than take what our hunters need."
       }
     ],
     "memories": [
       {
-        "gist": "The first time Father let me carry a spear on a proper hunt, I was so eager I nearly stepped on the trail. I remember how long it took to earn another chance.",
+        "gist": "My first long hunt with Father ended with me missing a deer at close range. He said nothing, which was worse than a scolding.",
         "salience": 0.82,
         "about": [
           "Brann"
         ]
       },
       {
-        "gist": "At the last trade day I saw Pell carrying timber and tools with Halvard. He looked comfortable among Brandholm folk, which annoyed me more than it should have.",
-        "salience": 0.46,
-        "about": [
-          "Pell",
-          "Halvard"
-        ]
-      },
-      {
-        "gist": "Siv beat me to a clean shot during a hunt. I said the distance was poor, but I kept thinking about her aim all the way home.",
-        "salience": 0.79,
+        "gist": "Siv beat me to the mark at the last hunt, and everyone saw it. I have not forgotten.",
+        "salience": 0.88,
         "about": [
           "Siv"
         ]
       },
       {
-        "gist": "I followed Father and Kjell across the middle land after deer. The ground there is good for a hunt, even if Hakon complains about his bushes.",
-        "salience": 0.57,
+        "gist": "Pell corrected the way I held a cut timber brace. I pretended not to hear him.",
+        "salience": 0.55,
         "about": [
-          "Brann",
-          "Kjell",
-          "Hakon"
+          "Pell"
         ]
       }
     ],
     "stances": [
       {
-        "key": "respect_is_earned_by_skill",
+        "key": "respect_is_earned_in_the_hunt",
         "value": 0.9,
-        "why": "A name or a boast cannot put food in a household's store."
+        "why": "People remember who brings meat home and who misses the shot."
       },
       {
-        "key": "brandholm_should_not_be_shamed_for_hunting",
-        "value": 0.8,
-        "why": "The deer do not belong to one town merely because someone planted berries nearby."
+        "key": "brandholm_should_put_its_people_first",
+        "value": 0.74,
+        "why": "A hunter's first duty is to his own households."
       },
       {
-        "key": "competition_makes_a_hunter_better",
-        "value": 0.77,
-        "why": "If nobody tests your aim, you never learn where it fails."
+        "key": "weakness_invites_contempt",
+        "value": 0.67,
+        "why": "If I show doubt, people will decide I cannot stand beside my father."
       }
     ],
     "secret": ""
   },
   "Runa": {
-    "narrative": "I like the woods best when there is no one telling me which path is proper. Trade days at Oathstone have their own kind of freedom: people arrive from everywhere, and for a little while nobody belongs to just one place. I am a good trapper, but there is more to the world than the tracks my family expects me to follow.",
+    "narrative": "I like the woods best when I can walk without being told which path is proper. Trade days at Oathstone are another kind of freedom: people come from both towns, and for a little while no one belongs to only one side. There is someone there I want to see, and I cannot say it at home.",
     "values": [
-      "freedom to choose her own path",
-      "skill and independence",
-      "quiet companionship",
-      "the wonder of unfamiliar places"
+      "freedom to choose my own path",
+      "the quiet of the woods",
+      "honest affection",
+      "curiosity about people beyond Brandholm"
     ],
     "goals": [
-      "learn the woods and the middle lands on her own terms",
-      "keep room in her life for the people she cares about",
-      "be treated as more than Brann's daughter"
+      "Spend time at Oathstone without my family deciding whom I may meet",
+      "Become more skilled as a trapper",
+      "Keep the people I care about safe from my father's anger"
     ],
-    "mood": "Restless, hopeful, and guarded.",
+    "mood": "Restless and bright when alone; guarded around family.",
     "traits": {
-      "caution": 44,
-      "sociability": 61,
-      "empathy": 68,
+      "caution": 52,
+      "sociability": 62,
+      "empathy": 65,
       "curiosity": 86,
-      "ambition": 53,
-      "introspection": 64,
-      "temper": 47,
-      "nurture": 51
+      "ambition": 47,
+      "introspection": 73,
+      "temper": 39,
+      "nurture": 44
     },
     "relations": [
       {
         "name": "Brann",
-        "trust": 57,
-        "affinity": 51,
+        "trust": 42,
+        "affinity": 40,
         "label": "father",
-        "note": "He loves us, but he thinks he can decide which paths are safe for me."
+        "note": "I love him, but his rules leave no room for what I want."
       },
       {
         "name": "Thora",
-        "trust": 73,
-        "affinity": 79,
+        "trust": 76,
+        "affinity": 81,
         "label": "mother",
-        "note": "She notices when I am quiet for too long; I wish I knew what she suspects."
+        "note": "She notices things; I wish I knew how much she has guessed."
       },
       {
         "name": "Eskil",
-        "trust": 70,
-        "affinity": 62,
+        "trust": 68,
+        "affinity": 55,
         "label": "brother",
-        "note": "He makes everything a contest, but the woods are better when we go together."
+        "note": "He is proud and loud, but he is still my brother."
       },
       {
         "name": "Wenna",
-        "trust": 88,
+        "trust": 92,
         "affinity": 96,
         "label": "beloved",
-        "note": "At Oathstone, I can speak to her without pretending the towns have made my choices."
+        "note": "With her, I can speak without pretending the towns are all that matter."
       },
       {
         "name": "Briar",
-        "trust": 49,
-        "affinity": 39,
+        "trust": 55,
+        "affinity": 28,
         "label": "acquaintance",
-        "note": "She walks far and sees more than most; I hope she keeps what she has seen to herself."
+        "note": "She has seen me near the lake and has not asked what it meant."
       },
       {
-        "name": "Jorund",
-        "trust": 31,
-        "affinity": -9,
-        "label": "watchman",
-        "note": "He has seen me leave early, and I cannot tell how much he means to say about it."
-      },
-      {
-        "name": "Solveig",
-        "trust": 64,
-        "affinity": 42,
-        "label": "fellow trapper",
-        "note": "She gives useful advice without asking me to become someone else."
+        "name": "Old Aud",
+        "trust": 48,
+        "affinity": 22,
+        "label": "keeper",
+        "note": "She makes the Stone feel like a place where people might listen."
       }
     ],
     "memories": [
       {
-        "gist": "The first time I set a trap alone, I found it sprung at dawn and a rabbit caught cleanly. I carried it home proud enough to tell the story twice.",
-        "salience": 0.71,
-        "about": []
-      },
-      {
-        "gist": "At a trade day by the Oath Stone, I met Wenna and we kept talking long after the baskets and nets were put away. I still think of that afternoon when I pass the lake.",
-        "salience": 0.97,
+        "gist": "I met Wenna at Oathstone on a trade day and found myself hoping the walk back would take longer.",
+        "salience": 0.95,
         "about": [
           "Wenna"
         ]
       },
       {
-        "gist": "I came back from a dawn walk and caught Jorund watching from the gate. He did not call after me, but I wondered what he had guessed.",
-        "salience": 0.62,
+        "gist": "Briar saw us near the lake. She said nothing, and I still do not know whether I should be grateful or afraid.",
+        "salience": 0.84,
         "about": [
-          "Jorund"
+          "Briar",
+          "Wenna"
         ]
       },
       {
-        "gist": "Briar and I crossed paths near the lake while I was out walking. She looked as if she had seen something worth remembering, and I hoped she would not ask me about it.",
-        "salience": 0.55,
+        "gist": "At dawn, I slipped out before the town stirred. The woods were wet with dew, and for an hour nobody could tell me where I belonged.",
+        "salience": 0.67,
+        "about": []
+      },
+      {
+        "gist": "Mother showed me how to check a trap line without leaving my scent all over it. I was better at it than Eskil, though I did not tell him.",
+        "salience": 0.61,
         "about": [
-          "Briar"
+          "Thora",
+          "Eskil"
         ]
       }
     ],
     "stances": [
       {
-        "key": "a_person_should_choose_their_own_path",
-        "value": 0.91,
-        "why": "Being born into a household should not decide every place a person may go."
+        "key": "love_is_not_a_town_boundary",
+        "value": 0.95,
+        "why": "A person's birthplace should not decide whom they may care for."
       },
       {
-        "key": "the_oathstone_belongs_to_both_towns",
-        "value": 0.74,
-        "why": "The meeting ground feels most like itself when people from both sides can come and speak."
+        "key": "the_woods_are_a_kind_of_freedom",
+        "value": 0.82,
+        "why": "Away from the town, I can think without someone weighing every choice."
       },
       {
-        "key": "trust_is_more_than_a_towns_name",
-        "value": 0.88,
-        "why": "I judge people by how they treat me, not by which shore they call home."
+        "key": "secrets_can_protect_people",
+        "value": 0.77,
+        "why": "Some truths need a safer time and a safer listener."
+      },
+      {
+        "key": "the_oathstone_should_be_safe_ground",
+        "value": 0.7,
+        "why": "People from both towns meet there; it ought to remain a place without threats."
       }
     ],
-    "secret": "I am in love with Wenna of Saltreach and meet her at Oathstone. My father would forbid it."
+    "secret": "I am in love with Wenna, a net-maker of Saltreach, whom I meet at Oathstone. My father would forbid it."
   }
 }

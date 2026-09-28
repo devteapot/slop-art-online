@@ -92,6 +92,7 @@ Rules:
 - Memories: 3-6 concrete events from their life, in their own words (older people remember the Hunger Winter or the Oath; others last winter, trade days, Tomas's death, small family moments). Salience ranges from 0 to 1. "about" lists the cast members involved.
 - Stances: 3-6 beliefs they act on, as snake_case keys with a value from 0 to 1 (how strongly held) and a reason.
 - Traits (0-100): caution, sociability, empathy, curiosity, ambition, introspection, temper, nurture. Vary them: not everyone is kind or calm.
+- Offices, trades, standing and money are part of who people are: an office holder knows their duties and rights and how others see them; masters, apprentices and hired hands know who they work for and what they are paid; people know roughly how many marks they have and what things cost. Other people know who holds which office.
 - Babies and small children: a short simple narrative (a baby's is sensation), a few relations to family, one or two memories at most, no stances.
 
 Reply with ONE JSON object: {"sheets": {"<name>": {"narrative": "first person, 2-5 sentences", "values": [...], "goals": [...], "mood": "...", "traits": {...}, "relations": [{"name": "...", "trust": 0, "affinity": 0, "label": "...", "note": "..."}], "memories": [{"gist": "...", "salience": 0.5, "about": ["..."]}], "stances": [{"key": "...", "value": 0.8, "why": "..."}], "secret": "... or empty"}}}"""
@@ -233,8 +234,11 @@ def main():
         residents = []
         for h in s["households"]:
             for m in h["members"]:
-                residents.append({"name": m["name"], "age": m["age"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", []), "sheet": sheets[m["name"]]})
-        t = {"name": s["name"], "character": s["character"], "walled": s["walled"], "occupations": {}, "stores": s["stores"], "resources": s.get("resources", {}), "ledger": s["ledger"], "residents": residents}
+                r = {"name": m["name"], "age": m["age"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", []), "sheet": sheets[m["name"]]}
+                if m.get("inventory"):
+                    r["inventory"] = m["inventory"]
+                residents.append(r)
+        t = {"name": s["name"], "character": s["character"], "walled": s["walled"], "occupations": {}, "stores": s["stores"], "resources": s.get("resources", {}), "ledger": s["ledger"], "buildings": s.get("buildings", []), "residents": residents}
         (villages if s["kind"] == "village" else towns).append(t)
     seed["towns"], seed["villages"] = towns, villages
     out = ROOT / "living/seeds" / f"{a.world}.json"

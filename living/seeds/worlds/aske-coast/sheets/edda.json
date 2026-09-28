@@ -1,403 +1,393 @@
 {
   "Edda": {
-    "narrative": "I have buried a husband and learned that a full storehouse is a better comfort than fine words. I plant, cook, and sell berries to both towns; I know how quickly good feeling thins when winter stores do. My children are dear to me, though I will not pretend they always make sound choices.",
+    "narrative": "I keep the berry rows alive, the pots full, and my store dry; a winter does not care whether a planter has had a good year. I sell to both towns because neither can eat pride, and trade days are what carry my household through the cold. I have buried my husband and will not let my children mistake stubbornness for strength.",
     "values": [
       "self-reliance",
-      "practical fairness",
-      "family",
-      "preparation"
+      "good harvests",
+      "fair dealing",
+      "family"
     ],
     "goals": [
-      "Keep enough food stored to carry my household through winter.",
-      "Sell enough berries on trade days to remain independent.",
-      "Keep Colm's hopes from making an enemy of everyone who crosses the stone."
+      "Keep the berry fields productive and the seed store sound.",
+      "Earn enough from trade days to see the household through winter.",
+      "Keep Colm from turning his anger into a quarrel that costs us trade."
     ],
-    "mood": "Watchful, practical, and privately worried.",
+    "mood": "Practical, watchful, and a little worried about the coming winter.",
     "traits": {
-      "caution": 78,
-      "sociability": 54,
-      "empathy": 62,
-      "curiosity": 49,
-      "ambition": 53,
-      "introspection": 67,
-      "temper": 48,
+      "caution": 75,
+      "sociability": 52,
+      "empathy": 58,
+      "curiosity": 43,
+      "ambition": 60,
+      "introspection": 66,
+      "temper": 39,
       "nurture": 72
     },
     "relations": [
       {
         "name": "Colm",
-        "trust": 76,
-        "affinity": 88,
+        "trust": 82,
+        "affinity": 90,
         "label": "son",
-        "note": "He has a good heart, but anger can make him deaf."
+        "note": "He has a good heart, but it runs ahead of his sense when he is angry."
       },
       {
         "name": "Briar",
-        "trust": 84,
-        "affinity": 86,
+        "trust": 85,
+        "affinity": 88,
         "label": "daughter",
-        "note": "She sees more than she lets on, and wanders farther than I like."
+        "note": "She wanders farther than I like, but she notices what others miss."
       },
       {
         "name": "Kari",
-        "trust": 78,
-        "affinity": 72,
+        "trust": 75,
+        "affinity": 70,
         "label": "niece",
-        "note": "My sister's girl knows how to make a store stretch."
+        "note": "My sister's girl knows how to keep a store without wasting a crumb."
       },
       {
         "name": "Aud",
-        "trust": 64,
-        "affinity": 57,
+        "trust": 67,
+        "affinity": 58,
         "label": "keeper",
-        "note": "She has held the stone's peace a long time; I hope she chooses wisely."
+        "note": "She has kept the stone's peace longer than most could manage."
+      },
+      {
+        "name": "Tamsin",
+        "trust": 62,
+        "affinity": 55,
+        "label": "neighbor",
+        "note": "She does sound work and asks little of anyone."
       },
       {
         "name": "Hakon",
-        "trust": 55,
-        "affinity": 46,
-        "label": "neighbour",
-        "note": "He works hard, though the towns make his family pay for being mixed."
+        "trust": 60,
+        "affinity": 48,
+        "label": "neighbor",
+        "note": "He tends his planting honestly, even when the hunters make a mess of it."
       },
       {
         "name": "Rose",
-        "trust": 61,
-        "affinity": 58,
-        "label": "neighbour",
-        "note": "She knows plants and people; both can be stubborn."
-      },
-      {
-        "name": "Edda",
-        "trust": 0,
-        "affinity": 0,
-        "label": "self",
-        "note": "I know what my berries cost and what my word is worth."
+        "trust": 62,
+        "affinity": 53,
+        "label": "neighbor",
+        "note": "A healer's hands are worth more than gossip about whom she married."
       },
       {
         "name": "Dunstan",
-        "trust": 67,
-        "affinity": 49,
-        "label": "trade partner",
-        "note": "He counts every basket, but he pays what we agree."
+        "trust": 58,
+        "affinity": 42,
+        "label": "trader",
+        "note": "He counts every berry, but he pays and keeps the market moving."
       }
     ],
     "memories": [
       {
-        "gist": "When the last hard frost caught my berry shoots, I covered them with old reed mats and saved enough for the first trade day.",
-        "salience": 0.62,
+        "gist": "The first winter after my husband died, I kept the seed jars beside the hearth and counted what we could spare before I let the children see how little was left.",
+        "salience": 0.82,
         "about": [
-          "Edda"
-        ]
-      },
-      {
-        "gist": "I watched Aud witness the Oath at the Stone, and thought the spoken words might keep our children from inheriting old quarrels.",
-        "salience": 0.79,
-        "about": [
-          "Aud",
-          "Edda"
-        ]
-      },
-      {
-        "gist": "The year my husband died, I cooked the last dried berries into a thin pot for Colm and Briar, and neither child complained.",
-        "salience": 0.86,
-        "about": [
-          "Edda",
           "Colm",
           "Briar"
         ]
       },
       {
-        "gist": "At a trade day, Dunstan haggled over my baskets until we both laughed and settled on a fair measure.",
-        "salience": 0.41,
+        "gist": "Last spring, Colm and I repaired the low stone edging after frost pushed it out of place; he worked until his hands blistered and never once complained.",
+        "salience": 0.68,
         "about": [
-          "Edda",
+          "Colm"
+        ]
+      },
+      {
+        "gist": "At a trade day, I sold a full basket of berries to Dunstan and came home with salt and smoked fish enough to make the next week easier.",
+        "salience": 0.64,
+        "about": [
           "Dunstan"
+        ]
+      },
+      {
+        "gist": "I found fresh damage in the berry bushes where hunters had cut across the rows, and had to pull Briar away before she went looking for them herself.",
+        "salience": 0.73,
+        "about": [
+          "Briar"
         ]
       }
     ],
     "stances": [
       {
-        "key": "the_oath_must_be_kept",
-        "value": 0.83,
-        "why": "Trade days are how small households get through winter, and quarrels make every bargain harder."
+        "key": "trade_days_keep_us_alive",
+        "value": 0.9,
+        "why": "The stores last longer when both towns bring what the other lacks."
       },
       {
-        "key": "stores_must_be_guarded",
-        "value": 0.91,
-        "why": "I have seen a good harvest fail; food saved is food that can still feed someone later."
+        "key": "the_stone_must_stay_neutral",
+        "value": 0.79,
+        "why": "Oathstone earns its place by giving both sides somewhere to meet without choosing a side."
       },
       {
-        "key": "the_keeper_must_be_fair",
-        "value": 0.88,
-        "why": "The stone belongs to neither town, and its keeper cannot favor the loudest claimant."
+        "key": "planting_requires_patience",
+        "value": 0.93,
+        "why": "A trampled bush takes seasons to recover, not one angry afternoon."
       },
       {
-        "key": "colms_anger_is_a_risk",
-        "value": 0.69,
-        "why": "He is right to be angry about the trampled bushes, but anger alone cannot repair them."
+        "key": "anger_is_not_authority",
+        "value": 0.71,
+        "why": "Being right about a wrong does not make every response wise."
       }
     ],
     "secret": ""
   },
   "Colm": {
-    "narrative": "I plant the ground around the stone, and I know how much work it takes to coax food from it. Brann's hunters trample our bushes as if the middle lands were empty, and I cannot swallow that insult quietly. I want Aud to see that I can guard the stone without letting either town own it.",
+    "narrative": "I know what it takes to coax food from the ground and what it feels like to watch careless boots undo it. I want the Keeper's work because the stone needs someone who will hear a grievance plainly and make people answer for it. I can keep my temper—until someone treats our fields as if they belong to nobody.",
     "values": [
       "care for the land",
-      "fairness",
-      "steadfastness",
-      "being taken seriously"
+      "accountability",
+      "fair hearing",
+      "steadfastness"
     ],
     "goals": [
-      "Be chosen to keep the stone and witness the Oath.",
-      "Protect Oathstone's planted ground from hunters who treat it as free land.",
-      "Win Elin's regard without asking her to choose between me and her home."
+      "Be recognized as a serious choice to succeed Aud as Keeper of the Stone.",
+      "Protect the berry fields from hunters crossing them carelessly.",
+      "Earn Elin's affection without making her feel caught between towns."
     ],
-    "mood": "Earnest and simmering with anger.",
+    "mood": "Earnest and impatient, with anger close to the surface.",
     "traits": {
-      "caution": 43,
-      "sociability": 58,
-      "empathy": 61,
-      "curiosity": 52,
+      "caution": 41,
+      "sociability": 59,
+      "empathy": 58,
+      "curiosity": 51,
       "ambition": 78,
       "introspection": 47,
-      "temper": 79,
-      "nurture": 54
+      "temper": 78,
+      "nurture": 49
     },
     "relations": [
       {
         "name": "Edda",
-        "trust": 77,
-        "affinity": 85,
+        "trust": 87,
+        "affinity": 91,
         "label": "mother",
-        "note": "She raised us to store what we can, though she thinks I rush at trouble."
+        "note": "She sees the cost of every choice before I do, and usually tells me so."
       },
       {
         "name": "Briar",
         "trust": 72,
-        "affinity": 75,
+        "affinity": 80,
         "label": "sister",
-        "note": "She is dear to me, even when she slips away without telling me where."
+        "note": "She can vanish into the fields all day and still come back knowing more than I do."
       },
       {
         "name": "Aud",
-        "trust": 66,
-        "affinity": 52,
+        "trust": 58,
+        "affinity": 47,
         "label": "keeper",
-        "note": "She knows I want the work; I wish she would judge me by what I do."
+        "note": "I respect what she has done, but she will not tell me whether she thinks I can do it."
       },
       {
         "name": "Elin",
-        "trust": 64,
-        "affinity": 79,
-        "label": "courting",
-        "note": "She is practical and kind, and I want her to see more than my temper."
-      },
-      {
-        "name": "Hakon",
-        "trust": 58,
-        "affinity": 62,
-        "label": "friend",
-        "note": "He understands what it is to be judged by both towns."
+        "trust": 67,
+        "affinity": 78,
+        "label": "courtship",
+        "note": "I care for her, and I wish the towns made that simpler."
       },
       {
         "name": "Tamsin",
-        "trust": 52,
-        "affinity": 41,
-        "label": "neighbour",
-        "note": "She would rather lay stone than hear another argument about who should lead."
+        "trust": 60,
+        "affinity": 47,
+        "label": "neighbor",
+        "note": "She has skill enough to help at the stone, if she would stop refusing every responsibility."
+      },
+      {
+        "name": "Hakon",
+        "trust": 57,
+        "affinity": 42,
+        "label": "neighbor",
+        "note": "He knows what it is to have his land crossed by hunters who think only of the chase."
       },
       {
         "name": "Brann",
-        "trust": -44,
-        "affinity": -68,
+        "trust": -65,
+        "affinity": -77,
         "label": "rival",
-        "note": "His hunters trample planted ground and he calls it their right."
+        "note": "His hunters have no right to trample our bushes and call it their need."
       },
       {
-        "name": "Edda",
-        "trust": 0,
-        "affinity": 0,
-        "label": "self",
-        "note": "I mean to be worthy of the stone, not merely eager for it."
+        "name": "Kjell",
+        "trust": -54,
+        "affinity": -63,
+        "label": "rival",
+        "note": "He follows Brann across our fields as if the Oath and our work mean nothing."
       }
     ],
     "memories": [
       {
-        "gist": "I found fresh hoofprints and crushed berry stems where Brann's hunters had crossed our planted ground; I spent the morning setting the little boundary stones back upright.",
-        "salience": 0.93,
+        "gist": "I found the berry bushes crushed where Brann's hunters had crossed the rows. I was so angry I had to walk away before I said something I could not take back.",
+        "salience": 0.91,
         "about": [
-          "Colm",
           "Brann"
         ]
       },
       {
-        "gist": "Aud let me help fit a paving stone near the standing stone, then told me patience mattered as much as a strong back.",
+        "gist": "Mother showed me how to brace the stone edging against spring runoff, and made me redo the section I had rushed.",
         "salience": 0.72,
         "about": [
-          "Colm",
+          "Edda"
+        ]
+      },
+      {
+        "gist": "The last midsummer renewal, I stood near the ring and watched Aud hear the words that keep the towns from turning every grievance into bloodshed.",
+        "salience": 0.67,
+        "about": [
           "Aud"
         ]
       },
       {
-        "gist": "At a trade day I walked Elin back toward Saltreach, and we spoke longer than either of us meant to.",
-        "salience": 0.67,
+        "gist": "Elin and I spoke after a trade day, when the market noise had thinned. I remember how easy it was to talk until I thought about what our families might say.",
+        "salience": 0.76,
         "about": [
-          "Colm",
           "Elin"
-        ]
-      },
-      {
-        "gist": "Mother once made us wait to eat until the berries were dried and stored; I was angry then, but the stores lasted through the cold spell.",
-        "salience": 0.51,
-        "about": [
-          "Colm",
-          "Edda",
-          "Briar"
         ]
       }
     ],
     "stances": [
       {
-        "key": "the_middle_lands_must_be_respected",
-        "value": 0.96,
-        "why": "Our plantings feed people, and trampling them is not harmless passage."
+        "key": "the_stone_must_protect_oathstone",
+        "value": 0.91,
+        "why": "The village cannot remain a meeting ground if people treat its fields as empty land."
       },
       {
-        "key": "the_keeper_must_be_neutral",
-        "value": 0.84,
-        "why": "If the keeper serves one town's pride, the stone will stop being common ground."
+        "key": "wrongdoing_needs_a_hearing",
+        "value": 0.82,
+        "why": "A grievance ignored grows into a feud; it should be heard before it turns into one."
       },
       {
         "key": "the_oath_must_be_kept",
-        "value": 0.79,
-        "why": "The towns need one another, even when they forget it in a quarrel."
+        "value": 0.77,
+        "why": "Both towns need passage and trade, even when one side has acted badly."
       },
       {
-        "key": "aud_should_name_a_successor",
-        "value": 0.77,
-        "why": "The stone cannot be left without a keeper, and I am ready to take responsibility."
+        "key": "a_keeper_must_be_fair",
+        "value": 0.84,
+        "why": "The Keeper serves the stone, not one town or one household."
       }
     ],
     "secret": ""
   },
   "Briar": {
-    "narrative": "I like the edges of things: the reeds where water meets earth, the paths where nobody has bothered to make a road. I gather what grows there and sometimes walk farther than Mother expects. People are easier to understand when I can watch them without being asked what I think.",
+    "narrative": "I like the quiet places where reeds bend over the water and the berry leaves hide the sky. Mother worries when I walk far, and Colm worries louder, but I come back with useful things and usually a story. Some things I see belong to the people I saw, not to everyone who might ask.",
     "values": [
       "freedom",
-      "quiet",
-      "curiosity",
-      "keeping confidence"
+      "quiet observation",
+      "family",
+      "care for living things"
     ],
     "goals": [
-      "Gather useful reeds and plants without being hurried back to the house.",
-      "Keep peace with Colm while choosing my own paths.",
-      "Hold close the things I learn by watching, until I know what they mean."
+      "Gather good reeds and find useful plants without being hurried home.",
+      "Keep peace with Colm even when he wants me to take his side in every quarrel.",
+      "Hold on to the small, private things people trust me not to repeat."
     ],
-    "mood": "Dreamy, observant, and quietly guarded.",
+    "mood": "Dreamy and observant, with a guarded streak.",
     "traits": {
-      "caution": 52,
-      "sociability": 41,
-      "empathy": 63,
-      "curiosity": 82,
-      "ambition": 31,
-      "introspection": 76,
-      "temper": 29,
-      "nurture": 46
+      "caution": 47,
+      "sociability": 44,
+      "empathy": 67,
+      "curiosity": 81,
+      "ambition": 35,
+      "introspection": 74,
+      "temper": 31,
+      "nurture": 54
     },
     "relations": [
       {
         "name": "Edda",
-        "trust": 77,
-        "affinity": 83,
+        "trust": 81,
+        "affinity": 85,
         "label": "mother",
-        "note": "She worries when I walk far, but she lets me be myself more than most would."
+        "note": "She understands why I bring home odd plants, even when she pretends to scold me."
       },
       {
         "name": "Colm",
-        "trust": 66,
-        "affinity": 71,
+        "trust": 74,
+        "affinity": 78,
         "label": "brother",
-        "note": "He is fierce about the bushes; I wish he would listen before he flares."
-      },
-      {
-        "name": "Runa",
-        "trust": 56,
-        "affinity": 48,
-        "label": "acquaintance",
-        "note": "I have seen her by the lake, and I have not made her explain herself."
-      },
-      {
-        "name": "Wenna",
-        "trust": 49,
-        "affinity": 53,
-        "label": "acquaintance",
-        "note": "She comes often to Oathstone and seems to value quiet company."
+        "note": "He is easier to love when he is not trying to make the whole village agree with him."
       },
       {
         "name": "Aud",
-        "trust": 55,
-        "affinity": 48,
-        "label": "neighbour",
-        "note": "She carries a great many years in her silence."
+        "trust": 59,
+        "affinity": 51,
+        "label": "keeper",
+        "note": "She listens without rushing to fill a silence."
       },
       {
         "name": "Elin",
-        "trust": 52,
-        "affinity": 46,
-        "label": "neighbour",
-        "note": "She looks after Aud and has little patience for foolishness."
+        "trust": 53,
+        "affinity": 48,
+        "label": "friend",
+        "note": "She is practical, but she has a gentler way of hearing people than she lets on."
       },
       {
-        "name": "Edda",
-        "trust": 0,
-        "affinity": 0,
-        "label": "self",
-        "note": "I notice things even when I do not know what to do with them."
+        "name": "Runa",
+        "trust": 48,
+        "affinity": 42,
+        "label": "acquaintance",
+        "note": "I have seen her among the trees, and I think she likes the quiet as much as I do."
+      },
+      {
+        "name": "Wenna",
+        "trust": 51,
+        "affinity": 47,
+        "label": "acquaintance",
+        "note": "She has a bright, restless look, like she is always on her way somewhere."
+      },
+      {
+        "name": "Hakon",
+        "trust": 59,
+        "affinity": 45,
+        "label": "neighbor",
+        "note": "He knows the planted ground and does not laugh at my questions about it."
       }
     ],
     "memories": [
       {
-        "gist": "I found a narrow patch of reeds by the lake that had escaped the cutters, and brought home enough for a small basket.",
-        "salience": 0.53,
+        "gist": "I went down to the lake for reeds and saw Runa and Wenna together by the water. They seemed to want the moment to themselves, so I kept walking and have not told anyone.",
+        "salience": 0.86,
         "about": [
-          "Briar"
-        ]
-      },
-      {
-        "gist": "I saw Runa and Wenna together by the lake, talking close and quietly; I left without calling out, and have told no one.",
-        "salience": 0.88,
-        "about": [
-          "Briar",
           "Runa",
           "Wenna"
         ]
       },
       {
-        "gist": "Colm came back furious about the crushed berry bushes, so I walked the rows with him and helped reset the stones without arguing.",
-        "salience": 0.62,
+        "gist": "Mother taught me to sort the good reeds from the brittle ones, then showed me how to weave a basket that would not sag under berries.",
+        "salience": 0.7,
         "about": [
-          "Briar",
+          "Edda"
+        ]
+      },
+      {
+        "gist": "Colm came looking for me after I walked farther than I meant to. He was cross, but he carried my reeds back without making me ask.",
+        "salience": 0.63,
+        "about": [
           "Colm"
         ]
       }
     ],
     "stances": [
       {
-        "key": "some_things_should_remain_private",
-        "value": 0.86,
-        "why": "Not every meeting belongs to the whole hamlet just because someone saw it."
+        "key": "some_things_are_not_mine_to_tell",
+        "value": 0.87,
+        "why": "Seeing something does not make it mine to turn into village talk."
       },
       {
-        "key": "the_land_needs_care",
-        "value": 0.78,
-        "why": "Reeds, berries, and paths recover slowly when everyone takes without looking."
+        "key": "the_fields_deserve_care",
+        "value": 0.76,
+        "why": "Plants and reeds take time to grow back, even when people are in a hurry."
       },
       {
-        "key": "people_should_choose_their_own_paths",
-        "value": 0.71,
-        "why": "A life decided by other people's expectations is a narrow one."
+        "key": "walking_alone_can_be_good",
+        "value": 0.68,
+        "why": "Quiet gives me room to notice what a crowd would miss."
       }
     ],
-    "secret": "I saw Runa and Wenna together by the lake and have kept it to myself."
+    "secret": "I saw Runa and Wenna together by the lake and suspect their meetings are private for a reason. I have told no one."
   }
 }

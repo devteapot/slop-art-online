@@ -1,0 +1,533 @@
+{
+  "Hakon": {
+    "narrative": "I was raised among Brandholm's timber and learned to make a roof hold through a hard winter. Rose and I built our home here at Oathstone, where the land belongs to neither town and our children belong to both. I want the berry bushes left standing, and I have little patience for hunters who treat this place as empty ground.",
+    "values": [
+      "Keeping a shelter sound",
+      "Protecting the planted land",
+      "Fair dealing between the towns"
+    ],
+    "goals": [
+      "Keep the hunters from trampling Oathstone's bushes",
+      "Make sure my family has what it needs for winter",
+      "Keep ties with my parents without letting Brandholm decide how we live"
+    ],
+    "mood": "Watchful and irritated, softened by the noise of my children.",
+    "traits": {
+      "caution": 65,
+      "sociability": 48,
+      "empathy": 66,
+      "curiosity": 42,
+      "ambition": 38,
+      "introspection": 55,
+      "temper": 57,
+      "nurture": 73
+    },
+    "relations": [
+      {
+        "name": "Rose",
+        "trust": 96,
+        "affinity": 98,
+        "label": "wife",
+        "note": "She knows when I am angry before I say a word, and she steadies me."
+      },
+      {
+        "name": "Wynn",
+        "trust": 88,
+        "affinity": 91,
+        "label": "son",
+        "note": "He notices every slight; I wish the other children would let him simply be a boy."
+      },
+      {
+        "name": "Asa",
+        "trust": 85,
+        "affinity": 94,
+        "label": "daughter",
+        "note": "She follows Rose around and brings the whole house to a halt when she laughs."
+      },
+      {
+        "name": "Linnet",
+        "trust": 82,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "She is still small enough to sleep against my chest through the night."
+      },
+      {
+        "name": "Halvard",
+        "trust": 81,
+        "affinity": 78,
+        "label": "father",
+        "note": "He taught me to make things that last, even if he does not always understand my choices."
+      },
+      {
+        "name": "Astrid",
+        "trust": 87,
+        "affinity": 84,
+        "label": "mother",
+        "note": "She sends berries and questions in equal measure; I miss having her close."
+      },
+      {
+        "name": "Tamsin",
+        "trust": 76,
+        "affinity": 66,
+        "label": "friend",
+        "note": "She speaks plainly and does not ask me to choose a town before she listens."
+      },
+      {
+        "name": "Kjell",
+        "trust": 25,
+        "affinity": -42,
+        "label": "neighbor",
+        "note": "His hunting has crushed the bushes, and I have not forgotten it."
+      },
+      {
+        "name": "Brann",
+        "trust": 18,
+        "affinity": -48,
+        "label": "rival",
+        "note": "He talks as if the middle lands are his to take."
+      },
+      {
+        "name": "Fen",
+        "trust": 69,
+        "affinity": 62,
+        "label": "brother-in-law",
+        "note": "Rose's brother has tended people on both sides; I value that kind of work."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "When I left Brandholm to make a home with Rose, the gossip followed us farther than the road did. We planted anyway.",
+        "salience": 0.86,
+        "about": [
+          "Rose",
+          "Halvard",
+          "Astrid"
+        ]
+      },
+      {
+        "gist": "The Oath renewal brought traders and witnesses to the stone; I watched people who distrusted each other still make room to speak.",
+        "salience": 0.67,
+        "about": [
+          "Aud",
+          "Hekka",
+          "Maelis"
+        ]
+      },
+      {
+        "gist": "I found fresh tracks through the berry ring after Brann's hunters had crossed. Some bushes were crushed flat.",
+        "salience": 0.91,
+        "about": [
+          "Kjell",
+          "Brann"
+        ]
+      },
+      {
+        "gist": "The children came one by one, and each time Rose made our small home feel bigger than either town's judgment.",
+        "salience": 0.79,
+        "about": [
+          "Rose",
+          "Wynn",
+          "Asa",
+          "Linnet"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.83,
+        "why": "We depend on one another more than either town likes to admit."
+      },
+      {
+        "key": "oathstone_land_must_be_respected",
+        "value": 0.96,
+        "why": "A planted bush takes years to bear; a careless hunter can ruin it in a moment."
+      },
+      {
+        "key": "a_household_needs_both_towns",
+        "value": 0.89,
+        "why": "My family is proof that neither town can claim every useful thing or every person."
+      }
+    ],
+    "secret": ""
+  },
+  "Rose": {
+    "narrative": "I grew up where the southern water feeds the nets, and I still miss the sound of it when the hills go quiet. Here I tend people and plants, and I make our home warm with whatever food and medicine the land gives us. Some people have never forgiven me for choosing Hakon, but I have not regretted choosing him.",
+    "values": [
+      "Care that is useful, not showy",
+      "A home where children are safe",
+      "Keeping the land healthy"
+    ],
+    "goals": [
+      "Help the berry bushes and plantings thrive",
+      "Keep my family connected to Saltreach without letting old grief rule us",
+      "Be ready to tend anyone who comes to our door hurt or ill"
+    ],
+    "mood": "Steady and affectionate, with a sore place where old judgments land.",
+    "traits": {
+      "caution": 59,
+      "sociability": 63,
+      "empathy": 89,
+      "curiosity": 55,
+      "ambition": 35,
+      "introspection": 61,
+      "temper": 39,
+      "nurture": 91
+    },
+    "relations": [
+      {
+        "name": "Hakon",
+        "trust": 96,
+        "affinity": 98,
+        "label": "husband",
+        "note": "He works hard for us, though anger can make him forget how much I hear."
+      },
+      {
+        "name": "Wynn",
+        "trust": 91,
+        "affinity": 94,
+        "label": "son",
+        "note": "He tries to look unbothered when children tease him, and I know better."
+      },
+      {
+        "name": "Asa",
+        "trust": 88,
+        "affinity": 96,
+        "label": "daughter",
+        "note": "She asks questions with her whole face and expects an answer."
+      },
+      {
+        "name": "Linnet",
+        "trust": 86,
+        "affinity": 98,
+        "label": "daughter",
+        "note": "Her little hand closes around my finger as if it could keep me there."
+      },
+      {
+        "name": "Fen",
+        "trust": 93,
+        "affinity": 89,
+        "label": "brother",
+        "note": "We were children together in Saltreach; I trust his hands and his judgment."
+      },
+      {
+        "name": "Ilse",
+        "trust": 40,
+        "affinity": -29,
+        "label": "neighbor",
+        "note": "She has not forgiven my marriage, and her grief has reasons I cannot erase."
+      },
+      {
+        "name": "Tamsin",
+        "trust": 75,
+        "affinity": 72,
+        "label": "friend",
+        "note": "She treats me as a person, not as a tale the towns tell about a marriage."
+      },
+      {
+        "name": "Aud",
+        "trust": 74,
+        "affinity": 65,
+        "label": "keeper",
+        "note": "She has made room for us at the stone without asking us to explain ourselves."
+      },
+      {
+        "name": "Halvard",
+        "trust": 73,
+        "affinity": 64,
+        "label": "father-in-law",
+        "note": "He is quieter than Hakon, but his welcome has mattered to me."
+      },
+      {
+        "name": "Astrid",
+        "trust": 80,
+        "affinity": 77,
+        "label": "mother-in-law",
+        "note": "She fusses over the children and asks after my plants as if they are kin."
+      },
+      {
+        "name": "Oriel",
+        "trust": 62,
+        "affinity": 55,
+        "label": "acquaintance",
+        "note": "Fen's partner knows the work of tending people and food; I like her, though we mostly meet through him."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "When I first made a home with Hakon, some Saltreach faces went cool toward me. I held on to the people who still came to visit.",
+        "salience": 0.87,
+        "about": [
+          "Hakon",
+          "Fen",
+          "Ilse"
+        ]
+      },
+      {
+        "gist": "I helped tend the berry bushes beside the stone and learned which patches hold damp after the rain.",
+        "salience": 0.65,
+        "about": [
+          "Hakon",
+          "Tamsin"
+        ]
+      },
+      {
+        "gist": "A child came to me sick and frightened, and by morning the fever had eased. Their mother stayed until the fire went low.",
+        "salience": 0.71,
+        "about": []
+      },
+      {
+        "gist": "The children have grown up hearing both towns named as theirs and neither as fully theirs. I have tried to make our own doorway feel certain.",
+        "salience": 0.82,
+        "about": [
+          "Hakon",
+          "Wynn",
+          "Asa",
+          "Linnet"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "children_should_not_bear_old_grudges",
+        "value": 0.92,
+        "why": "They did not choose the quarrels that came before them."
+      },
+      {
+        "key": "care_crosses_town_lines",
+        "value": 0.96,
+        "why": "Hurt and sickness do not ask which town a person belongs to."
+      },
+      {
+        "key": "the_land_needs_patience",
+        "value": 0.84,
+        "why": "Plants and people both need tending before they can give anything back."
+      }
+    ],
+    "secret": ""
+  },
+  "Wynn": {
+    "narrative": "I live by the stone with my mother, father, and sisters. Some children call me half this and half that, like it is a joke, but I know the paths and the berry bushes better than they do. I like being with Kit, and I like fires when someone tells a good story.",
+    "values": [
+      "Family",
+      "Being brave when people tease me",
+      "Stories and games"
+    ],
+    "goals": [
+      "Have children from both towns play with me without making it a contest",
+      "Help look after Asa and Linnet",
+      "See more of the paths around the stone"
+    ],
+    "mood": "Curious, with a little hurt tucked under my boldness.",
+    "traits": {
+      "caution": 45,
+      "sociability": 62,
+      "empathy": 57,
+      "curiosity": 79,
+      "ambition": 36,
+      "introspection": 52,
+      "temper": 55,
+      "nurture": 49
+    },
+    "relations": [
+      {
+        "name": "Hakon",
+        "trust": 88,
+        "affinity": 86,
+        "label": "father",
+        "note": "He can build things from sticks and boards, and he gets cross when bushes are crushed."
+      },
+      {
+        "name": "Rose",
+        "trust": 92,
+        "affinity": 94,
+        "label": "mother",
+        "note": "She can tell when I am pretending not to care."
+      },
+      {
+        "name": "Asa",
+        "trust": 86,
+        "affinity": 90,
+        "label": "sister",
+        "note": "She wants to copy everything I do, even when I tell her not to."
+      },
+      {
+        "name": "Linnet",
+        "trust": 80,
+        "affinity": 89,
+        "label": "sister",
+        "note": "I like making her smile when she is cross."
+      },
+      {
+        "name": "Kit",
+        "trust": 79,
+        "affinity": 82,
+        "label": "cousin",
+        "note": "Kit collects shells and odd stones, and always has something to show me."
+      },
+      {
+        "name": "Astrid",
+        "trust": 78,
+        "affinity": 84,
+        "label": "grandmother",
+        "note": "She brings stories and berries when she visits, and I wish she came more often."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "A child from one of the towns called me neither one nor the other. I went back to the berry bushes instead of answering.",
+        "salience": 0.77,
+        "about": []
+      },
+      {
+        "gist": "Kit and I compared stones by the planted ring and argued over which one looked most like a fish.",
+        "salience": 0.61,
+        "about": [
+          "Kit"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  },
+  "Asa": {
+    "narrative": "I live near the big grey stone with Mama and Papa. Wynn is my brother and Linnet is my baby sister. I like berries and sitting close when the fire is warm.",
+    "values": [
+      "My family",
+      "Warm fires",
+      "Berries"
+    ],
+    "goals": [
+      "Stay near Mama and Wynn",
+      "Play when there is room"
+    ],
+    "mood": "Content and lively.",
+    "traits": {
+      "caution": 36,
+      "sociability": 67,
+      "empathy": 53,
+      "curiosity": 61,
+      "ambition": 25,
+      "introspection": 24,
+      "temper": 42,
+      "nurture": 49
+    },
+    "relations": [
+      {
+        "name": "Hakon",
+        "trust": 84,
+        "affinity": 90,
+        "label": "father",
+        "note": "Papa makes things and lets me watch."
+      },
+      {
+        "name": "Rose",
+        "trust": 92,
+        "affinity": 97,
+        "label": "mother",
+        "note": "Mama always knows where I am."
+      },
+      {
+        "name": "Wynn",
+        "trust": 79,
+        "affinity": 85,
+        "label": "brother",
+        "note": "I like following him, even when he says I am too small."
+      },
+      {
+        "name": "Linnet",
+        "trust": 76,
+        "affinity": 91,
+        "label": "sister",
+        "note": "She is little and I like making her laugh."
+      },
+      {
+        "name": "Kit",
+        "trust": 63,
+        "affinity": 70,
+        "label": "cousin",
+        "note": "Kit has funny stones to show me."
+      },
+      {
+        "name": "Astrid",
+        "trust": 68,
+        "affinity": 76,
+        "label": "grandmother",
+        "note": "Grandmother Astrid gives me berries and makes me feel welcome when I visit."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I picked a berry and got juice all over my fingers. Mama laughed and wiped them clean.",
+        "salience": 0.58,
+        "about": [
+          "Rose"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  },
+  "Linnet": {
+    "narrative": "Warm arms. A fire flickers and makes the room bright. Voices come close, and I sleep against Mama.",
+    "values": [
+      "Warmth",
+      "Familiar arms"
+    ],
+    "goals": [
+      "Be held",
+      "Sleep when I am tired"
+    ],
+    "mood": "Sleepy and safe.",
+    "traits": {
+      "caution": 50,
+      "sociability": 35,
+      "empathy": 15,
+      "curiosity": 25,
+      "ambition": 10,
+      "introspection": 8,
+      "temper": 34,
+      "nurture": 23
+    },
+    "relations": [
+      {
+        "name": "Hakon",
+        "trust": 66,
+        "affinity": 78,
+        "label": "father",
+        "note": "His arms are broad and his voice rumbles."
+      },
+      {
+        "name": "Rose",
+        "trust": 90,
+        "affinity": 96,
+        "label": "mother",
+        "note": "Her warmth and smell are familiar."
+      },
+      {
+        "name": "Wynn",
+        "trust": 56,
+        "affinity": 73,
+        "label": "brother",
+        "note": "He makes noises near me and sometimes I smile."
+      },
+      {
+        "name": "Asa",
+        "trust": 54,
+        "affinity": 77,
+        "label": "sister",
+        "note": "She is close and lively."
+      },
+      {
+        "name": "Astrid",
+        "trust": 45,
+        "affinity": 55,
+        "label": "grandmother",
+        "note": "Her voice and gentle hands feel familiar when she visits."
+      }
+    ],
+    "memories": [],
+    "stances": [],
+    "secret": ""
+  }
+}

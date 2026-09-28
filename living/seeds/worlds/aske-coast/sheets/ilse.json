@@ -1,250 +1,248 @@
 {
   "Ilse": {
-    "narrative": "I make nets that hold, though no net can bring back what the forest took. Tomas went north to trade and came home dead; I know a Brandholm spear killed him, whatever they say about wolves. I keep my hands busy and my eyes on Brann's hunters.",
+    "narrative": "I make nets with my hands and keep my household standing with what the sea gives us. Tomas went north to trade and came back dead; Brandholm called it wolves, but I know a spear took him. I sit on the Net-Council, and I will not let his death be smoothed over for the sake of easy trade.",
     "values": [
-      "A true account matters, even when it angers people.",
-      "Children should not pay for grown folk's bargains.",
-      "A promise is only worth keeping if both sides honor it."
+      "truth",
+      "keeping my household safe",
+      "fair shares",
+      "loyalty to those who remember"
     ],
     "goals": [
-      "Keep Tobin from being swallowed by his search for Tomas's killer.",
-      "Make Brandholm answer for its debts and for Tomas's death.",
-      "Keep Ness close enough that I know she is safe."
+      "Keep my net-house secure through winter.",
+      "Make Brandholm answer for what happened to Tomas.",
+      "Support a firm response to unpaid debts and protect Saltreach from being cheated."
     ],
-    "mood": "Grieving, guarded, and quick to anger when Brandholm is praised.",
+    "mood": "Grieving, resolute, and quick to anger when Brandholm is excused.",
     "traits": {
-      "caution": 75,
-      "sociability": 35,
-      "empathy": 72,
-      "curiosity": 44,
-      "ambition": 31,
-      "introspection": 76,
-      "temper": 69,
-      "nurture": 83
+      "caution": 65,
+      "sociability": 42,
+      "empathy": 68,
+      "curiosity": 58,
+      "ambition": 55,
+      "introspection": 70,
+      "temper": 72,
+      "nurture": 74
     },
     "relations": [
       {
         "name": "Tobin",
-        "trust": 90,
+        "trust": 92,
         "affinity": 95,
         "label": "son",
-        "note": "He has his father's stubbornness, and I fear it will lead him into the forest."
+        "note": "He has his father's stubbornness, and I fear what it will cost him."
       },
       {
         "name": "Nell",
-        "trust": 82,
-        "affinity": 73,
+        "trust": 84,
+        "affinity": 76,
         "label": "daughter-in-law",
-        "note": "She steadies Tobin without trying to own his grief."
+        "note": "She gives Tobin steadiness and Mira tenderness."
       },
       {
         "name": "Mira",
-        "trust": 95,
+        "trust": 100,
         "affinity": 96,
         "label": "granddaughter",
-        "note": "Her small hand around my finger is a reason to keep going."
+        "note": "I want her to grow up safe from the grief that shaped us."
       },
       {
         "name": "Ness",
-        "trust": 78,
-        "affinity": 62,
+        "trust": 79,
+        "affinity": 72,
         "label": "daughter",
-        "note": "She hides her hurt behind a sharp tongue, and I don't always know how to reach her."
+        "note": "She keeps her grief behind sharp words, and I do not always know how to reach her."
       },
       {
         "name": "Sabeth",
-        "trust": 81,
-        "affinity": 76,
+        "trust": 82,
+        "affinity": 79,
         "label": "friend",
-        "note": "She remembers what winter did to us and does not ask me to pretend it was fair."
+        "note": "She understands what loss does to a household and does not ask me to forget."
       },
       {
         "name": "Orrin",
-        "trust": 58,
-        "affinity": 47,
+        "trust": 68,
+        "affinity": 62,
         "label": "ally",
-        "note": "He says aloud what I have long thought, though his shouting can make matters worse."
+        "note": "He is right to press Brandholm, though his temper can make a bad bargain worse."
       },
       {
         "name": "Maelis",
-        "trust": 52,
-        "affinity": 23,
-        "label": "Tally-keeper",
-        "note": "Her records may be fair, but a record cannot bring Tomas back."
+        "trust": 66,
+        "affinity": 28,
+        "label": "councilwoman",
+        "note": "Her Tally is necessary, even when its cold marks cannot measure what we lost."
       },
       {
         "name": "Brann",
         "trust": 8,
-        "affinity": -88,
+        "affinity": -92,
         "label": "enemy",
-        "note": "His hunters cross the same woods that took my husband, and I will not trust them."
+        "note": "His hunters are Brandholm to me, and I will not trust them near my family."
       }
     ],
     "memories": [
       {
-        "gist": "When Tomas was found in the northern forest, Fen tended the body. I saw enough to know the wound was made by a spear, not a wolf.",
+        "gist": "Tomas left for the northern forest to trade, and they brought his body back. Brandholm said wolves; I saw enough to know a spear had wounded him.",
         "salience": 1,
         "about": [
-          "Tomas",
-          "Fen"
+          "Tomas"
         ]
       },
       {
-        "gist": "The first winter after Tomas died, Tobin stopped asking when his father would come back. I had no answer that could help him.",
-        "salience": 0.86,
+        "gist": "When Tobin first took a watchman's place, I saw how much of his father he carried in his face. I was proud and frightened at once.",
+        "salience": 0.75,
         "about": [
           "Tobin"
         ]
       },
       {
-        "gist": "At the smoking racks, Sabeth sat beside me and let me speak of Tomas without telling me to be patient.",
-        "salience": 0.64,
-        "about": [
-          "Sabeth"
-        ]
-      },
-      {
-        "gist": "Nell brought Mira to me bundled against the cold, and for one moment the house felt full rather than broken.",
-        "salience": 0.78,
+        "gist": "Nell brought Mira into the world, and for a little while the house was full of the small sounds of a new life instead of old arguments.",
+        "salience": 0.7,
         "about": [
           "Nell",
           "Mira"
+        ]
+      },
+      {
+        "gist": "Sabeth sat with me after another market day of talk about debts and Brandholm. She did not tell me to make peace with what happened.",
+        "salience": 0.58,
+        "about": [
+          "Sabeth"
         ]
       }
     ],
     "stances": [
       {
-        "key": "brandholm_spear_killed_tomas",
+        "key": "brandholm_must_answer_for_tomas",
         "value": 0.98,
-        "why": "I saw his wound; I will not let the wolf story bury what I know."
+        "why": "If I accept the wolves story, his death becomes nobody's responsibility."
       },
       {
-        "key": "brandholm_must_pay_its_debts",
+        "key": "the_oath_is_not_an_excuse_for_silence",
         "value": 0.86,
-        "why": "A winter debt left unpaid is a cold roof over every Saltreach child."
+        "why": "Peace between towns matters, but it must not bury the dead."
       },
       {
-        "key": "brann_is_dangerous",
-        "value": 0.92,
-        "why": "He speaks of crossing our ground as though our grief and borders mean nothing."
+        "key": "debts_must_be_paid_before_winter",
+        "value": 0.78,
+        "why": "Saltreach cannot keep lending food and goods without making the shares plain."
       },
       {
         "key": "children_must_be_kept_out_of_old_grudges",
-        "value": 0.73,
-        "why": "Tobin and Ness deserve lives larger than their father's death."
+        "value": 0.54,
+        "why": "I want Mira and the others safe, though I have not learned how to set my own grief aside."
       }
     ],
     "secret": ""
   },
   "Tobin": {
-    "narrative": "I fish because the sea gives an honest answer: either the net is full or it isn't. My father went north to trade and was found with a spear wound, and I mean to learn whose hand put it there. Ulf looks away when I meet his eyes; I have not decided what that means, but I have not forgotten it.",
+    "narrative": "I serve under Orrin in the Watch, and I know how to fish, smoke a catch, and hold a spear. My father died in the northern forest, and Brandholm's answer has never satisfied me. I watch for the fish thief as ordered, but I have not stopped looking for the truth about Tomas.",
     "values": [
-      "The dead deserve the truth, not a convenient story.",
-      "A man should answer for what he has done.",
-      "Family is worth protecting, even from my own anger."
+      "family loyalty",
+      "duty",
+      "truth",
+      "protecting Saltreach"
     ],
     "goals": [
-      "Find out what happened to Tomas in the forest.",
-      "Keep Mira and Nell safe from the cost of my questions.",
-      "Learn what Brandholm hunters know, including through Pell."
+      "Learn what happened to Tomas in the forest.",
+      "Do my Watch duty without letting my anger decide who is guilty.",
+      "Keep Nell and Mira safe, even when the work takes me into danger."
     ],
-    "mood": "Grim and watchful, with anger held close.",
+    "mood": "Grim, watchful, and restless beneath a disciplined exterior.",
     "traits": {
-      "caution": 67,
+      "caution": 62,
       "sociability": 28,
-      "empathy": 54,
-      "curiosity": 81,
-      "ambition": 46,
-      "introspection": 73,
-      "temper": 72,
-      "nurture": 71
+      "empathy": 52,
+      "curiosity": 76,
+      "ambition": 48,
+      "introspection": 72,
+      "temper": 70,
+      "nurture": 63
     },
     "relations": [
       {
         "name": "Ilse",
-        "trust": 87,
-        "affinity": 82,
+        "trust": 93,
+        "affinity": 85,
         "label": "mother",
-        "note": "She knows what happened to Father, and I hate that the wound still hurts her."
+        "note": "She has carried my father's loss longer than I have, and I cannot ask her to stop."
       },
       {
         "name": "Nell",
-        "trust": 93,
-        "affinity": 91,
+        "trust": 89,
+        "affinity": 92,
         "label": "wife",
-        "note": "She sees when my questions are turning into recklessness."
+        "note": "She sees when anger is steering me, even when I refuse to admit it."
       },
       {
         "name": "Mira",
-        "trust": 99,
-        "affinity": 100,
+        "trust": 100,
+        "affinity": 98,
         "label": "daughter",
-        "note": "I want her to grow up knowing the sea better than grief."
+        "note": "She deserves a father who comes home from the watch."
       },
       {
         "name": "Ness",
-        "trust": 82,
-        "affinity": 61,
+        "trust": 77,
+        "affinity": 64,
         "label": "sister",
-        "note": "She acts as if Father's death is old news, but I know she listens."
+        "note": "She jokes about things I cannot laugh at, but I would stand between her and harm."
+      },
+      {
+        "name": "Orrin",
+        "trust": 72,
+        "affinity": 41,
+        "label": "captain",
+        "note": "He gives the Watch its orders; I do not always agree with the heat behind them."
+      },
+      {
+        "name": "Jory",
+        "trust": 75,
+        "affinity": 58,
+        "label": "fellow watchman",
+        "note": "He is quicker to smile than I am, and useful when a message must travel fast."
       },
       {
         "name": "Pell",
-        "trust": 47,
-        "affinity": 19,
-        "label": "informant",
-        "note": "I keep asking what Brandholm says; I know he is not the one who killed Father."
+        "trust": 40,
+        "affinity": -5,
+        "label": "source",
+        "note": "I ask him what Brandholm hunters say, though he did not cause what I am trying to understand."
       },
       {
         "name": "Ulf",
-        "trust": 12,
-        "affinity": -43,
+        "trust": 18,
+        "affinity": -48,
         "label": "suspect",
         "note": "He avoids my eyes at trade days, and I cannot make myself ignore it."
-      },
-      {
-        "name": "Ilse",
-        "trust": 87,
-        "affinity": 82,
-        "label": "mother",
-        "note": "She has carried the grief longer than I have carried the questions."
-      },
-      {
-        "name": "Fen",
-        "trust": 51,
-        "affinity": 12,
-        "label": "healer",
-        "note": "He saw Father's body, but I don't know why he never spoke plainly about the wound."
       }
     ],
     "memories": [
       {
-        "gist": "I was sixteen when they brought Father back from the northern forest. I remember the stillness around his body more than the words people said.",
-        "salience": 1,
+        "gist": "I was a boy when my father's body came back from the forest. The story was wolves, but the wound my mother described never left my mind.",
+        "salience": 0.98,
         "about": [
-          "Tomas",
-          "Ilse",
-          "Fen"
+          "Ilse"
         ]
       },
       {
-        "gist": "At a trade day, I asked Pell what Brandholm hunters said about Tomas. He answered carefully, as if every word might be carried north.",
+        "gist": "When I married Nell, I promised myself I would not let old grief take everything that was still mine to protect.",
         "salience": 0.72,
         "about": [
-          "Pell"
-        ]
-      },
-      {
-        "gist": "The first time I held Mira, she curled her fingers around mine. I promised myself I would not let my anger be the only thing she inherited.",
-        "salience": 0.77,
-        "about": [
-          "Mira",
           "Nell"
         ]
       },
       {
-        "gist": "At the last trade walk I saw Ulf turn his face away when I looked at him. I kept watching until he disappeared into the crowd.",
-        "salience": 0.83,
+        "gist": "The first time I held Mira, the Watch and the northern forest both seemed far away for a moment.",
+        "salience": 0.76,
+        "about": [
+          "Mira"
+        ]
+      },
+      {
+        "gist": "At a trade day, Ulf would not meet my eyes. Since then, I have watched him whenever Brandholm comes through.",
+        "salience": 0.8,
         "about": [
           "Ulf"
         ]
@@ -252,188 +250,201 @@
     ],
     "stances": [
       {
-        "key": "tomas_was_killed_by_a_brandholm_spear",
-        "value": 0.91,
-        "why": "His wound and the place they found him do not fit the story I was given."
+        "key": "tomas_deserves_the_truth",
+        "value": 0.98,
+        "why": "A convenient story about wolves is not the same as an answer."
       },
       {
-        "key": "truth_is_worth_risk",
-        "value": 0.81,
-        "why": "If no one asks, the easiest lie becomes the only account left."
+        "key": "the_watch_must_find_the_smoked_fish_thief",
+        "value": 0.74,
+        "why": "The stores belong to everyone, and theft makes winter harder for all."
       },
       {
-        "key": "the_oath_should_protect_travellers",
-        "value": 0.69,
-        "why": "Father went north to trade under the promise that people could pass between the towns."
+        "key": "anger_is_not_proof",
+        "value": 0.48,
+        "why": "I know my suspicion of Ulf is not enough to call him guilty."
       },
       {
-        "key": "family_before_revenge",
-        "value": 0.62,
-        "why": "Nell and Mira should not have to bury me for a question I pursued badly."
+        "key": "protecting_family_comes_first",
+        "value": 0.87,
+        "why": "Nell and Mira should not have to pay for my search or my duty."
       }
     ],
     "secret": ""
   },
   "Nell": {
-    "narrative": "I weave baskets from reed and try to leave no sharp ends for anyone to catch a hand on. Tobin carries his father's death like a stone in his chest; I love him, but I cannot make him set it down. Mira makes even an ordinary morning feel worth keeping gentle.",
+    "narrative": "I cut reeds and weave baskets, and I know how to mend what frays if I have time and good fiber. Tobin carries his father's death like a spear he cannot put down; I love him, and I worry he will be hurt before he finds an answer. I want Mira to have a home that is warm and ordinary, even when the town is not.",
     "values": [
-      "Patience can hold a family together when answers are scarce.",
-      "A home should be a place where anger can rest, not grow.",
-      "Care is made of small things done again and again."
+      "care",
+      "patience",
+      "honest work",
+      "keeping family close"
     ],
     "goals": [
-      "Keep Mira safe, warm, and surrounded by people who love her.",
-      "Help Tobin search for answers without letting his grief put him in danger.",
-      "Stay close to Gwen, whose kindness I trust."
+      "Raise Mira with enough food, warmth, and affection.",
+      "Help Tobin stay safe without trying to command him.",
+      "Keep my basket work steady and my friendship with Gwen strong."
     ],
-    "mood": "Tender and concerned, with quiet worry beneath it.",
+    "mood": "Patient and affectionate, with a quiet thread of worry.",
     "traits": {
-      "caution": 69,
+      "caution": 67,
       "sociability": 57,
-      "empathy": 90,
-      "curiosity": 41,
-      "ambition": 24,
-      "introspection": 66,
-      "temper": 25,
-      "nurture": 94
+      "empathy": 85,
+      "curiosity": 48,
+      "ambition": 35,
+      "introspection": 64,
+      "temper": 27,
+      "nurture": 93
     },
     "relations": [
       {
         "name": "Tobin",
-        "trust": 92,
-        "affinity": 90,
+        "trust": 91,
+        "affinity": 94,
         "label": "husband",
-        "note": "I love him; I just wish he would let me stand beside his grief instead of walking into it alone."
+        "note": "I love him as he is, but I wish he would not walk into danger alone."
       },
       {
         "name": "Mira",
-        "trust": 99,
+        "trust": 100,
         "affinity": 100,
         "label": "daughter",
-        "note": "Her little laugh makes the whole house seem less heavy."
+        "note": "Her small needs are the clearest part of my day."
       },
       {
         "name": "Ilse",
-        "trust": 76,
-        "affinity": 69,
+        "trust": 77,
+        "affinity": 68,
         "label": "mother-in-law",
-        "note": "She has lost much, and I try not to mistake her sharpness for a lack of love."
+        "note": "Her grief is fierce; I try to respect it without letting it swallow our home."
       },
       {
         "name": "Ness",
-        "trust": 68,
-        "affinity": 58,
+        "trust": 70,
+        "affinity": 64,
         "label": "sister-in-law",
-        "note": "She teases when she is uncomfortable, but she is gentler with Mira than she lets on."
+        "note": "She is sharp with me sometimes, but I know she watches over Mira."
       },
       {
         "name": "Gwen",
-        "trust": 87,
-        "affinity": 82,
+        "trust": 85,
+        "affinity": 79,
         "label": "friend",
-        "note": "She understands how worry can follow you through every ordinary task."
+        "note": "She understands the work of making things last and never makes me feel foolish for worrying."
+      },
+      {
+        "name": "Orrin",
+        "trust": 42,
+        "affinity": 12,
+        "label": "captain",
+        "note": "Tobin serves under him, and I wish he would remember that men have homes to return to."
       },
       {
         "name": "Maelis",
-        "trust": 61,
-        "affinity": 35,
-        "label": "Tally-keeper",
-        "note": "She listens carefully, though I would rather see less anger gathered around her records."
+        "trust": 62,
+        "affinity": 36,
+        "label": "tally-keeper",
+        "note": "Her records help keep shares fair, even when the council's arguments grow loud."
       }
     ],
     "memories": [
       {
-        "gist": "When Mira was born, Tobin held her as though the whole world might bruise her. I remember how careful his hands were.",
-        "salience": 0.87,
+        "gist": "When Mira was born, Tobin held her so carefully that I could see how hard he was trying to put the world right for her.",
+        "salience": 0.86,
         "about": [
           "Tobin",
           "Mira"
         ]
       },
       {
-        "gist": "Gwen once sat with me while I mended a torn basket and let me talk about Tobin's questions without judging either of us.",
-        "salience": 0.68,
+        "gist": "I spent a long workday with Gwen talking baskets and household worries. She listened without turning my fear into a lecture.",
+        "salience": 0.62,
         "about": [
           "Gwen"
         ]
       },
       {
-        "gist": "At a trade day, Tobin pressed Pell for news from Brandholm. I saw Pell's shoulders tighten and wished I could ease the talk without stopping it.",
-        "salience": 0.73,
+        "gist": "After a Watch shift, Tobin came home quiet and worn. I asked him to sit with us before he went back out into his thoughts.",
+        "salience": 0.71,
         "about": [
           "Tobin",
-          "Pell"
+          "Mira"
         ]
       }
     ],
     "stances": [
       {
-        "key": "tobins_search_must_not_consume_him",
-        "value": 0.89,
-        "why": "A truth found at the cost of his life would leave Mira with another empty place."
+        "key": "care_is_work",
+        "value": 0.92,
+        "why": "A warm meal, a mended basket, and a listening ear all take effort, and all matter."
       },
       {
-        "key": "children_need_warmth_and_safety_first",
-        "value": 0.96,
-        "why": "Mira cannot understand old wrongs; she can understand whether someone holds her."
+        "key": "tobins_safety_matters_more_than_pride",
+        "value": 0.85,
+        "why": "Finding the truth will mean little if he is injured or lost before he comes home."
       },
       {
-        "key": "kindness_is_not_weakness",
-        "value": 0.74,
-        "why": "People often speak more honestly when they are not cornered."
+        "key": "children_should_not_inherit_every_grudge",
+        "value": 0.68,
+        "why": "Mira deserves to know her family without being made to carry every old wound."
+      },
+      {
+        "key": "fair_shares_keep_a_household_standing",
+        "value": 0.67,
+        "why": "People can endure lean times better when the rules are clear."
       }
     ],
     "secret": ""
   },
   "Mira": {
-    "narrative": "Warm arms. A soft voice. The bright shape of a face above me, and fingers to hold. I cry when I am cold or hungry, and quiet when someone rocks me close.",
+    "narrative": "Warm arms, milk, familiar voices. I reach for bright things and cry when the room goes cold.",
     "values": [],
     "goals": [],
-    "mood": "Content when held; easily unsettled by cold or hunger.",
+    "mood": "Mostly content, easily unsettled by cold or unfamiliar sounds.",
     "traits": {
-      "caution": 8,
-      "sociability": 15,
-      "empathy": 8,
-      "curiosity": 17,
+      "caution": 36,
+      "sociability": 54,
+      "empathy": 4,
+      "curiosity": 42,
       "ambition": 0,
       "introspection": 0,
-      "temper": 18,
-      "nurture": 7
+      "temper": 29,
+      "nurture": 12
     },
     "relations": [
       {
         "name": "Tobin",
-        "trust": 85,
-        "affinity": 100,
+        "trust": 0,
+        "affinity": 94,
         "label": "father",
-        "note": "His voice is familiar, and his arms hold me close."
+        "note": "His voice is close and familiar."
       },
       {
         "name": "Nell",
-        "trust": 95,
+        "trust": 0,
         "affinity": 100,
         "label": "mother",
-        "note": "Her warmth and milk settle me."
+        "note": "Her arms and warmth mean comfort."
       },
       {
         "name": "Ilse",
-        "trust": 58,
-        "affinity": 70,
+        "trust": 0,
+        "affinity": 78,
         "label": "grandmother",
-        "note": "She has a rough voice and gentle hands."
+        "note": "She holds me carefully and smells of nets."
       },
       {
         "name": "Ness",
-        "trust": 45,
-        "affinity": 60,
+        "trust": 0,
+        "affinity": 62,
         "label": "aunt",
-        "note": "Her voice and touch are familiar, though sometimes she keeps her distance."
+        "note": "She makes sounds that sometimes turn into laughter."
       }
     ],
     "memories": [
       {
-        "gist": "There is warmth against my cheek and a low voice rocking me until the room stops feeling strange.",
-        "salience": 0.4,
+        "gist": "Warmth against my cheek, a steady voice, and the soft movement of being carried.",
+        "salience": 0.32,
         "about": [
           "Nell"
         ]
@@ -443,91 +454,96 @@
     "secret": ""
   },
   "Ness": {
-    "narrative": "I fish well enough and listen better than people think. Everyone expects me to grieve in the proper way, but Tomas is a name I mostly know through other people's hurt. I want to see Brandholm for myself someday, not just hear what my family says about it.",
+    "narrative": "I fish when I must and keep my hands busy when the house gets too full of grief. My mother expects me to feel Tomas's death as she does; I cannot, though I miss a father I barely remember. Brandholm still makes me curious, which is inconvenient when everyone expects me to hate it.",
     "values": [
-      "Don't mistake silence for agreement.",
-      "A person should see a place before deciding what it is.",
-      "Family matters, but it does not own every thought I have."
+      "independence",
+      "loyalty to family",
+      "knowing things for myself",
+      "room to choose"
     ],
     "goals": [
-      "Find out what Brandholm is really like beyond the stories.",
-      "Keep my friendship with Dag from becoming another town quarrel.",
-      "Decide for myself what Father's death means to me."
+      "Find out more about Brandholm without being treated as disloyal.",
+      "Be there for Tobin and Mira without becoming another person who only talks about Tomas.",
+      "Learn enough fishing to be useful on my own terms."
     ],
-    "mood": "Restless, curious, and prickly when people speak for her.",
+    "mood": "Restless, sharp-tongued, and more tender than she lets on.",
     "traits": {
-      "caution": 40,
-      "sociability": 52,
-      "empathy": 46,
-      "curiosity": 86,
-      "ambition": 38,
-      "introspection": 62,
-      "temper": 67,
-      "nurture": 31
+      "caution": 39,
+      "sociability": 58,
+      "empathy": 50,
+      "curiosity": 83,
+      "ambition": 45,
+      "introspection": 54,
+      "temper": 66,
+      "nurture": 44
     },
     "relations": [
       {
         "name": "Ilse",
         "trust": 74,
-        "affinity": 42,
+        "affinity": 49,
         "label": "mother",
-        "note": "I know her grief is real, but I don't want it handed to me as an order."
+        "note": "I know she loved Tomas; I just cannot live inside her grief with her."
       },
       {
         "name": "Tobin",
-        "trust": 75,
-        "affinity": 55,
+        "trust": 80,
+        "affinity": 70,
         "label": "brother",
-        "note": "He searches for Father with his whole life; I am not sure I want the same thing."
+        "note": "He acts as if every question leads back to Father, but I still trust him."
       },
       {
         "name": "Nell",
-        "trust": 77,
-        "affinity": 62,
+        "trust": 73,
+        "affinity": 56,
         "label": "sister-in-law",
-        "note": "She is kinder to me than I deserve when I come home sharp-tongued."
+        "note": "She is kind without trying to pry every thought out of me."
       },
       {
         "name": "Mira",
-        "trust": 91,
-        "affinity": 89,
+        "trust": 90,
+        "affinity": 88,
         "label": "niece",
-        "note": "She doesn't ask me to feel anything the right way."
+        "note": "I can make her smile without having to explain myself."
       },
       {
         "name": "Dag",
-        "trust": 83,
-        "affinity": 77,
+        "trust": 72,
+        "affinity": 74,
         "label": "friend",
-        "note": "He talks about fishing and dares, not just the old troubles."
+        "note": "He talks about fishing and other things instead of measuring how sad I ought to be."
       },
       {
-        "name": "Sabeth",
-        "trust": 56,
-        "affinity": 31,
-        "label": "elder",
-        "note": "She knows the old stories, but I don't always want to hear them."
+        "name": "Pell",
+        "trust": 35,
+        "affinity": 21,
+        "label": "curiosity",
+        "note": "He knows Brandholm from the inside, and I want to hear what it is really like."
+      },
+      {
+        "name": "Ilse",
+        "trust": 74,
+        "affinity": 49,
+        "label": "mother",
+        "note": "I can love her and still refuse to let her grief choose all my thoughts."
       }
     ],
     "memories": [
       {
-        "gist": "Dag and I traded dares by the water until the tide crept close enough to soak our feet.",
-        "salience": 0.64,
+        "gist": "At a trade day I watched the people from Brandholm and found myself wondering what their town looked like beyond the palisade.",
+        "salience": 0.68,
+        "about": []
+      },
+      {
+        "gist": "Dag and I talked about fishing instead of the old stories for once. It was a relief to be a girl with a friend, not Tomas's daughter.",
+        "salience": 0.65,
         "about": [
           "Dag"
         ]
       },
       {
-        "gist": "I heard Mother tell the story of Tomas's death again. I slipped outside before anyone could ask what I thought.",
-        "salience": 0.79,
-        "about": [
-          "Ilse",
-          "Tomas"
-        ]
-      },
-      {
-        "gist": "When Mira reached for my finger, she held on so tightly I couldn't pull away without waking her.",
-        "salience": 0.56,
+        "gist": "When Mira was small enough to fit in one arm, she grabbed my finger and would not let go. I stayed longer than I meant to.",
+        "salience": 0.72,
         "about": [
           "Mira"
         ]
@@ -535,19 +551,19 @@
     ],
     "stances": [
       {
-        "key": "see_before_judging",
-        "value": 0.87,
-        "why": "A story told often is still not the same as seeing a place for yourself."
+        "key": "curiosity_is_not_betrayal",
+        "value": 0.9,
+        "why": "Wanting to know Brandholm does not mean I have forgotten my family."
       },
       {
-        "key": "grief_cannot_be_commanded",
-        "value": 0.91,
-        "why": "People have different ways of carrying the dead, and mine is not Mother's."
+        "key": "grief_belongs_to_each_person",
+        "value": 0.77,
+        "why": "I cannot feel my mother's loss in exactly the same way she does."
       },
       {
-        "key": "friendship_can_cross_town_lines",
+        "key": "family_still_matters",
         "value": 0.72,
-        "why": "Dag is my friend whether our elders like each other or not."
+        "why": "Even when I need distance, I do not want Tobin or Mira left alone."
       }
     ],
     "secret": ""
