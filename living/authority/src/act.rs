@@ -482,6 +482,22 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         want_qty: want.1,
         victim: if matches!(skill, "attack" | "throw" | "shoot" | "threaten") && target.class == 3 { target.id as u32 } else { 0 },
     };
+    // A threat is made once: menacing the same person again within 30 s is refused (a
+    // routine that repeats it every second otherwise floods them with threats).
+    if skill == "threaten" && act.victim != 0 {
+        if let Some(mut st) = ctx.db.mind_state().id().find(id) {
+            let key = 0xE000 | (act.victim % 0x100) as u16;
+            if st.marks.iter().any(|m| m.node == key && now.saturating_sub(m.at_ms) < 30_000) {
+                return Err("you are already threatening them; to ask or urge someone, speak (say)".into());
+            }
+            st.marks.retain(|m| m.node != key);
+            st.marks.push(Mark { node: key, at_ms: now });
+            if st.marks.len() > 24 {
+                st.marks.remove(0);
+            }
+            ctx.db.mind_state().id().update(st);
+        }
+    }
     // An action that would start right here must pass its rules first, too; so must force
     // against someone farther off (no closing in on someone the rules won't let you strike).
     if !needs_approach || matches!(skill, "attack" | "threaten") {

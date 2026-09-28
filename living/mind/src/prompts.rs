@@ -31,7 +31,7 @@ but whoever swings stands still meanwhile. People run 2.6 tiles/s, wolves 3.4, g
 While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.
 FORCE is graded. An attack is meant to hurt or to kill ({\"do\": \"attack\", \"target\": T, \"item\": \"hurt\"} or \"kill\"; without an item, people fight people to hurt, and fights with animals are to kill). \
 Blows meant to hurt stop once the other is down to 40% of their health or has yielded, and never take anyone below 10%; blows meant to kill go on until death. \
-threaten = menace someone within a few tiles for 2 s (no harm; they see it coming, as {\"threatened\": true}, and so does anyone watching). \
+threaten = menace someone within a few tiles with harm for 2 s (no harm yet; they see it coming, as {\"threatened\": true}, and so does anyone watching). It is a threat of violence: to ask, wake, urge or call someone, speak (say) instead. \
 yield = give in, guard down and hands up: for 20 s you do not strike back, and blows meant only to hurt are held back from you; blows meant to kill are not. \
 Everyone nearby sees which force was used.
 COMMUNITIES: people can found a community (the act {\"do\": \"found\", \"text\": \"its name\"}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
