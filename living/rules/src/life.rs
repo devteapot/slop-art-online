@@ -138,6 +138,17 @@ impl Life {
     pub fn years_old(&self, age_days: f32, t: Pace) -> f32 {
         age_days / (t.year_days * t.pace.max(0.0001)).max(0.0001)
     }
+
+    /// Age in world days of someone a seed says is `years` old, kept just short of the
+    /// earliest death of old age (an authored 70-year-old is an elder, not dead at the start).
+    pub fn seeded_age(&self, years: f32, t: Pace) -> f32 {
+        days_of_years(years, t).min(self.age_at(self.old_age - 0.005, t))
+    }
+}
+
+/// World days in `years` calendar years at a world's pace (the inverse of `Life::years_old`).
+pub fn days_of_years(years: f32, t: Pace) -> f32 {
+    years.max(0.0) * t.year_days * t.pace.max(0.0001)
 }
 
 #[cfg(test)]
@@ -159,5 +170,21 @@ mod tests {
         let d = l.deathline(7);
         assert!((l.old_age..=1.0).contains(&d));
         assert_ne!(l.deathline(7), l.deathline(8));
+    }
+
+    #[test]
+    fn authored_ages_in_years_give_the_right_stage() {
+        // People as in species.json, at a lab's compressed pace.
+        let l = Life { years: 70.0, infant: 0.03, child: 0.23, elder: 0.85, old_age: 0.87, ..Life::default() };
+        let t = Pace { year_days: 4.0, pace: 0.1428 };
+        assert!((l.years_old(days_of_years(33.0, t), t) - 33.0).abs() < 0.01);
+        assert_eq!(l.stage(l.seeded_age(1.0, t), t), Stage::Infant);
+        assert_eq!(l.stage(l.seeded_age(6.0, t), t), Stage::Child);
+        assert_eq!(l.stage(l.seeded_age(33.0, t), t), Stage::Adult);
+        // A 70-year-old is an elder, kept short of the first deaths of old age.
+        let old = l.seeded_age(70.0, t);
+        assert_eq!(l.stage(old, t), Stage::Elder);
+        assert!(l.fraction(old, t) < l.old_age);
+        assert_eq!(days_of_years(-3.0, t), 0.0);
     }
 }

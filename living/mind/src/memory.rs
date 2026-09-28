@@ -48,6 +48,15 @@ pub struct EdgeOp {
     pub props: serde_json::Map<String, Value>,
 }
 
+/// Memories a world's author gave a person (from before the world began) have no experience;
+/// they are numbered from here (`exp:<n>` like any kept memory, so recall, rehearsal and
+/// forgetting treat them alike) far above any experience id.
+pub const AUTHORED_MEMORY: u64 = 1 << 40;
+
+pub fn is_authored_memory(exp: u64) -> bool {
+    exp >= AUTHORED_MEMORY
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MemoryOp {
     pub exp: u64,
@@ -250,17 +259,18 @@ impl Store {
         Ok(())
     }
 
-    /// Record who the character is now (on `self`) and keep the previous version.
+    /// Record who the character is now (on `self`) and keep the previous version. A
+    /// `secret` in the persona is kept on `self` (private to this mind) until another is given.
     pub async fn set_identity(&self, actor: u32, version: u32, persona: &Value, why: &str, thought: &str, t: u64) -> Result<()> {
         self.g
             .run(
                 self.q(
                     "MATCH (s:Concept {run: $run, actor: $actor, key: 'self'})
                      SET s.narrative = $narrative, s.values = $values, s.goals = $goals, s.traits = $traits,
-                         s.mood = $mood, s.identity_version = $version, s.updated_t = $t
+                         s.mood = $mood, s.identity_version = $version, s.updated_t = $t, s.secret = coalesce($secret, s.secret)
                      MERGE (v:Concept {run: $run, actor: $actor, key: 'identity:' + toString($version)})
                      SET v:IdentityVersion, v.version = $version, v.narrative = $narrative, v.values = $values, v.goals = $goals,
-                         v.traits = $traits, v.mood = $mood, v.why = $why, v.t = $t, v.thought = $thought, v.name = 'identity v' + toString($version)
+                         v.traits = $traits, v.mood = $mood, v.secret = s.secret, v.why = $why, v.t = $t, v.thought = $thought, v.name = 'identity v' + toString($version)
                      MERGE (s)-[:WAS]->(v)",
                     actor,
                 )
@@ -270,6 +280,7 @@ impl Store {
                 .param("goals", p(persona["goals"].clone()))
                 .param("traits", persona["traits"].to_string())
                 .param("mood", persona["mood"].as_str().unwrap_or_default())
+                .param("secret", p(persona["secret"].as_str().filter(|x| !x.trim().is_empty()).map_or(Value::Null, |x| json!(x))))
                 .param("why", why)
                 .param("thought", thought)
                 .param("t", t as i64),
@@ -1226,6 +1237,50 @@ mod tests {
     }
 
     /// Replays recall on an existing run, read-only (for audits):
+    /// An authored person's memories from before the world began (no experience) come back
+    /// by their words and by the people in them, and the secret stays on `self`.
+    #[tokio::test]
+    #[ignore]
+    async fn authored_memories_are_recalled() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-authored-{}", crate::llm::now_ms());
+        let s = Store::connect("127.0.0.1:7689", "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Oren").await.unwrap();
+        let now = crate::llm::now_ms();
+        let mut p = Patch::default();
+        for (id, name) in [(4, "Teodor Vane"), (3, "Pim Hale")] {
+            p.nodes.push(NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(name.into()), props: Default::default() });
+        }
+        sugar_into(&json!({"relations": [{"id": 4, "trust": 20, "affinity": -10, "label": "creditor"}]}), &mut p, &[]);
+        let mem = |i: u64, gist: &str, who: &str| MemoryOp { exp: AUTHORED_MEMORY + i, t: now, gist: gist.into(), salience: 0.9, involves: vec![who.into()] };
+        p.remember.push(mem(0, "The flood took the lower field and cracked the millstone; Teodor cut a new one on credit.", "person:4"));
+        p.remember.push(mem(1, "Pim fell into the millrace last summer and I pulled him out by his collar.", "person:3"));
+        p.remember.push(mem(2, "The traders cheated us on salt.", "self"));
+        s.apply(1, &p, "sheet-1", now).await.unwrap();
+        s.set_identity(1, 1, &json!({"narrative": "I keep the mill.", "values": [], "goals": [], "traits": {}, "mood": "worried", "secret": "I sold the seed grain."}), "who I was when this began", "sheet-1", now).await.unwrap();
+        // Seeing Teodor brings back the flood; hearing of the millrace brings back Pim's fall.
+        let mut cues = Cues::default();
+        cues.key("person:4", 1.0);
+        let r = s.recall(1, &cues.bounded(), 8, 1).await.unwrap();
+        // (`rehearse` holds only the cued memories; `memories` adds the latest as working memory.)
+        assert_eq!(r.rehearse, vec![AUTHORED_MEMORY], "{:?}", r.memories);
+        assert!(r.memories.iter().all(|m| is_authored_memory(m.0)));
+        assert!(r.people.iter().any(|(id, _)| *id == 4), "{:?}", r.people);
+        let mut cues = Cues::default();
+        cues.text("Careful near the millrace!", 1.0);
+        let r = s.recall(1, &cues.bounded(), 8, 1).await.unwrap();
+        assert_eq!(r.rehearse, vec![AUTHORED_MEMORY + 1], "{:?}", r.memories);
+        let mut rows = s.g.execute(s.q("MATCH (x:Concept {run: $run, actor: $actor, key: 'self'})-[:WAS]->(v) RETURN x.secret AS s, v.secret AS vs", 1)).await.unwrap();
+        let row = rows.next().await.unwrap().unwrap();
+        assert_eq!(row.get::<String>("s").unwrap(), "I sold the seed grain.");
+        assert_eq!(row.get::<String>("vs").unwrap(), "I sold the seed grain.");
+        // A later identity without a secret keeps it.
+        s.set_identity(1, 2, &json!({"narrative": "I keep the mill still.", "values": [], "goals": [], "traits": {}, "mood": "calm"}), "time", "c-2", now).await.unwrap();
+        let mut rows = s.g.execute(s.q("MATCH (x:Concept {run: $run, actor: $actor, key: 'self'}) RETURN x.secret AS s", 1)).await.unwrap();
+        assert_eq!(rows.next().await.unwrap().unwrap().get::<String>("s").unwrap(), "I sold the seed grain.");
+        s.g.run(s.q("MATCH (c:Concept {run: $run, actor: $actor}) DETACH DELETE c", 1)).await.unwrap();
+    }
+
     /// `LIVING_RECALL_CASES=cases.json LIVING_NEO4J_PASSWORD=… cargo test -p living-mind recall_replay -- --ignored --nocapture`
     /// where each case is `{"run", "actor", "keys": [[key, w]], "texts": [[text, w]], "budget"}`.
     #[tokio::test]

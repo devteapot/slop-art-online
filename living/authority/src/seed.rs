@@ -111,7 +111,8 @@ pub struct SeedTown {
     /// What the town is known for (goes into residents' backgrounds).
     #[serde(default)]
     pub character: String,
-    /// Occupation → number of residents (history, not assignment).
+    /// Occupation → number of residents (history, not assignment). Unused with `residents`.
+    #[serde(default)]
     pub occupations: std::collections::BTreeMap<String, u32>,
     #[serde(default)]
     pub stores: std::collections::BTreeMap<String, u32>,
@@ -120,6 +121,48 @@ pub struct SeedTown {
     /// A walled city (wall ring, gates) or an open village.
     #[serde(default = "yes")]
     pub walled: bool,
+    /// Authored people: when given, the settlement's residents are exactly these (with their
+    /// households, kin and sheets) instead of households drawn from `occupations`.
+    #[serde(default)]
+    pub residents: Vec<SeedResident>,
+}
+
+/// A person written by the world's author: who they are is installed as given (see
+/// docs/AUTHORED_WORLDS.md); only the name is required.
+#[derive(Deserialize)]
+pub struct SeedResident {
+    pub name: String,
+    /// Age in years (converted at the world's pace; the life stage follows from it).
+    #[serde(default = "thirty")]
+    pub age: f32,
+    /// Residents with the same household key share a house (none: a household of one).
+    #[serde(default)]
+    pub household: String,
+    /// Work history, as in `occupations` (it chooses the starting habits and, without
+    /// `knows`, the know-how); the young start with a child's habits whatever it says.
+    #[serde(default)]
+    pub occupation: String,
+    /// Techniques known from the start (none given: the occupation's, plus fire, for adults).
+    #[serde(default)]
+    pub knows: Vec<String>,
+    /// Names of up to two parents anywhere in the seed.
+    #[serde(default)]
+    pub parents: Vec<String>,
+    /// What they carry at the start.
+    #[serde(default = "four_berries")]
+    pub inventory: std::collections::BTreeMap<String, u32>,
+    /// The authored identity (narrative, values, goals, mood, traits, relations, memories,
+    /// stances, places, secret), passed to the mind with people resolved to ids.
+    #[serde(default)]
+    pub sheet: serde_json::Value,
+}
+
+fn thirty() -> f32 {
+    30.0
+}
+
+fn four_berries() -> std::collections::BTreeMap<String, u32> {
+    [("berries".to_string(), 4)].into()
 }
 
 fn yes() -> bool {
@@ -136,7 +179,108 @@ fn eight() -> u32 {
 
 impl SeedTown {
     fn households(&self) -> usize {
+        if !self.residents.is_empty() {
+            return household_keys(&self.residents).len();
+        }
         (self.occupations.values().sum::<u32>() as usize).div_ceil(2).max(1)
+    }
+}
+
+/// A resident's household key (their own name when they live alone).
+fn household_of(r: &SeedResident) -> &str {
+    if r.household.is_empty() {
+        &r.name
+    } else {
+        &r.household
+    }
+}
+
+/// Distinct households in first-mentioned order (the order houses are given out).
+fn household_keys(rs: &[SeedResident]) -> Vec<&str> {
+    let mut keys: Vec<&str> = Vec::new();
+    for r in rs {
+        if !keys.contains(&household_of(r)) {
+            keys.push(household_of(r));
+        }
+    }
+    keys
+}
+
+/// Residents in an order where parents come before their children in the same settlement,
+/// so a child's genes come from its parents at birth (a cycle keeps the written order).
+fn birth_order(rs: &[SeedResident]) -> Vec<usize> {
+    let mut order: Vec<usize> = Vec::new();
+    while order.len() < rs.len() {
+        let before = order.len();
+        for i in 0..rs.len() {
+            let waits = |p: &String| rs.iter().enumerate().any(|(j, o)| j != i && &o.name == p && !order.contains(&j));
+            if !order.contains(&i) && !rs[i].parents.iter().any(waits) {
+                order.push(i);
+            }
+        }
+        if order.len() == before {
+            order.extend((0..rs.len()).filter(|i| !order.contains(i)).collect::<Vec<_>>());
+        }
+    }
+    order
+}
+
+/// An authored sheet with its people resolved: `relations[]` and `memories[].about[]` name
+/// people, who gain their id (`about` becomes `[{"name", "id"}]`); entries naming no one in
+/// the world are dropped and returned. The private `secret` is left out: the background is a
+/// public table, and the mind reads the secret from the seed itself.
+pub fn resolve_sheet(sheet: &serde_json::Value, lookup: &dyn Fn(&str) -> Option<u32>) -> (serde_json::Value, Vec<String>) {
+    let mut s = sheet.clone();
+    let mut dropped = Vec::new();
+    if let Some(o) = s.as_object_mut() {
+        o.remove("secret");
+    }
+    if let Some(rs) = s.get_mut("relations").and_then(|v| v.as_array_mut()) {
+        rs.retain_mut(|r| match r["name"].as_str().and_then(lookup) {
+            Some(id) => {
+                r["id"] = serde_json::json!(id);
+                true
+            }
+            None => {
+                dropped.push(format!("relation {}", r["name"]));
+                false
+            }
+        });
+    }
+    if let Some(ms) = s.get_mut("memories").and_then(|v| v.as_array_mut()) {
+        for m in ms.iter_mut() {
+            let Some(about) = m.get_mut("about").and_then(|a| a.as_array_mut()) else { continue };
+            let mut known = Vec::new();
+            for a in about.iter() {
+                let name = a.as_str().or_else(|| a["name"].as_str()).unwrap_or_default();
+                match lookup(name) {
+                    Some(id) => known.push(serde_json::json!({"name": name, "id": id})),
+                    None => dropped.push(format!("memory about {name:?}")),
+                }
+            }
+            *about = known;
+        }
+    }
+    (s, dropped)
+}
+
+/// An authored temperament is also the body's: the sheet's person traits replace the drawn
+/// or inherited ones in the genome (and are what an authored child inherits from).
+fn author_temperament(ctx: &ReducerContext, id: u32, sheet: &serde_json::Value) {
+    let Some(traits) = sheet["traits"].as_object() else { return };
+    let Some(mut row) = ctx.db.genome().id().find(id) else { return };
+    let mut genes: living_rules::genes::Genes = serde_json::from_str(&row.genes).unwrap_or_default();
+    let mut changed = false;
+    for t in living_rules::genes::PERSON_TRAITS {
+        if let Some(v) = traits.get(t).and_then(|v| v.as_f64()) {
+            genes.insert(format!("trait:{t}"), (v as f32).clamp(0.0, 100.0).round());
+            changed = true;
+        }
+    }
+    if changed {
+        row.genes = serde_json::to_string(&genes).unwrap_or_default();
+        ctx.db.genome().id().update(row);
+        common::forget_cached(id);
     }
 }
 
@@ -339,9 +483,11 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         let st = ctx.db.structure().insert(Structure { id: 0, kind: a.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: 0, built_ms: 0 });
         ctx.db.artifact().insert(Artifact { id: 0, kind: a.kind.clone(), holder: STRUCTURE_BIT | st.id, author: 0, author_name: a.author_name.clone(), written_ms: 0, topic: a.topic.clone(), text: a.text.clone() });
     }
+    let mut authored: Vec<(String, u32)> = Vec::new();
     for (t, layout) in &settlements {
-        town(ctx, &map, t, layout, now);
+        authored.extend(town(ctx, &map, t, layout, now));
     }
+    settle_authored(ctx, &s, &authored);
     // Townsfolk know where the other towns stand (they grew up hearing of them); what is
     // there and how the way goes, they learn by going. It is part of their background, which
     // their minds turn into remembered places.
@@ -708,8 +854,8 @@ fn put(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32,
 /// An established settlement laid out by `living_rules::city`: a hearth, stores and a sign on
 /// the market square, a house per household along the streets, gates in the wall kept by the
 /// settlement's community, planted fields outside; residents with histories.
-fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) {
-    let admin = common::world(ctx).admin;
+/// Returns the authored residents by name (none for a town drawn from `occupations`).
+fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) -> Vec<(String, u32)> {
     let center = layout.center;
     let c = ctx.db.community().insert(Community { id: 0, name: t.name.clone(), founder: 0, founded_ms: 0, home_x: center.0, home_y: center.1 });
     put(ctx, map, "campfire", layout.market[0], 0, now);
@@ -719,7 +865,58 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
         let sid = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: 0, built_ms: 0 }).id;
         ctx.db.gate().insert(Gate { id: sid, x: gx, y: gy, open: true, community: c.id, changed_ms: now, changed_by: 0 });
     }
-    // Residents by occupation, grouped into households of 2-4.
+    let (ids, authored): (Vec<u32>, Vec<(String, u32)>) = if t.residents.is_empty() {
+        (drawn_households(ctx, map, t, layout, now), Vec::new())
+    } else {
+        let a = authored_households(ctx, map, t, layout, now);
+        (a.iter().map(|a| a.1).collect(), a)
+    };
+    // Stores on the market square.
+    let stores = if t.walled { 2 } else { 1 };
+    for k in 0..stores {
+        let at = layout.market.get(2 + k).copied().unwrap_or(center);
+        let sid = put(ctx, map, "storage", at, ids.get(k).copied().unwrap_or(0), now);
+        for (item, q) in &t.stores {
+            common::inv_add(ctx, STRUCTURE_BIT | sid, item, (*q).div_ceil(stores as u32));
+        }
+    }
+    let sc = common::scripts(ctx);
+    for p in &layout.fields {
+        common::invalidate_resources(ctx, None);
+        ctx.db.resource_node().insert(ResourceNode {
+            id: 0,
+            kind: "berry_bush".into(),
+            x: p.0,
+            y: p.1,
+            chunk: chunk_of(p.0, p.1),
+            amount: 5.0,
+            max: 5.0,
+            regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
+            at_ms: now,
+        });
+    }
+    if !t.ledger.is_empty() {
+        let at = layout.market.get(1).copied().unwrap_or(center);
+        let sid = put(ctx, map, "sign", at, 0, now);
+        ctx.db.artifact().insert(Artifact { id: 0, kind: "sign".into(), holder: STRUCTURE_BIT | sid, author: 0, author_name: format!("the elders of {}", t.name), written_ms: 0, topic: String::new(), text: t.ledger.clone() });
+    }
+    if let Some(mut com) = ctx.db.community().id().find(c.id) {
+        com.founder = ids.first().copied().unwrap_or(0);
+        ctx.db.community().id().update(com);
+    }
+    for id in &ids {
+        ctx.db.membership().insert(Membership { id: 0, community: c.id, member: *id, since_ms: now });
+    }
+    let what = if t.walled { format!("{} stands walled at ({:.0}, {:.0}) with {} people and {} gates", t.name, center.0, center.1, ids.len(), layout.gates.len()) } else { format!("the village of {} lies at ({:.0}, {:.0}) with {} people", t.name, center.0, center.1, ids.len()) };
+    common::chronicle(ctx, now, "arrival", 0, 0, center, what);
+    authored
+}
+
+/// Residents drawn from the town's `occupations`, grouped into households of 2-4 with
+/// generated names; returns their ids.
+fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) -> Vec<u32> {
+    let admin = common::world(ctx).admin;
+    let center = layout.center;
     let mut roles: Vec<String> = t.occupations.iter().flat_map(|(o, n)| std::iter::repeat(o.clone()).take(*n as usize)).collect();
     for i in (1..roles.len()).rev() {
         let j = ctx.rng().gen_range(0..=i);
@@ -798,44 +995,170 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
             ids.push(*id);
         }
     }
-    // Stores on the market square.
-    let stores = if t.walled { 2 } else { 1 };
-    for k in 0..stores {
-        let at = layout.market.get(2 + k).copied().unwrap_or(center);
-        let sid = put(ctx, map, "storage", at, ids.get(k).copied().unwrap_or(0), now);
-        for (item, q) in &t.stores {
-            common::inv_add(ctx, STRUCTURE_BIT | sid, item, (*q).div_ceil(stores as u32));
+    ids
+}
+
+/// A settlement's authored residents, household by household (parents before their
+/// children), each with the age, know-how, habits and belongings the seed gives them and a
+/// background row; their sheets and any parents in later settlements are resolved once every
+/// settlement has its people (`settle_authored`).
+fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) -> Vec<(String, u32)> {
+    let admin = common::world(ctx).admin;
+    let center = layout.center;
+    let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
+    let keys = household_keys(&t.residents);
+    let home_of = |h: usize| layout.houses.get(h % layout.houses.len().max(1)).copied().unwrap_or(center);
+    // (resident index, id, occupation as lived)
+    let mut spawned: Vec<(usize, u32, String)> = Vec::new();
+    for i in birth_order(&t.residents) {
+        let r = &t.residents[i];
+        let h = keys.iter().position(|k| *k == household_of(r)).unwrap_or(0);
+        let home = home_of(h);
+        let k = spawned.iter().filter(|(j, ..)| household_of(&t.residents[*j]) == household_of(r)).count();
+        let at = walkable_near(map, (home.0 + (k as f32 - 1.0) * 0.5, home.1 + 0.6));
+        let parents: Vec<u32> = r
+            .parents
+            .iter()
+            .take(2)
+            .filter_map(|n| spawned.iter().find(|(j, ..)| &t.residents[*j].name == n).map(|s| s.1).or_else(|| ctx.db.character().kind().filter("person").find(|c| c.alive && &c.name == n).map(|c| c.id)))
+            .collect();
+        if r.age >= life.years * life.old_age {
+            log::warn!("{}: {} years is past the first deaths of old age; seeded just short of them", r.name, r.age);
+        }
+        let id = spawn_with(ctx, &r.name, "person", admin, true, at, now, life.seeded_age(r.age, pace), (parents.first().copied().unwrap_or(0), parents.get(1).copied().unwrap_or(0)));
+        author_temperament(ctx, id, &r.sheet);
+        let stage = ctx.db.character().id().find(id).map(|c| c.stage).unwrap_or(2);
+        // The young live a child's day whatever the sheet calls them.
+        let occ = if stage <= 1 {
+            "child".to_string()
+        } else if r.occupation.is_empty() || r.occupation == "child" {
+            "forager".to_string()
+        } else {
+            r.occupation.clone()
+        };
+        for (item, q) in &r.inventory {
+            common::inv_add(ctx, id as u64, item, *q);
+        }
+        if !r.knows.is_empty() {
+            for tech in &r.knows {
+                common::learn(ctx, id, tech, "seed", now);
+            }
+        } else if stage >= 2 {
+            common::learn(ctx, id, "fire", "seed", now);
+            for tech in occupation_know_how(&occ) {
+                common::learn(ctx, id, tech, "seed", now);
+            }
+        }
+        if stage >= 1 {
+            give_repertoire(ctx, id, &occ, now);
+        }
+        if let Some(mut ch) = ctx.db.character().id().find(id) {
+            ch.home_x = home.0;
+            ch.home_y = home.1;
+            ctx.db.character().id().update(ch);
+        }
+        spawned.push((i, id, occ));
+    }
+    for (h, key) in keys.iter().enumerate() {
+        let owner = spawned.iter().find(|(j, ..)| household_of(&t.residents[*j]) == *key).map(|s| s.1).unwrap_or(0);
+        if h < layout.houses.len() {
+            put(ctx, map, "house", home_of(h), owner, now);
         }
     }
-    let sc = common::scripts(ctx);
-    for p in &layout.fields {
-        common::invalidate_resources(ctx, None);
-        ctx.db.resource_node().insert(ResourceNode {
-            id: 0,
-            kind: "berry_bush".into(),
-            x: p.0,
-            y: p.1,
-            chunk: chunk_of(p.0, p.1),
-            amount: 5.0,
-            max: 5.0,
-            regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
-            at_ms: now,
+    for (i, id, occ) in &spawned {
+        let key = household_of(&t.residents[*i]);
+        let home = home_of(keys.iter().position(|k| *k == key).unwrap_or(0));
+        let kin: Vec<serde_json::Value> = spawned
+            .iter()
+            .filter(|(j, o, _)| o != id && household_of(&t.residents[*j]) == key)
+            .map(|(_, o, oc)| serde_json::json!({"id": o, "name": common::name_of(ctx, *o), "occupation": oc}))
+            .collect();
+        let text = serde_json::json!({
+            "origin": if t.walled { "town" } else { "village" },
+            "town": t.name,
+            "town_character": t.character,
+            "walled": t.walled,
+            "occupation": occ,
+            "household": kin,
+            "home": [home.0.round(), home.1.round()],
+            "town_center": [center.0.round(), center.1.round()],
         });
+        ctx.db.background().insert(Background { id: *id, text: text.to_string() });
     }
-    if !t.ledger.is_empty() {
-        let at = layout.market.get(1).copied().unwrap_or(center);
-        let sid = put(ctx, map, "sign", at, 0, now);
-        ctx.db.artifact().insert(Artifact { id: 0, kind: "sign".into(), holder: STRUCTURE_BIT | sid, author: 0, author_name: format!("the elders of {}", t.name), written_ms: 0, topic: String::new(), text: t.ledger.clone() });
+    // In the order written (the first is the settlement's founder).
+    let mut out: Vec<(String, u32)> = spawned.iter().map(|(i, id, _)| (t.residents[*i].name.clone(), *id)).collect();
+    out.sort_by_key(|(n, _)| t.residents.iter().position(|r| &r.name == n));
+    out
+}
+
+/// Once every settlement has its people: authored parents who live elsewhere are linked (a
+/// child whose parents were both born later takes its genes from them now), and each
+/// authored sheet goes into its person's background with the people it names resolved.
+fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)]) {
+    if authored.is_empty() {
+        return;
     }
-    if let Some(mut com) = ctx.db.community().id().find(c.id) {
-        com.founder = ids.first().copied().unwrap_or(0);
-        ctx.db.community().id().update(com);
+    let lookup = |n: &str| authored.iter().find(|(a, _)| a == n).map(|a| a.1).or_else(|| ctx.db.character().kind().filter("person").find(|c| c.alive && c.name == n).map(|c| c.id));
+    let mut seen: Vec<&str> = Vec::new();
+    for r in s.towns.iter().chain(s.villages.iter()).flat_map(|t| t.residents.iter()) {
+        let Some(id) = authored.iter().find(|(a, _)| *a == r.name).map(|a| a.1) else { continue };
+        if seen.contains(&r.name.as_str()) {
+            log::warn!("seed: more than one resident is called {}; the first is meant wherever the name appears", r.name);
+            continue;
+        }
+        seen.push(&r.name);
+        let parents: Vec<u32> = r
+            .parents
+            .iter()
+            .take(2)
+            .filter_map(|n| {
+                let p = lookup(n).filter(|p| *p != id);
+                if p.is_none() {
+                    log::warn!("{}: parent {n} is not in the world", r.name);
+                }
+                p
+            })
+            .collect();
+        let want = (parents.first().copied().unwrap_or(0), parents.get(1).copied().unwrap_or(0));
+        if let Some(mut ch) = ctx.db.character().id().find(id) {
+            if (ch.parent_a, ch.parent_b) != want {
+                let late = want.0 != 0 && want.1 != 0 && (ch.parent_a == 0 || ch.parent_b == 0);
+                (ch.parent_a, ch.parent_b) = want;
+                ctx.db.character().id().update(ch);
+                if late {
+                    let mut u = || ctx.rng().gen::<f32>();
+                    let genes = living_rules::genes::inherit(&common::genes_of(ctx, want.0), &common::genes_of(ctx, want.1), &mut u);
+                    if let Some(mut g) = ctx.db.genome().id().find(id) {
+                        g.genes = serde_json::to_string(&genes).unwrap_or_default();
+                        ctx.db.genome().id().update(g);
+                        common::forget_cached(id);
+                    }
+                    if let Some(mut v) = ctx.db.vitals().id().find(id) {
+                        v.max_hp = common::scripts(ctx).num_of("max_hp", "person", 100.0) as f32 * living_rules::genes::gene(&genes, "vitality");
+                        v.hp = v.max_hp;
+                        ctx.db.vitals().id().update(v);
+                    }
+                    author_temperament(ctx, id, &r.sheet);
+                }
+            }
+        }
+        if r.sheet.is_null() {
+            continue;
+        }
+        if r.sheet["narrative"].as_str().map_or(true, |n| n.trim().is_empty()) {
+            log::warn!("{}: sheet has no narrative; their mind will make their identity from the background instead", r.name);
+        }
+        let (sheet, dropped) = resolve_sheet(&r.sheet, &lookup);
+        for d in dropped {
+            log::warn!("{}: sheet {d} names no one in the world; left out", r.name);
+        }
+        if let Some(mut bg) = ctx.db.background().id().find(id) {
+            let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&bg.text) else { continue };
+            v["sheet"] = sheet;
+            bg.text = v.to_string();
+            ctx.db.background().id().update(bg);
+        }
     }
-    for id in &ids {
-        ctx.db.membership().insert(Membership { id: 0, community: c.id, member: *id, since_ms: now });
-    }
-    let what = if t.walled { format!("{} stands walled at ({:.0}, {:.0}) with {} people and {} gates", t.name, center.0, center.1, ids.len(), layout.gates.len()) } else { format!("the village of {} lies at ({:.0}, {:.0}) with {} people", t.name, center.0, center.1, ids.len()) };
-    common::chronicle(ctx, now, "arrival", 0, 0, center, what);
 }
 
 /// A band of survivors with almost nothing: no structures, a little food, little know-how.
@@ -941,4 +1264,88 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
     }
     let what = if b.camp.is_empty() { "came to the wilds" } else { "live" };
     common::chronicle(ctx, now, "arrival", 0, 0, at, format!("{} ({} people) {what} at ({:.0}, {:.0})", b.name, ids.len(), at.0, at.1));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const AUTHORED: &str = include_str!("../../seeds/authored-test.json");
+
+    #[test]
+    fn older_seeds_still_parse() {
+        for (name, text) in [
+            ("stage3-village", include_str!("../../seeds/stage3-village.json")),
+            ("stage4-two", include_str!("../../seeds/stage4-two.json")),
+            ("stage4-makers", include_str!("../../seeds/stage4-makers.json")),
+            ("realm", include_str!("../../seeds/realm.json")),
+            ("realm2", include_str!("../../seeds/realm2.json")),
+        ] {
+            let s: Seed = serde_json::from_str(text).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(s.towns.iter().chain(s.villages.iter()).all(|t| t.residents.is_empty()), "{name}");
+        }
+    }
+
+    #[test]
+    fn authored_seed_parses_with_households_ages_and_sites() {
+        let s: Seed = serde_json::from_str(AUTHORED).expect("authored-test seed");
+        let (town, village) = (&s.towns[0], &s.villages[0]);
+        assert_eq!(town.residents.len(), 5);
+        assert_eq!(village.residents.len(), 2);
+        // mill (3), forge (1) and Brisk Marrow, who lives alone.
+        assert_eq!(town.households(), 3);
+        assert_eq!(village.households(), 1);
+        let pim = town.residents.iter().find(|r| r.name == "Pim Hale").unwrap();
+        assert_eq!(pim.parents, ["Oren Hale", "Ilsa Hale"]);
+        assert_eq!(pim.inventory.get("berries"), Some(&2));
+        assert_eq!(town.residents[0].inventory.get("berries"), Some(&4), "four berries by default");
+        // Ages in years give the right life stage at this seed's pace.
+        let (life, pace) = (common::life_of("person"), living_rules::life::Pace { year_days: s.year_days as f32, pace: s.life_pace });
+        let stage = |n: &str| {
+            let r = town.residents.iter().chain(village.residents.iter()).find(|r| r.name == n).unwrap();
+            life.stage(life.seeded_age(r.age, pace), pace)
+        };
+        assert_eq!(stage("Pim Hale"), living_rules::life::Stage::Child);
+        assert_eq!(stage("Oren Hale"), living_rules::life::Stage::Adult);
+        assert_eq!(stage("Teodor Vane"), living_rules::life::Stage::Elder);
+        // The realm has a site for every settlement the seed describes.
+        let m = s.map.as_ref().unwrap();
+        let r = living_rules::realm::generate(s.seed, m.w.max(64), m.h.max(64));
+        assert!(r.towns.len() >= s.towns.len() && r.villages.len() >= s.villages.len());
+    }
+
+    #[test]
+    fn parents_are_born_before_their_children() {
+        let rs: Vec<SeedResident> = serde_json::from_value(serde_json::json!([
+            {"name": "Kid", "parents": ["Ma", "Pa"]},
+            {"name": "Pa", "parents": ["Grandpa"]},
+            {"name": "Ma"},
+            {"name": "Grandpa"},
+            {"name": "Loop A", "parents": ["Loop B"]},
+            {"name": "Loop B", "parents": ["Loop A"]}
+        ]))
+        .unwrap();
+        let order: Vec<&str> = birth_order(&rs).into_iter().map(|i| rs[i].name.as_str()).collect();
+        let at = |n: &str| order.iter().position(|x| *x == n).unwrap();
+        assert_eq!(order.len(), rs.len());
+        assert!(at("Grandpa") < at("Pa") && at("Pa") < at("Kid") && at("Ma") < at("Kid"));
+    }
+
+    #[test]
+    fn sheets_resolve_people_and_keep_the_secret_out() {
+        let s: Seed = serde_json::from_str(AUTHORED).unwrap();
+        let names: Vec<&str> = s.towns.iter().chain(s.villages.iter()).flat_map(|t| t.residents.iter().map(|r| r.name.as_str())).collect();
+        let lookup = |n: &str| names.iter().position(|x| *x == n).map(|i| i as u32 + 1);
+        let oren = &s.towns[0].residents[0].sheet;
+        let (sheet, dropped) = resolve_sheet(oren, &lookup);
+        assert!(dropped.is_empty(), "{dropped:?}");
+        assert!(sheet.get("secret").is_none() && oren.get("secret").is_some());
+        assert_eq!(sheet["relations"][3]["name"], "Wenna Reed");
+        assert_eq!(sheet["relations"][3]["id"], 6, "a relation in another settlement");
+        assert_eq!(sheet["memories"][0]["about"], serde_json::json!([{"name": "Teodor Vane", "id": 4}]));
+        let (sheet, dropped) = resolve_sheet(&serde_json::json!({"narrative": "x", "relations": [{"name": "Nobody"}, {"name": "Cal Reed"}], "memories": [{"gist": "g", "about": ["Nobody", "Ilsa Hale"]}]}), &lookup);
+        assert_eq!(dropped.len(), 2);
+        assert_eq!(sheet["relations"].as_array().unwrap().len(), 1);
+        assert_eq!(sheet["memories"][0]["about"], serde_json::json!([{"name": "Ilsa Hale", "id": 2}]));
+    }
 }

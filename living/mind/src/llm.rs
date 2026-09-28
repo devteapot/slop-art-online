@@ -54,6 +54,25 @@ pub struct ModelsFile {
     /// Profiles by life stage (e.g. children think with a small model).
     #[serde(default)]
     pub stages: HashMap<String, String>,
+    /// Profiles by group: a town, village or band name (see [`group_of`]), so the
+    /// communities of one world can think with different models.
+    #[serde(default)]
+    pub groups: HashMap<String, String>,
+}
+
+/// Generations searched for a group through parents (and a bound on cycles).
+pub const GROUP_DEPTH: u32 = 8;
+
+/// The group whose model a person thinks with: their own (the `town` or `band` in their
+/// background) or, for someone born in the world, the first found through `parent_a` then
+/// `parent_b`, up to `depth` generations back. `of(id)` gives a character's own group and
+/// parents (`None` for an unknown character).
+pub fn group_of(id: u32, of: &dyn Fn(u32) -> Option<(Option<String>, u32, u32)>, depth: u32) -> Option<String> {
+    let (own, a, b) = of(id)?;
+    if own.is_some() || depth == 0 {
+        return own;
+    }
+    [a, b].into_iter().filter(|p| *p != 0 && *p != id).find_map(|p| group_of(p, of, depth - 1))
 }
 
 pub struct Llm {
@@ -181,6 +200,22 @@ impl Llm {
     /// The profile for a life stage, if the configuration names one.
     pub fn stage_profile(&self, stage: &str) -> Option<String> {
         self.models.stages.get(stage).filter(|p| self.keys.contains_key(*p)).cloned()
+    }
+
+    /// A person's profile: their group's (unless assigned one by name), over the child
+    /// stage's and rotation; without a group, as before: a child's stage profile, else the
+    /// assignment, rotation or default. Profiles without a key are passed over.
+    pub fn person_profile(&self, id: u32, name: &str, group: Option<&str>, child: bool) -> String {
+        let keyed = |p: Option<&String>| p.filter(|p| self.keys.contains_key(*p)).cloned();
+        if let Some(g) = keyed(group.and_then(|g| self.models.groups.get(g))) {
+            return keyed(self.models.assign.get(name)).unwrap_or(g);
+        }
+        child.then(|| self.stage_profile("child")).flatten().unwrap_or_else(|| self.profile_for(id, name))
+    }
+
+    /// Whether any group has a profile (otherwise groups need not be looked up).
+    pub fn has_groups(&self) -> bool {
+        !self.models.groups.is_empty()
     }
 
     pub fn profile_for(&self, id: u32, name: &str) -> String {
@@ -505,6 +540,54 @@ mod tests {
         let t = Instant::now();
         assert!(llm.chat("dead", "think", "a", &msg).await.is_err());
         assert!(t.elapsed() >= GATE_PAUSE_MIN, "the next call waits for the probe: {:?}", t.elapsed());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn groups_come_from_ones_own_background_or_ones_parents() {
+        // 1, 2: founders of Eastmere and a band; 3: their child; 4: 3's child with an
+        // unknown other parent; 5: a founder with no group; 6 and 7: each other's parents.
+        let of = |id: u32| match id {
+            1 => Some((Some("Eastmere".to_string()), 0, 0)),
+            2 => Some((Some("Hollow band".to_string()), 0, 0)),
+            3 => Some((None, 1, 2)),
+            4 => Some((None, 99, 3)),
+            5 => Some((None, 0, 0)),
+            6 => Some((None, 7, 0)),
+            7 => Some((None, 6, 0)),
+            _ => None,
+        };
+        assert_eq!(group_of(1, &of, GROUP_DEPTH).as_deref(), Some("Eastmere"));
+        assert_eq!(group_of(3, &of, GROUP_DEPTH).as_deref(), Some("Eastmere"), "parent_a first");
+        assert_eq!(group_of(4, &of, GROUP_DEPTH).as_deref(), Some("Eastmere"), "through a grandparent");
+        assert_eq!(group_of(4, &of, 1), None, "bounded depth");
+        assert_eq!(group_of(5, &of, GROUP_DEPTH), None);
+        assert_eq!(group_of(6, &of, GROUP_DEPTH), None, "a cycle ends");
+    }
+
+    #[test]
+    fn a_group_profile_overrides_stage_and_rotation_but_not_assignment() {
+        std::env::set_var("LIVING_TEST_GROUP_KEY", "x");
+        let p = |m: &str| json!({"base_url": "http://127.0.0.1:9/v1", "model": m, "key_env": "LIVING_TEST_GROUP_KEY"});
+        let models: ModelsFile = serde_json::from_value(json!({
+            "default": "a",
+            "profiles": {"a": p("a"), "b": p("b"), "c": p("c"), "kid": p("kid"), "nokey": {"base_url": "x", "model": "n", "key_env": "LIVING_TEST_UNSET_KEY"}},
+            "assign": {"Mara": "c"},
+            "rotate": ["a", "c"],
+            "stages": {"child": "kid"},
+            "groups": {"Eastmere": "b", "Stonewatch": "nokey"}
+        }))
+        .unwrap();
+        let dir = std::env::temp_dir().join(format!("living-groups-{}", now_ms()));
+        let llm = Llm::new(models, dir.clone()).unwrap();
+        assert_eq!(llm.person_profile(1, "Tam", Some("Eastmere"), false), "b");
+        assert_eq!(llm.person_profile(1, "Tam", Some("Eastmere"), true), "b", "over the child stage");
+        assert_eq!(llm.person_profile(1, "Mara", Some("Eastmere"), false), "c", "an assignment by name wins");
+        assert_eq!(llm.person_profile(1, "Tam", Some("Stonewatch"), false), "c", "a profile without a key falls through to rotation");
+        assert_eq!(llm.person_profile(2, "Tam", None, true), "kid");
+        assert_eq!(llm.person_profile(2, "Mara", None, true), "kid", "without a group, the child stage still comes first");
+        assert_eq!(llm.person_profile(2, "Mara", None, false), "c");
+        assert_eq!(llm.person_profile(2, "Tam", None, false), "a");
         let _ = std::fs::remove_dir_all(dir);
     }
 

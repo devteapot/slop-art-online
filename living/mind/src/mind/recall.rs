@@ -165,7 +165,11 @@ impl Minds {
             log::warn!("rehearsal for {}: {e:#}", self.name(actor));
         }
         let mind = r.facts.iter().map(|f| memory::render(f, &fmt)).collect();
-        let memories = r.memories.iter().map(|(exp, t, gist)| format!("[{}] {gist} (experience {exp})", fmt(*t))).collect();
+        let memories = r
+            .memories
+            .iter()
+            .map(|(exp, t, gist)| if memory::is_authored_memory(*exp) { format!("[before all this] {gist}") } else { format!("[{}] {gist} (experience {exp})", fmt(*t)) })
+            .collect();
         let cued_stances = self
             .conn
             .db

@@ -80,6 +80,10 @@ pub struct Minds {
     /// Pending deliberations by actor (kept only with the level of detail on, when many
     /// requests wait at once and scanning the view for each would be costly).
     pending: Mutex<HashMap<u32, Deliberation>>,
+    /// Each person's model group (see `llm::group_of`; it never changes) and the profile
+    /// last logged for each character.
+    groups: Mutex<HashMap<u32, Option<String>>>,
+    routed: Mutex<HashMap<u32, String>>,
 }
 
 fn flatten<E: std::fmt::Debug>(r: Result<Result<(), String>, E>) -> Result<(), String> {
@@ -152,7 +156,7 @@ impl Minds {
     pub fn new(conn: DbConnection, llm: Llm, store: Option<Store>, seed: Value, concurrency: usize) -> Result<Arc<Self>> {
         let me = conn.try_identity().ok_or_else(|| anyhow!("not connected"))?;
         let species = living_rules::species::parse(&std::fs::read_to_string(crate::root().join("living/seeds/species.json"))?).map_err(|e| anyhow!(e))?;
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency), slow: Semaphore::new((concurrency / 2).max(1)), talk_sem: Semaphore::new((concurrency / 4).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency), slow: Semaphore::new((concurrency / 2).max(1)), talk_sem: Semaphore::new((concurrency / 4).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -161,14 +165,35 @@ impl Minds {
         self.conn.db.character().iter().filter(|c| c.ai && c.alive && c.stage != 0 && c.controller == self.me && self.allowed(c.id)).collect()
     }
 
-    /// A character's model: children think with the "child" stage model when configured.
+    /// A character's model. A person thinks with their group's (`groups` in the models file:
+    /// their town or band, or for those born in the world their parents') unless assigned
+    /// one by name; without a group, children think with the "child" stage model when
+    /// configured. Otherwise assignment, rotation or the default. Logged when it changes.
     fn profile(&self, c: &Character) -> String {
-        if c.kind == "person" && c.stage <= 1 {
-            if let Some(p) = self.llm.stage_profile("child") {
-                return p;
-            }
+        let group = if c.kind == "person" { self.group(c.id) } else { None };
+        let p = if c.kind == "person" { self.llm.person_profile(c.id, &c.name, group.as_deref(), c.stage <= 1) } else { self.llm.profile_for(c.id, &c.name) };
+        if self.routed.lock().unwrap().insert(c.id, p.clone()).as_ref() != Some(&p) {
+            log::info!("{} (#{}) thinks with profile {p} ({}){}", c.name, c.id, self.llm.model_name(&p), group.map(|g| format!(", group {g}")).unwrap_or_default());
         }
-        self.llm.profile_for(c.id, &c.name)
+        p
+    }
+
+    /// A person's model group: the `town` or `band` of their background, or their parents'.
+    fn group(&self, id: u32) -> Option<String> {
+        if !self.llm.has_groups() {
+            return None;
+        }
+        if let Some(g) = self.groups.lock().unwrap().get(&id) {
+            return g.clone();
+        }
+        let of = |x: u32| {
+            let c = self.conn.db.character().id().find(&x)?;
+            let bg: Value = self.conn.db.background().id().find(&x).and_then(|b| serde_json::from_str(&b.text).ok()).unwrap_or_default();
+            Some((bg["town"].as_str().or(bg["band"].as_str()).map(String::from), c.parent_a, c.parent_b))
+        };
+        let g = llm::group_of(id, &of, llm::GROUP_DEPTH);
+        self.groups.lock().unwrap().insert(id, g.clone());
+        g
     }
 
     /// `LIVING_ONLY=3,7` limits this service to those characters (experiments on a seeded
@@ -417,7 +442,16 @@ impl Minds {
                 store.ensure_self(c.id, &c.name).await?;
             }
             if self.conn.db.persona().id().find(&c.id).is_none() {
-                if c.parent_a != 0 {
+                if let Some(bg) = self.authored(&c) {
+                    // Installed as written (no model call), concurrently with the rest.
+                    let me = self.clone();
+                    let c = c.clone();
+                    pending.push(tokio::spawn(async move {
+                        if let Err(e) = me.sheet_persona(&c, &bg).await {
+                            log::warn!("{}: authored identity not installed yet: {e:#}", c.name);
+                        }
+                    }));
+                } else if c.parent_a != 0 {
                     self.birth_persona(&c).await?;
                 } else if c.kind == "person" && self.conn.db.background().id().find(&c.id).is_some() {
                     let me = self.clone();
@@ -591,6 +625,129 @@ family, partner, friend, rival, stranger, and a short note in their words). Repl
         };
         let t = ThoughtIn { kind: "consolidate".into(), summary: "Who I am, from where I come from.".into(), detail: v.to_string(), latency_ms: reply.latency_ms, tokens: reply.tokens, model: reply.model, reference: thought };
         self.project(c.id, Some(persona), Some(t)).await
+    }
+
+    /// The background of a person the world's author wrote, when it carries a sheet with a
+    /// narrative (see docs/AUTHORED_WORLDS.md).
+    fn authored(&self, c: &Character) -> Option<Value> {
+        if c.kind != "person" {
+            return None;
+        }
+        let bg: Value = serde_json::from_str(&self.conn.db.background().id().find(&c.id)?.text).ok()?;
+        bg["sheet"]["narrative"].as_str().filter(|n| !n.trim().is_empty())?;
+        Some(bg)
+    }
+
+    /// An authored person's secret. It is not in any public table: it comes from the seed the
+    /// service runs (`LIVING_SEED`), for people whose background carries a sheet.
+    fn secret(&self, actor: u32) -> Option<String> {
+        let c = self.conn.db.character().id().find(&actor)?;
+        self.conn.db.background().id().find(&actor).filter(|b| b.text.contains("\"sheet\":"))?;
+        ["towns", "villages"]
+            .iter()
+            .flat_map(|k| self.seed[*k].as_array().into_iter().flatten())
+            .flat_map(|t| t["residents"].as_array().into_iter().flatten())
+            .find(|r| r["name"].as_str() == Some(c.name.as_str()))
+            .and_then(|r| r["sheet"]["secret"].as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
+    /// An authored person's starting self, installed as written, without a model call: who
+    /// they are (identity version 1), how they feel about the people they name, the places
+    /// they know, their stances and their memories go into their mind like anything else they
+    /// hold, and are theirs to revise from then on. Without a mind store, the projections the
+    /// body reads are published directly.
+    async fn sheet_persona(&self, c: &Character, bg: &Value) -> Result<()> {
+        let sheet = &bg["sheet"];
+        let thought = reference(c.id, "sheet");
+        let now = llm::now_ms();
+        let id_of = |v: &Value| v["id"].as_u64().map(|i| i as u32).filter(|i| *i != c.id);
+        let relations: Vec<Value> = sheet["relations"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|r| id_of(r).map(|id| json!({"id": id, "trust": r["trust"], "affinity": r["affinity"], "label": r["label"].as_str().unwrap_or("acquaintance"), "note": r["note"]})))
+            .collect();
+        let judgments: Vec<Value> = sheet["stances"].as_array().into_iter().flatten().filter(|j| j["key"].is_string()).map(|j| json!({"key": j["key"], "value": j["value"].as_f64().unwrap_or(0.5), "why": j["why"]})).collect();
+        let mut places = vec![json!({"name": "home", "x": c.home_x, "y": c.home_y})];
+        if let Some([x, y]) = bg["town_center"].as_array().map(|a| [a[0].as_f64().unwrap_or(0.0), a[1].as_f64().unwrap_or(0.0)]) {
+            places.push(json!({"name": format!("{} center", bg["town"].as_str().unwrap_or("town")), "x": x, "y": y}));
+        }
+        for t in bg["towns_known"].as_array().cloned().unwrap_or_default() {
+            if let (Some(name), Some(at)) = (t["name"].as_str(), t["at"].as_array()) {
+                places.push(json!({"name": name, "x": at[0].as_f64().unwrap_or(0.0), "y": at[1].as_f64().unwrap_or(0.0)}));
+            }
+        }
+        places.extend(sheet["places"].as_array().into_iter().flatten().filter(|p| p["name"].is_string() && p["x"].is_number() && p["y"].is_number()).cloned());
+        let traits = self.born_temperament(c.id).unwrap_or_else(|| if sheet["traits"].is_object() { sheet["traits"].clone() } else { json!({}) });
+        let mut identity = json!({
+            "narrative": sheet["narrative"],
+            "values": strings(&sheet["values"]),
+            "goals": strings(&sheet["goals"]),
+            "traits": traits,
+            "mood": sheet["mood"].as_str().unwrap_or("settled"),
+        });
+        if let Some(secret) = self.secret(c.id) {
+            identity["secret"] = json!(secret);
+        }
+        if let Some(store) = &self.store {
+            let mut patch = memory::Patch::default();
+            // Everyone they know of: household, the people they feel something about and the
+            // people in their memories.
+            let mut people: Vec<u32> = bg["household"].as_array().into_iter().flatten().filter_map(id_of).collect();
+            people.extend(relations.iter().filter_map(id_of));
+            people.extend(sheet["memories"].as_array().into_iter().flatten().flat_map(|m| m["about"].as_array().into_iter().flatten().filter_map(id_of)));
+            people.sort_unstable();
+            people.dedup();
+            for id in &people {
+                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.name(*id)), props: Default::default() });
+            }
+            // `sugar_into` bounds a model reply's lists; an authored sheet is taken whole.
+            for chunk in relations.chunks(12) {
+                memory::sugar_into(&json!({"relations": chunk}), &mut patch, &[]);
+            }
+            for chunk in judgments.chunks(12) {
+                memory::sugar_into(&json!({"judgments": chunk}), &mut patch, &[]);
+            }
+            for chunk in places.chunks(8) {
+                memory::sugar_into(&json!({"places": chunk}), &mut patch, &[]);
+            }
+            // Memories from before, recalled by their words and by the people in them.
+            for (i, m) in sheet["memories"].as_array().into_iter().flatten().enumerate() {
+                let gist: String = m["gist"].as_str().unwrap_or_default().trim().chars().take(300).collect();
+                if gist.is_empty() {
+                    continue;
+                }
+                let involves = m["about"].as_array().into_iter().flatten().filter_map(id_of).map(|id| format!("person:{id}")).collect();
+                patch.remember.push(memory::MemoryOp { exp: memory::AUTHORED_MEMORY + i as u64, t: now, gist, salience: m["salience"].as_f64().unwrap_or(0.7).clamp(0.0, 1.0), involves });
+            }
+            store.ensure_self(c.id, &c.name).await?;
+            store.apply(c.id, &patch, &thought, now).await?;
+            store.set_identity(c.id, 1, &identity, "who I was when this began", &thought, now).await?;
+        }
+        log::info!("{} (#{}) as authored: {}", c.name, c.id, identity["narrative"].as_str().unwrap_or_default());
+        let persona = PersonaIn {
+            narrative: identity["narrative"].as_str().unwrap_or_default().into(),
+            values: strings(&identity["values"]),
+            goals: strings(&identity["goals"]),
+            traits: identity["traits"].to_string(),
+            mood: identity["mood"].as_str().unwrap_or_default().into(),
+        };
+        // Thoughts are public: the detail is the sheet as the background has it, never a secret.
+        let mut detail = sheet.clone();
+        if let Some(o) = detail.as_object_mut() {
+            o.remove("secret");
+        }
+        let t = ThoughtIn { kind: "consolidate".into(), summary: "Who I am (authored).".into(), detail: detail.to_string(), latency_ms: 0, tokens: 0, model: "authored".into(), reference: thought };
+        if self.store.is_some() {
+            return self.project(c.id, Some(persona), Some(t)).await;
+        }
+        let num = |v: &Value| v.as_f64().unwrap_or(0.0) as f32;
+        let relations = relations.iter().filter_map(|r| Some(RelationIn { other: id_of(r)?, trust: num(&r["trust"]), affinity: num(&r["affinity"]), label: r["label"].as_str().unwrap_or_default().into(), note: r["note"].as_str().unwrap_or_default().into() })).collect();
+        let judgments = judgments.iter().filter_map(|j| Some(JudgmentIn { key: memory::key(j["key"].as_str()?.trim_start_matches("stance:"))?.replace(':', "_"), value: num(&j["value"]), why: j["why"].as_str().unwrap_or_default().into() })).collect();
+        let places = places.iter().map(|p| PlaceIn { name: p["name"].as_str().unwrap_or_default().into(), x: num(&p["x"]), y: num(&p["y"]) }).collect();
+        self.update(c.id, MindUpdate { persona: Some(persona), relations, beliefs: None, judgments, places, thought: Some(t), replace: false }).await
     }
 
     /// A newborn's starting identity: its own temperament, raised by its parents.
@@ -962,7 +1119,8 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                     }
                     None => "\nYou belong to no community.".into(),
                 };
-                format!("{}\nValues: {}\nGoals: {}\nTraits: {}\nMood: {}\nYou know how to: {know}{belong}", p.narrative, p.values.join("; "), p.goals.join("; "), p.traits, p.mood)
+                let secret = self.secret(actor).map(|s| format!("\nKnown only to you: {s}")).unwrap_or_default();
+                format!("{}{secret}\nValues: {}\nGoals: {}\nTraits: {}\nMood: {}\nYou know how to: {know}{belong}", p.narrative, p.values.join("; "), p.goals.join("; "), p.traits, p.mood)
             }
             None => "(no persona yet)".into(),
         }
@@ -1007,7 +1165,9 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             if let Some(store) = &self.store {
                 store.ensure_self(c.id, &c.name).await?;
             }
-            if c.parent_a != 0 {
+            if let Some(bg) = self.authored(&c) {
+                self.sheet_persona(&c, &bg).await?;
+            } else if c.parent_a != 0 {
                 self.birth_persona(&c).await?;
             } else {
                 self.seed_persona(&c).await?;
