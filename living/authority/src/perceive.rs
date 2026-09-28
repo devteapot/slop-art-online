@@ -318,6 +318,12 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         let decided = if a.node == crate::act::ACT { " (as you decided)" } else { "" };
         you.insert("doing".into(), json!(format!("{}{decided}", a.label)));
     }
+    // Having given in is a social fact both sides know.
+    let hold = common::scripts(ctx).num_of("yield_ms", "person", 20_000.0) as f32;
+    let gave_in = |who: u32| crate::act::yielded_ago(ctx, who, now).filter(|ago| *ago < hold).map(|ago| (ago / 1000.0).round());
+    if let Some(s) = gave_in(id) {
+        you.insert("yielded".into(), json!(format!("you gave in {s:.0}s ago: while it holds ({:.0}s) you do not strike back", hold / 1000.0)));
+    }
     let waiting: Vec<String> = ctx.db.act_queue().actor().filter(id).filter_map(|p| living_rules::acts::from_json(&p.node).ok()).map(|a| living_rules::graph::describe(&living_rules::graph::Node::Do(a))).collect();
     if !waiting.is_empty() {
         you.insert("decided, not yet done".into(), json!(waiting));
@@ -392,6 +398,11 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         o.insert("dir".into(), json!(direction(at, c.pos)));
         if let Some(a) = ctx.db.activity().id().find(c.id) {
             o.insert("doing".into(), json!(a.label));
+        }
+        if ch.kind == "person" {
+            if let Some(s) = gave_in(c.id) {
+                o.insert("yielded".into(), json!(format!("gave in {s:.0}s ago")));
+            }
         }
         if let Some(v) = ctx.db.vitals().id().find(c.id) {
             let n = common::needs(&v, now);

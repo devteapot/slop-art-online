@@ -91,6 +91,7 @@ fn line_urgency(line: &str) -> Urgency {
     let l = line.trim();
     const NOW: &[&str] = &[
         "is attacking you",
+        "is threatening you",
         "The fight with",
         "Your body: You are starving",
         "Your body: You are badly hurt",

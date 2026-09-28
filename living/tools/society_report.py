@@ -86,8 +86,8 @@ def report(db):
             m = re.match(r"([A-Z][a-z]+) taught ([A-Z][a-z]+)", t)
         elif k in ("trade", "accept"):
             m = re.match(r"([A-Z][a-z]+) .*?([A-Z][a-z]+)", t)
-        elif k == "attack":
-            m = re.match(r"([A-Z][a-z]+) attacked ([A-Z][a-z]+)$", t)
+        elif k in ("attack", "assault", "threat", "killing"):
+            m = re.match(r"([A-Z][a-z]+) (?:attacked|tried to kill|beat|threatened|killed|struck) ([A-Z][a-z]+)", t)
         elif k == "speech":
             m = re.match(r"([A-Z][a-z]+) to ([A-Z][a-z]+):", t)
         if not m or m.group(1) not in name_group or m.group(2) not in name_group:

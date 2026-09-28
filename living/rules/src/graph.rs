@@ -71,7 +71,7 @@ pub struct Weight {
     pub night: f32,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub day: f32,
-    /// Seeing an attack coming.
+    /// Seeing an attack coming, or being threatened.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub threatened: f32,
     /// No other person in sight.
@@ -204,7 +204,8 @@ pub enum Cond {
     Night(bool),
     /// Hour of the day (0..24), e.g. `{"hour": {"above": 6, "below": 12}}`.
     Hour(Cmp),
-    /// Someone's attack or throw aimed at me is winding up right now.
+    /// Someone's attack or throw aimed at me is winding up right now, or someone is
+    /// threatening me.
     Threatened(bool),
     /// How many creatures of a kind (and relation) are in sight within a distance.
     Count(CountCond),
@@ -740,8 +741,8 @@ pub fn describe_cond(c: &Cond) -> String {
         Cond::HurtWithin(s) => format!("hurt in last {s}s"),
         Cond::HeardWithin(s) => format!("heard speech in last {s}s"),
         Cond::Hour(x) => cmp("hour", x),
-        Cond::Threatened(true) => "an attack is coming at me".into(),
-        Cond::Threatened(false) => "no attack coming at me".into(),
+        Cond::Threatened(true) => "an attack or threat is coming at me".into(),
+        Cond::Threatened(false) => "no attack or threat coming at me".into(),
         Cond::Count(c) => {
             let who = match &c.of.relation {
                 Some(r) => format!("{} ({r})", c.of.kind),

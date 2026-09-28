@@ -14,10 +14,74 @@
                 }
               },
               {
+                "near": {
+                  "target": {
+                    "nearest": "wolf"
+                  },
+                  "within": 6
+                }
+              },
+              {
                 "count": {
                   "of": "person",
                   "within": 5,
                   "at_most": 0
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "flee",
+            "target": "attacker"
+          }
+        },
+        {
+          "if": {
+            "all": [
+              {
+                "hurt_within": 5
+              },
+              {
+                "health": {
+                  "below": 40
+                }
+              },
+              {
+                "not": {
+                  "near": {
+                    "target": {
+                      "nearest": "wolf"
+                    },
+                    "within": 6
+                  }
+                }
+              }
+            ]
+          },
+          "then": {
+            "do": "yield",
+            "target": "attacker"
+          }
+        },
+        {
+          "if": {
+            "all": [
+              {
+                "hurt_within": 2
+              },
+              {
+                "health": {
+                  "below": 40
+                }
+              },
+              {
+                "not": {
+                  "near": {
+                    "target": {
+                      "nearest": "wolf"
+                    },
+                    "within": 6
+                  }
                 }
               }
             ]

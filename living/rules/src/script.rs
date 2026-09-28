@@ -38,6 +38,14 @@ pub struct ActorFacts {
     pub kin_near: u32,
     /// Grazing left where one stands (filled for actions).
     pub pasture: f32,
+    /// Who last hurt the actor, and how long ago (ms; none when never).
+    pub hurt_by: u32,
+    pub hurt_ago: Option<f32>,
+    /// How long ago the actor yielded (ms; none when it has not).
+    pub yielded_ago: Option<f32>,
+    /// Creatures the actor senses (in sight, or smelled for a species with a scent) by kind;
+    /// filled for an animal's attack on a person.
+    pub sensed: Vec<(String, u32)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -58,6 +66,14 @@ pub struct TargetFacts {
     pub dist: f32,
     pub inv: Vec<(String, u32)>,
     pub knows: Vec<String>,
+    /// What a creature target is doing (its action under way, e.g. `sleep`).
+    pub activity: String,
+    /// How long ago a creature target yielded (ms; none when it has not).
+    pub yielded_ago: Option<f32>,
+    /// Filled for attacks: whether the target is near a fire, and how many other people
+    /// (not the target, not the actor) are within the `alone_within` law of it.
+    pub near_fire: bool,
+    pub company: u32,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -121,6 +137,8 @@ pub enum Effect {
     Bond,
     /// Make the species signal named by the action's item.
     Signal,
+    /// The actor stops resisting (to the target creature, or whoever last hurt it).
+    Yield,
     /// The target person learns a technique from the actor.
     Teach { technique: String },
     /// The actor works out a technique.
@@ -186,6 +204,8 @@ pub struct Laws {
     /// Grass regrowth per grassy tile per minute of growing time (grazing units): it sets how
     /// many grazers the land feeds.
     pub pasture_regen: f32,
+    /// Someone with no other person within this many tiles is alone (for predators' daring).
+    pub alone_within: f32,
 }
 
 impl Laws {
@@ -225,6 +245,7 @@ impl Default for Laws {
             input_hz: 30.0,
             input_burst: 15.0,
             pasture_regen: 0.006,
+            alone_within: 6.0,
         }
     }
 }
@@ -368,6 +389,7 @@ impl Scripts {
             input_hz: g("input_hz", l.input_hz).clamp(1.0, 120.0),
             input_burst: g("input_burst", l.input_burst).clamp(1.0, 240.0),
             pasture_regen: g("pasture_regen", l.pasture_regen).clamp(0.0, 1.0),
+            alone_within: g("alone_within", l.alone_within).clamp(0.0, 40.0),
         };
         l
     }
@@ -394,6 +416,15 @@ impl Scripts {
         let text = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
         let (takes, gives) = (text("takes"), text("gives"));
         (!takes.is_empty() || !gives.is_empty()).then_some((takes, gives))
+    }
+
+    /// Text a rule function returns for an action, e.g. `attack_mode(a)`; None when the
+    /// script does not define it or it fails.
+    pub fn text(&self, f: &str, ctx: &SkillCtx) -> Option<String> {
+        if !self.has(f) {
+            return None;
+        }
+        self.call(f, ctx).ok()?.into_string().ok()
     }
 
     /// Generic numeric query, e.g. `attack_cooldown`.
@@ -439,6 +470,11 @@ fn to_map(c: &SkillCtx) -> Map {
     a.insert("inv".into(), inv_map(&c.actor.inv).into());
     a.insert("kin_near".into(), Dynamic::from_int(c.actor.kin_near as i64));
     a.insert("pasture".into(), f(c.actor.pasture));
+    let ago = |v: Option<f32>| v.map_or(Dynamic::UNIT, |x| Dynamic::from_float(x as f64));
+    a.insert("hurt_by".into(), Dynamic::from_int(c.actor.hurt_by as i64));
+    a.insert("hurt_ago".into(), ago(c.actor.hurt_ago));
+    a.insert("yielded_ago".into(), ago(c.actor.yielded_ago));
+    a.insert("sensed".into(), inv_map(&c.actor.sensed).into());
     for g in crate::genes::BODY {
         a.insert(g.into(), f(crate::genes::gene(&c.actor.genes, g)));
     }
@@ -458,6 +494,10 @@ fn to_map(c: &SkillCtx) -> Map {
     t.insert("dist".into(), f(c.target.dist));
     t.insert("inv".into(), inv_map(&c.target.inv).into());
     t.insert("knows".into(), c.target.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
+    t.insert("activity".into(), c.target.activity.clone().into());
+    t.insert("yielded_ago".into(), ago(c.target.yielded_ago));
+    t.insert("near_fire".into(), c.target.near_fire.into());
+    t.insert("company".into(), Dynamic::from_int(c.target.company as i64));
     let mut r = Map::new();
     r.insert("exists".into(), c.routine.exists.into());
     r.insert("ok".into(), Dynamic::from_int(c.routine.ok as i64));
@@ -504,6 +544,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "build" => Effect::Build { kind: s("kind") },
         "bond" => Effect::Bond,
         "signal" => Effect::Signal,
+        "yield" => Effect::Yield,
         "teach" => Effect::Teach { technique: s("technique") },
         "learn" => Effect::Learn { technique: s("technique") },
         "write" => Effect::Write,
@@ -617,6 +658,105 @@ mod tests {
         assert!(s.check("give", &c).unwrap_err().contains("a baby can hold only"));
         c.qty = 3;
         assert!(s.check("give", &c).is_ok());
+    }
+
+    fn person(id: u64, hp: f32) -> TargetFacts {
+        TargetFacts { class: "creature".into(), kind: "person".into(), name: "Grim".into(), id, alive: true, stage: "adult".into(), hp, max_hp: 100.0, company: 2, ..Default::default() }
+    }
+
+    fn damage(fx: &[Effect]) -> f32 {
+        fx.iter().find_map(|e| if let Effect::Damage { amount } = e { Some(*amount) } else { None }).unwrap()
+    }
+
+    #[test]
+    fn force_between_people_is_graded() {
+        let s = scripts();
+        let mut c = ctx();
+        c.skill = "attack".into();
+        c.target = person(9, 100.0);
+        // Without an item, people fight people to hurt, and animals to kill.
+        assert_eq!(s.text("attack_mode", &c).as_deref(), Some("hurt"));
+        c.target.kind = "wolf".into();
+        assert_eq!(s.text("attack_mode", &c).as_deref(), Some("kill"));
+        c.target = person(9, 100.0);
+        c.item = "kill".into();
+        assert_eq!(s.text("attack_mode", &c).as_deref(), Some("kill"));
+        // A beating stops once they are badly hurt, and never takes them below the floor.
+        c.item = "hurt".into();
+        c.actor.inv = vec![("spear".into(), 1)];
+        assert!(s.check("attack", &c).is_ok());
+        c.target.hp = 30.0;
+        let why = s.check("attack", &c).unwrap_err();
+        assert!(why.contains("hurt Grim enough") && why.contains("badly hurt"), "{why}");
+        // A slight person (40 health) at 17: a spear blow would take 18.
+        c.target.max_hp = 40.0;
+        c.target.hp = 17.0;
+        assert!(s.check("attack", &c).is_ok());
+        let d = damage(&s.done("attack", &c).unwrap());
+        assert!((d - 13.0).abs() < 1e-3, "a blow meant to hurt stops at the floor: {d}");
+        c.item = "kill".into();
+        assert!(damage(&s.done("attack", &c).unwrap()) > d, "a blow meant to kill is not held back");
+        c.target.max_hp = 100.0;
+        assert!(s.check("attack", &c).is_ok());
+        // Someone who has yielded: a beating is held back, killing is not; the one who yielded
+        // does not strike back while the yield holds.
+        c.target.hp = 80.0;
+        c.target.yielded_ago = Some(3000.0);
+        assert!(s.check("attack", &c).is_ok());
+        c.item = "hurt".into();
+        assert!(s.check("attack", &c).unwrap_err().contains("has yielded"));
+        c.target.yielded_ago = Some(25_000.0);
+        assert!(s.check("attack", &c).is_ok());
+        c.actor.yielded_ago = Some(1000.0);
+        assert!(s.check("attack", &c).unwrap_err().contains("you have yielded"));
+        assert!(s.check("yield", &c).unwrap_err().contains("already yielded"));
+        c.actor.yielded_ago = None;
+        assert!(s.check("yield", &c).is_ok());
+        assert_eq!(s.done("yield", &c).unwrap(), vec![Effect::Yield]);
+        // Threatening does no harm.
+        assert!(s.check("threaten", &c).is_ok());
+        assert!(!s.done("threaten", &c).unwrap().iter().any(|e| matches!(e, Effect::Damage { .. })));
+    }
+
+    #[test]
+    fn wolves_fear_people_unless_desperate_or_the_chance_is_easy() {
+        let s = scripts();
+        let mut c = ctx();
+        c.skill = "attack".into();
+        c.actor.kind = "wolf".into();
+        c.actor.hunger = 60.0;
+        c.target = person(9, 100.0);
+        let refused = |c: &SkillCtx| s.check("attack", c).is_err_and(|w| w.contains("do not dare"));
+        assert!(refused(&c), "a healthy adult among others by day");
+        c.night = true;
+        assert!(refused(&c), "at night, among others");
+        c.target.company = 0;
+        assert!(!refused(&c), "alone at night");
+        c.target.near_fire = true;
+        assert!(refused(&c), "alone at night, but by a fire");
+        c.night = false;
+        c.target.near_fire = false;
+        c.target.activity = "sleep".into();
+        assert!(!refused(&c), "asleep away from a fire");
+        c.target.activity = String::new();
+        c.target.company = 2;
+        c.target.stage = "child".into();
+        assert!(!refused(&c), "a child");
+        c.target.stage = "adult".into();
+        c.target.hp = 30.0;
+        assert!(!refused(&c), "badly hurt");
+        c.target.hp = 100.0;
+        c.actor.hunger = 90.0;
+        assert!(!refused(&c), "starving, no prey sensed");
+        c.actor.sensed = vec![("deer".into(), 1)];
+        assert!(refused(&c), "starving, but a deer is near");
+        c.actor.hurt_by = 9;
+        c.actor.hurt_ago = Some(2000.0);
+        assert!(!refused(&c), "fighting back");
+        c.actor.hurt_ago = None;
+        c.target.kind = "deer".into();
+        assert!(s.check("attack", &c).is_ok(), "prey is prey");
+        assert_eq!(s.text("attack_mode", &c).as_deref(), Some("kill"));
     }
 
     #[test]

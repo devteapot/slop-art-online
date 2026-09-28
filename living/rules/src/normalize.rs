@@ -326,6 +326,13 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     })?;
     out.insert("skill".into(), json!(skill));
     let item = action.get("item").or_else(|| action.get("what")).or_else(|| action.get("object")).or_else(|| action.get("kind")).cloned();
+    // An attack's item says what its blows are meant for: "hurt" or "kill".
+    if skill == "attack" {
+        let mode = action.get("mode").or_else(|| action.get("intent")).or(item.as_ref()).and_then(|m| m.as_str()).and_then(attack_mode);
+        if let Some(m) = mode {
+            out.insert("item".into(), json!(m));
+        }
+    }
     if let Some(Value::String(i)) = item {
         if spec.needs_item {
             out.insert("item".into(), json!(if matches!(skill.as_str(), "signal" | "teach") { i.trim().to_lowercase().replace(' ', "_") } else { fix_item(&i) }));
@@ -373,13 +380,24 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     if spec.needs_target && !out.contains_key("target") {
         return Err(format!("{path}.do: skill `{skill}` needs a target"));
     }
-    if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework") {
+    if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework" && skill != "attack") {
         let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some();
         if !known {
             return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::ITEMS.iter().map(|x| x.name).collect::<Vec<_>>().join(", ")));
         }
     }
     Ok(json!({"do": out}))
+}
+
+/// What an attack is meant for, from the words a model uses ("hurt", "beat", "kill", "to kill"...).
+pub fn attack_mode(m: &str) -> Option<&'static str> {
+    let m = m.trim().to_lowercase();
+    let m = m.strip_prefix("to ").unwrap_or(&m);
+    match m {
+        "hurt" | "beat" | "wound" | "subdue" | "harm" | "injure" | "punish" | "defend" | "nonlethal" | "non-lethal" => Some("hurt"),
+        "kill" | "slay" | "death" | "lethal" | "murder" | "hunt" => Some("kill"),
+        _ => None,
+    }
 }
 
 /// Map loose item names onto the catalog (`raw meat` → `meat`, `Cooked Fish` → `cooked_fish`).
@@ -725,6 +743,26 @@ mod tests {
         let r = crate::acts::parse(json!({"do": "rework", "item": "explore", "retire": true}), None).unwrap();
         assert_eq!(r.text.as_deref(), Some("retire"));
         assert!(crate::acts::parse(json!({"do": "rework", "item": "explore"}), None).is_err());
+    }
+
+    #[test]
+    fn attacks_say_what_they_are_meant_for() {
+        let g = from_value(json!({"first": [
+            {"do": "attack", "target": "attacker", "item": "hurt"},
+            {"do": "attack", "target": {"nearest": "wolf"}, "mode": "to kill"},
+            {"do": "attack", "target": "attacker", "item": "spear"},
+            {"do": "threaten", "target": {"named": "Grim"}},
+            {"do": "yield", "target": "attacker"},
+            {"do": "yield"}
+        ]}))
+        .unwrap();
+        let o = outline(&g.root);
+        assert!(o.contains("attack hurt → attacker") && o.contains("attack kill → nearest wolf"), "{o}");
+        assert!(o.contains("  attack → attacker"), "an unknown mode is dropped: {o}");
+        assert!(o.contains("threaten → Grim") && o.contains("yield → attacker"), "{o}");
+        let a = crate::acts::parse(json!({"do": "threaten", "target": {"id": 4}}), None).unwrap();
+        assert_eq!(a.skill, "threaten");
+        assert!(crate::acts::parse(json!({"do": "yield"}), None).is_ok());
     }
 
     #[test]

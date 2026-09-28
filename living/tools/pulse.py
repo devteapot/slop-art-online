@@ -7,6 +7,8 @@ Each snapshot records, for the last interval:
 - people alive, born and dead (with causes) in all, hunger by settlement (mean, starving);
 - deer and wolves alive;
 - speech lines per person per minute and the share mentioning babies;
+- force: threats, beatings (assaults), attempts to kill a person (by people and by animals),
+  yields, people killed by people and by animals, and animals holding back from a person;
 - model calls per minute (by purpose and model), the share that errored, tokens per minute.
 
 Usage:
@@ -27,6 +29,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 STDB = str(ROOT / "living/tools/stdb")
 BABY = re.compile(r"\b(baby|babies|infant|little one)\b", re.I)
+TIMES = re.compile(r"\(×(\d+)\)$")
 
 
 def rows(db, q):
@@ -48,6 +51,26 @@ def journal(run, since_ms):
                     continue
                 if d.get("at_ms", 0) >= since_ms:
                     yield d
+
+
+def force(db, kinds, since):
+    """Uses of force in the story since `since` (a repeated entry counts its repeats)."""
+    out = collections.Counter()
+    for r in rows(db, f"SELECT kind, a, b, text FROM chronicle WHERE at_ms >= {int(since)}"):
+        k, a, b = r["kind"], kinds.get(r["a"]), kinds.get(r["b"])
+        m = TIMES.search(r["text"])
+        n = int(m.group(1)) if m else 1
+        if k in ("threat", "assault", "yield"):
+            out[k] += n
+        elif k == "attack" and b == "person":
+            out["kill attempt" if a == "person" else "animal attack on person"] += n
+        elif k == "killing":
+            out["killed by person"] += n
+        elif k == "death" and r["b"] != "0" and b not in (None, "person"):
+            out["killed by animal"] += n
+        elif k == "balk":
+            out["animal held back"] += n
+    return dict(out)
 
 
 def snapshot(db, run, window_s):
@@ -87,6 +110,7 @@ def snapshot(db, run, window_s):
         "wolves": sum(1 for c in chars if c["kind"] == "wolf" and c["alive"] == "true"),
         "speech_per_person_min": round(len(speech) / max(1, len(alive)) / mins, 2),
         "baby_talk": round(sum(1 for s in speech if BABY.search(s)) / max(1, len(speech)), 2),
+        "force": force(db, {c["id"]: c["kind"] for c in chars}, since),
         "calls_per_min": round(n / mins),
         "calls_by_purpose": {p: round(sum(v for (pp, _), v in calls.items() if pp == p) / mins) for p in sorted({p for p, _ in calls})},
         "calls_by_model": {m: round(sum(v for (_, mm), v in calls.items() if mm == m) / mins) for m in sorted({m for _, m in calls})},
@@ -98,10 +122,10 @@ def snapshot(db, run, window_s):
 def show(db):
     f = ROOT / ".local/living/pulse" / f"{db}.jsonl"
     snaps = [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
-    print(f"{'time':16s} {'ppl':>4s} {'dead':>4s} {'hunger by settlement (mean/starving)':44s} {'deer':>4s} {'wolf':>4s} {'talk':>5s} {'baby':>5s} {'calls':>6s} {'err':>5s} {'Mtok':>5s}")
+    print(f"{'time':16s} {'ppl':>4s} {'dead':>4s} {'hunger by settlement (mean/starving)':44s} {'deer':>4s} {'wolf':>4s} {'talk':>5s} {'baby':>5s} {'calls':>6s} {'err':>5s} {'Mtok':>5s}  force")
     for s in snaps:
         h = " ".join(f"{k[:5]}:{v['mean']}/{v['starving']}" for k, v in s["hunger"].items())
-        print(f"{s['t']:16s} {s['people']:4d} {sum(s['dead'].values()):4d} {h:44s} {s['deer']:4d} {s['wolves']:4d} {s['speech_per_person_min']:5.2f} {s['baby_talk']:5.2f} {s['calls_per_min']:6d} {s['error_share']:5.2f} {s['tokens_per_min'] / 1e6:5.2f}")
+        print(f"{s['t']:16s} {s['people']:4d} {sum(s['dead'].values()):4d} {h:44s} {s['deer']:4d} {s['wolves']:4d} {s['speech_per_person_min']:5.2f} {s['baby_talk']:5.2f} {s['calls_per_min']:6d} {s['error_share']:5.2f} {s['tokens_per_min'] / 1e6:5.2f}  {' '.join(f'{k}:{v}' for k, v in s.get('force', {}).items())}")
 
 
 def main():

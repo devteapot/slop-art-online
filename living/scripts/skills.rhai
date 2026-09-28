@@ -20,6 +20,8 @@ fn laws() {
         // Grass regrowth per grassy tile per growing minute: about one grazer per 300 grassy
         // tiles (it was one per 70, and the wilds filled with deer).
         pasture_regen: 0.0015,
+        // Someone with no other person within this many tiles is alone (predators dare more).
+        alone_within: 6.0,
     }
 }
 
@@ -385,11 +387,66 @@ fn take_done(a) {
 }
 
 // ---- conflict -----------------------------------------------------------
+// Force is graded. An attack is meant to hurt (a beating: it stops once the other is badly
+// hurt or gives in, and never takes anyone near death) or to kill. The node's item says
+// which ("hurt" or "kill"); without it, people mean to hurt people, and every fight with an
+// animal is to kill. Threatening someone does no harm; yielding stops resisting.
+
+// How long a yield holds: the one who yielded does not strike back, and blows meant only to
+// hurt are held back from them (ms).
+fn yield_ms(kind) { 20000.0 }
+// A beating stops once its target is down to this share of full health...
+fn hurt_enough(kind) { 0.4 }
+// ...and a blow meant only to hurt never takes anyone below this share.
+fn hurt_floor(kind) { 0.1 }
+
+fn within(ago, ms) { ago != () && ago < ms }
+fn yielding(a) { within(a.actor.yielded_ago, yield_ms(a.actor.kind)) }
+fn sensed(a, kind) { let n = a.actor.sensed[kind]; if n == () { 0 } else { n } }
+fn attack_mode(a) {
+    if a.item == "hurt" || a.item == "kill" { return a.item; }
+    if a.actor.kind == "person" && a.target.kind == "person" { "hurt" } else { "kill" }
+}
+// How the attacker refers to its target, and how the target looks.
+fn who(a) { if a.target.kind == a.actor.kind || a.target.name == "" { a.target.name } else { "the " + a.target.kind } }
+fn looks(t) {
+    let f = if t.max_hp > 0.0 { t.hp / t.max_hp } else { 0.0 };
+    if f < 0.2 { "barely standing" } else if f < hurt_enough(t.kind) { "badly hurt" } else { "hurt" }
+}
+
+// Predators and people. A predator fears people: it attacks a person only when desperate
+// (starving with no prey in sight or smell), when the person is easy prey (a child, badly
+// hurt, asleep away from a fire, or alone at night away from a fire), or to fight back.
+fn prey_of(kind) { switch kind { "wolf" => ["deer"], _ => [] } }
+fn desperate_hunger(kind) { 85.0 }
+// A person below this share of full health is easy prey.
+fn easy_hurt(kind) { 0.35 }
+// A predator fights back against whoever hurt it this recently (ms).
+fn fight_back_ms(kind) { 10000.0 }
+fn dares(a) {
+    if a.actor.kind == "person" || a.target.kind != "person" { return ""; }
+    if a.actor.hurt_by == a.target.id && within(a.actor.hurt_ago, fight_back_ms(a.actor.kind)) { return ""; }
+    let prey = 0;
+    for k in prey_of(a.actor.kind) { prey += sensed(a, k); }
+    if a.actor.hunger >= desperate_hunger(a.actor.kind) && prey == 0 { return ""; }
+    let t = a.target;
+    if t.stage == "infant" || t.stage == "child" { return ""; }
+    if t.max_hp > 0.0 && t.hp < easy_hurt(a.actor.kind) * t.max_hp { return ""; }
+    if !t.near_fire && (t.activity == "sleep" || (a.night && t.company == 0)) { return ""; }
+    "you do not dare: people are dangerous"
+}
 
 fn attack_check(a) {
     if a.actor.kind == "person" && young(a) { return "too young to fight"; }
     if a.target.class != "creature" || !a.target.alive { return "nothing to attack"; }
     if a.target.id == a.actor.id { return "cannot attack yourself"; }
+    if yielding(a) { return "you have yielded: you do not strike back while it holds"; }
+    let wary = dares(a);
+    if wary != "" { return wary; }
+    if attack_mode(a) == "hurt" {
+        if within(a.target.yielded_ago, yield_ms(a.target.kind)) { return `${who(a)} has yielded`; }
+        if a.target.hp < hurt_enough(a.target.kind) * a.target.max_hp { return `you have hurt ${who(a)} enough: they are ${looks(a.target)}`; }
+    }
     ""
 }
 // The windup: time the target has to see it coming and react.
@@ -405,10 +462,38 @@ fn attack_done(a) {
     };
     // Strength and skill at fighting (knack × practice) make blows count.
     let dmg = dmg * a.actor.strength * a.actor.factor * armor(a);
+    // A blow meant to hurt is held short of taking them near death.
+    if attack_mode(a) == "hurt" {
+        let room = a.target.hp - hurt_floor(a.target.kind) * a.target.max_hp;
+        if room < 0.0 { room = 0.0; }
+        if dmg > room { dmg = room; }
+    }
     [#{ op: "damage", amount: dmg }, #{ op: "vitals", energy: -1.5 }]
 }
 // Leather armor takes the edge off a blow.
 fn armor(a) { let n = a.target.inv["armor"]; if n == () || n < 1 { 1.0 } else { 0.65 } }
+
+// Menacing someone in reach (weapon raised, closing in): no harm done, but they see it.
+fn threaten_check(a) {
+    if a.actor.kind != "person" { return "only people threaten"; }
+    if a.actor.stage == "infant" { return "too small to threaten anyone"; }
+    if a.target.class != "creature" || !a.target.alive { return "no one to threaten"; }
+    if a.target.id == a.actor.id { return "cannot threaten yourself"; }
+    ""
+}
+fn threaten_duration(a) { 2000 }
+fn threaten_done(a) { [#{ op: "vitals", energy: -0.5 }] }
+
+// Giving in: guard down, hands up.
+fn yield_check(a) {
+    if a.actor.kind != "person" { return "only people yield"; }
+    if a.actor.stage == "infant" { return "too small to yield"; }
+    if a.target.class == "creature" && a.target.id == a.actor.id { return "cannot yield to yourself"; }
+    if yielding(a) { return "you have already yielded"; }
+    ""
+}
+fn yield_duration(a) { 1000 }
+fn yield_done(a) { [#{ op: "yield" }] }
 
 // Meat left when a creature dies at someone's hand.
 fn carcass_meat(kind) { switch kind { "deer" => 5, "wolf" => 2, _ => 0 } }
@@ -626,6 +711,7 @@ fn throw_check(a) {
     if inv(a, "spear") < 1 { return "no spear to throw"; }
     if a.target.class != "creature" || !a.target.alive { return "nothing to throw at"; }
     if young(a) { return "too young to fight"; }
+    if yielding(a) { return "you have yielded: you do not strike back while it holds"; }
     ""
 }
 fn throw_duration(a) { 800 }
@@ -636,6 +722,7 @@ fn shoot_check(a) {
     if inv(a, "arrow") < 1 { return `no arrows (arrow: ${source_of("arrow")})`; }
     if a.target.class != "creature" || !a.target.alive { return "nothing to shoot at"; }
     if young(a) { return "too young to fight"; }
+    if yielding(a) { return "you have yielded: you do not strike back while it holds"; }
     ""
 }
 fn shoot_duration(a) { 700 }
@@ -735,7 +822,11 @@ fn skill_io(skill) {
         "store" => #{ takes: `the items from your pack, a storage in reach with room (a storage holds ${storage_holds(0)} things in all)`, gives: "the items in the storage, for anyone to take" },
         "take" => #{ takes: "items in a storage, remains or a trap in reach, room in your pack", gives: "the items in your pack" },
         "drop" => #{ takes: "the items from your pack", gives: "room in your pack; the items are left behind" },
-        "attack" => #{ takes: "a creature in reach, a little energy", gives: "a blow (harder with a spear, strength and practice); a creature killed leaves remains with meat and hide to take" },
+        "attack" => #{ takes: "a creature in reach, a little energy; item \"hurt\" or \"kill\" says what the blows are meant for (without it: to hurt between people, to kill with animals)",
+            gives: `a blow (harder with a spear, strength and practice). Meant to hurt, blows stop once they are down to ${(hurt_enough("person") * 100.0).to_int()}% of their health or have yielded, and never take anyone below ${(hurt_floor("person") * 100.0).to_int()}%; meant to kill, they go on until death. A creature killed leaves remains with meat and hide to take` },
+        "threaten" => #{ takes: "a creature within a few tiles, 2 seconds", gives: "no harm: they see you menacing them (weapon raised), and so does anyone watching" },
+        "yield" => #{ takes: "a second (target: whom you give in to; without one, whoever last hurt you)",
+            gives: `you stop resisting, guard down and hands up: for ${(yield_ms("person") / 1000.0).to_int()} seconds you do not strike back, and blows meant only to hurt are held back from you (blows meant to kill are not)` },
         "throw" => #{ takes: "your spear", gives: "a hard hit at range; the spear is gone" },
         "shoot" => #{ takes: "a bow and 1 arrow, a creature within 9 tiles", gives: "a hit at range (softened by armor); the arrow is spent" },
         "tend" => #{ takes: "a hurt person in reach who is not fighting, a little energy (and a salve, if you know medicine)", gives: "their wounds healed some (far more with a salve)" },

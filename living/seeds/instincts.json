@@ -14,6 +14,58 @@
                   "health": {
                     "below": 50
                   }
+                },
+                {
+                  "near": {
+                    "target": {
+                      "nearest": "wolf"
+                    },
+                    "within": 6
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": {
+                "skill": "flee",
+                "target": "attacker"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "all": [
+                {
+                  "hurt_within": 6
+                },
+                {
+                  "health": {
+                    "below": 50
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": {
+                "skill": "yield",
+                "target": "attacker"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "all": [
+                {
+                  "hurt_within": 2
+                },
+                {
+                  "health": {
+                    "below": 50
+                  }
                 }
               ]
             },
@@ -567,6 +619,33 @@
               "do": {
                 "skill": "eat",
                 "item": "food"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "cond": {
+              "all": [
+                {
+                  "hurt_within": 5
+                },
+                {
+                  "not": {
+                    "near": {
+                      "target": {
+                        "nearest": "wolf"
+                      },
+                      "within": 6
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": {
+                "skill": "yield",
+                "target": "attacker"
               }
             }
           }

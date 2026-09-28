@@ -271,7 +271,7 @@ pub fn seed_communities(ctx: &ReducerContext) -> Result<(), String> {
 }
 
 /// Benchmark support: `n` spear-armed people packed into one small area, fighting the
-/// nearest person. Even ids dodge incoming windups, odd ids block.
+/// nearest person to kill. Even ids dodge incoming windups, odd ids block.
 #[spacetimedb::reducer]
 pub fn spawn_battle(ctx: &ReducerContext, n: u32) -> Result<(), String> {
     use spacetimedb::rand::Rng;
@@ -292,7 +292,7 @@ pub fn spawn_battle(ctx: &ReducerContext, n: u32) -> Result<(), String> {
         common::inv_add(ctx, id as u64, "spear", 1);
         let defend = if id % 2 == 0 { "dodge" } else { "block" };
         let graph = format!(
-            r#"{{"first":{{"label":"combat","children":[{{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},{{"do":{{"skill":"attack","target":{{"nearest":"person"}}}}}}]}}}}"#
+            r#"{{"first":{{"label":"combat","children":[{{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},{{"do":{{"skill":"attack","target":{{"nearest":"person"}},"item":"kill"}}}}]}}}}"#
         );
         mind::set_graph(ctx, id, &graph, "fight", "battle", now)?;
         made += 1;

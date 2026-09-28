@@ -112,7 +112,7 @@ The behavior graph is the body's real-time layer (moving, keeping close, fleeing
 
 - A deliberation or conversation-turn reply may carry `"acts": [{"do": "conceive", "target": {"id": 6}}, ...]`, delivered through the `mind_act` reducer (authorized like the other `mind_*` reducers). Players' single `do` commands (`human_act`) take the same path.
 - The authority queues them in the private `act_queue` table (at most 4) and carries each out once, in order, through `act::begin` with a dedicated `ACT` node: the same skill rules, walking into reach, checks, durations and effects as graph leaves.
-- While an act runs the graph is still evaluated, but its work waits; only a reflex (flee, dodge, block, attack, throw) takes the body back and interrupts the act (what was still queued is set aside). An act gives up after 90 s without reaching its target; a queued act older than 2 minutes is dropped.
+- While an act runs the graph is still evaluated, but its work waits; only a reflex (flee, dodge, block, attack, throw, yield) takes the body back and interrupts the act (what was still queued is set aside). An act gives up after 90 s without reaching its target; a queued act older than 2 minutes is dropped.
 - Every outcome comes back as an `act` experience ("You did what you had decided: …", "What you had decided did not work out: …: why"); failures also prompt a thought. Ongoing or real-time skills (wander, follow, flee, fighting, wait, sleep, rest) are refused as acts with feedback.
 - The deliberation scene lists what others have asked of you (a wish to start a family, a trade, a join request) and what you are waiting on; a conversation turn sees the proposals between the two speakers (the mind subscribes to `bond_offer` and `trade_offer`).
 - Graph support for these skills stays (animals mate from their graph). People's starting "start a family" routine no longer conceives: it is "keep close to my partner" (approach a suitor, follow the partner).
@@ -219,6 +219,42 @@ The ~115 ms maxima and the ticks over budget in the 2,000-character pairs appear
 Attacks wind up (0.55–0.75 s) before they land, recording their victim; the swinger stands still, and the blow lands only if the victim is still within reach (1.4 tiles plus a species lunge from the script: people 0.6, wolves 1.8) when the windup ends, so stepping back or running works against a person but not against a wolf; the victim is woken immediately and can perceive it (`{"threatened": true}`). `dodge` is a 2.4-tile dash at 9 tiles/s during which a landing blow misses; `block` holds a guard that takes three quarters off a hit; `throw` hurls a spear up to 7 tiles. Anyone in a fight is evaluated at combat cadence (about 15 Hz, staggered across ticks) for 8 s after the last blow, so a reaction fits inside a windup; tactics are the mind's own (no built-in auto-dodge), and a mind can patch only its labeled `combat` branch mid-fight (`"patch": {"label": "combat", "graph": …}`), keeping the rest of its plan. While people fight, each gets a short account of the exchange every ~7 s (blows taken, blocked, dodged, stepped out of reach; theirs blocked, dodged or missed) as a reason to think, so a mind can patch its `combat` branch from what actually happened. Combat rules (windups, damage, lunge, costs) are in the Rhai script; the defense and reach resolution and the cadence are engine primitives. Anyone can `tend` a wounded person (6 s, +10 health, not while the patient is fighting).
 
 A per-tick chunk cache lets all evaluations in one tick share each chunk's bodies (positions are analytic at the tick's instant), removing repeated row decoding in crowds.
+
+#### Graded force, and when predators attack people (2026-09-28)
+
+In `aske-coast-2` three people were killed in Brandholm in ten minutes ([stage log](STAGES.md), 20:28). `attack` was the only force one person could use on another, the seeded reflex "when hurt, strike back" answered every blow, and so a fight between people ended in a death within seconds: a daughter who meant to coerce her father for hides killed him. Starving wolves had also written themselves "attack people" rules. Force is now graded. The rules live in [skills.rhai](../living/scripts/skills.rhai) and the mechanics in [act.rs](../living/authority/src/act.rs); how anyone reacts stays in their own graph.
+
+- **What an attack is meant for.** `{"do": "attack", "target": T, "item": "hurt"}` or `"kill"`. The item carries the intent, as it carries the technique for `teach` or the signal for `signal`. The normalizer maps `mode`, `intent` and words like "beat" or "to kill" onto it. Without an item, the rules' `attack_mode` decides: people fight people to hurt, and any fight involving an animal is to kill. The authority writes the resolved mode into the action, so labels read "attack to hurt → Grim". In hurt mode, `attack_check` refuses once the target is below `hurt_enough` (40%) of full health ("you have hurt Grim enough: they are badly hurt"; the blow that gets there says so too) or has yielded. `attack_done` also holds a blow short of `hurt_floor` (10%). Kill mode is unchanged.
+- **Threaten** (people; in a graph or as an act): 2 s, within 3 tiles, no damage. The target perceives "Siv threatens you, spear raised" (salience 0.9) and gets a reason to think, and witnesses see it. While it lasts it counts as being `threatened`, both as a condition and as a desire signal, like an attack's windup.
+- **Yield** (people; in a graph or as an act, and a reflex that interrupts an act): takes 1 s. For `yield_ms` (20 s) afterwards, the yielder's own attacks, throws and shots are refused, and hurt-mode attacks on them are refused ("Grim has yielded"). Kill-mode blows still land. The first such blow after a yield is recorded and witnessed at salience 0.95 ("struck Grim to kill, though Grim had yielded"), and a death that follows is "killed by Siv, after yielding". The yield time is a mark in the private `mind_state.marks` (0xD400, kept across plan installs). Scenes show who has yielded.
+- **Reflex defaults** (seeded habits, which the characters own and can change). The common `stay safe` routine in [repertoire.json](../living/seeds/repertoire.json), in priority order:
+  1. alone and losing (below 40%) with a wolf near: flee;
+  2. losing with no wolf near: yield to the attacker;
+  3. still being struck after yielding: flee;
+  4. hurt: attack the attacker (by default, to hurt a person and to kill an animal);
+  5. a wolf near and others close by: attack it together;
+  6. a wolf near: flee.
+
+  The person instinct in [instincts.json](../living/seeds/instincts.json) flees wolves when losing, otherwise yields, and flees if still struck. Children yield when hit (babies cannot) and cry. Wolves' instincts are unchanged, and animals' fights stay to kill.
+- **Predators and people.** Before the approach, `attack_check` refuses a non-person's attack on a person with "you do not dare: people are dangerous", so a wolf that does not dare does not close in either. The attack goes ahead only if one of these holds:
+  - the animal is fighting back (that person hurt it within `fight_back_ms`, 10 s);
+  - it is desperate: hunger at or above `desperate_hunger` (85), with none of its `prey_of` kinds (deer, for wolves) in sight or smell (`a.actor.sensed`);
+  - the person is easy prey: a child or baby, below `easy_hurt` (35%) health, asleep away from a fire, or at night away from a fire with no other person within the `alone_within` law (6 tiles).
+
+  The wolf's `nature` in [species.json](../living/seeds/species.json) says the same. Deer have no attack skill.
+- **Counting it.** Chronicle kinds:
+  - `threat`;
+  - `assault` ("Siv beat Grim");
+  - `attack`: "tried to kill" for a person victim, "attacked" for hunts, and "struck … to kill, though … had yielded";
+  - `yield`;
+  - `killing` (a person killed by a person);
+  - `death` (with the killer as `b`);
+  - `balk` (an animal's attack on a person refused, at most once a minute per animal).
+
+  [pulse.py](../living/tools/pulse.py) reports them for each interval: threats, assaults, attempts to kill people (by people and by animals), yields, people killed by people and by animals, and animals holding back.
+- **Minds** are taught this in the world rules (a FORCE paragraph with the physics and no tactics), the skill reference, what each skill takes and gives (built from the same Rhai numbers), and the ACTS list. "is threatening you" is an urgent reason under level of detail. The `spawn_battle` benchmark now fights to kill explicitly, so it stays comparable with earlier runs.
+
+SpacetimeDB: no new tables, columns or reducers ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) are therefore not exercised), so a running world can be updated in place. Extra reads happen only for force: each attack, throw, shot or yield reads the actor's `mind_state` row for its yield time, and an attack also reads the target's. An animal's attack on a person adds a sight and scent scan around the animal and a warmth and company query around the person. The `balk` entry is spaced to one a minute per animal because `chronicle` is public. None of this has been measured in a live run. Checks: `cargo test -p living-rules` (modes, the hurt floor, yields, and every predator case), and four new [mechanics checks](../living/tools/verify_mechanics.py): a threat is perceived and counts as being threatened, a beating stops at the threshold without a death, a yield stops a beating, and a wolf that is not desperate does not attack a healthy adult among others.
 
 ### Worlds of any size, towns and bands (checkpoint 3)
 

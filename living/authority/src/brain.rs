@@ -222,6 +222,7 @@ impl<'a> Ev<'a> {
         let night = if common::night(&self.w, self.now) { 1.0 } else { 0.0 };
         let me = self.me.id;
         let now = self.now;
+        // An attack or a threat aimed at me right now.
         let threatened = if self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now) { 1.0 } else { 0.0 };
         // Company is one's own kind (people for a person, the herd or pack for an animal).
         let kind = self.me.kind.clone();
@@ -705,7 +706,7 @@ impl<'a> Ev<'a> {
             Cond::Threatened(b) => {
                 let me = self.me.id;
                 let now = self.now;
-                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && (a.skill == "attack" || a.skill == "throw" || a.skill == "shoot"));
+                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && matches!(a.skill.as_str(), "attack" | "throw" | "shoot" | "threaten"));
                 coming == *b
             }
             Cond::Believes(b) => self

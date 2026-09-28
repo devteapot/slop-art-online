@@ -5,7 +5,8 @@ Two scripted characters (installed behavior graphs, no LLM) exercise writing and
 tablet that teaches a technique, crafting with the learned technique, an atomic trade,
 planting, teaching and consensual conception, then the same kind of interactions as
 deliberate acts decided outside the graph (`mind_act`: a gift, conception chosen by both, a
-failure reported back). Each check reads the authority's tables.
+failure reported back), and graded force (a threat, a beating that stops short, a yield, a
+wolf that does not dare). Each check reads the authority's tables.
 
 Usage: living/tools/verify_mechanics.py [--db living-verify] [--wasm NAME] [--out FILE]
 Publishes the database fresh (deletes its data).
@@ -74,7 +75,7 @@ def main():
     db = a.db
     stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", db, "--delete-data", "-y")
     time.sleep(3)
-    stdb("call", "-s", "local", db, "spawn_crowd", "5", "true")
+    stdb("call", "-s", "local", db, "spawn_crowd", "10", "true")
     time.sleep(1.5)
     walkers = sorted(int(r["id"]) for r in rows(db, "SELECT id, name FROM character") if r["name"].startswith("Walker"))
     A, B, C, D, E = walkers[:5]
@@ -251,6 +252,65 @@ def main():
     results["clearing forest yields wood"] = bool(wait_for(lambda: have(D, "wood") >= wood0 + 2, timeout=150))
     if not results["clearing forest yields wood"]:
         print("  clear:", [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {D}")][-6:])
+    # Graded force. F threatens G: G perceives it, and it counts as being threatened (G's own
+    # graph yields to it).
+    F, G, H, I, J = walkers[5:10]
+    heard = lambda who, words: [r for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {who}") if words in r["text"]]
+    story = lambda kind: [r for r in rows(db, "SELECT kind, a, b, text FROM chronicle") if r["kind"] == kind]
+    alive = lambda who: rows(db, f"SELECT id, alive FROM character WHERE id = {who}")[0]["alive"] == "true"
+    max_hp = lambda who: float(rows(db, f"SELECT id, max_hp FROM vitals WHERE id = {who}")[0]["max_hp"])
+    call(db, "place_near", str(G), str(F))
+    call(db, "set_behavior", str(G), json.dumps({"first": [{"if": {"threatened": True}, "then": {"do": "yield", "target": {"id": F}}}, {"wait": 1}]}))
+    call(db, "set_behavior", str(F), seq({"do": {"skill": "threaten", "target": {"id": G}}}))
+    menaced = wait_for(lambda: heard(G, "threatens you"), timeout=20)
+    gave_in = wait_for(lambda: [r for r in story("yield") if int(r["a"]) == G], timeout=15)
+    results["force: a threat is perceived and counts as being threatened"] = bool(menaced) and bool(story("threat")) and bool(gave_in)
+    if not results["force: a threat is perceived and counts as being threatened"]:
+        print("  threat:", bool(menaced), story("threat"), [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {G}")][-5:])
+    # F beats H (who does not defend) with a spear: the beating stops once H is badly hurt,
+    # and H lives.
+    call(db, "grant_items", str(F), "spear", "1")
+    call(db, "place_near", str(H), str(F))
+    call(db, "set_behavior", str(H), idle)
+    call(db, "set_behavior", str(F), json.dumps({"first": [{"do": {"skill": "attack", "target": {"id": H}, "item": "hurt"}}, {"wait": 1}]}))
+    enough = wait_for(lambda: heard(F, "enough"), timeout=40)
+    time.sleep(6)
+    mh, h = max_hp(H), hp(H)
+    results["force: a beating stops at the threshold without death"] = bool(enough) and alive(H) and 0.1 * mh - 0.5 <= h < 0.4 * mh + 1 and bool(story("assault"))
+    if not results["force: a beating stops at the threshold without death"]:
+        print("  beating:", bool(enough), alive(H), f"{h:.1f}/{mh:.0f}", story("assault"), [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {F}")][-5:])
+    call(db, "set_behavior", str(F), idle)
+    # I beats J, who yields when hurt: the beating stops at the yield.
+    call(db, "place_near", str(I), str(J))
+    call(db, "set_behavior", str(J), json.dumps({"first": [{"if": {"hurt_within": 10}, "then": {"do": "yield", "target": "attacker"}}, {"wait": 1}]}))
+    call(db, "set_behavior", str(I), json.dumps({"first": [{"do": {"skill": "attack", "target": {"id": J}}}, {"wait": 1}]}))
+    yielded = wait_for(lambda: [r for r in story("yield") if int(r["a"]) == J], timeout=30)
+    time.sleep(1.5)
+    h0 = hp(J)
+    time.sleep(6)
+    results["force: a yield stops a beating"] = bool(yielded) and hp(J) >= h0 - 0.5 and alive(J)
+    if not results["force: a yield stops a beating"]:
+        print("  yield:", bool(yielded), f"{h0:.1f} -> {hp(J):.1f}", rows(db, f"SELECT id, status FROM mind_state WHERE id = {I}"))
+    call(db, "set_behavior", str(I), idle)
+    # A wolf that is not desperate does not dare attack a healthy adult among others.
+    call(db, "place_near", str(J), str(I))
+    now_ms = time.time() * 1000
+    hunger = {r["id"]: float(r["hunger"]) + float(r["hunger_rate"]) * (now_ms - float(r["at_ms"])) / 60000 for r in rows(db, "SELECT id, hunger, hunger_rate, at_ms FROM vitals")}
+    wolves = [r["id"] for r in rows(db, "SELECT id, kind, alive FROM character") if r["kind"] == "wolf" and r["alive"] == "true" and r["id"] in hunger]
+    if wolves:
+        W = int(min(wolves, key=lambda w: hunger[w]))
+        call(db, "place_near", str(W), str(I))
+        h0 = hp(I)
+        call(db, "set_behavior", str(W), seq({"do": {"skill": "attack", "target": {"id": I}}}))
+        balked = wait_for(lambda: [r for r in story("balk") if int(r["a"]) == W], timeout=15)
+        time.sleep(3)
+        results["force: a wolf does not dare attack a healthy adult among others"] = bool(balked) and hp(I) >= h0 - 0.5
+        if not results["force: a wolf does not dare attack a healthy adult among others"]:
+            print("  wolf:", W, f"hunger {hunger[str(W)]:.0f}", bool(balked), f"{h0:.1f} -> {hp(I):.1f}", rows(db, f"SELECT id, status FROM mind_state WHERE id = {W}"))
+        call(db, "set_behavior", str(W), idle)
+    else:
+        results["force: a wolf does not dare attack a healthy adult among others"] = False
+        print("  wolf: no living wolf in this world")
     # Death: what only a living body uses goes with it (routines, their stats, practice, the
     # graph, genes); a parent of a child still expected keeps it until the birth.
     act(E, {"do": "rework", "item": "keep watch", "graph": {"first": [{"do": "rest"}]}})

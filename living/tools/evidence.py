@@ -117,7 +117,7 @@ def main():
         "story_counts": dict(kinds),
         "cross_group_exchanges": [r["text"] for r in exchanges][-20:],
         "trades": [r["text"] for r in chron if r["kind"] == "trade"][-10:],
-        "fights": [r["text"] for r in chron if r["kind"] in ("attack", "kill", "death", "fight")][-10:],
+        "fights": [r["text"] for r in chron if r["kind"] in ("attack", "assault", "threat", "yield", "killing", "kill", "death", "fight")][-10:],
         "communities": {name: sorted(chars[m]["name"] for m, n in MEMBER.items() if n == name and m in chars and chars[m]["alive"]) for name in comm.values()},
         "people_by_group": dict(Counter(camp.get(c["id"]) for c in people if c["alive"])),
     }
