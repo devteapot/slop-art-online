@@ -373,6 +373,37 @@ fn sprites(ctx: &egui::Context, p: &egui::Painter, xf: &Xf, view: &View, art: &m
                             p.rect_filled(Rect::from_min_size(door.min + egui::vec2(px, 2.0 * px), egui::vec2(px * 0.8, px * 0.8)), 0.0, Color32::from_rgb(230, 210, 130));
                         }
                     }
+                    // A settlement's buildings: a hall is a large warm house, an inn a house
+                    // with a lantern, a workshop a large open shelter, a market a row of stalls.
+                    "hall" | "inn" => {
+                        let s = xf.px(if st.kind == "hall" { 2.6 } else { 2.1 }, 2.4 * FLOOR);
+                        shadow(p, feet, art.house.w as f32 * s * 1.1);
+                        let tint = if st.kind == "hall" { Color32::from_rgb(235, 205, 170) } else { Color32::from_rgb(225, 225, 205) };
+                        let r = art.house.draw(p, (st.id % 4) as usize, feet, s, false, tint);
+                        if st.kind == "inn" {
+                            let px = r.width() / art.house.w as f32;
+                            let glow = 0.6 + 0.4 * ((t * 2.0 + st.id as f32).sin() * 0.5 + 0.5);
+                            p.circle_filled(r.min + egui::vec2(13.5 * px, 10.0 * px), 1.2 * px, Color32::from_rgba_unmultiplied(255, 200, 90, (255.0 * glow) as u8));
+                        }
+                    }
+                    "workshop" => {
+                        let s = xf.px(1.7, 1.7 * FLOOR);
+                        shadow(p, feet, art.shelter.w as f32 * s * 1.2);
+                        art.shelter.draw(p, 0, feet, s, false, Color32::from_rgb(210, 190, 160));
+                    }
+                    "market" => {
+                        // Three stalls with striped awnings.
+                        let w = xf.r(0.7, 6.0);
+                        for k in -1..=1 {
+                            let base = feet + egui::vec2(k as f32 * w * 1.1, 0.0);
+                            let post = Stroke::new((w * 0.08).max(1.0), Color32::from_rgb(110, 80, 50));
+                            p.line_segment([base - egui::vec2(w * 0.45, 0.0), base - egui::vec2(w * 0.45, w * 0.9)], post);
+                            p.line_segment([base + egui::vec2(w * 0.45, 0.0), base + egui::vec2(w * 0.45, w * 0.9)], post);
+                            let awning = Rect::from_min_size(base - egui::vec2(w * 0.55, w * 1.15), egui::vec2(w * 1.1, w * 0.3));
+                            p.rect_filled(awning, 0.0, if k == 0 { Color32::from_rgb(190, 70, 60) } else { Color32::from_rgb(220, 190, 120) });
+                            p.rect_filled(Rect::from_min_size(base - egui::vec2(w * 0.45, w * 0.35), egui::vec2(w * 0.9, w * 0.2)), 0.0, Color32::from_rgb(140, 100, 60));
+                        }
+                    }
                     "gate" => {
                         // Tile-locked: it sits in the wall ring on a road tile.
                         let (tx, ty) = (st.x.floor(), st.y.floor());
