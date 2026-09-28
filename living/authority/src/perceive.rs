@@ -388,7 +388,11 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         if let Some(v) = ctx.db.vitals().id().find(c.id) {
             let n = common::needs(&v, now);
             let f = n.hp / v.max_hp.max(1.0);
-            let looks = if f < 0.15 { "barely alive" } else if f < 0.35 { "badly wounded" } else if f < 0.6 { "hurt" } else { "" };
+            let wound = if f < 0.15 { "barely alive" } else if f < 0.35 { "badly wounded" } else if f < 0.6 { "hurt" } else { "" };
+            // Hunger shows too: anyone looks starved near the end, and a baby or child cries
+            // and fusses when hungry.
+            let hunger = if n.hunger >= 85.0 { "starving" } else if n.hunger >= 60.0 && ch.stage <= 1 { "hungry" } else { "" };
+            let looks = [wound, hunger].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(", ");
             if !looks.is_empty() {
                 o.insert("looks".into(), json!(looks));
             }

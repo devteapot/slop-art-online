@@ -11,7 +11,8 @@
     "talk": "low",
     "think": "low"
    },
-   "max_tokens": null
+   "max_tokens": null,
+   "overflow": "mistral-small"
   },
   "mistral-small": {
    "base_url": "https://api.mistral.ai/v1",
