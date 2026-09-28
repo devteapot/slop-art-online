@@ -416,3 +416,39 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Solveig and Siv.** Solveig, who had been thinking of securing hides "by force if necessary", attacked Siv and killed her.
   - **Brann and Ulf.** At 20:22 Brann, believing "Ulf's threats" would turn to force (Ulf was trading berries for fish and asking for help with the babies), fought Ulf. Ulf killed him. Ulf keeps the secret of Tomas's death, which Brann had held over him.
   - **Readable causes, and a gap.** This is conflict with readable causes grown from the authored tensions (resource pressure, Grim's hoarding, Brann's temper). It also shows that people have no graded force: no threaten, shove, restrain, yield or flee from a person. Any attack between people is lethal within seconds, since the reflex "when hurt, strike back" finishes the fight. Deaths so far: 7 people (3 babies starved, Pell to a wolf, Grim, Siv, Brann).
+- 2026-09-28 22:55 — **Aske Coast v3 (`aske-coast-3`)**, after the user stopped `aske-coast-2` (paused, kept) and asked for:
+  - a more structured society;
+  - balanced wildlife, with wolves attacking people only when desperate or given a real chance;
+  - a smoother observer;
+  - graded force.
+
+  The user's view: offices, laws and status should be social rules, not engine features. The engine only supplies what the physical world needs. The world stays at about 70 people. Built in parallel, three by sub-agents:
+  - **Graded force (10e8081):**
+    - attacks to `hurt` (stop at 40% health, never below 10%) or `kill`;
+    - `threaten` (no damage, counts as threatened);
+    - `yield` (stops a beating; killing someone who yielded is recorded as such);
+    - reflexes fight back to hurt and yield when losing;
+    - an animal's attack on a person is refused ("you do not dare") unless it is desperate (hunger ≥ 85, no prey seen or smelled), fighting back, or the person is easy prey (child, badly hurt, asleep, or alone at night away from fire);
+    - chronicle kinds `threat`, `assault`, `yield`, `killing`, `balk`, counted by `pulse.py`;
+    - `verify_mechanics.py` 23/23.
+  - **Wildlife (5bfd02e):**
+    - deer breed about once a life-year;
+    - meat an animal carries spoils at a quarter of the rate;
+    - weaned pups feed themselves;
+    - a migration floor as species data (deer below 15: 5 arrive every 20 min; wolves below 3: 3 every 30 min);
+    - measured over 83 minutes without minds: wolves eat about 1 deer each per hour, both species breed, and the floor fires as specified.
+  - **Observer (2705346):**
+    - the jumps came from display timing, not from server data;
+    - the server paused bodies at segment ends until the next tick (53% of updates), and the viewer, not synced to the server's clock, held and then snapped;
+    - now segments continue seamlessly and the viewer shows server-synced time slightly in the past, easing late rows in;
+    - in replay, stutter frames fell from 5.1% to 0.26% (42% to 0.28% with a 150 ms clock offset);
+    - still open: people pacing between two tasks (behavior, not display).
+  - **Society (75cb4b9, 847cee6, c681272, 6624ce0):**
+    - bible v2: Saltreach as a city (Net-Council, Tally-keeper, Steward, Captain of the Watch with two watchmen, Market-warden, marks as money, a Written Code with fines, stocks and exile, masters, apprentices and hired hands); Brandholm's offices, trades and spoken law; Oathstone's Waystone Inn;
+    - 72 people with sheets redrafted;
+    - named buildings (halls, workshops, a market, an inn) placed with name signs and known to residents as places;
+    - the item `mark`; habits for watchman, steward, laborer and innkeeper;
+    - halls and inns count as roof and hearth.
+  - **Two traps found on the way:**
+    - `lab.py` reclaimed disk by deleting any database idle for 2 hours, paused reference worlds included; it is now opt-in (`--reclaim`);
+    - Neo4j reached its limit of 65,535 relationship types (minds invent free-form types; a day of runs used them all). Minds now store only the types code relies on as real types and all others as `RELATES {rel}` (0f0b42d). New runs use a second, fresh Neo4j on :7690 (`LIVING_NEO4J_URI` in `.env`); the first keeps the paused worlds' minds.
