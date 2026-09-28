@@ -130,6 +130,22 @@ pub struct SeedTown {
     /// on fitting ground near the settlement; what is already there counts.
     #[serde(default)]
     pub resources: std::collections::BTreeMap<String, u32>,
+    /// Named buildings (a hall, workshops, a market, an inn), placed near the settlement's
+    /// center with a sign giving the name; residents know them as places.
+    #[serde(default)]
+    pub buildings: Vec<SeedBuilding>,
+}
+
+#[derive(Deserialize)]
+pub struct SeedBuilding {
+    pub kind: String,
+    pub name: String,
+    /// A resident's name (whose it is); none for a common building.
+    #[serde(default)]
+    pub owner: String,
+    /// What the sign beside it says after the name.
+    #[serde(default)]
+    pub about: String,
 }
 
 /// A person written by the world's author: who they are is installed as given (see
@@ -950,6 +966,43 @@ fn put(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32,
     ctx.db.structure().insert(Structure { id: 0, kind: kind.into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now }).id
 }
 
+/// A settlement's named buildings: each on free walkable ground 5-12 tiles from the center,
+/// a few tiles from anything else, with a sign giving its name; then every resident's
+/// background lists them as places (their minds turn those into remembered places).
+fn buildings(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, center: (f32, f32), residents: &[u32], authored: &[(String, u32)], now: u64) {
+    if t.buildings.is_empty() {
+        return;
+    }
+    let mut taken: Vec<(f32, f32)> = ctx.db.structure().iter().filter(|s| common::dist((s.x, s.y), center) < 16.0).map(|s| (s.x, s.y)).collect();
+    let mut places = Vec::new();
+    for (i, b) in t.buildings.iter().enumerate() {
+        let spot = (5..=12)
+            .flat_map(|r| (0..16).map(move |k| (r as f32, (k as f32 + i as f32 * 0.37) * std::f32::consts::TAU / 16.0)))
+            .map(|(r, a)| ((center.0 + r * a.cos()).floor() + 0.5, (center.1 + r * a.sin()).floor() + 0.5))
+            .find(|p| map.walkable(p.0 as i32, p.1 as i32) && map.walkable(p.0 as i32 + 1, p.1 as i32) && taken.iter().all(|q| common::dist(*q, *p) >= 3.0));
+        let Some(at) = spot else {
+            log::warn!("{}: no room for {}", t.name, b.name);
+            continue;
+        };
+        let owner = authored.iter().find(|(n, _)| *n == b.owner).map(|(_, id)| *id).unwrap_or(0);
+        put(ctx, map, &b.kind, at, owner, now);
+        let sign_at = (at.0 + 1.5, at.1);
+        let sid = put(ctx, map, "sign", sign_at, owner, now);
+        let text = if b.about.is_empty() { b.name.clone() } else { format!("{}. {}", b.name, b.about) };
+        let author = if owner != 0 { b.owner.clone() } else { format!("the people of {}", t.name) };
+        ctx.db.artifact().insert(Artifact { id: 0, kind: "sign".into(), holder: STRUCTURE_BIT | sid, author: owner, author_name: author, written_ms: 0, topic: b.name.clone(), text });
+        taken.extend([at, sign_at]);
+        places.push(serde_json::json!({"name": b.name, "at": [at.0.round(), at.1.round()], "kind": b.kind}));
+    }
+    for id in residents {
+        let Some(mut bg) = ctx.db.background().id().find(*id) else { continue };
+        let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&bg.text) else { continue };
+        v["places"] = serde_json::Value::Array(places.clone());
+        bg.text = v.to_string();
+        ctx.db.background().id().update(bg);
+    }
+}
+
 /// An established settlement laid out by `living_rules::city`: a hearth, stores and a sign on
 /// the market square, a house per household along the streets, gates in the wall kept by the
 /// settlement's community, planted fields outside; residents with histories.
@@ -999,6 +1052,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
         let sid = put(ctx, map, "sign", at, 0, now);
         ctx.db.artifact().insert(Artifact { id: 0, kind: "sign".into(), holder: STRUCTURE_BIT | sid, author: 0, author_name: format!("the elders of {}", t.name), written_ms: 0, topic: String::new(), text: t.ledger.clone() });
     }
+    buildings(ctx, map, t, center, &ids, &authored, now);
     if let Some(mut com) = ctx.db.community().id().find(c.id) {
         com.founder = ids.first().copied().unwrap_or(0);
         ctx.db.community().id().update(com);
@@ -1389,7 +1443,7 @@ mod tests {
     fn aske_coast_parses_with_its_settlements() {
         let s: Seed = serde_json::from_str(include_str!("../../seeds/aske-coast.json")).expect("aske-coast seed");
         let people: usize = s.towns.iter().chain(s.villages.iter()).map(|t| t.residents.len()).sum();
-        assert_eq!((s.towns.len(), s.villages.len(), people), (2, 1, 70));
+        assert_eq!((s.towns.len(), s.villages.len(), people), (2, 1, 72));
         assert_eq!(s.habits, "makers");
         assert!(s.towns.iter().chain(s.villages.iter()).flat_map(|t| &t.residents).all(|r| r.sheet["narrative"].as_str().is_some_and(|n| !n.is_empty())));
     }

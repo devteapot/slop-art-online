@@ -27,6 +27,7 @@ def main():
     ap.add_argument("--db", default=None, help="database (default: the scenario name)")
     ap.add_argument("--minutes", type=float, default=240)
     ap.add_argument("--every", type=int, default=600)
+    ap.add_argument("--reclaim", action="store_true", help="first delete database replicas idle for 2 hours (paused worlds too) to free disk")
     ap.add_argument("--no-mind", action="store_true", help="no mind service (an ecology lab without people makes no model calls)")
     a = ap.parse_args()
     a.db = a.db or a.scenario
@@ -43,8 +44,10 @@ def main():
     # a lab run from another worktree copies its module there (LIVING_WASM_DIR).
     wasm_dir = Path(os.environ.get("LIVING_WASM_DIR", LIVING / "target/wasm32-unknown-unknown/release"))
     shutil.copy(src, wasm_dir / wasm)
-    # Old replicas pile up with every fresh publish; reclaim them (and the VM's disk) first.
-    subprocess.run([str(LIVING / "tools/reclaim_disk.sh")], check=False)
+    # Old replicas pile up with every fresh publish. Reclaiming them deletes any database idle
+    # for two hours, paused worlds kept for reference included, so it is opt-in.
+    if a.reclaim:
+        subprocess.run([str(LIVING / "tools/reclaim_disk.sh")], check=False)
     stdb = str(LIVING / "tools/stdb")
     subprocess.run([stdb, "publish", "-s", "local", "-b", f"/wasm/{wasm}", a.db, "--delete-data", "-y"], check=True)
     run = f"{a.scenario}-{int(time.time())}"
