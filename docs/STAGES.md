@@ -372,3 +372,17 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Visible hunger.** Scenes show `looks: starving` for anyone at hunger 85 or more, and `hungry` for babies and children at 60 or more, beside the existing wounds. A parent can see a hungry baby.
   - **Luna overflows to Mistral.** From 14:15 to 14:30 the Codex proxy again timed out connecting (70 calls failed after 3 attempts), and at 14:29 the ChatGPT plan rate-limited 133 calls in one minute. Luna now has `"overflow": "mistral-small"`, so Brandholm's calls spill to Mistral at once instead of waiting through retries.
   - Deployed in place with `lab_update.sh` (module, rules and minds together).
+- 15:15 — **The Aske Coast restarted as `aske-coast-2`** (user's choice; the first world stays paused as `aske-coast`). At 1.5 hours it had 7 dead and 12 starving, much of it from authoring:
+  - the "fishing town" Saltreach had 1 fishing spot within 15 tiles (spots are scattered at random along any shore);
+  - Brandholm started with almost no food;
+  - my craft habits looped (61 nets in Saltreach's store, 39 at Oathstone, and bows likewise);
+  - the food routine's last step, "go home", succeeded when nothing edible was in sight, so 13 people stood at home `done` while starving.
+
+  Fixes (6de4e73):
+  - **Settlement resources:** a settlement can promise resources within 24 tiles (`resources` in the seed), topped up on fitting ground. Saltreach now has 8 fishing spots, 8 reed beds and 37 berry bushes within reach.
+  - **Starting stores** as the bible says: Brandholm short of fish and berries, not empty.
+  - **Craft habits** make only what their maker lacks; netmakers store spare fiber.
+  - **Food search:** finding food tries fishing and then searches (wanders) instead of standing at home.
+  - **Wolves can `give`**, so parents can feed pups (11 wolves had starved, the pups among them, while wolves killed 32 deer).
+
+  Carried over: scent, visible hunger, and Luna overflowing to Mistral. Run `aske-coast-1790601273`, 8 hours.
