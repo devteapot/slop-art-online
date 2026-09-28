@@ -346,3 +346,18 @@ Evidence, rule changes and decisions per stage, newest last.
   - **The learning hint worked.** Village experiments rose from 2 before the 10:39 hint (1 wood, 1 fiber) to 18 after it (7 wood, 7 fiber, 4 hide). Know-how worked out: village basketry, writing, torch; makers planting, archery, writing, bridging. Earlier runs worked out 1–2 techniques in 5 hours. No cloak yet.
   - **Populations.** 25, 25 and 22 people; 5, 6 and 4 born; stage 4 reaches a third generation. Wolves are gone everywhere; the village has 2 deer.
   - **Change, installed live at 11:39** (rules script only): teaching something that is not a technique now says so truthfully. Before, "teach leather" answered "you don't know leather yourself", as if leather were a technique; about 50 such acts per lab named items or invented techniques ("hide_preservation", "berry drying", "cloak_making"). Now an item names the technique that makes it ("leather is a thing, not a technique: it is made with tanning"), and a made-up name gets the list of real techniques.
+- 13:28 — **Direction change (user, 2026-09-28): from growing worlds layer by layer to an authored, developed world.** Instead of seeing whether small bands evolve what they want, the user wants a complex, developed region with well-drawn people, to see how it continues. The staged labs are closed for now:
+  - **Final numbers at 4 h 12 m** (practice counts cover only the living, since the dead's rows are now removed; lifetime totals need their own counters):
+    - `stage4-two`: 17 people, 8 born, 4 generations. 58 torches and 60 cooked fish held; 19 storages built; 1 technique worked out.
+    - `stage4-makers`: 22 people, 9 born. Nets, a pick, an axe, spears, salves, 3 cloaks and 12 torches; 31 storages, 5 traps; 6 techniques worked out.
+    - `stage3-village`: 23 people, 9 born. 18 torches, 6 spears, 4 shelters, a gate; 7 techniques worked out.
+  - **Conclusions on making (finding 2):** seeded habits that make widen *what* is made; the minds' own needs (light at night, warmth) drive *how much*. Three pieces of truthful feedback moved behavior:
+    - a campfire shown as burning halved the pointless rebuilding;
+    - failures from missing know-how that say how to learn it raised experiments from 2 to 18 in the village;
+    - teaching feedback that names the real techniques.
+
+    Wolves died out in every lab (an ecology gap: no way to find prey beyond sight). The labs were stopped at 13:25, paused with data kept.
+  - **The Aske Coast** (see [AUTHORED_WORLDS.md](AUTHORED_WORLDS.md)) started at 13:28 for 8 hours, run `aske-coast-1790594904`:
+    - 70 authored people (Brandholm 30 on Luna; Saltreach 30 and Oathstone 10 on Mistral Small) and 68 animals;
+    - 66 identities installed from their sheets with no model call; the 4 babies get theirs when they grow into children;
+    - in the first 4 minutes, Brandholm made 177 calls on Luna (2 unusable replies redone on Mistral), and nothing errored.
