@@ -461,3 +461,8 @@ Evidence, rule changes and decisions per stage, newest last.
   - threatening the same person again within 30 s is refused ("you are already threatening them; to ask or urge someone, speak");
   - the grammar says threaten is a threat of violence, not for asking, waking or urging;
   - memory writes retry Neo4j transient errors: two conversation agreements had been lost to lock deadlocks.
+- 01:13 — `aske-coast-3` at 2 h 20 m (after the threat fix):
+  - **Force as social pressure.** 72 people (4 born: Moss, Wren, Ione, Rhea). In Brandholm, Solveig, Ulf, Arne and Brann threatened Grim within ten minutes; he threatened back twice, then yielded to Ulf, Arne and Brann. The reasons are the town's own law: Arne confronted him for "giving berries to Bo and Liv despite the accounting", and Brann because "Grim's defiance and hoarding still threaten household stability". In v2 the same pressure on Grim ended in three deaths; here no one was hurt.
+  - **The wolf Moon killed Oriel,** a Saltreach smokehouse hand. Her daughter Rhea was born to Fen afterwards.
+  - **Wildlife:** 54 deer, 9 wolves.
+  - **Load:** 536 calls a minute, error share 0.21.
