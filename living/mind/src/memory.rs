@@ -156,9 +156,20 @@ impl Store {
     /// Apply one reasoning episode's patch transactionally (given up after a minute rather
     /// than left to hold a connection forever).
     pub async fn apply(&self, actor: u32, patch: &Patch, thought: &str, t: u64) -> Result<()> {
-        tokio::time::timeout(std::time::Duration::from_secs(60), self.apply_inner(actor, patch, thought, t))
-            .await
-            .map_err(|_| anyhow::anyhow!("memory write for {actor} timed out"))?
+        // Neo4j reports lock conflicts between concurrent writers (a conversation turn and a
+        // consolidation touching one node) as transient: the transaction can simply run again.
+        for attempt in 0..3u64 {
+            let r = tokio::time::timeout(std::time::Duration::from_secs(60), self.apply_inner(actor, patch, thought, t))
+                .await
+                .map_err(|_| anyhow::anyhow!("memory write for {actor} timed out"))?;
+            match r {
+                Err(e) if attempt < 2 && format!("{e:#}").contains("TransientError") => {
+                    tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt + 1))).await;
+                }
+                r => return r,
+            }
+        }
+        unreachable!()
     }
 
     async fn apply_inner(&self, actor: u32, patch: &Patch, thought: &str, t: u64) -> Result<()> {
