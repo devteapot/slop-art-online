@@ -575,6 +575,18 @@ mod tests {
     }
 
     #[test]
+    fn missing_know_how_says_how_to_learn_it() {
+        let s = scripts();
+        let mut c = ctx();
+        c.item = "cloak".into();
+        let why = s.check("craft", &c).unwrap_err();
+        assert!(why.contains("don't know how to make a cloak") && why.contains("experimenting with fiber or hide"), "{why}");
+        c.item = "storage".into();
+        let why = s.check("build", &c).unwrap_err();
+        assert!(why.contains("from someone who knows it") && why.contains("experimenting with wood"), "{why}");
+    }
+
+    #[test]
     fn eat_requires_item_and_reduces_hunger() {
         let s = scripts();
         let mut c = ctx();

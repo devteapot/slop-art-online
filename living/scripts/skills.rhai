@@ -166,7 +166,7 @@ fn eat_done(a) {
 }
 
 fn cook_check(a) {
-    if !knows(a, "cooking") { return "you don't know how to cook"; }
+    if !knows(a, "cooking") { return "you don't know how to cook" + learn_how("cooking"); }
     if a.target.kind != "campfire" { return "cooking needs a campfire"; }
     if a.item != "fish" && a.item != "meat" { return "only raw fish or meat can be cooked"; }
     if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
@@ -178,7 +178,7 @@ fn cook_done(a) {
 }
 
 fn smoke_check(a) {
-    if !knows(a, "smoking") { return "you don't know how to smoke food"; }
+    if !knows(a, "smoking") { return "you don't know how to smoke food" + learn_how("smoking"); }
     if a.target.kind != "campfire" { return "smoking needs a campfire"; }
     if a.item != "fish" && a.item != "meat" { return "only raw fish or meat can be smoked"; }
     if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
@@ -277,7 +277,7 @@ fn build_check(a) {
         _ => (),
     };
     if needed == () { return `cannot build ${a.item}`; }
-    if !knows(a, needed) { return `you don't know how to build a ${a.item}`; }
+    if !knows(a, needed) { return `you don't know how to build a ${a.item}` + learn_how(needed); }
     if a.item == "wall" || a.item == "gate" || a.item == "bridge" {
         if a.target.class != "place" { return `point at the tile beside you where the ${a.item} goes`; }
     } else if a.actor.terrain == "water" || a.actor.terrain == "rock" || a.actor.terrain == "wall" { return "cannot build here"; }
@@ -314,7 +314,7 @@ fn craft_check(a) {
     if young(a) { return "too young to craft"; }
     let needed = made_by(a.item);
     if needed == () { return `cannot craft ${a.item}`; }
-    if !knows(a, needed) { return `you don't know how to make a ${a.item}`; }
+    if !knows(a, needed) { return `you don't know how to make a ${a.item}` + learn_how(needed); }
     afford(a, a.item)
 }
 fn craft_duration(a) { 8000 }
@@ -476,6 +476,17 @@ fn teach_check(a) {
 fn teach_duration(a) { 15000 }
 fn teach_done(a) { [#{ op: "teach", technique: a.item }] }
 
+// How a technique one lacks can be learned, for failure feedback: from someone who knows
+// it, from writing, or (when a material can reveal it) by experimenting with that material.
+fn learn_how(t) {
+    let from = "";
+    for m in ["stone", "wood", "clay", "fiber", "hide", "berries", "meat", "fish"] {
+        if discoveries(m).contains(t) { from += if from == "" { m } else { ` or ${m}` }; }
+    }
+    let tail = if from == "" { "" } else { `, or work it out by experimenting with ${from}` };
+    ` (${t}: learn it from someone who knows it or from writing${tail})`
+}
+
 // What tinkering with a material can reveal.
 fn discoveries(m) {
     switch m {
@@ -515,7 +526,7 @@ fn experiment_done(a) {
 }
 
 fn write_check(a) {
-    if !knows(a, "writing") { return "you don't know how to write"; }
+    if !knows(a, "writing") { return "you don't know how to write" + learn_how("writing"); }
     if a.item != "tablet" && a.item != "sign" { return "you can write a tablet or a sign"; }
     if inv(a, "wood") < 1 { return `writing needs 1 wood (wood: ${source_of("wood")})`; }
     if a.text == "" { return "nothing to write"; }
@@ -549,7 +560,7 @@ fn read_duration(a) { 6000 }
 fn read_done(a) { [#{ op: "read" }] }
 
 fn plant_check(a) {
-    if !knows(a, "planting") { return "you don't know how to plant"; }
+    if !knows(a, "planting") { return "you don't know how to plant" + learn_how("planting"); }
     if inv(a, "berries") < 2 { return `planting needs 2 berries (berries: ${source_of("berries")})`; }
     if a.actor.terrain != "grass" && a.actor.terrain != "dirt" { return "nothing grows here"; }
     if a.season == "winter" { return "the ground is frozen"; }
