@@ -457,3 +457,7 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Knowledge through institutions.** Maelis taught Ness writing, and Ness then learned storage from Maelis's sign.
   - **Wildlife.** 47 deer (hunters and wolves) and 11 wolves (3 pups).
   - **Load.** About 300 calls a minute with a 4% error share, half of v2's at the same population.
+- 00:35 — `aske-coast-3` at 1 h 40 m: 71 alive. Baby Linnet starved. Deer are back to 60 (fawns), with 10 wolves. The 23:55 window had **38 threats in 15 minutes**, but minds had decided only about 12 `threaten` acts in the whole run, several of them misuse: Frida wanted to *wake* sleeping adults, Robin to *ask* Jorund about a baby, Wenna to *ask* Corin. Routines repeated a threat every second (Thora noticed "Sten is threatening her [baby Ylva] repeatedly"). Fixes, deployed in place at 00:35:
+  - threatening the same person again within 30 s is refused ("you are already threatening them; to ask or urge someone, speak");
+  - the grammar says threaten is a threat of violence, not for asking, waking or urging;
+  - memory writes retry Neo4j transient errors: two conversation agreements had been lost to lock deadlocks.
