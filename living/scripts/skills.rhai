@@ -74,7 +74,8 @@ fn nutrition(item) {
 // ---- needs -------------------------------------------------------------
 
 fn rates(a) {
-    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 5.0, _ => 5.0 };
+    // A predator feeds big and rarely: a wolf lasts about an hour on a deer.
+    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 5.0 };
     let energy = -3.0;
     let hp = 0.0;
     let act = a.actor.activity;
@@ -405,7 +406,7 @@ fn attack_done(a) {
 fn armor(a) { let n = a.target.inv["armor"]; if n == () || n < 1 { 1.0 } else { 0.65 } }
 
 // Meat left when a creature dies at someone's hand.
-fn carcass_meat(kind) { switch kind { "deer" => 3, "wolf" => 2, _ => 0 } }
+fn carcass_meat(kind) { switch kind { "deer" => 5, "wolf" => 2, _ => 0 } }
 fn carcass_hide(kind) { switch kind { "deer" => 1, "wolf" => 1, _ => 0 } }
 
 fn max_hp(kind) { switch kind { "deer" => 40.0, "wolf" => 55.0, _ => 100.0 } }
