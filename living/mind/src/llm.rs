@@ -63,7 +63,24 @@ pub struct Llm {
     journal: PathBuf,
     budget: Budget,
     windows: std::sync::Mutex<HashMap<String, Window>>,
+    gates: std::sync::Mutex<HashMap<String, Gate>>,
 }
+
+/// Reachability of a provider (by base URL). When a request cannot reach it (DNS, no route,
+/// refused, timed out), calls to it wait instead of failing at once; one probe at a time goes
+/// out, with a pause that doubles from 2 s to a minute, until the provider answers again. An
+/// outage then costs a paused mind, not hundreds of failed calls a minute.
+#[derive(Default)]
+struct Gate {
+    down_since: Option<Instant>,
+    retry_at: Option<Instant>,
+    pause: Duration,
+    probing: bool,
+    held: u64,
+}
+
+const GATE_PAUSE_MIN: Duration = Duration::from_secs(2);
+const GATE_PAUSE_MAX: Duration = Duration::from_secs(60);
 
 /// Adaptive in-flight limit for a profile with an overflow (additive increase while calls
 /// succeed, multiplicative decrease on a rate limit). Separate mind processes sharing one
@@ -152,7 +169,7 @@ impl Llm {
         let http = reqwest::Client::builder().timeout(Duration::from_secs(180)).user_agent("sao-living-mind/0.1").build()?;
         let per_min = std::env::var("LIVING_LLM_PER_MIN").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
         log::info!("LLM budget: {} (LIVING_LLM_PER_MIN; 0 = unlimited)", if per_min > 0.0 { format!("{per_min} calls/min") } else { "unlimited".into() });
-        Ok(Self { http, models, keys, journal, budget: Budget::new(per_min), windows: Default::default() })
+        Ok(Self { http, models, keys, journal, budget: Budget::new(per_min), windows: Default::default(), gates: Default::default() })
     }
 
     /// Profile for a character: explicit assignment, then rotation, then default.
@@ -296,10 +313,19 @@ impl Llm {
         if let Some(e) = p.reasoning_effort.get(purpose) {
             body["reasoning_effort"] = json!(e);
         }
+        let host = p.base_url.clone();
+        self.gate_enter(&host).await;
         let started = Instant::now();
         let url = format!("{}/chat/completions", p.base_url.trim_end_matches('/'));
+        let mut unreachable = false;
         let result = async {
-            let resp = self.http.post(&url).bearer_auth(key).json(&body).send().await.context("request")?;
+            let resp = match self.http.post(&url).bearer_auth(key).json(&body).send().await {
+                Ok(r) => r,
+                Err(e) => {
+                    unreachable = e.is_connect() || e.is_timeout() || e.is_request();
+                    return Err(anyhow::Error::new(e).context("request"));
+                }
+            };
             let status = resp.status();
             let text = resp.text().await.context("body")?;
             if !status.is_success() {
@@ -311,6 +337,7 @@ impl Llm {
             Ok((content, tokens))
         }
         .await;
+        self.gate_leave(&host, unreachable);
         let latency_ms = started.elapsed().as_millis() as u32;
         let entry = json!({
             "at_ms": now_ms(),
@@ -327,6 +354,48 @@ impl Llm {
         self.journal(actor, &entry).await;
         let (content, tokens) = result?;
         Ok(Reply { content, tokens, latency_ms, model: p.model.clone() })
+    }
+
+    /// Wait while the provider is unreachable; one caller at a time probes it.
+    async fn gate_enter(&self, host: &str) {
+        let mut counted = false;
+        loop {
+            {
+                let mut gs = self.gates.lock().unwrap();
+                let g = gs.entry(host.to_string()).or_default();
+                match g.retry_at {
+                    None => return,
+                    Some(at) if !g.probing && Instant::now() >= at => {
+                        g.probing = true;
+                        return;
+                    }
+                    _ => {
+                        if !counted {
+                            g.held += 1;
+                            counted = true;
+                        }
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    }
+
+    fn gate_leave(&self, host: &str, unreachable: bool) {
+        let mut gs = self.gates.lock().unwrap();
+        let g = gs.entry(host.to_string()).or_default();
+        g.probing = false;
+        if unreachable {
+            g.pause = if g.down_since.is_none() { GATE_PAUSE_MIN } else { (g.pause * 2).min(GATE_PAUSE_MAX) };
+            if g.down_since.is_none() {
+                g.down_since = Some(Instant::now());
+                log::warn!("{host} unreachable: holding model calls, probing every {:?} up to {:?}", GATE_PAUSE_MIN, GATE_PAUSE_MAX);
+            }
+            g.retry_at = Some(Instant::now() + g.pause);
+        } else if let Some(since) = g.down_since.take() {
+            log::warn!("{host} reachable again after {:.0} s; {} calls were held meanwhile", since.elapsed().as_secs_f64(), g.held);
+            *g = Gate::default();
+        }
     }
 
     async fn journal(&self, actor: &str, entry: &Value) {
@@ -417,6 +486,27 @@ fn repair(text: &str) -> serde_json::Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A provider that cannot be reached holds later calls until a probe gets through.
+    #[tokio::test]
+    async fn unreachable_provider_holds_calls() {
+        std::env::set_var("LIVING_TEST_GATE_KEY", "x");
+        let models: ModelsFile = serde_json::from_value(json!({
+            "default": "dead",
+            "profiles": {"dead": {"base_url": "http://127.0.0.1:9/v1", "model": "m", "key_env": "LIVING_TEST_GATE_KEY"}}
+        }))
+        .unwrap();
+        let dir = std::env::temp_dir().join(format!("living-gate-{}", now_ms()));
+        let llm = Llm::new(models, dir.clone()).unwrap();
+        let msg = [Msg { role: "user", content: "hi".into() }];
+        let t = Instant::now();
+        assert!(llm.chat("dead", "think", "a", &msg).await.is_err());
+        assert!(t.elapsed() < Duration::from_millis(1500), "the first failure is immediate");
+        let t = Instant::now();
+        assert!(llm.chat("dead", "think", "a", &msg).await.is_err());
+        assert!(t.elapsed() >= GATE_PAUSE_MIN, "the next call waits for the probe: {:?}", t.elapsed());
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn repairs_small_model_slips() {
