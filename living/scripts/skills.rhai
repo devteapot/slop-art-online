@@ -346,6 +346,11 @@ fn give_check(a) {
     if a.target.class != "creature" || !a.target.alive { return "no one to give to"; }
     if a.target.id == a.actor.id { return "cannot give to yourself"; }
     if inv(a, a.item) < amount(a) { return `not enough ${a.item} (${a.item}: ${source_of(a.item)})`; }
+    // What someone is given has to fit in their pack; a baby can hold only a few things.
+    let held = 0;
+    for k in a.target.inv.keys() { held += a.target.inv[k]; }
+    let room = if a.target.stage == "infant" { 4.0 } else { carry_limit(a.target.kind) + if a.target.inv.contains("basket") { 20.0 } else { 0.0 } };
+    if held + amount(a) > room { return if a.target.stage == "infant" { `a baby can hold only ${room} things; give food a little at a time` } else { "their pack is full" }; }
     ""
 }
 fn give_duration(a) { 1000 }

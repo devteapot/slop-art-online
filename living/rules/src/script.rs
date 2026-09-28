@@ -601,6 +601,25 @@ mod tests {
     }
 
     #[test]
+    fn gifts_must_fit_the_receivers_pack() {
+        let s = scripts();
+        let mut c = ctx();
+        c.item = "berries".into();
+        c.qty = 5;
+        c.actor.inv = vec![("berries".into(), 20)];
+        c.target = TargetFacts { class: "creature".into(), kind: "person".into(), id: 9, alive: true, stage: "adult".into(), inv: vec![("wood".into(), 30)], ..Default::default() };
+        assert!(s.check("give", &c).is_ok());
+        c.target.inv = vec![("wood".into(), 38)];
+        assert!(s.check("give", &c).unwrap_err().contains("pack is full"));
+        c.target.inv.push(("basket".into(), 1));
+        assert!(s.check("give", &c).is_ok());
+        c.target = TargetFacts { class: "creature".into(), kind: "person".into(), id: 9, alive: true, stage: "infant".into(), ..Default::default() };
+        assert!(s.check("give", &c).unwrap_err().contains("a baby can hold only"));
+        c.qty = 3;
+        assert!(s.check("give", &c).is_ok());
+    }
+
+    #[test]
     fn eat_requires_item_and_reduces_hunger() {
         let s = scripts();
         let mut c = ctx();
