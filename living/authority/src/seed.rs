@@ -1287,6 +1287,15 @@ mod tests {
     }
 
     #[test]
+    fn aske_coast_parses_with_its_settlements() {
+        let s: Seed = serde_json::from_str(include_str!("../../seeds/aske-coast.json")).expect("aske-coast seed");
+        let people: usize = s.towns.iter().chain(s.villages.iter()).map(|t| t.residents.len()).sum();
+        assert_eq!((s.towns.len(), s.villages.len(), people), (2, 1, 70));
+        assert_eq!(s.habits, "makers");
+        assert!(s.towns.iter().chain(s.villages.iter()).flat_map(|t| &t.residents).all(|r| r.sheet["narrative"].as_str().is_some_and(|n| !n.is_empty())));
+    }
+
+    #[test]
     fn authored_seed_parses_with_households_ages_and_sites() {
         let s: Seed = serde_json::from_str(AUTHORED).expect("authored-test seed");
         let (town, village) = (&s.towns[0], &s.villages[0]);

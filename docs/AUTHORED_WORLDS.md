@@ -70,5 +70,31 @@ No new tables, columns or reducers, so no migration ([automatic migrations](http
 
 ## Open points
 
-- Authored memories and stances fade like any others. A salience-0.9 memory that is never recalled is forgotten after about 5 hours of wall time. Stances relax toward 0.5 unless reinforced: a 0.9 stance is no longer held after about 80 minutes. Whether an authored past should fade more slowly has not been decided.
+- Decided (2026-09-28): an authored past is **formative**. After installing a sheet, `Store::mark_formative` flags its stances (`JUDGES` edges written by that thought) and its memories (`exp` ≥ `AUTHORED_MEMORY`). They fade `FORMATIVE` (12) times more slowly: a 0.95 stance lasts about 16 hours unreinforced instead of about 80 minutes, and a 0.9 memory about 2.5 days instead of about 5 hours. Recall still rehearses them. If a mind changes a stance, the new edge is ordinary. Covered by the Neo4j test `formative_past_outlasts_ordinary_beliefs`.
 - `thought` rows are public. A mind may still reveal its secret in its own reasoning or speech; that is the character's choice.
+
+## Drafting a world: `author_world.py`
+
+`living/tools/author_world.py <world>` builds `living/seeds/<world>.json` from `living/seeds/worlds/<world>/`. That directory holds three files:
+
+- `bible.md`: the land, cultures, history, the current tensions, and guidance for sheet writers;
+- `cast.json`: settlements with character, stores and a ledger, and households of members, each with name, age, sex, occupation, role, known techniques, parents and ties; secret ties start with `SECRET:`;
+- `seed.json`: map, pace, habits, animals and the setting text minds are told.
+
+A model (by default `luna`, through the models config and `.env` keys) drafts one sheet per member, one household at a time. It sees the bible, the whole cast's public ties, and only that household's secrets. Sheets are checked: people must be in the cast (epithets like "Old Aud" resolve), numbers are clamped, keys are cleaned, and lists are bounded. Family, household and named ties that are felt only one way get a second, small drafting pass; other one-sided feelings are kept. Drafts are cached in `sheets/<household>.json`, and `--compile-only` rebuilds the seed from them.
+
+## The Aske Coast (`aske-coast`)
+
+The first authored world, set up at the user's request on 2026-09-28: a developed region with well-drawn people, to see how it continues rather than to grow it from bands.
+
+- **Settlements:**
+  - **Brandholm**, a palisaded timber-and-hide town in the northern forest (30 people);
+  - **Saltreach**, an open fishing and reed town on the southern shore that keeps a written Tally (30 people);
+  - **Oathstone**, a hamlet of planters around the stone where the towns swore peace (10 people).
+- **Shared history and tensions:** the Hunger Winter that split one people into two towns, the Oath at the Stone, the unexplained death of Tomas, Brandholm's debts to the Tally, succession in both Brandholm and Oathstone, missing smoked fish, and a secret love across the towns. See [the bible](../living/seeds/worlds/aske-coast/bible.md).
+- **Map:** realm seed 3 at 256×256, so the towns are about 160 tiles apart and the hamlet about 120 from each.
+- **Pace:** 12-minute days, 8-day years, `life_pace` 1.5. A person ages about one year per 2.4 real hours, so a 70-year life lasts about 7 real days. Elders start at 60 or younger, so nobody reaches old age on the first tick.
+- **Habits:** the `makers` set, with six new occupations: tanner, trapper, toolmaker, netmaker, smoker and keeper.
+- **Models:** Brandholm thinks with Luna; Saltreach and Oathstone with Mistral Small (`groups` in the models config).
+- **Wildlife:** 60 deer and 8 wolves in packs.
+- **Sheets** (first draft, Luna): 491 relations, of which 103 are one-sided non-family feelings, 222 memories, 190 stances and 8 secrets.

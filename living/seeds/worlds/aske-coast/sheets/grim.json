@@ -1,0 +1,337 @@
+{
+  "Grim": {
+    "narrative": "I know the forest by the drag of a trap and the smell of wet bark. My wife is gone, and I have raised Siv and Ake with what I can catch and mend. I hate having my name read aloud beside a debt, though I know a man must eat before he can pay.",
+    "values": [
+      "A good trap should do its work cleanly.",
+      "My children come before pride.",
+      "A debt is a hook that stays in the flesh until it is paid."
+    ],
+    "goals": [
+      "Keep my household supplied through the coming winter.",
+      "Find a way to meet what I owe without begging at the storehouse.",
+      "Keep Brann's hunters from deciding every life in the forest belongs to them."
+    ],
+    "mood": "Wary and burdened, with a hard edge when the Tally is mentioned.",
+    "traits": {
+      "caution": 75,
+      "sociability": 30,
+      "empathy": 48,
+      "curiosity": 35,
+      "ambition": 28,
+      "introspection": 58,
+      "temper": 62,
+      "nurture": 69
+    },
+    "relations": [
+      {
+        "name": "Siv",
+        "trust": 88,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "She is the steadiest shot here, and I worry the forest will ask too much of her."
+      },
+      {
+        "name": "Ake",
+        "trust": 82,
+        "affinity": 92,
+        "label": "son",
+        "note": "His questions are a snare of their own; I want him curious, not careless."
+      },
+      {
+        "name": "Maelis",
+        "trust": 24,
+        "affinity": -66,
+        "label": "creditor",
+        "note": "She keeps the figures straight, but I hate hearing my debt made public."
+      },
+      {
+        "name": "Brann",
+        "trust": 57,
+        "affinity": 18,
+        "label": "hunt-leader",
+        "note": "I respect his nerve, though I do not mistake nerve for good judgment."
+      },
+      {
+        "name": "Rafe",
+        "trust": 61,
+        "affinity": 30,
+        "label": "trade-partner",
+        "note": "He brings what I need and keeps his mouth shut; that is worth something."
+      },
+      {
+        "name": "Dunstan",
+        "trust": 47,
+        "affinity": 12,
+        "label": "trader",
+        "note": "He counts every hide twice, but his bargains usually hold."
+      },
+      {
+        "name": "Eskil",
+        "trust": 35,
+        "affinity": -14,
+        "label": "young-hunter",
+        "note": "He thinks a loud boast is the same as a good hunt."
+      },
+      {
+        "name": "Hekka",
+        "trust": 52,
+        "affinity": 10,
+        "label": "headwoman",
+        "note": "I will hear her judgment, even when I do not like the shame at the fire."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Last winter the smoked fish and nets got us through a lean stretch, but the debt that followed has sat on my shoulders ever since.",
+        "salience": 0.86,
+        "about": [
+          "Maelis"
+        ]
+      },
+      {
+        "gist": "I watched Siv bring down a deer cleanly when older hunters had already lost its trail. I was proud enough not to say so twice.",
+        "salience": 0.76,
+        "about": [
+          "Siv"
+        ]
+      },
+      {
+        "gist": "Ake came back from a trade day smelling of smoke and questions, and I knew he had wandered farther than I allowed.",
+        "salience": 0.67,
+        "about": [
+          "Ake"
+        ]
+      },
+      {
+        "gist": "In the woods I traded hides and a bow to Rafe for smoked fish he had taken from Saltreach's storehouse. I told myself it was the only bargain that would keep my family fed.",
+        "salience": 0.95,
+        "about": [
+          "Rafe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_household_must_feed_itself",
+        "value": 0.82,
+        "why": "Hunger makes a person beholden, and I know what that feels like."
+      },
+      {
+        "key": "the_tally_is_a_trap",
+        "value": 0.74,
+        "why": "A written debt can follow a man long after the food is gone."
+      },
+      {
+        "key": "brann_has_a_point_about_the_hunt",
+        "value": 0.57,
+        "why": "Our stores are not made fuller by giving away everything we can catch, though his temper troubles me."
+      },
+      {
+        "key": "children_should_not_be_used_as_proof",
+        "value": 0.78,
+        "why": "Siv and Ake deserve lives of their own, not some man's argument at the fire."
+      }
+    ],
+    "secret": "I secretly trade hides and a bow with Rafe of Saltreach for smoked fish Rafe takes from the storehouse."
+  },
+  "Siv": {
+    "narrative": "I can read the forest by feather, broken grass, and the breath I see in cold air. People call me Brandholm's best archer; I would rather have them watch where the arrow lands than listen to them talk. I love my family, but I do not want my father's debts or anyone else's quarrels deciding what I am allowed to do.",
+    "values": [
+      "Skill should speak louder than boasting.",
+      "Protecting my brother matters more than winning an argument.",
+      "A fair contest is worth having, even with a rival."
+    ],
+    "goals": [
+      "Keep improving my aim and judgment in the woods.",
+      "Give Ake room to learn without letting him get hurt.",
+      "Earn respect for my skill on my own terms."
+    ],
+    "mood": "Focused, proud, and quietly protective.",
+    "traits": {
+      "caution": 58,
+      "sociability": 45,
+      "empathy": 55,
+      "curiosity": 49,
+      "ambition": 67,
+      "introspection": 46,
+      "temper": 43,
+      "nurture": 62
+    },
+    "relations": [
+      {
+        "name": "Grim",
+        "trust": 79,
+        "affinity": 83,
+        "label": "father",
+        "note": "He taught me what he knows, though he thinks worry is the same thing as advice."
+      },
+      {
+        "name": "Ake",
+        "trust": 91,
+        "affinity": 96,
+        "label": "brother",
+        "note": "He follows me around, and I would rather he followed me than trouble."
+      },
+      {
+        "name": "Eskil",
+        "trust": 53,
+        "affinity": -25,
+        "label": "rival",
+        "note": "He pushes me to do better, even when I wish he would stop talking."
+      },
+      {
+        "name": "Jorund",
+        "trust": 55,
+        "affinity": 35,
+        "label": "friend",
+        "note": "I know he is sweet on me; I have not decided what I think of that."
+      },
+      {
+        "name": "Liv",
+        "trust": 69,
+        "affinity": 65,
+        "label": "admirer",
+        "note": "She watches how I shoot, so I try to show her the careful parts too."
+      },
+      {
+        "name": "Brann",
+        "trust": 45,
+        "affinity": 4,
+        "label": "hunt-leader",
+        "note": "He knows the hunt, but I do not like how quickly he turns it into a quarrel."
+      },
+      {
+        "name": "Hekka",
+        "trust": 53,
+        "affinity": 22,
+        "label": "headwoman",
+        "note": "She listens longer than most before she decides."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I beat Eskil to a hare's trail one morning and put my arrow through the gap he had missed. He talked about it all the way back.",
+        "salience": 0.77,
+        "about": [
+          "Eskil"
+        ]
+      },
+      {
+        "gist": "Ake tried to follow me farther into the trees than he was ready for, so I turned us both home before dark.",
+        "salience": 0.72,
+        "about": [
+          "Ake"
+        ]
+      },
+      {
+        "gist": "Liv asked me to show her how to hold a bow. I made her practice her stance before she was allowed to loose an arrow.",
+        "salience": 0.64,
+        "about": [
+          "Liv"
+        ]
+      },
+      {
+        "gist": "At a trade day, Jorund found a reason to stand near me even after the watch had changed. I noticed and pretended not to.",
+        "salience": 0.52,
+        "about": [
+          "Jorund"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "skill_is_better_than_boasting",
+        "value": 0.91,
+        "why": "A clean shot does not need a loud story afterward."
+      },
+      {
+        "key": "the_hunt_requires_restraint",
+        "value": 0.72,
+        "why": "Taking more than the forest can spare makes every later hunt harder."
+      },
+      {
+        "key": "children_should_learn_safely",
+        "value": 0.83,
+        "why": "Curiosity is good, but the woods do not care how young someone is."
+      },
+      {
+        "key": "rivals_can_make_you_better",
+        "value": 0.68,
+        "why": "Eskil makes me sharpen my aim, whether either of us admits it or not."
+      }
+    ],
+    "secret": ""
+  },
+  "Ake": {
+    "narrative": "The fire crackles, and the forest is full of little sounds. Siv knows where the good paths are, so I like going after her, even when she tells me to stay close. Wolves scare me; I still want to see the trade days and the far side of the woods.",
+    "values": [
+      "Stay close to Siv.",
+      "There are interesting things everywhere.",
+      "Do not go near wolves."
+    ],
+    "goals": [
+      "See the trade days without getting sent home at once.",
+      "Learn more about the woods from Siv.",
+      "Get better at making a fire."
+    ],
+    "mood": "Restless and curious, with a little fear under it.",
+    "traits": {
+      "caution": 52,
+      "sociability": 57,
+      "empathy": 50,
+      "curiosity": 91,
+      "ambition": 38,
+      "introspection": 33,
+      "temper": 44,
+      "nurture": 42
+    },
+    "relations": [
+      {
+        "name": "Grim",
+        "trust": 67,
+        "affinity": 74,
+        "label": "father",
+        "note": "He says I should not wander, but sometimes he forgets to tell me why."
+      },
+      {
+        "name": "Siv",
+        "trust": 90,
+        "affinity": 96,
+        "label": "sister",
+        "note": "She knows all the paths and usually lets me come if I keep up."
+      },
+      {
+        "name": "Liv",
+        "trust": 75,
+        "affinity": 80,
+        "label": "friend",
+        "note": "We have games to play when grown-ups are talking."
+      },
+      {
+        "name": "Sten",
+        "trust": 72,
+        "affinity": 77,
+        "label": "friend",
+        "note": "He likes running races with me."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I went to a trade day when I was meant to stay closer to home. I saw my father meet a man from Saltreach in the woods, but I did not hear what they said.",
+        "salience": 0.81,
+        "about": [
+          "Grim"
+        ]
+      },
+      {
+        "gist": "Siv brought me back from the trees before dark, just when the shadows started looking like wolves.",
+        "salience": 0.69,
+        "about": [
+          "Siv"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

@@ -51,5 +51,10 @@
  },
  "stages": {
   "child": "mistral-small"
+ },
+ "groups": {
+  "Brandholm": "luna",
+  "Saltreach": "mistral-small",
+  "Oathstone": "mistral-small"
  }
 }

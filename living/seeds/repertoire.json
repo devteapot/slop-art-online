@@ -861,6 +861,749 @@
           }
         ]
       }
+    },
+    "tanner": {
+      "routine": "work hides",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "cloak",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "cloak"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "cloak"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "leather",
+                      "at_least": 3
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "leather"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "leather"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "leather",
+                    "at_least": 3
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "leather",
+              "qty": 2
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "cloak",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "cloak",
+              "qty": 1
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "hide",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "take",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "hide",
+              "qty": 2
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "fiber",
+                  "at_least": 1
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "reeds"
+              }
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "trapper": {
+      "routine": "set traps",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "near": {
+                    "target": "home",
+                    "within": 15
+                  }
+                },
+                {
+                  "not": {
+                    "sees": {
+                      "nearest": "trap"
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "build",
+                    "item": "trap"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "build",
+              "item": "trap"
+            }
+          },
+          {
+            "if": {
+              "sees": {
+                "nearest": "trap"
+              }
+            },
+            "then": {
+              "do": "take",
+              "target": {
+                "nearest": "trap"
+              },
+              "item": "meat"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "meat",
+                    "at_least": 3
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "meat",
+              "qty": 2
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "wood",
+                  "at_least": 2
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "tree"
+              }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "fiber",
+                  "at_least": 2
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "reeds"
+              }
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "toolmaker": {
+      "routine": "make tools",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "axe",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "axe"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "axe"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "pick",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "pick"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "pick"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "bow",
+                      "at_least": 2
+                    }
+                  }
+                },
+                {
+                  "has": {
+                    "item": "wood",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "has": {
+                    "item": "fiber",
+                    "at_least": 1
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "bow"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "bow"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "bow",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "bow",
+              "qty": 1
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "axe",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "axe",
+              "qty": 1
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "wood",
+                  "at_least": 4
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "tree"
+              }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "stone",
+                  "at_least": 2
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "boulder"
+              }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "fiber",
+                  "at_least": 1
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "reeds"
+              }
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "netmaker": {
+      "routine": "make nets",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "net",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "net"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "net"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "net",
+                      "at_least": 3
+                    }
+                  }
+                },
+                {
+                  "has": {
+                    "item": "fiber",
+                    "at_least": 3
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "net"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "net"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "net",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "net",
+              "qty": 1
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "basket",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "basket"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "basket"
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "fiber",
+                  "at_least": 3
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "reeds"
+              }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "wood",
+                  "at_least": 1
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "tree"
+              }
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "smoker": {
+      "routine": "smoke fish",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "fish",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "campfire"
+                  }
+                },
+                {
+                  "can": {
+                    "do": "smoke",
+                    "item": "fish",
+                    "target": {
+                      "nearest": "campfire"
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "smoke",
+              "target": {
+                "nearest": "campfire"
+              },
+              "item": "fish"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "smoked_fish",
+                    "at_least": 3
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "smoked_fish",
+              "qty": 3
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "fish",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "take",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "fish",
+              "qty": 4
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "fishing_spot"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "keeper": {
+      "routine": "keep the peace",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "not": {
+                "near": {
+                  "target": "home",
+                  "within": 4
+                }
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": "home"
+            }
+          },
+          {
+            "if": {
+              "sees": {
+                "nearest": "person"
+              }
+            },
+            "then": {
+              "seq": [
+                {
+                  "do": "goto",
+                  "target": {
+                    "nearest": "person"
+                  }
+                },
+                {
+                  "wait": 20
+                }
+              ]
+            }
+          },
+          {
+            "wait": 15
+          }
+        ]
+      }
     }
   },
   "makers": {
@@ -1699,6 +2442,749 @@
                 "do": "wander"
               }
             ]
+          }
+        ]
+      }
+    },
+    "tanner": {
+      "routine": "work hides",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "cloak",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "cloak"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "cloak"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "leather",
+                      "at_least": 3
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "leather"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "leather"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "leather",
+                    "at_least": 3
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "leather",
+              "qty": 2
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "cloak",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "cloak",
+              "qty": 1
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "hide",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "take",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "hide",
+              "qty": 2
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "fiber",
+                  "at_least": 1
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "reeds"
+              }
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "trapper": {
+      "routine": "set traps",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "near": {
+                    "target": "home",
+                    "within": 15
+                  }
+                },
+                {
+                  "not": {
+                    "sees": {
+                      "nearest": "trap"
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "build",
+                    "item": "trap"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "build",
+              "item": "trap"
+            }
+          },
+          {
+            "if": {
+              "sees": {
+                "nearest": "trap"
+              }
+            },
+            "then": {
+              "do": "take",
+              "target": {
+                "nearest": "trap"
+              },
+              "item": "meat"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "meat",
+                    "at_least": 3
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "meat",
+              "qty": 2
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "wood",
+                  "at_least": 2
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "tree"
+              }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "fiber",
+                  "at_least": 2
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "reeds"
+              }
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "toolmaker": {
+      "routine": "make tools",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "axe",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "axe"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "axe"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "pick",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "pick"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "pick"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "bow",
+                      "at_least": 2
+                    }
+                  }
+                },
+                {
+                  "has": {
+                    "item": "wood",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "has": {
+                    "item": "fiber",
+                    "at_least": 1
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "bow"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "bow"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "bow",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "bow",
+              "qty": 1
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "axe",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "axe",
+              "qty": 1
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "wood",
+                  "at_least": 4
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "tree"
+              }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "stone",
+                  "at_least": 2
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "boulder"
+              }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "fiber",
+                  "at_least": 1
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "reeds"
+              }
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "netmaker": {
+      "routine": "make nets",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "net",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "net"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "net"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "net",
+                      "at_least": 3
+                    }
+                  }
+                },
+                {
+                  "has": {
+                    "item": "fiber",
+                    "at_least": 3
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "net"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "net"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "net",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "net",
+              "qty": 1
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "basket",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "can": {
+                    "do": "craft",
+                    "item": "basket"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "craft",
+              "item": "basket"
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "fiber",
+                  "at_least": 3
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "reeds"
+              }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "has": {
+                  "item": "wood",
+                  "at_least": 1
+                }
+              }
+            },
+            "then": {
+              "do": "gather",
+              "target": {
+                "nearest": "tree"
+              }
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "smoker": {
+      "routine": "smoke fish",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "fish",
+                    "at_least": 2
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "campfire"
+                  }
+                },
+                {
+                  "can": {
+                    "do": "smoke",
+                    "item": "fish",
+                    "target": {
+                      "nearest": "campfire"
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "smoke",
+              "target": {
+                "nearest": "campfire"
+              },
+              "item": "fish"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "has": {
+                    "item": "smoked_fish",
+                    "at_least": 3
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "store",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "smoked_fish",
+              "qty": 3
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "not": {
+                    "has": {
+                      "item": "fish",
+                      "at_least": 1
+                    }
+                  }
+                },
+                {
+                  "sees": {
+                    "nearest": "storage"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "take",
+              "target": {
+                "nearest": "storage"
+              },
+              "item": "fish",
+              "qty": 4
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "fishing_spot"
+            }
+          },
+          {
+            "do": "wander"
+          }
+        ]
+      }
+    },
+    "keeper": {
+      "routine": "keep the peace",
+      "graph": {
+        "first": [
+          {
+            "if": {
+              "not": {
+                "near": {
+                  "target": "home",
+                  "within": 4
+                }
+              }
+            },
+            "then": {
+              "do": "goto",
+              "target": "home"
+            }
+          },
+          {
+            "if": {
+              "sees": {
+                "nearest": "person"
+              }
+            },
+            "then": {
+              "seq": [
+                {
+                  "do": "goto",
+                  "target": {
+                    "nearest": "person"
+                  }
+                },
+                {
+                  "wait": 20
+                }
+              ]
+            }
+          },
+          {
+            "wait": 15
           }
         ]
       }

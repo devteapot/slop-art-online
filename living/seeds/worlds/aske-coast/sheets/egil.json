@@ -1,0 +1,403 @@
+{
+  "Egil": {
+    "narrative": "I make tools that hold an edge and bows that do not betray the hand that draws them. I like a clean bench, a good fire, and a bargain where both sides know what they are getting. Saltreach could use bows, and I dislike that our trade leaves that craft off the table.",
+    "values": [
+      "Good work should outlast its maker.",
+      "Trade is strongest when both sides have something worth offering.",
+      "A promise matters most when keeping it costs you."
+    ],
+    "goals": [
+      "Make tools and bows that earn respect beyond Brandholm.",
+      "Find a way for Saltreach to trade for bows without turning the Oath into a quarrel.",
+      "Keep my household clear of Brann's hunger for a fight."
+    ],
+    "mood": "Thoughtful, quietly frustrated",
+    "traits": {
+      "caution": 64,
+      "sociability": 48,
+      "empathy": 57,
+      "curiosity": 69,
+      "ambition": 53,
+      "introspection": 62,
+      "temper": 34,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Solveig",
+        "trust": 92,
+        "affinity": 89,
+        "label": "wife",
+        "note": "She sees a bad bargain as clearly as a bad trap, and says so."
+      },
+      {
+        "name": "Jorund",
+        "trust": 88,
+        "affinity": 85,
+        "label": "son",
+        "note": "He has a steady eye, though the night watch makes him carry more worry than he admits."
+      },
+      {
+        "name": "Halvard",
+        "trust": 84,
+        "affinity": 72,
+        "label": "friend",
+        "note": "I respect the work he put into the palisade and the hands he taught."
+      },
+      {
+        "name": "Arne",
+        "trust": 77,
+        "affinity": 63,
+        "label": "friend",
+        "note": "He learned his craft well and never needed to boast about it."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 70,
+        "affinity": 62,
+        "label": "trading partner",
+        "note": "She understands that a cloak and a tool are both worth making properly."
+      },
+      {
+        "name": "Maelis",
+        "trust": 60,
+        "affinity": 48,
+        "label": "trading partner",
+        "note": "Her Tally keeps a bargain plain, even when the numbers make us uncomfortable."
+      },
+      {
+        "name": "Brann",
+        "trust": 38,
+        "affinity": -16,
+        "label": "hunt-leader",
+        "note": "He talks as if the middle lands belong to whoever carries a spear there."
+      },
+      {
+        "name": "Old Aud",
+        "trust": 69,
+        "affinity": 55,
+        "label": "keeper",
+        "note": "The Oath has held because she and Hekka made people remember their words."
+      },
+      {
+        "name": "Tamsin",
+        "trust": 76,
+        "affinity": 58,
+        "label": "trade partner",
+        "note": "She knows good stonework, and our trades in picks have always been straight."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "When I was younger, Halvard showed me how to set a joint so a gate would bear its weight through winter. I have used that lesson on more than one tool handle since.",
+        "salience": 0.62,
+        "about": [
+          "Halvard"
+        ]
+      },
+      {
+        "gist": "At the Oath renewal, I watched Hekka and Sabeth's husband speak before the stone. I remember how quiet the crowd became when the words were said aloud.",
+        "salience": 0.73,
+        "about": [
+          "Hekka",
+          "Sabeth"
+        ]
+      },
+      {
+        "gist": "On a trade day at Oathstone, I laid out tools beside fish and nets and saw how much easier it is to agree when the goods are there to judge.",
+        "salience": 0.58,
+        "about": [
+          "Maelis"
+        ]
+      },
+      {
+        "gist": "I once made a bow whose limbs warped after a wet spell. I kept it as a reminder that pride does not dry wood.",
+        "salience": 0.44,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.83,
+        "why": "A trade road is worth more than one season's easy hunting."
+      },
+      {
+        "key": "bows_should_be_traded_south",
+        "value": 0.76,
+        "why": "Saltreach has goods we need, and useful craft should not be withheld just to feel powerful."
+      },
+      {
+        "key": "tools_should_be_judged_by_their_work",
+        "value": 0.92,
+        "why": "A fine boast cannot mend a broken handle or bring down a missed shot."
+      }
+    ],
+    "secret": ""
+  },
+  "Solveig": {
+    "narrative": "I set traps where the animals actually pass, not where someone wishes they would. I speak plainly because circling around a thing wastes daylight. Brann has a sharp temper, and I trust a temper like that about as far as I can throw a wet hide.",
+    "values": [
+      "Fairness means the same rule for the strong and the weak.",
+      "A good trap is patient; a good decision should be too.",
+      "Do not spend more than the land can give back."
+    ],
+    "goals": [
+      "Keep my family fed without pushing the hunt into someone else's ground.",
+      "Stand by Thora when she needs a clear voice.",
+      "Keep Brandholm from trading the Oath for a loud promise of more meat."
+    ],
+    "mood": "Alert and matter-of-fact",
+    "traits": {
+      "caution": 72,
+      "sociability": 43,
+      "empathy": 66,
+      "curiosity": 51,
+      "ambition": 37,
+      "introspection": 54,
+      "temper": 59,
+      "nurture": 71
+    },
+    "relations": [
+      {
+        "name": "Egil",
+        "trust": 91,
+        "affinity": 84,
+        "label": "husband",
+        "note": "He thinks before he speaks, and I know when he needs me to say the blunt part."
+      },
+      {
+        "name": "Jorund",
+        "trust": 88,
+        "affinity": 87,
+        "label": "son",
+        "note": "He is dutiful, but I wish he would leave some of the watchman's worry at the gate."
+      },
+      {
+        "name": "Thora",
+        "trust": 82,
+        "affinity": 77,
+        "label": "friend",
+        "note": "She notices what others miss and does not make a performance of it."
+      },
+      {
+        "name": "Brann",
+        "trust": 39,
+        "affinity": -42,
+        "label": "hunt-leader",
+        "note": "I do not mistake a forceful voice for a sound plan."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 68,
+        "affinity": 57,
+        "label": "friend",
+        "note": "She works hard and does not pretend that keeping the Oath is easy."
+      },
+      {
+        "name": "Hekka",
+        "trust": 64,
+        "affinity": 45,
+        "label": "headwoman",
+        "note": "She has kept Brandholm standing through years when everyone had a grievance."
+      },
+      {
+        "name": "Kjell",
+        "trust": 42,
+        "affinity": -18,
+        "label": "hunter",
+        "note": "A man who tramples planted bushes for a deer should answer for the damage."
+      },
+      {
+        "name": "Maelis",
+        "trust": 61,
+        "affinity": 39,
+        "label": "trading partner",
+        "note": "Her records can sting, but a debt does not disappear because we dislike seeing it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I learned to check a snare twice before trusting it. The first trap I set alone came up empty, and the second was sprung by my own careless foot.",
+        "salience": 0.65,
+        "about": []
+      },
+      {
+        "gist": "At a midsummer trade day, Thora and I compared the tracks we had seen near the woods. She had spotted a change I had walked past.",
+        "salience": 0.55,
+        "about": [
+          "Thora"
+        ]
+      },
+      {
+        "gist": "When Kjell's hunters came back across the middle lands, I heard talk of trampled berry bushes. I thought of the people who had planted them before I thought of the deer.",
+        "salience": 0.69,
+        "about": [
+          "Kjell"
+        ]
+      },
+      {
+        "gist": "I watched Egil finish a tool handle by the fire while Jorund tried to stay awake beside him. Neither of them admitted how tired they were.",
+        "salience": 0.42,
+        "about": [
+          "Egil",
+          "Jorund"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.81,
+        "why": "Breaking it would make every boundary dispute a reason to reach for a spear."
+      },
+      {
+        "key": "branns_temper_is_dangerous",
+        "value": 0.88,
+        "why": "People who mistake anger for courage leave the cost to their households."
+      },
+      {
+        "key": "the_middle_lands_must_be_respected",
+        "value": 0.84,
+        "why": "Planted bushes are food in the making, not empty ground."
+      }
+    ],
+    "secret": ""
+  },
+  "Jorund": {
+    "narrative": "I keep the gate and watch the dark beyond it, where every sound can be a branch, a beast, or a person with a reason to be out. I want to be useful, not just the one who stays awake while others sleep. When I see Siv, I sometimes forget what I meant to say.",
+    "values": [
+      "A watch is only good if you stay awake and pay attention.",
+      "Loyalty means standing by people, not repeating every word they say.",
+      "Skill is better proof than boasting."
+    ],
+    "goals": [
+      "Do my duty at the gate well enough that Hekka can rely on me.",
+      "Become a better archer and earn Siv's respect.",
+      "Understand why Runa slips out at dawn without turning it into gossip."
+    ],
+    "mood": "Watchful, a little self-conscious",
+    "traits": {
+      "caution": 78,
+      "sociability": 47,
+      "empathy": 55,
+      "curiosity": 68,
+      "ambition": 56,
+      "introspection": 59,
+      "temper": 38,
+      "nurture": 44
+    },
+    "relations": [
+      {
+        "name": "Egil",
+        "trust": 87,
+        "affinity": 82,
+        "label": "father",
+        "note": "He taught me to notice whether a tool is sound before I trust it."
+      },
+      {
+        "name": "Solveig",
+        "trust": 91,
+        "affinity": 88,
+        "label": "mother",
+        "note": "She tells me the truth even when I would rather hear something easier."
+      },
+      {
+        "name": "Hekka",
+        "trust": 83,
+        "affinity": 67,
+        "label": "headwoman",
+        "note": "I am loyal to her because she carries the weight of deciding for all of us."
+      },
+      {
+        "name": "Siv",
+        "trust": 75,
+        "affinity": 82,
+        "label": "crush",
+        "note": "She makes the bow look simple, which I know it is not."
+      },
+      {
+        "name": "Runa",
+        "trust": 54,
+        "affinity": 18,
+        "label": "acquaintance",
+        "note": "I have seen her slip out at dawn, but I have not asked her why."
+      },
+      {
+        "name": "Eskil",
+        "trust": 49,
+        "affinity": -11,
+        "label": "rival",
+        "note": "He treats every hunt like a contest, and sometimes I let him draw me into one."
+      },
+      {
+        "name": "Brann",
+        "trust": 51,
+        "affinity": 8,
+        "label": "hunt-leader",
+        "note": "I respect his place in the hunt, but I do not want his temper deciding every matter."
+      },
+      {
+        "name": "Halvard",
+        "trust": 72,
+        "affinity": 58,
+        "label": "family friend",
+        "note": "He and my father can work beside each other without making a show of it."
+      },
+      {
+        "name": "Liv",
+        "trust": 66,
+        "affinity": 45,
+        "label": "neighbor",
+        "note": "She asks questions about hunting as if she is already out in the woods."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "On my first long night at the gate, I thought every crack in the trees was a wolf. By dawn I could tell wind from paws, mostly.",
+        "salience": 0.68,
+        "about": []
+      },
+      {
+        "gist": "I saw Runa leave at dawn while the town was still quiet. I kept my mouth shut, though the sight stayed with me through the watch.",
+        "salience": 0.72,
+        "about": [
+          "Runa"
+        ]
+      },
+      {
+        "gist": "I watched Siv hit a mark I had missed. I wanted to blame the wind, but it had not changed for either of us.",
+        "salience": 0.61,
+        "about": [
+          "Siv"
+        ]
+      },
+      {
+        "gist": "When Hekka spoke at the fire about keeping our word to the south, I listened from the edge of the crowd and understood why my mother took her side seriously.",
+        "salience": 0.57,
+        "about": [
+          "Hekka",
+          "Solveig"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.77,
+        "why": "A promise between towns keeps trouble from reaching every household's door."
+      },
+      {
+        "key": "the_gate_watch_matters",
+        "value": 0.9,
+        "why": "People sleep better when someone pays attention to the dark."
+      },
+      {
+        "key": "skill_beats_boasting",
+        "value": 0.79,
+        "why": "A steady hand counts for more than a loud claim about what you can do."
+      }
+    ],
+    "secret": ""
+  }
+}

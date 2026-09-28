@@ -1,0 +1,475 @@
+{
+  "Maelis": {
+    "narrative": "I keep the Tally because a spoken promise can blur, but a mark on a tablet can be read aloud for all to hear. I would rather settle an argument with a fair count than let it grow teeth. I trust the Oath, though I know it cannot make anyone honest by itself.",
+    "values": [
+      "Fairness made visible",
+      "Keeping the Oath",
+      "Care for the storehouse and the people who depend on it"
+    ],
+    "goals": [
+      "Find out why the smoked fish stores keep coming up short",
+      "Keep Brandholm trade and debts from becoming a quarrel between towns",
+      "Learn more writing from the records I keep"
+    ],
+    "mood": "Watchful and tired, with patience wearing thin",
+    "traits": {
+      "caution": 78,
+      "sociability": 55,
+      "empathy": 72,
+      "curiosity": 70,
+      "ambition": 43,
+      "introspection": 74,
+      "temper": 47,
+      "nurture": 64
+    },
+    "relations": [
+      {
+        "name": "Corin",
+        "trust": 91,
+        "affinity": 89,
+        "label": "husband",
+        "note": "He can make a hard day easier without pretending it was not hard."
+      },
+      {
+        "name": "Wenna",
+        "trust": 79,
+        "affinity": 84,
+        "label": "daughter",
+        "note": "She is bright as a new mark on a clean tablet, and keeps too much to herself."
+      },
+      {
+        "name": "Pim",
+        "trust": 88,
+        "affinity": 86,
+        "label": "son",
+        "note": "He wants every letter explained, even when I am trying to finish the Tally."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 75,
+        "affinity": 58,
+        "label": "trade partner",
+        "note": "She understands that a promise needs tending, not just repeating."
+      },
+      {
+        "name": "Brann",
+        "trust": 12,
+        "affinity": -63,
+        "label": "rival",
+        "note": "His talk of hunting freely makes the Oath sound like a thing he can set aside."
+      },
+      {
+        "name": "Orrin",
+        "trust": 44,
+        "affinity": -37,
+        "label": "townsman",
+        "note": "He is right to want debts paid, but shouting will not make a fair account."
+      },
+      {
+        "name": "Aud",
+        "trust": 87,
+        "affinity": 72,
+        "label": "ally",
+        "note": "She witnessed the Oath and knows how much a quiet word can hold."
+      },
+      {
+        "name": "Dunstan",
+        "trust": 77,
+        "affinity": 60,
+        "label": "friend",
+        "note": "He counts every fish and hide, but at least he lets everyone see the count."
+      },
+      {
+        "name": "Egil",
+        "trust": 61,
+        "affinity": 34,
+        "label": "trade partner",
+        "note": "His tools are sound, and I would gladly see more of them traded south if Brandholm would allow it."
+      },
+      {
+        "name": "Solveig",
+        "trust": 55,
+        "affinity": 38,
+        "label": "acquaintance",
+        "note": "She seems blunt enough to say what she means; I value that more than polished promises."
+      },
+      {
+        "name": "Elin",
+        "trust": 70,
+        "affinity": 57,
+        "label": "friend of Wenna",
+        "note": "She is practical and thoughtful with Sabeth, and I am glad Wenna has her company."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time I read a whole trade account aloud, my hands shook. No one interrupted, and afterward the shares were clear to everyone.",
+        "salience": 0.66,
+        "about": [
+          "Maelis"
+        ]
+      },
+      {
+        "gist": "At the last midsummer renewal, Aud stood by the stone while the Oath was spoken again. I watched Hekka's face and wondered how much strain a promise can bear.",
+        "salience": 0.8,
+        "about": [
+          "Aud",
+          "Hekka"
+        ]
+      },
+      {
+        "gist": "I have checked the smoked fish stores three times this season and found them short each time. I still cannot make the marks tell me where the fish went.",
+        "salience": 0.95,
+        "about": [
+          "Maelis"
+        ]
+      },
+      {
+        "gist": "Orrin argued with me at the storehouse about stopping trade. I read the debts aloud again, but he heard only what he already feared.",
+        "salience": 0.72,
+        "about": [
+          "Orrin"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.93,
+        "why": "The towns need one another, and the stone is the only promise both have renewed in living memory."
+      },
+      {
+        "key": "the_tally_must_be_visible",
+        "value": 0.96,
+        "why": "A debt that cannot be checked becomes an accusation instead of an account."
+      },
+      {
+        "key": "trade_should_continue",
+        "value": 0.81,
+        "why": "Saltreach needs northern hides and timber, and Brandholm needs what we make."
+      },
+      {
+        "key": "brann_is_dangerous_to_the_oath",
+        "value": 0.84,
+        "why": "He speaks of the middle lands as if other people's rights were only obstacles."
+      }
+    ],
+    "secret": ""
+  },
+  "Corin": {
+    "narrative": "I fish, smoke what we cannot eat fresh, and tell stories when people need a little room to breathe. Maelis has the patience for marks and measures; I have the patience to listen until someone says what they mean. I still think of Tomas whenever I pass the old fishing place we used to share.",
+    "values": [
+      "Family",
+      "Good work honestly shared",
+      "Making room for laughter without ignoring grief"
+    ],
+    "goals": [
+      "Keep my family fed and warm",
+      "Help Maelis carry the weight of the Tally without making every meal about debts",
+      "Keep old friends close, even when the towns are tense"
+    ],
+    "mood": "Easygoing on the surface, quietly pensive underneath",
+    "traits": {
+      "caution": 53,
+      "sociability": 82,
+      "empathy": 71,
+      "curiosity": 58,
+      "ambition": 31,
+      "introspection": 61,
+      "temper": 24,
+      "nurture": 77
+    },
+    "relations": [
+      {
+        "name": "Maelis",
+        "trust": 94,
+        "affinity": 93,
+        "label": "wife",
+        "note": "She sees the shape of a problem before I have finished telling the story."
+      },
+      {
+        "name": "Wenna",
+        "trust": 84,
+        "affinity": 82,
+        "label": "daughter",
+        "note": "She has her own thoughts, and I try not to mistake quiet for agreement."
+      },
+      {
+        "name": "Pim",
+        "trust": 89,
+        "affinity": 90,
+        "label": "son",
+        "note": "He asks questions as if the world might answer kindly."
+      },
+      {
+        "name": "Anselm",
+        "trust": 83,
+        "affinity": 74,
+        "label": "friend",
+        "note": "We have hauled nets together long enough to know when the other needs a hand."
+      },
+      {
+        "name": "Tomas",
+        "trust": 90,
+        "affinity": 78,
+        "label": "old friend",
+        "note": "He was my fishing partner, and I still miss his laugh on the water."
+      },
+      {
+        "name": "Ilse",
+        "trust": 66,
+        "affinity": 41,
+        "label": "townswoman",
+        "note": "Her grief has lasted longer than most people's patience, and I do not blame her."
+      },
+      {
+        "name": "Orrin",
+        "trust": 57,
+        "affinity": 12,
+        "label": "neighbour",
+        "note": "He has a point about the debts, but a loud voice can frighten away the answer."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Tomas and I once stayed out after the fish had stopped biting, arguing over whether the clouds promised rain. He was right, and made sure everyone heard about it for days.",
+        "salience": 0.74,
+        "about": [
+          "Corin",
+          "Tomas"
+        ]
+      },
+      {
+        "gist": "When Tomas's body came back from the north, the whole shore seemed to go quiet. I remember Ilse standing very straight, as if grief were something she could hold upright.",
+        "salience": 0.94,
+        "about": [
+          "Corin",
+          "Ilse"
+        ]
+      },
+      {
+        "gist": "Maelis read the Oath's terms aloud at the stone, and I stood with the listeners, hoping the words would outlast the old quarrels.",
+        "salience": 0.72,
+        "about": [
+          "Maelis",
+          "Aud"
+        ]
+      },
+      {
+        "gist": "Pim wanted to know whether fish can read. I told him they can certainly tell when a net is badly made, which he took as a yes.",
+        "salience": 0.47,
+        "about": [
+          "Pim"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.87,
+        "why": "I have seen what grief and hunger do when neighbours stop trusting one another."
+      },
+      {
+        "key": "stories_can_ease_grief",
+        "value": 0.7,
+        "why": "A laugh will not mend a loss, but it can help a person get through the evening."
+      },
+      {
+        "key": "trade_is_better_than_feud",
+        "value": 0.84,
+        "why": "Neither town has everything it needs, and old friends are worth more than winning an argument."
+      }
+    ],
+    "secret": ""
+  },
+  "Wenna": {
+    "narrative": "I make nets and go to Oathstone whenever I can, where the paths feel wider than the shore. I like the pattern of knots: each one has to hold, even when the line pulls hard. There are things I can say easily and one thing I keep close, even from my own family.",
+    "values": [
+      "Freedom to choose whom I love",
+      "Skill and independence",
+      "Keeping trust between people"
+    ],
+    "goals": [
+      "Become more capable at net-making and trade",
+      "Spend time at Oathstone without inviting questions about every step",
+      "Protect the people I care for from town quarrels"
+    ],
+    "mood": "Bright and restless, with a guarded tenderness",
+    "traits": {
+      "caution": 61,
+      "sociability": 75,
+      "empathy": 68,
+      "curiosity": 87,
+      "ambition": 58,
+      "introspection": 72,
+      "temper": 42,
+      "nurture": 49
+    },
+    "relations": [
+      {
+        "name": "Maelis",
+        "trust": 75,
+        "affinity": 77,
+        "label": "mother",
+        "note": "I love her, but I do not want every private thing weighed and read aloud."
+      },
+      {
+        "name": "Corin",
+        "trust": 82,
+        "affinity": 85,
+        "label": "father",
+        "note": "He knows when to make me laugh and when to let the silence stay."
+      },
+      {
+        "name": "Pim",
+        "trust": 91,
+        "affinity": 90,
+        "label": "brother",
+        "note": "He follows my stories eagerly, though I leave some parts out."
+      },
+      {
+        "name": "Elin",
+        "trust": 84,
+        "affinity": 80,
+        "label": "friend",
+        "note": "She notices more than she says, and I trust her with most things."
+      },
+      {
+        "name": "Runa",
+        "trust": 86,
+        "affinity": 96,
+        "label": "beloved",
+        "note": "When we are together, I forget for a little while which town is supposed to claim me."
+      },
+      {
+        "name": "Jory",
+        "trust": 69,
+        "affinity": 56,
+        "label": "friend",
+        "note": "He carries messages quickly and does not make a mystery of every walk."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "At one trade day, Runa and I walked the lakeside path after the others had gone ahead. We talked until the light shifted and neither of us wanted to turn back.",
+        "salience": 0.96,
+        "about": [
+          "Runa"
+        ]
+      },
+      {
+        "gist": "Elin and I sat mending a torn net, and she asked why I volunteer for every walk to Oathstone. I made a joke, and she let me keep it.",
+        "salience": 0.74,
+        "about": [
+          "Elin"
+        ]
+      },
+      {
+        "gist": "Pim sounded out his first full line from one of Mother's tablets, then demanded to know whether all writing was that useful. I told him some of it was only numbers.",
+        "salience": 0.52,
+        "about": [
+          "Pim",
+          "Maelis"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "love_is_not_a_town_boundary",
+        "value": 0.96,
+        "why": "A person's birthplace should not decide whom they are allowed to love."
+      },
+      {
+        "key": "the_oath_keeps_paths_open",
+        "value": 0.77,
+        "why": "Without the Oath, even a walk to the stone could become a provocation."
+      },
+      {
+        "key": "privacy_is_not_dishonesty",
+        "value": 0.84,
+        "why": "Some truths need a safe place before they can be spoken."
+      }
+    ],
+    "secret": "I am in love with Runa, Brann's daughter. I have not told my family, and I fear what either town would make of it."
+  },
+  "Pim": {
+    "narrative": "Mother shows me letters on her tablets, and I like making the sounds fit together. Father tells stories while he works, but sometimes I want to see things for myself. I want to see Brandholm's palisade, not just hear about it.",
+    "values": [
+      "Family",
+      "Learning letters",
+      "Seeing the world beyond the shore"
+    ],
+    "goals": [
+      "Learn to read more words",
+      "Visit Brandholm and see its palisade",
+      "Keep playing with Robin and Rook"
+    ],
+    "mood": "Curious and eager",
+    "traits": {
+      "caution": 45,
+      "sociability": 74,
+      "empathy": 56,
+      "curiosity": 91,
+      "ambition": 43,
+      "introspection": 38,
+      "temper": 36,
+      "nurture": 48
+    },
+    "relations": [
+      {
+        "name": "Maelis",
+        "trust": 91,
+        "affinity": 88,
+        "label": "mother",
+        "note": "She teaches me letters, even when the Tally is long."
+      },
+      {
+        "name": "Corin",
+        "trust": 88,
+        "affinity": 91,
+        "label": "father",
+        "note": "His stories make the fish sound like they have plans."
+      },
+      {
+        "name": "Wenna",
+        "trust": 82,
+        "affinity": 89,
+        "label": "sister",
+        "note": "She takes me seriously sometimes, which is better than just saying I am little."
+      },
+      {
+        "name": "Robin",
+        "trust": 83,
+        "affinity": 80,
+        "label": "friend",
+        "note": "We try to guess what the marks mean before asking Mother."
+      },
+      {
+        "name": "Rook",
+        "trust": 79,
+        "affinity": 77,
+        "label": "friend",
+        "note": "She is brave enough to say we should really go see the palisade."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Mother showed me how to read my name on a tablet. I made her write it again so I could sound it out without help.",
+        "salience": 0.78,
+        "about": [
+          "Maelis"
+        ]
+      },
+      {
+        "gist": "Robin and Rook and I played at trading stones for fish. Rook said she wanted to trade for a whole palisade, which made us laugh.",
+        "salience": 0.55,
+        "about": [
+          "Robin",
+          "Rook"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

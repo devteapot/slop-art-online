@@ -96,6 +96,10 @@ const STANCE_LEAN: f64 = 0.05;
 /// (a salience-0.9 memory never recalled lasts about 5 hours, a 0.4 one about 3).
 const MEMORY_TAU_MS: f64 = 3.0 * 3_600_000.0;
 const MEMORY_FLOOR: f64 = 0.15;
+/// An authored past (the stances and memories a character starts a world with) is formative:
+/// it fades this many times more slowly (a 0.95 stance lasts about 16 hours unreinforced, a
+/// 0.9 memory about 2.5 days). Changing one's mind replaces it with an ordinary belief.
+const FORMATIVE: f64 = 12.0;
 /// Relationships that describe structure, not belief; they never fade.
 const DURABLE: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "CHILD_OF", "PARENT_OF", "MERGED_INTO"];
 const FIXED_LABELS: &[&str] = &["Concept", "Self", "Memory", "IdentityVersion", "Merged"];
@@ -366,13 +370,14 @@ impl Store {
             .execute(
                 self.q(
                     "MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:JUDGES {open: true}]->(:Concept)
-                     WHERE abs(toFloat(coalesce(r.value, 0.5)) - 0.5) * exp(-toFloat($t - coalesce(r.t, $t)) / $tau) < $lean
+                     WHERE abs(toFloat(coalesce(r.value, 0.5)) - 0.5) * exp(-toFloat($t - coalesce(r.t, $t)) / ($tau * CASE WHEN r.formative THEN $formative ELSE 1.0 END)) < $lean
                      SET r.open = false, r.valid_to = $t, r.retracted_by = 'faded'
                      RETURN count(r) AS n",
                     actor,
                 )
                 .param("t", t as i64)
                 .param("tau", TAU_MS)
+                .param("formative", FORMATIVE)
                 .param("lean", STANCE_LEAN),
             )
             .await?;
@@ -387,13 +392,14 @@ impl Store {
             .execute(
                 self.q(
                     "MATCH (m:Concept {run: $run, actor: $actor}) WHERE m:Memory AND NOT m:Forgotten
-                       AND coalesce(m.salience, 0.5) * exp(-toFloat($t - coalesce(m.recalled_t, m.t, $t)) / $tau) < $floor
+                       AND coalesce(m.salience, 0.5) * exp(-toFloat($t - coalesce(m.recalled_t, m.t, $t)) / ($tau * CASE WHEN m.formative THEN $formative ELSE 1.0 END)) < $floor
                      SET m:Forgotten, m.forgotten_t = $t
                      RETURN count(m) AS n",
                     actor,
                 )
                 .param("t", t as i64)
                 .param("tau", MEMORY_TAU_MS)
+                .param("formative", FORMATIVE)
                 .param("floor", MEMORY_FLOOR),
             )
             .await?;
@@ -405,6 +411,18 @@ impl Store {
             log::info!("mind {actor}: {beliefs} beliefs and {stances} stances faded, {forgotten} memories forgotten");
         }
         Ok(beliefs + stances)
+    }
+
+    /// Mark what a reasoning episode (by its `thought` reference) wrote as formative: the
+    /// stances and memories of an authored past (see `FORMATIVE`).
+    pub async fn mark_formative(&self, actor: u32, thought: &str) -> Result<()> {
+        self.g
+            .run(self.q("MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:JUDGES {open: true}]->(:Concept) WHERE r.thought = $thought SET r.formative = true", actor).param("thought", thought))
+            .await?;
+        self.g
+            .run(self.q("MATCH (m:Concept {run: $run, actor: $actor}) WHERE m:Memory AND m.exp >= $authored SET m.formative = true", actor).param("authored", AUTHORED_MEMORY as i64))
+            .await?;
+        Ok(())
     }
 
     /// Size of the living part of a mind: (concepts with at least one open link, open edges).
@@ -1239,6 +1257,35 @@ mod tests {
     /// Replays recall on an existing run, read-only (for audits):
     /// An authored person's memories from before the world began (no experience) come back
     /// by their words and by the people in them, and the secret stays on `self`.
+    /// An authored past fades far more slowly than what is learned in the world.
+    #[tokio::test]
+    #[ignore]
+    async fn formative_past_outlasts_ordinary_beliefs() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-formative-{}", crate::llm::now_ms());
+        let s = Store::connect("127.0.0.1:7689", "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Aud").await.unwrap();
+        let now = crate::llm::now_ms();
+        let mut p = Patch::default();
+        sugar_into(&json!({"judgments": [{"key": "the_oath_must_be_kept", "value": 0.95, "why": "I witnessed it"}]}), &mut p, &[]);
+        p.remember.push(MemoryOp { exp: AUTHORED_MEMORY, t: now, gist: "I watched them swear at the stone.".into(), salience: 0.9, involves: vec![] });
+        s.apply(1, &p, "sheet-1", now).await.unwrap();
+        s.mark_formative(1, "sheet-1").await.unwrap();
+        let mut p = Patch::default();
+        sugar_into(&json!({"judgments": [{"key": "rain_is_coming", "value": 0.95, "why": "clouds"}]}), &mut p, &[]);
+        p.remember.push(MemoryOp { exp: 7, t: now, gist: "A heron flew over the lake.".into(), salience: 0.9, involves: vec![] });
+        s.apply(1, &p, "think-2", now).await.unwrap();
+        // Six hours later the ordinary stance and memory are gone; the formative ones are held.
+        s.fade(1, 0.2, now + 6 * 3_600_000).await.unwrap();
+        let mut rows = s.g.execute(s.q("MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:JUDGES {open: true}]->(k) RETURN collect(k.key) AS held", 1)).await.unwrap();
+        let held: Vec<String> = rows.next().await.unwrap().unwrap().get("held").unwrap();
+        assert!(held.iter().any(|k| k.contains("oath")) && !held.iter().any(|k| k.contains("rain")), "{held:?}");
+        let mut rows = s.g.execute(s.q("MATCH (m:Concept {run: $run, actor: $actor}) WHERE m:Memory AND NOT m:Forgotten RETURN collect(m.exp) AS kept", 1)).await.unwrap();
+        let kept: Vec<i64> = rows.next().await.unwrap().unwrap().get("kept").unwrap();
+        assert_eq!(kept, vec![AUTHORED_MEMORY as i64]);
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
+    }
+
     #[tokio::test]
     #[ignore]
     async fn authored_memories_are_recalled() {

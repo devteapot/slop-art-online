@@ -1,0 +1,1577 @@
+{
+  "world": "aske-coast",
+  "settlements": [
+    {
+      "name": "Brandholm",
+      "kind": "town",
+      "walled": true,
+      "character": "a palisaded timber town where the great northern forest meets the sea: hunters, trappers, carpenters, tanners and toolmakers; timber and hides are plentiful, fish and berries scarce",
+      "stores": {
+        "wood": 30,
+        "hide": 12,
+        "meat": 8,
+        "stone": 6
+      },
+      "ledger": "The law of Brandholm, cut in the gate board: What a household hunts is the household's. The common store feeds the old, the young and the hurt first. Whoever takes from the common store without the Headwoman's word is shamed at the fire. The gates close at dark.",
+      "households": [
+        {
+          "key": "hekka",
+          "members": [
+            {
+              "name": "Hekka",
+              "age": 59,
+              "sex": "f",
+              "occupation": "keeper",
+              "role": "Headwoman of Brandholm, old and ailing; swore the Oath at the Stone twenty years ago",
+              "knows": [
+                "fire",
+                "shelter",
+                "spear",
+                "cloak",
+                "tanning",
+                "torch",
+                "storage"
+              ],
+              "ties": [
+                "mother of Sigrun",
+                "grandmother of Liv and Bo",
+                "younger sister of Ragna",
+                "swore the Oath with Sabeth's late husband and trusts Maelis grudgingly",
+                "worried that Brann will break the Oath",
+                "fond of Old Aud, who witnessed the Oath"
+              ]
+            },
+            {
+              "name": "Sigrun",
+              "age": 38,
+              "sex": "f",
+              "occupation": "tanner",
+              "role": "tanner and cloak-maker, Hekka's daughter; wants the Oath kept and trade widened",
+              "knows": [
+                "fire",
+                "shelter",
+                "tanning",
+                "cloak",
+                "torch",
+                "storage",
+                "spear"
+              ],
+              "parents": [
+                "Hekka"
+              ],
+              "ties": [
+                "wife of Arne",
+                "mother of Liv and Bo",
+                "rival of Brann for leading Brandholm",
+                "respects Maelis and wants to learn writing from her",
+                "trades with Dunstan",
+                "friend of Inga",
+                "cold with her cousin Gudrun, who backs Brann"
+              ]
+            },
+            {
+              "name": "Arne",
+              "age": 40,
+              "sex": "m",
+              "occupation": "carpenter",
+              "role": "carpenter, quiet and steady",
+              "knows": [
+                "fire",
+                "shelter",
+                "carpentry",
+                "toolmaking",
+                "torch",
+                "spear"
+              ],
+              "ties": [
+                "husband of Sigrun",
+                "father of Liv and Bo",
+                "trained under Halvard",
+                "uneasy friend of Ulf since the winter Ulf stopped laughing"
+              ]
+            },
+            {
+              "name": "Liv",
+              "age": 12,
+              "sex": "f",
+              "occupation": "child",
+              "role": "child, wants to be a hunter like Siv",
+              "knows": [
+                "fire"
+              ],
+              "parents": [
+                "Sigrun",
+                "Arne"
+              ],
+              "ties": [
+                "daughter of Sigrun and Arne",
+                "admires Siv",
+                "plays with Sten and Ake"
+              ]
+            },
+            {
+              "name": "Bo",
+              "age": 6,
+              "sex": "m",
+              "occupation": "child",
+              "role": "small child",
+              "knows": [],
+              "parents": [
+                "Sigrun",
+                "Arne"
+              ],
+              "ties": [
+                "son of Sigrun and Arne",
+                "follows his sister Liv everywhere",
+                "afraid of wolves"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "brann",
+          "members": [
+            {
+              "name": "Brann",
+              "age": 44,
+              "sex": "m",
+              "occupation": "hunter",
+              "role": "hunt-leader of Brandholm; says Brandholm feeds the south for too little and should hunt the middle lands freely; wants to lead after Hekka",
+              "knows": [
+                "fire",
+                "shelter",
+                "spear",
+                "trapping",
+                "archery",
+                "torch",
+                "cloak"
+              ],
+              "ties": [
+                "husband of Thora",
+                "father of Eskil and Runa",
+                "rival of Sigrun",
+                "trusted by Kjell and Gudrun",
+                "scorns the Tally and Maelis",
+                "SECRET: knows that Ulf's spear killed Tomas of Saltreach by accident in fog eight years ago, and told everyone it was wolves; he holds this over Ulf"
+              ]
+            },
+            {
+              "name": "Thora",
+              "age": 41,
+              "sex": "f",
+              "occupation": "trapper",
+              "role": "trapper, sharp-eyed and practical; less hungry for fights than her husband",
+              "knows": [
+                "fire",
+                "shelter",
+                "trapping",
+                "spear",
+                "cloak",
+                "tanning"
+              ],
+              "ties": [
+                "wife of Brann",
+                "mother of Eskil and Runa",
+                "suspects Runa is hiding something",
+                "friendly with Solveig, a fellow trapper"
+              ]
+            },
+            {
+              "name": "Eskil",
+              "age": 19,
+              "sex": "m",
+              "occupation": "hunter",
+              "role": "young hunter, proud, eager to prove himself to his father",
+              "knows": [
+                "fire",
+                "spear",
+                "archery",
+                "trapping"
+              ],
+              "parents": [
+                "Brann",
+                "Thora"
+              ],
+              "ties": [
+                "son of Brann and Thora",
+                "brother of Runa",
+                "competes with Siv at the hunt",
+                "looks down on Pell, the Saltreach apprentice"
+              ]
+            },
+            {
+              "name": "Runa",
+              "age": 17,
+              "sex": "f",
+              "occupation": "trapper",
+              "role": "young trapper, restless, loves the woods and the trade days at Oathstone",
+              "knows": [
+                "fire",
+                "trapping",
+                "spear",
+                "cloak"
+              ],
+              "parents": [
+                "Brann",
+                "Thora"
+              ],
+              "ties": [
+                "daughter of Brann and Thora",
+                "sister of Eskil",
+                "SECRET: in love with Wenna, a net-maker of Saltreach, whom she meets at Oathstone; her father would forbid it"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "gudrun",
+          "members": [
+            {
+              "name": "Ragna",
+              "age": 60,
+              "sex": "f",
+              "occupation": "keeper",
+              "role": "the oldest in Brandholm; was a baby at the Crossing and twenty in the Hunger Winter; tells the old stories at the fire",
+              "knows": [
+                "fire",
+                "shelter",
+                "cloak",
+                "tanning",
+                "torch"
+              ],
+              "ties": [
+                "elder sister of Hekka",
+                "mother of Gudrun",
+                "great-grandmother of Ylva",
+                "remembers the Hunger Winter as the south's greed",
+                "knew Sabeth of Saltreach as a girl, before the towns split"
+              ]
+            },
+            {
+              "name": "Gudrun",
+              "age": 42,
+              "sex": "f",
+              "occupation": "tanner",
+              "role": "tanner, proud of her craft, bitter that Hekka's line leads",
+              "knows": [
+                "fire",
+                "shelter",
+                "tanning",
+                "cloak",
+                "torch",
+                "storage"
+              ],
+              "parents": [
+                "Ragna"
+              ],
+              "ties": [
+                "daughter of Ragna",
+                "mother of Vidar",
+                "cousin of Sigrun and jealous of her",
+                "backs Brann to lead",
+                "owes the Tally for two nets"
+              ]
+            },
+            {
+              "name": "Vidar",
+              "age": 24,
+              "sex": "m",
+              "occupation": "tanner",
+              "role": "tanner, good-natured, avoids quarrels",
+              "knows": [
+                "fire",
+                "shelter",
+                "tanning",
+                "cloak",
+                "spear"
+              ],
+              "parents": [
+                "Gudrun"
+              ],
+              "ties": [
+                "son of Gudrun",
+                "husband of Kari",
+                "father of Ylva",
+                "friend of Arne",
+                "thinks his mother's grudge against Sigrun is foolish"
+              ]
+            },
+            {
+              "name": "Kari",
+              "age": 24,
+              "sex": "f",
+              "occupation": "cook",
+              "role": "cook of the common store, feeds the old and the young",
+              "knows": [
+                "fire",
+                "cooking",
+                "smoking",
+                "storage"
+              ],
+              "ties": [
+                "wife of Vidar",
+                "mother of Ylva",
+                "knows exactly what is in the common store",
+                "grew up in Oathstone as Edda's niece"
+              ]
+            },
+            {
+              "name": "Ylva",
+              "age": 1,
+              "sex": "f",
+              "occupation": "child",
+              "role": "baby",
+              "knows": [],
+              "parents": [
+                "Vidar",
+                "Kari"
+              ],
+              "ties": [
+                "daughter of Vidar and Kari"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "halvard",
+          "members": [
+            {
+              "name": "Halvard",
+              "age": 58,
+              "sex": "m",
+              "occupation": "carpenter",
+              "role": "master carpenter and toolmaker; built the palisade; remembers the Hunger Winter as a young man and is ashamed of it",
+              "knows": [
+                "fire",
+                "shelter",
+                "carpentry",
+                "toolmaking",
+                "masonry",
+                "torch",
+                "bridging"
+              ],
+              "ties": [
+                "husband of Astrid",
+                "father of Hakon, who married a Saltreach woman and lives at Oathstone",
+                "master of Pell, his Saltreach apprentice",
+                "taught Arne",
+                "friend of Ulf",
+                "quietly thinks the south was wronged in the Hunger Winter"
+              ]
+            },
+            {
+              "name": "Astrid",
+              "age": 55,
+              "sex": "f",
+              "occupation": "forager",
+              "role": "forager and berry-keeper, warm and nosy",
+              "knows": [
+                "fire",
+                "shelter",
+                "planting",
+                "storage",
+                "torch"
+              ],
+              "ties": [
+                "wife of Halvard",
+                "mother of Hakon",
+                "grandmother of Wynn, Asa and Linnet at Oathstone",
+                "misses her son",
+                "mothers Pell"
+              ]
+            },
+            {
+              "name": "Pell",
+              "age": 18,
+              "sex": "m",
+              "occupation": "carpenter",
+              "role": "apprentice carpenter, born in Saltreach, living in Brandholm for two years to learn carpentry",
+              "knows": [
+                "fire",
+                "shelter",
+                "fishing",
+                "carpentry"
+              ],
+              "ties": [
+                "apprentice of Halvard",
+                "nephew of Gwen of Saltreach, who raised him after his mother died",
+                "cousin of Robin and Rook",
+                "Tobin keeps asking him what the Brandholm hunters say",
+                "looked down on by Eskil",
+                "belongs to neither town fully"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "ulf",
+          "members": [
+            {
+              "name": "Ulf",
+              "age": 35,
+              "sex": "m",
+              "occupation": "hunter",
+              "role": "hunter, once cheerful, now withdrawn",
+              "knows": [
+                "fire",
+                "shelter",
+                "spear",
+                "archery",
+                "trapping",
+                "torch"
+              ],
+              "ties": [
+                "husband of Maren",
+                "father of Sten and Frida",
+                "friend of Halvard and Arne",
+                "afraid of Brann",
+                "SECRET: eight years ago, hunting in fog, his spear killed Tomas of Saltreach, whom he took for a deer; Brann made him say it was wolves; he has never told Maren"
+              ]
+            },
+            {
+              "name": "Maren",
+              "age": 33,
+              "sex": "f",
+              "occupation": "tanner",
+              "role": "cloak-maker, lively, worries about her husband's silences",
+              "knows": [
+                "fire",
+                "shelter",
+                "tanning",
+                "cloak",
+                "torch"
+              ],
+              "ties": [
+                "wife of Ulf",
+                "mother of Sten and Frida",
+                "friend of Sigrun",
+                "trades cloaks with Hild of Saltreach"
+              ]
+            },
+            {
+              "name": "Sten",
+              "age": 9,
+              "sex": "m",
+              "occupation": "child",
+              "role": "child",
+              "knows": [
+                "fire"
+              ],
+              "parents": [
+                "Ulf",
+                "Maren"
+              ],
+              "ties": [
+                "son of Ulf and Maren",
+                "plays with Liv and Ake"
+              ]
+            },
+            {
+              "name": "Frida",
+              "age": 5,
+              "sex": "f",
+              "occupation": "child",
+              "role": "small child",
+              "knows": [],
+              "parents": [
+                "Ulf",
+                "Maren"
+              ],
+              "ties": [
+                "daughter of Ulf and Maren",
+                "adores her grandmother figure Astrid"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "egil",
+          "members": [
+            {
+              "name": "Egil",
+              "age": 47,
+              "sex": "m",
+              "occupation": "toolmaker",
+              "role": "toolmaker and bowyer; makes axes, picks and bows",
+              "knows": [
+                "fire",
+                "shelter",
+                "toolmaking",
+                "archery",
+                "carpentry",
+                "spear"
+              ],
+              "ties": [
+                "husband of Solveig",
+                "father of Jorund",
+                "trades tools at Oathstone",
+                "thinks Saltreach would pay well for bows if Brandholm allowed it"
+              ]
+            },
+            {
+              "name": "Solveig",
+              "age": 45,
+              "sex": "f",
+              "occupation": "trapper",
+              "role": "trapper, blunt and fair",
+              "knows": [
+                "fire",
+                "shelter",
+                "trapping",
+                "spear",
+                "cloak"
+              ],
+              "ties": [
+                "wife of Egil",
+                "mother of Jorund",
+                "friend of Thora",
+                "distrusts Brann's temper"
+              ]
+            },
+            {
+              "name": "Jorund",
+              "age": 22,
+              "sex": "m",
+              "occupation": "guard",
+              "role": "keeps the gates and the night watch",
+              "knows": [
+                "fire",
+                "spear",
+                "torch",
+                "archery"
+              ],
+              "parents": [
+                "Egil",
+                "Solveig"
+              ],
+              "ties": [
+                "son of Egil and Solveig",
+                "sweet on Siv",
+                "loyal to Hekka",
+                "has seen Runa slip out at dawn"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "kjell",
+          "members": [
+            {
+              "name": "Kjell",
+              "age": 26,
+              "sex": "m",
+              "occupation": "hunter",
+              "role": "hunter, Brann's most loyal man",
+              "knows": [
+                "fire",
+                "shelter",
+                "spear",
+                "trapping",
+                "archery"
+              ],
+              "ties": [
+                "husband of Inga",
+                "father of Tove",
+                "follows Brann",
+                "has crossed the middle lands after deer and trampled Oathstone's bushes"
+              ]
+            },
+            {
+              "name": "Inga",
+              "age": 24,
+              "sex": "f",
+              "occupation": "forager",
+              "role": "forager, gentle, uneasy about her husband's loyalty to Brann",
+              "knows": [
+                "fire",
+                "shelter",
+                "planting",
+                "storage"
+              ],
+              "ties": [
+                "wife of Kjell",
+                "mother of Tove",
+                "friend of Sigrun",
+                "wants a second child"
+              ]
+            },
+            {
+              "name": "Tove",
+              "age": 0.5,
+              "sex": "f",
+              "occupation": "child",
+              "role": "baby",
+              "knows": [],
+              "parents": [
+                "Kjell",
+                "Inga"
+              ],
+              "ties": [
+                "daughter of Kjell and Inga"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "grim",
+          "members": [
+            {
+              "name": "Grim",
+              "age": 50,
+              "sex": "m",
+              "occupation": "trapper",
+              "role": "trapper and widower; owes the Tally more than anyone in Brandholm and resents it",
+              "knows": [
+                "fire",
+                "shelter",
+                "trapping",
+                "tanning",
+                "spear",
+                "cloak"
+              ],
+              "ties": [
+                "father of Siv and Ake",
+                "hates owing Maelis",
+                "SECRET: trades hides and a bow privately with Rafe of Saltreach for smoked fish Rafe takes from the storehouse",
+                "grudging respect for Brann"
+              ]
+            },
+            {
+              "name": "Siv",
+              "age": 20,
+              "sex": "f",
+              "occupation": "hunter",
+              "role": "the best archer in Brandholm",
+              "knows": [
+                "fire",
+                "archery",
+                "spear",
+                "trapping",
+                "torch"
+              ],
+              "parents": [
+                "Grim"
+              ],
+              "ties": [
+                "daughter of Grim",
+                "sister of Ake",
+                "rivals Eskil at the hunt",
+                "knows Jorund is sweet on her",
+                "admired by Liv"
+              ]
+            },
+            {
+              "name": "Ake",
+              "age": 14,
+              "sex": "m",
+              "occupation": "child",
+              "role": "child, curious, sneaks to the trade days",
+              "knows": [
+                "fire"
+              ],
+              "parents": [
+                "Grim"
+              ],
+              "ties": [
+                "son of Grim",
+                "brother of Siv",
+                "plays with Liv and Sten",
+                "has seen his father meet a Saltreach man in the woods"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Saltreach",
+      "kind": "town",
+      "walled": false,
+      "character": "an open fishing town on the southern shore, with reed beds, drying racks and a great storehouse where the Tally is kept: fishers, net-makers, basket-weavers, smokers, a healer and a scribe; fish and reeds are plentiful, timber and hides scarce",
+      "stores": {
+        "smoked_fish": 20,
+        "fish": 10,
+        "fiber": 20,
+        "berries": 10
+      },
+      "ledger": "The Tally of Saltreach, on the storehouse sign: Everything taken from the storehouse is told to the Tally-keeper and written. What is owed is paid before the next winter. Strangers are fed once and asked their business. No one goes north of the stone alone after dark.",
+      "households": [
+        {
+          "key": "maelis",
+          "members": [
+            {
+              "name": "Maelis",
+              "age": 49,
+              "sex": "f",
+              "occupation": "scribe",
+              "role": "Tally-keeper of Saltreach; keeps the written record of every share, debt and trade and reads it aloud; keeps the peace but cannot command",
+              "knows": [
+                "fire",
+                "shelter",
+                "writing",
+                "fishing",
+                "basketry",
+                "storage",
+                "cooking"
+              ],
+              "ties": [
+                "wife of Corin",
+                "mother of Wenna and Pim",
+                "has found the storehouse short of smoked fish three times and does not know why",
+                "works with Sigrun of Brandholm and thinks her the only sane voice there",
+                "fears Brann",
+                "argues with Orrin",
+                "trusts Old Aud"
+              ]
+            },
+            {
+              "name": "Corin",
+              "age": 51,
+              "sex": "m",
+              "occupation": "fisher",
+              "role": "fisher, easygoing, the town's best storyteller",
+              "knows": [
+                "fire",
+                "shelter",
+                "fishing",
+                "smoking",
+                "cooking"
+              ],
+              "ties": [
+                "husband of Maelis",
+                "father of Wenna and Pim",
+                "old fishing partner of the late Tomas",
+                "friend of Anselm"
+              ]
+            },
+            {
+              "name": "Wenna",
+              "age": 18,
+              "sex": "f",
+              "occupation": "netmaker",
+              "role": "net-maker, bright and secretive, volunteers for every trade walk to Oathstone",
+              "knows": [
+                "fire",
+                "fishing",
+                "basketry"
+              ],
+              "parents": [
+                "Maelis",
+                "Corin"
+              ],
+              "ties": [
+                "daughter of Maelis and Corin",
+                "sister of Pim",
+                "SECRET: in love with Runa, a young trapper of Brandholm and Brann's daughter",
+                "friend of Elin"
+              ]
+            },
+            {
+              "name": "Pim",
+              "age": 11,
+              "sex": "m",
+              "occupation": "child",
+              "role": "child, learning his letters from his mother",
+              "knows": [
+                "fire"
+              ],
+              "parents": [
+                "Maelis",
+                "Corin"
+              ],
+              "ties": [
+                "son of Maelis and Corin",
+                "friends with Robin and Rook",
+                "wants to see Brandholm's palisade"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "ilse",
+          "members": [
+            {
+              "name": "Ilse",
+              "age": 46,
+              "sex": "f",
+              "occupation": "netmaker",
+              "role": "net-maker, widow of Tomas; certain that a Brandholm spear killed him",
+              "knows": [
+                "fire",
+                "shelter",
+                "fishing",
+                "basketry",
+                "smoking"
+              ],
+              "ties": [
+                "widow of Tomas, who died in the northern forest eight years ago",
+                "mother of Tobin and Ness",
+                "grandmother of Mira",
+                "hates Brann's hunters",
+                "supports Orrin",
+                "friend of Sabeth"
+              ]
+            },
+            {
+              "name": "Tobin",
+              "age": 24,
+              "sex": "m",
+              "occupation": "fisher",
+              "role": "fisher, grim and determined to learn the truth about his father",
+              "knows": [
+                "fire",
+                "shelter",
+                "fishing",
+                "smoking",
+                "spear"
+              ],
+              "parents": [
+                "Ilse"
+              ],
+              "ties": [
+                "son of Ilse and the late Tomas",
+                "husband of Nell",
+                "father of Mira",
+                "brother of Ness",
+                "presses Pell for news from Brandholm",
+                "suspects Ulf because Ulf avoids his eyes at the trade days"
+              ]
+            },
+            {
+              "name": "Nell",
+              "age": 22,
+              "sex": "f",
+              "occupation": "forager",
+              "role": "basket-weaver and reed-cutter, patient and kind",
+              "knows": [
+                "fire",
+                "basketry",
+                "fishing"
+              ],
+              "ties": [
+                "wife of Tobin",
+                "mother of Mira",
+                "worries Tobin's anger will get him hurt",
+                "friend of Gwen"
+              ]
+            },
+            {
+              "name": "Mira",
+              "age": 1,
+              "sex": "f",
+              "occupation": "child",
+              "role": "baby",
+              "knows": [],
+              "parents": [
+                "Tobin",
+                "Nell"
+              ],
+              "ties": [
+                "daughter of Tobin and Nell"
+              ]
+            },
+            {
+              "name": "Ness",
+              "age": 15,
+              "sex": "f",
+              "occupation": "child",
+              "role": "girl nearly grown, sharp-tongued, keeps her mother's grief at arm's length",
+              "knows": [
+                "fire",
+                "fishing"
+              ],
+              "parents": [
+                "Ilse"
+              ],
+              "ties": [
+                "daughter of Ilse and the late Tomas",
+                "sister of Tobin",
+                "friend of Dag",
+                "curious about Brandholm despite everything"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "orrin",
+          "members": [
+            {
+              "name": "Orrin",
+              "age": 39,
+              "sex": "m",
+              "occupation": "fisher",
+              "role": "fisher, hot-tempered, wants Saltreach to stop all trade with Brandholm until its debts are paid",
+              "knows": [
+                "fire",
+                "shelter",
+                "fishing",
+                "smoking",
+                "spear"
+              ],
+              "ties": [
+                "husband of Bea",
+                "father of Dag and Lotte",
+                "elder brother of Cade",
+                "son of Mara",
+                "clashes with Maelis at the storehouse",
+                "despises Grim, who owes the most",
+                "backed by Ilse"
+              ]
+            },
+            {
+              "name": "Bea",
+              "age": 37,
+              "sex": "f",
+              "occupation": "smoker",
+              "role": "smokes the town's fish; tired of her husband's shouting but agrees Brandholm takes advantage",
+              "knows": [
+                "fire",
+                "shelter",
+                "smoking",
+                "cooking",
+                "fishing"
+              ],
+              "ties": [
+                "wife of Orrin",
+                "mother of Dag and Lotte",
+                "works the smoking racks with Oriel and Lark",
+                "noticed that smoked fish goes missing after dark"
+              ]
+            },
+            {
+              "name": "Dag",
+              "age": 13,
+              "sex": "m",
+              "occupation": "child",
+              "role": "boy, wants to fish with the men",
+              "knows": [
+                "fire",
+                "fishing"
+              ],
+              "parents": [
+                "Orrin",
+                "Bea"
+              ],
+              "ties": [
+                "son of Orrin and Bea",
+                "brother of Lotte",
+                "friend of Ness"
+              ]
+            },
+            {
+              "name": "Lotte",
+              "age": 7,
+              "sex": "f",
+              "occupation": "child",
+              "role": "small child",
+              "knows": [],
+              "parents": [
+                "Orrin",
+                "Bea"
+              ],
+              "ties": [
+                "daughter of Orrin and Bea",
+                "follows Posy around"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "sabeth",
+          "members": [
+            {
+              "name": "Sabeth",
+              "age": 60,
+              "sex": "f",
+              "occupation": "keeper",
+              "role": "the oldest in Saltreach; lost two children in the Hunger Winter; her late husband swore the Oath; the net-houses still ask her counsel",
+              "knows": [
+                "fire",
+                "shelter",
+                "fishing",
+                "basketry",
+                "smoking",
+                "cooking",
+                "storage"
+              ],
+              "ties": [
+                "grandmother of Jory and Elin",
+                "her late husband swore the Oath with Hekka",
+                "knew Ragna of Brandholm as a girl, before the towns split, and has not spoken to her since",
+                "friend of Ilse",
+                "respects Maelis"
+              ]
+            },
+            {
+              "name": "Jory",
+              "age": 20,
+              "sex": "m",
+              "occupation": "fisher",
+              "role": "fisher, cheerful, the fastest walker in Saltreach",
+              "knows": [
+                "fire",
+                "fishing",
+                "smoking"
+              ],
+              "parents": [],
+              "ties": [
+                "grandson of Sabeth",
+                "brother of Elin",
+                "friend of Rafe",
+                "carries messages to Oathstone"
+              ]
+            },
+            {
+              "name": "Elin",
+              "age": 17,
+              "sex": "f",
+              "occupation": "cook",
+              "role": "cook, practical, looks after her grandmother",
+              "knows": [
+                "fire",
+                "cooking",
+                "smoking",
+                "fishing"
+              ],
+              "ties": [
+                "granddaughter of Sabeth",
+                "sister of Jory",
+                "friend of Wenna and suspects her secret",
+                "courted by Colm of Oathstone"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "fen",
+          "members": [
+            {
+              "name": "Fen",
+              "age": 43,
+              "sex": "m",
+              "occupation": "healer",
+              "role": "healer; has tended people of both towns at Oathstone; believes in the Oath because he has sewn up both sides",
+              "knows": [
+                "fire",
+                "shelter",
+                "medicine",
+                "planting",
+                "fishing",
+                "cooking"
+              ],
+              "ties": [
+                "partner of Oriel",
+                "father of Kit",
+                "elder brother of Rose of Oathstone",
+                "friend of Old Aud",
+                "treated Tomas's body and saw a wound he never spoke of"
+              ]
+            },
+            {
+              "name": "Oriel",
+              "age": 40,
+              "sex": "f",
+              "occupation": "smoker",
+              "role": "smoker and fish-cook",
+              "knows": [
+                "fire",
+                "shelter",
+                "smoking",
+                "cooking",
+                "fishing"
+              ],
+              "ties": [
+                "partner of Fen",
+                "mother of Kit",
+                "works the racks with Bea and Lark"
+              ]
+            },
+            {
+              "name": "Kit",
+              "age": 8,
+              "sex": "f",
+              "occupation": "child",
+              "role": "child, collects shells and odd stones",
+              "knows": [],
+              "parents": [
+                "Fen",
+                "Oriel"
+              ],
+              "ties": [
+                "daughter of Fen and Oriel",
+                "cousin of Wynn and Asa at Oathstone"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "dunstan",
+          "members": [
+            {
+              "name": "Dunstan",
+              "age": 48,
+              "sex": "m",
+              "occupation": "trader",
+              "role": "trader; walks to Oathstone on trade days with fish and nets and comes back with hides and timber; pragmatic, jovial, always counting",
+              "knows": [
+                "fire",
+                "shelter",
+                "fishing",
+                "basketry",
+                "writing",
+                "storage"
+              ],
+              "ties": [
+                "husband of Hild",
+                "father of Rafe and Posy",
+                "does business with Sigrun and Grim",
+                "friend of Maelis",
+                "thinks Orrin will ruin everyone"
+              ]
+            },
+            {
+              "name": "Hild",
+              "age": 46,
+              "sex": "f",
+              "occupation": "forager",
+              "role": "basket-weaver",
+              "knows": [
+                "fire",
+                "shelter",
+                "basketry",
+                "fishing"
+              ],
+              "ties": [
+                "wife of Dunstan",
+                "mother of Rafe and Posy",
+                "trades baskets for Maren's cloaks"
+              ]
+            },
+            {
+              "name": "Rafe",
+              "age": 21,
+              "sex": "m",
+              "occupation": "fisher",
+              "role": "fisher who secretly wants to be a hunter",
+              "knows": [
+                "fire",
+                "fishing",
+                "smoking"
+              ],
+              "parents": [
+                "Dunstan",
+                "Hild"
+              ],
+              "ties": [
+                "son of Dunstan and Hild",
+                "brother of Posy",
+                "friend of Jory",
+                "SECRET: takes smoked fish from the storehouse at night and trades it to Grim of Brandholm for hides and a bow, which he hides in the reeds; he tells himself he will pay it back"
+              ]
+            },
+            {
+              "name": "Posy",
+              "age": 4,
+              "sex": "f",
+              "occupation": "child",
+              "role": "small child",
+              "knows": [],
+              "parents": [
+                "Dunstan",
+                "Hild"
+              ],
+              "ties": [
+                "daughter of Dunstan and Hild",
+                "plays with Lotte"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "anselm",
+          "members": [
+            {
+              "name": "Anselm",
+              "age": 35,
+              "sex": "m",
+              "occupation": "fisher",
+              "role": "fisher, head of a net-house, steady and well liked",
+              "knows": [
+                "fire",
+                "shelter",
+                "fishing",
+                "smoking",
+                "basketry"
+              ],
+              "ties": [
+                "husband of Gwen",
+                "father of Robin and Rook",
+                "friend of Corin",
+                "undecided between Maelis and Orrin"
+              ]
+            },
+            {
+              "name": "Gwen",
+              "age": 34,
+              "sex": "f",
+              "occupation": "netmaker",
+              "role": "net-maker, raised her nephew Pell after her sister died",
+              "knows": [
+                "fire",
+                "shelter",
+                "fishing",
+                "basketry"
+              ],
+              "ties": [
+                "wife of Anselm",
+                "mother of Robin and Rook",
+                "aunt and foster mother of Pell, who apprentices in Brandholm",
+                "misses Pell and fears Brandholm will turn him",
+                "friend of Nell"
+              ]
+            },
+            {
+              "name": "Robin",
+              "age": 10,
+              "sex": "m",
+              "occupation": "child",
+              "role": "child, twin of Rook",
+              "knows": [
+                "fire"
+              ],
+              "parents": [
+                "Anselm",
+                "Gwen"
+              ],
+              "ties": [
+                "son of Anselm and Gwen",
+                "twin of Rook",
+                "friend of Pim"
+              ]
+            },
+            {
+              "name": "Rook",
+              "age": 10,
+              "sex": "f",
+              "occupation": "child",
+              "role": "child, twin of Robin, bolder of the two",
+              "knows": [
+                "fire"
+              ],
+              "parents": [
+                "Anselm",
+                "Gwen"
+              ],
+              "ties": [
+                "daughter of Anselm and Gwen",
+                "twin of Robin",
+                "wants to visit cousin Pell in Brandholm"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "mara",
+          "members": [
+            {
+              "name": "Mara",
+              "age": 55,
+              "sex": "f",
+              "occupation": "cook",
+              "role": "cook, mother of Orrin and Cade; remembers the Hunger Winter",
+              "knows": [
+                "fire",
+                "shelter",
+                "cooking",
+                "smoking",
+                "fishing",
+                "storage"
+              ],
+              "ties": [
+                "mother of Orrin and Cade",
+                "worries her sons will fall out",
+                "friend of Sabeth"
+              ]
+            },
+            {
+              "name": "Cade",
+              "age": 29,
+              "sex": "m",
+              "occupation": "fisher",
+              "role": "fisher, calmer than his brother, thinks trade keeps Saltreach warm in winter",
+              "knows": [
+                "fire",
+                "shelter",
+                "fishing",
+                "smoking"
+              ],
+              "parents": [
+                "Mara"
+              ],
+              "ties": [
+                "son of Mara",
+                "younger brother of Orrin and at odds with him over trade",
+                "partner of Lark",
+                "friend of Anselm"
+              ]
+            },
+            {
+              "name": "Lark",
+              "age": 27,
+              "sex": "f",
+              "occupation": "smoker",
+              "role": "smoker, quick-witted, wants a child",
+              "knows": [
+                "fire",
+                "smoking",
+                "cooking",
+                "fishing"
+              ],
+              "ties": [
+                "partner of Cade",
+                "works the racks with Bea and Oriel",
+                "likes Maelis",
+                "finds Orrin tiresome"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Oathstone",
+      "kind": "village",
+      "walled": false,
+      "character": "a hamlet of planters in the open middle lands around the tall grey Oath Stone, where the two towns meet to trade and renew the Oath at midsummer; welcome in both towns and fully trusted by neither",
+      "stores": {
+        "berries": 20,
+        "stone": 10,
+        "clay": 6,
+        "wood": 6
+      },
+      "ledger": "At this stone Brandholm and Saltreach swore: no blood between the towns; each may pass through the other's lands; hides, timber and meat from the north for fish, nets and baskets from the south; the Oath renewed each midsummer before the Keeper of the Stone.",
+      "households": [
+        {
+          "key": "aud",
+          "members": [
+            {
+              "name": "Aud",
+              "age": 60,
+              "sex": "f",
+              "occupation": "keeper",
+              "role": "Old Aud, Keeper of the Stone; witnessed the Oath twenty years ago; very old, with no apprentice",
+              "knows": [
+                "fire",
+                "shelter",
+                "planting",
+                "storage",
+                "writing",
+                "medicine"
+              ],
+              "ties": [
+                "witnessed the Oath between Hekka and Sabeth's late husband",
+                "trusted by Maelis, Hekka and Fen",
+                "wants Tamsin to succeed her as keeper; Tamsin refuses",
+                "worries that Colm is too angry at Brandholm to keep the stone fairly"
+              ]
+            },
+            {
+              "name": "Tamsin",
+              "age": 30,
+              "sex": "f",
+              "occupation": "mason",
+              "role": "stoneworker; laid the stone ring and paving at Oathstone; independent, dislikes politics",
+              "knows": [
+                "fire",
+                "shelter",
+                "masonry",
+                "toolmaking",
+                "storage"
+              ],
+              "ties": [
+                "lives with and looks after Aud, her great-aunt",
+                "refuses to become keeper",
+                "trades picks with Egil of Brandholm",
+                "friendly with Hakon"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "hakon",
+          "members": [
+            {
+              "name": "Hakon",
+              "age": 36,
+              "sex": "m",
+              "occupation": "farmer",
+              "role": "planter; born in Brandholm, son of Halvard; married a Saltreach woman and settled at Oathstone, which both towns gossip about",
+              "knows": [
+                "fire",
+                "shelter",
+                "planting",
+                "carpentry",
+                "storage",
+                "spear"
+              ],
+              "parents": [
+                "Halvard",
+                "Astrid"
+              ],
+              "ties": [
+                "husband of Rose",
+                "father of Wynn, Asa and Linnet",
+                "son of Halvard and Astrid of Brandholm",
+                "angry that Kjell and Brann's hunters trample the planted bushes",
+                "friend of Tamsin"
+              ]
+            },
+            {
+              "name": "Rose",
+              "age": 34,
+              "sex": "f",
+              "occupation": "healer",
+              "role": "healer and planter; born in Saltreach, sister of Fen",
+              "knows": [
+                "fire",
+                "shelter",
+                "medicine",
+                "planting",
+                "fishing",
+                "cooking"
+              ],
+              "ties": [
+                "wife of Hakon",
+                "mother of Wynn, Asa and Linnet",
+                "younger sister of Fen of Saltreach",
+                "Ilse has not forgiven her for marrying a Brandholm man"
+              ]
+            },
+            {
+              "name": "Wynn",
+              "age": 11,
+              "sex": "m",
+              "occupation": "child",
+              "role": "child of both towns, teased by children of each",
+              "knows": [
+                "fire"
+              ],
+              "parents": [
+                "Hakon",
+                "Rose"
+              ],
+              "ties": [
+                "son of Hakon and Rose",
+                "brother of Asa and Linnet",
+                "cousin of Kit"
+              ]
+            },
+            {
+              "name": "Asa",
+              "age": 6,
+              "sex": "f",
+              "occupation": "child",
+              "role": "small child",
+              "knows": [],
+              "parents": [
+                "Hakon",
+                "Rose"
+              ],
+              "ties": [
+                "daughter of Hakon and Rose",
+                "cousin of Kit"
+              ]
+            },
+            {
+              "name": "Linnet",
+              "age": 1,
+              "sex": "f",
+              "occupation": "child",
+              "role": "baby",
+              "knows": [],
+              "parents": [
+                "Hakon",
+                "Rose"
+              ],
+              "ties": [
+                "daughter of Hakon and Rose"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "edda",
+          "members": [
+            {
+              "name": "Edda",
+              "age": 50,
+              "sex": "f",
+              "occupation": "farmer",
+              "role": "planter, widow, shrewd; sells berries to both towns",
+              "knows": [
+                "fire",
+                "shelter",
+                "planting",
+                "storage",
+                "cooking"
+              ],
+              "ties": [
+                "mother of Colm and Briar",
+                "aunt of Kari of Brandholm",
+                "counts on the trade days to get through winter"
+              ]
+            },
+            {
+              "name": "Colm",
+              "age": 25,
+              "sex": "m",
+              "occupation": "farmer",
+              "role": "planter, earnest and quick to anger; wants to be the next Keeper",
+              "knows": [
+                "fire",
+                "shelter",
+                "planting",
+                "storage",
+                "masonry"
+              ],
+              "parents": [
+                "Edda"
+              ],
+              "ties": [
+                "son of Edda",
+                "brother of Briar",
+                "wants Aud to name him keeper",
+                "furious at Brann's hunters for trampling the bushes",
+                "courting Elin of Saltreach"
+              ]
+            },
+            {
+              "name": "Briar",
+              "age": 19,
+              "sex": "f",
+              "occupation": "forager",
+              "role": "forager and reed-cutter, dreamy, walks far alone",
+              "knows": [
+                "fire",
+                "planting",
+                "basketry"
+              ],
+              "parents": [
+                "Edda"
+              ],
+              "ties": [
+                "daughter of Edda",
+                "sister of Colm",
+                "has seen Runa and Wenna together by the lake and told no one"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "animals": {
+    "deer": 60,
+    "wolf": 8
+  }
+}

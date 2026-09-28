@@ -724,6 +724,7 @@ family, partner, friend, rival, stranger, and a short note in their words). Repl
             }
             store.ensure_self(c.id, &c.name).await?;
             store.apply(c.id, &patch, &thought, now).await?;
+            store.mark_formative(c.id, &thought).await?;
             store.set_identity(c.id, 1, &identity, "who I was when this began", &thought, now).await?;
         }
         log::info!("{} (#{}) as authored: {}", c.name, c.id, identity["narrative"].as_str().unwrap_or_default());
