@@ -587,6 +587,20 @@ mod tests {
     }
 
     #[test]
+    fn teaching_names_real_techniques() {
+        let s = scripts();
+        let mut c = ctx();
+        c.item = "leather".into();
+        let why = s.check("teach", &c).unwrap_err();
+        assert!(why.contains("made with tanning"), "{why}");
+        c.item = "hide_preservation".into();
+        let why = s.check("teach", &c).unwrap_err();
+        assert!(why.contains("no technique called hide_preservation") && why.contains("tanning") && why.contains("cloak"), "{why}");
+        c.item = "cloak".into();
+        assert!(s.check("teach", &c).unwrap_err().contains("don't know cloak yourself"));
+    }
+
+    #[test]
     fn eat_requires_item_and_reduces_hunger() {
         let s = scripts();
         let mut c = ctx();

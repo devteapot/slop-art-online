@@ -466,7 +466,23 @@ fn close_check(a) { if a.target.kind != "gate" { return "that is not a gate"; } 
 fn close_duration(a) { 1500 }
 fn close_done(a) { [#{ op: "gate", open: 0.0 }] }
 
+// Every technique there is: whatever experimenting with some material can reveal.
+fn techniques() {
+    let all = [];
+    for m in ["stone", "wood", "clay", "fiber", "hide", "berries", "meat", "fish"] {
+        for t in discoveries(m) { if !all.contains(t) { all.push(t); } }
+    }
+    all
+}
 fn teach_check(a) {
+    let all = techniques();
+    if !all.contains(a.item) {
+        let by = made_by(a.item);
+        if by != () { return `${a.item} is a thing, not a technique: it is made with ${by}`; }
+        let names = "";
+        for t in all { names += if names == "" { t } else { `, ${t}` }; }
+        return `there is no technique called ${a.item} (the techniques are: ${names})`;
+    }
     if !knows(a, a.item) { return `you don't know ${a.item} yourself`; }
     if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to teach"; }
     if a.target.knows.contains(a.item) { return `they already know ${a.item}`; }
