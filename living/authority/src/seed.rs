@@ -125,6 +125,11 @@ pub struct SeedTown {
     /// households, kin and sheets) instead of households drawn from `occupations`.
     #[serde(default)]
     pub residents: Vec<SeedResident>,
+    /// What an author promises lies within reach of the settlement (kind → count within
+    /// `SETTLEMENT_REACH` tiles), e.g. a fishing town's fishing spots. Seeding tops up to it
+    /// on fitting ground near the settlement; what is already there counts.
+    #[serde(default)]
+    pub resources: std::collections::BTreeMap<String, u32>,
 }
 
 /// A person written by the world's author: who they are is installed as given (see
@@ -458,6 +463,9 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     common::invalidate_map();
     RESOURCE_SCALE.with(|r| *r.borrow_mut() = s.resource_scale.clone());
     spawn_resources(ctx, &map, now);
+    for (t, layout) in &settlements {
+        settlement_resources(ctx, &map, t, layout.center, now);
+    }
     let admin = common::world(ctx).admin;
     for p in &s.people {
         let at = map.nearest_walkable(p.at[0], p.at[1]).unwrap_or((48.0, 48.0));
@@ -682,6 +690,71 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         give_ways(ctx, id, kind, now);
     }
     id
+}
+
+/// How far "within reach" of a settlement goes for its promised resources.
+const SETTLEMENT_REACH: f32 = 24.0;
+
+/// Top up what a settlement's author promised within reach (see `SeedTown::resources`):
+/// nearest fitting tiles first, outside the settlement's own streets, a few tiles apart.
+fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, center: (f32, f32), now: u64) {
+    let sc = common::scripts(ctx);
+    let near = |x: i32, y: i32, k: Terrain| (-1..=1).any(|dy| (-1..=1).any(|dx| map.get(x + dx, y + dy) == k));
+    let fits = |kind: &str, x: i32, y: i32| {
+        let g = map.get(x, y);
+        match kind {
+            "fishing_spot" | "reeds" => (g == Terrain::Sand || g == Terrain::Grass) && near(x, y, Terrain::Water),
+            "clay_bank" => g == Terrain::Grass && near(x, y, Terrain::Water),
+            "berry_bush" => g == Terrain::Grass,
+            "tree" => g == Terrain::Forest || g == Terrain::Grass,
+            "boulder" => g == Terrain::Grass || g == Terrain::Dirt,
+            _ => false,
+        }
+    };
+    let max_of = |kind: &str| match kind {
+        "tree" => 8.0,
+        "boulder" => 6.0,
+        "clay_bank" => 6.0,
+        "reeds" => 4.0,
+        _ => 5.0,
+    };
+    let (cx, cy) = (center.0 as i32, center.1 as i32);
+    for (kind, want) in &t.resources {
+        let mut spots: Vec<(f32, f32)> = ctx
+            .db
+            .resource_node()
+            .iter()
+            .filter(|n| n.kind == *kind)
+            .map(|n| (n.x, n.y))
+            .collect();
+        let mut have = spots.iter().filter(|p| common::dist(**p, center) <= SETTLEMENT_REACH).count() as u32;
+        // Rings outward from 5 tiles (the settlement's own streets are left clear).
+        'rings: for r in 5..=(SETTLEMENT_REACH as i32 + 16) {
+            for dy in -r..=r {
+                for dx in -r..=r {
+                    if have >= *want {
+                        break 'rings;
+                    }
+                    if dx.abs() != r && dy.abs() != r {
+                        continue;
+                    }
+                    let (x, y) = (cx + dx, cy + dy);
+                    let p = (x as f32 + 0.5, y as f32 + 0.5);
+                    if !fits(kind, x, y) || spots.iter().any(|q| common::dist(*q, p) < 2.5) {
+                        continue;
+                    }
+                    common::invalidate_resources(ctx, None);
+                    let max = max_of(kind);
+                    ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), amount: max, max, regen: sc.num_of("regrow", kind, 0.5) as f32, at_ms: now });
+                    spots.push(p);
+                    have += 1;
+                }
+            }
+        }
+        if have < *want {
+            log::warn!("{}: only {have} of {want} {kind} could be placed within reach", t.name);
+        }
+    }
 }
 
 fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64) {

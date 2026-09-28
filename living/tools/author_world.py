@@ -234,7 +234,7 @@ def main():
         for h in s["households"]:
             for m in h["members"]:
                 residents.append({"name": m["name"], "age": m["age"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", []), "sheet": sheets[m["name"]]})
-        t = {"name": s["name"], "character": s["character"], "walled": s["walled"], "occupations": {}, "stores": s["stores"], "ledger": s["ledger"], "residents": residents}
+        t = {"name": s["name"], "character": s["character"], "walled": s["walled"], "occupations": {}, "stores": s["stores"], "resources": s.get("resources", {}), "ledger": s["ledger"], "residents": residents}
         (villages if s["kind"] == "village" else towns).append(t)
     seed["towns"], seed["villages"] = towns, villages
     out = ROOT / "living/seeds" / f"{a.world}.json"

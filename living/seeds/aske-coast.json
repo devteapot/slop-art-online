@@ -24,8 +24,14 @@
       "stores": {
         "wood": 30,
         "hide": 12,
-        "meat": 8,
+        "meat": 16,
+        "smoked_fish": 8,
+        "berries": 12,
         "stone": 6
+      },
+      "resources": {
+        "berry_bush": 16,
+        "fishing_spot": 2
       },
       "ledger": "The law of Brandholm, cut in the gate board: What a household hunts is the household's. The common store feeds the old, the young and the hurt first. Whoever takes from the common store without the Headwoman's word is shamed at the fire. The gates close at dark.",
       "residents": [
@@ -4049,10 +4055,17 @@
       "walled": false,
       "occupations": {},
       "stores": {
-        "smoked_fish": 20,
-        "fish": 10,
+        "smoked_fish": 30,
+        "fish": 12,
         "fiber": 20,
-        "berries": 10
+        "berries": 12,
+        "wood": 10,
+        "hide": 2
+      },
+      "resources": {
+        "fishing_spot": 8,
+        "reeds": 8,
+        "berry_bush": 14
       },
       "ledger": "The Tally of Saltreach, on the storehouse sign: Everything taken from the storehouse is told to the Tally-keeper and written. What is owed is paid before the next winter. Strangers are fed once and asked their business. No one goes north of the stone alone after dark.",
       "residents": [
@@ -7796,10 +7809,15 @@
       "walled": false,
       "occupations": {},
       "stores": {
-        "berries": 20,
+        "berries": 30,
         "stone": 10,
         "clay": 6,
         "wood": 6
+      },
+      "resources": {
+        "berry_bush": 20,
+        "boulder": 4,
+        "clay_bank": 2
       },
       "ledger": "At this stone Brandholm and Saltreach swore: no blood between the towns; each may pass through the other's lands; hides, timber and meat from the north for fish, nets and baskets from the south; the Oath renewed each midsummer before the Keeper of the Stone.",
       "residents": [

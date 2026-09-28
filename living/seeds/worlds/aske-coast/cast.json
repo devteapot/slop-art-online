@@ -9,7 +9,9 @@
       "stores": {
         "wood": 30,
         "hide": 12,
-        "meat": 8,
+        "meat": 16,
+        "smoked_fish": 8,
+        "berries": 12,
         "stone": 6
       },
       "ledger": "The law of Brandholm, cut in the gate board: What a household hunts is the household's. The common store feeds the old, the young and the hurt first. Whoever takes from the common store without the Headwoman's word is shamed at the fire. The gates close at dark.",
@@ -681,7 +683,11 @@
             }
           ]
         }
-      ]
+      ],
+      "resources": {
+        "berry_bush": 16,
+        "fishing_spot": 2
+      }
     },
     {
       "name": "Saltreach",
@@ -689,10 +695,12 @@
       "walled": false,
       "character": "an open fishing town on the southern shore, with reed beds, drying racks and a great storehouse where the Tally is kept: fishers, net-makers, basket-weavers, smokers, a healer and a scribe; fish and reeds are plentiful, timber and hides scarce",
       "stores": {
-        "smoked_fish": 20,
-        "fish": 10,
+        "smoked_fish": 30,
+        "fish": 12,
         "fiber": 20,
-        "berries": 10
+        "berries": 12,
+        "wood": 10,
+        "hide": 2
       },
       "ledger": "The Tally of Saltreach, on the storehouse sign: Everything taken from the storehouse is told to the Tally-keeper and written. What is owed is paid before the next winter. Strangers are fed once and asked their business. No one goes north of the stone alone after dark.",
       "households": [
@@ -1336,7 +1344,12 @@
             }
           ]
         }
-      ]
+      ],
+      "resources": {
+        "fishing_spot": 8,
+        "reeds": 8,
+        "berry_bush": 14
+      }
     },
     {
       "name": "Oathstone",
@@ -1344,7 +1357,7 @@
       "walled": false,
       "character": "a hamlet of planters in the open middle lands around the tall grey Oath Stone, where the two towns meet to trade and renew the Oath at midsummer; welcome in both towns and fully trusted by neither",
       "stores": {
-        "berries": 20,
+        "berries": 30,
         "stone": 10,
         "clay": 6,
         "wood": 6
@@ -1567,7 +1580,12 @@
             }
           ]
         }
-      ]
+      ],
+      "resources": {
+        "berry_bush": 20,
+        "boulder": 4,
+        "clay_bank": 2
+      }
     }
   ],
   "animals": {
