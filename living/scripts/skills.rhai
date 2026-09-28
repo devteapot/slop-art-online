@@ -481,6 +481,8 @@ fn armor(a) { let n = a.target.inv["armor"]; if n == () || n < 1 { 1.0 } else { 
 fn threaten_check(a) {
     if a.actor.kind != "person" { return "only people threaten"; }
     if a.actor.stage == "infant" { return "too small to threaten anyone"; }
+    // A child can frighten another child, not a grown-up.
+    if a.actor.stage == "child" && a.target.stage != "child" && a.target.stage != "infant" { return "you are too small to frighten a grown-up; ask them instead (say)"; }
     if a.target.class != "creature" || !a.target.alive { return "no one to threaten"; }
     if a.target.id == a.actor.id { return "cannot threaten yourself"; }
     ""
