@@ -102,6 +102,20 @@ const MEMORY_FLOOR: f64 = 0.15;
 const FORMATIVE: f64 = 12.0;
 /// Relationships that describe structure, not belief; they never fade.
 const DURABLE: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "CHILD_OF", "PARENT_OF", "MERGED_INTO"];
+/// Relationship types stored as real Neo4j types: the ones code relies on. Any other
+/// relationship a mind names is stored as `RELATES` with the name in `rel` (every edge carries
+/// `rel`). Neo4j never frees a type name and allows 65,535; minds invented that many in a day
+/// of runs, after which new ones could not be written.
+const TYPED: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "CHILD_OF", "PARENT_OF", "MERGED_INTO", "AGREED", "WITH"];
+
+/// The Neo4j type an edge named `rel` is stored as.
+fn stored_type(rel: &str) -> &str {
+    if TYPED.contains(&rel) {
+        rel
+    } else {
+        "RELATES"
+    }
+}
 const FIXED_LABELS: &[&str] = &["Concept", "Self", "Memory", "IdentityVersion", "Merged"];
 
 fn p(v: Value) -> BoltType {
@@ -158,13 +172,13 @@ impl Store {
                      WITH old, new WHERE old <> new
                      CALL (old, new) {
                        MATCH (old)-[r {open: true}]->(x) WHERE x <> new AND NOT type(r) IN ['MERGED_INTO']
-                       MERGE (new)-[r2:$(type(r)) {open: true}]->(x)
+                       MERGE (new)-[r2:$(type(r)) {open: true, rel: coalesce(r.rel, type(r))}]->(x)
                        SET r2 += properties(r), r2.thought = $thought
                        SET r.open = false, r.valid_to = $t, r.retracted_by = $thought
                      }
                      CALL (old, new) {
                        MATCH (x)-[r {open: true}]->(old) WHERE x <> new AND NOT type(r) IN ['MERGED_INTO', 'WAS']
-                       MERGE (x)-[r2:$(type(r)) {open: true}]->(new)
+                       MERGE (x)-[r2:$(type(r)) {open: true, rel: coalesce(r.rel, type(r))}]->(new)
                        SET r2 += properties(r), r2.thought = $thought
                        SET r.open = false, r.valid_to = $t, r.retracted_by = $thought
                      }
@@ -224,14 +238,14 @@ impl Store {
             let rows: Vec<Value> = patch
                 .edges
                 .iter()
-                .map(|e| json!({"from": e.from, "to": e.to, "rel": e.rel, "confidence": e.confidence, "because": e.because, "props": e.props}))
+                .map(|e| json!({"from": e.from, "to": e.to, "rel": e.rel, "type": stored_type(&e.rel), "confidence": e.confidence, "because": e.because, "props": e.props}))
                 .collect();
             txn.run(
                 self.q(
                     "UNWIND $rows AS e
                      MERGE (a:Concept {run: $run, actor: $actor, key: e.from})
                      MERGE (b:Concept {run: $run, actor: $actor, key: e.to})
-                     MERGE (a)-[r:$(e.rel) {open: true}]->(b)
+                     MERGE (a)-[r:$(e.type) {open: true, rel: e.rel}]->(b)
                      ON CREATE SET r.since = $t, r.because = []
                      SET r += e.props, r.confidence = e.confidence, r.t = $t, r.thought = $thought,
                          r.because = [x IN r.because WHERE NOT x IN e.because] + e.because",
@@ -249,7 +263,7 @@ impl Store {
                 self.q(
                     "UNWIND $rows AS x
                      MATCH (a:Concept {run: $run, actor: $actor, key: x.from})-[r {open: true}]->(b:Concept {run: $run, actor: $actor, key: x.to})
-                     WHERE type(r) = x.rel
+                     WHERE coalesce(r.rel, type(r)) = x.rel
                      SET r.open = false, r.valid_to = $t, r.retracted_by = $thought",
                     actor,
                 )
@@ -305,7 +319,7 @@ impl Store {
                      WITH r, startNode(r) AS a, endNode(r) AS b
                      WHERE NOT type(r) IN ['WAS', 'INVOLVES', 'MERGED_INTO']
                      WITH r, a, b, coalesce(r.confidence, 0.5) * CASE WHEN type(r) IN $durable THEN 1.0 ELSE exp(-toFloat($now - coalesce(r.t, $now)) / $tau) END AS c
-                     RETURN a.key AS a, coalesce(a.name, a.key) AS an, labels(a) AS al, type(r) AS rel,
+                     RETURN a.key AS a, coalesce(a.name, a.key) AS an, labels(a) AS al, coalesce(r.rel, type(r)) AS rel,
                             b.key AS b, coalesce(b.name, b.key) AS bn, labels(b) AS bl,
                             c, coalesce(r.t, 0) AS t,
                             [k IN keys(r) WHERE NOT k IN ['open', 't', 'since', 'because', 'thought', 'confidence', 'valid_to', 'retracted_by'] | k + ': ' + toString(r[k])] AS extra
@@ -789,7 +803,7 @@ impl Store {
                          WHERE (r.open = true OR type(r) = 'INVOLVES') AND NOT n:Merged
                          WITH s, r, n, startNode(r) AS a, endNode(r) AS b
                          RETURN s.key AS seed, s.w AS w, n.key AS other, n:Memory AS memory, n:Forgotten AS forgotten,
-                                a.key AS a, coalesce(a.name, a.key) AS an, labels(a) AS al, type(r) AS rel,
+                                a.key AS a, coalesce(a.name, a.key) AS an, labels(a) AS al, coalesce(r.rel, type(r)) AS rel,
                                 b.key AS b, coalesce(b.name, b.key) AS bn, labels(b) AS bl,
                                 toFloat(coalesce(r.confidence, 0.5)) AS c0, coalesce(r.t, 0) AS t,
                                 [k IN keys(r) WHERE NOT k IN ['open', 't', 'since', 'because', 'thought', 'confidence', 'valid_to', 'retracted_by'] | k + ': ' + toString(r[k])] AS extra,
@@ -1149,7 +1163,7 @@ mod tests {
     async fn minds_revise_merge_and_fade() {
         let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
         let run = format!("test-{}", crate::llm::now_ms());
-        let s = Store::connect("127.0.0.1:7689", "neo4j", &pw, &run).await.unwrap();
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
         s.ensure_self(1, "Fen").await.unwrap();
         let t0 = crate::llm::now_ms() - 3 * 3_600_000;
         let v = json!({
@@ -1209,7 +1223,7 @@ mod tests {
     async fn recall_by_cues_and_forgetting() {
         let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
         let run = format!("test-recall-{}", crate::llm::now_ms());
-        let s = Store::connect("127.0.0.1:7689", "neo4j", &pw, &run).await.unwrap();
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
         s.ensure_self(1, "Fen").await.unwrap();
         let now = crate::llm::now_ms();
         let old = now - 3 * 3_600_000;
@@ -1263,7 +1277,7 @@ mod tests {
     async fn formative_past_outlasts_ordinary_beliefs() {
         let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
         let run = format!("test-formative-{}", crate::llm::now_ms());
-        let s = Store::connect("127.0.0.1:7689", "neo4j", &pw, &run).await.unwrap();
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
         s.ensure_self(1, "Aud").await.unwrap();
         let now = crate::llm::now_ms();
         let mut p = Patch::default();
@@ -1291,7 +1305,7 @@ mod tests {
     async fn authored_memories_are_recalled() {
         let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
         let run = format!("test-authored-{}", crate::llm::now_ms());
-        let s = Store::connect("127.0.0.1:7689", "neo4j", &pw, &run).await.unwrap();
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
         s.ensure_self(1, "Oren").await.unwrap();
         let now = crate::llm::now_ms();
         let mut p = Patch::default();
@@ -1339,7 +1353,7 @@ mod tests {
         for case in cases {
             let run = case["run"].as_str().unwrap().to_string();
             if !stores.contains_key(&run) {
-                stores.insert(run.clone(), Store::connect("127.0.0.1:7689", "neo4j", &pw, &run).await.unwrap());
+                stores.insert(run.clone(), Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap());
             }
             let s = &stores[&run];
             let mut cues = Cues::default();
