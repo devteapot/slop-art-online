@@ -195,6 +195,8 @@ pub enum Cond {
     Has(HasCond),
     Sees(Target),
     Near(NearCond),
+    /// A creature is within the body's scent (its species smells that kind), seen or not.
+    Smells(Target),
     /// Hurt within the last N seconds.
     HurtWithin(f32),
     /// Heard speech within the last N seconds.
@@ -561,7 +563,7 @@ fn check_cond(c: &Cond, depth: usize) -> Result<(), String> {
             }
         }
         Cond::Not(x) => check_cond(x, depth + 1)?,
-        Cond::Sees(t) => check_target(t)?,
+        Cond::Sees(t) | Cond::Smells(t) => check_target(t)?,
         Cond::Near(n) => check_target(&n.target)?,
         Cond::HealthOf(h) => {
             check_target(&h.target)?;
@@ -733,6 +735,7 @@ pub fn describe_cond(c: &Cond) -> String {
         Cond::Health(x) => cmp("health", x),
         Cond::Has(h) => format!("has {} {}", h.at_least, h.item),
         Cond::Sees(t) => format!("sees {}", describe_target(t)),
+        Cond::Smells(t) => format!("smells {}", describe_target(t)),
         Cond::Near(n) => format!("within {} of {}", n.within, describe_target(&n.target)),
         Cond::HurtWithin(s) => format!("hurt in last {s}s"),
         Cond::HeardWithin(s) => format!("heard speech in last {s}s"),

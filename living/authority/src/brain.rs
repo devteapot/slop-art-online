@@ -57,6 +57,10 @@ struct Ev<'a> {
     orig: MindState,
     g: Rc<Compiled>,
     scene: Option<Scene>,
+    /// Creatures smelled beyond sight (built on first use).
+    smelled: Option<Vec<NearCreature>>,
+    /// While resolving a target the body acts on: smelled creatures count (see `sensed`).
+    smell: bool,
     running: Option<u16>,
     path: Vec<u16>,
     status: String,
@@ -96,7 +100,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         cur = ctx.db.activity().id().find(id);
     }
     let acting = cur.as_ref().map_or(false, |a| a.node == act::ACT);
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting };
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && LATCHES.contains(&a.skill.as_str())).map(|a| a.node);
     ev.alerts();
     let root = ev.g.clone();
@@ -105,7 +109,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
 }
 
 /// Resolve a target for a deliberate act exactly as a graph leaf would (only what the
-/// character perceives, its own places and remembered people).
+/// character perceives, sight or smell, its own places and remembered people).
 pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Option<Resolved> {
     let me = ctx.db.character().id().find(id)?;
     let st = ctx.db.mind_state().id().find(id)?;
@@ -114,8 +118,8 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
     let g = common::compiled(ctx, id, st.revision)?;
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
-    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting: false };
-    ev.resolve(t)
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting: false };
+    ev.sensed(t)
 }
 
 /// Re-anchor needs when their rate inputs change; handles death from needs. `cur` is the
@@ -176,6 +180,17 @@ impl<'a> Ev<'a> {
             self.scene = Some(Scene { creatures, resources, structures });
         }
         self.scene.as_ref().unwrap()
+    }
+
+    fn smelled(&mut self) -> &[NearCreature] {
+        if self.smelled.is_none() {
+            let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
+            let me = self.me.id;
+            let mut v = common::smelled_near(self.ctx, &self.me.kind, self.at, r, self.now);
+            v.retain(|c| c.id != me);
+            self.smelled = Some(v);
+        }
+        self.smelled.as_deref().unwrap()
     }
 
     fn mark_recent(&self, node: u16, within_ms: u64) -> bool {
@@ -376,7 +391,7 @@ impl<'a> Ev<'a> {
             }
             Node::Do(a) => {
                 let target = match &a.target {
-                    Some(t) => match self.resolve(t) {
+                    Some(t) => match self.sensed(t) {
                         Some(r) => r,
                         None => return self.leaf_fail(id, &format!("{}: no {} in sight", a.skill, graph::describe_target(t))),
                     },
@@ -475,23 +490,29 @@ impl<'a> Ev<'a> {
     }
 
     fn relation_ok(&self, other: u32, want: &str) -> bool {
-        let r = self.relation(other);
-        let label = r.as_ref().map(|r| r.label.to_lowercase()).unwrap_or_default();
-        let trust = r.as_ref().map(|r| r.trust).unwrap_or(0.0);
-        match want {
-            "friend" => r.is_some() && (trust >= 25.0 || ["friend", "family", "partner", "ally", "kin"].iter().any(|l| label.contains(l))),
-            "enemy" => r.is_some() && (trust <= -25.0 || ["enemy", "rival", "threat", "thief"].iter().any(|l| label.contains(l))),
-            "family" => ["family", "partner", "kin", "child", "parent", "sibling"].iter().any(|l| label.contains(l)),
-            "stranger" => r.is_none() || label.contains("stranger"),
-            "any" | "" => true,
-            other => label.contains(&other.to_lowercase()),
-        }
+        relation_ok(self.ctx, self.me.id, other, want)
     }
 
     fn visible_creature(&mut self, id: u32) -> Option<Resolved> {
         let c = self.scene().creatures.iter().find(|c| c.id == id)?.clone();
         let ch = self.ctx.db.character().id().find(id)?;
         Some(Resolved { class: 3, id: id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name })
+    }
+
+    fn smelled_creature(&mut self, id: u32) -> Option<Resolved> {
+        let c = self.smelled().iter().find(|c| c.id == id)?.clone();
+        let ch = self.ctx.db.character().id().find(id)?;
+        Some(Resolved { class: 3, id: id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name })
+    }
+
+    /// Resolve a target the body acts on (a skill's, an act's, `can`, `smells`): what it sees,
+    /// and failing that a creature it smells. Other conditions (`sees`, `near`, `count`,
+    /// `health_of`) and speech stay with sight.
+    fn sensed(&mut self, t: &Target) -> Option<Resolved> {
+        self.smell = true;
+        let r = self.resolve(t);
+        self.smell = false;
+        r
     }
 
     fn resolve(&mut self, t: &Target) -> Option<Resolved> {
@@ -546,7 +567,7 @@ impl<'a> Ev<'a> {
             Target::Wander => Some(Resolved::point(self.at)),
             Target::Place(name) => self.place(name),
             Target::At([x, y]) => Some(Resolved::point((*x, *y))),
-            Target::Id(id) => self.visible_creature(*id),
+            Target::Id(id) => self.visible_creature(*id).or_else(|| if self.smell { self.smelled_creature(*id) } else { None }),
             Target::Named(name) => {
                 let ids: Vec<u32> = self.scene().creatures.iter().filter(|c| &*c.kind == "person").map(|c| c.id).collect();
                 let id = ids.into_iter().find(|id| self.ctx.db.character().id().find(*id).map_or(false, |c| c.name.eq_ignore_ascii_case(name)))?;
@@ -569,18 +590,16 @@ impl<'a> Ev<'a> {
     fn nearest(&mut self, f: &Filter) -> Option<Resolved> {
         match living_rules::catalog::kind_class(&f.kind)? {
             living_rules::catalog::KindClass::Creature => {
-                let cands: Vec<u32> = self.scene().creatures.iter().filter(|c| f.kind == "creature" || *c.kind == *f.kind).map(|c| c.id).collect();
-                for id in cands {
-                    if let Some(rel) = &f.relation {
-                        if !self.relation_ok(id, rel) {
-                            continue;
-                        }
-                    }
-                    if let Some(r) = self.visible_creature(id) {
-                        return Some(r);
-                    }
+                // Seen first; a creature smelled farther away only for a target the body acts on.
+                let seen: Vec<(u32, Rc<str>, f32)> = self.scene().creatures.iter().map(|c| (c.id, c.kind.clone(), c.dist)).collect();
+                let scent = if self.smell { common::scent_of(&self.me.kind) } else { None };
+                let (ctx, me) = (self.ctx, self.me.id);
+                let ok = |id: u32| f.relation.as_deref().map_or(true, |rel| relation_ok(ctx, me, id, rel)) && ctx.db.character().id().find(id).is_some();
+                let smelled = || self.smelled().iter().map(|c| (c.id, c.kind.clone(), c.dist)).collect();
+                match living_rules::species::pick_nearest(&f.kind, &seen, scent.as_ref(), smelled, ok)? {
+                    (id, false) => self.visible_creature(id),
+                    (id, true) => self.smelled_creature(id),
                 }
-                None
             }
             living_rules::catalog::KindClass::Resource => {
                 let now = self.now;
@@ -649,6 +668,12 @@ impl<'a> Ev<'a> {
                 _ => self.resolve(t).is_some(),
             },
             Cond::Near(n) => self.resolve(&n.target).map_or(false, |p| dist(self.at, p.at) <= n.within),
+            // A creature within the body's scent (seen or not); never true without a scent.
+            Cond::Smells(t) => {
+                let Some(scent) = common::scent_of(&self.me.kind) else { return false };
+                let (at, me) = (self.at, self.me.id as u64);
+                self.sensed(t).is_some_and(|r| r.class == 3 && r.id != me && scent.reaches(&r.kind, dist(at, r.at)))
+            }
             Cond::Count(c) => {
                 let at = self.at;
                 self.scene();
@@ -693,7 +718,7 @@ impl<'a> Ev<'a> {
                 .map_or(false, |j| j.value > b.above),
             Cond::Can(a) => {
                 let target = match &a.target {
-                    Some(t) => match self.resolve(t) {
+                    Some(t) => match self.sensed(t) {
                         Some(r) => r,
                         None => return false,
                     },
@@ -1104,5 +1129,20 @@ impl<'a> Ev<'a> {
         if cur != before {
             ctx.db.mind_state().id().update(cur);
         }
+    }
+}
+
+/// Whether `me`'s relationship to `other` fits a selector's relation filter.
+fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
+    let r = ctx.db.relation().by_pair().filter((me, other)).next();
+    let label = r.as_ref().map(|r| r.label.to_lowercase()).unwrap_or_default();
+    let trust = r.as_ref().map(|r| r.trust).unwrap_or(0.0);
+    match want {
+        "friend" => r.is_some() && (trust >= 25.0 || ["friend", "family", "partner", "ally", "kin"].iter().any(|l| label.contains(l))),
+        "enemy" => r.is_some() && (trust <= -25.0 || ["enemy", "rival", "threat", "thief"].iter().any(|l| label.contains(l))),
+        "family" => ["family", "partner", "kin", "child", "parent", "sibling"].iter().any(|l| label.contains(l)),
+        "stranger" => r.is_none() || label.contains("stranger"),
+        "any" | "" => true,
+        other => label.contains(&other.to_lowercase()),
     }
 }

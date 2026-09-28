@@ -658,6 +658,27 @@ pub fn creatures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) ->
     out
 }
 
+/// Creatures a body of species `kind` smells beyond `sight` (within its scent radius, of its
+/// scent kinds), nearest first; empty for a body without a scent. Uses the same per-tick chunk
+/// cache as sight: a radius of 60 tiles covers at most 9x9 chunks, filtered by kind first.
+pub fn smelled_near(ctx: &ReducerContext, kind: &str, at: (f32, f32), sight: f32, now: u64) -> Vec<NearCreature> {
+    let Some(scent) = scent_of(kind).filter(|s| s.radius > sight) else { return Vec::new() };
+    let mut out = Vec::new();
+    for c in chunks_around(at.0, at.1, scent.radius) {
+        for (id, k, p) in chunk_bodies(ctx, c, now).iter() {
+            if !scent.kinds.iter().any(|x| **x == **k) {
+                continue;
+            }
+            let d = dist(at, *p);
+            if d > sight && d <= scent.radius {
+                out.push(NearCreature { id: *id, kind: k.clone(), pos: *p, dist: d });
+            }
+        }
+    }
+    out.sort_by(|a, b| a.dist.total_cmp(&b.dist));
+    out
+}
+
 /// Values derived from rows that change rarely (resource nodes change on a gather, structures
 /// on a build, a persona when the mind revises it), kept across transactions and dropped for a
 /// key when its rows are written.
@@ -808,6 +829,11 @@ thread_local! {
 
 pub fn species(kind: &str) -> Option<living_rules::species::Species> {
     SPECIES.with(|s| s.get(kind).cloned())
+}
+
+/// A species' scent, if it has one (without cloning the whole profile).
+pub fn scent_of(kind: &str) -> Option<living_rules::species::Scent> {
+    SPECIES.with(|s| s.get(kind).and_then(|sp| sp.scent.clone()))
 }
 
 pub fn chronicle(ctx: &ReducerContext, now: u64, kind: &str, a: u32, b: u32, at: (f32, f32), text: String) {

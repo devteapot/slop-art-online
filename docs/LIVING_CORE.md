@@ -101,10 +101,10 @@ A small reactive behavior tree the mind writes as JSON and the authority validat
 
 - Composites: `first` (reactive priority), `seq` (remembered progress), `if/then/else` (continuous guard), `repeat`.
 - Leaves: `do` (skill with a target selector; walks into range automatically), `say`, `wait`, `think` (request LLM deliberation without blocking).
-- Conditions: needs, inventory, `sees`/`near` a target selector, recently hurt/heard, night, `believes` a mind-maintained judgment, `chance`, boolean combinators.
+- Conditions: needs, inventory, `sees`/`near` a target selector, `smells` one (species with a scent), recently hurt/heard, night, `believes` a mind-maintained judgment, `chance`, boolean combinators.
 - Target selectors: nearest resource/structure/character with relation filters (`friend`, `enemy`, `stranger`, by name), remembered named places, `attacker`, `speaker`, `home`, coordinates.
 
-Selectors only resolve entities within the character's current perception radius or its own remembered places, so the graph cannot act on observer truth.
+Selectors only resolve entities within the character's current perception radius (sight; for a skill's target also its species' scent, below) or its own remembered places, so the graph cannot act on observer truth.
 
 ### Deliberate acts (experiment, 2026-09-26)
 
@@ -153,6 +153,8 @@ People, deer and wolves are the same entity (`character`) with the same body mac
 
 - **Species profile** ([species.json](../living/seeds/species.json)), data not code: allowed skills (a wolf cannot build or give; a deer grazes), whether it speaks, a signal vocabulary (deer alarm snort and contact bleat; wolf howl, growl, whimper, hunting yips), names, a temperament range, reflexes, and cognitive pacing (animals think at most once a minute unless attacked, reflect every ten minutes, consolidate rarely, write small graphs). The normalizer and the authority prune or reject anything a body cannot do.
 - **Controller**: an LLM mind, or a human client that receives the same experiences and acts through the same reducers.
+
+**Scent** is species data too (`"scent": {"radius": 60, "kinds": ["deer", "wolf"]}` for wolves, 30 tiles for deer smelling wolves, none for people). Creatures of those kinds beyond sight but within the radius appear in the scene coarsely: kind, rough direction, a distance rounded to 10 tiles and an id, at most the 3 nearest per kind (an animal's impulse prompt reads "You smell a deer to the northeast, far, about 40 tiles."). A skill's or act's creature target (`{"nearest": "deer"}`, `{"id": n}`) resolves to the nearest one seen and, failing that, the nearest one smelled; pursuit holds a smelled target while it stays within the radius, and attacking still needs reach. `sees`, `near`, `count` and `health_of` stay sight-only; `{"smells": T}` holds while T is within the body's scent. Reason: on realm maps wolves starved in the forest with deer 50–150 tiles away, because their `attack nearest deer` instinct resolved only within sight (11 tiles). Cost: a smell query runs only when an acting target of a smelled kind has nothing in sight, and for an animal's deliberation scene. It reads the per-tick chunk-body cache over at most 9×9 chunks (radius 60), filtered by kind. It adds no tables or subscriptions, and its cost has not yet been measured in a live run.
 
 Communication without words: `signal` is heard by every mind in range; a member of the same species hears "Ash makes a long howl (howl), north", others "You hear a long howl from a wolf, north". Animals hear speech as "a person's voice". Observers refer to people and their own kind by name and to other creatures by kind.
 

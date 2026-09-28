@@ -1427,7 +1427,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             Err(_) => (String::new(), felt.content.chars().take(400).collect()),
         };
         let signals = sp.signals.iter().map(|(k, s)| format!("{k} = {}", s.sound)).collect::<Vec<_>>().join("; ");
-        let system = prompts::animal_compile_system(&c.kind, &prompts::species_skills_help(&sp), &signals, sp.cognition.max_nodes);
+        let system = prompts::animal_compile_system(&c.kind, &prompts::species_skills_help(&sp), &signals, &prompts::scent_help(&sp), sp.cognition.max_nodes);
         let top = self.conn.db.brain().id().find(&actor).and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
         let user = format!(
             "Impulse of {} the {}: {impulse}\nFeeling: {feeling}\n\nAround it now:\n{}\n\nIts top level (what it weighs):\n{top}\n\nIts routines (how each has gone):\n{}",

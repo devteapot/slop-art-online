@@ -79,6 +79,13 @@ impl Minds {
                 None => {}
             }
         }
+        // What it smells beyond sight cues its kind more faintly.
+        for cr in scene[living_rules::species::SMELLED].as_array().cloned().unwrap_or_default() {
+            if let Some(k) = cr["kind"].as_str() {
+                cues.key(format!("kind:{k}"), 0.6);
+                cues.text(k, 0.4);
+            }
+        }
         for key in ["resources", "structures"] {
             for r in scene[key].as_array().cloned().unwrap_or_default() {
                 if let Some(k) = r["kind"].as_str() {

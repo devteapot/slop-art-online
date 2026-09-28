@@ -399,6 +399,30 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         }
     }
 
+    // Creatures smelled beyond sight: only kind, rough direction and distance (and an id to
+    // go after), at most the 3 nearest of each kind.
+    let mut smelled = Vec::new();
+    let mut per_kind: Vec<(std::rc::Rc<str>, u32)> = Vec::new();
+    for c in common::smelled_near(ctx, &me.kind, at, r, now) {
+        if c.id == id {
+            continue;
+        }
+        let n = match per_kind.iter_mut().find(|k| k.0 == c.kind) {
+            Some(k) => {
+                k.1 += 1;
+                k.1
+            }
+            None => {
+                per_kind.push((c.kind.clone(), 1));
+                1
+            }
+        };
+        if n <= 3 {
+            let far = if c.dist < 25.0 { "not far" } else if c.dist < 45.0 { "far" } else { "very far" };
+            smelled.push(json!({"kind": &*c.kind, "id": c.id, "dir": direction(at, c.pos), "dist": format!("{far}, about {:.0} tiles", (c.dist / 10.0).round() * 10.0)}));
+        }
+    }
+
     let mut groups: Vec<(String, u32, Value)> = Vec::new();
     for (n, d) in common::resources_near(ctx, at, r) {
         let amount = common::amount_now(ctx, &n, now).floor();
@@ -468,5 +492,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         }
     }
 
-    json!({"you": you, "time": time, "creatures": creatures, "resources": resources, "structures": structures, "terrain_near": terrain}).to_string()
+    let mut scene = json!({"you": you, "time": time, "creatures": creatures, "resources": resources, "structures": structures, "terrain_near": terrain});
+    if !smelled.is_empty() {
+        scene[living_rules::species::SMELLED] = Value::Array(smelled);
+    }
+    scene.to_string()
 }

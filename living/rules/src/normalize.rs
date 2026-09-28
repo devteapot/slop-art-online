@@ -55,7 +55,7 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
 const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted"];
-const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, near, count, health_of, hurt_within, heard_within, night, believes, chance, all, any, not";
+const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, night, believes, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -503,6 +503,7 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                 "is_night" => "night",
                 "belief" | "judgment" => "believes",
                 "see" | "can_see" => "sees",
+                "smell" | "can_smell" | "scents" => "smells",
                 "have" | "holding" => "has",
                 other => other,
             }
@@ -533,6 +534,7 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     json!({key: c})
                 }
                 "sees" => json!({"sees": target(v, &p)?}),
+                "smells" => json!({"smells": target(v, &p)?}),
                 "near" => {
                     let mut o = match v {
                         Value::Object(o) => strip_nulls(o),
@@ -642,6 +644,20 @@ mod tests {
         assert!(o.contains("at least 3 person (friend)"), "{o}");
         assert!(o.contains("health of nearest wolf < 40%"), "{o}");
         assert!(o.contains("at most 1 wolf"), "{o}");
+    }
+
+    #[test]
+    fn smells_is_a_condition_apart_from_sight() {
+        let g = from_value(json!({"first": [
+            {"if": {"smell": "wolf"}, "then": {"do": "flee", "target": {"nearest": "wolf"}}},
+            {"if": {"smells": {"nearest": {"kind": "deer"}}, "sees": {"nearest": "deer"}}, "then": {"do": "attack", "target": {"nearest": "deer"}}}
+        ]}))
+        .unwrap();
+        let o = outline(&g.root);
+        assert!(o.contains("smells nearest wolf"), "{o}");
+        assert!(o.contains("sees nearest deer and smells nearest deer"), "{o}");
+        let c: crate::graph::Cond = serde_json::from_value(json!({"smells": {"nearest": "deer"}})).unwrap();
+        assert!(matches!(c, crate::graph::Cond::Smells(_)));
     }
 
     #[test]

@@ -411,6 +411,7 @@ Feel the moment as the animal does. Answer with ONE JSON object of two short str
 }
 
 pub fn animal_think_user(mind: &[String], experiences: &[String], scene: &str, reason: &str) -> String {
+    let (scene, smells) = split_smells(scene);
     let mut out = String::from("# What you associate\n");
     if mind.is_empty() {
         out.push_str("(nothing yet)\n");
@@ -422,18 +423,54 @@ pub fn animal_think_user(mind: &[String], experiences: &[String], scene: &str, r
     for e in experiences {
         out.push_str(&format!("- {e}\n"));
     }
-    out.push_str(&format!("\n# Around you now\n{scene}\n\n# Why you stir\n{reason}\n"));
+    out.push_str(&format!("\n# Around you now\n{scene}\n"));
+    if !smells.is_empty() {
+        out.push_str("\n# What you smell, out of sight\n");
+        for s in &smells {
+            out.push_str(&format!("- {s}\n"));
+        }
+    }
+    out.push_str(&format!("\n# Why you stir\n{reason}\n"));
     out
 }
 
-pub fn animal_compile_system(kind: &str, skills: &str, signals: &str, max_nodes: usize) -> String {
+/// A scene without its smelled creatures, and those as the animal senses them
+/// ("You smell a deer to the northeast, far, about 40 tiles.").
+fn split_smells(scene: &str) -> (String, Vec<String>) {
+    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(scene) else { return (scene.to_string(), Vec::new()) };
+    let Some(list) = v.as_object_mut().and_then(|o| o.remove(living_rules::species::SMELLED)) else { return (scene.to_string(), Vec::new()) };
+    let lines = list
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|c| format!("You smell a {} to the {}, {}.", c["kind"].as_str().unwrap_or("creature"), c["dir"].as_str().unwrap_or("distance"), c["dist"].as_str().unwrap_or("far")))
+        .collect();
+    (v.to_string(), lines)
+}
+
+/// What an animal's graph compiler is told about its body's smell.
+pub fn scent_help(sp: &living_rules::species::Species) -> String {
+    let Some(s) = sp.scent.as_ref().filter(|s| !s.kinds.is_empty()) else { return String::new() };
+    let example = &s.kinds[0];
+    format!(
+        "SMELL: it smells {} within about {:.0} tiles, beyond sight; the scene lists them under \"{}\" (kind, rough direction and distance, id). \
+A skill's creature target ({{\"nearest\": \"{example}\"}} or {{\"id\": n}}) is the nearest one seen or, when none is seen, the nearest one smelled: \
+{{\"do\": \"goto\", \"target\": {{\"nearest\": \"{example}\"}}}} follows the scent and flee moves away from it (attacking still needs reach). \
+\"sees\", \"near\", \"count\" and \"health_of\" are sight only; {{\"smells\": T}} holds while T is within smell, e.g. {{\"if\": {{\"smells\": {{\"nearest\": \"{example}\"}}}}, \"then\": N}}.",
+        s.kinds.join(", "),
+        s.radius,
+        living_rules::species::SMELLED
+    )
+}
+
+pub fn animal_compile_system(kind: &str, skills: &str, signals: &str, scent: &str, max_nodes: usize) -> String {
     format!(
         "You turn the current impulse of a {kind} into what it does now. Its instincts (routines for staying safe, feeding, \
 resting, mating, keeping with its kind and roaming, weighed by a top level of desires) are inherited: they change over \
 generations, not by one animal's impulse, and they keep working underneath. The impulse is one more pull among them, \
 lasting about a minute. Do not add plans, knowledge or wisdom the animal does not have, and keep the graph short \
 (at most {max_nodes} nodes). The {kind} cannot speak; it communicates only with its signals: {signals} \
-(as {{\"do\": \"signal\", \"item\": name}}).\n\n{}\n\n\
+(as {{\"do\": \"signal\", \"item\": name}}).\n\n{}\n{scent}\n\n\
 Reply with ONE JSON object: {{\"intent\": {{\"weight\": 0.1-1.5, \"graph\": {{...what the impulse makes it do...}}}} \
 (weighed among its desires, whose weights its top level shows: an intent weighed above its safety desire outweighs fleeing danger while it lasts), \
 or {{\"graph\": \"keep\"}} when the impulse needs nothing its instincts don't already do}}",
@@ -525,4 +562,19 @@ pub fn talk_user(t: &TalkUser) -> String {
     }
     out.push_str(&format!("\n# What you are answering\n{other}: “{}”\n\nYour turn. Respond with the JSON object.", t.heard));
     out
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn animals_are_told_what_they_smell() {
+        let scene = serde_json::json!({"you": {"id": 1}, "creatures": [], living_rules::species::SMELLED: [{"kind": "deer", "id": 7, "dir": "northeast", "dist": "far, about 40 tiles"}]}).to_string();
+        let text = super::animal_think_user(&[], &[], &scene, "hungry");
+        assert!(text.contains("You smell a deer to the northeast, far, about 40 tiles."), "{text}");
+        assert!(!text.contains(living_rules::species::SMELLED), "{text}");
+        let species = living_rules::species::parse(include_str!("../../seeds/species.json")).unwrap();
+        let wolf = super::scent_help(&species["wolf"]);
+        assert!(wolf.contains("deer, wolf") && wolf.contains("{\"smells\": {\"nearest\": \"deer\"}}"), "{wolf}");
+        assert!(super::scent_help(&species["person"]).is_empty());
+    }
 }
