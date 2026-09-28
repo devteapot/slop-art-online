@@ -4,7 +4,7 @@
 use bevy::prelude::*;
 use living_bindings::*;
 use spacetimedb_sdk::{DbContext, SubscriptionHandle as _, Table, TableWithPrimaryKey};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Public tables the observer needs (all small at the current scale).
@@ -56,6 +56,8 @@ pub struct Generations {
     pub chronicle: Arc<AtomicU32>,
     pub thought: Arc<AtomicU32>,
     pub background: Arc<AtomicU32>,
+    /// Latest `t_ms` of body rows updated since the display clock last looked (0 = none).
+    pub body_t: Arc<AtomicU64>,
 }
 
 impl Generations {
@@ -216,6 +218,11 @@ impl Net {
                 incremental!(chronicle, chronicle, fresh_chronicle);
                 incremental!(thought, thought, fresh_thoughts);
                 watch!(background, background);
+                // Row times as they arrive keep the display clock in step with the authority's.
+                let t = gens.body_t.clone();
+                conn.db.body().on_update(move |_, _, new| {
+                    t.fetch_max(new.t_ms, Ordering::Relaxed);
+                });
                 let inbox = applied.clone();
                 let err = applied.clone();
                 conn.subscription_builder()

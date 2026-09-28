@@ -8,6 +8,7 @@ mod map;
 mod net;
 mod panels;
 mod state;
+mod sync;
 mod terrain;
 
 use bevy::prelude::*;
@@ -49,7 +50,7 @@ fn draw(mut contexts: EguiContexts, mut net: NonSendMut<net::Net>, mut view: Non
         view.splits[i] += ms;
         lap = t;
     };
-    let snap = state::Snap::take(net);
+    let snap = state::Snap::take(net, &mut view.clock);
     split(0, &mut view);
     view.refresh(ctx, net, &snap, time.delta_secs());
     split(1, &mut view);
@@ -74,8 +75,8 @@ fn draw(mut contexts: EguiContexts, mut net: NonSendMut<net::Net>, mut view: Non
         let n = view.frames.max(1) as f32;
         let s = view.splits.map(|x| x / n);
         info!(
-            "viewer: {:.0} fps, {} frames, ui avg {:.1} ms worst {:.1} ms (snapshot {:.1}, refresh {:.1}, left {:.1}, inspector {:.1}, map {:.1}), zoom {:.1}, {} creatures, {} resources, terrain chunks drawn/cached {}/{} (last build {:.1} ms)",
-            view.fps, view.frames, s.iter().sum::<f32>(), view.worst_ms, s[0], s[1], s[2], s[3], s[4], view.zoom, snap.bodies.len(), snap.resources.len(), view.terrain_stats.0, view.terrain_stats.1, view.terrain_stats.2
+            "viewer: {:.0} fps, {} frames, ui avg {:.1} ms worst {:.1} ms (snapshot {:.1}, refresh {:.1}, left {:.1}, inspector {:.1}, map {:.1}), zoom {:.1}, {} creatures, {} resources, terrain chunks drawn/cached {}/{} (last build {:.1} ms), display {:.0} ms behind the newest body row",
+            view.fps, view.frames, s.iter().sum::<f32>(), view.worst_ms, s[0], s[1], s[2], s[3], s[4], view.zoom, snap.bodies.len(), snap.resources.len(), view.terrain_stats.0, view.terrain_stats.1, view.terrain_stats.2, view.clock.delay_ms()
         );
         view.splits = [0.0; 5];
         view.frames = 0;

@@ -99,6 +99,53 @@ fn put(ctx: &ReducerContext, b: Body, chunk_before: u32) {
     ctx.db.body().id().update(b);
 }
 
+/// Longest a finished segment is continued from where it ended, not from `now`.
+const RESUME_MS: u64 = 40;
+
+thread_local! {
+    /// Segments this transaction began before its `now` (`resume_at`): the transaction's
+    /// `now` and, per body, the segment's start.
+    static RESUMED: std::cell::RefCell<(u64, std::collections::HashMap<u32, u64>)> = Default::default();
+}
+
+/// When the next segment of a moving body begins: where its last one ended (`next_ms`),
+/// when that was at most `RESUME_MS` ago, otherwise `now`. A due body is reached by the
+/// first tick after `next_ms` (up to 16.7 ms later at 60 Hz); starting the next segment at
+/// `next_ms` keeps it moving through that gap instead of standing at the segment's end
+/// until the tick, so observers see steady motion rather than a stop at every update.
+/// The new segment is swept from the same pose, so it is as safe as starting at `now`.
+///
+/// A segment begun that way and replaced in the same transaction (the update reported an
+/// arrival and the next activity set a new goal) is replaced from where it began:
+/// observers never received it, only the one before it.
+fn resume_at(b: &Body, now: u64) -> u64 {
+    if (b.vx != 0.0 || b.vy != 0.0) && b.next_ms < now {
+        return b.next_ms.max(now.saturating_sub(RESUME_MS)).max(b.t_ms);
+    }
+    if b.t_ms < now && RESUMED.with(|r| {
+        let r = r.borrow();
+        r.0 == now && r.1.get(&b.id) == Some(&b.t_ms)
+    }) {
+        return b.t_ms;
+    }
+    now
+}
+
+/// Note that `id`'s segment was begun at `t0` by a transaction at `now`.
+fn resumed(id: u32, t0: u64, now: u64) {
+    if t0 >= now {
+        return;
+    }
+    RESUMED.with(|r| {
+        let mut r = r.borrow_mut();
+        if r.0 != now {
+            r.0 = now;
+            r.1.clear();
+        }
+        r.1.insert(id, t0);
+    });
+}
+
 /// Re-anchor a body's segment at `now` (position and heading on the segment so far).
 fn anchor(b: &mut Body, now: u64) {
     let dt = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
@@ -200,14 +247,17 @@ fn angle(from: (f32, f32), to: (f32, f32)) -> f32 {
     (to.1 - from.1).atan2(to.0 - from.0)
 }
 
-/// One steering update at `now`: writes the new segment into `b` and possibly `st`.
+/// One steering update at `now`: writes the new segment (from `resume_at`) into `b` and
+/// possibly `st`.
 /// Returns an event for the driving activity and whether `st` changed.
 fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Option<Event>, bool) {
     let laws = common::laws(ctx);
     let tune = laws.tuning();
     let map = common::map(ctx);
     let v_cur = speed_of(b);
-    anchor(b, now);
+    let t0 = resume_at(b, now);
+    anchor(b, t0);
+    resumed(b.id, t0, now);
     let p = (b.x, b.y);
     let mut ev = None;
     let mut dirty = false;
@@ -256,7 +306,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                         stand = Some(IDLE);
                     } else {
                         set_motion(b, h, v, 0.0, 0.0);
-                        b.next_ms = due(now, dur, 1);
+                        b.next_ms = due(t0, dur, 1);
                         b.chunk = chunk_of(p.0, p.1);
                         if st.flags & FLAG_EARLY != 0 && !st.reported {
                             st.reported = true;
@@ -314,7 +364,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                         ev = Some(Event::Arrived);
                         st.goal = GOAL_NONE;
                         dirty = true;
-                        glide_stop(&map, b, now, 0.3);
+                        glide_stop(&map, b, t0, 0.3);
                         b.path.clear();
                         b.chunk = chunk_of(p.0, p.1);
                         return (ev, dirty);
@@ -325,7 +375,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                         if d <= st.keep {
                             b.heading = angle(p, tp);
                             b.path.clear();
-                            stand = Some(due(now, if target_moving { look } else { 1.0 }, MIN_STEP_MS));
+                            stand = Some(due(t0, if target_moving { look } else { 1.0 }, MIN_STEP_MS));
                         } else {
                             let cruise = b.speed.max(0.1);
                             let v = cruise * ((d - st.keep) / laws.slow_radius.max(0.1)).clamp(0.35, 1.0);
@@ -380,7 +430,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
                 ev = Some(Event::Arrived);
                 st.goal = GOAL_NONE;
                 dirty = true;
-                glide_stop(&map, b, now, 1.0);
+                glide_stop(&map, b, t0, 1.0);
                 b.path.clear();
                 b.chunk = chunk_of(p.0, p.1);
                 return (ev, dirty);
@@ -398,7 +448,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
         st.goal = GOAL_NONE;
         dirty = true;
         b.path.clear();
-        glide_stop(&map, b, now, 0.3);
+        glide_stop(&map, b, t0, 0.3);
         b.chunk = chunk_of(p.0, p.1);
         return (ev, dirty);
     }
@@ -448,7 +498,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
             dirty = true;
         }
         set_motion(b, geo::wrap(seg.heading), seg.speed, seg.turn, seg.turn_s);
-        b.next_ms = if seg.speed == 0.0 && seg.turn == 0.0 { due(now, seg.dur.max(0.25), MIN_STEP_MS) } else { due(now, seg.dur, MIN_STEP_MS) };
+        b.next_ms = if seg.speed == 0.0 && seg.turn == 0.0 { due(t0, seg.dur.max(0.25), MIN_STEP_MS) } else { due(t0, seg.dur, MIN_STEP_MS) };
     } else if let Some(until) = stand {
         halt(b);
         b.next_ms = until;
@@ -518,7 +568,9 @@ pub fn stop(ctx: &ReducerContext, id: u32, now: u64) {
         return;
     }
     let before = b.chunk;
-    anchor(&mut b, now);
+    let t0 = resume_at(&b, now);
+    anchor(&mut b, t0);
+    resumed(b.id, t0, now);
     halt(&mut b);
     b.path.clear();
     b.next_ms = IDLE;
@@ -540,9 +592,11 @@ pub fn brake(ctx: &ReducerContext, id: u32, now: u64) {
         return;
     }
     let before = b.chunk;
-    anchor(&mut b, now);
+    let t0 = resume_at(&b, now);
+    anchor(&mut b, t0);
+    resumed(b.id, t0, now);
     b.path.clear();
-    glide_stop(&common::map(ctx), &mut b, now, 0.3);
+    glide_stop(&common::map(ctx), &mut b, t0, 0.3);
     b.chunk = chunk_of(b.x, b.y);
     put(ctx, b, before);
 }
@@ -607,7 +661,9 @@ pub fn resteer_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) {
         let moving: Vec<Body> = ctx.db.body().chunk().filter(c).filter(|b| b.next_ms != IDLE && b.next_ms > now).collect();
         for mut b in moving {
             if dist(common::pos(&b, now), at) <= r {
-                anchor(&mut b, now);
+                let t0 = resume_at(&b, now);
+                anchor(&mut b, t0);
+                resumed(b.id, t0, now);
                 b.next_ms = now;
                 ctx.db.body().id().update(b);
             }

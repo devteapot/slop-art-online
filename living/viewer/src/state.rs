@@ -148,7 +148,9 @@ use std::collections::HashMap;
 /// Rows cloned from the client cache once per frame (tens of creatures).
 #[derive(Default)]
 pub struct Snap {
+    /// The authority time shown (ms; see `sync::ServerClock`), and with sub-millisecond precision.
     pub now: u64,
+    pub now_f: f64,
     pub world: Option<World>,
     pub stats: Option<Stats>,
     pub chars: HashMap<u32, Character>,
@@ -170,13 +172,15 @@ pub struct Snap {
 }
 
 impl Snap {
-    pub fn take(net: &Net) -> Self {
-        let now = crate::clock::now_ms();
+    pub fn take(net: &Net, clock: &mut crate::sync::ServerClock) -> Self {
+        let now_f = clock.frame(net.gens.body_t.swap(0, std::sync::atomic::Ordering::Relaxed));
+        let now = now_f as u64;
         let Some(c) = &net.conn else {
-            return Self { now, ..Default::default() };
+            return Self { now, now_f, ..Default::default() };
         };
         Self {
             now,
+            now_f,
             world: c.db.world().iter().next(),
             stats: c.db.stats().iter().next(),
             chars: c.db.character().iter().map(|r| (r.id, r)).collect(),
@@ -226,7 +230,7 @@ impl Snap {
 
     /// Kinematic position at `now` (tile coordinates).
     pub fn body_pos(&self, id: u32) -> Option<egui::Pos2> {
-        self.bodies.get(&id).map(|b| body_pos(b, self.now))
+        self.bodies.get(&id).map(|b| body_pos(b, self.now_f))
     }
 
     pub fn season(&self) -> Season {
@@ -274,25 +278,10 @@ pub fn hhmm(h: f32) -> String {
     format!("{:02}:{:02}", (m / 60) % 24, m % 60)
 }
 
-/// Where a body is at `now` on its steering segment (a turn, then straight; see
+/// Where a body is at `now` (ms) on its steering segment (a turn, then straight; see
 /// `living_rules::steer::pose`), held at `next_ms` until the authority writes the next one.
-pub fn body_pos(b: &Body, now: u64) -> egui::Pos2 {
-    let t = now.min(b.next_ms);
-    let dt = t.saturating_sub(b.t_ms) as f32 / 1000.0;
-    if b.turn == 0.0 || b.turn_s <= 0.0 {
-        return egui::pos2(b.x + b.vx * dt, b.y + b.vy * dt);
-    }
-    let (x, y, _) = living_rules::steer::pose(b.x, b.y, b.heading, b.vx.hypot(b.vy), b.turn, b.turn_s, dt);
-    egui::pos2(x, y)
-}
-
-/// Direction of travel at `now`, when moving.
-pub fn body_heading(b: &Body, now: u64) -> Option<f32> {
-    if (b.vx == 0.0 && b.vy == 0.0) || b.next_ms <= now {
-        return None;
-    }
-    let dt = now.saturating_sub(b.t_ms) as f32 / 1000.0;
-    Some(if b.turn == 0.0 { b.vy.atan2(b.vx) } else { b.heading + b.turn * dt.min(b.turn_s) })
+pub fn body_pos(b: &Body, now: f64) -> egui::Pos2 {
+    crate::sync::Seg::of(b).pos(now)
 }
 
 /// A need anchored at `at_ms` changing at `rate` per minute.
@@ -411,8 +400,11 @@ pub struct View {
     pub thoughts: HashMap<u32, Vec<Thought>>,
     /// Experience ids a consolidate thought integrated (from its detail JSON).
     pub thought_exps: HashMap<u64, Vec<u64>>,
-    /// Smoothed display positions (tile coordinates).
+    /// Displayed positions (tile coordinates).
     pub shown: HashMap<u32, egui::Pos2>,
+    /// The authority time shown and each body's segments (see `sync`).
+    pub clock: crate::sync::ServerClock,
+    tracks: crate::sync::Tracks,
     /// Smoothed frame rate and UI build time (diagnostics in the top bar).
     pub fps: f32,
     pub frame_ms: f32,
@@ -461,6 +453,8 @@ impl Default for View {
             thoughts: HashMap::new(),
             thought_exps: HashMap::new(),
             shown: HashMap::new(),
+            clock: Default::default(),
+            tracks: Default::default(),
             fps: 60.0,
             frame_ms: 0.0,
             logged_at: 0,
@@ -582,30 +576,21 @@ impl View {
             (None, Some(map)) => self.terrain = Some(crate::terrain::TerrainArt::new(ctx, map.clone(), season)),
             _ => {}
         }
-        for (id, b) in &snap.bodies {
-            if let Some(h) = body_heading(b, snap.now) {
-                if h.cos().abs() > 0.05 {
-                    self.facing.insert(*id, h.cos() < 0.0);
-                }
-            }
-        }
         self.track_combat(snap);
         if self.selected != self.last_selected {
             self.last_selected = self.selected;
             self.exp_highlight = None;
         }
-        // Ease displayed positions towards the kinematic ones; snap on large corrections.
-        let k = 1.0 - (-dt * 14.0).exp();
+        // Displayed positions: each body's segments at the display clock, late rows blended.
+        self.tracks.retain(|id| snap.bodies.contains_key(&id));
         self.shown.retain(|id, _| snap.bodies.contains_key(id));
-        for (id, b) in &snap.bodies {
-            let target = body_pos(b, snap.now);
-            let p = self.shown.entry(*id).or_insert(target);
-            if (target - *p).length() > 4.0 {
-                *p = target;
-            } else {
-                *p += (target - *p) * k;
+        let (shown, facing) = (&mut self.shown, &mut self.facing);
+        self.tracks.update(snap.bodies.values(), snap.now_f, dt, |id, p, heading| {
+            shown.insert(id, p);
+            if let Some(h) = heading.filter(|h| h.cos().abs() > 0.05) {
+                facing.insert(id, h.cos() < 0.0);
             }
-        }
+        });
         if self.follow {
             if let Some(p) = self.selected.and_then(|id| self.shown.get(&id)) {
                 self.center = *p;
