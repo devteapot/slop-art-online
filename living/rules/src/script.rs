@@ -124,6 +124,8 @@ pub enum Effect {
     Gate { open: bool },
     /// Move items from the actor to the target creature.
     Give { item: String, qty: u32 },
+    /// Move items from the target creature to the actor, against their will.
+    Seize { item: String, qty: u32 },
     /// Move items from the actor into the target structure.
     Store { item: String, qty: u32 },
     /// Move items from the target structure to the actor.
@@ -539,6 +541,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "heal" => Effect::Heal { amount: n("amount") as f32 },
         "gate" => Effect::Gate { open: n("open") > 0.0 },
         "give" => Effect::Give { item: s("item"), qty: qty()? },
+        "seize" => Effect::Seize { item: s("item"), qty: qty()? },
         "store" => Effect::Store { item: s("item"), qty: qty()? },
         "take" => Effect::Take { item: s("item"), qty: qty()? },
         "build" => Effect::Build { kind: s("kind") },
@@ -757,6 +760,25 @@ mod tests {
         c.target.kind = "deer".into();
         assert!(s.check("attack", &c).is_ok(), "prey is prey");
         assert_eq!(s.text("attack_mode", &c).as_deref(), Some("kill"));
+    }
+
+    #[test]
+    fn seizing_needs_a_yield_or_a_beaten_person() {
+        let s = scripts();
+        let mut c = ctx();
+        c.item = "hide".into();
+        c.qty = 2;
+        c.target = TargetFacts { class: "creature".into(), kind: "person".into(), id: 9, alive: true, stage: "adult".into(), hp: 90.0, max_hp: 100.0, inv: vec![("hide".into(), 3)], ..Default::default() };
+        assert!(s.check("seize", &c).unwrap_err().contains("has not given in"));
+        c.target.yielded_ago = Some(5_000.0);
+        assert!(s.check("seize", &c).is_ok());
+        let fx = s.done("seize", &c).unwrap();
+        assert!(fx.contains(&Effect::Seize { item: "hide".into(), qty: 2 }));
+        c.target.yielded_ago = None;
+        c.target.hp = 20.0;
+        assert!(s.check("seize", &c).is_ok());
+        c.qty = 5;
+        assert!(s.check("seize", &c).unwrap_err().contains("does not have"));
     }
 
     #[test]

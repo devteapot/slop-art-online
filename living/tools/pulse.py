@@ -60,7 +60,7 @@ def force(db, kinds, since):
         k, a, b = r["kind"], kinds.get(r["a"]), kinds.get(r["b"])
         m = TIMES.search(r["text"])
         n = int(m.group(1)) if m else 1
-        if k in ("threat", "assault", "yield"):
+        if k in ("threat", "assault", "yield", "seize"):
             out[k] += n
         elif k == "attack" and b == "person":
             out["kill attempt" if a == "person" else "animal attack on person"] += n

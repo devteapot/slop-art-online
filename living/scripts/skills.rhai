@@ -490,6 +490,22 @@ fn threaten_check(a) {
 fn threaten_duration(a) { 2000 }
 fn threaten_done(a) { [#{ op: "vitals", energy: -0.5 }] }
 
+// Taking by force without killing: from someone who has yielded, or who is badly hurt.
+fn seize_check(a) {
+    if a.actor.kind != "person" { return "only people seize things"; }
+    if young(a) { return "too young to take things by force"; }
+    if a.target.class != "creature" || !a.target.alive || a.target.kind != "person" { return "no one to take from"; }
+    if a.target.id == a.actor.id { return "cannot take from yourself"; }
+    let beaten = a.target.max_hp > 0.0 && a.target.hp < easy_hurt(a.actor.kind) * a.target.max_hp;
+    if !within(a.target.yielded_ago, yield_ms(a.target.kind)) && !beaten { return `${who(a)} has not given in: they would have to yield first (or be badly hurt)`; }
+    let has = 0;
+    for k in a.target.inv.keys() { if k == a.item { has = a.target.inv[k]; } }
+    if has < amount(a) { return `${who(a)} does not have ${amount(a)} ${a.item}`; }
+    ""
+}
+fn seize_duration(a) { 1500 }
+fn seize_done(a) { [#{ op: "seize", item: a.item, qty: amount(a) }] }
+
 // Giving in: guard down, hands up.
 fn yield_check(a) {
     if a.actor.kind != "person" { return "only people yield"; }
@@ -831,6 +847,7 @@ fn skill_io(skill) {
         "attack" => #{ takes: "a creature in reach, a little energy; item \"hurt\" or \"kill\" says what the blows are meant for (without it: to hurt between people, to kill with animals)",
             gives: `a blow (harder with a spear, strength and practice). Meant to hurt, blows stop once they are down to ${(hurt_enough("person") * 100.0).to_int()}% of their health or have yielded, and never take anyone below ${(hurt_floor("person") * 100.0).to_int()}%; meant to kill, they go on until death. A creature killed leaves remains with meat and hide to take` },
         "threaten" => #{ takes: "a creature within a few tiles, 2 seconds", gives: "no harm: they see you menacing them (weapon raised), and so does anyone watching" },
+        "seize" => #{ takes: "a person in reach who has yielded to force or is badly hurt, the items in their pack", gives: "the items in your pack; they and anyone watching see you take them" },
         "yield" => #{ takes: "a second (target: whom you give in to; without one, whoever last hurt you)",
             gives: `you stop resisting, guard down and hands up: for ${(yield_ms("person") / 1000.0).to_int()} seconds you do not strike back, and blows meant only to hurt are held back from you (blows meant to kill are not)` },
         "throw" => #{ takes: "your spear", gives: "a hard hit at range; the spear is gone" },

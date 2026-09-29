@@ -904,6 +904,19 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 witnessed(ctx, now, at, "gift", me, to, &format!("{{a}} gave {qty} {item} to {{b}}"), 0.35, &[me, to]);
                 notes.push(format!("gave {qty} {item} to {to_name}"));
             }
+            Effect::Seize { item, qty } => {
+                let from = a.target.id as u32;
+                common::inv_remove(ctx, from as u64, &item, qty)?;
+                common::inv_add(ctx, me as u64, &item, qty);
+                move_tablets(ctx, &item, from as u64, me as u64, qty);
+                let from_name = common::name_of(ctx, from);
+                common::chronicle(ctx, now, "seize", me, from, at, format!("{my_name} seized {qty} {item} from {from_name}"));
+                if let Some(c) = ctx.db.character().id().find(from) {
+                    percept(ctx, &c, now, "seize", me, from, at, format!("{my_name} took {qty} {item} from you by force"), 0.95);
+                }
+                witnessed(ctx, now, at, "seize", me, from, &format!("{{a}} took {qty} {item} from {{b}} by force"), 0.8, &[me, from]);
+                notes.push(format!("seized {qty} {item} from {from_name}"));
+            }
             Effect::Store { item, qty } => {
                 common::inv_remove(ctx, me as u64, &item, qty)?;
                 common::inv_add(ctx, STRUCTURE_BIT | a.target.id, &item, qty);
