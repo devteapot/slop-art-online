@@ -1,111 +1,100 @@
-# Living core handoff (2026-09-27)
+# Living core handoff (2026-09-29)
 
-Experiments were stopped on request on 2026-09-27 at about 21:10 local time. This note says:
-
-- what state things are in;
-- what the last runs showed;
-- where to pick up.
-
-The day-by-day evidence and every rule change are in [STAGES.md](STAGES.md). The architecture is in [LIVING_CORE.md](LIVING_CORE.md).
+The run `aske-coast-3` ended on schedule at 06:55 local on 2026-09-29. This note records the state of things, what the three Aske Coast runs showed, and where to pick up. Evidence and every rule change, with times, are in [STAGES.md](STAGES.md) (entries from 2026-09-28 00:15 onwards). The architecture is in [LIVING_CORE.md](LIVING_CORE.md); authored worlds are in [AUTHORED_WORLDS.md](AUTHORED_WORLDS.md). The previous handoff (2026-09-27) is in git history.
 
 ## State
 
-- **Labs.** Nothing is running: no lab, mind service or watcher.
-  - Two worlds remain on the local SpacetimeDB (`127.0.0.1:3300`), paused with their data kept for analysis: `stage3-village` and `stage4-two`.
-  - Resume one with `living/tools/lab.py <scenario>`. This publishes a *fresh* world. To continue a paused one instead, unpause it and start its mind.
-  - Delete them when done: `living/tools/stdb delete -s local <db> -y`, then `living/tools/reclaim_disk.sh 0`.
-- **Journals.** Model journals are under `.local/living/journal/<run>/`; those of finished runs are gzipped.
-  - The last runs are `stage4-two-1790518849` and `stage3-village-1790520577`.
-  - Watch reports are under `.local/living/watch/{s3-village,s4-two}/`.
-- **Services.** The observer web server may still be serving at `http://127.0.0.1:8330/?db=<db>`; its lab picker lists the two labs above. Neo4j and SpacetimeDB run in Docker (`sao-living-*`).
-- **Code.** Everything is committed on `living-core`. `just living-check` passes: authority, mind, native and web observer, and rules tests. `living/tools/verify_mechanics.py` passes 18 checks.
+- **Host.** Everything runs on the Fedora Linux machine: rootless podman, SELinux enforcing, IPv6 broken. The laptop's labs and journals are not here.
+- **Services.**
+  - **SpacetimeDB** on :3300 (`sao-living_spacetimedb_1`).
+  - **Neo4j A** on :7689 (`sao-living_neo4j_1`) holds the minds of every run up to `aske-coast-2`. It has reached Neo4j's limit of 65,535 relationship types, so do not use it for new runs.
+  - **Neo4j B** on :7690 (`sao-living-neo4j-2`) is used by new runs, through `LIVING_NEO4J_URI` in `.env`.
+  - **The Codex proxy** for GPT-6 Luna is at `~/dev/codex-cursor-proxy`, the systemd user service `codex-cursor-proxy` on 127.0.0.1:8787. It has a local, unpushed commit `167b91e`, and its unit sets `--dns-result-order=ipv4first`.
+  - **The public observer** is `sao-observer-web` and `sao-tunnel`. Rebuild it with `just living-web-dist`.
+- **Models.**
+  - **Split by town:** `groups` in the models config sends Brandholm to Luna, and Saltreach and Oathstone to Mistral Small.
+  - **Overflow:** Luna and Mistral overflow into each other.
+  - **Where the settings live:** host-only settings are in `.env` (`CARLID_NPC_API_KEY`, `LIVING_MODELS=.local/living/models.json`, `LIVING_NEO4J_URI`).
+- **Worlds.** All are paused, with their data kept. Nothing is running.
 
-## What changed on 2026-09-27
+  | db | what it is |
+  |---|---|
+  | `aske-coast-3` | Aske Coast v3: structured society, graded force, balanced wildlife (8 h) |
+  | `aske-coast-2` | Aske Coast v2, first authored world with fixes (5.5 h) |
+  | `aske-coast` | Aske Coast v1 (1.5 h; authoring flaws) |
+  | `stage4-two`, `stage4-makers`, `stage3-village` | the staged labs of 2026-09-28 |
 
-1. **Skills say what they take and give.** Each skill's inputs and outputs are described by `skill_io` in `living/scripts/skills.rhai`, built from the same numbers the rules use. Minds read them from the live rules script. A failure caused by a missing input names where that input comes from.
-2. **Rework is a skill.**
-   - Minds no longer rewrite routines in their replies. They use the `rework` act, which takes time sitting still; the rules script decides when a way has been lived with enough to change.
-   - Routine stats reset per version, and routine names are canonical.
-   - Onlookers see a rework only as someone "sitting deep in thought".
-3. **Skills can be conditions.** `{"can": {"do": ...}}` holds when the rules would let a skill start now.
-4. **Model routing.** Mistral Small runs inside an adaptive in-flight window (grows while calls succeed, shrinks on HTTP 429) and overflows to Luna. The half-Luna rotation was removed.
-5. **A less crowded world.**
-   - Grass regrowth is a world law (`pasture_regen`), 4× lower.
-   - The stage 4 realm is 320 tiles across, with towns 150 tiles apart and open towns spread with their households.
-   - The observer draws every sprite in proportion at every zoom.
-6. **New know-how.**
-   - Techniques: fishing (nets), smoking, basketry, archery (`shoot`), tanning (leather, armor), medicine (salves), trapping (traps catch meat over time) and bridging.
-   - A new `clear` skill turns forest into open ground.
-   - Townsfolk start knowing where the other towns stand, through their background.
-7. **Combat.** Real-time moves that a mind decides as acts become its intent (weighed above staying safe); they were refused before. The seeded "stay safe" habit faces a wolf when others are near.
-8. **Storages hold 120 things.**
+- **Journals.** Under `.local/living/journal/<run>/`, gzipped. Trends per run are in `.local/living/pulse/<db>.jsonl`; read them with `living/tools/pulse.py <db> --show`.
+- **Code.** Everything is committed on `living-core`, 46 commits since the previous handoff, not pushed. The user's uncommitted `Justfile`, `docs/LIVING_CORE.md` observer paragraph and `living/viewer/src/clock.rs` are still left as they were.
+- **Care.**
+  - `lab.py` no longer reclaims disk by default. `--reclaim` deletes any database idle for 2 hours, paused worlds included.
+  - Never `pkill -f` a pattern that appears in your own command line; kill by pid.
 
-## What the last runs showed
+## What was built (2026-09-28/29)
 
-Two labs ran the new code: `stage4-two`, about 5.4 hours, two towns on the 320 realm; and `stage3-village`, about 5 hours, three families in the 96-tile valley.
+- **Retention.** The dead's routines, stats, practice, graph and genes are deleted, as are animals' personas and thoughts. An expecting parent keeps what the child inherits until the birth.
+- **Authored worlds.**
+  - `author_world.py`: a world bible and cast, then sheets drafted per household by a model, checked, then compiled into a seed.
+  - Residents are installed directly from their sheets, and their authored past fades 12× slower ("formative").
+  - Seeds support settlement-promised `resources`, named `buildings` (hall, workshop, market, inn) and money (`mark`).
+  - A person thinks with their group's model.
+- **Feedback that tells the truth.**
+  - A campfire in the scene says it is burning.
+  - Visible hunger.
+  - Missing know-how says how to learn it.
+  - Teaching an item or an invented technique names the real techniques.
+  - A baby's cry says who is crying, and prompts only those who care about the baby.
+  - A gift must fit the receiver's pack; a baby holds 4 things.
+- **Force.**
+  - Attacks are made to `hurt` or to `kill`.
+  - `threaten`: once per target per 30 s; a child cannot frighten an adult.
+  - `yield`.
+  - `seize`: take goods from someone who has yielded or is badly hurt.
+  - Animals attack people only when desperate, fighting back, or given easy prey.
+- **Wildlife.**
+  - Scent: prey and kin beyond sight.
+  - Wolf metabolism and carried meat that spoils slowly.
+  - Deer breed faster.
+  - Weaned pups feed themselves.
+  - A migration floor.
+- **Minds.**
+  - An outage gate for unreachable providers.
+  - Consolidation keeps its minimum gap under a large backlog.
+  - Relationship types stay bounded.
+  - Neo4j transient errors are retried.
+- **Observer.** Server-synced display time and seamless segments; stutter frames fell from 5.1% to 0.26% in replay.
 
-| | village | two towns |
-|---|---|---|
-| people ever / alive at stop | 28 / 16 | 38 / 20 |
-| generations reached | 4 | 3 |
-| human deaths | 8 old age, 2 killed by people | 9 old age, 1 killed by a person |
-| speech between groups | 413 lines | 399 lines |
-| gifts / trades between groups | 16 / 3 | 12 / 1 |
-| all trades | 5 (berries↔fiber, wood↔fiber) | 1 (torch for wood) |
-| know-how among the living | fire 9, storage 3, fishing, shelter, spear, carpentry | fire 14, storage 10, torch 5, cooking 4, spear 3, medicine 3, fishing 2, trapping, cloak, … |
-| how know-how was gained | 11 taught, 1 worked out | 28 taught, 1 worked out |
-| new items made | none (4 spears) | none (9 torches, 1 salve used) |
-| skill uses: gather vs craft | 8,178 vs 0 | 15,415 vs 10 |
-| reworks (habit changes) | 16 | 34 |
-| routines using `can` | 4 | 9 |
-| wildlife at stop | none | 236 deer, no wolves |
+## What the Aske Coast showed
 
-### Findings, most important first
+| | v1 (1.5 h) | v2 (5.5 h) | v3 (8 h) |
+|---|---|---|---|
+| people at the end (start) | 63 (70) | 72 (70) | 69 (72) |
+| starved | 1 | 3 babies | 7 (mostly babies) |
+| killed by people | 0 | 3 | 5 (before the fixes) |
+| killed by wolves | 5 | 1 | 1 |
+| deer / wolves at the end | ~230 / 0 | 0 / 0 | 18 / 11 |
+| model calls per minute | ~210 (then an outage) | 440 → 650 | 300 → 800 → 440 |
 
-1. **Dead characters' rows are never removed, so active tables grow without bound.** Stage 4 held 1,300 characters (about 1,200 dead deer). It kept 6,076 routines of the dead (5,868 deer), 4,197 routine stats and 2,123 practice rows. Genomes are also kept for every character. Clean up at death:
-   - delete routines, routine stats and practice;
-   - keep what an expected child still inherits, if anything.
+**Findings, most important first:**
 
-   This matters directly for the 2,000-character target (see AGENTS.md on bounded retention).
-2. **People learn but do not make.**
-   - New techniques spread by teaching (39 taught, only 2 worked out by experimenting), but no new item was crafted in either lab.
-   - Gathering is 80–95% of all skill use; stage 4 had stored 1,901 wood before the 120-item storage limit.
-   - The limit fired only three times before the stop, so its effect on habits is unmeasured.
-   - The seeded work habits (gather and store, forever) give activity without purpose. Next to try: work habits that make or build what the group lacks, or feedback that shows what stored goods are for.
-3. **Contact and conflict emerged.**
-   - Speech between groups rose from near zero (28 lines in the earlier village) to about 400 lines per lab.
-   - Real exchanges happened: fiber for berries, wood for fiber, a torch for wood.
-   - The first people-on-people killings have readable causes. Gale, whose family was freezing without cloaks and who distrusted the neighbours, went to take hides and fiber from Pepeba's stores; Gale killed Pepeba, then was killed by Isebrine. That is stage 4's "conflict with interpretable causes", though still single events.
-4. **Ecology is unsettled in both labs.**
-   - Village: people hunted all 20 deer in about 40 minutes, and the wolves then died of old age.
-   - Stage 4: 5 wolves on the large map never bred, while deer boomed and starved (481 starvation deaths, 236 alive).
-   - Earlier, an in-place 4× cut in grass regrowth collapsed the previous village: deer died out, the wolves turned on people, and 18 of 21 were killed.
-   - Lessons:
-     - Change carrying capacity only in fresh worlds.
-     - Small predator populations on large maps need a way to find mates.
-     - The user asked not to chase balance for its own sake, but predators and combat cannot be tested with no wolves left.
-5. **Memory consolidation merges other people into oneself.** For example, `{"from": "person:11", "into": "self"}` in Garhanka's journal. Merges into `self` should be refused or at least logged. Consolidation is also a third of all calls.
-6. **Model cost.** Stage 4 made 38,000 calls and used 266M tokens in 5.4 hours for about 30 people plus animals:
-
-   | Use | Tokens | Per call |
-   |---|---|---|
-   | person compile | 109M | 12,000 |
-   | person consolidation | 62M | 10,000 |
-   | person think | 51M | 5,900 |
-   | animals | 35M | — |
-   | talk | 9M | — |
-
-   - Mistral took 95% of calls with 25 rate limits in 36,500 calls; Luna took the overflow (p50 7.7 s against 3.3 s).
-   - The skill reference with takes and gives adds about 2,500 characters to every compile prompt. Showing takes and gives only for skills a person can use would cut it.
-7. **Combat fix is only lightly tested.** After the fix, 2 people were killed (both by people) and none by wolves, but wolves were few or gone. The earlier failure is recorded in STAGES.md: minds decided to fight, and the acts were refused.
+1. **Crying babies become a permanent emergency, and a mind can radicalize in minutes.** With about ten newborns and cold nights, adults put infants first, ahead of their own food and the stores. A mind that consolidated every ~37 s (the 90 s gap was bypassed by a backlog; fixed) hardened "infants first" into "absolute", then "lethal enforcement". Thora killed her own son for his hides. One clear thought ("killing her would not feed Marlo") came only after the killing. The underlying belief that babies need cloaks drives the hide conflicts in every world.
+2. **Graded force works as social control once goods can change hands without death.** In v3, Brandholm pressed Grim, the hide-hoarder, with threats and yields over its own law ("the common store… the Headwoman's word"), and nobody died. Killings came only when the goods could not be taken otherwise; `seize` then closed that gap. After the fixes (04:30 to the end) there were no killings, and 30–70 threats per 15 minutes.
+3. **Authored institutions shape behavior.** Minds invoke the Oath, the Tally, the council, the Headwoman's authority and the Elders' sign, and the Keeper enforces the Oath with a threat. Offices are used as social rules, with no engine support beyond force and money.
+4. **Model load grows with population and crisis, not just head count.** At 70–80 people, both providers saturated: up to 800 calls a minute with 45% rejected. Thinking and deliberating dominate (about 240 calls a minute each, a person every ~17 s). This was left unaltered at the user's request, apart from the consolidation-gap bug. The lever for later is `think_min_s` and `consolidate_min_s` in `species.json`, or the level-of-detail mode.
+5. **Wildlife holds with scent, a slow wolf metabolism and the floor.** Deer fell from 60 to 18 over 8 hours under people's hunting and wolves; wolves held at 9–11. The floor (deer below 15) was not reached. People were killed by wolves only when the rules allowed it.
+6. **Talk rises over a long run** (0.8 → 3.4 lines per person per minute in v3), passing the staged labs' runaway bar of about 3 in the last hours.
 
 ## Where to pick up
 
-- Bounded retention for the dead (finding 1), with a measurement of table sizes over a long run.
-- Purpose and making (finding 2): rerun stage 4 with the storage limit from the start, then decide about work habits.
-- Consolidation merging into `self` (finding 5).
-- Stages 3–4 status:
-  - Contact, first trades and first conflict are there; storage, roles and repeated exchange are not.
-  - Stage 5 (several hubs, about 150 people) has not started.
-  - Mind level of detail (`LIVING_LOD=1`) is opt-in and was off in these labs.
-- Cleanup discipline: retire labs as soon as they are superseded (stop minds, delete the database, reclaim disk, trim the observer's `LABS`, gzip journals).
+- **Babies and the cloak belief.**
+  - Check whether infants really lose health at night: babies near a shelter are warm by the rules.
+  - If minds' beliefs are wrong, make the truth perceivable: a baby "looks warm" or "looks cold".
+  - Consider whether a baby's crying should prompt fewer adults.
+- **Talk volume** in long runs, and what drives it (conversation turns, babies, crises).
+- **Load:** decide the thinking pace (`think_min_s` 20 → about 45) or the level-of-detail mode before larger worlds.
+- **Force monitoring:** `pulse.py` counts threats, assaults, yields, seizes and killings. The next run will show whether `seize` replaces killing.
+- **Still open:**
+  - a behavioral fault: people pace between two tasks;
+  - people's hunting pressure on deer;
+  - lifetime counters for practice now that the dead's rows are deleted;
+  - pushing `living-core` and the proxy commit when the user wants.
