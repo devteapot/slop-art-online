@@ -477,3 +477,8 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Recurring pattern:** with ten new babies, adults' attention goes to crying infants ahead of their own food and the stores.
   - **Load stays saturated:** about 800 calls a minute, error share 0.46.
   - **Force:** 48 threats and 25 yields in one window, still no killings between people; one wolf attack on a person (allowed).
+- 04:15 — `aske-coast-3` at 5 h 20 m: **killing to take goods.** In one window: 87 threats, 11 beatings, 5 attempts to kill, 2 killings. Posy starved.
+  - **Kjell killed Ulf after Ulf yielded:** "Ulf has yielded but still holds the hides and fiber… I must secure the materials by force". Ragna beat Egil, killed him, then went after Kjell.
+  - **The cause is a missing mechanic.** Yielding stops a beating, but the yielder keeps what they carry; taking a person's goods was possible only by killing them and looting the remains.
+  - **Fix, deployed in place at about 04:25:** `seize` takes items from a person who has yielded (within 20 s) or is badly hurt (below 35%), is witnessed as taking by force, is taught to minds ("to get goods by force you need not kill"), and is counted by `pulse.py`.
+  - As before, the goods everyone fought over were hides and fiber for cloaks for newborns believed to be freezing.
