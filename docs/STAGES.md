@@ -467,3 +467,13 @@ Evidence, rule changes and decisions per stage, newest last.
   - **Wildlife:** 54 deer, 9 wolves.
   - **Load:** 536 calls a minute, error share 0.21.
 - 01:58 — `aske-coast-3` at 3 h 5 m. **Load is saturating** as the population grows (78 people, from births): calls rose from 536 to 796 a minute in 45 minutes, and the rejected share from 0.21 to 0.45. Nearly half of all model calls are refused and retried, so minds respond much later. Hunger rises at the same time (Saltreach mean 70 with 5 starving, Brandholm 68 with 2), and baby Tove starved. Force stays sub-lethal: 14 threats, 11 yields, 1 assault in the last window. But 6-year-old Bo threatened adults (Egil, Ake) and Egil yielded to him three times. Rule installed live: a child's threat is refused unless the target is a child or a baby.
+- 02:44 — `aske-coast-3` at 3 h 50 m: 76 people, **six starved**:
+  - babies Linnet, Tove and Odo;
+  - 13-year-old Dag;
+  - Corin, the Steward of the Storehouse;
+  - (and Oriel, killed by a wolf).
+
+  Corin's last thoughts: "starving, exhausted, and at only one health", staying by a fire because a wolf was near, still asking others to see to crying babies (Gil, Ione) he could not reach. Saltreach's storehouse is nearly empty (3 cooked fish, 1 smoked). 442 of his 1,926 model calls were rejected.
+  - **Recurring pattern:** with ten new babies, adults' attention goes to crying infants ahead of their own food and the stores.
+  - **Load stays saturated:** about 800 calls a minute, error share 0.46.
+  - **Force:** 48 threats and 25 yields in one window, still no killings between people; one wolf attack on a person (allowed).
