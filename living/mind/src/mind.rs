@@ -1061,9 +1061,12 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                 let stale = m.last_consolidated.map_or(true, |t| t.elapsed() > Duration::from_secs(240));
                 let min_gap = if offstage { self.lod.consolidate.as_secs() } else { self.species.get(&c.kind).map(|s| s.cognition.consolidate_min_s).unwrap_or(90) };
                 let rested = m.last_consolidated.map_or(true, |t| t.elapsed() > Duration::from_secs(min_gap));
-                let wanted = (rested && (salience >= self.consolidation_threshold(c.id) || meaningful.len() >= 30 || (stale && meaningful.len() >= 4))) || pending.len() >= 120;
+                // The minimum gap holds even for a large backlog (it is then integrated in one
+                // batch): in a crisis, forcing a consolidation per 120 experiences re-summarized
+                // the same events every ~40 s and ratcheted stances toward absolutes.
+                let wanted = rested && (salience >= self.consolidation_threshold(c.id) || meaningful.len() >= 30 || (stale && meaningful.len() >= 4) || pending.len() >= 120);
                 let allowed = !m.consolidating && m.retry_after.map_or(true, |t| Instant::now() >= t);
-                let sleepy = m.since_sleep >= 6 || (m.since_sleep >= 2 && m.last_sleep.map_or(true, |t| t.elapsed() > Duration::from_secs(20 * 60)));
+                let sleepy = rested && (m.since_sleep >= 6 || (m.since_sleep >= 2 && m.last_sleep.map_or(true, |t| t.elapsed() > Duration::from_secs(20 * 60))));
                 if allowed && (wanted || sleepy) {
                     m.consolidating = true;
                     Some(!wanted)
