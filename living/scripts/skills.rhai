@@ -78,6 +78,17 @@ fn nutrition(item) {
 
 // ---- needs -------------------------------------------------------------
 
+fn cold(a) {
+    a.night && a.actor.kind == "person" && !a.actor.near_fire && !a.actor.near_shelter && inv(a, "cloak") == 0
+}
+
+fn body_state(a) {
+    let fraction = a.actor.hp / (max_hp(a.actor.kind) * a.actor.vitality);
+    #{ cold: cold(a), hungry: a.actor.hunger > 55.0, starving: a.actor.hunger >= 100.0,
+       wound: if fraction < 0.15 { "barely alive" } else if fraction < 0.35 { "badly wounded" }
+              else if fraction < 0.6 || a.actor.hurt_ago < 5000 { "hurt" } else { "" } }
+}
+
 fn rates(a) {
     // A predator feeds big and rarely: a wolf lasts about an hour on a deer.
     let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 5.0 };
@@ -110,7 +121,7 @@ fn rates(a) {
     if energy < 0.0 { energy /= a.actor.endurance; }
     if hp > 0.0 { hp *= a.actor.vitality; }
     // Cold nights hurt people without a fire, shelter or warm cloak; winter nights are worse.
-    if a.night && a.actor.kind == "person" && !a.actor.near_fire && !a.actor.near_shelter && inv(a, "cloak") == 0 {
+    if cold(a) {
         hp -= if a.season == "winter" { 5.0 } else { 2.0 };
     }
     #{ hunger: hunger, energy: energy, hp: hp }

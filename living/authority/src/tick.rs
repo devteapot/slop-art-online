@@ -214,6 +214,9 @@ fn grew(ctx: &ReducerContext, c: &Character, stage: u8, now: u64) {
     let Some(mut row) = ctx.db.character().id().find(c.id) else { return };
     row.stage = stage;
     ctx.db.character().id().update(row);
+    if stage != 0 {
+        ctx.db.infant_cry().infant().delete(c.id);
+    }
     // A person who outgrows infancy starts from a child's way of life (theirs to change).
     if c.kind == "person" && c.stage == 0 && stage == 1 {
         if !seed::grow_into_ways(ctx, c.id, now) {

@@ -83,6 +83,9 @@ pub fn signal(ctx: &ReducerContext, from: u32, name: &str, now: u64) -> Result<S
     let sp = common::species(&me.kind).ok_or("unknown species")?;
     let sig = sp.signals.get(name).ok_or_else(|| format!("a {} has no `{name}` signal", me.kind))?;
     let at = ctx.db.body().id().find(from).map(|b| pos(&b, now)).ok_or("no body")?;
+    if name == "cry" && me.kind == "person" && me.stage == 0 && common::scripts(ctx).has("body_state") {
+        return infant_cry(ctx, &me, at, sig.range, now);
+    }
     // Calling the same call again within 45 s is still the same call, not news.
     if let Some(mut st) = ctx.db.mind_state().id().find(from) {
         let key = 0xD000 + (name.bytes().fold(7u32, |h, b| h.wrapping_mul(31) ^ b as u32) % 0x1000) as u16;
@@ -117,6 +120,106 @@ pub fn signal(ctx: &ReducerContext, from: u32, name: &str, now: u64) -> Result<S
         }
     }
     Ok(format!("made {}", sig.sound))
+}
+
+const CRY_REMINDER_MS: u64 = 120_000;
+
+fn infant_needs(state: living_rules::script::BodyState) -> Vec<InfantNeed> {
+    let mut needs = Vec::new();
+    if state.starving { needs.push(InfantNeed::Starving); }
+    else if state.hungry { needs.push(InfantNeed::Hungry); }
+    if state.cold { needs.push(InfantNeed::Cold); }
+    match state.wound {
+        living_rules::script::Wound::None => {},
+        living_rules::script::Wound::Hurt => needs.push(InfantNeed::Hurt),
+        living_rules::script::Wound::BadlyWounded => needs.push(InfantNeed::BadlyWounded),
+        living_rules::script::Wound::BarelyAlive => needs.push(InfantNeed::BarelyAlive),
+    }
+    if needs.is_empty() { needs.push(InfantNeed::Unsettled); }
+    needs
+}
+
+fn cry_carers(nearby: &[(u32, f32, bool, bool)]) -> Vec<u32> {
+    let parents: Vec<_> = nearby.iter().filter(|c| c.2).map(|c| c.0).collect();
+    if !parents.is_empty() { return parents; }
+    nearby.iter().filter(|c| c.3).min_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)))
+        .map(|c| vec![c.0]).unwrap_or_default()
+}
+
+fn cry_prompt_due(state: &InfantCry, carer: u32, now: u64, pending: bool) -> bool {
+    match state.prompted.iter().find(|p| p.carer == carer) {
+        None => true,
+        Some(p) => !pending && now.saturating_sub(p.at_ms) >= CRY_REMINDER_MS,
+    }
+}
+
+fn record_cry_prompt(cry: &mut InfantCry, carer: u32, now: u64) {
+    if let Some(p) = cry.prompted.iter_mut().find(|p| p.carer == carer) { p.at_ms = now; }
+    else { cry.prompted.push(CryPrompt { carer, at_ms: now }); }
+}
+
+fn cry_state(old: Option<&InfantCry>, infant: u32, needs: Vec<InfantNeed>) -> InfantCry {
+    old.filter(|r| r.needs == needs).cloned().unwrap_or(InfantCry {
+        infant, needs, heard_ms: 0, prompted: Vec::new(),
+    })
+}
+
+pub fn infant_distress(ctx: &ReducerContext, baby: &Character, at: (f32, f32), now: u64) {
+    if baby.kind != "person" || baby.stage != 0 { return; }
+    let Ok(state) = crate::act::body_state(ctx, baby.id, now) else { return };
+    if state.cold || state.starving || state.wound != living_rules::script::Wound::None {
+        if let Some(sig) = common::species(&baby.kind).and_then(|s| s.signals.get("cry").cloned()) {
+            let _ = infant_cry(ctx, baby, at, sig.range, now);
+        }
+    } else if ctx.db.infant_cry().infant().find(baby.id).is_some_and(|r| r.needs != infant_needs(state)) {
+        ctx.db.infant_cry().infant().delete(baby.id);
+    }
+}
+
+fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32, now: u64) -> Result<String, String> {
+    let state = crate::act::body_state(ctx, baby.id, now)?;
+    let needs = infant_needs(state);
+    let old = ctx.db.infant_cry().infant().find(baby.id);
+    let mut cry = cry_state(old.as_ref(), baby.id, needs);
+    let heard = format!("{}, a baby, is crying and looks {}", baby.name, state.looks());
+    let nearby = people_near(ctx, at, range, now, &[baby.id]);
+    let carers = cry_carers(&nearby.iter().filter(|(c, _)| c.stage >= 2).map(|(c, d)| {
+        let parent = baby.parent_a == c.id || baby.parent_b == c.id;
+        let caring = (baby.parent_a != 0 && (c.parent_a == baby.parent_a || c.parent_b == baby.parent_a))
+            || ctx.db.relation().by_pair().filter((c.id, baby.id)).any(|r| r.affinity > 0.0);
+        (c.id, *d, parent, caring)
+    }).collect::<Vec<_>>());
+    let emit = cry.heard_ms == 0 || now.saturating_sub(cry.heard_ms) >= 45_000;
+    if emit {
+        cry.heard_ms = now;
+        for (c, _) in minds_near(ctx, at, range, now, &[baby.id]) {
+            let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
+            let text = if c.kind == "person" {
+                let visible = ctx.db.body().id().find(c.id).map(|b| dist(pos(&b, now), at) <= common::sight_for(ctx, c.id, &common::world(ctx), now)).unwrap_or(false);
+                if visible { format!("{heard}, {dir}.") }
+                else { format!("You hear {} crying, {dir}.", baby.name) }
+            } else { format!("You hear a baby crying, {dir}.") };
+            percept(ctx, &c, now, "signal", baby.id, 0, at, text, if c.kind == "person" { 0.8 } else { 0.64 });
+        }
+    }
+    cry.prompted.retain(|p| carers.contains(&p.carer) || now.saturating_sub(p.at_ms) < CRY_REMINDER_MS);
+    for carer in carers {
+        let pending = ctx.db.deliberation().actor().find(carer);
+        if cry_prompt_due(&cry, carer, now, pending.is_some()) {
+            let visible = ctx.db.body().id().find(carer).map(|b| dist(pos(&b, now), at) <= common::sight_for(ctx, carer, &common::world(ctx), now)).unwrap_or(false);
+            let reason = if visible { heard.clone() } else { format!("You hear {} crying.", baby.name) };
+            if pending.as_ref().is_some_and(|d| d.reason.contains(&reason)) { continue; }
+            let urgent = state.cold || state.starving || state.wound != living_rules::script::Wound::None;
+            if request(ctx, carer, &reason, now, urgent) {
+                record_cry_prompt(&mut cry, carer, now);
+            }
+        }
+    }
+    if old.as_ref() != Some(&cry) {
+        if old.is_some() { ctx.db.infant_cry().infant().update(cry); }
+        else { ctx.db.infant_cry().insert(cry); }
+    }
+    Ok("made a baby crying".into())
 }
 
 pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) -> Result<(), String> {
@@ -212,26 +315,30 @@ fn mentions(text: &str, name: &str) -> bool {
 
 /// Ask the mind to reconsider. Reasons merge while a request is pending.
 pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u64) {
-    let Some(c) = ctx.db.character().id().find(id) else { return };
+    request(ctx, id, reason, now, false);
+}
+
+fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool) -> bool {
+    let Some(c) = ctx.db.character().id().find(id) else { return false };
     // Infants run on their instincts; they get a mind when they become children.
     if !c.ai || !c.alive || c.stage == 0 {
-        return;
+        return false;
     }
     // Minds of other species think less often; being attacked is always worth a thought.
-    let urgent = reason.contains("attacking you") || reason.starts_with("The fight with") || reason.starts_with("Dawn of day");
+    let urgent = urgent || reason.contains("attacking you") || reason.starts_with("The fight with") || reason.starts_with("Dawn of day");
     // Away from people an animal lives by its instincts: its mind is for encounters
     // (and for being attacked). Keeps thinking where the world is being lived and watched.
     if c.kind != "person" && !urgent {
         let at = ctx.db.body().id().find(id).map(|b| common::pos(&b, now)).unwrap_or((0.0, 0.0));
         if !common::creatures_near(ctx, at, 25.0, now).iter().any(|x| &*x.kind == "person") {
-            return;
+            return false;
         }
     }
     if let Some(sp) = common::species(&c.kind) {
         let min = sp.cognition.think_min_s * 1000;
         let recent = ctx.db.mind_state().id().find(id).map_or(false, |s| now.saturating_sub(s.deliberated_ms) < min);
         if min > 0 && recent && !urgent && ctx.db.deliberation().actor().find(id).is_none() {
-            return;
+            return false;
         }
     }
     let revision = ctx.db.brain().id().find(id).map(|b| b.revision).unwrap_or(0);
@@ -249,6 +356,7 @@ pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u6
         ctx.db.deliberation().insert(Deliberation { actor: id, controller: c.controller, reason: reason.into(), requested_ms: now, updated_ms: now, scene, revision });
         common::count(|k| k.deliberations += 1);
     }
+    true
 }
 
 fn round(v: f32) -> f64 {
@@ -415,6 +523,11 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             if !looks.is_empty() {
                 o.insert("looks".into(), json!(looks));
             }
+            if ch.kind == "person" && ch.stage == 0 {
+                if let Ok(state) = crate::act::body_state(ctx, ch.id, now) {
+                    o.insert("looks".into(), json!(state.looks()));
+                }
+            }
         }
         creatures.push(Value::Object(o));
         if creatures.len() >= 14 {
@@ -520,4 +633,58 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         scene[living_rules::species::SMELLED] = Value::Array(smelled);
     }
     scene.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cries_prompt_parents_then_one_nearest_caring_adult() {
+        let adults = [(1, 4.0, true, true), (2, 5.0, true, true), (3, 1.0, false, true), (4, 0.5, false, false)];
+        assert_eq!(cry_carers(&adults), vec![1, 2]);
+        assert_eq!(cry_carers(&adults[2..]), vec![3]);
+        assert!(cry_carers(&adults[3..]).is_empty());
+        assert_eq!(cry_carers(&[(4, 2.0, false, true), (3, 2.0, false, true)]), vec![3]);
+    }
+
+    #[test]
+    fn same_cause_merges_pending_and_limits_completed_reminders() {
+        let mut cry = cry_state(None, 9, vec![InfantNeed::Hungry]);
+        assert!(cry_prompt_due(&cry, 1, 10_000, true), "an unrelated pending reason still receives the cry");
+        cry.prompted.push(CryPrompt { carer: 1, at_ms: 10_000 });
+        assert!(!cry_prompt_due(&cry, 1, 55_000, false));
+        assert!(!cry_prompt_due(&cry, 1, 130_000, true), "pending cry never retriggers");
+        assert!(cry_prompt_due(&cry, 1, 130_000, false));
+        assert!(cry_prompt_due(&cry, 2, 11_000, false), "a newly responsible parent can respond");
+        let changed = cry_state(Some(&cry), 9, vec![InfantNeed::Hungry, InfantNeed::Cold]);
+        assert!(cry_prompt_due(&changed, 1, 11_000, true), "new distress merges immediately");
+        let starving = cry_state(Some(&cry), 9, vec![InfantNeed::Starving]);
+        assert!(cry_prompt_due(&starving, 1, 11_000, false));
+        let wounded = cry_state(Some(&cry), 9, vec![InfantNeed::Hungry, InfantNeed::BadlyWounded]);
+        let critical = cry_state(Some(&wounded), 9, vec![InfantNeed::Hungry, InfantNeed::BarelyAlive]);
+        assert!(cry_prompt_due(&critical, 1, 11_000, true));
+        assert_eq!(cry_state(Some(&cry), 9, vec![InfantNeed::Hungry]), cry);
+    }
+
+    #[test]
+    fn cries_keep_each_physical_cause() {
+        use living_rules::script::BodyState;
+        assert_eq!(infant_needs(BodyState::default()), vec![InfantNeed::Unsettled]);
+        assert_eq!(infant_needs(BodyState { hungry: true, cold: true, wound: living_rules::script::Wound::Hurt, starving: false }),
+            vec![InfantNeed::Hungry, InfantNeed::Cold, InfantNeed::Hurt]);
+        assert_eq!(infant_needs(BodyState { hungry: true, starving: true, ..Default::default() }), vec![InfantNeed::Starving]);
+    }
+
+    #[test]
+    fn one_parents_reminder_preserves_the_others_pending_cry() {
+        let mut cry = cry_state(None, 9, vec![InfantNeed::Hungry]);
+        record_cry_prompt(&mut cry, 1, 10_000);
+        record_cry_prompt(&mut cry, 2, 10_000);
+        assert!(cry_prompt_due(&cry, 1, 130_000, false));
+        record_cry_prompt(&mut cry, 1, 130_000);
+        assert!(!cry_prompt_due(&cry, 2, 130_000, true));
+        assert!(!cry_prompt_due(&cry, 2, 250_000, true));
+        assert!(cry_prompt_due(&cry, 2, 130_000, false));
+    }
 }

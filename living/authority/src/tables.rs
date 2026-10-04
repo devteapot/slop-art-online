@@ -411,6 +411,34 @@ pub struct Wake {
     pub id: u32,
 }
 
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub enum InfantNeed {
+    Hungry,
+    Starving,
+    Cold,
+    Hurt,
+    BadlyWounded,
+    BarelyAlive,
+    Unsettled,
+}
+
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct CryPrompt {
+    pub carer: u32,
+    pub at_ms: u64,
+}
+
+/// Signal and prompt cadence, bounded to the current episode and nearby carers.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = infant_cry)]
+pub struct InfantCry {
+    #[primary_key]
+    pub infant: u32,
+    pub needs: Vec<InfantNeed>,
+    pub heard_ms: u64,
+    pub prompted: Vec<CryPrompt>,
+}
+
 /// What reached a character's senses (sights, speech, what happened to them, their own
 /// results). Game state, not knowledge: written only by the authority, never edited, kept
 /// in a bounded per-character window. Minds read it and record how far they consolidated.

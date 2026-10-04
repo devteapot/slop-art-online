@@ -95,6 +95,37 @@ pub struct SkillCtx {
     pub routine: RoutineFacts,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Wound {
+    #[default]
+    None,
+    Hurt,
+    BadlyWounded,
+    BarelyAlive,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BodyState {
+    pub cold: bool,
+    pub hungry: bool,
+    pub starving: bool,
+    pub wound: Wound,
+}
+
+impl BodyState {
+    pub fn looks(&self) -> String {
+        let mut parts = vec![if self.cold { "cold" } else { "warm" }];
+        parts.push(if self.starving { "starving" } else if self.hungry { "hungry" } else { "fed" });
+        match self.wound {
+            Wound::None => {},
+            Wound::Hurt => parts.push("hurt"),
+            Wound::BadlyWounded => parts.push("badly wounded"),
+            Wound::BarelyAlive => parts.push("barely alive"),
+        }
+        parts.join(", ")
+    }
+}
+
 /// How the actor's current version of a routine has gone (for `rework`).
 #[derive(Clone, Debug, Default)]
 pub struct RoutineFacts {
@@ -349,6 +380,19 @@ impl Scripts {
         let m = self.call("rates", ctx)?.try_cast::<Map>().ok_or("rates must return a map")?;
         let g = |k: &str| m.get(k).and_then(number).unwrap_or(0.0) as f32;
         Ok(Rates { hunger_per_min: g("hunger"), energy_per_min: g("energy"), hp_per_min: g("hp") })
+    }
+
+    pub fn body_state(&self, ctx: &SkillCtx) -> Result<BodyState, String> {
+        let m = self.call("body_state", ctx)?.try_cast::<Map>().ok_or("body_state must return a map")?;
+        let flag = |k: &str| m.get(k).and_then(|v| v.clone().try_cast::<bool>()).ok_or_else(|| format!("body_state missing {k}"));
+        let wound = match m.get("wound").and_then(|v| v.clone().into_string().ok()).as_deref() {
+            Some("") => Wound::None,
+            Some("hurt") => Wound::Hurt,
+            Some("badly wounded") => Wound::BadlyWounded,
+            Some("barely alive") => Wound::BarelyAlive,
+            _ => return Err("body_state invalid wound".into()),
+        };
+        Ok(BodyState { cold: flag("cold")?, hungry: flag("hungry")?, starving: flag("starving")?, wound })
     }
 
     pub fn move_speed(&self, ctx: &SkillCtx) -> Result<f32, String> {
@@ -807,5 +851,52 @@ mod tests {
         assert!(s.rates(&c).unwrap().hp_per_min < 0.0, "cold nights hurt without fire or shelter");
         c.actor.near_fire = true;
         assert!(s.rates(&c).unwrap().hp_per_min >= 0.0);
+    }
+
+    #[test]
+    fn infant_appearance_agrees_with_cold_damage() {
+        let s = scripts();
+        for night in [false, true] {
+            for fire in [false, true] {
+                for shelter in [false, true] {
+                    for cloak in [false, true] {
+                        for winter in [false, true] {
+                            let mut c = ctx();
+                            c.actor.stage = "infant".into();
+                            c.actor.hunger = 80.0;
+                            c.actor.near_fire = fire;
+                            c.actor.near_shelter = shelter;
+                            c.actor.inv = if cloak { vec![("cloak".into(), 1)] } else { vec![] };
+                            c.night = night;
+                            c.season = if winter { "winter" } else { "summer" }.into();
+                            let state = s.body_state(&c).unwrap();
+                            let damage = s.rates(&c).unwrap().hp_per_min;
+                            assert_eq!(state.cold, damage < 0.0);
+                            assert!(state.looks().starts_with(if damage < 0.0 { "cold" } else { "warm" }));
+                            assert_eq!(damage, if state.cold { if winter { -5.0 } else { -2.0 } } else { 0.0 });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn infant_appearance_reports_food_and_injury_separately() {
+        let s = scripts();
+        let mut c = ctx();
+        assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed");
+        c.actor.hunger = 56.0;
+        assert_eq!(s.body_state(&c).unwrap().looks(), "warm, hungry");
+        c.actor.hunger = 100.0;
+        assert_eq!(s.body_state(&c).unwrap().looks(), "warm, starving");
+        assert_eq!(s.rates(&c).unwrap().hp_per_min, -6.0);
+        c.actor.hunger = 20.0;
+        c.actor.hurt_ago = Some(1000.0);
+        assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed, hurt");
+        c.actor.hp = 30.0;
+        assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed, badly wounded");
+        c.actor.hp = 10.0;
+        assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed, barely alive");
     }
 }

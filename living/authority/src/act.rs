@@ -163,6 +163,14 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
     }
 }
 
+pub fn body_state(ctx: &ReducerContext, id: u32, now: u64) -> Result<living_rules::script::BodyState, String> {
+    common::scripts(ctx).body_state(&living_rules::script::SkillCtx {
+        actor: facts(ctx, id, now),
+        night: common::night(&common::world(ctx), now),
+        ..Default::default()
+    })
+}
+
 fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64) -> TargetFacts {
     let mut f = TargetFacts { class: "none".into(), ..Default::default() };
     match t.class {
@@ -1702,6 +1710,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
     common::invalidate_bodies();
     ctx.db.activity().id().delete(id);
     ctx.db.mind_state().id().delete(id);
+    ctx.db.infant_cry().infant().delete(id);
     ctx.db.vitals().id().delete(id);
     ctx.db.wake().id().delete(id);
     ctx.db.deliberation().actor().delete(id);

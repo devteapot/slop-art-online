@@ -88,6 +88,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let at = pos(&body, now);
     let mut cur = ctx.db.activity().id().find(id);
     let Some(vit) = settle_needs(ctx, &me, vit, at, &w, cur.as_ref(), now) else { return };
+    perceive::infant_distress(ctx, &me, at, now);
     let needs = common::needs(&vit, now);
     let Some(g) = common::compiled(ctx, id, st.revision) else {
         log::warn!("character {id} has no valid graph at revision {}", st.revision);
@@ -140,6 +141,8 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     }
     let night = common::night(w, now);
     let (near_fire, near_shelter) = act::warmth(ctx, at);
+    let cloak = common::inv_count(ctx, me.id as u64, "cloak") > 0;
+    let season = common::season(ctx, now);
     let activity = cur.filter(|a| a.phase == 1).map_or("", |a| a.skill.as_str());
     let key = 1
         | (night as u32) << 1
@@ -150,14 +153,16 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
         | (near_fire as u32) << 6
         | (near_shelter as u32) << 7
         | ((activity == "sleep") as u32) << 8
-        | ((activity == "rest") as u32) << 9;
+        | ((activity == "rest") as u32) << 9
+        | (cloak as u32) << 10
+        | ((season == "winter") as u32) << 11;
     if key == v.rate_key {
         return Some(v);
     }
     let facts = act::facts(ctx, me.id, now);
     let sc = common::scripts(ctx);
     let hour = common::hour(w, now);
-    let sctx = living_rules::script::SkillCtx { actor: facts, night, hour, ..Default::default() };
+    let sctx = living_rules::script::SkillCtx { actor: facts, night, hour, season: season.into(), ..Default::default() };
     let _ = at;
     if let Ok(r) = sc.rates(&sctx) {
         common::settle(&mut v, now);
