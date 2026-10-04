@@ -22,7 +22,7 @@ enum St {
 const MAX_VISITS: u32 = 160;
 const ROOT_MARK: u16 = u16::MAX - 1;
 const FAIL_MARK: u16 = u16::MAX - 2;
-const REFLECT_MARK: u16 = u16::MAX - 3;
+pub(crate) const REFLECT_MARK: u16 = u16::MAX - 3;
 thread_local! {
     /// When each person last checked for, and last felt, knowing something alone (kept here:
     /// evaluator marks are reset when a new plan is installed).
@@ -1119,10 +1119,10 @@ impl<'a> Ev<'a> {
         cur.active = self.path.clone();
         cur.status = self.status.clone();
         cur.cursors = self.st.cursors.clone();
-        // Marks at 0xD000 and above are written by speech, signals and failures (possibly during
-        // this evaluation); keep those from the stored row, the rest are the evaluator's.
-        let mut marks: Vec<Mark> = self.st.marks.iter().filter(|m| m.node < 0xD000).cloned().collect();
-        marks.extend(cur.marks.iter().filter(|m| m.node >= 0xD000).cloned());
+        // Speech and signal marks may be written during evaluation; keep their stored
+        // values. The top three marks are evaluator timers, despite sharing the high range.
+        let mut marks: Vec<Mark> = self.st.marks.iter().filter(|m| m.node < 0xD000 || m.node >= REFLECT_MARK).cloned().collect();
+        marks.extend(cur.marks.iter().filter(|m| m.node >= 0xD000 && m.node < REFLECT_MARK).cloned());
         cur.marks = marks;
         cur.seen = self.st.seen.clone();
         cur.alerts = self.st.alerts;

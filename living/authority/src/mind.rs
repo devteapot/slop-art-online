@@ -282,7 +282,7 @@ pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, sour
     if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
         st.revision = revision;
         st.cursors.clear();
-        st.marks.retain(|m| m.node >= 0xD000);
+        st.marks.retain(|m| m.node >= 0xD000 && m.node < crate::brain::REFLECT_MARK);
         st.last = None;
         st.active.clear();
         st.fails = 0;
