@@ -21,7 +21,7 @@ FAKE = Path(__file__).with_name('fake_llm.py')
 CASES = ('basic', 'routing-group', 'routing-assign', 'routing-rotate', 'routing-child',
          'routing-default', 'overflow', 'retry-fallback', 'error-overflow', 'outage',
          'repair', 'deliberation-retry', 'retry-exhausted', 'timeout', 'missing-default-key')
-FIELDS = {'at_ms', 'actor', 'purpose', 'profile', 'model', 'latency_ms', 'request', 'reply', 'tokens', 'error'}
+FIELDS = {'at_ms', 'actor', 'purpose', 'profile', 'model', 'latency_ms', 'request', 'reply', 'tokens', 'error', 'lane', 'queue_wait_ms', 'prompt_tokens', 'completion_tokens', 'cached_tokens'}
 
 
 def rows(path):
@@ -70,6 +70,7 @@ class Run:
         self.streams = []
         self.cleanup_record = {}
         self.token = None
+        self.launch_blocked = False
 
     def command(self, args, filename='driver.log', check=True, timeout=240):
         result = subprocess.run([str(x) for x in args], cwd=ROOT, capture_output=True, text=True, timeout=timeout)
@@ -80,6 +81,16 @@ class Run:
         return result
 
     def harness(self, *args):
+        if args[0] == 'launch':
+            result = self.command(['docker', 'inspect', 'sao-living_spacetimedb_1', '--format', '{{json .Mounts}}'])
+            mounts = json.loads(result.stdout)
+            source = next((m.get('Source') for m in mounts if m.get('Destination') == '/wasm'), None)
+            expected = ROOT / 'living/target/wasm32-unknown-unknown/release'
+            check = {'expected': str(expected.resolve()), 'mounted': source}
+            (self.directory / 'mount-check.json').write_text(json.dumps(check, indent=2))
+            if source is None or Path(source).resolve() != expected.resolve():
+                self.launch_blocked = True
+                raise RuntimeError(f"/wasm mount mismatch: mounted {source}, worktree writes {expected}; no database published")
         return self.command([SHARED, args[0], '--run', self.name, *args[1:]])
 
     def sql(self, query, save):
@@ -184,7 +195,8 @@ class Run:
             shutil.rmtree(self.journal)
         self.cleanup_record['journal_copied'] = copied.exists()
         self.cleanup_record['journal_removed'] = not self.journal.exists()
-        self.harness('cleanup')
+        if not self.launch_blocked:
+            self.harness('cleanup')
 
     def finish_cleanup(self):
         try:
@@ -193,18 +205,20 @@ class Run:
             self.cleanup_record['error'] = str(error)
         for stream in self.streams:
             stream.close()
-        state = json.loads((self.directory / 'state.json').read_text())
+        state_path = self.directory / 'state.json'
+        state = json.loads(state_path.read_text()) if state_path.exists() else {}
+        self.cleanup_record['database_not_created'] = self.launch_blocked and not state_path.exists()
         self.cleanup_record['database_deleted'] = state.get('published') is False
         (self.directory / 'cleanup.json').write_text(json.dumps(self.cleanup_record, indent=2))
         if self.cleanup_record.get('error'):
             raise RuntimeError('cleanup failed; inspect cleanup.json')
-        if not self.cleanup_record.get('database_deleted'):
+        if not (self.cleanup_record.get('database_deleted') or self.cleanup_record.get('database_not_created')):
             raise RuntimeError('database cleanup failed; inspect cleanup.json')
 
 
 def profile(port, model, **extra):
     return {'base_url': f'http://127.0.0.1:{port}/v1', 'model': model,
-            'key_env': 'LIVING_VERIFY_FAKE_KEY', 'max_tokens': 256,
+            'key_env': 'LIVING_VERIFY_FAKE_KEY', 'max_tokens': 256, 'requests_per_minute': 6000,
             'reasoning_effort': {p: p for p in ('think', 'deliberate', 'consolidate', 'talk')}, **extra}
 
 
@@ -259,6 +273,8 @@ def run_case(run, case):
         models['profiles']['primary']['key_env'] = 'LIVING_VERIFY_MISSING_KEY'
     first = run.fake(a, script, 'primary')
     alternate_script = {}
+    if case == 'basic':
+        models['profiles']['primary']['prompt_cache_key'] = True
     if case == 'retry-fallback':
         alternate_script = {'rules': [{'purpose': 'think', 'status': 429, 'times': -1}]}
     elif case == 'timeout':
@@ -328,8 +344,7 @@ def run_case(run, case):
         failed = sorted([e for e in exchanges if e['purpose'] == 'think' and e['profile'] == 'alternate' and e['error']], key=lambda e: e['at_ms'])
         fallback = min(e['at_ms'] for e in exchanges if e['purpose'] == 'think' and e['profile'] == 'primary' and not e['error'])
         failed = [e for e in failed if e['at_ms'] < fallback]
-        assert len(failed) == 4 and all('HTTP 429' in e['error'] for e in failed), 'first think episode must retry exactly three times'
-        assert all(y['at_ms'] - x['at_ms'] >= delay for x, y, delay in zip(failed, failed[1:], (1500, 3000, 6000)))
+        assert len(failed) == 1 and 'HTTP 429' in failed[0]['error'], 'a failed nondefault profile falls back without blind retries'
         assert any(e['purpose'] == 'think' and e['profile'] == 'primary' and not e['error'] for e in exchanges)
     elif case == 'timeout':
         failed = [e for e in exchanges if e['purpose'] == 'think' and e['profile'] == 'alternate' and e['error']]
@@ -351,12 +366,20 @@ def run_case(run, case):
         assert set(e['purpose'] for e in exchanges) == {'think', 'deliberate', 'consolidate', 'talk'}
         requests = rows(run.directory / 'primary-requests.jsonl')
         assert all(e['body']['max_tokens'] == 256 and e['body']['response_format'] == {'type': 'json_object'} for e in requests)
-        assert all(e['tokens'] == 17 for e in exchanges if e['error'] is None)
+        assert all(e['tokens'] == 17 and e['prompt_tokens'] == 12 and e['completion_tokens'] == 5 and e['cached_tokens'] == 8 for e in exchanges if e['error'] is None)
+        assert all(isinstance(e['queue_wait_ms'], int) and e['queue_wait_ms'] >= 0 for e in exchanges)
+        assert all(e['lane'] == 'background' for e in exchanges if e['purpose'] == 'consolidate')
+        assert any(e['lane'] == 'interactive' for e in exchanges if e['purpose'] == 'talk')
+        keys = {}
+        for e in exchanges:
+            key = e['request'].get('prompt_cache_key')
+            assert key
+            assert keys.setdefault((e['profile'], e['purpose']), key) == key
     if case.startswith('routing'):
         for actor, target in expected.items():
             assert all(e['profile'] == target for e in exchanges if e['actor'] == actor)
         requests = rows(run.directory / 'alternate-requests.jsonl')
-        assert all('response_format' not in e['body'] for e in requests)
+        assert all('response_format' not in e['body'] and 'prompt_cache_key' not in e['body'] for e in requests)
     (run.directory / 'result.json').write_text(json.dumps({'case': case, 'pass': True, 'expected_profiles': expected,
                 'journal_entries': len(exchanges), 'purposes': sorted(set(e['purpose'] for e in exchanges))}, indent=2))
 

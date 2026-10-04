@@ -51,6 +51,8 @@ Each rule overlays `defaults`. Available response fields:
 | `close_port` | Close the request connection and stop the server's listener. |
 | `raw_http_body` | Exact HTTP body. Use this for malformed envelope JSON. |
 | `tokens` | `usage.total_tokens`, default 17. |
+| `usage` | Exact usage object. Default prompt 12, completion 5, total 17, cached 8. Omit individual fields to prove unknown values remain null. |
+| `headers` | Response header map, including Retry-After and optional provider rate-limit headers. |
 
 ## Purpose and valid replies
 

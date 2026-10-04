@@ -15,7 +15,7 @@ Preconditions: run from the repository root. If SpacetimeDB is down, run `docker
 .agents/skills/verify-llm/scripts/verify_llm.py --run llm-$(date +%Y%m%d-%H%M%S)
 ```
 
-The command builds with `cargo build --manifest-path living/Cargo.toml -p living-mind --release`, checks all nine fake-server scenarios, runs the four existing `llm::tests`, then launches one fresh `verify-llm-*` database per case through `verify.py`. Each launch passes `doctor` before any mind starts. It drives every local feature in [features/README.md](features/README.md). The first `think` node waits for the authority's 45-second settling period. The timeout case deliberately waits for the real 180-second HTTP timeout.
+The command builds with `cargo build --manifest-path living/Cargo.toml -p living-mind --release`, checks all nine fake-server scenarios, runs the `llm::tests` checks, including pacing, priority and a direct fake HTTP exchange, then launches one fresh `verify-llm-*` database per case through `verify.py`. Each launch passes `doctor` before any mind starts. It drives every local feature in [features/README.md](features/README.md). The first `think` node waits for the authority's 45-second settling period. The timeout case deliberately waits for the real 180-second HTTP timeout.
 
 To repeat a specific case on a new database:
 
@@ -26,6 +26,8 @@ To repeat a specific case on a new database:
 Repeat `--case` to select several. Read the map for the exact case names. A failed assertion exits nonzero after cleanup. An HTTP success passes only when the expected journal and authority evidence also exist.
 
 The driver selects one living adult for most cases and two adults plus a child for routing. It sets `LIVING_SERVER`, `LIVING_DB`, `LIVING_RUN`, `LIVING_SEED`, `LIVING_MODELS`, `LIVING_ONLY`, `LIVING_LLM_PER_MIN`, `LIVING_CONCURRENCY`, `LIVING_TOKEN`, `LIVING_ROOT`, `LIVING_LOD` and `LIVING_NEO4J` explicitly. `LIVING_NEO4J=off` overrides the host's Neo4j configuration. Profiles point only to `127.0.0.1` and use dummy keys. The admin token comes from `living/tools/stdb login show --token` into process memory. The driver never overwrites `.local/living/token` or writes that token into evidence.
+
+The runner checks the container's `/wasm` bind mount against this checkout before publishing. A mismatch stops the case with `mount-check.json` and `failure.txt`, records `database_not_created` in cleanup, and leaves the shared service untouched. Worktrees must not publish a stale module from another checkout.
 
 ## Evidence and cleanup
 
@@ -59,7 +61,7 @@ This checks reply overrides, status codes, malformed content and envelope JSON, 
 
 ## Opt-in live tier
 
-Do not run this tier without authorization for that particular paid run. It loads `.env` without overriding existing variables, reads `.local/living/models.json`, and sends one minimal request per keyed provider base URL. It has no retries, caps the output at 64 tokens and writes credential-free results. It does not start a mind or connect to Neo4j.
+Do not run this tier without authorization for that particular paid run. It loads `.env` without overriding existing variables, resolves the active models config, and sends one minimal request per keyed provider base URL. It has no retries, caps the output at 64 tokens and writes credential-free results. It does not start a mind or connect to Neo4j.
 
 After authorization:
 
@@ -71,7 +73,7 @@ This checks provider access and response shape through Python HTTP. The local ti
 
 [references/validation.md](references/validation.md) records the actual local run. Use `maintain-verification-skill` after this interface changes.
 
-Both paid commands share [models_config.py](scripts/models_config.py). An explicit `--models` wins, then `LIVING_MODELS` from the environment or non-overriding `.env`, then `living/configs/models.json`. This matches the active mind configuration. On this host `.env` selects `.local/living/models.json`, which routes Luna through the local proxy on port 8787. Forcing the repository example would bypass that route. The free tier supplies its own loopback fake config.
+Both paid commands share [models_config.py](scripts/models_config.py). An explicit `--models` wins, then `LIVING_MODELS` from the environment or non-overriding `.env`, then `living/configs/models.json`. This matches the active mind configuration. Inspect the selected config before authorizing the paid tier; an explicit reviewed Mistral-only file avoids probing a legacy model chosen alphabetically at the same endpoint. The free tier supplies its own loopback fake config.
 
 ## What this skill does not prove
 
@@ -79,4 +81,4 @@ Both paid commands share [models_config.py](scripts/models_config.py). An explic
 - Durable Neo4j memory, recall, knowledge privacy or learning. Use `verify-knowledge`.
 - Core physical rules or world generation. Use `verify-core` and `verify-generation`.
 - Client subscription permissions, human controls or observer presentation. Use `verify-client`, `verify-player` and the future UI skill (not built; see `verify`).
-- Performance acceptance, large populations, full-window overflow at high concurrency, or the eight-hour workload.
+- Provider limits, tokenizer accuracy, caching economics, performance acceptance, large populations or the eight-hour workload.

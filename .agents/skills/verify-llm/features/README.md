@@ -6,6 +6,7 @@ Run `scripts/verify_llm.py` from the repository root as shown in [SKILL.md](../S
 | --- | --- | --- |
 | Basic exchange, accepted replies and journals | `basic` | [exchange.md](exchange.md) |
 | Routing and key configuration | `routing-group`, `routing-assign`, `routing-rotate`, `routing-child`, `routing-default`, `missing-default-key` | [routing.md](routing.md) |
+| Pacing, priority lanes, token admission and caching | Cargo and fake contract, `basic` | [pacing.md](pacing.md) |
 | Rate limits, overflow and fallback | `overflow`, `retry-fallback`, `error-overflow` | [overflow.md](overflow.md) |
 | Outage gate and recovery | `outage` | [outage.md](outage.md) |
 | JSON repair and bounded deliberation retry | `repair`, `deliberation-retry`, `retry-exhausted` | [repair.md](repair.md) |

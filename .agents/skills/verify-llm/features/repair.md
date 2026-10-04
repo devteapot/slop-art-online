@@ -21,4 +21,6 @@ Check the raw fake content, copied journal requests and authority thoughts. The 
 
 ## Gotchas
 
-`llm.rs:466-519` repairs JSON slips. `mind.rs:1269-1389` bounds compilation attempts to three. JSON parse failures have error null in the HTTP journal because transport succeeded. Authority thoughts and later request feedback establish semantic rejection. The repair cargo test also covers stray closers.
+`parse_json` and `repair` repairs JSON slips. `Minds::deliberate` bounds compilation attempts to three. JSON parse failures have error null in the HTTP journal because transport succeeded. Authority thoughts and later request feedback establish semantic rejection. The repair cargo test also covers stray closers.
+
+Compilation retries keep their original lane.

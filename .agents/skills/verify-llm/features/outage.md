@@ -20,4 +20,4 @@ A model endpoint becomes unreachable while the mind remains connected to the aut
 
 ## Gotchas
 
-`llm.rs:394-434` gates by base_url, not profile name. The driver stops only its primary fake pid. A fresh think graph waits for the authority settling period before it can trigger. Gate waiting happens before latency measurement, so journal latency alone cannot prove held-call time. This case proves recovery after a short local outage, not the 60-second cap under a long outage.
+`Queue::candidate` and `Llm::gate_leave` gate by base_url, not profile name. The driver stops only its primary fake pid. A fresh think graph waits for the authority settling period before it can trigger. Gate and pacing waits appear in `queue_wait_ms`; `latency_ms` measures the HTTP exchange. Admission selects the one outage probe before taking a network slot. This case proves recovery after a short local outage, not the 60-second cap under a long outage.

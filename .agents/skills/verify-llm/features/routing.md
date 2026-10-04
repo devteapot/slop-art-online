@@ -23,4 +23,6 @@ Each routing result records expected actor-to-profile mappings in `result.json`.
 
 ## Gotchas
 
-`llm.rs:208-214` implements person precedence. `llm.rs:223-237` implements assignment, rotation and default. `mind.rs:172-197` resolves group background. Two adults and a child are selected from real authority rows. `set_background` prepares only the scratch scene. This map does not claim species-role or inherited-parent group integration; the existing unit tests cover bounded group ancestry.
+`Llm::person_profile` implements person precedence. `Llm::profile_for` implements assignment, rotation and default. `Minds::profile` resolves group background. Two adults and a child are selected from real authority rows. `set_background` prepares only the scratch scene. This map does not claim species-role or inherited-parent group integration; the existing unit tests cover bounded group ancestry.
+
+See [pacing.md](pacing.md) for the added profile keys and startup validation.

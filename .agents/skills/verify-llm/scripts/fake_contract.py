@@ -34,8 +34,8 @@ def main():
         command = [sys.executable, str(FAKE), '--port', str(port), '--log', str(log)]
         if scenario == 'script':
             script = directory / 'script.json'
-            script.write_text(json.dumps({'rules': [{'purpose': 'think', 'status': 429},
-                       {'purpose': 'talk', 'reply': {'say': 'scripted', 'to': 3}},
+            script.write_text(json.dumps({'rules': [{'purpose': 'think', 'status': 429, 'headers': {'Retry-After': '2', 'x-ratelimit-limit-req-minute': '60'}},
+                       {'purpose': 'talk', 'reply': {'say': 'scripted', 'to': 3}, 'usage': {'total_tokens': 100, 'prompt_tokens': 80, 'completion_tokens': 20, 'prompt_tokens_details': {'cached_tokens': 64}}},
                        {'purpose': 'consolidate', 'raw_http_body': 'broken envelope'}]}))
             command += ['--script', str(script)]
         else:
@@ -84,8 +84,13 @@ def main():
                         raise AssertionError('first script action did not inject 429')
                     except urllib.error.HTTPError as error:
                         assert error.code == 429
+                        assert error.headers['Retry-After'] == '2'
+                        assert error.headers['x-ratelimit-limit-req-minute'] == '60'
                     assert json.loads(json.loads(post('think')[1])['choices'][0]['message']['content'])['intend']
-                    assert json.loads(json.loads(post('talk')[1])['choices'][0]['message']['content'])['say'] == 'scripted'
+                    talk = json.loads(post('talk')[1])
+                    assert json.loads(talk['choices'][0]['message']['content'])['say'] == 'scripted'
+                    assert talk['usage']['prompt_tokens_details']['cached_tokens'] == 64
+                    assert talk['usage']['prompt_tokens'] + talk['usage']['completion_tokens'] == talk['usage']['total_tokens']
                     assert post('consolidate')[1] == 'broken envelope'
                 else:
                     for purpose in ('think', 'deliberate', 'consolidate', 'talk'):

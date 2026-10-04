@@ -24,4 +24,4 @@ The command uses explicit `--models`, then active `LIVING_MODELS` from the envir
 
 This tier was not run during skill creation. The default local driver cannot invoke it. `--allow-live` is a second guard, not user authorization by itself. A provider may reject a 64-token cap or spend that budget on reasoning. Preserve that failed result. This HTTP probe does not prove the Rust mind workload or model quality. Several models sharing a base URL receive only one request using the first keyed profile by name.
 
-Both live commands use `scripts/models_config.py`. The host's `.env` selects `.local/living/models.json`, with Luna on the local proxy at `127.0.0.1:8787`. `living/configs/models.json` is the repository example and points Luna at `codex.carlid.dev`. Following the active configuration keeps this probe and the real mind on the same route.
+Both live commands use `scripts/models_config.py`. Inspect the selected configuration before authorizing a probe. Use an explicit reviewed Mistral-only config when checking the active provider. This Python probe omits transport pacing, lanes, cache keys and usage breakdown; it cannot establish those Rust behaviors.
