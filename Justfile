@@ -184,6 +184,11 @@ living-viewer:
 living-web:
     cd living/viewer && env -u NO_COLOR trunk serve --cargo-profile wasm-dev --address 127.0.0.1 --port 8330
 
+# Optimized browser observer for the public tunnel (https://sos.carlid.dev); the
+# sao-observer-web user service serves .local/living/web on 127.0.0.1:8331.
+living-web-dist:
+    cd living/viewer && CARGO_PROFILE_RELEASE_STRIP=true env -u NO_COLOR trunk build --release --dist ../../.local/living/web
+
 living-test:
     cargo test --manifest-path living/Cargo.toml -p living-rules
 

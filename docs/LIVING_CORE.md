@@ -439,3 +439,5 @@ python3 living/tools/mind_load.py <db> <run>           # model load per person, 
 ```
 
 `just living-publish` updates the module in place and installs the current skill rules. LLM exchanges are journaled to `.local/living/journal/<run>/<name>.jsonl`.
+
+**Public observer** at `https://sos.carlid.dev` (`?db=<lab>` picks a world). A Cloudflare tunnel (`sao-tunnel` systemd user service, config `~/.cloudflared/sos.yml`) forwards only `/v1/database/<db>/subscribe` to SpacetimeDB on :3300. Everything else goes to the static bundle from `just living-web-dist`, which the `sao-observer-web` user service serves on 127.0.0.1:8331. SpacetimeDB's HTTP API (publish, SQL, reducer calls, identities, logs) is not reachable through the tunnel. Loaded from a non-local host, the viewer connects to its own origin. Rebuild with `just living-web-dist` after viewer changes; the running service picks the new files up without a restart. Limits: a WebSocket client can still call the non-admin reducers (`join`, `human_*`), because that authority is enforced per identity, not by the tunnel. Every visitor also adds a full observer subscription, and that load is not measured.
