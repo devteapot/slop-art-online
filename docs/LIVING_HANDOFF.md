@@ -86,12 +86,9 @@ The run `aske-coast-3` ended on schedule at 06:55 local on 2026-09-29. This note
 
 ## Where to pick up
 
-- **Babies and the cloak belief.**
-  - Check whether infants really lose health at night: babies near a shelter are warm by the rules.
-  - If minds' beliefs are wrong, make the truth perceivable: a baby "looks warm" or "looks cold".
-  - Consider whether a baby's crying should prompt fewer adults.
+- **Babies and the cloak belief.** Done on 2026-10-04 (`7f01379`..`be8c4f9`, `verify-core` infant scene). An infant is warm only by its own position (shelter 2.5 tiles, campfire 3.5) or a cloak; carrying is not implemented. A parent who can see the baby now perceives "warm" or "cold", "fed", "hungry" or "starving", and wounds, from the same predicate as cold damage. A cry prompts nearby adult parents, else the nearest caring adult; repeats with the same cause merge, with 120 s reminders. Winter's -5 hp/min cold now actually applies (a rates cache ignored season and cloaks). The next run shows whether minds drop the cloak belief.
 - **Talk volume** in long runs, and what drives it (conversation turns, babies, crises).
-- **Load:** decide the thinking pace (`think_min_s` 20 → about 45) or the level-of-detail mode before larger worlds.
+- **Load.** On 2026-10-04 the mind gained per-profile pacing learned from rate-limit headers and 429s, priority lanes (player-facing first), cached-token journaling and `prompt_cache_key`; prompts now open with text shared by every character (84% of a `deliberate` prompt, 73% of `think`). Level of detail keeps merged requests current but stays opt-in. The models config runs Mistral only (Luna backup at `.local/living/models.with-luna.json`). A paid run must still measure the 429 rate, cache hits, `talk` latency and whether Mistral Small copies the `talk` example placeholder `id of who you speak to`. The thinking pace (`think_min_s`) is unchanged.
 - **Force monitoring:** `pulse.py` counts threats, assaults, yields, seizes and killings. The next run will show whether `seize` replaces killing.
 - **Still open:**
   - a behavioral fault: people pace between two tasks;
