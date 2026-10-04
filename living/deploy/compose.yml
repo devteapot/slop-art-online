@@ -5,6 +5,10 @@ services:
   spacetimedb:
     image: docker.io/clockworklabs/spacetime:v2.10.1
     command: [start, --listen-addr, "0.0.0.0:3000"]
+    # The server runs as PID 1 and handles SIGINT but not SIGTERM. A PID 1 ignores
+    # unhandled signals, so the default SIGTERM did nothing and every stop ended in
+    # SIGKILL. SIGINT shuts it down cleanly ("Shutting down server...", exit 0).
+    stop_signal: SIGINT
     user: spacetime
     ports:
       - "${LIVING_STDB_BIND:-127.0.0.1}:${LIVING_STDB_PORT:-3300}:3000"
