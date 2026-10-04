@@ -200,9 +200,8 @@ def seize(s):
     yielded = s.inventory(a).get("stone", 0) == 2
     s.rows(f"SELECT kind, text FROM experience WHERE observer = {a}", "yielded-seize-feedback")
     s.story("yield", b, "yield")
-    s.expect("KNOWN ISSUE seize accepts a yielded healthy person", yielded,
-             "docs/LIVING_HANDOFF.md, Still open: act.rs:238 sets target.yielded_ago only for attack; skills.rhai:496-500 needs it for seize.",
-             fatal=False, known=True)
+    s.expect("seize accepts a yielded healthy person", yielded,
+             "act.rs skill_ctx must fill target.yielded_ago for seize; skills.rhai seize_check needs it.", fatal=False)
     if not yielded:
         s.call("grant_items", a, "spear", 1)
         s.graph(a, {"first": [{"do": {"skill": "attack", "target": {"id": b}, "item": "hurt"}}, {"wait": 1}]})

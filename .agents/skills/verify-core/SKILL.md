@@ -35,7 +35,7 @@ python3 "$C/scenes.py" seize --run "$R" > "$E/seize.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
 ```
 
-Record each exit status. Unexpected failures exit 1. Run the remaining independent checks, then report the failure. `seize` labels the healthy yielded-target defect `XFAIL KNOWN ISSUE` and links to [Still open in LIVING_HANDOFF](../../../docs/LIVING_HANDOFF.md#where-to-pick-up). It continues to check transfer from a badly hurt person, witnesses and lethal intent. It exits 0 when every other check passes. A fixed known check becomes `XPASS` and exits 1 so the stale expectation gets reviewed.
+Record each exit status. Unexpected failures exit 1. Run the remaining independent checks, then report the failure. `seize` checks refusal from an unyielded healthy person, seizure from a yielded healthy person, exact transfer, witnesses and lethal intent. If the yielded seizure fails, it still drives the badly-hurt path and exits 1. A check marked known (`XFAIL`/`XPASS`) exits 1 when it starts passing, so the stale expectation gets reviewed.
 
 `cargo_checks.py` saves separate transcripts for these commands:
 
