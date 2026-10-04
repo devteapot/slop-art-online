@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "budget": "session",
+  "modelEfforts": {
+    "glm-5-3": "max",
+    "gpt-6.1-sol": "high",
+    "claude-opus-5-5": "high",
+    "grok-4.7": "high"
+  },
+  "roleEfforts": {},
+  "roleModelEfforts": {}
+}
