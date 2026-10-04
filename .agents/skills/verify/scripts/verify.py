@@ -48,6 +48,12 @@ CONTAINER = "sao-living_spacetimedb_1"
 PREFIX = "verify-"
 
 
+def wasm_mount():
+    """Host directory the container serves as /wasm. From a git worktree it is not this checkout's build dir."""
+    r = subprocess.run(["docker", "inspect", CONTAINER, "--format", '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}'], capture_output=True, text=True)
+    return Path(r.stdout.strip()) if r.stdout.strip() else LIVING / "target/wasm32-unknown-unknown/release"
+
+
 def run_dir(run):
     d = ROOT / ".local/living/verify" / run
     d.mkdir(parents=True, exist_ok=True)
@@ -128,11 +134,12 @@ def launch(a):
     tdir = ["--target-dir", str(Path(target).resolve()) if getattr(a, "target_dir", None) else target] if target else []
     subprocess.run(["cargo", "build", "-p", "living-authority", "--target", "wasm32-unknown-unknown", "--release", *tdir], cwd=LIVING, env=env, check=True)
     wasm = "living_authority.wasm"
-    if tdir:
+    base = (Path(tdir[1]) if Path(tdir[1]).is_absolute() else LIVING / tdir[1]) if tdir else LIVING / "target"
+    built = base / "wasm32-unknown-unknown/release/living_authority.wasm"
+    mount = wasm_mount()
+    if tdir or built.parent.resolve() != mount.resolve():
         wasm = f"living_authority_verify_{a.run.replace('-', '_')}.wasm"
-        base = Path(tdir[1]) if Path(tdir[1]).is_absolute() else LIVING / tdir[1]
-        built = base / "wasm32-unknown-unknown/release/living_authority.wasm"
-        (LIVING / "target/wasm32-unknown-unknown/release" / wasm).write_bytes(built.read_bytes())
+        (mount / wasm).write_bytes(built.read_bytes())
     st["wasm"] = wasm
     # Record the database before publishing: a publish or script install that fails halfway
     # still leaves a database for cleanup to delete.
@@ -173,7 +180,7 @@ def doctor(a):
         time.sleep(4)
         t1 = ticks()
         checks[f"world is ticking (paused={paused}, ticks {t0} -> {t1} in 4 s)"] = not paused and None not in (t0, t1) and t1 > t0
-    wasm = LIVING / "target/wasm32-unknown-unknown/release" / st.get("wasm", "living_authority.wasm")
+    wasm = wasm_mount() / st.get("wasm", "living_authority.wasm")
     src = max((p.stat().st_mtime for d in ("authority/src", "rules/src") for p in (LIVING / d).rglob("*.rs")), default=0)
     checks["published module is newer than authority and rules sources"] = wasm.exists() and wasm.stat().st_mtime >= src
     if st.get("observer"):
@@ -353,7 +360,7 @@ def cleanup(a):
             save(st)
             sys.exit(f"{st['db']} still answers SQL after delete (HTTP {code}); rerun cleanup or delete it with living/tools/stdb")
     if st.get("wasm", "").startswith("living_authority_verify_"):
-        (LIVING / "target/wasm32-unknown-unknown/release" / st["wasm"]).unlink(missing_ok=True)
+        (wasm_mount() / st["wasm"]).unlink(missing_ok=True)
         log(st, f"removed module copy {st['wasm']}")
     if st.get("started_container"):
         # Other runs may share the server. Leave it up while any other verify-* database lives.

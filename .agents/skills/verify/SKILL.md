@@ -55,7 +55,7 @@ $V launch --run <run> [--seed world]
 - Builds the module from the working tree. The default seed is `living/seeds/world.json` (`realm-4`: 512×512 tiles, about 190 people and 80 animals). Another `--seed <name>` builds in `living/target/verify-<seed>` and leaves the active module alone.
 - Publishes a fresh `verify-<run>` with `--delete-data` and installs `living/scripts/skills.rhai`. The world ticks at 60 Hz right away. AI characters run their instinct graphs until a mind connects.
 - `--keep-data` updates the run's existing database in place instead, as `just living-publish` does for the active world. Use it to prove that minds and clients recover from a module update with their data intact.
-- `--target-dir DIR` builds the module in `DIR`, for example `.local/living/verify/<run>/target`, so a run never shares a build directory with another run. The module is copied into the server's `/wasm` mount as `living_authority_verify_<run>.wasm`, and cleanup removes the copy.
+- `--target-dir DIR` builds the module in `DIR`, for example `.local/living/verify/<run>/target`, so a run never shares a build directory with another run. The module is copied into the server's `/wasm` mount as `living_authority_verify_<run>.wasm`, and cleanup removes the copy. The helper reads the mount from the container, so a run from a git worktree also publishes its own build this way instead of the main checkout's.
 
 ### Doctor
 
