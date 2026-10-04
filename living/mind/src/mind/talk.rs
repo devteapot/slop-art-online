@@ -758,6 +758,7 @@ impl Minds {
             }
         }
         let t = prompts::TalkUser {
+            name: &c.name,
             identity: &identity,
             pacing: &pacing,
             other: &other_name,
@@ -772,7 +773,7 @@ impl Minds {
             heard: &heard.text,
             between: &between,
         };
-        (prompts::talk_system(&c.name, &other_name, other), prompts::talk_user(&t))
+        (prompts::talk_system(), prompts::talk_user(&t))
     }
 }
 

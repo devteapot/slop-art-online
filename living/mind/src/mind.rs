@@ -562,26 +562,10 @@ impl Minds {
     async fn background_persona(&self, c: &Character) -> Result<()> {
         let bg: Value = self.conn.db.background().id().find(&c.id).and_then(|b| serde_json::from_str(&b.text).ok()).unwrap_or_default();
         let profile = self.profile(&c);
-        let system = format!(
-            "You create the starting identity of a person in a persistent simulated world. {}\n\n\
-The person has lived before this moment: use their background, but give them an individual temperament, private hopes, worries, \
-likes and grudges of their own (not a job description; what they did so far is history, not destiny). Write the narrative in the first person, \
-2-4 sentences. Relations: how they feel about each person named in the background (trust and affinity -100..100, a label such as \
-family, partner, friend, rival, stranger, and a short note in their words). Reply with ONE JSON object: {{\"narrative\": \"...\", \"values\": [...], \"goals\": [...], \
-\"traits\": {{\"caution\": 0-100, \"sociability\": 0-100, \"empathy\": 0-100, \"curiosity\": 0-100, \"ambition\": 0-100, \"introspection\": 0-100, \"temper\": 0-100, \"nurture\": 0-100}}, \"mood\": \"...\", \
-\"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"...\", \"note\": \"...\"}}]}}",
-            prompts::world_rules()
-        );
+        let system = prompts::identity_system();
         let knows: Vec<String> = self.conn.db.know_how().iter().filter(|k| k.actor == c.id).map(|k| k.technique).collect();
         let born = self.born_temperament(c.id);
-        let user = format!(
-            "Person: {} (#{}). Knows how to: {}.\nBackground: {}{}",
-            c.name,
-            c.id,
-            if knows.is_empty() { "nothing special".into() } else { knows.join(", ") },
-            bg,
-            born.as_ref().map(|t| format!("\nInborn temperament (0-100, use these traits as given): {t}")).unwrap_or_default()
-        );
+        let user = prompts::identity_user(&c.name, c.id, &knows, &bg, born.as_ref());
         let reply = {
             let _slow = self.slow.acquire().await?;
             let _permit = self.sem.acquire().await?;
@@ -765,26 +749,9 @@ family, partner, friend, rival, stranger, and a short note in their words). Repl
         let (an, ap) = parent(c.parent_a);
         let (bn, bp) = parent(c.parent_b);
         let profile = self.profile(&c);
-        let system = format!(
-            "You create the starting identity of a newborn person in a persistent simulated world. {}\n\nThe child has its own temperament: \
-traits are influenced by the parents but varied (never copied), and the child knows almost nothing yet. Write the narrative in the first person, \
-simple and short, as a very young child. Reply with ONE JSON object: {{\"narrative\": \"...\", \"values\": [...], \"goals\": [...], \
-\"traits\": {{\"caution\": 0-100, \"sociability\": 0-100, \"empathy\": 0-100, \"curiosity\": 0-100, \"ambition\": 0-100, \"introspection\": 0-100, \"temper\": 0-100, \"nurture\": 0-100}}, \"mood\": \"...\"}}",
-            prompts::world_rules()
-        );
+        let system = prompts::birth_identity_system();
         let born = self.born_temperament(c.id);
-        let user = format!(
-            "Newborn: {} (#{}).\nParent {} (#{}): {}\nParent {} (#{}): {}{}",
-            c.name,
-            c.id,
-            an,
-            c.parent_a,
-            ap,
-            bn,
-            c.parent_b,
-            bp,
-            born.as_ref().map(|t| format!("\nThe child's inborn temperament (0-100, use these traits as given): {t}")).unwrap_or_default()
-        );
+        let user = prompts::birth_identity_user(&c.name, c.id, [(&an, c.parent_a, &ap), (&bn, c.parent_b, &bp)], born.as_ref());
         let _slow = self.slow.acquire().await?;
         let _permit = self.sem.acquire().await?;
         let reply = self.llm.chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?;
@@ -1246,7 +1213,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         // Think first, as the person and without the grammar; then compile the decision.
         let habits: String = self.conn.db.routine().iter().filter(|r| r.actor == actor).map(|r| r.name).collect::<Vec<_>>().join(", ");
         let think_msgs = vec![
-            Msg { role: "system", content: prompts::think_system(&c.name) },
+            Msg { role: "system", content: prompts::think_system() },
             Msg { role: "user", content: prompts::think_user(&ctx, &d.scene, &plan, &reason, &habits) },
         ];
         let mut decision = Value::Null;
@@ -1267,8 +1234,8 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             decision["thought"].as_str().unwrap_or_default(),
             if intend.is_empty() { "(nothing new: carry on)".to_string() } else { intend.join("; ") }
         );
-        let system = prompts::deliberate_system(&c.name);
-        let user = prompts::compile_user(&decided, &prompts::deliberate_user(&ctx, &d.scene, &outline, &plan, &reason, &repertoire));
+        let system = prompts::deliberate_system();
+        let user = prompts::compile_user(&decided, prompts::deliberate_user(&ctx, &d.scene, &outline, &plan, &reason, &repertoire));
         let mut messages = vec![Msg { role: "system", content: system }, Msg { role: "user", content: user }];
         let mut last_err = String::new();
         let mut total_latency = think_latency;
@@ -1446,8 +1413,8 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         let felt = self
             .llm
             .chat(&think, "deliberate", &c.name, &[
-                Msg { role: "system", content: prompts::animal_think_system(&c.name, &c.kind, &sp.nature, &temperament) },
-                Msg { role: "user", content: prompts::animal_think_user(&mind, &experiences, &d.scene, &d.reason) },
+                Msg { role: "system", content: prompts::animal_think_system(&c.kind, &sp.nature) },
+                Msg { role: "user", content: prompts::animal_think_user(&c.name, &c.kind, &temperament, &mind, &experiences, &d.scene, &d.reason) },
             ])
             .await?;
         let (feeling, impulse) = match llm::parse_json(&felt.content) {
@@ -1457,13 +1424,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         let signals = sp.signals.iter().map(|(k, s)| format!("{k} = {}", s.sound)).collect::<Vec<_>>().join("; ");
         let system = prompts::animal_compile_system(&c.kind, &prompts::species_skills_help(&sp), &signals, &prompts::scent_help(&sp), sp.cognition.max_nodes);
         let top = self.conn.db.brain().id().find(&actor).and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
-        let user = format!(
-            "Impulse of {} the {}: {impulse}\nFeeling: {feeling}\n\nAround it now:\n{}\n\nIts top level (what it weighs):\n{top}\n\nIts routines (how each has gone):\n{}",
-            c.name,
-            c.kind,
-            d.scene,
-            self.repertoire_text(actor)
-        );
+        let user = prompts::animal_compile_user(&c.name, &c.kind, &impulse, &feeling, &d.scene, &top, &self.repertoire_text(actor));
         let mut messages = vec![Msg { role: "system", content: system }, Msg { role: "user", content: user }];
         let mut last_err = String::new();
         let (mut latency, mut tokens) = (felt.latency_ms, felt.tokens);
@@ -1568,8 +1529,8 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         };
         let animal = c.kind != "person";
         let system = match self.species.get(&c.kind).filter(|_| animal) {
-            Some(sp) => prompts::animal_consolidate_system(&c.name, &c.kind, &sp.nature),
-            None => prompts::consolidate_system(&c.name),
+            Some(sp) => prompts::animal_consolidate_system(&c.kind, &sp.nature),
+            None => prompts::consolidate_system(),
         };
         let user = prompts::consolidate_user(&ctx);
         let remember = if animal { self.llm.species_profile(&c.kind, "remember").unwrap_or(profile.clone()) } else { profile.clone() };
@@ -1687,7 +1648,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         let _permit = self.sem.acquire().await?;
         let reply = self
             .llm
-            .chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: prompts::reorganize_system(&c.name) }, Msg { role: "user", content: prompts::reorganize_user(&self.persona_text(actor), &concepts, &lines) }])
+            .chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: prompts::reorganize_system() }, Msg { role: "user", content: prompts::reorganize_user(&c.name, &self.persona_text(actor), &concepts, &lines) }])
             .await?;
         let v = llm::parse_json(&reply.content)?;
         let known: Vec<u64> = self.experiences(actor).iter().map(|e| e.id).collect();
