@@ -696,4 +696,184 @@ mod tests {
         assert!(wolf.contains("deer, wolf") && wolf.contains("{\"smells\": {\"nearest\": \"deer\"}}"), "{wolf}");
         assert!(super::scent_help(&species["person"]).is_empty());
     }
+    use super::*;
+
+    fn context(name: &str) -> Ctx<'_> {
+        Ctx {
+            name,
+            clock: format!("dynamic-clock-{name}"),
+            persona: format!("persona-{name}"),
+            relations: vec![format!("relation-{name}")],
+            mind: vec![format!("dynamic-recall-{name}")],
+            memories: vec![format!("dynamic-memory-{name}")],
+            judgments: vec![format!("dynamic-stance-{name}")],
+            places: vec![format!("place-{name}")],
+            experiences: vec![format!("dynamic-experience-{name}")],
+        }
+    }
+
+    fn fixture(purpose: &str, name: &str, kind: &str) -> (String, String) {
+        static WORLD: std::sync::Once = std::sync::Once::new();
+        WORLD.call_once(|| {
+            let seed: serde_json::Value = serde_json::from_str(include_str!("../../seeds/world.json")).unwrap();
+            let species: serde_json::Value = serde_json::from_str(include_str!("../../seeds/species.json")).unwrap();
+            let life = serde_json::from_value(species["person"]["life"].clone()).unwrap();
+            set_world(
+                seed["setting"].as_str().unwrap_or_default(),
+                seed["map"]["w"].as_u64().unwrap_or(96) as u32,
+                seed["map"]["h"].as_u64().unwrap_or(96) as u32,
+                seed["year_days"].as_f64().unwrap_or(living_rules::YEAR_DAYS as f64) as f32,
+                seed["life_pace"].as_f64().unwrap_or(1.0) as f32,
+                life,
+            );
+            set_rules(1, include_str!("../../scripts/skills.rhai"));
+        });
+        let c = context(name);
+        match purpose {
+            "think" => (think_system(), think_user(&c, "dynamic-scene", "dynamic-plan", "dynamic-reason", "habit")),
+            "deliberate" => (deliberate_system(), compile_user("dynamic-decision", deliberate_user(&c, "dynamic-scene", "dynamic-outline", "dynamic-plan", "dynamic-reason", "routine"))),
+            "consolidate" => (consolidate_system(), consolidate_user(&c)),
+            "reorganize" => (reorganize_system(), reorganize_user(name, &c.persona, &["dynamic-concept".into()], &["dynamic-edge".into()])),
+            "identity" => (identity_system(), identity_user(name, 42, &["fire".into()], &serde_json::json!({"town": "fixture"}), Some(&serde_json::json!({"caution": 40})))),
+            "birth_identity" => (birth_identity_system(), birth_identity_user(name, 42, [("Parent A", 3, "kind"), ("Parent B", 4, "gentle")], Some(&serde_json::json!({"caution": 40})))),
+            "talk" => (
+                talk_system(),
+                talk_user(&TalkUser {
+                    name,
+                    identity: &c.persona,
+                    pacing: "talk slowly",
+                    other: if name == "Aria" { "Cora" } else { "Dara" },
+                    other_id: if name == "Aria" { 3 } else { 4 },
+                    feeling: "friend, trust 50",
+                    mind: &c.mind,
+                    memories: &c.memories,
+                    lately: &c.experiences,
+                    earlier: Some("dynamic-earlier"),
+                    scene: "dynamic-scene",
+                    conversation: &["dynamic-line".into()],
+                    heard: "dynamic-heard",
+                    between: &["dynamic-offer".into()],
+                }),
+            ),
+            "animal_impulse" | "animal_compile" | "animal_consolidate" => {
+                let species = living_rules::species::parse(include_str!("../../seeds/species.json")).unwrap();
+                let sp = &species[kind];
+                match purpose {
+                    "animal_impulse" => (animal_think_system(kind, &sp.nature), animal_think_user(name, kind, "temperament", &c.mind, &c.experiences, "dynamic-scene", "dynamic-reason")),
+                    "animal_compile" => {
+                        let signals = sp.signals.iter().map(|(k, s)| format!("{k} = {}", s.sound)).collect::<Vec<_>>().join("; ");
+                        (
+                            animal_compile_system(kind, &species_skills_help(sp), &signals, &scent_help(sp), sp.cognition.max_nodes),
+                            animal_compile_user(name, kind, "dynamic-impulse", "dynamic-feeling", "dynamic-scene", "dynamic-outline", "routine"),
+                        )
+                    }
+                    _ => (animal_consolidate_system(kind, &sp.nature), consolidate_user(&c)),
+                }
+            }
+            _ => panic!("unknown purpose {purpose}"),
+        }
+    }
+
+    fn assert_prefix(purpose: &str, kind: &str) {
+        let (system_a, user_a) = fixture(purpose, "Aria", kind);
+        let (system_b, user_b) = fixture(purpose, "Zora", kind);
+        assert_eq!(system_a.as_bytes(), system_b.as_bytes());
+        assert!(!system_a.contains("Aria") && !system_a.contains("Zora"));
+        let a = format!("{system_a}\n{user_a}");
+        let b = format!("{system_b}\n{user_b}");
+        let shared_user = if purpose == "talk" {
+            "Your turn. Respond with the JSON object.\n\n"
+        } else if matches!(purpose, "think" | "deliberate" | "consolidate" | "reorganize" | "animal_consolidate") {
+            "Respond with the JSON object.\n\n"
+        } else {
+            ""
+        };
+        let shared_len = system_a.len() + 1 + shared_user.len();
+        assert!(user_a.starts_with(shared_user) && user_b.starts_with(shared_user));
+        assert_eq!(&a.as_bytes()[..shared_len], &b.as_bytes()[..shared_len]);
+        let lcp = a.bytes().zip(b.bytes()).take_while(|(a, b)| a == b).count();
+        assert!(lcp >= shared_len, "{purpose}/{kind}: {lcp} < {shared_len}");
+        for text in [&a, &b] {
+            let character = text.find(if text == &a { "Aria" } else { "Zora" }).unwrap();
+            assert!(character >= shared_len);
+            for (pos, _) in text.match_indices("dynamic-") {
+                assert!(pos > character, "{purpose}/{kind}: dynamic content precedes identity");
+            }
+            for stable in ["place-", "# Your habits", "# Your routines", "Its routines"] {
+                if let Some(pos) = text.find(stable) {
+                    assert!(pos < text.find("dynamic-").unwrap(), "{purpose}/{kind}: {stable} follows dynamic content");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn think_shares_prefix() {
+        assert_prefix("think", "person");
+    }
+    #[test]
+    fn deliberate_shares_prefix() {
+        assert_prefix("deliberate", "person");
+    }
+    #[test]
+    fn consolidate_shares_prefix() {
+        assert_prefix("consolidate", "person");
+    }
+    #[test]
+    fn reorganize_shares_prefix() {
+        assert_prefix("reorganize", "person");
+    }
+    #[test]
+    fn identity_shares_prefix() {
+        assert_prefix("identity", "person");
+        assert_prefix("birth_identity", "person");
+    }
+    #[test]
+    fn talk_shares_prefix() {
+        assert_prefix("talk", "person");
+    }
+    #[test]
+    fn animal_impulse_shares_prefix() {
+        for kind in ["wolf", "deer"] {
+            assert_prefix("animal_impulse", kind);
+        }
+    }
+    #[test]
+    fn animal_compile_shares_prefix() {
+        for kind in ["wolf", "deer"] {
+            assert_prefix("animal_compile", kind);
+        }
+    }
+    #[test]
+    fn animal_consolidate_shares_prefix() {
+        for kind in ["wolf", "deer"] {
+            assert_prefix("animal_consolidate", kind);
+        }
+    }
+
+    #[test]
+    fn segments_order_by_stability() {
+        let mut out = Segments::default();
+        out.push(Stability::Dynamic, "clock");
+        out.push(Stability::Character, "persona");
+        out.push(Stability::Shared, "rules");
+        out.push(Stability::Character, "places");
+        assert_eq!(out.render(), "rulespersonaplacesclock");
+    }
+
+    #[test]
+    fn export_prompt_fixtures() {
+        let Ok(dir) = std::env::var("LIVING_PROMPT_FIXTURES") else { return };
+        let dir = std::path::Path::new(&dir);
+        std::fs::create_dir_all(dir).unwrap();
+        for purpose in ["think", "deliberate", "consolidate", "reorganize", "identity", "birth_identity", "talk", "animal_impulse", "animal_compile", "animal_consolidate"] {
+            for kind in if purpose.starts_with("animal_") { vec!["wolf", "deer"] } else { vec!["person"] } {
+                for name in ["Aria", "Zora"] {
+                    let (system, user) = fixture(purpose, name, kind);
+                    let body = serde_json::json!({"messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]});
+                    std::fs::write(dir.join(format!("{purpose}-{kind}-{name}.json")), serde_json::to_string_pretty(&body).unwrap()).unwrap();
+                }
+            }
+        }
+    }
 }
