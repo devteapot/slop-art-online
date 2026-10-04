@@ -126,3 +126,12 @@ Shared frontmatter, executable Python helpers, all four required feature heading
 - No supported agent runtime was relaunched to test its live skill menu. Only file discovery and instruction links were checked for Claude, Cursor, Codex and Mistral Vibe.
 - Browser presentation and Bevy reconnect policy have no verification skill until the proper UI exists. Authentic inference and personal learning belong to `verify-minds`, `verify-llm` and `verify-knowledge`; gameplay outcomes belong to `verify-core` and `verify-player`.
 - These short scratch runs establish no population, latency, memory or retention acceptance. No new product defect was found beyond the two existing privacy XFAILs.
+
+
+## Infant private-table verification, 2026-10-04
+
+Runs `client-infant-visibility-01` on `llm/baby-warmth` at `b2f115c` and `client-infant-visibility-02` after the evaluator-timer fix at `6001413` used the documented `scripts/run.py` wrapper. In each run, all eleven private tables, including `infant_cry`, refused anonymous SDK WebSocket subscriptions and HTTP SQL. The infant table returned the pinned server's private-table error through both transports. The full suite also passed 164 reducer-permission calls with zero mismatches, identity-scoped views, per-character reads, live updates, reconnect and ad-hoc speech. The existing public `experience` and `thought` leaks remained XFAIL.
+
+Evidence is `.local/living/verify/client-infant-visibility-{01,02}/{visibility.json,private-infant_cry.json,results.md,cleanup-proof.json}`. Both cleanups confirmed SQL 404, removed the player tokens and preserved the running shared container and existing living token. No model service or inference ran.
+
+The scoped maintenance source wave checked the visibility map against the private-table inventory and runtime discovery links. Shared skill discovery, executable helpers and frontmatter were checked for Codex, Claude, Cursor and Mistral. Live runtime menu/instruction-loading checks were not run. Unchanged client features were covered by the full suite; no new product fix was needed.

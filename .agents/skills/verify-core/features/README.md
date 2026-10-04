@@ -5,7 +5,7 @@
 | Tick, housekeeping, pause and resume | `scenes.py tick` | [tick.md](tick.md) |
 | Graph parsing, normalization, evaluation and routines | Cargo, mechanics and steering | [graphs.md](graphs.md) |
 | Rhai skills, laws, crafting and exchanges | Cargo and 23 mechanics checks | [mechanics.md](mechanics.md) |
-| Hunger, energy, eating and night cold | `scenes.py needs` | [needs.md](needs.md) |
+| Hunger, energy, eating, infant appearance and cry routing | `scenes.py needs` and `scenes.py infant` | [needs.md](needs.md) |
 | Birth, infancy, aging and death cleanup | `scenes.py lifecycle` and mechanics | [lifecycle.md](lifecycle.md) |
 | Species restrictions, grazing and migration floor | `scenes.py wildlife` and Cargo | [wildlife.md](wildlife.md) |
 | Hurt, kill, threaten, yield and seize | Mechanics and `scenes.py seize` | [combat.md](combat.md) |

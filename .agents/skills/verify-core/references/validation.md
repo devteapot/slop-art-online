@@ -105,3 +105,51 @@ All nine owned databases are absent with SQL HTTP 404, including the failed wild
 The known healthy-yielded seizure defect remains open at `living/authority/src/act.rs:238` and `living/scripts/skills.rhai:496,500`. Mechanics is intermittent, and its gift and broad conception predicates can overstate coverage. The exact original tablet-transfer failure remains unresolved.
 
 This run does not establish sustained performance, resource bounds, long-term ecology, wolf migration, every graph combination, natural old-age death, act queue limits, genuine model inference, player permissions, private subscriptions, or observer UI behavior. Use the neighbouring skills listed in `SKILL.md`. Display-sync tests are the entire viewer coverage here.
+
+
+## Infant thermal perception and cry requests, 2026-10-04
+
+The scoped `baby-warmth` pass added `scenes.py infant`, `scripts/infant.json` and the documented infant baseline. Product commit `6001413` fixes an evaluator-timer defect found during the live run. The thermal phase used the original infant implementation at `b2f115c`; the final cry interval used that implementation plus the exact product changes subsequently committed as `6001413`. The baseline authority was built from `6db8d1f` in the temporary `baby-baseline` worktree. The verification driver and fixture were shared; no baseline product changes were applied.
+
+### Scene and predicates
+
+The seed has four adult family members and their infant. The scene adds a caring witness and a remote shelter anchor. It holds behavior on rest and waits for real night and hunger at least 70, suppressing positive healing. There is no time-setting reducer; `set_paused` was used during diagnosis and the in-place fix, outside the final interval. Species, rules and vitals were not patched.
+
+The sheltered infant's parent-visible `looks` was `warm, hungry`, with HP rate 0. The exposed infant's `looks` was `cold, hungry`, with HP rate -2 per minute. Derived HP fell from 100.93207 to 100.6487 across the exposure probe. Thermal predicates passed on both authorities; the old authority omitted the new appearance assertion.
+
+The cry phase feeds adults to suppress their own survival alarms, cloaks the infant and gives a bounded berry meal. Hunger then crosses 55 through real rates. An explicit signal/wait graph emits cries about every seven seconds. For a 250-second window, one parent acknowledges through `mind_skip`; the other leaves its request pending. No minds connect and no model calls occur. The changed authority passed parent-only routing, one prompt for the pending parent, an answered-parent reminder gap of 126.453 seconds, an unchanged hunger-only cause for over 120 seconds, and a caring witness receiving signal experiences without crying deliberations. With parents and witness over 75 tiles away, caring adults at one and two tiles yielded exactly one cry request for the nearest adult.
+
+### Counts and method
+
+| Authority/run | Valid windows | Authority seconds | Created | Merged | Prompts per infant per minute |
+| --- | --- | --- | --- | --- | --- |
+| `6db8d1f`, `core-infant-before-01` | 1 | 251.704 | 5 | 13 | 4.290754 |
+| `6001413` product, `core-infant-after-01` | 1 | 251.572 | 3 | 0 | 0.715501 |
+
+Each window contains one crying infant and seven live characters: infant, parents, witness, two fallback adults and the remote anchor. Six dead preparation actors remain as retained rows, so each world has 13 character rows. Four actors occupy the local cry site; alternatives are remote during measurement. Admin SQL polls at about 1 Hz plus CLI overhead; there are no core SDK subscriptions, model service or observer. This is a bounded prompt-workload comparison, not a performance or model-call claim. The initial prompt is included; fallback is outside the rate window.
+
+The changed branch counts `InfantCry.prompted` stamps matched to actual crying request rows. The baseline matches signal `experience.at_ms` to a request containing the baby's crying reason whose requested/updated interval spans that stamp. Actor/stamp pairs are deduplicated. This excludes unrelated dawn and reflection request updates while preserving those raw observations. Per-event records carry the full corresponding request and classify creation versus merge using `requested_ms`.
+
+There were three preparation interruptions and two invalid/interrupted measurement attempts per authority, retained in `preparation-*` and `measurement-*`. Attempt 1 counted unrelated request updates; attempt 2 missed the initial stamp because the driver captured its start clock after installing the signal graph. The final driver captures time first and uses cry-specific stamps. One valid interval per revision completed after these corrections. `--resume-infant` reused the thermal checkpoint on the same owned world. `infant-verification.json` combines the original passed thermal checks with the final cry checks and points to both source result files; original failures remain intact.
+
+### Evaluator-timer defect and fix
+
+`mind_state.marks` holds graph evaluator markers alongside action-owned markers. The merge retained only evaluator IDs below `0xD000`, dropping reserved root-completion, failure and reflection timers at `0xFFFE`, `0xFFFD` and `0xFFFC`. After quiet reflection became due, a pending request refreshed roughly every two seconds. `6001413` preserves these evaluator timers through merges and clears them on graph replacement, while retaining action-owned markers below that reserved range. No schema or bindings changed. Both `reflection-proof.json` files preserve the comparison: baseline lacks the reflection marker and advances request `updated_ms` during ten seconds; the changed branch retains it and leaves `updated_ms` unchanged. Independent source review found no remaining concrete defect in this fix or the corrected cry counter.
+
+### Baseline, visibility and evidence
+
+`core-smoke-infant-{01,02}` ran Cargo, tick, needs and seize before and after the fix. Every command exited 0. Both runs passed rules 47 (one ignored), authority 9, mind 28 (five ignored) and viewer sync 3. Tick, needs and seize each passed six live predicates. `baseline-exits.json`, `cargo-results.json`, transcripts and individual scene results retain the outcomes. The scoped graph and needs maps were maintained; unrelated core features were not re-audited or driven in this pass.
+
+`client-infant-visibility-{01,02}` ran the entire documented client wrapper before and after the fix: all eleven private tables, including `infant_cry`, refused anonymous SDK subscriptions and HTTP SQL; all 164 reducer-permission calls matched. Views, live updates, reconnect and ad-hoc speech passed. Public `experience` and `thought` leaks remain known XFAILs. See the client validation record.
+
+Evidence lives under `.local/living/verify/`. Infant runs retain `infant-verification.json`, `infant-prompt-rate.json`, `infant-prompt-events.jsonl`, `infant-request-observations.jsonl`, thermal/cry/fallback snapshots, action transcripts, diagnostics and cleanup. `.local/living/verify/baby-live/report.md` records commands, commits and limits. The baseline evidence was copied into the branch before removing its temporary worktree.
+
+### Documentation, compatibility, cleanup and limits
+
+Consulted official [documentation](https://spacetimedb.com/docs/), [tables](https://spacetimedb.com/docs/tables/), [indexes](https://spacetimedb.com/docs/tables/indexes/), [performance](https://spacetimedb.com/docs/tables/performance/), [views](https://spacetimedb.com/docs/functions/views/) and [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) before the authority fix. Served docs identify 2.0.0; pinned/running 2.10.1 was checked against [official versioned Rust bindings](https://github.com/clockworklabs/SpacetimeDB/blob/v2.10.1/crates/bindings/src/lib.rs). The fix keeps the existing row-local mind-state representation. Diagnostics read a bounded fixture, with primary-key vitals/cry queries and small request/experience snapshots. No production tables, indexes, subscription recipients or retention policy changed.
+
+Shared discovery links, frontmatter, executable helpers, local documentation links and Python syntax were checked for Codex, Claude, Cursor and Mistral Vibe. Scoped source-reader reviews checked needs, graph markers and client visibility. The existing adapters resolve to shared files and required no edits. Live runtime menu and instruction-loading checks remain unverified.
+
+All six scratch databases were deleted with SQL HTTP 404. Their evidence remains; module copies and player tokens were removed. The baseline worktree was removed. The shared server stayed running; reference worlds and Neo4j were untouched. There were no new environment symlinks or real model calls.
+
+Live winter damage, infant campfire placement, starvation, wounds, urgent changed-cause routing, connected mind responses, multi-infant rates, long-term survival, scale/resource acceptance and browser presentation remain unproven here. Rule/authority unit checks cover some policy variants; they do not establish those live outcomes.

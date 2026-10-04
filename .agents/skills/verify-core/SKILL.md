@@ -33,9 +33,23 @@ python3 "$C/scenes.py" tick --run "$R" > "$E/tick.txt" 2>&1
 python3 "$C/scenes.py" needs --run "$R" > "$E/needs.txt" 2>&1
 python3 "$C/scenes.py" seize --run "$R" > "$E/seize.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
+
+# Infant assertions use their own small, long-lived family fixture.
+I=$R-infant
+IE=.local/living/verify/$I
+mkdir -p "$IE"
+python3 "$V" launch --run "$I" --seed "$PWD/$C/infant" \
+  --target-dir "$PWD/living/target/verify-infant" > "$IE/launch.txt" 2>&1
+python3 "$V" doctor --run "$I" > "$IE/doctor.txt" 2>&1
+python3 "$C/scenes.py" infant --run "$I" > "$IE/infant.txt" 2>&1
+python3 "$V" cleanup --run "$I" > "$IE/cleanup.txt" 2>&1
 ```
 
 Record each exit status. Unexpected failures exit 1. Run the remaining independent checks, then report the failure. `seize` checks refusal from an unyielded healthy person, seizure from a yielded healthy person, exact transfer, witnesses and lethal intent. If the yielded seizure fails, it still drives the badly-hurt path and exits 1. A check marked known (`XFAIL`/`XPASS`) exits 1 when it starts passing, so the stale expectation gets reviewed.
+
+`infant` is part of this baseline. Its fixture keeps ordinary lifespans, a 12-minute day and production species/rules. Allow about 30 minutes: the first night arrives before hunger suppresses healing, so the scene waits for the second real night. It compares shelter warmth, the parent's perceived infant `looks`, anchored HP rates and actual health loss. Then a cloak and a bounded berry meal reset the cry episode; the scene waits until hunger returns above 55 and holds it as the sole cause for a 250-second window. One parent answers scripted requests; the other stays pending. It checks parent-only prompts, pending suppression, 120-second reminders, witness experiences and one nearest caring adult after the parents leave hearing. No mind service runs.
+
+`infant-prompt-rate.json` records created and merged requests per infant per authority minute, including the initial request. `infant-prompt-events.jsonl` retains each cry prompt stamp and its request row. The changed authority supplies `infant_cry.prompted`; the baseline matches cry `experience.at_ms` to an eligible request spanning that timestamp. Raw request snapshots go to `infant-request-observations.jsonl`. Dawn and reflection updates are retained there and excluded from the cry count. Polling runs roughly once per second, with CLI overhead; it measures this bounded scene, not model calls or a general workload rate. `--resume-infant` reruns cry checks from the retained `infant-cast.json` thermal checkpoint after a harness failure. Preserve the failed results, events and observations in a separate attempt directory, run doctor again, then resume on the same owned database. The scene resets the cry episode through food and waits for hunger to return. `--baseline` runs the same scene on the pre-change authority, retaining physical assertions and measurements while omitting the new appearance and routing/cadence assertions.
 
 `cargo_checks.py` saves separate transcripts for these commands:
 

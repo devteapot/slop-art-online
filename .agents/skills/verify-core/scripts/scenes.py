@@ -2,6 +2,7 @@
 """Assert core behavior through the authority on a shared-harness scratch run."""
 import argparse
 import json
+import math
 import re
 import subprocess
 import time
@@ -326,15 +327,218 @@ def arrival(s):
     s.expect("cooldown prevents another group below the floor", {c["id"] for c in after} == ids)
 
 
-SCENES = {"tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival}
+def infant(s):
+    """One infant, two parents, a caring witness and two fallback adults; no minds."""
+    if s.resume_infant:
+        cast = json.loads((s.out / "infant-cast.json").read_text())
+        infant_cries(s, **cast)
+        return
+    w = s.rows("SELECT * FROM world", "world")[0]
+    s.expect("long-lived infant fixture selected", w["run"] == "verify-infant" and w["life_pace"] == 1)
+    people = s.rows("SELECT * FROM character WHERE id <= 5", "cast-before")
+    baby = next(c for c in people if c["alive"] and c["stage"] == 0)
+    a, b = baby["parent_a"], baby["parent_b"]
+    carers = [c["id"] for c in people if c["stage"] >= 2 and c["id"] not in (a, b)]
+    s.expect("two adult parents and two fallback carers", len(carers) == 2 and all(
+        any(c["id"] == p and c["stage"] >= 2 for c in people) for p in (a, b)))
+    witness, warm_anchor = s.people(2)
+    for c in s.rows("SELECT * FROM character"):
+        s.graph(c["id"], {"first": [{"do": "rest"}]})
+    # The caring witness would have been eligible alongside parents before this change.
+    s.call("mind_update", witness, {"persona": None, "relations": [{"other": baby["id"],
+        "trust": 50, "affinity": 50, "label": "care", "note": "verification fixture"}],
+        "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": True})
+    for actor in (b, witness):
+        s.call("place_near", actor, a)
+    s.call("place_near", baby["id"], a)
+    s.call("place_structure", warm_anchor, "shelter")
+    s.rows("SELECT * FROM relation", "relations")
+    positions = {r["id"]: r for r in s.rows("SELECT * FROM body", "positions-before")}
+    remote = math.hypot(positions[a]["x"] - positions[warm_anchor]["x"], positions[a]["y"] - positions[warm_anchor]["y"])
+    s.expect("warm anchor lies outside crying hearing", remote > 30, remote)
+
+    thought = {"kind": "verify", "summary": "scripted acknowledgement, no model",
+        "detail": "", "latency_ms": 0, "tokens": 0, "model": "none", "reference": "verify-core-infant"}
+    def clear(d):
+        s.call("mind_skip", d["actor"], d["updated_ms"], thought)
+    def requests(label=None):
+        return s.rows("SELECT * FROM deliberation", label)
+    def scene_for(parent, label):
+        s.graph(parent, {"think": "verify-core infant looks " + label})
+        d = s.wait(lambda: [d for d in requests() if d["actor"] == parent and label in d["reason"]], seconds=60)[0]
+        scene = json.loads(d["scene"])
+        (s.out / f"infant-{label}-scene.json").write_text(json.dumps(scene, indent=2) + "\n")
+        visible = next(c for c in scene["creatures"] if c["id"] == baby["id"])
+        clear(d)
+        s.graph(parent, {"first": [{"do": "rest"}]})
+        return visible.get("looks", "")
+    def night_and_no_healing():
+        now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        hour = ((now - w["epoch_ms"] + w["day_ms"] * 7 // 24) % w["day_ms"]) / w["day_ms"] * 24
+        v = s.vitals(baby["id"])
+        hunger = v["hunger"] + v["hunger_rate"] * max(0, now - v["at_ms"]) / 60000
+        return (20 <= hour < 22 or hour < 2) and 70 <= hunger < 95
+    print("Waiting for real night with infant hunger >=70 to isolate cold HP loss.", flush=True)
+    s.wait(night_and_no_healing, seconds=2100, every=5)
+    s.expect("infant is still alive and infant", s.rows(f"SELECT stage, alive FROM character WHERE id = {baby['id']}")[0] == {"stage": 0, "alive": True})
+    s.call("place_near", baby["id"], warm_anchor)
+    s.call("place_near", a, baby["id"])
+    s.wait(lambda: s.vitals(baby["id"])["rate_key"] & 128)
+    warm = s.vitals(baby["id"], "sheltered-vitals")
+    warm_looks = scene_for(a, "sheltered")
+    s.call("place_near", baby["id"], b)
+    s.call("place_near", a, baby["id"])
+    s.wait(lambda: not s.vitals(baby["id"])["rate_key"] & (64 | 128))
+    cold = s.vitals(baby["id"], "exposed-vitals")
+    cold_looks = scene_for(b, "exposed")
+    s.expect("shelter removes exactly the summer cold penalty", abs(warm["hp_rate"] - cold["hp_rate"] - 2) < 0.1,
+             {"sheltered": warm["hp_rate"], "exposed": cold["hp_rate"]})
+    if not s.baseline:
+        s.expect("parent sees warm shelter and cold exposure matching HP-rate sign",
+                 "warm" in warm_looks and "cold" in cold_looks and warm["hp_rate"] >= 0 and cold["hp_rate"] < 0,
+                 {"sheltered_looks": warm_looks, "exposed_looks": cold_looks})
+    n0 = s.needs(baby["id"], "cold-before")
+    time.sleep(8)
+    n1 = s.needs(baby["id"], "cold-after")
+    s.expect("exposed infant actually loses health", n1["hp"] < n0["hp"] - 0.15)
+
+    cast = {"baby": baby, "a": a, "b": b, "carers": carers, "witness": witness, "warm_anchor": warm_anchor}
+    (s.out / "infant-cast.json").write_text(json.dumps(cast, indent=2) + "\n")
+    infant_cries(s, **cast)
+
+
+def infant_cries(s, baby, a, b, carers, witness, warm_anchor):
+    thought = {"kind": "verify", "summary": "scripted acknowledgement, no model",
+        "detail": "", "latency_ms": 0, "tokens": 0, "model": "none", "reference": "verify-core-infant"}
+    def clear(d):
+        s.call("mind_skip", d["actor"], d["updated_ms"], thought)
+    def requests(label=None):
+        return s.rows("SELECT * FROM deliberation", label)
+    # Adults must not introduce starvation/injury alarms into the infant's requests.
+    for actor in (a, b, witness, *carers):
+        s.call("grant_items", actor, "cooked_meat", 3)
+        for _ in range(3):
+            before = s.inventory(actor).get("cooked_meat", 0)
+            s.act(actor, {"do": "eat", "item": "cooked_meat"})
+            s.wait(lambda actor=actor, before=before: s.inventory(actor).get("cooked_meat", 0) < before)
+        s.needs(actor, f"fed-adult-{actor}")
+
+    # Park every fallback carer by the remote warm anchor during the parents phase.
+    for actor in carers:
+        s.call("place_near", actor, warm_anchor)
+    s.call("place_near", a, baby["id"])
+    s.call("place_near", b, baby["id"])
+    s.call("place_near", witness, baby["id"])
+    for actor in (a, b, witness):
+        s.graph(actor, {"first": [{"do": "rest"}]})
+    # Keep hunger as the only cause across dawn, without patching food or energy.
+    s.call("grant_items", baby["id"], "cloak", 1)
+    # Feed only enough to keep hunger as the sole physical cause throughout the window.
+    s.graph(baby["id"], {"first": [{"do": "rest"}]})
+    hunger = s.needs(baby["id"], "before-cry-food")["hunger"]
+    count = max(0, math.ceil((hunger - 54) / 12))
+    s.call("grant_items", baby["id"], "berries", count)
+    for _ in range(count):
+        before = s.inventory(baby["id"]).get("berries", 0)
+        s.act(baby["id"], {"do": "eat", "item": "berries"})
+        s.wait(lambda before=before: s.inventory(baby["id"]).get("berries", 0) < before)
+    time.sleep(3)
+    s.wait(lambda: 55 < s.needs(baby["id"], "hunger-ready")["hunger"] < 80, seconds=300, every=2)
+    for d in requests():
+        clear(d)
+    time.sleep(21)
+    hunger = s.needs(baby["id"], "measurement-start")["hunger"]
+    s.expect("infant has room for a stable hunger-only measurement", 55 < hunger < 80, hunger)
+    start = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.graph(baby["id"], {"seq": [{"do": "signal", "item": "cry"}, {"wait": 6}]})
+    events, initial = [], {}
+    seen = set()
+    cause = None
+    end = time.monotonic() + 250
+    while time.monotonic() < end:
+        rows = {d["actor"]: d for d in requests()}
+        if s.baseline:
+            heard = s.rows(f"SELECT * FROM experience WHERE subject = {baby['id']} AND kind = 'signal'")
+            stamps = [(e["observer"], e["at_ms"]) for e in heard if e["at_ms"] >= start and "crying" in e["text"]]
+        else:
+            state = s.rows(f"SELECT * FROM infant_cry WHERE infant = {baby['id']}")
+            stamps = [tuple(p) for p in state[0]["prompted"]] if state else []
+            if state:
+                cause = state[0]["needs"] if cause is None else cause
+                if state[0]["needs"] != cause or cause != [[0, []]]:
+                    s.expect("cry cause remains hunger alone", False, state[0]["needs"])
+        for actor, stamp in stamps:
+            key = (actor, stamp)
+            d = rows.get(actor)
+            if key in seen or stamp < start or not d or baby["name"] not in d["reason"] or "crying" not in d["reason"]:
+                continue
+            if s.baseline and not d["requested_ms"] <= stamp <= d["updated_ms"]:
+                continue
+            event = {"at_ms": stamp, "actor": actor, "kind": "created" if d["requested_ms"] == stamp else "merged", "request": d}
+            events.append(event)
+            seen.add(key)
+            initial.setdefault(actor, d)
+            with (s.out / "infant-prompt-events.jsonl").open("a") as f:
+                f.write(json.dumps(event) + "\n")
+            s.rows("SELECT * FROM deliberation", f"requests-{len(events)}")
+            if actor == a:
+                clear(d)
+        with (s.out / "infant-request-observations.jsonl").open("a") as f:
+            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "requests": list(rows.values())}) + "\n")
+        time.sleep(1)
+    finish = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    metrics = {"baseline": s.baseline, "infants": 1, "run_count": 1, "start_ms": start,
+        "finish_ms": finish, "minutes": (finish-start)/60000, "created": sum(e["kind"] == "created" for e in events),
+        "merged": sum(e["kind"] == "merged" for e in events), "events": len(events),
+        "prompts_per_infant_minute": len(events) * 60000 / (finish-start),
+        "recipient_counts": {str(actor): sum(e["actor"] == actor for e in events) for actor in sorted(initial)}}
+    (s.out / "infant-prompt-rate.json").write_text(json.dumps(metrics, indent=2) + "\n")
+    s.needs(baby["id"], "measurement-end")
+    requests("parents-final-requests")
+    s.rows("SELECT * FROM experience", "parents-experiences")
+    if not s.baseline:
+        cry = s.rows(f"SELECT * FROM infant_cry WHERE infant = {baby['id']}", "cry-state")
+        s.expect("only parents receive crying deliberations", set(initial) == {a, b}, metrics)
+        s.expect("same-cause pending cry is never re-triggered", sum(e["actor"] == b for e in events) == 1, metrics)
+        a_events = [e for e in events if e["actor"] == a]
+        gaps = [(r["at_ms"]-l["at_ms"])/1000 for l,r in zip(a_events,a_events[1:])]
+        s.expect("answered parent receives 120-second reminders", len(gaps) >= 1 and all(120 <= gap <= 128 for gap in gaps), gaps)
+        s.expect("cry cause stays unchanged for over 120 seconds", bool(cry) and cry[0]["needs"] == [[0, []]] and finish - start > 120_000, cry)
+        s.expect("caring witness receives experience without deliberation", bool(s.told(witness, "crying", "signal")) and witness not in initial)
+
+    # Parents and witness leave hearing; two eligible carers remain at different distances.
+    for actor in (a, b, witness):
+        s.call("place_near", actor, warm_anchor)
+    for d in requests():
+        clear(d)
+    s.call("place_near", carers[0], baby["id"])
+    s.call("place_near", carers[1], carers[0])
+    positions = {r["id"]: r for r in s.rows("SELECT * FROM body", "fallback-positions")}
+    def distance(actor):
+        return math.hypot(positions[actor]["x"] - positions[baby["id"]]["x"], positions[actor]["y"] - positions[baby["id"]]["y"])
+    s.expect("parents leave hearing and carers have unequal nearby distances", all(distance(p) > 12 for p in (a, b, witness))
+             and distance(carers[0]) < distance(carers[1]) <= 12, {str(p): distance(p) for p in (a, b, witness, *carers)})
+    fallback = s.wait(lambda: [d for d in requests() if "crying" in d["reason"] and baby["name"] in d["reason"]], seconds=55)
+    time.sleep(3)
+    fallback = [d for d in requests("fallback-requests") if "crying" in d["reason"] and baby["name"] in d["reason"]]
+    if not s.baseline:
+        s.expect("exactly the nearest caring adult receives fallback", {d["actor"] for d in fallback} == {carers[0]}, fallback)
+    s.rows("SELECT * FROM experience", "fallback-experiences")
+
+
+SCENES = {"infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival}
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("scene", choices=SCENES)
     ap.add_argument("--run", required=True)
+    ap.add_argument("--baseline", action="store_true", help="measure pre-change infant authority without new-policy assertions")
+    ap.add_argument("--resume-infant", action="store_true", help="rerun cry checks from the retained thermal checkpoint")
     a = ap.parse_args()
     s = Scene(a.run, a.scene)
+    s.baseline = a.baseline
+    s.resume_infant = a.resume_infant
     error = None
     try:
         SCENES[a.scene](s)
