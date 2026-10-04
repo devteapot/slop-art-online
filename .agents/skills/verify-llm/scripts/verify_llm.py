@@ -85,12 +85,11 @@ class Run:
             result = self.command(['docker', 'inspect', 'sao-living_spacetimedb_1', '--format', '{{json .Mounts}}'])
             mounts = json.loads(result.stdout)
             source = next((m.get('Source') for m in mounts if m.get('Destination') == '/wasm'), None)
-            expected = ROOT / 'living/target/wasm32-unknown-unknown/release'
-            check = {'expected': str(expected.resolve()), 'mounted': source}
+            check = {'mounted': source, 'worktree_copy': True}
             (self.directory / 'mount-check.json').write_text(json.dumps(check, indent=2))
-            if source is None or Path(source).resolve() != expected.resolve():
+            if source is None or not Path(source).is_dir() or not os.access(source, os.W_OK):
                 self.launch_blocked = True
-                raise RuntimeError(f"/wasm mount mismatch: mounted {source}, worktree writes {expected}; no database published")
+                raise RuntimeError(f"/wasm mount unavailable or unwritable: {source}; no database published")
         return self.command([SHARED, args[0], '--run', self.name, *args[1:]])
 
     def sql(self, query, save):
@@ -312,10 +311,23 @@ def run_case(run, case):
                     continue
                 run.admin('set_behavior', person['id'], json.dumps({'think': 'verify outage'}))
             run.wait(lambda: 'unreachable: holding model calls' in (run.directory / 'mind.log').read_text(), 'outage gate closes', 70)
-            # Let a second call/probe wait behind the gate, then recover the same base URL.
+            # Keep the outage long enough for a held probe, then restore the same URL.
             time.sleep(5)
+            restarted_ms = time.time_ns() // 1_000_000
             first = run.fake(a, {}, 'primary-restarted')
-            run.wait(lambda: 'reachable again after' in (run.directory / 'mind.log').read_text(), 'outage recovery', 40)
+            # A failed compile can leave the next think behind its authority cooldown.
+            # Fresh demand after restoration avoids exhausting its probe while still down.
+            run.harness('player', 'join', 'LlmOutageVerifier')
+            player = run.sql("SELECT id FROM character WHERE name = 'LlmOutageVerifier'", 'outage-player')[0]['id']
+            run.admin('place_near', player, ids[0])
+            run.harness('player', 'say', 'Are you still there?', '--to', str(ids[0]))
+            run.wait(lambda: 'reachable again after' in (run.directory / 'mind.log').read_text(), 'outage recovery', 70)
+            run.wait(lambda: bool(rows(run.directory / 'primary-restarted-requests.jsonl')) and
+                     any(e['at_ms'] >= restarted_ms and e['error'] is None for e in run.exchanges()),
+                     'successful exchange after provider restart')
+            run.wait(lambda: any(b['source'] == 'mind' for b in run.sql(
+                     f'SELECT * FROM brain WHERE id = {ids[0]}', 'brain-recovered')),
+                     'accepted graph after outage', 160)
             log = (run.directory / 'mind.log').read_text()
             recovery = re.search(r'reachable again after .*?; (\d+) calls were held meanwhile', log)
             assert recovery and int(recovery[1]) > 0, 'recovery must report held callers'

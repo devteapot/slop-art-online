@@ -1,5 +1,37 @@
 # Model integration validation
 
+## 2026-10-04 pacing correction and authority verification
+
+Product commit `47f3f9a18aa92111ec81b806ee9bc43a4feac42d` fixes rate collapse after simultaneous 429s, proportional recovery and the unconfigured ceiling. Runs used `/home/carlid/dev/sao-wt/llm-transport`, branch `llm/llm-transport`, rebased onto the living-core LoD and prompt fixes. No reference world, paid endpoint or Neo4j endpoint was contacted. No main-checkout `.env` or `.local` symlink was needed.
+
+The data shape remains a per-profile `Rate` plus the typed `Lane` queue. `configured_ceiling: Option<f64>` distinguishes an explicit static override from the adaptive starting ceiling. `last_decrease: Option<Instant>` and ticket send times deduplicate responses from one congestion event. Constants are `RATE_START_RPM=600`, `RATE_DECREASE=0.5`, `RATE_FLOOR_FRACTION=0.05`, `RATE_RECOVERY_FRACTION=0.05`, `RATE_RECOVERY_INTERVAL=10s` and `RATE_HEADER_HEADROOM=0.9`. The floor and recovery step are at least one request/minute; a configured ceiling below one still wins. At a 400 ceiling, a decrease to 200 recovers in ten successful 10-second steps, or 100 seconds. Recovery still requires successful total-usage feedback. The start accommodates the audited world's roughly 400 successful calls/minute while unknown providers can reduce it through headers or 429s. This is policy, not evidence of quota or scale acceptance.
+
+Commands driven:
+
+```bash
+cargo test --manifest-path living/Cargo.toml -p living-mind llm::tests -- --nocapture
+.agents/skills/verify-llm/scripts/verify_llm.py --run llm-20261004-pacing-r1
+.agents/skills/verify-llm/scripts/verify_llm.py --run llm-20261004-pacing-r2 --case outage
+.agents/skills/verify-llm/scripts/verify_llm.py --run llm-20261004-pacing-r3 --case outage
+.agents/skills/verify-minds/scripts/verify_minds.py --run minds-20261004-pacing-r1
+.agents/skills/verify-minds/scripts/paid_safety.py --run minds-duel-safety-20261004-pacing
+```
+
+- PASS: release build, all 16 transport tests, 40 non-ignored mind tests and all nine fake contract scenarios. Five existing mind tests remain ignored.
+- LLM first full suite: 14 PASS, one outage FAIL. Failure remains in `llm-20261004-pacing-r1-outage/`; the endpoint failed during compilation and no further request reached the restored server within the original 40-second recovery check. Other cases include the actual 180-second HTTP timeout, overflow, JSON repair, bounded retries, routing and missing-key refusal.
+- PASS: outage retry `r2`, then final fixture `r3`. The fixture restores the provider after five seconds and sends a fresh addressed player question, avoiding a probe that finishes while the endpoint is still down. It requires restarted-provider requests, a successful post-restart exchange, positive held count and an accepted authority graph. `r3` proves the final fixture. The full `r1` invocation exited 1; these results are not a claim that one final full invocation exited 0.
+- Minds: eight PASS, including roundtrip, acts, conversation, reconnect and LoD. Consolidation remains its documented XFAIL for no-store relations, beliefs, judgments and places. Its persona, consolidation thought and cursor assertions pass. Paid-wrapper guard and all five inert termination scenarios PASS, with no model calls.
+
+Evidence is under `.local/living/verify/` in the named suite and case directories. Each case retains doctor output, authority snapshots, fake request logs, mind logs, source/binary hashes, journals when created and cleanup records. `llm-20261004-pacing-review/cleanup-audit.json` independently confirms HTTP SQL 404 for all 26 scratch databases, no owned PID or copied module remaining, and retained evidence. Startup refusal creates no journal. `results-review.json`, `retry-lanes.txt`, `source-pass.txt` and `compatibility-and-links.json` record result counts, runtime retry lanes, source maintenance and discovery checks.
+
+Maintenance outcome is changed. One read-only source reader covered each of nine feature files; every local feature was driven. The paid feature's authorization prerequisite remains unmet. Shared standard skill discovery and Markdown links passed for Codex/Mistral Vibe sources and Claude/Cursor adapters. Actual invocation and instruction loading in all four runtimes remain unverified. No adapter shape changed.
+
+Official [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) and [indexes](https://spacetimedb.com/docs/tables/indexes/) guidance was consulted. The workspace pins server/SDK 2.10.1; every doctor verified that server version. These changes add no table, query, index, subscription or reducer. The SDK's pinned `client_cache.rs::TableHandle::iter` clones all rows before filtering. Deliberation priority therefore costs approximately `400 × controlled characters` cloned experiences per call with full retained windows, or 86,400 for 216 characters. At 400 deliberations/minute that is about 34.6 million clones/minute, an estimate rather than a measurement. The authority has an observer index; generated client bindings do not expose it. Adding a maintained client index needs lifecycle/reconnect work and remains outside this correction.
+
+The animal conflict matches living-core prompt order and preserves the lane through both think and compile calls; the release build passes. The suites select people, so animal desire-plan routine installation was not reproduced. A source reader flagged a possible existing missing routine-application path, also present on living-core; it is not a transport merge change.
+
+Paid follow-up still needs explicit authorization and a reviewed active configuration. Measure real provider headers/quotas, 429s, queue and player latency, background progress, cache hits, split token usage and billing under the actual model workload. Free fixtures do not establish those, population performance, long-run stability or model judgment.
+
 ## 2026-10-04 transport stream
 
 Product commit `e18d912e012c0fba0a8c6a648663aaeb2b78744f` replaces the old budget/window with profile pacing and typed priority admission. Checks below ran from `/home/carlid/dev/sao-wt/llm-transport` immediately before committing that exact product source. `living/` had the uncommitted transport edits, without authority or prompt changes. Earlier failed attempts remain in the `*-01` directories; they are not passing evidence.

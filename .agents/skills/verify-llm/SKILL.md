@@ -27,7 +27,7 @@ Repeat `--case` to select several. Read the map for the exact case names. A fail
 
 The driver selects one living adult for most cases and two adults plus a child for routing. It sets `LIVING_SERVER`, `LIVING_DB`, `LIVING_RUN`, `LIVING_SEED`, `LIVING_MODELS`, `LIVING_ONLY`, `LIVING_LLM_PER_MIN`, `LIVING_CONCURRENCY`, `LIVING_TOKEN`, `LIVING_ROOT`, `LIVING_LOD` and `LIVING_NEO4J` explicitly. `LIVING_NEO4J=off` overrides the host's Neo4j configuration. Profiles point only to `127.0.0.1` and use dummy keys. The admin token comes from `living/tools/stdb login show --token` into process memory. The driver never overwrites `.local/living/token` or writes that token into evidence.
 
-The runner checks the container's `/wasm` bind mount against this checkout before publishing. A mismatch stops the case with `mount-check.json` and `failure.txt`, records `database_not_created` in cleanup, and leaves the shared service untouched. Worktrees must not publish a stale module from another checkout.
+The runner checks that the container's `/wasm` bind mount exists and is writable before publishing. Shared `verify.py` copies this run's own build to a uniquely named module there when launched from a worktree. An unavailable mount stops the case with `mount-check.json` and `failure.txt`, records `database_not_created` in cleanup, and leaves the shared service untouched. Worktrees never publish a stale module from another checkout.
 
 ## Evidence and cleanup
 

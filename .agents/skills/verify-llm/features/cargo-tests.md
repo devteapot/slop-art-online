@@ -6,7 +6,8 @@
 - Group ancestry is bounded and searches parent_a first.
 - Group, stage, assignment, rotation and missing-key precedence.
 - Repair of stray closers and trailing commas.
-- Explicit-clock pacing, token reservations, 429 adaptation and priority under saturation.
+- Explicit-clock pacing, token reservations, one decrease per 429 burst, relative rate floors and 100-second recovery after halving.
+- Unconfigured profiles start at 600 requests/minute, header ceilings can exceed the start, and Interactive precedes queued Background under saturation.
 - Cancellation of queued requests and outage probes.
 - Fake HTTP recovery, cache keys, usage breakdown and omitted usage fields.
 

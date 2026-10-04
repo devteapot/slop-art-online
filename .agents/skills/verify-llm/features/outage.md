@@ -4,6 +4,7 @@
 
 - Stop an owned provider process and observe a real connect failure.
 - Later calls wait while one probe retries.
+- After provider restoration, an addressed player question supplies fresh demand even if the failed compilation left thinking behind an authority cooldown. The gate reopens on a reachable response, so new calls can still enter it after restoration.
 - Restart the same port and observe recovery with a positive held-call count.
 
 ## How to get to it (user POV)
@@ -16,7 +17,7 @@ A model endpoint becomes unreachable while the mind remains connected to the aut
 .agents/skills/verify-llm/scripts/verify_llm.py --run llm-$(date +%Y%m%d-%H%M%S) --case outage
 ```
 
-`mind.log` must contain unreachable holding and reachable-again lines, with at least one held caller. The fake restarted log and copied journal must show resumed requests. `processes.json` records owned processes, and `cleanup.json` records their stops.
+`mind.log` must contain unreachable holding and reachable-again lines, with at least one held caller. The driver requires requests in the restarted fake log, a successful journal exchange after restart and a mind-installed authority graph. The question may be handled by a pending deliberation instead of a talk turn. `processes.json` records owned processes, and `cleanup.json` records their stops.
 
 ## Gotchas
 
