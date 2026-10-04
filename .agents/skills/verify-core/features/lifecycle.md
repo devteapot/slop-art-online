@@ -7,6 +7,10 @@
 - Birth writes a chronicle line and starts rearing.
 - A seeded infant ages into a child.
 - Death clears bodily rows while retaining an expecting parent's inheritance until birth.
+- Infant cries retain cause enums and per-carer prompt times in private `infant_cry`. Cold, starvation and injury cry even when the infant's installed behavior does not signal.
+- Nearby adult parents receive cry deliberations. With no parent nearby, only the nearest adult sibling or adult with positive affinity does. Other listeners receive experiences.
+- Same-cause pending requests are left unchanged. Completed requests get a reminder after 120 seconds; new causes can merge immediately, with cold, starvation and injury bypassing the normal think interval.
+- Leaving infancy or dying deletes the infant's cry state.
 
 ## How to get to it (user POV)
 
@@ -23,3 +27,4 @@ Run the fresh `stage1-acts` lifecycle recipe in [SKILL.md](../SKILL.md). It gran
 - Gestation uses species `Life.gestation` and pace in `living/authority/src/act.rs:1299`. `laws.gestation_days` does not compress it.
 - No mind connects. Persona generation and memory isolation require neighbouring skills.
 - Adult-to-elder transitions and natural old-age deaths are not asserted.
+- Authority `perceive::tests` covers carer selection, pending merging, cause escalation and reminders with one parent pending and the other completed. The live recipe is in [needs.md](needs.md). Lifecycle's current driver does not assert `infant_cry` cleanup or cry fan-out.

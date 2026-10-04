@@ -52,7 +52,7 @@ BASE_QUERIES = [
     'SELECT * FROM gate',
 ]
 PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
-           'act_queue', 'pasture', 'tick_timer', 'slow_timer']
+           'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry']
 MIND = ['mind_routines', 'mind_install', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update']
 ADMIN = {

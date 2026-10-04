@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[4]
 CHECKS = {
     "rules": ["-p", "living-rules"],
-    "authority-seed": ["-p", "living-authority", "--lib", "seed::tests"],
+    "authority": ["-p", "living-authority", "--lib"],
     "mind": ["-p", "living-mind"],
     "viewer-sync": ["-p", "living-viewer", "sync::tests"],
 }

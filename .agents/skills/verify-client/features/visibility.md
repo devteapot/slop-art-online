@@ -2,7 +2,7 @@
 
 ## Sub-features
 
-- Refuse anonymous WebSocket subscriptions to all ten private tables.
+- Refuse anonymous WebSocket subscriptions to all eleven private tables.
 - Refuse anonymous HTTP SQL reads of the same tables.
 - Record the exact transport-specific refusal for each table.
 - KNOWN ISSUE: an anonymous client currently reads every character's `experience` rows.
@@ -12,7 +12,7 @@
 
 A client submits `SELECT * FROM <table>` on its connection. Table visibility is enforced by the authority, independently of the viewer's selected-character filter.
 
-The private tables are `clock`, `steer`, `wake`, `familiar`, `deliberation`, `rearing`, `act_queue`, `pasture`, `tick_timer`, and `slow_timer`. `living/authority/src/tables.rs:417` declares `experience` public. `tables.rs:588` declares `thought` public. The claim at `tables.rs:3` that percepts are private is contradicted by this access.
+The private tables are `clock`, `steer`, `wake`, `familiar`, `deliberation`, `rearing`, `act_queue`, `pasture`, `tick_timer`, `slow_timer`, and `infant_cry`. The latter stores infant needs and per-carer cry prompt times and has no client subscription. `living/authority/src/tables.rs` declares `experience` and `thought` public. The claim at the top of that file that percepts are private is contradicted by this access.
 
 ## Driving it with drive.py
 
