@@ -26,16 +26,12 @@ pub struct Profile {
     /// Optional alternate for legacy configs. Every alternate uses its own pacing.
     #[serde(default)]
     pub overflow: Option<String>,
-    #[serde(default = "requests_per_minute")]
-    pub requests_per_minute: f64,
+    #[serde(default)]
+    pub requests_per_minute: Option<f64>,
     #[serde(default)]
     pub tokens_per_minute: Option<u64>,
     #[serde(default)]
     pub prompt_cache_key: bool,
-}
-
-fn requests_per_minute() -> f64 {
-    60.0
 }
 
 fn yes() -> bool {
@@ -142,7 +138,15 @@ impl Lane {
     }
 }
 
+const RATE_START_RPM: f64 = 600.0;
+const RATE_DECREASE: f64 = 0.5;
+const RATE_FLOOR_FRACTION: f64 = 0.05;
+const RATE_RECOVERY_FRACTION: f64 = 0.05;
+const RATE_RECOVERY_INTERVAL: Duration = Duration::from_secs(10);
+const RATE_HEADER_HEADROOM: f64 = 0.9;
+
 struct Rate {
+    configured_ceiling: Option<f64>,
     ceiling: f64,
     rpm: f64,
     tpm: Option<u64>,
@@ -150,19 +154,22 @@ struct Rate {
     last_sent: Instant,
     blocked_until: Instant,
     last_increase: Instant,
+    last_decrease: Option<Instant>,
     tokens: VecDeque<(u64, Instant, u64)>,
 }
 
 impl Rate {
     fn new(p: &Profile, now: Instant) -> Self {
         Self {
-            ceiling: p.requests_per_minute,
-            rpm: p.requests_per_minute,
+            configured_ceiling: p.requests_per_minute,
+            ceiling: p.requests_per_minute.unwrap_or(RATE_START_RPM),
+            rpm: p.requests_per_minute.unwrap_or(RATE_START_RPM),
             tpm: p.tokens_per_minute,
             next: now,
             last_sent: now,
             blocked_until: now,
             last_increase: now,
+            last_decrease: None,
             tokens: VecDeque::new(),
         }
     }
@@ -194,11 +201,12 @@ impl Rate {
     fn feedback(&mut self, id: u64, limited: bool, headers: &reqwest::header::HeaderMap, usage: Option<u64>, now: Instant) {
         let number = |name| headers.get(name).and_then(|v| v.to_str().ok()).and_then(|s| s.parse::<f64>().ok()).filter(|n| n.is_finite() && *n >= 0.0);
         if let Some(limit) = number("x-ratelimit-limit-req-minute").filter(|n| *n >= 0.01) {
-            self.ceiling = self.ceiling.min(limit * 0.9);
+            let advertised = limit * RATE_HEADER_HEADROOM;
+            self.ceiling = self.configured_ceiling.map_or(advertised, |cap| cap.min(advertised));
             self.rpm = self.rpm.min(self.ceiling);
         }
         if let Some(limit) = number("x-ratelimit-limit-tokens-minute").filter(|n| *n >= 1.0) {
-            let limit = (limit * 0.9).max(1.0) as u64;
+            let limit = (limit * RATE_HEADER_HEADROOM).max(1.0) as u64;
             self.tpm = Some(self.tpm.map_or(limit, |old| old.min(limit)));
         }
         if let Some(actual) = usage {
@@ -207,13 +215,19 @@ impl Rate {
             }
         }
         if limited {
-            self.rpm = (self.rpm * 0.5).max(0.01).min(self.ceiling);
+            // Responses from the same in-flight burst describe one congestion event.
+            let sent = self.tokens.iter().find(|(ticket, _, _)| *ticket == id).map(|(_, at, _)| *at);
+            if self.last_decrease.is_none_or(|last| sent.is_some_and(|at| at > last)) {
+                let floor = (self.ceiling * RATE_FLOOR_FRACTION).max(1.0).min(self.ceiling);
+                self.rpm = (self.rpm * RATE_DECREASE).max(floor);
+                self.last_decrease = Some(now);
+            }
             self.last_increase = now;
             let wait = retry_after(headers, std::time::SystemTime::now()).unwrap_or(Duration::from_secs_f64(60.0 / self.rpm));
             self.blocked_until = self.blocked_until.max(now.checked_add(wait).unwrap_or(now + Duration::from_secs(60)));
             self.next = self.next.max(now + Duration::from_secs_f64(60.0 / self.rpm));
-        } else if usage.is_some() && now.duration_since(self.last_increase) >= Duration::from_secs(60) {
-            self.rpm = (self.rpm + 1.0).min(self.ceiling);
+        } else if usage.is_some() && now.duration_since(self.last_increase) >= RATE_RECOVERY_INTERVAL {
+            self.rpm = (self.rpm + (self.ceiling * RATE_RECOVERY_FRACTION).max(1.0)).min(self.ceiling);
             self.last_increase = now;
         }
         if number("x-ratelimit-remaining-req-minute") == Some(0.0) || number("x-ratelimit-remaining-tokens-minute") == Some(0.0) {
@@ -435,7 +449,7 @@ impl Llm {
         let http = reqwest::Client::builder().timeout(Duration::from_secs(180)).user_agent("sao-living-mind/0.1").build()?;
         let per_min: f64 = std::env::var("LIVING_LLM_PER_MIN").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
         for (name, p) in &models.profiles {
-            if !p.requests_per_minute.is_finite() || p.requests_per_minute < 0.01 || p.requests_per_minute > 60000.0 || p.tokens_per_minute == Some(0) {
+            if p.requests_per_minute.is_some_and(|rpm| !rpm.is_finite() || !(0.01..=60000.0).contains(&rpm)) || p.tokens_per_minute == Some(0) {
                 return Err(anyhow!("profile {name}: requests_per_minute must be between 0.01 and 60000, tokens_per_minute must be positive"));
             }
         }
@@ -737,11 +751,79 @@ mod tests {
         assert_eq!(rate.tpm, Some(900));
         assert_eq!(rate.ready_at(20, now), now + Duration::from_secs(120));
         rate.feedback(1, false, &Default::default(), Some(10), now + Duration::from_secs(120));
-        assert_eq!(rate.rpm, 19.0);
+        assert_eq!(rate.rpm, 19.8);
         headers.clear();
         headers.insert("x-ratelimit-remaining-req-minute", "0".parse().unwrap());
         rate.feedback(1, false, &headers, None, now + Duration::from_secs(120));
         assert!(rate.ready_at(20, now + Duration::from_secs(120)) >= now + Duration::from_secs(180));
+    }
+
+    #[test]
+    fn a_burst_of_429s_decreases_once_and_new_congestion_respects_the_floor() {
+        let now = Instant::now();
+        let mut p = test_profile();
+        p.requests_per_minute = Some(400.0);
+        let mut rate = Rate::new(&p, now);
+        for id in 1..=20 {
+            rate.sent(id, 10, now + Duration::from_millis(id));
+        }
+        for id in 1..=20 {
+            rate.feedback(id, true, &Default::default(), None, now + Duration::from_secs(1));
+            assert_eq!(rate.rpm, 200.0, "one burst must cause one decrease");
+        }
+        for id in 21..=30 {
+            let sent = now + Duration::from_secs(id);
+            rate.sent(id, 10, sent);
+            rate.feedback(id, true, &Default::default(), None, sent + Duration::from_millis(1));
+        }
+        assert_eq!(rate.rpm, 20.0, "five percent of the ceiling is the floor");
+        rate.feedback(1, true, &Default::default(), None, now + Duration::from_secs(31));
+        assert_eq!(rate.rpm, 20.0, "a delayed response cannot decrease again");
+    }
+
+    #[test]
+    fn a_halved_rate_recovers_in_one_hundred_seconds_without_more_429s() {
+        let now = Instant::now();
+        let mut p = test_profile();
+        p.requests_per_minute = Some(400.0);
+        let mut rate = Rate::new(&p, now);
+        rate.sent(1, 10, now);
+        rate.feedback(1, true, &Default::default(), None, now);
+        assert_eq!(rate.rpm, 200.0);
+        rate.feedback(1, false, &Default::default(), Some(10), now + Duration::from_secs(9));
+        assert_eq!(rate.rpm, 200.0, "recovery waits ten seconds");
+        for step in 1..=10 {
+            let at = now + RATE_RECOVERY_INTERVAL * step;
+            rate.sent(u64::from(step) + 1, 10, at);
+            rate.feedback(u64::from(step) + 1, false, &Default::default(), Some(10), at);
+            assert_eq!(rate.rpm, 200.0 + 20.0 * f64::from(step));
+        }
+        rate.feedback(11, false, &Default::default(), Some(10), now + Duration::from_secs(110));
+        assert_eq!(rate.rpm, rate.ceiling);
+    }
+
+    #[test]
+    fn an_unconfigured_profile_starts_at_six_hundred_until_provider_feedback() {
+        let now = Instant::now();
+        let p: Profile = serde_json::from_value(json!({"base_url": "x", "model": "m", "key_env": "unused"})).unwrap();
+        assert_eq!(p.requests_per_minute, None);
+        let mut rate = Rate::new(&p, now);
+        assert_eq!(rate.rpm, 600.0);
+        rate.sent(1, 10, now);
+        assert_eq!(rate.ready_at(10, now), now + Duration::from_millis(100));
+        rate.feedback(1, false, &Default::default(), Some(10), now + Duration::from_secs(10));
+        assert_eq!(rate.rpm, 600.0);
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("x-ratelimit-limit-req-minute", "1000".parse().unwrap());
+        rate.feedback(1, false, &headers, None, now + Duration::from_secs(10));
+        assert_eq!(rate.ceiling, 900.0, "starting rate is not a static ceiling");
+        headers.insert("x-ratelimit-limit-req-minute", "400".parse().unwrap());
+        rate.feedback(1, false, &headers, None, now + Duration::from_secs(10));
+        assert_eq!(rate.rpm, 360.0);
+        let mut no_headers = Rate::new(&p, now);
+        no_headers.sent(1, 10, now);
+        no_headers.feedback(1, true, &Default::default(), None, now);
+        assert_eq!(no_headers.rpm, 300.0);
     }
 
     #[test]
