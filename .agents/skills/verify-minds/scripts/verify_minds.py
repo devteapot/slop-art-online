@@ -268,6 +268,25 @@ def run_case(run, case):
         time.sleep(7)
         assert len([e for e in run.exchanges() if e['purpose'] == 'think']) == count
         assert run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'offstage-held')
+        run.admin('set_behavior', actor, json.dumps({'think': 'verify plain merged reason'}))
+        plain = run.wait(lambda: [d for d in run.private(f'SELECT * FROM deliberation WHERE actor = {actor}',
+                        'plain-merged-pending') if 'verify plain merged reason' in d['reason']], 'plain authority merge')
+        time.sleep(2)
+        assert len([e for e in run.exchanges() if e['purpose'] == 'think']) == count
+        upgraded_at = time.monotonic()
+        run.admin('set_behavior', actor, json.dumps({'think': 'Wolf is attacking you! verify urgent upgrade'}))
+        run.wait(lambda: len([e for e in run.exchanges() if e['purpose'] == 'think']) > count,
+                 'urgent upgrade starts a thought', 5)
+        urgent_release_s = time.monotonic() - upgraded_at
+        urgent = run.wait(lambda: [t for t in run.thoughts(actor, 'urgent-thoughts') if t['kind'] == 'deliberate'
+                         and 'verify urgent upgrade' in json.loads(t['detail']).get('reason', '')],
+                         'urgent upgrade accepted', 15)
+        assert 'verify plain merged reason' in json.loads(urgent[0]['detail'])['reason']
+        time.sleep(46)
+        run.request(actor, 'offstage-player')
+        count = len([e for e in run.exchanges() if e['purpose'] == 'think'])
+        time.sleep(3)
+        assert len([e for e in run.exchanges() if e['purpose'] == 'think']) == count
         run.harness('player', 'join', 'MindsAudience')
         player = run.sql("SELECT id FROM character WHERE name = 'MindsAudience'", 'player')[0]['id']
         run.admin('place_near', player, actor)
@@ -288,11 +307,12 @@ def run_case(run, case):
         (run.directory / 'lod.json').write_text(json.dumps({'offstage_think_count': count,
             'onstage_think_count': len([e for e in run.exchanges() if e['purpose'] == 'think']),
             'think_gap_s': 600, 'observed_hold_s': 7, 'merged_pending': merged,
+            'plain_merged_pending': plain, 'urgent_release_s': urgent_release_s,
+            'urgent_thoughts': urgent, 'plain_reason_handled': True,
             'pending_after': pending, 'merged_reason_handled': handled}, indent=2))
-        assert handled or any('verify merged nonplan reason' in d['reason'] for d in pending), 'unexpected loss of merged reason'
-        return {'status': 'xpass' if handled else 'xfail', 'label': 'KNOWN ISSUE',
-                'hold_and_release': 'pass', 'issue': 'LoD misses updated deliberation reasons',
-                'reference': 'docs/LIVING_HANDOFF.md', 'section': 'Still open'}
+        assert handled, 'merged non-plan reason was not reconsidered'
+        return {'status': 'pass', 'hold_and_release': 'pass', 'urgent_release_s': urgent_release_s,
+                'plain_reason_handled': True, 'merged_reason_handled': True}
     return {'status': 'pass'}
 
 

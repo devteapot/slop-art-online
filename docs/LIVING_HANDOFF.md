@@ -107,6 +107,5 @@ The run `aske-coast-3` ended on schedule at 06:55 local on 2026-09-29. This note
     Details are in `verify-core`'s validation record. The script needs isolated, controlled scenes and exact predicates before its results count as evidence;
   - a seed missing a required field panics at `seed.rs:444`, so publish fails with a generic HTTP 500 instead of naming the field (`verify-generation`, 2026-10-04);
   - `LIVING_CORE.md` says `verify_mechanics.py` has 14 checks; it has 23;
-  - with level of detail on, the mind subscribes to new deliberation rows only (`main.rs:165`, `on_insert`). Reasons the authority merges into a pending request arrive as row updates, so the mind's pending copy goes stale (`verify-minds`, 2026-10-04);
   - minds run without Neo4j (`LIVING_NEO4J=off`) lose what they consolidate. `consolidate` parses the model's patch but applies it only inside the store branch (`mind.rs:1607`), and `project` (`mind.rs:825`) then sends no relations, beliefs, judgments or places. `mind_consolidated` still deletes the integrated experiences and advances the cursor, so those experiences are consumed with no effect beyond the persona (`verify-minds`, 2026-10-04);
   - pushing `living-core` and the proxy commit when the user wants.

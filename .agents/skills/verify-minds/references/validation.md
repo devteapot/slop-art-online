@@ -1,5 +1,21 @@
 # Internal mind validation
 
+## 2026-10-04 LOD replacement fix
+
+The `llm/lod-fix` worktree changes pending deliberations to a current row, `Ready` / `Waiting { until }` / `InFlight` state and one wake notification per actor. Inserts refresh the row; obsolete deletes match the full old row rather than its timestamp. Merges, withdrawal and player contact wake delayed work. The generated `my_deliberations` view lacks a primary key, so [SDK 2.10.1](https://docs.rs/spacetimedb-sdk/2.10.1/src/spacetimedb_sdk/table.rs.html#153-178) supplies insert/delete callbacks rather than `on_update`. Its local versioned callback source confirms inserts are dispatched before deletes. The authority's `clear_deliberation` can strip old plan reasons while retaining `updated_ms`, which explains the lost replacement.
+
+`cargo test --manifest-path living/Cargo.toml -p living-mind -- --nocapture` passed 17 tests with five store-dependent tests ignored. Evidence is `.local/living/verify/lod-fix-unit/cargo-tests.log` in that worktree. New unit checks cover a plain merge, an urgent upgrade waking the delayed worker, a changed scene, and same-timestamp row replacement. LOD remains opt-in. The live `lod` case now requires these merged reasons and urgent release to pass instead of accepting XFAIL.
+
+Live verification from the worktree, after the shared harness learned to publish a worktree's own module (`b05c78b`):
+
+```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run minds-lod-fix-02 --case lod
+```
+
+It passed. A plain merged reason stayed held offstage; an urgent reason merged into the held request started a thought 0.14 s later and the accepted thought carried both reasons; the merged non-plan reason was reconsidered; a player's contact released the character. Evidence is `minds-lod-fix-02/results.json` and `minds-lod-fix-02-lod/lod.json` under `.local/living/verify/`. The scratch database was deleted.
+
+Targeted LOD map maintenance updated the script, skill and feature description. Claude and Cursor links still resolve to the shared source; Codex and Mistral use `.agents/skills` directly. Interactive runtime loading and a complete all-feature maintenance pass were not exercised. The full-suite evidence below is historical and remains intact.
+
 ## 2026-10-04 fix round
 
 The final driver ran the complete nine-case mind map once as `minds-1004-fix3`. It exited 0 with seven PASS cases and two XFAIL KNOWN ISSUE cases. Every ordinary assertion passed, including the persona and cursor checks within consolidation and the hold/release checks within LoD. This table uses only that full run. Earlier attempts are history, not stitched acceptance evidence.
@@ -35,11 +51,11 @@ All paths below are under `.local/living/verify/`. Each case directory is `minds
 | Shared config selection and live-probe guard | PASS without requests | `minds-duel-safety-1004-final/config-checks.json`, `config-routes.json`, `live-probe-guard.log` |
 | Real-model duel | NOT RUN | Specific authorization and `--allow-live` are required. |
 
-## Known product findings
+## Product findings in the historical run
 
 The no-store patch-loss defect remains open in [the handoff](../../../../docs/LIVING_HANDOFF.md), under "Still open". `living/mind/src/mind.rs:1607` applies the graph patch only with a store; `project` at line 825 publishes empty projections without it. The final run accepted an actual consolidation whose experience IDs include addressed player speech, changed the persona, advanced `mind_cursor` and deleted experiences at or below that cursor. None of the distinct relation, belief, judgment or place markers reached the authority. This is XFAIL rather than a red suite. Applying every marker would produce XPASS and require review. Projections WITH a store belong to `verify-knowledge`, which already proves them. This case gives no contradictory verdict about that path.
 
-The LoD pending-reason defect is also open in the handoff. `living/mind/src/main.rs:165` subscribes with `on_insert`; the authority merges reasons into existing deliberations. The final run held a routine request off stage, released it after player contact, and merged `verify merged nonplan reason` during a four-second delayed compile. The released plan was accepted, but the new non-plan reason stayed in the authority row with no matching later deliberation thought during the ten-second observation. The map records XFAIL KNOWN ISSUE separately from the successful hold/release checks. Handling the reason would produce XPASS. The version-pinned generated view handle exposes insert/delete callbacks; this run does not establish that an `on_update` API is available or sufficient to fix the defect.
+The historical LoD run held a routine request off stage, released it after player contact, and merged `verify merged nonplan reason` during a four-second delayed compile. The released plan was accepted, but the new non-plan reason stayed in the authority row with no matching later deliberation thought during the ten-second observation. That run recorded XFAIL KNOWN ISSUE separately from its successful hold/release checks. The implementation fix and the pending live re-verification are recorded above.
 
 No new product defect was found in this round. The two additional failures were driver bugs fixed below.
 
