@@ -454,8 +454,19 @@ def infant_cries(s, baby, a, b, carers, witness, warm_anchor):
     events, initial = [], {}
     seen = set()
     cause = None
+    unrelated = None
+    unrelated_reason = "verify-core unrelated reminder request"
+    inject_at = time.monotonic() + 60
     end = time.monotonic() + 250
     while time.monotonic() < end:
+        if not s.baseline and unrelated is None and a in initial and time.monotonic() >= inject_at:
+            s.graph(a, {"think": unrelated_reason})
+            unrelated = s.wait(lambda: [d for d in requests() if d["actor"] == a
+                and unrelated_reason in d["reason"]], seconds=30)[0]
+            s.expect("answered parent has an unrelated pending request before reminder",
+                     "crying" not in unrelated["reason"], unrelated)
+            (s.out / "infant-unrelated-pending.json").write_text(json.dumps(unrelated, indent=2) + "\n")
+            s.graph(a, {"first": [{"do": "rest"}]})
         rows = {d["actor"]: d for d in requests()}
         if s.baseline:
             heard = s.rows(f"SELECT * FROM experience WHERE subject = {baby['id']} AND kind = 'signal'")
@@ -503,6 +514,9 @@ def infant_cries(s, baby, a, b, carers, witness, warm_anchor):
         a_events = [e for e in events if e["actor"] == a]
         gaps = [(r["at_ms"]-l["at_ms"])/1000 for l,r in zip(a_events,a_events[1:])]
         s.expect("answered parent receives 120-second reminders", len(gaps) >= 1 and all(120 <= gap <= 128 for gap in gaps), gaps)
+        s.expect("due reminder merges into the unrelated pending request", unrelated is not None and any(
+            e["kind"] == "merged" and e["request"]["requested_ms"] == unrelated["requested_ms"]
+            and unrelated_reason in e["request"]["reason"] for e in a_events), a_events)
         s.expect("cry cause stays unchanged for over 120 seconds", bool(cry) and cry[0]["needs"] == [[0, []]] and finish - start > 120_000, cry)
         s.expect("caring witness receives experience without deliberation", bool(s.told(witness, "crying", "signal")) and witness not in initial)
 
