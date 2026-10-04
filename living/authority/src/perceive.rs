@@ -146,10 +146,15 @@ fn cry_carers(nearby: &[(u32, f32, bool, bool)]) -> Vec<u32> {
         .map(|c| vec![c.0]).unwrap_or_default()
 }
 
-fn cry_prompt_due(state: &InfantCry, carer: u32, now: u64, pending: bool) -> bool {
+fn pending_infant_cry(reason: &str, name: &str) -> bool {
+    reason.contains(&format!("{name}, a baby, is crying and looks "))
+        || reason.contains(&format!("You hear {name} crying."))
+}
+
+fn cry_prompt_due(state: &InfantCry, carer: u32, now: u64, pending_cry: bool) -> bool {
     match state.prompted.iter().find(|p| p.carer == carer) {
         None => true,
-        Some(p) => !pending && now.saturating_sub(p.at_ms) >= CRY_REMINDER_MS,
+        Some(p) => !pending_cry && now.saturating_sub(p.at_ms) >= CRY_REMINDER_MS,
     }
 }
 
@@ -205,7 +210,8 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     cry.prompted.retain(|p| carers.contains(&p.carer) || now.saturating_sub(p.at_ms) < CRY_REMINDER_MS);
     for carer in carers {
         let pending = ctx.db.deliberation().actor().find(carer);
-        if cry_prompt_due(&cry, carer, now, pending.is_some()) {
+        let pending_cry = pending.as_ref().is_some_and(|d| pending_infant_cry(&d.reason, &baby.name));
+        if cry_prompt_due(&cry, carer, now, pending_cry) {
             let visible = ctx.db.body().id().find(carer).map(|b| dist(pos(&b, now), at) <= common::sight_for(ctx, carer, &common::world(ctx), now)).unwrap_or(false);
             let reason = if visible { heard.clone() } else { format!("You hear {} crying.", baby.name) };
             if pending.as_ref().is_some_and(|d| d.reason.contains(&reason)) { continue; }
@@ -674,6 +680,23 @@ mod tests {
         assert_eq!(infant_needs(BodyState { hungry: true, cold: true, wound: living_rules::script::Wound::Hurt, starving: false }),
             vec![InfantNeed::Hungry, InfantNeed::Cold, InfantNeed::Hurt]);
         assert_eq!(infant_needs(BodyState { hungry: true, starving: true, ..Default::default() }), vec![InfantNeed::Starving]);
+    }
+
+    #[test]
+    fn due_reminder_merges_unrelated_pending_reason_but_preserves_pending_cry() {
+        let mut cry = cry_state(None, 9, vec![InfantNeed::Hungry]);
+        record_cry_prompt(&mut cry, 1, 10_000);
+        for (reason, due) in [
+            ("A new day. You long for another child.", true),
+            ("A new day.\nMira, a baby, is crying and looks hungry, cold", false),
+            ("A new day.\nYou hear Mira crying.", false),
+            ("Nora, a baby, is crying and looks hungry", true),
+            ("You hear Nora crying.", true),
+        ] {
+            let pending = Some(reason);
+            let pending_cry = pending.is_some_and(|reason| pending_infant_cry(reason, "Mira"));
+            assert_eq!(cry_prompt_due(&cry, 1, 130_000, pending_cry), due, "{reason}");
+        }
     }
 
     #[test]
