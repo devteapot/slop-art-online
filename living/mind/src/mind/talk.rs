@@ -26,7 +26,7 @@
 //! experiences), so consolidation integrates conversations like anything else lived.
 
 use super::{acts_of, acts_text, flatten, reference, Minds};
-use crate::llm::{self, Msg};
+use crate::llm::{self, Lane, Msg};
 use crate::memory::{self, Cues};
 use crate::prompts;
 use anyhow::{anyhow, Result};
@@ -472,17 +472,20 @@ impl Minds {
             (conv.lines.clone(), conv.own.get(&me).copied().unwrap_or(0), conv.reopened.clone(), lately_said)
         };
         let Some(heard) = lines.iter().rev().find(|l| l.speaker == other).cloned() else { return Ok(()) };
+        let lane = if self.is_player(me) || self.is_player(other) || lines.iter().any(|l| self.is_player(l.speaker) || self.is_player(l.to)) {
+            Lane::Interactive
+        } else {
+            Lane::Routine
+        };
         let last_word = own + 1 >= stamina;
         let ctx = TalkCtx { temper: &temper, lately_said, own, last_word, reopened: reopened.as_ref() };
         let (system, user) = self.talk_prompt(&c, other, &lines, &heard, &ctx).await;
         let mut profile = self.profile(&c);
         let messages = [Msg { role: "system", content: system }, Msg { role: "user", content: user }];
         let (reply, v) = {
-            let _talk = self.talk_sem.acquire().await?;
-            let _permit = self.sem.acquire().await?;
             let mut attempt = 0;
             loop {
-                let reply = self.llm.chat(&profile, "talk", &c.name, &messages).await?;
+                let reply = self.llm.chat_in_lane(&profile, "talk", &c.name, &messages, lane).await?;
                 match llm::parse_json(&reply.content) {
                     Ok(v) => break (reply, v),
                     Err(e) if attempt == 0 && profile != self.llm.default_profile() => {

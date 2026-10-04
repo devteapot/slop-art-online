@@ -9,7 +9,7 @@
 //! Every reasoning episode is logged as a `thought` with a `reference` the mind graph
 //! points back to; exact prompts and replies are journaled on disk.
 
-use crate::llm::{self, Llm, Msg};
+use crate::llm::{self, Lane, Llm, Msg};
 use crate::memory::{self, Store};
 use crate::prompts;
 use anyhow::{anyhow, Result};
@@ -68,12 +68,8 @@ pub struct Minds {
     species: std::collections::BTreeMap<String, living_rules::species::Species>,
     me: Identity,
     actors: Mutex<HashMap<u32, ActorMind>>,
-    sem: Semaphore,
-    /// Deferrable work (consolidation, reorganization, identities) may hold at most half of the
-    /// model slots, so deliberation (being attacked, spoken to, a plan failing) always gets one.
+    /// Bound concurrent background memory work independently of network admission.
     slow: Semaphore,
-    /// Conversation turns may hold at most a quarter of the model slots.
-    talk_sem: Semaphore,
     talk: Mutex<talk::Talks>,
     only: Option<std::collections::HashSet<u32>>,
     lod: lod::Lod,
@@ -156,7 +152,7 @@ impl Minds {
     pub fn new(conn: DbConnection, llm: Llm, store: Option<Store>, seed: Value, concurrency: usize) -> Result<Arc<Self>> {
         let me = conn.try_identity().ok_or_else(|| anyhow!("not connected"))?;
         let species = living_rules::species::parse(&std::fs::read_to_string(crate::root().join("living/seeds/species.json"))?).map_err(|e| anyhow!(e))?;
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), sem: Semaphore::new(concurrency), slow: Semaphore::new((concurrency / 2).max(1)), talk_sem: Semaphore::new((concurrency / 4).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -568,7 +564,6 @@ impl Minds {
         let user = prompts::identity_user(&c.name, c.id, &knows, &bg, born.as_ref());
         let reply = {
             let _slow = self.slow.acquire().await?;
-            let _permit = self.sem.acquire().await?;
             self.llm.chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?
         };
         let v = llm::parse_json(&reply.content)?;
@@ -753,7 +748,6 @@ impl Minds {
         let born = self.born_temperament(c.id);
         let user = prompts::birth_identity_user(&c.name, c.id, [(&an, c.parent_a, &ap), (&bn, c.parent_b, &bp)], born.as_ref());
         let _slow = self.slow.acquire().await?;
-        let _permit = self.sem.acquire().await?;
         let reply = self.llm.chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?;
         let v = llm::parse_json(&reply.content)?;
         let thought = reference(c.id, "birth");
@@ -986,6 +980,21 @@ impl Minds {
         self.conn.db.character().id().find(&id).is_some_and(|c| lod::is_player(&c, self.me))
     }
 
+    fn deliberation_lane(&self, d: &Deliberation) -> Lane {
+        let player_act = self.conn.db.experience().iter().filter(|e| e.observer == d.actor).any(|e| {
+            if e.at_ms < d.requested_ms.saturating_sub(1000) || e.at_ms > d.updated_ms {
+                return false;
+            }
+            [e.subject, e.object].into_iter().filter(|id| self.is_player(*id)).any(|id| {
+                (!e.text.is_empty() && d.reason.contains(&e.text))
+                    || d.reason.contains(&format!("(#{id})"))
+                    || (e.kind == "combat" && self.conn.db.character().id().find(&id)
+                        .is_some_and(|c| d.reason.contains(&format!("The fight with {}:", c.name))))
+            })
+        });
+        Lane::deliberation(&d.reason, player_act)
+    }
+
     /// Whether a person is on stage (see lod.rs): always, with the level of detail off; while a
     /// human player is in the scene of a pending request (`scene`) or was recently part of
     /// what they experienced.
@@ -1153,6 +1162,7 @@ impl Minds {
 
     async fn deliberate(&self, d: &Deliberation) -> Result<()> {
         let actor = d.actor;
+        let lane = self.deliberation_lane(d);
         let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
         if !c.alive {
             return Ok(());
@@ -1176,7 +1186,7 @@ impl Minds {
             }
         }
         if c.kind != "person" {
-            return self.deliberate_animal(d, &c).await;
+            return self.deliberate_animal(d, &c, lane).await;
         }
         let profile = self.profile(&c);
         let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
@@ -1209,7 +1219,6 @@ impl Minds {
             experiences,
         };
         let repertoire = self.repertoire_text(actor);
-        let _permit = self.sem.acquire().await?;
         // Think first, as the person and without the grammar; then compile the decision.
         let habits: String = self.conn.db.routine().iter().filter(|r| r.actor == actor).map(|r| r.name).collect::<Vec<_>>().join(", ");
         let think_msgs = vec![
@@ -1219,7 +1228,7 @@ impl Minds {
         let mut decision = Value::Null;
         let (mut think_latency, mut think_tokens) = (0u32, 0u32);
         for p in [profile.clone(), self.llm.default_profile()] {
-            if let Ok(r) = self.llm.chat(&p, "think", &c.name, &think_msgs).await {
+            if let Ok(r) = self.llm.chat_in_lane(&p, "think", &c.name, &think_msgs, lane).await {
                 think_latency += r.latency_ms;
                 think_tokens += r.tokens;
                 if let Ok(v) = llm::parse_json(&r.content) {
@@ -1258,7 +1267,7 @@ impl Minds {
         };
         let mut profile = profile;
         for attempt in 0..3 {
-            let reply = match self.llm.chat(&profile, "deliberate", &c.name, &messages).await {
+            let reply = match self.llm.chat_in_lane(&profile, "deliberate", &c.name, &messages, lane).await {
                 Ok(r) => r,
                 Err(e) => {
                     last_err = format!("model error: {e:#}");
@@ -1392,7 +1401,7 @@ impl Minds {
 
     /// Animals: a small model feels an impulse; a competent model compiles it into a graph
     /// the body allows. The compiler is told to add nothing the animal does not have.
-    async fn deliberate_animal(&self, d: &Deliberation, c: &Character) -> Result<()> {
+    async fn deliberate_animal(&self, d: &Deliberation, c: &Character, lane: Lane) -> Result<()> {
         let actor = c.id;
         let Some(sp) = self.species.get(&c.kind).cloned() else { return Ok(()) };
         let think = self.llm.species_profile(&c.kind, "think").unwrap_or_else(|| self.llm.profile_for(actor, &c.name));
@@ -1409,13 +1418,12 @@ impl Minds {
         };
         let temperament = self.conn.db.persona().id().find(&actor).map(|p| format!("{} (mood: {})", p.traits, p.mood)).unwrap_or_default();
         let thought_ref = reference(actor, "deliberate");
-        let _permit = self.sem.acquire().await?;
         let felt = self
             .llm
-            .chat(&think, "deliberate", &c.name, &[
+            .chat_in_lane(&think, "deliberate", &c.name, &[
                 Msg { role: "system", content: prompts::animal_think_system(&c.kind, &sp.nature) },
                 Msg { role: "user", content: prompts::animal_think_user(&c.name, &c.kind, &temperament, &mind, &experiences, &d.scene, &d.reason) },
-            ])
+            ], lane)
             .await?;
         let (feeling, impulse) = match llm::parse_json(&felt.content) {
             Ok(v) => (flat(&v["feeling"]), flat(&v["impulse"])),
@@ -1429,7 +1437,7 @@ impl Minds {
         let mut last_err = String::new();
         let (mut latency, mut tokens) = (felt.latency_ms, felt.tokens);
         for attempt in 0..3 {
-            let reply = self.llm.chat(&compile, "deliberate", &c.name, &messages).await?;
+            let reply = self.llm.chat_in_lane(&compile, "deliberate", &c.name, &messages, lane).await?;
             latency += reply.latency_ms;
             tokens += reply.tokens;
             // An impulse is weighed among the animal's desires, like a person's plan. Its
@@ -1535,7 +1543,6 @@ impl Minds {
         let user = prompts::consolidate_user(&ctx);
         let remember = if animal { self.llm.species_profile(&c.kind, "remember").unwrap_or(profile.clone()) } else { profile.clone() };
         let _slow = self.slow.acquire().await?;
-        let _permit = self.sem.acquire().await?;
         let msgs = [Msg { role: "system", content: system }, Msg { role: "user", content: user }];
         let mut reply = self.llm.chat(&remember, "consolidate", &c.name, &msgs).await?;
         let v = match llm::parse_json(&reply.content) {
@@ -1645,7 +1652,6 @@ impl Minds {
         let lines: Vec<String> = facts.iter().map(|f| memory::render_keys(f, &fmt)).collect();
         let profile = self.profile(&c);
         let _slow = self.slow.acquire().await?;
-        let _permit = self.sem.acquire().await?;
         let reply = self
             .llm
             .chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: prompts::reorganize_system() }, Msg { role: "user", content: prompts::reorganize_user(&c.name, &self.persona_text(actor), &concepts, &lines) }])

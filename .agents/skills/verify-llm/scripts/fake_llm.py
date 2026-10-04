@@ -99,11 +99,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.respond(200 if self.path == '/health' else 404, b'{"ready":true}')
 
-    def respond(self, status, data):
+    def respond(self, status, data, headers=None):
         try:
             self.send_response(status)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(data)))
+            for name, value in (headers or {}).items():
+                self.send_header(name, str(value))
             self.end_headers()
             self.wfile.write(data)
         except (BrokenPipeError, ConnectionResetError):
@@ -128,9 +130,11 @@ class Handler(BaseHTTPRequestHandler):
         status = int(action.get('status', 200))
         envelope = {'id': 'verify-local', 'object': 'chat.completion',
                     'choices': [{'message': {'role': 'assistant', 'content': content}}],
-                    'usage': {'total_tokens': int(action.get('tokens', 17))}}
+                    'usage': action.get('usage', {'total_tokens': int(action.get('tokens', 17)),
+                              'prompt_tokens': 12, 'completion_tokens': 5,
+                              'prompt_tokens_details': {'cached_tokens': 8}})}
         payload = action.get('raw_http_body', json.dumps(envelope) if status == 200 else json.dumps({'error': 'scripted failure'}))
-        self.respond(status, payload.encode())
+        self.respond(status, payload.encode(), action.get('headers'))
 
 
 def main():
