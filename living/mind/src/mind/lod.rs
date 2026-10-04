@@ -25,7 +25,54 @@
 //! context (the reasons that waited are all in the request). Only how often it is asked
 //! changes, like a person nobody is watching living by habit.
 
+use living_bindings::{Character, Deliberation};
+use spacetimedb_sdk::Identity;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::Notify;
+
+#[derive(Clone, Copy, Debug)]
+pub enum PendingState {
+    Ready,
+    Waiting { until: Instant },
+    InFlight,
+}
+
+pub struct PendingRequest {
+    pub row: Deliberation,
+    pub state: PendingState,
+    pub changed: Arc<Notify>,
+}
+
+impl PendingRequest {
+    pub fn new(row: Deliberation) -> Self {
+        Self { row, state: PendingState::Ready, changed: Arc::new(Notify::new()) }
+    }
+
+    pub fn refresh(&mut self, row: Deliberation) {
+        self.row = row;
+        if !matches!(self.state, PendingState::InFlight) {
+            self.state = PendingState::Ready;
+        }
+        self.changed.notify_one();
+    }
+
+    pub fn decide(&mut self, wait: Option<Duration>) -> Option<Instant> {
+        self.state = match wait {
+            Some(wait) => PendingState::Waiting { until: Instant::now() + wait },
+            None => PendingState::InFlight,
+        };
+        match self.state {
+            PendingState::Waiting { until } => Some(until),
+            _ => None,
+        }
+    }
+}
+
+/// Existing player signal; benchmark characters on instinct also qualify.
+pub fn is_player(c: &Character, mind_identity: Identity) -> bool {
+    c.id != 0 && !c.ai && c.controller != mind_identity
+}
 
 #[derive(Clone, Debug)]
 pub struct Lod {
@@ -141,5 +188,45 @@ mod tests {
         assert_eq!(l.wait("I finished my plan.", false, None), None, "the first thought is never held back");
         assert_eq!(l.wait("Wolf is attacking you!", false, just), None);
         assert_eq!(Lod { on: false, ..l }.wait("I finished my plan.", false, just), None);
+    }
+
+    fn request(reason: &str, scene: &str, updated_ms: u64) -> Deliberation {
+        Deliberation { actor: 1, controller: Identity::ZERO, reason: reason.into(), requested_ms: 1, updated_ms, scene: scene.into(), revision: 1 }
+    }
+
+    #[tokio::test]
+    async fn merged_request_refreshes_and_urgent_upgrade_wakes_waiter() {
+        let l = lod();
+        let last = Some(Instant::now());
+        let old = request("I finished my plan.", r#"{"creatures":[]}"#, 2);
+        let mut pending = PendingRequest::new(old.clone());
+        assert!(pending.decide(l.wait(&pending.row.reason, false, last)).is_some());
+
+        // Two versions can share an authority timestamp; the old delete must not match.
+        let plain = request("I finished my plan.\nA visitor left.", r#"{"creatures":[]}"#, 2);
+        pending.refresh(plain.clone());
+        assert_eq!(pending.row, plain);
+        assert_ne!(pending.row, old);
+        assert!(pending.decide(l.wait(&pending.row.reason, false, last)).is_some());
+        pending.changed.notified().await;
+
+        let wake = pending.changed.clone();
+        let urgent = request("I finished my plan.\nA visitor left.\nWolf is attacking you!", r#"{"creatures":[{"id":9}]}"#, 3);
+        pending.refresh(urgent.clone());
+        tokio::time::timeout(Duration::from_millis(100), wake.notified()).await.expect("merged request wakes the delayed worker");
+        assert_eq!(pending.row, urgent);
+        assert!(pending.decide(l.wait(&pending.row.reason, false, last)).is_none());
+        assert!(matches!(pending.state, PendingState::InFlight));
+    }
+
+    #[test]
+    fn player_scene_upgrade_releases_waiting_request() {
+        let l = lod();
+        let last = Some(Instant::now());
+        let mut pending = PendingRequest::new(request("I finished my plan.", r#"{"creatures":[]}"#, 2));
+        assert!(pending.decide(l.wait(&pending.row.reason, false, last)).is_some());
+        pending.refresh(request("I finished my plan.", r#"{"creatures":[{"id":9}]}"#, 3));
+        assert_eq!(pending.row.scene, r#"{"creatures":[{"id":9}]}"#);
+        assert!(pending.decide(l.wait(&pending.row.reason, true, last)).is_none());
     }
 }

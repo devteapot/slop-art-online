@@ -30,9 +30,9 @@ pub enum Event {
     Speech(Experience),
     Deliberation(u32),
     /// With the level of detail on: a pending deliberation as it now stands (inserted or
-    /// merged), and one that is gone (actor, `updated_ms`).
+    /// merged), and the exact old row that is gone.
     Pending(Deliberation),
-    PendingGone(u32, u64),
+    PendingGone(Deliberation),
     /// With the level of detail on: a human player was part of what this character experienced.
     Contact(u32),
 }
@@ -79,7 +79,7 @@ pub struct Minds {
     lod: lod::Lod,
     /// Pending deliberations by actor (kept only with the level of detail on, when many
     /// requests wait at once and scanning the view for each would be costly).
-    pending: Mutex<HashMap<u32, Deliberation>>,
+    pending: Mutex<HashMap<u32, lod::PendingRequest>>,
     /// Each person's model group (see `llm::group_of`; it never changes) and the profile
     /// last logged for each character.
     groups: Mutex<HashMap<u32, Option<String>>>,
@@ -899,7 +899,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
         for d in self.conn.db.my_deliberations().iter() {
             let actor = d.actor;
             if self.lod.on {
-                self.pending.lock().unwrap().insert(actor, d);
+                self.pending.lock().unwrap().insert(actor, lod::PendingRequest::new(d));
             }
             self.clone().schedule(actor);
         }
@@ -910,16 +910,26 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                     Some(Event::Speech(e)) => self.clone().on_speech(e),
                     Some(Event::Deliberation(actor)) => self.clone().schedule(actor),
                     Some(Event::Pending(d)) => {
-                        self.pending.lock().unwrap().insert(d.actor, d);
-                    }
-                    Some(Event::PendingGone(actor, updated_ms)) => {
                         let mut p = self.pending.lock().unwrap();
-                        if p.get(&actor).is_some_and(|d| d.updated_ms == updated_ms) {
-                            p.remove(&actor);
+                        if let Some(request) = p.get_mut(&d.actor) {
+                            request.refresh(d);
+                        } else {
+                            p.insert(d.actor, lod::PendingRequest::new(d));
+                        }
+                    }
+                    Some(Event::PendingGone(d)) => {
+                        let mut p = self.pending.lock().unwrap();
+                        if p.get(&d.actor).is_some_and(|request| request.row == d) {
+                            if let Some(request) = p.remove(&d.actor) {
+                                request.changed.notify_one();
+                            }
                         }
                     }
                     Some(Event::Contact(actor)) => {
                         self.actors.lock().unwrap().entry(actor).or_default().onstage_until = Some(Instant::now() + self.lod.sticky);
+                        if let Some(request) = self.pending.lock().unwrap().get(&actor) {
+                            request.changed.notify_one();
+                        }
                     }
                     None => return Err(anyhow!("event channel closed")),
                 },
@@ -956,7 +966,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
             let mut seen = 0u64;
             loop {
                 let pending = if self.lod.on {
-                    self.pending.lock().unwrap().get(&actor).filter(|d| d.updated_ms > seen).cloned()
+                    self.pending.lock().unwrap().get(&actor).map(|p| &p.row).filter(|d| d.updated_ms > seen).cloned()
                 } else {
                     self.conn.db.my_deliberations().iter().find(|d| d.actor == actor && d.updated_ms > seen)
                 };
@@ -965,10 +975,21 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                 let wait = self.lod_wait(&d);
                 if self.lod.on {
                     self.actors.lock().unwrap().entry(actor).or_default().deferring = wait.is_some();
-                }
-                if let Some(wait) = wait {
-                    tokio::time::sleep(wait.min(Duration::from_secs(3))).await;
-                    continue;
+                    let decision = {
+                        let mut pending = self.pending.lock().unwrap();
+                        let Some(request) = pending.get_mut(&actor) else { continue };
+                        if request.row != d {
+                            continue;
+                        }
+                        (request.decide(wait), request.changed.clone())
+                    };
+                    if let (Some(until), changed) = decision {
+                        tokio::select! {
+                            _ = tokio::time::sleep_until(until.into()) => {},
+                            _ = changed.notified() => {},
+                        }
+                        continue;
+                    }
                 }
                 seen = d.updated_ms;
                 if let Err(e) = self.deliberate(&d).await {
@@ -976,6 +997,9 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
                 }
                 if self.lod.on {
                     self.actors.lock().unwrap().entry(actor).or_default().last_deliberated = Some(Instant::now());
+                    if let Some(request) = self.pending.lock().unwrap().get_mut(&actor) {
+                        request.state = lod::PendingState::Ready;
+                    }
                 }
                 let again = std::mem::take(&mut self.actors.lock().unwrap().entry(actor).or_default().again);
                 if !again {
@@ -992,7 +1016,7 @@ simple and short, as a very young child. Reply with ONE JSON object: {{\"narrati
     /// A character controlled by a human (not by a mind service; benchmark characters on
     /// instinct also count).
     fn is_player(&self, id: u32) -> bool {
-        id != 0 && self.conn.db.character().id().find(&id).is_some_and(|c| !c.ai && c.controller != self.me)
+        self.conn.db.character().id().find(&id).is_some_and(|c| lod::is_player(&c, self.me))
     }
 
     /// Whether a person is on stage (see lod.rs): always, with the level of detail off; while a

@@ -150,7 +150,7 @@ async fn main() -> Result<()> {
             // Level of detail: a human player in what a character experiences puts it on stage.
             if lod {
                 let me = ctx.identity();
-                let player = |id: u32| id != 0 && ctx.db.character().id().find(&id).is_some_and(|c| !c.ai && c.controller != me);
+                let player = |id: u32| ctx.db.character().id().find(&id).is_some_and(|c| mind::lod::is_player(&c, me));
                 if player(e.subject) || player(e.object) {
                     let _ = tx.send(mind::Event::Contact(e.observer));
                 }
@@ -162,6 +162,7 @@ async fn main() -> Result<()> {
     }
     {
         let tx = tx.clone();
+        // This view has no primary key: SDK 2.10.1 delivers replacements as insert/delete.
         conn.db.my_deliberations().on_insert(move |_, d| {
             if lod {
                 let _ = tx.send(mind::Event::Pending(d.clone()));
@@ -172,7 +173,7 @@ async fn main() -> Result<()> {
     if lod {
         let tx = tx.clone();
         conn.db.my_deliberations().on_delete(move |_, d| {
-            let _ = tx.send(mind::Event::PendingGone(d.actor, d.updated_ms));
+            let _ = tx.send(mind::Event::PendingGone(d.clone()));
         });
     }
     conn.run_threaded();
