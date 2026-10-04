@@ -78,3 +78,22 @@ For `setup-pstack`, refresh T3's live catalog, show the resolved project roles a
 GPT-6.1-Sol is the default implementation coordinator; Claude Opus 5.5 leads UI work (Bevy presentation, input and interaction) and judgment at their saved high-effort baselines. For mixed features, delegate the UI portion to Opus and the authority, simulation and agent logic to Sol with clear interface and file ownership, then verify integration. UI scope overrides generic workflow model defaults for that portion. The policy does not switch the current conversation's provider. See `.agents/pstack-models.md` for routing and unavailable-model behavior.
 
 For quick, easy, narrowly scoped non-UI changes and bounded mechanical batches, use GLM 5.3 through Mistral Vibe at its saved max-effort baseline as the bulk-work delegate. Sol coordinates and reviews the result. Keep UI work with Opus and broad, architectural or unknown-cause work with Sol/judgment; return a GLM assignment to the coordinator if its scope grows.
+
+## Verification surfaces
+
+The living core is verified surface by surface, so a failure can be traced to the layer that owns it. `.agents/skills/verify/SKILL.md` is the entry point. It maps changes and symptoms to surfaces and owns the shared harness: scratch `verify-<run>` databases, the player identity, the observer, cleanup and evidence. The surface skills are:
+
+- `verify-core`: rules and the tick.
+- `verify-generation`: worlds from seeds.
+- `verify-client`: what a connecting client sees and may call.
+- `verify-player`: human players.
+- `verify-minds`: the mind service.
+- `verify-llm`: model integration.
+- `verify-knowledge`: know-how and memory.
+
+The browser observer has no skill; it is a simple developer client that the proper game UI will replace. When that UI is integrated, add a UI skill that clicks through it. When the external-agent connector is implemented, add `verify-agent-external` with a scripted tier and a real-agent tier.
+
+- Before reporting a living-core change as working, run the skill of every surface it touches. Report what was driven, the evidence paths and what was not covered.
+- To locate a failure, step down the layers: screen → client → player, or minds → llm and knowledge → core and generation. Name the lowest layer that reproduces it.
+- When a change alters a surface's shape, run `maintain-verification-skill` on that surface's skill in the same change. Shape means tables, reducers, views or subscriptions; the mind protocol; seed or model-config formats; UI controls; or launch and run commands. When a change adds a surface, create its skill with `create-verification-skill` and add it to the entry point's surface table. A skill whose map no longer matches the code is a defect, not documentation debt.
+- Free tiers use scratch databases and a fake model server. Paid tiers make real model calls and run only after the user authorizes that run. These skills do not establish performance or scale; those claims follow the evidence rules above. Never point a verification run at the paused reference worlds.

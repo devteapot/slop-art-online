@@ -97,4 +97,17 @@ The run `aske-coast-3` ended on schedule at 06:55 local on 2026-09-29. This note
   - a behavioral fault: people pace between two tasks;
   - people's hunting pressure on deer;
   - lifetime counters for practice now that the dead's rows are deleted;
+  - `experience` and `thought` are public tables (`living/authority/src/tables.rs`), so any anonymous client, including the public observer's tunnel, can read every character's perceptions and raw model replies. This contradicts the tables' own comment and the perception rules in `AGENTS.md`. Fixing it needs per-controller views for minds and a developer path for the observer's Experiences and Thoughts tabs. `verify-client` carries an expected-fail check for it (found 2026-10-04);
+  - no test covers reducer authorization (admin, controller, player), and `just living-check` runs only the rules tests, not the authority, mind or viewer tests;
+  - **seize from a yielded person never works.** `act.rs:238` fills the target's `yielded_ago` only for `attack`, but `seize_check` (`skills.rhai:496`) relies on it. Seizing from someone who has yielded but is not badly hurt is refused with "has not given in", and only the badly-hurt branch works. Found by `verify-core` on 2026-10-04. This bears on the v3 reading that `seize` would replace killings;
+  - `verify_mechanics.py` is unreliable both ways. Unchanged code gave 23, 16, 21, 23, 16 and 23 of 23 across six runs on 2026-10-04. Likely contributors: random spawn placement (`lib.rs:123-124`); `place_near` putting bodies on tiles that may be blocked (`lib.rs:262`), next to the walls the script builds; nearby AI actors running instincts; and fixed waits. Three predicates can also pass without the outcome they name:
+    - the gift check accepts any berries in the receiver's pack (`verify_mechanics.py:197`);
+    - the feedback check can match an earlier eat (`:199`);
+    - the conception check accepts any pregnancy, an animal's included (`:141`).
+
+    Details are in `verify-core`'s validation record. The script needs isolated, controlled scenes and exact predicates before its results count as evidence;
+  - a seed missing a required field panics at `seed.rs:444`, so publish fails with a generic HTTP 500 instead of naming the field (`verify-generation`, 2026-10-04);
+  - `LIVING_CORE.md` says `verify_mechanics.py` has 14 checks; it has 23;
+  - with level of detail on, the mind subscribes to new deliberation rows only (`main.rs:165`, `on_insert`). Reasons the authority merges into a pending request arrive as row updates, so the mind's pending copy goes stale (`verify-minds`, 2026-10-04);
+  - minds run without Neo4j (`LIVING_NEO4J=off`) lose what they consolidate. `consolidate` parses the model's patch but applies it only inside the store branch (`mind.rs:1607`), and `project` (`mind.rs:825`) then sends no relations, beliefs, judgments or places. `mind_consolidated` still deletes the integrated experiences and advances the cursor, so those experiences are consumed with no effect beyond the persona (`verify-minds`, 2026-10-04);
   - pushing `living-core` and the proxy commit when the user wants.
