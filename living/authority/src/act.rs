@@ -235,7 +235,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
     if matches!(a.skill.as_str(), "attack" | "throw" | "shoot" | "yield") {
         actor.yielded_ago = yielded_ago(ctx, id, now);
     }
-    if a.skill == "attack" && target.class == "creature" {
+    if matches!(a.skill.as_str(), "attack" | "seize") && target.class == "creature" {
         target.yielded_ago = yielded_ago(ctx, target.id as u32, now);
         if actor.kind != "person" && target.kind == "person" {
             let sight = common::sight_for(ctx, id, &w, now);
