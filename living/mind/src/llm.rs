@@ -129,7 +129,10 @@ impl Lane {
             return Self::Interactive;
         }
         let reason = reason.to_lowercase();
-        if reason.split(|c: char| !c.is_alphanumeric()).any(|w| matches!(w, "combat" | "fight" | "fighting" | "alarm" | "attack" | "attacked" | "attacking" | "hit" | "danger" | "wound" | "wounded")) {
+        if reason
+            .split(|c: char| !c.is_alphanumeric())
+            .any(|w| matches!(w, "combat" | "fight" | "fighting" | "alarm" | "attack" | "attacked" | "attacking" | "hit" | "danger" | "wound" | "wounded"))
+        {
             Self::Urgent
         } else {
             Self::Routine
@@ -143,6 +146,14 @@ const RATE_FLOOR_FRACTION: f64 = 0.05;
 const RATE_RECOVERY_FRACTION: f64 = 0.05;
 const RATE_RECOVERY_INTERVAL: Duration = Duration::from_secs(10);
 const RATE_HEADER_HEADROOM: f64 = 0.9;
+const RATE_LOG_INTERVAL: Duration = Duration::from_secs(30);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct RateLimits {
+    ceiling: f64,
+    rpm: f64,
+    tpm: Option<u64>,
+}
 
 struct Rate {
     configured_ceiling: Option<f64>,
@@ -154,21 +165,26 @@ struct Rate {
     blocked_until: Instant,
     last_increase: Instant,
     last_decrease: Option<Instant>,
+    logged_limits: RateLimits,
+    last_limit_log: Option<Instant>,
     tokens: VecDeque<(u64, Instant, u64)>,
 }
 
 impl Rate {
     fn new(p: &Profile, now: Instant) -> Self {
+        let ceiling = p.requests_per_minute.unwrap_or(RATE_START_RPM);
         Self {
             configured_ceiling: p.requests_per_minute,
-            ceiling: p.requests_per_minute.unwrap_or(RATE_START_RPM),
-            rpm: p.requests_per_minute.unwrap_or(RATE_START_RPM),
+            ceiling,
+            rpm: ceiling,
             tpm: p.tokens_per_minute,
             next: now,
             last_sent: now,
             blocked_until: now,
             last_increase: now,
             last_decrease: None,
+            logged_limits: RateLimits { ceiling, rpm: ceiling, tpm: p.tokens_per_minute },
+            last_limit_log: None,
             tokens: VecDeque::new(),
         }
     }
@@ -233,6 +249,16 @@ impl Rate {
             self.blocked_until = self.blocked_until.max(now + Duration::from_secs(60));
         }
         self.next = self.next.max(self.last_sent + Duration::from_secs_f64(60.0 / self.rpm));
+    }
+
+    fn take_limit_update(&mut self, now: Instant) -> Option<RateLimits> {
+        let limits = RateLimits { ceiling: self.ceiling, rpm: self.rpm, tpm: self.tpm };
+        if limits == self.logged_limits || self.last_limit_log.is_some_and(|last| now.duration_since(last) < RATE_LOG_INTERVAL) {
+            return None;
+        }
+        self.logged_limits = limits;
+        self.last_limit_log = Some(now);
+        Some(limits)
     }
 }
 
@@ -426,7 +452,16 @@ impl Scheduler {
     }
 
     fn feedback(&self, profile: &str, id: u64, limited: bool, headers: &reqwest::header::HeaderMap, usage: Option<u64>) {
-        self.queue.lock().unwrap().rates.get_mut(profile).unwrap().feedback(id, limited, headers, usage, Instant::now());
+        let now = Instant::now();
+        let mut q = self.queue.lock().unwrap();
+        let rate = q.rates.get_mut(profile).unwrap();
+        rate.feedback(id, limited, headers, usage, now);
+        if let Some(limits) = rate.take_limit_update(now) {
+            log::info!(
+                "model limits profile={profile} rpm_ceiling={:.2} rpm={:.2} tpm_ceiling={}",
+                limits.ceiling, limits.rpm, limits.tpm.map_or_else(|| "none".into(), |limit| limit.to_string())
+            );
+        }
         self.changed.notify_waiters();
     }
 }
@@ -869,6 +904,44 @@ mod tests {
         headers.insert("x-ratelimit-remaining-req-minute", "0".parse().unwrap());
         rate.feedback(1, false, &headers, None, now + Duration::from_secs(120));
         assert!(rate.ready_at(20, now + Duration::from_secs(120)) >= now + Duration::from_secs(180));
+    }
+
+    #[test]
+    fn learned_limits_log_changes_and_flush_the_latest_suppressed_update() {
+        let now = Instant::now();
+        let mut rate = Rate::new(&test_profile(), now);
+        assert_eq!(rate.take_limit_update(now), None);
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("x-ratelimit-limit-req-minute", "50".parse().unwrap());
+        headers.insert("x-ratelimit-limit-tokens-minute", "1000".parse().unwrap());
+        rate.feedback(0, false, &headers, None, now);
+        assert_eq!(rate.take_limit_update(now), Some(RateLimits { ceiling: 45.0, rpm: 45.0, tpm: Some(900) }));
+        rate.feedback(0, false, &headers, None, now + Duration::from_secs(1));
+        assert_eq!(rate.take_limit_update(now + Duration::from_secs(1)), None, "unchanged headers do not log");
+        headers.insert("x-ratelimit-limit-req-minute", "40".parse().unwrap());
+        headers.insert("x-ratelimit-limit-tokens-minute", "500".parse().unwrap());
+        rate.feedback(0, false, &headers, None, now + Duration::from_secs(2));
+        assert_eq!(rate.take_limit_update(now + Duration::from_secs(2)), None, "changes within thirty seconds coalesce");
+        rate.feedback(0, false, &Default::default(), None, now + RATE_LOG_INTERVAL);
+        assert_eq!(rate.take_limit_update(now + RATE_LOG_INTERVAL), Some(RateLimits { ceiling: 36.0, rpm: 36.0, tpm: Some(450) }));
+        assert_eq!(rate.take_limit_update(now + RATE_LOG_INTERVAL * 2), None);
+        headers.insert("x-ratelimit-limit-req-minute", "60".parse().unwrap());
+        rate.feedback(0, false, &headers, None, now + RATE_LOG_INTERVAL * 2);
+        assert_eq!(rate.take_limit_update(now + RATE_LOG_INTERVAL * 2), Some(RateLimits { ceiling: 54.0, rpm: 36.0, tpm: Some(450) }), "ceiling-only changes also log");
+    }
+
+    #[test]
+    fn rate_decreases_and_recovery_log_without_provider_headers() {
+        let now = Instant::now();
+        let mut rate = Rate::new(&test_profile(), now);
+        rate.sent(1, 10, now);
+        rate.feedback(1, true, &Default::default(), None, now);
+        assert_eq!(rate.take_limit_update(now), Some(RateLimits { ceiling: 60.0, rpm: 30.0, tpm: None }));
+        rate.feedback(1, true, &Default::default(), None, now + Duration::from_secs(1));
+        assert_eq!(rate.take_limit_update(now + Duration::from_secs(1)), None, "duplicate congestion feedback does not log");
+        rate.feedback(1, false, &Default::default(), Some(10), now + Duration::from_secs(11));
+        assert_eq!(rate.take_limit_update(now + Duration::from_secs(11)), None);
+        assert_eq!(rate.take_limit_update(now + RATE_LOG_INTERVAL), Some(RateLimits { ceiling: 60.0, rpm: 33.0, tpm: None }));
     }
 
     #[test]
