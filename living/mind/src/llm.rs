@@ -112,6 +112,8 @@ pub enum Lane {
     Background,
 }
 
+const NON_INTERACTIVE_ADMISSIONS: [Lane; 10] = [Lane::Urgent, Lane::Urgent, Lane::Urgent, Lane::Urgent, Lane::Urgent, Lane::Urgent, Lane::Routine, Lane::Routine, Lane::Routine, Lane::Background];
+
 impl Lane {
     pub fn for_purpose(purpose: &str) -> Self {
         match purpose {
@@ -127,10 +129,7 @@ impl Lane {
             return Self::Interactive;
         }
         let reason = reason.to_lowercase();
-        if reason
-            .split(|c: char| !c.is_alphanumeric())
-            .any(|w| matches!(w, "combat" | "fight" | "fighting" | "alarm" | "attack" | "attacked" | "attacking" | "hit" | "danger" | "wound" | "wounded"))
-        {
+        if reason.split(|c: char| !c.is_alphanumeric()).any(|w| matches!(w, "combat" | "fight" | "fighting" | "alarm" | "attack" | "attacked" | "attacking" | "hit" | "danger" | "wound" | "wounded")) {
             Self::Urgent
         } else {
             Self::Routine
@@ -281,6 +280,7 @@ struct Queue {
     hosts: HashMap<String, String>,
     gates: HashMap<String, Gate>,
     waiting: VecDeque<Waiting>,
+    next_lane: usize,
     sequence: u64,
     in_flight: usize,
     lower_in_flight: usize,
@@ -294,11 +294,18 @@ impl Queue {
         if self.in_flight >= self.concurrency || now < self.global_next {
             return None;
         }
-        let lane = self.waiting.iter().map(|w| w.lane).min()?;
+        let lane = if self.waiting.iter().any(|w| w.lane == Lane::Interactive) {
+            Lane::Interactive
+        } else {
+            (0..NON_INTERACTIVE_ADMISSIONS.len())
+                .map(|offset| NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()])
+                .find(|lane| self.waiting.iter().any(|w| w.lane == *lane))?
+        };
         let lower_limit = self.concurrency.saturating_sub((self.concurrency / 4).max(1)).max(1);
         if lane != Lane::Interactive && self.lower_in_flight >= lower_limit {
             return None;
         }
+        // Keep a paced lane's turn so cheaper requests cannot consume its token budget forever.
         self.waiting
             .iter()
             .filter(|w| w.lane == lane)
@@ -312,6 +319,10 @@ impl Queue {
     fn start(&mut self, id: u64, now: Instant) -> (Lane, Option<String>) {
         let pos = self.waiting.iter().position(|w| w.id == id).unwrap();
         let w = self.waiting.remove(pos).unwrap();
+        if w.lane != Lane::Interactive {
+            let offset = (0..NON_INTERACTIVE_ADMISSIONS.len()).find(|offset| NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()] == w.lane).unwrap();
+            self.next_lane = (self.next_lane + offset + 1) % NON_INTERACTIVE_ADMISSIONS.len();
+        }
         self.rates.get_mut(&w.profile).unwrap().sent(id, w.cost, now);
         self.in_flight += 1;
         self.lower_in_flight += usize::from(w.lane != Lane::Interactive);
@@ -367,6 +378,7 @@ impl Scheduler {
                 hosts: models.profiles.iter().map(|(name, p)| (name.clone(), p.base_url.clone())).collect(),
                 gates: HashMap::new(),
                 waiting: VecDeque::new(),
+                next_lane: 0,
                 sequence: 0,
                 in_flight: 0,
                 lower_in_flight: 0,
@@ -719,6 +731,107 @@ mod tests {
 
     fn test_profile() -> Profile {
         serde_json::from_value(json!({"base_url": "http://127.0.0.1:9/v1", "model": "m", "key_env": "unused", "requests_per_minute": 60})).unwrap()
+    }
+
+    fn test_scheduler() -> Scheduler {
+        let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {
+            "p": {"base_url": "x", "model": "m", "key_env": "unused", "requests_per_minute": 60}
+        }}))
+        .unwrap();
+        Scheduler::new(&models, 1, 60.0)
+    }
+
+    fn enqueue(q: &mut Queue, lane: Lane, cost: u64) -> u64 {
+        q.sequence += 1;
+        q.waiting.push_back(Waiting { id: q.sequence, profile: "p".into(), lane, cost });
+        q.sequence
+    }
+
+    fn complete(q: &mut Queue, lane: Lane) {
+        q.in_flight -= 1;
+        q.lower_in_flight -= usize::from(lane != Lane::Interactive);
+    }
+
+    #[test]
+    fn background_has_a_bounded_share_under_continuously_refilled_routine_load() {
+        for urgent in [false, true] {
+            let scheduler = test_scheduler();
+            let mut q = scheduler.queue.lock().unwrap();
+            let now = q.global_next;
+            enqueue(&mut q, Lane::Routine, 10);
+            enqueue(&mut q, Lane::Background, 10);
+            if urgent {
+                enqueue(&mut q, Lane::Urgent, 10);
+            }
+            let cycle = if urgent { 10 } else { 4 };
+            let mut background = 0;
+            for step in 0..cycle * 10 {
+                let at = now + Duration::from_secs(step);
+                let id = q.candidate(at).expect("capacity is available");
+                let (lane, _) = q.start(id, at);
+                assert_eq!(q.candidate(at), None, "the single slot is saturated");
+                complete(&mut q, lane);
+                enqueue(&mut q, lane, 10);
+                background += usize::from(lane == Lane::Background);
+                if (step + 1) % cycle == 0 {
+                    assert_eq!(background, 1, "Background needs one admission in every {cycle} while Routine never empties");
+                    background = 0;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn interactive_preempts_every_weighted_turn_and_urgent_beats_routine() {
+        let scheduler = test_scheduler();
+        let mut q = scheduler.queue.lock().unwrap();
+        let now = q.global_next;
+        for lane in [Lane::Background, Lane::Routine, Lane::Urgent] {
+            enqueue(&mut q, lane, 10);
+        }
+        let mut admitted = Vec::new();
+        for step in 0..10 {
+            let at = now + Duration::from_secs(step * 2);
+            let interactive = enqueue(&mut q, Lane::Interactive, 10);
+            assert_eq!(q.candidate(at), Some(interactive));
+            let (lane, _) = q.start(interactive, at);
+            complete(&mut q, lane);
+            let at = at + Duration::from_secs(1);
+            let id = q.candidate(at).unwrap();
+            let (lane, _) = q.start(id, at);
+            admitted.push(lane);
+            complete(&mut q, lane);
+            enqueue(&mut q, lane, 10);
+        }
+        assert_eq!(admitted[0], Lane::Urgent, "Urgent precedes Routine even when enqueued later");
+        assert_eq!(admitted.iter().filter(|lane| **lane == Lane::Urgent).count(), 6);
+        assert_eq!(admitted.iter().filter(|lane| **lane == Lane::Routine).count(), 3);
+        assert_eq!(admitted.iter().filter(|lane| **lane == Lane::Background).count(), 1);
+    }
+
+    #[test]
+    fn a_background_turn_waits_for_tokens_instead_of_feeding_cheaper_routine_calls() {
+        let scheduler = test_scheduler();
+        let mut q = scheduler.queue.lock().unwrap();
+        let now = q.global_next;
+        q.rates.get_mut("p").unwrap().tpm = Some(100);
+        enqueue(&mut q, Lane::Routine, 10);
+        let background = enqueue(&mut q, Lane::Background, 80);
+        for step in 0..3 {
+            let at = now + Duration::from_secs(step);
+            let id = q.candidate(at).unwrap();
+            let (lane, _) = q.start(id, at);
+            assert_eq!(lane, Lane::Routine);
+            complete(&mut q, lane);
+            enqueue(&mut q, lane, 10);
+        }
+        assert_eq!(q.candidate(now + Duration::from_secs(3)), None, "save the turn for the larger Background reservation");
+        let interactive = enqueue(&mut q, Lane::Interactive, 1);
+        assert_eq!(q.candidate(now + Duration::from_secs(3)), Some(interactive));
+        let (lane, _) = q.start(interactive, now + Duration::from_secs(3));
+        complete(&mut q, lane);
+        assert_eq!(q.candidate(now + Duration::from_secs(60)), None);
+        assert_eq!(q.candidate(now + Duration::from_secs(61)), Some(background));
     }
 
     #[test]
