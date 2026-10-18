@@ -68,9 +68,16 @@ def num(v, default=0.0):
 
 
 def report(args):
-    people = {int(c["id"]): c for c in rows(args.db, "SELECT id, name, kind, alive, stage, born_ms FROM character") if c["kind"] == "person" and c["alive"] == "true"}
+    people = {int(c["id"]): c for c in rows(args.db, "SELECT id, name, kind, alive, stage, born_ms, birth_age_days, parent_a, parent_b FROM character") if c["kind"] == "person" and c["alive"] == "true"}
+    epoch = max((num(w["epoch_ms"]) for w in rows(args.db, "SELECT id, epoch_ms FROM world")), default=0.0)
     communities = {int(c["id"]): c for c in rows(args.db, "SELECT id, name, founded_ms FROM community")}
     member = {int(m["member"]): (int(m["community"]), int(m["since_ms"])) for m in rows(args.db, "SELECT community, member, since_ms FROM membership")}
+    # A child born here belongs where a parent does until it joins somewhere itself.
+    for pid, c in people.items():
+        if pid not in member:
+            home = next((member[int(x)][0] for x in (c.get("parent_a"), c.get("parent_b")) if x and int(x) in member), None)
+            if home is not None:
+                member[pid] = (home, int(num(c["born_ms"])))
     g = Graph(args.container, args.engine, args.run)
     alive = sorted(people)
     ids = json.dumps(alive)
@@ -119,8 +126,9 @@ def report(args):
         members = [p for p in alive if member.get(p, (None,))[0] == cid]
         if len(members) < 2:
             continue
-        founded = num(c["founded_ms"])
-        newcomer = [p for p in members if member[p][1] > founded + 600_000 or num(people[p]["born_ms"]) > founded]
+        # A seeded town is founded with the world (founded_ms 0, members since the epoch).
+        founded = max(num(c["founded_ms"]), epoch)
+        newcomer = [p for p in members if member[p][1] > founded + 600_000 or num(people[p].get("birth_age_days"), 1.0) == 0.0]
         old = [p for p in members if p not in newcomer]
         base = old if len(old) >= 2 else members
         need = max(2, (len(base) + 1) // 2)
