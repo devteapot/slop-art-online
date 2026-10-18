@@ -51,7 +51,7 @@ Every run has a name (`--run <run>`) and a directory `.local/living/verify/<run>
 $V launch --run <run> [--seed world]
 ```
 
-- Starts the SpacetimeDB container `sao-living_spacetimedb_1` (`http://127.0.0.1:3300`, image `v2.10.1`) if it is down, without Neo4j, and records that the run started it. Startup takes 1–2 minutes. The helper polls `/v1/ping` because `docker compose up --wait` can hang under podman-compose.
+- Starts the SpacetimeDB container `sao-living_spacetimedb_1` (`http://127.0.0.1:3300`, image `v2.10.1`) if it is down, without Neo4j, and records that the run started it. Startup takes 1–2 minutes. The helper polls `/v1/ping` because `docker compose up --wait` can hang under podman-compose. The same name holds under Docker Compose (Docker Desktop on the laptop), because `compose.yml` pins `container_name`; the `/wasm` mount's `/host_mnt` prefix there is stripped.
 - Builds the module from the working tree. The default seed is `living/seeds/world.json` (`realm-4`: 512×512 tiles, about 190 people and 80 animals). Another `--seed <name>` builds in `living/target/verify-<seed>` and leaves the active module alone.
 - Publishes a fresh `verify-<run>` with `--delete-data` and installs `living/scripts/skills.rhai`. The world ticks at 60 Hz right away. AI characters run their instinct graphs until a mind connects.
 - `--keep-data` updates the run's existing database in place instead, as `just living-publish` does for the active world. Use it to prove that minds and clients recover from a module update with their data intact.

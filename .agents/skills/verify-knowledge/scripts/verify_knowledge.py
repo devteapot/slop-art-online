@@ -41,6 +41,23 @@ def actions(node):
     return [a for child in node.values() for a in actions(child)]
 
 
+def proc_info(pid):
+    """(start time, state letter) of a live process, to tell it from a later one reusing its
+    pid; None when gone. /proc on Linux, ps elsewhere (macOS)."""
+    if Path('/proc/self/stat').exists():
+        try:
+            fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
+            return fields[19], fields[0]
+        except (OSError, IndexError):
+            return None
+    r = subprocess.run(['ps', '-o', 'lstart=,stat=', '-p', str(pid)], capture_output=True, text=True)
+    out = r.stdout.strip()
+    if r.returncode or not out:
+        return None
+    start, state = out.rsplit(None, 1)
+    return start, state[0]
+
+
 class Run:
     def __init__(self, name, existing=False):
         if not re.fullmatch(r'knowledge-[a-zA-Z0-9-]+', name):
@@ -131,12 +148,17 @@ class Run:
             raise RuntimeError(f'Cypher failed; see {label}.txt')
         return result
 
+    def container_exists(self, log):
+        # `container inspect` works with Docker and podman; `container exists` is podman only.
+        return self.command(['docker', 'container', 'inspect', self.state['container']], log, check=False).returncode == 0
+
     def start_neo4j(self):
         images = self.command(['docker', 'images', '--format', '{{.Repository}}:{{.Tag}}'], 'images.log').stdout.splitlines()
         image = 'docker.io/library/neo4j:2026.09.0'
-        if image not in images:
+        # Docker lists Docker Hub images by short name; podman lists the qualified one.
+        if image not in images and image.removeprefix('docker.io/library/') not in images:
             raise RuntimeError('required fully qualified Neo4j image is not present locally')
-        if self.command(['docker', 'container', 'exists', self.state['container']], 'neo4j-name-check.log', check=False).returncode == 0:
+        if self.container_exists('neo4j-name-check.log'):
             raise RuntimeError('scratch container name already exists')
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 7691))
@@ -296,7 +318,7 @@ class Run:
         self.streams.append(stream)
         process = subprocess.Popen(list(map(str, args)), cwd=ROOT, env=env, stdout=stream, stderr=subprocess.STDOUT)
         self.processes.append(process)
-        self.state['pids'][label] = {'pid': process.pid, 'start': Path(f'/proc/{process.pid}/stat').read_text().split()[21]}
+        self.state['pids'][label] = {'pid': process.pid, 'start': proc_info(process.pid)[0]}
         self.save()
         return process
 
@@ -419,17 +441,19 @@ class Run:
         failures = []
         for label, owned in reversed(list(self.state['pids'].items())):
             pid = owned['pid']
-            proc = Path(f'/proc/{pid}/stat')
-            if not proc.exists() or proc.read_text().split()[21] != owned['start']:
+            info = proc_info(pid)
+            if info is None or info[0] != owned['start']:
                 report['processes'].append({'name': label, 'pid': pid, 'stop': 'already exited'})
                 continue
             os.kill(pid, signal.SIGTERM)
             end = time.monotonic() + 10
             while time.monotonic() < end:
-                if not proc.exists() or proc.read_text().split()[2] == 'Z':
+                info = proc_info(pid)
+                if info is None or info[1] == 'Z':
                     break
                 time.sleep(0.2)
-            forced = proc.exists() and proc.read_text().split()[2] != 'Z'
+            info = proc_info(pid)
+            forced = info is not None and info[1] != 'Z'
             if forced:
                 os.kill(pid, signal.SIGKILL)
             report['processes'].append({'name': label, 'pid': pid, 'stop': 'SIGKILL' if forced else 'SIGTERM'})
@@ -458,7 +482,7 @@ class Run:
             report['database_deleted'] = error.code == 404
         if not report['database_deleted']:
             failures.append('database still exists')
-        exists = self.command(['docker', 'container', 'exists', self.state['container']], 'cleanup-container.log', check=False).returncode == 0
+        exists = self.container_exists('cleanup-container.log')
         if exists and self.state['container_started']:
             label = self.command(['docker', 'inspect', self.state['container'], '--format', '{{index .Config.Labels "sao.verify.run"}}'], 'cleanup-container.log').stdout.strip()
             if label != self.name:
@@ -468,7 +492,7 @@ class Run:
                 self.command(['docker', 'stop', '-t', '30', self.state['container']], 'cleanup-container.log', check=False)
                 self.command(['docker', 'inspect', self.state['container'], '--format', '{{.State.ExitCode}}'], 'cleanup-container.log', check=False)
                 self.command(['docker', 'rm', '-v', self.state['container']], 'cleanup-container.log', check=False)
-        report['container_removed'] = self.command(['docker', 'container', 'exists', self.state['container']], 'cleanup-container.log', check=False).returncode == 1
+        report['container_removed'] = not self.container_exists('cleanup-container.log')
         if not report['container_removed']:
             failures.append('scratch Neo4j removal failed')
         else:

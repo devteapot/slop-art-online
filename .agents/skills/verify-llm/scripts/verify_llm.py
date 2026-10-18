@@ -85,6 +85,8 @@ class Run:
             result = self.command(['docker', 'inspect', 'sao-living_spacetimedb_1', '--format', '{{json .Mounts}}'])
             mounts = json.loads(result.stdout)
             source = next((m.get('Source') for m in mounts if m.get('Destination') == '/wasm'), None)
+            # Docker Desktop reports bind mounts by their path in its VM (/host_mnt/Users/...).
+            source = source.removeprefix('/host_mnt') if source else source
             check = {'mounted': source, 'worktree_copy': True}
             (self.directory / 'mount-check.json').write_text(json.dumps(check, indent=2))
             if source is None or not Path(source).is_dir() or not os.access(source, os.W_OK):

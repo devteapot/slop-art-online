@@ -51,7 +51,9 @@ PREFIX = "verify-"
 def wasm_mount():
     """Host directory the container serves as /wasm. From a git worktree it is not this checkout's build dir."""
     r = subprocess.run(["docker", "inspect", CONTAINER, "--format", '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}'], capture_output=True, text=True)
-    return Path(r.stdout.strip()) if r.stdout.strip() else LIVING / "target/wasm32-unknown-unknown/release"
+    # Docker Desktop reports bind mounts by their path in its VM (/host_mnt/Users/...).
+    src = r.stdout.strip().removeprefix("/host_mnt")
+    return Path(src) if src else LIVING / "target/wasm32-unknown-unknown/release"
 
 
 def run_dir(run):

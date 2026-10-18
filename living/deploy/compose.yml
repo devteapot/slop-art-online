@@ -4,6 +4,9 @@
 services:
   spacetimedb:
     image: docker.io/clockworklabs/spacetime:v2.10.1
+    # podman-compose's default name, pinned so Docker Compose (which would say
+    # sao-living-spacetimedb-1) matches the recipes and verify scripts that address it.
+    container_name: sao-living_spacetimedb_1
     command: [start, --listen-addr, "0.0.0.0:3000"]
     # The server runs as PID 1 and handles SIGINT but not SIGTERM. A PID 1 ignores
     # unhandled signals, so the default SIGTERM did nothing and every stop ended in
