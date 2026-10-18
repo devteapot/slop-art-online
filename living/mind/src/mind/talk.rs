@@ -599,8 +599,8 @@ impl Minds {
                 let patch = memory::Patch {
                     nodes: vec![memory::NodeOp { key: key.clone(), labels: vec!["Agreement".into()], name: Some(s.outcome.clone()), props }],
                     edges: vec![
-                        memory::EdgeOp { from: "self".into(), rel: "AGREED".into(), to: key.clone(), confidence: 0.9, because: because.clone(), props: edge_props },
-                        memory::EdgeOp { from: key, rel: "WITH".into(), to: format!("person:{other}"), confidence: 0.9, because, props: Default::default() },
+                        memory::EdgeOp { from: "self".into(), rel: "AGREED".into(), to: key.clone(), confidence: 0.9, because: because.clone(), props: edge_props, firsthand: false, sources: Vec::new() },
+                        memory::EdgeOp { from: key, rel: "WITH".into(), to: format!("person:{other}"), confidence: 0.9, because, props: Default::default(), firsthand: false, sources: Vec::new() },
                     ],
                     ..Default::default()
                 };

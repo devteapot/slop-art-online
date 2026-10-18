@@ -1,5 +1,21 @@
 # Knowledge validation
 
+## 2026-10-18 stories, hearsay and childhood (`knowledge-20261018-205004`)
+
+Host: macOS laptop, Docker Desktop 29.8.0 (first runs of this skill on Docker). Commit `f3595c3` plus the uncommitted knowledge-transmission changes (`living/mind/src/memory.rs`, `mind.rs`, `mind/recall.rs`, `mind/talk.rs`, `prompts.rs`) and harness portability fixes. SpacetimeDB 2.10.1, scratch Neo4j `neo4j:2026.09.0`. No paid model calls.
+
+All seventeen proof groups passed, including the three new ignored tests (`grounds_link_stories_and_lessons`, `hearsay_fades_faster_until_corroborated`, `childhood_memories_last_longer`) and the real consolidation through the fake model. `graph-edges.txt` shows consolidated edges with provenance (six `hearsay: TRUE` from teller 25, two `firsthand: TRUE`) and `GROUNDS` links. `cleanup.json`: mind and fake stopped by SIGTERM, database 404, container removed, journal copied.
+
+Portability fixes found on the way, each reproduced by a failed attempt (`knowledge-20261018-204243`, `-204405`, `-204436`, `-204602`, `-204927`; all cleaned up):
+
+- Docker Compose named the server `sao-living-spacetimedb-1`; `living/deploy/compose.yml` now pins podman-compose's `sao-living_spacetimedb_1`.
+- Docker Desktop reports the `/wasm` bind mount as `/host_mnt/...`; the shared harness strips it.
+- `docker container exists` is podman only (on Docker, cleanup would report a running container removed); the runner uses `container inspect`.
+- Docker lists the image by short name; the runner accepts it.
+- `/proc/<pid>/stat` is Linux only; `proc_info` falls back to `ps -o lstart=,stat=`.
+- A run that starts SpacetimeDB stops it in shared cleanup before the runner's final SQL check, which then fails with "connection refused". Start the server first (SKILL.md preconditions).
+- `-204436` also caught a product bug: the memory write's new `GROUNDS` link used `$t` without passing it.
+
 ## 2026-10-04 implementation runs
 
 Host: Fedora, rootless Podman through the docker CLI, SELinux enforcing. Commit: `384fb50`, plus existing uncommitted `living/` changes reported by shared launch. Authority and SDK pin: SpacetimeDB 2.10.1. Scratch graph image: `docker.io/library/neo4j:2026.09.0`, already present locally. No paid model calls ran.

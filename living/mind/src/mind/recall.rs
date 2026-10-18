@@ -41,6 +41,14 @@ pub(super) fn day_words(hour: f32) -> &'static str {
     }
 }
 
+/// Techniques a text names (as whole words): `know:<technique>` anchors, so being taught,
+/// watching someone make a thing, hearing who knows what, and failing for lack of a technique
+/// all meet at one concept, and the failure brings back who was seen or said to know it.
+pub(super) fn techniques_in(text: &str) -> Vec<&'static str> {
+    let words: Vec<String> = text.to_lowercase().split(|c: char| !c.is_alphabetic()).map(String::from).collect();
+    living_rules::catalog::TECHNIQUES.iter().map(|t| t.name).filter(|n| words.iter().any(|w| w == n)).collect()
+}
+
 impl Minds {
     /// People named in a text (by their names as words), for cues.
     pub(super) fn named_people(&self, text: &str) -> Vec<u32> {
@@ -113,9 +121,15 @@ impl Minds {
         }
         cues.text(reason, 1.0);
         named(&mut cues, reason, 1.1);
+        for t in techniques_in(reason) {
+            cues.key(format!("know:{t}"), 1.0);
+        }
         let exps = self.experiences(actor);
         for e in exps.iter().rev().take(5) {
             cues.text(&e.text, 0.6);
+            for t in techniques_in(&e.text) {
+                cues.key(format!("know:{t}"), 0.8);
+            }
             for id in [e.subject, e.object] {
                 if id != 0 && id != actor && self.conn.db.character().id().find(&id).map_or(false, |c| c.kind == "person") {
                     cues.key(format!("person:{id}"), 0.9);
@@ -214,5 +228,15 @@ impl Minds {
             out.push(format!("({hidden} other stances you hold are not on your mind now)"));
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn techniques_named_as_whole_words() {
+        assert_eq!(super::techniques_in("you don't know how to cook (cooking: learn it from someone who knows it)"), vec!["cooking"]);
+        assert_eq!(super::techniques_in("Ada taught you Fire."), vec!["fire"]);
+        assert!(super::techniques_in("by the campfire, firewood stacked").is_empty());
     }
 }

@@ -424,6 +424,7 @@ impl Minds {
                 out.push(if c.kind == "person" { format!("person:{id}") } else { format!("kind:{}", c.kind) });
             }
         }
+        out.extend(recall::techniques_in(&e.text).into_iter().map(|t| format!("know:{t}")));
         out
     }
 
@@ -700,7 +701,7 @@ impl Minds {
                     continue;
                 }
                 let involves = m["about"].as_array().into_iter().flatten().filter_map(id_of).map(|id| format!("person:{id}")).collect();
-                patch.remember.push(memory::MemoryOp { exp: memory::AUTHORED_MEMORY + i as u64, t: now, gist, salience: m["salience"].as_f64().unwrap_or(0.7).clamp(0.0, 1.0), involves });
+                patch.remember.push(memory::MemoryOp { exp: memory::AUTHORED_MEMORY + i as u64, t: now, gist, salience: m["salience"].as_f64().unwrap_or(0.7).clamp(0.0, 1.0), involves, childhood: false });
             }
             store.ensure_self(c.id, &c.name).await?;
             store.apply(c.id, &patch, &thought, now).await?;
@@ -758,7 +759,7 @@ impl Minds {
             for (id, name) in &parents {
                 let key = format!("person:{id}");
                 patch.nodes.push(memory::NodeOp { key: key.clone(), labels: vec!["Person".into(), "Parent".into()], name: Some(name.clone()), props: Default::default() });
-                patch.edges.push(memory::EdgeOp { from: "self".into(), rel: "CHILD_OF".into(), to: key, confidence: 1.0, because: Vec::new(), props: Default::default() });
+                patch.edges.push(memory::EdgeOp { from: "self".into(), rel: "CHILD_OF".into(), to: key, confidence: 1.0, because: Vec::new(), props: Default::default(), firsthand: false, sources: Vec::new() });
             }
             let sugar = json!({
                 "relations": parents.iter().map(|(id, _)| json!({"id": id, "trust": 70, "affinity": 80, "label": "parent"})).collect::<Vec<_>>(),
@@ -1563,6 +1564,13 @@ impl Minds {
         let (mut patch, notes) = memory::patch_from(&v, &known, &lookup);
         memory::sugar_into(&v, &mut patch, &known);
         self.canonical_people(&mut patch);
+        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
+        memory::attribute(&mut patch, actor, &told);
+        if c.stage <= 1 {
+            for m in patch.remember.iter_mut() {
+                m.childhood = true;
+            }
+        }
         // Name person anchors from what the character perceives, when the model did not.
         for n in patch.nodes.iter_mut() {
             if n.name.is_none() {

@@ -13,6 +13,8 @@ This skill drives two paths. Scripted characters learn and use techniques throug
 
 SpacetimeDB must be running. When it is down, `.agents/skills/verify/scripts/verify.py launch --run <run>` starts it. Or run `docker start sao-living_spacetimedb_1` and poll `curl -s http://127.0.0.1:3300/v1/ping` until it answers.
 
+The runner works with podman (the Fedora host) and Docker Desktop (the laptop). Docker lists the image by its short name, which the runner accepts. On Docker, start SpacetimeDB before the run (`docker compose --env-file .local/living/neo4j.env -f living/deploy/compose.yml -p sao-living up -d --no-deps spacetimedb`); a run that starts it also stops it during cleanup, before its final SQL check.
+
 The Neo4j image must be present locally, because the runner does not pull it. Pull it with the exact fully qualified name the runner uses: `docker pull docker.io/library/neo4j:2026.09.0`. Short image names do not resolve without a terminal on this host, so the full `docker.io/...` name is required. Check the image with `docker images`.
 
 ## Run every feature
@@ -46,7 +48,7 @@ For a running attempt:
 
 The runner asserts table changes, exact knowledge sources, preserved row IDs and acquisition times, negative effects for blocked actions, successful practice counts, graph content, projected rows and recalled prompt content. Admin reducers prepare and drive deterministic authority scenes. They do not prove player permissions.
 
-Four ignored memory tests create and delete graphs inside this scratch Neo4j. `recall_replay` requires `LIVING_RECALL_CASES`; the runner generates nonempty cases against the real mind's graph and asserts budgets and recalled content from its output. It also runs the two focused truthful-feedback rules tests.
+Seven ignored memory tests create and delete graphs inside this scratch Neo4j. `recall_replay` requires `LIVING_RECALL_CASES`; the runner generates nonempty cases against the real mind's graph and asserts budgets and recalled content from its output. It also runs the two focused truthful-feedback rules tests.
 
 Evidence remains in `.local/living/verify/$R/`. Inspect `results.json`, the recorded SQL snapshots, `graph-*.cypher` and `graph-*.txt`, `recalled-deliberation.json`, Cargo test logs, `requests.jsonl`, `journal/` and `cleanup.json`. `knowledge-state.json` and shared `state.json` are private operational state, not evidence to share.
 

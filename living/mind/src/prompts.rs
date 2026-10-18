@@ -375,9 +375,10 @@ outdated, and change it — re-assert an edge with a new confidence, retract wha
 that fit it now (labels you give REPLACE its old ones, e.g. a Stranger who became a Friend), clear a property with null, and \
 merge concepts that turn out to be the same thing. Prefer connecting to existing concepts over inventing new ones. \
 History is kept automatically. Keep as memories only the \
-few experiences the person would still remember tomorrow (at most 3, often none), each with a gist in the person's own words. Identity (narrative, values, goals, traits 0-100, \
+few experiences the person would still remember tomorrow (at most 3, often none), each with a gist in the person's own words{}. Identity (narrative, values, goals, traits 0-100, \
 mood) changes only when experiences genuinely warrant it; otherwise identity is null.\n\n{}\n\n\
-KEYS: anchors connect your mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \"kind:<wolf|deer|berry_bush|campfire|...>\". \
+KEYS: anchors connect your mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \"kind:<wolf|deer|berry_bush|campfire|...>\", \
+\"know:<technique>\" (the technique itself, e.g. \"know:cooking\"). \
 Any other key is yours to invent (\"idea:shared_storage\", \"plan:river_camp\"). Reuse existing keys shown in your mind.\n\
 The body acts on three parts of the mind without thinking: how the person feels about people (self -FEELS {{trust, affinity -100..100, label, note}}-> person:<id>), \
 stances the behavior graph can test (self -JUDGES {{value 0..1, why}}-> stance:<key>, e.g. stance:wolves_hunt_near_camp; stances relax toward 0.5 unless reinforced) \
@@ -395,9 +396,20 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
  \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\"}}],\n\
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
  \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}",
+        if lessons() { LESSON } else { "" },
         world_rules()
     ))
 }
+
+/// Kept memories carry what they taught (opt-in experiment: `LIVING_LESSONS=1`; off by
+/// default). A lesson told with its story may carry to new situations better than a rule;
+/// whether it does, and what it costs in tokens, is for an A/B lab to show.
+fn lessons() -> bool {
+    matches!(std::env::var("LIVING_LESSONS").as_deref(), Ok("1") | Ok("on") | Ok("true"))
+}
+
+const LESSON: &str = ": what happened and, when it taught the person something, what it taught, as they would tell it \
+(e.g. \"The night the wolves came to the ford, Bram's goats were gone by dawn: wolves follow the water in winter\")";
 
 pub fn reorganize_system() -> String {
     shared(format!(

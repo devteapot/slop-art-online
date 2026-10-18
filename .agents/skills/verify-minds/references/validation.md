@@ -1,5 +1,9 @@
 # Internal mind validation
 
+## 2026-10-18 `minds-20261018-205441` (macOS, Docker Desktop)
+
+After the knowledge-transmission changes (consolidation attributes provenance and marks childhood memories; the consolidation prompt names `know:<technique>` anchors and an off-by-default lesson clause). Commit `f3595c3` plus uncommitted changes. Eight cases pass; `consolidation` stays XFAIL (the Neo4j-off known issue). Every case's database answered 404 after cleanup; no mind or fake process survived. The first attempt (`minds-20261018-205344`) failed every case before publishing: `verify_llm.py` read Docker Desktop's `/host_mnt/...` mount path. It now strips that prefix, as the shared harness does.
+
 ## 2026-10-04 LOD replacement fix
 
 The `llm/lod-fix` worktree changes pending deliberations to a current row, `Ready` / `Waiting { until }` / `InFlight` state and one wake notification per actor. Inserts refresh the row; obsolete deletes match the full old row rather than its timestamp. Merges, withdrawal and player contact wake delayed work. The generated `my_deliberations` view lacks a primary key, so [SDK 2.10.1](https://docs.rs/spacetimedb-sdk/2.10.1/src/spacetimedb_sdk/table.rs.html#153-178) supplies insert/delete callbacks rather than `on_update`. Its local versioned callback source confirms inserts are dispatched before deletes. The authority's `clear_deliberation` can strip old plan reasons while retaining `updated_ms`, which explains the lost replacement.

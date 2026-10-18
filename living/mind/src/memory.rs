@@ -3,7 +3,8 @@
 //! Only three things are fixed:
 //! - every node is a `:Concept {run, actor, key}` owned by one mind (no sharing);
 //! - anchor keys connect thoughts to the world: `self`, `person:<id>`, `place:<name>`,
-//!   `kind:<creature/resource/structure/item>`, `exp:<experience id>` (a kept memory);
+//!   `kind:<creature/resource/structure/item>`, `know:<technique>`, `exp:<experience id>`
+//!   (a kept memory);
 //! - every edge carries `confidence`, `because` (experience ids in SpacetimeDB), `thought`
 //!   (the reasoning episode that asserted it), `t`, and `open` (false once retracted,
 //!   with `valid_to`); nothing is deleted.
@@ -14,6 +15,11 @@
 //! to the survivor, which gains `MERGED_INTO` from the old one), and unreinforced edges fade
 //! (confidence decays with age; faded edges close with `retracted_by = 'faded'`).
 //! Identity lives on the `self` node, with `:IdentityVersion` snapshots linked by `WAS`.
+//!
+//! Two links are written by this store, never by the mind: a kept memory `INVOLVES` the
+//! anchors of its experience, and `GROUNDS` what every belief citing that experience is
+//! about, so a story comes to mind with its lesson and a lesson with its story. Beliefs
+//! also carry their provenance (`firsthand`, `sources`, `hearsay`; see [`attribute`]).
 
 use anyhow::Result;
 use neo4rs::{query, BoltType, Graph};
@@ -46,6 +52,12 @@ pub struct EdgeOp {
     pub confidence: f64,
     pub because: Vec<u64>,
     pub props: serde_json::Map<String, Value>,
+    /// Some experience in `because` was lived, not told (see [`attribute`]).
+    #[serde(default)]
+    pub firsthand: bool,
+    /// Who told or wrote the testimony in `because` (person ids; 0 for an unsigned text).
+    #[serde(default)]
+    pub sources: Vec<u32>,
 }
 
 /// Memories a world's author gave a person (from before the world began) have no experience;
@@ -64,6 +76,9 @@ pub struct MemoryOp {
     pub gist: String,
     pub salience: f64,
     pub involves: Vec<String>,
+    /// Formed as an infant or child: fades `CHILDHOOD` times more slowly.
+    #[serde(default)]
+    pub childhood: bool,
 }
 
 /// One current edge of the mind, for prompts and the observer projection.
@@ -84,6 +99,10 @@ pub struct Fact {
 pub struct Store {
     g: Graph,
     run: String,
+    /// Recall follows `GROUNDS` between beliefs and the memories behind them (opt-in:
+    /// `LIVING_GROUNDS=1`). The links are always written; following them is off until a lab
+    /// shows whether bringing a stance's story back with it hardens the stance.
+    pub grounds: bool,
 }
 
 /// Belief half-life: confidence decays as `c · exp(-age / TAU_MS)` unless reinforced.
@@ -100,13 +119,20 @@ const MEMORY_FLOOR: f64 = 0.15;
 /// it fades this many times more slowly (a 0.95 stance lasts about 16 hours unreinforced, a
 /// 0.9 memory about 2.5 days). Changing one's mind replaces it with an ordinary belief.
 const FORMATIVE: f64 = 12.0;
+/// What one learns as an infant or child stays longer: such memories fade this many times
+/// more slowly (a 0.9 memory lasts about 20 hours instead of 5).
+const CHILDHOOD: f64 = 4.0;
+/// Hearsay (a belief only one teller or writer stands behind, never lived) fades this much
+/// faster: its time constant is multiplied by this until one's own experience or a second,
+/// independent source backs it.
+const HEARSAY: f64 = 0.5;
 /// Relationships that describe structure, not belief; they never fade.
-const DURABLE: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "CHILD_OF", "PARENT_OF", "MERGED_INTO"];
+const DURABLE: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "GROUNDS", "CHILD_OF", "PARENT_OF", "MERGED_INTO"];
 /// Relationship types stored as real Neo4j types: the ones code relies on. Any other
 /// relationship a mind names is stored as `RELATES` with the name in `rel` (every edge carries
 /// `rel`). Neo4j never frees a type name and allows 65,535; minds invented that many in a day
 /// of runs, after which new ones could not be written.
-const TYPED: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "CHILD_OF", "PARENT_OF", "MERGED_INTO", "AGREED", "WITH"];
+const TYPED: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "GROUNDS", "CHILD_OF", "PARENT_OF", "MERGED_INTO", "AGREED", "WITH"];
 
 /// The Neo4j type an edge named `rel` is stored as.
 fn stored_type(rel: &str) -> &str {
@@ -128,7 +154,8 @@ impl Store {
         // whole length, and a pool smaller than the task count can starve everyone.
         let config = neo4rs::ConfigBuilder::default().uri(uri).user(user).password(password).max_connections(128).build()?;
         let g = Graph::connect(config).await?;
-        let s = Self { g, run: run.into() };
+        let grounds = matches!(std::env::var("LIVING_GROUNDS").as_deref(), Ok("1") | Ok("on") | Ok("true"));
+        let s = Self { g, run: run.into(), grounds };
         for q in [
             "CREATE CONSTRAINT living_concept IF NOT EXISTS FOR (c:Concept) REQUIRE (c.run, c.actor, c.key) IS UNIQUE",
             "CREATE INDEX living_concept_mind IF NOT EXISTS FOR (c:Concept) ON (c.run, c.actor)",
@@ -228,12 +255,23 @@ impl Store {
             .await?;
         }
         if !patch.remember.is_empty() {
-            let rows: Vec<Value> = patch.remember.iter().map(|m| json!({"key": format!("exp:{}", m.exp), "exp": m.exp, "t": m.t, "gist": m.gist, "salience": m.salience, "involves": m.involves})).collect();
+            let rows: Vec<Value> = patch.remember.iter().map(|m| json!({"key": format!("exp:{}", m.exp), "exp": m.exp, "t": m.t, "gist": m.gist, "salience": m.salience, "involves": m.involves, "childhood": m.childhood})).collect();
+            // A memory kept after beliefs already cited its experience (a conversation turn
+            // writes before consolidation keeps the memory) grounds them too.
             txn.run(
                 self.q(
                     "UNWIND $rows AS m
                      MERGE (c:Concept {run: $run, actor: $actor, key: m.key})
                      SET c:Memory, c.exp = m.exp, c.t = m.t, c.gist = m.gist, c.name = m.gist, c.salience = m.salience, c.thought = $thought
+                     SET c.childhood = CASE WHEN m.childhood THEN true ELSE c.childhood END
+                     WITH c, m
+                     CALL (c, m) {
+                       MATCH (:Concept {run: $run, actor: $actor})-[r {open: true}]->(b:Concept)
+                       WHERE m.exp IN coalesce(r.because, []) AND NOT type(r) IN ['INVOLVES', 'GROUNDS', 'MERGED_INTO', 'WAS'] AND b <> c
+                       WITH DISTINCT b
+                       MERGE (c)-[g:GROUNDS {open: true, rel: 'GROUNDS'}]->(b)
+                       ON CREATE SET g.since = $t, g.thought = $thought
+                     }
                      WITH c, m
                      UNWIND m.involves AS k
                      MERGE (x:Concept {run: $run, actor: $actor, key: k})
@@ -241,6 +279,7 @@ impl Store {
                     actor,
                 )
                 .param("rows", p(Value::Array(rows)))
+                .param("t", t as i64)
                 .param("thought", thought),
             )
             .await?;
@@ -249,8 +288,10 @@ impl Store {
             let rows: Vec<Value> = patch
                 .edges
                 .iter()
-                .map(|e| json!({"from": e.from, "to": e.to, "rel": e.rel, "type": stored_type(&e.rel), "confidence": e.confidence, "because": e.because, "props": e.props}))
+                .map(|e| json!({"from": e.from, "to": e.to, "rel": e.rel, "type": stored_type(&e.rel), "confidence": e.confidence, "because": e.because, "props": e.props, "firsthand": e.firsthand, "sources": e.sources}))
                 .collect();
+            // Provenance accumulates over re-assertions: once lived or told by two people, a
+            // belief is no longer hearsay. The kept memories it cites ground what it is about.
             txn.run(
                 self.q(
                     "UNWIND $rows AS e
@@ -259,7 +300,18 @@ impl Store {
                      MERGE (a)-[r:$(e.type) {open: true, rel: e.rel}]->(b)
                      ON CREATE SET r.since = $t, r.because = []
                      SET r += e.props, r.confidence = e.confidence, r.t = $t, r.thought = $thought,
-                         r.because = [x IN r.because WHERE NOT x IN e.because] + e.because",
+                         r.because = [x IN r.because WHERE NOT x IN e.because] + e.because,
+                         r.firsthand = coalesce(r.firsthand, false) OR e.firsthand,
+                         r.sources = [x IN coalesce(r.sources, []) WHERE NOT x IN e.sources] + e.sources
+                     SET r.hearsay = NOT r.firsthand AND size(r.sources) = 1
+                     WITH b, e
+                     CALL (b, e) {
+                       UNWIND e.because AS x
+                       MATCH (m:Concept:Memory {run: $run, actor: $actor, key: 'exp:' + toString(x)})
+                       WHERE m <> b
+                       MERGE (m)-[g:GROUNDS {open: true, rel: 'GROUNDS'}]->(b)
+                       ON CREATE SET g.since = $t, g.thought = $thought
+                     }",
                     actor,
                 )
                 .param("rows", p(Value::Array(rows)))
@@ -328,8 +380,8 @@ impl Store {
                      MATCH (s)-[r {open: true}]-(:Concept)
                      WITH DISTINCT r
                      WITH r, startNode(r) AS a, endNode(r) AS b
-                     WHERE NOT type(r) IN ['WAS', 'INVOLVES', 'MERGED_INTO']
-                     WITH r, a, b, coalesce(r.confidence, 0.5) * CASE WHEN type(r) IN $durable THEN 1.0 ELSE exp(-toFloat($now - coalesce(r.t, $now)) / $tau) END AS c
+                     WHERE NOT type(r) IN ['WAS', 'INVOLVES', 'GROUNDS', 'MERGED_INTO']
+                     WITH r, a, b, coalesce(r.confidence, 0.5) * CASE WHEN type(r) IN $durable THEN 1.0 ELSE exp(-toFloat($now - coalesce(r.t, $now)) / ($tau * CASE WHEN r.hearsay THEN $hearsay ELSE 1.0 END)) END AS c
                      RETURN a.key AS a, coalesce(a.name, a.key) AS an, labels(a) AS al, coalesce(r.rel, type(r)) AS rel,
                             b.key AS b, coalesce(b.name, b.key) AS bn, labels(b) AS bl,
                             c, coalesce(r.t, 0) AS t,
@@ -341,6 +393,7 @@ impl Store {
                 .param("durable", DURABLE.iter().map(|s| s.to_string()).collect::<Vec<_>>())
                 .param("now", crate::llm::now_ms() as i64)
                 .param("tau", TAU_MS)
+                .param("hearsay", HEARSAY)
                 .param("limit", limit as i64),
             )
             .await?;
@@ -373,7 +426,7 @@ impl Store {
                 self.q(
                     "MATCH (:Concept {run: $run, actor: $actor})-[r {open: true}]->(:Concept)
                      WHERE NOT type(r) IN $durable
-                       AND coalesce(r.confidence, 0.5) * exp(-toFloat($t - coalesce(r.t, $t)) / $tau) < $floor
+                       AND coalesce(r.confidence, 0.5) * exp(-toFloat($t - coalesce(r.t, $t)) / ($tau * CASE WHEN r.hearsay THEN $hearsay ELSE 1.0 END)) < $floor
                      SET r.open = false, r.valid_to = $t, r.retracted_by = 'faded'
                      RETURN count(r) AS n",
                     actor,
@@ -381,6 +434,7 @@ impl Store {
                 .param("durable", DURABLE.iter().map(|s| s.to_string()).collect::<Vec<_>>())
                 .param("t", t as i64)
                 .param("tau", TAU_MS)
+                .param("hearsay", HEARSAY)
                 .param("floor", floor),
             )
             .await?;
@@ -395,7 +449,7 @@ impl Store {
             .execute(
                 self.q(
                     "MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:JUDGES {open: true}]->(:Concept)
-                     WHERE abs(toFloat(coalesce(r.value, 0.5)) - 0.5) * exp(-toFloat($t - coalesce(r.t, $t)) / ($tau * CASE WHEN r.formative THEN $formative ELSE 1.0 END)) < $lean
+                     WHERE abs(toFloat(coalesce(r.value, 0.5)) - 0.5) * exp(-toFloat($t - coalesce(r.t, $t)) / ($tau * CASE WHEN r.formative THEN $formative WHEN r.hearsay THEN $hearsay ELSE 1.0 END)) < $lean
                      SET r.open = false, r.valid_to = $t, r.retracted_by = 'faded'
                      RETURN count(r) AS n",
                     actor,
@@ -403,6 +457,7 @@ impl Store {
                 .param("t", t as i64)
                 .param("tau", TAU_MS)
                 .param("formative", FORMATIVE)
+                .param("hearsay", HEARSAY)
                 .param("lean", STANCE_LEAN),
             )
             .await?;
@@ -417,7 +472,7 @@ impl Store {
             .execute(
                 self.q(
                     "MATCH (m:Concept {run: $run, actor: $actor}) WHERE m:Memory AND NOT m:Forgotten
-                       AND coalesce(m.salience, 0.5) * exp(-toFloat($t - coalesce(m.recalled_t, m.t, $t)) / ($tau * CASE WHEN m.formative THEN $formative ELSE 1.0 END)) < $floor
+                       AND coalesce(m.salience, 0.5) * exp(-toFloat($t - coalesce(m.recalled_t, m.t, $t)) / ($tau * CASE WHEN m.formative THEN $formative WHEN m.childhood THEN $childhood ELSE 1.0 END)) < $floor
                      SET m:Forgotten, m.forgotten_t = $t
                      RETURN count(m) AS n",
                     actor,
@@ -425,6 +480,7 @@ impl Store {
                 .param("t", t as i64)
                 .param("tau", MEMORY_TAU_MS)
                 .param("formative", FORMATIVE)
+                .param("childhood", CHILDHOOD)
                 .param("floor", MEMORY_FLOOR),
             )
             .await?;
@@ -556,13 +612,16 @@ impl Store {
                 self.q(
                     "MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:JUDGES {open: true}]->(j:Concept)
                      WHERE NOT j:Merged
-                     WITH j, r, toFloat(coalesce(r.value, 0.5)) AS v, exp(-toFloat($now - coalesce(r.t, $now)) / $tau) AS keep
+                     WITH j, r, toFloat(coalesce(r.value, 0.5)) AS v,
+                          exp(-toFloat($now - coalesce(r.t, $now)) / ($tau * CASE WHEN r.formative THEN $formative WHEN r.hearsay THEN $hearsay ELSE 1.0 END)) AS keep
                      RETURN j.key AS key, 0.5 + (v - 0.5) * keep AS value, coalesce(r.why, '') AS why
                      ORDER BY r.t DESC LIMIT 32",
                     actor,
                 )
                 .param("now", crate::llm::now_ms() as i64)
-                .param("tau", TAU_MS),
+                .param("tau", TAU_MS)
+                .param("formative", FORMATIVE)
+                .param("hearsay", HEARSAY),
             )
             .await?;
         while let Some(r) = rows.next().await? {
@@ -698,8 +757,9 @@ fn recency(now: u64, t: u64) -> f64 {
     0.6 + 0.4 * (-(now.saturating_sub(t) as f64) / (30.0 * 60_000.0)).exp()
 }
 
-fn memory_strength(now: u64, t: u64, recalled: u64, salience: f64) -> f64 {
-    salience * (-(now.saturating_sub(t.max(recalled)) as f64) / MEMORY_TAU_MS).exp()
+/// How present a memory still is; `slow` is its fade factor (formative or childhood).
+fn memory_strength(now: u64, t: u64, recalled: u64, salience: f64, slow: f64) -> f64 {
+    salience * (-(now.saturating_sub(t.max(recalled)) as f64) / (MEMORY_TAU_MS * slow)).exp()
 }
 
 /// Minimum activation for a belief to come to mind.
@@ -719,7 +779,8 @@ impl Store {
         let started = std::time::Instant::now();
         let now = crate::llm::now_ms();
         let mut seeds: Vec<(String, f64)> = Vec::new();
-        let mut mem_cands: Vec<(u64, u64, String, f64)> = Vec::new();
+        // (exp, formed, gist, strength, rehearse when recalled)
+        let mut mem_cands: Vec<(u64, u64, String, f64, bool)> = Vec::new();
         // Anchor keys that exist in this mind.
         if !cues.keys.is_empty() {
             let rows: Vec<Value> = cues.keys.iter().map(|(k, w)| json!({"key": k, "w": w})).collect();
@@ -753,13 +814,16 @@ impl Store {
                          WITH c, [w IN $words WHERE text CONTAINS w] AS hit
                          WHERE size(hit) > 0
                          RETURN c.key AS key, hit, c:Memory AS memory, c.exp AS exp, c.t AS t, c.gist AS gist,
-                                toFloat(coalesce(c.salience, 0.5)) AS sal, coalesce(c.recalled_t, 0) AS rt",
+                                toFloat(coalesce(c.salience, 0.5)) AS sal, coalesce(c.recalled_t, 0) AS rt,
+                                CASE WHEN c.formative THEN $formative WHEN c.childhood THEN $childhood ELSE 1.0 END AS slow",
                         actor,
                     )
-                    .param("words", words),
+                    .param("words", words)
+                    .param("formative", FORMATIVE)
+                    .param("childhood", CHILDHOOD),
                 )
                 .await?;
-            let mut found: Vec<(String, Vec<String>, bool, u64, u64, String, f64, u64)> = Vec::new();
+            let mut found: Vec<(String, Vec<String>, bool, u64, u64, String, f64, u64, f64)> = Vec::new();
             while let Some(row) = r.next().await? {
                 found.push((
                     row.get("key").unwrap_or_default(),
@@ -770,11 +834,12 @@ impl Store {
                     row.get("gist").unwrap_or_default(),
                     row.get("sal").unwrap_or(0.5),
                     row.get::<i64>("rt").unwrap_or(0) as u64,
+                    row.get("slow").unwrap_or(1.0),
                 ));
             }
             let freq = |w: &str| found.iter().filter(|f| f.1.iter().any(|h| h == w)).count();
             let mut word_seeds: Vec<(String, f64)> = Vec::new();
-            for (key, hit, memory, exp, t, gist, sal, rt) in &found {
+            for (key, hit, memory, exp, t, gist, sal, rt, slow) in &found {
                 let ws: Vec<f64> = hit
                     .iter()
                     .filter_map(|h| {
@@ -786,7 +851,11 @@ impl Store {
                 // Several matching words are stronger evidence than one.
                 let w = (best * (1.0 + 0.25 * (ws.len() as f64 - 1.0))).min(1.5) * 0.8;
                 if *memory {
-                    mem_cands.push((*exp, *t, gist.clone(), w * memory_strength(now, *t, *rt, *sal)));
+                    mem_cands.push((*exp, *t, gist.clone(), w * memory_strength(now, *t, *rt, *sal, *slow), true));
+                    // A story that comes to mind can bring back what it taught.
+                    if self.grounds && !seeds.iter().any(|s| &s.0 == key) {
+                        word_seeds.push((key.clone(), w));
+                    }
                 } else if !seeds.iter().any(|s| &s.0 == key) {
                     word_seeds.push((key.clone(), w));
                 }
@@ -816,13 +885,16 @@ impl Store {
                          RETURN s.key AS seed, s.w AS w, n.key AS other, n:Memory AS memory, n:Forgotten AS forgotten,
                                 a.key AS a, coalesce(a.name, a.key) AS an, labels(a) AS al, coalesce(r.rel, type(r)) AS rel,
                                 b.key AS b, coalesce(b.name, b.key) AS bn, labels(b) AS bl,
-                                toFloat(coalesce(r.confidence, 0.5)) AS c0, coalesce(r.t, 0) AS t,
-                                [k IN keys(r) WHERE NOT k IN ['open', 't', 'since', 'because', 'thought', 'confidence', 'valid_to', 'retracted_by'] | k + ': ' + toString(r[k])] AS extra,
-                                n.exp AS exp, n.t AS mt, n.gist AS gist, toFloat(coalesce(n.salience, 0.5)) AS sal, coalesce(n.recalled_t, 0) AS rt
+                                toFloat(coalesce(r.confidence, 0.5)) AS c0, coalesce(r.t, 0) AS t, coalesce(r.hearsay, false) AS hearsay,
+                                [k IN keys(r) WHERE NOT k IN ['open', 't', 'since', 'because', 'thought', 'confidence', 'valid_to', 'retracted_by', 'firsthand', 'sources', 'hearsay'] | k + ': ' + toString(r[k])] AS extra,
+                                n.exp AS exp, n.t AS mt, n.gist AS gist, toFloat(coalesce(n.salience, 0.5)) AS sal, coalesce(n.recalled_t, 0) AS rt,
+                                CASE WHEN n.formative THEN $formative WHEN n.childhood THEN $childhood ELSE 1.0 END AS slow
                          LIMIT 800",
                         actor,
                     )
-                    .param("rows", p(Value::Array(rows))),
+                    .param("rows", p(Value::Array(rows)))
+                    .param("formative", FORMATIVE)
+                    .param("childhood", CHILDHOOD),
                 )
                 .await?;
             let damp = if hop == 0 { 1.0 } else { 0.5 };
@@ -831,20 +903,36 @@ impl Store {
                 let w: f64 = row.get::<f64>("w").unwrap_or(0.5) * damp;
                 let rel: String = row.get("rel").unwrap_or_default();
                 let other: String = row.get("other").unwrap_or_default();
+                if rel == "GROUNDS" && !self.grounds {
+                    continue;
+                }
                 if row.get::<bool>("memory").unwrap_or(false) {
                     if !row.get::<bool>("forgotten").unwrap_or(false) {
                         let (exp, mt) = (row.get::<i64>("exp").unwrap_or(0) as u64, row.get::<i64>("mt").unwrap_or(0) as u64);
-                        let s = w * memory_strength(now, mt, row.get::<i64>("rt").unwrap_or(0) as u64, row.get("sal").unwrap_or(0.5));
-                        mem_cands.push((exp, mt, row.get("gist").unwrap_or_default(), s));
+                        let s = w * memory_strength(now, mt, row.get::<i64>("rt").unwrap_or(0) as u64, row.get("sal").unwrap_or(0.5), row.get("slow").unwrap_or(1.0));
+                        // A story a belief brought back is not rehearsed by it: only what the
+                        // situation itself cued stays fresh.
+                        mem_cands.push((exp, mt, row.get("gist").unwrap_or_default(), s, rel != "GROUNDS"));
                     }
                     continue;
                 }
                 if rel == "INVOLVES" {
                     continue;
                 }
+                // A memory's lesson: what it grounds leads one step further, as a link to it.
+                if rel == "GROUNDS" {
+                    if hop == 0 && !seeds.iter().any(|s| s.0 == other) {
+                        match next.iter_mut().find(|x| x.0 == other) {
+                            Some(x) => x.1 = x.1.max(w),
+                            None => next.push((other.clone(), w)),
+                        }
+                    }
+                    continue;
+                }
                 let t = row.get::<i64>("t").unwrap_or(0) as u64;
                 let c0: f64 = row.get("c0").unwrap_or(0.5);
-                let eff = if DURABLE.contains(&rel.as_str()) { c0 } else { c0 * (-(now.saturating_sub(t) as f64) / TAU_MS).exp() };
+                let tau = if row.get::<bool>("hearsay").unwrap_or(false) { TAU_MS * HEARSAY } else { TAU_MS };
+                let eff = if DURABLE.contains(&rel.as_str()) { c0 } else { c0 * (-(now.saturating_sub(t) as f64) / tau).exp() };
                 if eff < 0.15 {
                     continue;
                 }
@@ -862,6 +950,13 @@ impl Store {
                 }
                 if a == "self" && rel == "JUDGES" {
                     stances.push((b.strip_prefix("stance:").unwrap_or(&b).to_string(), score));
+                    // A stance that comes to mind can bring back the memories behind it.
+                    if self.grounds && hop == 0 && !seeds.iter().any(|s| s.0 == b) {
+                        match next.iter_mut().find(|x| x.0 == b) {
+                            Some(x) => x.1 = x.1.max(w * eff),
+                            None => next.push((b.clone(), w * eff)),
+                        }
+                    }
                     continue;
                 }
                 // Ideas, plans and places reached lead one step further.
@@ -941,15 +1036,17 @@ impl Store {
         // Memories: the cued ones, strongest first, plus the two most recent as working memory.
         mem_cands.sort_by(|a, b| b.3.total_cmp(&a.3));
         let mut mems: Vec<(u64, u64, String)> = Vec::new();
-        for (exp, t, gist, s) in mem_cands {
+        for (exp, t, gist, s, rehearse) in mem_cands {
             if mems.len() >= mem_budget {
                 break;
             }
             if s >= RECALL_FLOOR * 0.5 && !mems.iter().any(|m| m.0 == exp) && !gist.is_empty() {
                 mems.push((exp, t, gist));
+                if rehearse {
+                    out.rehearse.push(exp);
+                }
             }
         }
-        out.rehearse = mems.iter().map(|m| m.0).collect();
         for m in self.memories(actor, 2).await? {
             if !mems.iter().any(|x| x.0 == m.0) {
                 mems.push(m);
@@ -991,7 +1088,7 @@ pub fn sugar_into(v: &Value, patch: &mut Patch, because: &[u64]) {
         }
         props.insert("label".into(), json!(r["label"].as_str().unwrap_or("acquaintance")));
         props.insert("note".into(), json!(r["note"].as_str().unwrap_or_default().chars().take(300).collect::<String>()));
-        patch.edges.push(EdgeOp { from: "self".into(), rel: "FEELS".into(), to: format!("person:{id}"), confidence: 1.0, because: because.to_vec(), props });
+        patch.edges.push(EdgeOp { from: "self".into(), rel: "FEELS".into(), to: format!("person:{id}"), confidence: 1.0, because: because.to_vec(), props, firsthand: false, sources: Vec::new() });
     }
     for j in v["judgments"].as_array().cloned().unwrap_or_default().into_iter().take(12) {
         let Some(k) = j["key"].as_str().and_then(|k| key(k.trim_start_matches("stance:"))) else { continue };
@@ -1000,7 +1097,7 @@ pub fn sugar_into(v: &Value, patch: &mut Patch, because: &[u64]) {
         props.insert("why".into(), json!(j["why"].as_str().unwrap_or_default().chars().take(300).collect::<String>()));
         let k = k.replace(':', "_");
         patch.nodes.push(NodeOp { key: format!("stance:{k}"), labels: vec!["Stance".into()], name: Some(k.clone()), props: Default::default() });
-        patch.edges.push(EdgeOp { from: "self".into(), rel: "JUDGES".into(), to: format!("stance:{k}"), confidence: 1.0, because: because.to_vec(), props });
+        patch.edges.push(EdgeOp { from: "self".into(), rel: "JUDGES".into(), to: format!("stance:{k}"), confidence: 1.0, because: because.to_vec(), props, firsthand: false, sources: Vec::new() });
     }
     for p in v["places"].as_array().cloned().unwrap_or_default().into_iter().take(8) {
         let (Some(name), Some(x), Some(y)) = (p["name"].as_str(), p["x"].as_f64(), p["y"].as_f64()) else { continue };
@@ -1011,6 +1108,24 @@ pub fn sugar_into(v: &Value, patch: &mut Patch, because: &[u64]) {
         props.insert("y".into(), json!(y.clamp(0.0, h as f64)));
         let k = k.trim_start_matches("place:").to_string();
         patch.nodes.push(NodeOp { key: format!("place:{k}"), labels: vec!["Place".into()], name: Some(name.chars().take(48).collect()), props });
+    }
+}
+
+/// Where each belief of a patch came from, by the experiences it cites. `testimony` gives
+/// `Some(Some(teller))` for an experience that was only told or read (a person id; 0 for an
+/// unsigned text), `Some(None)` for one that was lived, and `None` when unknown. Testimony
+/// about the teller themselves (an edge from or to `person:<teller>`) is what one perceived of
+/// that person, so it counts as lived; so does one's own speech or writing.
+pub fn attribute(patch: &mut Patch, actor: u32, testimony: &dyn Fn(u64) -> Option<Option<u32>>) {
+    for e in patch.edges.iter_mut() {
+        for id in &e.because {
+            match testimony(*id) {
+                Some(None) => e.firsthand = true,
+                Some(Some(src)) if src == actor || e.from == format!("person:{src}") || e.to == format!("person:{src}") => e.firsthand = true,
+                Some(Some(src)) if !e.sources.contains(&src) => e.sources.push(src),
+                _ => {}
+            }
+        }
     }
 }
 
@@ -1141,11 +1256,11 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
             notes.push(format!("edge skipped: {e}"));
             continue;
         };
-        if ["WAS", "INVOLVES"].contains(&rel.as_str()) {
+        if ["WAS", "INVOLVES", "GROUNDS"].contains(&rel.as_str()) {
             continue;
         }
         let because: Vec<u64> = e["because"].as_array().map(|a| a.iter().filter_map(|x| x.as_u64()).filter(|x| known.contains(x)).collect()).unwrap_or_default();
-        patch.edges.push(EdgeOp { from: a, rel, to: b, confidence: e["confidence"].as_f64().unwrap_or(0.6).clamp(0.0, 1.0), because, props: props(&e["props"]) });
+        patch.edges.push(EdgeOp { from: a, rel, to: b, confidence: e["confidence"].as_f64().unwrap_or(0.6).clamp(0.0, 1.0), because, props: props(&e["props"]), firsthand: false, sources: Vec::new() });
     }
     for r in v["retract"].as_array().cloned().unwrap_or_default().into_iter().take(16) {
         if let (Some(a), Some(b), Some(rel)) = (r["from"].as_str().and_then(key), r["to"].as_str().and_then(key), r["rel"].as_str().and_then(|x| ident(x, true, 40))) {
@@ -1159,7 +1274,7 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
         if gist.is_empty() {
             continue;
         }
-        patch.remember.push(MemoryOp { exp, t, gist, salience, involves });
+        patch.remember.push(MemoryOp { exp, t, gist, salience, involves, childhood: false });
     }
     (patch, notes)
 }
@@ -1293,12 +1408,12 @@ mod tests {
         let now = crate::llm::now_ms();
         let mut p = Patch::default();
         sugar_into(&json!({"judgments": [{"key": "the_oath_must_be_kept", "value": 0.95, "why": "I witnessed it"}]}), &mut p, &[]);
-        p.remember.push(MemoryOp { exp: AUTHORED_MEMORY, t: now, gist: "I watched them swear at the stone.".into(), salience: 0.9, involves: vec![] });
+        p.remember.push(MemoryOp { exp: AUTHORED_MEMORY, t: now, gist: "I watched them swear at the stone.".into(), salience: 0.9, involves: vec![], childhood: false });
         s.apply(1, &p, "sheet-1", now).await.unwrap();
         s.mark_formative(1, "sheet-1").await.unwrap();
         let mut p = Patch::default();
         sugar_into(&json!({"judgments": [{"key": "rain_is_coming", "value": 0.95, "why": "clouds"}]}), &mut p, &[]);
-        p.remember.push(MemoryOp { exp: 7, t: now, gist: "A heron flew over the lake.".into(), salience: 0.9, involves: vec![] });
+        p.remember.push(MemoryOp { exp: 7, t: now, gist: "A heron flew over the lake.".into(), salience: 0.9, involves: vec![], childhood: false });
         s.apply(1, &p, "think-2", now).await.unwrap();
         // Six hours later the ordinary stance and memory are gone; the formative ones are held.
         s.fade(1, 0.2, now + 6 * 3_600_000).await.unwrap();
@@ -1324,7 +1439,7 @@ mod tests {
             p.nodes.push(NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(name.into()), props: Default::default() });
         }
         sugar_into(&json!({"relations": [{"id": 4, "trust": 20, "affinity": -10, "label": "creditor"}]}), &mut p, &[]);
-        let mem = |i: u64, gist: &str, who: &str| MemoryOp { exp: AUTHORED_MEMORY + i, t: now, gist: gist.into(), salience: 0.9, involves: vec![who.into()] };
+        let mem = |i: u64, gist: &str, who: &str| MemoryOp { exp: AUTHORED_MEMORY + i, t: now, gist: gist.into(), salience: 0.9, involves: vec![who.into()], childhood: false };
         p.remember.push(mem(0, "The flood took the lower field and cracked the millstone; Teodor cut a new one on credit.", "person:4"));
         p.remember.push(mem(1, "Pim fell into the millrace last summer and I pulled him out by his collar.", "person:3"));
         p.remember.push(mem(2, "The traders cheated us on salt.", "self"));
@@ -1434,5 +1549,134 @@ mod tests {
         // A name-style person key becomes an id later; the check holds for the result too.
         assert!(merge_refused("person:11", "person:5"));
         assert!(merge_refused("person:11", "self"));
+    }
+
+    #[test]
+    fn attributes_hearsay_by_teller() {
+        let edge = |from: &str, to: &str, because: Vec<u64>| EdgeOp { from: from.into(), rel: "RELATES".into(), to: to.into(), confidence: 0.8, because, props: Default::default(), firsthand: false, sources: Vec::new() };
+        let mut p = Patch::default();
+        p.edges.push(edge("kind:wolf", "place:ford", vec![1]));
+        p.edges.push(edge("kind:wolf", "place:ford", vec![1, 2]));
+        p.edges.push(edge("kind:wolf", "place:ford", vec![1, 3]));
+        p.edges.push(edge("person:4", "idea:wolves_at_ford", vec![1]));
+        p.edges.push(edge("kind:wolf", "place:ford", vec![5, 9]));
+        // 1 and 2: told by 4 and 6; 3: lived; 5: my own words; 9: unknown.
+        let told = |id: u64| match id {
+            1 => Some(Some(4)),
+            2 => Some(Some(6)),
+            3 => Some(None),
+            5 => Some(Some(1)),
+            _ => None,
+        };
+        attribute(&mut p, 1, &told);
+        let got: Vec<(bool, Vec<u32>)> = p.edges.iter().map(|e| (e.firsthand, e.sources.clone())).collect();
+        assert_eq!(got, vec![(false, vec![4]), (false, vec![4, 6]), (true, vec![4]), (true, vec![]), (true, vec![])]);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn grounds_link_stories_and_lessons() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-grounds-{}", crate::llm::now_ms());
+        let mut s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Aud").await.unwrap();
+        let now = crate::llm::now_ms();
+        let mem = |exp: u64, t: u64, gist: &str| MemoryOp { exp, t, gist: gist.into(), salience: 0.9, involves: vec![], childhood: false };
+        // The story and its lesson in one consolidation.
+        let mut p = Patch::default();
+        p.remember.push(mem(11, now, "Wolves took Bram's goats at the ford in the snow."));
+        sugar_into(&json!({"judgments": [{"key": "keep_goats_inside", "value": 0.9, "why": "the night they were lost"}]}), &mut p, &[11]);
+        s.apply(1, &p, "consolidate-1", now).await.unwrap();
+        // A belief written first (a conversation turn) and its memory kept afterwards.
+        let mut p = Patch::default();
+        p.edges.push(EdgeOp { from: "self".into(), rel: "AGREED".into(), to: "agreement:dawn_watch".into(), confidence: 0.9, because: vec![12], props: Default::default(), firsthand: false, sources: Vec::new() });
+        s.apply(1, &p, "talk-1", now).await.unwrap();
+        let mut p = Patch::default();
+        p.remember.push(mem(12, now, "Sten and I swore to keep watch at dawn."));
+        s.apply(1, &p, "consolidate-2", now).await.unwrap();
+        // Newer memories, so neither story is only working memory.
+        let mut p = Patch::default();
+        for i in 0..3 {
+            p.remember.push(mem(20 + i, now + 1000 + i, "Gathered berries by the hill."));
+        }
+        s.apply(1, &p, "consolidate-3", now).await.unwrap();
+        let mut rows = s.g.execute(s.q("MATCH (m:Concept {run: $run, actor: $actor})-[:GROUNDS {open: true}]->(b) RETURN m.exp AS exp, b.key AS key ORDER BY exp", 1)).await.unwrap();
+        let mut grounds = Vec::new();
+        while let Some(r) = rows.next().await.unwrap() {
+            grounds.push((r.get::<i64>("exp").unwrap(), r.get::<String>("key").unwrap()));
+        }
+        assert_eq!(grounds, vec![(11, "stance:keep_goats_inside".to_string()), (12, "agreement:dawn_watch".to_string())]);
+        // Off: the story's words bring back the story only; the stance comes with nothing.
+        let mut cues = Cues::default();
+        cues.text("snow at the ford", 1.0);
+        let r = s.recall(1, &cues.clone().bounded(), 8, 3).await.unwrap();
+        assert!(r.memories.iter().any(|m| m.0 == 11) && !r.stances.iter().any(|x| x.0 == "keep_goats_inside"), "{:?} {:?}", r.memories, r.stances);
+        let mut stance = Cues::default();
+        stance.key("stance:keep_goats_inside", 1.0);
+        let r = s.recall(1, &stance.clone().bounded(), 8, 3).await.unwrap();
+        assert!(!r.memories.iter().any(|m| m.0 == 11), "{:?}", r.memories);
+        // On: the story brings its lesson, and the lesson its story (not rehearsed by it).
+        s.grounds = true;
+        let r = s.recall(1, &cues.bounded(), 8, 3).await.unwrap();
+        assert!(r.stances.iter().any(|x| x.0 == "keep_goats_inside"), "{:?}", r.stances);
+        let r = s.recall(1, &stance.bounded(), 8, 3).await.unwrap();
+        assert!(r.memories.iter().any(|m| m.0 == 11) && !r.rehearse.contains(&11), "{:?} {:?}", r.memories, r.rehearse);
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn hearsay_fades_faster_until_corroborated() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-hearsay-{}", crate::llm::now_ms());
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Aud").await.unwrap();
+        let now = crate::llm::now_ms();
+        let edge = |to: &str, because: Vec<u64>| EdgeOp { from: "kind:wolf".into(), rel: "HUNTS_AT".into(), to: to.into(), confidence: 0.8, because, props: Default::default(), firsthand: false, sources: Vec::new() };
+        let told = |id: u64| Some(match id {
+            1 | 3 => Some(4),
+            2 => Some(6),
+            _ => None,
+        });
+        let mut p = Patch::default();
+        p.edges.push(edge("place:ford", vec![1]));
+        p.edges.push(edge("place:hill", vec![1]));
+        p.edges.push(edge("place:marsh", vec![5]));
+        p.edges.push(edge("place:lake", vec![3]));
+        attribute(&mut p, 1, &told);
+        s.apply(1, &p, "consolidate-1", now).await.unwrap();
+        // A second teller backs the hill; the same teller again does not back the lake.
+        let mut p = Patch::default();
+        p.edges.push(edge("place:hill", vec![2]));
+        p.edges.push(edge("place:lake", vec![1]));
+        attribute(&mut p, 1, &told);
+        s.apply(1, &p, "consolidate-2", now).await.unwrap();
+        // 40 minutes on: 0.8 decays to about 0.29 at the ordinary pace, 0.11 as hearsay.
+        s.fade(1, 0.2, now + 40 * 60_000).await.unwrap();
+        let mut rows = s.g.execute(s.q("MATCH (:Concept {run: $run, actor: $actor, key: 'kind:wolf'})-[r {open: true}]->(b) RETURN collect(b.key) AS held", 1)).await.unwrap();
+        let mut held: Vec<String> = rows.next().await.unwrap().unwrap().get("held").unwrap();
+        held.sort();
+        assert_eq!(held, vec!["place:hill".to_string(), "place:marsh".to_string()]);
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn childhood_memories_last_longer() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-childhood-{}", crate::llm::now_ms());
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Ylva").await.unwrap();
+        let now = crate::llm::now_ms();
+        let mut p = Patch::default();
+        p.remember.push(MemoryOp { exp: 1, t: now, gist: "Mother sang by the fire the night of the storm.".into(), salience: 0.9, involves: vec![], childhood: true });
+        p.remember.push(MemoryOp { exp: 2, t: now, gist: "A heron flew over the lake.".into(), salience: 0.9, involves: vec![], childhood: false });
+        s.apply(1, &p, "consolidate-1", now).await.unwrap();
+        // Eight hours on: 0.9 decays to about 0.06 at the ordinary pace, 0.46 from childhood.
+        s.fade(1, 0.2, now + 8 * 3_600_000).await.unwrap();
+        let mut rows = s.g.execute(s.q("MATCH (m:Concept {run: $run, actor: $actor}) WHERE m:Memory AND NOT m:Forgotten RETURN collect(m.exp) AS kept", 1)).await.unwrap();
+        let kept: Vec<i64> = rows.next().await.unwrap().unwrap().get("kept").unwrap();
+        assert_eq!(kept, vec![1]);
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
     }
 }

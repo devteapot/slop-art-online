@@ -8,8 +8,9 @@
 - `recall_replay` runs with a generated nonempty `LIVING_RECALL_CASES` file against this real graph.
 - A budget of one yields one fact. A budget of eight yields more facts within its limit. An unrelated cue yields none.
 - A textual flood cue recalls the authored flood memory in the replay output.
+- `techniques_named_as_whole_words` (unit) covers the `know:<technique>` cues; experiences naming a technique link to that anchor through `INVOLVES` when kept as memories.
 
-Sources: `living/mind/src/mind/recall.rs:60`, `recall.rs:164`; `living/mind/src/memory.rs:718`, `memory.rs:938`, `memory.rs:1371`; `living/seeds/authored-test.json:37`.
+Sources: `living/mind/src/mind/recall.rs:47` (`techniques_in`), `recall.rs:68`, `recall.rs:164`; `living/mind/src/memory.rs:777`, `memory.rs:1063`, `memory.rs:1474`; `living/seeds/authored-test.json:37`.
 
 ## How to get to it (user POV)
 
@@ -28,4 +29,6 @@ After checking projection, the helper requests a new thought about `knowledge_ma
 - `recall_replay` cannot run without its cases path. It only prints results. The helper asserts its actual output and supplies cases against the populated scratch graph.
 - Fact and memory budgets differ. Up to two latest memories enter as working memory in addition to cued memories. An uncued replay may still show those recent memories.
 - Production deliberation uses eighteen facts. Consolidation uses thirty-two. Replay tests use one and eight to expose the cap.
+- `LIVING_GROUNDS` is off by default. The real mind in this proof runs without it, so recall here never follows `GROUNDS`; `grounds_link_stories_and_lessons` covers both settings in the store.
+- `LIVING_LESSONS=1` changes the consolidation system prompt; the fake model ignores it. Only a paid lab shows its effect.
 - Prompt proof includes the entire user prompt. A cue repeated in a reason is not sufficient by itself; the helper also checks the graph, projections and authored-memory prefix.
