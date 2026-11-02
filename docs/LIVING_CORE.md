@@ -1,0 +1,453 @@
+# Living core
+
+Status: **in development** (started 2026-09-25). This is the lean replacement core agreed with the user after the scaling diagnosis below. It lives in its own Cargo workspace under [`living/`](../living) and does not modify the legacy `simulation/`, `server/` or `client/` crates. Legacy docs remain historical evidence.
+
+## Why a new core
+
+Diagnosis of the legacy stack (source inspection, 2026-09-25):
+
+- The authority hydrates a Rust `World` (often from JSON text columns), clones it per tick and per action (`simulation/src/scripted_world.rs:67,368`), and writes it back. SpacetimeDB's guidance is the opposite: typed tables split by access pattern, indexed local reads and writes.
+- Every rule crosses a JSON⇄Rhai boundary on the hot path, including an O(k²) per-pair visibility law (91% of observation time) and effect authorization (83% of kernel time).
+- Every event is appended to a JSON audit table inside the tick (≈6.5k events/s, ≈2.7 MB/s in combat).
+- Per-sender views are recomputed for every client on every tick; legacy MMO ticks still run in the same database.
+- The world is one-dimensional (`position: i32`).
+- The mind has no consolidation (16-item FIFO memory), beliefs are `{location, danger}`, knowledge never reaches behavior, identity drift is two scalars the behavior graph cannot read, model calls run on fixed timers, evaluators/reflection logic are duplicated, and the Neo4j concept graph is disconnected.
+
+## Decisions (user, 2026-09-25)
+
+| Question | Decision |
+| --- | --- |
+| Approach | New lean core alongside the legacy code. |
+| Scripting / audit | Keep Rhai for skill rules behind a typed boundary evaluated only at action start/completion; defer the exhaustive per-event audit. Causal evidence is kept at meaningful-event granularity (chronicle, percepts, full LLM exchange journal). |
+| World view | Bevy in-game observer. |
+| Models | `gpt-6-luna` (Carlid endpoint) plus Mistral-served `mistral-medium-3-5` and `mistral-small-latest`, rotated across characters to compare behavior ([models.json](../living/configs/models.json)). `zai-glm-5-3` is configured but out of rotation: its thinking mode took 100–180 s per deliberation. |
+| Services | SpacetimeDB 2.10.1 and Neo4j run in Docker ([compose.yml](../living/deploy/compose.yml)); only Docker and Rust are needed on the host. |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Authority[SpacetimeDB module: living-authority]
+    T[60 Hz tick: due motions, activities, thinks] --> B[Behavior graph evaluator]
+    B --> S[Skills: Rhai check/duration/complete]
+    S --> P[Percepts to nearby witnesses via chunk index]
+    B --> D[Deliberation requests]
+  end
+  subgraph Mind[Rust mind service: living-mind]
+    P --> E[Episodes] --> N[(Neo4j personal graph)]
+    N --> C[Consolidation LLM: claims, relations, identity, judgments]
+    D --> L[Deliberation LLM: behavior graph + speech]
+    N --> L
+  end
+  C -->|mind_update| Authority
+  L -->|mind_install| Authority
+  Authority -->|public tables| V[Bevy observer: living-viewer]
+```
+
+### Authority tables (typed, split by access pattern)
+
+| Table | Contents | Write rate |
+| --- | --- | --- |
+| `world` (singleton) | seed, map size, day length, epoch | once |
+| `terrain_chunk` | 16×16 terrain bytes per chunk | init / edits |
+| `character` | name, kind (human/animal), controller identity, alive, birth/death | rare |
+| `body` | motion segment `(x,y,t, vx,vy, heading, turn, turn_s)`, chunk, remaining coarse path corners, next steering time | steering updates only (events plus a modest cadence while moving) |
+| `steer` (private) | steering goal (point, creature, direction, flight), keep distance, flags, player input bucket | when a goal changes |
+| `vitals` | hp, hunger, energy anchored at `at_ms` with current rates | on rate change / damage |
+| `activity` | current skill, target, start/end | per action |
+| `inventory` | `(owner, item) → qty` | per action |
+| `resource_node` | kind, position, amount, lazy regrowth anchor | on gather |
+| `structure` | campfire / shelter / storage | on build |
+| `brain` | behavior graph JSON, revision, sequence cursors, active path, `next_think_ms` | per think (only when changed) |
+| `experience` | durable per-character log of what reached the senses; minds track progress in `mind_cursor` | per event × witnesses |
+| `deliberation` (private, per-controller view) | pending LLM deliberation with a scene snapshot | per trigger |
+| `persona`, `relation`, `belief`, `judgment`, `place`, `thought` | mind projections for behavior and the observer | per consolidation/deliberation |
+| `chronicle` | bounded story feed of notable events | per notable event |
+
+Motion is steered (see [steering locomotion](#steering-locomotion)): a body stores an analytic segment (a turn, then straight) and the time steering looks again. Clients extrapolate; the server writes only at steering updates. Needs are analytic (`value + rate × elapsed`) and settled on change. The tick processes only due rows through btree ranges on `next_*_ms`, so an idle world costs almost nothing.
+
+### Data model: game state vs. mind (agreed 2026-09-26)
+
+The dividing rule: **SpacetimeDB holds everything that happened or was done — including to and by minds. Neo4j holds only what a character now holds true, feels and intends, and who they are.**
+
+| Layer | Store | Written by | Contents |
+| --- | --- | --- | --- |
+| World truth | SpacetimeDB | authority | bodies, needs, items, structures, resources, `chronicle` (story feed) |
+| Experience | SpacetimeDB `experience` | authority only | a transactional inbox of what is new to a character: speech heard, being attacked, gifts, births, failures, meaningful own acts, bodily alarms, discoveries and first encounters. Deleted once the mind integrates it; a ~400-row window bounds it when no mind consumes. |
+| Familiarity | SpacetimeDB `familiar` (private) | authority only | bodily recognition: regions visited, creatures and structures encountered (≤256 per character, least recent forgotten). Decides what is novel enough to become an experience. |
+| Reasoning | SpacetimeDB `thought` (+ JSONL journal) | mind service | each LLM episode (deliberation, consolidation, birth): summary, raw reply, model, latency, tokens and a `reference` id |
+| Integration progress | SpacetimeDB `mind_cursor` | mind service | experiences up to `upto` are integrated (and deleted); a restart or provider outage resumes from here |
+| Mind | Neo4j | the character's own reasoning | an open graph: `:Concept {run, actor, key}` nodes with any labels and properties, relationships of any type |
+| Behavior interface | SpacetimeDB `relation`, `judgment`, `place`, `persona`, `belief` | mind service | deterministic projections of the graph, fully replaced after every mind change: `self -FEELS {trust, affinity, label}-> person:<id>` → relation, `self -JUDGES {value, why}-> stance:<key>` → judgment (relaxing toward 0.5 unless reinforced), `place:<name>` with `x`, `y` → place, the self node → persona. Models may use `relations`/`judgments`/`places` shorthand arrays, which become exactly those edges. |
+
+Mind graph conventions (the only fixed parts):
+
+- Anchor keys tie concepts to the world: `self`, `person:<numeric id>`, `place:<name>`, `kind:<creature/resource/structure/item>`, `know:<technique>`, `exp:<experience id>` (a kept memory). Any other key is the mind's own (`idea:shared_storage`, `plan:river_camp`); name-style person keys are canonicalized to ids.
+- Every edge carries `confidence`, `because` (experience ids in SpacetimeDB), `thought` (the reasoning `reference`), `t`, and `open`. Changing one's mind retracts an edge (`open = false`, `valid_to`, `retracted_by`) and adds another; nothing is deleted. Consolidated edges also carry provenance from the experiences they cite: `firsthand` (some were lived), `sources` (who told or wrote the rest) and `hearsay` (never lived, one source); see [stories, hearsay and shared belief](#stories-hearsay-and-shared-belief-2026-10-18).
+- Minds change, not just grow: labels given for a concept replace its previous ones (a `Stranger` becomes a `Friend`), a null property clears it, re-asserting an edge updates its confidence and evidence, retraction closes an edge, and duplicate concepts merge (edges move to the survivor; the old concept keeps `MERGED_INTO`). Consolidation is told to look first for what new experiences contradict or update.
+- Unreinforced beliefs fade: effective confidence is `c · exp(-age / 40 min)`; structural edges (`KNOWS`, `CHILD_OF`, …) do not fade. A sleep-like reorganization runs after about six integrations (or 20 minutes): faded edges close (`retracted_by = 'faded'`), then the mind merges duplicates, generalizes repeated specifics into patterns, relabels and retracts, keeping the mind compact and connected. Verified end to end against Neo4j in `minds_revise_merge_and_fade`. At the same sleep, stances (`JUDGES`) whose relaxed lean `|value − 0.5| · exp(-age / 40 min)` falls below 0.05 are no longer held (a 0.95 stance lasts about 80 minutes unless reinforced), and memories fade as `salience · exp(-age / 3 h)` from when they were formed or last recalled; below 0.15 they become `:Forgotten` (kept as history, never recalled). Hearsay beliefs and stances fade twice as fast, memories formed as an infant or child four times more slowly (2026-10-18). Measured before this (2026-09-26, read-only): stances and memories only accumulated — on realm-1 after 5 hours a mind held 65–97 open stances and 179–210 memories, growing linearly; the new rules would have closed about 60% of those stances and 27% of those memories. Verified in `recall_by_cues_and_forgetting`.
+- `:Memory` nodes are optional: the mind keeps only experiences it would remember, as a gist in its own words, pointing to the experience id rather than copying it.
+- Identity lives on `self`; each change adds an `:IdentityVersion` via `WAS`, with the reason and the thought that caused it. Identity changes at most every 8 minutes unless an experience is momentous (salience ≥ 0.9).
+
+Novelty at the source keeps experience volume proportional to what is new in a character's life rather than to world size: entering an unfamiliar region yields one discovery summary; a first encounter, a long-absent face, the start of a crowd or of nearby danger (with hysteresis), events (speech, attacks, gifts, births) and failures (not repeated within two minutes) become experiences; routine re-perception only refreshes familiarity. When news does repeat, integration re-asserts existing edges, which reinforces them instead of duplicating.
+
+Decided (2026-09-26): experiences are transactional (deleted after integration; the reasoning's `thought` row and the journal keep what it meant); relations, judgments and places are derived from the graph.
+
+Next modeling step (proposed): persistent artifacts — written tablets and signs as world state with author and time; `read` yields an experience the reader integrates as attributed testimony; later, knowledge-gated recipes so knowledge matters mechanically and can outlive its holders.
+
+### Behavior graph
+
+A small reactive behavior tree the mind writes as JSON and the authority validates and evaluates at ≈1 Hz per character (immediately on salient events):
+
+- Composites: `first` (reactive priority), `seq` (remembered progress), `if/then/else` (continuous guard), `repeat`.
+- Leaves: `do` (skill with a target selector; walks into range automatically), `say`, `wait`, `think` (request LLM deliberation without blocking).
+- Conditions: needs, inventory, `sees`/`near` a target selector, `smells` one (species with a scent), recently hurt/heard, night, `believes` a mind-maintained judgment, `chance`, boolean combinators.
+- Target selectors: nearest resource/structure/character with relation filters (`friend`, `enemy`, `stranger`, by name), remembered named places, `attacker`, `speaker`, `home`, coordinates.
+
+Selectors only resolve entities within the character's current perception radius (sight; for a skill's target also its species' scent, below) or its own remembered places, so the graph cannot act on observer truth.
+
+### Deliberate acts (experiment, 2026-09-26)
+
+The behavior graph is the body's real-time layer (moving, keeping close, fleeing, fighting, eating, sleeping, work loops). Deliberate one-off interactions that need no sub-second reaction (starting a family, trading, giving, teaching, writing, reading, joining a community, a single piece of work, a single walk as the step before one) are *acts* a mind decides in its slow loop, like speech ([acts.rs](../living/authority/src/acts.rs), shared rules in [rules acts.rs](../living/rules/src/acts.rs)):
+
+- A deliberation or conversation-turn reply may carry `"acts": [{"do": "conceive", "target": {"id": 6}}, ...]`, delivered through the `mind_act` reducer (authorized like the other `mind_*` reducers). Players' single `do` commands (`human_act`) take the same path.
+- The authority queues them in the private `act_queue` table (at most 4) and carries each out once, in order, through `act::begin` with a dedicated `ACT` node: the same skill rules, walking into reach, checks, durations and effects as graph leaves.
+- While an act runs the graph is still evaluated, but its work waits; only a reflex (flee, dodge, block, attack, throw, yield) takes the body back and interrupts the act (what was still queued is set aside). An act gives up after 90 s without reaching its target; a queued act older than 2 minutes is dropped.
+- Every outcome comes back as an `act` experience ("You did what you had decided: …", "What you had decided did not work out: …: why"); failures also prompt a thought. Ongoing or real-time skills (wander, follow, flee, fighting, wait, sleep, rest) are refused as acts with feedback.
+- The deliberation scene lists what others have asked of you (a wish to start a family, a trade, a join request) and what you are waiting on; a conversation turn sees the proposals between the two speakers (the mind subscribes to `bond_offer` and `trade_offer`).
+- Graph support for these skills stays (animals mate from their graph). People's starting "start a family" routine no longer conceives: it is "keep close to my partner" (approach a suitor, follow the partner).
+
+SpacetimeDB documentation consulted: [tables](https://spacetimedb.com/docs/tables/) (private tables; split by access pattern) and [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) (adding a table and a reducer is allowed). `act_queue` is written and read only by the authority, indexed by actor, a few rows per character at most; no subscriber receives it.
+
+First lab evidence is in the [stage log](STAGES.md#stage-1).
+
+### Mind loop
+
+1. **Experience.** Percepts become episodes (with salience) in the actor's own Neo4j subgraph, linked to subjective concepts (people, places, things).
+2. **Consolidation.** When accumulated salience crosses a personality-dependent threshold, or during sleep, the LLM turns new episodes into claims with evidence, relation changes, named places, judgments and an updated persona (narrative, values, goals, traits, mood). Revisions keep history (`REVISES`, persona versions).
+3. **Deliberation.** Triggered by events (plan finished, repeated failure, being hurt, being addressed, introspection timer). What comes to mind is recalled from the actor's graph by the situation (below). Output: a validated behavior graph, optional speech and judgments.
+4. **Beliefs reach behavior** through judgments (`believes` conditions) and relations (target filters), without rewriting the graph.
+
+### Situational recall
+
+Every reasoning episode (deliberation, conversation turn, consolidation, an animal's impulse) is given what the moment brings to mind, not the most recently written part of the mind ([recall.rs](../living/mind/src/mind/recall.rs), `Store::recall` in [memory.rs](../living/mind/src/memory.rs)):
+
+- **Cues** come from the situation, weighted by how present they are: people and creatures perceived (closer and hurt count more), notable structures (remains, gates, signs), places the character knows within sight, people named in the reason or the latest experiences, words from the reason for thinking, what was just said or happened, the plan, the time of day and the season. A conversation turn is cued by the other person, the words said and the place; consolidation by who and what the new experiences involve and what they say.
+- **Spreading activation** runs through the character's own concepts: cue keys resolve by the `(run, actor, key)` index, words match concept keys, names and memory gists (a word matching more than 8 concepts says nothing specific and is dropped), activation spreads one step along open edges weighted by effective confidence and recency, and a second, damped step from the ideas, plans and places reached. The strongest beliefs above a floor come to mind within a small budget (18 for a deliberation, 8 for a talk turn, 32 for consolidation, 10 for an animal), shared across cues so one busy person does not crowd out the rest. Recalled memories are rehearsed (`recalled_t`), which keeps them from fading. Techniques named in the reason or the latest experiences cue their `know:<technique>` anchor, which experiences naming the technique are linked to, so failing for lack of a technique brings back who was seen or said to know it. With `LIVING_GROUNDS=1`, activation also follows `GROUNDS` between memories and the beliefs they support (below).
+- Feelings about people and stances keep their own prompt sections. Stances are listed when the situation touches them, when the current graph tests them (`believes`), or, if few, the most strongly held; the rest are counted ("12 other stances you hold are not on your mind now").
+- Cost: 4–5 indexed Neo4j round trips, 4–15 ms per recall on realm-4 minds (p50 about 6 ms in a lab run, occasional 50–100 ms).
+
+Audit that motivated it (realm-4, 2026-09-26, five people, their last three deliberations; read-only): the retrieval seeded `self` along with what was perceived, and `self` touches every feeling and stance, so 379 of 390 mind lines (97%) were `self -FEELS/JUDGES->` edges already listed in the relations and judgments sections, ordered by how recently they were written. Beliefs held about the moment were missing: when Zoel's baby cried, Torgar's prompt did not contain that Zovik and Niaos had promised to check on Zoel and the baby at first light (`PROMISES_TO_CHECK_ON`, held at 0.99); with a wolf in sight, Briwen's did not contain Fecor's claim that wolves threaten the eastern fields. Replaying the same moments through situational recall brings those back (the promises, the wolf memory "Wolves came within two tiles in the dark, and I fled" and the stance `wolves_nearby_at_night_are_immediate_danger`) and nothing from `self` that is not cued. Memories were the eight most recent, whatever the situation.
+
+### Robustness layers found necessary in live runs
+
+- **Lenient graph front end** ([normalize.rs](../living/rules/src/normalize.rs)): models are taught flat forms (`{"if": C, "then": N}`, `{"do": "gather", "target": T}`), common slips are normalized, invalid branches are pruned with path-precise warnings fed back into the next deliberation, and a reply gets up to three attempts. Before this, most Mistral graphs and many Luna replies (brace-miscounted nested JSON) were rejected outright.
+- **No injected behavior** (decided with the user, 2026-09-26): a character's graph is all its body does. It starts as the species' instincts (`instincts.json`) and belongs to the character, which keeps, changes or drops any part of it; nothing eats, sleeps or flees for it. An earlier injected "body habit" layer (and animal drives) kept people and animals alive but decided for them; `own_habits` turned the layer each character had into an ordinary branch labeled `habits`. Mistakes are answered with feedback rather than correction: bodily sensations (hunger, exhaustion, cold), plan failures, fight reports, and noticing when it keeps turning back and forth between two targets. Animal minds adjust their current graph to their impulse instead of replacing it. The rules text keeps the physics of fighting and no tactics: fighting is learned by fighting.
+- **Finishing work** (a rule of the behavior language, stated in the grammar minds are taught): an `if` keeps running work that completes on its own (sleep, eat, gather, build, craft, cook, teach, …) after its condition stops holding; movement and combat stay reactive. Without it, "sleep while energy < 4" woke people at 4.1 and a whole town sat at the energy floor.
+- **Start guard**: a new action must be preparable, and pass its rules check when it would start on the spot, before the running one is cancelled. Without it, a higher-priority option that could not start (taking food from an empty store) cancelled the gather below it every second, and people starved standing on berry bushes.
+- **Deliberation hygiene**: `think` nodes are ignored for 45 s after a decision (a fresh plan otherwise re-triggered itself), speech no longer requests deliberation (it gets conversation turns, below), bodily alarms (starving with no food, freezing, badly hurt) request deliberation, and reasons arriving during an LLM call are kept (`updated_ms`/`seen_ms`).
+
+### Stories, hearsay and shared belief (2026-10-18)
+
+Prompted by OpenRig's knowledge design (lessons kept as stories, canon that rests on evidence one can follow downward, trust worked out when read): how a lesson and a shared belief move through a population whose members are born and die. User decisions of 2026-10-18; none of these is a guardrail on decisions.
+
+- **Stories ground beliefs.** The store links a kept memory to what every belief citing its experience is about: `(:Memory)-[:GROUNDS]->(stance or concept)`, written when the belief or the memory comes second ([memory.rs](../living/mind/src/memory.rs) `apply_inner`). The links are always written. Recall follows them only with `LIVING_GROUNDS=1`: a story that comes to mind brings its stance, and a stance its story, which is then not rehearsed by that recall. It is off by default because of the stage-log reading of 2026-10-05: consolidating throughout coincided with hardening into lethal enforcement (`aske-coast-5`, Thora in v3), and bringing back a stance's story at every recall could feed that loop. An A/B lab decides.
+- **Hearsay fades faster until corroborated.** `attribute` marks each consolidated edge from the experiences it cites: `speech` and `read` are testimony from their speaker or author, anything else was lived, and testimony about the teller themselves (an edge from or to `person:<teller>`) counts as lived. Provenance accumulates over re-assertions. Unlived beliefs from one source fade with half the time constant. Limitations: stances and feelings from the shorthand arrays cite the whole batch, so a batch with any lived experience makes them firsthand; edges written before 2026-10-18 have no provenance.
+- **Childhood is formative.** Memories kept while the character is an infant or child fade four times more slowly (authored pasts: twelve).
+- **Lessons in the gist (experiment).** `LIVING_LESSONS=1` asks consolidation to keep, with a memory, what it taught as the person would tell it. Off by default; to be compared on two scratch worlds with real model calls, measuring transmission, hardening and tokens (tokens per minute bind on Mistral since `aske-coast-5`).
+- **Measurement, not mechanics, for shared belief, customs and offices.** No role table: minds already invoke offices (the Oath, the Headwoman, the Elders' sign) without engine support. [transmission.py](../living/tools/transmission.py) reports, read-only, beliefs by provenance, stories and what they ground, stance lean and near-absolute stances with their backing, per community the beliefs most members hold and how much of them newcomers hold, and the offices minds name.
+
+### Every living thing is a character
+
+People, deer and wolves are the same entity (`character`) with the same body machinery (needs, skills through the same Rhai rules, perception into an experience inbox) and the same mind pipeline (Neo4j mind, consolidation, deliberation). Two things vary:
+
+- **Species profile** ([species.json](../living/seeds/species.json)), data not code: allowed skills (a wolf cannot build or give; a deer grazes), whether it speaks, a signal vocabulary (deer alarm snort and contact bleat; wolf howl, growl, whimper, hunting yips), names, a temperament range, reflexes, and cognitive pacing (animals think at most once a minute unless attacked, reflect every ten minutes, consolidate rarely, write small graphs). The normalizer and the authority prune or reject anything a body cannot do.
+- **Controller**: an LLM mind, or a human client that receives the same experiences and acts through the same reducers.
+
+**Scent** is species data too (`"scent": {"radius": 60, "kinds": ["deer", "wolf"]}` for wolves, 30 tiles for deer smelling wolves, none for people). Creatures of those kinds beyond sight but within the radius appear in the scene coarsely: kind, rough direction, a distance rounded to 10 tiles and an id, at most the 3 nearest per kind (an animal's impulse prompt reads "You smell a deer to the northeast, far, about 40 tiles."). A skill's or act's creature target (`{"nearest": "deer"}`, `{"id": n}`) resolves to the nearest one seen and, failing that, the nearest one smelled; pursuit holds a smelled target while it stays within the radius, and attacking still needs reach. `sees`, `near`, `count` and `health_of` stay sight-only; `{"smells": T}` holds while T is within the body's scent. Reason: on realm maps wolves starved in the forest with deer 50–150 tiles away, because their `attack nearest deer` instinct resolved only within sight (11 tiles). Cost: a smell query runs only when an acting target of a smelled kind has nothing in sight, and for an animal's deliberation scene. It reads the per-tick chunk-body cache over at most 9×9 chunks (radius 60), filtered by kind. It adds no tables or subscriptions, and its cost has not yet been measured in a live run.
+
+Communication without words: `signal` is heard by every mind in range; a member of the same species hears "Ash makes a long howl (howl), north", others "You hear a long howl from a wolf, north". Animals hear speech as "a person's voice". Observers refer to people and their own kind by name and to other creatures by kind.
+
+Animal minds are deliberately simple: a small model (`ministral-8b`) feels an impulse (drives, smells, associations — no language, no long plans) and remembers blunt associations; a competent model (`mistral-small`) compiles the impulse into a valid behavior graph for that body without adding wisdom the animal lacks. An unusable memory reply is redone by the competent model. Temperament (boldness, sociability, aggression, nervousness…) is rolled per individual, so animals of one species diverge.
+
+Silence is information: addressing someone out of earshot (far away, or dead without anyone knowing) yields "No answer from Mira", so a mind can come to worry, search and eventually find remains.
+
+### Conversations (checkpoint 4, item 6, first part)
+
+A conversation is an exchange of turns between two minds, not one line per deliberation ([talk.rs](../living/mind/src/mind/talk.rs)):
+
+- When a person hears speech addressed to them (`to`, their name, or being the only one close by), their mind service gets a **reply turn**: a small model call (purpose `talk`, the person's own model profile; no world rules or graph grammar) with who they are (narrative, values, goals, mood), how they feel about the speaker (relation) and what they hold about them (`Store::around` on `person:<id>`), their recent non-speech experiences involving the speaker, a one-line scene (time of day, nearest remembered place, current plan) and the conversation so far. The reply is `{"thought", "say" or null, "to", "end"}`, delivered through `mind_say` with thought kind `talk`: the behavior graph is kept, and a talk turn neither clears pending deliberation reasons nor resets the deliberation clock. The other side hears the line as an ordinary experience, which gives them a turn in return.
+- **Pacing from temperament** (2026-09-26): how many turns someone takes in one exchange (their stamina) follows from their sociability (1 for the most reserved, up to 6 for the most sociable), a low or bright mood and fondness for the other; their last turn is told to wrap up. A remark that asks nothing draws an answer with probability 0.3 + 0.65 × sociability/100, so the talkative answer more often than the reserved; questions always get a turn. Traits change with identity revisions, so pacing can change with experience. The talk prompt shows the temperament, how much they have talked in the last minutes, what the moment brings to mind (situational recall cued by the other person, the words said and the place) and the line being answered.
+- **Closure and agreements**: each turn says what, if anything, is now `settled` ("meet at the ford at dawn", "she will think about it", "I refused") and `until` when; saying so closes the exchange. A settled pair takes no reply turns until that time comes, something happens between them that they have not already talked over (a gift, an attack, a death), or one of them brings up something new (a question or addressed line whose words are mostly new to the exchange); echoes of what was said, including a graph's repeating `say` node, do not reopen it. An exchange closed without an outcome rests for 4 hours of the day on the same terms. What was settled is the closing speaker's own conclusion, so it goes into their mind as `self -AGREED {until}-> agreement:person_<id> -WITH-> person:<id>` (one current agreement per person, restating replaces it), where recall brings it back when that person, the place or the time comes up. Otherwise an exchange stops on silence, "No answer" (out of earshot) or 12 turns, and resets after 90 s of quiet.
+- Remarks addressed to nobody draw a turn only from a listener who cares about the speaker (family or close label, |affinity| ≥ 40 or trust ≥ 60), who is not in another conversation, at most once a minute per listener and one listener per remark.
+- A listener whose full deliberation is pending or running gets no separate turn: the deliberation sees the line among recent experiences. Talk turns hold at most a quarter of the model slots, so deliberation is never starved.
+- Conversation state is working memory in the mind service (per pair, in memory). The authority stays the record: every line is a `speak` (chronicle and experiences), so consolidation turns conversations into memories and relationship changes as before, and every turn writes a `thought` row (kind `talk`) and a journal entry.
+- Saying nearly the same thing again (word overlap ≥ 60% with one's own line within 90 s) is spoken and heard like anything else; the speaker gets an experience that they said almost the same thing moments ago (feedback, not the former silent drop). Previously only addressed questions invited a reply, as a full deliberation.
+
+Measured on a scratch database (2026-09-26; realm seed, an Oakhollow household of four and an exiled band member placed among them, five minds, 11.2 minutes spanning dusk, night and dawn, no budget; journal run `talk-1790404754`): 33 talk turns (2.9/min, 2.8k tokens/min, about 950 tokens a turn; p50 latency 0.9 s on Mistral Small, 2.8 s on Luna) against 19 deliberations (1.7/min, 12.6k tokens/min) and 25 consolidations (2.2/min, 12.8k tokens/min). Exchanges ran 6–8 turns; beside plans (berries, ledgers) they asked where the other would go beyond town, teased, and reminisced ("The oaks don't whisper. But if you listen close enough, the light hums."), and consolidation carried them into relation notes ("Invited Liise to walk to Saltmere together"). Mistral Small tends to open every line the same way ("Morning, Delga."); that is left to the model and to feedback.
+
+Pacing, measured on scratch databases (2026-09-26; realm-4 seed, ten minds in neighbouring Harrowgate households, ids 1–10, 11–15 minutes from the first morning; old and new mind service in parallel on identical fresh worlds; Mistral returned intermittent 503s in all runs). Live realm-4 before (16.5 min chronicle window, 129 speakers): 1.8 lines/min per speaker, 64% of lines from talk turns, 3% of talk turns ending, 13% near-repeats, exchanges p90 23 and up to 73 lines, e.g. a child and a guardian settling "the gate can wait until dawn" about twenty times. Old service (two runs): 2.4 and 1.5 lines/min per speaker, 10.1 and 9.1 talk turns/min, 0 of 229 turns ended an exchange, exchanges up to 71 and 51 lines (a "Deal?"/"Deal!" loop over the sweetest berry), 11% and 3% of lines restating plans. New service (final run `talklab-new3`): 0.86 lines/min per speaker, 2.9 talk turns/min (40 turns, 54k tokens against 122k), 9 closures of which 5 with an agreement written to the mind ("carpentry lessons tomorrow at dawn", "we'll face the wolf together", "shelter work paused until morning"), 25 lines heard without a turn because the pair had settled, 4 settled exchanges reopened (3 by something new said, 1 by being taught shelter), exchanges up to 15 lines, 2% of lines restating plans; later deliberations and talk turns with that person recalled the agreement. Most remaining speech comes from deliberations (44–72% of lines in the new runs), e.g. a failing trade that re-deliberates and restates the offer each time; that is the deliberation's own speech, not a conversation turn.
+
+### Knowledge, artifacts, trade and communities (checkpoint 2)
+
+- **Know-how** (`know_how`) is capability, not belief: techniques gate skills in the Rhai rules; they spread by `teach` (time beside the learner), by reading a tablet or sign that describes one (literacy is itself a technique), or by `experiment` (a chance to work one out from a material, given prerequisites); they die with their last holder unless taught or written down.
+- **Artifacts** (`artifact`): tablets (carried, given, stored, taken — an inventory count plus individual texts) and signs (placed structures), with author, time and text composed by the author's mind. Reading is an experience weighed as testimony.
+- **Seasons**: an 8-day year; plants regrow only in growing time (`growing_ms`), winter nights are colder; cloaks (from hides) and torches (sight at night) make venturing out survivable.
+- **Trade**: `offer` (give X for Y) and `accept` exchange both sides atomically or not at all.
+- **Communities** (`community`, `membership`, `join_request`): founded, joined by consent (a member must `welcome`) and left; belonging shows in perception ("yours"), and taking from another community's storage is witnessed as taking from them. Their meaning, roles and rules are the members'.
+- **Drives, not schedules**: restlessness (uneventful stretches, paced by curiosity) and loneliness (time without company, paced by sociability) are felt and prompt reflection; what to do about them is the mind's choice. Graphs can use `hour` conditions; a dawn moment invites reflection.
+- **Laws** (perception radii, warmth distances, gestation, bonding window, crowd size, danger distances, failure-repeat window) are the Rhai `laws()` function, read once per script revision and cached, so they cost nothing per tick.
+
+### Steering locomotion
+
+Built 2026-09-26 after the user saw movement "pinpoint a point, get there, recompute, stop and restart". Everyone (people, animals, players) moves by steering ([motion.rs](../living/authority/src/motion.rs), geometry in [steer.rs](../living/rules/src/steer.rs)):
+
+- **Goal, not waypoint.** A body steers for a goal kept in the private `steer` table: a point (walk, wander, approach a resource or structure), a creature (chase, approach to act, follow at a distance, walk up to someone), a direction (a player's input), or away from something (flee until a safe distance). Only point goals and blocked creature pursuits use A*; a pursuit in view steers straight at where the target is going to be (its velocity times the time to close in), and re-plans at most once a second when the way is not clear.
+- **Segments are analytic.** A `body` row is a pose `(x, y, heading)` at `t_ms` with speed `|(vx, vy)|`, turning at `turn` rad/s for `turn_s` seconds (a circular arc), then straight, until `next_ms`. Authority (`common::pos`) and viewer (`body_pos`) evaluate the same `living_rules::steer::pose`, so positions are continuous across updates (measured: 99% of updates move a body less than 0.001 tile from where observers already had it).
+- **A steering update** turns the heading toward the next path corner (or straight at the goal) at the `turn_rate` law, slowing for sharp turns (`turn_slow`); a standing body turns on the spot. A bend and the straight walk after it are one segment. It bends away from bodies close ahead (`separation`, `separation_weight`; not near the destination, so people still gather at a fire), cuts corners it can see past (`corner_radius`), and speeds up with the share of road just ahead (`road_speed`). The segment is swept across the map at 0.2-tile steps and ends before walls, water, rock or shut gates (then the body turns toward the wish or slides along the obstacle, and if still stuck re-plans once, then reports "the way is blocked") and just past a chunk boundary, so `chunk` stays exact for spatial queries. Shutting a gate or building a wall makes nearby moving bodies look again at once.
+- **When steering looks again** (the only time `body` is written): events (the next corner, the start of the final approach, arrival, a chunk crossing, an obstacle ahead, reach of a creature) and a cadence only where it matters: every `steer_s` (2 s) at most when alone, `crowd_hz` (3 Hz) among others, `chase_hz` (4 Hz) after a moving target or away from a moving threat, `combat_hz` (8 Hz) in a fight. A still target is approached event by event.
+- **No stop-and-go.** A walk reports arrival when its final approach begins (within `slow_radius`, 1.2 tiles), then glides in at about half speed and stops on the spot; the next movement, started in the meantime, takes over from the current heading and speed. Cancelling a movement coasts to a stop (a flight coasts for a second); a new goal in the same transaction keeps the momentum. Work, windups and guards still root the body (`perform` stops it), but `wait`, `eat` and `signal` do not, so they neither freeze a glide nor a player's walk. Followers stand when within `follow` reach and move on when the target does; an approach performs as soon as the target is in reach. A dodge is a dash at 9 tiles/s straight to its spot.
+- **Players steer too.** `human_move(dx, dy, run)` sets a direction intent (any length; `0, 0` stops, gliding) at walking or running speed (`run_speed`), carried out by the same steering, collisions and roads. It cancels a running action, turns the plan into waiting, and repeats of the current intent cost nothing; changes are limited by a per-character token bucket (`input_hz` 30/s, `input_burst` 15). AI graphs keep their targets; an explicit "move in a direction" skill was not added (it would need the behavior grammar, which another change is editing).
+- **Rules as data.** Turn rate, sharp-turn slowing, slow and corner radii, separation, cadences, run speed and input limits are `laws()` in [skills.rhai](../living/scripts/skills.rhai) (read once per script revision); walking speed stays the script's `move_speed`.
+
+SpacetimeDB documentation consulted (2026-09-26, service and crates pinned at 2.10.1): [table performance](https://spacetimedb.com/docs/tables/performance/) (keep hot rows small and split hot from cold data; each update re-sends the row), [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) and [default values](https://spacetimedb.com/docs/tables/default-values) (new columns go at the end with `#[default]`; new tables are allowed), [schedule tables](https://spacetimedb.com/docs/tables/schedule-tables) and [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/). Implications: `heading`, `turn` and `turn_s` are appended to `body` with defaults, so the live `living` world can be updated in place; the goal, flags, re-plan clock and input bucket live in a private `steer` table written only when a goal changes, so the public row every observer receives stays lean and per-update writes stay one row; scheduling remains the 60 Hz tick reading due bodies through the `next_ms` btree, so cost follows steering updates, not ticks. The subscription page does not say how a row updated twice in one transaction is delivered (a replaced movement's brake and new goal land in the same reducer call); the benchmark subscriber saw one update per body per transaction.
+
+Measured (Apple Silicon laptop, Docker SpacetimeDB 2.10.1, fresh `steer-bench` database on the realm-4 seed, 60 s windows, a live subscriber to all `body` rows counting delivered row updates; 2026-09-26; host shared with other work, load average 5–9):
+
+| Scenario | Build | Tick p50 | p95 | p99 | Max | Ticks > 16.7 ms | Steering updates/s | `body` row updates/s | JSON kB/s to the subscriber |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ~2,060 mind-controlled characters | before (kinematic) | 3.33–3.44 ms | 4.28–4.44 | 4.87–5.09 | 120–123 | 2–6 of ~3,200 | 496–507 | 842–857 | 308–313 |
+| same | steering | 3.57–3.64 ms | 4.74–4.76 | 5.30–5.41 | 113–117 | 5 of ~3,100 | 981–1,036 | 1,308–1,421 | 603–654 |
+| same, quieter host (earlier pair) | before / steering | 3.43 / 3.55 ms | 4.41 / 4.55 | 4.99 / 5.13 | 6.9 / 6.6 | 0 / 0 | 542 / 1,204 | 910 / 1,590 | 332 / 737 |
+| 200-fighter battle (+ realm seed) | before | 3.01–3.20 ms | 4.64–5.12 | 5.85–6.73 | 8.4–11.3 | 0 | 185–196 | 345–391 | 126–144 |
+| same | steering | 3.07–3.16 ms | 4.80–5.05 | 5.92–6.53 | 9.5–11.8 | 0 | 360–367 | 525–557 | 235–249 |
+
+The ~115 ms maxima and the ticks over budget in the 2,000-character pairs appear in both builds (54 and 49–53 ticks/s): host stalls during those windows, not tick work; the quieter pair had none. Steering costs about 0.2 ms at p50 and 0.3 ms at p99 per tick at 2,000 characters, and about 1.6× the `body` row updates (a glide-in plus a stop per arrival instead of a stop; corners, bends and cadence in crowds and chases). Combat outcomes are unchanged in kind (blocks dominate: about 1,950 blocked, 28–46 hits and 4–23 dodges a minute in both builds). With the realm seed alone (about 260 characters, [motion_probe.py](../living/tools/motion_probe.py), both builds side by side): 0.73 against 0.43 row updates per moving body per second, abrupt direction changes (over 60° between segments) 0.26 against 1.54 per moving body per minute; short stands between movements (0.22 against 0.14 per minute) are behavior choices, mostly animals fleeing again after reaching a safe distance. Checks: `cargo test -p living-rules` (steering geometry: arcs, bounded turns, stopping at and sliding along walls, chunk boundaries, roads), [verify_steering.py](../living/tools/verify_steering.py) (two walks flow into each other with no standing row between, arrival slows, a follower keeps 1–2 tiles and keeps up, a player's input moves, turns, runs and stops, input is rate-limited) and the 10 [mechanics checks](../living/tools/verify_mechanics.py) pass.
+
+**Smooth display (2026-09-28).** The user saw characters "jump around" in the observer at about 120 FPS. The authority's segments were continuous. The jumps came from how the viewer chose the instant to draw, plus a stand at the end of every segment:
+
+- The viewer evaluated each body's latest row at its own wall clock and held it at `next_ms` until the next row arrived. The next steering update runs at the first tick after `next_ms` (the authority also held the body there, 0–17 ms, in 53% of updates, p50 9 ms), and delivery added another 10–25 ms. Bodies therefore stopped at every update and then snapped ahead. An offset between the viewer's clock and the authority's clock, such as on another device, multiplies this. Nothing corrected it.
+- **Authority fix** ([motion.rs](../living/authority/src/motion.rs) `resume_at`): a moving body's next segment starts where and when the last one ended (`t_ms = next_ms`, at most 40 ms back), not at the tick. A segment replaced in the same transaction (an arrival reported, a new goal set) is replaced from where it began. There are no extra writes or reads.
+- **Viewer fix** ([sync.rs](../living/viewer/src/sync.rs)): the viewer shows the authority's clock slightly in the past. The offset from a local monotonic clock is estimated from arriving row times: the 2nd percentile of `t_ms − arrival` over 4 s, minus 4 ms. The clock slews at most ±10% and resynchronizes only when more than 1 s off. Each body's rows are kept in time order and switched when the display reaches their `t_ms`. A row that still comes late, or a discontinuity, is blended out with a 40 ms time constant. Jumps over 2 tiles are shown as jumps. `Snap::now` is that display time, so needs, speech and effects use the same clock.
+
+Measured on two fresh `aske-coast` worlds without minds (published together, before/after authority, 120 s, a subscriber to `body` on the same host, load average about 5). Tools: [jitter_probe.py](../living/tools/jitter_probe.py) for the rows and [viewer_sim.py](../living/tools/viewer_sim.py), which replays the recorded arrivals frame by frame through the old and new display. Speed error is the displayed movement per frame against the authority's own movement over the same display interval, for moving bodies. A stutter frame moves under half or over 1.5× the authority's speed.
+
+| | Before | After |
+| --- | ---: | ---: |
+| Row updates (moving body update interval p50) | 15,468 (415 ms) | 14,197 (399 ms) |
+| Position discontinuity at an update, p99 / max (tiles) | 0.0013 / 0.03 | 0.0013 / 0.027 |
+| Updates after which the body had stood at its segment end | 53% (p50 9 ms, max 17) | 0 |
+| Moving-body frames the authority itself holds still | 1.0% | 0 |
+| Old viewer at 120 FPS, same host: speed error p95 / p99, stutter frames | 1.2 / 2.7 tiles/s, 5.1% | 1.0 / 2.5, 4.2% |
+| Old viewer, clock 150 ms ahead, +40–80 ms delivery | 4.1 / 6.5 tiles/s, 42% | 4.0 / 6.4, 41% |
+| New viewer, same host: speed error p95 / p99, stutter frames | 0 / 0.02 tiles/s, 0.3% | 0 / 0.03, 0.26% |
+| New viewer, clock ±150 ms off, +40–80 ms delivery | 0 / 0.04, 0.3% | 0 / 0.06, 0.28% |
+| New viewer's display delay behind the authority, p50 / p95 | 48 / 114 ms | 54 / 79 ms (+ delivery elsewhere) |
+
+The remaining stutter frames are rows that arrived later than the 2nd-percentile allowance (delivery p99 90 ms, max 250 ms in this run). The same recordings also show something that is not a display problem: some people pace back and forth about 1 tile every second between two activities, for example `gather → tree` and `take meat → trap`, or two bushes. Each switch reverses direction at once, and moving updates reverse heading by more than 2 rad at p95 for `gather` and `take`. That comes from behavior selection, not motion.
+
+### Real-time combat
+
+Attacks wind up (0.55–0.75 s) before they land, recording their victim; the swinger stands still, and the blow lands only if the victim is still within reach (1.4 tiles plus a species lunge from the script: people 0.6, wolves 1.8) when the windup ends, so stepping back or running works against a person but not against a wolf; the victim is woken immediately and can perceive it (`{"threatened": true}`). `dodge` is a 2.4-tile dash at 9 tiles/s during which a landing blow misses; `block` holds a guard that takes three quarters off a hit; `throw` hurls a spear up to 7 tiles. Anyone in a fight is evaluated at combat cadence (about 15 Hz, staggered across ticks) for 8 s after the last blow, so a reaction fits inside a windup; tactics are the mind's own (no built-in auto-dodge), and a mind can patch only its labeled `combat` branch mid-fight (`"patch": {"label": "combat", "graph": …}`), keeping the rest of its plan. While people fight, each gets a short account of the exchange every ~7 s (blows taken, blocked, dodged, stepped out of reach; theirs blocked, dodged or missed) as a reason to think, so a mind can patch its `combat` branch from what actually happened. Combat rules (windups, damage, lunge, costs) are in the Rhai script; the defense and reach resolution and the cadence are engine primitives. Anyone can `tend` a wounded person (6 s, +10 health, not while the patient is fighting).
+
+A per-tick chunk cache lets all evaluations in one tick share each chunk's bodies (positions are analytic at the tick's instant), removing repeated row decoding in crowds.
+
+#### Graded force, and when predators attack people (2026-09-28)
+
+In `aske-coast-2` three people were killed in Brandholm in ten minutes ([stage log](STAGES.md), 20:28). `attack` was the only force one person could use on another, the seeded reflex "when hurt, strike back" answered every blow, and so a fight between people ended in a death within seconds: a daughter who meant to coerce her father for hides killed him. Starving wolves had also written themselves "attack people" rules. Force is now graded. The rules live in [skills.rhai](../living/scripts/skills.rhai) and the mechanics in [act.rs](../living/authority/src/act.rs); how anyone reacts stays in their own graph.
+
+- **What an attack is meant for.** `{"do": "attack", "target": T, "item": "hurt"}` or `"kill"`. The item carries the intent, as it carries the technique for `teach` or the signal for `signal`. The normalizer maps `mode`, `intent` and words like "beat" or "to kill" onto it. Without an item, the rules' `attack_mode` decides: people fight people to hurt, and any fight involving an animal is to kill. The authority writes the resolved mode into the action, so labels read "attack to hurt → Grim". In hurt mode, `attack_check` refuses once the target is below `hurt_enough` (40%) of full health ("you have hurt Grim enough: they are badly hurt"; the blow that gets there says so too) or has yielded. `attack_done` also holds a blow short of `hurt_floor` (10%). Kill mode is unchanged.
+- **Threaten** (people; in a graph or as an act): 2 s, within 3 tiles, no damage. The target perceives "Siv threatens you, spear raised" (salience 0.9) and gets a reason to think, and witnesses see it. While it lasts it counts as being `threatened`, both as a condition and as a desire signal, like an attack's windup.
+- **Yield** (people; in a graph or as an act, and a reflex that interrupts an act): takes 1 s. For `yield_ms` (20 s) afterwards, the yielder's own attacks, throws and shots are refused, and hurt-mode attacks on them are refused ("Grim has yielded"). Kill-mode blows still land. The first such blow after a yield is recorded and witnessed at salience 0.95 ("struck Grim to kill, though Grim had yielded"), and a death that follows is "killed by Siv, after yielding". The yield time is a mark in the private `mind_state.marks` (0xD400, kept across plan installs). Scenes show who has yielded.
+- **Reflex defaults** (seeded habits, which the characters own and can change). The common `stay safe` routine in [repertoire.json](../living/seeds/repertoire.json), in priority order:
+  1. alone and losing (below 40%) with a wolf near: flee;
+  2. losing with no wolf near: yield to the attacker;
+  3. still being struck after yielding: flee;
+  4. hurt: attack the attacker (by default, to hurt a person and to kill an animal);
+  5. a wolf near and others close by: attack it together;
+  6. a wolf near: flee.
+
+  The person instinct in [instincts.json](../living/seeds/instincts.json) flees wolves when losing, otherwise yields, and flees if still struck. Children yield when hit (babies cannot) and cry. Wolves' instincts are unchanged, and animals' fights stay to kill.
+- **Predators and people.** Before the approach, `attack_check` refuses a non-person's attack on a person with "you do not dare: people are dangerous", so a wolf that does not dare does not close in either. The attack goes ahead only if one of these holds:
+  - the animal is fighting back (that person hurt it within `fight_back_ms`, 10 s);
+  - it is desperate: hunger at or above `desperate_hunger` (85), with none of its `prey_of` kinds (deer, for wolves) in sight or smell (`a.actor.sensed`);
+  - the person is easy prey: a child or baby, below `easy_hurt` (35%) health, asleep away from a fire, or at night away from a fire with no other person within the `alone_within` law (6 tiles).
+
+  The wolf's `nature` in [species.json](../living/seeds/species.json) says the same. Deer have no attack skill.
+- **Counting it.** Chronicle kinds:
+  - `threat`;
+  - `assault` ("Siv beat Grim");
+  - `attack`: "tried to kill" for a person victim, "attacked" for hunts, and "struck … to kill, though … had yielded";
+  - `yield`;
+  - `killing` (a person killed by a person);
+  - `death` (with the killer as `b`);
+  - `balk` (an animal's attack on a person refused, at most once a minute per animal).
+
+  [pulse.py](../living/tools/pulse.py) reports them for each interval: threats, assaults, attempts to kill people (by people and by animals), yields, people killed by people and by animals, and animals holding back.
+- **Minds** are taught this in the world rules (a FORCE paragraph with the physics and no tactics), the skill reference, what each skill takes and gives (built from the same Rhai numbers), and the ACTS list. "is threatening you" is an urgent reason under level of detail. The `spawn_battle` benchmark now fights to kill explicitly, so it stays comparable with earlier runs.
+
+SpacetimeDB: no new tables, columns or reducers ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) are therefore not exercised), so a running world can be updated in place. Extra reads happen only for force: each attack, throw, shot or yield reads the actor's `mind_state` row for its yield time, and an attack also reads the target's. An animal's attack on a person adds a sight and scent scan around the animal and a warmth and company query around the person. The `balk` entry is spaced to one a minute per animal because `chronicle` is public. None of this has been measured in a live run. Checks: `cargo test -p living-rules` (modes, the hurt floor, yields, and every predator case), and four new [mechanics checks](../living/tools/verify_mechanics.py): a threat is perceived and counts as being threatened, a beating stops at the threshold without a death, a yield stops a beating, and a wolf that is not desperate does not attack a healthy adult among others.
+
+### Worlds of any size, towns and bands (checkpoint 3)
+
+The world row carries its width and height; chunk ids are packed `(cy << 16) | cx`, so nothing depends on a fixed map. A seed's `map` selects the classic 96×96 valley or a realm of any size ([realm.rs](../living/rules/src/realm.rs): mountains in the west, a coast in the east, rivers carved downhill, fords cut so all land connects, proposed town and wild sites). Resources scale with area. A seed's `towns` are laid out at the realm's town sites: a meeting fire, households in shelters around it, two stocked storages, a ring of planted berry bushes, a ledger sign and a community. Residents get generated names, know-how that goes with their occupation's history (history, not assignment) and a `background` row (town, occupation, household, home). `bands` start in the wilds with a few berries and little or no know-how. The mind writes each resident's starting identity from their background with an individual temperament, then treats it as ordinary identity. The seed's `setting` and size are what minds are told about the world. `just living-seed realm` selects `seeds/realm.json` for the next reset.
+
+[Authored worlds](AUTHORED_WORLDS.md): towns can list `residents`, each with an authored sheet (identity, relations, memories, stances) that the mind installs without a model call. `groups` in the models config lets each community think with its own model profile.
+
+### LLM load and priority
+
+An optional global budget (`LIVING_LLM_PER_MIN`, off by default since the user moved to cheap models on 2026-09-26; token bucket with ~15 s burst) admits every model call. Deliberation may use the whole bucket; deferrable work (consolidation, reorganization, identities) waits while less than a quarter is left and may hold at most half of the concurrent slots (`LIVING_CONCURRENCY`, default 32). People rotate between GPT-6 Luna (also the default, and the retry for unusable replies) and Mistral Small; animals feel with Ministral and build their graphs with Mistral Small. [llm_load.py](../living/tools/llm_load.py) reports calls, tokens and latency per purpose, model and purpose × model (e.g. `purpose:talk/model:…`) from the journal; `--span` rates short experiments over their own time span. Measured on realm-1 in its first 10 minutes, before the budget (39 people, 42 animals): 79 calls/min, 456k tokens/min, deliberation p50 4.4 s; the largest sources were plans with no applicable branch re-deliberating every 25 s and reflections every 150 s, since slowed to 60 s and 240 s.
+
+### Minds at scale: level of detail (stage 6 design note, 2026-09-27)
+
+**Measured load per person** ([mind_load.py](../living/tools/mind_load.py), journals of the running labs, last 50–60 minutes, read-only; lab days are 12 minutes and lives compressed, so dawn planning and life events come often):
+
+| Lab (people) | think | compile (`deliberate`) | talk | consolidate | All calls/person/min | Tokens/person/min |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| stage3-village (20) | 0.77 (4.8k tok, p50 2.9 s) | 0.84 (9.9k, 5.1 s) | 0.42 (1.7k, 1.1 s) | 0.63 (6.8k, 10.6 s) | 2.66 | 17.0k |
+| stage4-two (28) | 0.71 (5.3k) | 0.74 (10.3k) | 0.28 (1.6k) | 0.63 (7.1k) | 2.35 | 16.3k |
+| stage2-base (4–7) | 0.71 | 0.73 | 0.29 | 0.41 | 2.13 | 15.7k |
+
+Animals near those people add 0.14–0.34 calls per animal per minute (stage3: 122 animals, 55 calls/min, about as many as its 20 people). Why people think (share of 4,901 think steps across the three labs whose request lists the reason; a request often merges several): a decided act that did not work out 42%, other reasons (a graph's own `think` nodes, missing or runaway routines, turning back and forth, growing up) 38%, dawn 23%, bodily alarms 16% (mostly freezing at night), feelings 13%, a finished plan 12%, being attacked or a fight 1%. Only 0.2% of think steps decide nothing new, so skipping the compile step would save almost nothing.
+
+**Extrapolated linearly to 2,000 people:** 4,300–5,300 calls/min (71–89 per second), 31–34M tokens/min (about 2 billion tokens an hour), and 480–570 calls in flight at the measured mean latency of 6.4–7.0 s, before animals. The service would also need 60+ concurrent slots (default 64) and the authority would receive the resulting `mind_*` reducer calls (tens per second, each a transaction beside the 60 Hz tick; not yet measured).
+
+**Level of detail (implemented, opt-in, mind service):** `LIVING_LOD=1` makes the mind service grade attention like the authority already does for animals (which think only with a person within 25 tiles), with human players as the audience ([lod.rs](../living/mind/src/mind/lod.rs)):
+
+- **On stage** (a human player is in the scene of the pending request, or was the subject or object of an experience within `LIVING_LOD_STICKY_S`, 600 s): unchanged.
+- **Off stage:** a pending deliberation waits until `LIVING_LOD_THINK_S` (600 s) after the character's last one; the authority keeps merging new reasons and refreshing the scene into the one pending request, so the thought that follows sees them all. Other bodily alarms (freezing, very hungry with no food) and calls of one's own kind wait `LIVING_LOD_PROMPT_S` (120 s); being attacked, a fight report, starving, being badly hurt and what others ask (a trade, a family, joining) are taken at once, as is the first thought after the service starts. Consolidation waits at least `LIVING_LOD_CONSOLIDATE_S` (900 s) between integrations (the 120-experience backlog still forces one); a person takes at most one conversation turn per `LIVING_LOD_TALK_S` (120 s), and a request being held back does not count as a deliberation under way (which would leave lines to it). Animals' requests wait the same way.
+- The body keeps running its own graph in real time; when a mind does think, the prompts, models and context are the same, so what minds decide is unchanged. Nothing decides for the character; only how often its mind is consulted changes. Players are characters with `ai = false` not controlled by the mind service (instinct-only benchmark characters also count). Off by default: the running labs are unaffected.
+
+Replaying the labs' journals under this policy with nobody on stage (the case of a large world with few players; `mind_load.py` prints it) gives 0.41–0.50 calls/person/min (think and compile 0.12–0.13 each, talk 0.12–0.16, consolidation 0.05–0.07), about **5× fewer calls and, at the measured tokens per call, about 6× fewer tokens** (fewer but larger consolidation batches make the real token saving somewhat smaller): at 2,000 people 815–1,005 calls/min (14–17 per second), 5.1–5.5M tokens/min, about 100 calls in flight. Urgent and prompt reasons dominate what remains (freezing at night and a baby's cry in the labs' short days).
+
+Checked live without spending tokens (2026-09-27): two fresh scratch worlds on the stage3-village module (18 people, about 120 animals), each with its own mind service pointed at a local stand-in endpoint that answers every call instantly with "carry on, keep the graph, say nothing, integrate nothing" (so the triggers are real but no plan ever changes, and there are no conversations), one with `LIVING_LOD=1`, measured over the same 24 minutes after the first 3: people 1.81 → 0.35 calls/person/min (think and compile 0.71 → 0.15 each, consolidation 0.39 → 0.05), animals' deliberations 32 → 24 per minute. Synthetic replies: this checks the gating, not what minds do with fewer thoughts; a lab with real models and `LIVING_LOD=1` (and a player walking in and out of a village) is the next step before relying on it.
+
+**Proposed next steps (not implemented):**
+
+- *Cheaper tiers off stage.* An off-stage compile or consolidation with a smaller model (e.g. `mistral-small` or `ministral` instead of Luna) would cut cost further but changes what minds decide; it belongs behind its own switch and a model comparison like `compare_models.py`.
+- *Prompt caching.* A person's compile request is about 27–30k characters, of which the system prompt (the grammar and rules, about 17k) is the same for everyone except the character's name in its first sentence; moving the name after the shared text would make that prefix identical across calls, which providers with prefix caching bill as cached input.
+- *Batching.* Several off-stage members of one household or work group could share one planning call (their shared situation once, each person's own context and reply). This changes the prompt, so it needs its own evaluation.
+- *Authority side.* With the level of detail on, off-stage characters leave requests pending for minutes; every merged reason rebuilds the request's scene (about 0.15 ms). If that becomes visible, rebuild it only when the request is taken. The authority's animal rule could move to the same notion of stage.
+- *Mind service scans.* The SDK client cache has no secondary indexes, so per-call context (experiences, relations, judgments, places, routines, know-how) scans whole tables. `check_consolidation` scanned the experience inbox once per character every two seconds (characters × experiences); it now groups it in one pass. The per-call scans need per-character indexes maintained from row callbacks before 2,000 people.
+
+### Life course
+
+People age (`birth_age_days` + elapsed days). Children (< 3 days) are slower and cannot build, craft, fight or conceive; elders weaken after 40 days. Two adults who both choose `conceive` toward each other within two minutes, fed and near a shelter, have a child a day later. A newborn's persona is generated by its mind from its own temperament and its parents' identities, without copying their memories.
+
+**Wildlife populations** (2026-09-28). Animals breed, age and die like everyone else. In `aske-coast-2` wolves took about 2 deer each per hour, the herd could not replace them, deer were extinct at about 4 hours and then the wolves starved; in earlier labs the reverse happened (wolf pups starved, deer boomed). Four changes, all species or rules data except the weaning and the floor:
+
+- **Deer breed about once a life-year** ([species.json](../living/seeds/species.json) `life`): gestation 0.037 of the lifespan (about 200 days of a 15-year life), interbirth 0.04, grown at 0.1, litters of up to 2. Any two adults can pair (there are no sexes), so one pair's litter stands for one doe's. At the Aske Coast's pace (12-minute days, 8-day years, `life_pace` 1.5: a life-year is 2.4 real hours) that means gestation 1.3 h, interbirth 1.4 h and adulthood at 3.6 h (it was 1.7 h, 3.0 h and 4.5 h). Grazing caps the herd, not a number: pasture regrowth (`pasture_regen` 0.0015 grazings per grass or forest tile per growing minute, 14 hunger each against a deer's 6 a minute) feeds about 160 deer outside winter on the realm's 45,800 grass and forest tiles. In winter nothing regrows.
+- **A kill feeds a wolf for about an hour.** A wolf eats until its food desire fades and carries the rest. Food an animal carries now spoils at a quarter of the item's rate (`carried_spoil` beside `spoil_rate` in [skills.rhai](../living/scripts/skills.rhai)): a predator gorges and keeps its kill by it. A deer (5 meat at 20 hunger each) against a wolf's 1.5 hunger a minute is then about 1 deer per wolf-hour. With raw meat's full 5% a minute, most of it rotted, which made 1.5–2.
+- **Weaned young fend for themselves.** A suckling animal's hunger grows at 0.3 of the adult rate (a person's baby: 0.6), a stand-in for milk that is not charged to the mother. A young animal takes its species' ways when it leaves infancy instead of when it grows up (`grew` in [tick.rs](../living/authority/src/tick.rs)), so a wolf hunts from half a life-year (1.2 h) but still breeds only as an adult (4.8 h). Before, a pup born in the world kept the young instinct (follow a parent, eat what it holds) until adulthood and starved unless a mind chose to feed it.
+- **The wilds beyond the map are a floor.** `migrate` in species.json: deer `{"below": 15, "group": 5, "every_min": 20}`, wolves `{"below": 3, "group": 3, "every_min": 30}`, each with a chronicle line. Once a minute, housekeeping checks each species that has a floor. If fewer than `below` are alive, and no newcomers (or the world's first animals) came within `every_min` real minutes, a group of grown ones arrives. They land on fitting ground (grass for deer, forest for wolves) within 12 tiles of a random map edge; a sea side is never chosen, because it has none. The chronicle notes it ("A small herd of deer came in from the south"). The newcomers are ordinary founders: no parents, their species' ways, and a mind like any seeded animal. The last arrival time is read from the kind's parentless characters, so it needs no table and survives module updates. A kind that never lived in a world never arrives, and nothing arrives while a population is at or above its floor. Cost: counting per kind is folded into housekeeping's existing pass over characters. The kind's rows are scanned by the `kind` index once a minute, and only while the kind is below its floor.
+
+Expected numbers ([wildlife.py](../living/tools/wildlife.py) `model`: a minute-step stochastic model that reads these numbers from species.json and skills.rhai; kill rate and pairing chance are assumptions, and pasture is one pool without geography). From 60 deer and 8 wolves at the Aske Coast's pace, averaged over hours 12–24 of five runs:
+
+- **This version:** 107 deer and 14 wolves. Per run the means are 72–134 deer and 11–20 wolves, never fewer than 32 deer or 8 wolves, with about 1.0 deer eaten per wolf-hour. The deer are limited by grazing, with winter die-offs, and the floors never fire.
+- **The previous numbers:** 88 deer and 3.5 wolves. Wolves died out in every run (pups starved), and a wolf ate 1.3 deer an hour.
+- **What the model leaves out:** hunting by people, and deer minds that may rarely choose to pair. So it does not reproduce the `aske-coast-2` extinction. There the floor is the guarantee.
+
+Measured on a scratch database (2026-09-28, `wildlife-test`: [the Aske Coast's map and pace](../living/seeds/wildlife-test.json) with no people, 60 deer and 8 wolves, no mind service, so animals ran their seeded ways and instincts; module built from 75cb4b9 plus these changes, deleted afterwards). Sampled with `wildlife.py sample`; young are infants and juveniles:
+
+| min | deer (young) | wolves (young) | deer killed | births (deer + wolf) |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 60 (26) | 8 (2) | 0 | 0 |
+| 3 | 56 (24) | 8 (2) | 4 | 0 |
+| 21 | 53 (23) | 8 (2) | 7 | 0 |
+| 24 | 53 (23) | 12 (6) | 7 | 4 (wolf pups, two litters) |
+| 45 | 52 (19) | 12 (6) | 8 | 4 |
+| 60 | 52 (16) | 12 (6) | 8 | 4 |
+| 79 | 46 (8) | 12 (6) | 14 | 4 |
+| 83 | 62 (24) | 12 (6) | 15 | 21 (17 fawns) |
+| 93 | 63 (25) | 12 (6) | 15 | 23 |
+
+The wolves hunted on their ways: 8 kills in the first 33 minutes, one per wolf, then none for half an hour while they ate what they carried. That is about 1 deer per wolf-hour, against about 2 in `aske-coast-2`. 19 deer pairs were expecting at 60 minutes, and their fawns (1.3 h gestation) arrived from minute 80. One deer starved, a juvenile seeded on the plain instinct. No wolf died. The run was stopped at 93 minutes, before the wolf pups were weaned (72 minutes of their life), so pup hunting and the winter at hours 1.2–1.6 of each 1.6-hour year are not measured.
+
+The floor, on a second scratch world (`wildlife-floor`: the same map with 4 deer and 1 wolf, deleted afterwards). At 20.2 minutes "A small herd of deer came in from the south": 5 adults on grass 2–5 tiles from the south edge. At 30.0 minutes "A few wolves came in from the west": 3 adults on their ways, in forest at the west edge. With deer still at 7, a second herd came at 41.0 minutes, 21 minutes after the first. With 4 wolves (the floor is 3), no more wolves came.
+
+## Measured authority load
+
+Benchmark database `living-bench` on the same Docker SpacetimeDB 2.10.1 service (Apple Silicon laptop), instinct-driven people (no LLM), 96×96 map, tick duration from the module's `LogStopwatch` over a 60 s window ([bench.py](../living/tools/bench.py)); 2026-09-25:
+
+| Characters | Ticks/s | Tick p50 | p95 | p99 | Max | Ticks > 16.7 ms | Evaluations/s |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 216 + 20 animals | 59.6 | 0.88 ms | 1.66 ms | 2.26 ms | 7.6 ms | 0 of 3,792 | 306 |
+| 2,000 + 20 animals | 59.7 | 5.84 ms | 7.33 ms | 8.22 ms | 12.0 ms | 0 of 3,609 | 2,655 |
+
+| 216 mind-controlled (experiences + deliberation requests, live subscriber, no LLM answering) | 59.7 | 0.94 ms | 1.87 ms | 2.46 ms | 4.8 ms | 0 of 3,607 | 310 |
+| 2,000 mind-controlled, same | 59.7 | 6.87 ms | 8.51 ms | 9.31 ms | 15.8 ms | 0 of 3,605 | 2,664 |
+
+Mind-controlled rows write experiences inside the tick. Before bounding them, 2,000 characters on this dense map produced 5,276 experiences/s (strangers re-noticed in crowds, one row per routine success) and p99 rose to 13 ms with 17 slots over budget. Crowds of strangers are now summarized ("among a crowd of 23 people") while known people and wolves are still noticed individually, and only failures and meaningful acts (build, give, attack, …) of one's own become experiences: 8.5 experiences/s.
+
+| 2,000 mind-controlled, with per-tick chunk cache | 59.7 | 4.79 ms | — | 6.43 ms | 8.0 ms | 0 | — |
+| 200-fighter spear battle in a 14×14-tile area (+ seed world) | 59.5 | 3.27 ms | 5.25 ms | 6.41 ms | 9.8 ms | 0 of ~1,800 | 2,780 |
+
+Before staggering combat cadence and caching chunks, the same battle ran at 51.8 ticks/s with 3% of ticks over budget (p99 18 ms).
+
+On the 256×256 realm (checkpoint 3; 2026-09-26, same service, 60 s windows):
+
+| Scenario | Tick p50 | p95 | p99 | Max | Ticks > 16.7 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2,039 mind-controlled characters spread over the realm (+ seeded towns and wildlife) | 3.56 ms | 4.60 ms | 5.17 ms | 6.7 ms | 0 of 3,606 |
+| 200-fighter spear battle (+ realm seed) | 2.78 ms | 4.98 ms | 6.22 ms | 12.6 ms | 0 of 3,612 |
+
+Each fresh 2,000-character benchmark writes gigabytes of commit log, and `--delete-data` republishes leave the old replica directories in the SpacetimeDB volume; run benchmarks against a dedicated database and watch host disk space (a full disk put the Docker VM's filesystem into read-only mode on 2026-09-26).
+
+The legacy path missed ≈48% of 60 Hz slots at 200 characters. These runs do not yet include the performance contract's full workload (sustained 30 min/8 h, 200-character battle, human clients, observer subscriptions); they establish that the per-tick work now scales with due events rather than with world size.
+
+### Stage 6 check: 2,000 characters and a 200-character battle (2026-09-27)
+
+Re-benchmarked after genes, practice, pasture, acts, desires with routines, perception additions, deliberate acts and scene building. Workload, all on scratch database `living-bench-agent` (deleted afterwards) on the same Docker SpacetimeDB 2.10.1 service and laptop, module built with the realm-4 seed (512×512, 176 seeded people, 82 animals), 60 s windows via [bench.py](../living/tools/bench.py), no LLM answering; the host was shared with three running labs and their mind services (load average 6–17):
+
+- **2,000:** `--crowd 1800 --minded --subscribe --body-writes`, 30 s settle: about 1,980 people (1,800 foragers on their repertoire, controlled like LLM characters: experiences and deliberation requests, a live subscriber to their experiences) and 82 animals; about 2,450 evaluations/s, 1,560–1,580 steering updates/s, 410–420 completions/s, 300–310 experiences/s, 10 deliberation requests/s; a subscriber to all `body` rows received 1,960–2,050 row updates/s (950–990 kB/s JSON).
+- **Battle:** `--battle 200` (spear fighters in a 14×14-tile area) beside the seed world: about 280 people, 2,500 evaluations/s, about 1,220 blocks, 25–30 hits and 15 dodges a minute.
+- **Combined (the contract's shape):** `--crowd 1600 --minded --battle 200`: about 1,870 people (200 of them fighting) and 82 animals, 4,070–4,130 evaluations/s, 2,160–2,250 `body` row updates/s.
+
+| Scenario | Build | Tick p50 | p95 | p99 | Max | Ticks > 16.7 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2,000 | before, no spans (two windows) | 5.35–5.39 ms | 6.78–7.00 | 7.37–7.99 | 9.1–12.6 | 0, 0 of 3,606 |
+| 2,000 | before, phase spans (two runs) | 5.87–5.97 | 7.56–7.76 | 8.70–11.23 | 15.8–81.4 | 0, 17 (all in one host stall in the first 1.6 s) |
+| 2,000 | after (two runs) | 4.98–5.34 | 6.80–7.46 | 8.60–8.64 | 11.2–21.4 | 2, 0 |
+| Battle | before, no spans | 3.88 | 5.72 | 6.77 | 9.5 | 0 of 3,605 |
+| Battle | before, phase spans (two runs) | 3.76–3.84 | 5.46–5.47 | 6.44–6.78 | 9.4–17.8 | 1, 0 |
+| Battle | after (two runs) | 2.49–2.61 | 4.12–4.32 | 5.09–5.88 | 9.7–16.1 | 0, 0 |
+| Combined | before, no spans | 7.38 | 9.96 | 11.47 | 15.7 | 0 of 3,603 |
+| Combined | before, phase spans (two runs) | 7.81–7.94 | 10.91–11.14 | 12.55–13.32 | 18.2–21.1 | 1, 3 |
+| Combined | after (two runs) | 6.55–6.72 | 9.25–9.52 | 10.96–11.31 | 23.0–40.4 | 1, 2 (host stalls: every phase spikes at once) |
+
+"Before" is `living-core` at 1a30fdd; "phase spans" adds only the profiling spans below. Runs of each pair were interleaved (before, after) so both saw similar host load.
+
+Against 2026-09-26 (2,000 characters p50 3.57, p99 5.30 ms; battle p50 3.07–3.16, p99 5.92–6.53 ms) the features added since cost about 1.8 ms at p50 and 2–3 ms at p99 at 2,000. Every tick stays inside the 16.7 ms budget except isolated ones that coincide with stalls across all phases at once (host), but the combined workload's p99 of 11–12.5 ms leaves little headroom on a shared host. A 120 s combined window before the changes, under heavier host load (7.5), reached p99 15.8 ms with 51 ticks over budget, clustered in two stalls.
+
+Where the time goes ([bench.py](../living/tools/bench.py) now reports named spans: `tick.motion`, `tick.activity`, `tick.wakes`, `tick.combat`, `tick.slots`, `housekeeping`, `housekeeping.spoil`; combined workload before → after, ms of tick work per second of world time): 1 Hz evaluations 188–197 → 178–179, combat cadence 113–114 → 58–60, steering 57–73, wakes 54–58, activity timers 39–41; housekeeping 2.5–2.6 → 1.9 ms once a second. An evaluation costs 60–90 µs, almost all of it row reads (each a host call and decode) and Rhai calls. A sampled per-evaluation profile (every eighth character, spans inside `evaluate`) put 22% in computing the need-rate key (full actor facts: inventory, know-how, genes, structures), 27% in building the scene (19% resource nodes), 21% in starting actions (a Rhai check or duration is 50–60 µs, the context map rebuilt for each call), and a clock-row rewrite in every evaluation, experience and deliberation request.
+
+Changes (behavior unchanged; `verify_mechanics.py` 14/14, `verify_steering.py` 5/5, `cargo test -p living-rules --features scripting` pass):
+
+- **Rate key from what it depends on.** `settle_needs` computes night, needs, fire/shelter nearby and the current activity directly and gathers the full actor facts only when the key changes (it rarely does); the activity row is read once per evaluation.
+- **Counters off the hot row.** Evaluation, experience, deliberation, completion and combat counters accumulate in the module and are added to the `clock` row once per tick (and by housekeeping), instead of a read and rewrite of that row per event.
+- **Per-transaction caches** for the world row and the script revision (`laws()` and `scripts()` read the clock row on every call before).
+- **Chunk caches for resource nodes and structures, kept across transactions** and dropped for a chunk when it is written (every write site invalidates first; rows loaded after a write in the same transaction are trusted only by that transaction, so a rolled-back reducer cannot leave uncommitted rows behind; like the map cache this assumes one module instance runs the reducers). The persona traits the evaluator reads (curiosity, sociability, nurture) are cached the same way instead of decoding the persona row and parsing its JSON on every evaluation of a mind-controlled character (not exercised by the benchmark crowd, which has no personas).
+- **Nearest-creature and count conditions** no longer clone the whole list of perceived creatures (200 per fighter in the battle).
+- **Spoilage rolls through the inventory.** The once-a-minute pass over the whole `inventory` table (7.6 ms with about 2,000 30-berry stacks; growing with every stack in the world) is spread over the minute's 60 housekeeping calls by owner (`inventory.owner` btree range), so each stack is still checked once a minute; a call takes 0.4 ms (max 0.9) in the combined workload.
+- **Housekeeping reads the characters once** instead of three full passes a second.
+
+SpacetimeDB documentation consulted: [indexes](https://spacetimedb.com/docs/tables/indexes/) (btree range filters; unique primary-key accessors have no range filter, hence the owner index for spoilage), [table performance](https://spacetimedb.com/docs/tables/performance/) (prefer indexed lookups over scans; keep hot data in focused rows), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) and the [SQL reference](https://spacetimedb.com/docs/reference/sql) (subscription joins return one table, need indexed join columns). No table, index, reducer or subscription changed; the caches are module-internal.
+
+**What remains for the authority at stage 6:** everyone is still evaluated once a second (2,000 evaluations/s) and fighters 15 times a second; per-evaluation cost is dominated by row reads, so the next steps are evaluating only characters whose situation changed (event-driven evaluation while latched work runs), caching character and brain rows the same way, and reusing the Rhai context between the check, duration and speed calls of one action. A database runs its reducers on one core, so beyond this headroom a world of 2,000 must be split (regions as databases). The `mind_*` reducers that 2,000 thinking people would call (tens per second, each a transaction between ticks) and spatially scoped subscriptions for players (a full `body` subscription is about 1 MB/s of JSON at 2,000) are not yet measured; nor are the 30-minute and 8-hour runs, memory growth (dead characters are kept, the `experience` window holds up to 400 rows per character when no mind consumes it: 74k rows after two minutes of the unanswered benchmark crowd) and client-side costs.
+
+## Running
+
+```bash
+just living-up          # SpacetimeDB :3300 + Neo4j (:7476 browser, :7689 bolt) in Docker
+just living-reset       # build the module and publish a fresh world (deletes world data)
+just living-mind        # LLM minds (supervised; reconnects after module updates)
+just living-web         # Bevy observer in the browser
+python3 living/tools/status.py   # text snapshot of people and the story
+python3 living/tools/bench.py --db living-bench --fresh --crowd 206 --seconds 60
+LIVING_LOD=1 just living-mind                          # minds with the level of detail (see Minds at scale)
+python3 living/tools/mind_load.py <db> <run>           # model load per person, extrapolated, and off stage
+```
+
+`just living-publish` updates the module in place and installs the current skill rules. LLM exchanges are journaled to `.local/living/journal/<run>/<name>.jsonl`.
+
+**Public observer** at `https://sos.carlid.dev` (`?db=<lab>` picks a world). A Cloudflare tunnel (`sao-tunnel` systemd user service, config `~/.cloudflared/sos.yml`) forwards only `/v1/database/<db>/subscribe` to SpacetimeDB on :3300. Everything else goes to the static bundle from `just living-web-dist`, which the `sao-observer-web` user service serves on 127.0.0.1:8331. SpacetimeDB's HTTP API (publish, SQL, reducer calls, identities, logs) is not reachable through the tunnel. Loaded from a non-local host, the viewer connects to its own origin. Rebuild with `just living-web-dist` after viewer changes; the running service picks the new files up without a restart. Limits: a WebSocket client can still call the non-admin reducers (`join`, `human_*`), because that authority is enforced per identity, not by the tunnel. Every visitor also adds a full observer subscription, and that load is not measured.

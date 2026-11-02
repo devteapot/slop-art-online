@@ -1,0 +1,36 @@
+{
+  "run": "verify-infant",
+  "seed": 11,
+  "map": {
+    "kind": "valley"
+  },
+  "year_days": 1800,
+  "life_pace": 1.0,
+  "bands": [
+    {
+      "name": "infant fixture",
+      "family": [
+        {
+          "stage": "adult"
+        },
+        {
+          "stage": "adult"
+        },
+        {
+          "stage": "adult"
+        },
+        {
+          "stage": "adult"
+        },
+        {
+          "stage": "infant"
+        }
+      ],
+      "camp": []
+    }
+  ],
+  "animals": {
+    "deer": 0,
+    "wolf": 0
+  }
+}

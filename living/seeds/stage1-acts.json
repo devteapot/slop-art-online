@@ -1,0 +1,59 @@
+{
+  "run": "s1-acts",
+  "seed": 11,
+  "map": {
+    "kind": "valley"
+  },
+  "year_days": 4,
+  "life_pace": 0.0714,
+  "setting": "A small valley between hills and the sea, with streams, woods and grassland. One family lives here alone: the old, the grown, the young and a baby. Berries grow in the grass by the woods, fish swim in the streams, deer graze the meadows and a few wolves live in the woods. Seasons turn quickly; in winter nothing grows and nights are colder. People live about seventy years here, but the years pass fast.",
+  "bands": [
+    {
+      "name": "the family",
+      "history": "We have always lived in this valley, one family, three generations. We know how to make fire and build shelters; our shelter and fire stand at our camp.",
+      "knows": [
+        "fire",
+        "shelter"
+      ],
+      "family": [
+        {
+          "stage": "elder",
+          "occupation": "healer"
+        },
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "forager"
+        },
+        {
+          "stage": "adult",
+          "occupation": "hunter"
+        },
+        {
+          "stage": "child"
+        },
+        {
+          "stage": "child"
+        },
+        {
+          "stage": "infant"
+        }
+      ],
+      "camp": [
+        "shelter",
+        "campfire"
+      ]
+    }
+  ],
+  "animals": {
+    "deer": 16,
+    "wolf": 3
+  }
+}

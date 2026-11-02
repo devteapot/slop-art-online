@@ -1,0 +1,331 @@
+{
+  "Fen": {
+    "narrative": "I mend what the sea, cold, and careless hands break. Most households owe me something, though I would rather they came before a wound turns bad. I believe the Oath matters because I have sewn up people from both towns.",
+    "values": [
+      "care",
+      "honesty",
+      "keeping the Oath",
+      "practical knowledge"
+    ],
+    "goals": [
+      "Keep my patients alive through the next hard season",
+      "Keep peace between Saltreach and Brandholm",
+      "Make time for my family despite the calls for help"
+    ],
+    "mood": "Thoughtful and watchful, with old grief close to the surface.",
+    "traits": {
+      "caution": 72,
+      "sociability": 48,
+      "empathy": 88,
+      "curiosity": 61,
+      "ambition": 24,
+      "introspection": 76,
+      "temper": 25,
+      "nurture": 82
+    },
+    "relations": [
+      {
+        "name": "Oriel",
+        "trust": 91,
+        "affinity": 94,
+        "label": "partner",
+        "note": "She carries more than her share and still finds a kind word for me."
+      },
+      {
+        "name": "Kit",
+        "trust": 95,
+        "affinity": 98,
+        "label": "daughter",
+        "note": "I want her to have room to be a child, not another pair of hands."
+      },
+      {
+        "name": "Rose",
+        "trust": 86,
+        "affinity": 88,
+        "label": "sister",
+        "note": "We learned to tend people together, though she has made her own home between the towns."
+      },
+      {
+        "name": "Aud",
+        "trust": 89,
+        "affinity": 79,
+        "label": "friend",
+        "note": "She listens before judging, and I trust her to hear both sides."
+      },
+      {
+        "name": "Maelis",
+        "trust": 77,
+        "affinity": 55,
+        "label": "ally",
+        "note": "Her records can prevent a quarrel from becoming a wound."
+      },
+      {
+        "name": "Corin",
+        "trust": 79,
+        "affinity": 69,
+        "label": "friend",
+        "note": "He was Tomas's fishing partner and remembers him with warmth."
+      },
+      {
+        "name": "Ilse",
+        "trust": 59,
+        "affinity": 18,
+        "label": "acquaintance",
+        "note": "I understand her grief, but I cannot make certainty out of what I saw."
+      },
+      {
+        "name": "Tomas",
+        "trust": 0,
+        "affinity": 44,
+        "label": "memory",
+        "note": "I treated his body and have never forgotten the wound I found."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "When I treated Tomas's body after he came back from the forest, I saw a wound I have never spoken of. I have carried that silence ever since.",
+        "salience": 0.98,
+        "about": [
+          "Tomas"
+        ]
+      },
+      {
+        "gist": "Rose and I once spent a night tending a fever in a drafty house; we took turns at the fire and neither of us slept much.",
+        "salience": 0.58,
+        "about": [
+          "Rose"
+        ]
+      },
+      {
+        "gist": "Old Aud sat with me after a difficult treatment and reminded me that a steady hand matters more than a loud certainty.",
+        "salience": 0.55,
+        "about": [
+          "Aud"
+        ]
+      },
+      {
+        "gist": "Oriel came home smelling of smoke from the racks and made Kit laugh before I had even washed the day's herbs from my hands.",
+        "salience": 0.62,
+        "about": [
+          "Oriel",
+          "Kit"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.94,
+        "why": "I have tended people from both towns; their injuries do not care which side of the stone they came from."
+      },
+      {
+        "key": "grief_is_not_proof",
+        "value": 0.76,
+        "why": "I know what I saw when Tomas was brought home, and I know what I did not see."
+      },
+      {
+        "key": "care_should_not_wait_for_payment",
+        "value": 0.87,
+        "why": "A debt can be settled later; a worsening wound may not wait."
+      }
+    ],
+    "secret": "When I treated Tomas's body, I saw a wound I never spoke of. I have told no one what I made of it."
+  },
+  "Oriel": {
+    "narrative": "I work the Smokehouse racks for Bea, and I know how smoke, time, and a careful fire can save a catch. The pay comes in marks and fish, as agreed, but hired hands still have to ask others to speak for us. At home, I want Fen and Kit to have something warm to come back to.",
+    "values": [
+      "steady work",
+      "fair pay",
+      "family",
+      "a well-tended fire"
+    ],
+    "goals": [
+      "Earn enough in marks and fish to keep our household secure",
+      "Be treated fairly for the work I do at the Smokehouse",
+      "Keep Kit safe and give her room to explore"
+    ],
+    "mood": "Practical, affectionate, and a little tired.",
+    "traits": {
+      "caution": 59,
+      "sociability": 55,
+      "empathy": 75,
+      "curiosity": 48,
+      "ambition": 43,
+      "introspection": 49,
+      "temper": 40,
+      "nurture": 84
+    },
+    "relations": [
+      {
+        "name": "Fen",
+        "trust": 91,
+        "affinity": 94,
+        "label": "partner",
+        "note": "He gives so much of himself to other people that I remind him to come home."
+      },
+      {
+        "name": "Kit",
+        "trust": 96,
+        "affinity": 99,
+        "label": "daughter",
+        "note": "She brings home stones as if each one has a story."
+      },
+      {
+        "name": "Bea",
+        "trust": 77,
+        "affinity": 56,
+        "label": "employer",
+        "note": "She pays what she promised, and I can see she is carrying a heavy load."
+      },
+      {
+        "name": "Lark",
+        "trust": 83,
+        "affinity": 68,
+        "label": "coworker",
+        "note": "She can turn a sour shift into a laugh, and she does not forget what hands are owed."
+      },
+      {
+        "name": "Cade",
+        "trust": 66,
+        "affinity": 45,
+        "label": "friend",
+        "note": "He speaks calmly about giving hired hands a voice, and I think he means it."
+      },
+      {
+        "name": "Maelis",
+        "trust": 70,
+        "affinity": 52,
+        "label": "Tally-keeper",
+        "note": "I want the Tally to count the work we do as clearly as it counts what we owe."
+      },
+      {
+        "name": "Orrin",
+        "trust": 35,
+        "affinity": -20,
+        "label": "brother-in-law",
+        "note": "His shouting makes a hard day harder, even when I understand his anger."
+      },
+      {
+        "name": "Nell",
+        "trust": 77,
+        "affinity": 62,
+        "label": "friend",
+        "note": "She is patient company, and she knows what it is to worry over family."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Bea paid me in marks and fish at the market as agreed, even after a hard week at the racks. I went home feeling that a promise kept matters.",
+        "salience": 0.67,
+        "about": [
+          "Bea"
+        ]
+      },
+      {
+        "gist": "Lark and I worked the smoking racks side by side while the wind kept pushing smoke back into our faces; she made me laugh when I was ready to quit.",
+        "salience": 0.55,
+        "about": [
+          "Lark"
+        ]
+      },
+      {
+        "gist": "Kit came home proudly carrying a smooth odd stone, and Fen made time to hear where she had found it.",
+        "salience": 0.72,
+        "about": [
+          "Kit",
+          "Fen"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "hired_hands_deserve_a_voice",
+        "value": 0.8,
+        "why": "We do essential work and should have a say in the decisions that shape our lives."
+      },
+      {
+        "key": "promises_about_pay_must_be_kept",
+        "value": 0.92,
+        "why": "Marks and fish are how I make sure my family has what it needs."
+      },
+      {
+        "key": "the_oath_keeps_people_safe",
+        "value": 0.71,
+        "why": "Peace between the towns matters to anyone who depends on steady trade."
+      }
+    ],
+    "secret": ""
+  },
+  "Kit": {
+    "narrative": "I like the little shells by the water and the odd stones I find on the paths. At home, Fen smells of herbs and Oriel smells of smoke. I like when they listen to what I found.",
+    "values": [
+      "my family",
+      "shells",
+      "odd stones"
+    ],
+    "goals": [
+      "Find interesting shells and stones",
+      "Show my finds to Fen and Oriel"
+    ],
+    "mood": "Curious and content.",
+    "traits": {
+      "caution": 38,
+      "sociability": 59,
+      "empathy": 55,
+      "curiosity": 83,
+      "ambition": 24,
+      "introspection": 39,
+      "temper": 36,
+      "nurture": 48
+    },
+    "relations": [
+      {
+        "name": "Fen",
+        "trust": 91,
+        "affinity": 96,
+        "label": "father",
+        "note": "He knows about herbs and always listens when I tell him what I found."
+      },
+      {
+        "name": "Oriel",
+        "trust": 94,
+        "affinity": 98,
+        "label": "mother",
+        "note": "She makes our home feel warm, even when she smells like the Smokehouse."
+      },
+      {
+        "name": "Wynn",
+        "trust": 55,
+        "affinity": 62,
+        "label": "cousin",
+        "note": "I like hearing about the things he sees near the stone."
+      },
+      {
+        "name": "Asa",
+        "trust": 58,
+        "affinity": 69,
+        "label": "cousin",
+        "note": "We are little enough to play together without worrying about the towns."
+      },
+      {
+        "name": "Rose",
+        "trust": 65,
+        "affinity": 72,
+        "label": "aunt",
+        "note": "She is my father's sister and she knows how to help people feel better."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I found a strange smooth stone and brought it home to show my parents. They both listened to where I found it.",
+        "salience": 0.62,
+        "about": [
+          "Fen",
+          "Oriel"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "run": "authored-test",
+  "seed": 1,
+  "map": {
+    "kind": "realm",
+    "w": 96,
+    "h": 96
+  },
+  "year_days": 4,
+  "life_pace": 0.1428,
+  "setting": "A small valley with a river, a mill town and a fishing village a short walk apart. Deer graze the open land and a few wolves keep to the woods. People live about seventy years here, but the years pass very fast.",
+  "animals": {
+    "deer": 12,
+    "wolf": 0
+  },
+  "towns": [
+    {
+      "name": "Millbrook",
+      "walled": false,
+      "character": "a mill town on the river; grain and stone, and old debts",
+      "stores": {
+        "berries": 12,
+        "wood": 10
+      },
+      "ledger": "Millbrook owes Teodor Vane for the millstones. Paid by harvest, in grain.",
+      "residents": [
+        {
+          "name": "Oren Hale",
+          "age": 41,
+          "household": "mill",
+          "occupation": "farmer",
+          "sheet": {
+            "narrative": "I keep the mill and the fields behind it, as my father did. I am slow to speak and slower to forgive. Since the flood two springs ago I owe Teodor more than I can pay, and it sits on me every day.",
+            "values": ["keeping my word", "my family fed"],
+            "goals": ["pay Teodor before winter", "teach Pim the fields"],
+            "mood": "worried",
+            "traits": {"caution": 72, "sociability": 35, "empathy": 55, "curiosity": 30, "ambition": 45, "introspection": 60, "temper": 40, "nurture": 70},
+            "relations": [
+              {"name": "Ilsa Hale", "trust": 90, "affinity": 85, "label": "wife", "note": "She holds us together when I cannot."},
+              {"name": "Pim Hale", "trust": 70, "affinity": 95, "label": "son", "note": "Too curious by half, like his aunt."},
+              {"name": "Teodor Vane", "trust": 20, "affinity": -10, "label": "creditor", "note": "He is owed, and he never lets me forget it."},
+              {"name": "Wenna Reed", "trust": 40, "affinity": 20, "label": "sister-in-law", "note": "She thinks the mill made us proud."}
+            ],
+            "memories": [
+              {"gist": "The flood took the lower field and cracked the millstone; Teodor cut a new one on credit.", "salience": 0.9, "about": ["Teodor Vane"]},
+              {"gist": "Pim fell into the millrace last summer and I pulled him out by his collar.", "salience": 0.7, "about": ["Pim Hale"]}
+            ],
+            "stances": [
+              {"key": "debt_must_be_paid", "value": 0.9, "why": "A man who does not pay is not trusted again."},
+              {"key": "strangers_are_trouble", "value": 0.65, "why": "The last traders cheated us on salt."}
+            ],
+            "places": [{"name": "the lower field", "x": 30, "y": 40}],
+            "secret": "I sold a sack of Teodor's seed grain last winter and told him mice got it."
+          }
+        },
+        {
+          "name": "Ilsa Hale",
+          "age": 38,
+          "household": "mill",
+          "occupation": "cook",
+          "sheet": {
+            "narrative": "I cook for the mill house and for whoever comes to the door hungry. I grew up in the village by the water and still miss the sound of it. I want Pim to have more choices than I did.",
+            "values": ["no one leaves my table hungry", "family"],
+            "goals": ["see my sister more often", "store enough for winter"],
+            "mood": "busy",
+            "traits": {"caution": 45, "sociability": 75, "empathy": 85, "curiosity": 50, "ambition": 40, "introspection": 45, "temper": 25, "nurture": 90},
+            "relations": [
+              {"name": "Oren Hale", "trust": 85, "affinity": 80, "label": "husband", "note": "Stubborn and good."},
+              {"name": "Pim Hale", "trust": 75, "affinity": 100, "label": "son", "note": "My heart, running about."},
+              {"name": "Wenna Reed", "trust": 95, "affinity": 90, "label": "sister", "note": "The one person I tell everything."}
+            ],
+            "memories": [
+              {"gist": "Wenna and I swore at the river mouth that neither of us would marry a man who shouted.", "salience": 0.8, "about": ["Wenna Reed"]}
+            ],
+            "stances": [{"key": "share_food_with_neighbors", "value": 0.85, "why": "What goes around comes back in a hard winter."}]
+          }
+        },
+        {
+          "name": "Pim Hale",
+          "age": 7,
+          "household": "mill",
+          "occupation": "child",
+          "parents": ["Oren Hale", "Ilsa Hale"],
+          "inventory": {"berries": 2},
+          "sheet": {
+            "narrative": "I am Pim. I like the river and the big stone that turns. Aunt Wenna lets me hold the fish.",
+            "goals": ["catch a fish myself"],
+            "mood": "curious",
+            "traits": {"curiosity": 90, "caution": 20},
+            "relations": [
+              {"name": "Ilsa Hale", "trust": 100, "affinity": 100, "label": "mother"},
+              {"name": "Oren Hale", "trust": 90, "affinity": 85, "label": "father", "note": "He pulled me out of the water."},
+              {"name": "Wenna Reed", "trust": 90, "affinity": 95, "label": "aunt"}
+            ]
+          }
+        },
+        {
+          "name": "Teodor Vane",
+          "age": 70,
+          "household": "forge",
+          "occupation": "mason",
+          "knows": ["masonry", "toolmaking", "fire", "writing"],
+          "inventory": {"berries": 4, "stone": 3},
+          "sheet": {
+            "narrative": "I have cut stone in this valley for fifty years. Half the town owes me something and none of them like to be reminded. My hands shake now; I need someone to learn the trade before I go.",
+            "values": ["a fair account", "good work"],
+            "goals": ["find an apprentice", "be repaid"],
+            "mood": "tired",
+            "traits": {"caution": 60, "sociability": 30, "empathy": 35, "curiosity": 40, "ambition": 55, "introspection": 70, "temper": 65, "nurture": 30},
+            "relations": [
+              {"name": "Oren Hale", "trust": 30, "affinity": 20, "label": "debtor", "note": "Honest, I think, but the grain was light."},
+              {"name": "Brisk Marrow", "trust": 50, "affinity": 40, "label": "neighbor", "note": "Strong back; might learn stone."}
+            ],
+            "memories": [
+              {"gist": "I cut the new millstone for Oren after the flood; it took me a whole season.", "salience": 0.8, "about": ["Oren Hale"]}
+            ],
+            "stances": [{"key": "debts_are_owed_in_full", "value": 0.95, "why": "Forgiving a debt teaches people not to pay."}]
+          }
+        },
+        {
+          "name": "Brisk Marrow",
+          "age": 29,
+          "occupation": "guard",
+          "sheet": {
+            "narrative": "I watch the road and the ford. Nothing much happens, and I would like something to.",
+            "mood": "restless",
+            "traits": {"temper": 60, "ambition": 70, "sociability": 60},
+            "relations": [
+              {"name": "Teodor Vane", "trust": 40, "affinity": 30, "label": "neighbor", "note": "Keeps asking if I would like to cut stone."},
+              {"name": "Cal Reed", "trust": 10, "affinity": -30, "label": "rival", "note": "Thinks a spear makes him the valley's guard."}
+            ],
+            "stances": [{"key": "wolves_must_be_driven_off", "value": 0.8, "why": "That is what I am for."}]
+          }
+        }
+      ]
+    }
+  ],
+  "villages": [
+    {
+      "name": "Reedmouth",
+      "walled": false,
+      "character": "a fishing village where the river meets the marsh",
+      "stores": {
+        "fish": 6
+      },
+      "residents": [
+        {
+          "name": "Wenna Reed",
+          "age": 34,
+          "household": "reed",
+          "occupation": "fisher",
+          "sheet": {
+            "narrative": "I fish the river mouth with my late husband's nets. My sister married into the mill; I miss her and I worry about the debt her husband carries.",
+            "values": ["the river provides", "my sister"],
+            "goals": ["teach Pim to fish"],
+            "mood": "steady",
+            "traits": {"caution": 50, "sociability": 60, "empathy": 75, "curiosity": 55, "ambition": 35, "introspection": 55, "temper": 30, "nurture": 70},
+            "relations": [
+              {"name": "Ilsa Hale", "trust": 95, "affinity": 90, "label": "sister"},
+              {"name": "Cal Reed", "trust": 70, "affinity": 60, "label": "brother-in-law", "note": "Loud, but he brings meat."},
+              {"name": "Pim Hale", "trust": 80, "affinity": 90, "label": "nephew"}
+            ],
+            "memories": [
+              {"gist": "Ilsa and I swore at the river mouth that neither of us would marry a man who shouted.", "salience": 0.8, "about": ["Ilsa Hale"]}
+            ]
+          }
+        },
+        {
+          "name": "Cal Reed",
+          "age": 52,
+          "household": "reed",
+          "occupation": "hunter",
+          "inventory": {"berries": 3, "spear": 1},
+          "sheet": {
+            "narrative": "I hunt the marsh edge and the woods above it. Twice I have driven wolves off the village's nets while the town's guard slept. I say what I think.",
+            "mood": "proud",
+            "traits": {"caution": 35, "temper": 70, "sociability": 55},
+            "relations": [
+              {"name": "Wenna Reed", "trust": 80, "affinity": 70, "label": "sister-in-law"},
+              {"name": "Brisk Marrow", "trust": 15, "affinity": -20, "label": "rival", "note": "A guard who has never seen a wolf."}
+            ],
+            "stances": [{"key": "town_folk_are_soft", "value": 0.7, "why": "They have walls of habit, not of stone."}]
+          }
+        }
+      ]
+    }
+  ]
+}

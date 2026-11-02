@@ -1,0 +1,10 @@
+[package]
+name = "living-bindings"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+browser = ["spacetimedb-sdk/browser"]
+
+[dependencies]
+spacetimedb-sdk = { workspace = true }

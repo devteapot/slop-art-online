@@ -1,0 +1,11 @@
+{
+  "run": "aske-coast",
+  "seed": 3,
+  "map": {"kind": "realm", "w": 256, "h": 256},
+  "year_days": 8,
+  "life_pace": 1.5,
+  "habits": "makers",
+  "setting": "The Aske Coast: a stretch of coast about a day's walk from north to south, between the sea in the east and bare mountains in the west. In the north a great forest reaches the shore; the palisaded timber town of Brandholm stands there. In the south lie reed beds, shallows and fishing streams; the open fishing town of Saltreach stands there. Between them, in the open middle lands, is the hamlet of Oathstone around a tall grey standing stone, where the two towns meet to trade. Deer graze the open land and wolves roam the woods. The seasons turn quickly; in winter nothing grows, nights are bitter, and food that is not cooked, smoked or stored spoils.",
+  "bands": [],
+  "animals": {"deer": 60, "wolf": 8}
+}

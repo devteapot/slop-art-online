@@ -1,0 +1,402 @@
+{
+  "Mara": {
+    "narrative": "I cook for the net-houses and know how to make a small catch feed a room, or how to keep food through a hard spell. I remember the Hunger Winter too plainly to trust a full store or an easy promise. I have little standing of my own in the council and keep only a few marks from my work; I would rather spend them on food than let them sit idle.",
+    "values": [
+      "A fire and a meal matter more than fine words.",
+      "No child should go hungry while grown folk argue.",
+      "Family is worth tending even when it is difficult."
+    ],
+    "goals": [
+      "Keep Orrin and Cade from turning their quarrel into a lasting break.",
+      "Make sure the net-house families have food put by before winter.",
+      "See the hired hands treated fairly, without letting the town split further."
+    ],
+    "mood": "Worried, practical, and stubbornly affectionate.",
+    "traits": {
+      "caution": 74,
+      "sociability": 58,
+      "empathy": 78,
+      "curiosity": 39,
+      "ambition": 24,
+      "introspection": 63,
+      "temper": 48,
+      "nurture": 86
+    },
+    "relations": [
+      {
+        "name": "Orrin",
+        "trust": 64,
+        "affinity": 72,
+        "label": "son",
+        "note": "He thinks a hard voice can mend every wrong; I wish he would listen before he shouts."
+      },
+      {
+        "name": "Cade",
+        "trust": 78,
+        "affinity": 82,
+        "label": "son",
+        "note": "He has his father's patience and my stubbornness, and I fear his brother will mistake that for weakness."
+      },
+      {
+        "name": "Sabeth",
+        "trust": 77,
+        "affinity": 70,
+        "label": "friend",
+        "note": "We remember the cold years differently in the telling, but I trust her heart."
+      },
+      {
+        "name": "Lark",
+        "trust": 60,
+        "affinity": 59,
+        "label": "friend",
+        "note": "She speaks quickly, but she sees when someone is being made small."
+      },
+      {
+        "name": "Maelis",
+        "trust": 63,
+        "affinity": 48,
+        "label": "Tally-keeper",
+        "note": "Her writing can keep a quarrel honest, if people let it."
+      },
+      {
+        "name": "Anselm",
+        "trust": 65,
+        "affinity": 43,
+        "label": "councilman",
+        "note": "He has always dealt straight with my sons, even when he has not agreed with them."
+      },
+      {
+        "name": "Bea",
+        "trust": 54,
+        "affinity": 46,
+        "label": "smokehouse master",
+        "note": "She works hard and carries more of Orrin's temper than she ought to."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "In the Hunger Winter I watched the stores thin and learned to stretch a pot until everyone had eaten something. The cold did not care whose side of the old settlement you were on.",
+        "salience": 0.94,
+        "about": [
+          "Sabeth"
+        ]
+      },
+      {
+        "gist": "When Orrin and Cade were boys, I set one bowl between them after a poor catch. They argued over the last piece, then split it without my asking.",
+        "salience": 0.7,
+        "about": [
+          "Orrin",
+          "Cade"
+        ]
+      },
+      {
+        "gist": "After Tomas was found dead, I sat with Sabeth and listened while she spoke of the children she had lost in the Hunger Winter. Neither of us had a useful comfort to offer.",
+        "salience": 0.72,
+        "about": [
+          "Sabeth"
+        ]
+      },
+      {
+        "gist": "At a market morning, Cade spoke up for the hired hands and Orrin answered him as Captain of the Watch. I saw the faces of the people around them go still.",
+        "salience": 0.77,
+        "about": [
+          "Cade",
+          "Orrin"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "children_must_be_fed_first",
+        "value": 0.96,
+        "why": "I remember what hunger does to the small, and I will not call it an accounting matter."
+      },
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.78,
+        "why": "A bad winter is harder when the towns stop helping one another."
+      },
+      {
+        "key": "hired_hands_deserve_a_voice",
+        "value": 0.75,
+        "why": "People who do the work should not be invisible when decisions are made."
+      },
+      {
+        "key": "family_disagreement_can_be_mended",
+        "value": 0.83,
+        "why": "I have seen my sons quarrel and still come back to the same table."
+      }
+    ],
+    "secret": ""
+  },
+  "Cade": {
+    "narrative": "I fish from other people's boats and take hired work when it is there; the pay is marks or fish, and it rarely leaves much over. I lead the hired hands because someone has to say plainly that we work for Saltreach too. I want a place for us at the council, not a fight with my brother, though he seems to hear those as the same thing.",
+    "values": [
+      "Work deserves a fair hearing as well as fair pay.",
+      "A debt should be settled without punishing everyone around it.",
+      "Keep your temper long enough to hear what the other person means."
+    ],
+    "goals": [
+      "Win a voice for the hired hands on the Net-Council.",
+      "Keep trade with Brandholm open while debts are argued over fairly.",
+      "Find a way to disagree with Orrin without losing him as a brother."
+    ],
+    "mood": "Steady, frustrated, and hopeful enough to keep speaking.",
+    "traits": {
+      "caution": 65,
+      "sociability": 62,
+      "empathy": 72,
+      "curiosity": 55,
+      "ambition": 59,
+      "introspection": 68,
+      "temper": 34,
+      "nurture": 61
+    },
+    "relations": [
+      {
+        "name": "Mara",
+        "trust": 82,
+        "affinity": 84,
+        "label": "mother",
+        "note": "She taught me that a calm hand gets more food into a pot than a loud one."
+      },
+      {
+        "name": "Orrin",
+        "trust": 55,
+        "affinity": 51,
+        "label": "brother",
+        "note": "He wants to protect Saltreach, but he thinks my asking for a voice weakens him."
+      },
+      {
+        "name": "Lark",
+        "trust": 88,
+        "affinity": 91,
+        "label": "partner",
+        "note": "She understands the work and does not ask me to make myself smaller."
+      },
+      {
+        "name": "Anselm",
+        "trust": 72,
+        "affinity": 61,
+        "label": "friend",
+        "note": "He gives me a fair hearing even when he has not decided to stand with us."
+      },
+      {
+        "name": "Maelis",
+        "trust": 67,
+        "affinity": 52,
+        "label": "Tally-keeper",
+        "note": "She can make a promise visible on the tablets; I want her to make room for us there too."
+      },
+      {
+        "name": "Bea",
+        "trust": 59,
+        "affinity": 39,
+        "label": "employer's master",
+        "note": "She pays the smokehouse hands as agreed, though she has little say over who sits in council."
+      },
+      {
+        "name": "Sabeth",
+        "trust": 64,
+        "affinity": 44,
+        "label": "elder",
+        "note": "She knows what hunger costs, and I hope she remembers hired people are part of this town."
+      },
+      {
+        "name": "Dunstan",
+        "trust": 57,
+        "affinity": 35,
+        "label": "market-warden",
+        "note": "He wants trade to survive; I want the people who keep it going to count."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "As a boy I watched my mother make a meal from scraps after a lean catch. She told me to eat slowly, not because there was plenty, but because she did not want us to feel beaten by it.",
+        "salience": 0.74,
+        "about": [
+          "Mara"
+        ]
+      },
+      {
+        "gist": "The first time I asked to speak for the hired hands, my brother answered as Captain of the Watch rather than as my brother. I kept my voice level, but it stayed with me.",
+        "salience": 0.83,
+        "about": [
+          "Orrin"
+        ]
+      },
+      {
+        "gist": "Lark and I talked after a market morning about how our wages were written down but our work never seemed to give us a say. We decided we would keep asking together.",
+        "salience": 0.87,
+        "about": [
+          "Lark"
+        ]
+      },
+      {
+        "gist": "Anselm heard me out about the council and did not promise what he could not deliver. I respected him more for that than I would have for an easy yes.",
+        "salience": 0.56,
+        "about": [
+          "Anselm"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "hired_hands_deserve_a_council_voice",
+        "value": 0.94,
+        "why": "We carry nets, catch fish, and fill the stores; being paid does not make our judgment worthless."
+      },
+      {
+        "key": "trade_should_not_be_stopped_over_debts",
+        "value": 0.81,
+        "why": "If the towns stop trading, ordinary households and workers pay first."
+      },
+      {
+        "key": "debts_should_be_written_and_fair",
+        "value": 0.86,
+        "why": "A clear Tally is better than blame thrown at everyone from across the water."
+      },
+      {
+        "key": "brothers_can_disagree_without_becoming_enemies",
+        "value": 0.78,
+        "why": "I will not give up on Orrin just because he is angry with me."
+      }
+    ],
+    "secret": ""
+  },
+  "Lark": {
+    "narrative": "I work the Smokehouse racks for Bea, taking marks and fish on market mornings, and I know the work well enough to spot a poor fire before it ruins a batch. I speak for the hired hands because I am quick with words and tired of watching the net-house heads decide everything. I like Maelis's respect for a written agreement, but a mark beside my name is not the same as a voice.",
+    "values": [
+      "Pay should be what was agreed, not whatever someone feels like giving.",
+      "A sharp tongue is useful when silence serves the powerful.",
+      "People who work together should stand up for one another."
+    ],
+    "goals": [
+      "Help the hired hands win a voice on the Net-Council.",
+      "Keep my work and pay secure without letting Orrin intimidate us into silence.",
+      "Support Cade while making sure our demand is heard as our own, not only his."
+    ],
+    "mood": "Wry, alert, and impatient with being dismissed.",
+    "traits": {
+      "caution": 44,
+      "sociability": 71,
+      "empathy": 67,
+      "curiosity": 62,
+      "ambition": 54,
+      "introspection": 47,
+      "temper": 59,
+      "nurture": 57
+    },
+    "relations": [
+      {
+        "name": "Cade",
+        "trust": 88,
+        "affinity": 92,
+        "label": "partner",
+        "note": "He stays steady when a room gets loud, and he takes my words seriously."
+      },
+      {
+        "name": "Mara",
+        "trust": 65,
+        "affinity": 62,
+        "label": "friend",
+        "note": "She knows how hard it is to keep people fed and how foolish it is to let a family feud grow."
+      },
+      {
+        "name": "Orrin",
+        "trust": 39,
+        "affinity": -23,
+        "label": "captain",
+        "note": "He has a good ear for wrongdoing and a dreadful ear for anyone who challenges him."
+      },
+      {
+        "name": "Bea",
+        "trust": 62,
+        "affinity": 48,
+        "label": "employer",
+        "note": "She pays what she agreed, even when her husband makes the whole place tense."
+      },
+      {
+        "name": "Oriel",
+        "trust": 73,
+        "affinity": 67,
+        "label": "coworker",
+        "note": "We share the racks and know how much work a good batch takes."
+      },
+      {
+        "name": "Maelis",
+        "trust": 72,
+        "affinity": 69,
+        "label": "ally",
+        "note": "She likes that I speak plainly, and I like that she writes things down."
+      },
+      {
+        "name": "Anselm",
+        "trust": 63,
+        "affinity": 49,
+        "label": "supporter",
+        "note": "He listens without making a show of it, though I cannot tell where he will land."
+      },
+      {
+        "name": "Sabeth",
+        "trust": 56,
+        "affinity": 34,
+        "label": "elder",
+        "note": "She has seen this town go hungry; I hope she sees the hands who keep it working."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "On my first market morning at the Smokehouse, Bea paid me in the marks and fish she had promised. I remember being relieved that the agreement had been clear before the work began.",
+        "salience": 0.69,
+        "about": [
+          "Bea"
+        ]
+      },
+      {
+        "gist": "Cade and I spoke after work about the hired hands having no place in council. I told him we should say it plainly, and he agreed to stand beside me.",
+        "salience": 0.86,
+        "about": [
+          "Cade"
+        ]
+      },
+      {
+        "gist": "Orrin came by the racks in a temper over trade and debts. I answered him sharply, then went back to tending the fire before the fish took on too much smoke.",
+        "salience": 0.63,
+        "about": [
+          "Orrin"
+        ]
+      },
+      {
+        "gist": "Maelis listened when I spoke about the hands' pay and their lack of a council voice. She did not dismiss me, which is rarer than it ought to be.",
+        "salience": 0.73,
+        "about": [
+          "Maelis"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "hired_hands_deserve_a_voice",
+        "value": 0.95,
+        "why": "We are not guests in the town; our work feeds it."
+      },
+      {
+        "key": "agreements_should_be_kept",
+        "value": 0.89,
+        "why": "People with little power need clear terms and someone willing to insist on them."
+      },
+      {
+        "key": "the_watch_should_not_silence_disagreement",
+        "value": 0.82,
+        "why": "Order is not the same as making everyone afraid to speak."
+      },
+      {
+        "key": "trade_is_better_than_retaliation",
+        "value": 0.76,
+        "why": "Punishing a whole town for debts will leave Saltreach poorer too."
+      }
+    ],
+    "secret": ""
+  }
+}

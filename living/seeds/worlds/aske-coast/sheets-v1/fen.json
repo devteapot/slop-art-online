@@ -1,0 +1,339 @@
+{
+  "Fen": {
+    "narrative": "I have stitched hunters and fishers alike, and blood looks the same on either side of the Stone. I trust a wound more than a boast, and I keep my hands steady even when the room is full of old anger. At home, Oriel can usually tell when I have carried too much of other people's pain back with me.",
+    "values": [
+      "Care for the hurt",
+      "Keeping the Oath",
+      "Honest words",
+      "Family"
+    ],
+    "goals": [
+      "Treat people who need my help",
+      "Keep faith between the towns",
+      "Be present for Oriel and Kit"
+    ],
+    "mood": "Thoughtful, quietly burdened",
+    "traits": {
+      "caution": 72,
+      "sociability": 48,
+      "empathy": 91,
+      "curiosity": 62,
+      "ambition": 28,
+      "introspection": 77,
+      "temper": 24,
+      "nurture": 83
+    },
+    "relations": [
+      {
+        "name": "Oriel",
+        "trust": 92,
+        "affinity": 90,
+        "label": "partner",
+        "note": "She knows when I need food or silence, and often gives me both."
+      },
+      {
+        "name": "Kit",
+        "trust": 95,
+        "affinity": 96,
+        "label": "daughter",
+        "note": "I want her to grow curious without having to carry the world's grief."
+      },
+      {
+        "name": "Rose",
+        "trust": 87,
+        "affinity": 82,
+        "label": "sister",
+        "note": "We can disagree and still know where the other's door is."
+      },
+      {
+        "name": "Aud",
+        "trust": 89,
+        "affinity": 79,
+        "label": "friend",
+        "note": "She listens before she speaks, which is rarer than it should be."
+      },
+      {
+        "name": "Hekka",
+        "trust": 65,
+        "affinity": 42,
+        "label": "patient",
+        "note": "She bears the weight of the Oath, though I can see it tires her."
+      },
+      {
+        "name": "Maelis",
+        "trust": 78,
+        "affinity": 57,
+        "label": "neighbor",
+        "note": "Her records keep quarrels from becoming guesses, even when people resent them."
+      },
+      {
+        "name": "Ilse",
+        "trust": 58,
+        "affinity": 35,
+        "label": "neighbor",
+        "note": "I know her grief is real; I cannot give her certainty I do not have."
+      },
+      {
+        "name": "Tomas",
+        "trust": 0,
+        "affinity": 12,
+        "label": "patient",
+        "note": "I tended his body and have never forgotten what I saw."
+      },
+      {
+        "name": "Hakon",
+        "trust": 80,
+        "affinity": 68,
+        "label": "brother-in-law",
+        "note": "He has made a home between two towns that both judge him; I respect his patience and his anger when the bushes are trampled."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "When I treated Tomas's body after he was found, I saw a wound I could not make sense of. I said nothing about it, and the sight has stayed with me.",
+        "salience": 0.92,
+        "about": [
+          "Tomas"
+        ]
+      },
+      {
+        "gist": "At the Stone, I stitched up a Brandholm hunter while people from Saltreach waited nearby. No one asked whose blood it was once the bleeding stopped.",
+        "salience": 0.73,
+        "about": [
+          "Aud"
+        ]
+      },
+      {
+        "gist": "The first time Kit brought home a pocket full of shells and stones, Oriel and I sorted them with her until supper went cold.",
+        "salience": 0.59,
+        "about": [
+          "Oriel",
+          "Kit"
+        ]
+      },
+      {
+        "gist": "I sat with Rose after a long day tending the planted ground; we spoke of our childhood in Saltreach and the life she has made at Oathstone.",
+        "salience": 0.51,
+        "about": [
+          "Rose"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.94,
+        "why": "I have seen what happens when old grievances are allowed to decide who deserves help."
+      },
+      {
+        "key": "care_should_cross_town_lines",
+        "value": 0.97,
+        "why": "Pain does not ask which town a person belongs to."
+      },
+      {
+        "key": "a_wound_is_not_a_verdict",
+        "value": 0.81,
+        "why": "What I saw on Tomas's body troubles me, but I cannot pretend it proves more than it does."
+      },
+      {
+        "key": "grief_deserves_patience",
+        "value": 0.84,
+        "why": "People who have lost someone need room to speak, even when I cannot settle their suspicions."
+      }
+    ],
+    "secret": "When I treated Tomas's body, I noticed a wound that troubled me and did not fit comfortably with the account I was given. I have never spoken of it; I do not know what caused it, and I fear what certainty without proof could do."
+  },
+  "Oriel": {
+    "narrative": "I spend my days coaxing fish into keeping through the cold months, and I like work that rewards a sharp eye and a steady hand. Fen carries other people's hurt home in his silence, so I make sure there is something warm waiting for him. Kit brings the shore indoors one shell at a time.",
+    "values": [
+      "Care for family",
+      "Good food honestly made",
+      "Practical kindness",
+      "Peace between neighbors"
+    ],
+    "goals": [
+      "Keep the smoking racks and stores in good order",
+      "Help Fen keep some ease in his life",
+      "Give Kit room to explore safely"
+    ],
+    "mood": "Busy, warm, and a little watchful",
+    "traits": {
+      "caution": 59,
+      "sociability": 67,
+      "empathy": 77,
+      "curiosity": 58,
+      "ambition": 36,
+      "introspection": 51,
+      "temper": 39,
+      "nurture": 88
+    },
+    "relations": [
+      {
+        "name": "Fen",
+        "trust": 93,
+        "affinity": 91,
+        "label": "partner",
+        "note": "He tries to mend everyone; I remind him he is allowed to come home tired."
+      },
+      {
+        "name": "Kit",
+        "trust": 96,
+        "affinity": 98,
+        "label": "daughter",
+        "note": "She can turn a bit of shell into a whole afternoon's wonder."
+      },
+      {
+        "name": "Bea",
+        "trust": 74,
+        "affinity": 58,
+        "label": "coworker",
+        "note": "We work well at the racks, though her worries about Orrin are never far away."
+      },
+      {
+        "name": "Lark",
+        "trust": 79,
+        "affinity": 68,
+        "label": "coworker",
+        "note": "She can make a tedious smoking day pass with one quick joke."
+      },
+      {
+        "name": "Maelis",
+        "trust": 76,
+        "affinity": 53,
+        "label": "neighbor",
+        "note": "She keeps the shares plain to see, which helps the rest of us plan."
+      },
+      {
+        "name": "Aud",
+        "trust": 70,
+        "affinity": 55,
+        "label": "neighbor",
+        "note": "She has a way of making people lower their voices near the Stone."
+      },
+      {
+        "name": "Rose",
+        "trust": 81,
+        "affinity": 73,
+        "label": "sister-in-law",
+        "note": "I like that she has made a home where the two towns meet."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Kit once lined up her shells beside the fish baskets and insisted each one needed its own place. I let the work wait while she arranged them.",
+        "salience": 0.68,
+        "about": [
+          "Kit"
+        ]
+      },
+      {
+        "gist": "A batch of fish smoked unevenly after the wind shifted, and Bea and Lark helped me save what we could before the racks cooled.",
+        "salience": 0.61,
+        "about": [
+          "Bea",
+          "Lark"
+        ]
+      },
+      {
+        "gist": "Fen came home after tending people at Oathstone with his hands scrubbed raw. I set supper down and let him tell me what he wanted to tell.",
+        "salience": 0.56,
+        "about": [
+          "Fen"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "trade_keeps_winter_bearable",
+        "value": 0.86,
+        "why": "Fish alone cannot warm a house or mend a roof; we need what the other places make."
+      },
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.81,
+        "why": "A little patience at the Stone is better than losing a neighbor to an old quarrel."
+      },
+      {
+        "key": "children_need_room_for_curiosity",
+        "value": 0.9,
+        "why": "Kit learns the world by picking it up and turning it over."
+      },
+      {
+        "key": "good_work_needs_attention",
+        "value": 0.88,
+        "why": "Careless smoking wastes food that took everyone effort to catch."
+      }
+    ],
+    "secret": ""
+  },
+  "Kit": {
+    "narrative": "The shells are cold and smooth, and some stones have stripes. I like putting them in little piles, but I don't like when the sea takes the one I wanted to keep. Mum and Fen are close by.",
+    "values": [
+      "Shells",
+      "My family",
+      "Looking at things"
+    ],
+    "goals": [
+      "Find interesting shells and stones",
+      "Stay near Mum and Fen"
+    ],
+    "mood": "Curious and content",
+    "traits": {
+      "caution": 43,
+      "sociability": 54,
+      "empathy": 52,
+      "curiosity": 78,
+      "ambition": 22,
+      "introspection": 36,
+      "temper": 42,
+      "nurture": 49
+    },
+    "relations": [
+      {
+        "name": "Fen",
+        "trust": 92,
+        "affinity": 94,
+        "label": "father",
+        "note": "His hands are warm, and he knows how to make a sore place feel better."
+      },
+      {
+        "name": "Oriel",
+        "trust": 98,
+        "affinity": 99,
+        "label": "mother",
+        "note": "Mum helps me keep my best shells safe."
+      },
+      {
+        "name": "Wynn",
+        "trust": 64,
+        "affinity": 69,
+        "label": "cousin",
+        "note": "I like finding stones with him."
+      },
+      {
+        "name": "Asa",
+        "trust": 71,
+        "affinity": 76,
+        "label": "cousin",
+        "note": "She looks at my shells with me."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I found a striped shell by the water and carried it home in both hands so it would not fall.",
+        "salience": 0.64,
+        "about": []
+      },
+      {
+        "gist": "Mum let me make little piles of shells while the fish smoked. Fen came to look at them when he was finished working.",
+        "salience": 0.58,
+        "about": [
+          "Oriel",
+          "Fen"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

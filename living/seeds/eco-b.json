@@ -1,0 +1,25 @@
+{
+  "run": "eco-b",
+  "seed": 11,
+  "map": {
+    "kind": "valley"
+  },
+  "year_days": 4,
+  "life_pace": 0.1428,
+  "setting": "A small valley with grassland, woods and streams, where deer graze and wolves hunt; no people live here.",
+  "bands": [],
+  "animals": {
+    "deer": 40,
+    "wolf": 3
+  },
+  "note": "Ecology lab (wolves: one pair per 50 tiles, single pups, a third of a life between litters); no people, so animals live by instinct and no model is called.",
+  "species": {
+    "wolf": {
+      "life": {
+        "breeding_radius": 50.0,
+        "litter": 1,
+        "interbirth": 0.33
+      }
+    }
+  }
+}

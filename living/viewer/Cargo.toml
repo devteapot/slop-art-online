@@ -1,0 +1,21 @@
+[package]
+name = "living-viewer"
+version = "0.1.0"
+edition = "2021"
+description = "Observer for the living world: map, story feed and character minds (native and browser)."
+
+[dependencies]
+bevy = { version = "=0.18.1", default-features = false, features = ["std", "default_app", "bevy_winit", "2d_bevy_render", "x11"] }
+bevy_egui = { version = "=0.39.1", default-features = false, features = ["render", "default_fonts"] }
+spacetimedb-sdk = { workspace = true }
+living-bindings = { path = "../bindings" }
+living-rules = { path = "../rules", default-features = false }
+serde_json = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+bevy = { version = "=0.18.1", default-features = false, features = ["webgl2"] }
+spacetimedb-sdk = { workspace = true, features = ["browser"] }
+living-bindings = { path = "../bindings", features = ["browser"] }
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["Window", "Location", "UrlSearchParams"] }

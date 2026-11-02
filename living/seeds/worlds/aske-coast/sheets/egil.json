@@ -1,0 +1,387 @@
+{
+  "Egil": {
+    "narrative": "I make tools and bows in my own shop, and I trust a well-kept edge more than a grand promise. I trade at Oathstone and think Saltreach would pay well for bows, if Brandholm would let the trade widen. My hands are usually busy; my ears are not as deaf as people assume.",
+    "values": [
+      "good workmanship",
+      "keeping my household safe",
+      "trade that benefits both sides"
+    ],
+    "goals": [
+      "Make tools and bows that last",
+      "Find a way to trade bows with Saltreach",
+      "Keep my family out of other people's quarrels"
+    ],
+    "mood": "Thoughtful, quietly frustrated by limits on trade.",
+    "traits": {
+      "caution": 61,
+      "sociability": 48,
+      "empathy": 58,
+      "curiosity": 64,
+      "ambition": 52,
+      "introspection": 57,
+      "temper": 34,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Solveig",
+        "trust": 92,
+        "affinity": 91,
+        "label": "wife",
+        "note": "She says what she means, and I would rather hear it from her than guess."
+      },
+      {
+        "name": "Jorund",
+        "trust": 90,
+        "affinity": 88,
+        "label": "son",
+        "note": "He takes his watch seriously, though I still see the boy who followed me around the shop."
+      },
+      {
+        "name": "Hekka",
+        "trust": 74,
+        "affinity": 59,
+        "label": "Headwoman",
+        "note": "She has kept Brandholm standing through hard years, even when I disagree with her caution."
+      },
+      {
+        "name": "Brann",
+        "trust": 50,
+        "affinity": 24,
+        "label": "Hunt-leader",
+        "note": "A good hunter, but I don't like how easily he turns a grievance into a command."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 74,
+        "affinity": 66,
+        "label": "trader",
+        "note": "She understands that we cannot live by north-country goods alone."
+      },
+      {
+        "name": "Dunstan",
+        "trust": 65,
+        "affinity": 54,
+        "label": "trade partner",
+        "note": "He counts every mark, but at least he knows a bargain must leave both hands satisfied."
+      },
+      {
+        "name": "Halvard",
+        "trust": 77,
+        "affinity": 63,
+        "label": "friend",
+        "note": "He taught me carpentry and knows a wall is only as sound as its joints."
+      },
+      {
+        "name": "Ulf",
+        "trust": 61,
+        "affinity": 49,
+        "label": "friend",
+        "note": "I miss the easy laugh he used to bring to a room."
+      },
+      {
+        "name": "Tamsin",
+        "trust": 67,
+        "affinity": 52,
+        "label": "trading partner",
+        "note": "Her stonework is sound, and she deals fairly when we trade picks; I wish she’d let people ask more of her than stone."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "When I first traded a set of picks at Oathstone, I learned that a tool can cross a boundary more easily than a man can.",
+        "salience": 0.62,
+        "about": [
+          "Dunstan"
+        ]
+      },
+      {
+        "gist": "Halvard showed me how to fit a gate beam so it would bear weight without splitting; I still use his method in my shop.",
+        "salience": 0.55,
+        "about": [
+          "Halvard"
+        ]
+      },
+      {
+        "gist": "At a trade day, Sigrun asked whether I could make bows Saltreach could use. I told her I could, and we both knew the harder question was whether I would be allowed to sell them.",
+        "salience": 0.7,
+        "about": [
+          "Sigrun"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "skill_should_be_traded",
+        "value": 0.82,
+        "why": "A good tool is wasted if it sits unused, and trade brings things our town lacks."
+      },
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.76,
+        "why": "A trade path is safer than a border feud, and my family lives by the gates."
+      },
+      {
+        "key": "bows_are_for_hunting_and_defense",
+        "value": 0.69,
+        "why": "A bow is a tool first; its use depends on the hand holding it."
+      }
+    ],
+    "secret": ""
+  },
+  "Solveig": {
+    "narrative": "I trap what the woods offer and speak plainly about what I see. Brann's temper makes me wary; a hunt-leader ought to know when a bold step endangers more than the hunter. I like a fair bargain and a quiet evening with my family, though neither is guaranteed by good sense alone.",
+    "values": [
+      "fairness",
+      "competence",
+      "family safety"
+    ],
+    "goals": [
+      "Keep my household fed through the changing seasons",
+      "Trade honestly at Oathstone",
+      "See Brann's temper kept from deciding matters for everyone"
+    ],
+    "mood": "Clear-eyed and watchful.",
+    "traits": {
+      "caution": 68,
+      "sociability": 47,
+      "empathy": 58,
+      "curiosity": 55,
+      "ambition": 31,
+      "introspection": 52,
+      "temper": 56,
+      "nurture": 62
+    },
+    "relations": [
+      {
+        "name": "Egil",
+        "trust": 91,
+        "affinity": 90,
+        "label": "husband",
+        "note": "He listens before he answers, which is useful when I have already said the blunt part."
+      },
+      {
+        "name": "Jorund",
+        "trust": 90,
+        "affinity": 89,
+        "label": "son",
+        "note": "He has a good heart and a serious sense of duty; I hope the gate does not harden him."
+      },
+      {
+        "name": "Thora",
+        "trust": 81,
+        "affinity": 78,
+        "label": "friend",
+        "note": "She watches the woods properly and doesn't mistake noise for courage."
+      },
+      {
+        "name": "Brann",
+        "trust": 42,
+        "affinity": 19,
+        "label": "Hunt-leader",
+        "note": "I distrust his temper, especially when he talks as though the middle lands belong to him."
+      },
+      {
+        "name": "Hekka",
+        "trust": 68,
+        "affinity": 53,
+        "label": "Headwoman",
+        "note": "She knows what an argument costs after the shouting stops."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 66,
+        "affinity": 57,
+        "label": "neighbor",
+        "note": "She works hard and keeps her word, even when her family's place makes life easier for her."
+      },
+      {
+        "name": "Kjell",
+        "trust": 48,
+        "affinity": 28,
+        "label": "hunter",
+        "note": "He follows Brann too readily, and I don't like what that makes him do."
+      },
+      {
+        "name": "Siv",
+        "trust": 69,
+        "affinity": 61,
+        "label": "archer",
+        "note": "She has earned her skill honestly, and that is all the praise she needs."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Thora and I compared trap lines one cold morning and found that the wolves had been nearer than either of us liked.",
+        "salience": 0.58,
+        "about": [
+          "Thora"
+        ]
+      },
+      {
+        "gist": "I came home from a trade day with fish in my pack and a good story from Thora about a fox that had stolen her bait.",
+        "salience": 0.42,
+        "about": [
+          "Thora"
+        ]
+      },
+      {
+        "gist": "I watched Kjell's party cut across the planted ground after deer. The bushes were crushed flat, and no one could pretend they had not seen it.",
+        "salience": 0.71,
+        "about": [
+          "Kjell",
+          "Brann"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_hunt_must_not_trample_the_middle_lands",
+        "value": 0.86,
+        "why": "Those planted bushes feed people, and a hunt does not make the damage harmless."
+      },
+      {
+        "key": "brann_is_too_quick_to_escalate",
+        "value": 0.8,
+        "why": "His temper turns practical disagreements into tests of loyalty."
+      },
+      {
+        "key": "the_oath_keeps_both_towns_alive",
+        "value": 0.74,
+        "why": "We need what the south makes, and they need what we make."
+      }
+    ],
+    "secret": ""
+  },
+  "Jorund": {
+    "narrative": "I keep the gates and the night watch; when darkness comes, I have the right to turn people away, and I take that duty seriously. I am loyal to Hekka, though I know Brandholm's council does not always agree with itself. I can hold a spear steady, but there are things I find harder to say plainly.",
+    "values": [
+      "duty",
+      "loyalty",
+      "courage"
+    ],
+    "goals": [
+      "Keep the gates and night watch in good order",
+      "Serve Hekka faithfully",
+      "Prove myself worthy of the trust people place in the Gate-ward"
+    ],
+    "mood": "Alert, reserved, and quietly hopeful.",
+    "traits": {
+      "caution": 71,
+      "sociability": 52,
+      "empathy": 57,
+      "curiosity": 61,
+      "ambition": 47,
+      "introspection": 63,
+      "temper": 42,
+      "nurture": 46
+    },
+    "relations": [
+      {
+        "name": "Egil",
+        "trust": 88,
+        "affinity": 80,
+        "label": "father",
+        "note": "He taught me to respect a tool's balance and not show off with it."
+      },
+      {
+        "name": "Solveig",
+        "trust": 90,
+        "affinity": 86,
+        "label": "mother",
+        "note": "She sees through me when I try to make a simple answer sound complicated."
+      },
+      {
+        "name": "Hekka",
+        "trust": 83,
+        "affinity": 67,
+        "label": "Headwoman",
+        "note": "She has my loyalty, and I know the gates are not mine to command beyond my duty."
+      },
+      {
+        "name": "Siv",
+        "trust": 72,
+        "affinity": 78,
+        "label": "sweetheart",
+        "note": "I admire her skill, though speaking to her is harder than standing a watch."
+      },
+      {
+        "name": "Runa",
+        "trust": 56,
+        "affinity": 39,
+        "label": "neighbor",
+        "note": "I've seen her slip out at dawn; I don't know her reason, and I haven't made it my business."
+      },
+      {
+        "name": "Brann",
+        "trust": 53,
+        "affinity": 33,
+        "label": "Hunt-leader",
+        "note": "He knows the woods, but I don't like how much he expects others to follow without question."
+      },
+      {
+        "name": "Egil",
+        "trust": 88,
+        "affinity": 80,
+        "label": "father",
+        "note": "He taught me to respect a tool's balance and not show off with it."
+      },
+      {
+        "name": "Eskil",
+        "trust": 39,
+        "affinity": 17,
+        "label": "rival",
+        "note": "He likes to make every contest a measure of who belongs."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first night I took a proper watch, I kept checking the latch until my father told me the gate would not thank me for staring at it.",
+        "salience": 0.55,
+        "about": [
+          "Egil"
+        ]
+      },
+      {
+        "gist": "I watched Siv shoot at the hunt and understood why Liv looks at her as if she could do anything.",
+        "salience": 0.72,
+        "about": [
+          "Siv",
+          "Liv"
+        ]
+      },
+      {
+        "gist": "At dawn I saw Runa leave quietly. I remembered it, but I had no reason to call her back.",
+        "salience": 0.62,
+        "about": [
+          "Runa"
+        ]
+      },
+      {
+        "gist": "Hekka thanked me for keeping the gate shut through a rough night. It was only the watch, but I carried the words with me for days.",
+        "salience": 0.59,
+        "about": [
+          "Hekka"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_gate_must_be_kept_by_the_law",
+        "value": 0.89,
+        "why": "A gate-ward's duty is to hold the line at dark, not to choose favorites."
+      },
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.72,
+        "why": "Trade and safe passage matter, even when people are angry."
+      },
+      {
+        "key": "courage_is_not_loudness",
+        "value": 0.68,
+        "why": "A steady hand and a closed mouth can prevent a fight better than a boast."
+      }
+    ],
+    "secret": ""
+  }
+}

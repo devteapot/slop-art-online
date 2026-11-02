@@ -1,0 +1,1154 @@
+//! Behavior graph evaluation. Each character is evaluated about once per second (its
+//! slot) and immediately after salient events. Evaluation reads only what the character
+//! can perceive (sight radius), its own state and its mind's projections (relations,
+//! places, judgments). Conditions and targets never consult observer truth beyond that.
+
+use crate::act::{self, Resolved};
+use crate::perceive::{self, percept};
+use crate::tables::*;
+use crate::common::{self, dist, direction, pos, Compiled, Needs, NearCreature};
+use living_rules::graph::{self, Cond, Filter, Node, Target};
+use spacetimedb::rand::Rng;
+use spacetimedb::{ReducerContext, Table};
+use std::rc::Rc;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum St {
+    Ok,
+    Fail,
+    Run,
+}
+
+const MAX_VISITS: u32 = 160;
+const ROOT_MARK: u16 = u16::MAX - 1;
+const FAIL_MARK: u16 = u16::MAX - 2;
+pub(crate) const REFLECT_MARK: u16 = u16::MAX - 3;
+thread_local! {
+    /// When each person last checked for, and last felt, knowing something alone (kept here:
+    /// evaluator marks are reset when a new plan is installed).
+    static LEGACY: std::cell::RefCell<std::collections::HashMap<u32, (u64, u64)>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+/// Alert bits for ongoing situations (bits 1..8 are bodily alarms).
+const IN_CROWD: u32 = 1 << 8;
+const WOLF_NEAR: u32 = 1 << 9;
+const FAMILIAR_LIMIT: usize = 256;
+/// Marks at 0xC000 | node: when a desire last began to act.
+const DESIRE_MARK: u16 = 0xC000;
+/// Set when the current plan's routine completes; cleared by the next install.
+const PLAN_DONE_MARK: u16 = 0xCFFF;
+/// How long an animal's impulse keeps any pull.
+const IMPULSE_MS: f32 = 60_000.0;
+
+struct Scene {
+    creatures: Vec<NearCreature>,
+    resources: Vec<(ResourceNode, f32)>,
+    structures: Vec<(Structure, f32)>,
+}
+
+struct Ev<'a> {
+    ctx: &'a ReducerContext,
+    now: u64,
+    w: World,
+    me: Character,
+    at: (f32, f32),
+    needs: Needs,
+    vit: Vitals,
+    st: MindState,
+    orig: MindState,
+    g: Rc<Compiled>,
+    scene: Option<Scene>,
+    /// Creatures smelled beyond sight (built on first use).
+    smelled: Option<Vec<NearCreature>>,
+    /// While resolving a target the body acts on: smelled creatures count (see `sensed`).
+    smell: bool,
+    running: Option<u16>,
+    path: Vec<u16>,
+    status: String,
+    visits: u32,
+    last_fail: String,
+    want: (String, u32),
+    /// Node of the activity in progress if it is work that completes on its own (see `latches`).
+    latched: Option<u16>,
+    /// A deliberate act holds the body: graph leaves wait, except reflexes (see `acts.rs`).
+    acting: bool,
+}
+
+/// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
+/// holding (sleeping until rested, not until barely awake). Movement and combat stay reactive.
+const LATCHES: &[&str] = &["sleep", "rest", "eat", "gather", "build", "craft", "cook", "teach", "experiment", "write", "read", "plant", "store", "take", "give"];
+
+pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
+    let Some(me) = ctx.db.character().id().find(id) else { return };
+    if !me.alive {
+        return;
+    }
+    let (Some(st), Some(body), Some(vit)) = (ctx.db.mind_state().id().find(id), ctx.db.body().id().find(id), ctx.db.vitals().id().find(id)) else { return };
+    common::count(|k| k.evals += 1);
+    let w = common::world(ctx);
+    let at = pos(&body, now);
+    let mut cur = ctx.db.activity().id().find(id);
+    let Some(vit) = settle_needs(ctx, &me, vit, at, &w, cur.as_ref(), now) else { return };
+    perceive::infant_distress(ctx, &me, at, now);
+    let needs = common::needs(&vit, now);
+    let Some(g) = common::compiled(ctx, id, st.revision) else {
+        log::warn!("character {id} has no valid graph at revision {}", st.revision);
+        return;
+    };
+    // A deliberate act that cannot reach its target gives up after a while (and the next
+    // one waiting may start in its place).
+    if let Some(a) = cur.clone().filter(|a| crate::acts::overdue(a, now)) {
+        act::cancel(ctx, a, now, Some("you could not get to it in time"));
+        cur = ctx.db.activity().id().find(id);
+    }
+    let acting = cur.as_ref().map_or(false, |a| a.node == act::ACT);
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting };
+    ev.latched = cur.filter(|a| a.revision == ev.st.revision && LATCHES.contains(&a.skill.as_str())).map(|a| a.node);
+    ev.alerts();
+    let root = ev.g.clone();
+    let result = ev.run(&root.root, 0);
+    ev.after(result, &root.root);
+}
+
+/// Resolve a target for a deliberate act exactly as a graph leaf would (only what the
+/// character perceives, sight or smell, its own places and remembered people).
+pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Option<Resolved> {
+    let me = ctx.db.character().id().find(id)?;
+    let st = ctx.db.mind_state().id().find(id)?;
+    let body = ctx.db.body().id().find(id)?;
+    let vit = ctx.db.vitals().id().find(id)?;
+    let g = common::compiled(ctx, id, st.revision)?;
+    let at = pos(&body, now);
+    let needs = common::needs(&vit, now);
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting: false };
+    ev.sensed(t)
+}
+
+/// Re-anchor needs when their rate inputs change; handles death from needs. `cur` is the
+/// character's activity. The rate key is computed from the few facts the rates depend on;
+/// the full facts are gathered only when it changes.
+fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f32), w: &World, cur: Option<&Activity>, now: u64) -> Option<Vitals> {
+    let n = common::needs(&v, now);
+    if n.hp <= 0.0 {
+        let cause = if n.hunger >= 100.0 {
+            "starvation"
+        } else if common::night(w, now) && me.kind == "person" {
+            "cold and exposure"
+        } else {
+            "exhaustion"
+        };
+        act::die(ctx, me.id, cause, now, 0);
+        return None;
+    }
+    let night = common::night(w, now);
+    let (near_fire, near_shelter) = act::warmth(ctx, at);
+    let cloak = common::inv_count(ctx, me.id as u64, "cloak") > 0;
+    let season = common::season(ctx, now);
+    let activity = cur.filter(|a| a.phase == 1).map_or("", |a| a.skill.as_str());
+    let key = 1
+        | (night as u32) << 1
+        | ((n.hunger >= 100.0) as u32) << 2
+        | ((n.hunger < 70.0) as u32) << 3
+        | ((n.energy > 15.0) as u32) << 4
+        | ((n.energy <= 0.0) as u32) << 5
+        | (near_fire as u32) << 6
+        | (near_shelter as u32) << 7
+        | ((activity == "sleep") as u32) << 8
+        | ((activity == "rest") as u32) << 9
+        | (cloak as u32) << 10
+        | ((season == "winter") as u32) << 11;
+    if key == v.rate_key {
+        return Some(v);
+    }
+    let facts = act::facts(ctx, me.id, now);
+    let sc = common::scripts(ctx);
+    let hour = common::hour(w, now);
+    let sctx = living_rules::script::SkillCtx { actor: facts, night, hour, season: season.into(), ..Default::default() };
+    let _ = at;
+    if let Ok(r) = sc.rates(&sctx) {
+        common::settle(&mut v, now);
+        v.hp_rate = r.hp_per_min;
+        v.hunger_rate = r.hunger_per_min;
+        v.energy_rate = r.energy_per_min;
+        v.rate_key = key;
+        ctx.db.vitals().id().update(v.clone());
+    }
+    Some(v)
+}
+
+impl<'a> Ev<'a> {
+    fn scene(&mut self) -> &Scene {
+        if self.scene.is_none() {
+            let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
+            let creatures = common::creatures_near(self.ctx, self.at, r, self.now).into_iter().filter(|c| c.id != self.me.id).collect();
+            let resources = common::resources_near(self.ctx, self.at, r);
+            let structures = common::structures_near(self.ctx, self.at, r);
+            self.scene = Some(Scene { creatures, resources, structures });
+        }
+        self.scene.as_ref().unwrap()
+    }
+
+    fn smelled(&mut self) -> &[NearCreature] {
+        if self.smelled.is_none() {
+            let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
+            let me = self.me.id;
+            let mut v = common::smelled_near(self.ctx, &self.me.kind, self.at, r, self.now);
+            v.retain(|c| c.id != me);
+            self.smelled = Some(v);
+        }
+        self.smelled.as_deref().unwrap()
+    }
+
+    fn mark_recent(&self, node: u16, within_ms: u64) -> bool {
+        self.st.marks.iter().any(|m| m.node == node && self.now.saturating_sub(m.at_ms) < within_ms)
+    }
+
+    fn set_mark(&mut self, node: u16) {
+        self.st.marks.retain(|m| m.node != node);
+        self.st.marks.push(Mark { node, at_ms: self.now });
+        if self.st.marks.len() > 24 {
+            self.st.marks.remove(0);
+        }
+    }
+
+    /// Weighted desires: score each from the body's state and the character's stances, try
+    /// the strongest first (the one already acting gets a small bonus, so choices do not
+    /// flicker), and remember when each last acted (for "longing").
+    fn desires(&mut self, ds: &[graph::Desire], id: u16) -> St {
+        let mut ids = Vec::with_capacity(ds.len());
+        let mut next = id + 1;
+        for _ in ds {
+            ids.push(next);
+            next += self.g.sizes.get(next as usize).copied().unwrap_or(1);
+        }
+        let current = self.cursor(id) as usize;
+        let hunger = (self.needs.hunger / 100.0).clamp(0.0, 1.0);
+        let tired = ((100.0 - self.needs.energy) / 100.0).clamp(0.0, 1.0);
+        let hurt = (1.0 - self.needs.hp / self.vit.max_hp.max(1.0)).clamp(0.0, 1.0);
+        let night = if common::night(&self.w, self.now) { 1.0 } else { 0.0 };
+        let me = self.me.id;
+        let now = self.now;
+        // An attack or a threat aimed at me right now.
+        let threatened = if self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now) { 1.0 } else { 0.0 };
+        // Company is one's own kind (people for a person, the herd or pack for an animal).
+        let kind = self.me.kind.clone();
+        let people = self.scene().creatures.iter().filter(|c| *c.kind == *kind).count() as f32;
+        let alone = if people == 0.0 { 1.0 } else { 0.0 };
+        let company = (people / 5.0).min(1.0);
+        let winter = if common::season(self.ctx, now) == "winter" { 1.0 } else { 0.0 };
+        let starving = if self.needs.hunger >= 90.0 { 1.0 } else { 0.0 };
+        let exhausted = if self.needs.energy <= 10.0 { 1.0 } else { 0.0 };
+        let courted = if ds.iter().any(|d| d.weight.courted != 0.0) && self.resolve(&graph::Target::Suitor).is_some() { 1.0 } else { 0.0 };
+        let judgments: Vec<(String, f32)> = if ds.iter().any(|d| !d.weight.believes.is_empty()) {
+            self.ctx.db.judgment().actor().filter(me).map(|j| (j.key.to_lowercase(), j.value)).collect()
+        } else {
+            Vec::new()
+        };
+        // An animal's impulse is brief: its pull fades over about a minute after it arises, and
+        // the animal's standing drives (feeding, mating, its herd or pack) take over again.
+        let impulse = if self.me.kind != "person" {
+            let age = self.ctx.db.brain().id().find(self.me.id).map_or(0, |b| self.now.saturating_sub(b.installed_ms));
+            (1.0 - age as f32 / IMPULSE_MS).max(0.0)
+        } else {
+            1.0
+        };
+        let plan_label = format!("routine:{}", graph::PLAN_ROUTINE);
+        let is_plan = |n: &Node| matches!(n, Node::First(c) if c.label.as_deref().is_some_and(|l| l.eq_ignore_ascii_case(&plan_label)));
+        let mut order: Vec<(f32, usize)> = ds
+            .iter()
+            .enumerate()
+            .map(|(i, d)| {
+                let w = &d.weight;
+                let last = self.st.marks.iter().find(|m| m.node == DESIRE_MARK | ids[i]).map(|m| m.at_ms);
+                let longing = last.map_or(1.0, |t| (now.saturating_sub(t) as f32 / 3_600_000.0).min(1.0));
+                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted;
+                for (k, v) in &w.believes {
+                    let j = judgments.iter().find(|(key, _)| key == &k.to_lowercase()).map(|(_, x)| *x).unwrap_or(0.5);
+                    s += v * j;
+                }
+                if is_plan(&d.body) {
+                    s *= impulse;
+                }
+                if current == i + 1 {
+                    s += 0.1;
+                }
+                (s, i)
+            })
+            .collect();
+        order.sort_by(|a, b| b.0.total_cmp(&a.0));
+        // A plan that has been carried out is done: it stops competing until the mind makes a new one.
+        let plan_done = self.st.marks.iter().any(|m| m.node == PLAN_DONE_MARK);
+
+        for (score, i) in order {
+            if score <= 0.0 {
+                break;
+            }
+            let plan = is_plan(&ds[i].body);
+            if plan && (plan_done || impulse <= 0.0) {
+                continue;
+            }
+            let r = self.run(&ds[i].body, ids[i]);
+            if plan && r == St::Ok {
+                self.set_mark(PLAN_DONE_MARK);
+                self.deliberate("I finished my plan.");
+            }
+            if r != St::Fail {
+                if current != i + 1 {
+                    self.set_cursor(id, i as u16 + 1);
+                    self.set_mark(DESIRE_MARK | ids[i]);
+                }
+                return r;
+            }
+        }
+        self.set_cursor(id, 0);
+        St::Fail
+    }
+
+    fn cursor(&self, node: u16) -> u16 {
+        self.st.cursors.iter().find(|c| c.node == node).map(|c| c.idx).unwrap_or(0)
+    }
+
+    fn set_cursor(&mut self, node: u16, idx: u16) {
+        self.st.cursors.retain(|c| c.node != node);
+        if idx != 0 {
+            self.st.cursors.push(Cursor { node, idx });
+        }
+    }
+
+    fn deliberate(&mut self, reason: &str) {
+        if self.me.ai {
+            perceive::request_deliberation(self.ctx, self.me.id, reason, self.now);
+        }
+    }
+
+    fn run(&mut self, n: &Node, id: u16) -> St {
+        self.visits += 1;
+        if self.visits > MAX_VISITS {
+            return St::Fail;
+        }
+        self.path.push(id);
+        let r = self.run_inner(n, id);
+        if r != St::Run {
+            self.path.pop();
+        }
+        r
+    }
+
+    fn child_ids(&self, id: u16, count: usize) -> Vec<u16> {
+        let mut out = Vec::with_capacity(count);
+        let mut next = id + 1;
+        for _ in 0..count {
+            out.push(next);
+            next += self.g.sizes.get(next as usize).copied().unwrap_or(1);
+        }
+        out
+    }
+
+    fn run_inner(&mut self, n: &Node, id: u16) -> St {
+        match n {
+            Node::Desires(ds) => self.desires(ds, id),
+            // Routines are inlined when the graph is compiled; a stray call does nothing.
+            Node::Routine(_) => St::Fail,
+            Node::First(c) => {
+                let ids = self.child_ids(id, c.children.len());
+                for (ch, cid) in c.children.iter().zip(ids) {
+                    let s = self.run(ch, cid);
+                    if s != St::Fail {
+                        return s;
+                    }
+                }
+                St::Fail
+            }
+            Node::Seq(c) => {
+                let ids = self.child_ids(id, c.children.len());
+                let mut i = self.cursor(id) as usize;
+                while i < c.children.len() {
+                    match self.run(&c.children[i], ids[i]) {
+                        St::Run => {
+                            self.set_cursor(id, i as u16);
+                            return St::Run;
+                        }
+                        St::Fail => {
+                            self.set_cursor(id, 0);
+                            return St::Fail;
+                        }
+                        St::Ok => i += 1,
+                    }
+                    if self.visits > MAX_VISITS {
+                        self.set_cursor(id, i as u16);
+                        return St::Run;
+                    }
+                }
+                self.set_cursor(id, 0);
+                St::Ok
+            }
+            Node::If(i) => {
+                let then_id = id + 1;
+                let then_end = then_id + self.g.sizes.get(then_id as usize).copied().unwrap_or(1);
+                let latched = self.latched.map_or(false, |n| n >= then_id && n < then_end);
+                let holds = latched || self.cond(&i.cond);
+                if holds {
+                    self.run(&i.then, then_id)
+                } else if let Some(e) = &i.otherwise {
+                    let else_id = then_id + self.g.sizes.get(then_id as usize).copied().unwrap_or(1);
+                    self.run(e, else_id)
+                } else {
+                    St::Fail
+                }
+            }
+            Node::Do(a) => {
+                let target = match &a.target {
+                    Some(t) => match self.sensed(t) {
+                        Some(r) => r,
+                        None => return self.leaf_fail(id, &format!("{}: no {} in sight", a.skill, graph::describe_target(t))),
+                    },
+                    None => Resolved::none(),
+                };
+                self.want = (a.want.clone().unwrap_or_default(), a.want_qty.unwrap_or(0));
+                self.leaf(id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), graph::describe(n))
+            }
+            Node::Wait(s) => self.leaf(id, "wait", Resolved::none(), "", s.round().max(1.0) as u32, "", "", graph::describe(n)),
+            Node::Say(s) => {
+                if self.mark_recent(id, 45_000) {
+                    return St::Ok;
+                }
+                let to = match &s.to {
+                    Some(t) => match self.resolve(t) {
+                        Some(r) if r.class == 3 => r.id as u32,
+                        _ => return St::Fail,
+                    },
+                    None => 0,
+                };
+                self.set_mark(id);
+                match perceive::speak(self.ctx, self.me.id, &s.text, to, self.now) {
+                    Ok(()) => St::Ok,
+                    Err(_) => St::Fail,
+                }
+            }
+            Node::Think(reason) => {
+                // A fresh decision is not immediately second-guessed.
+                let settled = self.now.saturating_sub(self.st.deliberated_ms) > 45_000;
+                if settled && !self.mark_recent(id, 90_000) {
+                    self.set_mark(id);
+                    let r = reason.clone();
+                    self.deliberate(&r);
+                }
+                St::Ok
+            }
+        }
+    }
+
+    fn leaf_fail(&mut self, id: u16, why: &str) -> St {
+        let _ = id;
+        self.last_fail = why.to_string();
+        St::Fail
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
+        if self.acting {
+            // A deliberate act holds the body: the graph's work waits for it, but a reflex
+            // (flee, dodge, block, attack, throw) takes the body back at once.
+            match self.ctx.db.activity().id().find(self.me.id).filter(|a| a.node == act::ACT) {
+                Some(a) if living_rules::acts::REFLEXES.contains(&skill) => {
+                    crate::acts::interrupt(self.ctx, a, skill, self.now);
+                    self.acting = false;
+                }
+                Some(_) => return St::Run,
+                None => self.acting = false,
+            }
+        }
+        let rev = self.st.revision;
+        if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
+            if a.node == id && a.revision == rev {
+                self.running = Some(id);
+                self.status = a.label;
+                return St::Run;
+            }
+        }
+        if let Some(l) = self.st.last.clone() {
+            if l.node == id && l.revision == rev {
+                self.st.last = None;
+                if l.ok {
+                    return St::Ok;
+                }
+                self.last_fail = l.why.clone();
+                return St::Fail;
+            }
+        }
+        let want = std::mem::take(&mut self.want);
+        match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), self.now) {
+            Ok(()) => {
+                self.running = Some(id);
+                self.status = self.ctx.db.activity().id().find(self.me.id).map(|a| a.label).unwrap_or(desc);
+                St::Run
+            }
+            Err(why) => {
+                self.last_fail = format!("{skill}: {why}");
+                St::Fail
+            }
+        }
+    }
+
+    // ---- targets ---------------------------------------------------------------
+
+    fn relation(&self, other: u32) -> Option<Relation> {
+        self.ctx.db.relation().by_pair().filter((self.me.id, other)).next()
+    }
+
+    fn relation_ok(&self, other: u32, want: &str) -> bool {
+        relation_ok(self.ctx, self.me.id, other, want)
+    }
+
+    fn visible_creature(&mut self, id: u32) -> Option<Resolved> {
+        let c = self.scene().creatures.iter().find(|c| c.id == id)?.clone();
+        let ch = self.ctx.db.character().id().find(id)?;
+        Some(Resolved { class: 3, id: id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name })
+    }
+
+    fn smelled_creature(&mut self, id: u32) -> Option<Resolved> {
+        let c = self.smelled().iter().find(|c| c.id == id)?.clone();
+        let ch = self.ctx.db.character().id().find(id)?;
+        Some(Resolved { class: 3, id: id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name })
+    }
+
+    /// Resolve a target the body acts on (a skill's, an act's, `can`, `smells`): what it sees,
+    /// and failing that a creature it smells. Other conditions (`sees`, `near`, `count`,
+    /// `health_of`) and speech stay with sight.
+    fn sensed(&mut self, t: &Target) -> Option<Resolved> {
+        self.smell = true;
+        let r = self.resolve(t);
+        self.smell = false;
+        r
+    }
+
+    fn resolve(&mut self, t: &Target) -> Option<Resolved> {
+        let now = self.now;
+        match t {
+            // Oneself is a creature like any other (one can tend one's own wounds).
+            Target::Me => Some(Resolved { class: 3, id: self.me.id as u64, at: self.at, kind: self.me.kind.to_string(), name: self.me.name.clone() }),
+            Target::Attacker => {
+                if self.vit.hurt_by != 0 && now.saturating_sub(self.vit.hurt_ms) < 60_000 {
+                    self.visible_creature(self.vit.hurt_by)
+                } else {
+                    None
+                }
+            }
+            Target::Speaker => {
+                if self.st.speaker != 0 && now.saturating_sub(self.st.heard_ms) < 60_000 {
+                    self.visible_creature(self.st.speaker)
+                } else {
+                    None
+                }
+            }
+            Target::Suitor => {
+                let window = (common::laws(self.ctx).bond_window_s * 1000.0) as u64;
+                let offer = self.ctx.db.bond_offer().to().filter(self.me.id).filter(|o| now.saturating_sub(o.at_ms) <= window).max_by_key(|o| o.at_ms)?;
+                self.visible_creature(offer.from)
+            }
+            Target::Partner => {
+                let me = self.me.id;
+                let db = &self.ctx.db;
+                let youngest = db.character().parent_a().filter(me).chain(db.character().parent_b().filter(me)).max_by_key(|c| c.born_ms)?;
+                let other = if youngest.parent_a == me { youngest.parent_b } else { youngest.parent_a };
+                if other == 0 {
+                    return None;
+                }
+                self.visible_creature(other)
+            }
+            Target::Parent => {
+                let (a, b) = (self.me.parent_a, self.me.parent_b);
+                let pa = if a != 0 { self.visible_creature(a) } else { None };
+                let pb = if b != 0 { self.visible_creature(b) } else { None };
+                match (pa, pb) {
+                    (Some(x), Some(y)) => Some(if dist(self.at, x.at) <= dist(self.at, y.at) { x } else { y }),
+                    (x, y) => x.or(y),
+                }
+            }
+            Target::Home => {
+                if let Some(p) = self.place("home") {
+                    return Some(p);
+                }
+                Some(Resolved::point((self.me.home_x, self.me.home_y)))
+            }
+            Target::Wander => Some(Resolved::point(self.at)),
+            Target::Place(name) => self.place(name),
+            Target::At([x, y]) => Some(Resolved::point((*x, *y))),
+            Target::Id(id) => self.visible_creature(*id).or_else(|| if self.smell { self.smelled_creature(*id) } else { None }),
+            Target::Named(name) => {
+                let ids: Vec<u32> = self.scene().creatures.iter().filter(|c| &*c.kind == "person").map(|c| c.id).collect();
+                let id = ids.into_iter().find(|id| self.ctx.db.character().id().find(*id).map_or(false, |c| c.name.eq_ignore_ascii_case(name)))?;
+                self.visible_creature(id)
+            }
+            Target::Nearest(f) => self.nearest(f),
+        }
+    }
+
+    fn place(&self, name: &str) -> Option<Resolved> {
+        self.ctx
+            .db
+            .place()
+            .actor()
+            .filter(self.me.id)
+            .find(|p| p.name.eq_ignore_ascii_case(name))
+            .map(|p| Resolved { class: 4, id: p.id, at: (p.x, p.y), kind: "place".into(), name: p.name })
+    }
+
+    fn nearest(&mut self, f: &Filter) -> Option<Resolved> {
+        match living_rules::catalog::kind_class(&f.kind)? {
+            living_rules::catalog::KindClass::Creature => {
+                // Seen first; a creature smelled farther away only for a target the body acts on.
+                let seen: Vec<(u32, Rc<str>, f32)> = self.scene().creatures.iter().map(|c| (c.id, c.kind.clone(), c.dist)).collect();
+                let scent = if self.smell { common::scent_of(&self.me.kind) } else { None };
+                let (ctx, me) = (self.ctx, self.me.id);
+                let ok = |id: u32| f.relation.as_deref().map_or(true, |rel| relation_ok(ctx, me, id, rel)) && ctx.db.character().id().find(id).is_some();
+                let smelled = || self.smelled().iter().map(|c| (c.id, c.kind.clone(), c.dist)).collect();
+                match living_rules::species::pick_nearest(&f.kind, &seen, scent.as_ref(), smelled, ok)? {
+                    (id, false) => self.visible_creature(id),
+                    (id, true) => self.smelled_creature(id),
+                }
+            }
+            living_rules::catalog::KindClass::Resource => {
+                let now = self.now;
+                let ctx = self.ctx;
+                self.scene()
+                    .resources
+                    .iter()
+                    .find(|(n, _)| n.kind == f.kind && common::amount_now(ctx, n, now) >= 1.0)
+                    .map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
+            }
+            living_rules::catalog::KindClass::Terrain => {
+                // The nearest tile of that ground within sight.
+                let map = common::map(self.ctx);
+                let sight = if common::night(&self.w, self.now) { living_rules::NIGHT_SIGHT } else { living_rules::SIGHT };
+                let r = sight as i32;
+                let (cx, cy) = (self.at.0.floor() as i32, self.at.1.floor() as i32);
+                let mut best: Option<((f32, f32), f32)> = None;
+                // Grazed-bare ground doesn't count as grass to go to.
+                let mut bare: std::collections::HashMap<u32, bool> = std::collections::HashMap::new();
+                for dy in -r..=r {
+                    for dx in -r..=r {
+                        if map.get(cx + dx, cy + dy).name() != f.kind {
+                            continue;
+                        }
+                        let chunk = living_rules::map::chunk_of((cx + dx) as f32, (cy + dy) as f32);
+                        let (ctx, now) = (self.ctx, self.now);
+                        if *bare.entry(chunk).or_insert_with(|| common::pasture_now(ctx, chunk, now) < 1.0) {
+                            continue;
+                        }
+                        let p = ((cx + dx) as f32 + 0.5, (cy + dy) as f32 + 0.5);
+                        let d = dist(self.at, p);
+                        if d <= sight && best.map_or(true, |(_, bd)| d < bd) {
+                            best = Some((p, d));
+                        }
+                    }
+                }
+                best.map(|(p, _)| Resolved { class: 4, id: 0, at: p, kind: f.kind.clone(), name: String::new() })
+            }
+            living_rules::catalog::KindClass::Structure => {
+                let me = self.me.id;
+                self.scene()
+                    .structures
+                    .iter()
+                    .find(|(s, _)| s.kind == f.kind && (!f.mine || s.owner == me))
+                    .map(|(s, _)| Resolved { class: 2, id: s.id, at: (s.x, s.y), kind: s.kind.clone(), name: String::new() })
+            }
+        }
+    }
+
+    // ---- conditions ------------------------------------------------------------
+
+    fn cond(&mut self, c: &Cond) -> bool {
+        match c {
+            Cond::Hunger(x) => x.test(self.needs.hunger),
+            Cond::Energy(x) => x.test(self.needs.energy),
+            Cond::Health(x) => x.test(self.needs.hp),
+            Cond::Has(h) => {
+                let n = if h.item == "food" { common::food_count(self.ctx, self.me.id as u64) } else { common::inv_count(self.ctx, self.me.id as u64, &h.item) };
+                n >= h.at_least
+            }
+            Cond::Sees(t) => match t {
+                Target::Place(_) | Target::At(_) | Target::Home => {
+                    let r = common::sight(self.ctx, &self.w, self.now);
+                    self.resolve(t).map_or(false, |p| dist(self.at, p.at) <= r)
+                }
+                _ => self.resolve(t).is_some(),
+            },
+            Cond::Near(n) => self.resolve(&n.target).map_or(false, |p| dist(self.at, p.at) <= n.within),
+            // A creature within the body's scent (seen or not); never true without a scent.
+            Cond::Smells(t) => {
+                let Some(scent) = common::scent_of(&self.me.kind) else { return false };
+                let (at, me) = (self.at, self.me.id as u64);
+                self.sensed(t).is_some_and(|r| r.class == 3 && r.id != me && scent.reaches(&r.kind, dist(at, r.at)))
+            }
+            Cond::Count(c) => {
+                let at = self.at;
+                self.scene();
+                let scene = self.scene.as_ref().expect("scene built");
+                let mut n = 0u32;
+                for x in &scene.creatures {
+                    if dist(at, x.pos) > c.within || (c.of.kind != "creature" && *x.kind != *c.of.kind) {
+                        continue;
+                    }
+                    if let Some(rel) = &c.of.relation {
+                        if !self.relation_ok(x.id, rel) {
+                            continue;
+                        }
+                    }
+                    n += 1;
+                }
+                c.at_least.map_or(true, |a| n >= a) && c.at_most.map_or(true, |b| n <= b)
+            }
+            Cond::HealthOf(h) => {
+                let Some(r) = self.resolve(&h.target).filter(|r| r.class == 3) else { return false };
+                let Some(v) = self.ctx.db.vitals().id().find(r.id as u32) else { return false };
+                let pct = common::needs(&v, self.now).hp / v.max_hp.max(1.0) * 100.0;
+                h.above.map_or(true, |a| pct > a) && h.below.map_or(true, |b| pct < b)
+            }
+            Cond::HurtWithin(s) => self.vit.hurt_ms != 0 && self.now.saturating_sub(self.vit.hurt_ms) as f32 <= s * 1000.0,
+            Cond::HeardWithin(s) => self.st.heard_ms != 0 && self.now.saturating_sub(self.st.heard_ms) as f32 <= s * 1000.0,
+            Cond::Night(b) => common::night(&self.w, self.now) == *b,
+            Cond::Hour(x) => x.test(common::hour(&self.w, self.now)),
+            Cond::Threatened(b) => {
+                let me = self.me.id;
+                let now = self.now;
+                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && matches!(a.skill.as_str(), "attack" | "throw" | "shoot" | "threaten"));
+                coming == *b
+            }
+            Cond::Believes(b) => self
+                .ctx
+                .db
+                .judgment()
+                .actor()
+                .filter(self.me.id)
+                .find(|j| j.key.eq_ignore_ascii_case(&b.key))
+                .map_or(false, |j| j.value > b.above),
+            Cond::Can(a) => {
+                let target = match &a.target {
+                    Some(t) => match self.sensed(t) {
+                        Some(r) => r,
+                        None => return false,
+                    },
+                    None => act::Resolved::none(),
+                };
+                act::can(self.ctx, self.me.id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), self.now)
+            }
+            Cond::Chance(p) => self.ctx.rng().gen_range(0.0f32..1.0) < *p,
+            Cond::All(v) => v.iter().all(|x| self.cond(x)),
+            Cond::Any(v) => v.iter().any(|x| self.cond(x)),
+            Cond::Not(x) => !self.cond(x),
+        }
+    }
+
+    // ---- bookkeeping -----------------------------------------------------------
+
+    /// Bodily alerts become percepts once per episode.
+    fn alerts(&mut self) {
+        if !self.me.ai {
+            return;
+        }
+        let night = common::night(&self.w, self.now);
+        let facts_fire = self.vit.hp_rate < 0.0 && night && self.needs.hunger < 100.0;
+        let checks: [(u32, bool, &str, f32); 5] = [
+            (1, self.needs.hunger >= 80.0, "You are very hungry.", 0.5),
+            (64, self.needs.hunger >= 97.0, "You are starving: your body is wasting away.", 0.8),
+            (2, self.needs.hp < 40.0, "You are badly hurt.", 0.7),
+            (4, facts_fire, "You are freezing in the night air; you need a fire or shelter.", 0.6),
+            (8, self.needs.energy < 12.0, "You are exhausted.", 0.4),
+        ];
+        // Psychological drives: an uneventful stretch makes curious people restless; time without
+        // company makes sociable people lonely. They are felt, not prescribed: the mind decides.
+        let traits = common::traits_of(self.ctx, self.me.id);
+        let trait_of = |k: &str| match k {
+            "curiosity" => traits[0],
+            "sociability" => traits[1],
+            _ => traits[2],
+        };
+        let calm = self.needs.hunger < 60.0 && self.needs.energy > 35.0 && self.needs.hp > 60.0;
+        let quiet_ms = self.now.saturating_sub(self.st.deliberated_ms);
+        let restless_after = 60_000.0 * (12.0 - trait_of("curiosity") / 12.0);
+        let lonely_after = 60_000.0 * (14.0 - trait_of("sociability") / 10.0);
+        let alone_ms = self.now.saturating_sub(self.st.heard_ms.max(self.st.spoke_ms));
+        // Grown people long for a child of their own, sooner the more nurturing they were born.
+        let broody = self.me.kind == "person" && self.me.stage == 2 && calm && !common::night(&self.w, self.now) && {
+            let me = self.me.id;
+            let db = &self.ctx.db;
+            let expecting = db.expecting().iter().any(|e| e.a == me || e.b == me);
+            let rearing = db.rearing().id().find(me).map_or(false, |r| r.until_ms > self.now);
+            let last = db.character().parent_a().filter(me).chain(db.character().parent_b().filter(me)).map(|c| c.born_ms).max().unwrap_or(self.me.born_ms);
+            let wait = 60_000.0 * (20.0 - trait_of("nurture") / 6.0);
+            !expecting && !rearing && self.now.saturating_sub(last) as f32 > wait
+        };
+        // Who one would have a child with, when there is someone: the other parent of one's youngest.
+        let longing = if broody {
+            let me = self.me.id;
+            let db = &self.ctx.db;
+            let partner = db.character().parent_a().filter(me).chain(db.character().parent_b().filter(me)).max_by_key(|c| c.born_ms).map(|c| if c.parent_a == me { c.parent_b } else { c.parent_a }).filter(|p| *p != 0 && db.character().id().find(*p).map_or(false, |c| c.alive));
+            // Without a child yet, whoever one calls one's partner.
+            let named = partner.map(|p| (p, true)).or_else(|| {
+                db.relation().actor().filter(me).find(|r| r.label.to_lowercase().contains("partner") && db.character().id().find(r.other).map_or(false, |c| c.alive)).map(|r| (r.other, false))
+            });
+            match named {
+                Some((p, true)) => format!("You long for another child with {} (#{p}).", common::name_of(self.ctx, p)),
+                Some((p, false)) => format!("You long for a child with {} (#{p}).", common::name_of(self.ctx, p)),
+                None => "You long for a child of your own.".to_string(),
+            }
+        } else {
+            String::new()
+        };
+        // Knowing something no one else alive knows weighs on a grown person now and then
+        // (checked about once a minute): it dies with them unless they pass it on.
+        let mut sole = String::new();
+        let (checked, felt) = LEGACY.with(|l| l.borrow().get(&self.me.id).copied().unwrap_or((0, 0)));
+        if self.me.kind == "person" && self.me.stage >= 2 && calm && self.now.saturating_sub(checked) >= 60_000 {
+            LEGACY.with(|l| l.borrow_mut().insert(self.me.id, (self.now, felt)));
+            let me = self.me.id;
+            let db = &self.ctx.db;
+            let mine: Vec<String> = db.know_how().actor().filter(me).map(|k| k.technique).collect();
+            let alone: Vec<String> = mine
+                .into_iter()
+                .filter(|t| !db.know_how().iter().any(|k| k.actor != me && &k.technique == t && db.character().id().find(k.actor).map_or(false, |c| c.alive)))
+                .collect();
+            if !alone.is_empty() {
+                sole = format!("You alone know how to {}: when you are gone, it goes with you.", alone.join(" and "));
+            }
+        }
+        // Felt again at most every 15 minutes while it stays true.
+        if !sole.is_empty() && self.now.saturating_sub(felt) >= 15 * 60_000 {
+            let now = self.now;
+            LEGACY.with(|l| l.borrow_mut().insert(self.me.id, (now, now)));
+            percept(self.ctx, &self.me, self.now, "feeling", self.me.id, 0, self.at, sole.clone(), 0.5);
+            self.deliberate(&format!("You feel something: {sole}"));
+        }
+        let drives: [(u32, bool, String); 3] = [
+            (16, calm && quiet_ms as f32 > restless_after, "You feel restless: your days have been the same for a while.".into()),
+            (32, calm && self.st.heard_ms > 0 && alone_ms as f32 > lonely_after, "You feel lonely: it has been a long time since you spoke with anyone.".into()),
+            (128, broody, longing),
+        ];
+        for (bit, on, text) in drives {
+            let was = self.st.alerts & bit != 0;
+            if on && !was {
+                self.st.alerts |= bit;
+                percept(self.ctx, &self.me, self.now, "feeling", self.me.id, 0, self.at, text.clone(), 0.5);
+                self.deliberate(&format!("You feel something: {text}"));
+            } else if !on && was {
+                self.st.alerts &= !bit;
+            }
+        }
+        for (bit, on, text, sal) in checks {
+            let was = self.st.alerts & bit != 0;
+            if on && !was {
+                self.st.alerts |= bit;
+                percept(self.ctx, &self.me, self.now, "body", self.me.id, 0, self.at, text.into(), sal);
+                let urgent = match bit {
+                    1 => common::food_count(self.ctx, self.me.id as u64) == 0,
+                    2 | 4 | 64 => true,
+                    _ => false,
+                };
+                if urgent {
+                    let mut why = format!("Your body: {text}");
+                    // Starving: show what one's hunger actually runs, so a way of eating that
+                    // cannot feed (e.g. one that only waits) can be seen and changed.
+                    if bit == 64 {
+                        // The routine one's food desire calls (seeded as "find food and eat").
+                        let food_routine = self.ctx.db.brain().id().find(self.me.id).and_then(|b| living_rules::graph::parse(&b.graph).ok()).and_then(|g| match g.root {
+                            Node::Desires(ds) => ds.iter().find(|d| d.want.eq_ignore_ascii_case("food")).and_then(|d| match &*d.body {
+                                Node::Routine(r) => Some(r.clone()),
+                                _ => None,
+                            }),
+                            _ => None,
+                        });
+                        let name = food_routine.unwrap_or_else(|| "eat".to_string());
+                        if let Some(r) = self.ctx.db.routine().actor().filter(self.me.id).find(|r| crate::common::same_routine(&r.name, &name)) {
+                            if let Ok(g) = living_rules::graph::parse(&r.graph) {
+                                let how: String = living_rules::graph::outline(&g.root).lines().map(|l| l.trim()).collect::<Vec<_>>().join("; ");
+                                why.push_str(&format!(" Your hunger runs your routine \"{}\", which does: {}. It has not fed you.", r.name, how.chars().take(300).collect::<String>()));
+                            }
+                        }
+                    }
+                    self.deliberate(&why);
+                }
+            } else if !on && was {
+                self.st.alerts &= !bit;
+            }
+        }
+    }
+
+    /// Look up (and refresh) bodily familiarity; returns the previous record, if any.
+    fn familiarity(&mut self, thing: u64) -> Option<Familiar> {
+        let prev = self.ctx.db.familiar().by_actor_thing().filter((self.me.id, thing)).next();
+        match prev.clone() {
+            Some(mut f) => {
+                if self.now.saturating_sub(f.last_ms) > 30_000 {
+                    f.last_ms = self.now;
+                    f.times += 1;
+                    self.ctx.db.familiar().id().update(f);
+                }
+            }
+            None => {
+                let row = self.ctx.db.familiar().insert(Familiar { id: 0, actor: self.me.id, thing, first_ms: self.now, last_ms: self.now, times: 1 });
+                if row.id % 16 == 0 {
+                    let mut all: Vec<(u64, u64)> = self.ctx.db.familiar().actor().filter(self.me.id).map(|f| (f.last_ms, f.id)).collect();
+                    if all.len() > FAMILIAR_LIMIT {
+                        all.sort_unstable();
+                        for (_, id) in &all[..all.len() - FAMILIAR_LIMIT] {
+                            self.ctx.db.familiar().id().delete(*id);
+                        }
+                    }
+                }
+            }
+        }
+        prev
+    }
+
+    /// Recently checked (fast path that avoids familiarity lookups every second).
+    fn recently_seen(&mut self, key: u32) -> bool {
+        let now = self.now;
+        if let Some(s) = self.st.seen.iter_mut().find(|s| s.id == key) {
+            if now.saturating_sub(s.at_ms) < 90_000 {
+                if now.saturating_sub(s.at_ms) > 45_000 {
+                    s.at_ms = now;
+                }
+                return true;
+            }
+            s.at_ms = now;
+            return false;
+        }
+        self.st.seen.push(Seen { id: key, at_ms: now });
+        if self.st.seen.len() > 96 {
+            self.st.seen.remove(0);
+        }
+        false
+    }
+
+    /// Turn what is new to this character into experiences: unfamiliar regions, first
+    /// encounters, long-absent faces, nearby danger and newly noticed structures. Routine
+    /// re-perception only refreshes familiarity, so experience volume follows novelty.
+    fn noticed(&mut self) {
+        if !self.me.ai {
+            return;
+        }
+        let now = self.now;
+        let at = self.at;
+        let day = self.w.day_ms.max(1);
+
+        // Regions.
+        let chunk = living_rules::map::chunk_of(at.0, at.1);
+        if !self.recently_seen(0x8000_0000 | chunk) && self.familiarity(FAM_REGION | chunk as u64).is_none() {
+            let text = self.region_summary();
+            percept(self.ctx, &self.me, now, "discovered", 0, 0, at, text, 0.5);
+        }
+
+        // Creatures.
+        let me_kind = self.me.kind.clone();
+        let cands: Vec<NearCreature> = self.scene().creatures.iter().filter(|c| &*c.kind != "deer" || me_kind != "person").cloned().collect();
+        let people = cands.iter().filter(|c| &*c.kind == "person").count();
+        let laws = common::laws(self.ctx);
+        let crowded = people as f32 > laws.crowd;
+        // Crowds and nearby danger are noticed when they begin, not re-announced while they last.
+        if crowded && self.st.alerts & IN_CROWD == 0 {
+            percept(self.ctx, &self.me, now, "saw", 0, 0, at, format!("You are among a crowd of about {people} people."), 0.3);
+        }
+        self.st.alerts = if crowded { self.st.alerts | IN_CROWD } else { self.st.alerts & !IN_CROWD };
+        // Hysteresis: danger begins inside 8 tiles and ends beyond 12.
+        let was_near = self.st.alerts & WOLF_NEAR != 0;
+        let wolf_near = cands.iter().any(|c| &*c.kind == "wolf" && c.dist <= if was_near { laws.danger_far } else { laws.danger_near });
+        let wolf_arrived = wolf_near && self.st.alerts & WOLF_NEAR == 0;
+        self.st.alerts = if wolf_near { self.st.alerts | WOLF_NEAR } else { self.st.alerts & !WOLF_NEAR };
+        let mut announced = 0;
+        for c in cands {
+            if announced >= 2 {
+                break;
+            }
+            if crowded && &*c.kind == "person" && self.relation(c.id).is_none() {
+                continue;
+            }
+            let danger = wolf_arrived && &*c.kind == "wolf" && c.dist <= laws.danger_near;
+            if self.recently_seen(c.id) && !danger {
+                continue;
+            }
+            let prev = self.familiarity(FAM_CREATURE | c.id as u64);
+            let Some(ch) = self.ctx.db.character().id().find(c.id) else { continue };
+            let who = common::label_for(self.ctx, &self.me, c.id);
+            let doing = self.ctx.db.activity().id().find(c.id).map(|a| format!(", {}", a.label)).unwrap_or_default();
+            let place = format!("{:.0} tiles {}{doing}", c.dist, direction(at, c.pos));
+            let (text, sal) = match prev {
+                None if ch.kind == "person" || ch.kind == self.me.kind => (format!("For the first time you see {who}, {place}."), 0.45),
+                None => (format!("You see {who} {place}."), 0.65),
+                Some(f) if now.saturating_sub(f.last_ms) > day => (format!("You see {who} again after a long time, {place}."), 0.25),
+                Some(_) if danger => {
+                    (format!("{} is close: {place}.", if who.starts_with("a ") { format!("A{}", &who[1..]) } else { who.clone() }), 0.6)
+                }
+                Some(_) => continue,
+            };
+            announced += 1;
+            percept(self.ctx, &self.me, now, "saw", c.id, 0, c.pos, text, sal);
+        }
+
+        // Structures.
+        let structures: Vec<(u64, String, u32, (f32, f32), f32)> = self.scene().structures.iter().map(|(s, d)| (s.id, s.kind.clone(), s.owner, (s.x, s.y), *d)).collect();
+        for (id, kind, owner, pos, dist) in structures {
+            if self.recently_seen(0x4000_0000 | (id as u32 & 0x3fff_ffff)) || self.familiarity(FAM_STRUCTURE | id).is_some() {
+                continue;
+            }
+            if owner == self.me.id {
+                continue;
+            }
+            let by = if owner != 0 && kind != "remains" { format!(" built by {}", common::name_of(self.ctx, owner)) } else if kind == "remains" { format!(" — the remains of {}", common::name_of(self.ctx, owner)) } else { String::new() };
+            let text = format!("You notice a {kind}{by}, {dist:.0} tiles {}.", direction(at, pos));
+            percept(self.ctx, &self.me, now, "saw", owner, 0, pos, text, if kind == "remains" { 0.8 } else { 0.35 });
+        }
+    }
+
+    /// One-line description of the surroundings when a region is first discovered.
+    fn region_summary(&mut self) -> String {
+        let at = self.at;
+        let now = self.now;
+        let mut kinds: Vec<(String, u32)> = Vec::new();
+        let ctx = self.ctx;
+        for (n, _) in &self.scene().resources {
+            if common::amount_now(ctx, n, now) < 0.0 {
+                continue;
+            }
+            match kinds.iter_mut().find(|k| k.0 == n.kind) {
+                Some(k) => k.1 += 1,
+                None => kinds.push((n.kind.clone(), 1)),
+            }
+        }
+        kinds.sort_by(|a, b| b.1.cmp(&a.1));
+        let res = kinds.iter().map(|(k, n)| format!("{n} {}", k.replace('_', " "))).collect::<Vec<_>>().join(", ");
+        let ctx = self.ctx;
+        let structures: Vec<String> = self
+            .scene()
+            .structures
+            .iter()
+            .take(4)
+            .map(|(s, _)| if s.owner != 0 { format!("{}'s {}", common::name_of(ctx, s.owner), s.kind) } else { s.kind.clone() })
+            .collect();
+        let map = common::map(self.ctx);
+        let mut terrain = Vec::new();
+        for (t, word) in [(living_rules::map::Terrain::Water, "water"), (living_rules::map::Terrain::Forest, "forest")] {
+            let mut best: Option<(f32, (f32, f32))> = None;
+            for dy in -8i32..=8 {
+                for dx in -8i32..=8 {
+                    if map.get(at.0 as i32 + dx, at.1 as i32 + dy) == t {
+                        let p = (at.0.floor() + dx as f32 + 0.5, at.1.floor() + dy as f32 + 0.5);
+                        let d = dist(at, p);
+                        if best.map_or(true, |b| d < b.0) {
+                            best = Some((d, p));
+                        }
+                    }
+                }
+            }
+            if let Some((_, p)) = best {
+                terrain.push(format!("{word} to the {}", direction(at, p)));
+            }
+        }
+        let mut parts = vec![format!("You come to a place new to you, around ({:.0}, {:.0})", at.0, at.1)];
+        if !res.is_empty() {
+            parts.push(format!("here: {res}"));
+        }
+        if !terrain.is_empty() {
+            parts.push(terrain.join(", "));
+        }
+        if !structures.is_empty() {
+            parts.push(format!("you see {}", structures.join(", ")));
+        }
+        parts.join("; ") + "."
+    }
+
+    fn after(mut self, result: St, root: &Node) {
+        let ctx = self.ctx;
+        let id = self.me.id;
+        // Interrupt an activity no running leaf owns anymore (the branch lost priority);
+        // a deliberate act is not the graph's to interrupt (only a reflex does, in `leaf`).
+        if let Some(a) = ctx.db.activity().id().find(id) {
+            if a.node == act::ACT {
+                self.running = Some(act::ACT);
+                self.status = format!("{} (decided)", a.label);
+                self.path.clear();
+            } else if self.running != Some(a.node) || a.revision != self.st.revision {
+                act::cancel(ctx, a, self.now, None);
+            }
+        }
+        if self.me.ai {
+            match result {
+                // A plan with nothing applicable backs off longer than one that hit a concrete
+                // obstacle, so an all-guards graph doesn't re-think several times a minute.
+                St::Fail if !self.mark_recent(ROOT_MARK, if self.last_fail.is_empty() { 60_000 } else { 40_000 }) => {
+                    self.set_mark(ROOT_MARK);
+                    let why = if self.last_fail.is_empty() { "no branch applies".to_string() } else { self.last_fail.clone() };
+                    self.deliberate(&format!("Nothing in my current plan works right now ({why})."));
+                }
+                St::Ok if matches!(root, Node::Seq(_)) && !self.mark_recent(ROOT_MARK, 8_000) => {
+                    self.set_mark(ROOT_MARK);
+                    self.deliberate("I finished my plan.");
+                }
+                _ => {}
+            }
+            if self.st.fails >= 4 && !self.mark_recent(FAIL_MARK, 30_000) {
+                self.set_mark(FAIL_MARK);
+                self.st.fails = 0;
+                let why = if self.last_fail.is_empty() { "things keep going wrong".to_string() } else { self.last_fail.clone() };
+                self.deliberate(&format!("My actions keep failing ({why})."));
+            }
+            let base = common::species(&self.me.kind).map(|s| s.cognition.reflect_s * 1000).unwrap_or(150_000);
+            let period = base + (id as u64 % 7) * 20_000;
+            if self.now.saturating_sub(self.st.deliberated_ms) > period && !self.mark_recent(REFLECT_MARK, period) {
+                self.set_mark(REFLECT_MARK);
+                self.deliberate("A quiet moment to take stock of how things are going.");
+            }
+            self.noticed();
+        }
+        if result != St::Run && self.running != Some(act::ACT) {
+            self.status = match result {
+                St::Ok => "done".into(),
+                _ => {
+                    if self.last_fail.is_empty() {
+                        "idle".into()
+                    } else {
+                        format!("stuck: {}", self.last_fail)
+                    }
+                }
+            };
+            self.path.clear();
+        }
+        // Merge the fields evaluation owns into the current row (actions and speech may
+        // have updated others during this evaluation).
+        let Some(mut cur) = ctx.db.mind_state().id().find(id) else { return };
+        let before = cur.clone();
+        cur.active = self.path.clone();
+        cur.status = self.status.clone();
+        cur.cursors = self.st.cursors.clone();
+        // Speech and signal marks may be written during evaluation; keep their stored
+        // values. The top three marks are evaluator timers, despite sharing the high range.
+        let mut marks: Vec<Mark> = self.st.marks.iter().filter(|m| m.node < 0xD000 || m.node >= REFLECT_MARK).cloned().collect();
+        marks.extend(cur.marks.iter().filter(|m| m.node >= 0xD000 && m.node < REFLECT_MARK).cloned());
+        cur.marks = marks;
+        cur.seen = self.st.seen.clone();
+        cur.alerts = self.st.alerts;
+        if self.st.last != self.orig.last && cur.last == self.orig.last {
+            cur.last = self.st.last.clone();
+        }
+        if self.st.fails == 0 && self.orig.fails > 0 && cur.fails == self.orig.fails {
+            cur.fails = 0;
+        }
+        if cur != before {
+            ctx.db.mind_state().id().update(cur);
+        }
+    }
+}
+
+/// Whether `me`'s relationship to `other` fits a selector's relation filter.
+fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
+    let r = ctx.db.relation().by_pair().filter((me, other)).next();
+    let label = r.as_ref().map(|r| r.label.to_lowercase()).unwrap_or_default();
+    let trust = r.as_ref().map(|r| r.trust).unwrap_or(0.0);
+    match want {
+        "friend" => r.is_some() && (trust >= 25.0 || ["friend", "family", "partner", "ally", "kin"].iter().any(|l| label.contains(l))),
+        "enemy" => r.is_some() && (trust <= -25.0 || ["enemy", "rival", "threat", "thief"].iter().any(|l| label.contains(l))),
+        "family" => ["family", "partner", "kin", "child", "parent", "sibling"].iter().any(|l| label.contains(l)),
+        "stranger" => r.is_none() || label.contains("stranger"),
+        "any" | "" => true,
+        other => label.contains(&other.to_lowercase()),
+    }
+}

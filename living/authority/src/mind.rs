@@ -1,0 +1,533 @@
+//! Reducers used by LLM mind services. A mind may act only for characters it controls.
+//! Graphs are validated here; untrusted model output never changes world facts directly.
+
+use crate::act::{ACT, ORPHAN};
+use crate::tables::*;
+use crate::{common, perceive};
+use spacetimedb::{ReducerContext, SpacetimeType, Table};
+
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct ThoughtIn {
+    pub kind: String,
+    pub summary: String,
+    pub detail: String,
+    pub latency_ms: u32,
+    pub tokens: u32,
+    pub model: String,
+    pub reference: String,
+}
+
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct PersonaIn {
+    pub narrative: String,
+    pub values: Vec<String>,
+    pub goals: Vec<String>,
+    pub traits: String,
+    pub mood: String,
+}
+
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct RelationIn {
+    pub other: u32,
+    pub trust: f32,
+    pub affinity: f32,
+    pub label: String,
+    pub note: String,
+}
+
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct BeliefIn {
+    pub about: String,
+    pub text: String,
+    pub confidence: f32,
+}
+
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct JudgmentIn {
+    pub key: String,
+    pub value: f32,
+    pub why: String,
+}
+
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct PlaceIn {
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct MindUpdate {
+    pub persona: Option<PersonaIn>,
+    pub relations: Vec<RelationIn>,
+    /// Replaces the belief projection when present.
+    pub beliefs: Option<Vec<BeliefIn>>,
+    pub judgments: Vec<JudgmentIn>,
+    pub places: Vec<PlaceIn>,
+    pub thought: Option<ThoughtIn>,
+    /// The relations, judgments and places given are the complete current set (projected
+    /// from the mind); rows not among them are removed.
+    pub replace: bool,
+}
+
+const MAX_THOUGHTS: usize = 60;
+
+fn authorize(ctx: &ReducerContext, actor: u32) -> Result<Character, String> {
+    let c = ctx.db.character().id().find(actor).ok_or("no such character")?;
+    if c.controller != ctx.sender() {
+        return Err("not your character".into());
+    }
+    Ok(c)
+}
+
+fn clip(s: &str, n: usize) -> String {
+    if s.len() <= n {
+        return s.to_string();
+    }
+    let mut end = n;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    s[..end].to_string()
+}
+
+pub fn add_thought(ctx: &ReducerContext, actor: u32, t: ThoughtIn, now: u64) {
+    ctx.db.thought().insert(Thought {
+        id: 0,
+        actor,
+        at_ms: now,
+        kind: clip(&t.kind, 32),
+        summary: clip(&t.summary, 600),
+        detail: clip(&t.detail, 16_000),
+        latency_ms: t.latency_ms,
+        tokens: t.tokens,
+        model: clip(&t.model, 64),
+        reference: clip(&t.reference, 64),
+    });
+    let mut ids: Vec<u64> = ctx.db.thought().actor().filter(actor).map(|t| t.id).collect();
+    if ids.len() > MAX_THOUGHTS {
+        ids.sort_unstable();
+        for id in &ids[..ids.len() - MAX_THOUGHTS] {
+            ctx.db.thought().id().delete(*id);
+        }
+    }
+}
+
+/// Install a validated graph; the current activity is kept as an orphan the new graph may adopt.
+/// A routine as a mind sends it: its name and graph (empty graph = retire it).
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct RoutineIn {
+    pub name: String,
+    pub graph: String,
+}
+
+/// Most routines a character keeps.
+pub const MAX_ROUTINES: usize = 40;
+
+/// Add, change or retire routines; the character's graph is recompiled with them.
+pub fn set_routines(ctx: &ReducerContext, actor: u32, routines: &[RoutineIn], source: &str, now: u64) -> Result<Vec<String>, String> {
+    let kind = ctx.db.character().id().find(actor).map(|c| c.kind).unwrap_or_default();
+    let sp = common::species(&kind);
+    let mut notes = Vec::new();
+    for r in routines {
+        let name = living_rules::normalize::routine_name(&r.name);
+        if name.is_empty() {
+            continue;
+        }
+        let existing = ctx.db.routine().actor().filter(actor).find(|x| living_rules::normalize::routine_name(&x.name) == name);
+        if r.graph.trim().is_empty() {
+            if let Some(x) = existing {
+                ctx.db.routine_stat().id().delete(x.id);
+                ctx.db.routine().id().delete(x.id);
+                notes.push(format!("retired {name}"));
+            }
+            continue;
+        }
+        let g = match living_rules::graph::parse(&r.graph) {
+            Ok(g) => g,
+            Err(e) => {
+                notes.push(format!("{name}: {e}"));
+                continue;
+            }
+        };
+        if let Some(sp) = &sp {
+            if let Some(bad) = living_rules::graph::skills_used(&g.root).into_iter().find(|s| if s == "say" { !sp.speaks } else { !sp.allows(s) }) {
+                notes.push(format!("{name}: a {kind} cannot {bad}"));
+                continue;
+            }
+        }
+        match existing {
+            Some(mut x) => {
+                // How a routine has gone describes this version: a new one starts afresh.
+                ctx.db.routine_stat().id().delete(x.id);
+                x.name = name.clone();
+                x.graph = g.to_json();
+                x.revision += 1;
+                x.source = source.into();
+                x.updated_ms = now;
+                ctx.db.routine().id().update(x);
+                notes.push(format!("revised {name}"));
+            }
+            None => {
+                if ctx.db.routine().actor().filter(actor).count() >= MAX_ROUTINES {
+                    notes.push(format!("{name}: already {MAX_ROUTINES} routines; retire one first"));
+                    continue;
+                }
+                ctx.db.routine().insert(Routine { id: 0, actor, name: name.clone(), graph: g.to_json(), revision: 1, source: source.into(), updated_ms: now });
+                notes.push(format!("new {name}"));
+            }
+        }
+    }
+    // Recompile the character's graph with its routines.
+    if let Some(b) = ctx.db.brain().id().find(actor) {
+        let _ = set_graph(ctx, actor, &b.graph, &b.plan, &b.source, now);
+    }
+    Ok(notes)
+}
+
+/// The top level (the desires that call routines) as a rework's item.
+pub const TOP_LEVEL: &str = "top level";
+
+/// How the current version of a routine (or the top level) has gone, for the rework rules.
+pub fn routine_facts(ctx: &ReducerContext, actor: u32, name: &str, now: u64) -> living_rules::script::RoutineFacts {
+    let name = living_rules::normalize::routine_name(name);
+    if name == TOP_LEVEL {
+        return match ctx.db.brain().id().find(actor) {
+            Some(b) => living_rules::script::RoutineFacts { exists: true, ok: 0, failed: 0, changed_s: now.saturating_sub(b.installed_ms) as f32 / 1000.0 },
+            None => Default::default(),
+        };
+    }
+    match ctx.db.routine().actor().filter(actor).find(|r| living_rules::normalize::routine_name(&r.name) == name) {
+        Some(r) => {
+            let st = ctx.db.routine_stat().id().find(r.id);
+            living_rules::script::RoutineFacts {
+                exists: true,
+                ok: st.as_ref().map_or(0, |s| s.ok),
+                failed: st.as_ref().map_or(0, |s| s.failed),
+                changed_s: now.saturating_sub(r.updated_ms) as f32 / 1000.0,
+            }
+        }
+        None => Default::default(),
+    }
+}
+
+/// Carry out a finished rework: the routine (or the top level) becomes the new version, or
+/// is retired. Returns what the person feels came of it.
+pub fn rework(ctx: &ReducerContext, actor: u32, name: &str, graph: &str, now: u64) -> String {
+    let name = living_rules::normalize::routine_name(name);
+    if name == living_rules::normalize::routine_name(living_rules::graph::PLAN_ROUTINE) {
+        return "Your plan is what you decide, not a habit to rework.".into();
+    }
+    if name == TOP_LEVEL {
+        if graph == "retire" {
+            return "You cannot live without any ways at all.".into();
+        }
+        let person = ctx.db.character().id().find(actor).map_or(false, |c| c.kind == "person");
+        if person && !graph.trim_start().starts_with("{\"desires\"") {
+            return "You could not settle on a new way of living: your top level has to weigh desires.".into();
+        }
+        let plan = ctx.db.brain().id().find(actor).map(|b| b.plan).unwrap_or_default();
+        return match set_graph(ctx, actor, graph, &plan, "mind", now) {
+            Ok(_) => "You reworked how you live: what you weigh and how.".into(),
+            Err(e) => format!("You could not settle on a new way of living: {e}"),
+        };
+    }
+    let edit = RoutineIn { name: name.clone(), graph: if graph == "retire" { String::new() } else { graph.to_string() } };
+    match set_routines(ctx, actor, &[edit], "mind", now) {
+        Ok(notes) => match notes.first() {
+            Some(n) if n.contains(": ") => format!("You could not rework \"{name}\": {}", n.split_once(": ").map(|x| x.1).unwrap_or(n)),
+            Some(n) if n.starts_with("revised") => format!("You reworked \"{name}\": now see how the new way goes."),
+            Some(n) if n.starts_with("retired") => format!("You gave up \"{name}\"."),
+            Some(_) => format!("You worked out a new way: \"{name}\"."),
+            None => format!("There was no \"{name}\" to give up."),
+        },
+        Err(e) => format!("You could not rework \"{name}\": {e}"),
+    }
+}
+
+/// A mind edits its character's routines (one or a few at a time).
+#[spacetimedb::reducer]
+pub fn mind_routines(ctx: &ReducerContext, actor: u32, routines: Vec<RoutineIn>) -> Result<(), String> {
+    authorize(ctx, actor)?;
+    let now = common::now_ms(ctx);
+    let notes = set_routines(ctx, actor, &routines, "mind", now)?;
+    let rejected: Vec<&String> = notes.iter().filter(|n| n.contains(": ")).collect();
+    if !rejected.is_empty() {
+        if let Some(c) = ctx.db.character().id().find(actor) {
+            let at = ctx.db.body().id().find(actor).map(|b| common::pos(&b, now)).unwrap_or((0.0, 0.0));
+            perceive::percept(ctx, &c, now, "self", actor, 0, at, format!("Some of your routines could not be kept: {}", rejected.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("; ")), 0.5);
+        }
+    }
+    Ok(())
+}
+
+pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, source: &str, now: u64) -> Result<u32, String> {
+    let g = living_rules::graph::parse(graph)?;
+    let kind = ctx.db.character().id().find(actor).map(|c| c.kind).unwrap_or_default();
+    // The body decides what a graph may ask of it.
+    if let Some(sp) = common::species(&kind) {
+        for skill in living_rules::graph::skills_used(&g.root) {
+            if skill == "say" && !sp.speaks || skill != "say" && !sp.allows(&skill) {
+                return Err(format!("a {kind} cannot {skill}"));
+            }
+        }
+    }
+    let revision = ctx.db.brain().id().find(actor).map(|b| b.revision + 1).unwrap_or(1);
+    let row = Brain { id: actor, graph: g.to_json(), revision, plan: clip(plan, 600), source: source.into(), installed_ms: now };
+    if ctx.db.brain().id().find(actor).is_some() {
+        ctx.db.brain().id().update(row);
+    } else {
+        ctx.db.brain().insert(row);
+    }
+    if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
+        st.revision = revision;
+        st.cursors.clear();
+        st.marks.retain(|m| m.node >= 0xD000 && m.node < crate::brain::REFLECT_MARK);
+        st.last = None;
+        st.active.clear();
+        st.fails = 0;
+        if source == "mind" {
+            st.deliberated_ms = now;
+        }
+        ctx.db.mind_state().id().update(st);
+    }
+    if let Some(mut a) = ctx.db.activity().id().find(actor) {
+        // A deliberate act in progress stays the act it is; graph work becomes an orphan the
+        // new graph may adopt.
+        if a.node != ACT {
+            a.node = ORPHAN;
+        }
+        a.revision = revision;
+        ctx.db.activity().id().update(a);
+    }
+    common::wake(ctx, actor);
+    Ok(revision)
+}
+
+/// Reasons about the plan being replaced; a new plan makes them obsolete.
+const PLAN_STATE: &[&str] = &["Nothing in my current plan works", "My actions keep failing", "I finished my plan", "A quiet moment to take stock"];
+
+/// Remove the pending deliberation unless reasons arrived after `seen_ms`. When a new plan
+/// is installed (`new_plan`), reasons about the old plan failing that piled up while the mind
+/// was thinking are dropped; otherwise they re-triggered thinking at once, every few seconds.
+fn clear_deliberation(ctx: &ReducerContext, actor: u32, seen_ms: u64, new_plan: bool) {
+    if let Some(mut d) = ctx.db.deliberation().actor().find(actor) {
+        if d.updated_ms <= seen_ms {
+            ctx.db.deliberation().actor().delete(actor);
+        } else if new_plan {
+            let rest: Vec<&str> = d.reason.lines().filter(|l| !l.trim().is_empty() && !PLAN_STATE.iter().any(|p| l.starts_with(p))).collect();
+            if rest.is_empty() {
+                ctx.db.deliberation().actor().delete(actor);
+            } else {
+                d.reason = rest.join("\n");
+                ctx.db.deliberation().actor().update(d);
+            }
+        }
+    }
+}
+
+/// Deliver a deliberation result: a new behavior graph, optional speech and a thought log entry.
+#[spacetimedb::reducer]
+pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: String, say: String, say_to: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    let c = authorize(ctx, actor)?;
+    if !c.alive {
+        ctx.db.deliberation().actor().delete(actor);
+        return Err("character is dead".into());
+    }
+    let now = common::now_ms(ctx);
+    clear_deliberation(ctx, actor, seen_ms, true);
+    if let Err(e) = set_graph(ctx, actor, &graph, &plan, "mind", now) {
+        add_thought(ctx, actor, ThoughtIn { kind: "error".into(), summary: format!("rejected graph: {e}"), ..thought }, now);
+        return Err(e);
+    }
+    add_thought(ctx, actor, thought, now);
+    if !say.trim().is_empty() {
+        let _ = perceive::speak(ctx, actor, &say, say_to, now);
+    }
+    Ok(())
+}
+
+/// Answer without changing behavior: speak, log the thought, clear what was considered.
+/// A conversation turn (`thought.kind == "talk"`) is not a deliberation: it leaves pending
+/// deliberation reasons and the deliberation clock alone, so talking never displaces or
+/// postpones thinking about what to do.
+#[spacetimedb::reducer]
+pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    let c = authorize(ctx, actor)?;
+    if !c.alive {
+        return Err("character is dead".into());
+    }
+    let now = common::now_ms(ctx);
+    if thought.kind != "talk" {
+        clear_deliberation(ctx, actor, seen_ms, true);
+        if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
+            st.deliberated_ms = now;
+            ctx.db.mind_state().id().update(st);
+        }
+    }
+    add_thought(ctx, actor, thought, now);
+    if !say.trim().is_empty() {
+        perceive::speak(ctx, actor, &say, say_to, now)?;
+    }
+    Ok(())
+}
+
+/// Deliberate acts decided by a mind (in a deliberation or a conversation turn): each a
+/// `do` node (`{"do": "conceive", "target": {"id": 6}}`), carried out once, in order, by the
+/// same skill rules as graph leaves, outside the behavior graph. The outcome of each comes
+/// back as an experience. `source` says where it was decided (e.g. "deliberate", "talk").
+#[spacetimedb::reducer]
+pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: String) -> Result<(), String> {
+    let c = authorize(ctx, actor)?;
+    if !c.alive {
+        return Err("character is dead".into());
+    }
+    let now = common::now_ms(ctx);
+    let notes = crate::acts::submit(ctx, actor, &acts, &source, false, now);
+    log::debug!("{} decides: {}", c.name, notes.join("; "));
+    Ok(())
+}
+
+/// Give up on a pending deliberation (e.g. model failure), logging why.
+#[spacetimedb::reducer]
+pub fn mind_skip(ctx: &ReducerContext, actor: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    authorize(ctx, actor)?;
+    let now = common::now_ms(ctx);
+    clear_deliberation(ctx, actor, seen_ms, false);
+    if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
+        st.deliberated_ms = now;
+        ctx.db.mind_state().id().update(st);
+    }
+    add_thought(ctx, actor, thought, now);
+    Ok(())
+}
+
+/// Record that the mind has integrated this character's experiences up to `upto`; the
+/// integrated experiences are removed (the inbox is transactional).
+#[spacetimedb::reducer]
+pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<(), String> {
+    authorize(ctx, actor)?;
+    let now = common::now_ms(ctx);
+    let done: Vec<u64> = ctx.db.experience().observer().filter(actor).filter(|e| e.id <= upto).map(|e| e.id).collect();
+    for id in done {
+        ctx.db.experience().id().delete(id);
+    }
+    let row = MindCursor { actor, upto, updated_ms: now };
+    match ctx.db.mind_cursor().actor().find(actor) {
+        Some(c) if c.upto >= upto => {}
+        Some(_) => {
+            ctx.db.mind_cursor().actor().update(row);
+        }
+        None => {
+            ctx.db.mind_cursor().insert(row);
+        }
+    }
+    Ok(())
+}
+
+/// Project consolidated mind state: persona, relations, beliefs, judgments, places.
+#[spacetimedb::reducer]
+pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Result<(), String> {
+    authorize(ctx, actor)?;
+    let now = common::now_ms(ctx);
+    if update.replace {
+        let keep: Vec<u32> = update.relations.iter().map(|r| r.other).collect();
+        for r in ctx.db.relation().actor().filter(actor).filter(|r| !keep.contains(&r.other)).map(|r| r.id).collect::<Vec<_>>() {
+            ctx.db.relation().id().delete(r);
+        }
+        let keep: Vec<String> = update.judgments.iter().map(|j| j.key.trim().to_lowercase()).collect();
+        for j in ctx.db.judgment().actor().filter(actor).filter(|j| !keep.contains(&j.key.to_lowercase())).map(|j| j.id).collect::<Vec<_>>() {
+            ctx.db.judgment().id().delete(j);
+        }
+        let keep: Vec<String> = update.places.iter().map(|p| p.name.trim().to_lowercase()).collect();
+        for p in ctx.db.place().actor().filter(actor).filter(|p| !keep.contains(&p.name.to_lowercase())).map(|p| p.id).collect::<Vec<_>>() {
+            ctx.db.place().id().delete(p);
+        }
+    }
+    if let Some(p) = update.persona {
+        let version = ctx.db.persona().id().find(actor).map(|p| p.version + 1).unwrap_or(1);
+        let row = Persona {
+            id: actor,
+            narrative: clip(&p.narrative, 2_000),
+            values: p.values.iter().take(8).map(|v| clip(v, 120)).collect(),
+            goals: p.goals.iter().take(8).map(|v| clip(v, 200)).collect(),
+            traits: clip(&p.traits, 1_000),
+            mood: clip(&p.mood, 120),
+            version,
+            updated_ms: now,
+        };
+        common::invalidate_traits(ctx, actor);
+        if ctx.db.persona().id().find(actor).is_some() {
+            ctx.db.persona().id().update(row);
+        } else {
+            ctx.db.persona().insert(row);
+        }
+    }
+    for r in update.relations.into_iter().take(32) {
+        if r.other == actor || ctx.db.character().id().find(r.other).is_none() {
+            continue;
+        }
+        let existing = ctx.db.relation().by_pair().filter((actor, r.other)).next();
+        let row = Relation {
+            id: existing.as_ref().map(|e| e.id).unwrap_or(0),
+            actor,
+            other: r.other,
+            trust: r.trust.clamp(-100.0, 100.0),
+            affinity: r.affinity.clamp(-100.0, 100.0),
+            label: clip(&r.label, 60),
+            note: clip(&r.note, 300),
+            updated_ms: now,
+        };
+        if existing.is_some() {
+            ctx.db.relation().id().update(row);
+        } else {
+            ctx.db.relation().insert(row);
+        }
+    }
+    if let Some(beliefs) = update.beliefs {
+        for id in ctx.db.belief().actor().filter(actor).map(|b| b.id).collect::<Vec<_>>() {
+            ctx.db.belief().id().delete(id);
+        }
+        for b in beliefs.into_iter().take(40) {
+            ctx.db.belief().insert(Belief { id: 0, actor, about: clip(&b.about, 80), text: clip(&b.text, 300), confidence: b.confidence.clamp(0.0, 1.0), updated_ms: now });
+        }
+    }
+    for j in update.judgments.into_iter().take(32) {
+        let key = clip(j.key.trim(), 64);
+        if key.is_empty() {
+            continue;
+        }
+        let existing = ctx.db.judgment().actor().filter(actor).find(|x| x.key.eq_ignore_ascii_case(&key));
+        let row = Judgment { id: existing.as_ref().map(|e| e.id).unwrap_or(0), actor, key, value: j.value.clamp(0.0, 1.0), why: clip(&j.why, 300), updated_ms: now };
+        if existing.is_some() {
+            ctx.db.judgment().id().update(row);
+        } else {
+            ctx.db.judgment().insert(row);
+        }
+    }
+    for p in update.places.into_iter().take(16) {
+        let name = clip(p.name.trim(), 48);
+        let w = common::world(ctx);
+        if name.is_empty() || !(0.0..w.width as f32).contains(&p.x) || !(0.0..w.height as f32).contains(&p.y) {
+            continue;
+        }
+        let existing = ctx.db.place().actor().filter(actor).find(|x| x.name.eq_ignore_ascii_case(&name));
+        let row = Place { id: existing.as_ref().map(|e| e.id).unwrap_or(0), actor, name, x: p.x, y: p.y };
+        if existing.is_some() {
+            ctx.db.place().id().update(row);
+        } else {
+            ctx.db.place().insert(row);
+        }
+    }
+    if ctx.db.place().actor().filter(actor).count() > 24 {
+        let mut ids: Vec<u64> = ctx.db.place().actor().filter(actor).map(|p| p.id).collect();
+        ids.sort_unstable();
+        for id in &ids[..ids.len() - 24] {
+            ctx.db.place().id().delete(*id);
+        }
+    }
+    if let Some(t) = update.thought {
+        add_thought(ctx, actor, t, now);
+    }
+    Ok(())
+}

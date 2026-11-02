@@ -1,0 +1,238 @@
+{
+  "person": {
+    "skills": null,
+    "speaks": true,
+    "signals": {
+      "cry": {
+        "sound": "a baby crying",
+        "heard": "{name}, a baby, is crying",
+        "kin_only": true,
+        "range": 12,
+        "salience": 0.8
+      }
+    },
+    "names": [],
+    "cognition": {
+      "think_min_s": 20,
+      "reflect_s": 240,
+      "consolidate_threshold": 1.0,
+      "max_nodes": 64,
+      "consolidate_min_s": 90
+    },
+    "life": {
+      "years": 70,
+      "infant": 0.03,
+      "child": 0.23,
+      "elder": 0.85,
+      "old_age": 0.87,
+      "gestation": 0.011,
+      "litter": 1,
+      "interbirth": 0.03
+    },
+    "eats": "berries, fish and meat (cooked is better); food you carry, or from stores"
+  },
+  "deer": {
+    "skills": [
+      "goto",
+      "wander",
+      "flee",
+      "graze",
+      "sleep",
+      "rest",
+      "wait",
+      "follow",
+      "signal",
+      "conceive"
+    ],
+    "speaks": false,
+    "signals": {
+      "alarm": {
+        "sound": "a sharp alarm snort",
+        "range": 14,
+        "salience": 0.75
+      },
+      "call": {
+        "sound": "a soft contact bleat",
+        "range": 10,
+        "salience": 0.35
+      }
+    },
+    "names": [
+      "Dapple",
+      "Brindle",
+      "Sorrel",
+      "Thistle",
+      "Hazel",
+      "Clover",
+      "Pip",
+      "Russet",
+      "Willow",
+      "Bramble",
+      "Sedge",
+      "Tansy",
+      "Birch",
+      "Nettle",
+      "Rowan",
+      "Speck",
+      "Mallow",
+      "Heather",
+      "Acorn",
+      "Flick"
+    ],
+    "temperament": {
+      "boldness": [
+        5,
+        50
+      ],
+      "sociability": [
+        50,
+        95
+      ],
+      "curiosity": [
+        15,
+        70
+      ],
+      "nervousness": [
+        40,
+        95
+      ]
+    },
+    "nature": "You are a deer: a grazing herd animal and prey. Wolves hunt you and people with spears can kill you; you keep well away from people and their settlements unless you have learned otherwise. You feel safest near your herd and in open ground where danger can be seen. You can smell wolves some way off, before you can see them. You eat by grazing grass. You have no words: you think in sensations, drives, smells and associations, never in sentences or long plans, and you communicate only with signals.",
+    "group": 6,
+    "scent": {
+      "radius": 30,
+      "kinds": [
+        "wolf"
+      ]
+    },
+    "cognition": {
+      "think_min_s": 240,
+      "reflect_s": 1800,
+      "consolidate_threshold": 5.0,
+      "max_nodes": 24,
+      "consolidate_min_s": 900
+    },
+    "life": {
+      "years": 15,
+      "infant": 0.04,
+      "child": 0.1,
+      "elder": 0.8,
+      "old_age": 0.85,
+      "gestation": 0.037,
+      "litter": 2,
+      "interbirth": 0.04
+    },
+    "migrate": {
+      "below": 15,
+      "group": 5,
+      "every_min": 20,
+      "text": "A small herd of deer came in from the {dir}"
+    },
+    "eats": "grass: you graze wherever grass or forest floor is underfoot (you cannot eat berries, trees or meat)"
+  },
+  "wolf": {
+    "skills": [
+      "goto",
+      "wander",
+      "flee",
+      "attack",
+      "eat",
+      "sleep",
+      "rest",
+      "wait",
+      "follow",
+      "signal",
+      "dodge",
+      "conceive", "give"
+    ],
+    "speaks": false,
+    "signals": {
+      "howl": {
+        "sound": "a long howl",
+        "range": 18,
+        "salience": 0.5
+      },
+      "growl": {
+        "sound": "a low growl",
+        "range": 8,
+        "salience": 0.8
+      },
+      "whimper": {
+        "sound": "a whimper",
+        "range": 6,
+        "salience": 0.4
+      },
+      "yip": {
+        "sound": "excited hunting yips",
+        "range": 14,
+        "salience": 0.6
+      }
+    },
+    "names": [
+      "Ash",
+      "Fang",
+      "Scar",
+      "Grey",
+      "Moon",
+      "Ember",
+      "Shade",
+      "Frost",
+      "Rook",
+      "Storm",
+      "Tallow",
+      "Slate"
+    ],
+    "temperament": {
+      "boldness": [
+        30,
+        95
+      ],
+      "sociability": [
+        30,
+        90
+      ],
+      "curiosity": [
+        20,
+        70
+      ],
+      "aggression": [
+        30,
+        90
+      ]
+    },
+    "nature": "You are a wolf: a predator of the forests. You hunt deer, eat meat, and fear fire, walls and people: you keep away from them and their settlements unless hunger or experience teaches you otherwise. You do not dare attack a person unless you are starving with no prey in sight or smell, or the person is easy prey: a child, badly hurt, asleep away from a fire, or alone at night away from a fire; or they attacked you. You are stronger with other wolves; a pack hunts better and is safer. Newborn pups cannot hunt: wolves carry meat back to their young until they are weaned. You can smell deer and other wolves from far away, well beyond what you can see. You have no words: you think in drives, smells, sensations and associations, never in sentences or long plans, and you communicate only with signals.",
+    "group": 5,
+    "scent": {
+      "radius": 60,
+      "kinds": [
+        "deer",
+        "wolf"
+      ]
+    },
+    "cognition": {
+      "think_min_s": 240,
+      "reflect_s": 1800,
+      "consolidate_threshold": 5.0,
+      "max_nodes": 24,
+      "consolidate_min_s": 900
+    },
+    "life": {
+      "years": 10,
+      "infant": 0.05,
+      "child": 0.2,
+      "elder": 0.8,
+      "old_age": 0.85,
+      "gestation": 0.017,
+      "litter": 2,
+      "interbirth": 0.25,
+      "breeding_radius": 25.0
+    },
+    "migrate": {
+      "below": 3,
+      "group": 3,
+      "every_min": 30,
+      "text": "A few wolves came in from the {dir}"
+    },
+    "eats": "meat: from prey you kill (deer), eaten from what you carry"
+  }
+}

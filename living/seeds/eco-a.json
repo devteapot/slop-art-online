@@ -1,0 +1,16 @@
+{
+  "run": "eco-a",
+  "seed": 11,
+  "map": {
+    "kind": "valley"
+  },
+  "year_days": 4,
+  "life_pace": 0.1428,
+  "setting": "A small valley with grassland, woods and streams, where deer graze and wolves hunt; no people live here.",
+  "bands": [],
+  "animals": {
+    "deer": 40,
+    "wolf": 3
+  },
+  "note": "Ecology lab (current wolves: one breeding pair per 35 tiles, a quarter-life between litters of up to two); no people, so animals live by instinct and no model is called."
+}

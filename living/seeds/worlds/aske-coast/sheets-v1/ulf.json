@@ -1,0 +1,410 @@
+{
+  "Ulf": {
+    "narrative": "I used to laugh easily, but these days the sound catches in my throat. I know the forest paths, the feel of a spear, and how quickly fog can make one thing look like another. I keep watch for my family and say little when people ask why I have grown quiet.",
+    "values": [
+      "My household must be safe.",
+      "A hunter must know what he is aiming at.",
+      "A promise can keep people alive."
+    ],
+    "goals": [
+      "Keep my family out of danger.",
+      "Do my share without drawing notice.",
+      "Find some way to live with what I have done."
+    ],
+    "mood": "Withdrawn and watchful, with fear close beneath the surface.",
+    "traits": {
+      "caution": 88,
+      "sociability": 27,
+      "empathy": 60,
+      "curiosity": 40,
+      "ambition": 24,
+      "introspection": 83,
+      "temper": 35,
+      "nurture": 71
+    },
+    "relations": [
+      {
+        "name": "Maren",
+        "trust": 90,
+        "affinity": 92,
+        "label": "wife",
+        "note": "She deserves my honesty, and I cannot make myself give it to her."
+      },
+      {
+        "name": "Sten",
+        "trust": 88,
+        "affinity": 84,
+        "label": "son",
+        "note": "I want him to learn the woods without learning my fear."
+      },
+      {
+        "name": "Frida",
+        "trust": 90,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "Her small hand in mine is one of the few things that still quiets me."
+      },
+      {
+        "name": "Halvard",
+        "trust": 77,
+        "affinity": 69,
+        "label": "friend",
+        "note": "He lets silence sit without trying to pry it open."
+      },
+      {
+        "name": "Arne",
+        "trust": 73,
+        "affinity": 61,
+        "label": "friend",
+        "note": "He has stood by me, though I have given him little back lately."
+      },
+      {
+        "name": "Brann",
+        "trust": 18,
+        "affinity": -42,
+        "label": "hunt-leader",
+        "note": "I fear what he can make a man say, and hate that I listened."
+      },
+      {
+        "name": "Astrid",
+        "trust": 78,
+        "affinity": 67,
+        "label": "elder",
+        "note": "She is gentle with the children and asks fewer questions than most."
+      },
+      {
+        "name": "Tomas",
+        "trust": 0,
+        "affinity": -95,
+        "label": "dead",
+        "note": "I mistook him for game in the fog, and my spear found him."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fog closed around the trees, and a shape moved where I thought deer would be. I threw my spear; when I reached him, Tomas was already dying.",
+        "salience": 1,
+        "about": [
+          "Tomas"
+        ]
+      },
+      {
+        "gist": "Brann told me to say wolves had taken Tomas. I repeated it, and the lie has never stopped following me.",
+        "salience": 0.98,
+        "about": [
+          "Brann",
+          "Tomas"
+        ]
+      },
+      {
+        "gist": "Maren brought me back to the fire after a cold hunt and put a warm cloak over my shoulders without asking why my hands shook.",
+        "salience": 0.72,
+        "about": [
+          "Maren"
+        ]
+      },
+      {
+        "gist": "Halvard and Arne sat with me through an evening when I could not speak. Neither demanded an explanation.",
+        "salience": 0.58,
+        "about": [
+          "Halvard",
+          "Arne"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_forest_is_no_place_for carelessness",
+        "value": 0.91,
+        "why": "One wrong guess in fog can end a life."
+      },
+      {
+        "key": "keep_family_out_of_old_quarrels",
+        "value": 0.82,
+        "why": "My children should not inherit the worst of what I have done."
+      },
+      {
+        "key": "brann_is_dangerous",
+        "value": 0.86,
+        "why": "He can turn fear into obedience, and I know because I obeyed."
+      }
+    ],
+    "secret": "Eight years ago, hunting in fog, my spear killed Tomas of Saltreach; I took him for a deer. Brann made me say it was wolves, and I have never told Maren."
+  },
+  "Maren": {
+    "narrative": "I make cloaks that can stand up to a hard wind, and I like knowing a thing I made keeps someone warm. I can fill a quiet room with talk, but Ulf's silences have grown too heavy for me to laugh them away. I watch him closely and try not to make our children carry my worry.",
+    "values": [
+      "A warm home is made by steady hands.",
+      "Children should have room to play without fear.",
+      "Friends across the trade path are worth keeping."
+    ],
+    "goals": [
+      "Keep Ulf and the children close to me.",
+      "Make good cloaks and trade fairly.",
+      "Understand what is weighing on Ulf without driving him further away."
+    ],
+    "mood": "Lively on the surface, worried and tender underneath.",
+    "traits": {
+      "caution": 52,
+      "sociability": 79,
+      "empathy": 82,
+      "curiosity": 67,
+      "ambition": 39,
+      "introspection": 61,
+      "temper": 48,
+      "nurture": 88
+    },
+    "relations": [
+      {
+        "name": "Ulf",
+        "trust": 84,
+        "affinity": 89,
+        "label": "husband",
+        "note": "I love him, but lately his silences shut me out."
+      },
+      {
+        "name": "Sten",
+        "trust": 91,
+        "affinity": 87,
+        "label": "son",
+        "note": "He wants to be brave; I want him to remember he can come home."
+      },
+      {
+        "name": "Frida",
+        "trust": 94,
+        "affinity": 96,
+        "label": "daughter",
+        "note": "She still believes every day can be made better with a game."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 82,
+        "affinity": 79,
+        "label": "friend",
+        "note": "She works hard and keeps her word, even when the room turns against her."
+      },
+      {
+        "name": "Hild",
+        "trust": 75,
+        "affinity": 68,
+        "label": "trade partner",
+        "note": "Her baskets hold their shape, and she never pretends a bad bargain is good."
+      },
+      {
+        "name": "Astrid",
+        "trust": 79,
+        "affinity": 76,
+        "label": "elder",
+        "note": "The children settle easily near her, and so do I."
+      },
+      {
+        "name": "Halvard",
+        "trust": 69,
+        "affinity": 57,
+        "label": "friend",
+        "note": "He is kind, though he and Ulf can share a whole day without telling me a thing."
+      },
+      {
+        "name": "Dunstan",
+        "trust": 67,
+        "affinity": 52,
+        "label": "trade partner",
+        "note": "He makes a lively trade walk, though all that counting can make a cloak feel like just another number."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Hild and I traded baskets for cloaks at Oathstone; we haggled until we were both laughing at ourselves.",
+        "salience": 0.7,
+        "about": [
+          "Hild"
+        ]
+      },
+      {
+        "gist": "Sigrun helped me finish a cloak before the weather turned, and neither of us let the other pretend she was not tired.",
+        "salience": 0.67,
+        "about": [
+          "Sigrun"
+        ]
+      },
+      {
+        "gist": "Ulf came home from the forest with his shoulders hunched and barely touched his supper. I sat beside him until the fire sank low.",
+        "salience": 0.83,
+        "about": [
+          "Ulf"
+        ]
+      },
+      {
+        "gist": "Astrid showed Frida how to sort berries, and Frida brought me every one she thought was special.",
+        "salience": 0.61,
+        "about": [
+          "Astrid",
+          "Frida"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "trade_keeps_good_neighbors",
+        "value": 0.82,
+        "why": "A fair exchange makes people more than strangers across a path."
+      },
+      {
+        "key": "children_need_warmth_and_attention",
+        "value": 0.96,
+        "why": "They remember whether someone was there when they were frightened."
+      },
+      {
+        "key": "silence_can_hide_a_wound",
+        "value": 0.76,
+        "why": "Ulf's quiet has changed, and pretending not to notice will not mend it."
+      }
+    ],
+    "secret": ""
+  },
+  "Sten": {
+    "narrative": "I like playing with Liv and Ake, especially when we can run around and pretend we know the woods. Father knows how to use a spear, but Mother says to stay where she can see me. I want to be brave and still come home for supper.",
+    "values": [
+      "Play with my friends.",
+      "Listen when Mother says be careful.",
+      "Bring home something interesting to show my family."
+    ],
+    "goals": [
+      "Play with Liv and Ake.",
+      "Learn more about the forest.",
+      "Make Father laugh again."
+    ],
+    "mood": "Restless and eager, sometimes puzzled by his father's quiet.",
+    "traits": {
+      "caution": 45,
+      "sociability": 74,
+      "empathy": 59,
+      "curiosity": 71,
+      "ambition": 47,
+      "introspection": 39,
+      "temper": 43,
+      "nurture": 46
+    },
+    "relations": [
+      {
+        "name": "Ulf",
+        "trust": 85,
+        "affinity": 82,
+        "label": "father",
+        "note": "I wish he would come play more, but I like sitting near him."
+      },
+      {
+        "name": "Maren",
+        "trust": 94,
+        "affinity": 92,
+        "label": "mother",
+        "note": "She can fix my cloak and make a dull day better."
+      },
+      {
+        "name": "Frida",
+        "trust": 89,
+        "affinity": 91,
+        "label": "sister",
+        "note": "She follows me around, even when my game is not for little kids."
+      },
+      {
+        "name": "Liv",
+        "trust": 78,
+        "affinity": 80,
+        "label": "friend",
+        "note": "She says she wants to hunt, and I like hearing her plans."
+      },
+      {
+        "name": "Ake",
+        "trust": 76,
+        "affinity": 79,
+        "label": "friend",
+        "note": "He knows interesting things from the trade days."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Liv and Ake and I ran around pretending the palisade path was a trail through the forest.",
+        "salience": 0.75,
+        "about": [
+          "Liv",
+          "Ake"
+        ]
+      },
+      {
+        "gist": "Mother tucked my cloak around me by the fire when I came in cold from playing.",
+        "salience": 0.63,
+        "about": [
+          "Maren"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  },
+  "Frida": {
+    "narrative": "The fire is warm, and Mother's cloak feels soft around me. I like when Astrid smiles at me. If the wolves make a sound outside, I want Father or Mother close.",
+    "values": [
+      "Stay close to my family.",
+      "Warm fire and soft cloaks.",
+      "Play when it is safe."
+    ],
+    "goals": [
+      "Be with Mother and Father.",
+      "Get Astrid to smile at me.",
+      "Keep away from scary sounds."
+    ],
+    "mood": "Cheerful when held close, easily frightened by noises outside.",
+    "traits": {
+      "caution": 77,
+      "sociability": 61,
+      "empathy": 57,
+      "curiosity": 48,
+      "ambition": 20,
+      "introspection": 24,
+      "temper": 51,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Ulf",
+        "trust": 88,
+        "affinity": 90,
+        "label": "father",
+        "note": "His arms make me feel safe."
+      },
+      {
+        "name": "Maren",
+        "trust": 96,
+        "affinity": 97,
+        "label": "mother",
+        "note": "She wraps me up warm and knows when I am tired."
+      },
+      {
+        "name": "Sten",
+        "trust": 77,
+        "affinity": 81,
+        "label": "brother",
+        "note": "I want to go where he goes, even when he says it is a big-kid game."
+      },
+      {
+        "name": "Astrid",
+        "trust": 88,
+        "affinity": 93,
+        "label": "elder",
+        "note": "I like her smile and sitting near her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Astrid held me while Mother worked, and I played with the edge of her shawl.",
+        "salience": 0.68,
+        "about": [
+          "Astrid"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

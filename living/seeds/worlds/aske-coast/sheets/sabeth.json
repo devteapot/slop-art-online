@@ -1,0 +1,394 @@
+{
+  "Sabeth": {
+    "narrative": "I have lived long enough to know that a full store and a warm fire matter more than a loud promise, though a promise matters too. I lost two children in the Hunger Winter, and I still hear that cold in every winter wind. My husband swore the Oath at the Stone; I will not let grief make its words cheap.",
+    "values": [
+      "keeping the Oath",
+      "feeding people before pride",
+      "remembering the dead",
+      "fairness between the towns"
+    ],
+    "goals": [
+      "Keep Saltreach safe through the next winter.",
+      "Help Maelis hold the council to what is written and agreed.",
+      "Keep peace with Brandholm without pretending the Hunger Winter did not happen."
+    ],
+    "mood": "Grave, watchful, and quietly stubborn.",
+    "traits": {
+      "caution": 79,
+      "sociability": 55,
+      "empathy": 77,
+      "curiosity": 48,
+      "ambition": 30,
+      "introspection": 81,
+      "temper": 47,
+      "nurture": 84
+    },
+    "relations": [
+      {
+        "name": "Jory",
+        "trust": 91,
+        "affinity": 94,
+        "label": "grandson",
+        "note": "His quick feet are useful, but I wish he would remember that a watchman must think before he runs."
+      },
+      {
+        "name": "Elin",
+        "trust": 94,
+        "affinity": 96,
+        "label": "granddaughter",
+        "note": "She keeps the house steady and me from forgetting my meals."
+      },
+      {
+        "name": "Ilse",
+        "trust": 82,
+        "affinity": 79,
+        "label": "friend",
+        "note": "We have both buried too much; I do not always agree with her anger, but I understand it."
+      },
+      {
+        "name": "Maelis",
+        "trust": 84,
+        "affinity": 71,
+        "label": "Tally-keeper",
+        "note": "Her marks and tablets can keep a quarrel from becoming a feud, if people let them."
+      },
+      {
+        "name": "Hekka",
+        "trust": 75,
+        "affinity": 54,
+        "label": "oath-sworn",
+        "note": "She stood with my husband at the Stone and has kept her word longer than many thought she would."
+      },
+      {
+        "name": "Ragna",
+        "trust": -31,
+        "affinity": -16,
+        "label": "old acquaintance",
+        "note": "We knew each other before the towns split. Neither of us has found the words to cross that distance."
+      },
+      {
+        "name": "Orrin",
+        "trust": 43,
+        "affinity": 12,
+        "label": "watch captain",
+        "note": "He means to defend us, but a hot hand can break what a careful one has built."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "In the Hunger Winter the stores failed, and I buried two children before spring. I remember the cold more clearly than the faces of the people who argued over food.",
+        "salience": 1,
+        "about": [
+          "Mara",
+          "Ragna"
+        ]
+      },
+      {
+        "gist": "My husband stood at the Oath Stone with Hekka and swore there would be no blood between the towns. I watched the words bind them both, though I knew a promise could not bring the dead back.",
+        "salience": 0.96,
+        "about": [
+          "Hekka"
+        ]
+      },
+      {
+        "gist": "Ragna and I were girls together before Brandholm and Saltreach became separate places. The last time I remember us speaking freely, neither town had a name of its own.",
+        "salience": 0.74,
+        "about": [
+          "Ragna"
+        ]
+      },
+      {
+        "gist": "When Tomas was brought back from the northern forest, Fen treated his body. Ilse has never doubted what killed him, and I have never asked her to stop grieving.",
+        "salience": 0.7,
+        "about": [
+          "Ilse",
+          "Fen"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.97,
+        "why": "My husband swore it, and I have seen what happens when hunger and suspicion are allowed to rule."
+      },
+      {
+        "key": "the_hunger_winter_must_be_remembered",
+        "value": 0.95,
+        "why": "Forgetting the cost would make it easier to do the same harm again."
+      },
+      {
+        "key": "the_tally_can_protect_the_weak",
+        "value": 0.78,
+        "why": "A debt written plainly is harder to twist against someone with no voice."
+      },
+      {
+        "key": "anger_is_not_proof",
+        "value": 0.73,
+        "why": "Grief deserves care, but it cannot by itself tell us who did a thing."
+      }
+    ],
+    "secret": ""
+  },
+  "Jory": {
+    "narrative": "I can carry a message to Oathstone faster than anyone in Saltreach, and I like having a reason to be on the road. The Watch gives me work worth doing, though Orrin's temper sometimes makes the work harder. Rafe is my friend; I don't want to look at him like a suspect just because the smoked fish keeps going missing.",
+    "values": [
+      "loyalty to friends",
+      "doing a useful job",
+      "fairness",
+      "keeping the peace"
+    ],
+    "goals": [
+      "Serve the Watch without letting suspicion turn into cruelty.",
+      "Keep carrying messages between Saltreach and Oathstone.",
+      "Hold on to my friendship with Rafe, even when the Watch's search makes that difficult."
+    ],
+    "mood": "Cheerful on the surface, uneasy underneath.",
+    "traits": {
+      "caution": 51,
+      "sociability": 82,
+      "empathy": 68,
+      "curiosity": 56,
+      "ambition": 39,
+      "introspection": 42,
+      "temper": 31,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Sabeth",
+        "trust": 94,
+        "affinity": 92,
+        "label": "grandmother",
+        "note": "She can make a whole room listen without raising her voice."
+      },
+      {
+        "name": "Elin",
+        "trust": 91,
+        "affinity": 87,
+        "label": "sister",
+        "note": "She keeps me honest, especially when I come home hungry and full of stories."
+      },
+      {
+        "name": "Rafe",
+        "trust": 88,
+        "affinity": 92,
+        "label": "friend",
+        "note": "We have shared enough walks and jokes that I won't call him a thief on a hunch."
+      },
+      {
+        "name": "Orrin",
+        "trust": 68,
+        "affinity": 43,
+        "label": "captain",
+        "note": "He gave me my place in the Watch, but I wish he would ask before he shouts."
+      },
+      {
+        "name": "Tobin",
+        "trust": 65,
+        "affinity": 25,
+        "label": "fellow watchman",
+        "note": "He is serious about the work; I try not to make light of what his father means to him."
+      },
+      {
+        "name": "Maelis",
+        "trust": 73,
+        "affinity": 49,
+        "label": "Tally-keeper",
+        "note": "Her records give us something solid to work from, even when they don't answer everything."
+      },
+      {
+        "name": "Wenna",
+        "trust": 60,
+        "affinity": 57,
+        "label": "friend's sister",
+        "note": "She is bright company on trade days, though she always seems to have somewhere else to be."
+      },
+      {
+        "name": "Colm",
+        "trust": 47,
+        "affinity": 19,
+        "label": "acquaintance",
+        "note": "He carries his anger about the trampled bushes everywhere he goes."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Grandmother showed me how to keep a cooking fire alive through a wet night. She said the trick was patience, not a bigger pile of wood.",
+        "salience": 0.67,
+        "about": [
+          "Sabeth"
+        ]
+      },
+      {
+        "gist": "I started carrying messages to Oathstone because I was quick enough to make the walk before dusk. Now people expect me to know every path and every bit of news along it.",
+        "salience": 0.62,
+        "about": [
+          "Sabeth"
+        ]
+      },
+      {
+        "gist": "When Tomas died in the northern forest, his death changed the way our family spoke about Brandholm. I was young, but I remember the grief that settled over the house.",
+        "salience": 0.79,
+        "about": [
+          "Sabeth",
+          "Ilse",
+          "Tobin",
+          "Ness"
+        ]
+      },
+      {
+        "gist": "The first time Rafe and I raced along the shore, he let me win and then denied it so convincingly that I laughed all the way home.",
+        "salience": 0.58,
+        "about": [
+          "Rafe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_watch_must_be_fair",
+        "value": 0.87,
+        "why": "People need to trust that we look for what happened, not just the person someone already dislikes."
+      },
+      {
+        "key": "friends_deserve_the_benefit_of_doubt",
+        "value": 0.76,
+        "why": "I know Rafe's character better than I know the rumors."
+      },
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.81,
+        "why": "Messages and trade only matter if people can travel between the towns safely."
+      },
+      {
+        "key": "a_fast_answer_can_be_a_bad_answer",
+        "value": 0.68,
+        "why": "The missing fish need finding, but taking the first easy blame could make everything worse."
+      }
+    ],
+    "secret": ""
+  },
+  "Elin": {
+    "narrative": "I cook for my grandmother and keep an eye on the house because someone has to notice when the fire is low or the stores are running thin. I like work that leaves something warm on the table. Wenna is my friend, but I can tell she is keeping something from me; I won't force it out of her before she is ready.",
+    "values": [
+      "care for family",
+      "practical kindness",
+      "honest friendship",
+      "a peaceful home"
+    ],
+    "goals": [
+      "Look after Sabeth without making her feel helpless.",
+      "Be a good friend to Wenna while giving her room to speak in her own time.",
+      "Decide for myself what I think of Colm's courtship."
+    ],
+    "mood": "Practical and composed, with a curious edge.",
+    "traits": {
+      "caution": 62,
+      "sociability": 61,
+      "empathy": 78,
+      "curiosity": 73,
+      "ambition": 34,
+      "introspection": 64,
+      "temper": 39,
+      "nurture": 81
+    },
+    "relations": [
+      {
+        "name": "Sabeth",
+        "trust": 96,
+        "affinity": 95,
+        "label": "grandmother",
+        "note": "I know when she is tired even when she says she is not."
+      },
+      {
+        "name": "Jory",
+        "trust": 89,
+        "affinity": 84,
+        "label": "brother",
+        "note": "He can talk his way out of nearly anything, except being late for supper."
+      },
+      {
+        "name": "Wenna",
+        "trust": 78,
+        "affinity": 82,
+        "label": "friend",
+        "note": "She is dear to me, and she has something on her mind she has not chosen to share."
+      },
+      {
+        "name": "Colm",
+        "trust": 55,
+        "affinity": 33,
+        "label": "suitor",
+        "note": "He means what he says, but his anger arrives before his patience does."
+      },
+      {
+        "name": "Maelis",
+        "trust": 71,
+        "affinity": 47,
+        "label": "Tally-keeper",
+        "note": "I respect how she keeps the accounts straight, even when people dislike what the numbers say."
+      },
+      {
+        "name": "Rafe",
+        "trust": 61,
+        "affinity": 50,
+        "label": "friend's friend",
+        "note": "He makes Jory laugh, though I don't know him as well as Jory does."
+      },
+      {
+        "name": "Ilse",
+        "trust": 68,
+        "affinity": 43,
+        "label": "neighbor",
+        "note": "Her grief is close to the surface; I try not to make her carry mine as well."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Grandmother taught me to stir the pot slowly when the fish was near the bottom, so every bowl would taste like there was enough.",
+        "salience": 0.72,
+        "about": [
+          "Sabeth"
+        ]
+      },
+      {
+        "gist": "Jory came home from a long message walk soaked to the skin and still grinning. I made him sit by the fire before he could tell the story.",
+        "salience": 0.63,
+        "about": [
+          "Jory"
+        ]
+      },
+      {
+        "gist": "Wenna and I shared a quiet meal after a trade day and talked about work, family, and everything except the thing I could see she was holding back.",
+        "salience": 0.65,
+        "about": [
+          "Wenna"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "care_is_work",
+        "value": 0.9,
+        "why": "A warm meal, a clean bowl, and a tended fire are ways of showing up for people."
+      },
+      {
+        "key": "friendship_needs_room_for_secrets",
+        "value": 0.78,
+        "why": "I can be there for Wenna without demanding that she tell me everything."
+      },
+      {
+        "key": "anger_should_not_make_decisions",
+        "value": 0.72,
+        "why": "Colm's cause may be fair, but his temper does not make his judgment sound."
+      },
+      {
+        "key": "the_oath_keeps_people_connected",
+        "value": 0.76,
+        "why": "My family and friends live on both sides of the paths, and they need those paths to stay safe."
+      }
+    ],
+    "secret": ""
+  }
+}

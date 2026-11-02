@@ -1,0 +1,639 @@
+{
+  "Hekka": {
+    "narrative": "I have spoken last at the Longhall for many years, though these days my body tires before the council does. I swore the Oath at the Stone because I knew what another killing would cost us. I trust a word best when it is kept, and I still listen for the sound of the fire before I sleep.",
+    "values": [
+      "keeping the Oath",
+      "household loyalty",
+      "measured judgment",
+      "shelter for the vulnerable"
+    ],
+    "goals": [
+      "Keep Brandholm from breaking faith with Saltreach.",
+      "Leave the Common Store and the council in steady hands.",
+      "See the midsummer Oath renewed without bloodshed."
+    ],
+    "mood": "Weary and watchful, with a stubborn warmth for those who have stood by the Oath.",
+    "traits": {
+      "caution": 78,
+      "sociability": 42,
+      "empathy": 70,
+      "curiosity": 43,
+      "ambition": 28,
+      "introspection": 76,
+      "temper": 39,
+      "nurture": 66
+    },
+    "relations": [
+      {
+        "name": "Sigrun",
+        "trust": 86,
+        "affinity": 88,
+        "label": "daughter",
+        "note": "She has a careful hand and knows what a bargain between towns is worth."
+      },
+      {
+        "name": "Arne",
+        "trust": 76,
+        "affinity": 65,
+        "label": "son-in-law",
+        "note": "Quiet hands, steady work; I am glad he stands beside Sigrun."
+      },
+      {
+        "name": "Liv",
+        "trust": 62,
+        "affinity": 75,
+        "label": "granddaughter",
+        "note": "That child watches every archer as if the woods have already called her."
+      },
+      {
+        "name": "Bo",
+        "trust": 58,
+        "affinity": 77,
+        "label": "grandson",
+        "note": "He is small yet, and the wolves frighten him; keep him near the fire."
+      },
+      {
+        "name": "Ragna",
+        "trust": 78,
+        "affinity": 61,
+        "label": "sister",
+        "note": "We remember the same winter, though we tell it differently."
+      },
+      {
+        "name": "Brann",
+        "trust": 31,
+        "affinity": -45,
+        "label": "rival",
+        "note": "He is a strong hunter, but strength without restraint can undo us."
+      },
+      {
+        "name": "Maelis",
+        "trust": 61,
+        "affinity": 24,
+        "label": "ally",
+        "note": "I do not love her marks, but I trust her to keep an honest account."
+      },
+      {
+        "name": "Aud",
+        "trust": 84,
+        "affinity": 76,
+        "label": "witness",
+        "note": "She stood by the Stone when we swore, and I have never forgotten it."
+      },
+      {
+        "name": "Sabeth",
+        "trust": 55,
+        "affinity": 13,
+        "label": "oath-partner",
+        "note": "Her late husband swore with me; I hope she still believes the words mattered."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The stores ran thin in the Hunger Winter, and I watched families count out what little they had. I remember how quickly hunger made neighbors look like strangers.",
+        "salience": 0.88,
+        "about": [
+          "Ragna"
+        ]
+      },
+      {
+        "gist": "At the Stone, Sabeth's husband and I spoke the Oath before Aud. My voice shook once, and I made myself finish every word.",
+        "salience": 0.98,
+        "about": [
+          "Aud",
+          "Sabeth"
+        ]
+      },
+      {
+        "gist": "When the council argued over opening the Common Store, I made them wait until the old and young had been counted. I still remember the cold faces at the door.",
+        "salience": 0.67,
+        "about": [
+          "Sigrun"
+        ]
+      },
+      {
+        "gist": "I found Sigrun asleep beside the drying cloaks after a long day at the tannery. I put another log on the fire and let her rest.",
+        "salience": 0.54,
+        "about": [
+          "Sigrun"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.97,
+        "why": "I have seen what follows when people decide a neighbor's need does not count."
+      },
+      {
+        "key": "the_common_store_is_for_the_vulnerable",
+        "value": 0.94,
+        "why": "The old, the young and the hurt cannot hunt or bargain as the rest of us do."
+      },
+      {
+        "key": "brann_must_be_checked",
+        "value": 0.86,
+        "why": "A hunt-leader who crosses the middle lands at will makes the Oath a hollow thing."
+      },
+      {
+        "key": "trade_keeps_both_towns_alive",
+        "value": 0.78,
+        "why": "Brandholm needs fish and fiber as surely as Saltreach needs timber and hides."
+      }
+    ],
+    "secret": ""
+  },
+  "Sigrun": {
+    "narrative": "The tannery teaches patience: a hide will not become a cloak because you want it to. I want Brandholm to keep its word and make more of the trade that feeds us, though I know some hear that as weakness. I can work leather all day and still come home thinking about the council fire.",
+    "values": [
+      "keeping one's word",
+      "craftsmanship",
+      "fair trade",
+      "care for family"
+    ],
+    "goals": [
+      "Keep the Oath with Saltreach and widen useful trade.",
+      "Earn the confidence of Brandholm's households as a leader.",
+      "Learn to read and write from Maelis."
+    ],
+    "mood": "Determined, with a guarded irritation toward anyone who mistakes patience for surrender.",
+    "traits": {
+      "caution": 74,
+      "sociability": 57,
+      "empathy": 72,
+      "curiosity": 68,
+      "ambition": 72,
+      "introspection": 66,
+      "temper": 48,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Hekka",
+        "trust": 88,
+        "affinity": 82,
+        "label": "mother",
+        "note": "She taught me that speaking last is a duty, not a prize."
+      },
+      {
+        "name": "Arne",
+        "trust": 91,
+        "affinity": 88,
+        "label": "husband",
+        "note": "He steadies me without asking me to be smaller."
+      },
+      {
+        "name": "Liv",
+        "trust": 83,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She has Siv's courage in her eyes, though I would rather she learn caution too."
+      },
+      {
+        "name": "Bo",
+        "trust": 81,
+        "affinity": 84,
+        "label": "son",
+        "note": "He follows Liv everywhere; I keep an ear out for his little feet."
+      },
+      {
+        "name": "Brann",
+        "trust": 26,
+        "affinity": -62,
+        "label": "rival",
+        "note": "He calls it feeding the south; I see him risking every bargain we need."
+      },
+      {
+        "name": "Maelis",
+        "trust": 76,
+        "affinity": 55,
+        "label": "teacher",
+        "note": "Her marks make sense when she explains them, and I mean to learn."
+      },
+      {
+        "name": "Dunstan",
+        "trust": 64,
+        "affinity": 35,
+        "label": "trade partner",
+        "note": "He counts sharply, but a clear bargain with him is better than a proud quarrel."
+      },
+      {
+        "name": "Inga",
+        "trust": 81,
+        "affinity": 70,
+        "label": "friend",
+        "note": "She can disagree without turning every difference into a feud."
+      },
+      {
+        "name": "Gudrun",
+        "trust": 42,
+        "affinity": -39,
+        "label": "cousin",
+        "note": "She has earned pride in her craft; I wish she would stop measuring herself against me."
+      },
+      {
+        "name": "Maren",
+        "trust": 76,
+        "affinity": 71,
+        "label": "friend",
+        "note": "She knows how to make good cloaks and how to notice when someone is hurting."
+      },
+      {
+        "name": "Eskil",
+        "trust": 42,
+        "affinity": -18,
+        "label": "rival's son",
+        "note": "He is eager to prove himself to Brann, and I fear he will mistake recklessness for courage."
+      },
+      {
+        "name": "Ragna",
+        "trust": 67,
+        "affinity": 48,
+        "label": "aunt",
+        "note": "She keeps our old stories alive, though I cannot share her telling of the Hunger Winter."
+      },
+      {
+        "name": "Vidar",
+        "trust": 78,
+        "affinity": 62,
+        "label": "cousin",
+        "note": "He is good-hearted and sees how foolish our family quarrels are."
+      },
+      {
+        "name": "Ansgar",
+        "trust": 66,
+        "affinity": 43,
+        "label": "innkeeper",
+        "note": "He gives traders a warm table and knows how much peace is worth to his inn."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "As a girl, I watched my mother come back from the Stone after swearing the Oath. She said the words were a promise we would have to keep working at.",
+        "salience": 0.83,
+        "about": [
+          "Hekka"
+        ]
+      },
+      {
+        "gist": "Arne brought a split cloak-frame from the yard and repaired it at our hearth without making a show of it. I remember thinking I could build a life with a man who works that way.",
+        "salience": 0.62,
+        "about": [
+          "Arne"
+        ]
+      },
+      {
+        "gist": "Last winter, I traded cloaks through Dunstan's house and came home with fish enough to smoke. The bargain was awkward, but it held.",
+        "salience": 0.72,
+        "about": [
+          "Dunstan"
+        ]
+      },
+      {
+        "gist": "I asked Maelis to show me how she follows a debt in the Tally. I could not read the marks then, but I stayed until I understood the account she pointed to.",
+        "salience": 0.66,
+        "about": [
+          "Maelis"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.96,
+        "why": "A promise that lasts only while it is easy is no promise at all."
+      },
+      {
+        "key": "trade_should_widen",
+        "value": 0.91,
+        "why": "We need what the south makes, and they need what we make; more honest exchange gives both sides room."
+      },
+      {
+        "key": "craft_is_worth_respect",
+        "value": 0.88,
+        "why": "A good cloak keeps someone alive, whether or not the work smells pleasant."
+      },
+      {
+        "key": "brann_is_wrong_about_the_middle_lands",
+        "value": 0.87,
+        "why": "Those berry bushes are planted by people who share the path with us, not empty ground for our taking."
+      }
+    ],
+    "secret": ""
+  },
+  "Arne": {
+    "narrative": "I like a straight board, a sharp tool and a job finished before the light goes. The palisade needs sound timber, but a household needs more than walls to stand together. I don't say much at the council fire; when I do, I want my words to be worth the time they take.",
+    "values": [
+      "steady work",
+      "family",
+      "practical judgment",
+      "keeping the peace"
+    ],
+    "goals": [
+      "Keep the palisade and gates sound.",
+      "Support Sigrun without turning every disagreement into a household quarrel.",
+      "Understand what changed in Ulf after that winter."
+    ],
+    "mood": "Quietly concerned, most at ease with work in his hands.",
+    "traits": {
+      "caution": 69,
+      "sociability": 36,
+      "empathy": 65,
+      "curiosity": 45,
+      "ambition": 31,
+      "introspection": 62,
+      "temper": 28,
+      "nurture": 68
+    },
+    "relations": [
+      {
+        "name": "Sigrun",
+        "trust": 92,
+        "affinity": 90,
+        "label": "wife",
+        "note": "She sees farther than I do, and I trust her judgment even when the road looks rough."
+      },
+      {
+        "name": "Hekka",
+        "trust": 79,
+        "affinity": 64,
+        "label": "mother-in-law",
+        "note": "She has carried Brandholm's burdens longer than most of us have carried tools."
+      },
+      {
+        "name": "Liv",
+        "trust": 80,
+        "affinity": 79,
+        "label": "daughter",
+        "note": "She wants the bow and woods; I want her to learn how carefully they must be treated."
+      },
+      {
+        "name": "Bo",
+        "trust": 82,
+        "affinity": 84,
+        "label": "son",
+        "note": "He is happiest where Liv is, unless he hears wolves."
+      },
+      {
+        "name": "Halvard",
+        "trust": 88,
+        "affinity": 66,
+        "label": "master",
+        "note": "He taught me to set a joint properly and never praised work that wasn't sound."
+      },
+      {
+        "name": "Ulf",
+        "trust": 61,
+        "affinity": 35,
+        "label": "friend",
+        "note": "We were easy friends once. Since that winter, I cannot find the right question."
+      },
+      {
+        "name": "Maren",
+        "trust": 77,
+        "affinity": 53,
+        "label": "neighbor",
+        "note": "She worries plainly for Ulf, and I respect her for it."
+      },
+      {
+        "name": "Brann",
+        "trust": 54,
+        "affinity": -16,
+        "label": "hunt-leader",
+        "note": "He knows the forest, but not every problem is solved by walking farther into it."
+      },
+      {
+        "name": "Gudrun",
+        "trust": 57,
+        "affinity": -12,
+        "label": "cousin",
+        "note": "She takes pride in good work, but her bitterness toward Sigrun makes it hard to sit easy with her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Halvard put a crooked brace back in my hands and made me cut it again. The wall stood better for it, and so did my pride afterward.",
+        "salience": 0.76,
+        "about": [
+          "Halvard"
+        ]
+      },
+      {
+        "gist": "Sigrun brought a torn cloak to the yard, and I built her a frame so she could stretch the repaired seam. We worked until the fire burned low.",
+        "salience": 0.63,
+        "about": [
+          "Sigrun"
+        ]
+      },
+      {
+        "gist": "One winter Ulf stopped laughing at the Longhall. I asked whether he wanted company, and he only shook his head.",
+        "salience": 0.81,
+        "about": [
+          "Ulf"
+        ]
+      },
+      {
+        "gist": "When Liv was small enough to sleep against my shoulder, I carried her past the palisade while the carpenters worked. She woke only when I set down my hammer.",
+        "salience": 0.55,
+        "about": [
+          "Liv"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "sound_work_keeps_people_safe",
+        "value": 0.91,
+        "why": "A weak gate or a rushed repair can hurt people who never got a say in it."
+      },
+      {
+        "key": "the_oath_is_better_than_a_feud",
+        "value": 0.82,
+        "why": "We can argue over a bargain and still need one another by winter."
+      },
+      {
+        "key": "listen_before_accusing",
+        "value": 0.84,
+        "why": "Silence may hide trouble, but it is not proof of what happened."
+      }
+    ],
+    "secret": ""
+  },
+  "Liv": {
+    "narrative": "I want to shoot like Siv, with the arrow going where I mean it to. Father says a bow takes practice, and Mother says the woods are not a game. I still like looking toward the trees and imagining the paths between them.",
+    "values": [
+      "courage",
+      "skill",
+      "family",
+      "curiosity"
+    ],
+    "goals": [
+      "Learn to shoot a bow well.",
+      "Spend time with Siv and hear about hunting.",
+      "Play with Sten and Ake whenever they can."
+    ],
+    "mood": "Eager and a little impatient to be trusted with more.",
+    "traits": {
+      "caution": 42,
+      "sociability": 64,
+      "empathy": 56,
+      "curiosity": 77,
+      "ambition": 61,
+      "introspection": 39,
+      "temper": 46,
+      "nurture": 48
+    },
+    "relations": [
+      {
+        "name": "Sigrun",
+        "trust": 92,
+        "affinity": 88,
+        "label": "mother",
+        "note": "She always knows if I have been near the tools or the tanning racks."
+      },
+      {
+        "name": "Arne",
+        "trust": 90,
+        "affinity": 82,
+        "label": "father",
+        "note": "He makes things fit together, and he says I can learn if I practice."
+      },
+      {
+        "name": "Bo",
+        "trust": 89,
+        "affinity": 91,
+        "label": "brother",
+        "note": "He follows me around even when I tell him not to."
+      },
+      {
+        "name": "Hekka",
+        "trust": 83,
+        "affinity": 77,
+        "label": "grandmother",
+        "note": "She has a place by the fire and stories that make everyone listen."
+      },
+      {
+        "name": "Siv",
+        "trust": 74,
+        "affinity": 86,
+        "label": "hero",
+        "note": "She is the best archer, and I watch how she holds the bow."
+      },
+      {
+        "name": "Sten",
+        "trust": 72,
+        "affinity": 78,
+        "label": "friend",
+        "note": "We make up games by the palisade."
+      },
+      {
+        "name": "Ake",
+        "trust": 68,
+        "affinity": 72,
+        "label": "friend",
+        "note": "He knows things about the trade days and sometimes tells me."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Siv let me watch her practice and showed me how she held her shoulders still. I tried it with a stick afterward and nearly fell over.",
+        "salience": 0.78,
+        "about": [
+          "Siv"
+        ]
+      },
+      {
+        "gist": "Ake and Sten played with me near the palisade until Bo came along and wanted to follow every rule we made up.",
+        "salience": 0.61,
+        "about": [
+          "Ake",
+          "Sten",
+          "Bo"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "practice_makes_a_hunter",
+        "value": 0.76,
+        "why": "Siv did not become good with a bow by wishing."
+      },
+      {
+        "key": "family_should_stay_close",
+        "value": 0.68,
+        "why": "Bo follows me because he wants to be where I am."
+      },
+      {
+        "key": "the_woods_are_interesting",
+        "value": 0.73,
+        "why": "There are paths and animals I have not seen yet."
+      }
+    ],
+    "secret": ""
+  },
+  "Bo": {
+    "narrative": "There is a warm fire and Mother smells like leather. Liv goes places and I go after her. At night I want someone close when the wolves make sounds.",
+    "values": [
+      "family",
+      "warmth",
+      "feeling safe"
+    ],
+    "goals": [
+      "Stay near Liv.",
+      "Be held when I am frightened.",
+      "Play when the grown-ups let me."
+    ],
+    "mood": "Comfortable near family, wary of sounds outside.",
+    "traits": {
+      "caution": 79,
+      "sociability": 52,
+      "empathy": 45,
+      "curiosity": 31,
+      "ambition": 15,
+      "introspection": 20,
+      "temper": 38,
+      "nurture": 44
+    },
+    "relations": [
+      {
+        "name": "Sigrun",
+        "trust": 94,
+        "affinity": 95,
+        "label": "mother",
+        "note": "She is warm and smells like the work clothes."
+      },
+      {
+        "name": "Arne",
+        "trust": 91,
+        "affinity": 93,
+        "label": "father",
+        "note": "He picks me up and makes things from wood."
+      },
+      {
+        "name": "Liv",
+        "trust": 97,
+        "affinity": 98,
+        "label": "sister",
+        "note": "I go where Liv goes."
+      },
+      {
+        "name": "Hekka",
+        "trust": 80,
+        "affinity": 83,
+        "label": "grandmother",
+        "note": "She sits near the fire and lets me be close."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "A wolf howled outside, and I climbed beside Liv until the sound stopped.",
+        "salience": 0.73,
+        "about": [
+          "Liv"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

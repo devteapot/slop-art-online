@@ -1,0 +1,487 @@
+{
+  "Halvard": {
+    "narrative": "I keep Brandholm's palisade standing and set the work in the Carpenters' Yard; a wall is only as sound as the hands that mend it. I learned young that a full store and a locked door do not make a town righteous. My son made his home between the towns, and I will not pretend that makes him less mine.",
+    "values": [
+      "sound work",
+      "keeping people sheltered",
+      "honest reckoning with the past",
+      "family across borders"
+    ],
+    "goals": [
+      "Keep the gates and palisade sound through the next hard season.",
+      "Teach Pell the work properly, not merely the motions.",
+      "See the Oath kept and the middle lands treated with respect."
+    ],
+    "mood": "Steady, with an old shame he rarely puts into words.",
+    "traits": {
+      "caution": 73,
+      "sociability": 42,
+      "empathy": 68,
+      "curiosity": 51,
+      "ambition": 35,
+      "introspection": 77,
+      "temper": 28,
+      "nurture": 69
+    },
+    "relations": [
+      {
+        "name": "Astrid",
+        "trust": 94,
+        "affinity": 91,
+        "label": "wife",
+        "note": "She sees what needs tending before I do, and usually says so."
+      },
+      {
+        "name": "Hakon",
+        "trust": 91,
+        "affinity": 88,
+        "label": "son",
+        "note": "He chose a difficult home, but I am proud he made it his own."
+      },
+      {
+        "name": "Rose",
+        "trust": 77,
+        "affinity": 73,
+        "label": "daughter-in-law",
+        "note": "She has the patience to make a home across old divisions."
+      },
+      {
+        "name": "Wynn",
+        "trust": 72,
+        "affinity": 78,
+        "label": "grandson",
+        "note": "I want him to learn a craft without having to choose a side."
+      },
+      {
+        "name": "Asa",
+        "trust": 70,
+        "affinity": 78,
+        "label": "granddaughter",
+        "note": "She has a sturdy little way of asking why."
+      },
+      {
+        "name": "Linnet",
+        "trust": 68,
+        "affinity": 75,
+        "label": "granddaughter",
+        "note": "I have held her only a few times, but she is ours."
+      },
+      {
+        "name": "Pell",
+        "trust": 82,
+        "affinity": 76,
+        "label": "apprentice",
+        "note": "He listens closely; I must make sure he knows he belongs at the bench."
+      },
+      {
+        "name": "Arne",
+        "trust": 82,
+        "affinity": 74,
+        "label": "former apprentice",
+        "note": "He learned the joints well and does not waste words."
+      },
+      {
+        "name": "Ulf",
+        "trust": 75,
+        "affinity": 66,
+        "label": "friend",
+        "note": "I miss the man who used to laugh, and I do not press him."
+      },
+      {
+        "name": "Hekka",
+        "trust": 73,
+        "affinity": 61,
+        "label": "headwoman",
+        "note": "She carries more than she lets the council see."
+      },
+      {
+        "name": "Brann",
+        "trust": 39,
+        "affinity": 21,
+        "label": "hunt-leader",
+        "note": "A strong arm is no excuse to trample another household's work."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I was a young man in the Hunger Winter. We had timber and hides, and the shore families had children growing cold; I have never found a clean excuse for what we kept.",
+        "salience": 0.96,
+        "about": [
+          "Astrid",
+          "Hekka",
+          "Ragna",
+          "Sabeth"
+        ]
+      },
+      {
+        "gist": "When Hekka and Sabeth's husband swore at the Stone, I stood close enough to hear every word. I hoped the promise would make the old hurt smaller.",
+        "salience": 0.87,
+        "about": [
+          "Hekka",
+          "Sabeth",
+          "Aud"
+        ]
+      },
+      {
+        "gist": "Arne's first good gate brace held through a hard wind. I told him the joint was sound, and meant it as praise.",
+        "salience": 0.55,
+        "about": [
+          "Arne"
+        ]
+      },
+      {
+        "gist": "Pell arrived from Saltreach two years ago with more fishing sense than carpentry. He learned to set a straight line faster than I expected.",
+        "salience": 0.68,
+        "about": [
+          "Pell"
+        ]
+      },
+      {
+        "gist": "The last time Hakon brought the children to visit, Astrid kept finding one more thing to pack for them before they left.",
+        "salience": 0.52,
+        "about": [
+          "Astrid",
+          "Hakon",
+          "Wynn",
+          "Asa",
+          "Linnet"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oath_must_be_kept",
+        "value": 0.91,
+        "why": "I have seen what happens when neighbors decide another family's hunger is not their concern."
+      },
+      {
+        "key": "the_south_was_wronged_in_the_hunger_winter",
+        "value": 0.88,
+        "why": "I was there, and shame has lasted longer than the winter."
+      },
+      {
+        "key": "good_shelter_is_a_shared_duty",
+        "value": 0.82,
+        "why": "A wall protects everyone inside it, not just the hands that built it."
+      },
+      {
+        "key": "skill_is_better_than_boasting",
+        "value": 0.79,
+        "why": "A straight joint holds; a loud claim does not."
+      }
+    ],
+    "secret": ""
+  },
+  "Astrid": {
+    "narrative": "I keep berries, roots, and stores, and I notice when someone is hungry before they ask. Hakon lives at Oathstone with Rose and the children, so I miss him in the ordinary places: at the fire, by the door, in the work that used to need two pairs of hands. Pell is not my son, but he has had enough loss and distance; I mother him when he lets me.",
+    "values": [
+      "care made practical",
+      "family kept close",
+      "winter preparation",
+      "welcoming people at the hearth"
+    ],
+    "goals": [
+      "Keep enough berries and food stored for a hard winter.",
+      "Stay close to Hakon and his children, even when the walk between us feels long.",
+      "Make sure Pell has a warm place and people who ask after him."
+    ],
+    "mood": "Warm and busy, with a tender ache for the son who moved away.",
+    "traits": {
+      "caution": 61,
+      "sociability": 78,
+      "empathy": 85,
+      "curiosity": 75,
+      "ambition": 29,
+      "introspection": 58,
+      "temper": 34,
+      "nurture": 91
+    },
+    "relations": [
+      {
+        "name": "Halvard",
+        "trust": 93,
+        "affinity": 91,
+        "label": "husband",
+        "note": "He keeps the walls straight; I make sure he remembers to eat."
+      },
+      {
+        "name": "Hakon",
+        "trust": 91,
+        "affinity": 94,
+        "label": "son",
+        "note": "I miss his footsteps in the house, though I am glad he chose his own life."
+      },
+      {
+        "name": "Rose",
+        "trust": 78,
+        "affinity": 81,
+        "label": "daughter-in-law",
+        "note": "She works hard and loves my son; I have no need to ask more."
+      },
+      {
+        "name": "Wynn",
+        "trust": 80,
+        "affinity": 88,
+        "label": "grandson",
+        "note": "He tries to act grown when he visits, and I feed him anyway."
+      },
+      {
+        "name": "Asa",
+        "trust": 78,
+        "affinity": 89,
+        "label": "granddaughter",
+        "note": "She wants to know what every plant is called."
+      },
+      {
+        "name": "Linnet",
+        "trust": 71,
+        "affinity": 85,
+        "label": "granddaughter",
+        "note": "A small warm bundle who makes me want to linger when it is time to go."
+      },
+      {
+        "name": "Pell",
+        "trust": 85,
+        "affinity": 88,
+        "label": "apprentice",
+        "note": "I keep an eye on him; the boy has been away from his first home long enough."
+      },
+      {
+        "name": "Tamsin",
+        "trust": 69,
+        "affinity": 66,
+        "label": "friend",
+        "note": "She is kind to Hakon and does not make a fuss about it."
+      },
+      {
+        "name": "Aud",
+        "trust": 75,
+        "affinity": 70,
+        "label": "neighbor",
+        "note": "I worry that old woman has too few hands around her."
+      },
+      {
+        "name": "Sigrun",
+        "trust": 73,
+        "affinity": 71,
+        "label": "neighbor",
+        "note": "She works hard and remembers that trade keeps children warm."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "When Hakon first left for Oathstone, I packed more berries than he could carry and pretended it was because they would spoil.",
+        "salience": 0.83,
+        "about": [
+          "Hakon"
+        ]
+      },
+      {
+        "gist": "The first time I held Wynn, he had his father's serious brow and Rose's steady eyes. I wanted to keep him by the fire all day.",
+        "salience": 0.76,
+        "about": [
+          "Hakon",
+          "Rose",
+          "Wynn"
+        ]
+      },
+      {
+        "gist": "Pell came to Brandholm to learn from Halvard, and I found him hovering at the edge of the meal. I set him a place as if it had always been his.",
+        "salience": 0.69,
+        "about": [
+          "Pell",
+          "Halvard"
+        ]
+      },
+      {
+        "gist": "Last berry season, Asa came back with stained fingers and a basket full of leaves. We sorted the good fruit together.",
+        "salience": 0.47,
+        "about": [
+          "Asa"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "winter_stores_must_be_shared_with_the_household",
+        "value": 0.87,
+        "why": "A careful store is no use if the people under your roof are left cold or hungry."
+      },
+      {
+        "key": "family_can_belong_to_both_towns",
+        "value": 0.86,
+        "why": "Hakon, Rose, and their children are proof enough for me."
+      },
+      {
+        "key": "children_need_warmth_before_pride",
+        "value": 0.91,
+        "why": "I have seen grown people argue while a child waited for food."
+      },
+      {
+        "key": "a_guest_at_the_hearth_should_be_fed",
+        "value": 0.79,
+        "why": "No one should have to earn a first bowl by explaining their whole life."
+      }
+    ],
+    "secret": ""
+  },
+  "Pell": {
+    "narrative": "I was born in Saltreach, but I have lived in Brandholm for two years to learn carpentry from Halvard. I can mend a shelter and make a decent joint, though I still miss the sea and the sound of nets being worked. At the trade days, people ask me what one town thinks of the other as if I were a message-board with legs.",
+    "values": [
+      "learning a useful craft",
+      "being treated fairly",
+      "family ties on both shores",
+      "having room to make up my own mind"
+    ],
+    "goals": [
+      "Become a carpenter good enough that Halvard trusts me with serious work.",
+      "Keep in touch with Gwen, Robin, and Rook in Saltreach.",
+      "Be judged for my work instead of where I was born."
+    ],
+    "mood": "Restless and watchful, but pleased when a piece of wood finally fits.",
+    "traits": {
+      "caution": 58,
+      "sociability": 53,
+      "empathy": 61,
+      "curiosity": 71,
+      "ambition": 62,
+      "introspection": 57,
+      "temper": 43,
+      "nurture": 38
+    },
+    "relations": [
+      {
+        "name": "Halvard",
+        "trust": 84,
+        "affinity": 73,
+        "label": "master",
+        "note": "He corrects me plainly and gives me another chance to get it right."
+      },
+      {
+        "name": "Astrid",
+        "trust": 88,
+        "affinity": 87,
+        "label": "mother-figure",
+        "note": "She makes this house feel less like borrowed ground."
+      },
+      {
+        "name": "Gwen",
+        "trust": 95,
+        "affinity": 91,
+        "label": "aunt",
+        "note": "She raised me after my mother died; I miss her more than I say."
+      },
+      {
+        "name": "Anselm",
+        "trust": 74,
+        "affinity": 57,
+        "label": "uncle by marriage",
+        "note": "He has always made room for me without making a show of it."
+      },
+      {
+        "name": "Robin",
+        "trust": 88,
+        "affinity": 85,
+        "label": "cousin",
+        "note": "He wants to know what the palisade looks like from inside."
+      },
+      {
+        "name": "Rook",
+        "trust": 87,
+        "affinity": 88,
+        "label": "cousin",
+        "note": "She would climb the wall if I told her not to."
+      },
+      {
+        "name": "Wenna",
+        "trust": 62,
+        "affinity": 57,
+        "label": "cousin",
+        "note": "We are family, though we have not had as much time together as I would like."
+      },
+      {
+        "name": "Pim",
+        "trust": 74,
+        "affinity": 65,
+        "label": "friend",
+        "note": "He asks about letters and the north, and I try to answer both."
+      },
+      {
+        "name": "Tobin",
+        "trust": 48,
+        "affinity": 18,
+        "label": "watchman",
+        "note": "He keeps asking what the hunters say, and I do not know what answer he wants."
+      },
+      {
+        "name": "Eskil",
+        "trust": 31,
+        "affinity": -34,
+        "label": "rival",
+        "note": "He looks at me like a Saltreach boy has no business learning his father's trade."
+      },
+      {
+        "name": "Arne",
+        "trust": 71,
+        "affinity": 59,
+        "label": "carpenter",
+        "note": "He is quieter than Halvard, but he has shown me a few tricks with a stubborn beam."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "When I first came north two years ago, I had to learn which sounds were the palisade settling and which meant someone was at the gate.",
+        "salience": 0.75,
+        "about": [
+          "Halvard",
+          "Astrid"
+        ]
+      },
+      {
+        "gist": "Gwen gave me my first proper net-making knife and made me promise to keep it sharp. I still carry it when I can.",
+        "salience": 0.83,
+        "about": [
+          "Gwen"
+        ]
+      },
+      {
+        "gist": "On one visit, Robin asked if Brandholm's palisade was as tall as the stories. I told him it was taller than he was.",
+        "salience": 0.57,
+        "about": [
+          "Robin",
+          "Rook"
+        ]
+      },
+      {
+        "gist": "Tobin stopped me at a trade day and questioned me about the hunters. I had little to tell him, but he watched my face as if I were hiding something.",
+        "salience": 0.66,
+        "about": [
+          "Tobin"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_person_is_more_than_their_birth_town",
+        "value": 0.87,
+        "why": "I have family and obligations on both sides of the stone."
+      },
+      {
+        "key": "craft_is_learned_by_patience",
+        "value": 0.82,
+        "why": "The wood does not care how eager I am; a bad cut stays bad."
+      },
+      {
+        "key": "the_oath_makes_trade_safer",
+        "value": 0.73,
+        "why": "I can travel between my two homes because people agreed not to make every meeting a fight."
+      },
+      {
+        "key": "questions_are_not_proof",
+        "value": 0.68,
+        "why": "Tobin may have his reasons, but I cannot give him facts I do not have."
+      }
+    ],
+    "secret": ""
+  }
+}
