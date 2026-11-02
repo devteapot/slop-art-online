@@ -207,6 +207,15 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
             percept(ctx, &c, now, "signal", baby.id, 0, at, text, if c.kind == "person" { 0.8 } else { 0.64 });
         }
     }
+    if !common::CRY_PROMPTS_CARERS {
+        // The cry is only a percept (above): no mind is made to think about it, and
+        // whether a culture attends to its infants is left to the minds themselves.
+        if old.as_ref() != Some(&cry) {
+            if old.is_some() { ctx.db.infant_cry().infant().update(cry); }
+            else { ctx.db.infant_cry().insert(cry); }
+        }
+        return Ok("made a baby crying".into());
+    }
     cry.prompted.retain(|p| carers.contains(&p.carer) || now.saturating_sub(p.at_ms) < CRY_REMINDER_MS);
     for carer in carers {
         let pending = ctx.db.deliberation().actor().find(carer);

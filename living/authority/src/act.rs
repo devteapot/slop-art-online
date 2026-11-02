@@ -275,6 +275,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         roll,
         skill: a.skill.clone(),
         routine,
+        yield_shield: common::YIELD_SHIELD,
     }
 }
 

@@ -407,8 +407,9 @@ fn take_done(a) {
 // which ("hurt" or "kill"); without it, people mean to hurt people, and every fight with an
 // animal is to kill. Threatening someone does no harm; yielding stops resisting.
 
-// How long a yield holds: the one who yielded does not strike back, and blows meant only to
-// hurt are held back from them (ms).
+// How long a yield holds: the one who yielded does not strike back (ms). Whether blows
+// meant only to hurt are also held back from them is the seed's `rules` choice
+// (`yield_shield`, on by default); a seed may hand that mercy to the minds' norms instead.
 fn yield_ms(kind) { 20000.0 }
 // A beating stops once its target is down to this share of full health...
 fn hurt_enough(kind) { 0.4 }
@@ -459,7 +460,10 @@ fn attack_check(a) {
     let wary = dares(a);
     if wary != "" { return wary; }
     if attack_mode(a) == "hurt" {
-        if within(a.target.yielded_ago, yield_ms(a.target.kind)) { return `${who(a)} has yielded`; }
+        // The yield's shield against blows meant only to hurt is a rule only while the
+        // seed's `rules` block keeps it so (`a.yield_shield`); without it, striking the
+        // yielded is possible and a matter for the minds and their norms.
+        if a.yield_shield && within(a.target.yielded_ago, yield_ms(a.target.kind)) { return `${who(a)} has yielded`; }
         if a.target.hp < hurt_enough(a.target.kind) * a.target.max_hp { return `you have hurt ${who(a)} enough: they are ${looks(a.target)}`; }
     }
     ""

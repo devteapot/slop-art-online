@@ -9,6 +9,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+// Behavior switches from the seed's `rules` block (build.rs writes the file; each lab arm
+// compiles its own). True is the enforced rule; false hands the behavior to the minds.
+include!(concat!(env!("OUT_DIR"), "/rules_flags.rs"));
+
 thread_local! {
     static MAP: RefCell<Option<Rc<Map>>> = const { RefCell::new(None) };
     static SCRIPTS: RefCell<Option<(u32, Rc<Scripts>)>> = const { RefCell::new(None) };

@@ -93,6 +93,9 @@ pub struct SkillCtx {
     pub skill: String,
     /// The routine being reworked (rework only).
     pub routine: RoutineFacts,
+    /// Whether the rules shield someone who has yielded from blows meant only to hurt
+    /// (the seed's `rules` block may hand that mercy to the minds instead).
+    pub yield_shield: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -561,6 +564,7 @@ fn to_map(c: &SkillCtx) -> Map {
     m.insert("text".into(), c.text.clone().into());
     m.insert("topic".into(), c.topic.clone().into());
     m.insert("roll".into(), f(c.roll));
+    m.insert("yield_shield".into(), c.yield_shield.into());
     m
 }
 
@@ -745,14 +749,23 @@ mod tests {
         assert!(damage(&s.done("attack", &c).unwrap()) > d, "a blow meant to kill is not held back");
         c.target.max_hp = 100.0;
         assert!(s.check("attack", &c).is_ok());
-        // Someone who has yielded: a beating is held back, killing is not; the one who yielded
-        // does not strike back while the yield holds.
+        // Someone who has yielded: with the shield on, a beating is held back while the
+        // yield holds (killing is not); the one who yielded does not strike back. With the
+        // seed's shield handed to the minds, the beating lands and stays short of the floor.
         c.target.hp = 80.0;
         c.target.yielded_ago = Some(3000.0);
         assert!(s.check("attack", &c).is_ok());
         c.item = "hurt".into();
+        c.yield_shield = true;
         assert!(s.check("attack", &c).unwrap_err().contains("has yielded"));
-        c.target.yielded_ago = Some(25_000.0);
+        c.yield_shield = false;
+        assert!(s.check("attack", &c).is_ok());
+        let d = damage(&s.done("attack", &c).unwrap());
+        assert!((d - 18.0).abs() < 1e-3, "without the shield the full blow lands on the yielded: {d}");
+        c.target.hp = 20.0;
+        let d = damage(&s.done("attack", &c).unwrap());
+        assert!((d - 10.0).abs() < 1e-3, "a beating of the yielded is still held at the floor: {d}");
+        c.target.hp = 80.0;
         assert!(s.check("attack", &c).is_ok());
         c.actor.yielded_ago = Some(1000.0);
         assert!(s.check("attack", &c).unwrap_err().contains("you have yielded"));
