@@ -1,6 +1,6 @@
 # Stages: growing the living world
 
-Decided with the user on 2026-09-26 after the large realm worlds collapsed (mass starvation, stillness, repetitive talk) in ways that made it unclear which layer had failed. The world now grows one layer at a time in small lab worlds. A stage passes only when its measured criteria hold, and only then does the next layer go on top. Work proceeds autonomously; evidence and every rule change are recorded here, and each passing stage is committed and pushed to `living-core`.
+Decided with the user on 2026-09-26 after the large realm worlds collapsed (mass starvation, stillness, repetitive talk) in ways that made it unclear which layer had failed. The world now grows one layer at a time in small lab worlds. A stage passes only when its measured criteria hold, and only then does the next layer go on top. Work proceeds autonomously; evidence and every rule change are recorded here, and each passing stage is committed and pushed to `main` (since 2026-11-02; earlier stages went to `living-core`, which is fully merged).
 
 **Latest handoff:** [LIVING_HANDOFF.md](LIVING_HANDOFF.md) (2026-09-27: experiments stopped, state and findings).
 
