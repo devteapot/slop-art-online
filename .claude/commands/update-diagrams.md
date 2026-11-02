@@ -2,13 +2,13 @@ Maintain Mermaid diagrams in `docs/diagrams/` when the task changes the architec
 
 ## Establish the diagram's scope
 
-Read `docs/SIMULATION_VISION.md`, `docs/WORLD_VISION.md`, the current-status summary and linked evidence. Use `server/module/spacetimedb/AGENTS.md` and `server/bridge/AGENTS.md` to locate active source.
+Read `docs/SIMULATION_VISION.md`, `docs/WORLD_VISION.md`, the current-status summary and linked evidence. Use [docs/LIVING_CORE.md](../../docs/LIVING_CORE.md) and the `living/` workspace to locate active source.
 
 The foundation path is Bevy/participant clients, scoped SpacetimeDB authority and external agent reasoning. Legacy `NpcPendingDecision`, NPC tick/identity tables and ADR 005 diagrams must be labeled historical where they remain. Do not copy their template conversation, automatic belief propagation or fixed model-call quotas into a current diagram.
 
 ## Trace the actual flow
 
-Inspect the relevant `simulation/` modules, foundation reducers/storage/client access, participant/MCP services, agent harness and Bevy foundation code. Show actual perception, intention, validation, effect and learning boundaries. Distinguish participant knowledge from operator audit access.
+Inspect the relevant `living/` crates (authority, rules, mind, viewer) and their reducer, skill and subscription paths. Show actual perception, intention, validation, effect and learning boundaries. Distinguish participant knowledge from operator audit access.
 
 For database/subscription diagrams, consult official SpacetimeDB documentation and the pinned implementation. Distinguish current whole-World paths from proposed typed-row or spatial-subscription changes. A planned optimization is not an implemented incremental path.
 

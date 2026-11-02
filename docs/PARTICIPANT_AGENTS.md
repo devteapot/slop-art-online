@@ -1,5 +1,7 @@
 # Participant agent runtimes
 
+**Historical (removed line).** This guide serves the retired participant runtimes, deleted from the tree on 2026-11-02. Their code no longer exists at HEAD; the last state is the `legacy-baseline` tag. The active core is the [living core](LIVING_CORE.md).
+
 ## Current combat and perception boundary
 
 [Iteration 26](PERFORMANCE_ITERATION_26.md) adds the optional

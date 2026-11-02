@@ -1,5 +1,7 @@
 # Running the M1 simulation proof
 
+**Historical (removed line).** This runbook serves the retired `simulation`/`server`/`bridge` implementation, deleted from the tree on 2026-11-02. Its recipes no longer exist at HEAD; the last state is the `legacy-baseline` tag. The active core is the [living core](LIVING_CORE.md).
+
 M1 is a small survival simulation inside the existing SpacetimeDB module. [simulation/src/lib.rs](../simulation/src/lib.rs) owns the rules; [foundation.rs](../server/module/spacetimedb/src/foundation.rs) invokes them transactionally. The runner never steps a second local simulation. The Rust [sao-sim](../server/bridge/src/bin/sao-sim.rs) binary publishes unique local databases, calls reducers, performs asynchronous model requests, and exports evidence. Its HTML inspector is an operator tool, not a replacement for the Bevy game client.
 
 This is the foundation path for future gameplay. The old voxel/3D client has been removed. Legacy `Player`/`Npc` server reducers have not been migrated; their respawn, skill and evaluator limitations still apply to that prototype. Use the commands below for headless M1 checks. `just client` now opens the supported 2D foundation client; the original bridge binary still targets legacy reducers.

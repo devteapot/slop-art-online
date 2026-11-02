@@ -4,7 +4,7 @@ Maintain project documentation against actual source and retained verification e
 
 Start with `docs/SIMULATION_VISION.md`, `docs/WORLD_VISION.md`, `docs/CURRENT_STATE.md`, `docs/WORLD_ROADMAP.md`, `docs/TODO.md` and `docs/AUDIT_AND_EXPERIMENTS.md`. Historical ADRs explain previous decisions; they are not the current implementation specification.
 
-Use `server/module/spacetimedb/AGENTS.md` and `server/bridge/AGENTS.md` for active source maps. Inspect `simulation/`, foundation storage/client access, participant runtimes and the Bevy foundation client. Inspect legacy `npc_ai.rs`, tables and bridge routing only when documenting that explicitly labeled path.
+Use [docs/LIVING_CORE.md](../../docs/LIVING_CORE.md) and the `living/` workspace for the active source map. Inspect the `living/` crates (authority, rules, mind, viewer). The removed legacy line (`simulation/`, `server/`, `client/`) is documented only as an explicitly labeled historical path; its last state is the `legacy-baseline` tag.
 
 For SpacetimeDB architecture/API claims, consult the relevant official documentation and verify compatibility with pinned dependencies and actual runtime versions. Do not reproduce obsolete SDK snippets or infer implementation from a guide.
 

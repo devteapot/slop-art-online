@@ -2,6 +2,8 @@
 
 This document describes the retained technology and architectural boundaries. Product direction lives in the [simulation vision](docs/SIMULATION_VISION.md), implementation limitations in [current state](docs/CURRENT_STATE.md), and build order in the [roadmap](docs/TODO.md). It is not a second feature specification. Source/configuration review: baseline `1736fc1`, 2026-09-04; no build or deployment verification performed here.
 
+**Historical (removed line).** This reference reviews the retired legacy stack; its source trees were deleted on 2026-11-02 (last state: the `legacy-baseline` tag). The active stack is the [living core](docs/LIVING_CORE.md): SpacetimeDB 2.10.1, the `living/` Rust workspace and Docker.
+
 The M1 kernel now lives in `simulation/`, called by `foundation.rs` in the existing authoritative module. The Rust bridge also supplies a scenario/model runner and local operator inspector. See the [runbook](docs/M1_RUNBOOK.md); legacy source findings below are not an inventory of the new foundation path.
 
 ## Retained architecture

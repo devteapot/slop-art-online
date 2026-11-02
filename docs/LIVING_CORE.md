@@ -1,6 +1,6 @@
 # Living core
 
-Status: **in development** (started 2026-09-25). This is the lean replacement core agreed with the user after the scaling diagnosis below. It lives in its own Cargo workspace under [`living/`](../living) and does not modify the legacy `simulation/`, `server/` or `client/` crates. Legacy docs remain historical evidence.
+Status: **in development** (started 2026-09-25). This is the lean replacement core agreed with the user after the scaling diagnosis below. It lives in its own Cargo workspace under [`living/`](../living). The legacy `simulation/`, `server/`, `client/`, `prototypes/`, `experiments/` and `shared/` trees were removed on 2026-11-02; their last state is the `legacy-baseline` tag, and the legacy docs remain historical evidence.
 
 ## Why a new core
 
