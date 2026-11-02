@@ -1,5 +1,7 @@
 # Bevy browser simulation client
 
+**Historical (removed line).** This runbook serves the retired browser foundation client, deleted from the tree on 2026-11-02. Its recipes no longer exist at HEAD; the last state is the `legacy-baseline` tag. The active observer is the living viewer (`just living-web` / `just living-viewer`).
+
 The current rendering iteration also caches unchanged SDK presentation components,
 retains closed-inspector navigation entities and updates the clock text separately.
 Actor motion continues to update every frame; the open inspector keeps its rich

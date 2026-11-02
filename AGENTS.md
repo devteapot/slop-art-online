@@ -1,16 +1,15 @@
 # Project guidance
 
-Slop Art Online is a persistent living-world game built with Rust, SpacetimeDB and Bevy. The current client is a top-down 2D behavior lab; the voxel/3D client is retired. Human-controlled and AI-controlled characters share authority, capabilities and physical rules.
+Slop Art Online is a persistent living-world game built with Rust, SpacetimeDB and Bevy. The active implementation is the living core (`living/` workspace, `just living-*` recipes). The earlier `simulation/`/`server/`/`client/` line was removed on 2026-11-02; its last state is the `legacy-baseline` tag. Human-controlled and AI-controlled characters share authority, capabilities and physical rules.
 
 ## Read first
 
-- **[Living core](docs/LIVING_CORE.md)**: the active core since 2026-09-26 (`living/` workspace, `just living-*` recipes). Legacy `simulation/`, `server/` and `client/` remain as historical baseline.
+- **[Living core](docs/LIVING_CORE.md)**: the active core since 2026-09-26 (`living/` workspace, `just living-*` recipes). The legacy `simulation/`, `server/`, `client/`, `prototypes/`, `experiments/` and `shared/` trees are removed; their runbooks and evidence remain in `docs/` as history, resolving at `legacy-baseline`.
 
 - [Simulation vision](docs/SIMULATION_VISION.md) and [world vision](docs/WORLD_VISION.md): agreed direction and open design choices.
-- [Current state](docs/CURRENT_STATE.md), [world roadmap](docs/WORLD_ROADMAP.md) and [work queue](docs/TODO.md): implementation evidence and remaining work.
+- [Current state](docs/CURRENT_STATE.md), [world roadmap](docs/WORLD_ROADMAP.md) and [work queue](docs/TODO.md): implementation evidence and remaining work; the legacy sections are historical.
 - [Performance contract](docs/PERFORMANCE_CONTRACT.md): locked gameplay, latency, population and resource targets; benchmark acceptance rules.
 - [Audit and experiments](docs/AUDIT_AND_EXPERIMENTS.md): causal evidence and acceptance requirements.
-- [Module guidance](server/module/AGENTS.md), [authority guidance](server/module/spacetimedb/AGENTS.md) and [bridge guidance](server/bridge/AGENTS.md): local implementation rules.
 
 The seven-stage roadmap has completed a bounded implementation pass. That does not establish autonomous ascension, sustainable large populations or performance acceptance. The locked target is 60 Hz active movement/combat, stable 60 FPS with higher refresh-rate support, and 2,000 active characters including a 200-character local battle for 8 hours within the performance contract's latency/resource limits. The immediate gate is 216 characters for 30 minutes at the same quality limits. Existing whole-World processing and finite actor limits are prototype constraints to address, not patterns to extend. Historical 20 Hz checkpoints, ADRs and old current-state sections do not override newer evidence or agreed design.
 
@@ -31,8 +30,8 @@ Spatial subscriptions are not permission boundaries by themselves: enforce perce
 - Preserve real-time behavior execution beneath asynchronous model interpretation and policy revision. Free-form communication and personal learning must not become silent proximity-based knowledge copying or prescribed narratives.
 - Death is initially permanent. New identities do not automatically inherit memories, possessions or mastery.
 - Preserve exact causal evidence, actual model exchanges, scoped privacy and original failed outcomes. A seed does not make fresh inference deterministic. Reported model explanations are not hidden chain-of-thought or proof of causation.
-- Keep rules authoritative in SpacetimeDB and reusable in `simulation/`; Bevy handles presentation/input. External inference belongs in the Rust agent/bridge layer, never in reducers. Do not create a second approximate simulator for experiments.
-- Retain shared logic when replacing storage boundaries. Generated types in `shared/` should be regenerated only for relevant interface changes, not hand-edited.
+- Keep rules authoritative in the living authority and expressed in its shared rules and skill scripts; Bevy handles presentation/input. External inference belongs in the mind service (`living/mind`), never in reducers. Do not create a second approximate simulator for experiments.
+- Retain shared logic when replacing storage boundaries. Generated bindings in `living/bindings` are regenerated via `just living-generate`, not hand-edited.
 
 ## Validation and resource discipline
 
@@ -42,17 +41,18 @@ Measure reducer execution/queue time, subscription volume, table growth, WASM me
 
 ## Build and run
 
-Use the [Justfile](Justfile), [browser runbook](docs/BEVY_BROWSER_CLIENT.md), [headless runbook](docs/M1_RUNBOOK.md) and [participant runtime guide](docs/PARTICIPANT_AGENTS.md). Verify the selected server, database, CLI and output paths before publishing or launching a run.
+Use the [Justfile](Justfile) and the [living core](docs/LIVING_CORE.md). The legacy runbooks ([M1 runbook](docs/M1_RUNBOOK.md), [Bevy browser client](docs/BEVY_BROWSER_CLIENT.md), [participant agents](docs/PARTICIPANT_AGENTS.md)) and [stack reference](STACK_REFERENCE.md) are retained as historical evidence for the removed line. Verify the selected server, database, CLI and output paths before publishing or launching a run.
 
 ```bash
-cargo test -p simulation --lib       # focused kernel checks
-cargo test -p bridge                 # bridge checks
-just bevy-web-build                  # browser assets
-just bevy-dev                        # foundation development host
-just client                          # native 2D client
+just living-check     # authority wasm + mind + both observers + rules tests; run before every commit
+just living-test      # rules tests
+just living-up        # SpacetimeDB + Neo4j containers
+just living-reset     # fresh world from the seed (DELETES world data)
+just living-mind      # mind service
+just living-web       # browser observer
 ```
 
-`just bevy-db-up` starts the foundation database; see the browser runbook for initial setup and versioned CLI paths. `cargo run -p bridge`, `just dev` and the default `just publish` recipes serve the legacy path. Reset recipes delete database data; they are not routine update commands.
+Reset recipes delete database data; they are not routine update commands.
 
 For documentation-only work, check links, terminology, current/target labels and `git diff --check`; do not build or regenerate bindings. Preserve unrelated workspace changes and immutable experiment artifacts.
 

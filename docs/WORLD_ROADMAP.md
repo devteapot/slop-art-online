@@ -1,5 +1,7 @@
 # From a first society to the living world
 
+Historical note (2026-11-02): the `simulation/` foundation described below was removed from the tree; its last state is the `legacy-baseline` tag. The active line is the [living core](LIVING_CORE.md) and current work is tracked in [STAGES.md](STAGES.md). The roadmap's intent still stands; its legacy source links and measurements are history.
+
 Work is paused at [script invocation boundary (49)](SCRIPT_BOUNDARY_SCALING_49.md).
 Its shared-definition candidate passes 360 focused tests and builds successfully;
 candidate performance measurements have not run. Iteration 48 remains the latest
