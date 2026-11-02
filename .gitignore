@@ -1,15 +1,4 @@
-/target
-/web/node_modules
-/web/dist
-/web/playwright-report
-/web/test-results
-/deploy/spacetimedb-data
-/deploy/ollama-data
-/deploy/open-webui-data
 .DS_Store
-
-# Local simulation evidence and browser verification artifacts
-/output/
 
 # Local NPC endpoint credentials; never part of run evidence
 /.local/credentials/
@@ -20,14 +9,9 @@
 # Short browser socket paths (Unix-domain sockets have a platform length limit)
 /.local/t/
 
-# Generated Bevy WASM bundle
-/client/dist/
-
-# Python verification-script caches
+# Python tool caches
 __pycache__/
 *.py[cod]
-
-/client/dist-participant/
 
 # Local API keys
 /.env
