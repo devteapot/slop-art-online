@@ -324,11 +324,12 @@ def main():
     ap.add_argument("--review", action="store_true")
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--llm-run", default=None, help="journal run name (default: the world's run)")
+    ap.add_argument("--name", default=None, help="report directory name (default: the world's run; use when worlds share a run name)")
     a = ap.parse_args()
     state = {}
     while True:
         r = round_once(a, state)
-        d = ROOT / ".local/living/watch" / r["run"]
+        d = ROOT / ".local/living/watch" / (a.name or r["run"])
         d.mkdir(parents=True, exist_ok=True)
         stamp = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M")
         (d / f"{stamp}.json").write_text(json.dumps(r, indent=2, ensure_ascii=False) + "\n")
