@@ -7,7 +7,7 @@
 use crate::controls::Input;
 use crate::net::Net;
 use crate::world::{Draw, Scene};
-use bevy::input::mouse::AccumulatedMouseScroll;
+use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
 use living_bindings::*;
@@ -172,6 +172,12 @@ pub struct Cam {
     pub shown: View,
     /// Least zoom allowed now (sight-bound presets), 0 otherwise.
     pub zoom_min: f32,
+    /// How long I have been walking toward the camera (s): short steps back don't turn the view.
+    back_s: f32,
+    /// Temporary look-around offset (degrees) while the glance button is held; eases back after.
+    pub glance: f32,
+    /// Scripted glance (demo), overriding the mouse.
+    pub scripted_glance: Option<f32>,
 }
 
 impl Default for Cam {
@@ -192,6 +198,9 @@ impl Default for Cam {
             cursor_ground: None,
             shown: rig.far,
             zoom_min: 0.0,
+            back_s: 0.0,
+            glance: 0.0,
+            scripted_glance: None,
         }
     }
 }
@@ -265,6 +274,8 @@ pub fn follow(
     mut draw: ResMut<Draw>,
     keys: Res<ButtonInput<KeyCode>>,
     scroll: Res<AccumulatedMouseScroll>,
+    motion: Res<AccumulatedMouseMotion>,
+    mouse: Res<ButtonInput<MouseButton>>,
     target: Res<crate::controls::Target>,
     input: Res<Input>,
     net: NonSend<Net>,
@@ -337,9 +348,24 @@ pub fn follow(
             // Pointing well off to the side keeps turning the view, faster the further off.
             YawMode::MouseSteer => (30.0, (2.0 * (d.abs() - 30.0)).min(90.0), look.is_some()),
         };
+        // Walking toward the camera (backing off, dodging) turns the view only after a second
+        // of it, so a retreat keeps what you retreat from in front of you.
+        let backwards = look.is_none() && d.abs() > 120.0 && input.moving;
+        cam.back_s = if backwards { cam.back_s + dt } else { 0.0 };
+        let active = active && (!backwards || cam.back_s > 1.2);
         if active && d.abs() > band {
             cam.follow_yaw += d.signum() * (rate * dt).min(d.abs() - band);
         }
+    }
+    // Glance: hold the middle button (or Alt) and move the mouse to look around; let go and
+    // the view eases back. Not an orbit: it always returns.
+    let holding = !ui.pointer && (mouse.pressed(MouseButton::Middle) || keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight));
+    if let Some(g) = cam.scripted_glance {
+        cam.glance += (g - cam.glance) * ease(6.0);
+    } else if holding {
+        cam.glance = (cam.glance + motion.delta.x * 0.3).clamp(-150.0, 150.0);
+    } else {
+        cam.glance -= cam.glance * ease(5.0);
     }
     // How much of the view follows: all of it, or (blend modes) more as you zoom in.
     let w = match mode {
@@ -354,7 +380,7 @@ pub fn follow(
     if w == 0.0 {
         cam.follow_yaw = cam.rig.yaw;
     }
-    let target_yaw = cam.rig.yaw + diff(cam.follow_yaw, cam.rig.yaw) * w;
+    let target_yaw = cam.rig.yaw + diff(cam.follow_yaw, cam.rig.yaw) * w + cam.glance;
     let delta = diff(target_yaw, cam.shown_yaw);
     cam.shown_yaw += delta * ease(10.0);
     // The movement keys keep their frame while held and catch up over about half a second

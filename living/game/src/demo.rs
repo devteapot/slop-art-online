@@ -72,6 +72,7 @@ pub fn run(
             sight.cone = *cone;
         }
         Act::Look(dir) => input.scripted_look = *dir,
+        Act::Glance(g) => cam.scripted_glance = *g,
         Act::Log(what) => info!("demo: {what}: camera yaw {:.0}°, pitch {:.0}°, sight {} r {:.0} cone {:.0}", cam.shown_yaw, cam.shown.pitch, sight.enabled, sight.radius, sight.cone),
         Act::Say(line) => {
             let end = net.my_body().map(|b| (b.x, b.y));
@@ -102,6 +103,7 @@ enum Act {
     Say(&'static str),
     Sight(bool, f32, f32),
     Look(Option<Vec2>),
+    Glance(Option<f32>),
     Log(&'static str),
     Exit,
 }
@@ -128,6 +130,21 @@ const STEPS: &[(f32, Act)] = &[
     (2.5, Act::Shot("default-out-scout-sight")),
     (0.1, Act::Log("default out, scout sight")),
     (0.2, Act::Sight(false, 11.0, 180.0)),
+    // Default camera: a short step back toward the camera keeps the view; a sustained walk turns it.
+    (0.3, Act::Preset(4, 0.55)),
+    (1.5, Act::Walk(Vec2::Y)),
+    (0.8, Act::Log("default, 0.8 s walking toward the camera")),
+    (0.1, Act::Stop),
+    (1.0, Act::Walk(Vec2::Y)),
+    (3.5, Act::Log("default, 3.5 s walking toward the camera")),
+    (0.1, Act::Shot("default-after-turning-around")),
+    (0.2, Act::Stop),
+    // Glance 90° to the right, then let go.
+    (0.5, Act::Glance(Some(90.0))),
+    (1.5, Act::Shot("default-glance")),
+    (0.1, Act::Log("glancing")),
+    (0.1, Act::Glance(None)),
+    (1.5, Act::Log("after the glance")),
     (0.3, Act::Preset(3, 0.0)),
     (2.5, Act::Shot("tilt-far")),
     (0.3, Act::Zoom(0.55)),
