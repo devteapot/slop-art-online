@@ -4761,6 +4761,7 @@ dependencies = [
  "bevy_mod_outline",
  "living-bindings",
  "living-rules",
+ "serde",
  "serde_json",
  "spacetimedb-sdk",
 ]
