@@ -22,6 +22,19 @@ python3 $V cleanup --run game-1                          # when done
 | `LIVING_GAME_TOKEN` | `.local/living/game/<db>.token` | where your identity token is kept, so you return to the same character |
 | `LIVING_GAME_DEMO` | unset | a directory: run the scripted demo, write screenshots there, then quit |
 
+## Look-dev mode
+
+`LIVING_GAME_LOOKDEV=1` runs a small fixed scene without the server, for judging the look on real models:
+- every `.glb`/`.gltf` in `living/game/assets/lookdev/` (git-ignored) is laid out in an arc beside a 1.75 m reference figure;
+- each model is converted to the shared toon material and outlined;
+- the game camera works as in play, and F1 → Look dev sets the sun's hour.
+
+With `LIVING_GAME_DEMO=<dir>` it photographs the scene from the north, east and south, at sunset, and without the toon look, then quits.
+
+```bash
+LIVING_GAME_LOOKDEV=1 cargo run --manifest-path living/Cargo.toml --release -p living-game
+```
+
 ## Controls
 
 | Input | Effect |

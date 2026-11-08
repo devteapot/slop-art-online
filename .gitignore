@@ -20,3 +20,4 @@ __pycache__/
 /living/target/
 /.local/living/
 /living/viewer/dist/
+/living/game/assets/lookdev/

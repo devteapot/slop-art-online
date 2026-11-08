@@ -45,6 +45,7 @@ pub fn draw(
     mut sight: ResMut<crate::sight::Sight>,
     mut my_size: ResMut<crate::bodies::MySize>,
     mut style: ResMut<crate::style::Style>,
+    lookdev: Option<ResMut<crate::lookdev::Lookdev>>,
     keys: Res<ButtonInput<KeyCode>>,
     target: Res<Target>,
     camq: Query<(&Camera, &Transform), With<Camera3d>>,
@@ -121,6 +122,14 @@ pub fn draw(
             ui.separator();
             ui.add(egui::Slider::new(&mut my_size.0, 0.4..=3.0).text("my size (× adult)"));
             ui.label(egui::RichText::new(format!("now: pitch {:.0}°, distance {:.1} m, fov {:.0}°{}", shown.pitch, shown.distance * my_size.0.max(0.4), shown.fov, if cam.talk_partner.is_some() { " · framing a conversation" } else { "" })).small().weak());
+        });
+    }
+
+    // Look-dev scene controls.
+    if let Some(mut look) = lookdev {
+        egui::Window::new("Look dev").anchor(egui::Align2::CENTER_TOP, [0.0, 10.0]).resizable(false).show(ctx, |ui| {
+            ui.add(egui::Slider::new(&mut look.hour, 6.0..=19.0).text("sun hour"));
+            ui.label(egui::RichText::new(format!("{} model(s) from living/game/assets/lookdev", look.models.len())).small().weak());
         });
     }
 

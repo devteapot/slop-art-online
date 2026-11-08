@@ -229,31 +229,37 @@ pub fn update(
             }
             continue;
         }
-        let parts = parts(&b.kind, *id, mine);
-        let smooth = |mut m: Mesh| {
-            let _ = m.generate_outline_normals(&Default::default());
-            m
-        };
-        let body = meshes.add(smooth(parts.body));
-        let e = commands
-            .spawn((
-                Creature(*id),
-                Gait { last: p, phase: hash(*id, 9) * 6.28, speed: 0.0, stride: parts.stride },
-                Transform::from_translation(at).with_rotation(rot).with_scale(Vec3::splat(size)),
-                Visibility::default(),
-                outline(Outlined::Person, &style),
-                PropagateOutline,
-            ))
-            .with_children(|root| {
-                root.spawn((Mesh3d(body), MeshMaterial3d(palette.vertex.clone()), Transform::default()));
-                for (pivot, mesh, offset, amp) in parts.limbs {
-                    let m = meshes.add(smooth(mesh));
-                    root.spawn((Limb { offset, amp }, Transform::from_translation(pivot), Visibility::default())).with_children(|l| {
-                        l.spawn((Mesh3d(m), MeshMaterial3d(palette.vertex.clone()), Transform::default()));
-                    });
-                }
-            })
-            .id();
+        let e = spawn(&mut commands, &mut meshes, &palette, &style, &b.kind, *id, mine, Transform::from_translation(at).with_rotation(rot).with_scale(Vec3::splat(size)), p);
         scene.creatures.insert(*id, e);
     }
+}
+
+/// Spawn a creature model (root, body and limbs) at `tf`; `p` seeds its gait position.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &crate::world::Palette, style: &Style, kind: &str, id: u32, mine: bool, tf: Transform, p: Vec2) -> Entity {
+    let parts = parts(kind, id, mine);
+    let smooth = |mut m: Mesh| {
+        let _ = m.generate_outline_normals(&Default::default());
+        m
+    };
+    let body = meshes.add(smooth(parts.body));
+    commands
+        .spawn((
+            Creature(id),
+            Gait { last: p, phase: hash(id, 9) * 6.28, speed: 0.0, stride: parts.stride },
+            tf,
+            Visibility::default(),
+            outline(Outlined::Person, style),
+            PropagateOutline,
+        ))
+        .with_children(|root| {
+            root.spawn((Mesh3d(body), MeshMaterial3d(palette.vertex.clone()), Transform::default()));
+            for (pivot, mesh, offset, amp) in parts.limbs {
+                let m = meshes.add(smooth(mesh));
+                root.spawn((Limb { offset, amp }, Transform::from_translation(pivot), Visibility::default())).with_children(|l| {
+                    l.spawn((Mesh3d(m), MeshMaterial3d(palette.vertex.clone()), Transform::default()));
+                });
+            }
+        })
+        .id()
 }

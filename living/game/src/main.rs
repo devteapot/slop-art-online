@@ -16,6 +16,7 @@ mod camera;
 mod controls;
 mod demo;
 mod hud;
+mod lookdev;
 mod net;
 mod sight;
 mod style;
@@ -27,14 +28,19 @@ use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 fn main() {
     let mut app = App::new();
     app.insert_resource(ClearColor(camera::SKY))
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Slop Art Online — camera spike".into(),
-                resolution: bevy::window::WindowResolution::new(1600, 900),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Slop Art Online — camera spike".into(),
+                        resolution: bevy::window::WindowResolution::new(1600, 900),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                // Assets live beside the crate, wherever the binary is run from.
+                .set(AssetPlugin { file_path: lookdev::asset_root(), ..default() }),
+        )
         .add_plugins(EguiPlugin::default())
         .add_plugins(style::StylePlugin)
         .init_non_send::<net::Net>()
@@ -49,14 +55,20 @@ fn main() {
         .insert_resource(controls::Input::new(std::env::var("LIVING_GAME_DEMO").is_ok()))
         .init_resource::<hud::Hud>()
         .init_resource::<hud::UiWants>()
-        .add_systems(Startup, (world::setup, camera::spawn, sight::setup))
-        .add_systems(
-            Update,
-            (net::pump, bodies::update, world::things, controls::target, world::terrain, demo::run, controls::movement, camera::follow, world::fade_trees, sight::update, controls::gizmos).chain(),
-        )
         .add_systems(EguiPrimaryContextPass, hud::draw);
-    if let Some(d) = demo::Demo::from_env() {
-        app.insert_resource(d);
+    if lookdev::enabled() {
+        // Look-dev: a fixed scene of models from assets/lookdev, no server.
+        app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup).chain())
+            .add_systems(Update, (lookdev::convert, lookdev::sun, lookdev::demo, camera::follow, world::fade_trees).chain());
+    } else {
+        app.add_systems(Startup, (world::setup, camera::spawn, sight::setup))
+            .add_systems(
+                Update,
+                (net::pump, bodies::update, world::things, controls::target, world::terrain, demo::run, controls::movement, camera::follow, world::fade_trees, sight::update, controls::gizmos).chain(),
+            );
+        if let Some(d) = demo::Demo::from_env() {
+            app.insert_resource(d);
+        }
     }
     app.run();
 }

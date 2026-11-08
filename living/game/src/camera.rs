@@ -106,6 +106,11 @@ fn axes(yaw_deg: f32) -> (Vec2, Vec2) {
 }
 
 impl Cam {
+    /// Turn the view to a yaw (degrees); it eases there.
+    pub fn set_yaw(&mut self, yaw: f32) {
+        self.yaw = yaw;
+    }
+
     /// Ground-plane unit vectors for "screen up" and "screen right" of the movement keys.
     pub fn control_axes(&self) -> (Vec2, Vec2) {
         axes(self.control_yaw)
