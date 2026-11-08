@@ -62,7 +62,7 @@ fn main() {
     if lookdev::enabled() {
         // Look-dev: a fixed scene of models from assets/lookdev, no server.
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup).chain())
-            .add_systems(Update, (lookdev::convert, lookdev::fit, lookdev::sun, lookdev::demo, camera::follow, world::fade_trees).chain());
+            .add_systems(Update, (lookdev::convert, lookdev::fit, lookdev::rig, lookdev::animate, lookdev::sun, lookdev::demo, camera::follow, world::fade_trees).chain());
     } else {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup))
             .add_systems(

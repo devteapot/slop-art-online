@@ -29,7 +29,16 @@ python3 $V cleanup --run game-1                          # when done
 - each model is converted to the shared toon material and outlined;
 - the game camera works as in play, and F1 → Look dev sets the sun's hour.
 
-Each model is scaled to a 1.75 m character from its bounds and faces the camera (VRM models are turned, since they face −Z). `living/tools/lookdev_assets.sh` downloads the CC0 set used so far: two VRoid anime characters (Sendagaya Shino, Vivi) and four KayKit Adventurers.
+Each model is scaled to a 1.75 m character from its bounds and faces the camera (VRM models are turned, since they face −Z).
+- **Skin:** materials named …_SKIN (VRoid's convention) get lighter, warmer skin shadows.
+- **VRoid characters:** they are animated procedurally from their standard `J_Bip_*` bones and `Fcl_*` face blend shapes:
+  - arms lowered out of the T-pose;
+  - breathing and head movement;
+  - a walk cycle in place;
+  - blinking;
+  - the mouth moving while talking.
+
+  F1 → Look dev switches between idle, walk and talk. Bevy reads morph target names from mesh extras, while VRoid stores them on the primitive, so the names are read from the file's JSON. `living/tools/lookdev_assets.sh` downloads the CC0 set used so far: two VRoid anime characters (Sendagaya Shino, Vivi) and four KayKit Adventurers.
 
 With `LIVING_GAME_DEMO=<dir>` it photographs the scene:
 - from the north, east and south;

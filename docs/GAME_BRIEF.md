@@ -206,7 +206,11 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
     - a hard step with about 70% lit;
     - shadows made by hue shift with saturation kept;
     - a finishing pass with depth and normal edge lines drawn outside silhouettes, a screen-space rim from depth, and a film gradient with saturation grading.
-  - Still to add: flattened face normals and SDF face shadows, which need real character heads.
+  - Skin materials get lighter, warm-hued shadows. That fixed faces turning flushed pink under the cool shadow hue.
+  - Look-dev mode has real CC0 models: VRoid Sendagaya Shino and Vivi, and KayKit Adventurers. The VRoid characters move procedurally (idle, walk, talk, blink).
+  - `bevy_vrm1` supports only VRM 1.0, and the CC0 VRoid samples are VRM 0.x. Converting to VRM 1.0 (for example with the Blender VRM add-on) would add spring bones and look-at later.
+  - Still to add: SDF face shadows and flattened face normals.
+  - Frame rate in look-dev fell from 120 to about 60 fps with the high-poly VRoid models, prepasses and outlines. That needs profiling before scaling up.
 
 **Bevy 0.20.1 support** (checked in source and crates.io):
 - built in: extended materials (WGSL/WESL), fullscreen post-processing materials, depth and normal prepasses, colour grading, bloom, fog, decals, and stepped glTF interpolation;

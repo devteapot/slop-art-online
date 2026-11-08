@@ -31,7 +31,7 @@ struct Toon {
     // x: brush scale (1/m), y: ambient lift, z: second (core) band darkness, w: exposure.
     extra: vec4<f32>,
     // Shadow colour by hue shift (Blue Protocol): x target hue (0..1), y how far toward it,
-    // z saturation multiplier, w unused.
+    // z saturation multiplier, w: 1 on skin (lighter, warmer shadows; see below).
     shade: vec4<f32>,
 }
 
@@ -92,9 +92,14 @@ fn hsv_to_rgb(c: vec3<f32>) -> vec3<f32> {
 // raised), brightness lowered.
 fn shadow_of(lit: vec3<f32>, value: f32) -> vec3<f32> {
     var hsv = rgb_to_hsv(lit);
-    var d = toon.shade.x - hsv.x;
+    // Skin keeps a warm shadow (toward red-orange) instead of the scene's cool target, so faces
+    // never turn purple or flushed.
+    let skin = toon.shade.w > 0.5;
+    let target_hue = select(toon.shade.x, 0.015, skin);
+    let shift = select(toon.shade.y, 0.35, skin);
+    var d = target_hue - hsv.x;
     d = d - round(d);
-    hsv.x = fract(hsv.x + d * toon.shade.y);
+    hsv.x = fract(hsv.x + d * shift);
     hsv.y = clamp(hsv.y * toon.shade.z, 0.0, 1.0);
     hsv.z = hsv.z * value;
     return hsv_to_rgb(hsv);
@@ -147,7 +152,10 @@ fn fragment(
         lit = band * shadow;
         let away = mix(toon.extra.z, 1.0, core);
         let lit_color = albedo.rgb * sun;
-        let shadow_color = shadow_of(lit_color, (1.0 - toon.shadow.a) * away) * toon.shadow.rgb + albedo.rgb * sun * toon.extra.y;
+        // Skin shadows are much lighter (anime faces stay clean), and its far side isn't darkened.
+        let skin = toon.shade.w > 0.5;
+        let depth = select(toon.shadow.a, toon.shadow.a * 0.45, skin);
+        let shadow_color = shadow_of(lit_color, (1.0 - depth) * select(away, 1.0, skin)) * toon.shadow.rgb + albedo.rgb * sun * toon.extra.y;
         var color = mix(shadow_color, lit_color, lit);
         // Rim light on silhouettes, stronger on the lit side.
         let rim = pow(clamp(1.0 - max(dot(N, V), 0.0), 0.0, 1.0), toon.band.w) * toon.rim.a * (0.35 + 0.65 * lit);

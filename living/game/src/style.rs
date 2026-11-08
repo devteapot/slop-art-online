@@ -136,6 +136,13 @@ impl Style {
     pub fn toon(&self, base: StandardMaterial) -> Toon {
         Toon { base, extension: ToonExt { params: self.params() } }
     }
+
+    /// A toon material for skin: lighter, warmer shadows.
+    pub fn skin(&self, base: StandardMaterial) -> Toon {
+        let mut t = self.toon(base);
+        t.extension.params.shade.w = 1.0;
+        t
+    }
 }
 
 /// What kind of outline an entity gets.
@@ -178,7 +185,10 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0) }
     };
     for (_, m) in toons.iter_mut() {
+        // Keep each material's own flags (skin).
+        let skin = m.extension.params.shade.w;
         m.extension.params = p;
+        m.extension.params.shade.w = skin;
     }
     let [r, g, b] = style.outline_color;
     for (kind, mut o) in &mut outlines {

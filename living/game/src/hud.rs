@@ -129,6 +129,11 @@ pub fn draw(
     if let Some(mut look) = lookdev {
         egui::Window::new("Look dev").anchor(egui::Align2::CENTER_TOP, [0.0, 10.0]).resizable(false).show(ctx, |ui| {
             ui.add(egui::Slider::new(&mut look.hour, 6.0..=19.0).text("sun hour"));
+            ui.horizontal(|ui| {
+                for (a, label) in [(crate::lookdev::Act::Idle, "idle"), (crate::lookdev::Act::Walk, "walk"), (crate::lookdev::Act::Talk, "talk")] {
+                    ui.selectable_value(&mut look.act, a, label);
+                }
+            });
             ui.label(egui::RichText::new(format!("{} model(s) from living/game/assets/lookdev", look.models.len())).small().weak());
         });
     }
