@@ -97,7 +97,10 @@ fn shadow_of(lit: vec3<f32>, value: f32) -> vec3<f32> {
     // never turn purple or flushed.
     let skin = toon.shade.w > 0.5;
     let target_hue = select(toon.shade.x, 0.015, skin);
-    let shift = select(toon.shade.y, 0.35, skin);
+    // Reds and oranges reach a violet target through magenta, which reads as pink roofs and
+    // cloth; they take a quarter of the shift and simply deepen instead.
+    let red = 1.0 - smoothstep(0.05, 0.12, abs(hsv.x - round(hsv.x)));
+    let shift = select(toon.shade.y * (1.0 - 0.75 * red), 0.35, skin);
     var d = target_hue - hsv.x;
     d = d - round(d);
     hsv.x = fract(hsv.x + d * shift);

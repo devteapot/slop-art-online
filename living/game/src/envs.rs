@@ -112,6 +112,9 @@ pub struct Slot {
     #[serde(default)]
     pub offset: [f32; 2],
     pub glow: Option<[f32; 3]>,
+    /// `ring` only: `"in"` turns fronts toward the centre (default: outward).
+    #[serde(default)]
+    pub face: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -280,7 +283,8 @@ fn place(slot: &Slot, si: usize, taken: &mut Vec<(Vec2, f32)>, limit: f32) -> Ve
                 let a = k as f32 / slot.count.max(1) as f32 * TAU + r(k, 1) * 0.05;
                 let rr = slot.radius - r(k, 2) * 2.0;
                 let at = Vec2::new(a.cos(), a.sin()) * rr;
-                out.push(Place { at, yaw: -a + PI / 2.0, height: height(k) });
+                let inward = if slot.face == "in" { PI } else { 0.0 };
+                out.push(Place { at, yaw: -a + PI / 2.0 + inward, height: height(k) });
                 taken.push((at, 1.0));
             }
         }
