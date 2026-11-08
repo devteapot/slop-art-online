@@ -44,6 +44,7 @@ pub fn draw(
     mut wants: ResMut<UiWants>,
     mut sight: ResMut<crate::sight::Sight>,
     mut my_size: ResMut<crate::bodies::MySize>,
+    mut style: ResMut<crate::style::Style>,
     keys: Res<ButtonInput<KeyCode>>,
     target: Res<Target>,
     camq: Query<(&Camera, &Transform), With<Camera3d>>,
@@ -120,6 +121,40 @@ pub fn draw(
             ui.separator();
             ui.add(egui::Slider::new(&mut my_size.0, 0.4..=3.0).text("my size (× adult)"));
             ui.label(egui::RichText::new(format!("now: pitch {:.0}°, distance {:.1} m, fov {:.0}°{}", shown.pitch, shown.distance * my_size.0.max(0.4), shown.fov, if cam.talk_partner.is_some() { " · framing a conversation" } else { "" })).small().weak());
+        });
+    }
+
+    // The shared look (style profile).
+    if hud.tuning {
+        egui::Window::new("Look").anchor(egui::Align2::LEFT_TOP, [12.0, 120.0]).resizable(false).default_width(280.0).default_open(false).show(ctx, |ui| {
+            let mut s = *style;
+            ui.checkbox(&mut s.enabled, "toon look (off = plain, for comparison)");
+            ui.add(egui::Slider::new(&mut s.exposure, 0.4..=1.4).text("brightness"));
+            ui.add(egui::Slider::new(&mut s.threshold, -0.6..=0.6).text("light/shadow split (N·L)"));
+            ui.add(egui::Slider::new(&mut s.softness, 0.0..=0.4).text("edge softness"));
+            ui.add(egui::Slider::new(&mut s.shadow_depth, 0.0..=0.9).text("shadow depth"));
+            ui.horizontal(|ui| {
+                ui.label("shadow tint");
+                ui.color_edit_button_rgb(&mut s.shadow_tint);
+            });
+            ui.add(egui::Slider::new(&mut s.core, 0.3..=1.0).text("far side (1 = no extra dark)"));
+            ui.add(egui::Slider::new(&mut s.brush, 0.0..=1.0).text("brush breakup"));
+            ui.add(egui::Slider::new(&mut s.brush_size, 0.2..=6.0).text("brush size (m)"));
+            ui.add(egui::Slider::new(&mut s.rim, 0.0..=1.5).text("rim light"));
+            ui.add(egui::Slider::new(&mut s.rim_width, 1.0..=8.0).text("rim tightness"));
+            ui.checkbox(&mut s.outlines, "outlines");
+            ui.add(egui::Slider::new(&mut s.outline_people, 0.0..=5.0).text("outline: people (px)"));
+            ui.add(egui::Slider::new(&mut s.outline_things, 0.0..=5.0).text("outline: objects (px)"));
+            ui.horizontal(|ui| {
+                ui.label("outline colour");
+                ui.color_edit_button_rgb(&mut s.outline_color);
+                if ui.small_button("reset look").clicked() {
+                    s = crate::style::Style::default();
+                }
+            });
+            if s != *style {
+                *style = s;
+            }
         });
     }
 

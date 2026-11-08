@@ -174,6 +174,28 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
 - **Reference:** Arcane-inspired. Try what the engine can do and iterate toward a specific style, keeping both the look and performance in mind. Blue Protocol, Genshin Impact and Zenless Zone Zero are further references (research in progress).
 - The user is in the EU, which rules out Hunyuan3D, whose licence excludes the EU.
 
+**Anime-style references** (Blue Protocol, Genshin Impact, Honkai Star Rail, ZZZ; research of 2026-11-08):
+- **Blue Protocol** (CEDEC 2020/2021 reports: [4Gamer](https://www.4gamer.net/games/467/G046741/20210826001/), [CGWORLD](https://cgworld.jp/feature/202011-cedec2020-bluep.html)):
+  - one hard light-to-shadow step, with about 70% of a character lit;
+  - shadow colour made by shifting hue and lowering brightness, keeping saturation;
+  - artist-flattened face normals and no character normal maps;
+  - outlines mostly from a post-process (Sobel on depth and normals, drawn outside silhouettes), with inverted hulls only on chin, ears and hair;
+  - rim light from a depth post-process;
+  - anime "photography" grading, sunshafts, and blue-near, green-far shadows.
+- **HoYoverse:**
+  - official talks cover grading, not character shading (Genshin rejected ACES for a LUT, [Unite 2020](https://www.docswell.com/s/UnityJapan/KWRPQ5-210617-unity-dojo20211mihoyozhenzhongyi));
+  - reverse-engineered: lightmap masks (shadow weight, specular, ramp row), day and night ramp textures, and SDF face shadows ([HoyoToon](https://github.com/Melioli/HoyoToon/wiki/Using-the-Genshin-Shader));
+  - nothing published on ZZZ.
+- **Characters:** VRM 1.0 as the one humanoid skeleton.
+  - Author characters in [VRoid Studio](https://vroid.com/en/studio/guidelines). Output may be used commercially, but an in-game character creator built from VRoid's own parts needs a separate pixiv licence.
+  - Load them with `bevy_vrm1` 0.11 (Bevy 0.20): spring bones, look-at, VRMA animation retargeting, and expressions including visemes, which suit characters who talk.
+  - MToon serves as a baseline only (no ramps, SDF faces or specular).
+  - Keep Quaternius for animals and props.
+- **First style test** (`living/game/src/style.rs`, `toon.wesl`):
+  - every surface uses one toon material: two bands with a soft, brush-broken edge, hue-tinted shadows, a darker far side, a rim light and emission;
+  - characters and buildings get `bevy_mod_outline` outlines, and ground, trees and props act as stencils that hide outlines behind them;
+  - every parameter is a slider in F1 → Look, with an on/off comparison.
+
 **Bevy 0.20.1 support** (checked in source and crates.io):
 - built in: extended materials (WGSL/WESL), fullscreen post-processing materials, depth and normal prepasses, colour grading, bloom, fog, decals, and stepped glTF interpolation;
 - crates: `bevy_mod_outline` 0.14 (Bevy 0.20.1), `bevy_hanabi` (particles) and `bevy_sprite3d` (2D sprites in 3D);

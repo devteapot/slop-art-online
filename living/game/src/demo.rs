@@ -39,6 +39,7 @@ pub fn run(
     mut input: ResMut<Input>,
     mut sight: ResMut<crate::sight::Sight>,
     mut my_size: ResMut<crate::bodies::MySize>,
+    mut style: ResMut<crate::style::Style>,
     target: Res<controls::Target>,
     time: Res<Time>,
     mut exit: MessageWriter<AppExit>,
@@ -56,6 +57,7 @@ pub fn run(
     let d = &mut *demo;
     match act {
         Act::Size(k) => my_size.0 = *k,
+        Act::Shading(on) => style.enabled = *on,
         Act::Shot(name) => shot(&mut commands, &d.dir, name),
         Act::Walk(dir) => {
             d.start = net.my_body().map(|b| (b.x, b.y));
@@ -94,6 +96,7 @@ pub fn run(
 
 enum Act {
     Size(f32),
+    Shading(bool),
     Shot(&'static str),
     Walk(Vec2),
     Stop,
@@ -111,6 +114,16 @@ enum Act {
 const STEPS: &[(f32, Act)] = &[
     // Let terrain and people build around the player first.
     (5.0, Act::Shot("view")),
+    // The same frame without the toon look, then in town from above (size 2.5), both ways.
+    (0.1, Act::Shading(false)),
+    (1.0, Act::Shot("view-plain")),
+    (0.1, Act::Shading(true)),
+    (0.1, Act::Size(2.5)),
+    (2.5, Act::Shot("town-toon")),
+    (0.1, Act::Shading(false)),
+    (1.0, Act::Shot("town-plain")),
+    (0.1, Act::Shading(true)),
+    (0.1, Act::Size(1.0)),
     (0.1, Act::Log("the view")),
     // Rotate 90° with [ ] (it stays), and back.
     (0.1, Act::Turn(Some(90.0))),

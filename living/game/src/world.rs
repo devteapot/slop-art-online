@@ -8,6 +8,8 @@
 //! creatures live in `bodies.rs`.
 
 use crate::net::Net;
+use crate::style::{outline, Outlined, Style, Toon};
+use bevy_mod_outline::{OutlineMeshExt, OutlineStencil};
 use crate::sync::{ServerClock, Tracks};
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -37,32 +39,32 @@ impl Default for Draw {
 
 #[derive(Resource, Default)]
 pub struct Palette {
-    terrain: Handle<StandardMaterial>,
+    terrain: Handle<Toon>,
     water: Handle<StandardMaterial>,
-    pub vertex: Handle<StandardMaterial>,
-    pub tree: Handle<StandardMaterial>,
-    pub tree_faded: Handle<StandardMaterial>,
+    pub vertex: Handle<Toon>,
+    pub tree: Handle<Toon>,
+    pub tree_faded: Handle<Toon>,
     /// Trees outside sight: remembered, and never seen (perception mock).
-    pub tree_dim: [Handle<StandardMaterial>; 2],
+    pub tree_dim: [Handle<Toon>; 2],
     trees: [Handle<Mesh>; 2],
-    colors: HashMap<u32, Handle<StandardMaterial>>,
+    colors: HashMap<u32, Handle<Toon>>,
     /// Resource and structure models by kind: the mesh, and a glowing part with its colour.
     things: HashMap<String, (Handle<Mesh>, Option<(Handle<Mesh>, [u8; 3])>)>,
 }
 
 impl Palette {
-    pub fn color(&mut self, mats: &mut Assets<StandardMaterial>, c: [u8; 3], emissive: bool) -> Handle<StandardMaterial> {
+    pub fn color(&mut self, mats: &mut Assets<Toon>, style: &Style, c: [u8; 3], emissive: bool) -> Handle<Toon> {
         let key = (c[0] as u32) << 16 | (c[1] as u32) << 8 | c[2] as u32 | (emissive as u32) << 24;
         self.colors
             .entry(key)
             .or_insert_with(|| {
                 let base = Color::srgb_u8(c[0], c[1], c[2]);
-                mats.add(StandardMaterial {
+                mats.add(style.toon(StandardMaterial {
                     base_color: base,
                     perceptual_roughness: 0.85,
                     emissive: if emissive { LinearRgba::from(base) * 6.0 } else { LinearRgba::BLACK },
                     ..default()
-                })
+                }))
             })
             .clone()
     }
@@ -136,9 +138,10 @@ pub struct Thing(pub Vec2);
 #[derive(Component)]
 pub struct Tree;
 
-pub fn setup(mut commands: Commands, mut mats: ResMut<Assets<StandardMaterial>>, mut meshes: ResMut<Assets<Mesh>>, mut palette: ResMut<Palette>) {
-    palette.terrain = mats.add(StandardMaterial { base_color: Color::WHITE, perceptual_roughness: 0.95, ..default() });
-    palette.vertex = mats.add(StandardMaterial { base_color: Color::WHITE, perceptual_roughness: 0.85, ..default() });
+pub fn setup(mut commands: Commands, mut mats: ResMut<Assets<StandardMaterial>>, mut toons: ResMut<Assets<Toon>>, mut meshes: ResMut<Assets<Mesh>>, mut palette: ResMut<Palette>, style: Res<Style>) {
+    let white = |r: f32| StandardMaterial { base_color: Color::WHITE, perceptual_roughness: r, ..default() };
+    palette.terrain = toons.add(style.toon(white(0.95)));
+    palette.vertex = toons.add(style.toon(white(0.85)));
     palette.water = mats.add(StandardMaterial {
         base_color: Color::srgba(0.16, 0.38, 0.56, 0.78),
         alpha_mode: AlphaMode::Blend,
@@ -146,16 +149,16 @@ pub fn setup(mut commands: Commands, mut mats: ResMut<Assets<StandardMaterial>>,
         reflectance: 0.7,
         ..default()
     });
-    palette.tree = mats.add(StandardMaterial { base_color: Color::WHITE, perceptual_roughness: 0.9, ..default() });
-    palette.tree_faded = mats.add(StandardMaterial { base_color: Color::srgba(1.0, 1.0, 1.0, 0.2), alpha_mode: AlphaMode::Blend, perceptual_roughness: 0.9, ..default() });
+    palette.tree = toons.add(style.toon(white(0.9)));
+    palette.tree_faded = toons.add(style.toon(StandardMaterial { base_color: Color::srgba(1.0, 1.0, 1.0, 0.2), alpha_mode: AlphaMode::Blend, ..white(0.9) }));
     palette.trees = [meshes.add(tree_mesh(false)), meshes.add(tree_mesh(true))];
     palette.tree_dim = [
-        mats.add(StandardMaterial { base_color: Color::srgb(0.5, 0.5, 0.55), perceptual_roughness: 0.9, ..default() }),
-        mats.add(StandardMaterial { base_color: Color::srgb(0.12, 0.13, 0.16), perceptual_roughness: 1.0, ..default() }),
+        toons.add(style.toon(StandardMaterial { base_color: Color::srgb(0.5, 0.5, 0.55), ..white(0.9) })),
+        toons.add(style.toon(StandardMaterial { base_color: Color::srgb(0.12, 0.13, 0.16), ..white(1.0) })),
     ];
     commands.insert_resource(GlobalAmbientLight { color: Color::srgb(0.75, 0.8, 0.95), brightness: 420.0, ..default() });
     commands.spawn((
-        DirectionalLight { illuminance: 9_000.0, shadow_maps_enabled: true, ..default() },
+        DirectionalLight { color: Color::srgb(1.0, 0.96, 0.88), illuminance: 9_000.0, shadow_maps_enabled: true, ..default() },
         Transform::from_xyz(-30.0, 60.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
         bevy::light::CascadeShadowConfigBuilder { first_cascade_far_bound: 30.0, maximum_distance: 160.0, ..default() }.build(),
     ));
@@ -429,7 +432,8 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
             mesh.idx.extend_from_slice(&[a, c, b, b, c, d]);
         }
     }
-    let mut entities = vec![commands.spawn((Mesh3d(meshes.add(mesh.build())), MeshMaterial3d(palette.terrain.clone()), Transform::default())).id()];
+    // Ground, props and trees are outline stencils: they hide outlines behind them.
+    let mut entities = vec![commands.spawn((Mesh3d(meshes.add(mesh.build())), MeshMaterial3d(palette.terrain.clone()), Transform::default(), OutlineStencil::default())).id()];
 
     let mut props = MeshBuf::default();
     let mut water = false;
@@ -448,7 +452,7 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
                     let size = 4.0 + 2.5 * hash(tx + 7, ty + 3);
                     let broad = hash(tx + 1, ty + 9) < 0.3;
                     let tf = Transform::from_translation(p).with_rotation(Quat::from_rotation_y(v * 37.0)).with_scale(Vec3::splat(size));
-                    entities.push(commands.spawn((Tree, Mesh3d(palette.trees[broad as usize].clone()), MeshMaterial3d(palette.tree.clone()), tf)).id());
+                    entities.push(commands.spawn((Tree, Mesh3d(palette.trees[broad as usize].clone()), MeshMaterial3d(palette.tree.clone()), tf, OutlineStencil::default())).id());
                 }
                 Terrain::Forest if v < 0.45 => {
                     let r = 0.35 + 0.45 * hash(tx + 5, ty + 2);
@@ -475,7 +479,7 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
         }
     }
     if !props.is_empty() {
-        entities.push(commands.spawn((Mesh3d(meshes.add(props.build())), MeshMaterial3d(palette.terrain.clone()), Transform::default())).id());
+        entities.push(commands.spawn((Mesh3d(meshes.add(props.build())), MeshMaterial3d(palette.terrain.clone()), Transform::default(), OutlineStencil::default())).id());
     }
     if water {
         let (w, h) = (tiles_w as f32, tiles_h as f32);
@@ -537,7 +541,7 @@ fn thing_mesh(kind: &str) -> (Mesh, Option<(Mesh, [u8; 3])>) {
 
 /// Mirror subscribed resources and structures as entities (static, spawned once per row once the
 /// ground under them is known).
-pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>, mut palette: ResMut<Palette>) {
+pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<Toon>>, mut palette: ResMut<Palette>, style: Res<Style>) {
     let Some(conn) = &net.conn else { return };
     let mut seen: HashSet<(u8, u64)> = HashSet::new();
     let (resources, structures) = (conn.db.resource_node(), conn.db.structure());
@@ -556,17 +560,22 @@ pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<S
             .things
             .entry(kind.clone())
             .or_insert_with(|| {
-                let (m, g) = thing_mesh(&kind);
+                let (mut m, g) = thing_mesh(&kind);
+                let _ = m.generate_outline_normals(&Default::default());
                 (meshes.add(m), g.map(|(g, c)| (meshes.add(g), c)))
             })
             .clone();
         let at = scene.at3(x, y);
         let turn = Quat::from_rotation_y(hash(x.to_bits(), y.to_bits()) * 6.28);
         let e = commands
-            .spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at).with_rotation(turn).with_scale(Vec3::splat(fill))))
+            .spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at).with_rotation(turn).with_scale(Vec3::splat(fill)), OutlineStencil::default()))
             .id();
+        // Outlines on structures only; small resources stay unlined so the scene stays calm.
+        if key.0 == 1 {
+            commands.entity(e).insert(outline(Outlined::Thing, &style));
+        }
         if let Some((g, color)) = glow {
-            let mat = palette.color(&mut mats, color, true);
+            let mat = palette.color(&mut mats, &style, color, true);
             commands.entity(e).with_children(|c| {
                 c.spawn((Mesh3d(g), MeshMaterial3d(mat), Transform::default()));
             });
@@ -593,7 +602,7 @@ pub fn fade_trees(
     sight: Res<crate::sight::Sight>,
     me_size: Res<crate::bodies::MySize>,
     cam: Query<&Transform, (With<Camera3d>, Without<Tree>)>,
-    mut trees: Query<(&Transform, &mut MeshMaterial3d<StandardMaterial>, &mut Visibility), With<Tree>>,
+    mut trees: Query<(&Transform, &mut MeshMaterial3d<Toon>, &mut Visibility), With<Tree>>,
 ) {
     let (Some(me), Ok(cam)) = (target.0, cam.single()) else { return };
     let head = me + Vec3::Y * 1.6 * me_size.0;

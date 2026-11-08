@@ -49,6 +49,10 @@ The line from your character to the cursor shows where an aimed skill would go. 
   - you face the cursor; the view turns only when you turn it, with `[` `]` or middle-drag, and Alt glances (turning by pointing is an option, off by default);
   - conversations are framed;
   - the view never pulls back further than about 1.5 × your sight, so night sight brings it down and in.
+- **Look (F1 → Look):**
+  - one toon material on every surface: banded sun, hue-tinted shadows, brushy band edges, rim light;
+  - outlines on characters and buildings, which the ground, trees and props hide;
+  - every parameter is tunable, with a toggle to compare against the plain look.
 - **Occlusion:** trees between the camera and you, or close to you on the camera's side, are hidden, with a faded band around them.
 - **Region subscriptions:** `body`, `resource_node` and `structure` rows are subscribed for the chunks within 40 m.
 - **Motion:** the observer's display sync (`living/viewer/src/sync.rs`, included by path) smooths it.

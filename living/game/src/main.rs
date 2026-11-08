@@ -18,6 +18,7 @@ mod demo;
 mod hud;
 mod net;
 mod sight;
+mod style;
 mod world;
 
 use bevy::prelude::*;
@@ -35,6 +36,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(EguiPlugin::default())
+        .add_plugins(style::StylePlugin)
         .init_non_send::<net::Net>()
         .init_non_send::<world::Scene>()
         .init_resource::<world::Palette>()

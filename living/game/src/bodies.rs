@@ -4,6 +4,8 @@
 //! Models face local +X (the authority's heading 0 is east).
 
 use crate::net::Net;
+use crate::style::{outline, Outlined, Style};
+use bevy_mod_outline::{OutlineMeshExt, PropagateOutline};
 use crate::world::{hash, rgb, scale, MeshBuf, Scene};
 use bevy::prelude::*;
 use living_bindings::*;
@@ -162,6 +164,7 @@ pub fn update(
     mut scene: NonSendMut<Scene>,
     mut meshes: ResMut<Assets<Mesh>>,
     palette: Res<crate::world::Palette>,
+    style: Res<Style>,
     my_size: Res<MySize>,
     input: Res<crate::controls::Input>,
     mut roots: Query<(&mut Transform, &mut Gait, &Children), (With<Creature>, Without<Limb>)>,
@@ -227,13 +230,24 @@ pub fn update(
             continue;
         }
         let parts = parts(&b.kind, *id, mine);
-        let body = meshes.add(parts.body);
+        let smooth = |mut m: Mesh| {
+            let _ = m.generate_outline_normals(&Default::default());
+            m
+        };
+        let body = meshes.add(smooth(parts.body));
         let e = commands
-            .spawn((Creature(*id), Gait { last: p, phase: hash(*id, 9) * 6.28, speed: 0.0, stride: parts.stride }, Transform::from_translation(at).with_rotation(rot).with_scale(Vec3::splat(size)), Visibility::default()))
+            .spawn((
+                Creature(*id),
+                Gait { last: p, phase: hash(*id, 9) * 6.28, speed: 0.0, stride: parts.stride },
+                Transform::from_translation(at).with_rotation(rot).with_scale(Vec3::splat(size)),
+                Visibility::default(),
+                outline(Outlined::Person, &style),
+                PropagateOutline,
+            ))
             .with_children(|root| {
                 root.spawn((Mesh3d(body), MeshMaterial3d(palette.vertex.clone()), Transform::default()));
                 for (pivot, mesh, offset, amp) in parts.limbs {
-                    let m = meshes.add(mesh);
+                    let m = meshes.add(smooth(mesh));
                     root.spawn((Limb { offset, amp }, Transform::from_translation(pivot), Visibility::default())).with_children(|l| {
                         l.spawn((Mesh3d(m), MeshMaterial3d(palette.vertex.clone()), Transform::default()));
                     });
