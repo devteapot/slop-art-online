@@ -36,6 +36,17 @@ pub struct Input {
     pub look: Option<Vec2>,
     /// Scripted look direction (demo), overriding the mouse.
     pub scripted_look: Option<Vec2>,
+    /// Scripted cursor (demo), as -1..1 screen offsets from the centre (+x right, +y down);
+    /// with a demo running the real mouse never steers.
+    pub scripted_cursor: Option<Vec2>,
+    pub demo: bool,
+}
+
+impl Input {
+    /// You face the cursor by default (mouse look); a demo scripts its own look and cursor.
+    pub fn new(demo: bool) -> Self {
+        Self { mouse_look: !demo, demo, ..Default::default() }
+    }
 }
 
 pub fn target(net: NonSend<Net>, scene: NonSend<Scene>, mut target: ResMut<Target>) {

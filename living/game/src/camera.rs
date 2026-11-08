@@ -76,7 +76,7 @@ impl YawMode {
             YawMode::North => "fixed (north up, Q/E steps)",
             YawMode::FollowHeading => "follow heading",
             YawMode::ZoomBlend => "zoom blend (north out, behind you in)",
-            YawMode::MouseSteer => "mouse steer (needs mouse look)",
+            YawMode::MouseSteer => "follow cursor (turns while the cursor is toward a side)",
         }
     }
 }
@@ -130,7 +130,7 @@ pub const PRESETS: [Preset; 5] = [
     },
     Preset {
         name: "Default (mid)",
-        like: "One camera for every character: zoom-tilt starting mid-way (about 40° down), turning with you once zoomed past a quarter; zooming out is bounded by how far you see",
+        like: "One camera for every character: zoom-tilt starting mid-way (about 40° down); you face the cursor, and the view turns while the cursor is toward a side; zooming out is bounded by how far you see",
         rig: Rig {
             far: view(60.0, 26.0, 35.0),
             near: view(24.0, 7.5, 52.0),
@@ -139,7 +139,7 @@ pub const PRESETS: [Preset; 5] = [
             ortho: false,
             lead: 3.0,
             rotate_steps: false,
-            yaw_mode: YawMode::ZoomBlend,
+            yaw_mode: YawMode::MouseSteer,
             frame_talk: true,
             follow_zoom: (0.15, 0.45),
             sight_bound: true,
@@ -333,6 +333,14 @@ pub fn follow(
     cam.talk += ((framing as u8 as f32) - cam.talk) * ease(3.0);
     cam.shown_zoom += (cam.zoom - cam.shown_zoom) * ease(8.0);
 
+    // Where the cursor meets the ground, from the current camera.
+    let window = windows.single().ok();
+    let cursor = window.and_then(|w| w.cursor_position().map(|c| (c, Vec2::new(w.width(), w.height()))));
+    cam.cursor_ground = cursor.and_then(|(c, _)| {
+        let ray = camera.viewport_to_world(gtf, c).ok()?;
+        scene.ray_ground(ray.origin, *ray.direction)
+    });
+
     // Where I face, as a camera yaw (degrees): where I look with the mouse, else the way I walk.
     let heading = net.my_id.and_then(|id| scene.shown.get(&id)).and_then(|(_, h)| *h);
     let look = input.look.map(|l| l.y.atan2(l.x));
@@ -345,8 +353,8 @@ pub fn follow(
             YawMode::North => (0.0, 0.0, false),
             YawMode::FollowHeading => (20.0, 35.0, input.moving),
             YawMode::ZoomBlend => (15.0, 60.0, input.moving || look.is_some()),
-            // Pointing well off to the side keeps turning the view, faster the further off.
-            YawMode::MouseSteer => (30.0, (2.0 * (d.abs() - 30.0)).min(90.0), look.is_some()),
+            // Steered in screen space below, so a cursor held still can't make it spin.
+            YawMode::MouseSteer => (0.0, 0.0, false),
         };
         // Walking toward the camera (backing off, dodging) turns the view only after a second
         // of it, so a retreat keeps what you retreat from in front of you.
@@ -355,6 +363,26 @@ pub fn follow(
         let active = active && (!backwards || cam.back_s > 1.2);
         if active && d.abs() > band {
             cam.follow_yaw += d.signum() * (rate * dt).min(d.abs() - band);
+        }
+    }
+    // Follow cursor: the view turns while the cursor sits toward a side of the screen (outside the
+    // middle 45%), faster further out, up to 90°/s; a cursor below your character (aiming behind
+    // you, kiting) never turns it. Rotation follows where you point, never your movement.
+    let screen = window.map(|w| Vec2::new(w.width(), w.height()));
+    let steer_cursor = match (input.demo, input.scripted_cursor, screen) {
+        (true, Some(n), Some(size)) => Some(((n + Vec2::ONE) * size / 2.0, size)),
+        (true, _, _) => None,
+        (false, _, _) => cursor,
+    };
+    if mode == YawMode::MouseSteer && !ui.pointer && !input.chat_open {
+        if let (Some((c, size)), Some(me)) = (steer_cursor, target.0) {
+            let nx = (c.x - size.x / 2.0) / (size.x / 2.0);
+            let me_y = camera.world_to_viewport(gtf, me).map(|p| p.y).unwrap_or(size.y / 2.0);
+            let behind = c.y > me_y + size.y * 0.08;
+            let over = ((nx.abs() - 0.45) / 0.55).clamp(0.0, 1.0);
+            if !behind && over > 0.0 {
+                cam.follow_yaw += nx.signum() * over * over * 90.0 * dt;
+            }
         }
     }
     // Glance: hold the middle button (or Alt) and move the mouse to look around; let go and
@@ -386,14 +414,6 @@ pub fn follow(
     // The movement keys keep their frame while held and catch up over about half a second
     // (Haigh-Hutchinson: never change the control reference instantly).
     cam.control_yaw = if input.moving { cam.control_yaw + (cam.shown_yaw - cam.control_yaw) * ease(2.0) } else { cam.shown_yaw };
-
-    // Where the cursor meets the ground, from the current camera.
-    let window = windows.single().ok();
-    let cursor = window.and_then(|w| w.cursor_position().map(|c| (c, Vec2::new(w.width(), w.height()))));
-    cam.cursor_ground = cursor.and_then(|(c, _)| {
-        let ray = camera.viewport_to_world(gtf, c).ok()?;
-        scene.ray_ground(ray.origin, *ray.direction)
-    });
 
     let r = cam.rig;
     let base = if r.tilt { r.far.lerp(r.near, cam.shown_zoom) } else { View { distance: r.far.distance * (1.5 - cam.shown_zoom), ..r.far } };

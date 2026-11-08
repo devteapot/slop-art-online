@@ -73,6 +73,7 @@ pub fn run(
         }
         Act::Look(dir) => input.scripted_look = *dir,
         Act::Glance(g) => cam.scripted_glance = *g,
+        Act::Cursor(c) => input.scripted_cursor = *c,
         Act::Log(what) => info!("demo: {what}: camera yaw {:.0}°, pitch {:.0}°, sight {} r {:.0} cone {:.0}", cam.shown_yaw, cam.shown.pitch, sight.enabled, sight.radius, sight.cone),
         Act::Say(line) => {
             let end = net.my_body().map(|b| (b.x, b.y));
@@ -104,6 +105,7 @@ enum Act {
     Sight(bool, f32, f32),
     Look(Option<Vec2>),
     Glance(Option<f32>),
+    Cursor(Option<Vec2>),
     Log(&'static str),
     Exit,
 }
@@ -130,8 +132,9 @@ const STEPS: &[(f32, Act)] = &[
     (2.5, Act::Shot("default-out-scout-sight")),
     (0.1, Act::Log("default out, scout sight")),
     (0.2, Act::Sight(false, 11.0, 180.0)),
-    // Default camera: a short step back toward the camera keeps the view; a sustained walk turns it.
-    (0.3, Act::Preset(4, 0.55)),
+    // Zoom blend (walking turns the view): a short step back toward the camera keeps the view; a
+    // sustained walk turns it. The default (follow cursor) never turns with walking.
+    (0.3, Act::Preset(3, 1.0)),
     (1.5, Act::Walk(Vec2::Y)),
     (0.8, Act::Log("default, 0.8 s walking toward the camera")),
     (0.1, Act::Stop),
@@ -145,6 +148,20 @@ const STEPS: &[(f32, Act)] = &[
     (0.1, Act::Log("glancing")),
     (0.1, Act::Glance(None)),
     (1.5, Act::Log("after the glance")),
+    (0.2, Act::Preset(4, 0.55)),
+    // Follow cursor (the default's turning): cursor toward the right edge turns the view right;
+    // the same cursor below the character (aiming behind) does not; centred, it stays put.
+    (0.2, Act::Look(Some(Vec2::new(1.0, -1.0)))),
+    (0.1, Act::Cursor(Some(Vec2::new(0.9, -0.3)))),
+    (0.1, Act::Log("follow cursor, before")),
+    (2.0, Act::Log("follow cursor, after 2 s toward the right edge")),
+    (0.1, Act::Shot("follow-cursor-turned")),
+    (0.1, Act::Cursor(Some(Vec2::new(0.9, 0.7)))),
+    (2.0, Act::Log("after 2 s with the cursor right but behind you")),
+    (0.1, Act::Cursor(Some(Vec2::new(0.1, -0.4)))),
+    (2.0, Act::Log("after 2 s with the cursor near the middle")),
+    (0.1, Act::Cursor(None)),
+    (0.1, Act::Look(None)),
     (0.3, Act::Preset(3, 0.0)),
     (2.5, Act::Shot("tilt-far")),
     (0.3, Act::Zoom(0.55)),

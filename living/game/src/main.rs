@@ -41,7 +41,8 @@ fn main() {
         .init_resource::<sight::Sight>()
         .init_resource::<camera::Cam>()
         .init_resource::<controls::Target>()
-        .init_resource::<controls::Input>()
+        // You face the cursor by default (mouse look); the demo scripts its own look and cursor.
+        .insert_resource(controls::Input::new(std::env::var("LIVING_GAME_DEMO").is_ok()))
         .init_resource::<hud::Hud>()
         .init_resource::<hud::UiWants>()
         .add_systems(Startup, (world::setup, camera::spawn, sight::setup))
