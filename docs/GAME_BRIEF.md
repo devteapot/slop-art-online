@@ -142,6 +142,57 @@ What doesn't fit yet is the world, not the drawing:
 
 Both are settings for the game's own world (seed and laws), not the lab's. Body size is so far only a client slider ("my size"). Real sizes of character would need the rules to carry a size: reach, separation, speed and sight.
 
+## Art direction (proposal, 2026-11-08)
+
+The user wants:
+- a real art style, with models better than the spike's placeholders;
+- the look of Fortiche's Arcane (2D and 3D mixed, painterly, clean);
+- different styles per zone (a cyberpunk town, an anime-like fantasy region) over the same systems.
+
+**How Arcane is made, and what carries over** ([80.lv](https://80.lv/articles/arcane-artists-show-how-they-combine-traditional-art-3d-for-backgrounds), [VFX Voice](https://vfxvoice.com/riot-games-and-fortiche-get-revolutionary-with-arcane-season-2/)):
+- 3D sets with matte painting projected onto them.
+- 3D character rigs with 2D animation layered on top for texture, smoke, fire and dust. Effects are reportedly at 12 fps, which is unverified for the characters.
+- Light and shadow largely painted into textures.
+
+In real time we can reach:
+- banded "cel" lighting through a painted ramp, with shadows tinted toward a hue;
+- outlines, and a moderate brush or Kuwahara filter;
+- per-zone colour grading;
+- 2D flipbook effects at 12 fps, and stepped character poses.
+
+We can't reach Fortiche's per-shot painting and compositing, or painted light that stays right under a moving camera. The closest games, and their methods:
+- Guilty Gear Xrd: hand-edited normals, inverted-hull outlines and limited animation ([GDC](https://gdcvault.com/play/1022031/GuiltyGearXrd-s-Art-Style-The)).
+- Hi-Fi Rush: a toon renderer ([GDC](https://gdcvault.com/play/1034330/3D-Toon-Rendering-in-Hi)).
+- Genshin: face-shadow SDFs.
+
+**Style as data over the same world (architecture):**
+- Gameplay objects stay abstract: `person`, `house`, `deer`, `campfire`.
+- A zone's **style profile** chooses:
+  - the models and materials for each kind;
+  - a toon ramp, shadow tint and rim light;
+  - outline width, colour and edge thresholds;
+  - the painterly-filter strength;
+  - colour grading and fog;
+  - the light rig;
+  - the effects palette.
+- One "uber" material takes style parameters as uniforms rather than shader variants, so a new style adds no pipelines.
+- Profiles blend at zone borders, the way Unreal blends post-process volumes.
+- A few invariants hold across every style so gameplay stays readable: character silhouettes and outlines, threat and faction colours, and the language of effects.
+
+**Bevy 0.20.1 support** (checked in source and crates.io):
+- built in: extended materials (WGSL/WESL), fullscreen post-processing materials, depth and normal prepasses, colour grading, bloom, fog, decals, and stepped glTF interpolation;
+- crates: `bevy_mod_outline` 0.14 (Bevy 0.20.1), `bevy_hanabi` (particles) and `bevy_sprite3d` (2D sprites in 3D);
+- custom code needed: the toon ramp, edge detection, Kuwahara, face SDFs and a stepped-animation sampler.
+
+**Assets** (licences checked where official pages allowed):
+- **Humanoids:** Quaternius Universal Base Characters with the Universal Animation Library 1 and 2 (CC0). Six body types share one rig, with about 250 clips (locomotion, combat, emotes, farming, fishing). Bevy plays clips on any character whose bone names match, but has no runtime retargeting. So every humanoid is fitted to one canonical skeleton offline in Blender.
+- **Avoid:** Mixamo (unclear long-term terms, and raw files can't be redistributed), Sketchfab models under NC or ND licences, and Hunyuan3D weights, whose licence excludes the EU, the UK and South Korea.
+- **Props and buildings** can come from AI generation (Meshy, Tripo or Rodin on a paid plan so the output is owned), conditioned on style reference images. AI-rigged characters each bring their own vendor's skeleton and break shared animation.
+- **Animals** need their own four-legged skeleton and clips (not yet researched).
+- Blender 5.2.2 runs headless here (`blender -b -P`). A pipeline script and a manifest (kind + traits × zone style → model, materials, animation set, height, triangle budget) can be built and checked automatically, with screenshots next to a 1.75 m reference figure.
+
+**Animation gaps in Bevy 0.20** that need custom code: root motion, IK (feet), animation level of detail. Every bone is an entity, so CPU cost grows with bones × characters. Measure with Bevy's `many_foxes` example before scaling up.
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**
