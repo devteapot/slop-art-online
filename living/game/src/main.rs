@@ -13,6 +13,7 @@ mod sync;
 
 mod bodies;
 mod camera;
+mod capture;
 mod controls;
 mod demo;
 mod envs;
@@ -30,21 +31,32 @@ use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 
 fn main() {
     let mut app = App::new();
-    app.insert_resource(ClearColor(camera::SKY))
-        .add_plugins(
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "Slop Art Online — camera spike".into(),
-                        resolution: bevy::window::WindowResolution::new(1600, 900),
-                        ..default()
-                    }),
-                    ..default()
-                })
-                // Assets live beside the crate, wherever the binary is run from.
-                .set(AssetPlugin { file_path: lookdev::asset_root(), ..default() }),
+    let size = capture::size();
+    // Assets live beside the crate, wherever the binary is run from.
+    let plugins = DefaultPlugins.set(AssetPlugin { file_path: lookdev::asset_root(), ..default() });
+    let headless = capture::headless();
+    if headless {
+        // Scripted photographs: no window; the camera renders into an image (capture.rs).
+        app.add_plugins(
+            plugins
+                .set(WindowPlugin { primary_window: None, exit_condition: bevy::window::ExitCondition::DontExit, ..default() })
+                .disable::<bevy::winit::WinitPlugin>(),
         )
-        .add_plugins(EguiPlugin::default())
+        .add_plugins(bevy::app::ScheduleRunnerPlugin::run_loop(std::time::Duration::from_secs_f64(1.0 / 60.0)))
+        .add_systems(PreStartup, capture::setup)
+        .add_systems(PostUpdate, capture::attach.before(post::update));
+    } else {
+        app.add_plugins(plugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Slop Art Online — camera spike".into(),
+                resolution: bevy::window::WindowResolution::new(size.x, size.y),
+                ..default()
+            }),
+            ..default()
+        }))
+        .add_plugins(EguiPlugin::default());
+    }
+    app.insert_resource(ClearColor(camera::SKY))
         .add_plugins(style::StylePlugin)
         .add_plugins(post::PostPlugin)
         .add_systems(PostUpdate, post::update)
@@ -62,14 +74,18 @@ fn main() {
         .init_resource::<hud::UiWants>();
     if view::enabled() {
         // Asset view: models through the game's renderer, no server and no panels.
+        if !headless {
+            app.add_systems(EguiPrimaryContextPass, || {});
+        }
         app.insert_resource(envs::Roam::default())
-            .add_systems(EguiPrimaryContextPass, || {})
             .add_systems(Startup, (world::setup, camera::spawn, lookdev::setup, view::setup).chain())
             .add_systems(Update, (envs::hdr, lookdev::convert, lookdev::fit, view::clips, lookdev::rig, lookdev::animate, lookdev::sun, view::layout, view::interact, view::batch).chain());
         app.run();
         return;
     }
-    app.add_systems(EguiPrimaryContextPass, hud::draw);
+    if !headless {
+        app.add_systems(EguiPrimaryContextPass, hud::draw);
+    }
     if lookdev::enabled() {
         // Look-dev: a fixed scene of models from assets/lookdev, no server.
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())

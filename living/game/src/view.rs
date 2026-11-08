@@ -2,11 +2,18 @@
 //! the game's own renderer (toon material, outlines, finishing pass, bloom), on a 1 m checker,
 //! so an asset is judged as the game will draw it.
 //!
-//! - `LIVING_GAME_VIEW_OUT=<dir>`: batch mode. For each model, photograph it from the front,
-//!   three-quarter, side, back, above and through the default game camera; photograph six frames
-//!   of each animation clip from the side; write `report.json` with measured size, triangles,
-//!   materials, vertex colours, glow and clips; then quit. `living/tools/view_assets.sh` wraps
-//!   this and makes one contact sheet per model.
+//! - `LIVING_GAME_VIEW_OUT=<dir>`: batch mode, headless (no window; `LIVING_GAME_WINDOW=1`
+//!   shows it). For each model, take the shots, write `report.json` with measured size,
+//!   triangles, materials, vertex colours, glow and clips, then quit.
+//!   `living/tools/view_assets.sh` wraps this and makes one contact sheet per model.
+//! - `LIVING_GAME_VIEW_SHOTS=<shot>[,<shot>…]` picks the shots (default `views,clips`):
+//!   - a view: `front`, `three-quarter`, `side`, `back`, `above`, `game` (the default game
+//!     camera, 40° down, 16 m) or `YAW:PITCH[:ZOOM]` (degrees; yaw 0 faces the model's front;
+//!     zoom 1 frames the model, 0.5 is twice as close);
+//!   - `views`: the five angles and `game`;
+//!   - `<clip>`: six frames of that clip from the side; `<clip>/<view>` from that view;
+//!     `<clip>@<seconds>` or `<clip>@<seconds>/<view>`: one frame;
+//!   - `clips`: six frames of each clip in `LIVING_GAME_VIEW_CLIP`.
 //! - Without it: interactive. Left-drag orbits, the wheel zooms, `,` `.` change model, space
 //!   pauses clips.
 //! - `LIVING_GAME_VIEW_HEIGHT=<m>` scales every model to that height (default: the file's own
@@ -23,7 +30,6 @@ use crate::style::Style;
 use crate::world::{rgb, MeshBuf, Palette};
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::world_serialization::WorldAssetRoot;
 use bevy_mod_outline::OutlineStencil;
 use std::path::{Path, PathBuf};
@@ -32,10 +38,77 @@ pub fn enabled() -> bool {
     std::env::var("LIVING_GAME_VIEW").is_ok_and(|v| !v.is_empty())
 }
 
-/// Named camera angles for batch photographs: (name, yaw°, pitch°). Yaw 0 looks at a model's
-/// front (glTF models face +Z).
+/// Named camera angles for photographs: (name, yaw°, pitch°). Yaw 0 looks at a model's front
+/// (glTF models face +Z).
 const ANGLES: [(&str, f32, f32); 5] = [("front", 0.0, 8.0), ("three-quarter", 40.0, 18.0), ("side", 90.0, 8.0), ("back", 180.0, 8.0), ("above", 30.0, 62.0)];
 const CLIP_FRAMES: usize = 6;
+
+#[derive(Clone, Copy, Debug)]
+enum Pose {
+    Orbit { yaw: f32, pitch: f32, zoom: f32 },
+    Game,
+}
+
+/// One photograph: a name, a camera pose, and optionally a clip held at a time (seconds).
+#[derive(Clone, Debug)]
+struct Shot {
+    name: String,
+    pose: Pose,
+    clip: Option<(usize, f32)>,
+}
+
+fn parse_view(s: &str) -> Option<(String, Pose)> {
+    if s == "game" {
+        return Some(("game".into(), Pose::Game));
+    }
+    if let Some((n, yaw, pitch)) = ANGLES.iter().find(|a| a.0 == s) {
+        return Some((n.to_string(), Pose::Orbit { yaw: *yaw, pitch: *pitch, zoom: 1.0 }));
+    }
+    let n: Vec<f32> = s.split(':').map(|x| x.parse().ok()).collect::<Option<_>>()?;
+    (n.len() >= 2).then(|| (s.replace(':', "_"), Pose::Orbit { yaw: n[0], pitch: n[1], zoom: n.get(2).copied().unwrap_or(1.0) }))
+}
+
+/// The shots for a model with these clips (see the module docs for the grammar).
+fn parse_shots(spec: &str, clips: &[(String, f32)], default_clips: &[usize], file: &str) -> Vec<Shot> {
+    let side = Pose::Orbit { yaw: 90.0, pitch: 8.0, zoom: 1.0 };
+    let film = |c: usize, view: &str, pose: Pose| -> Vec<Shot> {
+        (0..CLIP_FRAMES).map(|f| Shot { name: format!("{}-{f}{}", sanitize(&clips[c].0), view), pose, clip: Some((c, clips[c].1 * f as f32 / CLIP_FRAMES as f32)) }).collect()
+    };
+    let mut shots = Vec::new();
+    for tok in spec.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+        if tok == "views" {
+            shots.extend(ANGLES.iter().map(|a| a.0).chain(["game"]).filter_map(parse_view).map(|(name, pose)| Shot { name, pose, clip: None }));
+        } else if tok == "clips" {
+            for &c in default_clips {
+                shots.extend(film(c, "", side));
+            }
+        } else if let Some((name, pose)) = parse_view(tok) {
+            shots.push(Shot { name, pose, clip: None });
+        } else {
+            let (clip_part, view) = tok.split_once('/').map_or((tok, None), |(a, b)| (a, Some(b)));
+            let (cname, at) = clip_part.split_once('@').map_or((clip_part, None), |(a, b)| (a, b.parse::<f32>().ok()));
+            let Some(c) = clips.iter().position(|x| x.0 == cname) else {
+                if !clips.is_empty() || !cname.is_empty() {
+                    warn!("view: {file}: no clip or view {tok}");
+                }
+                continue;
+            };
+            let (vname, pose) = match view.map(parse_view) {
+                Some(Some((n, p))) => (format!("-{n}"), p),
+                Some(None) => {
+                    warn!("view: bad view in {tok}");
+                    continue;
+                }
+                None => (String::new(), side),
+            };
+            match at {
+                Some(t) => shots.push(Shot { name: format!("{}@{t}{vname}", sanitize(cname)), pose, clip: Some((c, t)) }),
+                None => shots.extend(film(c, &vname, pose)),
+            }
+        }
+    }
+    shots
+}
 
 /// One model on view.
 #[derive(Component)]
@@ -43,8 +116,10 @@ pub struct Item {
     index: usize,
     /// Animation clips in file order, with names, and the graph nodes playing them.
     clips: Vec<(String, f32)>,
-    /// Which clips to photograph (indices into `clips`).
-    shown: Vec<usize>,
+    /// What to photograph.
+    shots: Vec<Shot>,
+    /// The clip to play while not photographing a clip.
+    first_clip: usize,
     graph: Option<(Handle<Gltf>, Vec<AnimationNodeIndex>, Entity)>,
 }
 
@@ -171,8 +246,11 @@ pub fn setup(
         let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
         let wanted: Vec<String> = std::env::var("LIVING_GAME_VIEW_CLIP").unwrap_or_default().split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
         let shown: Vec<usize> = if wanted.is_empty() { (0..clips.len().min(4)).collect() } else { clips.iter().enumerate().filter(|(_, c)| wanted.contains(&c.0)).map(|(i, _)| i).collect() };
+        let spec = std::env::var("LIVING_GAME_VIEW_SHOTS").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "views,clips".into());
+        let shots = parse_shots(&spec, &clips, &shown, file);
+        let first_clip = shown.first().copied().unwrap_or(0);
         let graph = (!clips.is_empty()).then(|| (assets.load::<Gltf>(file.clone()), vec![], Entity::PLACEHOLDER));
-        commands.spawn((model, Item { index, clips, shown, graph }, WorldAssetRoot(handle), Transform::from_rotation(turn), Visibility::Hidden));
+        commands.spawn((model, Item { index, clips, shots, first_clip, graph }, WorldAssetRoot(handle), Transform::from_rotation(turn), Visibility::Hidden));
     }
     commands.insert_resource(ViewState {
         files,
@@ -201,7 +279,7 @@ pub fn clips(
 ) {
     for (e, mut item) in &mut items {
         let clip_names: Vec<String> = item.clips.iter().map(|c| c.0.clone()).collect();
-        let pick = item.shown.first().copied().unwrap_or(0);
+        let pick = item.first_clip;
         let Some((handle, nodes, player)) = item.graph.as_mut() else { continue };
         if !nodes.is_empty() {
             continue;
@@ -328,6 +406,7 @@ pub fn batch(
     children: Query<&Children>,
     mesh_q: Query<(&Mesh3d, Option<&bevy::gltf::GltfMaterialName>)>,
     meshes: Res<Assets<Mesh>>,
+    target: Option<Res<crate::capture::Target>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let Some(out) = state.out.clone() else { return };
@@ -357,7 +436,6 @@ pub fn batch(
         }
         return;
     }
-    let shots = ANGLES.len() + 1 + item.shown.len() * CLIP_FRAMES;
     if step == 0 && at == 0.0 {
         let _ = std::fs::create_dir_all(&dir);
         state.batch = (i, 0, now);
@@ -367,25 +445,18 @@ pub fn batch(
     let Ok((mut tf, mut proj)) = cam.single_mut() else { return };
     // Each shot: pose the camera (and clip), let the frame settle, photograph, move on.
     let settle = if step == 0 { 1.5 } else { 0.6 };
-    let name = if step < ANGLES.len() {
-        let (n, yaw, pitch) = ANGLES[step];
-        place_camera(&mut tf, &mut proj, c, h, yaw, pitch, 1.0);
-        n.to_string()
-    } else if step == ANGLES.len() {
-        game_camera(&mut tf, &mut proj, Vec3::new(c.x, 0.0, c.z));
-        "game".to_string()
-    } else if step < shots {
-        let k = step - ANGLES.len() - 1;
-        let (clip, frame) = (item.shown[k / CLIP_FRAMES], k % CLIP_FRAMES);
-        let (cname, dur) = item.clips[clip].clone();
-        place_camera(&mut tf, &mut proj, c, h, 90.0, 8.0, 1.0);
-        if let Some((_, nodes, p)) = &item.graph {
+    let name = if let Some(shot) = item.shots.get(step) {
+        match shot.pose {
+            Pose::Orbit { yaw, pitch, zoom } => place_camera(&mut tf, &mut proj, c, h, yaw, pitch, zoom),
+            Pose::Game => game_camera(&mut tf, &mut proj, Vec3::new(c.x, 0.0, c.z)),
+        }
+        if let (Some((clip, t)), Some((_, nodes, p))) = (shot.clip, &item.graph) {
             if let (Ok(mut pl), Some(node)) = (players.get_mut(*p), nodes.get(clip)) {
                 pl.stop_all();
-                pl.play(*node).seek_to(dur * frame as f32 / CLIP_FRAMES as f32).pause();
+                pl.play(*node).seek_to(t).pause();
             }
         }
-        format!("clip-{}-{frame}", sanitize(&cname))
+        if shot.clip.is_some() { format!("clip-{}", shot.name) } else { shot.name.clone() }
     } else {
         // Report, then the next model (after the last photograph has been saved).
         if now - at < 0.8 {
@@ -432,7 +503,7 @@ pub fn batch(
         return;
     };
     if now - at > settle {
-        commands.spawn(Screenshot::primary_window()).observe(save_to_disk(dir.join(format!("{step:02}-{name}.png"))));
+        crate::capture::shot(&mut commands, target.as_deref(), dir.join(format!("{step:02}-{name}.png")));
         state.batch = (i, step + 1, now + 0.3);
     }
 }

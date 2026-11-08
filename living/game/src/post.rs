@@ -35,12 +35,11 @@ pub fn update(
     style: Res<crate::style::Style>,
     mut cams: Query<(&Camera, &GlobalTransform, &Projection, &mut Edges, &mut bevy::render::view::ColorGrading)>,
     lights: Query<&GlobalTransform, With<DirectionalLight>>,
-    windows: Query<&Window>,
 ) {
     let Ok((camera, gtf, proj, mut e, mut grading)) = cams.single_mut() else { return };
     let s = &*style;
     let on = s.enabled && s.edges;
-    let (w, h) = windows.single().map(|w| (w.physical_width() as f32, w.physical_height() as f32)).unwrap_or((1600.0, 900.0));
+    let (w, h) = camera.physical_viewport_size().map_or((1600.0, 900.0), |s| (s.x as f32, s.y as f32));
     let near = if let Projection::Perspective(p) = proj { p.near } else { 0.1 };
     // The sun's direction across the screen: project a step toward it from in front of the camera.
     let sun_dir = lights.iter().next().map(|l| -l.forward().as_vec3()).unwrap_or(Vec3::Y);

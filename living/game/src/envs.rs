@@ -14,14 +14,20 @@
 //! matter. Without files, a placeholder shape stands in. Environment 0 is the character line-up.
 //!
 //! You walk around with WASD (Shift to run) using the game camera, as a VRoid character from the
-//! look-dev folder if there is one. `LIVING_GAME_TOUR=<dir>` photographs every environment.
+//! look-dev folder if there is one.
+//!
+//! `LIVING_GAME_TOUR=<dir>` photographs environments headless (no window) and quits:
+//! - `LIVING_GAME_TOUR_ONLY=<id>[,<id>…]` limits it to those environments (`lineup` is the
+//!   line-up); default all.
+//! - `LIVING_GAME_TOUR_SHOTS=<shot>[,<shot>…]`: `default` (the game camera), `close` (low and
+//!   near), or `YAW:PITCH:DISTANCE[:FOV]` in degrees and metres, yaw 0 looking north; default
+//!   `default,close`. Each lands in `env-<id>-<shot>.png`.
 
 use crate::camera::{Cam, SKY};
 use crate::lookdev::{Fitted, Lookdev, Model};
 use crate::style::{outline, Outlined, Style};
 use crate::world::{hash, rgb, scale, MeshBuf, Palette};
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::world_serialization::WorldAssetRoot;
 use bevy_mod_outline::{OutlineMeshExt, OutlineStencil};
 use serde::Deserialize;
@@ -120,7 +126,7 @@ pub struct Envs {
     pub want: usize,
     /// Ground shape of the current environment.
     pub ground: GroundShape,
-    tour: Option<(std::path::PathBuf, usize, f32, u8)>,
+    tour: Option<Tour>,
 }
 
 /// The current environment's ground: gentle relief from value noise, flat when paved.
@@ -204,10 +210,7 @@ pub fn load_defs() -> Vec<EnvDef> {
 pub fn setup(mut commands: Commands) {
     let defs = load_defs();
     info!("environments: line-up + {} ({})", defs.len(), defs.iter().map(|d| d.id.as_str()).collect::<Vec<_>>().join(", "));
-    let tour = std::env::var("LIVING_GAME_TOUR").ok().filter(|d| !d.is_empty()).map(|d| {
-        let _ = std::fs::create_dir_all(&d);
-        (std::path::PathBuf::from(d), 0usize, 0.0, 0u8)
-    });
+    let tour = std::env::var("LIVING_GAME_TOUR").ok().filter(|d| !d.is_empty()).map(|d| Tour::from_env(d, &defs));
     let want = std::env::var("LIVING_GAME_ENV").ok().and_then(|id| defs.iter().position(|d| d.id == id).map(|i| i + 1)).unwrap_or(0);
     commands.insert_resource(Envs { defs, current: None, want, ground: GroundShape::default(), tour });
     commands.insert_resource(Roam { facing: Vec2::new(0.0, 1.0), ..default() });
@@ -631,42 +634,91 @@ pub fn keys(keys: Res<ButtonInput<KeyCode>>, ui: Res<crate::hud::UiWants>, mut e
     }
 }
 
-/// `LIVING_GAME_TOUR=<dir>`: photograph every environment from the default view and close up.
-pub fn tour(mut commands: Commands, mut envs: ResMut<Envs>, mut cam: ResMut<Cam>, time: Res<Time>, mut exit: MessageWriter<AppExit>) {
-    let Some((dir, i, at, stage)) = envs.tour.clone() else { return };
+/// A scripted tour: which environments, which shots, and progress.
+#[derive(Clone)]
+pub struct Tour {
+    dir: std::path::PathBuf,
+    /// Environment indices (0 = line-up).
+    envs: Vec<usize>,
+    shots: Vec<(String, crate::camera::View, f32)>,
+    /// Environment, shot and stage within the shot, and when the stage began.
+    at: (usize, usize, u8, f32),
+}
+
+impl Tour {
+    fn from_env(dir: String, defs: &[EnvDef]) -> Self {
+        let _ = std::fs::create_dir_all(&dir);
+        let list = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty()).map(|v| v.split(',').map(|x| x.trim().to_string()).collect::<Vec<_>>());
+        let envs = match list("LIVING_GAME_TOUR_ONLY") {
+            Some(ids) => ids
+                .iter()
+                .filter_map(|id| {
+                    let i = if id == "lineup" { Some(0) } else { defs.iter().position(|d| &d.id == id).map(|i| i + 1) };
+                    if i.is_none() {
+                        warn!("tour: no environment {id}");
+                    }
+                    i
+                })
+                .collect(),
+            None => (0..=defs.len()).collect(),
+        };
+        let rig = crate::camera::Rig::default();
+        let shots = list("LIVING_GAME_TOUR_SHOTS")
+            .unwrap_or_else(|| vec!["default".into(), "close".into()])
+            .into_iter()
+            .filter_map(|s| {
+                let v = match s.as_str() {
+                    "default" => (rig.view, 0.0),
+                    "close" => (crate::camera::View { pitch: 24.0, distance: 9.0, fov: 44.0 }, 0.0),
+                    _ => {
+                        let n: Vec<f32> = s.split(':').filter_map(|x| x.parse().ok()).collect();
+                        if n.len() < 3 {
+                            warn!("tour: bad shot {s} (want default, close or YAW:PITCH:DISTANCE[:FOV])");
+                            return None;
+                        }
+                        (crate::camera::View { pitch: n[1], distance: n[2], fov: n.get(3).copied().unwrap_or(rig.view.fov) }, n[0])
+                    }
+                };
+                Some((s.replace(':', "_"), v.0, v.1))
+            })
+            .collect();
+        Self { dir: std::path::PathBuf::from(dir), envs, shots, at: (0, 0, 0, 0.0) }
+    }
+}
+
+/// Run the tour: switch environment, wait for it to load, then pose and photograph each shot.
+pub fn tour(mut commands: Commands, mut envs: ResMut<Envs>, mut cam: ResMut<Cam>, time: Res<Time>, target: Option<Res<crate::capture::Target>>, mut exit: MessageWriter<AppExit>) {
+    let Some(mut t) = envs.tour.clone() else { return };
     let now = time.elapsed_secs();
-    let n = envs.defs.len() + 1;
-    if i >= n {
-        exit.write(AppExit::Success);
+    let (e, k, stage, since) = t.at;
+    let Some(&env) = t.envs.get(e) else {
+        if now - since > 0.8 {
+            exit.write(AppExit::Success);
+        }
         return;
-    }
-    let id = if i == 0 { "lineup".to_string() } else { envs.defs[i - 1].id.clone() };
-    let next = match stage {
-        0 => {
-            envs.want = i;
-            cam.rig.view = crate::camera::Rig::default().view;
-            Some(1)
-        }
-        1 if now - at > 6.0 => {
-            commands.spawn(Screenshot::primary_window()).observe(save_to_disk(dir.join(format!("env-{id}.png"))));
-            info!("tour: {id}");
-            Some(2)
-        }
-        2 if now - at > 0.3 => {
-            cam.rig.view = crate::camera::View { pitch: 24.0, distance: 9.0, fov: 44.0 };
-            Some(3)
-        }
-        3 if now - at > 2.0 => {
-            commands.spawn(Screenshot::primary_window()).observe(save_to_disk(dir.join(format!("env-{id}-close.png"))));
-            Some(4)
-        }
-        4 if now - at > 0.3 => {
-            envs.tour = Some((dir, i + 1, now, 0));
-            return;
-        }
-        _ => None,
     };
-    if let Some(s) = next {
-        envs.tour = Some((dir, i, now, s));
-    }
+    let id = if env == 0 { "lineup".to_string() } else { envs.defs[env - 1].id.clone() };
+    let Some((name, view, yaw)) = t.shots.get(k).cloned() else {
+        t.at = (e + 1, 0, 0, now);
+        envs.tour = Some(t);
+        return;
+    };
+    // The first shot of an environment waits for its models to load; later ones only for the
+    // camera to ease into place.
+    let wait = if k == 0 { 6.0 } else { 2.0 };
+    t.at = match stage {
+        0 => {
+            envs.want = env;
+            cam.rig.view = view;
+            cam.set_yaw(yaw);
+            (e, k, 1, now)
+        }
+        1 if now - since > wait => {
+            crate::capture::shot(&mut commands, target.as_deref(), t.dir.join(format!("env-{id}-{name}.png")));
+            info!("tour: {id} {name}");
+            (e, k + 1, 0, now + 0.3)
+        }
+        _ => return,
+    };
+    envs.tour = Some(t);
 }
