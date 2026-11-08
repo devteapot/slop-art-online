@@ -126,6 +126,9 @@ pub struct EnvDef {
     pub mood: Mood,
     pub ground: GroundDef,
     pub slots: Vec<Slot>,
+    /// A generated world instead of a ground disc and slots (`island.rs`).
+    #[serde(default)]
+    pub world: Option<crate::island::WorldDef>,
 }
 
 /// The environments, the current one and the one asked for.
@@ -196,6 +199,22 @@ pub fn apply_mood(md: &Mood, style: &mut Style, look: &mut Lookdev, lights: &mut
     };
 }
 
+/// You: a VRoid character from the look-dev folder if there is one, else the figure.
+fn spawn_player(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Palette, style: &Style, look: &Lookdev, assets: &AssetServer) {
+    let vroid = look.models.iter().find(|m| m.starts_with("vroid-")).cloned();
+    match vroid {
+        Some(name) => {
+            let file = crate::lookdev::animated(&format!("lookdev/{name}"));
+            let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
+            commands.spawn((EnvPart, Player::Model { vrm: true }, Model::character(file, true), WorldAssetRoot(handle), Transform::from_rotation(Quat::from_rotation_y(PI)), Visibility::Hidden));
+        }
+        None => {
+            let e = crate::bodies::spawn(commands, meshes, palette, style, "person", 1, false, Transform::default(), Vec2::ZERO);
+            commands.entity(e).insert((EnvPart, Player::Figure));
+        }
+    }
+}
+
 /// Free walking: position, facing and whether you are moving.
 #[derive(Resource, Default)]
 pub struct Roam {
@@ -231,7 +250,7 @@ pub fn setup(mut commands: Commands) {
 }
 
 /// Model files for a kind in this environment (its own folder, then the shared one).
-fn assets_for(env: &str, kind: &str) -> Vec<String> {
+pub(crate) fn assets_for(env: &str, kind: &str) -> Vec<String> {
     let root = std::path::Path::new(&crate::lookdev::asset_root()).to_path_buf();
     let mut out = Vec::new();
     for sub in [format!("envs/{env}/{kind}"), format!("envs/shared/{kind}")] {
@@ -248,14 +267,14 @@ fn assets_for(env: &str, kind: &str) -> Vec<String> {
 }
 
 /// One placed thing.
-struct Place {
-    at: Vec2,
-    yaw: f32,
-    height: f32,
+pub(crate) struct Place {
+    pub at: Vec2,
+    pub yaw: f32,
+    pub height: f32,
 }
 
 /// Where a slot's things go: deterministic, kept clear of the start, spaced apart.
-fn place(slot: &Slot, si: usize, taken: &mut Vec<(Vec2, f32)>, limit: f32) -> Vec<Place> {
+pub(crate) fn place(slot: &Slot, si: usize, taken: &mut Vec<(Vec2, f32)>, limit: f32) -> Vec<Place> {
     let r = |i: u32, k: u32| hash(si as u32 * 7919 + i, k);
     let height = |i: u32| slot.height[0] + (slot.height[1] - slot.height[0]) * r(i, 3);
     let mut out = Vec::new();
@@ -389,7 +408,7 @@ fn placeholder(kind: &str, seed: u32) -> (Mesh, Option<Mesh>) {
 
 /// A point light for a glowing thing (lamps, signs, crystals, some mushrooms), at ~90% of its
 /// height, no shadows.
-fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: usize) -> Option<(PointLight, Transform)> {
+pub(crate) fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: usize) -> Option<(PointLight, Transform)> {
     let [r, g, b] = glow?;
     let (lumens, range) = match kind {
         "lamp" => (60_000.0, 12.0),
@@ -455,6 +474,7 @@ pub fn switch(
     envs.current = Some(want);
     *roam = Roam { facing: Vec2::new(0.0, 1.0), ..default() };
     let base = Style::default();
+    commands.remove_resource::<crate::island::Island>();
     if want == 0 || want > envs.defs.len() {
         // The character line-up, in the default mood.
         envs.ground = GroundShape::default();
@@ -475,6 +495,15 @@ pub fn switch(
     let def = envs.defs[want - 1].clone();
     info!("environment: {} — {}", def.name, def.note);
     apply_mood(&def.mood, &mut *style, &mut *look, &mut lights, &mut cams, &mut *clear);
+    if let Some(world) = def.world {
+        // The island streams itself in (island.rs); you start at its town.
+        let island = crate::island::Island::new(world, &envs.defs);
+        roam.pos = island.start;
+        envs.ground = GroundShape::default();
+        commands.insert_resource(island);
+        spawn_player(&mut commands, &mut meshes, &palette, &style, &look, &assets);
+        return;
+    }
     // Ground.
     let g = &def.ground;
     let shape = GroundShape { relief: g.relief, radius: g.radius, seed: def.id.len() as u32 * 131 };
@@ -562,19 +591,7 @@ pub fn switch(
         }
     }
     info!("environment {}: {}", def.id, counts.join(", "));
-    // You: a VRoid character from the look-dev folder if there is one, else the figure.
-    let vroid = look.models.iter().find(|m| m.starts_with("vroid-")).cloned();
-    match vroid {
-        Some(name) => {
-            let file = crate::lookdev::animated(&format!("lookdev/{name}"));
-            let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
-            commands.spawn((EnvPart, Player::Model { vrm: true }, Model::character(file, true), WorldAssetRoot(handle), Transform::from_rotation(Quat::from_rotation_y(PI)), Visibility::Hidden));
-        }
-        None => {
-            let e = crate::bodies::spawn(&mut commands, &mut meshes, &palette, &style, "person", 1, false, Transform::default(), Vec2::ZERO);
-            commands.entity(e).insert((EnvPart, Player::Figure));
-        }
-    }
+    spawn_player(&mut commands, &mut meshes, &palette, &style, &look, &assets);
 }
 
 /// Walk with WASD (Shift to run) relative to the camera; the camera follows you.
@@ -589,6 +606,7 @@ pub fn walk(
     mut input: ResMut<crate::controls::Input>,
     mut target: ResMut<crate::controls::Target>,
     mut players: Query<(&Player, &mut Transform, Option<&Fitted>)>,
+    island: Option<Res<crate::island::Island>>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -601,8 +619,14 @@ pub fn walk(
             }
         }
     }
-    let d = d.normalize_or_zero();
-    let run = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    // Scripted walking for measurements: `LIVING_GAME_AUTOWALK=<degrees>` (0 = north, 90 = east;
+    // append `run` to run).
+    let auto = std::env::var("LIVING_GAME_AUTOWALK").ok();
+    let d = match auto.as_deref().and_then(|a| a.trim_end_matches("run").trim().parse::<f32>().ok()) {
+        Some(deg) => Vec2::new(deg.to_radians().sin(), -deg.to_radians().cos()),
+        None => d.normalize_or_zero(),
+    };
+    let run = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) || auto.as_deref().is_some_and(|a| a.ends_with("run"));
     roam.moving = d != Vec2::ZERO;
     roam.running = run;
     input.moving = roam.moving;
@@ -610,11 +634,26 @@ pub fn walk(
         // Walking and running at the speeds the authored clips were made for.
         let speed = if run { crate::lookdev::RUN_CLIP_SPEED } else { crate::lookdev::WALK_CLIP_SPEED };
         roam.speed = speed;
-        let limit = if envs.ground.radius > 0.0 { envs.ground.radius - 2.0 } else { 28.0 };
-        roam.pos = (roam.pos + d * speed * dt).clamp_length_max(limit);
+        match &island {
+            // On the island, water and rock stop you; slide along them.
+            Some(i) => {
+                let step = d * speed * dt;
+                for s in [step, Vec2::new(step.x, 0.0), Vec2::new(0.0, step.y)] {
+                    let next = roam.pos + s;
+                    if s != Vec2::ZERO && i.walkable(next.x, next.y) {
+                        roam.pos = next;
+                        break;
+                    }
+                }
+            }
+            None => {
+                let limit = if envs.ground.radius > 0.0 { envs.ground.radius - 2.0 } else { 28.0 };
+                roam.pos = (roam.pos + d * speed * dt).clamp_length_max(limit);
+            }
+        }
         roam.facing = d;
     }
-    let y = envs.ground.height(roam.pos.x, roam.pos.y);
+    let y = island.as_ref().map_or_else(|| envs.ground.height(roam.pos.x, roam.pos.y), |i| i.height(roam.pos.x, roam.pos.y));
     let f = roam.facing;
     for (p, mut tf, fitted) in &mut players {
         tf.translation.x = roam.pos.x;
@@ -728,6 +767,8 @@ pub fn tour(mut commands: Commands, mut envs: ResMut<Envs>, mut cam: ResMut<Cam>
     t.at = match stage {
         0 => {
             envs.want = env;
+            // Shots wider than the default view may pull back past sight (vistas).
+            cam.rig.sight_bound = view.distance <= crate::camera::Rig::default().view.distance;
             cam.rig.view = view;
             cam.set_yaw(yaw);
             (e, k, 1, now)

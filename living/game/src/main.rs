@@ -18,6 +18,7 @@ mod controls;
 mod demo;
 mod envs;
 mod hud;
+mod island;
 mod lookdev;
 mod net;
 mod post;
@@ -91,7 +92,7 @@ fn main() {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())
             .add_systems(
                 Update,
-                (envs::hdr, envs::keys, envs::switch, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::clips, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway).chain(),
+                (envs::hdr, envs::keys, envs::switch, island::stream, island::report, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::clips, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway).chain(),
             );
     } else {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup))

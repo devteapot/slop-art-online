@@ -40,7 +40,7 @@ impl Default for Draw {
 #[derive(Resource, Default)]
 pub struct Palette {
     terrain: Handle<Toon>,
-    water: Handle<StandardMaterial>,
+    pub water: Handle<StandardMaterial>,
     pub vertex: Handle<Toon>,
     pub tree: Handle<Toon>,
     pub tree_faded: Handle<Toon>,

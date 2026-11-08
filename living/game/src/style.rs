@@ -172,11 +172,27 @@ impl Plugin for StylePlugin {
         app.add_plugins(MaterialPlugin::<Toon>::default())
             .add_plugins(bevy_mod_outline::OutlinePlugin::EXTRUDE_VERTEX)
             .init_resource::<Style>()
-            .add_systems(Update, apply);
+            .add_systems(Update, (apply, fog_outlines).chain());
     }
 }
 
 /// Push a changed style to every toon material and outline.
+/// Outlines are not fogged, so they would draw through fog as bare line drawings: hide them
+/// where the fog has mostly swallowed the thing.
+fn fog_outlines(style: Res<Style>, cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>, mut outlines: Query<(&mut OutlineVolume, &GlobalTransform), With<Outlined>>) {
+    let Ok((cam, fog)) = cams.single() else { return };
+    let FogFalloff::Linear { start, end } = fog.falloff else { return };
+    let cutoff = start + (end - start) * 0.55;
+    let eye = cam.translation();
+    let on = style.outlines && style.enabled;
+    for (mut o, g) in &mut outlines {
+        let want = on && g.translation().distance(eye) < cutoff;
+        if o.visible != want {
+            o.visible = want;
+        }
+    }
+}
+
 fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query<(&Outlined, &mut OutlineVolume)>) {
     if !style.is_changed() {
         return;

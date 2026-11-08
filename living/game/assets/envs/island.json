@@ -1,0 +1,50 @@
+{
+ "id": "island",
+ "name": "Island",
+ "note": "The generic first world (docs/FIRST_WORLD.md): a 2 km island from living_rules::land, streamed around you. Regions wear the meadow, forest and spirit-forest assets; settlements use the city layouts.",
+ "mood": {
+  "hour": 15.0,
+  "sun": [
+   1.0,
+   0.96,
+   0.88
+  ],
+  "lux": 9000,
+  "sky": [
+   0.62,
+   0.74,
+   0.86
+  ],
+  "fog": [
+   0.62,
+   0.74,
+   0.86
+  ],
+  "fog_start": 70,
+  "fog_end": 160,
+  "shadow_hue": 0.72,
+  "saturation": 1.08,
+  "grade": [
+   1.0,
+   0.92,
+   0.8
+  ],
+  "grade_strength": 0.22,
+  "exposure": 0.82
+ },
+ "ground": {
+  "surface": "open",
+  "color": [
+   112,
+   160,
+   74
+  ],
+  "radius": 0,
+  "relief": 0
+ },
+ "slots": [],
+ "world": {
+  "seed": 7,
+  "size": 2048
+ }
+}

@@ -160,6 +160,25 @@ Options, none applied (the camera is unchanged):
 7. **Fog that scales with height above the ground below**, so high places look far.
 8. **Map and compass UI** with landmark bearings.
 
+## Walking it in the game client (2026-11-09)
+
+`LIVING_GAME_LOOKDEV=1 LIVING_GAME_ENV=island living/target/release/living-game` (or pick **Island** in F1 → Look dev). Client only: `living/game/src/island.rs` generates seed 7 at 2048 m and streams it around you in 64 m chunks:
+- Ground meshes come from `Land::height`, coloured by terrain and region. Water surfaces sit at `Land::water_level`.
+- Each region gets its environment's scatter slots at that environment's density, thinned on beach, highland, peaks and wetland.
+- Things taller than 1.6 m stream within 170 m; smaller things within 60 m.
+- Settlements use their city environment's layout, centred on the site.
+- Water and rock block walking. You start at the town; `LIVING_GAME_START=x,z` starts elsewhere.
+- For measurement, `LIVING_GAME_AUTOWALK="<degrees> [run]"` walks for you.
+- Tour shots wider than the default view lift the sight cap, so vistas can be photographed.
+
+Outlines now hide where the fog has mostly swallowed a thing, so distant objects no longer draw as bare line drawings in the fog.
+
+Measured headless at 1600×900 on the development Mac, running from the town into the forest:
+- frame time about 19 ms on average (52 fps), with chunk-build peaks of 26–30 ms;
+- 35–39 ground chunks, and up to about 1,600 models and 2,800 meshes loaded.
+
+Before this scales, static props need merging or instancing, and level of detail.
+
 ## What the authority would need
 
 Out of scope here; nothing in the authority, mind, viewer or game uses `land` yet. **Before designing storage or subscriptions for this world, consult the SpacetimeDB documentation as [AGENTS.md](../AGENTS.md) requires**: [tables](https://spacetimedb.com/docs/tables/), [performance](https://spacetimedb.com/docs/tables/performance/), [indexes](https://spacetimedb.com/docs/tables/indexes/), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) and [views](https://spacetimedb.com/docs/functions/views/). Check them against the pinned version.
