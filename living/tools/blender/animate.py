@@ -8,6 +8,9 @@ Run headless:
 
 Writes the same character with named, looping clips at 30 fps: idle, walk, talk, run, attack.
 
+`--kimodo NAME=motion.npz` (repeatable) adds a clip retargeted from an NVIDIA Kimodo SOMA-RP
+output (see `retarget_kimodo`); `--clips ""` writes only those.
+
 Pipeline:
 1. Blender's glTF importer reads the VRoid GLB (unknown VRM extensions are ignored). With the
    BLENDER bone heuristic every J_Bip bone's rest frame is the glTF frame rotated into Blender's
@@ -654,6 +657,7 @@ def import_model(path):
 
 
 def key_clip(arm, sk, name, clip, speeds):
+    """Evaluate a CLIPS entry over one loop and key it."""
     n = round(clip["seconds"] * FPS)
     # Pass 1 finds where the legs can't reach and the hips must come down; pass 2 lowers them
     # along a smooth curve instead, so the clamp leaves no corners.
@@ -667,6 +671,13 @@ def key_clip(arm, sk, name, clip, speeds):
         t = (f % n) / n
         out, off, _ = evaluate(sk, name, clip, t, speeds, stats, extra[f % n])
         frames.append((out, off))
+    return key_frames(arm, name, frames, stats)
+
+
+def key_frames(arm, name, frames, stats):
+    """Key per-frame local rotations (glTF frame) and hips offsets as one action on its own NLA
+    track; returns the keyed values for the graft's check."""
+    n = len(frames) - 1
     act = bpy.data.actions.new(name)
     arm.animation_data_create()
     arm.animation_data.action = act
@@ -715,6 +726,61 @@ def key_clip(arm, sk, name, clip, speeds):
     print(f"ANIM {name}: {n} frames, {n / FPS:.3f} s, {len(values) - 1} bones, "
           + ", ".join(f"{k}={v[0]:+.4f}..{v[1]:+.4f}" if isinstance(v, tuple) else f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in stats.items()))
     return values
+
+
+# NVIDIA Kimodo's SOMA skeleton → VRoid J_Bip (side letter → SOMA prefix). SOMA's `Leg` is the
+# thigh and `Shin` the knee; its fingers have a metacarpal joint (`…1`) that J_Bip lacks.
+SOMA_CENTRAL = {"Hips": "Hips", "Spine": "Spine1", "Chest": "Spine2", "UpperChest": "Chest", "Neck": "Neck1", "Head": "Head"}
+SOMA_LIMB = {
+    "Shoulder": "Shoulder", "UpperArm": "Arm", "LowerArm": "ForeArm", "Hand": "Hand",
+    "UpperLeg": "Leg", "LowerLeg": "Shin", "Foot": "Foot", "ToeBase": "ToeBase",
+    "Thumb1": "HandThumb1", "Thumb2": "HandThumb2", "Thumb3": "HandThumb3",
+    **{f"{v}{i}": f"Hand{s}{i + 1}" for v, s in [("Index", "Index"), ("Middle", "Middle"), ("Ring", "Ring"), ("Little", "Pinky")] for i in (1, 2, 3)},
+}
+SOMA_HIPS_REST = 1.005  # SOMA's rest hips height above the soles, m
+
+
+def retarget_kimodo(sk, path):
+    """Frames from a Kimodo SOMA-RP NPZ. Both skeletons rest in a T-pose with identity rest
+    rotations (arms along ±X, Y up); SOMA faces +Z and VRoid −Z, so each joint's global rotation
+    is turned half round Y, and each J_Bip bone's local rotation is its mapped joint's global
+    rotation relative to its nearest mapped ancestor's (SOMA joints J_Bip lacks, like Neck2,
+    fold into the next bone). The hips keep their sway and bob but not their travel (the game
+    moves the character), scaled by the ratio of hips heights."""
+    import numpy as np
+
+    sk_json = json.load(open(os.path.join(os.path.dirname(path), "somaskel77_skeleton.json")))
+    index = {j["name"]: j["index"] for j in sk_json["joints"]}
+    d = np.load(path)
+    G, root, smooth = d["global_rot_mats"], d["root_positions"], d["smooth_root_pos"]
+    turn = Matrix.Diagonal((-1.0, 1.0, -1.0))
+    pairs = {bone("C", b): s for b, s in SOMA_CENTRAL.items()}
+    for side, prefix in (("L", "Left"), ("R", "Right")):
+        pairs.update({bone(side, b): prefix + s for b, s in SOMA_LIMB.items()})
+    pairs = {b: index[s] for b, s in pairs.items() if b in sk.parent and s in index}
+
+    def mapped_parent(b):
+        p = sk.parent.get(b)
+        while p is not None and p not in pairs:
+            p = sk.parent.get(p)
+        return p
+
+    parents = {b: mapped_parent(b) for b in pairs}
+    hips_h = sk.rest[bone("C", "Hips")].y - sk.floor
+    k = hips_h / SOMA_HIPS_REST
+    frames = []
+    for t in range(G.shape[0]):
+        glob = {b: turn @ Matrix(G[t, j].tolist()) @ turn for b, j in pairs.items()}
+        out = {}
+        for b in pairs:
+            p = parents[b]
+            local = glob[b] if p is None else glob[p].transposed() @ glob[b]
+            out[b] = local.to_quaternion().normalized()
+        dx, dz = float(root[t, 0] - smooth[t, 0]), float(root[t, 2] - smooth[t, 2])
+        off = Vector((-dx * k, (float(root[t, 1]) - SOMA_HIPS_REST) * k, -dz * k))
+        frames.append((out, off))
+    print(f"KIMODO {os.path.basename(path)}: {len(frames)} frames, {len(pairs)} bones mapped")
+    return frames
 
 
 def check_pose_basis(arm):
@@ -862,6 +928,7 @@ def main():
     ap.add_argument("--speed", type=float, default=1.4, help="walk speed, game m/s")
     ap.add_argument("--run-speed", type=float, default=3.6, help="run speed, game m/s")
     ap.add_argument("--height", type=float, default=1.75, help="height the game fits the character to, m")
+    ap.add_argument("--kimodo", action="append", default=[], metavar="NAME=NPZ", help="add a clip retargeted from a Kimodo SOMA-RP NPZ (repeatable)")
     ap.add_argument("--blend", help="also save the .blend with the NLA tracks")
     ap.add_argument("--keep-export", help="also keep Blender's own GLB export at this path")
     a = ap.parse_args(argv)
@@ -882,6 +949,11 @@ def main():
         values = key_clip(arm, sk, c, CLIPS[c], speeds)
         expected[c] = {k: v for k, v in values.items() if not k.startswith("__")}
         animated |= set(expected[c])
+    for spec in a.kimodo:
+        name, path = spec.split("=", 1)
+        values = key_frames(arm, name, retarget_kimodo(sk, os.path.abspath(path)), {})
+        expected[name] = {k: v for k, v in values.items() if not k.startswith("__")}
+        animated |= set(expected[name])
     if a.blend:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a.blend))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
