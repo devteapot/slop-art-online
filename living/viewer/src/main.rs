@@ -12,7 +12,7 @@ mod sync;
 mod terrain;
 
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
+use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 
 fn main() {
     App::new()
@@ -27,8 +27,8 @@ fn main() {
             ..default()
         }))
         .add_plugins(EguiPlugin::default())
-        .init_non_send_resource::<net::Net>()
-        .init_non_send_resource::<state::View>()
+        .init_non_send::<net::Net>()
+        .init_non_send::<state::View>()
         .add_systems(Startup, |mut commands: Commands| {
             commands.spawn(Camera2d);
         })
@@ -56,14 +56,17 @@ fn draw(mut contexts: EguiContexts, mut net: NonSendMut<net::Net>, mut view: Non
     split(1, &mut view);
     let dt = time.delta_secs().max(1e-4);
     view.fps += (1.0 / dt - view.fps) * 0.05;
-    panels::top_bar(ctx, net, &snap, &mut view);
-    panels::left(ctx, &mut view, net, &snap);
+    // Panels are shown inside one Ui over the whole viewport; each takes its space from it,
+    // and the central map gets what is left.
+    let mut root = egui::Ui::new(ctx.clone(), "viewport".into(), egui::UiBuilder::new().layer_id(egui::LayerId::background()).max_rect(ctx.viewport_rect()));
+    panels::top_bar(&mut root, net, &snap, &mut view);
+    panels::left(&mut root, &mut view, net, &snap);
     split(2, &mut view);
-    panels::inspector(ctx, &mut view, net, &snap);
+    panels::inspector(&mut root, &mut view, net, &snap);
     panels::sign_window(ctx, &mut view, &snap);
-    panels::fight_panel(ctx, &mut view, &snap);
+    panels::fight_panel(ctx, root.available_rect_before_wrap(), &mut view, &snap);
     split(3, &mut view);
-    map::central(ctx, &mut view, &snap, time.elapsed_secs());
+    map::central(&mut root, &mut view, &snap, time.elapsed_secs());
     split(4, &mut view);
     let ms = started.elapsed().as_secs_f32() * 1000.0;
     view.frame_ms += (ms - view.frame_ms) * 0.05;

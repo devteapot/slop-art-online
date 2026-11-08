@@ -43,9 +43,9 @@ fn lab_picker(ui: &mut egui::Ui, net: &Net, view: &mut View) {
     }
 }
 
-pub fn top_bar(ctx: &egui::Context, net: &Net, snap: &Snap, view: &mut View) {
+pub fn top_bar(root: &mut egui::Ui, net: &Net, snap: &Snap, view: &mut View) {
     let (fps, frame_ms) = (view.fps, view.frame_ms);
-    egui::TopBottomPanel::top("top").show(ctx, |ui| {
+    egui::Panel::top("top").show(root, |ui| {
         ui.add_space(3.0);
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("Living world").strong().size(16.0));
@@ -141,8 +141,8 @@ fn kind_style(kind: &str, text: &str) -> (&'static str, Color32) {
     }
 }
 
-pub fn left(ctx: &egui::Context, view: &mut View, net: &Net, snap: &Snap) {
-    egui::SidePanel::left("left").resizable(true).default_width(330.0).min_width(240.0).show(ctx, |ui| {
+pub fn left(root: &mut egui::Ui, view: &mut View, net: &Net, snap: &Snap) {
+    egui::Panel::left("left").resizable(true).default_size(330.0).min_size(240.0).show(root, |ui| {
         ui.add_space(4.0);
         let alive = snap.chars.values().filter(|c| c.kind == "person" && c.alive).count();
         ui.horizontal(|ui| {
@@ -299,8 +299,8 @@ fn signed_bar(ui: &mut egui::Ui, label: &str, v: f32, range: f32) {
     });
 }
 
-pub fn inspector(ctx: &egui::Context, view: &mut View, net: &Net, snap: &Snap) {
-    egui::SidePanel::right("inspector").resizable(true).default_width(420.0).min_width(300.0).show(ctx, |ui| {
+pub fn inspector(root: &mut egui::Ui, view: &mut View, net: &Net, snap: &Snap) {
+    egui::Panel::right("inspector").resizable(true).default_size(420.0).min_size(300.0).show(root, |ui| {
         let Some(id) = view.selected else {
             ui.add_space(20.0);
             ui.label(RichText::new("Select a character on the map, in the people list or in the story.").color(WEAK));
@@ -388,13 +388,13 @@ fn technique_style(t: &str) -> (&'static str, Color32) {
 
 /// The selected character's fight: participants, their health and actions, what the
 /// viewer saw (hits, blocks, dodges, misses) and what they said.
-pub fn fight_panel(ctx: &egui::Context, view: &mut View, snap: &Snap) {
+/// `area` is the space left between the panels (where the map is drawn).
+pub fn fight_panel(ctx: &egui::Context, area: egui::Rect, view: &mut View, snap: &Snap) {
     let Some(sel) = view.selected else { return };
     let group = view.fight_group(sel);
     if group.is_empty() {
         return;
     }
-    let area = ctx.available_rect();
     let mut go = None;
     egui::Window::new("⚔ Fight")
         .id(egui::Id::new("fight-panel"))

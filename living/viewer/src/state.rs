@@ -487,7 +487,7 @@ impl View {
             f.push("Hack".into());
         }
         ctx.set_fonts(fonts);
-        ctx.style_mut(|s| {
+        ctx.global_style_mut(|s| {
             s.spacing.item_spacing = egui::vec2(6.0, 5.0);
             s.spacing.button_padding = egui::vec2(8.0, 3.0);
         });

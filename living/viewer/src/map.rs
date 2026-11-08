@@ -82,12 +82,13 @@ pub fn darkness(h: f32) -> f32 {
 /// Where each creature was drawn this frame: feet and sprite top (screen points).
 type Placed = HashMap<u32, (Pos2, f32)>;
 
-pub fn central(ctx: &egui::Context, view: &mut View, snap: &Snap, t: f32) {
-    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(Color32::from_rgb(16, 22, 28))).show(ctx, |ui| {
+pub fn central(root: &mut egui::Ui, view: &mut View, snap: &Snap, t: f32) {
+    let ctx = &root.ctx().clone();
+    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(Color32::from_rgb(16, 22, 28))).show(root, |ui| {
         let rect = ui.max_rect();
         let resp = ui.allocate_rect(rect, egui::Sense::click_and_drag());
         // Fit the whole valley once the terrain has arrived (and on request).
-        let fit = ui.input(|i| i.key_pressed(egui::Key::Home)) && !ui.ctx().wants_keyboard_input();
+        let fit = ui.input(|i| i.key_pressed(egui::Key::Home)) && !ui.ctx().egui_wants_keyboard_input();
         if (!view.fitted && view.terrain.is_some() && rect.width() > 50.0) || fit {
             view.zoom = (rect.width().min(rect.height()) / world_tiles().max_elem() * 0.96).max(0.8);
             view.center = (world_tiles() / 2.0).to_pos2();
@@ -741,7 +742,7 @@ fn input(ui: &egui::Ui, resp: &egui::Response, view: &mut View, rect: Rect) {
             }
         }
     }
-    if !ui.ctx().wants_keyboard_input() {
+    if !ui.ctx().egui_wants_keyboard_input() {
         let dt = ui.input(|i| i.stable_dt).min(0.1);
         let mut d = Vec2::ZERO;
         ui.input(|i| {
