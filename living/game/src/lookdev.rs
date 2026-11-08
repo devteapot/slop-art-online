@@ -95,7 +95,13 @@ pub fn setup(mut commands: Commands) {
         let _ = std::fs::create_dir_all(&d);
         (std::path::PathBuf::from(d), 0usize, 0.0)
     });
-    commands.insert_resource(Lookdev { hour: 15.0, act: Act::Idle, models, demo, focus: None });
+    // What the line-up does at the start (`LIVING_GAME_ACT=idle|walk|talk`; F1 → Look dev too).
+    let act = match std::env::var("LIVING_GAME_ACT").as_deref() {
+        Ok("walk") => Act::Walk,
+        Ok("talk") => Act::Talk,
+        _ => Act::Idle,
+    };
+    commands.insert_resource(Lookdev { hour: 15.0, act, models, demo, focus: None });
 }
 
 /// The character line-up: every look-dev model in an arc beside the reference figure.
@@ -117,11 +123,12 @@ pub fn build_lineup(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette:
         let a = std::f32::consts::PI * (1.1 + 0.8 * (i as f32 + 0.5) / n);
         let r = 5.0 + 1.5 * (i % 2) as f32;
         let at = Vec3::new(r * a.cos(), 0.0, r * a.sin());
-        let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(format!("{FOLDER}/{name}")));
+        let file = animated(&format!("{FOLDER}/{name}"));
+        let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
         // glTF models face +Z, toward the camera's default side (south); VRM models face −Z.
         let vrm = name.starts_with("vroid-") || name.ends_with(".vrm");
         let turn = Quat::from_rotation_y(if vrm { std::f32::consts::PI } else { 0.0 });
-        commands.spawn((crate::envs::EnvPart, Model::character(format!("{FOLDER}/{name}"), vrm), WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
+        commands.spawn((crate::envs::EnvPart, Model::character(file, vrm), WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
     }
 }
 
@@ -228,6 +235,9 @@ pub struct Rig {
     arm_side: [f32; 2],
     face: Option<(Entity, usize, usize)>,
     seed: f32,
+    /// The file carries animation clips: the body plays them (`clips`), and only the face is
+    /// moved here.
+    clips: bool,
 }
 
 const BONES: [&str; 13] = [
@@ -282,7 +292,8 @@ pub fn rig(
         let side = |lower: &str| bones.get(lower).and_then(|b| transforms.get(*b).ok()).map_or(1.0, |t| t.translation.x.signum());
         let arm_side = [side("J_Bip_L_LowerArm"), side("J_Bip_R_LowerArm")];
         info!("look-dev: rigged a VRoid model ({} bones, face {})", bones.len(), if face.is_some() { "found" } else { "missing" });
-        commands.entity(e).insert(Rig { bones, arm_side, face, seed: (e.index_u32() % 97) as f32 * 0.37 });
+        let clips = glb_json(&model.file).is_some_and(|j| j["animations"].as_array().is_some_and(|a| !a.is_empty()));
+        commands.entity(e).insert(Rig { bones, arm_side, face, seed: (e.index_u32() % 97) as f32 * 0.37, clips });
     }
 }
 
@@ -324,6 +335,107 @@ fn target_names(file: &str, node: &str) -> Option<Vec<String>> {
     Some(names.as_array()?.iter().filter_map(|v| v.as_str().map(String::from)).collect())
 }
 
+/// Blink every few seconds; the mouth moves while talking.
+fn face(rig: &Rig, look: &Lookdev, morphs: &mut Query<&mut MorphWeights>, t: f32) {
+    let Some((face, blink, mouth)) = rig.face else { return };
+    let Ok(mut w) = morphs.get_mut(face) else { return };
+    let cycle = (t % 3.7) / 3.7;
+    let close = if cycle > 0.96 { ((cycle - 0.96) / 0.04 * std::f32::consts::PI).sin() } else { 0.0 };
+    let talk = if look.act == Act::Talk { ((t * 11.0).sin() * 0.5 + 0.5) * ((t * 2.3).sin() * 0.3 + 0.7) } else { 0.0 };
+    let ws = w.weights_mut();
+    if blink < ws.len() {
+        ws[blink] = close;
+    }
+    if mouth < ws.len() {
+        ws[mouth] = talk * 0.8;
+    }
+}
+
+/// A model's animation clips by name, on its animation player, and the one playing.
+#[derive(Component)]
+pub struct Clips {
+    player: Entity,
+    nodes: HashMap<String, AnimationNodeIndex>,
+    playing: Option<String>,
+}
+
+/// The glTF file a model's clips come from.
+#[derive(Component)]
+pub struct ClipSource(Handle<Gltf>);
+
+/// Speeds the authored locomotion clips were made for (m/s; `animate.py --speed/--run-speed`);
+/// playback is scaled from these to the actual speed.
+pub const WALK_CLIP_SPEED: f32 = 1.4;
+pub const RUN_CLIP_SPEED: f32 = 3.6;
+
+/// Models whose files carry clips (`assets/lookdev/anim/`, from `living/tools/blender/animate.py`)
+/// play them: idle, walk or run for you by how you move; idle, walk or talk for the line-up.
+#[allow(clippy::too_many_arguments)]
+pub fn clips(
+    mut commands: Commands,
+    look: Res<Lookdev>,
+    roam: Res<crate::envs::Roam>,
+    assets: Res<AssetServer>,
+    gltfs: Res<Assets<Gltf>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+    new: Query<(Entity, &Model, &Rig, Option<&ClipSource>), Without<Clips>>,
+    mut playing: Query<(&mut Clips, Has<crate::envs::Player>)>,
+    children: Query<&Children>,
+    mut players: Query<(&mut AnimationPlayer, Option<&mut AnimationTransitions>)>,
+) {
+    for (e, model, rig, source) in &new {
+        if !rig.clips {
+            continue;
+        }
+        // Hold the file's handle: the load is dropped with its last handle.
+        let Some(source) = source else {
+            commands.entity(e).insert(ClipSource(assets.load::<Gltf>(model.file.clone())));
+            continue;
+        };
+        let Some(gltf) = gltfs.get(&source.0) else { continue };
+        let Some(p) = children.iter_descendants(e).find(|d| players.contains(*d)) else { continue };
+        let (names, handles): (Vec<String>, Vec<_>) = gltf.named_animations.iter().map(|(n, h)| (n.to_string(), h.clone())).unzip();
+        let (graph, idx) = AnimationGraph::from_clips(handles);
+        commands.entity(p).insert((AnimationGraphHandle(graphs.add(graph)), AnimationTransitions::new()));
+        info!("look-dev: {} plays clips {names:?} on {p}", model.file);
+        commands.entity(e).insert(Clips { player: p, nodes: names.into_iter().zip(idx).collect(), playing: None });
+    }
+    for (mut c, is_player) in &mut playing {
+        let (want, speed) = if is_player && roam.moving {
+            if roam.running { ("run", roam.speed / RUN_CLIP_SPEED) } else { ("walk", roam.speed / WALK_CLIP_SPEED) }
+        } else {
+            match look.act {
+                Act::Walk if !is_player => ("walk", 1.0),
+                Act::Talk if !is_player => ("talk", 1.0),
+                _ => ("idle", 1.0),
+            }
+        };
+        let Some(&node) = c.nodes.get(want).or_else(|| c.nodes.get("idle")) else { continue };
+        let Ok((mut player, transitions)) = players.get_mut(c.player) else { continue };
+        if c.playing.as_deref() != Some(want) {
+            match transitions {
+                Some(mut t) => t.play(&mut player, node, std::time::Duration::from_millis(220)).repeat(),
+                None => player.play(node).repeat(),
+            };
+            c.playing = Some(want.to_string());
+        }
+        if let Some(a) = player.animation_mut(node) {
+            a.set_speed(speed);
+        }
+    }
+}
+
+/// The animated version of a look-dev model, if `animate.py` has made one.
+pub fn animated(file: &str) -> String {
+    let p = std::path::Path::new(file);
+    let alt = p.parent().unwrap_or(std::path::Path::new("")).join("anim").join(p.file_name().unwrap_or_default());
+    if std::path::Path::new(&asset_root()).join(&alt).exists() {
+        alt.to_string_lossy().to_string()
+    } else {
+        file.to_string()
+    }
+}
+
 /// Procedural motion for VRoid characters: arms down, breathing, a walk cycle in place,
 /// blinking, and the mouth moving while talking.
 pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(&Rig, Has<crate::envs::Player>)>, mut transforms: Query<&mut Transform>, mut morphs: Query<&mut MorphWeights>, time: Res<Time>) {
@@ -337,6 +449,10 @@ pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(&R
         };
         let walk = look.act == Act::Walk || (is_player && roam.moving);
         let phase = t * 6.0;
+        if rig.clips {
+            face(rig, &look, &mut morphs, t);
+            continue;
+        }
         let breathe = (t * 1.6).sin();
         // Arms down along the body (about 72° from the T-pose), swinging when walking; elbows
         // slightly bent.
@@ -360,21 +476,7 @@ pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(&R
         if let Some(mut hips) = rig.bones.get("J_Bip_C_Hips").and_then(|b| transforms.get_mut(*b).ok()) {
             hips.rotation = Quat::from_rotation_z(if walk { phase.sin() * 0.04 } else { 0.0 });
         }
-        // Blink every few seconds; mouth moves while talking.
-        if let Some((face, blink, mouth)) = rig.face {
-            if let Ok(mut w) = morphs.get_mut(face) {
-                let cycle = (t % 3.7) / 3.7;
-                let close = if cycle > 0.96 { ((cycle - 0.96) / 0.04 * std::f32::consts::PI).sin() } else { 0.0 };
-                let talk = if look.act == Act::Talk { ((t * 11.0).sin() * 0.5 + 0.5) * ((t * 2.3).sin() * 0.3 + 0.7) } else { 0.0 };
-                let ws = w.weights_mut();
-                if blink < ws.len() {
-                    ws[blink] = close;
-                }
-                if mouth < ws.len() {
-                    ws[mouth] = talk * 0.8;
-                }
-            }
-        }
+        face(rig, &look, &mut morphs, t);
     }
 }
 

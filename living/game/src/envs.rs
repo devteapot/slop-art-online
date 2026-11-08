@@ -191,6 +191,9 @@ pub struct Roam {
     pub pos: Vec2,
     pub facing: Vec2,
     pub moving: bool,
+    pub running: bool,
+    /// Current speed, m/s.
+    pub speed: f32,
 }
 
 pub fn load_defs() -> Vec<EnvDef> {
@@ -551,8 +554,9 @@ pub fn switch(
     let vroid = look.models.iter().find(|m| m.starts_with("vroid-")).cloned();
     match vroid {
         Some(name) => {
-            let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(format!("lookdev/{name}")));
-            commands.spawn((EnvPart, Player::Model { vrm: true }, Model::character(format!("lookdev/{name}"), true), WorldAssetRoot(handle), Transform::from_rotation(Quat::from_rotation_y(PI)), Visibility::Hidden));
+            let file = crate::lookdev::animated(&format!("lookdev/{name}"));
+            let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
+            commands.spawn((EnvPart, Player::Model { vrm: true }, Model::character(file, true), WorldAssetRoot(handle), Transform::from_rotation(Quat::from_rotation_y(PI)), Visibility::Hidden));
         }
         None => {
             let e = crate::bodies::spawn(&mut commands, &mut meshes, &palette, &style, "person", 1, false, Transform::default(), Vec2::ZERO);
@@ -588,9 +592,12 @@ pub fn walk(
     let d = d.normalize_or_zero();
     let run = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     roam.moving = d != Vec2::ZERO;
+    roam.running = run;
     input.moving = roam.moving;
     if roam.moving {
-        let speed = if run { 3.9 } else { 2.6 };
+        // Walking and running at the speeds the authored clips were made for.
+        let speed = if run { crate::lookdev::RUN_CLIP_SPEED } else { crate::lookdev::WALK_CLIP_SPEED };
+        roam.speed = speed;
         let limit = if envs.ground.radius > 0.0 { envs.ground.radius - 2.0 } else { 28.0 };
         roam.pos = (roam.pos + d * speed * dt).clamp_length_max(limit);
         roam.facing = d;
