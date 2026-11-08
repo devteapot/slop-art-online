@@ -33,10 +33,10 @@ pub struct Edges {
 /// Feed the finishing pass from the style profile, the sun and the camera.
 pub fn update(
     style: Res<crate::style::Style>,
-    mut cams: Query<(&Camera, &GlobalTransform, &Projection, &mut Edges, &mut bevy::render::view::ColorGrading)>,
+    mut cams: Query<(&Camera, &GlobalTransform, &Projection, &mut Edges, &mut bevy::render::view::ColorGrading, Option<&mut bevy::post_process::bloom::Bloom>)>,
     lights: Query<&GlobalTransform, With<DirectionalLight>>,
 ) {
-    let Ok((camera, gtf, proj, mut e, mut grading)) = cams.single_mut() else { return };
+    let Ok((camera, gtf, proj, mut e, mut grading, bloom)) = cams.single_mut() else { return };
     let s = &*style;
     let on = s.enabled && s.edges;
     let (w, h) = camera.physical_viewport_size().map_or((1600.0, 900.0), |s| (s.x as f32, s.y as f32));
@@ -61,6 +61,11 @@ pub fn update(
         grade: Vec4::new(gr, gg, gb, if on { s.grade } else { 0.0 }),
         screen: Vec4::new(w, h, 1.0 / w, 1.0 / h),
     };
+    if let Some(mut b) = bloom {
+        if b.intensity != s.bloom {
+            b.intensity = s.bloom;
+        }
+    }
     let sat = if s.enabled { s.saturation } else { 1.0 };
     if grading.global.post_saturation != sat {
         grading.global.post_saturation = sat;

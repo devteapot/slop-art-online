@@ -71,6 +71,13 @@ pub struct Mood {
     /// Lifts shadows a little in dark places (style ambient).
     #[serde(default)]
     pub ambient: f32,
+    /// Bloom strength; glowing places want more (default 0.12).
+    #[serde(default = "default_bloom")]
+    pub bloom: f32,
+}
+
+fn default_bloom() -> f32 {
+    0.12
 }
 
 fn default_hue_shift() -> f32 {
@@ -180,6 +187,7 @@ pub fn apply_mood(md: &Mood, style: &mut Style, look: &mut Lookdev, lights: &mut
         grade: md.grade_strength,
         exposure: md.exposure,
         ambient: md.ambient,
+        bloom: md.bloom,
         line_fade: [md.fog_start * 0.6, md.fog_end * 0.8],
         ..base
     };

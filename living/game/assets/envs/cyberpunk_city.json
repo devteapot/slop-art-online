@@ -31,6 +31,7 @@
   ],
   "grade_strength": 0.25,
   "exposure": 1.0,
+  "bloom": 0.25,
   "ambient": 0.12
  },
  "ground": {

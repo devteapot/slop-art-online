@@ -31,6 +31,7 @@
   ],
   "grade_strength": 0.3,
   "exposure": 0.95,
+  "bloom": 0.32,
   "ambient": 0.12
  },
  "ground": {
@@ -59,11 +60,11 @@
   {
    "kind": "glow_mushroom",
    "rule": "scatter",
-   "count": 120,
+   "count": 90,
    "radius": 45,
    "clear": 2,
    "height": [
-    0.3,
+    0.5,
     1.4
    ],
    "glow": [
@@ -75,12 +76,12 @@
   {
    "kind": "glow_plant",
    "rule": "scatter",
-   "count": 140,
+   "count": 110,
    "radius": 50,
    "clear": 2,
    "height": [
-    0.4,
-    1.2
+    0.5,
+    1.1
    ],
    "glow": [
     0.7,
@@ -102,6 +103,17 @@
     0.5,
     0.8,
     1.0
+   ]
+  },
+  {
+   "kind": "grass",
+   "rule": "scatter",
+   "count": 160,
+   "radius": 50,
+   "clear": 1.5,
+   "height": [
+    0.3,
+    0.55
    ]
   }
  ]

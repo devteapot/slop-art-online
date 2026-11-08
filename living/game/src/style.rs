@@ -36,6 +36,8 @@ impl MaterialExtension for ToonExt {
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct Style {
     pub enabled: bool,
+    /// Bloom strength (HDR scenes): how far bright and glowing things halo.
+    pub bloom: f32,
     /// Shadows are the lit colour with its hue moved toward `shadow_hue` (0..1) by
     /// `hue_shift`, saturation times `shadow_saturation`, darkened by `shadow_depth`, then
     /// multiplied by `shadow_tint`.
@@ -83,6 +85,7 @@ impl Default for Style {
     fn default() -> Self {
         Self {
             enabled: true,
+            bloom: 0.12,
             // Blue Protocol-like defaults: a hard step with about 70% lit, cool hue-shifted
             // shadows that keep their saturation.
             shadow_hue: 0.72,

@@ -87,6 +87,17 @@
     0.5,
     0.9
    ]
+  },
+  {
+   "kind": "grass",
+   "rule": "scatter",
+   "count": 180,
+   "radius": 55,
+   "clear": 1.5,
+   "height": [
+    0.3,
+    0.55
+   ]
   }
  ]
 }

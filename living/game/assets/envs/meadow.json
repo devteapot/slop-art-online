@@ -1,7 +1,7 @@
 {
  "id": "meadow",
  "name": "Meadow",
- "note": "Open grassland with a few trees: the baseline.",
+ "note": "Open grassland with a few trees: the baseline. Grass tufts and flower patches give the ground texture at the game camera.",
  "mood": {
   "hour": 15.0,
   "sun": [
@@ -46,18 +46,18 @@
   {
    "kind": "tree",
    "rule": "scatter",
-   "count": 14,
+   "count": 18,
    "radius": 60,
    "clear": 12,
    "height": [
-    8,
-    13
+    7,
+    12
    ]
   },
   {
    "kind": "bush",
    "rule": "scatter",
-   "count": 40,
+   "count": 55,
    "radius": 50,
    "clear": 4,
    "height": [
@@ -68,23 +68,34 @@
   {
    "kind": "flower",
    "rule": "scatter",
-   "count": 160,
-   "radius": 40,
+   "count": 150,
+   "radius": 45,
    "clear": 2,
    "height": [
-    0.2,
-    0.5
+    0.3,
+    0.55
    ]
   },
   {
    "kind": "rock",
    "rule": "scatter",
-   "count": 18,
+   "count": 22,
    "radius": 55,
    "clear": 6,
    "height": [
     0.4,
     2.2
+   ]
+  },
+  {
+   "kind": "grass",
+   "rule": "scatter",
+   "count": 900,
+   "radius": 50,
+   "clear": 1.5,
+   "height": [
+    0.3,
+    0.6
    ]
   }
  ]

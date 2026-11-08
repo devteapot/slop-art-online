@@ -379,7 +379,7 @@ pub fn clips(
     gltfs: Res<Assets<Gltf>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     new: Query<(Entity, &Model, &Rig, Option<&ClipSource>), Without<Clips>>,
-    mut playing: Query<(&mut Clips, Has<crate::envs::Player>)>,
+    mut playing: Query<(Entity, &mut Clips, Has<crate::envs::Player>)>,
     children: Query<&Children>,
     mut players: Query<(&mut AnimationPlayer, Option<&mut AnimationTransitions>)>,
 ) {
@@ -397,10 +397,10 @@ pub fn clips(
         let (names, handles): (Vec<String>, Vec<_>) = gltf.named_animations.iter().map(|(n, h)| (n.to_string(), h.clone())).unzip();
         let (graph, idx) = AnimationGraph::from_clips(handles);
         commands.entity(p).insert((AnimationGraphHandle(graphs.add(graph)), AnimationTransitions::new()));
-        info!("look-dev: {} plays clips {names:?} on {p}", model.file);
+        debug!("look-dev: {} plays clips {names:?} on {p}", model.file);
         commands.entity(e).insert(Clips { player: p, nodes: names.into_iter().zip(idx).collect(), playing: None });
     }
-    for (mut c, is_player) in &mut playing {
+    for (e, mut c, is_player) in &mut playing {
         let (want, speed) = if is_player && roam.moving {
             if roam.running { ("run", roam.speed / RUN_CLIP_SPEED) } else { ("walk", roam.speed / WALK_CLIP_SPEED) }
         } else {
@@ -411,7 +411,11 @@ pub fn clips(
             }
         };
         let Some(&node) = c.nodes.get(want).or_else(|| c.nodes.get("idle")) else { continue };
-        let Ok((mut player, transitions)) = players.get_mut(c.player) else { continue };
+        let Ok((mut player, transitions)) = players.get_mut(c.player) else {
+            // The scene's animation player went away (its instance was rebuilt): find it again.
+            commands.entity(e).remove::<Clips>();
+            continue;
+        };
         if c.playing.as_deref() != Some(want) {
             match transitions {
                 Some(mut t) => t.play(&mut player, node, std::time::Duration::from_millis(220)).repeat(),
