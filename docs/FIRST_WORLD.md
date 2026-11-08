@@ -173,6 +173,12 @@ Options, none applied (the camera is unchanged):
 
 Outlines now hide where the fog has mostly swallowed a thing, so distant objects no longer draw as bare line drawings in the fog.
 
+Second pass (2026-11-09, user feedback):
+- **Stands and glades:** tall things gather into stands with glades between them, from a slow density field. Ground cover stays everywhere.
+- **Blended ground colour:** the ground colour is averaged over about 25 m, so region borders no longer switch along straight polygon edges.
+- **Water placement:** water draws only on water tiles and their neighbours. Using the nearest water's level alone put a sheet of water over dry slopes.
+- **Camera:** see the camera notes in [game brief](GAME_BRIEF.md).
+
 Measured headless at 1600×900 on the development Mac, running from the town into the forest:
 - frame time about 19 ms on average (52 fps), with chunk-build peaks of 26–30 ms;
 - 35–39 ground chunks, and up to about 1,600 models and 2,800 meshes loaded.

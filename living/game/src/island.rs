@@ -175,7 +175,11 @@ impl Island {
                         RegionKind::Wetland => 0.6,
                         _ => 1.0,
                     };
-                    if hash(seed ^ 0xabc, k) > keep {
+                    // Tall things gather into stands with glades between (a slow density field);
+                    // ground cover stays everywhere.
+                    let tall = slot.height[1] > 4.0;
+                    let stand = if tall { (grove(self.land.seed, at) * 1.9).clamp(0.0, 1.7) } else { 1.0 };
+                    if hash(seed ^ 0xabc, k) > keep * stand {
                         continue;
                     }
                     let height = slot.height[0] + (slot.height[1] - slot.height[0]) * hash(seed ^ 0x51, k);
@@ -186,6 +190,23 @@ impl Island {
         }
         out
     }
+}
+
+/// Smooth value noise in 0..1 over about `scale` metres.
+fn noise(seed: u32, p: Vec2, scale: f32) -> f32 {
+    let q = p / scale;
+    let (i, f) = (q.floor(), q.fract());
+    let s = f * f * (Vec2::splat(3.0) - 2.0 * f);
+    let h = |x: f32, y: f32| hash((x as i32 as u32).wrapping_add(seed), (y as i32 as u32).wrapping_mul(7919).wrapping_add(seed));
+    let a = h(i.x, i.y) + (h(i.x + 1.0, i.y) - h(i.x, i.y)) * s.x;
+    let b = h(i.x, i.y + 1.0) + (h(i.x + 1.0, i.y + 1.0) - h(i.x, i.y + 1.0)) * s.x;
+    a + (b - a) * s.y
+}
+
+/// How strongly tall things gather here: dense stands (above 0.6) and open glades (near 0).
+fn grove(seed: u64, p: Vec2) -> f32 {
+    let n = 0.65 * noise(seed as u32 ^ 0x6a09, p, 70.0) + 0.35 * noise(seed as u32 ^ 0xbb67, p, 23.0);
+    ((n - 0.32) / 0.4).clamp(0.0, 1.0).powf(1.3)
 }
 
 fn chunk_of(p: Vec2) -> (i32, i32) {
@@ -224,6 +245,23 @@ fn ground_colour(t: Terrain, kind: RegionKind, v: f32) -> [f32; 4] {
     scale(base, 0.94 + 0.12 * v)
 }
 
+/// Ground colour averaged over a few metres, so region borders and single tiles blend instead
+/// of switching along straight polygon edges.
+fn blended_colour(land: &Land, x: f32, z: f32, v: f32) -> [f32; 4] {
+    const RING: [(f32, f32); 9] = [(0.0, 0.0), (6.0, 0.0), (-6.0, 0.0), (0.0, 6.0), (0.0, -6.0), (13.0, 9.0), (-13.0, -9.0), (9.0, -13.0), (-9.0, 13.0)];
+    let mut acc = [0.0f32; 4];
+    for (k, (dx, dz)) in RING.iter().enumerate() {
+        // The centre sample counts most; the ring spreads the change over about 25 m.
+        let w = if k == 0 { 3.0 } else { 1.0 };
+        let (px, pz) = (x + dx, z + dz);
+        let c = ground_colour(land.map.at(px + 0.01, pz + 0.01), land.kind_at(px, pz), v);
+        for i in 0..4 {
+            acc[i] += c[i] * w;
+        }
+    }
+    acc.map(|c| c / 11.0)
+}
+
 /// A chunk's ground (indexed 1 m grid, smooth normals) and its water surface.
 fn chunk_meshes(land: &Land, c: (i32, i32)) -> (Mesh, Option<Mesh>) {
     let n = CHUNK as usize;
@@ -235,7 +273,7 @@ fn chunk_meshes(land: &Land, c: (i32, i32)) -> (Mesh, Option<Mesh>) {
             let (x, z) = ((x0 + i as i32) as f32, (z0 + j as i32) as f32);
             pos.push([x, land.height(x, z), z]);
             let v = hash((x0 + i as i32) as u32, (z0 + j as i32) as u32);
-            col.push(ground_colour(land.map.at(x + 0.01, z + 0.01), land.kind_at(x, z), v));
+            col.push(blended_colour(land, x, z, v));
         }
     }
     let mut idx = Vec::with_capacity(n * n * 6);
@@ -251,14 +289,17 @@ fn chunk_meshes(land: &Land, c: (i32, i32)) -> (Mesh, Option<Mesh>) {
         .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
         .with_inserted_indices(Indices::U32(idx));
     ground.compute_smooth_normals();
-    // Water: a quad per metre wherever the surface stands above the ground nearby.
+    // Water: a quad per metre on water tiles and the tiles touching them (so banks meet it),
+    // at the water's level. The level alone is not enough: the nearest water's surface can stand
+    // above dry ground well away from it.
     let mut wpos: Vec<[f32; 3]> = Vec::new();
     let mut widx: Vec<u32> = Vec::new();
     for j in 0..n {
         for i in 0..n {
             let (x, z) = ((x0 + i as i32) as f32, (z0 + j as i32) as f32);
             let corners = [(x, z), (x + 1.0, z), (x, z + 1.0), (x + 1.0, z + 1.0)];
-            let wet = corners.iter().any(|&(cx, cz)| land.water_level(cx, cz) > land.height(cx, cz) + 0.02);
+            let water = |dx: f32, dz: f32| land.map.at(x + 0.5 + dx, z + 0.5 + dz) == Terrain::Water;
+            let wet = water(0.0, 0.0) || water(1.0, 0.0) || water(-1.0, 0.0) || water(0.0, 1.0) || water(0.0, -1.0);
             if !wet {
                 continue;
             }
