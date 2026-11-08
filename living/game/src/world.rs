@@ -1,10 +1,11 @@
-//! The authority's flat tile world drawn in 3D. Simulation (x, y) in tiles maps to Bevy
-//! (x, height, y): +X east, +Z south, +Y up. The ground is a heightfield from the shared
-//! `living_rules::height::ground` function, so characters stand on the drawn surface; each
-//! 16×16 chunk gets a ground mesh (two samples per tile, colours blended between tile kinds
-//! and darkened on slopes), a props mesh (boulders on rock, built walls) and a water plane.
-//! Trees are entities sharing two meshes, so the ones between the camera and the player can
-//! fade. Creatures, resources and structures mirror the subscribed rows.
+//! The authority's flat tile world drawn in 3D, at one metre per tile. Simulation (x, y) maps
+//! to Bevy (x, height, y): +X east, +Z south, +Y up. The ground comes from the shared
+//! `living_rules::height::Ground` (hills, valleys and mountains derived from the tile map), so
+//! characters stand on the drawn surface. Each 16×16 chunk gets a ground mesh (two samples per
+//! metre, colours blended between tile kinds, bare rock on slopes), a props mesh (bushes,
+//! boulders, built walls) and a water plane. Trees are entities sharing two meshes, so the
+//! ones between the camera and the player can fade. Resources and structures mirror their rows;
+//! creatures live in `bodies.rs`.
 
 use crate::net::Net;
 use crate::sync::{ServerClock, Tracks};
@@ -12,17 +13,17 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use living_bindings::*;
-use living_rules::height::{self, WATER_LEVEL};
+use living_rules::height::{self, Ground, WATER_LEVEL};
 use living_rules::map::{chunk_xy, Map, Terrain, CHUNK};
 use spacetimedb_sdk::Table;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
 
 const CHUNKS_PER_FRAME: usize = 3;
-/// Ground samples per tile edge.
+/// Ground samples per metre.
 const RES: u32 = 2;
 
-/// How far (tiles) terrain is drawn; the camera widens it when it comes down toward the horizon.
+/// How far (metres) terrain is drawn.
 #[derive(Resource)]
 pub struct Draw {
     pub radius: f32,
@@ -30,7 +31,7 @@ pub struct Draw {
 
 impl Default for Draw {
     fn default() -> Self {
-        Self { radius: 56.0 }
+        Self { radius: 110.0 }
     }
 }
 
@@ -38,13 +39,15 @@ impl Default for Draw {
 pub struct Palette {
     terrain: Handle<StandardMaterial>,
     water: Handle<StandardMaterial>,
+    pub vertex: Handle<StandardMaterial>,
     pub tree: Handle<StandardMaterial>,
     pub tree_faded: Handle<StandardMaterial>,
     /// Trees outside sight: remembered, and never seen (perception mock).
     pub tree_dim: [Handle<StandardMaterial>; 2],
     trees: [Handle<Mesh>; 2],
     colors: HashMap<u32, Handle<StandardMaterial>>,
-    meshes: HashMap<&'static str, Handle<Mesh>>,
+    /// Resource and structure models by kind: the mesh, and a glowing part with its colour.
+    things: HashMap<String, (Handle<Mesh>, Option<(Handle<Mesh>, [u8; 3])>)>,
 }
 
 impl Palette {
@@ -57,15 +60,11 @@ impl Palette {
                 mats.add(StandardMaterial {
                     base_color: base,
                     perceptual_roughness: 0.85,
-                    emissive: if emissive { LinearRgba::from(base) * 4.0 } else { LinearRgba::BLACK },
+                    emissive: if emissive { LinearRgba::from(base) * 6.0 } else { LinearRgba::BLACK },
                     ..default()
                 })
             })
             .clone()
-    }
-
-    fn mesh(&mut self, meshes: &mut Assets<Mesh>, name: &'static str, make: impl FnOnce() -> Mesh) -> Handle<Mesh> {
-        self.meshes.entry(name).or_insert_with(|| meshes.add(make())).clone()
     }
 }
 
@@ -73,35 +72,39 @@ struct ChunkParts {
     entities: Vec<Entity>,
 }
 
-/// Display-side state: the authority clock as shown, body tracks, the map and spawned entities.
+/// Display-side state: the authority clock as shown, body tracks, the ground and entities.
 #[derive(Default)]
 pub struct Scene {
     pub clock: ServerClock,
     pub tracks: Tracks,
-    /// Displayed position (sim tiles) and heading of every subscribed body.
+    /// Displayed position (sim metres) and heading of every subscribed body.
     pub shown: HashMap<u32, (Vec2, Option<f32>)>,
     pub now_ms: f64,
-    map: Option<Arc<Map>>,
+    ground: Option<Arc<Ground>>,
     map_rows: usize,
     seed: u64,
     chunks: HashMap<u32, ChunkParts>,
-    creatures: HashMap<u32, Entity>,
+    pub creatures: HashMap<u32, Entity>,
     things: HashMap<(u8, u64), Entity>,
 }
 
 impl Scene {
     /// Drawn ground height at a simulation point (0 before the map is known).
     pub fn ground(&self, x: f32, y: f32) -> f32 {
-        self.map.as_ref().map_or(0.0, |m| height::ground(m, self.seed, x, y))
+        self.ground.as_ref().map_or(0.0, |g| g.height(x, y))
     }
 
     pub fn at3(&self, x: f32, y: f32) -> Vec3 {
         Vec3::new(x, self.ground(x, y), y)
     }
 
+    pub fn ready(&self) -> bool {
+        self.ground.is_some()
+    }
+
     /// First point where a ray meets the ground (marching, then refining), if any.
     pub fn ray_ground(&self, origin: Vec3, dir: Vec3) -> Option<Vec3> {
-        let (step, max) = (0.25, 400.0);
+        let (step, max) = (0.5, 600.0);
         let mut prev = origin;
         let mut t = 0.0;
         while t < max {
@@ -109,7 +112,7 @@ impl Scene {
             let p = origin + dir * t;
             if p.y <= self.ground(p.x, p.z) {
                 let (mut lo, mut hi) = (prev, p);
-                for _ in 0..12 {
+                for _ in 0..14 {
                     let mid = (lo + hi) * 0.5;
                     if mid.y <= self.ground(mid.x, mid.z) {
                         hi = mid;
@@ -125,9 +128,6 @@ impl Scene {
     }
 }
 
-#[derive(Component)]
-pub struct Creature(pub u32);
-
 /// A resource or structure at a simulation point.
 #[derive(Component)]
 pub struct Thing(pub Vec2);
@@ -138,15 +138,16 @@ pub struct Tree;
 
 pub fn setup(mut commands: Commands, mut mats: ResMut<Assets<StandardMaterial>>, mut meshes: ResMut<Assets<Mesh>>, mut palette: ResMut<Palette>) {
     palette.terrain = mats.add(StandardMaterial { base_color: Color::WHITE, perceptual_roughness: 0.95, ..default() });
+    palette.vertex = mats.add(StandardMaterial { base_color: Color::WHITE, perceptual_roughness: 0.85, ..default() });
     palette.water = mats.add(StandardMaterial {
-        base_color: Color::srgba(0.18, 0.42, 0.62, 0.72),
+        base_color: Color::srgba(0.16, 0.38, 0.56, 0.78),
         alpha_mode: AlphaMode::Blend,
-        perceptual_roughness: 0.08,
-        reflectance: 0.6,
+        perceptual_roughness: 0.06,
+        reflectance: 0.7,
         ..default()
     });
     palette.tree = mats.add(StandardMaterial { base_color: Color::WHITE, perceptual_roughness: 0.9, ..default() });
-    palette.tree_faded = mats.add(StandardMaterial { base_color: Color::srgba(1.0, 1.0, 1.0, 0.22), alpha_mode: AlphaMode::Blend, perceptual_roughness: 0.9, ..default() });
+    palette.tree_faded = mats.add(StandardMaterial { base_color: Color::srgba(1.0, 1.0, 1.0, 0.2), alpha_mode: AlphaMode::Blend, perceptual_roughness: 0.9, ..default() });
     palette.trees = [meshes.add(tree_mesh(false)), meshes.add(tree_mesh(true))];
     palette.tree_dim = [
         mats.add(StandardMaterial { base_color: Color::srgb(0.5, 0.5, 0.55), perceptual_roughness: 0.9, ..default() }),
@@ -156,18 +157,21 @@ pub fn setup(mut commands: Commands, mut mats: ResMut<Assets<StandardMaterial>>,
     commands.spawn((
         DirectionalLight { illuminance: 9_000.0, shadow_maps_enabled: true, ..default() },
         Transform::from_xyz(-30.0, 60.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
-        bevy::light::CascadeShadowConfigBuilder { first_cascade_far_bound: 25.0, maximum_distance: 140.0, ..default() }.build(),
+        bevy::light::CascadeShadowConfigBuilder { first_cascade_far_bound: 30.0, maximum_distance: 160.0, ..default() }.build(),
     ));
 }
 
-/// Keep the map in step with the terrain rows, build chunks near the player, drop far ones.
+/// Keep the ground in step with the terrain rows, build chunks near the player, drop far ones.
 pub fn terrain(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, palette: Res<Palette>, draw: Res<Draw>) {
     let Some(conn) = &net.conn else { return };
     let rows = conn.db.terrain_chunk().count() as usize;
     let seed = conn.db.world().iter().next().map_or(0, |w| w.seed);
-    if rows != scene.map_rows || seed != scene.seed {
+    if rows > 0 && (rows != scene.map_rows || seed != scene.seed) {
         let (w, h) = net.map_size();
-        scene.map = Some(Arc::new(Map::from_chunks(w, h, conn.db.terrain_chunk().iter().map(|c| (c.id, c.tiles)))));
+        let map = Map::from_chunks(w, h, conn.db.terrain_chunk().iter().map(|c| (c.id, c.tiles)));
+        let t0 = std::time::Instant::now();
+        scene.ground = Some(Arc::new(Ground::new(&map, seed)));
+        info!("ground for a {w}×{h} m map prepared in {:.0} ms", t0.elapsed().as_secs_f32() * 1000.0);
         scene.map_rows = rows;
         scene.seed = seed;
         for (_, parts) in scene.chunks.drain() {
@@ -176,7 +180,7 @@ pub fn terrain(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<
             }
         }
     }
-    let Some(map) = scene.map.clone() else { return };
+    let Some(ground) = scene.ground.clone() else { return };
     let center = net.my_id.and_then(|id| scene.shown.get(&id)).map(|(p, _)| *p);
     let Some(center) = center else { return };
     let dist = |id: u32| {
@@ -193,16 +197,16 @@ pub fn terrain(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<
         }
         keep
     });
-    let mut todo: Vec<(f32, u32)> = map.chunks().filter(|id| !scene.chunks.contains_key(id)).map(|id| (dist(id), id)).filter(|(d, _)| *d < radius).collect();
+    let mut todo: Vec<(f32, u32)> = ground.map().chunks().filter(|id| !scene.chunks.contains_key(id)).map(|id| (dist(id), id)).filter(|(d, _)| *d < radius).collect();
     todo.sort_by(|a, b| a.0.total_cmp(&b.0));
     for (_, id) in todo.into_iter().take(CHUNKS_PER_FRAME) {
-        let parts = build_chunk(&mut commands, &mut meshes, &palette, &map, scene.seed, id);
+        let parts = build_chunk(&mut commands, &mut meshes, &palette, &ground, id);
         scene.chunks.insert(id, parts);
     }
 }
 
 /// Cheap deterministic hash for per-object variation.
-fn hash(x: u32, y: u32) -> f32 {
+pub fn hash(x: u32, y: u32) -> f32 {
     let mut h = x.wrapping_mul(0x9E37_79B1) ^ y.wrapping_mul(0x85EB_CA77);
     h ^= h >> 15;
     h = h.wrapping_mul(0x2C1B_3C6D);
@@ -210,8 +214,9 @@ fn hash(x: u32, y: u32) -> f32 {
     (h & 0xFFFF) as f32 / 65535.0
 }
 
+/// Vertex-coloured, flat-shaded mesh building.
 #[derive(Default)]
-struct MeshBuf {
+pub struct MeshBuf {
     pos: Vec<[f32; 3]>,
     nrm: Vec<[f32; 3]>,
     col: Vec<[f32; 4]>,
@@ -219,7 +224,7 @@ struct MeshBuf {
 }
 
 impl MeshBuf {
-    fn tri(&mut self, v: [Vec3; 3], c: [f32; 4]) {
+    pub fn tri(&mut self, v: [Vec3; 3], c: [f32; 4]) {
         let n = (v[1] - v[0]).cross(v[2] - v[0]).normalize_or_zero();
         let b = self.pos.len() as u32;
         for p in v {
@@ -230,13 +235,13 @@ impl MeshBuf {
         self.idx.extend_from_slice(&[b, b + 1, b + 2]);
     }
 
-    fn quad(&mut self, v: [Vec3; 4], c: [f32; 4]) {
+    pub fn quad(&mut self, v: [Vec3; 4], c: [f32; 4]) {
         self.tri([v[0], v[1], v[2]], c);
         self.tri([v[0], v[2], v[3]], c);
     }
 
-    /// An axis-aligned box from `lo` to `hi` (no bottom face).
-    fn block(&mut self, a: Vec3, b: Vec3, top: [f32; 4], side: [f32; 4]) {
+    /// An axis-aligned box from `a` to `b` (no bottom face).
+    pub fn block(&mut self, a: Vec3, b: Vec3, top: [f32; 4], side: [f32; 4]) {
         self.quad([Vec3::new(a.x, b.y, a.z), Vec3::new(a.x, b.y, b.z), Vec3::new(b.x, b.y, b.z), Vec3::new(b.x, b.y, a.z)], top);
         self.quad([Vec3::new(a.x, a.y, b.z), Vec3::new(b.x, a.y, b.z), Vec3::new(b.x, b.y, b.z), Vec3::new(a.x, b.y, b.z)], side);
         self.quad([Vec3::new(b.x, a.y, a.z), Vec3::new(a.x, a.y, a.z), Vec3::new(a.x, b.y, a.z), Vec3::new(b.x, b.y, a.z)], side);
@@ -244,8 +249,15 @@ impl MeshBuf {
         self.quad([Vec3::new(a.x, a.y, a.z), Vec3::new(a.x, a.y, b.z), Vec3::new(a.x, b.y, b.z), Vec3::new(a.x, b.y, a.z)], side);
     }
 
+    /// A box centred on `c` with half-sizes `h` (all faces).
+    pub fn cube(&mut self, c: Vec3, h: Vec3, col: [f32; 4]) {
+        self.block(c - h, c + h, col, scale(col, 0.82));
+        let (a, b) = (c - h, c + h);
+        self.quad([Vec3::new(a.x, a.y, a.z), Vec3::new(b.x, a.y, a.z), Vec3::new(b.x, a.y, b.z), Vec3::new(a.x, a.y, b.z)], scale(col, 0.6));
+    }
+
     /// A cone-ish crown: `sides`-gon base at `y0` of radius `r`, apex at `y1`.
-    fn cone(&mut self, c: Vec3, r: f32, y0: f32, y1: f32, sides: u32, col: [f32; 4]) {
+    pub fn cone(&mut self, c: Vec3, r: f32, y0: f32, y1: f32, sides: u32, col: [f32; 4]) {
         let apex = Vec3::new(c.x, y1, c.z);
         for i in 0..sides {
             let a0 = i as f32 / sides as f32 * std::f32::consts::TAU;
@@ -253,19 +265,19 @@ impl MeshBuf {
             let p0 = Vec3::new(c.x + r * a0.cos(), y0, c.z + r * a0.sin());
             let p1 = Vec3::new(c.x + r * a1.cos(), y0, c.z + r * a1.sin());
             self.tri([p1, p0, apex], scale(col, 0.85 + 0.15 * (a0 + 0.8).sin()));
-            self.tri([p0, p1, c + Vec3::Y * y0], scale(col, 0.6));
+            self.tri([p0, p1, Vec3::new(c.x, y0, c.z)], scale(col, 0.6));
         }
     }
 
-    /// A lumpy low-poly boulder: an icosphere with each vertex pushed in or out.
-    fn boulder(&mut self, c: Vec3, r: f32, seed: u32, col: [f32; 4]) {
+    /// A lumpy low-poly blob: an icosphere with each vertex pushed in or out; `flat` squashes it.
+    pub fn boulder(&mut self, c: Vec3, r: f32, flat: f32, seed: u32, col: [f32; 4]) {
         let (verts, tris) = ico();
         let moved: Vec<Vec3> = verts
             .iter()
             .enumerate()
             .map(|(i, v)| {
                 let k = 0.75 + 0.5 * hash(seed, i as u32);
-                c + Vec3::new(v.x * r * k, v.y * r * 0.7 * k, v.z * r * k)
+                c + Vec3::new(v.x * r * k, v.y * r * flat * k, v.z * r * k)
             })
             .collect();
         for t in tris {
@@ -274,12 +286,29 @@ impl MeshBuf {
         }
     }
 
-    fn build(self) -> Mesh {
+    /// A four-sided roof from the top of walls `a`..`b` (at `a.y`) to a ridge `rise` higher.
+    pub fn roof(&mut self, a: Vec3, b: Vec3, overhang: f32, rise: f32, col: [f32; 4]) {
+        let (x0, x1, z0, z1, y) = (a.x - overhang, b.x + overhang, a.z - overhang, b.z + overhang, a.y);
+        let zm = (z0 + z1) / 2.0;
+        let inset = ((x1 - x0) * 0.2).min((z1 - z0) / 2.0);
+        let (r0, r1) = (Vec3::new(x0 + inset, y + rise, zm), Vec3::new(x1 - inset, y + rise, zm));
+        let (c00, c10, c11, c01) = (Vec3::new(x0, y, z0), Vec3::new(x1, y, z0), Vec3::new(x1, y, z1), Vec3::new(x0, y, z1));
+        self.quad([c00, r0, r1, c10], scale(col, 0.95));
+        self.quad([c11, r1, r0, c01], scale(col, 0.8));
+        self.tri([c01, r0, c00], scale(col, 0.7));
+        self.tri([c10, r1, c11], scale(col, 0.88));
+    }
+
+    pub fn build(self) -> Mesh {
         Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
             .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
             .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nrm)
             .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
             .with_inserted_indices(Indices::U32(self.idx))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.pos.is_empty()
     }
 }
 
@@ -298,12 +327,12 @@ fn ico() -> &'static (Vec<Vec3>, Vec<[u32; 3]>) {
     })
 }
 
-fn rgb(r: u8, g: u8, b: u8) -> [f32; 4] {
+pub fn rgb(r: u8, g: u8, b: u8) -> [f32; 4] {
     let l = |c: u8| Color::srgb_u8(c, c, c).to_linear().red;
     [l(r), l(g), l(b), 1.0]
 }
 
-fn scale(c: [f32; 4], k: f32) -> [f32; 4] {
+pub fn scale(c: [f32; 4], k: f32) -> [f32; 4] {
     [c[0] * k, c[1] * k, c[2] * k, c[3]]
 }
 
@@ -314,41 +343,44 @@ fn mix(a: [f32; 4], b: [f32; 4], t: f32) -> [f32; 4] {
 fn ground_color(t: Terrain) -> [f32; 4] {
     match t {
         Terrain::Grass => rgb(112, 160, 74),
-        Terrain::Forest => rgb(70, 112, 52),
+        Terrain::Forest => rgb(78, 116, 56),
         Terrain::Water => rgb(150, 140, 100),
         Terrain::Sand => rgb(214, 196, 140),
-        Terrain::Rock => rgb(130, 126, 118),
+        Terrain::Rock => rgb(132, 128, 120),
         Terrain::Dirt => rgb(150, 118, 82),
         Terrain::Road => rgb(176, 156, 120),
         Terrain::Wall => rgb(140, 120, 90),
     }
 }
 
-/// Two tree shapes along +Y from the origin: a pine (stacked cones) and a broadleaf.
+/// Two tree shapes along +Y from the origin, about 2.2 units tall: a pine (stacked cones)
+/// and a broadleaf. Instances are scaled 4–6.5×, so trees stand 8–15 m.
 fn tree_mesh(broadleaf: bool) -> Mesh {
     let mut m = MeshBuf::default();
     let trunk = rgb(96, 70, 46);
-    m.block(Vec3::new(-0.07, 0.0, -0.07), Vec3::new(0.07, 0.7, 0.07), trunk, scale(trunk, 0.85));
+    m.block(Vec3::new(-0.06, 0.0, -0.06), Vec3::new(0.06, 0.8, 0.06), trunk, scale(trunk, 0.85));
     if broadleaf {
-        m.boulder(Vec3::Y * 1.25, 0.62, 11, rgb(74, 128, 58));
-        m.boulder(Vec3::new(0.25, 1.0, 0.15), 0.42, 23, rgb(66, 118, 52));
+        m.boulder(Vec3::Y * 1.35, 0.6, 0.85, 11, rgb(74, 128, 58));
+        m.boulder(Vec3::new(0.28, 1.1, 0.15), 0.4, 0.85, 23, rgb(66, 118, 52));
+        m.boulder(Vec3::new(-0.2, 1.15, -0.2), 0.38, 0.85, 37, rgb(70, 122, 54));
     } else {
         let green = rgb(44, 96, 54);
-        m.cone(Vec3::ZERO, 0.55, 0.45, 1.35, 7, green);
-        m.cone(Vec3::ZERO, 0.42, 0.95, 1.8, 7, scale(green, 1.06));
-        m.cone(Vec3::ZERO, 0.28, 1.4, 2.2, 7, scale(green, 1.12));
+        m.cone(Vec3::ZERO, 0.5, 0.5, 1.3, 7, green);
+        m.cone(Vec3::ZERO, 0.4, 0.95, 1.75, 7, scale(green, 1.06));
+        m.cone(Vec3::ZERO, 0.27, 1.4, 2.2, 7, scale(green, 1.12));
     }
     m.build()
 }
 
-fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Palette, map: &Map, seed: u64, id: u32) -> ChunkParts {
+fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Palette, ground: &Ground, id: u32) -> ChunkParts {
+    let map = ground.map();
     let (cx, cy) = chunk_xy(id);
     let (x0, y0) = ((cx * CHUNK) as f32, (cy * CHUNK) as f32);
     let tiles_w = CHUNK.min(map.w - cx * CHUNK);
     let tiles_h = CHUNK.min(map.h - cy * CHUNK);
     let (nx, ny) = (tiles_w * RES + 1, tiles_h * RES + 1);
     let step = 1.0 / RES as f32;
-    let g = |x: f32, y: f32| height::ground(map, seed, x, y);
+    let g = |x: f32, y: f32| ground.height(x, y);
     // Heights with a one-sample border for normals.
     let (bw, bh) = (nx + 2, ny + 2);
     let mut hs = Vec::with_capacity((bw * bh) as usize);
@@ -359,7 +391,7 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
     }
     let at = |i: u32, j: u32| hs[((j + 1) * bw + i + 1) as usize];
     let hb = |i: i32, j: i32| hs[((j + 1) as u32 * bw + (i + 1) as u32) as usize];
-    let mut ground = MeshBuf::default();
+    let mut mesh = MeshBuf::default();
     for j in 0..ny {
         for i in 0..nx {
             let (x, y) = (x0 + i as f32 * step, y0 + j as f32 * step);
@@ -375,26 +407,29 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
                     c[k] += tc[k] * w;
                 }
             });
-            // Steep ground shows bare rock; ground under water darkens with depth.
-            let steep = ((0.9 - n.y) / 0.25).clamp(0.0, 1.0);
+            // Steep ground shows bare rock, high ground turns stony and snowy; ground under
+            // water darkens with depth.
+            let steep = ((0.85 - n.y) / 0.25).clamp(0.0, 1.0);
             c = mix(c, rgb(118, 112, 104), steep);
+            c = mix(c, rgb(128, 124, 116), ((h - 22.0) / 14.0).clamp(0.0, 0.8));
+            c = mix(c, rgb(236, 238, 242), ((h - 42.0) / 8.0).clamp(0.0, 1.0) * n.y.clamp(0.0, 1.0));
             if h < WATER_LEVEL {
                 c = mix(c, rgb(60, 80, 90), ((WATER_LEVEL - h) / 1.0).clamp(0.0, 0.7));
             }
             c = scale(c, 0.94 + 0.1 * hash(x.to_bits(), y.to_bits()));
-            ground.pos.push([x, h, y]);
-            ground.nrm.push(n.into());
-            ground.col.push(c);
+            mesh.pos.push([x, h, y]);
+            mesh.nrm.push(n.into());
+            mesh.col.push(c);
         }
     }
     for j in 0..ny - 1 {
         for i in 0..nx - 1 {
             let a = j * nx + i;
             let (b, c, d) = (a + 1, a + nx, a + nx + 1);
-            ground.idx.extend_from_slice(&[a, c, b, b, c, d]);
+            mesh.idx.extend_from_slice(&[a, c, b, b, c, d]);
         }
     }
-    let mut entities = vec![commands.spawn((Mesh3d(meshes.add(ground.build())), MeshMaterial3d(palette.terrain.clone()), Transform::default())).id()];
+    let mut entities = vec![commands.spawn((Mesh3d(meshes.add(mesh.build())), MeshMaterial3d(palette.terrain.clone()), Transform::default())).id()];
 
     let mut props = MeshBuf::default();
     let mut water = false;
@@ -406,30 +441,40 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
             let (px, py) = (tx as f32 + 0.25 + 0.5 * v, ty as f32 + 0.25 + 0.5 * hash(ty, tx));
             match t {
                 Terrain::Water => water = true,
-                Terrain::Forest => {
-                    let p = Vec3::new(px, g(px, py) - 0.05, py);
-                    let size = 0.8 + 0.5 * hash(tx + 7, ty + 3);
+                // A real forest: a tree on about one forest tile in ten (3–4 m apart, crowns
+                // 4–7 m wide), bushes and undergrowth between.
+                Terrain::Forest if v < 0.1 => {
+                    let p = Vec3::new(px, g(px, py) - 0.1, py);
+                    let size = 4.0 + 2.5 * hash(tx + 7, ty + 3);
                     let broad = hash(tx + 1, ty + 9) < 0.3;
-                    let tf = Transform::from_translation(p).with_rotation(Quat::from_rotation_y(v * 6.28)).with_scale(Vec3::splat(size));
+                    let tf = Transform::from_translation(p).with_rotation(Quat::from_rotation_y(v * 37.0)).with_scale(Vec3::splat(size));
                     entities.push(commands.spawn((Tree, Mesh3d(palette.trees[broad as usize].clone()), MeshMaterial3d(palette.tree.clone()), tf)).id());
                 }
-                // Boulders only inside rock (all eight neighbours rock) and within their own
-                // tile, so they never stand on or overhang ground a character can walk on.
-                Terrain::Rock if v < 0.6 && rock_inside(map, tx as i32, ty as i32) => {
-                    let r = 0.35 + 0.2 * hash(tx + 3, ty + 1);
+                Terrain::Forest if v < 0.45 => {
+                    let r = 0.35 + 0.45 * hash(tx + 5, ty + 2);
+                    props.boulder(Vec3::new(px, g(px, py) + r * 0.3, py), r, 0.7, tx * 13 + ty, rgb(62, 104, 48));
+                }
+                Terrain::Grass if v < 0.025 => {
+                    let r = 0.3 + 0.3 * hash(tx + 5, ty + 2);
+                    props.boulder(Vec3::new(px, g(px, py) + r * 0.3, py), r, 0.7, tx * 13 + ty, rgb(86, 132, 60));
+                }
+                // Boulders only inside rock (all eight neighbours rock), so they never stand
+                // on or overhang ground a character can walk on.
+                Terrain::Rock if v < 0.35 && rock_inside(map, tx as i32, ty as i32) => {
+                    let r = 0.7 + 0.7 * hash(tx + 3, ty + 1);
                     let (bx, by) = (tx as f32 + 0.5 + (v - 0.5) * 0.2, ty as f32 + 0.5 + (hash(ty, tx) - 0.5) * 0.2);
-                    props.boulder(Vec3::new(bx, g(bx, by) + r * 0.1, by), r, tx * 31 + ty, rgb(128, 124, 116));
+                    props.boulder(Vec3::new(bx, g(bx, by) + r * 0.1, by), r, 0.7, tx * 31 + ty, rgb(128, 124, 116));
                 }
                 Terrain::Wall => {
                     let (fx, fy) = (tx as f32, ty as f32);
                     let base = g(fx + 0.5, fy + 0.5);
-                    props.block(Vec3::new(fx, base - 0.4, fy), Vec3::new(fx + 1.0, base + 1.4, fy + 1.0), rgb(120, 92, 64), rgb(104, 80, 56));
+                    props.block(Vec3::new(fx, base - 0.5, fy), Vec3::new(fx + 1.0, base + 2.6, fy + 1.0), rgb(150, 140, 124), rgb(124, 116, 102));
                 }
                 _ => {}
             }
         }
     }
-    if !props.pos.is_empty() {
+    if !props.is_empty() {
         entities.push(commands.spawn((Mesh3d(meshes.add(props.build())), MeshMaterial3d(palette.terrain.clone()), Transform::default())).id());
     }
     if water {
@@ -444,124 +489,88 @@ fn rock_inside(map: &Map, x: i32, y: i32) -> bool {
     (-1..=1).all(|j| (-1..=1).all(|i| map.get(x + i, y + j) == Terrain::Rock))
 }
 
-/// What a resource or structure row looks like: mesh name, size, colour, glow.
-fn look(kind: &str) -> (&'static str, Vec3, [u8; 3], bool) {
+/// A resource or structure model, at real size (metres), vertex-coloured; glowing parts apart.
+fn thing_mesh(kind: &str) -> (Mesh, Option<(Mesh, [u8; 3])>) {
+    let mut m = MeshBuf::default();
+    let mut glow = None;
     match kind {
-        "berry_bush" => ("ball", Vec3::splat(0.55), [150, 60, 90], false),
-        "fish" | "fishing_spot" => ("disc", Vec3::new(0.7, 0.05, 0.7), [150, 200, 230], false),
-        "tree" | "wood" => ("ball", Vec3::splat(0.4), [90, 70, 40], false),
-        "flint" | "stone" | "rock" => ("ball", Vec3::splat(0.35), [160, 160, 170], false),
-        "campfire" | "fire" | "hearth" | "smoking_fire" => ("box", Vec3::new(0.5, 0.35, 0.5), [255, 140, 40], true),
-        "shelter" | "house" | "hut" => ("box", Vec3::new(1.6, 1.1, 1.6), [150, 110, 70], false),
-        "hall" | "workshop" | "market" | "inn" | "smokehouse" => ("box", Vec3::new(2.4, 1.4, 2.0), [170, 120, 80], false),
-        "storage" | "store" | "storehouse" => ("box", Vec3::new(1.2, 0.9, 1.2), [120, 90, 60], false),
-        "gate" => ("box", Vec3::new(1.0, 1.3, 0.3), [110, 80, 50], false),
-        _ => ("box", Vec3::splat(0.5), [200, 200, 200], false),
-    }
-}
-
-fn creature_look(kind: &str, mine: bool) -> (&'static str, Vec3, [u8; 3]) {
-    match kind {
-        "person" if mine => ("person", Vec3::ONE, [240, 196, 64]),
-        "person" => ("person", Vec3::ONE, [210, 140, 110]),
-        "deer" => ("animal", Vec3::new(1.0, 0.9, 0.8), [160, 110, 60]),
-        "wolf" => ("animal", Vec3::new(0.9, 0.8, 0.7), [110, 110, 120]),
-        _ => ("animal", Vec3::splat(0.7), [200, 200, 200]),
-    }
-}
-
-fn shape(name: &'static str) -> Mesh {
-    match name {
-        "person" => Capsule3d::new(0.22, 0.55).mesh().build().translated_by(Vec3::Y * 0.5),
-        // Body along +X (the facing direction) with a head in front.
-        "animal" => {
-            let mut body = Cuboid::new(0.8, 0.35, 0.3).mesh().build().translated_by(Vec3::Y * 0.45);
-            body.merge(&Cuboid::new(0.25, 0.25, 0.22).mesh().build().translated_by(Vec3::new(0.48, 0.65, 0.0))).ok();
-            body
-        }
-        "ball" => Sphere::new(0.5).mesh().ico(2).unwrap().translated_by(Vec3::Y * 0.5),
-        "disc" => Cylinder::new(0.5, 1.0).mesh().build().translated_by(Vec3::Y * 0.5),
-        _ => Cuboid::new(1.0, 1.0, 1.0).mesh().build().translated_by(Vec3::Y * 0.5),
-    }
-}
-
-/// Mirror subscribed bodies, resources and structures as entities, with smoothed motion.
-#[allow(clippy::too_many_arguments)]
-pub fn entities(
-    mut commands: Commands,
-    net: NonSend<Net>,
-    mut scene: NonSendMut<Scene>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut mats: ResMut<Assets<StandardMaterial>>,
-    mut palette: ResMut<Palette>,
-    mut q: Query<&mut Transform, With<Creature>>,
-    input: Res<crate::controls::Input>,
-    time: Res<Time>,
-) {
-    let Some(conn) = &net.conn else { return };
-    let now = scene.clock.frame(net.body_t.swap(0, std::sync::atomic::Ordering::Relaxed));
-    scene.now_ms = now;
-    let bodies: HashMap<u32, Body> = conn.db.body().iter().map(|b| (b.id, b)).collect();
-    let chars: HashMap<u32, Character> = conn.db.character().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
-    let scene = &mut *scene;
-    scene.tracks.retain(|id| bodies.contains_key(&id));
-    scene.shown.retain(|id, _| bodies.contains_key(id));
-    let shown = &mut scene.shown;
-    scene.tracks.update(bodies.values(), now, time.delta_secs(), |id, p, heading| {
-        let prev = shown.get(&id).and_then(|(_, h)| *h);
-        shown.insert(id, (Vec2::new(p.x, p.y), heading.or(prev)));
-    });
-    scene.creatures.retain(|id, e| {
-        let keep = bodies.contains_key(id);
-        if !keep {
-            commands.entity(*e).despawn();
-        }
-        keep
-    });
-    for (id, b) in &bodies {
-        let Some((p, heading)) = scene.shown.get(id).copied() else { continue };
-        let alive = chars.get(id).is_none_or(|c| c.alive);
-        // Facing: heading is radians with +x east, +y south; the models face local +X.
-        // My own character turns toward where I look with the mouse (shown locally only: the
-        // authority has no look direction yet).
-        let look = input.look.filter(|_| Some(*id) == net.my_id).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
-        let mut rot = Quat::from_rotation_y(-look.or(heading).unwrap_or(b.heading));
-        if !alive {
-            rot *= Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
-        }
-        let at = scene.at3(p.x, p.y);
-        if let Some(e) = scene.creatures.get(id) {
-            if let Ok(mut t) = q.get_mut(*e) {
-                t.translation = at;
-                t.rotation = rot;
+        "berry_bush" => {
+            m.boulder(Vec3::Y * 0.5, 0.6, 0.85, 3, rgb(70, 116, 54));
+            for k in 0..7u32 {
+                let a = k as f32 * 0.9;
+                m.boulder(Vec3::new(0.5 * a.cos(), 0.45 + 0.08 * (k % 3) as f32, 0.5 * a.sin()), 0.07, 1.0, k, rgb(170, 40, 70));
             }
-            continue;
         }
-        let (mesh, size, color) = creature_look(&b.kind, Some(*id) == net.my_id);
-        let mesh = palette.mesh(&mut meshes, mesh, || shape(mesh));
-        let mat = palette.color(&mut mats, color, false);
-        let e = commands.spawn((Creature(*id), Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(at).with_rotation(rot).with_scale(size))).id();
-        scene.creatures.insert(*id, e);
+        "fish" | "fishing_spot" => m.boulder(Vec3::Y * 0.02, 0.45, 0.1, 5, rgb(150, 200, 230)),
+        "flint" | "stone" | "rock" => m.boulder(Vec3::Y * 0.15, 0.3, 0.7, 9, rgb(150, 150, 160)),
+        "campfire" | "fire" | "hearth" | "smoking_fire" => {
+            for k in 0..8u32 {
+                let a = k as f32 / 8.0 * std::f32::consts::TAU;
+                m.boulder(Vec3::new(0.45 * a.cos(), 0.08, 0.45 * a.sin()), 0.12, 0.8, k, rgb(110, 106, 100));
+            }
+            m.block(Vec3::new(-0.3, 0.0, -0.05), Vec3::new(0.3, 0.12, 0.05), rgb(90, 62, 40), rgb(80, 54, 34));
+            let mut f = MeshBuf::default();
+            f.cone(Vec3::ZERO, 0.28, 0.05, 0.75, 6, [1.0, 1.0, 1.0, 1.0]);
+            glow = Some((f.build(), [255, 140, 40]));
+        }
+        "shelter" | "house" | "hut" => {
+            let (a, b) = (Vec3::new(-1.6, 0.0, -1.4), Vec3::new(1.6, 2.2, 1.4));
+            m.block(Vec3::new(a.x, -0.3, a.z), b, rgb(150, 112, 74), rgb(136, 100, 66));
+            m.block(Vec3::new(1.55, 0.0, -0.45), Vec3::new(1.65, 1.8, 0.45), rgb(70, 50, 34), rgb(70, 50, 34));
+            m.roof(Vec3::new(a.x, b.y, a.z), b, 0.35, 1.5, rgb(122, 96, 60));
+        }
+        "hall" | "workshop" | "market" | "inn" | "smokehouse" => {
+            let (a, b) = (Vec3::new(-3.0, 0.0, -2.4), Vec3::new(3.0, 3.0, 2.4));
+            m.block(Vec3::new(a.x, -0.3, a.z), b, rgb(170, 128, 86), rgb(152, 112, 76));
+            m.block(Vec3::new(2.95, 0.0, -0.6), Vec3::new(3.05, 2.2, 0.6), rgb(70, 50, 34), rgb(70, 50, 34));
+            m.roof(Vec3::new(a.x, b.y, a.z), b, 0.4, 2.0, rgb(110, 70, 52));
+        }
+        "storage" | "store" | "storehouse" => {
+            m.block(Vec3::new(-0.9, -0.2, -0.9), Vec3::new(0.9, 1.6, 0.9), rgb(128, 96, 64), rgb(112, 84, 56));
+            m.roof(Vec3::new(-0.9, 1.6, -0.9), Vec3::new(0.9, 1.6, 0.9), 0.2, 0.7, rgb(100, 80, 54));
+        }
+        "gate" => m.block(Vec3::new(-0.5, -0.2, -0.15), Vec3::new(0.5, 2.4, 0.15), rgb(110, 80, 50), rgb(96, 70, 44)),
+        _ => m.boulder(Vec3::Y * 0.25, 0.25, 1.0, 1, rgb(200, 200, 200)),
     }
-    // Resources (tag 0) and structures (tag 1): static, spawned once per row (re-placed when
-    // the ground under them is first known).
+    (m.build(), glow)
+}
+
+/// Mirror subscribed resources and structures as entities (static, spawned once per row once the
+/// ground under them is known).
+pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>, mut palette: ResMut<Palette>) {
+    let Some(conn) = &net.conn else { return };
     let mut seen: HashSet<(u8, u64)> = HashSet::new();
     let (resources, structures) = (conn.db.resource_node(), conn.db.structure());
     let rows = resources
         .iter()
-        .map(|r| ((0u8, r.id), r.kind, r.x, r.y, (r.amount / r.max.max(1.0)).clamp(0.3, 1.0)))
+        .map(|r| ((0u8, r.id), r.kind, r.x, r.y, (r.amount / r.max.max(1.0)).clamp(0.4, 1.0)))
         .chain(structures.iter().map(|s| ((1u8, s.id), s.kind, s.x, s.y, 1.0)));
-    let ready = scene.map.is_some();
+    let ready = scene.ready();
+    let scene = &mut *scene;
     for (key, kind, x, y, fill) in rows {
         seen.insert(key);
         if !ready || scene.things.contains_key(&key) {
             continue;
         }
-        let (mesh, size, color, glow) = look(&kind);
-        let mesh = palette.mesh(&mut meshes, mesh, || shape(mesh));
-        let mat = palette.color(&mut mats, color, glow);
+        let (mesh, glow) = palette
+            .things
+            .entry(kind.clone())
+            .or_insert_with(|| {
+                let (m, g) = thing_mesh(&kind);
+                (meshes.add(m), g.map(|(g, c)| (meshes.add(g), c)))
+            })
+            .clone();
         let at = scene.at3(x, y);
-        let e = commands.spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(at).with_scale(size * fill))).id();
+        let turn = Quat::from_rotation_y(hash(x.to_bits(), y.to_bits()) * 6.28);
+        let e = commands
+            .spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at).with_rotation(turn).with_scale(Vec3::splat(fill))))
+            .id();
+        if let Some((g, color)) = glow {
+            let mat = palette.color(&mut mats, color, true);
+            commands.entity(e).with_children(|c| {
+                c.spawn((Mesh3d(g), MeshMaterial3d(mat), Transform::default()));
+            });
+        }
         scene.things.insert(key, e);
     }
     scene.things.retain(|k, e| {
@@ -573,42 +582,46 @@ pub fn entities(
     });
 }
 
-/// Fade trees that stand between the camera and the player's head; with the perception mock,
-/// dim trees outside sight (remembered) or darken them (never seen).
+/// Cut away trees between the camera and the player: hide those whose crowns block the line
+/// from the camera to the player's head, or stand close to the player on the camera's side, and
+/// fade a band around them. With the perception mock, dim trees outside sight (remembered) or
+/// darken them (never seen).
+#[allow(clippy::type_complexity)]
 pub fn fade_trees(
     target: Res<crate::controls::Target>,
     palette: Res<Palette>,
     sight: Res<crate::sight::Sight>,
+    me_size: Res<crate::bodies::MySize>,
     cam: Query<&Transform, (With<Camera3d>, Without<Tree>)>,
-    mut trees: Query<(&Transform, &mut MeshMaterial3d<StandardMaterial>), With<Tree>>,
+    mut trees: Query<(&Transform, &mut MeshMaterial3d<StandardMaterial>, &mut Visibility), With<Tree>>,
 ) {
     let (Some(me), Ok(cam)) = (target.0, cam.single()) else { return };
-    let head = me + Vec3::Y * 1.0;
+    let head = me + Vec3::Y * 1.6 * me_size.0;
     let (a, b) = (cam.translation, head);
     let ab = b - a;
     let len2 = ab.length_squared().max(1e-4);
     let me2 = Vec2::new(me.x, me.z);
-    for (t, mut mat) in &mut trees {
-        let p = t.translation + Vec3::Y * 1.2 * t.scale.y;
+    // The camera's side of the player, on the ground.
+    let toward_cam = Vec2::new(a.x - me.x, a.z - me.z).normalize_or_zero();
+    let cut_r = 5.0 * me_size.0.max(0.6);
+    for (t, mut mat, mut vis) in &mut trees {
         let state = sight.state_at(me2, Vec2::new(t.translation.x, t.translation.z));
-        if state > 0 {
-            let want = &palette.tree_dim[state as usize - 1];
-            if &mat.0 != want {
-                mat.0 = want.clone();
-            }
-            continue;
+        let crown = t.translation + Vec3::Y * 1.3 * t.scale.y;
+        let reach = 0.55 * t.scale.x + 0.5;
+        let flat = Vec2::new(t.translation.x - me.x, t.translation.z - me.z);
+        // 0 = drawn, 1 = faded, 2 = hidden.
+        let mut cut = 0u8;
+        if flat.length() < 40.0 {
+            let s = ((crown - a).dot(ab) / len2).clamp(0.0, 1.0);
+            let off = (a + ab * s).distance(crown);
+            let near_side = flat.length() < cut_r + reach && flat.dot(toward_cam) > -1.0;
+            cut = if (off < reach && s < 0.97) || near_side { 2 } else if off < reach + 2.5 && s < 0.97 { 1 } else { 0 };
         }
-        if p.distance_squared(head) > 400.0 {
-            if mat.0 != palette.tree {
-                mat.0 = palette.tree.clone();
-            }
-            continue;
+        let want_vis = if cut == 2 { Visibility::Hidden } else { Visibility::Inherited };
+        if *vis != want_vis {
+            *vis = want_vis;
         }
-        let s = ((p - a).dot(ab) / len2).clamp(0.0, 1.0);
-        let near_line = (a + ab * s).distance(p) < 1.3 && s > 0.05 && s < 0.98;
-        // Also anything right around the player that rises above them.
-        let close = Vec2::new(p.x - me.x, p.z - me.z).length() < 1.4 && t.translation.z > me.z - 0.5;
-        let want = if near_line || close { &palette.tree_faded } else { &palette.tree };
+        let want = if state > 0 { &palette.tree_dim[state as usize - 1] } else if cut == 1 { &palette.tree_faded } else { &palette.tree };
         if &mat.0 != want {
             mat.0 = want.clone();
         }

@@ -120,6 +120,27 @@ Pinned versions at the time: module, SDK and server `2.10.1` (upgraded to 2.14.1
   - When moving, subscribe to the new set before dropping the old one.
   - **Implication:** the client subscribes to a moving window of chunks around the player.
 
+## Scale (decided 2026-11-08)
+
+**One tile is one metre.** The rules already read that way:
+- walking is 2.6 m/s and running 3.9 m/s;
+- personal space is 0.8 m;
+- a campfire warms within 3.5 m and a shelter within 2.5 m;
+- speech carries 9 m.
+
+The client draws everything to that scale:
+- an adult is 1.75 m (children and infants smaller by life stage);
+- deer are about 1.1 m at the shoulder and wolves about 0.75 m;
+- trees are 8–15 m, spaced 3–4 m apart in forests;
+- huts are about 3.7 m to the ridge, and town walls 2.6 m;
+- the ground has hills up to about 14 m and mountains of 40–60 m where rock is dense, while water lies in valleys.
+
+What doesn't fit yet is the world, not the drawing:
+- day sight of 11 m is short;
+- the default world (four walled cities between mountains and a sea) is only 512 × 512 m.
+
+Both are settings for the game's own world (seed and laws), not the lab's. Body size is so far only a client slider ("my size"). Real sizes of character would need the rules to carry a size: reach, separation, speed and sight.
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**

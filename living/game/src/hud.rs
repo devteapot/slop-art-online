@@ -1,7 +1,7 @@
 //! Spike HUD in egui: status, camera tuning (F1), what my character perceives, proximity
 //! chat, and names and speech over heads. The real game UI will not be egui.
 
-use crate::camera::{Cam, PRESETS};
+use crate::camera::Cam;
 use crate::controls::{self, Input, Target};
 use crate::net::{Net, Status};
 use crate::world::Scene;
@@ -43,6 +43,7 @@ pub fn draw(
     mut hud: ResMut<Hud>,
     mut wants: ResMut<UiWants>,
     mut sight: ResMut<crate::sight::Sight>,
+    mut my_size: ResMut<crate::bodies::MySize>,
     keys: Res<ButtonInput<KeyCode>>,
     target: Res<Target>,
     camq: Query<(&Camera, &Transform), With<Camera3d>>,
@@ -83,63 +84,39 @@ pub fn draw(
                     ui.label(format!("health {:.0}/{:.0} · hunger {:.0} · energy {:.0}", v.hp, v.max_hp, v.hunger, v.energy));
                 }
             }
-            ui.label(egui::RichText::new(format!("camera: {} · {:.0} fps", PRESETS[cam.preset].name, hud.fps)).small());
+            ui.label(egui::RichText::new(format!("{:.0} fps", hud.fps)).small());
             if !net.detail.is_empty() {
                 ui.colored_label(egui::Color32::LIGHT_RED, &net.detail);
             }
             if let Some(e) = net.errors.lock().unwrap().last() {
                 ui.colored_label(egui::Color32::LIGHT_RED, e);
             }
-            ui.label(egui::RichText::new("WASD move · Shift run · cursor: face and aim · cursor toward a side: turn · [ ] or middle-drag: rotate · Alt+mouse: glance · right click: walk to · Enter: talk · 1–5 camera · F1 panels").small().weak());
+            ui.label(egui::RichText::new("WASD move · Shift run · cursor: face and aim · cursor toward a side: turn · [ ] or middle-drag: rotate · Alt+mouse: glance · right click: walk to · Enter: talk · F1 panels").small().weak());
         });
     });
 
     // Camera tuning.
     if hud.tuning {
         egui::Window::new("Camera").anchor(egui::Align2::RIGHT_TOP, [-12.0, 10.0]).resizable(false).default_width(300.0).show(ctx, |ui| {
-            for (i, p) in PRESETS.iter().enumerate() {
-                if ui.selectable_label(cam.preset == i, format!("{} {}", i + 1, p.name)).on_hover_text(p.like).clicked() {
-                    cam.set_preset(i);
-                }
-            }
-            ui.label(egui::RichText::new(PRESETS[cam.preset].like).small().weak());
-            ui.separator();
             let shown = cam.shown;
             let r = &mut cam.rig;
-            let view = |ui: &mut egui::Ui, v: &mut crate::camera::View, label: &str| {
-                ui.label(egui::RichText::new(label).small().strong());
-                ui.add(egui::Slider::new(&mut v.pitch, 10.0..=89.0).text("pitch °"));
-                ui.add(egui::Slider::new(&mut v.distance, 4.0..=80.0).text("distance"));
-                ui.add(egui::Slider::new(&mut v.fov, 10.0..=70.0).text("fov °"));
-            };
-            ui.checkbox(&mut r.tilt, "zoom tilts the view (zoom-tilt)");
-            if r.tilt {
-                view(ui, &mut r.far, "zoomed out");
-                view(ui, &mut r.near, "zoomed in");
-            } else {
-                view(ui, &mut r.far, "view");
-            }
-            ui.add(egui::Slider::new(&mut r.yaw, -180.0..=180.0).text("yaw °"));
-            ui.checkbox(&mut r.ortho, "orthographic");
-            ui.add(egui::Slider::new(&mut r.lead, 0.0..=10.0).text("cursor lean (tiles)"));
-            ui.checkbox(&mut r.rotate_steps, "Q/E rotate 45°");
+            ui.label(egui::RichText::new("view").small().strong());
+            ui.add(egui::Slider::new(&mut r.view.pitch, 15.0..=80.0).text("pitch °"));
+            ui.add(egui::Slider::new(&mut r.view.distance, 5.0..=40.0).text("distance (m)"));
+            ui.add(egui::Slider::new(&mut r.view.fov, 20.0..=70.0).text("fov °"));
+            ui.label(egui::RichText::new("turning").small().strong());
+            ui.add(egui::Slider::new(&mut r.steer_zone, 0.1..=0.9).text("middle zone (no turn)"));
+            ui.add(egui::Slider::new(&mut r.steer_rate, 0.0..=240.0).text("turn by pointing °/s"));
+            ui.add(egui::Slider::new(&mut r.rotate_rate, 20.0..=240.0).text("[ ] rotate °/s"));
+            ui.add(egui::Slider::new(&mut r.lead, 0.0..=8.0).text("cursor lean (m)"));
             ui.checkbox(&mut r.frame_talk, "frame conversations");
-            egui::ComboBox::from_label("turning").selected_text(r.yaw_mode.label()).show_ui(ui, |ui| {
-                for m in crate::camera::YawMode::ALL {
-                    ui.selectable_value(&mut r.yaw_mode, m, m.label());
-                }
-            });
-            ui.checkbox(&mut input.mouse_look, "mouse look (face the cursor)");
-            ui.checkbox(&mut r.zoom_locked, "zoom fixed (wheel off)");
-            ui.checkbox(&mut r.sight_bound, "zoom-out bounded by sight");
-            ui.add(egui::Slider::new(&mut r.follow_zoom.0, 0.0..=1.0).text("turns with you from zoom"));
-            ui.add(egui::Slider::new(&mut r.follow_zoom.1, 0.0..=1.0).text("fully turned at zoom"));
-            let lo = cam.zoom_min;
-            ui.add(egui::Slider::new(&mut cam.zoom, lo..=1.0).text("zoom (wheel)"));
-            if lo > 0.0 {
-                ui.label(egui::RichText::new(format!("zoom-out limited by sight ({:.0} tiles)", sight.radius)).small().weak());
+            ui.checkbox(&mut r.sight_bound, "never show further than sight");
+            if ui.small_button("reset camera").clicked() {
+                *r = crate::camera::Rig::default();
             }
-            ui.label(egui::RichText::new(format!("now: pitch {:.0}°, distance {:.1}, fov {:.0}°{}", shown.pitch, shown.distance, shown.fov, if cam.talk_partner.is_some() { " · framing a conversation" } else { "" })).small().weak());
+            ui.separator();
+            ui.add(egui::Slider::new(&mut my_size.0, 0.4..=3.0).text("my size (× adult)"));
+            ui.label(egui::RichText::new(format!("now: pitch {:.0}°, distance {:.1} m, fov {:.0}°{}", shown.pitch, shown.distance * my_size.0.max(0.4), shown.fov, if cam.talk_partner.is_some() { " · framing a conversation" } else { "" })).small().weak());
         });
     }
 
@@ -245,7 +222,8 @@ pub fn draw(
             if target.0.is_some_and(|me| me.distance(at) > 30.0) {
                 continue;
             }
-            let Ok(screen) = camera.world_to_viewport(gtf, at + Vec3::Y * 1.45) else { continue };
+            let lift = if Some(*id) == net.my_id { 2.05 * my_size.0 } else { 2.05 };
+            let Ok(screen) = camera.world_to_viewport(gtf, at + Vec3::Y * lift) else { continue };
             let pos = egui::pos2(screen.x, screen.y);
             if let Some(name) = names.get(id) {
                 painter.text(pos, egui::Align2::CENTER_BOTTOM, name, egui::FontId::proportional(12.0), egui::Color32::from_white_alpha(220));

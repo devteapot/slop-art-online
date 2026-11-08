@@ -9,7 +9,8 @@
 
 use crate::controls::{Input, Target};
 use crate::net::Net;
-use crate::world::{Creature, Draw, Scene, Thing};
+use crate::bodies::Creature;
+use crate::world::{Draw, Scene, Thing};
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;

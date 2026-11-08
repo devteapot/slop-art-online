@@ -11,6 +11,7 @@ mod clock;
 #[allow(dead_code)]
 mod sync;
 
+mod bodies;
 mod camera;
 mod controls;
 mod demo;
@@ -39,6 +40,7 @@ fn main() {
         .init_resource::<world::Palette>()
         .init_resource::<world::Draw>()
         .init_resource::<sight::Sight>()
+        .init_resource::<bodies::MySize>()
         .init_resource::<camera::Cam>()
         .init_resource::<controls::Target>()
         // You face the cursor by default (mouse look); the demo scripts its own look and cursor.
@@ -48,7 +50,7 @@ fn main() {
         .add_systems(Startup, (world::setup, camera::spawn, sight::setup))
         .add_systems(
             Update,
-            (net::pump, world::entities, controls::target, world::terrain, demo::run, controls::movement, camera::follow, world::fade_trees, sight::update, controls::gizmos).chain(),
+            (net::pump, bodies::update, world::things, controls::target, world::terrain, demo::run, controls::movement, camera::follow, world::fade_trees, sight::update, controls::gizmos).chain(),
         )
         .add_systems(EguiPrimaryContextPass, hud::draw);
     if let Some(d) = demo::Demo::from_env() {

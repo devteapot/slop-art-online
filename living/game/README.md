@@ -29,45 +29,33 @@ python3 $V cleanup --run game-1                          # when done
 | WASD, Shift | move relative to the camera, run (`human_move`) |
 | Right click | walk to that point (`human_act` with `goto`) |
 | Enter | say something; only characters within earshot hear it (`human_say`) |
-| 1–5 | camera presets: ARPG, MOBA north-up, top-down action, zoom-tilt, default (mid; the starting one) |
 | Q / E | rotate 45° (when the preset allows it) |
 | Mouse cursor | where you face and aim; toward a side of the screen it turns the view |
 | `[` / `]` held, or middle mouse drag | rotate the view (90°/s for the keys); it stays where you leave it |
 | Alt + mouse | glance around; the view eases back on release |
-| Mouse wheel | zoom (off in the default preset); in zoom-tilt it also brings the view down toward the ground |
 | F1 | camera and sight panels |
 
 The line from your character to the cursor shows where an aimed skill would go. There are no skills yet.
 
 ## What it shows
 
-- **Ground:** a heightfield from the shared `living_rules::height::ground` function (water lowest, rock rising into hills, borders blended, seeded noise). Characters stand on it. Each chunk has a ground mesh with blended tile colours and bare rock on steep slopes, boulders inside rock, walls and a water plane. Trees between the camera and your character fade out.
-- **Zoom-tilt (preset 4):** one zoom axis eases pitch, distance and field of view together, from 60° far out to 24° close in. Distant ground fades into the sky, and more terrain is drawn as the view lowers.
-- **Default (preset 5):** zoom-tilt fixed mid-way at about 40°; the wheel does nothing. Sight still bounds it, so night sight (6 tiles) brings the view closer.
-  - You face the cursor (mouse look is on by default), and WASD moves you relative to the camera.
-  - The view turns while the cursor sits toward a side of the screen ("follow cursor"), but not when the cursor is below your character.
-  - In the walking-based turning modes, walking toward the camera turns the view only after 1.2 s. Zooming out is bounded by sight: the camera distance is at most 1.5 × the sight radius, so scout sight allows the full tactical view.
-- **Camera options (F1):**
-  - conversation framing: comes in on you and whoever you are talking with; a manual zoom overrides it until the conversation ends;
-  - turning modes:
-    - fixed, north up, with Q/E 45° steps;
-    - follow heading;
-    - zoom blend: north up when zoomed out, increasingly behind where you face as you zoom in;
-    - mouse steer: the view turns while you point well off to the side;
-  - mouse look: you move with WASD and face the cursor, shown locally only, because the authority has no look direction yet;
-  - in every mode the movement keys keep their direction while held, and a compass at the top shows north;
-  - cursor lean, with a deadzone.
-- **Sight mock (F1, client-only):**
-  - you see within a sight radius, either all around or in a forward cone with a small all-round ring; presets are night 6, torch 9, day 11 and scout 20;
-  - ground you have seen stays dimmed, and ground you have never seen stays dark;
-  - characters, names and speech bubbles outside sight are hidden; what you hear stays in the feed;
-  - resources and structures appear once their tile has been seen, and trees outside sight are dimmed;
-  - nothing is enforced: the authority still sends every row.
-
-- **Terrain:** one mesh per 16×16-tile chunk, built near the player.
-- **Region subscriptions:** `body`, `resource_node` and `structure` rows are subscribed for the chunks within 40 tiles. The next window is subscribed before the old one is dropped.
+- **Scale:** one tile is one metre.
+  - The ground comes from the shared `living_rules::height::Ground`: hills up to about 14 m that flatten toward water, mountains of 40–60 m where rock is dense, and snow on the highest ground.
+  - People are 1.75 m, deer and wolves are real size, and legs and arms swing with actual speed.
+  - Trees are 8–15 m, with bushes and berry bushes between; huts have roofs, and town walls are 2.6 m.
+- **One camera:**
+  - about 40° down and 16 m away for an adult, scaled to your size ("my size" in F1 tries a giant or a small character);
+  - you face the cursor, the view turns while the cursor is toward a side, `[` `]` or middle-drag rotate it, and Alt glances;
+  - conversations are framed;
+  - the view never pulls back further than about 1.5 × your sight, so night sight brings it down and in.
+- **Occlusion:** trees between the camera and you, or close to you on the camera's side, are hidden, with a faded band around them.
+- **Region subscriptions:** `body`, `resource_node` and `structure` rows are subscribed for the chunks within 40 m.
 - **Motion:** the observer's display sync (`living/viewer/src/sync.rs`, included by path) smooths it.
-- **Perception:** the feed and speech bubbles come only from your character's own `experience` rows. Your own lines are echoed locally, because the authority sends a speaker no percept of their own words.
+- **Perception:** the feed and speech bubbles come only from your character's own `experience` rows. Your own lines are echoed locally.
+- **Sight mock (F1, client-only):**
+  - a sight radius, all round or in a forward cone;
+  - seen ground stays dimmed, and never-seen ground stays dark;
+  - characters, names and bubbles outside sight are hidden, and trees outside sight are dimmed.
 
 ## Known limits
 

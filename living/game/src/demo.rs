@@ -35,9 +35,10 @@ pub fn run(
     mut commands: Commands,
     demo: Option<ResMut<Demo>>,
     net: NonSend<Net>,
-    mut cam: ResMut<Cam>,
+    cam: Res<Cam>,
     mut input: ResMut<Input>,
     mut sight: ResMut<crate::sight::Sight>,
+    mut my_size: ResMut<crate::bodies::MySize>,
     target: Res<controls::Target>,
     time: Res<Time>,
     mut exit: MessageWriter<AppExit>,
@@ -54,11 +55,7 @@ pub fn run(
     }
     let d = &mut *demo;
     match act {
-        Act::Preset(i, zoom) => {
-            cam.set_preset(*i);
-            cam.zoom = *zoom;
-        }
-        Act::Zoom(z) => cam.zoom = *z,
+        Act::Size(k) => my_size.0 = *k,
         Act::Shot(name) => shot(&mut commands, &d.dir, name),
         Act::Walk(dir) => {
             d.start = net.my_body().map(|b| (b.x, b.y));
@@ -72,8 +69,6 @@ pub fn run(
             sight.cone = *cone;
         }
         Act::Look(dir) => input.scripted_look = *dir,
-        Act::Glance(g) => cam.scripted_glance = *g,
-        Act::Cursor(c) => input.scripted_cursor = *c,
         Act::Turn(rate) => input.scripted_turn = *rate,
         Act::Log(what) => info!("demo: {what}: camera yaw {:.0}°, pitch {:.0}°, sight {} r {:.0} cone {:.0}", cam.shown_yaw, cam.shown.pitch, sight.enabled, sight.radius, sight.cone),
         Act::Say(line) => {
@@ -97,16 +92,13 @@ pub fn run(
 }
 
 enum Act {
-    Preset(usize, f32),
-    Zoom(f32),
+    Size(f32),
     Shot(&'static str),
     Walk(Vec2),
     Stop,
     Say(&'static str),
     Sight(bool, f32, f32),
     Look(Option<Vec2>),
-    Glance(Option<f32>),
-    Cursor(Option<Vec2>),
     Turn(Option<f32>),
     Log(&'static str),
     Exit,
@@ -115,90 +107,35 @@ enum Act {
 /// (seconds after the previous step, action). Pictures are taken a moment after each change
 /// so they never show the frame in which the camera moved.
 const STEPS: &[(f32, Act)] = &[
-    (4.0, Act::Preset(0, 0.5)),
-    (2.0, Act::Shot("camera-1")),
-    (0.3, Act::Preset(1, 0.5)),
-    (2.0, Act::Shot("camera-2")),
-    (0.3, Act::Preset(2, 0.5)),
-    (2.0, Act::Shot("camera-3")),
-    // The common default: mid zoom, then zoomed out as far as day sight allows, then with
-    // scout sight (more sight, more room to zoom out).
-    (0.3, Act::Preset(4, 0.55)),
-    (2.5, Act::Shot("default-mid")),
-    (0.1, Act::Log("default mid")),
-    (0.2, Act::Zoom(0.0)),
-    (2.5, Act::Shot("default-out-day-sight")),
-    (0.1, Act::Log("default out, day sight")),
-    (0.2, Act::Sight(false, 20.0, 180.0)),
-    (0.1, Act::Zoom(0.0)),
-    (2.5, Act::Shot("default-out-scout-sight")),
-    (0.1, Act::Log("default out, scout sight")),
-    (0.2, Act::Sight(false, 11.0, 180.0)),
-    // Zoom blend (walking turns the view): a short step back toward the camera keeps the view; a
-    // sustained walk turns it. The default (follow cursor) never turns with walking.
-    (0.3, Act::Preset(3, 1.0)),
-    (1.5, Act::Walk(Vec2::Y)),
-    (0.8, Act::Log("default, 0.8 s walking toward the camera")),
-    (0.1, Act::Stop),
-    (1.0, Act::Walk(Vec2::Y)),
-    (3.5, Act::Log("default, 3.5 s walking toward the camera")),
-    (0.1, Act::Shot("default-after-turning-around")),
-    (0.2, Act::Stop),
-    // Glance 90° to the right, then let go.
-    (0.5, Act::Glance(Some(90.0))),
-    (1.5, Act::Shot("default-glance")),
-    (0.1, Act::Log("glancing")),
-    (0.1, Act::Glance(None)),
-    (1.5, Act::Log("after the glance")),
-    (0.2, Act::Preset(4, 0.55)),
-    // Follow cursor (the default's turning): cursor toward the right edge turns the view right;
-    // the same cursor below the character (aiming behind) does not; centred, it stays put.
-    (0.2, Act::Look(Some(Vec2::new(1.0, -1.0)))),
-    (0.1, Act::Cursor(Some(Vec2::new(0.9, -0.3)))),
-    (0.1, Act::Log("follow cursor, before")),
-    (2.0, Act::Log("follow cursor, after 2 s toward the right edge")),
-    (0.1, Act::Shot("follow-cursor-turned")),
-    (0.1, Act::Cursor(Some(Vec2::new(0.9, 0.7)))),
-    (2.0, Act::Log("after 2 s with the cursor right but behind you")),
-    (0.1, Act::Cursor(Some(Vec2::new(0.1, -0.4)))),
-    (2.0, Act::Log("after 2 s with the cursor near the middle")),
-    (0.1, Act::Cursor(None)),
-    (0.1, Act::Look(None)),
-    // Manual rotation ([ ] or middle-drag): 90°/s for one second, and it stays.
-    (0.5, Act::Log("manual rotation, before")),
+    // Let terrain and people build around the player first.
+    (5.0, Act::Shot("view")),
+    (0.1, Act::Log("the view")),
+    // Rotate 90° with [ ] (it stays), and back.
     (0.1, Act::Turn(Some(90.0))),
     (1.0, Act::Turn(None)),
-    (1.5, Act::Log("manual rotation, 1.5 s after turning 90°")),
-    (0.3, Act::Preset(3, 0.0)),
-    (2.5, Act::Shot("tilt-far")),
-    (0.3, Act::Zoom(0.55)),
-    (2.5, Act::Shot("tilt-mid")),
-    (0.3, Act::Zoom(1.0)),
-    (2.5, Act::Shot("tilt-near")),
-    (0.3, Act::Preset(3, 0.35)),
-    (1.0, Act::Walk(Vec2::X)),
-    (3.0, Act::Stop),
+    (1.5, Act::Shot("rotated-90")),
+    (0.1, Act::Log("rotated 90°")),
+    (0.1, Act::Turn(Some(-90.0))),
+    (1.0, Act::Turn(None)),
+    // Walk east for 3 s, looking ahead, then say something.
+    (0.5, Act::Look(Some(Vec2::new(1.0, -0.3)))),
+    (0.2, Act::Walk(Vec2::X)),
+    (1.2, Act::Shot("walking")),
+    (1.8, Act::Stop),
     (1.5, Act::Say("Hello! Is anyone around here?")),
     // Long enough for someone nearby to answer (the verification run has a second player
     // speak here) and for the camera to frame the conversation.
     (6.0, Act::Shot("talk-framing")),
-    // Zoomed all the way in with zoom blend, walking south: the view should come round behind.
-    (0.5, Act::Preset(3, 1.0)),
-    (8.5, Act::Walk(Vec2::Y)),
-    (3.5, Act::Shot("blend-walking-south")),
-    (0.1, Act::Log("walking south, zoom blend")),
-    (0.2, Act::Stop),
-    // Perception mock: day sight in a forward cone, looking east.
-    (0.5, Act::Look(Some(Vec2::X))),
-    (0.1, Act::Sight(true, 11.0, 60.0)),
-    (3.0, Act::Shot("sight-cone-day")),
-    (0.1, Act::Log("cone")),
-    (0.2, Act::Sight(true, 6.0, 180.0)),
-    (2.0, Act::Shot("sight-night")),
-    // The high view with sight limited reveals nothing more than the character perceives.
-    (0.2, Act::Look(None)),
-    (0.1, Act::Preset(1, 0.5)),
-    (0.1, Act::Sight(true, 11.0, 180.0)),
-    (2.5, Act::Shot("sight-high-view")),
+    (9.0, Act::Look(None)),
+    // Other sizes of character: the camera scales with them.
+    (0.1, Act::Size(2.5)),
+    (2.5, Act::Shot("size-giant")),
+    (0.1, Act::Size(0.55)),
+    (2.5, Act::Shot("size-small")),
+    (0.1, Act::Size(1.0)),
+    // Night sight brings the view in.
+    (0.1, Act::Sight(true, 6.0, 180.0)),
+    (2.5, Act::Shot("night-sight")),
+    (0.1, Act::Sight(false, 11.0, 180.0)),
     (0.5, Act::Exit),
 ];
