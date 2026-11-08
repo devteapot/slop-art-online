@@ -90,7 +90,7 @@ pub fn draw(
             if let Some(e) = net.errors.lock().unwrap().last() {
                 ui.colored_label(egui::Color32::LIGHT_RED, e);
             }
-            ui.label(egui::RichText::new("WASD move · Shift run · right click walk to · Enter talk · 1–4 camera · Q/E rotate (iso) · wheel zoom · F1 tuning").small().weak());
+            ui.label(egui::RichText::new("WASD move · Shift run · cursor: face and aim · cursor toward a side: turn · [ ] or middle-drag: rotate · Alt+mouse: glance · right click: walk to · Enter: talk · 1–5 camera · F1 panels").small().weak());
         });
     });
 
@@ -130,6 +130,7 @@ pub fn draw(
                 }
             });
             ui.checkbox(&mut input.mouse_look, "mouse look (face the cursor)");
+            ui.checkbox(&mut r.zoom_locked, "zoom fixed (wheel off)");
             ui.checkbox(&mut r.sight_bound, "zoom-out bounded by sight");
             ui.add(egui::Slider::new(&mut r.follow_zoom.0, 0.0..=1.0).text("turns with you from zoom"));
             ui.add(egui::Slider::new(&mut r.follow_zoom.1, 0.0..=1.0).text("fully turned at zoom"));

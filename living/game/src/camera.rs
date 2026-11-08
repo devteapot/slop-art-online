@@ -54,6 +54,8 @@ pub struct Rig {
     /// Zooming out stops where the view would show much more than the character sees
     /// (distance at most 1.5 × the sight radius), so more sight means more room.
     pub sight_bound: bool,
+    /// The zoom stays where the preset puts it (the scroll wheel does nothing).
+    pub zoom_locked: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -104,6 +106,7 @@ const fn fixed(pitch: f32, distance: f32, fov: f32, lead: f32) -> Rig {
         frame_talk: false,
         follow_zoom: (0.35, 0.9),
         sight_bound: false,
+        zoom_locked: false,
     }
 }
 
@@ -126,11 +129,12 @@ pub const PRESETS: [Preset; 5] = [
             frame_talk: true,
             follow_zoom: (0.35, 0.9),
             sight_bound: false,
+            zoom_locked: false,
         },
     },
     Preset {
         name: "Default (mid)",
-        like: "One camera for every character: zoom-tilt starting mid-way (about 40° down); you face the cursor, and the view turns while the cursor is toward a side; zooming out is bounded by how far you see",
+        like: "One camera for every character: mid-way zoom-tilt (about 40° down), zoom fixed; you face the cursor, the view turns while the cursor is toward a side, and [ ] or middle-drag rotate it",
         rig: Rig {
             far: view(60.0, 26.0, 35.0),
             near: view(24.0, 7.5, 52.0),
@@ -143,6 +147,7 @@ pub const PRESETS: [Preset; 5] = [
             frame_talk: true,
             follow_zoom: (0.15, 0.45),
             sight_bound: true,
+            zoom_locked: true,
         },
     },
 ];
@@ -322,7 +327,7 @@ pub fn follow(
             cam.talk_dismissed = None;
         }
     }
-    if !ui.pointer && scroll.delta.y != 0.0 {
+    if !ui.pointer && scroll.delta.y != 0.0 && !cam.rig.zoom_locked {
         cam.zoom = (cam.zoom + scroll.delta.y * 0.06).clamp(cam.zoom_min, 1.0);
         // A manual zoom during a conversation overrides the framing until it ends.
         if partner.is_some() {
@@ -385,9 +390,30 @@ pub fn follow(
             }
         }
     }
-    // Glance: hold the middle button (or Alt) and move the mouse to look around; let go and
+    // Glance: hold Alt and move the mouse to look around; let go and
     // the view eases back. Not an orbit: it always returns.
-    let holding = !ui.pointer && (mouse.pressed(MouseButton::Middle) || keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight));
+    // Manual rotation, kept where you leave it: hold [ or ] (90°/s), or drag with the middle
+    // button. It moves the view's base and whatever follow state it has together.
+    let mut turn = 0.0;
+    if !ui.keyboard {
+        if keys.pressed(KeyCode::BracketLeft) {
+            turn -= 90.0 * dt;
+        }
+        if keys.pressed(KeyCode::BracketRight) {
+            turn += 90.0 * dt;
+        }
+    }
+    if !ui.pointer && !input.demo && mouse.pressed(MouseButton::Middle) {
+        turn += motion.delta.x * 0.3;
+    }
+    if let Some(rate) = input.scripted_turn {
+        turn += rate * dt;
+    }
+    if turn != 0.0 {
+        cam.rig.yaw += turn;
+        cam.follow_yaw += turn;
+    }
+    let holding = !ui.pointer && (keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight));
     if let Some(g) = cam.scripted_glance {
         cam.glance += (g - cam.glance) * ease(6.0);
     } else if holding {

@@ -39,6 +39,8 @@ pub struct Input {
     /// Scripted cursor (demo), as -1..1 screen offsets from the centre (+x right, +y down);
     /// with a demo running the real mouse never steers.
     pub scripted_cursor: Option<Vec2>,
+    /// Scripted manual rotation (demo), degrees per second.
+    pub scripted_turn: Option<f32>,
     pub demo: bool,
 }
 

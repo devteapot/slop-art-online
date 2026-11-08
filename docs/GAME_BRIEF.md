@@ -57,6 +57,17 @@ The user's idea: seeing only what is in front of you makes sense, and skills, pa
   - A summoner who perceives through their summons (as vision from minions or wards does in MOBAs) therefore has a reason to zoom out; a melee fighter doesn't, and sees nothing more by doing so.
   - Context framing extends the same idea: conversations (built), fights (you and your opponents) and your summons or companions, always overridable by the player.
   - Spike preset 5, "Default (mid)", implements the default and the sight bound.
+- **Controls (user, 2026-11-08), each separate from the others:**
+
+  | Control | Input |
+  |---|---|
+  | Move | WASD, relative to the camera |
+  | Face and aim | the cursor |
+  | Turn by pointing | the cursor toward a side of the screen |
+  | Rotate the view | `[` / `]` or middle-drag; stays where you leave it |
+  | Glance | Alt + mouse; springs back |
+
+  The zoom stays fixed at the default mid-way view for now, with the wheel off, "to see how it works".
 - **Facing follows the cursor (agreed to try, 2026-11-08).** You face the cursor on the ground, and WASD moves you relative to the camera, so you can walk backwards or sideways while facing forward. The spike's default (preset 5) now does this.
   - The view turns while the cursor sits toward a side of the screen (outside the middle 45%, up to 90°/s). It doesn't turn when the cursor is below your character, as when aiming behind you while kiting. A cursor held still can't make it spin, and walking never turns it.
   - Hiding by hills and objects: the user wants to see whether this way of turning already makes it a non-issue before building more (only trees fade today).

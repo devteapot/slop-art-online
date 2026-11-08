@@ -31,8 +31,10 @@ python3 $V cleanup --run game-1                          # when done
 | Enter | say something; only characters within earshot hear it (`human_say`) |
 | 1–5 | camera presets: ARPG, MOBA north-up, top-down action, zoom-tilt, default (mid; the starting one) |
 | Q / E | rotate 45° (when the preset allows it) |
-| Middle mouse or Alt + mouse | glance around; the view eases back on release |
-| Mouse wheel | zoom; in zoom-tilt it also brings the view down toward the ground |
+| Mouse cursor | where you face and aim; toward a side of the screen it turns the view |
+| `[` / `]` held, or middle mouse drag | rotate the view (90°/s for the keys); it stays where you leave it |
+| Alt + mouse | glance around; the view eases back on release |
+| Mouse wheel | zoom (off in the default preset); in zoom-tilt it also brings the view down toward the ground |
 | F1 | camera and sight panels |
 
 The line from your character to the cursor shows where an aimed skill would go. There are no skills yet.
@@ -41,7 +43,7 @@ The line from your character to the cursor shows where an aimed skill would go. 
 
 - **Ground:** a heightfield from the shared `living_rules::height::ground` function (water lowest, rock rising into hills, borders blended, seeded noise). Characters stand on it. Each chunk has a ground mesh with blended tile colours and bare rock on steep slopes, boulders inside rock, walls and a water plane. Trees between the camera and your character fade out.
 - **Zoom-tilt (preset 4):** one zoom axis eases pitch, distance and field of view together, from 60° far out to 24° close in. Distant ground fades into the sky, and more terrain is drawn as the view lowers.
-- **Default (preset 5):** zoom-tilt starting mid-way at about 40°.
+- **Default (preset 5):** zoom-tilt fixed mid-way at about 40°; the wheel does nothing. Sight still bounds it, so night sight (6 tiles) brings the view closer.
   - You face the cursor (mouse look is on by default), and WASD moves you relative to the camera.
   - The view turns while the cursor sits toward a side of the screen ("follow cursor"), but not when the cursor is below your character.
   - In the walking-based turning modes, walking toward the camera turns the view only after 1.2 s. Zooming out is bounded by sight: the camera distance is at most 1.5 × the sight radius, so scout sight allows the full tactical view.

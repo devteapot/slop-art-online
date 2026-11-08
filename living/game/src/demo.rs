@@ -74,6 +74,7 @@ pub fn run(
         Act::Look(dir) => input.scripted_look = *dir,
         Act::Glance(g) => cam.scripted_glance = *g,
         Act::Cursor(c) => input.scripted_cursor = *c,
+        Act::Turn(rate) => input.scripted_turn = *rate,
         Act::Log(what) => info!("demo: {what}: camera yaw {:.0}°, pitch {:.0}°, sight {} r {:.0} cone {:.0}", cam.shown_yaw, cam.shown.pitch, sight.enabled, sight.radius, sight.cone),
         Act::Say(line) => {
             let end = net.my_body().map(|b| (b.x, b.y));
@@ -106,6 +107,7 @@ enum Act {
     Look(Option<Vec2>),
     Glance(Option<f32>),
     Cursor(Option<Vec2>),
+    Turn(Option<f32>),
     Log(&'static str),
     Exit,
 }
@@ -162,6 +164,11 @@ const STEPS: &[(f32, Act)] = &[
     (2.0, Act::Log("after 2 s with the cursor near the middle")),
     (0.1, Act::Cursor(None)),
     (0.1, Act::Look(None)),
+    // Manual rotation ([ ] or middle-drag): 90°/s for one second, and it stays.
+    (0.5, Act::Log("manual rotation, before")),
+    (0.1, Act::Turn(Some(90.0))),
+    (1.0, Act::Turn(None)),
+    (1.5, Act::Log("manual rotation, 1.5 s after turning 90°")),
     (0.3, Act::Preset(3, 0.0)),
     (2.5, Act::Shot("tilt-far")),
     (0.3, Act::Zoom(0.55)),
