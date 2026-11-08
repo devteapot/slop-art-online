@@ -152,6 +152,33 @@ impl GroundShape {
     }
 }
 
+/// A mood: light, sky, fog and gentle style shifts only.
+pub fn apply_mood(md: &Mood, style: &mut Style, look: &mut Lookdev, lights: &mut Query<&mut DirectionalLight>, cams: &mut Query<&mut DistanceFog, With<Camera3d>>, clear: &mut ClearColor) {
+    let base = Style::default();
+    look.hour = md.hour;
+    for mut l in lights.iter_mut() {
+        l.color = Color::srgb(md.sun[0], md.sun[1], md.sun[2]);
+        l.illuminance = md.lux;
+    }
+    let sky = Color::srgb(md.sky[0], md.sky[1], md.sky[2]);
+    clear.0 = sky;
+    for mut f in cams.iter_mut() {
+        f.color = Color::srgb(md.fog[0], md.fog[1], md.fog[2]);
+    }
+    *style = Style {
+        enabled: style.enabled,
+        shadow_hue: md.shadow_hue,
+        hue_shift: md.hue_shift,
+        saturation: md.saturation,
+        grade_color: md.grade,
+        grade: md.grade_strength,
+        exposure: md.exposure,
+        ambient: md.ambient,
+        line_fade: [md.fog_start * 0.6, md.fog_end * 0.8],
+        ..base
+    };
+}
+
 /// Free walking: position, facing and whether you are moving.
 #[derive(Resource, Default)]
 pub struct Roam {
@@ -429,30 +456,7 @@ pub fn switch(
     }
     let def = envs.defs[want - 1].clone();
     info!("environment: {} — {}", def.name, def.note);
-    // Mood: light, sky, fog and gentle style shifts only.
-    let md = &def.mood;
-    look.hour = md.hour;
-    for mut l in &mut lights {
-        l.color = Color::srgb(md.sun[0], md.sun[1], md.sun[2]);
-        l.illuminance = md.lux;
-    }
-    let sky = Color::srgb(md.sky[0], md.sky[1], md.sky[2]);
-    clear.0 = sky;
-    for mut f in &mut cams {
-        f.color = Color::srgb(md.fog[0], md.fog[1], md.fog[2]);
-    }
-    *style = Style {
-        enabled: style.enabled,
-        shadow_hue: md.shadow_hue,
-        hue_shift: md.hue_shift,
-        saturation: md.saturation,
-        grade_color: md.grade,
-        grade: md.grade_strength,
-        exposure: md.exposure,
-        ambient: md.ambient,
-        line_fade: [md.fog_start * 0.6, md.fog_end * 0.8],
-        ..base
-    };
+    apply_mood(&def.mood, &mut *style, &mut *look, &mut lights, &mut cams, &mut *clear);
     // Ground.
     let g = &def.ground;
     let shape = GroundShape { relief: g.relief, radius: g.radius, seed: def.id.len() as u32 * 131 };

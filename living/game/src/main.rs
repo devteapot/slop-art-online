@@ -22,6 +22,7 @@ mod net;
 mod post;
 mod sight;
 mod style;
+mod view;
 mod world;
 
 use bevy::prelude::*;
@@ -58,8 +59,17 @@ fn main() {
         // You face the cursor by default (mouse look); the demo scripts its own look and cursor.
         .insert_resource(controls::Input::new(std::env::var("LIVING_GAME_DEMO").is_ok()))
         .init_resource::<hud::Hud>()
-        .init_resource::<hud::UiWants>()
-        .add_systems(EguiPrimaryContextPass, hud::draw);
+        .init_resource::<hud::UiWants>();
+    if view::enabled() {
+        // Asset view: models through the game's renderer, no server and no panels.
+        app.insert_resource(envs::Roam::default())
+            .add_systems(EguiPrimaryContextPass, || {})
+            .add_systems(Startup, (world::setup, camera::spawn, lookdev::setup, view::setup).chain())
+            .add_systems(Update, (envs::hdr, lookdev::convert, lookdev::fit, view::clips, lookdev::rig, lookdev::animate, lookdev::sun, view::layout, view::interact, view::batch).chain());
+        app.run();
+        return;
+    }
+    app.add_systems(EguiPrimaryContextPass, hud::draw);
     if lookdev::enabled() {
         // Look-dev: a fixed scene of models from assets/lookdev, no server.
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())

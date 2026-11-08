@@ -46,7 +46,8 @@ pub struct Model {
     pub vrm: bool,
     /// Path under the asset folder.
     pub file: String,
-    /// Height to scale the model to (m), and the ground level it stands on.
+    /// Height to scale the model to (m; 0 keeps the file's own size), and the ground level it
+    /// stands on.
     pub height: f32,
     pub ground_y: f32,
     /// Emissive colour for glowing things (multiplies the base colour).
@@ -60,9 +61,13 @@ impl Model {
 }
 
 /// A model already scaled to its height; `y_off` lifts its lowest point onto the ground.
+/// `size` and `center` are its bounds in metres, `center` relative to the root's origin before
+/// its rotation.
 #[derive(Component)]
 pub struct Fitted {
     pub y_off: f32,
+    pub size: Vec3,
+    pub center: Vec3,
 }
 
 /// A mesh entity already given the toon material and outline.
@@ -203,12 +208,14 @@ pub fn fit(
             continue;
         }
         let height = (hi.y - lo.y).max(0.01);
-        let k = model.height / height;
+        let k = if model.height > 0.0 { model.height / height } else { 1.0 };
         tf.scale = Vec3::splat(k);
         tf.translation.y = model.ground_y - lo.y * k;
         *vis = Visibility::Inherited;
         debug!("look-dev: fitted {} ({height:.2} units) to {:.2} m (×{k:.2})", model.file, model.height);
-        commands.entity(e).insert(Fitted { y_off: -lo.y * k });
+        let y_off = -lo.y * k;
+        let center = Vec3::new((lo.x + hi.x) * 0.5 * k, (hi.y - lo.y) * 0.5 * k, (lo.z + hi.z) * 0.5 * k);
+        commands.entity(e).insert(Fitted { y_off, size: (hi - lo) * k, center });
     }
 }
 
@@ -280,7 +287,7 @@ pub fn rig(
 }
 
 /// Whether a GLB file has any emissive material (cached per file).
-fn has_glow(file: &str) -> bool {
+pub fn has_glow(file: &str) -> bool {
     use std::sync::{Mutex, OnceLock};
     static CACHE: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
@@ -288,9 +295,7 @@ fn has_glow(file: &str) -> bool {
         return *v;
     }
     let v = (|| {
-        let bytes = std::fs::read(std::path::Path::new(&asset_root()).join(file)).ok()?;
-        let len = u32::from_le_bytes(bytes.get(12..16)?.try_into().ok()?) as usize;
-        let json: serde_json::Value = serde_json::from_slice(bytes.get(20..20 + len)?).ok()?;
+        let json = glb_json(file)?;
         Some(json["materials"].as_array()?.iter().any(|m| {
             m["emissiveFactor"].as_array().is_some_and(|f| f.iter().any(|x| x.as_f64().unwrap_or(0.0) > 0.01)) || m["name"].as_str().is_some_and(|n| n.contains("Glow"))
         }))
@@ -300,14 +305,19 @@ fn has_glow(file: &str) -> bool {
     v
 }
 
-/// Morph target names of the mesh on node `node`, from a GLB file's JSON (mesh or primitive extras).
-fn target_names(file: &str, node: &str) -> Option<Vec<String>> {
+/// The JSON chunk of a GLB file under the asset folder.
+pub fn glb_json(file: &str) -> Option<serde_json::Value> {
     let bytes = std::fs::read(std::path::Path::new(&asset_root()).join(file)).ok()?;
     if bytes.len() < 20 || &bytes[0..4] != b"glTF" {
         return None;
     }
     let len = u32::from_le_bytes(bytes[12..16].try_into().ok()?) as usize;
-    let json: serde_json::Value = serde_json::from_slice(bytes.get(20..20 + len)?).ok()?;
+    serde_json::from_slice(bytes.get(20..20 + len)?).ok()
+}
+
+/// Morph target names of the mesh on node `node`, from a GLB file's JSON (mesh or primitive extras).
+fn target_names(file: &str, node: &str) -> Option<Vec<String>> {
+    let json = glb_json(file)?;
     let mesh = json["nodes"].as_array()?.iter().find(|n| n["name"] == node)?["mesh"].as_u64()? as usize;
     let m = &json["meshes"][mesh];
     let names = if m["extras"]["targetNames"].is_array() { &m["extras"]["targetNames"] } else { &m["primitives"][0]["extras"]["targetNames"] };

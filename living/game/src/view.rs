@@ -1,0 +1,442 @@
+//! Asset view (`LIVING_GAME_VIEW=<files or folders, comma-separated>`): models shown through
+//! the game's own renderer (toon material, outlines, finishing pass, bloom), on a 1 m checker,
+//! so an asset is judged as the game will draw it.
+//!
+//! - `LIVING_GAME_VIEW_OUT=<dir>`: batch mode. For each model, photograph it from the front,
+//!   three-quarter, side, back, above and through the default game camera; photograph six frames
+//!   of each animation clip from the side; write `report.json` with measured size, triangles,
+//!   materials, vertex colours, glow and clips; then quit. `living/tools/view_assets.sh` wraps
+//!   this and makes one contact sheet per model.
+//! - Without it: interactive. Left-drag orbits, the wheel zooms, `,` `.` change model, space
+//!   pauses clips.
+//! - `LIVING_GAME_VIEW_HEIGHT=<m>` scales every model to that height (default: the file's own
+//!   size, which is real size for our generated assets).
+//! - `LIVING_GAME_VIEW_ENV=<environment id>` lights the view with that environment's mood.
+//! - `LIVING_GAME_VIEW_CLIP=<name>[,<name>…]`: the clips to play and photograph (default: the
+//!   first four).
+//!
+//! Files outside the asset folder are copied into `assets/view/` (git-ignored) first, since the
+//! asset server reads only under its root.
+
+use crate::lookdev::{asset_root, glb_json, has_glow, Fitted, Lookdev, Model};
+use crate::style::Style;
+use crate::world::{rgb, MeshBuf, Palette};
+use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
+use bevy::prelude::*;
+use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+use bevy::world_serialization::WorldAssetRoot;
+use bevy_mod_outline::OutlineStencil;
+use std::path::{Path, PathBuf};
+
+pub fn enabled() -> bool {
+    std::env::var("LIVING_GAME_VIEW").is_ok_and(|v| !v.is_empty())
+}
+
+/// Named camera angles for batch photographs: (name, yaw°, pitch°). Yaw 0 looks at a model's
+/// front (glTF models face +Z).
+const ANGLES: [(&str, f32, f32); 5] = [("front", 0.0, 8.0), ("three-quarter", 40.0, 18.0), ("side", 90.0, 8.0), ("back", 180.0, 8.0), ("above", 30.0, 62.0)];
+const CLIP_FRAMES: usize = 6;
+
+/// One model on view.
+#[derive(Component)]
+pub struct Item {
+    index: usize,
+    /// Animation clips in file order, with names, and the graph nodes playing them.
+    clips: Vec<(String, f32)>,
+    /// Which clips to photograph (indices into `clips`).
+    shown: Vec<usize>,
+    graph: Option<(Handle<Gltf>, Vec<AnimationNodeIndex>, Entity)>,
+}
+
+#[derive(Resource)]
+pub struct ViewState {
+    files: Vec<String>,
+    out: Option<PathBuf>,
+    focus: usize,
+    yaw: f32,
+    pitch: f32,
+    zoom: f32,
+    paused: bool,
+    /// Batch progress: model index, step within its shots, time the step began.
+    batch: (usize, usize, f32),
+    reports: Vec<serde_json::Value>,
+    started: f32,
+}
+
+/// Resolve the requested files to paths under the asset folder.
+fn requested() -> Vec<String> {
+    let root = PathBuf::from(asset_root());
+    let mut files = Vec::new();
+    for part in std::env::var("LIVING_GAME_VIEW").unwrap_or_default().split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let p = PathBuf::from(part);
+        let abs = if p.is_absolute() { p } else if root.join(&p).exists() { root.join(&p) } else { std::env::current_dir().unwrap_or_default().join(&p) };
+        let mut found = Vec::new();
+        collect(&abs, &mut found);
+        found.sort();
+        for f in found {
+            let rel = match f.strip_prefix(&root) {
+                Ok(r) => r.to_string_lossy().to_string(),
+                Err(_) => {
+                    // Outside the asset folder: copy it in.
+                    let name = f.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    let dst = root.join("view").join(&name);
+                    let _ = std::fs::create_dir_all(root.join("view"));
+                    if let Err(e) = std::fs::copy(&f, &dst) {
+                        warn!("view: cannot copy {}: {e}", f.display());
+                        continue;
+                    }
+                    format!("view/{name}")
+                }
+            };
+            files.push(rel);
+        }
+    }
+    files
+}
+
+fn collect(p: &Path, out: &mut Vec<PathBuf>) {
+    if p.is_dir() {
+        for e in std::fs::read_dir(p).into_iter().flatten().flatten() {
+            collect(&e.path(), out);
+        }
+    } else if p.extension().is_some_and(|x| x == "glb" || x == "gltf" || x == "vrm") {
+        out.push(p.to_path_buf());
+    }
+}
+
+/// Clip names and durations from the file's JSON (the largest sampler input time per animation).
+fn clip_list(json: &serde_json::Value) -> Vec<(String, f32)> {
+    let Some(anims) = json["animations"].as_array() else { return vec![] };
+    anims
+        .iter()
+        .enumerate()
+        .map(|(i, a)| {
+            let name = a["name"].as_str().map(String::from).unwrap_or_else(|| format!("clip{i}"));
+            let dur = a["samplers"].as_array().into_iter().flatten().filter_map(|s| json["accessors"][s["input"].as_u64()? as usize]["max"][0].as_f64()).fold(0.0, f64::max);
+            (name, dur as f32)
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    palette: Res<Palette>,
+    mut style: ResMut<Style>,
+    mut look: ResMut<Lookdev>,
+    assets: Res<AssetServer>,
+    mut lights: Query<&mut DirectionalLight>,
+    mut cams: Query<&mut DistanceFog, With<Camera3d>>,
+    mut clear: ResMut<ClearColor>,
+) {
+    let files = requested();
+    let height: f32 = std::env::var("LIVING_GAME_VIEW_HEIGHT").ok().and_then(|h| h.parse().ok()).unwrap_or(0.0);
+    let out = std::env::var("LIVING_GAME_VIEW_OUT").ok().filter(|d| !d.is_empty()).map(PathBuf::from);
+    info!("view: {} model(s){}", files.len(), out.as_ref().map(|o| format!(", photographs to {}", o.display())).unwrap_or_default());
+    // Mood: an environment's, or the look-dev default.
+    let mut ground = [108u8, 128, 96];
+    if let Some(id) = std::env::var("LIVING_GAME_VIEW_ENV").ok().filter(|i| !i.is_empty()) {
+        match crate::envs::load_defs().into_iter().find(|d| d.id == id) {
+            Some(def) => {
+                crate::envs::apply_mood(&def.mood, &mut style, &mut look, &mut lights, &mut cams, &mut clear);
+                ground = def.ground.color;
+            }
+            None => warn!("view: no environment {id}"),
+        }
+    }
+    // A 1 m checker, as an outline stencil.
+    let mut g = MeshBuf::default();
+    let r: i32 = 40;
+    for j in -r..r {
+        for i in -r..r {
+            let (x, z) = (i as f32, j as f32);
+            if Vec2::new(x + 0.5, z + 0.5).length() > r as f32 {
+                continue;
+            }
+            let k = if (i + j).rem_euclid(2) == 0 { 1.0 } else { 0.9 };
+            let c = rgb((ground[0] as f32 * k) as u8, (ground[1] as f32 * k) as u8, (ground[2] as f32 * k) as u8);
+            g.quad([Vec3::new(x, 0.0, z), Vec3::new(x, 0.0, z + 1.0), Vec3::new(x + 1.0, 0.0, z + 1.0), Vec3::new(x + 1.0, 0.0, z)], c);
+        }
+    }
+    commands.spawn((Mesh3d(meshes.add(g.build())), MeshMaterial3d(palette.vertex.clone()), Transform::default(), OutlineStencil::default()));
+    for (index, file) in files.iter().enumerate() {
+        let json = glb_json(file);
+        let clips = json.as_ref().map(clip_list).unwrap_or_default();
+        let is_vrm = file.ends_with(".vrm") || file.contains("vroid-") || json.as_ref().is_some_and(|j| j["extensions"]["VRM"].is_object() || j["extensions"]["VRMC_vrm"].is_object());
+        // VRM 0.x models face −Z; turn them to face the camera. Models with clips aren't given
+        // the procedural rig (`vrm: false`), so their own animation plays.
+        let turn = Quat::from_rotation_y(if is_vrm && !file.contains("VRMC") { std::f32::consts::PI } else { 0.0 });
+        let model = Model { vrm: is_vrm && clips.is_empty(), file: file.clone(), height, ground_y: 0.0, glow: None };
+        let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
+        let wanted: Vec<String> = std::env::var("LIVING_GAME_VIEW_CLIP").unwrap_or_default().split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
+        let shown: Vec<usize> = if wanted.is_empty() { (0..clips.len().min(4)).collect() } else { clips.iter().enumerate().filter(|(_, c)| wanted.contains(&c.0)).map(|(i, _)| i).collect() };
+        let graph = (!clips.is_empty()).then(|| (assets.load::<Gltf>(file.clone()), vec![], Entity::PLACEHOLDER));
+        commands.spawn((model, Item { index, clips, shown, graph }, WorldAssetRoot(handle), Transform::from_rotation(turn), Visibility::Hidden));
+    }
+    commands.insert_resource(ViewState {
+        files,
+        out,
+        focus: 0,
+        yaw: 30.0,
+        pitch: 15.0,
+        zoom: 1.0,
+        paused: false,
+        batch: (0, 0, 0.0),
+        reports: vec![],
+        started: 0.0,
+    });
+}
+
+/// Start each model's clips once the file and its animation player are loaded.
+#[allow(clippy::type_complexity)]
+pub fn clips(
+    mut commands: Commands,
+    state: Res<ViewState>,
+    gltfs: Res<Assets<Gltf>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+    mut items: Query<(Entity, &mut Item), With<Fitted>>,
+    children: Query<&Children>,
+    mut players: Query<&mut AnimationPlayer>,
+) {
+    for (e, mut item) in &mut items {
+        let clip_names: Vec<String> = item.clips.iter().map(|c| c.0.clone()).collect();
+        let pick = item.shown.first().copied().unwrap_or(0);
+        let Some((handle, nodes, player)) = item.graph.as_mut() else { continue };
+        if !nodes.is_empty() {
+            continue;
+        }
+        let Some(gltf) = gltfs.get(handle.id()) else { continue };
+        let Some(p) = children.iter_descendants(e).find(|d| players.contains(*d)) else { continue };
+        let (graph, idx) = AnimationGraph::from_clips(gltf.animations.iter().cloned());
+        *nodes = idx;
+        *player = p;
+        commands.entity(p).insert(AnimationGraphHandle(graphs.add(graph)));
+        if let (Ok(mut pl), Some(n)) = (players.get_mut(p), nodes.get(pick)) {
+            pl.play(*n).repeat();
+        }
+        info!("view: {} plays {:?}", state.files[item.index], clip_names.get(pick));
+    }
+}
+
+/// Lay the models out in a row by their measured widths, and show only the one in focus in batch
+/// mode.
+pub fn layout(state: Res<ViewState>, mut items: Query<(&Item, &Fitted, &mut Transform, &mut Visibility)>) {
+    let mut order: Vec<_> = items.iter_mut().collect();
+    order.sort_by_key(|(it, ..)| it.index);
+    let batch = state.out.is_some();
+    let mut x = 0.0;
+    for (item, fit, tf, vis) in order {
+        let tf = tf.into_inner();
+        let w = fit.size.x.max(fit.size.z) + 1.5;
+        let at = if batch { 0.0 } else { x + w / 2.0 };
+        x += w;
+        let c = tf.rotation * fit.center;
+        tf.translation.x = at - c.x;
+        tf.translation.z = -c.z;
+        *vis.into_inner() = if !batch || item.index == state.focus { Visibility::Inherited } else { Visibility::Hidden };
+    }
+}
+
+/// Bounds of the model in focus, for framing: (centre, half extents), down to the ground.
+fn framing(state: &ViewState, items: &Query<(&Item, &Fitted, &GlobalTransform)>) -> Option<(Vec3, Vec3)> {
+    let (_, fit, g) = items.iter().find(|(it, ..)| it.index == state.focus)?;
+    let c = g.translation() + g.rotation() * fit.center;
+    let half = Vec3::new(fit.size.x.max(fit.size.z), fit.size.y, fit.size.x.max(fit.size.z)) * 0.5;
+    let lo = (c - half).min(Vec3::new(c.x, 0.0, c.z));
+    let hi = c + half;
+    Some(((lo + hi) * 0.5, (hi - lo) * 0.5))
+}
+
+fn place_camera(tf: &mut Transform, proj: &mut Projection, centre: Vec3, half: Vec3, yaw: f32, pitch: f32, zoom: f32) {
+    let fov = 35f32;
+    if let Projection::Perspective(p) = proj {
+        p.fov = fov.to_radians();
+    }
+    let radius = half.length().max(0.5);
+    let dist = radius / (fov.to_radians() * 0.5).tan() * 1.05 * zoom;
+    let (y, p) = (yaw.to_radians(), pitch.to_radians());
+    let dir = Vec3::new(y.sin() * p.cos(), p.sin(), y.cos() * p.cos());
+    *tf = Transform::from_translation(centre + dir * dist).looking_at(centre, Vec3::Y);
+}
+
+/// The game's default camera, looking at a model's foot from the south.
+fn game_camera(tf: &mut Transform, proj: &mut Projection, at: Vec3) {
+    let v = crate::camera::Rig::default().view;
+    if let Projection::Perspective(p) = proj {
+        p.fov = v.fov.to_radians();
+    }
+    let p = v.pitch.to_radians();
+    let target = at + Vec3::Y * 1.0;
+    *tf = Transform::from_translation(target + Vec3::new(0.0, p.sin(), p.cos()) * v.distance).looking_at(target, Vec3::Y);
+}
+
+/// Interactive view: orbit, zoom, change model, pause clips.
+#[allow(clippy::too_many_arguments)]
+pub fn interact(
+    mut state: ResMut<ViewState>,
+    keys: Res<ButtonInput<KeyCode>>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    motion: Res<AccumulatedMouseMotion>,
+    scroll: Res<AccumulatedMouseScroll>,
+    items: Query<(&Item, &Fitted, &GlobalTransform)>,
+    mut cam: Query<(&mut Transform, &mut Projection), With<Camera3d>>,
+    mut players: Query<&mut AnimationPlayer>,
+) {
+    if state.out.is_some() {
+        return;
+    }
+    let n = state.files.len().max(1);
+    if keys.just_pressed(KeyCode::Period) {
+        state.focus = (state.focus + 1) % n;
+    }
+    if keys.just_pressed(KeyCode::Comma) {
+        state.focus = (state.focus + n - 1) % n;
+    }
+    if keys.just_pressed(KeyCode::Space) {
+        state.paused = !state.paused;
+        for mut p in &mut players {
+            if state.paused {
+                p.pause_all();
+            } else {
+                p.resume_all();
+            }
+        }
+    }
+    if buttons.pressed(MouseButton::Left) {
+        state.yaw -= motion.delta.x * 0.3;
+        state.pitch = (state.pitch + motion.delta.y * 0.3).clamp(-10.0, 89.0);
+    }
+    state.zoom = (state.zoom * (1.0 - scroll.delta.y * 0.08)).clamp(0.2, 4.0);
+    let Some((c, h)) = framing(&state, &items) else { return };
+    if let Ok((mut tf, mut proj)) = cam.single_mut() {
+        place_camera(&mut tf, &mut proj, c, h, state.yaw, state.pitch, state.zoom);
+    }
+}
+
+/// Batch photographs and the report, one model at a time.
+#[allow(clippy::too_many_arguments)]
+pub fn batch(
+    mut commands: Commands,
+    mut state: ResMut<ViewState>,
+    time: Res<Time>,
+    all: Query<(&Item, Option<&Fitted>)>,
+    items: Query<(&Item, &Fitted, &GlobalTransform)>,
+    roots: Query<(Entity, &Item)>,
+    mut cam: Query<(&mut Transform, &mut Projection), With<Camera3d>>,
+    mut players: Query<&mut AnimationPlayer>,
+    children: Query<&Children>,
+    mesh_q: Query<(&Mesh3d, Option<&bevy::gltf::GltfMaterialName>)>,
+    meshes: Res<Assets<Mesh>>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    let Some(out) = state.out.clone() else { return };
+    let now = time.elapsed_secs();
+    if state.started == 0.0 {
+        state.started = now.max(1e-3);
+    }
+    let (i, step, at) = state.batch;
+    if i >= state.files.len() {
+        let _ = std::fs::write(out.join("report.json"), serde_json::to_string_pretty(&state.reports).unwrap_or_default());
+        info!("view: done, {} model(s)", state.files.len());
+        exit.write(AppExit::Success);
+        return;
+    }
+    state.focus = i;
+    let file = state.files[i].clone();
+    let stem = Path::new(&file).file_stem().unwrap_or_default().to_string_lossy().to_string();
+    let dir = out.join(&stem);
+    let Some((item, fitted)) = all.iter().find(|(it, _)| it.index == i) else { return };
+    // Wait for the model to load (it is fitted once its meshes have bounds), up to 30 s.
+    if fitted.is_none() || (item.graph.as_ref().is_some_and(|g| g.1.is_empty()) && now - state.started < 30.0) {
+        if now - state.started > 30.0 {
+            warn!("view: {file} did not load");
+            state.reports.push(serde_json::json!({ "file": file, "error": "did not load within 30 s" }));
+            state.batch = (i + 1, 0, now);
+            state.started = now;
+        }
+        return;
+    }
+    let shots = ANGLES.len() + 1 + item.shown.len() * CLIP_FRAMES;
+    if step == 0 && at == 0.0 {
+        let _ = std::fs::create_dir_all(&dir);
+        state.batch = (i, 0, now);
+        return;
+    }
+    let Some((c, h)) = framing(&state, &items) else { return };
+    let Ok((mut tf, mut proj)) = cam.single_mut() else { return };
+    // Each shot: pose the camera (and clip), let the frame settle, photograph, move on.
+    let settle = if step == 0 { 1.5 } else { 0.6 };
+    let name = if step < ANGLES.len() {
+        let (n, yaw, pitch) = ANGLES[step];
+        place_camera(&mut tf, &mut proj, c, h, yaw, pitch, 1.0);
+        n.to_string()
+    } else if step == ANGLES.len() {
+        game_camera(&mut tf, &mut proj, Vec3::new(c.x, 0.0, c.z));
+        "game".to_string()
+    } else if step < shots {
+        let k = step - ANGLES.len() - 1;
+        let (clip, frame) = (item.shown[k / CLIP_FRAMES], k % CLIP_FRAMES);
+        let (cname, dur) = item.clips[clip].clone();
+        place_camera(&mut tf, &mut proj, c, h, 90.0, 8.0, 1.0);
+        if let Some((_, nodes, p)) = &item.graph {
+            if let (Ok(mut pl), Some(node)) = (players.get_mut(*p), nodes.get(clip)) {
+                pl.stop_all();
+                pl.play(*node).seek_to(dur * frame as f32 / CLIP_FRAMES as f32).pause();
+            }
+        }
+        format!("clip-{}-{frame}", sanitize(&cname))
+    } else {
+        // Report, then the next model (after the last photograph has been saved).
+        if now - at < 0.8 {
+            return;
+        }
+        let root = roots.iter().find(|(_, it)| it.index == i).map(|(e, _)| e);
+        let (mut tris, mut verts, mut colours, mut mats) = (0usize, 0usize, true, Vec::<String>::new());
+        let mut n_meshes = 0;
+        if let Some(root) = root {
+            for d in children.iter_descendants(root) {
+                if let Ok((m, mn)) = mesh_q.get(d) {
+                    if let Some(mesh) = meshes.get(&m.0) {
+                        n_meshes += 1;
+                        verts += mesh.count_vertices();
+                        tris += mesh.indices().map_or(mesh.count_vertices(), |ix| ix.len()) / 3;
+                        colours &= mesh.attribute(Mesh::ATTRIBUTE_COLOR).is_some();
+                    }
+                    if let Some(n) = mn {
+                        if !mats.contains(&n.0) {
+                            mats.push(n.0.clone());
+                        }
+                    }
+                }
+            }
+        }
+        let (_, fit, _) = items.iter().find(|(it, ..)| it.index == i).unwrap();
+        let report = serde_json::json!({
+            "file": file,
+            "size_m": [fit.size.x, fit.size.y, fit.size.z],
+            "meshes": n_meshes,
+            "triangles": tris,
+            "vertices": verts,
+            "vertex_colours": colours && n_meshes > 0,
+            "materials": mats,
+            "glow": has_glow(&file),
+            "clips": item.clips.iter().map(|(n, d)| serde_json::json!({ "name": n, "seconds": d })).collect::<Vec<_>>(),
+            "photos": dir.display().to_string(),
+        });
+        let _ = std::fs::write(dir.join("report.json"), serde_json::to_string_pretty(&report).unwrap_or_default());
+        state.reports.push(report);
+        info!("view: {file} done");
+        state.batch = (i + 1, 0, 0.0);
+        state.started = now;
+        return;
+    };
+    if now - at > settle {
+        commands.spawn(Screenshot::primary_window()).observe(save_to_disk(dir.join(format!("{step:02}-{name}.png"))));
+        state.batch = (i, step + 1, now + 0.3);
+    }
+}
+
+fn sanitize(s: &str) -> String {
+    s.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect()
+}
