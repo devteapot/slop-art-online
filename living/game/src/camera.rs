@@ -49,6 +49,11 @@ pub struct Rig {
     pub yaw_mode: YawMode,
     /// Come in and frame both speakers during a conversation.
     pub frame_talk: bool,
+    /// Blend modes: the zoom at which the view starts to turn with you, and is fully turned.
+    pub follow_zoom: (f32, f32),
+    /// Zooming out stops where the view would show much more than the character sees
+    /// (distance at most 1.5 × the sight radius), so more sight means more room.
+    pub sight_bound: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -87,10 +92,22 @@ const fn view(pitch: f32, distance: f32, fov: f32) -> View {
 }
 
 const fn fixed(pitch: f32, distance: f32, fov: f32, lead: f32) -> Rig {
-    Rig { far: view(pitch, distance, fov), near: view(pitch, distance, fov), tilt: false, yaw: 0.0, ortho: false, lead, rotate_steps: false, yaw_mode: YawMode::North, frame_talk: false }
+    Rig {
+        far: view(pitch, distance, fov),
+        near: view(pitch, distance, fov),
+        tilt: false,
+        yaw: 0.0,
+        ortho: false,
+        lead,
+        rotate_steps: false,
+        yaw_mode: YawMode::North,
+        frame_talk: false,
+        follow_zoom: (0.35, 0.9),
+        sight_bound: false,
+    }
 }
 
-pub const PRESETS: [Preset; 4] = [
+pub const PRESETS: [Preset; 5] = [
     Preset { name: "ARPG", like: "Path of Exile, Diablo: north up, about 52° down, medium lens", rig: fixed(52.0, 24.0, 35.0, 3.0) },
     Preset { name: "MOBA north-up", like: "League of Legends: north up, about 56° down, narrow lens", rig: fixed(56.0, 32.0, 28.0, 2.0) },
     Preset { name: "Top-down action", like: "Supervive: high angle, wider lens, more pan toward the cursor", rig: fixed(64.0, 26.0, 40.0, 6.0) },
@@ -107,9 +124,31 @@ pub const PRESETS: [Preset; 4] = [
             rotate_steps: true,
             yaw_mode: YawMode::ZoomBlend,
             frame_talk: true,
+            follow_zoom: (0.35, 0.9),
+            sight_bound: false,
+        },
+    },
+    Preset {
+        name: "Default (mid)",
+        like: "One camera for every character: zoom-tilt starting mid-way (about 40° down), turning with you once zoomed past a quarter; zooming out is bounded by how far you see",
+        rig: Rig {
+            far: view(60.0, 26.0, 35.0),
+            near: view(24.0, 7.5, 52.0),
+            tilt: true,
+            yaw: 0.0,
+            ortho: false,
+            lead: 3.0,
+            rotate_steps: false,
+            yaw_mode: YawMode::ZoomBlend,
+            frame_talk: true,
+            follow_zoom: (0.15, 0.45),
+            sight_bound: true,
         },
     },
 ];
+
+/// The preset a session starts with.
+pub const DEFAULT_PRESET: usize = 4;
 
 #[derive(Resource)]
 pub struct Cam {
@@ -131,16 +170,18 @@ pub struct Cam {
     pub talk_partner: Option<u32>,
     pub cursor_ground: Option<Vec3>,
     pub shown: View,
+    /// Least zoom allowed now (sight-bound presets), 0 otherwise.
+    pub zoom_min: f32,
 }
 
 impl Default for Cam {
     fn default() -> Self {
-        let rig = PRESETS[0].rig;
+        let rig = PRESETS[DEFAULT_PRESET].rig;
         Self {
-            preset: 0,
+            preset: DEFAULT_PRESET,
             rig,
-            zoom: 0.0,
-            shown_zoom: 0.0,
+            zoom: 0.55,
+            shown_zoom: 0.55,
             shown_yaw: 0.0,
             follow_yaw: 0.0,
             control_yaw: 0.0,
@@ -150,6 +191,7 @@ impl Default for Cam {
             talk_partner: None,
             cursor_ground: None,
             shown: rig.far,
+            zoom_min: 0.0,
         }
     }
 }
@@ -164,7 +206,11 @@ impl Cam {
     pub fn set_preset(&mut self, i: usize) {
         self.preset = i;
         self.rig = PRESETS[i].rig;
-        self.zoom = if self.rig.tilt { 0.35 } else { 0.5 };
+        self.zoom = match (self.rig.tilt, self.rig.sight_bound) {
+            (true, true) => 0.55,
+            (true, false) => 0.35,
+            _ => 0.5,
+        };
         self.follow_yaw = self.shown_yaw;
     }
 
@@ -223,6 +269,7 @@ pub fn follow(
     input: Res<Input>,
     net: NonSend<Net>,
     scene: NonSend<Scene>,
+    sight: Res<crate::sight::Sight>,
     mut q: Query<(&mut Transform, &mut Projection, &Camera, &GlobalTransform, &mut DistanceFog), With<Camera3d>>,
     windows: Query<&Window>,
     ui: Res<crate::hud::UiWants>,
@@ -232,7 +279,7 @@ pub fn follow(
     let dt = time.delta_secs();
     let ease = |rate: f32| 1.0 - (-dt * rate).exp();
     if !ui.keyboard {
-        for (i, k) in [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4].iter().enumerate() {
+        for (i, k) in [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5].iter().enumerate() {
             if keys.just_pressed(*k) {
                 cam.set_preset(i);
             }
@@ -246,6 +293,17 @@ pub fn follow(
             }
         }
     }
+    // Sight-bound zoom: the far end may come out only to 1.5 × the sight radius.
+    cam.zoom_min = if cam.rig.sight_bound && cam.rig.tilt {
+        let (far, near) = (cam.rig.far.distance, cam.rig.near.distance);
+        let allowed = (sight.radius * 1.5).clamp(near, far);
+        ((far - allowed) / (far - near).max(0.01)).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    if cam.zoom < cam.zoom_min {
+        cam.zoom = cam.zoom_min;
+    }
     let partner = if cam.rig.frame_talk { talk_partner(&net, &scene, &input) } else { None };
     if partner != cam.talk_partner {
         cam.talk_partner = partner;
@@ -254,7 +312,7 @@ pub fn follow(
         }
     }
     if !ui.pointer && scroll.delta.y != 0.0 {
-        cam.zoom = (cam.zoom + scroll.delta.y * 0.06).clamp(0.0, 1.0);
+        cam.zoom = (cam.zoom + scroll.delta.y * 0.06).clamp(cam.zoom_min, 1.0);
         // A manual zoom during a conversation overrides the framing until it ends.
         if partner.is_some() {
             cam.talk_dismissed = partner;
@@ -288,7 +346,8 @@ pub fn follow(
         YawMode::North => 0.0,
         YawMode::FollowHeading => 1.0,
         YawMode::ZoomBlend | YawMode::MouseSteer => {
-            let t = ((cam.shown_zoom - 0.35) / 0.55).clamp(0.0, 1.0);
+            let (a, b) = cam.rig.follow_zoom;
+            let t = ((cam.shown_zoom - a) / (b - a).max(0.01)).clamp(0.0, 1.0);
             t * t * (3.0 - 2.0 * t)
         }
     };

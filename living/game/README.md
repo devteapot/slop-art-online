@@ -29,7 +29,7 @@ python3 $V cleanup --run game-1                          # when done
 | WASD, Shift | move relative to the camera, run (`human_move`) |
 | Right click | walk to that point (`human_act` with `goto`) |
 | Enter | say something; only characters within earshot hear it (`human_say`) |
-| 1–4 | camera presets: ARPG, MOBA north-up, top-down action, zoom-tilt |
+| 1–5 | camera presets: ARPG, MOBA north-up, top-down action, zoom-tilt, default (mid; the starting one) |
 | Q / E | rotate 45° (when the preset allows it) |
 | Mouse wheel | zoom; in zoom-tilt it also brings the view down toward the ground |
 | F1 | camera and sight panels |
@@ -40,6 +40,7 @@ The line from your character to the cursor shows where an aimed skill would go. 
 
 - **Ground:** a heightfield from the shared `living_rules::height::ground` function (water lowest, rock rising into hills, borders blended, seeded noise). Characters stand on it. Each chunk has a ground mesh with blended tile colours and bare rock on steep slopes, boulders inside rock, walls and a water plane. Trees between the camera and your character fade out.
 - **Zoom-tilt (preset 4):** one zoom axis eases pitch, distance and field of view together, from 60° far out to 24° close in. Distant ground fades into the sky, and more terrain is drawn as the view lowers.
+- **Default (preset 5):** zoom-tilt starting mid-way at about 40°, turning with you once zoomed in past a quarter. Zooming out is bounded by sight: the camera distance is at most 1.5 × the sight radius, so scout sight allows the full tactical view.
 - **Camera options (F1):**
   - conversation framing: comes in on you and whoever you are talking with; a manual zoom overrides it until the conversation ends;
   - turning modes:

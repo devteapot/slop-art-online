@@ -130,7 +130,14 @@ pub fn draw(
                 }
             });
             ui.checkbox(&mut input.mouse_look, "mouse look (face the cursor)");
-            ui.add(egui::Slider::new(&mut cam.zoom, 0.0..=1.0).text("zoom (wheel)"));
+            ui.checkbox(&mut r.sight_bound, "zoom-out bounded by sight");
+            ui.add(egui::Slider::new(&mut r.follow_zoom.0, 0.0..=1.0).text("turns with you from zoom"));
+            ui.add(egui::Slider::new(&mut r.follow_zoom.1, 0.0..=1.0).text("fully turned at zoom"));
+            let lo = cam.zoom_min;
+            ui.add(egui::Slider::new(&mut cam.zoom, lo..=1.0).text("zoom (wheel)"));
+            if lo > 0.0 {
+                ui.label(egui::RichText::new(format!("zoom-out limited by sight ({:.0} tiles)", sight.radius)).small().weak());
+            }
             ui.label(egui::RichText::new(format!("now: pitch {:.0}°, distance {:.1}, fov {:.0}°{}", shown.pitch, shown.distance, shown.fov, if cam.talk_partner.is_some() { " · framing a conversation" } else { "" })).small().weak());
         });
     }
