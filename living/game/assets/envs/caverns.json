@@ -1,0 +1,96 @@
+{
+ "id": "caverns",
+ "name": "Caverns",
+ "note": "Enclosed and dark: local light from crystals, walls all round, no ceiling (the camera looks down).",
+ "mood": {
+  "hour": 9.0,
+  "sun": [
+   0.5,
+   0.55,
+   0.7
+  ],
+  "lux": 1800,
+  "sky": [
+   0.02,
+   0.02,
+   0.03
+  ],
+  "fog": [
+   0.03,
+   0.03,
+   0.05
+  ],
+  "fog_start": 6,
+  "fog_end": 30,
+  "shadow_hue": 0.65,
+  "saturation": 1.1,
+  "grade": [
+   0.3,
+   0.4,
+   0.6
+  ],
+  "grade_strength": 0.2,
+  "exposure": 1.1,
+  "ambient": 0.18
+ },
+ "ground": {
+  "surface": "cave",
+  "color": [
+   92,
+   86,
+   80
+  ],
+  "radius": 24,
+  "relief": 1.5
+ },
+ "slots": [
+  {
+   "kind": "cave_wall",
+   "rule": "ring",
+   "count": 60,
+   "radius": 21,
+   "height": [
+    12,
+    24
+   ]
+  },
+  {
+   "kind": "stalagmite",
+   "rule": "scatter",
+   "count": 30,
+   "radius": 18,
+   "clear": 4,
+   "height": [
+    1.0,
+    5.0
+   ]
+  },
+  {
+   "kind": "crystal",
+   "rule": "scatter",
+   "count": 24,
+   "radius": 18,
+   "clear": 3,
+   "height": [
+    0.6,
+    2.5
+   ],
+   "glow": [
+    0.6,
+    0.4,
+    1.0
+   ]
+  },
+  {
+   "kind": "rock",
+   "rule": "scatter",
+   "count": 24,
+   "radius": 18,
+   "clear": 3,
+   "height": [
+    0.4,
+    1.8
+   ]
+  }
+ ]
+}

@@ -52,6 +52,33 @@ then quits.
 LIVING_GAME_LOOKDEV=1 cargo run --manifest-path living/Cargo.toml --release -p living-game
 ```
 
+## Test environments
+
+In look-dev mode, F1 → Look dev (or `,` and `.`) switches between the character line-up and the test environments in `living/game/assets/envs/*.json`:
+- meadow, forest and spirit forest;
+- caverns;
+- the cities of giants and of small folk;
+- cyberpunk, fantasy and steampunk cities.
+
+Each file gives:
+- **mood:** sun, sky, fog, and gentle shifts in shadow hue, saturation, gradient, brightness and ambient;
+- **ground:** `open`, `paved` or `cave`, with colour and relief;
+- **slots:** a kind, a rule (`scatter`, `grid` or `ring`), a height range in metres and an optional glow.
+
+**Assets plug in by folder:**
+- every GLB/glTF in `assets/envs/<id>/<kind>/` (or `assets/envs/shared/<kind>/`) is used for that kind, scaled to the slot's height, so a pack's units don't matter;
+- empty folders fall back to placeholder shapes;
+- glowing kinds (lamps, signs, crystals, some mushrooms) get point lights, which the toon shader bands like the sun;
+- tall things are cut away when they stand between the camera and you.
+
+You walk around with WASD (Shift to run), as a VRoid character from the look-dev folder if there is one.
+
+`LIVING_GAME_TOUR=<dir>` photographs every environment, from the default view and close up:
+
+```bash
+LIVING_GAME_LOOKDEV=1 LIVING_GAME_TOUR=/tmp/tour cargo run --manifest-path living/Cargo.toml --release -p living-game
+```
+
 ## Controls
 
 | Input | Effect |

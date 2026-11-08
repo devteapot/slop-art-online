@@ -1,0 +1,93 @@
+{
+ "id": "small_city",
+ "name": "City of small folk",
+ "note": "Everything about a third of your size: you at 1.75 m as a giant among 0.6 m folk.",
+ "mood": {
+  "hour": 15.0,
+  "sun": [
+   1.0,
+   0.96,
+   0.88
+  ],
+  "lux": 9000,
+  "sky": [
+   0.62,
+   0.74,
+   0.86
+  ],
+  "fog": [
+   0.62,
+   0.74,
+   0.86
+  ],
+  "fog_start": 50,
+  "fog_end": 110,
+  "shadow_hue": 0.72,
+  "saturation": 1.08,
+  "grade": [
+   1.0,
+   0.92,
+   0.8
+  ],
+  "grade_strength": 0.22,
+  "exposure": 0.82
+ },
+ "ground": {
+  "surface": "paved",
+  "color": [
+   160,
+   150,
+   130
+  ],
+  "radius": 40,
+  "relief": 0.0
+ },
+ "slots": [
+  {
+   "kind": "house",
+   "rule": "grid",
+   "rows": 6,
+   "cols": 6,
+   "spacing": 3.2,
+   "clear": 3,
+   "height": [
+    1.0,
+    1.5
+   ]
+  },
+  {
+   "kind": "tower",
+   "rule": "grid",
+   "rows": 2,
+   "cols": 2,
+   "spacing": 12,
+   "clear": 6,
+   "height": [
+    3.0,
+    4.0
+   ]
+  },
+  {
+   "kind": "person",
+   "rule": "scatter",
+   "count": 30,
+   "radius": 14,
+   "clear": 1.5,
+   "height": [
+    0.5,
+    0.7
+   ]
+  },
+  {
+   "kind": "tree",
+   "rule": "scatter",
+   "count": 30,
+   "radius": 30,
+   "clear": 12,
+   "height": [
+    2.0,
+    3.0
+   ]
+  }
+ ]
+}

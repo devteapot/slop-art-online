@@ -15,6 +15,7 @@ mod bodies;
 mod camera;
 mod controls;
 mod demo;
+mod envs;
 mod hud;
 mod lookdev;
 mod net;
@@ -61,8 +62,11 @@ fn main() {
         .add_systems(EguiPrimaryContextPass, hud::draw);
     if lookdev::enabled() {
         // Look-dev: a fixed scene of models from assets/lookdev, no server.
-        app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup).chain())
-            .add_systems(Update, (lookdev::convert, lookdev::fit, lookdev::rig, lookdev::animate, lookdev::sun, lookdev::demo, camera::follow, world::fade_trees).chain());
+        app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())
+            .add_systems(
+                Update,
+                (envs::hdr, envs::keys, envs::switch, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway).chain(),
+            );
     } else {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup))
             .add_systems(

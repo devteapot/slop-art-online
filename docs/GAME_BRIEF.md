@@ -180,6 +180,14 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
   - caverns;
   - a city of giants and a city of small folk;
   - a cyberpunk city, a fantasy city and a steampunk city.
+- **Environment harness (built 2026-11-08):** each environment is a data file in `living/game/assets/envs/`: mood, ground, and slots of kinds with placement rules and heights. Assets plug in by folder (`assets/envs/<id>/<kind>/`), scaled to the slot's height, with placeholders until then. Glowing kinds get point lights, which the toon shader now bands. You walk through each environment with the game camera.
+  - First finding: with real-size trees (9–16 m), the camera at 40° and 16 m sees mostly canopy in a dense forest, even with cut-away. Forest density and the camera need judging together.
+- **Asset sources** (research of 2026-11-08):
+  - **Fetchable without an account:** Kenney, KayKit and OpenGameArt CC0 kits.
+  - **Need the user:** Quaternius MegaKits (an itch.io click), Fab (Standard licence: any engine, commercial use, no credit; needs an Epic login) and Sketchfab (mostly CC-BY, credit needed; an API token).
+  - **Avoid:** Unity Asset Store (download only through the editor, scripting banned) and CGTrader/TurboSquid free models (they must ship in protected formats).
+  - **Steampunk** has no complete free kit.
+  - Keep a credits file for CC-BY assets.
 
 **Anime-style references** (Blue Protocol, Genshin Impact, Honkai Star Rail, ZZZ; research of 2026-11-08):
 - **Blue Protocol** (CEDEC 2020/2021 reports: [4Gamer](https://www.4gamer.net/games/467/G046741/20210826001/), [CGWORLD](https://cgworld.jp/feature/202011-cedec2020-bluep.html)):

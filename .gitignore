@@ -21,3 +21,4 @@ __pycache__/
 /.local/living/
 /living/viewer/dist/
 /living/game/assets/lookdev/
+/living/game/assets/envs/*/

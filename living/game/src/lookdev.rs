@@ -6,7 +6,6 @@
 //! four sides, at sunset, and without the toon look, then quits.
 
 use crate::camera::Cam;
-use crate::controls::Target;
 use crate::style::{outline, Outlined, Style, Toon};
 use crate::world::{rgb, MeshBuf, Palette};
 use bevy::prelude::*;
@@ -37,18 +36,34 @@ pub struct Lookdev {
     pub act: Act,
     pub models: Vec<String>,
     demo: Option<(std::path::PathBuf, usize, f32)>,
+    /// Where the camera looks instead of the player (scripted close-ups).
+    pub focus: Option<Vec3>,
 }
 
 /// A loaded look-dev model's root; `vrm` models face −Z (Unity convention) and get turned.
 #[derive(Component)]
 pub struct Model {
-    vrm: bool,
-    file: String,
+    pub vrm: bool,
+    /// Path under the asset folder.
+    pub file: String,
+    /// Height to scale the model to (m), and the ground level it stands on.
+    pub height: f32,
+    pub ground_y: f32,
+    /// Emissive colour for glowing things (multiplies the base colour).
+    pub glow: Option<[f32; 3]>,
 }
 
-/// A model already scaled to a 1.75 m height.
+impl Model {
+    pub fn character(file: String, vrm: bool) -> Self {
+        Self { vrm, file, height: 1.75, ground_y: 0.0, glow: None }
+    }
+}
+
+/// A model already scaled to its height; `y_off` lifts its lowest point onto the ground.
 #[derive(Component)]
-pub struct Fitted;
+pub struct Fitted {
+    pub y_off: f32,
+}
 
 /// A mesh entity already given the toon material and outline.
 #[derive(Component)]
@@ -58,26 +73,40 @@ pub fn asset_root() -> String {
     format!("{}/assets", env!("CARGO_MANIFEST_DIR"))
 }
 
-pub fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, palette: Res<Palette>, style: Res<Style>, assets: Res<AssetServer>, mut target: ResMut<Target>) {
-    // Ground: a disc of grass with a few low mounds, as a stencil for outlines.
+/// The models in the look-dev folder.
+pub fn lookdev_models() -> Vec<String> {
+    let dir = std::path::Path::new(&asset_root()).join(FOLDER);
+    let mut models: Vec<String> = std::fs::read_dir(&dir)
+        .map(|r| r.filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.ends_with(".glb") || n.ends_with(".gltf")).collect())
+        .unwrap_or_default();
+    models.sort();
+    models
+}
+
+pub fn setup(mut commands: Commands) {
+    let models = lookdev_models();
+    info!("look-dev: {} model(s) in {FOLDER}", models.len());
+    let demo = std::env::var("LIVING_GAME_DEMO").ok().filter(|d| !d.is_empty() && std::env::var("LIVING_GAME_TOUR").is_err()).map(|d| {
+        let _ = std::fs::create_dir_all(&d);
+        (std::path::PathBuf::from(d), 0usize, 0.0)
+    });
+    commands.insert_resource(Lookdev { hour: 15.0, act: Act::Idle, models, demo, focus: None });
+}
+
+/// The character line-up: every look-dev model in an arc beside the reference figure.
+pub fn build_lineup(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Palette, style: &Style, assets: &AssetServer, models: &[String]) {
+    // Ground: a disc of grass, as a stencil for outlines.
     let mut g = MeshBuf::default();
     let ring = |r: f32, a: f32| Vec3::new(r * a.cos(), 0.0, r * a.sin());
     for i in 0..64 {
         let (a0, a1) = (i as f32 / 64.0 * std::f32::consts::TAU, (i + 1) as f32 / 64.0 * std::f32::consts::TAU);
         g.tri([Vec3::ZERO, ring(30.0, a1), ring(30.0, a0)], rgb(112, 160, 74));
     }
-    commands.spawn((Mesh3d(meshes.add(g.build())), MeshMaterial3d(palette.vertex.clone()), Transform::default(), OutlineStencil::default()));
-    // The reference figure at the centre, facing the camera's side (+Z is south).
-    crate::bodies::spawn(&mut commands, &mut meshes, &palette, &style, "person", 1, false, Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)), Vec2::ZERO);
-    target.0 = Some(Vec3::ZERO);
-
-    // Every model in the folder, in an arc behind and beside the figure.
-    let dir = std::path::Path::new(&asset_root()).join(FOLDER);
-    let mut models: Vec<String> = std::fs::read_dir(&dir)
-        .map(|r| r.filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.ends_with(".glb") || n.ends_with(".gltf")).collect())
-        .unwrap_or_default();
-    models.sort();
-    info!("look-dev: {} model(s) in {}", models.len(), dir.display());
+    commands.spawn((crate::envs::EnvPart, Mesh3d(meshes.add(g.build())), MeshMaterial3d(palette.vertex.clone()), Transform::default(), OutlineStencil::default()));
+    // The reference figure at the centre, facing the camera's side (+Z is south); it is the
+    // character you walk around with here.
+    let figure = crate::bodies::spawn(commands, meshes, palette, style, "person", 1, false, Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)), Vec2::ZERO);
+    commands.entity(figure).insert((crate::envs::EnvPart, crate::envs::Player::Figure));
     let n = models.len().max(1) as f32;
     for (i, name) in models.iter().enumerate() {
         let a = std::f32::consts::PI * (1.1 + 0.8 * (i as f32 + 0.5) / n);
@@ -87,13 +116,8 @@ pub fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, palette: 
         // glTF models face +Z, toward the camera's default side (south); VRM models face −Z.
         let vrm = name.starts_with("vroid-") || name.ends_with(".vrm");
         let turn = Quat::from_rotation_y(if vrm { std::f32::consts::PI } else { 0.0 });
-        commands.spawn((Model { vrm, file: name.clone() }, WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
+        commands.spawn((crate::envs::EnvPart, Model::character(format!("{FOLDER}/{name}"), vrm), WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
     }
-    let demo = std::env::var("LIVING_GAME_DEMO").ok().filter(|d| !d.is_empty()).map(|d| {
-        let _ = std::fs::create_dir_all(&d);
-        (std::path::PathBuf::from(d), 0usize, 0.0)
-    });
-    commands.insert_resource(Lookdev { hour: 15.0, act: Act::Idle, models, demo });
 }
 
 /// Give every mesh of a loaded model the shared toon material and an outline.
@@ -106,27 +130,38 @@ pub fn convert(
     mut meshes: ResMut<Assets<Mesh>>,
     q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), Without<Converted>>,
     parents: Query<&ChildOf>,
-    models: Query<(), With<Model>>,
-    mut done: Local<(HashMap<AssetId<StandardMaterial>, Handle<Toon>>, HashSet<AssetId<Mesh>>)>,
+    models: Query<&Model>,
+    mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), Handle<Toon>>, HashSet<AssetId<Mesh>>)>,
 ) {
     for (e, mat, mesh, name) in &q {
         // Only meshes under a look-dev model.
         let mut cur = e;
-        let mut under = false;
+        let mut owner = None;
         while let Ok(p) = parents.get(cur) {
             cur = p.parent();
-            if models.contains(cur) {
-                under = true;
+            if let Ok(m) = models.get(cur) {
+                owner = Some(m);
                 break;
             }
         }
-        if !under {
-            continue;
-        }
+        let Some(owner) = owner else { continue };
+        let glow = owner.glow;
+        let glow_key = glow.map_or(0, |g| (g[0] * 255.0) as u32 | ((g[1] * 255.0) as u32) << 8 | ((g[2] * 255.0) as u32) << 16 | 1 << 24);
         let Some(base) = standards.get(&mat.0) else { continue };
         // VRoid names materials …_SKIN, …_FACE, …_EYE, …_HAIR, …_CLOTH.
         let skin = name.is_some_and(|n| n.0.ends_with("_SKIN") || n.0.contains("Skin") || n.0.contains("skin"));
-        let toon = done.0.entry(mat.0.id()).or_insert_with(|| toons.add(if skin { style.skin(base.clone()) } else { style.toon(base.clone()) })).clone();
+        let toon = done
+            .0
+            .entry((mat.0.id(), glow_key))
+            .or_insert_with(|| {
+                let mut b = base.clone();
+                if let Some([r, g, bl]) = glow {
+                    let c = b.base_color.to_linear();
+                    b.emissive = LinearRgba::new(c.red * r, c.green * g, c.blue * bl, 1.0) * 8.0 + LinearRgba::new(r, g, bl, 1.0) * 2.0;
+                }
+                toons.add(if skin { style.skin(b) } else { style.toon(b) })
+            })
+            .clone();
         if done.1.insert(mesh.0.id()) {
             if let Some(mut m) = meshes.get_mut(&mesh.0) {
                 let _ = m.generate_outline_normals(&Default::default());
@@ -166,12 +201,12 @@ pub fn fit(
             continue;
         }
         let height = (hi.y - lo.y).max(0.01);
-        let k = 1.75 / height;
+        let k = model.height / height;
         tf.scale = Vec3::splat(k);
-        tf.translation.y = -lo.y * k;
+        tf.translation.y = model.ground_y - lo.y * k;
         *vis = Visibility::Inherited;
-        info!("look-dev: fitted a model of {height:.2} units to 1.75 m (×{k:.2}){}", if model.vrm { " (VRM)" } else { "" });
-        commands.entity(e).insert(Fitted);
+        debug!("look-dev: fitted {} ({height:.2} units) to {:.2} m (×{k:.2})", model.file, model.height);
+        commands.entity(e).insert(Fitted { y_off: -lo.y * k });
     }
 }
 
@@ -244,7 +279,7 @@ pub fn rig(
 
 /// Morph target names of the mesh on node `node`, from a GLB file's JSON (mesh or primitive extras).
 fn target_names(file: &str, node: &str) -> Option<Vec<String>> {
-    let bytes = std::fs::read(std::path::Path::new(&asset_root()).join(FOLDER).join(file)).ok()?;
+    let bytes = std::fs::read(std::path::Path::new(&asset_root()).join(file)).ok()?;
     if bytes.len() < 20 || &bytes[0..4] != b"glTF" {
         return None;
     }
@@ -258,16 +293,16 @@ fn target_names(file: &str, node: &str) -> Option<Vec<String>> {
 
 /// Procedural motion for VRoid characters: arms down, breathing, a walk cycle in place,
 /// blinking, and the mouth moving while talking.
-pub fn animate(look: Res<Lookdev>, rigs: Query<&Rig>, mut transforms: Query<&mut Transform>, mut morphs: Query<&mut MorphWeights>, time: Res<Time>) {
+pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(&Rig, Has<crate::envs::Player>)>, mut transforms: Query<&mut Transform>, mut morphs: Query<&mut MorphWeights>, time: Res<Time>) {
     let t = time.elapsed_secs();
-    for rig in &rigs {
+    for (rig, is_player) in &rigs {
         let t = t + rig.seed;
         let mut set = |bone: &str, q: Quat| {
             if let Some(mut tf) = rig.bones.get(bone).and_then(|b| transforms.get_mut(*b).ok()) {
                 tf.rotation = q;
             }
         };
-        let walk = look.act == Act::Walk;
+        let walk = look.act == Act::Walk || (is_player && roam.moving);
         let phase = t * 6.0;
         let breathe = (t * 1.6).sin();
         // Arms down along the body (about 72° from the T-pose), swinging when walking; elbows
@@ -326,7 +361,6 @@ pub fn demo(
     mut look: ResMut<Lookdev>,
     mut cam: ResMut<Cam>,
     mut style: ResMut<Style>,
-    mut target: ResMut<Target>,
     models: Query<(&Model, &Transform)>,
     time: Res<Time>,
     mut exit: MessageWriter<AppExit>,
@@ -373,7 +407,7 @@ pub fn demo(
             cam.rig.view = crate::camera::View { pitch: 22.0, distance: 8.0, fov: 40.0 };
             cam.rig.sight_bound = false;
             // Close-ups frame the first anime (VRM) character, else the row's middle.
-            target.0 = Some(models.iter().find(|(m, _)| m.vrm).map_or(Vec3::new(0.0, 0.0, -5.0), |(_, t)| Vec3::new(t.translation.x, 0.0, t.translation.z)));
+            look.focus = Some(models.iter().find(|(m, _)| m.vrm).map_or(Vec3::new(0.0, 0.0, -5.0), |(_, t)| Vec3::new(t.translation.x, 0.0, t.translation.z)));
         }
         "close4" => cam.rig.view = crate::camera::View { pitch: 15.0, distance: 4.5, fov: 40.0 },
         "walk" => look.act = Act::Walk,
@@ -381,7 +415,7 @@ pub fn demo(
         "idle" => look.act = Act::Idle,
         "far" => {
             cam.rig.view = crate::camera::Rig::default().view;
-            target.0 = Some(Vec3::ZERO);
+            look.focus = None;
         }
         "yaw90" => cam.set_yaw(90.0),
         "yaw180" => cam.set_yaw(180.0),

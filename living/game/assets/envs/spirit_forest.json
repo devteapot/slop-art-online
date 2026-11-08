@@ -1,0 +1,108 @@
+{
+ "id": "spirit_forest",
+ "name": "Spirit forest",
+ "note": "Dusk, glowing flora: emission and bloom against a dark palette.",
+ "mood": {
+  "hour": 19.4,
+  "sun": [
+   0.55,
+   0.62,
+   1.0
+  ],
+  "lux": 2200,
+  "sky": [
+   0.06,
+   0.08,
+   0.16
+  ],
+  "fog": [
+   0.06,
+   0.12,
+   0.18
+  ],
+  "fog_start": 12,
+  "fog_end": 60,
+  "shadow_hue": 0.6,
+  "saturation": 1.25,
+  "grade": [
+   0.4,
+   0.7,
+   1.0
+  ],
+  "grade_strength": 0.3,
+  "exposure": 0.95,
+  "ambient": 0.12
+ },
+ "ground": {
+  "surface": "open",
+  "color": [
+   44,
+   74,
+   66
+  ],
+  "radius": 70,
+  "relief": 3.0
+ },
+ "slots": [
+  {
+   "kind": "tree",
+   "rule": "scatter",
+   "count": 90,
+   "radius": 60,
+   "clear": 6,
+   "height": [
+    10,
+    18
+   ],
+   "spacing": 4
+  },
+  {
+   "kind": "glow_mushroom",
+   "rule": "scatter",
+   "count": 120,
+   "radius": 45,
+   "clear": 2,
+   "height": [
+    0.3,
+    1.4
+   ],
+   "glow": [
+    0.3,
+    1.0,
+    0.9
+   ]
+  },
+  {
+   "kind": "glow_plant",
+   "rule": "scatter",
+   "count": 140,
+   "radius": 50,
+   "clear": 2,
+   "height": [
+    0.4,
+    1.2
+   ],
+   "glow": [
+    0.7,
+    0.5,
+    1.0
+   ]
+  },
+  {
+   "kind": "crystal",
+   "rule": "scatter",
+   "count": 16,
+   "radius": 40,
+   "clear": 6,
+   "height": [
+    1.0,
+    3.0
+   ],
+   "glow": [
+    0.5,
+    0.8,
+    1.0
+   ]
+  }
+ ]
+}

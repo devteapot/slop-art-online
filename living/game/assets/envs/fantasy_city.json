@@ -1,0 +1,123 @@
+{
+ "id": "fantasy_city",
+ "name": "Fantasy city",
+ "note": "A walled medieval-fantasy town with a market.",
+ "mood": {
+  "hour": 16.5,
+  "sun": [
+   1.0,
+   0.96,
+   0.88
+  ],
+  "lux": 9000,
+  "sky": [
+   0.62,
+   0.74,
+   0.86
+  ],
+  "fog": [
+   0.62,
+   0.74,
+   0.86
+  ],
+  "fog_start": 50,
+  "fog_end": 110,
+  "shadow_hue": 0.72,
+  "saturation": 1.12,
+  "grade": [
+   1.0,
+   0.92,
+   0.8
+  ],
+  "grade_strength": 0.22,
+  "exposure": 0.82
+ },
+ "ground": {
+  "surface": "paved",
+  "color": [
+   176,
+   160,
+   128
+  ],
+  "radius": 75,
+  "relief": 0.5
+ },
+ "slots": [
+  {
+   "kind": "house",
+   "rule": "grid",
+   "rows": 5,
+   "cols": 5,
+   "spacing": 11,
+   "clear": 8,
+   "height": [
+    5,
+    8
+   ]
+  },
+  {
+   "kind": "tower",
+   "rule": "grid",
+   "rows": 1,
+   "cols": 1,
+   "spacing": 1,
+   "clear": 0,
+   "offset": [
+    0,
+    -30
+   ],
+   "height": [
+    24,
+    24
+   ]
+  },
+  {
+   "kind": "wall",
+   "rule": "ring",
+   "count": 90,
+   "radius": 62,
+   "height": [
+    5,
+    6
+   ]
+  },
+  {
+   "kind": "market_stall",
+   "rule": "scatter",
+   "count": 14,
+   "radius": 20,
+   "clear": 5,
+   "height": [
+    2.2,
+    2.8
+   ]
+  },
+  {
+   "kind": "lamp",
+   "rule": "scatter",
+   "count": 18,
+   "radius": 45,
+   "clear": 4,
+   "height": [
+    3,
+    4
+   ],
+   "glow": [
+    1.0,
+    0.8,
+    0.5
+   ]
+  },
+  {
+   "kind": "person",
+   "rule": "scatter",
+   "count": 16,
+   "radius": 30,
+   "clear": 4,
+   "height": [
+    1.6,
+    1.85
+   ]
+  }
+ ]
+}

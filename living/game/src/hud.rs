@@ -46,6 +46,7 @@ pub fn draw(
     mut my_size: ResMut<crate::bodies::MySize>,
     mut style: ResMut<crate::style::Style>,
     lookdev: Option<ResMut<crate::lookdev::Lookdev>>,
+    envs: Option<ResMut<crate::envs::Envs>>,
     keys: Res<ButtonInput<KeyCode>>,
     target: Res<Target>,
     camq: Query<(&Camera, &Transform), With<Camera3d>>,
@@ -128,6 +129,22 @@ pub fn draw(
     // Look-dev scene controls.
     if let Some(mut look) = lookdev {
         egui::Window::new("Look dev").anchor(egui::Align2::CENTER_TOP, [0.0, 10.0]).resizable(false).show(ctx, |ui| {
+            if let Some(mut envs) = envs {
+                let names: Vec<String> = std::iter::once("Character line-up".to_string()).chain(envs.defs.iter().map(|d| d.name.clone())).collect();
+                let mut want = envs.want;
+                egui::ComboBox::from_label("environment (, .)").selected_text(names.get(want).cloned().unwrap_or_default()).show_ui(ui, |ui| {
+                    for (i, n) in names.iter().enumerate() {
+                        ui.selectable_value(&mut want, i, n);
+                    }
+                });
+                if want != envs.want {
+                    envs.want = want;
+                }
+                if let Some(d) = envs.want.checked_sub(1).and_then(|i| envs.defs.get(i)) {
+                    ui.label(egui::RichText::new(&d.note).small().weak());
+                }
+                ui.label(egui::RichText::new("WASD walk · Shift run · assets: assets/envs/<id>/<kind>/*.glb").small().weak());
+            }
             ui.add(egui::Slider::new(&mut look.hour, 6.0..=19.0).text("sun hour"));
             ui.horizontal(|ui| {
                 for (a, label) in [(crate::lookdev::Act::Idle, "idle"), (crate::lookdev::Act::Walk, "walk"), (crate::lookdev::Act::Talk, "talk")] {

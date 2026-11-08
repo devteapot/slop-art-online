@@ -1,0 +1,98 @@
+{
+ "id": "giants_city",
+ "name": "City of giants",
+ "note": "Buildings and people about three times your size: you at 1.75 m among 5 m giants.",
+ "mood": {
+  "hour": 15.0,
+  "sun": [
+   1.0,
+   0.96,
+   0.88
+  ],
+  "lux": 9000,
+  "sky": [
+   0.62,
+   0.74,
+   0.86
+  ],
+  "fog": [
+   0.62,
+   0.74,
+   0.86
+  ],
+  "fog_start": 50,
+  "fog_end": 110,
+  "shadow_hue": 0.72,
+  "saturation": 1.08,
+  "grade": [
+   1.0,
+   0.92,
+   0.8
+  ],
+  "grade_strength": 0.22,
+  "exposure": 0.82
+ },
+ "ground": {
+  "surface": "paved",
+  "color": [
+   150,
+   140,
+   124
+  ],
+  "radius": 90,
+  "relief": 0.0
+ },
+ "slots": [
+  {
+   "kind": "house",
+   "rule": "grid",
+   "rows": 4,
+   "cols": 4,
+   "spacing": 30,
+   "clear": 14,
+   "height": [
+    11,
+    16
+   ]
+  },
+  {
+   "kind": "tower",
+   "rule": "grid",
+   "rows": 2,
+   "cols": 2,
+   "spacing": 60,
+   "clear": 20,
+   "height": [
+    30,
+    40
+   ]
+  },
+  {
+   "kind": "person",
+   "rule": "scatter",
+   "count": 10,
+   "radius": 50,
+   "clear": 8,
+   "height": [
+    4.5,
+    5.5
+   ]
+  },
+  {
+   "kind": "lamp",
+   "rule": "scatter",
+   "count": 20,
+   "radius": 60,
+   "clear": 6,
+   "height": [
+    9,
+    11
+   ],
+   "glow": [
+    1.0,
+    0.85,
+    0.6
+   ]
+  }
+ ]
+}

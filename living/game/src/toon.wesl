@@ -8,6 +8,7 @@ import bevy_pbr::render::{
     mesh_view_bindings as view_bindings,
     shadows,
     mesh_view_types,
+    clustered_forward,
 };
 
 @if(PREPASS_PIPELINE)
@@ -160,6 +161,20 @@ fn fragment(
         // Rim light on silhouettes, stronger on the lit side.
         let rim = pow(clamp(1.0 - max(dot(N, V), 0.0), 0.0, 1.0), toon.band.w) * toon.rim.a * (0.35 + 0.65 * lit);
         color = color + toon.rim.rgb * sun * rim;
+        // Local lights (point lights: lamps, crystals, neon), banded like the sun, no shadows.
+        let cluster = clustered_forward::view_fragment_cluster_index(pbr_input.frag_coord.xy, view_z, pbr_input.is_orthographic);
+        let ranges = clustered_forward::unpack_clusterable_object_index_ranges(cluster);
+        for (var i: u32 = ranges.first_point_light_index_offset; i < ranges.first_spot_light_index_offset; i = i + 1u) {
+            let id = clustered_forward::get_clusterable_object_id(i);
+            let l = &view_bindings::clustered_lights.data[id];
+            let to = (*l).position_radius.xyz - p.xyz;
+            let d2 = dot(to, to);
+            let f = d2 * (*l).color_inverse_square_range.w;
+            let window = clamp(1.0 - f * f, 0.0, 1.0);
+            let fall = window * window / max(d2, 0.0001);
+            let b = smoothstep(-0.05, 0.12, dot(N, normalize(to))) * 0.8 + 0.2;
+            color = color + albedo.rgb * (*l).color_inverse_square_range.rgb * fall * b * view_bindings::view.exposure / 3.14159265 * toon.extra.w;
+        }
         // Emission (fires, lamps) on top.
         color = color + pbr_input.material.emissive.rgb * view_bindings::view.exposure;
         out.color = vec4<f32>(color, albedo.a);

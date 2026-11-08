@@ -12,3 +12,4 @@ spacetimedb-sdk = { workspace = true }
 living-bindings = { path = "../bindings" }
 living-rules = { path = "../rules", default-features = false }
 serde_json = { workspace = true }
+serde = { workspace = true }

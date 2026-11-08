@@ -1,0 +1,92 @@
+{
+ "id": "forest",
+ "name": "Forest",
+ "note": "A dense ordinary forest: canopy occlusion and cut-away.",
+ "mood": {
+  "hour": 13.0,
+  "sun": [
+   1.0,
+   0.96,
+   0.88
+  ],
+  "lux": 9000,
+  "sky": [
+   0.62,
+   0.74,
+   0.86
+  ],
+  "fog": [
+   0.5,
+   0.62,
+   0.6
+  ],
+  "fog_start": 20,
+  "fog_end": 70,
+  "shadow_hue": 0.72,
+  "saturation": 1.05,
+  "grade": [
+   1.0,
+   0.92,
+   0.8
+  ],
+  "grade_strength": 0.22,
+  "exposure": 0.82
+ },
+ "ground": {
+  "surface": "open",
+  "color": [
+   70,
+   104,
+   52
+  ],
+  "radius": 70,
+  "relief": 3.5
+ },
+ "slots": [
+  {
+   "kind": "tree",
+   "rule": "scatter",
+   "count": 160,
+   "radius": 60,
+   "clear": 5,
+   "height": [
+    9,
+    16
+   ],
+   "spacing": 3.2
+  },
+  {
+   "kind": "bush",
+   "rule": "scatter",
+   "count": 90,
+   "radius": 55,
+   "clear": 2.5,
+   "height": [
+    0.6,
+    1.6
+   ]
+  },
+  {
+   "kind": "rock",
+   "rule": "scatter",
+   "count": 25,
+   "radius": 55,
+   "clear": 3,
+   "height": [
+    0.4,
+    1.6
+   ]
+  },
+  {
+   "kind": "log",
+   "rule": "scatter",
+   "count": 12,
+   "radius": 50,
+   "clear": 4,
+   "height": [
+    0.5,
+    0.9
+   ]
+  }
+ ]
+}

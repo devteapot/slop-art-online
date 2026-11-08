@@ -1,0 +1,110 @@
+{
+ "id": "steampunk_city",
+ "name": "Steampunk city",
+ "note": "Brass, smoke and amber light: warm grading and a warm shadow hue.",
+ "mood": {
+  "hour": 17.5,
+  "sun": [
+   1.0,
+   0.82,
+   0.6
+  ],
+  "lux": 9000,
+  "sky": [
+   0.7,
+   0.62,
+   0.52
+  ],
+  "fog": [
+   0.62,
+   0.55,
+   0.46
+  ],
+  "fog_start": 25,
+  "fog_end": 90,
+  "shadow_hue": 0.08,
+  "saturation": 1.0,
+  "grade": [
+   1.0,
+   0.75,
+   0.5
+  ],
+  "grade_strength": 0.3,
+  "exposure": 0.82,
+  "hue_shift": 0.12,
+  "ambient": 0.04
+ },
+ "ground": {
+  "surface": "paved",
+  "color": [
+   120,
+   98,
+   78
+  ],
+  "radius": 75,
+  "relief": 0.0
+ },
+ "slots": [
+  {
+   "kind": "factory",
+   "rule": "grid",
+   "rows": 3,
+   "cols": 3,
+   "spacing": 22,
+   "clear": 12,
+   "height": [
+    10,
+    16
+   ]
+  },
+  {
+   "kind": "chimney",
+   "rule": "scatter",
+   "count": 12,
+   "radius": 50,
+   "clear": 10,
+   "height": [
+    14,
+    24
+   ]
+  },
+  {
+   "kind": "pipe",
+   "rule": "scatter",
+   "count": 30,
+   "radius": 50,
+   "clear": 4,
+   "height": [
+    1.0,
+    3.0
+   ]
+  },
+  {
+   "kind": "lamp",
+   "rule": "scatter",
+   "count": 20,
+   "radius": 50,
+   "clear": 4,
+   "height": [
+    3.5,
+    4.5
+   ],
+   "glow": [
+    1.0,
+    0.7,
+    0.35
+   ]
+  },
+  {
+   "kind": "crate",
+   "rule": "scatter",
+   "count": 24,
+   "radius": 40,
+   "clear": 3,
+   "height": [
+    0.6,
+    1.2
+   ]
+  }
+ ]
+}
