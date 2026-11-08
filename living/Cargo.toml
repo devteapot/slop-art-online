@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["rules", "authority", "bindings", "mind", "viewer"]
+members = ["rules", "authority", "bindings", "mind", "viewer", "game"]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -1,0 +1,13 @@
+[package]
+name = "living-game"
+version = "0.1.0"
+edition = "2021"
+description = "Camera and controls spike for the playable client (desktop, 3D). Throwaway; see docs/GAME_BRIEF.md."
+
+[dependencies]
+bevy = { version = "=0.20.1", default-features = false, features = ["3d"] }
+bevy_egui = { version = "=0.43.1", default-features = false, features = ["render", "default_fonts"] }
+spacetimedb-sdk = { workspace = true }
+living-bindings = { path = "../bindings" }
+living-rules = { path = "../rules", default-features = false }
+serde_json = { workspace = true }
