@@ -165,19 +165,14 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
 - Hi-Fi Rush: a toon renderer ([GDC](https://gdcvault.com/play/1034330/3D-Toon-Rendering-in-Hi)).
 - Genshin: face-shadow SDFs.
 
-**Style as data over the same world (architecture):**
-- Gameplay objects stay abstract: `person`, `house`, `deer`, `campfire`.
-- A zone's **style profile** chooses:
-  - the models and materials for each kind;
-  - a toon ramp, shadow tint and rim light;
-  - outline width, colour and edge thresholds;
-  - the painterly-filter strength;
-  - colour grading and fog;
-  - the light rig;
-  - the effects palette.
-- One "uber" material takes style parameters as uniforms rather than shader variants, so a new style adds no pipelines.
-- Profiles blend at zone borders, the way Unreal blends post-process volumes.
-- A few invariants hold across every style so gameplay stays readable: character silhouettes and outlines, threat and faction colours, and the language of effects.
+**One way of rendering, with zones that differ by what is in them (user, 2026-11-08):**
+- **Every thing has its own look, and keeps it everywhere.** A character, a creature or an item looks the same in every zone.
+- **A zone differs by its contents:** buildings, plants, props, ground and materials. A cyberpunk town is built from cyberpunk assets; nothing gets re-skinned per zone.
+- **One shading model for everything:** the same lighting bands, shadow treatment, outlines and post stack across the game. That shared shading is what keeps a character from looking out of place in any environment.
+- **Zones may shift mood only gently:** light, sky, fog and colour grading. They never change how things are drawn.
+- **A few invariants hold everywhere** so gameplay stays readable: character silhouettes and outlines, threat and faction colours, and the language of effects.
+- **Reference:** Arcane-inspired. Try what the engine can do and iterate toward a specific style, keeping both the look and performance in mind. Blue Protocol, Genshin Impact and Zenless Zone Zero are further references (research in progress).
+- The user is in the EU, which rules out Hunyuan3D, whose licence excludes the EU.
 
 **Bevy 0.20.1 support** (checked in source and crates.io):
 - built in: extended materials (WGSL/WESL), fullscreen post-processing materials, depth and normal prepasses, colour grading, bloom, fog, decals, and stepped glTF interpolation;
