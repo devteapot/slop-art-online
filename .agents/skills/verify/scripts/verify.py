@@ -166,7 +166,7 @@ def doctor(a):
     code, _ = http("/v1/ping")
     checks["SpacetimeDB answers /v1/ping"] = code == 200
     r = subprocess.run(["docker", "inspect", CONTAINER, "--format", "{{.Config.Image}}"], capture_output=True, text=True)
-    checks[f"server image is v2.10.1 ({r.stdout.strip() or 'none'})"] = r.stdout.strip().endswith(":v2.10.1")
+    checks[f"server image is v2.14.1 ({r.stdout.strip() or 'none'})"] = r.stdout.strip().endswith(":v2.14.1")
     q = lambda text: json.loads(http(f"/v1/database/{st['db']}/sql", text, raw=True)[1])[0]["rows"]
     code, _ = http(f"/v1/database/{st['db']}/sql", "SELECT paused FROM world", raw=True)
     checks[f"database {st['db']} exists"] = code == 200

@@ -1,5 +1,17 @@
 # Client protocol validation
 
+## 2026-11-08 SpacetimeDB 2.14.1 upgrade (macOS)
+
+Host: Apple Silicon laptop, Docker Desktop. Image `v2.14.1` on a fresh data volume (`living-stdb-2`). SDK, SATS and generated bindings were 2.14.1, and the bindings were regenerated with the in-container 2.14.1 CLI. `living/` had uncommitted upgrade changes on top of `0ea349c`.
+
+- **First attempt failed** (`client-20261108-192719`). The probe passed the connection token back through `/proc/self/fd/N`, which exists only on Linux. On macOS that panicked with `credential pipe: … No such file or directory`, and `drive.py` failed to parse the empty output.
+- **The fix:** the probe now writes to `/dev/fd/N`, which works on Linux and macOS. This was a portability bug, not an upgrade regression.
+- **Second run** (`client-20261108-192909`) exited 0. Its results match the 2026-10-04 baseline: 13 PASS and two XFAIL, the known anonymous `experience` and `thought` leaks.
+  - The base subscription received live updates: 839 body updates and 4 stats updates.
+  - The reducer permission matrix made 164 calls with 0 mismatches.
+  - Reconnect recorded 1 drop and 2 connections.
+  - Cleanup deleted the scratch database.
+
 ## 2026-10-04 fix round
 
 Host: Fedora, rootless podman, SELinux enforcing. The existing `sao-living_spacetimedb_1` container served `http://127.0.0.1:3300`, image `v2.10.1`. SDK, SATS and generated bindings were 2.10.1. Commit: `384fb50e379533b7db64698357efd0b2323f9452`. `living/` had the user's uncommitted viewer clock change. This fix round changed only `.agents/skills/verify-client/`.

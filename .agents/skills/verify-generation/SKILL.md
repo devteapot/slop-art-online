@@ -9,7 +9,7 @@ Read the [`verify` entry point](../verify/SKILL.md) first. It owns the shared la
 
 ## Run
 
-Preconditions: SpacetimeDB 2.10.1 must answer on `http://127.0.0.1:3300`. If it is down, run `docker start sao-living_spacetimedb_1`, then poll `curl -s http://127.0.0.1:3300/v1/ping` until it answers. The driver uses the existing container and leaves it running.
+Preconditions: SpacetimeDB 2.14.1 must answer on `http://127.0.0.1:3300`. If it is down, run `docker start sao-living_spacetimedb_1`, then poll `curl -s http://127.0.0.1:3300/v1/ping` until it answers. The driver uses the existing container and leaves it running.
 
 Run from the repository root:
 

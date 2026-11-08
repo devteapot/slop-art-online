@@ -302,7 +302,7 @@ class Run:
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         write(self.directory / 'source-inventory.json', {'base_queries': exact, 'private': private,
-              'reducers': reducers, 'sdk': '2.10.1', 'server': '2.10.1'})
+              'reducers': reducers, 'sdk': '2.14.1', 'server': '2.14.1'})
 
     def run(self):
         self.source_inventory()

@@ -227,7 +227,8 @@ fn connect(r: &Request, signals: Arc<Mutex<Signals>>) -> Result<DbConnection, St
         .with_token(r.token.clone())
         .on_connect(move |c, identity, token| {
             if let Some(fd) = credential_fd {
-                std::fs::write(format!("/proc/self/fd/{fd}"), token).expect("credential pipe");
+                // /dev/fd works on Linux and macOS (/proc/self/fd is Linux-only).
+                std::fs::write(format!("/dev/fd/{fd}"), token).expect("credential pipe");
             }
             ready.lock().unwrap().identity = identity.to_hex().to_string();
             if stream {

@@ -3,7 +3,7 @@
 #   just living-reset     build the module and publish a fresh world
 services:
   spacetimedb:
-    image: docker.io/clockworklabs/spacetime:v2.10.1
+    image: docker.io/clockworklabs/spacetime:v2.14.1
     # podman-compose's default name, pinned so Docker Compose (which would say
     # sao-living-spacetimedb-1) matches the recipes and verify scripts that address it.
     container_name: sao-living_spacetimedb_1
@@ -16,8 +16,10 @@ services:
     ports:
       - "${LIVING_STDB_BIND:-127.0.0.1}:${LIVING_STDB_PORT:-3300}:3000"
     volumes:
-      # Server data and the in-container CLI identity (the world's admin).
-      - living-stdb:/home/spacetime
+      # Server data and the in-container CLI identity (the world's admin). Since the
+      # 2.14.1 upgrade (2026-11-08) this is a fresh volume; `living-stdb` below keeps the
+      # 2.10.1 data (the paused stage3/stage4 and aske-coast-6*/7* worlds) untouched.
+      - living-stdb-2:/home/spacetime
       # Built module for `spacetime publish` inside the container.
       - ../target/wasm32-unknown-unknown/release:/wasm:ro
     healthcheck:
@@ -30,7 +32,7 @@ services:
 
   # Personal knowledge graphs for the minds (separate from the concept-graph prototype).
   neo4j:
-    image: neo4j:2026.09.0
+    image: neo4j:2026.10.1
     environment:
       NEO4J_AUTH: neo4j/${LIVING_NEO4J_PASSWORD:?Set LIVING_NEO4J_PASSWORD}
       NEO4J_server_memory_heap_max__size: 1G
@@ -43,5 +45,12 @@ services:
     restart: unless-stopped
 
 volumes:
+  living-stdb-2:
+  # SpacetimeDB 2.10.1 data, kept read-only for the paused reference worlds. It is never
+  # mounted by this stack; to open those worlds, run the old server on it, e.g.
+  #   docker run --rm -p 127.0.0.1:3310:3000 -v sao-living_living-stdb:/home/spacetime \
+  #     docker.io/clockworklabs/spacetime:v2.10.1 start --listen-addr 0.0.0.0:3000
   living-stdb:
   living-neo4j:
+  # Backup of the Neo4j 2026.09.0 store before the in-place upgrade to 2026.10.1:
+  # .local/living/backups/neo4j-2026.09.0-20261108.tar.zst

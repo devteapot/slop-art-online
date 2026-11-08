@@ -61,7 +61,7 @@ Bevy's gaps are filled with our own code: game UI widgets (egui only for develop
 
 ## SpacetimeDB documentation consulted (2026-11-08)
 
-Pinned versions: module, SDK and server `2.10.1`.
+Pinned versions at the time: module, SDK and server `2.10.1` (upgraded to 2.14.1 the same day).
 
 - [Client SDKs](https://spacetimedb.com/docs/clients): official SDKs exist for Rust, C# (also used for Unity), TypeScript and Unreal (C++ and Blueprint). The pages read give no maturity labels.
 - [Views](https://spacetimedb.com/docs/functions/views/):

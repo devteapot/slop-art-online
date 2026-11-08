@@ -1,6 +1,6 @@
 # Implementation state and legacy baseline
 
-**Active core (2026-09-26): the [living core](LIVING_CORE.md)** in `living/` — a lean SpacetimeDB 2.10.1 authority, LLM minds with Neo4j knowledge graphs, and a Bevy observer. It replaces the legacy `simulation/`/`server/` path for new work; everything below describes the legacy implementation and its evidence. That implementation was removed from the tree on 2026-11-02 (last state: the `legacy-baseline` tag); the source links below resolve there.
+**Active core (2026-09-26): the [living core](LIVING_CORE.md)** in `living/` — a lean SpacetimeDB 2.14.1 authority (2.10.1 until 2026-11-08), LLM minds with Neo4j knowledge graphs, and a Bevy observer. It replaces the legacy `simulation/`/`server/` path for new work; everything below describes the legacy implementation and its evidence. That implementation was removed from the tree on 2026-11-02 (last state: the `legacy-baseline` tag); the source links below resolve there.
 
 Work is paused at [script invocation boundary (49)](SCRIPT_BOUNDARY_SCALING_49.md).
 Its shared-definition candidate passes 360 focused tests and builds successfully;
