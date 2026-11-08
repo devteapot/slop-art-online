@@ -29,7 +29,15 @@ python3 $V cleanup --run game-1                          # when done
 - each model is converted to the shared toon material and outlined;
 - the game camera works as in play, and F1 → Look dev sets the sun's hour.
 
-With `LIVING_GAME_DEMO=<dir>` it photographs the scene from the north, east and south, at sunset, and without the toon look, then quits.
+Each model is scaled to a 1.75 m character from its bounds and faces the camera (VRM models are turned, since they face −Z). `living/tools/lookdev_assets.sh` downloads the CC0 set used so far: two VRoid anime characters (Sendagaya Shino, Vivi) and four KayKit Adventurers.
+
+With `LIVING_GAME_DEMO=<dir>` it photographs the scene:
+- from the north, east and south;
+- close up at 8 m and 4.5 m;
+- at sunset;
+- without the toon look;
+
+then quits.
 
 ```bash
 LIVING_GAME_LOOKDEV=1 cargo run --manifest-path living/Cargo.toml --release -p living-game

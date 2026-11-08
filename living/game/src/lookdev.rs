@@ -30,9 +30,15 @@ pub struct Lookdev {
     demo: Option<(std::path::PathBuf, usize, f32)>,
 }
 
-/// A loaded look-dev model's root.
+/// A loaded look-dev model's root; `vrm` models face −Z (Unity convention) and get turned.
 #[derive(Component)]
-pub struct Model;
+pub struct Model {
+    vrm: bool,
+}
+
+/// A model already scaled to a 1.75 m height.
+#[derive(Component)]
+pub struct Fitted;
 
 /// A mesh entity already given the toon material and outline.
 #[derive(Component)]
@@ -68,7 +74,10 @@ pub fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, palette: 
         let r = 5.0 + 1.5 * (i % 2) as f32;
         let at = Vec3::new(r * a.cos(), 0.0, r * a.sin());
         let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(format!("{FOLDER}/{name}")));
-        commands.spawn((Model, WorldAssetRoot(handle), Transform::from_translation(at).looking_at(Vec3::new(0.0, 0.0, 6.0), Vec3::Y)));
+        // glTF models face +Z, toward the camera's default side (south); VRM models face −Z.
+        let vrm = name.starts_with("vroid-") || name.ends_with(".vrm");
+        let turn = Quat::from_rotation_y(if vrm { std::f32::consts::PI } else { 0.0 });
+        commands.spawn((Model { vrm }, WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
     }
     let demo = std::env::var("LIVING_GAME_DEMO").ok().filter(|d| !d.is_empty()).map(|d| {
         let _ = std::fs::create_dir_all(&d);
@@ -115,6 +124,45 @@ pub fn convert(
     }
 }
 
+/// Scale each model to a 1.75 m character once its meshes have bounds, then show it.
+#[allow(clippy::type_complexity)]
+pub fn fit(
+    mut roots: Query<(Entity, &Model, &mut Transform, &mut Visibility), Without<Fitted>>,
+    children: Query<&Children>,
+    meshes: Query<(&bevy::camera::primitives::Aabb, &GlobalTransform), With<Mesh3d>>,
+    root_gtf: Query<&GlobalTransform>,
+    mut commands: Commands,
+) {
+    for (e, model, mut tf, mut vis) in &mut roots {
+        let Ok(rg) = root_gtf.get(e) else { continue };
+        let inv = rg.affine().inverse();
+        let (mut lo, mut hi, mut any) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN), false);
+        for d in children.iter_descendants(e) {
+            if let Ok((aabb, g)) = meshes.get(d) {
+                let (c, h) = (Vec3::from(aabb.center), Vec3::from(aabb.half_extents));
+                for k in 0..8 {
+                    let s = Vec3::new(if k & 1 == 0 { -1.0 } else { 1.0 }, if k & 2 == 0 { -1.0 } else { 1.0 }, if k & 4 == 0 { -1.0 } else { 1.0 });
+                    // Into the root's own space, so its current scale doesn't count.
+                    let p = inv.transform_point3(g.transform_point(c + h * s));
+                    lo = lo.min(p);
+                    hi = hi.max(p);
+                }
+                any = true;
+            }
+        }
+        if !any {
+            continue;
+        }
+        let height = (hi.y - lo.y).max(0.01);
+        let k = 1.75 / height;
+        tf.scale = Vec3::splat(k);
+        tf.translation.y = -lo.y * k;
+        *vis = Visibility::Inherited;
+        info!("look-dev: fitted a model of {height:.2} units to 1.75 m (×{k:.2}){}", if model.vrm { " (VRM)" } else { "" });
+        commands.entity(e).insert(Fitted);
+    }
+}
+
 /// Move the sun with the hour: east at 6, high at noon, west at 18.
 pub fn sun(look: Res<Lookdev>, mut lights: Query<&mut Transform, With<DirectionalLight>>) {
     let t = ((look.hour - 6.0) / 12.0).clamp(0.0, 1.0) * std::f32::consts::PI;
@@ -125,11 +173,30 @@ pub fn sun(look: Res<Lookdev>, mut lights: Query<&mut Transform, With<Directiona
 }
 
 /// The scripted look-dev photographs.
-pub fn demo(mut commands: Commands, mut look: ResMut<Lookdev>, mut cam: ResMut<Cam>, mut style: ResMut<Style>, time: Res<Time>, mut exit: MessageWriter<AppExit>) {
+pub fn demo(mut commands: Commands, mut look: ResMut<Lookdev>, mut cam: ResMut<Cam>, mut style: ResMut<Style>, mut target: ResMut<Target>, time: Res<Time>, mut exit: MessageWriter<AppExit>) {
     let Some((dir, step, at)) = look.demo.clone() else { return };
     let now = time.elapsed_secs();
     // (wait before, action)
-    let steps: [(f32, &str); 10] = [(5.0, "yaw0"), (2.0, "shot:lookdev-north"), (0.2, "yaw90"), (2.0, "shot:lookdev-east"), (0.2, "yaw180"), (2.0, "shot:lookdev-south"), (0.2, "sunset"), (2.0, "shot:lookdev-sunset"), (0.2, "plain"), (1.5, "shot:lookdev-plain")];
+    let steps: [(f32, &str); 18] = [
+        (6.0, "yaw0"),
+        (2.0, "shot:lookdev-north"),
+        (0.2, "close8"),
+        (2.0, "shot:lookdev-8m"),
+        (0.2, "close4"),
+        (2.0, "shot:lookdev-4m"),
+        (0.2, "far"),
+        (0.2, "yaw90"),
+        (2.0, "shot:lookdev-east"),
+        (0.2, "yaw180"),
+        (2.0, "shot:lookdev-south"),
+        (0.2, "sunset"),
+        (2.0, "shot:lookdev-sunset"),
+        (0.2, "close8"),
+        (2.0, "shot:lookdev-sunset-8m"),
+        (0.2, "plain"),
+        (1.5, "shot:lookdev-plain-8m"),
+        (0.2, "far"),
+    ];
     let Some((wait, act)) = steps.get(step).copied() else {
         exit.write(AppExit::Success);
         return;
@@ -139,6 +206,17 @@ pub fn demo(mut commands: Commands, mut look: ResMut<Lookdev>, mut cam: ResMut<C
     }
     match act {
         "yaw0" => cam.set_yaw(0.0),
+        // Conversation and close-up distances, aimed at the row of models behind the figure.
+        "close8" => {
+            cam.rig.view = crate::camera::View { pitch: 22.0, distance: 8.0, fov: 40.0 };
+            cam.rig.sight_bound = false;
+            target.0 = Some(Vec3::new(0.0, 0.0, -5.0));
+        }
+        "close4" => cam.rig.view = crate::camera::View { pitch: 15.0, distance: 4.5, fov: 40.0 },
+        "far" => {
+            cam.rig.view = crate::camera::Rig::default().view;
+            target.0 = Some(Vec3::ZERO);
+        }
         "yaw90" => cam.set_yaw(90.0),
         "yaw180" => cam.set_yaw(180.0),
         "sunset" => {
