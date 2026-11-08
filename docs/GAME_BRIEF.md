@@ -173,7 +173,7 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
 - **A few invariants hold everywhere** so gameplay stays readable: character silhouettes and outlines, threat and faction colours, and the language of effects.
 - **Reference:** Arcane-inspired. Try what the engine can do and iterate toward a specific style, keeping both the look and performance in mind. Blue Protocol, Genshin Impact and Zenless Zone Zero are further references (research in progress).
 - The user is in the EU, which rules out Hunyuan3D, whose licence excludes the EU.
-- **Assets for now: existing models only** (user, 2026-11-08). Build and evolve the world around pre-existing assets. Generate or create game-specific models later, once the world has enough shape and a backstory. It is too early now.
+- **Assets for now: existing models only** (user, 2026-11-08). Build and evolve the world around pre-existing assets. Generate or create game-specific models later, once the world has enough shape and a backstory. It is too early now. Later the same day the user approved piloting our own generators in Blender (below).
 - **Test environments to explore** (user, 2026-11-08), to see how the shared look and different scales hold up across contrasting places:
   - a nature world and a normal forest;
   - a spirit forest with glowing plants;
@@ -231,6 +231,29 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
 - **Props and buildings** can come from AI generation (Meshy, Tripo or Rodin on a paid plan so the output is owned), conditioned on style reference images. AI-rigged characters each bring their own vendor's skeleton and break shared animation.
 - **Animals** need their own four-legged skeleton and clips (not yet researched).
 - Blender 5.2.2 runs headless here (`blender -b -P`). A pipeline script and a manifest (kind + traits × zone style → model, materials, animation set, height, triangle budget) can be built and checked automatically, with screenshots next to a 1.75 m reference figure.
+
+**Generated assets in Blender (pilot, 2026-11-08):** the user offered local Blender and approved trying our own generators next to existing models.
+- `living/tools/blender/nature.py` builds stylized trees, pines, bushes, rocks, flowers, glowing mushrooms and crystals for the meadow, forest and spirit styles. Assets are real-size, coloured by vertex colours on white materials so the toon material shades them, and canopies carry custom normals that point out from each clump so foliage shades as soft masses. Glowing parts use a material named `Glow`.
+- `living/tools/blender/gen_nature.sh [count] [seed]` regenerates every set into the environment folders. The output is git-ignored: the script is the asset.
+- Look-dev applies an environment slot's glow only to models without their own emissive material.
+- First tour: colours, glow and scale read correctly. Flowers are too small to read from the game camera, and spirit-forest trees vanish into the night mood. Both are generator tuning.
+
+**Claude–Blender integration** (research of 2026-11-08):
+- **Backbone: headless scripts** (`blender -b -P`), versioned in the repo. No socket or telemetry, reproducible, and N processes can run in parallel. The agent checks its work through rendered contact sheets and numeric checks (dimensions, triangle budget, silhouette against a reference, a re-import round trip), reviewed by a fresh-context subagent ([blender-game-skills](https://github.com/majidmanzarpour/blender-game-skills), [blender-kiln](https://github.com/elithril/blender-kiln)).
+- **Live inspection: the official [Blender Lab MCP server](https://www.blender.org/lab/mcp-server/)** (GPL-3.0, Blender 5.1+, the server behind Anthropic's Blender connector). It is optional. It runs model-written code unguarded, so use it on localhost only.
+- The community [MCP for Blender](https://github.com/ahujasid/mcp-for-blender) (MIT; `blender-mcp` now installs `mcp-for-blender`) sends anonymous usage telemetry by default (turn it off with `DISABLE_TELEMETRY=true`) and had several 2026 CVEs. Its asset search and paid generation are its only advantage here. Both add-ons default to port 9876.
+- Reported limits: blockouts, layout and batch scripts work reliably. Organic shapes, topology, weight painting and IK do not. Procedural materials must be baked before glTF export.
+
+**Characters and animation tooling** (research of 2026-11-08; licences checked, aarch64 untested):
+- **Bases:** a person makes two to four base bodies in VRoid Studio (GUI only). The agent derives variants in bpy with the [VRM add-on](https://github.com/saturday06/VRM-Addon-for-Blender) (Blender 4.2–5.3): proportions through bone scaling and shape keys, recoloured materials, outfit swaps, and weights carried over with Data Transfer.
+- **Rigging:** every humanoid shares the J_Bip skeleton, so no learned auto-rigger is needed. Fit the template armature, apply automatic (heat) weights, and transfer weights onto outfits.
+- **Clips:** the Quaternius Universal Animation Library 1 and 2 (CC0, about 250 clips) retargeted to J_Bip by script. Their bone names are unverified.
+- **Text-to-motion:** NVIDIA [Kimodo](https://github.com/nv-tlabs/kimodo) SOMA-RP models (NVIDIA Open Model License: commercial use allowed, no claim on outputs, and a required notice). Its SMPL-X model is non-commercial.
+- **Quadrupeds:** Quaternius Ultimate Animated Animals (CC0) or procedural gaits.
+- **Excluded:**
+  - HY-Motion and Hunyuan3D: their licence excludes the EU, outputs included.
+  - Weights trained on AMASS/HumanML3D (MDM, MoMask, MotionGPT, T2M-GPT) and SMPL-based mocap such as GVHMR and WHAM: non-commercial.
+  - Mixamo: browser only, and raw files can't be redistributed.
 
 **Animation gaps in Bevy 0.20** that need custom code: root motion, IK (feet), animation level of detail. Every bone is an entity, so CPU cost grows with bones × characters. Measure with Bevy's `many_foxes` example before scaling up.
 

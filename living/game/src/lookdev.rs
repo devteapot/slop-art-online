@@ -145,7 +145,9 @@ pub fn convert(
             }
         }
         let Some(owner) = owner else { continue };
-        let glow = owner.glow;
+        // A slot's glow lights up models with no glow of their own (kits without emissive
+        // materials); models that carry emissive materials keep exactly those.
+        let glow = owner.glow.filter(|_| !has_glow(&owner.file));
         let glow_key = glow.map_or(0, |g| (g[0] * 255.0) as u32 | ((g[1] * 255.0) as u32) << 8 | ((g[2] * 255.0) as u32) << 16 | 1 << 24);
         let Some(base) = standards.get(&mat.0) else { continue };
         // VRoid names materials …_SKIN, …_FACE, …_EYE, …_HAIR, …_CLOTH.
@@ -275,6 +277,27 @@ pub fn rig(
         info!("look-dev: rigged a VRoid model ({} bones, face {})", bones.len(), if face.is_some() { "found" } else { "missing" });
         commands.entity(e).insert(Rig { bones, arm_side, face, seed: (e.index_u32() % 97) as f32 * 0.37 });
     }
+}
+
+/// Whether a GLB file has any emissive material (cached per file).
+fn has_glow(file: &str) -> bool {
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(file) {
+        return *v;
+    }
+    let v = (|| {
+        let bytes = std::fs::read(std::path::Path::new(&asset_root()).join(file)).ok()?;
+        let len = u32::from_le_bytes(bytes.get(12..16)?.try_into().ok()?) as usize;
+        let json: serde_json::Value = serde_json::from_slice(bytes.get(20..20 + len)?).ok()?;
+        Some(json["materials"].as_array()?.iter().any(|m| {
+            m["emissiveFactor"].as_array().is_some_and(|f| f.iter().any(|x| x.as_f64().unwrap_or(0.0) > 0.01)) || m["name"].as_str().is_some_and(|n| n.contains("Glow"))
+        }))
+    })()
+    .unwrap_or(false);
+    cache.lock().unwrap().insert(file.to_string(), v);
+    v
 }
 
 /// Morph target names of the mesh on node `node`, from a GLB file's JSON (mesh or primitive extras).
