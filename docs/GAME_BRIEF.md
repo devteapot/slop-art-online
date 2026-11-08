@@ -65,6 +65,7 @@ The user's idea: seeing only what is in front of you makes sense, and skills, pa
   | Face and aim | the cursor |
   | Turn by pointing | the cursor toward a side of the screen (**dropped as the default**: the user disliked it, 2026-11-08; an F1 option) |
   | Rotate the view | `[` / `]` or middle-drag; stays where you leave it |
+  | Turn to where you face | `R` or a middle tap, on request only (user, 2026-11-08). The cursor moves with the ground while the view turns, so the facing doesn't change and the turn ends with it straight ahead |
   | Glance | Alt + mouse; springs back |
 
   The zoom stays fixed at the default mid-way view for now, with the wheel off, "to see how it works".

@@ -35,7 +35,7 @@ pub fn run(
     mut commands: Commands,
     demo: Option<ResMut<Demo>>,
     net: NonSend<Net>,
-    cam: Res<Cam>,
+    mut cam: ResMut<Cam>,
     mut input: ResMut<Input>,
     mut sight: ResMut<crate::sight::Sight>,
     mut my_size: ResMut<crate::bodies::MySize>,
@@ -70,6 +70,7 @@ pub fn run(
         }
         Act::Look(dir) => input.scripted_look = *dir,
         Act::Turn(rate) => input.scripted_turn = *rate,
+        Act::Align => cam.align_request = true,
         Act::Log(what) => info!("demo: {what}: camera yaw {:.0}°, pitch {:.0}°, sight {} r {:.0} cone {:.0}", cam.shown_yaw, cam.shown.pitch, sight.enabled, sight.radius, sight.cone),
         Act::Say(line) => {
             let end = net.my_body().map(|b| (b.x, b.y));
@@ -100,6 +101,7 @@ enum Act {
     Sight(bool, f32, f32),
     Look(Option<Vec2>),
     Turn(Option<f32>),
+    Align,
     Log(&'static str),
     Exit,
 }
@@ -117,6 +119,15 @@ const STEPS: &[(f32, Act)] = &[
     (0.1, Act::Log("rotated 90°")),
     (0.1, Act::Turn(Some(-90.0))),
     (1.0, Act::Turn(None)),
+    // Align on request: facing south-east, press R; the view turns until south-east is ahead.
+    (0.5, Act::Look(Some(Vec2::new(1.0, 1.0)))),
+    (0.3, Act::Log("before align, facing south-east")),
+    (0.1, Act::Align),
+    (1.5, Act::Log("after align")),
+    (0.1, Act::Shot("aligned-south-east")),
+    (0.3, Act::Look(Some(Vec2::new(0.0, -1.0)))),
+    (0.1, Act::Align),
+    (1.5, Act::Log("after align, facing north")),
     // Walk east for 3 s, looking ahead, then say something.
     (0.5, Act::Look(Some(Vec2::new(1.0, -0.3)))),
     (0.2, Act::Walk(Vec2::X)),

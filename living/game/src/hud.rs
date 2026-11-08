@@ -91,7 +91,7 @@ pub fn draw(
             if let Some(e) = net.errors.lock().unwrap().last() {
                 ui.colored_label(egui::Color32::LIGHT_RED, e);
             }
-            ui.label(egui::RichText::new("WASD move · Shift run · cursor: face and aim · [ ] or middle-drag: rotate · Alt+mouse: glance · right click: walk to · Enter: talk · F1 panels").small().weak());
+            ui.label(egui::RichText::new("WASD move · Shift run · cursor: face and aim · R or middle-tap: turn to where you face · [ ] or middle-drag: rotate · Alt+mouse: glance · right click: walk to · Enter: talk · F1 panels").small().weak());
         });
     });
 

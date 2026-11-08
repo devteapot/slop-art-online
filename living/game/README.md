@@ -31,6 +31,7 @@ python3 $V cleanup --run game-1                          # when done
 | Enter | say something; only characters within earshot hear it (`human_say`) |
 | Q / E | rotate 45° (when the preset allows it) |
 | Mouse cursor | where you face and aim (turning the view by pointing at screen sides is an F1 option, off by default) |
+| `R`, or a middle mouse tap | turn the view until the direction you face is straight ahead; the cursor moves with the ground meanwhile, so you keep facing the same spot |
 | `[` / `]` held, or middle mouse drag | rotate the view (90°/s for the keys); it stays where you leave it |
 | Alt + mouse | glance around; the view eases back on release |
 | F1 | camera and sight panels |

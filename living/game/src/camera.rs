@@ -6,6 +6,9 @@
 //!   pointing toward a screen side is an option, off by default.
 //! - **Rotation:** hold `[` or `]`, or drag with the middle button; the view stays where you leave
 //!   it. Alt + mouse glances around and springs back.
+//! - **Align (on request only):** press `R` or tap the middle button, and the view turns until
+//!   the direction you face is straight ahead. The mouse cursor moves with the ground meanwhile,
+//!   so you keep facing the same spot (a fixed cursor would make the view keep turning).
 //! - **Context:** conversations frame both speakers, until you rotate or the talk ends.
 //! - **Sight bound:** the view never pulls back further than about 1.5 × the sight radius, so
 //!   less sight (night) brings it in, along the same tilt toward the ground.
@@ -88,6 +91,12 @@ pub struct Cam {
     /// Temporary look-around offset while Alt is held; eases back after.
     pub glance: f32,
     pub scripted_glance: Option<f32>,
+    /// Align in progress: the yaw to reach, and the ground point the cursor stays on.
+    align: Option<(f32, Option<Vec3>)>,
+    /// Middle-button movement since it was pressed (a tap aligns, a drag rotates).
+    middle_moved: f32,
+    /// Request an align (the demo; keys and the middle button set it too).
+    pub align_request: bool,
 }
 
 fn axes(yaw_deg: f32) -> (Vec2, Vec2) {
@@ -160,7 +169,7 @@ pub fn follow(
     sight: Res<crate::sight::Sight>,
     size: Res<crate::bodies::MySize>,
     mut q: Query<(&mut Transform, &mut Projection, &Camera, &GlobalTransform, &mut DistanceFog), With<Camera3d>>,
-    windows: Query<&Window>,
+    mut windows: Query<&mut Window>,
     ui: Res<crate::hud::UiWants>,
     time: Res<Time>,
 ) {
@@ -172,7 +181,7 @@ pub fn follow(
 
     // Where the cursor meets the ground, from the current camera.
     let window = windows.single().ok();
-    let cursor = window.and_then(|w| w.cursor_position().map(|c| (c, Vec2::new(w.width(), w.height()))));
+    let cursor = window.as_ref().and_then(|w| w.cursor_position().map(|c| (c, Vec2::new(w.width(), w.height()))));
     cam.cursor_ground = cursor.and_then(|(c, _)| {
         let ray = camera.viewport_to_world(gtf, c).ok()?;
         scene.ray_ground(ray.origin, *ray.direction)
@@ -180,7 +189,7 @@ pub fn follow(
 
     // Turn by pointing: outside the middle zone of the screen the view turns toward the cursor's
     // side, faster further out; never while the cursor is below your character.
-    let screen = window.map(|w| Vec2::new(w.width(), w.height()));
+    let screen = window.as_ref().map(|w| Vec2::new(w.width(), w.height()));
     let steer_cursor = match (input.demo, input.scripted_cursor, screen) {
         (true, Some(n), Some(size)) => Some(((n + Vec2::ONE) * size / 2.0, size)),
         (true, _, _) => None,
@@ -208,8 +217,31 @@ pub fn follow(
             manual += r.rotate_rate * dt;
         }
     }
+    if mouse.just_pressed(MouseButton::Middle) {
+        cam.middle_moved = 0.0;
+    }
     if !ui.pointer && !input.demo && mouse.pressed(MouseButton::Middle) {
         manual += motion.delta.x * 0.3;
+        cam.middle_moved += motion.delta.length();
+    }
+    // Align on request: R, or a middle-button tap (released having moved under 6 px).
+    let tapped = mouse.just_released(MouseButton::Middle) && cam.middle_moved < 6.0 && !ui.pointer;
+    let pressed_r = !ui.keyboard && !input.chat_open && keys.just_pressed(KeyCode::KeyR);
+    if tapped || pressed_r || std::mem::take(&mut cam.align_request) {
+        if let Some(l) = input.look.filter(|l| l.length_squared() > 1e-4) {
+            let face = l.y.atan2(l.x).to_degrees() + 90.0;
+            let lock = cam.cursor_ground.filter(|_| !input.demo);
+            cam.align = Some((cam.yaw + diff(face, cam.yaw), lock));
+        }
+    }
+    // A manual turn cancels an align in progress.
+    if manual != 0.0 {
+        cam.align = None;
+    }
+    if let Some((want, _)) = cam.align {
+        let left = diff(want, cam.yaw);
+        let step = left * ease(9.0);
+        cam.yaw += if left.abs() < 0.3 { left } else { step };
     }
     if let Some(rate) = input.scripted_turn {
         manual += rate * dt;
@@ -283,6 +315,22 @@ pub fn follow(
     eye.y = eye.y.max(scene.ground(eye.x, eye.z) + 1.0);
     tf.translation = eye;
     tf.look_at(cam.focus, Vec3::Y);
+
+    // While aligning, keep the cursor on the same ground point, so your facing doesn't change
+    // and the turn ends with that point straight ahead.
+    if let Some((want, lock)) = cam.align {
+        if let (Some(p), Ok(mut w)) = (lock, windows.single_mut()) {
+            if let Ok(screen) = camera.world_to_viewport(&GlobalTransform::from(*tf), p) {
+                let size = Vec2::new(w.width(), w.height());
+                if screen.x >= 0.0 && screen.y >= 0.0 && screen.x < size.x && screen.y < size.y {
+                    w.set_cursor_position(Some(screen));
+                }
+            }
+        }
+        if diff(want, cam.shown_yaw).abs() < 0.5 {
+            cam.align = None;
+        }
+    }
 
     // Draw out toward the horizon and fade it into the sky.
     draw.radius = 110.0 * s.max(0.7);
