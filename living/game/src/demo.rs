@@ -37,6 +37,7 @@ pub fn run(
     net: NonSend<Net>,
     mut cam: ResMut<Cam>,
     mut input: ResMut<Input>,
+    mut sight: ResMut<crate::sight::Sight>,
     target: Res<controls::Target>,
     time: Res<Time>,
     mut exit: MessageWriter<AppExit>,
@@ -65,6 +66,13 @@ pub fn run(
             input.scripted = Some((*dir, false));
         }
         Act::Stop => input.scripted = Some((Vec2::ZERO, false)),
+        Act::Sight(on, radius, cone) => {
+            sight.enabled = *on;
+            sight.radius = *radius;
+            sight.cone = *cone;
+        }
+        Act::Look(dir) => input.scripted_look = *dir,
+        Act::Log(what) => info!("demo: {what}: camera yaw {:.0}°, pitch {:.0}°, sight {} r {:.0} cone {:.0}", cam.shown_yaw, cam.shown.pitch, sight.enabled, sight.radius, sight.cone),
         Act::Say(line) => {
             let end = net.my_body().map(|b| (b.x, b.y));
             info!("demo: after walking east 3 s, authority position {end:?} (from {:?})", d.start);
@@ -92,6 +100,9 @@ enum Act {
     Walk(Vec2),
     Stop,
     Say(&'static str),
+    Sight(bool, f32, f32),
+    Look(Option<Vec2>),
+    Log(&'static str),
     Exit,
 }
 
@@ -117,5 +128,23 @@ const STEPS: &[(f32, Act)] = &[
     // Long enough for someone nearby to answer (the verification run has a second player
     // speak here) and for the camera to frame the conversation.
     (6.0, Act::Shot("talk-framing")),
-    (1.5, Act::Exit),
+    // Zoomed all the way in with zoom blend, walking south: the view should come round behind.
+    (0.5, Act::Preset(3, 1.0)),
+    (8.5, Act::Walk(Vec2::Y)),
+    (3.5, Act::Shot("blend-walking-south")),
+    (0.1, Act::Log("walking south, zoom blend")),
+    (0.2, Act::Stop),
+    // Perception mock: day sight in a forward cone, looking east.
+    (0.5, Act::Look(Some(Vec2::X))),
+    (0.1, Act::Sight(true, 11.0, 60.0)),
+    (3.0, Act::Shot("sight-cone-day")),
+    (0.1, Act::Log("cone")),
+    (0.2, Act::Sight(true, 6.0, 180.0)),
+    (2.0, Act::Shot("sight-night")),
+    // The high view with sight limited reveals nothing more than the character perceives.
+    (0.2, Act::Look(None)),
+    (0.1, Act::Preset(1, 0.5)),
+    (0.1, Act::Sight(true, 11.0, 180.0)),
+    (2.5, Act::Shot("sight-high-view")),
+    (0.5, Act::Exit),
 ];

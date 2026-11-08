@@ -49,8 +49,9 @@ The user's idea: seeing only what is in front of you makes sense, and skills, pa
   - night vision;
   - scent shown as traces (animals already smell beyond sight);
   - a skill that briefly lifts the camera.
+- **The view must turn with the character when it is low.** The user, 2026-11-08: a north-locked view means you only ever look one way. Fully zoomed in, what you see then depends on which way you walk. The spike compares four turning modes: fixed, follow heading, zoom blend and mouse steer. With mouse look, where you face can differ from where you walk; the authority would need a look direction, which aimed skills and a facing cone need anyway.
 - **To explore before deciding:**
-  - a client-only mock in the spike: hide what lies beyond sight or outside a facing cone, dim terrain not seen recently, and use a slider for the "sight" capability;
+  - a client-only mock in the spike: hide what lies beyond sight or outside a facing cone, dim terrain not seen recently, and use a slider for the "sight" capability (built 2026-11-08, F1 → Sight);
   - try it at day and night, alone and in a crowd, high and low camera;
   - only then move the scoping into the authority.
 

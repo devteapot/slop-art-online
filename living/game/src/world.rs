@@ -40,6 +40,8 @@ pub struct Palette {
     water: Handle<StandardMaterial>,
     pub tree: Handle<StandardMaterial>,
     pub tree_faded: Handle<StandardMaterial>,
+    /// Trees outside sight: remembered, and never seen (perception mock).
+    pub tree_dim: [Handle<StandardMaterial>; 2],
     trees: [Handle<Mesh>; 2],
     colors: HashMap<u32, Handle<StandardMaterial>>,
     meshes: HashMap<&'static str, Handle<Mesh>>,
@@ -124,7 +126,11 @@ impl Scene {
 }
 
 #[derive(Component)]
-pub struct Creature;
+pub struct Creature(pub u32);
+
+/// A resource or structure at a simulation point.
+#[derive(Component)]
+pub struct Thing(pub Vec2);
 
 /// A tree that fades when it stands between the camera and the player.
 #[derive(Component)]
@@ -142,6 +148,10 @@ pub fn setup(mut commands: Commands, mut mats: ResMut<Assets<StandardMaterial>>,
     palette.tree = mats.add(StandardMaterial { base_color: Color::WHITE, perceptual_roughness: 0.9, ..default() });
     palette.tree_faded = mats.add(StandardMaterial { base_color: Color::srgba(1.0, 1.0, 1.0, 0.22), alpha_mode: AlphaMode::Blend, perceptual_roughness: 0.9, ..default() });
     palette.trees = [meshes.add(tree_mesh(false)), meshes.add(tree_mesh(true))];
+    palette.tree_dim = [
+        mats.add(StandardMaterial { base_color: Color::srgb(0.5, 0.5, 0.55), perceptual_roughness: 0.9, ..default() }),
+        mats.add(StandardMaterial { base_color: Color::srgb(0.12, 0.13, 0.16), perceptual_roughness: 1.0, ..default() }),
+    ];
     commands.insert_resource(GlobalAmbientLight { color: Color::srgb(0.75, 0.8, 0.95), brightness: 420.0, ..default() });
     commands.spawn((
         DirectionalLight { illuminance: 9_000.0, shadow_maps_enabled: true, ..default() },
@@ -485,6 +495,7 @@ pub fn entities(
     mut mats: ResMut<Assets<StandardMaterial>>,
     mut palette: ResMut<Palette>,
     mut q: Query<&mut Transform, With<Creature>>,
+    input: Res<crate::controls::Input>,
     time: Res<Time>,
 ) {
     let Some(conn) = &net.conn else { return };
@@ -511,7 +522,10 @@ pub fn entities(
         let Some((p, heading)) = scene.shown.get(id).copied() else { continue };
         let alive = chars.get(id).is_none_or(|c| c.alive);
         // Facing: heading is radians with +x east, +y south; the models face local +X.
-        let mut rot = Quat::from_rotation_y(-heading.unwrap_or(b.heading));
+        // My own character turns toward where I look with the mouse (shown locally only: the
+        // authority has no look direction yet).
+        let look = input.look.filter(|_| Some(*id) == net.my_id).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
+        let mut rot = Quat::from_rotation_y(-look.or(heading).unwrap_or(b.heading));
         if !alive {
             rot *= Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
         }
@@ -526,7 +540,7 @@ pub fn entities(
         let (mesh, size, color) = creature_look(&b.kind, Some(*id) == net.my_id);
         let mesh = palette.mesh(&mut meshes, mesh, || shape(mesh));
         let mat = palette.color(&mut mats, color, false);
-        let e = commands.spawn((Creature, Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(at).with_rotation(rot).with_scale(size))).id();
+        let e = commands.spawn((Creature(*id), Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(at).with_rotation(rot).with_scale(size))).id();
         scene.creatures.insert(*id, e);
     }
     // Resources (tag 0) and structures (tag 1): static, spawned once per row (re-placed when
@@ -547,7 +561,7 @@ pub fn entities(
         let mesh = palette.mesh(&mut meshes, mesh, || shape(mesh));
         let mat = palette.color(&mut mats, color, glow);
         let at = scene.at3(x, y);
-        let e = commands.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(at).with_scale(size * fill))).id();
+        let e = commands.spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(at).with_scale(size * fill))).id();
         scene.things.insert(key, e);
     }
     scene.things.retain(|k, e| {
@@ -559,10 +573,12 @@ pub fn entities(
     });
 }
 
-/// Fade trees that stand between the camera and the player's head.
+/// Fade trees that stand between the camera and the player's head; with the perception mock,
+/// dim trees outside sight (remembered) or darken them (never seen).
 pub fn fade_trees(
     target: Res<crate::controls::Target>,
     palette: Res<Palette>,
+    sight: Res<crate::sight::Sight>,
     cam: Query<&Transform, (With<Camera3d>, Without<Tree>)>,
     mut trees: Query<(&Transform, &mut MeshMaterial3d<StandardMaterial>), With<Tree>>,
 ) {
@@ -571,8 +587,17 @@ pub fn fade_trees(
     let (a, b) = (cam.translation, head);
     let ab = b - a;
     let len2 = ab.length_squared().max(1e-4);
+    let me2 = Vec2::new(me.x, me.z);
     for (t, mut mat) in &mut trees {
         let p = t.translation + Vec3::Y * 1.2 * t.scale.y;
+        let state = sight.state_at(me2, Vec2::new(t.translation.x, t.translation.z));
+        if state > 0 {
+            let want = &palette.tree_dim[state as usize - 1];
+            if &mat.0 != want {
+                mat.0 = want.clone();
+            }
+            continue;
+        }
         if p.distance_squared(head) > 400.0 {
             if mat.0 != palette.tree {
                 mat.0 = palette.tree.clone();

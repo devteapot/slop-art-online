@@ -30,6 +30,12 @@ pub struct Input {
     pub said: Vec<(u64, String)>,
     /// Whether a movement direction is held (the camera keeps the keys' frame meanwhile).
     pub moving: bool,
+    /// Face the cursor: you move with WASD and look where the mouse points.
+    pub mouse_look: bool,
+    /// Where I look (sim direction), with mouse look on.
+    pub look: Option<Vec2>,
+    /// Scripted look direction (demo), overriding the mouse.
+    pub scripted_look: Option<Vec2>,
 }
 
 pub fn target(net: NonSend<Net>, scene: NonSend<Scene>, mut target: ResMut<Target>) {
@@ -53,6 +59,7 @@ pub fn movement(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut input: ResMut<Input>,
+    target: Res<Target>,
     ui: Res<crate::hud::UiWants>,
     time: Res<Time>,
 ) {
@@ -60,6 +67,11 @@ pub fn movement(
     if net.my_id.is_none() {
         return;
     }
+    input.look = input.scripted_look.or_else(|| {
+        let me = target.0?;
+        let c = cam.cursor_ground?;
+        input.mouse_look.then(|| Vec2::new(c.x - me.x, c.z - me.z)).filter(|d| d.length() > 0.3)
+    });
     let (up, right) = cam.control_axes();
     let (dir, run) = if let Some((d, run)) = input.scripted {
         (d, run)

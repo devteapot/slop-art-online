@@ -45,10 +45,35 @@ pub struct Rig {
     pub lead: f32,
     /// Q/E rotate in 45° steps.
     pub rotate_steps: bool,
-    /// Ease the yaw toward the way the character walks (opt-in).
-    pub follow_heading: bool,
+    /// How the view turns around the vertical (no free orbit in any mode).
+    pub yaw_mode: YawMode,
     /// Come in and frame both speakers during a conversation.
     pub frame_talk: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum YawMode {
+    /// Fixed (north up unless turned with Q/E).
+    North,
+    /// Eases behind the way you walk (deadband 20°, at most 35°/s).
+    FollowHeading,
+    /// North up zoomed out, increasingly behind where you face as you zoom in.
+    ZoomBlend,
+    /// Turns toward where you look with the mouse when it points well off to the side
+    /// (deadband 30°, up to 90°/s), blended in with zoom like `ZoomBlend`.
+    MouseSteer,
+}
+
+impl YawMode {
+    pub const ALL: [YawMode; 4] = [YawMode::North, YawMode::FollowHeading, YawMode::ZoomBlend, YawMode::MouseSteer];
+    pub fn label(self) -> &'static str {
+        match self {
+            YawMode::North => "fixed (north up, Q/E steps)",
+            YawMode::FollowHeading => "follow heading",
+            YawMode::ZoomBlend => "zoom blend (north out, behind you in)",
+            YawMode::MouseSteer => "mouse steer (needs mouse look)",
+        }
+    }
 }
 
 pub struct Preset {
@@ -62,7 +87,7 @@ const fn view(pitch: f32, distance: f32, fov: f32) -> View {
 }
 
 const fn fixed(pitch: f32, distance: f32, fov: f32, lead: f32) -> Rig {
-    Rig { far: view(pitch, distance, fov), near: view(pitch, distance, fov), tilt: false, yaw: 0.0, ortho: false, lead, rotate_steps: false, follow_heading: false, frame_talk: false }
+    Rig { far: view(pitch, distance, fov), near: view(pitch, distance, fov), tilt: false, yaw: 0.0, ortho: false, lead, rotate_steps: false, yaw_mode: YawMode::North, frame_talk: false }
 }
 
 pub const PRESETS: [Preset; 4] = [
@@ -80,7 +105,7 @@ pub const PRESETS: [Preset; 4] = [
             ortho: false,
             lead: 3.0,
             rotate_steps: true,
-            follow_heading: false,
+            yaw_mode: YawMode::ZoomBlend,
             frame_talk: true,
         },
     },
@@ -93,8 +118,10 @@ pub struct Cam {
     /// Zoom: 0 = all the way out, 1 = all the way in.
     pub zoom: f32,
     shown_zoom: f32,
-    /// Yaw actually shown (eases toward `rig.yaw`).
-    shown_yaw: f32,
+    /// Yaw actually shown, degrees (eases toward the mode's target).
+    pub shown_yaw: f32,
+    /// Yaw that trails where you face, for the following modes.
+    follow_yaw: f32,
     /// Yaw the movement keys are relative to; it lags a turning camera while keys are held.
     control_yaw: f32,
     focus: Vec3,
@@ -115,6 +142,7 @@ impl Default for Cam {
             zoom: 0.0,
             shown_zoom: 0.0,
             shown_yaw: 0.0,
+            follow_yaw: 0.0,
             control_yaw: 0.0,
             focus: Vec3::ZERO,
             talk: 0.0,
@@ -137,6 +165,7 @@ impl Cam {
         self.preset = i;
         self.rig = PRESETS[i].rig;
         self.zoom = if self.rig.tilt { 0.35 } else { 0.5 };
+        self.follow_yaw = self.shown_yaw;
     }
 
     /// Ground-plane unit vectors for "screen up" and "screen right" of the movement keys.
@@ -235,18 +264,40 @@ pub fn follow(
     cam.talk += ((framing as u8 as f32) - cam.talk) * ease(3.0);
     cam.shown_zoom += (cam.zoom - cam.shown_zoom) * ease(8.0);
 
-    // Opt-in: ease the yaw toward the way I walk (deadband ±20°, at most 35°/s).
-    if cam.rig.follow_heading && input.moving {
-        if let Some(h) = net.my_id.and_then(|id| scene.shown.get(&id)).and_then(|(_, h)| *h) {
-            let want = h.to_degrees() + 90.0;
-            let diff = (want - cam.rig.yaw + 540.0).rem_euclid(360.0) - 180.0;
-            if diff.abs() > 20.0 {
-                cam.rig.yaw += diff.signum() * (35.0 * dt).min(diff.abs() - 20.0);
-            }
+    // Where I face, as a camera yaw (degrees): where I look with the mouse, else the way I walk.
+    let heading = net.my_id.and_then(|id| scene.shown.get(&id)).and_then(|(_, h)| *h);
+    let look = input.look.map(|l| l.y.atan2(l.x));
+    let face = look.or(heading).map(|h| h.to_degrees() + 90.0);
+    let diff = |want: f32, from: f32| (want - from + 540.0).rem_euclid(360.0) - 180.0;
+    let mode = cam.rig.yaw_mode;
+    if let Some(want) = face {
+        let d = diff(want, cam.follow_yaw);
+        let (band, rate, active) = match mode {
+            YawMode::North => (0.0, 0.0, false),
+            YawMode::FollowHeading => (20.0, 35.0, input.moving),
+            YawMode::ZoomBlend => (15.0, 60.0, input.moving || look.is_some()),
+            // Pointing well off to the side keeps turning the view, faster the further off.
+            YawMode::MouseSteer => (30.0, (2.0 * (d.abs() - 30.0)).min(90.0), look.is_some()),
+        };
+        if active && d.abs() > band {
+            cam.follow_yaw += d.signum() * (rate * dt).min(d.abs() - band);
         }
     }
-    let k = ease(10.0);
-    cam.shown_yaw += (cam.rig.yaw - cam.shown_yaw) * k;
+    // How much of the view follows: all of it, or (blend modes) more as you zoom in.
+    let w = match mode {
+        YawMode::North => 0.0,
+        YawMode::FollowHeading => 1.0,
+        YawMode::ZoomBlend | YawMode::MouseSteer => {
+            let t = ((cam.shown_zoom - 0.35) / 0.55).clamp(0.0, 1.0);
+            t * t * (3.0 - 2.0 * t)
+        }
+    };
+    if w == 0.0 {
+        cam.follow_yaw = cam.rig.yaw;
+    }
+    let target_yaw = cam.rig.yaw + diff(cam.follow_yaw, cam.rig.yaw) * w;
+    let delta = diff(target_yaw, cam.shown_yaw);
+    cam.shown_yaw += delta * ease(10.0);
     // The movement keys keep their frame while held and catch up over about half a second
     // (Haigh-Hutchinson: never change the control reference instantly).
     cam.control_yaw = if input.moving { cam.control_yaw + (cam.shown_yaw - cam.control_yaw) * ease(2.0) } else { cam.shown_yaw };

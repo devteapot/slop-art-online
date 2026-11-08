@@ -42,6 +42,7 @@ pub fn draw(
     mut input: ResMut<Input>,
     mut hud: ResMut<Hud>,
     mut wants: ResMut<UiWants>,
+    mut sight: ResMut<crate::sight::Sight>,
     keys: Res<ButtonInput<KeyCode>>,
     target: Res<Target>,
     camq: Query<(&Camera, &Transform), With<Camera3d>>,
@@ -123,10 +124,46 @@ pub fn draw(
             ui.add(egui::Slider::new(&mut r.lead, 0.0..=10.0).text("cursor lean (tiles)"));
             ui.checkbox(&mut r.rotate_steps, "Q/E rotate 45°");
             ui.checkbox(&mut r.frame_talk, "frame conversations");
-            ui.checkbox(&mut r.follow_heading, "yaw follows heading (opt-in)");
+            egui::ComboBox::from_label("turning").selected_text(r.yaw_mode.label()).show_ui(ui, |ui| {
+                for m in crate::camera::YawMode::ALL {
+                    ui.selectable_value(&mut r.yaw_mode, m, m.label());
+                }
+            });
+            ui.checkbox(&mut input.mouse_look, "mouse look (face the cursor)");
             ui.add(egui::Slider::new(&mut cam.zoom, 0.0..=1.0).text("zoom (wheel)"));
             ui.label(egui::RichText::new(format!("now: pitch {:.0}°, distance {:.1}, fov {:.0}°{}", shown.pitch, shown.distance, shown.fov, if cam.talk_partner.is_some() { " · framing a conversation" } else { "" })).small().weak());
         });
+    }
+
+    // Perception mock.
+    if hud.tuning {
+        egui::Window::new("Sight (mock)").anchor(egui::Align2::RIGHT_BOTTOM, [-12.0, -10.0]).resizable(false).default_width(300.0).show(ctx, |ui| {
+            ui.checkbox(&mut sight.enabled, "show only what I perceive");
+            ui.add(egui::Slider::new(&mut sight.radius, 3.0..=40.0).text("sight (tiles)"));
+            ui.horizontal(|ui| {
+                for (label, r) in [("night 6", 6.0), ("torch 9", 9.0), ("day 11", 11.0), ("scout 20", 20.0)] {
+                    if ui.small_button(label).clicked() {
+                        sight.radius = r;
+                    }
+                }
+            });
+            ui.add(egui::Slider::new(&mut sight.cone, 30.0..=180.0).text("cone half-angle °"));
+            ui.add(egui::Slider::new(&mut sight.close, 0.0..=6.0).text("all-round (tiles)"));
+            ui.checkbox(&mut sight.remember, "remember seen ground");
+            ui.label(egui::RichText::new("Client-only: the authority still sends everything (its laws: day 11, night 6, torch 9, hearing 9).").small().weak());
+        });
+    }
+
+    // Compass: where north is when the view turns.
+    {
+        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("compass")));
+        let c = egui::pos2(ctx.content_rect().center().x, 34.0);
+        painter.circle_filled(c, 20.0, egui::Color32::from_black_alpha(140));
+        let a = (-cam.shown_yaw).to_radians();
+        let n = egui::vec2(a.sin(), -a.cos());
+        painter.line_segment([c - n * 13.0, c + n * 13.0], egui::Stroke::new(1.5, egui::Color32::from_gray(160)));
+        painter.circle_filled(c + n * 13.0, 3.5, egui::Color32::from_rgb(230, 80, 70));
+        painter.text(c + n * 13.0 + n * 9.0, egui::Align2::CENTER_CENTER, "N", egui::FontId::proportional(11.0), egui::Color32::WHITE);
     }
 
     // What I perceive: my own experience rows, newest last.
@@ -190,7 +227,12 @@ pub fn draw(
             .map(|e| (e.subject, quoted(&e.text).to_string()))
             .chain(net.my_id.and_then(|me| input.said.last().filter(|(t, _)| scene.now_ms - (*t as f64) < BUBBLE_MS).map(|(_, l)| (me, l.clone()))))
             .collect();
+        let me2 = target.0.map(|m| Vec2::new(m.x, m.z));
         for (id, (p, _)) in &scene.shown {
+            // Names and speech only over those in sight (what is heard stays in the feed).
+            if Some(*id) != net.my_id && me2.is_some_and(|m| !sight.shows(m, *p)) {
+                continue;
+            }
             let at = scene.at3(p.x, p.y);
             if target.0.is_some_and(|me| me.distance(at) > 30.0) {
                 continue;

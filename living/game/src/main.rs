@@ -16,6 +16,7 @@ mod controls;
 mod demo;
 mod hud;
 mod net;
+mod sight;
 mod world;
 
 use bevy::prelude::*;
@@ -37,15 +38,16 @@ fn main() {
         .init_non_send::<world::Scene>()
         .init_resource::<world::Palette>()
         .init_resource::<world::Draw>()
+        .init_resource::<sight::Sight>()
         .init_resource::<camera::Cam>()
         .init_resource::<controls::Target>()
         .init_resource::<controls::Input>()
         .init_resource::<hud::Hud>()
         .init_resource::<hud::UiWants>()
-        .add_systems(Startup, (world::setup, camera::spawn))
+        .add_systems(Startup, (world::setup, camera::spawn, sight::setup))
         .add_systems(
             Update,
-            (net::pump, world::entities, controls::target, world::terrain, demo::run, controls::movement, camera::follow, world::fade_trees, controls::gizmos).chain(),
+            (net::pump, world::entities, controls::target, world::terrain, demo::run, controls::movement, camera::follow, world::fade_trees, sight::update, controls::gizmos).chain(),
         )
         .add_systems(EguiPrimaryContextPass, hud::draw);
     if let Some(d) = demo::Demo::from_env() {
