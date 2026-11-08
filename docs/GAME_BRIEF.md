@@ -173,6 +173,13 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
 - **A few invariants hold everywhere** so gameplay stays readable: character silhouettes and outlines, threat and faction colours, and the language of effects.
 - **Reference:** Arcane-inspired. Try what the engine can do and iterate toward a specific style, keeping both the look and performance in mind. Blue Protocol, Genshin Impact and Zenless Zone Zero are further references (research in progress).
 - The user is in the EU, which rules out Hunyuan3D, whose licence excludes the EU.
+- **Assets for now: existing models only** (user, 2026-11-08). Build and evolve the world around pre-existing assets. Generate or create game-specific models later, once the world has enough shape and a backstory. It is too early now.
+- **Test environments to explore** (user, 2026-11-08), to see how the shared look and different scales hold up across contrasting places:
+  - a nature world and a normal forest;
+  - a spirit forest with glowing plants;
+  - caverns;
+  - a city of giants and a city of small folk;
+  - a cyberpunk city, a fantasy city and a steampunk city.
 
 **Anime-style references** (Blue Protocol, Genshin Impact, Honkai Star Rail, ZZZ; research of 2026-11-08):
 - **Blue Protocol** (CEDEC 2020/2021 reports: [4Gamer](https://www.4gamer.net/games/467/G046741/20210826001/), [CGWORLD](https://cgworld.jp/feature/202011-cedec2020-bluep.html)):
