@@ -34,8 +34,25 @@ Findings move from the lab to the game when a core version is released and the g
 | Joining | Arrive at the edge of a settlement and ask to join (`community`, `membership`, `join_request` exist) | Being born is too slow at a playable pace |
 | Death | Permanent, as agreed. The player sees how they died and who saw it, then arrives as a new stranger with nothing inherited | Follows [world vision](WORLD_VISION.md) mortality |
 | World pace | Slower than labs (labs run about 5 game days per real hour); set per seed with `life_pace` and `year_days` | To decide by play-testing |
-| Camera details | Zoom-tilt (spike preset 4): one zoom axis from a 52–64° north-up tactical view down to about 24°, conversation framing on, follow-heading yaw opt-in | User, 2026-11-08: liked presets 1–3 and disliked the diagonal view, but found a purely high view less immersive. The camera research (below) found this blend in Baldur's Gate 3, Manor Lords and Diablo IV |
+| Camera details | **Not fixed yet** (user, 2026-11-08). Leading candidate: zoom-tilt (spike preset 4). The view should show only what the character perceives, and how much a character can see could be a capability (below) | The user liked presets 1–3 and found a purely high view less immersive. Fully zoomed in feels most immersive, but it is unclear how that plays with many players, since much of the area is not visible. The camera research found the zoom-tilt blend in Baldur's Gate 3, Manor Lords and Diablo IV |
 | Movement | WASD relative to the camera, plus click-to-move (`goto` to a point) | Matches the chosen genre |
+
+## The view as perception (idea, 2026-11-08)
+
+The user's idea: seeing only what is in front of you makes sense, and skills, passives or kinds of character could change the view. That fits the core's rules:
+
+- The authority already gives every character a sight range (`sight_day` 11, `sight_night` 6, `sight_torch` 9 tiles) and `hearing` 9, and minds receive only what falls inside them. Players are the exception today: they receive every table.
+- **Principle:** the camera presents the character's perception, not the world. A higher or wider view then reveals nothing the character doesn't perceive, so the camera stops being a fairness question. The authority enforces it (perception-scoped views); the client only draws it.
+- **Then the view can be a capability**, granted, learned or bodily like any skill. Possible forms:
+  - a wider or farther sight (a scout, an elevated perch);
+  - a facing cone with peripheral awareness;
+  - night vision;
+  - scent shown as traces (animals already smell beyond sight);
+  - a skill that briefly lifts the camera.
+- **To explore before deciding:**
+  - a client-only mock in the spike: hide what lies beyond sight or outside a facing cone, dim terrain not seen recently, and use a slider for the "sight" capability;
+  - try it at day and night, alone and in a crowd, high and low camera;
+  - only then move the scoping into the authority.
 
 ## Core work the game needs (engine-independent)
 
