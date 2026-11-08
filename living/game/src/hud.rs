@@ -4,7 +4,7 @@
 use crate::camera::{Cam, PRESETS};
 use crate::controls::{self, Input, Target};
 use crate::net::{Net, Status};
-use crate::world::{to3, Scene};
+use crate::world::Scene;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use living_bindings::*;
@@ -103,19 +103,29 @@ pub fn draw(
             }
             ui.label(egui::RichText::new(PRESETS[cam.preset].like).small().weak());
             ui.separator();
+            let shown = cam.shown;
             let r = &mut cam.rig;
-            ui.add(egui::Slider::new(&mut r.pitch, 20.0..=89.0).text("pitch °"));
+            let view = |ui: &mut egui::Ui, v: &mut crate::camera::View, label: &str| {
+                ui.label(egui::RichText::new(label).small().strong());
+                ui.add(egui::Slider::new(&mut v.pitch, 10.0..=89.0).text("pitch °"));
+                ui.add(egui::Slider::new(&mut v.distance, 4.0..=80.0).text("distance"));
+                ui.add(egui::Slider::new(&mut v.fov, 10.0..=70.0).text("fov °"));
+            };
+            ui.checkbox(&mut r.tilt, "zoom tilts the view (zoom-tilt)");
+            if r.tilt {
+                view(ui, &mut r.far, "zoomed out");
+                view(ui, &mut r.near, "zoomed in");
+            } else {
+                view(ui, &mut r.far, "view");
+            }
             ui.add(egui::Slider::new(&mut r.yaw, -180.0..=180.0).text("yaw °"));
             ui.checkbox(&mut r.ortho, "orthographic");
-            if r.ortho {
-                ui.add(egui::Slider::new(&mut r.ortho_height, 8.0..=60.0).text("view height"));
-            } else {
-                ui.add(egui::Slider::new(&mut r.distance, 8.0..=80.0).text("distance"));
-                ui.add(egui::Slider::new(&mut r.fov, 10.0..=70.0).text("fov °"));
-            }
-            ui.add(egui::Slider::new(&mut r.lead, 0.0..=0.4).text("cursor lead"));
+            ui.add(egui::Slider::new(&mut r.lead, 0.0..=10.0).text("cursor lean (tiles)"));
             ui.checkbox(&mut r.rotate_steps, "Q/E rotate 45°");
-            ui.add(egui::Slider::new(&mut cam.zoom, 0.5..=2.0).text("zoom"));
+            ui.checkbox(&mut r.frame_talk, "frame conversations");
+            ui.checkbox(&mut r.follow_heading, "yaw follows heading (opt-in)");
+            ui.add(egui::Slider::new(&mut cam.zoom, 0.0..=1.0).text("zoom (wheel)"));
+            ui.label(egui::RichText::new(format!("now: pitch {:.0}°, distance {:.1}, fov {:.0}°{}", shown.pitch, shown.distance, shown.fov, if cam.talk_partner.is_some() { " · framing a conversation" } else { "" })).small().weak());
         });
     }
 
@@ -181,7 +191,7 @@ pub fn draw(
             .chain(net.my_id.and_then(|me| input.said.last().filter(|(t, _)| scene.now_ms - (*t as f64) < BUBBLE_MS).map(|(_, l)| (me, l.clone()))))
             .collect();
         for (id, (p, _)) in &scene.shown {
-            let at = to3(p.x, p.y);
+            let at = scene.at3(p.x, p.y);
             if target.0.is_some_and(|me| me.distance(at) > 30.0) {
                 continue;
             }

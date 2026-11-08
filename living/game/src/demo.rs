@@ -3,7 +3,7 @@
 //! `human_move` path the keys use, say a line, screenshot again, and quit. It logs the
 //! character's authoritative position before and after the walk.
 
-use crate::camera::{Cam, PRESETS};
+use crate::camera::Cam;
 use crate::controls::{self, Input};
 use crate::net::Net;
 use bevy::prelude::*;
@@ -47,71 +47,75 @@ pub fn run(
         demo.at = now;
         return;
     }
-    let n = PRESETS.len();
+    let Some(&(after, ref act)) = STEPS.get(demo.step) else { return };
+    if now - demo.at < after {
+        return;
+    }
     let d = &mut *demo;
-    let since = now - d.at;
-    let wait = |s: f32| since >= s;
-    match d.step {
-        // Let terrain chunks build around the player first.
-        0 if wait(4.0) => {
-            cam.set_preset(0);
-            d.step = 1;
-            d.at = now;
+    match act {
+        Act::Preset(i, zoom) => {
+            cam.set_preset(*i);
+            cam.zoom = *zoom;
         }
-        // Odd steps photograph preset k; even steps switch to the next one, a moment later, so
-        // a picture never shows the frame in which the camera changed.
-        s if (1..2 * n).contains(&s) && s % 2 == 1 && wait(1.5) => {
-            shot(&mut commands, &d.dir, &format!("camera-{}", s / 2 + 1));
-            d.step += 1;
-            d.at = now;
-        }
-        s if (1..2 * n).contains(&s) && s % 2 == 0 && wait(0.3) => {
-            cam.set_preset(s / 2);
-            d.step += 1;
-            d.at = now;
-        }
-        s if s == 2 * n - 1 + 1 && wait(0.3) => {
-            cam.set_preset(0);
-            d.step += 1;
-            d.at = now;
-        }
-        s if s == 2 * n + 1 && wait(1.0) => {
+        Act::Zoom(z) => cam.zoom = *z,
+        Act::Shot(name) => shot(&mut commands, &d.dir, name),
+        Act::Walk(dir) => {
             d.start = net.my_body().map(|b| (b.x, b.y));
             info!("demo: before walking, authority position {:?}", d.start);
-            input.scripted = Some((Vec2::X, false));
-            d.step += 1;
-            d.at = now;
+            input.scripted = Some((*dir, false));
         }
-        s if s == 2 * n + 2 && wait(3.0) => {
-            input.scripted = Some((Vec2::ZERO, false));
-            d.step += 1;
-            d.at = now;
-        }
-        s if s == 2 * n + 3 && wait(1.5) => {
+        Act::Stop => input.scripted = Some((Vec2::ZERO, false)),
+        Act::Say(line) => {
             let end = net.my_body().map(|b| (b.x, b.y));
             info!("demo: after walking east 3 s, authority position {end:?} (from {:?})", d.start);
             input.scripted = None;
-            let line = "Hello! Is anyone around here?";
             if controls::say(&net, line) {
-                input.said.push((crate::clock::now_ms(), line.into()));
+                input.said.push((crate::clock::now_ms(), (*line).into()));
             }
-            d.step += 1;
-            d.at = now;
         }
-        // Long enough for someone nearby to answer (the verification run has a second player
-        // speak here).
-        s if s == 2 * n + 4 && wait(6.0) => {
-            shot(&mut commands, &d.dir, "after-walk-and-talk");
-            d.step += 1;
-            d.at = now;
-        }
-        s if s == 2 * n + 5 && wait(1.5) => {
+        Act::Exit => {
             for e in net.errors.lock().unwrap().iter() {
                 warn!("demo: reported error: {e}");
             }
-            info!("demo: done");
+            info!("demo: done (camera now pitch {:.0}°, framing {:?})", cam.shown.pitch, cam.talk_partner);
             exit.write(AppExit::Success);
         }
-        _ => {}
     }
+    d.step += 1;
+    d.at = now;
 }
+
+enum Act {
+    Preset(usize, f32),
+    Zoom(f32),
+    Shot(&'static str),
+    Walk(Vec2),
+    Stop,
+    Say(&'static str),
+    Exit,
+}
+
+/// (seconds after the previous step, action). Pictures are taken a moment after each change
+/// so they never show the frame in which the camera moved.
+const STEPS: &[(f32, Act)] = &[
+    (4.0, Act::Preset(0, 0.5)),
+    (2.0, Act::Shot("camera-1")),
+    (0.3, Act::Preset(1, 0.5)),
+    (2.0, Act::Shot("camera-2")),
+    (0.3, Act::Preset(2, 0.5)),
+    (2.0, Act::Shot("camera-3")),
+    (0.3, Act::Preset(3, 0.0)),
+    (2.5, Act::Shot("tilt-far")),
+    (0.3, Act::Zoom(0.55)),
+    (2.5, Act::Shot("tilt-mid")),
+    (0.3, Act::Zoom(1.0)),
+    (2.5, Act::Shot("tilt-near")),
+    (0.3, Act::Preset(3, 0.35)),
+    (1.0, Act::Walk(Vec2::X)),
+    (3.0, Act::Stop),
+    (1.5, Act::Say("Hello! Is anyone around here?")),
+    // Long enough for someone nearby to answer (the verification run has a second player
+    // speak here) and for the camera to frame the conversation.
+    (6.0, Act::Shot("talk-framing")),
+    (1.5, Act::Exit),
+];

@@ -28,10 +28,12 @@ pub struct Input {
     pub scripted: Option<(Vec2, bool)>,
     /// My own lines (authority ms, text): a speaker gets no percept of their own words.
     pub said: Vec<(u64, String)>,
+    /// Whether a movement direction is held (the camera keeps the keys' frame meanwhile).
+    pub moving: bool,
 }
 
 pub fn target(net: NonSend<Net>, scene: NonSend<Scene>, mut target: ResMut<Target>) {
-    target.0 = net.my_id.and_then(|id| scene.shown.get(&id)).map(|(p, _)| crate::world::to3(p.x, p.y));
+    target.0 = net.my_id.and_then(|id| scene.shown.get(&id)).map(|(p, _)| scene.at3(p.x, p.y));
 }
 
 /// Quantize to 16 directions so tiny camera eases don't resend.
@@ -58,7 +60,7 @@ pub fn movement(
     if net.my_id.is_none() {
         return;
     }
-    let (up, right) = cam.ground_axes();
+    let (up, right) = cam.control_axes();
     let (dir, run) = if let Some((d, run)) = input.scripted {
         (d, run)
     } else if input.chat_open || ui.keyboard {
@@ -79,6 +81,7 @@ pub fn movement(
         }
         (d.normalize_or_zero(), keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight))
     };
+    input.moving = dir != Vec2::ZERO;
     let (qx, qy) = quantize(dir);
     let intent = (qx, qy, run && (qx, qy) != (0, 0));
     // Release of all keys sends one stop; idle frames send nothing.

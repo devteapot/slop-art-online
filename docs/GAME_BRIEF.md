@@ -34,7 +34,7 @@ Findings move from the lab to the game when a core version is released and the g
 | Joining | Arrive at the edge of a settlement and ask to join (`community`, `membership`, `join_request` exist) | Being born is too slow at a playable pace |
 | Death | Permanent, as agreed. The player sees how they died and who saw it, then arrives as a new stranger with nothing inherited | Follows [world vision](WORLD_VISION.md) mortality |
 | World pace | Slower than labs (labs run about 5 game days per real hour); set per seed with `life_pace` and `year_days` | To decide by play-testing |
-| Camera details | North up, fixed, about 52–64° down, scroll zoom within limits; tune between the spike's presets 1–3 | User, 2026-11-08: liked presets 1–3 of the spike and disliked the diagonal (45°) view; the isometric orthographic preset got no comment |
+| Camera details | Zoom-tilt (spike preset 4): one zoom axis from a 52–64° north-up tactical view down to about 24°, conversation framing on, follow-heading yaw opt-in | User, 2026-11-08: liked presets 1–3 and disliked the diagonal view, but found a purely high view less immersive. The camera research (below) found this blend in Baldur's Gate 3, Manor Lords and Diablo IV |
 | Movement | WASD relative to the camera, plus click-to-move (`goto` to a point) | Matches the chosen genre |
 
 ## Core work the game needs (engine-independent)
@@ -73,6 +73,25 @@ Pinned versions at the time: module, SDK and server `2.10.1` (upgraded to 2.14.1
   - Keep subscriptions small and precise, grouped by lifetime.
   - When moving, subscribe to the new set before dropping the old one.
   - **Implication:** the client subscribes to a moving window of chunks around the player.
+
+## World look and camera research (2026-11-08)
+
+**Terrain: heightfield plus meshes, not voxels.**
+- No Man's Sky does use a density field ("voxels") meshed smoothly, with dual contouring, and with dual marching cubes since its 5.0 update ([GDC 2017](https://www.gdcvault.com/play/1024265/Continuous-World-Generation-in-No), [5.0 notes](https://www.nomanssky.com/worlds-part-i-update/)). Its terrain edits are buffers with known size limits.
+- For a world whose rules are a flat tile grid, that brings level-of-detail seams, 3D memory and harder edit syncing, with no gameplay that needs caves or overhangs.
+- Shipped stylized worlds mostly use heightfields: The Witcher 3 ([GDC](https://www.gdcvault.com/play/1020394/Landscape-Creation-and-Rendering-in)), Valheim (height edits). BitCraft, the closest match to our model, uses discrete height steps on a grid ([blog](https://bitcraftonline.com/blog/shaping-the-world)).
+- **Decision:** a seeded height function in the shared rules crate (`living_rules::height`), so characters stand on the drawn ground, plus separate meshes for rocks and cliffs. The authority stays 2D. If height ever matters to gameplay, the authority calls the same function or stores per-chunk heights.
+- A surface-nets cliff on one chunk is the test for whether real overhangs are worth it later.
+
+**Camera: zoom-tilt with context framing.**
+- Diablo IV brings the camera closer in towns and frames conversations while keeping its isometric feel, and pulls back for big fights ([GameBanshee](https://www.gamebanshee.com/3dhhd)).
+- Baldur's Gate 3 and Manor Lords scroll from a bird's-eye view down to near ground level ([PCGamesN](https://www.pcgamesn.com/baldurs-gate-3/camera-controls), [TechRadar](https://www.techradar.com/gaming/manor-lords-preview-camera-feature-brings-you-down-to-earth)).
+- Guild Wars 2 and Throne and Liberty make a follow-heading camera opt-in ([GW2 wiki](https://wiki.guildwars2.com/wiki/Camera)).
+- Design rules applied:
+  - pitch, distance and field of view come from one zoom value (Nesky, [50 Camera Mistakes](https://gdcvault.com/play/1020460/50-Camera));
+  - the movement keys never change direction instantly (Haigh-Hutchinson);
+  - the player's zoom overrides the automatic framing.
+- **Open tension:** cursor aiming loses precision at low angles. Skillshots will need a pitch floor while aiming, an automatic raise in combat, or a reticle (as in GW2's action camera).
 
 ## Dependency upgrades (checked 2026-11-08)
 

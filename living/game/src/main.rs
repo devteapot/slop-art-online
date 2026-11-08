@@ -23,7 +23,7 @@ use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 
 fn main() {
     let mut app = App::new();
-    app.insert_resource(ClearColor(Color::srgb(0.53, 0.68, 0.82)))
+    app.insert_resource(ClearColor(camera::SKY))
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Slop Art Online — camera spike".into(),
@@ -36,6 +36,7 @@ fn main() {
         .init_non_send::<net::Net>()
         .init_non_send::<world::Scene>()
         .init_resource::<world::Palette>()
+        .init_resource::<world::Draw>()
         .init_resource::<camera::Cam>()
         .init_resource::<controls::Target>()
         .init_resource::<controls::Input>()
@@ -44,7 +45,7 @@ fn main() {
         .add_systems(Startup, (world::setup, camera::spawn))
         .add_systems(
             Update,
-            (net::pump, world::entities, controls::target, world::terrain, demo::run, controls::movement, camera::follow, controls::gizmos).chain(),
+            (net::pump, world::entities, controls::target, world::terrain, demo::run, controls::movement, camera::follow, world::fade_trees, controls::gizmos).chain(),
         )
         .add_systems(EguiPrimaryContextPass, hud::draw);
     if let Some(d) = demo::Demo::from_env() {
