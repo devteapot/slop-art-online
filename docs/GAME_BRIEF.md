@@ -124,7 +124,7 @@ Pinned versions at the time: module, SDK and server `2.10.1` (upgraded to 2.14.1
 ## Scale (decided 2026-11-08)
 
 **One tile is one metre.** The rules already read that way:
-- walking is 2.6 m/s and running 3.9 m/s;
+- walking is 2.6 m/s and running 3.9 m/s. The look-dev client walks at the authored clips' 1.4 and 3.6 m/s instead. Settle one pair before the clips play on authority-driven characters: a brisker walk clip, or slower rules.
 - personal space is 0.8 m;
 - a campfire warms within 3.5 m and a shelter within 2.5 m;
 - speech carries 9 m.
@@ -140,7 +140,7 @@ What doesn't fit yet is the world, not the drawing:
 - day sight of 11 m is short;
 - the default world (four walled cities between mountains and a sea) is only 512 × 512 m.
 
-Both are settings for the game's own world (seed and laws), not the lab's. Body size is so far only a client slider ("my size"). Real sizes of character would need the rules to carry a size: reach, separation, speed and sight.
+Both are settings for the game's own world (seed and laws), not the lab's. A generic km-scale placeholder world, with travel times, densities, landmark visibility and hosting costs, is drafted in [first world](FIRST_WORLD.md). Body size is so far only a client slider ("my size"). Real sizes of character would need the rules to carry a size: reach, separation, speed and sight.
 
 ## Art direction (proposal, 2026-11-08)
 
