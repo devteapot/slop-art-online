@@ -30,7 +30,7 @@ python3 $V cleanup --run game-1                          # when done
 | Right click | walk to that point (`human_act` with `goto`) |
 | Enter | say something; only characters within earshot hear it (`human_say`) |
 | Q / E | rotate 45° (when the preset allows it) |
-| Mouse cursor | where you face and aim; toward a side of the screen it turns the view |
+| Mouse cursor | where you face and aim (turning the view by pointing at screen sides is an F1 option, off by default) |
 | `[` / `]` held, or middle mouse drag | rotate the view (90°/s for the keys); it stays where you leave it |
 | Alt + mouse | glance around; the view eases back on release |
 | F1 | camera and sight panels |
@@ -45,7 +45,7 @@ The line from your character to the cursor shows where an aimed skill would go. 
   - Trees are 8–15 m, with bushes and berry bushes between; huts have roofs, and town walls are 2.6 m.
 - **One camera:**
   - about 40° down and 16 m away for an adult, scaled to your size ("my size" in F1 tries a giant or a small character);
-  - you face the cursor, the view turns while the cursor is toward a side, `[` `]` or middle-drag rotate it, and Alt glances;
+  - you face the cursor; the view turns only when you turn it, with `[` `]` or middle-drag, and Alt glances (turning by pointing is an option, off by default);
   - conversations are framed;
   - the view never pulls back further than about 1.5 × your sight, so night sight brings it down and in.
 - **Occlusion:** trees between the camera and you, or close to you on the camera's side, are hidden, with a faded band around them.

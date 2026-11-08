@@ -63,7 +63,7 @@ The user's idea: seeing only what is in front of you makes sense, and skills, pa
   |---|---|
   | Move | WASD, relative to the camera |
   | Face and aim | the cursor |
-  | Turn by pointing | the cursor toward a side of the screen |
+  | Turn by pointing | the cursor toward a side of the screen (**dropped as the default**: the user disliked it, 2026-11-08; an F1 option) |
   | Rotate the view | `[` / `]` or middle-drag; stays where you leave it |
   | Glance | Alt + mouse; springs back |
 

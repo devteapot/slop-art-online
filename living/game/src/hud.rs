@@ -91,7 +91,7 @@ pub fn draw(
             if let Some(e) = net.errors.lock().unwrap().last() {
                 ui.colored_label(egui::Color32::LIGHT_RED, e);
             }
-            ui.label(egui::RichText::new("WASD move · Shift run · cursor: face and aim · cursor toward a side: turn · [ ] or middle-drag: rotate · Alt+mouse: glance · right click: walk to · Enter: talk · F1 panels").small().weak());
+            ui.label(egui::RichText::new("WASD move · Shift run · cursor: face and aim · [ ] or middle-drag: rotate · Alt+mouse: glance · right click: walk to · Enter: talk · F1 panels").small().weak());
         });
     });
 
@@ -105,8 +105,11 @@ pub fn draw(
             ui.add(egui::Slider::new(&mut r.view.distance, 5.0..=40.0).text("distance (m)"));
             ui.add(egui::Slider::new(&mut r.view.fov, 20.0..=70.0).text("fov °"));
             ui.label(egui::RichText::new("turning").small().strong());
-            ui.add(egui::Slider::new(&mut r.steer_zone, 0.1..=0.9).text("middle zone (no turn)"));
-            ui.add(egui::Slider::new(&mut r.steer_rate, 0.0..=240.0).text("turn by pointing °/s"));
+            ui.checkbox(&mut r.steer, "turn by pointing at screen sides");
+            if r.steer {
+                ui.add(egui::Slider::new(&mut r.steer_zone, 0.1..=0.9).text("middle zone (no turn)"));
+                ui.add(egui::Slider::new(&mut r.steer_rate, 0.0..=240.0).text("turn by pointing °/s"));
+            }
             ui.add(egui::Slider::new(&mut r.rotate_rate, 20.0..=240.0).text("[ ] rotate °/s"));
             ui.add(egui::Slider::new(&mut r.lead, 0.0..=8.0).text("cursor lean (m)"));
             ui.checkbox(&mut r.frame_talk, "frame conversations");

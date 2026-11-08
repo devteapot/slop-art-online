@@ -2,8 +2,8 @@
 //!
 //! - **View:** mid-way between a tactical view and the ground, about 40° down and 16 m away for an
 //!   ordinary adult, fixed (no zoom). Distance and focus height scale with the character's size.
-//! - **Facing and turning:** you face the cursor; the view turns while the cursor sits toward a
-//!   side of the screen (never when it is below your character, as when aiming behind you).
+//! - **Facing:** you face the cursor. The view only turns when you turn it (below); turning by
+//!   pointing toward a screen side is an option, off by default.
 //! - **Rotation:** hold `[` or `]`, or drag with the middle button; the view stays where you leave
 //!   it. Alt + mouse glances around and springs back.
 //! - **Context:** conversations frame both speakers, until you rotate or the talk ends.
@@ -42,7 +42,9 @@ pub struct Rig {
     pub view: View,
     /// Where the view goes when it has to come in (sight bound): low and close.
     pub close: View,
-    /// Share of the half-screen around the centre where the cursor doesn't turn the view.
+    /// Turn the view while the cursor sits toward a side of the screen (off by default: the user
+    /// found it unpleasant, 2026-11-08). Outside `steer_zone` of the half-screen it turns.
+    pub steer: bool,
     pub steer_zone: f32,
     /// Fastest the view turns by pointing, and by `[` `]` (degrees per second).
     pub steer_rate: f32,
@@ -58,6 +60,7 @@ impl Default for Rig {
         Self {
             view: View { pitch: 40.0, distance: 16.0, fov: 44.0 },
             close: View { pitch: 24.0, distance: 7.5, fov: 52.0 },
+            steer: false,
             steer_zone: 0.45,
             steer_rate: 90.0,
             rotate_rate: 90.0,
@@ -184,7 +187,7 @@ pub fn follow(
         (false, _, _) => cursor,
     };
     let mut turn = 0.0;
-    if !ui.pointer && !input.chat_open {
+    if r.steer && !ui.pointer && !input.chat_open {
         if let (Some((c, size2)), Some(me)) = (steer_cursor, target.0) {
             let nx = (c.x - size2.x / 2.0) / (size2.x / 2.0);
             let me_y = camera.world_to_viewport(gtf, me).map(|p| p.y).unwrap_or(size2.y / 2.0);
