@@ -63,7 +63,8 @@ The line from your character to the cursor shows where an aimed skill would go. 
   - conversations are framed;
   - the view never pulls back further than about 1.5 × your sight, so night sight brings it down and in.
 - **Look (F1 → Look):**
-  - one toon material on every surface: banded sun, hue-tinted shadows, brushy band edges, rim light;
+  - one toon material on every surface, after Blue Protocol: a hard step with about 70% lit, shadows whose hue is shifted toward a target with saturation kept, slightly brushy band edges, rim light;
+  - a finishing pass (`edges.wesl`): edge lines from the depth and normal prepasses, drawn outside silhouettes and fading with distance; a screen-space rim on silhouettes facing the sun; a warm film gradient; saturation grading. SMAA replaces MSAA so the prepasses stay single-sample;
   - outlines on characters and buildings, which the ground, trees and props hide;
   - every parameter is tunable, with a toggle to compare against the plain look.
 - **Occlusion:** trees between the camera and you, or close to you on the camera's side, are hidden, with a faded band around them.

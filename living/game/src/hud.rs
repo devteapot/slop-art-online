@@ -154,6 +154,22 @@ pub fn draw(
             ui.checkbox(&mut s.outlines, "outlines");
             ui.add(egui::Slider::new(&mut s.outline_people, 0.0..=5.0).text("outline: people (px)"));
             ui.add(egui::Slider::new(&mut s.outline_things, 0.0..=5.0).text("outline: objects (px)"));
+            ui.separator();
+            ui.checkbox(&mut s.edges, "finishing pass: edge lines, screen rim, film gradient");
+            ui.add(egui::Slider::new(&mut s.line_strength, 0.0..=1.0).text("edge lines"));
+            ui.add(egui::Slider::new(&mut s.depth_threshold, 0.01..=0.3).text("depth edge threshold"));
+            ui.add(egui::Slider::new(&mut s.normal_threshold, 0.05..=1.5).text("crease threshold"));
+            ui.add(egui::Slider::new(&mut s.line_width, 0.5..=3.0).text("line width (px)"));
+            ui.horizontal(|ui| {
+                ui.label("line colour");
+                ui.color_edit_button_rgb(&mut s.line_color);
+            });
+            ui.add(egui::Slider::new(&mut s.screen_rim, 0.0..=0.6).text("screen rim light"));
+            ui.add(egui::Slider::new(&mut s.grade, 0.0..=0.6).text("film gradient"));
+            ui.add(egui::Slider::new(&mut s.saturation, 0.6..=1.5).text("saturation"));
+            ui.add(egui::Slider::new(&mut s.shadow_hue, 0.0..=1.0).text("shadow hue (target)"));
+            ui.add(egui::Slider::new(&mut s.hue_shift, 0.0..=0.6).text("shadow hue shift"));
+            ui.add(egui::Slider::new(&mut s.shadow_saturation, 0.5..=1.6).text("shadow saturation"));
             ui.horizontal(|ui| {
                 ui.label("outline colour");
                 ui.color_edit_button_rgb(&mut s.outline_color);

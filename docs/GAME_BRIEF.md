@@ -195,6 +195,11 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
   - every surface uses one toon material: two bands with a soft, brush-broken edge, hue-tinted shadows, a darker far side, a rim light and emission;
   - characters and buildings get `bevy_mod_outline` outlines, and ground, trees and props act as stencils that hide outlines behind them;
   - every parameter is a slider in F1 → Look, with an on/off comparison.
+  - Blue Protocol techniques added the same day:
+    - a hard step with about 70% lit;
+    - shadows made by hue shift with saturation kept;
+    - a finishing pass with depth and normal edge lines drawn outside silhouettes, a screen-space rim from depth, and a film gradient with saturation grading.
+  - Still to add: flattened face normals and SDF face shadows, which need real character heads.
 
 **Bevy 0.20.1 support** (checked in source and crates.io):
 - built in: extended materials (WGSL/WESL), fullscreen post-processing materials, depth and normal prepasses, colour grading, bloom, fog, decals, and stepped glTF interpolation;

@@ -30,6 +30,9 @@ struct Toon {
     band: vec4<f32>,
     // x: brush scale (1/m), y: ambient lift, z: second (core) band darkness, w: exposure.
     extra: vec4<f32>,
+    // Shadow colour by hue shift (Blue Protocol): x target hue (0..1), y how far toward it,
+    // z saturation multiplier, w unused.
+    shade: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -59,6 +62,42 @@ fn noise3(p: vec3<f32>) -> f32 {
     let x01 = mix(n001, n101, u.x);
     let x11 = mix(n011, n111, u.x);
     return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+}
+
+fn rgb_to_hsv(c: vec3<f32>) -> vec3<f32> {
+    let mx = max(c.r, max(c.g, c.b));
+    let mn = min(c.r, min(c.g, c.b));
+    let d = mx - mn;
+    var h = 0.0;
+    if (d > 1e-5) {
+        if (mx == c.r) {
+            h = (c.g - c.b) / d + select(0.0, 6.0, c.g < c.b);
+        } else if (mx == c.g) {
+            h = (c.b - c.r) / d + 2.0;
+        } else {
+            h = (c.r - c.g) / d + 4.0;
+        }
+        h = h / 6.0;
+    }
+    return vec3(h, select(0.0, d / mx, mx > 1e-5), mx);
+}
+
+fn hsv_to_rgb(c: vec3<f32>) -> vec3<f32> {
+    let k = vec3(1.0, 2.0 / 3.0, 1.0 / 3.0);
+    let p = abs(fract(vec3(c.x) + k) * 6.0 - 3.0);
+    return c.z * mix(vec3(1.0), clamp(p - 1.0, vec3(0.0), vec3(1.0)), c.y);
+}
+
+// A shadow colour from a lit colour: the hue moved toward a target, saturation kept (or
+// raised), brightness lowered.
+fn shadow_of(lit: vec3<f32>, value: f32) -> vec3<f32> {
+    var hsv = rgb_to_hsv(lit);
+    var d = toon.shade.x - hsv.x;
+    d = d - round(d);
+    hsv.x = fract(hsv.x + d * toon.shade.y);
+    hsv.y = clamp(hsv.y * toon.shade.z, 0.0, 1.0);
+    hsv.z = hsv.z * value;
+    return hsv_to_rgb(hsv);
 }
 
 @fragment
@@ -107,8 +146,9 @@ fn fragment(
         let core = smoothstep(-0.35 + brush, -0.15 + brush, ndl);
         lit = band * shadow;
         let away = mix(toon.extra.z, 1.0, core);
-        let shade = mix(toon.shadow.rgb * (1.0 - toon.shadow.a) + vec3(toon.extra.y), vec3(1.0), lit) * mix(away, 1.0, lit);
-        var color = albedo.rgb * sun * shade;
+        let lit_color = albedo.rgb * sun;
+        let shadow_color = shadow_of(lit_color, (1.0 - toon.shadow.a) * away) * toon.shadow.rgb + albedo.rgb * sun * toon.extra.y;
+        var color = mix(shadow_color, lit_color, lit);
         // Rim light on silhouettes, stronger on the lit side.
         let rim = pow(clamp(1.0 - max(dot(N, V), 0.0), 0.0, 1.0), toon.band.w) * toon.rim.a * (0.35 + 0.65 * lit);
         color = color + toon.rim.rgb * sun * rim;

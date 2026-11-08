@@ -18,6 +18,7 @@ mod demo;
 mod hud;
 mod lookdev;
 mod net;
+mod post;
 mod sight;
 mod style;
 mod world;
@@ -43,6 +44,8 @@ fn main() {
         )
         .add_plugins(EguiPlugin::default())
         .add_plugins(style::StylePlugin)
+        .add_plugins(post::PostPlugin)
+        .add_systems(PostUpdate, post::update)
         .init_non_send::<net::Net>()
         .init_non_send::<world::Scene>()
         .init_resource::<world::Palette>()

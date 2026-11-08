@@ -123,6 +123,14 @@ pub fn spawn(mut commands: Commands) {
         Projection::from(PerspectiveProjection::default()),
         Transform::from_xyz(0.0, 20.0, 20.0),
         DistanceFog { color: SKY, falloff: FogFalloff::Linear { start: 60.0, end: 110.0 }, ..default() },
+        // The finishing pass reads depth and normals; it needs single-sample prepasses, so
+        // anti-aliasing is SMAA rather than MSAA.
+        bevy::core_pipeline::prepass::DepthPrepass,
+        bevy::core_pipeline::prepass::NormalPrepass,
+        Msaa::Off,
+        bevy::anti_alias::smaa::Smaa::default(),
+        bevy::render::view::ColorGrading::default(),
+        crate::post::Edges::default(),
     ));
 }
 

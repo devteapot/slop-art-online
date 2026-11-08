@@ -23,6 +23,7 @@ pub struct ToonParams {
     pub rim: Vec4,
     pub band: Vec4,
     pub extra: Vec4,
+    pub shade: Vec4,
 }
 
 impl MaterialExtension for ToonExt {
@@ -35,7 +36,12 @@ impl MaterialExtension for ToonExt {
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct Style {
     pub enabled: bool,
-    /// Shadows are the lit colour times this tint, darkened by `shadow_depth`.
+    /// Shadows are the lit colour with its hue moved toward `shadow_hue` (0..1) by
+    /// `hue_shift`, saturation times `shadow_saturation`, darkened by `shadow_depth`, then
+    /// multiplied by `shadow_tint`.
+    pub shadow_hue: f32,
+    pub hue_shift: f32,
+    pub shadow_saturation: f32,
     pub shadow_tint: [f32; 3],
     pub shadow_depth: f32,
     /// N·L where light turns to shadow, and how soft the edge is.
@@ -57,17 +63,36 @@ pub struct Style {
     /// Outline width in pixels for characters and for objects.
     pub outline_people: f32,
     pub outline_things: f32,
+    /// Finishing pass (`edges.wesl`): lines from depth and normal edges, drawn outside
+    /// silhouettes and fading with distance; a screen-space rim; a film gradient.
+    pub edges: bool,
+    pub line_color: [f32; 3],
+    pub line_strength: f32,
+    pub depth_threshold: f32,
+    pub normal_threshold: f32,
+    pub line_width: f32,
+    pub line_fade: [f32; 2],
+    pub screen_rim: f32,
+    pub screen_rim_width: f32,
+    pub grade_color: [f32; 3],
+    pub grade: f32,
+    pub saturation: f32,
 }
 
 impl Default for Style {
     fn default() -> Self {
         Self {
             enabled: true,
-            shadow_tint: [0.62, 0.58, 0.82],
-            shadow_depth: 0.45,
-            threshold: 0.12,
-            softness: 0.05,
-            brush: 0.22,
+            // Blue Protocol-like defaults: a hard step with about 70% lit, cool hue-shifted
+            // shadows that keep their saturation.
+            shadow_hue: 0.72,
+            hue_shift: 0.18,
+            shadow_saturation: 1.1,
+            shadow_tint: [1.0, 1.0, 1.0],
+            shadow_depth: 0.42,
+            threshold: -0.2,
+            softness: 0.02,
+            brush: 0.12,
             brush_size: 1.6,
             core: 0.82,
             ambient: 0.0,
@@ -79,6 +104,18 @@ impl Default for Style {
             outline_color: [0.12, 0.09, 0.1],
             outline_people: 2.0,
             outline_things: 1.2,
+            edges: true,
+            line_color: [0.35, 0.28, 0.32],
+            line_strength: 0.85,
+            depth_threshold: 0.06,
+            normal_threshold: 0.55,
+            line_width: 1.0,
+            line_fade: [25.0, 70.0],
+            screen_rim: 0.18,
+            screen_rim_width: 3.0,
+            grade_color: [1.0, 0.92, 0.8],
+            grade: 0.22,
+            saturation: 1.08,
         }
     }
 }
@@ -92,6 +129,7 @@ impl Style {
             rim: Vec4::new(rr, rg, rb, self.rim),
             band: Vec4::new(self.threshold, self.softness.max(0.001), self.brush, self.rim_width),
             extra: Vec4::new(1.0 / self.brush_size.max(0.05), self.ambient, self.core, self.exposure),
+            shade: Vec4::new(self.shadow_hue, self.hue_shift, self.shadow_saturation, 0.0),
         }
     }
 
@@ -137,7 +175,7 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         style.params()
     } else {
         // Plain look: no bands, no tint, no rim (for comparison).
-        ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0) }
+        ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0) }
     };
     for (_, m) in toons.iter_mut() {
         m.extension.params = p;
