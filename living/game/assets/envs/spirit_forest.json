@@ -1,7 +1,7 @@
 {
  "id": "spirit_forest",
  "name": "Spirit forest",
- "note": "Dusk, glowing flora: emission and bloom against a dark palette.",
+ "note": "Dusk, glowing flora: emission and bloom against a dark palette. A few ancient giants over spirit trees of several forms, with glowing saplings below.",
  "mood": {
   "hour": 19.4,
   "sun": [
@@ -46,16 +46,40 @@
  },
  "slots": [
   {
+   "kind": "giant",
+   "rule": "scatter",
+   "count": 5,
+   "radius": 60,
+   "clear": 10,
+   "height": [
+    20,
+    28
+   ],
+   "spacing": 12
+  },
+  {
    "kind": "tree",
    "rule": "scatter",
-   "count": 90,
+   "count": 70,
    "radius": 60,
    "clear": 6,
    "height": [
-    10,
-    18
+    9,
+    16
    ],
    "spacing": 4
+  },
+  {
+   "kind": "sapling",
+   "rule": "scatter",
+   "count": 30,
+   "radius": 50,
+   "clear": 2,
+   "height": [
+    1.0,
+    2.6
+   ],
+   "spacing": 1.5
   },
   {
    "kind": "glow_mushroom",

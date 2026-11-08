@@ -1,7 +1,7 @@
 {
  "id": "forest",
  "name": "Forest",
- "note": "A dense ordinary forest: canopy occlusion and cut-away.",
+ "note": "A dense, mixed ordinary forest: a few broad old oaks over a canopy of broadleaves, pines, spruces and birches, with coppice, young trees, saplings and dead snags beneath. Canopy occlusion and cut-away.",
  "mood": {
   "hour": 13.0,
   "sun": [
@@ -44,16 +44,112 @@
  },
  "slots": [
   {
+   "kind": "oak",
+   "rule": "scatter",
+   "count": 6,
+   "radius": 60,
+   "clear": 8,
+   "height": [
+    15,
+    21
+   ],
+   "spacing": 9
+  },
+  {
    "kind": "tree",
    "rule": "scatter",
-   "count": 160,
+   "count": 40,
    "radius": 60,
    "clear": 5,
    "height": [
-    9,
+    11,
     16
    ],
+   "spacing": 3.4
+  },
+  {
+   "kind": "pine",
+   "rule": "scatter",
+   "count": 24,
+   "radius": 60,
+   "clear": 5,
+   "height": [
+    12,
+    18
+   ],
    "spacing": 3.2
+  },
+  {
+   "kind": "spruce",
+   "rule": "scatter",
+   "count": 20,
+   "radius": 60,
+   "clear": 5,
+   "height": [
+    14,
+    20
+   ],
+   "spacing": 3.2
+  },
+  {
+   "kind": "birch",
+   "rule": "scatter",
+   "count": 22,
+   "radius": 60,
+   "clear": 4,
+   "height": [
+    9,
+    14
+   ],
+   "spacing": 2.6
+  },
+  {
+   "kind": "coppice",
+   "rule": "scatter",
+   "count": 9,
+   "radius": 60,
+   "clear": 4,
+   "height": [
+    5.5,
+    8
+   ],
+   "spacing": 3.5
+  },
+  {
+   "kind": "young",
+   "rule": "scatter",
+   "count": 30,
+   "radius": 60,
+   "clear": 3,
+   "height": [
+    3.5,
+    7
+   ],
+   "spacing": 2
+  },
+  {
+   "kind": "snag",
+   "rule": "scatter",
+   "count": 10,
+   "radius": 60,
+   "clear": 3,
+   "height": [
+    4,
+    9
+   ],
+   "spacing": 2
+  },
+  {
+   "kind": "sapling",
+   "rule": "scatter",
+   "count": 18,
+   "radius": 55,
+   "clear": 2,
+   "height": [
+    0.8,
+    1.6
+   ],
+   "spacing": 1.2
   },
   {
    "kind": "bush",

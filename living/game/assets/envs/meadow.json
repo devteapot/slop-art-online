@@ -1,7 +1,7 @@
 {
  "id": "meadow",
  "name": "Meadow",
- "note": "Open grassland with a few trees: the baseline. Grass tufts and flower patches give the ground texture at the game camera.",
+ "note": "Open grassland with scattered trees of every age (a few old oaks and birches, coppice, young trees, saplings, one dead snag): the baseline. Grass tufts and flower patches give the ground texture at the game camera.",
  "mood": {
   "hour": 15.0,
   "sun": [
@@ -44,14 +44,81 @@
  },
  "slots": [
   {
+   "kind": "oak",
+   "rule": "scatter",
+   "count": 3,
+   "radius": 60,
+   "clear": 14,
+   "height": [
+    11,
+    16
+   ],
+   "spacing": 10
+  },
+  {
    "kind": "tree",
    "rule": "scatter",
-   "count": 18,
+   "count": 8,
    "radius": 60,
    "clear": 12,
    "height": [
     7,
+    11
+   ]
+  },
+  {
+   "kind": "birch",
+   "rule": "scatter",
+   "count": 3,
+   "radius": 60,
+   "clear": 10,
+   "height": [
+    8,
     12
+   ]
+  },
+  {
+   "kind": "coppice",
+   "rule": "scatter",
+   "count": 2,
+   "radius": 60,
+   "clear": 8,
+   "height": [
+    4.5,
+    7
+   ]
+  },
+  {
+   "kind": "young",
+   "rule": "scatter",
+   "count": 4,
+   "radius": 60,
+   "clear": 6,
+   "height": [
+    3,
+    6
+   ]
+  },
+  {
+   "kind": "snag",
+   "rule": "scatter",
+   "count": 1,
+   "radius": 60,
+   "clear": 10,
+   "height": [
+    5,
+    8
+   ]
+  },
+  {
+   "kind": "sapling",
+   "rule": "scatter",
+   "count": 6,
+   "radius": 50,
+   "clear": 4,
+   "height": [
+    0.8,
+    1.5
    ]
   },
   {
