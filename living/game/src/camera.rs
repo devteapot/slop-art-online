@@ -32,9 +32,9 @@ pub struct Preset {
 
 pub const PRESETS: [Preset; 4] = [
     Preset {
-        name: "ARPG diagonal",
-        like: "Path of Exile, Diablo: diagonal view, steep-ish angle",
-        rig: Rig { pitch: 52.0, yaw: 45.0, distance: 24.0, fov: 35.0, ortho: false, ortho_height: 20.0, lead: 0.12, rotate_steps: false },
+        name: "ARPG",
+        like: "Path of Exile, Diablo: north up, about 52° down, medium lens",
+        rig: Rig { pitch: 52.0, yaw: 0.0, distance: 24.0, fov: 35.0, ortho: false, ortho_height: 20.0, lead: 0.12, rotate_steps: false },
     },
     Preset {
         name: "MOBA north-up",

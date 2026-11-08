@@ -29,7 +29,7 @@ python3 $V cleanup --run game-1                          # when done
 | WASD, Shift | move relative to the camera, run (`human_move`) |
 | Right click | walk to that point (`human_act` with `goto`) |
 | Enter | say something; only characters within earshot hear it (`human_say`) |
-| 1–4 | camera presets: ARPG diagonal, MOBA north-up, top-down action, isometric orthographic |
+| 1–4 | camera presets: ARPG, MOBA north-up, top-down action, isometric orthographic |
 | Q / E | rotate 45° (when the preset allows it) |
 | Mouse wheel | zoom within limits |
 | F1 | camera tuning panel |

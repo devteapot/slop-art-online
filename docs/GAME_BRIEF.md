@@ -34,7 +34,7 @@ Findings move from the lab to the game when a core version is released and the g
 | Joining | Arrive at the edge of a settlement and ask to join (`community`, `membership`, `join_request` exist) | Being born is too slow at a playable pace |
 | Death | Permanent, as agreed. The player sees how they died and who saw it, then arrives as a new stranger with nothing inherited | Follows [world vision](WORLD_VISION.md) mortality |
 | World pace | Slower than labs (labs run about 5 game days per real hour); set per seed with `life_pace` and `year_days` | To decide by play-testing |
-| Camera details | One fixed angle, rotation in 45° steps or none, scroll zoom within limits | The camera spike below compares presets |
+| Camera details | North up, fixed, about 52–64° down, scroll zoom within limits; tune between the spike's presets 1–3 | User, 2026-11-08: liked presets 1–3 of the spike and disliked the diagonal (45°) view; the isometric orthographic preset got no comment |
 | Movement | WASD relative to the camera, plus click-to-move (`goto` to a point) | Matches the chosen genre |
 
 ## Core work the game needs (engine-independent)
