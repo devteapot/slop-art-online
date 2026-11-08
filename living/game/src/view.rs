@@ -8,7 +8,7 @@
 //!   `living/tools/view_assets.sh` wraps this and makes one contact sheet per model.
 //! - `LIVING_GAME_VIEW_SHOTS=<shot>[,<shot>…]` picks the shots (default `views,clips`):
 //!   - a view: `front`, `three-quarter`, `side`, `back`, `above`, `game` (the default game
-//!     camera, 40° down, 16 m) or `YAW:PITCH[:ZOOM]` (degrees; yaw 0 faces the model's front;
+//!     camera, 28° down, 22 m) or `YAW:PITCH[:ZOOM]` (degrees; yaw 0 faces the model's front;
 //!     zoom 1 frames the model, 0.5 is twice as close);
 //!   - `views`: the five angles and `game`;
 //!   - `<clip>`: six frames of that clip from the side; `<clip>/<view>` from that view;

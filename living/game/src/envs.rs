@@ -433,13 +433,18 @@ pub fn cutaway(target: Res<crate::controls::Target>, cam: Query<&Transform, (Wit
         if model.is_some() && fitted.is_none() {
             continue;
         }
-        let centre = t.translation + Vec3::Y * o.height * 0.6;
-        // A body's own width, capped: a 60 m tower is a few metres wide, not twenty.
-        let reach = (o.height * 0.25 + 0.6).min(5.0);
+        // A body's own width: measured when the model is fitted, else guessed from its height and
+        // capped (a 60 m tower is a few metres wide, not twenty).
+        let (reach, centre) = match fitted {
+            Some(f) if f.size.x > 0.0 => (0.5 * f.size.x.max(f.size.z) + 0.4, t.translation + t.rotation * Vec3::new(f.center.x, 0.0, f.center.z) + Vec3::Y * o.height * 0.6),
+            _ => ((o.height * 0.25 + 0.6).min(5.0), t.translation + Vec3::Y * o.height * 0.6),
+        };
         let s = ((centre - a).dot(ab) / len2).clamp(0.0, 1.0);
         let off = (a + ab * s).distance(centre);
-        let flat = Vec2::new(t.translation.x - me.x, t.translation.z - me.z);
-        let cut = (off < reach && s < 0.97) || (flat.length() < 5.0 + reach && flat.dot(toward_cam) > 0.0 && t.translation.y + o.height > me.y + 2.0);
+        let flat = Vec2::new(centre.x - me.x, centre.z - me.z);
+        // The camera itself inside the thing (big buildings, giants' houses).
+        let around_cam = Vec2::new(centre.x - a.x, centre.z - a.z).length() < reach + 1.0 && a.y < t.translation.y + o.height + 1.0;
+        let cut = around_cam || (off < reach && s < 0.97) || (flat.length() < 5.0 + reach && flat.dot(toward_cam) > 0.0 && t.translation.y + o.height > me.y + 2.0);
         let want = if cut { Visibility::Hidden } else { Visibility::Inherited };
         if *vis != want {
             *vis = want;

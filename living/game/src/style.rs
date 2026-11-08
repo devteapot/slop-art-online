@@ -177,16 +177,17 @@ impl Plugin for StylePlugin {
 }
 
 /// Push a changed style to every toon material and outline.
-/// Outlines are not fogged, so they would draw through fog as bare line drawings: hide them
-/// where the fog has mostly swallowed the thing.
-fn fog_outlines(style: Res<Style>, cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>, mut outlines: Query<(&mut OutlineVolume, &GlobalTransform), With<Outlined>>) {
+/// Outlines draw on their own: they ignore fog and a hidden parent (a building the cut-away
+/// hides), so they would remain as bare line drawings. Show one only where its object shows and
+/// the fog has not mostly swallowed it.
+fn fog_outlines(style: Res<Style>, cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>, mut outlines: Query<(&mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>), With<Outlined>>) {
     let Ok((cam, fog)) = cams.single() else { return };
     let FogFalloff::Linear { start, end } = fog.falloff else { return };
     let cutoff = start + (end - start) * 0.55;
     let eye = cam.translation();
     let on = style.outlines && style.enabled;
-    for (mut o, g) in &mut outlines {
-        let want = on && g.translation().distance(eye) < cutoff;
+    for (mut o, g, shown) in &mut outlines {
+        let want = on && shown.is_none_or(|v| v.get()) && g.translation().distance(eye) < cutoff;
         if o.visible != want {
             o.visible = want;
         }

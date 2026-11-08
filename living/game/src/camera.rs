@@ -1,7 +1,8 @@
 //! The game camera (one camera for every character; docs/GAME_BRIEF.md):
 //!
-//! - **View:** mid-way between a tactical view and the ground, about 40° down and 16 m away for an
-//!   ordinary adult, fixed (no zoom). Distance and focus height scale with the character's size.
+//! - **View:** about 28° down and 22 m away for an ordinary adult, with a 50° field of view, fixed
+//!   (no zoom). Flatter and further than the first 40°/16 m, so the land ahead and rising ground
+//!   show (user, 2026-11-09). Distance and focus height scale with the character's size.
 //! - **Facing:** you face the cursor. The view only turns when you turn it (below); turning by
 //!   pointing toward a screen side is an option, off by default.
 //! - **Rotation:** hold `[` or `]`, or drag with the middle button; the view stays where you leave
@@ -10,7 +11,7 @@
 //!   the direction you face is straight ahead. The mouse cursor moves with the ground meanwhile,
 //!   so you keep facing the same spot (a fixed cursor would make the view keep turning).
 //! - **Context:** conversations frame both speakers, until you rotate or the talk ends.
-//! - **Sight bound:** the view never pulls back further than about 1.5 × the sight radius, so
+//! - **Sight bound:** the view never pulls back further than about 2 × the sight radius, so
 //!   less sight (night) brings it in, along the same tilt toward the ground.
 
 use crate::controls::Input;
@@ -61,7 +62,7 @@ pub struct Rig {
 impl Default for Rig {
     fn default() -> Self {
         Self {
-            view: View { pitch: 40.0, distance: 16.0, fov: 44.0 },
+            view: View { pitch: 28.0, distance: 22.0, fov: 50.0 },
             close: View { pitch: 24.0, distance: 7.5, fov: 52.0 },
             steer: false,
             steer_zone: 0.45,
@@ -293,7 +294,7 @@ pub fn follow(
     // The view, brought in along the tilt toward the ground when sight is short.
     let mut v = r.view;
     if r.sight_bound {
-        let allowed = (sight.radius * 1.5).max(r.close.distance);
+        let allowed = (sight.radius * 2.0).max(r.close.distance);
         if allowed < r.view.distance {
             let t = ((r.view.distance - allowed) / (r.view.distance - r.close.distance).max(0.01)).clamp(0.0, 1.0);
             v = r.view.lerp(r.close, t);

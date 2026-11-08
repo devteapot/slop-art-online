@@ -52,8 +52,8 @@ The user's idea: seeing only what is in front of you makes sense, and skills, pa
 - **The view must turn with the character when it is low.** The user, 2026-11-08: a north-locked view means you only ever look one way. Fully zoomed in, what you see then depends on which way you walk. The spike compares four turning modes: fixed, follow heading, zoom blend and mouse steer. With mouse look, where you face can differ from where you walk; the authority would need a look direction, which aimed skills and a facing cone need anyway.
 - **One camera for every kind of character (proposal, 2026-11-08).** The user wants a common default that suits a summoner mage, who benefits from a wide view, as well as a melee fighter, who wants to be close. The proposal:
   - Characters differ in what they perceive, not in camera rules.
-  - The default is a mid zoom-tilt (about 40° down) that turns with you.
-  - How far you can zoom out is bounded by sight: the camera distance is at most 1.5 × the sight radius. Day sight barely allows zooming out past the default, while scout sight allows the full tactical view.
+  - The default is a mid zoom-tilt that turns with you. It was about 40° down and 16 m away; since 2026-11-09 it is 28° down, 22 m away, with a 50° field of view. The user found 40° showed too little of the world, and the flatter view lets rising ground and far trees show.
+  - How far you can zoom out is bounded by sight: the camera distance is at most 2 × the sight radius (1.5 × before the wider default). Day sight barely allows zooming out past the default, while scout sight allows the full tactical view.
   - A summoner who perceives through their summons (as vision from minions or wards does in MOBAs) therefore has a reason to zoom out; a melee fighter doesn't, and sees nothing more by doing so.
   - Context framing extends the same idea: conversations (built), fights (you and your opponents) and your summons or companions, always overridable by the player.
   - Spike preset 5, "Default (mid)", implements the default and the sight bound.
@@ -217,6 +217,7 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
   - Skin materials get lighter, warm-hued shadows. That fixed faces turning flushed pink under the cool shadow hue.
   - Look-dev mode has real CC0 models: VRoid Sendagaya Shino and Vivi, and KayKit Adventurers. The VRoid characters move procedurally (idle, walk, talk, blink).
   - `bevy_vrm1` supports only VRM 1.0, and the CC0 VRoid samples are VRM 0.x. Converting to VRM 1.0 (for example with the Blender VRM add-on) would add spring bones and look-at later.
+  - **Outlines (2026-11-09):** shell outlines (`bevy_mod_outline`) now go on characters only; environment models are stencils, and their lines come from the finishing pass. Shell outlines ignore fog and hidden parents, and they drew buildings' buried bases through hillsides, so the user saw black outlines with no object. This matches Blue Protocol, which takes most lines from the post-process. Character outlines also hide where their object is hidden or deep in fog.
   - Still to add: SDF face shadows and flattened face normals.
   - Frame rate in look-dev fell from 120 to about 60 fps with the high-poly VRoid models, prepasses and outlines. That needs profiling before scaling up.
 

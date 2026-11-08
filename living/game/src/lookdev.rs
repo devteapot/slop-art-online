@@ -181,7 +181,16 @@ pub fn convert(
                 let _ = m.generate_outline_normals(&Default::default());
             }
         }
-        commands.entity(e).remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(toon), Converted, outline(Outlined::Thing, &style)));
+        // Characters get shell outlines. Environment models only take part as stencils (they hide
+        // outlines behind them); their lines come from the finishing pass, which respects what is
+        // actually visible. Shell outlines on buildings drew their buried bases through hillsides.
+        let mut ec = commands.entity(e);
+        ec.remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(toon), Converted));
+        if owner.file.starts_with("lookdev/") || owner.file.starts_with("view/") {
+            ec.insert(outline(Outlined::Thing, &style));
+        } else {
+            ec.insert(OutlineStencil::default());
+        }
     }
 }
 

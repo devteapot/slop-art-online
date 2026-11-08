@@ -138,7 +138,7 @@ Real routes are longer: rivers have fords about 400 m apart, and the ranges are 
 
 ## Landmark visibility
 
-The default game camera ([`living/game/src/camera.rs`](../living/game/src/camera.rs)) looks 40° down from 16 m away, with a 44° vertical field of view:
+*Written for the first camera (40° down, 16 m, 44° field of view). Since 2026-11-09 the default is 28° down, 22 m away, with a 50° field of view: the top of the frame is 3° below the horizon, so rising ground and anything above eye level beyond the focus now show.* The first camera ([`living/game/src/camera.rs`](../living/game/src/camera.rs)) looked 40° down from 16 m away, with a 44° vertical field of view:
 - The top of the screen is 18° below the horizon, and the bottom is 62° below it.
 - The camera sits about 10.3 m above the focus point, so flat ground is in frame from about 7 m behind the focus to about 19 m ahead.
 - Distance fog runs from 60 to 110 m.
