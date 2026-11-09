@@ -127,6 +127,16 @@ At 40 worlds every tick but one stayed far inside the 16.7 ms budget, and memory
 | 7. wolf brains | `w3` `pack-life` × `default`, `instinct` | the shipped road pack of four as the subject in a `minds: true` island (models file's species map: glm-flash for think, remember and compile); `instinct`: no mind service at all |
 | 8. human, then AI | `w4` `life-takeover` × `default` | a 20-minute scripted player session through the player reducers, then takeover after `takeover_s` (30 s); proved in a dry run: the character became `ai`, controlled by the minds, 30 s after the last call |
 
+## What still special-cases trials (to remove later)
+
+No engine code knows about trials. The authority gained one generic admin-only scene reducer, `spawn_newcomer` (a player's `join`, thought for by the minds). Everything else a trial sets up uses existing admin scene reducers, `mind_say`/`mind_act` for admin-controlled characters, behaviour graphs with the existing skills (the ladder's scribe is a graph plus the ordinary `teach` act), the player reducers (the human session) and the real presence path (the takeover). What the runner itself still hard-codes:
+
+- **The human session's script** lives in `trials.py` (`Player.session`: walk to the town, forage, meet residents and state a plan, gather wood, build a campfire, leave). It should be a list of player steps in the trial file, like the timeline.
+- **Trial-specific probes by name** in `trial_evidence.py --table`: the teacher, theft, wolves and hungry columns match trial-name prefixes and role names (`thief`, `pack`, `cloak`). They should come from each trial's `probes` field.
+- **Generic probes with assumptions:** `FOOD` (the edible items) is a constant instead of coming from `skills.rhai`; `fled_m` measures movement after a `place` step; the 12-minute day is the fallback when a summary lacks `day_ms`; settlement names come from residents' backgrounds.
+- **Subject setup heuristics:** a picked person (not spawned or joined) is "repurposed": its items are dropped and its routines cleared. A trial can override this with `clear_items` and `clear_routines`.
+- **Merge rules for `extends`:** `pick`, `graph`, `sheet`, `rules`, `to`, `act` and `items` replace instead of merging (`REPLACE` in `trials.py`).
+
 ## Notes for the mind-harness lab
 
 - **Models per purpose and per species.** A variant's `models` value is deep-merged into `living/configs/models.json` as given, or `models_file` names a whole file. Whatever keys the config grows (for example per-purpose mixes for people), a variant can carry them unchanged. Today `species` routes animals per purpose (`think`, `remember`, `compile`), proven in the fake run `dry8`: wolves impulse with `ministral-8b` and compile and consolidate with `ministral-14b`. **People have one profile for every purpose**: assign, rotate, groups, stages and the default all choose one profile. Per-purpose mixes for people need a change in the mind service (`llm.rs` profile choice), not in the runner. The current variants are single-profile for people.
