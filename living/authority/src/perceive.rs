@@ -85,9 +85,14 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
             continue;
         }
         let a = if template.starts_with("{a}") { common::label_cap(ctx, &c, subject) } else { common::label_for(ctx, &c, subject) };
-        let text = template.replacen("{a}", &a, 1).replace("{a}", &common::label_for(ctx, &c, subject)).replace("{b}", &common::label_for(ctx, &c, object));
+        // The one it was done to hears it as done to them ("from your storage", not "from
+        // <their own name>'s storage"), and it matters to them more than to a bystander.
+        let me = c.id == object && object != 0;
+        let text = if me { template.replace("{b}'s", "your").replace("{b}", "you") } else { template.to_string() };
+        let text = text.replacen("{a}", &a, 1).replace("{a}", &common::label_for(ctx, &c, subject)).replace("{b}", &common::label_for(ctx, &c, object));
         // Animals notice people's and other species' affairs less keenly than their own kind's.
         let sal = if &*c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
+        let sal = if me { sal.max(0.8) } else { sal };
         percept(ctx, &c, now, kind, subject, object, at, text, sal);
     }
 }
