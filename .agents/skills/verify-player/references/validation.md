@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-09 the Rhai boundary, rhai-1 (dev-box)
+
+Private container `rhai-stdb` (2.14.1). Island runs on `33e3185` (`rhai-1` with `origin/main` `2a64837` merged; scoped perception). `player-rhai1-combat-192743`: 25 of 25. `player-rhai1-appraise-192825`: 10 of 10. `player-rhai1-gesture-192904`: 10 of 10. The player's skills now run on lean contexts, with cooldowns and costs from the tables read at compile.
+
 ## 2026-11-09 the scoped default (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `acbbda7` plus the uncommitted change that lands the perception client and makes `scoped` the default build (docs/PERCEPTION.md, "Third change"). Fake model only; private `CARGO_TARGET_DIR`s; every scratch database answered 404 after cleanup. `player-sd` on an island run of the default build (`perception scoped`): `gesture.py` 10 of 10; `appraise.py` 10 of 10; `combat.py --scene all` 24 of 25 in the full run: the bow scene's arrow struck a resident who walked into its path (`struck Gada`) and the fire bolt struck the appraise scene's bystander, so the dummy's health did not change; `--scene bow` alone then passed (`struck Moly: hit for 13`).
