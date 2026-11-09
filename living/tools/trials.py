@@ -485,10 +485,12 @@ class Instance:
         sh("docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}.wasm", self.db, "--delete-data", "-y", timeout=300)
         self.published = True
         self.save()
-        code, body = http(f"/v1/database/{self.db}/call/install_script", [(ROOT / "living/scripts/skills.rhai").read_text()], self.shared["token"])
+        # A variant may name another skills file (a rules change under test); the default is the tree's.
+        skills = ROOT / self.shared["variants"][self.variant].get("skills", "living/scripts/skills.rhai")
+        code, body = http(f"/v1/database/{self.db}/call/install_script", [skills.read_text()], self.shared["token"])
         if code != 200:
             raise RuntimeError(f"install_script {code}: {body[:300]}")
-        self.log(f"published {self.db} from {wasm}.wasm; skills installed")
+        self.log(f"published {self.db} from {wasm}.wasm; skills installed from {skills.relative_to(ROOT)} (sha256 {hashlib.sha256(skills.read_bytes()).hexdigest()[:12]})")
         end = time.time() + 60
         while time.time() < end:
             st = self.rows("SELECT * FROM stats")
@@ -532,7 +534,8 @@ class Instance:
         out = []
         for c in chars:
             bg = bgs.get(c["id"], {})
-            if c["id"] in taken or c["kind"] != spec.get("kind", "person"):
+            kinds = spec.get("kinds") or [spec.get("kind", "person")]
+            if c["id"] in taken or c["kind"] not in kinds:
                 continue
             if spec.get("mindable", True) and not (c["ai"] and c["controller"] == admin):
                 continue
@@ -554,7 +557,7 @@ class Instance:
             out.sort(key=lambda c: (dist(pos.get(c["id"], (1e9, 1e9)), at), c["id"]))
         elif spec.get("fewest_know_how"):
             out.sort(key=lambda c: (know[c["id"]], c["id"]))
-        n = spec.get("count", 1)
+        n = len(out) if spec.get("count") == "all" else spec.get("count", 1)
         if len(out) < n:
             raise RuntimeError(f"pick {spec}: only {len(out)} match")
         return [c["id"] for c in out[:n]]
@@ -1106,7 +1109,8 @@ class Instance:
         self.status = "preparing"
         # A repurposed resident starts empty-handed and without its old routines. A spawned
         # newcomer, a joined player (whose rows only the player may act on) and an animal do not.
-        repurposed = not subj.get("spawn") and not subj.get("join") and subj.get("pick", {}).get("kind", "person") == "person"
+        kinds = subj.get("pick", {}).get("kinds") or [subj.get("pick", {}).get("kind", "person")]
+        repurposed = not subj.get("spawn") and not subj.get("join") and kinds == ["person"]
         if subj.get("clear_items", repurposed):
             self.clear_items(self.subject)
         if subj.get("clear_routines", repurposed):
