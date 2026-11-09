@@ -26,6 +26,7 @@ pub mod character_type;
 pub mod chronicle_table;
 pub mod chronicle_type;
 pub mod clock_type;
+pub mod combat_seen_type;
 pub mod community_table;
 pub mod community_type;
 pub mod cry_prompt_type;
@@ -36,6 +37,8 @@ pub mod expecting_type;
 pub mod experience_table;
 pub mod experience_type;
 pub mod familiar_type;
+pub mod fighter_table;
+pub mod fighter_type;
 pub mod gate_table;
 pub mod gate_type;
 pub mod genome_table;
@@ -80,12 +83,17 @@ pub mod mind_state_table;
 pub mod mind_state_type;
 pub mod mind_update_reducer;
 pub mod mind_update_type;
+pub mod missile_type;
+pub mod my_combat_table;
 pub mod my_deliberations_table;
+pub mod my_readiness_table;
+pub mod my_skill_uses_table;
 pub mod own_habits_reducer;
 pub mod pasture_type;
 pub mod persona_in_type;
 pub mod persona_table;
 pub mod persona_type;
+pub mod place_at_reducer;
 pub mod place_in_type;
 pub mod place_near_reducer;
 pub mod place_structure_reducer;
@@ -95,10 +103,13 @@ pub mod planned_act_type;
 pub mod practice_table;
 pub mod practice_type;
 pub mod purge_dead_reducer;
+pub mod readiness_type;
+pub mod ready_type;
 pub mod rearing_type;
 pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
+pub mod release_skill_reducer;
 pub mod resource_node_table;
 pub mod resource_node_type;
 pub mod routine_in_type;
@@ -116,9 +127,13 @@ pub mod set_paused_reducer;
 pub mod set_profile_reducer;
 pub mod settlement_table;
 pub mod settlement_type;
+pub mod skill_card_table;
+pub mod skill_card_type;
+pub mod skill_use_type;
 pub mod slow_timer_type;
 pub mod spawn_battle_reducer;
 pub mod spawn_crowd_reducer;
+pub mod spawn_skirmish_reducer;
 pub mod stats_table;
 pub mod stats_type;
 pub mod steer_type;
@@ -133,6 +148,7 @@ pub mod thought_type;
 pub mod tick_timer_type;
 pub mod trade_offer_table;
 pub mod trade_offer_type;
+pub mod use_skill_reducer;
 pub mod vitals_table;
 pub mod vitals_type;
 pub mod wake_type;
@@ -160,6 +176,7 @@ pub use character_type::Character;
 pub use chronicle_table::*;
 pub use chronicle_type::Chronicle;
 pub use clock_type::Clock;
+pub use combat_seen_type::CombatSeen;
 pub use community_table::*;
 pub use community_type::Community;
 pub use cry_prompt_type::CryPrompt;
@@ -170,6 +187,8 @@ pub use expecting_type::Expecting;
 pub use experience_table::*;
 pub use experience_type::Experience;
 pub use familiar_type::Familiar;
+pub use fighter_table::*;
+pub use fighter_type::Fighter;
 pub use gate_table::*;
 pub use gate_type::Gate;
 pub use genome_table::*;
@@ -214,12 +233,17 @@ pub use mind_state_table::*;
 pub use mind_state_type::MindState;
 pub use mind_update_reducer::mind_update;
 pub use mind_update_type::MindUpdate;
+pub use missile_type::Missile;
+pub use my_combat_table::*;
 pub use my_deliberations_table::*;
+pub use my_readiness_table::*;
+pub use my_skill_uses_table::*;
 pub use own_habits_reducer::own_habits;
 pub use pasture_type::Pasture;
 pub use persona_in_type::PersonaIn;
 pub use persona_table::*;
 pub use persona_type::Persona;
+pub use place_at_reducer::place_at;
 pub use place_in_type::PlaceIn;
 pub use place_near_reducer::place_near;
 pub use place_structure_reducer::place_structure;
@@ -229,10 +253,13 @@ pub use planned_act_type::PlannedAct;
 pub use practice_table::*;
 pub use practice_type::Practice;
 pub use purge_dead_reducer::purge_dead;
+pub use readiness_type::Readiness;
+pub use ready_type::Ready;
 pub use rearing_type::Rearing;
 pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
+pub use release_skill_reducer::release_skill;
 pub use resource_node_table::*;
 pub use resource_node_type::ResourceNode;
 pub use routine_in_type::RoutineIn;
@@ -250,9 +277,13 @@ pub use set_paused_reducer::set_paused;
 pub use set_profile_reducer::set_profile;
 pub use settlement_table::*;
 pub use settlement_type::Settlement;
+pub use skill_card_table::*;
+pub use skill_card_type::SkillCard;
+pub use skill_use_type::SkillUse;
 pub use slow_timer_type::SlowTimer;
 pub use spawn_battle_reducer::spawn_battle;
 pub use spawn_crowd_reducer::spawn_crowd;
+pub use spawn_skirmish_reducer::spawn_skirmish;
 pub use stats_table::*;
 pub use stats_type::Stats;
 pub use steer_type::Steer;
@@ -267,6 +298,7 @@ pub use thought_type::Thought;
 pub use tick_timer_type::TickTimer;
 pub use trade_offer_table::*;
 pub use trade_offer_type::TradeOffer;
+pub use use_skill_reducer::use_skill;
 pub use vitals_table::*;
 pub use vitals_type::Vitals;
 pub use wake_type::Wake;
@@ -353,6 +385,11 @@ pub enum Reducer {
         update: MindUpdate,
     },
     OwnHabits,
+    PlaceAt {
+        id: u32,
+        x: f32,
+        y: f32,
+    },
     PlaceNear {
         id: u32,
         near: u32,
@@ -362,6 +399,9 @@ pub enum Reducer {
         kind: String,
     },
     PurgeDead,
+    ReleaseSkill {
+        skill: String,
+    },
     SeedCommunities,
     SetBackground {
         id: u32,
@@ -383,6 +423,16 @@ pub enum Reducer {
     SpawnCrowd {
         n: u32,
         minded: bool,
+    },
+    SpawnSkirmish {
+        n: u32,
+        spacing: f32,
+    },
+    UseSkill {
+        skill: String,
+        target: u32,
+        x: f32,
+        y: f32,
     },
 }
 
@@ -410,9 +460,11 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindSkip { .. } => "mind_skip",
             Reducer::MindUpdate { .. } => "mind_update",
             Reducer::OwnHabits => "own_habits",
+            Reducer::PlaceAt { .. } => "place_at",
             Reducer::PlaceNear { .. } => "place_near",
             Reducer::PlaceStructure { .. } => "place_structure",
             Reducer::PurgeDead => "purge_dead",
+            Reducer::ReleaseSkill { .. } => "release_skill",
             Reducer::SeedCommunities => "seed_communities",
             Reducer::SetBackground { .. } => "set_background",
             Reducer::SetBehavior { .. } => "set_behavior",
@@ -420,6 +472,8 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetProfile { .. } => "set_profile",
             Reducer::SpawnBattle { .. } => "spawn_battle",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
+            Reducer::SpawnSkirmish { .. } => "spawn_skirmish",
+            Reducer::UseSkill { .. } => "use_skill",
             _ => unreachable!(),
         }
     }
@@ -537,6 +591,13 @@ impl __sdk::Reducer for Reducer {
                 })
             }
             Reducer::OwnHabits => __sats::bsatn::to_vec(&own_habits_reducer::OwnHabitsArgs {}),
+            Reducer::PlaceAt { id, x, y } => {
+                __sats::bsatn::to_vec(&place_at_reducer::PlaceAtArgs {
+                    id: id.clone(),
+                    x: x.clone(),
+                    y: y.clone(),
+                })
+            }
             Reducer::PlaceNear { id, near } => {
                 __sats::bsatn::to_vec(&place_near_reducer::PlaceNearArgs {
                     id: id.clone(),
@@ -550,6 +611,11 @@ impl __sdk::Reducer for Reducer {
                 })
             }
             Reducer::PurgeDead => __sats::bsatn::to_vec(&purge_dead_reducer::PurgeDeadArgs {}),
+            Reducer::ReleaseSkill { skill } => {
+                __sats::bsatn::to_vec(&release_skill_reducer::ReleaseSkillArgs {
+                    skill: skill.clone(),
+                })
+            }
             Reducer::SeedCommunities => {
                 __sats::bsatn::to_vec(&seed_communities_reducer::SeedCommunitiesArgs {})
             }
@@ -582,6 +648,23 @@ impl __sdk::Reducer for Reducer {
                     minded: minded.clone(),
                 })
             }
+            Reducer::SpawnSkirmish { n, spacing } => {
+                __sats::bsatn::to_vec(&spawn_skirmish_reducer::SpawnSkirmishArgs {
+                    n: n.clone(),
+                    spacing: spacing.clone(),
+                })
+            }
+            Reducer::UseSkill {
+                skill,
+                target,
+                x,
+                y,
+            } => __sats::bsatn::to_vec(&use_skill_reducer::UseSkillArgs {
+                skill: skill.clone(),
+                target: target.clone(),
+                x: x.clone(),
+                y: y.clone(),
+            }),
             _ => unreachable!(),
         }
     }
@@ -603,6 +686,7 @@ pub struct DbUpdate {
     community: __sdk::TableUpdate<Community>,
     expecting: __sdk::TableUpdate<Expecting>,
     experience: __sdk::TableUpdate<Experience>,
+    fighter: __sdk::TableUpdate<Fighter>,
     gate: __sdk::TableUpdate<Gate>,
     genome: __sdk::TableUpdate<Genome>,
     inventory: __sdk::TableUpdate<Inventory>,
@@ -614,7 +698,10 @@ pub struct DbUpdate {
     membership: __sdk::TableUpdate<Membership>,
     mind_cursor: __sdk::TableUpdate<MindCursor>,
     mind_state: __sdk::TableUpdate<MindState>,
+    my_combat: __sdk::TableUpdate<CombatSeen>,
     my_deliberations: __sdk::TableUpdate<Deliberation>,
+    my_readiness: __sdk::TableUpdate<Readiness>,
+    my_skill_uses: __sdk::TableUpdate<SkillUse>,
     persona: __sdk::TableUpdate<Persona>,
     place: __sdk::TableUpdate<Place>,
     practice: __sdk::TableUpdate<Practice>,
@@ -624,6 +711,7 @@ pub struct DbUpdate {
     routine_stat: __sdk::TableUpdate<RoutineStat>,
     script: __sdk::TableUpdate<Script>,
     settlement: __sdk::TableUpdate<Settlement>,
+    skill_card: __sdk::TableUpdate<SkillCard>,
     stats: __sdk::TableUpdate<Stats>,
     structure: __sdk::TableUpdate<Structure>,
     terrain_chunk: __sdk::TableUpdate<TerrainChunk>,
@@ -675,6 +763,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "experience" => db_update
                     .experience
                     .append(experience_table::parse_table_update(table_update)?),
+                "fighter" => db_update
+                    .fighter
+                    .append(fighter_table::parse_table_update(table_update)?),
                 "gate" => db_update
                     .gate
                     .append(gate_table::parse_table_update(table_update)?),
@@ -708,9 +799,18 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "mind_state" => db_update
                     .mind_state
                     .append(mind_state_table::parse_table_update(table_update)?),
+                "my_combat" => db_update
+                    .my_combat
+                    .append(my_combat_table::parse_table_update(table_update)?),
                 "my_deliberations" => db_update
                     .my_deliberations
                     .append(my_deliberations_table::parse_table_update(table_update)?),
+                "my_readiness" => db_update
+                    .my_readiness
+                    .append(my_readiness_table::parse_table_update(table_update)?),
+                "my_skill_uses" => db_update
+                    .my_skill_uses
+                    .append(my_skill_uses_table::parse_table_update(table_update)?),
                 "persona" => db_update
                     .persona
                     .append(persona_table::parse_table_update(table_update)?),
@@ -738,6 +838,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "settlement" => db_update
                     .settlement
                     .append(settlement_table::parse_table_update(table_update)?),
+                "skill_card" => db_update
+                    .skill_card
+                    .append(skill_card_table::parse_table_update(table_update)?),
                 "stats" => db_update
                     .stats
                     .append(stats_table::parse_table_update(table_update)?),
@@ -821,6 +924,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.experience = cache
             .apply_diff_to_table::<Experience>("experience", &self.experience)
             .with_updates_by_pk(|row| &row.id);
+        diff.fighter = cache
+            .apply_diff_to_table::<Fighter>("fighter", &self.fighter)
+            .with_updates_by_pk(|row| &row.id);
         diff.gate = cache
             .apply_diff_to_table::<Gate>("gate", &self.gate)
             .with_updates_by_pk(|row| &row.id);
@@ -881,6 +987,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.settlement = cache
             .apply_diff_to_table::<Settlement>("settlement", &self.settlement)
             .with_updates_by_pk(|row| &row.id);
+        diff.skill_card = cache
+            .apply_diff_to_table::<SkillCard>("skill_card", &self.skill_card)
+            .with_updates_by_pk(|row| &row.skill);
         diff.stats = cache
             .apply_diff_to_table::<Stats>("stats", &self.stats)
             .with_updates_by_pk(|row| &row.id);
@@ -902,8 +1011,13 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.world = cache
             .apply_diff_to_table::<World>("world", &self.world)
             .with_updates_by_pk(|row| &row.id);
+        diff.my_combat = cache.apply_diff_to_table::<CombatSeen>("my_combat", &self.my_combat);
         diff.my_deliberations =
             cache.apply_diff_to_table::<Deliberation>("my_deliberations", &self.my_deliberations);
+        diff.my_readiness =
+            cache.apply_diff_to_table::<Readiness>("my_readiness", &self.my_readiness);
+        diff.my_skill_uses =
+            cache.apply_diff_to_table::<SkillUse>("my_skill_uses", &self.my_skill_uses);
 
         diff
     }
@@ -947,6 +1061,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "experience" => db_update
                     .experience
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "fighter" => db_update
+                    .fighter
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "gate" => db_update
                     .gate
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -980,8 +1097,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "mind_state" => db_update
                     .mind_state
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_combat" => db_update
+                    .my_combat
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_deliberations" => db_update
                     .my_deliberations
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_readiness" => db_update
+                    .my_readiness
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_skill_uses" => db_update
+                    .my_skill_uses
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "persona" => db_update
                     .persona
@@ -1009,6 +1135,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "skill_card" => db_update
+                    .skill_card
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "stats" => db_update
                     .stats
@@ -1080,6 +1209,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "experience" => db_update
                     .experience
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "fighter" => db_update
+                    .fighter
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "gate" => db_update
                     .gate
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1113,8 +1245,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "mind_state" => db_update
                     .mind_state
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_combat" => db_update
+                    .my_combat
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_deliberations" => db_update
                     .my_deliberations
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_readiness" => db_update
+                    .my_readiness
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_skill_uses" => db_update
+                    .my_skill_uses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "persona" => db_update
                     .persona
@@ -1142,6 +1283,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "skill_card" => db_update
+                    .skill_card
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "stats" => db_update
                     .stats
@@ -1191,6 +1335,7 @@ pub struct AppliedDiff<'r> {
     community: __sdk::TableAppliedDiff<'r, Community>,
     expecting: __sdk::TableAppliedDiff<'r, Expecting>,
     experience: __sdk::TableAppliedDiff<'r, Experience>,
+    fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     gate: __sdk::TableAppliedDiff<'r, Gate>,
     genome: __sdk::TableAppliedDiff<'r, Genome>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
@@ -1202,7 +1347,10 @@ pub struct AppliedDiff<'r> {
     membership: __sdk::TableAppliedDiff<'r, Membership>,
     mind_cursor: __sdk::TableAppliedDiff<'r, MindCursor>,
     mind_state: __sdk::TableAppliedDiff<'r, MindState>,
+    my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
+    my_readiness: __sdk::TableAppliedDiff<'r, Readiness>,
+    my_skill_uses: __sdk::TableAppliedDiff<'r, SkillUse>,
     persona: __sdk::TableAppliedDiff<'r, Persona>,
     place: __sdk::TableAppliedDiff<'r, Place>,
     practice: __sdk::TableAppliedDiff<'r, Practice>,
@@ -1212,6 +1360,7 @@ pub struct AppliedDiff<'r> {
     routine_stat: __sdk::TableAppliedDiff<'r, RoutineStat>,
     script: __sdk::TableAppliedDiff<'r, Script>,
     settlement: __sdk::TableAppliedDiff<'r, Settlement>,
+    skill_card: __sdk::TableAppliedDiff<'r, SkillCard>,
     stats: __sdk::TableAppliedDiff<'r, Stats>,
     structure: __sdk::TableAppliedDiff<'r, Structure>,
     terrain_chunk: __sdk::TableAppliedDiff<'r, TerrainChunk>,
@@ -1244,6 +1393,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
         callbacks.invoke_table_row_callbacks::<Expecting>("expecting", &self.expecting, event);
         callbacks.invoke_table_row_callbacks::<Experience>("experience", &self.experience, event);
+        callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
         callbacks.invoke_table_row_callbacks::<Gate>("gate", &self.gate, event);
         callbacks.invoke_table_row_callbacks::<Genome>("genome", &self.genome, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
@@ -1259,9 +1409,20 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Membership>("membership", &self.membership, event);
         callbacks.invoke_table_row_callbacks::<MindCursor>("mind_cursor", &self.mind_cursor, event);
         callbacks.invoke_table_row_callbacks::<MindState>("mind_state", &self.mind_state, event);
+        callbacks.invoke_table_row_callbacks::<CombatSeen>("my_combat", &self.my_combat, event);
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "my_deliberations",
             &self.my_deliberations,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Readiness>(
+            "my_readiness",
+            &self.my_readiness,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SkillUse>(
+            "my_skill_uses",
+            &self.my_skill_uses,
             event,
         );
         callbacks.invoke_table_row_callbacks::<Persona>("persona", &self.persona, event);
@@ -1281,6 +1442,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<Script>("script", &self.script, event);
         callbacks.invoke_table_row_callbacks::<Settlement>("settlement", &self.settlement, event);
+        callbacks.invoke_table_row_callbacks::<SkillCard>("skill_card", &self.skill_card, event);
         callbacks.invoke_table_row_callbacks::<Stats>("stats", &self.stats, event);
         callbacks.invoke_table_row_callbacks::<Structure>("structure", &self.structure, event);
         callbacks.invoke_table_row_callbacks::<TerrainChunk>(
@@ -1964,6 +2126,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         community_table::register_table(client_cache);
         expecting_table::register_table(client_cache);
         experience_table::register_table(client_cache);
+        fighter_table::register_table(client_cache);
         gate_table::register_table(client_cache);
         genome_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
@@ -1975,7 +2138,10 @@ impl __sdk::SpacetimeModule for RemoteModule {
         membership_table::register_table(client_cache);
         mind_cursor_table::register_table(client_cache);
         mind_state_table::register_table(client_cache);
+        my_combat_table::register_table(client_cache);
         my_deliberations_table::register_table(client_cache);
+        my_readiness_table::register_table(client_cache);
+        my_skill_uses_table::register_table(client_cache);
         persona_table::register_table(client_cache);
         place_table::register_table(client_cache);
         practice_table::register_table(client_cache);
@@ -1985,6 +2151,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         routine_stat_table::register_table(client_cache);
         script_table::register_table(client_cache);
         settlement_table::register_table(client_cache);
+        skill_card_table::register_table(client_cache);
         stats_table::register_table(client_cache);
         structure_table::register_table(client_cache);
         terrain_chunk_table::register_table(client_cache);
@@ -2006,6 +2173,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "community",
         "expecting",
         "experience",
+        "fighter",
         "gate",
         "genome",
         "inventory",
@@ -2017,7 +2185,10 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "membership",
         "mind_cursor",
         "mind_state",
+        "my_combat",
         "my_deliberations",
+        "my_readiness",
+        "my_skill_uses",
         "persona",
         "place",
         "practice",
@@ -2027,6 +2198,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "routine_stat",
         "script",
         "settlement",
+        "skill_card",
         "stats",
         "structure",
         "terrain_chunk",

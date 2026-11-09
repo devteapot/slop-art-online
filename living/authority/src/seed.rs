@@ -381,6 +381,119 @@ pub struct Seed {
     /// `repertoire.json` (e.g. `makers`), falling back to `occupations` per occupation.
     #[serde(default)]
     pub habits: String,
+    /// What every newcomer (a player's new character) arrives with: items and know-how. A
+    /// starter kit of the world, not anything of a character before.
+    #[serde(default)]
+    pub newcomer: SeedNewcomer,
+    /// Animal groups placed on purpose (e.g. a hostile pack near the arrival point).
+    #[serde(default)]
+    pub packs: Vec<SeedPack>,
+}
+
+#[derive(Deserialize, Default)]
+pub struct SeedNewcomer {
+    #[serde(default)]
+    pub items: std::collections::BTreeMap<String, u32>,
+    #[serde(default)]
+    pub knows: Vec<String>,
+}
+
+/// A group of animals placed `from_m`..`to_m` from a reference point (`near`: `arrival`, the
+/// newcomers' arrival point, or a settlement kind such as `town`), outside every settlement.
+/// `bold` animals do not fear people (the rules read it from their background); `instinct`
+/// names their starting graph in instincts.json.
+#[derive(Deserialize)]
+pub struct SeedPack {
+    pub kind: String,
+    pub count: u32,
+    #[serde(default = "arrival_ref")]
+    pub near: String,
+    #[serde(default)]
+    pub from_m: f32,
+    #[serde(default = "pack_far")]
+    pub to_m: f32,
+    #[serde(default)]
+    pub bold: bool,
+    #[serde(default)]
+    pub instinct: String,
+    #[serde(default)]
+    pub name: String,
+}
+
+fn arrival_ref() -> String {
+    "arrival".into()
+}
+
+fn pack_far() -> f32 {
+    100.0
+}
+
+/// A newcomer's starter kit (the seed's `newcomer`).
+pub fn newcomer_kit(ctx: &ReducerContext, id: u32, now: u64) {
+    let Ok(s) = serde_json::from_str::<Seed>(VALLEY) else { return };
+    for (item, qty) in &s.newcomer.items {
+        if living_rules::catalog::item(item).is_some() && *qty > 0 {
+            common::inv_add(ctx, id as u64, item, *qty);
+        }
+    }
+    for t in &s.newcomer.knows {
+        if living_rules::catalog::technique(t).is_some() {
+            common::learn(ctx, id, t, "what newcomers know", now);
+        }
+    }
+}
+
+/// The seed's packs, placed after the world's other animals.
+fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack], now: u64) {
+    let settlements: Vec<Settlement> = ctx.db.settlement().iter().collect();
+    for p in packs {
+        let reference = if p.near == "arrival" { Some(crate::island::arrival(ctx)) } else { settlements.iter().find(|s| s.kind == p.near).map(|s| (s.x, s.y)) };
+        let Some(r) = reference else {
+            log::warn!("pack of {}: no {} to place it near", p.kind, p.near);
+            continue;
+        };
+        let outside = |q: (f32, f32)| settlements.iter().all(|s| common::dist(q, (s.x, s.y)) > s.radius_m + 15.0);
+        let centre = (0..400).find_map(|_| {
+            let ang: f32 = ctx.rng().gen_range(0.0..std::f32::consts::TAU);
+            let d: f32 = ctx.rng().gen_range(p.from_m..p.to_m.max(p.from_m + 1.0));
+            let q = (r.0 + ang.cos() * d, r.1 + ang.sin() * d);
+            (map.free(q.0, q.1) && outside(q)).then_some(q)
+        });
+        let Some(centre) = centre else {
+            log::warn!("pack of {}: no room {}..{} m from {}", p.kind, p.from_m, p.to_m, p.near);
+            continue;
+        };
+        let w = common::world(ctx);
+        let (admin, minded) = common::mind_controller(ctx);
+        for _ in 0..p.count {
+            let at = (0..30).map(|_| (centre.0 + ctx.rng().gen_range(-4.0f32..4.0), centre.1 + ctx.rng().gen_range(-4.0f32..4.0))).find(|q| map.free(q.0, q.1)).unwrap_or(centre);
+            let name = animal_name(ctx, &p.kind);
+            let age = common::life_of(&p.kind).age_at(0.3 + 0.3 * ctx.rng().gen::<f32>(), common::pace(&w));
+            let id = spawn_with(ctx, &name, &p.kind, admin, minded, at, now, age, (0, 0));
+            let text = serde_json::json!({ "pack": if p.name.is_empty() { format!("the {}s near {}", p.kind, p.near) } else { p.name.clone() }, "bold": p.bold }).to_string();
+            match ctx.db.background().id().find(id) {
+                Some(mut b) => {
+                    b.text = text;
+                    ctx.db.background().id().update(b);
+                }
+                None => {
+                    ctx.db.background().insert(Background { id, text });
+                }
+            }
+            if !p.instinct.is_empty() {
+                let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
+                match all.get(p.instinct.as_str()) {
+                    Some(g) => {
+                        if let Err(e) = crate::mind::set_graph(ctx, id, &g.to_string(), "instinct", "seed", now) {
+                            log::warn!("pack instinct {}: {e}", p.instinct);
+                        }
+                    }
+                    None => log::warn!("pack instinct {} is not in instincts.json", p.instinct),
+                }
+            }
+        }
+        log::info!("placed {} {}s at ({:.0}, {:.0}), {:.0} m from {}", p.count, p.kind, centre.0, centre.1, common::dist(centre, r), p.near);
+    }
 }
 
 pub fn communities(ctx: &ReducerContext, now: u64) {
@@ -604,6 +717,7 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
             left -= group.min(left);
         }
     }
+    packs(ctx, &map, &s.packs, now);
 }
 
 fn animal_ground(map: &living_rules::map::Map, kind: &str, x: i32, y: i32) -> bool {

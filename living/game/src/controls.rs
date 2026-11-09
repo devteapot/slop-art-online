@@ -3,7 +3,8 @@
 //! - WASD (Shift to run) moves relative to the camera through `human_move`. Only changes of
 //!   intent are sent: the authority keeps steering until told otherwise, and rate-limits
 //!   intent changes (`input_hz`/`input_burst` laws).
-//! - Right click walks to a ground point through `human_act` with the `goto` skill.
+//! - The mouse buttons and Q/E/R/Shift are the skill bar (`combat.rs`); scripts can still walk
+//!   to a point with `goto`.
 //! - Enter opens proximity chat (`human_say`); only characters within earshot hear it.
 
 use crate::camera::Cam;
@@ -30,6 +31,8 @@ pub struct Input {
     pub said: Vec<(u64, String)>,
     /// Whether a movement direction is held (the camera keeps the keys' frame meanwhile).
     pub moving: bool,
+    /// The direction held (sim axes, unit or zero): a dodge goes this way.
+    pub dir: Vec2,
     /// Face the cursor: you move with WASD and look where the mouse points.
     pub mouse_look: bool,
     /// Where I look (sim direction), with mouse look on.
@@ -107,6 +110,7 @@ pub fn movement(
         (d.normalize_or_zero(), keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight))
     };
     input.moving = dir != Vec2::ZERO;
+    input.dir = dir;
     let (qx, qy) = quantize(dir);
     let intent = (qx, qy, run && (qx, qy) != (0, 0));
     // Release of all keys sends one stop; idle frames send nothing.
@@ -116,16 +120,9 @@ pub fn movement(
         let r = conn.reducers.human_move_then(qx as f32 / 1000.0, qy as f32 / 1000.0, intent.2, net.on_reply("move"));
         net.report("move", r);
     }
-    if mouse.just_pressed(MouseButton::Right) && !ui.pointer {
-        if let Some(p) = cam.cursor_ground {
-            let node = serde_json::json!({"do": {"skill": "goto", "target": {"at": [p.x, p.z]}}}).to_string();
-            let r = conn.reducers.human_act_then(node, net.on_reply("goto"));
-            net.report("goto", r);
-            input.goto = Some((p, time.elapsed_secs()));
-            // A held key resumes direct control on its next change.
-            input.sent = None;
-        }
-    }
+    // A move the authority held back while I was rooted is re-sent by the authority itself
+    // (`combat::resume_move`); RMB is the bow shot (combat.rs), so there is no click-to-move.
+    let _ = (&mouse, &ui, &time);
 }
 
 /// Send a chat line to whoever is in earshot. Returns whether it was sent.
@@ -138,15 +135,9 @@ pub fn say(net: &Net, text: &str) -> bool {
     ok
 }
 
-/// An aim line from the player toward the cursor (the shape a skillshot would take) and the
-/// click-to-move marker.
-pub fn gizmos(mut g: Gizmos, cam: Res<Cam>, target: Res<Target>, input: Res<Input>, time: Res<Time>) {
-    if let (Some(me), Some(c)) = (target.0, cam.cursor_ground) {
-        let lift = Vec3::Y * 0.05;
-        let to = me + (c - me).clamp_length_max(8.0);
-        g.line(me + lift, to + lift, Color::srgba(1.0, 0.95, 0.6, 0.6));
-        g.circle(Isometry3d::new(c + lift, Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)), 0.3, Color::srgba(1.0, 1.0, 1.0, 0.7));
-    }
+/// The marker of a scripted walk to a point (aim indicators are `combat.rs`'s, shown only
+/// while aiming).
+pub fn gizmos(mut g: Gizmos, input: Res<Input>, time: Res<Time>) {
     if let Some((p, t)) = input.goto {
         let age = time.elapsed_secs() - t;
         if age < 1.0 {

@@ -38,7 +38,7 @@ macro_rules! primary_tables {
             belief, judgment, place, thought, chronicle, stats, bond_offer, expecting,
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
             routine, routine_stat, script, community, membership, join_request, genome,
-            practice, land, settlement, lot);
+            practice, land, settlement, lot, fighter, skill_card);
     };
 }
 
@@ -81,7 +81,7 @@ fn stream_callbacks(c: &DbConnection, signals: Arc<Mutex<Signals>>) {
     }
     primary_tables!(insert_delete, c, signals);
     primary_tables!(updates, c, signals);
-    insert_delete!(c, signals; my_deliberations);
+    insert_delete!(c, signals; my_deliberations, my_combat, my_readiness, my_skill_uses);
 }
 
 fn stream_initial(c: &DbConnection, r: &Request, identity: &str) {
@@ -95,7 +95,7 @@ fn stream_initial(c: &DbConnection, r: &Request, identity: &str) {
         )* };
     }
     primary_tables!(rows, c, tables);
-    rows!(c, tables; my_deliberations);
+    rows!(c, tables; my_deliberations, my_combat, my_readiness, my_skill_uses);
     emit(&json!({"event":"initial","identity":identity,"db":r.db,
         "queries":r.queries,"seconds":r.seconds,"tables":tables}));
 }
@@ -145,7 +145,12 @@ fn snapshot(c: &DbConnection) -> Value {
         practice,
         land,
         settlement,
-        lot
+        lot,
+        fighter,
+        skill_card,
+        my_combat,
+        my_readiness,
+        my_skill_uses
     );
     let characters: Vec<_> = c.db.character().iter().map(|r| json!({
         "id":r.id,"name":r.name,"kind":r.kind,"controller":r.controller.to_hex().to_string(),
@@ -181,6 +186,8 @@ fn snapshot(c: &DbConnection) -> Value {
                 })
             })
             .collect();
+    let combat: Vec<_> = c.db.my_combat().iter().map(|r| json!({"id":r.id,"viewer":r.viewer.to_hex().to_string(),"kind":r.kind,"actor":r.actor,"note":r.note})).collect();
+    let skill_uses: Vec<_> = c.db.my_skill_uses().iter().map(|r| json!({"id":r.id,"actor":r.actor,"skill":r.skill,"accepted_ms":r.accepted_ms,"outcome":r.outcome})).collect();
     let routines: Vec<_> =
         c.db.routine()
             .iter()
@@ -213,7 +220,7 @@ fn snapshot(c: &DbConnection) -> Value {
             .collect();
     json!({"counts":counts,"ticks":c.db.stats().iter().next().map(|r|r.ticks),
         "characters":characters,"experiences":experiences,"thoughts":thoughts,
-        "deliberations":deliberations,"routines":routines,"routine_stats":routine_stats,
+        "deliberations":deliberations,"combat":combat,"skill_uses":skill_uses,"routines":routines,"routine_stats":routine_stats,
         "brains":brains,"bodies":bodies,"chronicle":chronicle,"cursors":cursors})
 }
 

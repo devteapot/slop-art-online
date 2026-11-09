@@ -60,7 +60,7 @@ pub fn founder(temperament: &BTreeMap<String, [f32; 2]>, skills: &[String], u: &
     for (k, [lo, hi]) in temperament {
         g.insert(format!("trait:{k}"), (lo + (hi - lo) * u()).round());
     }
-    for k in BODY.iter().map(|s| s.to_string()).chain(skills.iter().filter(|s| !UNSKILLED.contains(&s.as_str())).map(|s| format!("knack:{s}"))) {
+    for k in BODY.iter().map(|s| s.to_string()).chain(skills.iter().filter(|s| !UNSKILLED.contains(&s.as_str()) && knack_of(s) == s.as_str()).map(|s| format!("knack:{s}"))) {
         let v = 1.0 + mutation(u, 0.06);
         g.insert(k.clone(), clamp(&k, v));
     }
@@ -96,7 +96,19 @@ pub fn gene(g: &Genes, name: &str) -> f32 {
 
 /// Combat moves: their timing is the other side's chance to react, so skill makes them hit
 /// harder (in the scripts), not faster.
-const TIMED: [&str; 5] = ["attack", "throw", "shoot", "dodge", "block"];
+const TIMED: [&str; 9] = ["attack", "throw", "shoot", "dodge", "block", "strike", "bowshot", "firebolt", "heal"];
+
+/// The gene that makes one good at a skill. The starter combat skills (2026-11-09) share the
+/// knacks of the older skills nearest them, so founders draw the same genes as before.
+pub fn knack_of(skill: &str) -> &str {
+    match skill {
+        "strike" => "attack",
+        "bowshot" => "shoot",
+        "firebolt" => "throw",
+        "heal" => "tend",
+        s => s,
+    }
+}
 
 /// Whether skill makes a skill's work quicker.
 pub fn paced(skill: &str) -> bool {
@@ -118,7 +130,7 @@ pub fn skill_factor(g: &Genes, practice: &BTreeMap<String, u32>, skill: &str) ->
     if UNSKILLED.contains(&skill) {
         return 1.0;
     }
-    gene(g, &format!("knack:{skill}")) * practice_factor(practice.get(skill).copied().unwrap_or(0))
+    gene(g, &format!("knack:{}", knack_of(skill))) * practice_factor(practice.get(skill).copied().unwrap_or(0))
 }
 
 /// Temperament for a persona: trait name → 0..100.

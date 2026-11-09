@@ -127,11 +127,13 @@ pub struct Live {
     pub heights: HashMap<u32, f32>,
 }
 
-/// A drawn authority body and the clip it should play.
+/// A drawn authority body and the clip it should play: locomotion, and over it a combat move,
+/// a hit or its death (`combat.rs`), played once.
 #[derive(Component)]
 pub struct LiveBody {
     clip: &'static str,
     rate: f32,
+    action: Option<crate::combat::Action>,
 }
 
 /// Regenerate the land from the `land` row once, then put the island in place.
@@ -276,6 +278,7 @@ fn bodies(
     palette: Res<crate::world::Palette>,
     style: Res<crate::style::Style>,
     input: Res<Input>,
+    combat: Res<crate::combat::Combat>,
     mut live: ResMut<Live>,
     mut q: Query<(&mut Transform, Option<&Fitted>, Option<&mut Model>, Option<&crate::characters::Character>, &mut LiveBody)>,
     time: Res<Time>,
@@ -294,6 +297,15 @@ fn bodies(
     }
     let gone: Vec<u32> = live.shown.keys().copied().filter(|id| !scene.shown.contains_key(id)).collect();
     for id in gone {
+        // Someone I saw die stays where they fell for a while, playing their death.
+        if let Some(a) = combat.deaths.contains_key(&id).then(|| combat.actions.get(&id).copied()).flatten() {
+            if let Some(s) = live.shown.get(&id) {
+                if let Ok((_, _, _, _, mut lb)) = q.get_mut(s.entity) {
+                    lb.action = Some(a);
+                }
+            }
+            continue;
+        }
         if let Some(s) = live.shown.remove(&id) {
             commands.entity(s.entity).despawn();
         }
@@ -305,7 +317,10 @@ fn bodies(
         let mine = Some(id) == me;
         // My character turns toward where I look (shown locally; the authority has no look).
         let look = input.look.filter(|_| mine).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
-        let h = look.or(heading);
+        // During a move a body faces where the move goes.
+        let action = combat.actions.get(&id).copied();
+        let aimed = action.and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
+        let h = aimed.or(look).or(heading);
         if !live.shown.contains_key(&id) {
             let Some(body) = conn.db.body().id().find(&id) else { continue };
             let character = conn.db.character().id().find(&id);
@@ -333,7 +348,7 @@ fn bodies(
                 let e = crate::bodies::spawn(&mut commands, &mut meshes, &palette, &style, &body.kind, id, false, tf, p);
                 (e, if body.kind == "wolf" { 0.9 } else { 1.4 }, false)
             };
-            commands.entity(entity).insert(LiveBody { clip: "idle", rate: 1.0 });
+            commands.entity(entity).insert(LiveBody { clip: "idle", rate: 1.0, action: None });
             live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person });
             live.heights.insert(id, height);
             continue;
@@ -365,6 +380,7 @@ fn bodies(
         };
         lb.clip = clip;
         lb.rate = rate;
+        lb.action = action;
     }
 }
 
@@ -393,7 +409,10 @@ fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, liv
 struct ClipSet {
     player: Entity,
     nodes: HashMap<String, AnimationNodeIndex>,
-    playing: Option<&'static str>,
+    /// Clip lengths (s), for holding a pose part-way.
+    lens: HashMap<String, f32>,
+    /// What plays: the clip and, for a one-shot move, when it started (display ms).
+    playing: Option<(&'static str, Option<u64>)>,
 }
 
 #[derive(Component)]
@@ -405,6 +424,7 @@ fn clips(
     mut commands: Commands,
     assets: Res<AssetServer>,
     gltfs: Res<Assets<Gltf>>,
+    anims: Res<Assets<AnimationClip>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     new: Query<(Entity, &Model, Option<&ClipFile>), (With<LiveBody>, With<crate::lookdev::Rig>, Without<ClipSet>)>,
     mut playing: Query<(Entity, &mut ClipSet, &LiveBody)>,
@@ -424,27 +444,53 @@ fn clips(
         };
         let Some(gltf) = gltfs.get(&file.0) else { continue };
         let Some(p) = children.iter_descendants(e).find(|d| players.contains(*d)) else { continue };
+        let lens: HashMap<String, f32> = gltf.named_animations.iter().filter_map(|(n, h)| anims.get(h).map(|a| (n.to_string(), a.duration()))).collect();
         let (names, handles): (Vec<String>, Vec<_>) = gltf.named_animations.iter().map(|(n, h)| (n.to_string(), h.clone())).unzip();
         let (graph, idx) = AnimationGraph::from_clips(handles);
         commands.entity(p).insert((AnimationGraphHandle(graphs.add(graph)), AnimationTransitions::new()));
-        commands.entity(e).insert(ClipSet { player: p, nodes: names.into_iter().zip(idx).collect(), playing: None });
+        commands.entity(e).insert(ClipSet { player: p, nodes: names.into_iter().zip(idx).collect(), lens, playing: None });
     }
     for (e, mut c, lb) in &mut playing {
-        let want = if c.nodes.contains_key(lb.clip) { lb.clip } else { "idle" };
+        // A move plays once over locomotion, until it is over (or holds its pose).
+        let action = lb.action.filter(|a| c.nodes.contains_key(a.clip));
+        let (want, once) = match action {
+            Some(a) => (a.clip, Some(a.start_ms as u64)),
+            None => (if c.nodes.contains_key(lb.clip) { lb.clip } else { "idle" }, None),
+        };
         let Some(&node) = c.nodes.get(want) else { continue };
         let Ok((mut player, transitions)) = players.get_mut(c.player) else {
             commands.entity(e).remove::<ClipSet>();
             continue;
         };
-        if c.playing != Some(want) {
-            match transitions {
-                Some(mut t) => t.play(&mut player, node, std::time::Duration::from_millis(220)).repeat(),
-                None => player.play(node).repeat(),
+        if c.playing != Some((want, once)) {
+            let blend = std::time::Duration::from_millis(if once.is_some() { 90 } else { 220 });
+            match (transitions, once.is_some()) {
+                (Some(mut t), true) => {
+                    t.play(&mut player, node, blend);
+                }
+                (Some(mut t), false) => {
+                    t.play(&mut player, node, blend).repeat();
+                }
+                (None, true) => {
+                    player.play(node);
+                }
+                (None, false) => {
+                    player.play(node).repeat();
+                }
             };
-            c.playing = Some(want);
+            c.playing = Some((want, once));
         }
+        let len = c.lens.get(want).copied().unwrap_or(1.0);
         if let Some(a) = player.animation_mut(node) {
-            a.set_speed(if want == lb.clip { lb.rate } else { 1.0 });
+            let speed = match action {
+                Some(act) => match act.hold {
+                    Some(h) if a.seek_time() >= h * len => 0.0,
+                    _ => act.rate,
+                },
+                None if want == lb.clip => lb.rate,
+                None => 1.0,
+            };
+            a.set_speed(speed);
         }
     }
 }
@@ -539,6 +585,9 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `walk:DEG:S[:run]`: hold a direction (0 = north, 90 = east) through `human_move`;
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
 /// - `say:TEXT`: proximity chat (`human_say`);
+/// - `skill:NAME[:AIM]`: use a skill-bar skill through `use_skill` (`combat.rs`); AIM is
+///   `nearest`, a creature kind (`wolf`) or `DX,DY` metres from me; `release:NAME` lets go of
+///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
 ///   until a new character is mine;
 /// - `quit`.
@@ -572,6 +621,7 @@ fn script(
     mut input: ResMut<Input>,
     mut cam: ResMut<Cam>,
     mut out: ResMut<crate::ui::model::Outbox>,
+    mut skills: ResMut<crate::combat::Scripted>,
     hud: Res<crate::ui::model::HudModel>,
     target: Option<Res<crate::capture::Target>>,
     time: Res<Time>,
@@ -628,6 +678,19 @@ fn script(
         }
         "say" => {
             out.say.push(arg.to_string());
+            true
+        }
+        "skill" | "aim" => {
+            let (name, aim) = arg.split_once(':').unwrap_or((arg, ""));
+            if verb == "skill" {
+                skills.press.push((name.to_string(), aim.to_string()));
+            } else {
+                skills.aiming = (!name.is_empty()).then(|| (name.to_string(), aim.to_string()));
+            }
+            true
+        }
+        "release" => {
+            skills.release.push(arg.to_string());
             true
         }
         "dead" => hud.death.is_some() || s.since > 120.0,

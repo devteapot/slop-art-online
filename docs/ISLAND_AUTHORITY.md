@@ -340,7 +340,7 @@ Connected play costs about 1.5–3.5 ms more than look-dev with a similar crowd.
 - **A slimmer moving-body stream.** Every steering update sends the whole `body` row, path included, at about 150 B. That is about 10 kB/s for 72 bodies, and it scales with the crowd. At the town's update rate, 200 characters in view would be about 28 kB/s per client; a battle steers more often, so more. A narrower row or table for what clients draw (position, velocity, heading, segment time) would cut it.
 - **Perception-scoped subscriptions.** Every window table is public, and the windows are not permission boundaries. A view with arguments (2.13+) or per-sender filtering on the authority is needed before the client shows only what the character perceives.
 - **Body size as a rule.** Giants and small folk are drawn at their settlement's scale, but the rules move and collide them as adults.
-- **Combat state per character for others:** health, what they are doing, attack and skill events with timings. Today only my own `vitals` are readable, and the HUD's skill bar shows "Not on the server yet".
+- **Combat state per character for others:** health, what they are doing, attack and skill events with timings. *Done 2026-11-09:* the `fighter` health band and move, the perception-scoped `my_combat` feed and the skill bar's live cooldowns ([combat](COMBAT.md)).
 - **Gait speeds that match the clips.** The rules' walk is 2.6–2.7 m/s and their run 4.1. The walk clip was authored at 1.4 m/s, so walking plays it at about 1.9×. Either clips are authored for the rules' speeds, or the rules get a slower ambling gait.
 - **Masonry for newcomers**, if a newcomer should be able to wall anything: `build wall` is refused without the know-how, as designed.
 

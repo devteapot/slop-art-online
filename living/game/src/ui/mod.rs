@@ -17,6 +17,7 @@ mod frame;
 mod icons;
 mod live;
 pub mod model;
+mod numbers;
 mod overhead;
 mod sample;
 mod theme;
@@ -42,9 +43,9 @@ impl Plugin for UiPlugin {
             .init_resource::<model::Outbox>()
             .init_resource::<overhead::Stack>()
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
-            .add_systems(Startup, (frame::spawn, overhead::spawn, chat::spawn, compass::spawn, death::spawn))
+            .add_systems(Startup, (frame::spawn, overhead::spawn, numbers::spawn, chat::spawn, compass::spawn, death::spawn))
             .add_systems(Update, (default_camera, scale, chat::keys));
-        let widgets = (frame::vitals, frame::status, frame::skills, frame::hint, frame::target, frame::vignette, overhead::plates, overhead::bubbles, chat::update, compass::update, death::update, visibility);
+        let widgets = (frame::vitals, frame::status, frame::skills, frame::hint, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, chat::update, compass::update, death::update, visibility);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
         } else {

@@ -6,6 +6,7 @@
 mod act;
 mod acts;
 mod brain;
+mod combat;
 mod island;
 mod mind;
 mod motion;
@@ -53,7 +54,8 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         blocked: 0,
         missed: 0,
     });
-    living_rules::script::Scripts::new(seed::SKILLS)?;
+    let sc = living_rules::script::Scripts::new(seed::SKILLS)?;
+    combat::cards(ctx, &sc);
     ctx.db.script().insert(Script { name: "skills".into(), source: seed::SKILLS.into(), revision: 1, updated_ms: now });
     for kind in ["person", "deer", "wolf"] {
         living_rules::graph::parse(&seed::instinct(kind)).map_err(|e| format!("{kind} instinct: {e}"))?;
@@ -85,7 +87,7 @@ pub fn set_paused(ctx: &ReducerContext, paused: bool) -> Result<(), String> {
 #[spacetimedb::reducer]
 pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String> {
     require_admin(ctx)?;
-    living_rules::script::Scripts::new(&source)?;
+    combat::cards(ctx, &living_rules::script::Scripts::new(&source)?);
     let now = common::now_ms(ctx);
     let rev = ctx.db.script().name().find("skills".to_string()).map(|s| s.revision + 1).unwrap_or(1);
     ctx.db.script().name().delete("skills".to_string());
@@ -263,6 +265,15 @@ pub fn place_near(ctx: &ReducerContext, id: u32, near: u32) -> Result<(), String
     motion::place(ctx, id, (p.0 + 1.0, p.1), now)
 }
 
+/// Test support: put a character at rest at a point (tiles).
+#[spacetimedb::reducer]
+pub fn place_at(ctx: &ReducerContext, id: u32, x: f32, y: f32) -> Result<(), String> {
+    require_admin(ctx)?;
+    let map = common::map(ctx);
+    let at = map.nearest_walkable(x, y).ok_or("no room there")?;
+    motion::place(ctx, id, at, common::now_ms(ctx))
+}
+
 /// Create the seed's communities (if missing) and their members, on a running world.
 #[spacetimedb::reducer]
 pub fn seed_communities(ctx: &ReducerContext) -> Result<(), String> {
@@ -302,6 +313,61 @@ pub fn spawn_battle(ctx: &ReducerContext, n: u32) -> Result<(), String> {
     Ok(())
 }
 
+/// Benchmark and test support: `n` people in two sides `spacing` tiles apart near the
+/// arrival point (or the map centre), fighting the other side with the starter skills on a
+/// behavior graph (strike in reach, bow shots at range, block or dodge when threatened, a
+/// heal when hurt). Each side is a community; the other side's people are `outsider`s.
+#[spacetimedb::reducer]
+pub fn spawn_skirmish(ctx: &ReducerContext, n: u32, spacing: f32) -> Result<(), String> {
+    use spacetimedb::rand::Rng;
+    require_admin(ctx)?;
+    let now = common::now_ms(ctx);
+    let map = common::map(ctx);
+    let spot = if ctx.db.land().id().find(0).is_some() { let a = island::arrival(ctx); (a.0, a.1 - 30.0) } else { (map.w as f32 / 2.0, map.h as f32 / 2.0) };
+    let center = map.nearest_walkable(spot.0, spot.1).ok_or("no room")?;
+    let community = |name: &str| -> u32 {
+        match ctx.db.community().iter().find(|c| c.name == name) {
+            Some(c) => c.id,
+            None => ctx.db.community().insert(Community { id: 0, name: name.into(), founder: 0, founded_ms: now, home_x: center.0, home_y: center.1 }).id,
+        }
+    };
+    let sides = [community("Skirmish East"), community("Skirmish West")];
+    let mut made = 0;
+    for _ in 0..n * 40 {
+        if made >= n {
+            break;
+        }
+        let side = (made % 2) as usize;
+        let dx = if side == 0 { spacing * 0.5 } else { -spacing * 0.5 };
+        let p = (center.0 + dx + ctx.rng().gen_range(-3.0f32..3.0), center.1 + ctx.rng().gen_range(-6.0f32..6.0));
+        if !map.free(p.0, p.1) {
+            continue;
+        }
+        let name = format!("{}{}", if side == 0 { "East" } else { "West" }, made / 2 + 1);
+        let id = seed::spawn_creature(ctx, &name, "person", ctx.database_identity(), false, p, now);
+        common::inv_add(ctx, id as u64, "bow", 1);
+        common::inv_add(ctx, id as u64, "arrow", 40);
+        common::learn(ctx, id, "mending", "skirmish", now);
+        ctx.db.membership().insert(Membership { id: 0, community: sides[side], member: id, since_ms: now });
+        let graph = format!(
+            r#"{{"first":{{"label":"combat","children":[
+              {{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},
+              {{"if":{{"cond":{{"health":{{"below":45}}}},"then":{{"do":{{"skill":"heal","target":"self"}}}}}}}},
+              {{"if":{{"cond":{{"near":{{"target":{{"nearest":{{"kind":"person","relation":"outsider"}}}},"within":2}}}},"then":{{"do":{{"skill":"strike","target":{{"nearest":{{"kind":"person","relation":"outsider"}}}},"item":"kill"}}}}}}}},
+              {{"if":{{"cond":{{"near":{{"target":{{"nearest":{{"kind":"person","relation":"outsider"}}}},"within":14}}}},"then":{{"do":{{"skill":"bowshot","target":{{"nearest":{{"kind":"person","relation":"outsider"}}}}}}}}}}}},
+              {{"if":{{"cond":{{"sees":{{"nearest":{{"kind":"person","relation":"outsider"}}}}}},"then":{{"do":{{"skill":"goto","target":{{"nearest":{{"kind":"person","relation":"outsider"}}}}}}}}}}}},
+              {{"do":{{"skill":"goto","target":{{"at":[{fx},{fy}]}}}}}}]}}}}"#,
+            defend = if id % 2 == 0 { "dodge" } else { "block" },
+            // With no one of the other side in sight, toward where they started.
+            fx = center.0 - dx,
+            fy = center.1,
+        );
+        mind::set_graph(ctx, id, &graph.replace(['\n', ' '], ""), "skirmish", "battle", now)?;
+        made += 1;
+    }
+    Ok(())
+}
+
 // ---- views for controllers ------------------------------------------------------
 
 #[spacetimedb::view(accessor = my_deliberations, public)]
@@ -326,6 +392,9 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     let at = map.nearest_walkable(arrive.0, arrive.1).ok_or("no room")?;
     let id = seed::spawn_creature(ctx, &name, "person", ctx.sender(), false, at, now);
     mind::set_graph(ctx, id, r#"{"wait":30}"#, "waiting for you", "human", now)?;
+    // What the world gives every newcomer (the seed's `newcomer`): nothing of anyone before.
+    seed::newcomer_kit(ctx, id, now);
+    combat::invalidate_humans();
     Ok(())
 }
 
@@ -358,26 +427,40 @@ pub fn human_act(ctx: &ReducerContext, node: String) -> Result<(), String> {
 /// changes are rate-limited by the `input_hz`/`input_burst` laws.
 #[spacetimedb::reducer]
 pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(), String> {
-    use crate::tables::brain as _;
     let me = my_character(ctx)?;
     if !dx.is_finite() || !dy.is_finite() {
         return Err("direction must be finite".into());
     }
     let now = common::now_ms(ctx);
+    // A blow, a shot or a dash under way holds the body: the movement follows when it ends.
+    if combat::rooted_now(ctx, me.id) {
+        combat::defer_move(ctx, me.id, dx, dy, run);
+        return Ok(());
+    }
     let dir = (dx != 0.0 || dy != 0.0).then_some((dx, dy));
     if dir.is_some() {
-        // Taking the controls: what was going on stops, and the plan becomes "wait".
-        if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill != "wait") {
+        // Taking the controls: what was going on stops (a raised guard walks along), and the
+        // plan becomes "wait".
+        if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill != "wait" && !(a.skill == "block" && a.node == act::PLAYER)) {
             act::cancel(ctx, a, now, Some("you moved"));
         }
-        if ctx.db.brain().id().find(me.id).map_or(true, |b| b.plan != MOVING) {
-            mind::set_graph(ctx, me.id, r#"{"wait":60}"#, MOVING, "human", now)?;
-        }
+        player_controls(ctx, me.id, now)?;
     }
-    motion::intent(ctx, me.id, dir, run, || act::walk_speed(ctx, me.id, now), now)
+    // A guard is held at a walk.
+    let guarding = ctx.db.activity().id().find(me.id).is_some_and(|a| a.skill == "block");
+    motion::intent(ctx, me.id, dir, run && !guarding, || act::walk_speed(ctx, me.id, now), now)
 }
 
 const MOVING: &str = "moving yourself";
+
+/// A player takes the controls: the character's plan becomes waiting for them.
+pub(crate) fn player_controls(ctx: &ReducerContext, id: u32, now: u64) -> Result<(), String> {
+    use crate::tables::brain as _;
+    if ctx.db.brain().id().find(id).map_or(true, |b| b.plan != MOVING) {
+        mind::set_graph(ctx, id, r#"{"wait":60}"#, MOVING, "human", now)?;
+    }
+    Ok(())
+}
 
 #[spacetimedb::reducer]
 pub fn human_say(ctx: &ReducerContext, text: String, to: u32) -> Result<(), String> {

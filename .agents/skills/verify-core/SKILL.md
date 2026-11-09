@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws, needs, life stages, wildlife, combat, steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws, needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
 ---
 
 # Verify the core rules and loop
@@ -33,6 +33,14 @@ python3 "$C/scenes.py" tick --run "$R" > "$E/tick.txt" 2>&1
 python3 "$C/scenes.py" needs --run "$R" > "$E/needs.txt" 2>&1
 python3 "$C/scenes.py" seize --run "$R" > "$E/seize.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
+
+# The starter combat skills under graphs use the island seed (its newcomer kit, pack and
+# skill cards); see features/combat.md.
+K=$R-skirmish
+mkdir -p ".local/living/verify/$K"
+python3 "$V" launch --run "$K" --seed island > ".local/living/verify/$K/launch.txt" 2>&1
+python3 "$C/scenes.py" skirmish --run "$K" > ".local/living/verify/$K/skirmish.txt" 2>&1
+python3 "$V" cleanup --run "$K" > ".local/living/verify/$K/cleanup.txt" 2>&1
 
 # Infant assertions use their own small, long-lived family fixture.
 I=$R-infant

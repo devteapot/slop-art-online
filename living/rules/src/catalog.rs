@@ -51,8 +51,12 @@ pub const SKILLS: &[SkillSpec] = &[
     SkillSpec { name: "join", needs_target: true, needs_item: false, reach: 3.0, help: "ask a member of a community to let you join it (a member must welcome you)" },
     SkillSpec { name: "welcome", needs_target: true, needs_item: false, reach: 3.0, help: "welcome a person who asked to join your community" },
     SkillSpec { name: "leave", needs_target: false, needs_item: false, reach: 0.0, help: "leave your community" },
-    SkillSpec { name: "dodge", needs_target: false, needs_item: false, reach: 0.0, help: "dash out of the way; an attack landing while you dodge misses (costs energy)" },
-    SkillSpec { name: "block", needs_target: false, needs_item: false, reach: 0.0, help: "raise your guard for a moment; hits taken while blocking do a quarter of the damage" },
+    SkillSpec { name: "dodge", needs_target: false, needs_item: false, reach: 0.0, help: "dash out of the way (away from what is coming, or toward a point you aim at); a blow or missile landing while you dash misses (costs energy)" },
+    SkillSpec { name: "block", needs_target: false, needs_item: false, reach: 0.0, help: "raise your guard toward what threatens you (or a point you aim at) for a moment (qty: ms to hold it); hits from the front while blocking do a quarter of the damage, from behind it does not help" },
+    SkillSpec { name: "strike", needs_target: true, needs_item: false, reach: 1.6, help: "a quick blow at a creature within reach, telegraphed for a moment (spear hits harder); \"item\": \"hurt\" or \"kill\" as for attack" },
+    SkillSpec { name: "bowshot", needs_target: true, needs_item: false, reach: 22.0, help: "loose an arrow toward a creature or a point (target {\"at\": [x, y]}): it flies straight and hits the first creature in its path; needs a bow and an arrow" },
+    SkillSpec { name: "firebolt", needs_target: true, needs_item: false, reach: 16.0, help: "hurl a bolt of fire toward a creature or a point: it flies straight and burns the first creature it meets; needs fire_bolt and a lot of energy" },
+    SkillSpec { name: "heal", needs_target: false, needs_item: false, reach: 8.0, help: "mend the wounds of yourself or an ally you can see within 8 tiles, quickly, even in a fight; needs mending and a lot of energy" },
     SkillSpec { name: "throw", needs_target: true, needs_item: false, reach: 7.0, help: "throw your spear at a creature up to 7 tiles away (you lose the spear)" },
     SkillSpec { name: "shoot", needs_target: true, needs_item: false, reach: 9.0, help: "shoot an arrow from your bow at a creature up to 9 tiles away" },
     SkillSpec { name: "follow", needs_target: true, needs_item: false, reach: 2.0, help: "walk alongside a creature for a while" },
@@ -136,6 +140,8 @@ pub const TECHNIQUES: &[TechniqueSpec] = &[
     TechniqueSpec { name: "medicine", help: "craft a salve (2 berries, 1 fiber); tending with a salve heals far more", requires: &[] },
     TechniqueSpec { name: "trapping", help: "build a trap (2 wood, 2 fiber) that catches small game over time", requires: &[] },
     TechniqueSpec { name: "bridging", help: "build a bridge (4 wood, 2 stone) over water beside you", requires: &["carpentry"] },
+    TechniqueSpec { name: "fire_bolt", help: "hurl a bolt of fire (firebolt) that burns the first creature in its path", requires: &["fire"] },
+    TechniqueSpec { name: "mending", help: "mend wounds quickly with your hands (heal), yourself or an ally, even in a fight", requires: &[] },
     TechniqueSpec { name: "toolmaking", help: "craft an axe (2 wood, 1 stone; cuts wood twice as fast) or a pick (2 wood, 2 stone; breaks stone twice as fast)", requires: &[] },
 ];
 

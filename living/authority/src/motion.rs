@@ -655,6 +655,22 @@ pub fn intent(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, run: bool,
     }
 }
 
+/// Spend one token of a player's input bucket (the `input_hz`/`input_burst` laws, shared with
+/// movement) for a skill input; false when the bucket is empty.
+pub fn spend_input(ctx: &ReducerContext, id: u32, now: u64) -> bool {
+    let (mut st, exists) = load_steer(ctx, id);
+    let laws = common::laws(ctx);
+    let refill = now.saturating_sub(st.input_ms) as f32 / 1000.0 * laws.input_hz;
+    let tokens = if exists { (st.tokens + refill).min(laws.input_burst) } else { laws.input_burst };
+    if tokens < 1.0 {
+        return false;
+    }
+    st.tokens = tokens - 1.0;
+    st.input_ms = now;
+    save_steer(ctx, st, exists);
+    true
+}
+
 /// Re-steer bodies near a place whose passability changed (a gate shut, a wall built).
 pub fn resteer_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) {
     for c in living_rules::map::chunks_around(at.0, at.1, r) {

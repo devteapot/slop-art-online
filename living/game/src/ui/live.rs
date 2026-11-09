@@ -12,8 +12,11 @@
 //! - my known places (`place` rows of my character) on the compass;
 //! - on a land world (the island, `live.rs`), nameplates and bubbles over the drawn characters.
 //!
-//! Not on the server yet, so shown as unavailable or omitted: skills and cooldowns, others'
-//! health, what others are doing, interactions, and who saw a death.
+//! - combat (docs/COMBAT.md, `combat.rs`): the skill bar from `my_readiness` (cooldowns), the
+//!   rules' own costs (`skill_card`), my inventory and know-how; others' health band and
+//!   move from their `fighter` rows; floating numbers and who saw my death from `my_combat`.
+//!
+//! Not on the server yet, so omitted: interactions.
 
 use super::model::*;
 use crate::camera::Cam;
@@ -33,7 +36,7 @@ pub struct Last {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, mut last: Local<Last>) {
+pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, mut last: Local<Last>) {
     let now_ms = scene.now_ms;
     let now = now_ms / 1000.0;
     model.shown = true;
@@ -67,7 +70,15 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         last.id = net.my_id;
         last.dead = None;
     }
-    model.death = last.dead.and_then(|id| chars.get(&id)).map(death);
+    model.death = last.dead.and_then(|id| chars.get(&id)).map(death).map(|mut d| {
+        // Who saw it, as my character perceived (the authority's `WITNESS` rows).
+        if !combat.witnesses.is_empty() {
+            d.witnesses = Some(combat.witnesses.iter().map(|w| chars.get(w).map_or_else(|| "someone".to_string(), |c| if c.kind == "person" { c.name.clone() } else { format!("a {}", c.kind) })).collect());
+        } else if combat.killer.is_some() {
+            d.witnesses = Some(Vec::new());
+        }
+        d
+    });
 
     let me = net.my_id;
     let my_pos = target.0;
@@ -102,6 +113,10 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         Me { name, hp, max_hp: v.max_hp, energy, max_energy: 100.0, statuses, hurt: if v.hurt_ms > 0 { (1.0 - since_hurt / 0.8).clamp(0.0, 1.0) } else { 0.0 } }
     });
     let hostile_id = vit.as_ref().filter(|v| v.hurt_by != 0 && (now_ms - v.hurt_ms as f64) < 15_000.0).map(|v| v.hurt_by);
+    let hostile = |id: u32| hostile_id == Some(id) || me.is_some_and(|m| crate::combat::hostile(conn, id, m));
+    // Others' health as anyone sees it: the band of their `fighter` row, if they have fought.
+    let band = |id: u32| conn.db.fighter().id().find(&id).map(|f| living_rules::combat::band_fraction(f.band));
+    let busy = |id: u32| conn.db.fighter().id().find(&id).is_some_and(|f| f.act != 0 && (now_ms as u64) < f.until_ms);
 
     // What I heard.
     let mut heard: Vec<Experience> = me.map(|id| conn.db.experience().iter().filter(|e| e.observer == id && e.kind == "speech").collect()).unwrap_or_default();
@@ -130,7 +145,6 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     };
     let cursor = cam.cursor_ground.map(|c| Vec2::new(c.x, c.z));
     let mut actors = Vec::new();
-    let mut best: Option<(f32, u32)> = None;
     for (id, (p, _)) in &scene.shown {
         let Some(c) = chars.get(id) else { continue };
         // The client-side sight mock (F1): nothing over those out of sight.
@@ -142,11 +156,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             continue;
         }
         let near_cursor = cursor.map_or(f32::MAX, |c| c.distance(*p));
-        // Targeted skills hit the character under or nearest the cursor (docs/GAME_BRIEF.md).
-        if near_cursor < 3.5 && distance < 30.0 && best.is_none_or(|(d, _)| near_cursor < d) {
-            best = Some((near_cursor, *id));
-        }
-        let hostile = hostile_id == Some(*id);
+        let hostile = hostile(*id);
         actors.push(Actor {
             id: *id as u64,
             name: c.name.clone(),
@@ -156,24 +166,26 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             targeted: false,
             talking: talking.contains(id),
             stance: if hostile { Stance::Hostile } else { Stance::Neutral },
-            hp: None,
+            hp: band(*id),
         });
     }
-    let target_id = best.map(|(_, id)| id);
+    // Targeted skills go to the creature under or nearest the cursor (`combat.rs` picks it).
+    let target_id = combat.target;
     for a in &mut actors {
         a.targeted = Some(a.id as u32) == target_id;
     }
     model.target = target_id.and_then(|id| {
         let c = chars.get(&id)?;
         let a = actors.iter().find(|a| a.id == id as u64)?;
-        let doing = if a.stance == Stance::Hostile {
+        let doing = if a.stance == Stance::Hostile || busy(id) {
             Some(StatusKind::InCombat)
         } else if a.talking {
             Some(StatusKind::Talking)
         } else {
             None
         };
-        Some(TargetInfo { name: c.name.clone(), doing, hp: None, stance: a.stance, distance: a.distance })
+        let name = if c.kind == "person" { c.name.clone() } else { format!("{} the {}", c.name, c.kind) };
+        Some(TargetInfo { name, doing, hp: band(id), stance: a.stance, distance: a.distance })
     });
 
     // Bubbles: lines heard within their lifetime, and my own last line.
@@ -198,8 +210,56 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     model.bubbles = bubbles;
     model.actors = actors;
 
-    // Skills: the bar is laid out, but combat is not on the server yet.
-    model.skills = default_bar(|_| SkillState::Unavailable("Not on the server yet".into()));
+    // Skills: live cooldowns, held guard, and what the rules require (costs from `skill_card`).
+    model.skills = match (me, model.me.as_ref()) {
+        (Some(id), Some(m)) => {
+            let inv = |item: &str| conn.db.inventory().iter().filter(|r| r.owner == id as u64 && r.item == item).map(|r| r.qty).sum::<u32>();
+            let knows = |t: &str| conn.db.know_how().iter().any(|k| k.actor == id && k.technique == t);
+            let guard = conn.db.fighter().id().find(&id).is_some_and(|f| f.act == living_rules::combat::code("block") && (now_ms as u64) < f.until_ms);
+            let energy = m.energy;
+            default_bar(|key| {
+                let skill = skill_of(key);
+                if skill == "block" && (guard || combat.guarding) {
+                    return SkillState::Active;
+                }
+                if let Some((left, total)) = crate::combat::cooldown(conn, id, skill, now_ms) {
+                    return SkillState::Cooldown { left, total };
+                }
+                let missing = match skill {
+                    "bowshot" if inv("bow") == 0 => Some("No bow"),
+                    "bowshot" if inv("arrow") == 0 => Some("No arrows"),
+                    "firebolt" if !knows("fire_bolt") => Some("Unknown"),
+                    "heal" if !knows("mending") => Some("Unknown"),
+                    _ => None,
+                };
+                if let Some(why) = missing {
+                    return SkillState::Unavailable(why.into());
+                }
+                let cost = conn.db.skill_card().skill().find(&skill.to_string()).map_or(0.0, |c| c.cost);
+                if energy < cost {
+                    return SkillState::Unavailable("Too tired".into());
+                }
+                SkillState::Ready
+            })
+        }
+        _ => default_bar(|_| SkillState::Ready),
+    };
+
+    // Floating numbers over whoever they happened to.
+    model.numbers = combat
+        .numbers
+        .iter()
+        .map(|n| {
+            let at = Vec3::new(n.at.x, island.as_ref().map_or(0.0, |i| i.height(n.at.x, n.at.y)), n.at.y) + Vec3::Y * 2.0;
+            let kind = match n.kind {
+                crate::combat::NumberKind::Dealt => NumberKind::Dealt,
+                crate::combat::NumberKind::Taken => NumberKind::Taken,
+                crate::combat::NumberKind::Healed => NumberKind::Healed,
+                crate::combat::NumberKind::Blocked => NumberKind::Blocked,
+            };
+            FloatNumber { at, amount: n.amount, kind, age: ((now_ms - n.born_ms) / 1000.0) as f32 }
+        })
+        .collect();
 
     // Compass: my known places.
     model.map = MapInfo {
@@ -208,6 +268,18 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         yaw: cam.shown_yaw,
         pois: me.map(|id| conn.db.place().iter().filter(|p| p.actor == id).map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect()).unwrap_or_default(),
     };
+}
+
+/// The skill on a key of the bar.
+fn skill_of(key: Key) -> &'static str {
+    match key {
+        Key::Lmb => "strike",
+        Key::Rmb => "bowshot",
+        Key::Q => "firebolt",
+        Key::E => "block",
+        Key::R => "heal",
+        Key::Shift => "dodge",
+    }
 }
 
 /// The starter skills on their keys (docs/GAME_BRIEF.md, 2026-11-09); F interacts.

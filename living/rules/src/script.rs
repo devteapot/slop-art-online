@@ -46,6 +46,9 @@ pub struct ActorFacts {
     /// Creatures the actor senses (in sight, or smelled for a species with a scent) by kind;
     /// filled for an animal's attack on a person.
     pub sensed: Vec<(String, u32)>,
+    /// A creature bold enough to attack people without the predator's usual fear (a seed's
+    /// hostile pack; read from its background for an animal's attack on a person).
+    pub bold: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -193,6 +196,8 @@ pub enum Effect {
     Join,
     Welcome,
     Leave,
+    /// Loose the skill's missile (`<skill>_missile(a)`) toward the action's target point.
+    Launch,
 }
 
 /// World laws that parameterize the engine. Read once per script revision (the `laws()`
@@ -370,8 +375,28 @@ impl Scripts {
     }
 
     pub fn done(&self, skill: &str, ctx: &SkillCtx) -> Result<Vec<Effect>, String> {
-        let f = format!("{skill}_done");
+        self.effects(&format!("{skill}_done"), ctx)
+    }
+
+    /// What a skill's missile does to the creature it strikes (`<skill>_hit(a)`, with that
+    /// creature as the target).
+    pub fn hit(&self, skill: &str, ctx: &SkillCtx) -> Result<Vec<Effect>, String> {
+        self.effects(&format!("{skill}_hit"), ctx)
+    }
+
+    /// A skill's missile (`<skill>_missile(a)`: a map of speed, range and radius).
+    pub fn missile(&self, skill: &str, ctx: &SkillCtx) -> Result<crate::combat::MissileSpec, String> {
+        let f = format!("{skill}_missile");
         if !self.has(&f) {
+            return Err(format!("{skill} has no missile"));
+        }
+        let m = self.call(&f, ctx)?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
+        let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("{f} missing {k}"));
+        Ok(crate::combat::MissileSpec { speed: g("speed")?.clamp(1.0, 120.0), range: g("range")?.clamp(0.5, 80.0), radius: g("radius")?.clamp(0.05, 3.0) })
+    }
+
+    fn effects(&self, f: &str, ctx: &SkillCtx) -> Result<Vec<Effect>, String> {
+        if !self.has(f) {
             return Ok(Vec::new());
         }
         let r = self.call(&f, ctx)?;
@@ -524,6 +549,7 @@ fn to_map(c: &SkillCtx) -> Map {
     a.insert("hurt_ago".into(), ago(c.actor.hurt_ago));
     a.insert("yielded_ago".into(), ago(c.actor.yielded_ago));
     a.insert("sensed".into(), inv_map(&c.actor.sensed).into());
+    a.insert("bold".into(), c.actor.bold.into());
     for g in crate::genes::BODY {
         a.insert(g.into(), f(crate::genes::gene(&c.actor.genes, g)));
     }
@@ -565,6 +591,7 @@ fn to_map(c: &SkillCtx) -> Map {
     m.insert("topic".into(), c.topic.clone().into());
     m.insert("roll".into(), f(c.roll));
     m.insert("yield_shield".into(), c.yield_shield.into());
+    m.insert("skill".into(), c.skill.clone().into());
     m
 }
 
@@ -608,6 +635,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "join" => Effect::Join,
         "welcome" => Effect::Welcome,
         "leave" => Effect::Leave,
+        "launch" => Effect::Launch,
         other => return Err(format!("unknown effect op `{other}`")),
     })
 }
@@ -651,6 +679,61 @@ mod tests {
         let s = scripts();
         let text = crate::catalog::skills_help_io(&|n| s.skill_io(n));
         println!("{text}\n({} chars)", text.len());
+    }
+
+    #[test]
+    fn starter_combat_skills_follow_the_rules() {
+        let s = scripts();
+        let mut c = ctx();
+        let foe = TargetFacts { class: "creature".into(), id: 2, kind: "wolf".into(), alive: true, hp: 55.0, max_hp: 55.0, dist: 1.2, ..Default::default() };
+        // A strike: a short windup, a blow and its energy.
+        c.skill = "strike".into();
+        c.target = foe.clone();
+        assert!(s.check("strike", &c).is_ok());
+        assert_eq!(s.duration_ms("strike", &c).unwrap(), 350);
+        let fx = s.done("strike", &c).unwrap();
+        assert!(fx.iter().any(|e| matches!(e, Effect::Damage { amount } if *amount > 5.0)), "{fx:?}");
+        assert!(fx.iter().any(|e| matches!(e, Effect::Vitals { energy, .. } if *energy < 0.0)), "{fx:?}");
+        c.actor.energy = 1.0;
+        assert_eq!(s.check("strike", &c).unwrap_err(), "too tired");
+        c.actor.energy = 80.0;
+        // A bow shot needs a bow and an arrow, launches a missile, and its hit is damage.
+        c.skill = "bowshot".into();
+        c.target = TargetFacts { class: "place".into(), ..Default::default() };
+        assert!(s.check("bowshot", &c).unwrap_err().contains("no bow"));
+        c.actor.inv = vec![("bow".into(), 1), ("arrow".into(), 2)];
+        assert!(s.check("bowshot", &c).is_ok());
+        assert!(s.done("bowshot", &c).unwrap().contains(&Effect::Launch));
+        let m = s.missile("bowshot", &c).unwrap();
+        assert!(m.speed > 10.0 && m.range >= 20.0 && m.radius > 0.0, "{m:?}");
+        c.target = foe.clone();
+        assert!(s.hit("bowshot", &c).unwrap().iter().any(|e| matches!(e, Effect::Damage { .. })));
+        // A fire bolt needs its technique.
+        c.skill = "firebolt".into();
+        assert!(s.check("firebolt", &c).unwrap_err().contains("hurl fire"));
+        c.actor.knows = vec!["fire".into(), "fire_bolt".into()];
+        assert!(s.check("firebolt", &c).is_ok());
+        // A heal: yourself or an ally, not someone fighting you, and only when hurt.
+        c.skill = "heal".into();
+        c.actor.knows.push("mending".into());
+        c.target = TargetFacts { class: "creature".into(), id: 1, kind: "person".into(), alive: true, hp: 100.0, max_hp: 100.0, ..Default::default() };
+        assert_eq!(s.check("heal", &c).unwrap_err(), "you are not hurt");
+        c.target.hp = 40.0;
+        assert!(s.check("heal", &c).is_ok());
+        c.target.id = 3;
+        c.actor.hurt_by = 3;
+        c.actor.hurt_ago = Some(2_000.0);
+        assert_eq!(s.check("heal", &c).unwrap_err(), "they are fighting you");
+        // A held guard lasts as long as it is held, up to 8 s; a graph's guard a moment.
+        c.skill = "block".into();
+        c.qty = 20_000;
+        assert_eq!(s.duration_ms("block", &c).unwrap(), 8_000);
+        c.qty = 0;
+        assert_eq!(s.duration_ms("block", &c).unwrap(), 1_200);
+        // Timing numbers are the rules' own.
+        for sk in crate::combat::STARTER {
+            assert!(s.num_of("combat_cooldown", sk, -1.0) > 0.0, "{sk}");
+        }
     }
 
     #[test]

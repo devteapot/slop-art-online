@@ -1,5 +1,14 @@
 # Validation record (player)
 
+## 2026-11-09 combat skills on the island (dev-box)
+
+Own scratch container `slop-combat-stdb` (image `v2.14.1`, own volume) through a `docker` name shim (`~/combat-shim`); worktree `~/dev/slop-combat` at `e0c9d1f` plus the uncommitted combat change (docs/COMBAT.md). Run `player-combat-20261109-054716`, `--seed island`, recipe `features/combat.md`: `scripts/combat.py` with the player identity, scenes set by admin `place_at`, `set_behavior`, `kill` and a second `join`.
+
+- **Passed, 23 of 23:** unknown skill is a reducer error; refusals recorded and told (no target, out of reach, unhurt heal, a fire bolt inside its windup); strike windup visible, damage, perceived release and hit with the amount; band public; bow shot launch, impact on the first body, arrow spent; fire bolt; guard in front blocks (amount 2.4 got through), from behind it does not; release ends the guard; dodge moved 2.6 m and the blow was dodged; self-heal +22; the bold pack attacked; death "killed by Storm the wolf" (an earlier run) with the killer as witness; rejoin made a new character with only the kit.
+- **Found and fixed on the way:** the rules never read the new `bold` fact (wolves balked); the band row appeared only below the top band; scene ordering (a teleport after setting a graph dropped its approach); a bolt correctly struck an earlier dummy on its line, so the scene aims off those lines.
+- Earlier attempts on `verify-combat-1` are kept in that run's `actions.log`.
+
+
 ## 2026-11-09 island land world (dev-box)
 
 The dev-box (Fedora, rootless podman) ran its own scratch container `slop-live-stdb` (image `v2.14.1`) through a `docker` name shim. The worktree was `c5a2c00`, with uncommitted `living/game` changes (the connected game client); the authority and rules were unchanged. The recipe in `features/player-character.md` ran on `--seed island`, runs `player-island-live` and `player-island-live2`. Evidence is in the dev-box's `~/live-evidence/`.

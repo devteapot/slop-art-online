@@ -120,6 +120,13 @@ impl Map {
         self.walkable(x.floor() as i32, y.floor() as i32)
     }
 
+    /// Whether a missile flies through a continuous position: walls, rock and shut gates
+    /// stop it; water, forest and open ground do not.
+    pub fn passable_missile(&self, x: f32, y: f32) -> bool {
+        let (tx, ty) = (x.floor() as i32, y.floor() as i32);
+        !matches!(self.get(tx, ty), Terrain::Wall | Terrain::Rock) && (self.blocked.is_empty() || !self.blocked.contains(&(ty as u32 * self.w + tx as u32)))
+    }
+
     /// Change one tile (roads, walls); callers persist the chunk.
     pub fn set(&mut self, x: i32, y: i32, t: Terrain) {
         if x >= 0 && y >= 0 && x < self.w as i32 && y < self.h as i32 {

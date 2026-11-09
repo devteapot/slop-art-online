@@ -21,6 +21,8 @@ pub struct HudModel {
     pub log: Vec<LogLine>,
     pub hint: Option<Hint>,
     pub death: Option<Death>,
+    /// Floating combat numbers (damage dealt and taken, healing).
+    pub numbers: Vec<FloatNumber>,
     pub map: MapInfo,
     /// Model time (seconds), for fades.
     pub now: f64,
@@ -145,6 +147,23 @@ pub struct TargetInfo {
     pub hp: Option<f32>,
     pub stance: Stance,
     pub distance: f32,
+}
+
+pub struct FloatNumber {
+    /// Where it rises from (world space, above the head).
+    pub at: Vec3,
+    pub amount: f32,
+    pub kind: NumberKind,
+    /// Seconds since it appeared.
+    pub age: f32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NumberKind {
+    Dealt,
+    Taken,
+    Healed,
+    Blocked,
 }
 
 pub struct Bubble {

@@ -14,7 +14,7 @@ The living core (`living/`, see `docs/LIVING_CORE.md`) is verified surface by su
 | Core rules and loop | `verify-core` | 60 Hz tick, behavior graphs, skills and laws, needs, life course, wildlife, combat, deliberate acts | scripted scenes and cargo tests | – |
 | World generation | `verify-generation` | worlds built from seeds: map, settlements, people, animals, resources; authored-world compilation | publishes and compiles | model drafting of authored worlds |
 | Client protocol | `verify-client` | what a connecting client sees and may do: subscriptions, table and view visibility, reducer permissions per identity | WebSocket probe client | – |
-| Human player | `verify-player` | a person's character: join, move, act, speak, refusals | player identity over HTTP | – |
+| Human player | `verify-player` | a person's character: join, move, act, speak, fight (the skill bar), refusals, death and rejoin | player identity over HTTP | – |
 | Internal agents (minds) | `verify-minds` | the mind service turns requests into installed behavior, speech and consolidated memory | real mind service against a fake model server | real models, short and capped |
 | LLM integration | `verify-llm` | model routing, overflow, outage gate, JSON repair, journaling | fake provider scenarios | one live check per provider |
 | Knowledge | `verify-knowledge` | know-how, tablets, teaching, learning; the personal memory graph, recall and fading | scripted scenes, scratch Neo4j runs | – |

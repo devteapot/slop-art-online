@@ -24,6 +24,10 @@ Run the existing mechanics driver through the recorder using [SKILL.md](../SKILL
 - Admin setup does not prove player authority, personal learning or model reasoning.
 - Seize is absent from the existing driver. Use [combat.md](combat.md).
 
+### A fished-out spot
+
+The net check sends Walker4 to the nearest fishing spot. Residents fish too, and a spot with nothing left fails the gather ("the fishing_spot is depleted"), which also fails the chained smoking and crafting check. With the combat change of 2026-11-09 (docs/COMBAT.md) that spot was fished out in four of four fresh worlds, and in none of two worlds on the base commit; why residents fished it out more often is not established. The driver now picks the nearest spot holding at least two fish. The net itself was shown working in isolation (+2 fish).
+
 ### Recognize and investigate intermittent failures
 
 The preserved `core-1004-proof-mechanics` run passed 16/23 on unchanged product code. It failed tablet transfer, reading, spear crafting, trade, teaching, deliberate conception and expecting-parent retention. Its tablet stayed with Walker1. Walker2 later reported "You failed to accept → Walker1: they moved away". The fresh fix-round runs also retain blocked-path refusals between walkers. Read [the validation record](../references/validation.md) for the exact failed keys, outputs and fresh-run counts.

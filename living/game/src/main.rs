@@ -15,6 +15,7 @@ mod bodies;
 mod camera;
 mod capture;
 mod characters;
+mod combat;
 mod controls;
 mod daylight;
 mod demo;
@@ -32,6 +33,7 @@ mod sky;
 mod style;
 mod terrain;
 mod ui;
+mod vfx;
 mod view;
 mod water;
 mod weather;
@@ -121,6 +123,8 @@ fn main() {
             );
         // Land worlds (the island the authority hosts) draw through the island renderer.
         app.add_plugins(live::LivePlugin);
+        // Combat: skill input, perceived events, clips and effects (docs/COMBAT.md).
+        app.add_plugins((combat::CombatPlugin, vfx::VfxPlugin));
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }

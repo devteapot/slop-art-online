@@ -228,8 +228,9 @@ def main():
     fish0 = have(D, "fish")
     body = rows(db, f"SELECT x, y FROM body WHERE id = {D}")[0]
     dx, dy = float(body["x"]), float(body["y"])
-    nearest = lambda kind: min(((float(r["x"]), float(r["y"])) for r in rows(db, f"SELECT x, y FROM resource_node WHERE kind = '{kind}'")), key=lambda p: (p[0] - dx) ** 2 + (p[1] - dy) ** 2)
-    spot = nearest("fishing_spot")
+    # The nearest one that still holds some (a spot fished out by residents fails the gather).
+    nearest = lambda kind, at_least=0: min(((float(r["x"]), float(r["y"])) for r in rows(db, f"SELECT x, y, amount FROM resource_node WHERE kind = '{kind}'") if float(r["amount"]) >= at_least), key=lambda p: (p[0] - dx) ** 2 + (p[1] - dy) ** 2)
+    spot = nearest("fishing_spot", 2)
     # Earlier checks left D with a full pack: set the berries down first.
     call(db, "set_behavior", str(D), seq(
         {"do": {"skill": "drop", "item": "berries", "qty": 60}},

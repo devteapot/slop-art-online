@@ -13,11 +13,14 @@
 //!      :sender`, indexed). Terrain comes from regenerating the land (`live.rs`), so
 //!      `terrain_chunk` is only subscribed in the window, for edits.
 //!    - **tiles** (the lab worlds): `terrain_chunk` and `character` whole, as before.
-//! 3. My rows: `body`, `vitals`, `experience` and `place` of my character.
+//! 3. My rows: `body`, `vitals`, `experience`, `place`, `inventory` and `know_how` of my
+//!    character; for the connection, my combat feed and timing (`my_combat`, `my_readiness`:
+//!    per-sender views) and the skill bar's `skill_card` (docs/COMBAT.md).
 //! 4. Windows round me:
 //!    - land, near: `body` and the characters on those bodies (a join on `body.id`) within
 //!      [`BODY_CHUNKS`], and `terrain_chunk` within [`TERRAIN_CHUNKS`] (only edits since world
-//!      creation matter there), re-centred when I walk [`RECENTRE`] chunks from its centre;
+//!      creation matter there), and the `fighter` rows on those bodies (a join, as for
+//!      characters), re-centred when I walk [`RECENTRE`] chunks from its centre;
 //!    - land, far: `lot` within [`LOT_CHUNKS`] (buildings show to the island's draw distance),
 //!      re-centred after [`LOT_RECENTRE`] chunks. Lots never change, so this window has its own,
 //!      longer lifetime: re-sending it with every near move cost about 130 kB a move.
@@ -250,7 +253,10 @@ impl Net {
         let Some(conn) = self.conn.as_ref() else { return };
         self.mode = if conn.db.land().count() > 0 { Mode::Land } else { Mode::Tiles };
         let queries: &[&str] = match self.mode {
-            Mode::Land => &["SELECT * FROM character WHERE controller = :sender"],
+            // My combat feed and timing (per-sender views: only my identity's rows) for the
+            // connection's lifetime, so the death screen keeps them after my character dies;
+            // the rules' numbers for the skill bar (`skill_card`, 6 rows; docs/COMBAT.md).
+            Mode::Land => &["SELECT * FROM character WHERE controller = :sender", "SELECT * FROM my_combat", "SELECT * FROM my_readiness", "SELECT * FROM skill_card"],
             _ => &["SELECT * FROM terrain_chunk", "SELECT * FROM character"],
         };
         info!("world kind: {:?}", self.mode);
@@ -315,6 +321,9 @@ impl Net {
                     format!("SELECT * FROM experience WHERE observer = {id}"),
                     // My character's known places, for the compass (`place.actor` is indexed).
                     format!("SELECT * FROM place WHERE actor = {id}"),
+                    // What my skills need: arrows and a bow, and know-how (both indexed).
+                    format!("SELECT * FROM inventory WHERE owner = {id}"),
+                    format!("SELECT * FROM know_how WHERE actor = {id}"),
                 ];
                 self.mine = self.subscribe(q, vec![id]);
             }
@@ -386,6 +395,8 @@ impl Net {
                 // The characters standing in the window (names, kind, life stage, home), through
                 // their bodies: both join columns are primary keys.
                 format!("SELECT character.* FROM character JOIN body ON character.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
+                // How the fighters in the window look: health band and the move under way.
+                format!("SELECT fighter.* FROM fighter JOIN body ON fighter.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
                 format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", tx, ty)),
             ],
             Which::Lots => vec![format!("SELECT * FROM lot WHERE {}", chunk_ranges("chunk", xs, ys))],

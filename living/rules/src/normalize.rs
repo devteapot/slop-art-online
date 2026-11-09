@@ -327,7 +327,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     out.insert("skill".into(), json!(skill));
     let item = action.get("item").or_else(|| action.get("what")).or_else(|| action.get("object")).or_else(|| action.get("kind")).cloned();
     // An attack's item says what its blows are meant for: "hurt" or "kill".
-    if skill == "attack" {
+    if skill == "attack" || skill == "strike" {
         let mode = action.get("mode").or_else(|| action.get("intent")).or(item.as_ref()).and_then(|m| m.as_str()).and_then(attack_mode);
         if let Some(m) = mode {
             out.insert("item".into(), json!(m));
@@ -380,7 +380,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     if spec.needs_target && !out.contains_key("target") {
         return Err(format!("{path}.do: skill `{skill}` needs a target"));
     }
-    if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework" && skill != "attack") {
+    if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework" && skill != "attack" && skill != "strike") {
         let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some();
         if !known {
             return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::ITEMS.iter().map(|x| x.name).collect::<Vec<_>>().join(", ")));

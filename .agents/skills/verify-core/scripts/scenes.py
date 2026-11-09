@@ -540,7 +540,47 @@ def infant_cries(s, baby, a, b, carers, witness, warm_anchor):
     s.rows("SELECT * FROM experience", "fallback-experiences")
 
 
-SCENES = {"infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival}
+def skirmish(s):
+    """Graph-driven fighters use the starter skills through the same rules as players
+    (docs/COMBAT.md): two sides of 10, strike in reach, bow shots at range, block or dodge when
+    threatened, heal when hurt. Asserts accepted uses from graphs, missiles that struck, the
+    timing gate (cooldowns), fighter bands, and deaths through the ordinary death rule."""
+    before = {c["id"] for c in s.rows("SELECT id FROM character")}
+    t0 = int(time.time() * 1000)
+    s.call("spawn_skirmish", 20, 16.0)
+    made = [c["id"] for c in s.rows("SELECT id, name FROM character") if c["id"] not in before]
+    s.expect("skirmish fighters created", len(made) == 20, made)
+    def uses():
+        return s.rows("SELECT * FROM skill_use")
+    s.wait(lambda: len([u for u in uses() if u["actor"] in made and u["accepted_ms"] > 0]) >= 30, seconds=60, every=2)
+    time.sleep(20)
+    u = [x for x in s.rows("SELECT * FROM skill_use", "uses") if x["actor"] in made]
+    by = {}
+    for x in u:
+        by.setdefault(x["skill"], []).append(x)
+    s.expect("graphs use the starter skills", {"strike", "bowshot"} <= set(by) and len(set(by) & {"block", "dodge", "heal"}) >= 1,
+             {k: len(v) for k, v in by.items()})
+    s.expect("graph uses are recorded from acceptance, source graph", all(x["source"] == "graph" and x["accepted_ms"] >= t0 for x in u), len(u))
+    struck = [x for x in by.get("bowshot", []) if x["outcome"].startswith("struck")]
+    s.expect("arrows fly and strike bodies on their path", len(struck) >= 1, [x["outcome"] for x in by.get("bowshot", [])][:6])
+    # Cooldowns hold for graphs too: no two accepted uses of a skill by one actor closer than its cooldown.
+    cards = {c["skill"]: c["cooldown_ms"] for c in s.rows("SELECT * FROM skill_card", "cards")}
+    tight = []
+    for actor in made:
+        for skill, cd in cards.items():
+            ts = sorted(x["accepted_ms"] for x in u if x["actor"] == actor and x["skill"] == skill and x["accepted_ms"])
+            tight += [(actor, skill, b - a) for a, b in zip(ts, ts[1:]) if b - a < cd]
+    s.expect("cooldowns hold for graph-driven fighters", not tight, tight[:5])
+    f = s.rows("SELECT * FROM fighter", "fighters")
+    s.expect("fighters show a health band", any(x["id"] in made and x["band"] < 4 for x in f), [(x["id"], x["band"]) for x in f if x["id"] in made][:8])
+    s.wait(lambda: any(not c["alive"] for c in s.rows("SELECT id, alive FROM character") if c["id"] in made), seconds=120, every=3)
+    dead = [c for c in s.rows("SELECT id, alive, cause FROM character", "after") if c["id"] in made and not c["alive"]]
+    s.expect("skirmish deaths through the death rule", dead and all(c["cause"].startswith("killed by") for c in dead), [c["cause"] for c in dead][:5])
+    gone = {c["id"] for c in dead}
+    s.expect("the dead leave no fighter or readiness rows", not [x for x in s.rows("SELECT id FROM fighter") + s.rows("SELECT id FROM readiness") if x["id"] in gone])
+
+
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival}
 
 
 def main():

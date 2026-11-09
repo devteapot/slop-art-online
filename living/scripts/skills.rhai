@@ -100,6 +100,8 @@ fn rates(a) {
         hunger *= 0.5;
     } else if act == "rest" {
         energy = 6.0;
+    } else if act == "block" {
+        energy = -12.0;
     }
     if a.actor.hunger >= 100.0 {
         hp -= 6.0;
@@ -441,6 +443,8 @@ fn easy_hurt(kind) { 0.35 }
 fn fight_back_ms(kind) { 10000.0 }
 fn dares(a) {
     if a.actor.kind == "person" || a.target.kind != "person" { return ""; }
+    // A hostile pack (the seed's `bold` animals) has lost its fear of people.
+    if a.actor.bold { return ""; }
     if a.actor.hurt_by == a.target.id && within(a.actor.hurt_ago, fight_back_ms(a.actor.kind)) { return ""; }
     let prey = 0;
     for k in prey_of(a.actor.kind) { prey += sensed(a, k); }
@@ -737,12 +741,88 @@ fn rework_done(a) { [#{ op: "rework" }, #{ op: "vitals", energy: -1.0 }] }
 
 // ---- combat moves ---------------------------------------------------------------
 
-fn dodge_check(a) { if a.actor.energy < 5.0 { "too exhausted to dodge" } else { "" } }
-fn dodge_done(a) { [#{ op: "vitals", energy: -2.0 }] }
+// Every combat move has a windup (its `_duration`: the time others have to see it coming),
+// then its release, a recovery in which only a dodge can follow (`combat_recover`), and a
+// cooldown counted from its start (`combat_cooldown`), for anyone who uses it: player or
+// graph, person or animal. `combat_cost` is the energy it takes, paid at the release.
+fn combat_recover(skill) { switch skill { "strike" => 250, "bowshot" => 250, "firebolt" => 350, "heal" => 300, "dodge" => 200, "attack" => 300, "shoot" => 300, "throw" => 400, _ => 0 } }
+fn combat_cooldown(skill) { switch skill { "strike" => 650, "bowshot" => 900, "firebolt" => 4000, "heal" => 8000, "dodge" => 900, "block" => 400, _ => 0 } }
+fn combat_cost(skill) { switch skill { "strike" => 2.0, "bowshot" => 1.5, "firebolt" => 12.0, "heal" => 15.0, "dodge" => 4.0, "block" => 1.0, _ => 0.0 } }
+fn spent(skill) { [#{ op: "vitals", energy: -combat_cost(skill) }] }
+fn winded(a) { if a.actor.energy < combat_cost(a.skill) { "too tired" } else { "" } }
+// A raised guard covers this many degrees either side of where it faces.
+fn block_arc(kind) { 75.0 }
+// How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
+fn dodge_dist(kind) { switch kind { "wolf" => 2.4, "deer" => 2.8, _ => 2.6 } }
+fn dodge_speed(kind) { switch kind { "wolf" => 8.0, "deer" => 8.0, _ => 5.2 } }
 
-fn block_check(a) { if a.actor.kind != "person" { "only people can block" } else { "" } }
-fn block_duration(a) { 1200 }
+fn dodge_check(a) { if a.actor.energy < 5.0 { "too exhausted to dodge" } else { "" } }
+fn dodge_done(a) { spent("dodge") }
+
+// A guard is held for `qty` ms (a player holds it until they let go, at most 8 s), else a
+// moment. Holding it is tiring (see `rates`).
+fn block_check(a) { if a.actor.kind != "person" { return "only people can block"; } winded(a) }
+fn block_duration(a) { if a.qty > 0 { if a.qty > 8000 { 8000 } else { a.qty } } else { 1200 } }
 fn block_done(a) { [#{ op: "vitals", energy: -0.5 }] }
+
+// ---- the starter skills (docs/GAME_BRIEF.md): sword strike, bow shot, fire bolt, heal ------
+
+// A quick, telegraphed blow at a creature in reach; meant to hurt or to kill like an attack.
+fn strike_check(a) {
+    let why = attack_check(a);
+    if why != "" { return why; }
+    winded(a)
+}
+fn strike_duration(a) { 350 }
+fn strike_done(a) {
+    let dmg = if inv(a, "spear") > 0 { 15.0 } else { 10.0 };
+    let dmg = dmg * a.actor.strength * a.actor.factor * armor(a);
+    if attack_mode(a) == "hurt" {
+        let room = a.target.hp - hurt_floor(a.target.kind) * a.target.max_hp;
+        if room < 0.0 { room = 0.0; }
+        if dmg > room { dmg = room; }
+    }
+    [#{ op: "damage", amount: dmg }] + spent("strike")
+}
+
+fn aim_check(a) {
+    if young(a) { return "too young to fight"; }
+    if yielding(a) { return "you have yielded: you do not strike back while it holds"; }
+    if a.target.class == "creature" && (a.target.id == a.actor.id || !a.target.alive) { return "nothing to aim at"; }
+    winded(a)
+}
+// An arrow flies straight and hits the first creature in its path.
+fn bowshot_check(a) {
+    if inv(a, "bow") < 1 { return "no bow to shoot with"; }
+    if inv(a, "arrow") < 1 { return `no arrows (arrow: ${source_of("arrow")})`; }
+    aim_check(a)
+}
+fn bowshot_duration(a) { 300 }
+fn bowshot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "launch" }] + spent("bowshot") }
+fn bowshot_missile(a) { #{ speed: 30.0, range: 22.0, radius: 0.15 } }
+fn bowshot_hit(a) { [#{ op: "damage", amount: 14.0 * a.actor.strength * a.actor.factor * armor(a) }] }
+
+// A bolt of fire: slower, shorter, wider and much harder, at a great cost of energy.
+fn firebolt_check(a) {
+    if !knows(a, "fire_bolt") { return "you don't know how to hurl fire" + learn_how("fire_bolt"); }
+    aim_check(a)
+}
+fn firebolt_duration(a) { 450 }
+fn firebolt_done(a) { [#{ op: "launch" }] + spent("firebolt") }
+fn firebolt_missile(a) { #{ speed: 16.0, range: 16.0, radius: 0.35 } }
+fn firebolt_hit(a) { [#{ op: "damage", amount: 24.0 * a.actor.factor * armor(a) }] }
+
+// Mending by hand: yourself or an ally in sight, quickly, even mid-fight.
+fn heal_check(a) {
+    if !knows(a, "mending") { return "you don't know how to mend wounds" + learn_how("mending"); }
+    if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to heal"; }
+    if a.target.hp >= a.target.max_hp - 0.5 { return if a.target.id == a.actor.id { "you are not hurt" } else { "they are not hurt" }; }
+    // An ally: not someone fighting you, nor someone you are fighting.
+    if a.target.id != a.actor.id && (a.actor.hurt_by == a.target.id && within(a.actor.hurt_ago, 15000.0)) { return "they are fighting you"; }
+    winded(a)
+}
+fn heal_duration(a) { 600 }
+fn heal_done(a) { [#{ op: "heal", amount: 22.0 * a.actor.factor }] + spent("heal") }
 
 fn throw_check(a) {
     if inv(a, "spear") < 1 { return "no spear to throw"; }
@@ -867,6 +947,10 @@ fn skill_io(skill) {
             gives: `you stop resisting, guard down and hands up: for ${(yield_ms("person") / 1000.0).to_int()} seconds you do not strike back, and blows meant only to hurt are held back from you (blows meant to kill are not)` },
         "throw" => #{ takes: "your spear", gives: "a hard hit at range; the spear is gone" },
         "shoot" => #{ takes: "a bow and 1 arrow, a creature within 9 tiles", gives: "a hit at range (softened by armor); the arrow is spent" },
+        "strike" => #{ takes: `a creature within reach, ${combat_cost("strike")} energy; ready again ${combat_cooldown("strike")} ms after you start`, gives: "a quick blow (harder with a spear, strength and practice) after a short windup they can see; out of reach by then, it misses; a raised guard in front of them takes most of it" },
+        "bowshot" => #{ takes: `a bow and 1 arrow, ${combat_cost("bowshot")} energy, a creature or a point to aim at (up to 22 tiles)`, gives: "an arrow that flies straight and hits the first creature in its path (softened by armor); the arrow is spent" },
+        "firebolt" => #{ takes: `knowing fire_bolt, ${combat_cost("firebolt")} energy, a creature or a point to aim at (up to 16 tiles); ready again after ${combat_cooldown("firebolt") / 1000} s`, gives: "a bolt of fire that burns the first creature it meets, hard" },
+        "heal" => #{ takes: `knowing mending, ${combat_cost("heal")} energy, yourself or a hurt ally in sight within 8 tiles; ready again after ${combat_cooldown("heal") / 1000} s`, gives: "their wounds mended at once, even in a fight" },
         "tend" => #{ takes: "a hurt person in reach who is not fighting, a little energy (and a salve, if you know medicine)", gives: "their wounds healed some (far more with a salve)" },
         "plant" => #{ takes: "2 berries, open grass or dirt outside winter, knowing planting", gives: "a new berry bush in time" },
         "experiment" => #{ takes: "1 of the material", gives: "sometimes a new technique" },

@@ -52,7 +52,11 @@ BASE_QUERIES = [
     'SELECT * FROM gate',
 ]
 PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
-           'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry']
+           'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
+           'combat_seen', 'missile', 'skill_use', 'readiness']
+# The player's combat input (docs/COMBAT.md): refusals are recorded and told through
+# `my_combat`, so these calls succeed for any living character.
+PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block']}
 MIND = ['mind_routines', 'mind_install', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update']
 ADMIN = {
@@ -62,6 +66,7 @@ ADMIN = {
     'set_background': [0, '{}'], 'grant_items': [0, 'berries', 0],
     'place_structure': [0, 'shelter'], 'set_behavior': [0, '{"wait":30}'],
     'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0],
+    'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0],
 }
 
 
@@ -298,7 +303,7 @@ class Run:
             text = path.read_text()
             for match in re.finditer(r'#\[spacetimedb::reducer\]\s*pub fn (\w+)\(', text):
                 reducers[match[1]] = f'{path.relative_to(ROOT)}:{text[:match.start()].count(chr(10)) + 2}'
-        expected = set(ADMIN) | set(MIND) | {'join', 'human_move', 'human_act', 'human_say', 'tick', 'housekeeping'}
+        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'tick', 'housekeeping'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         write(self.directory / 'source-inventory.json', {'base_queries': exact, 'private': private,
@@ -352,6 +357,8 @@ class Run:
             self.call(label, token, 'human_move', [0, 0, False])
             self.call(label, token, 'human_act', ['{"wait":30}'])
             self.call(label, token, 'human_say', ['VERIFY_CLIENT_SPEECH_' + label, 0])
+            for reducer, args in PLAYER.items():
+                self.call(label, token, reducer, args)
         for reducer, args in ADMIN.items():
             self.call('anonymous-http-no-token', None, reducer, args, 'admin only')
         for reducer in MIND:
@@ -359,7 +366,7 @@ class Run:
         for reducer in ['tick', 'housekeeping']:
             self.call('anonymous-http-no-token', None, reducer, [{'scheduled_id': 0, 'scheduled_at': {'Interval': 16667}}],
                       'No such procedure', expected_status=404)
-        for reducer, args in [('human_move', [0, 0, False]), ('human_act', ['{"wait":30}']), ('human_say', ['probe', 0])]:
+        for reducer, args in [('human_move', [0, 0, False]), ('human_act', ['{"wait":30}']), ('human_say', ['probe', 0])] + list(PLAYER.items()):
             self.call('anonymous-http-no-token', None, reducer, args, 'you have no living character')
         self.call('anonymous-http-no-token', None, 'join', ['AnonHttp'])
         self.check('reducer permission matrix', all(row['pass'] for row in self.matrix), 'reducers.json',
@@ -428,6 +435,30 @@ class Run:
                        all(v['final']['counts']['my_deliberations'] == 0
                            for label, v in views.items() if label != 'admin'),
                        'view-*.json', 'admin requests exist before and after empty foreign views')
+        # Combat (docs/COMBAT.md): each player's refused strike is told to that player
+        # only; anonymous sees no feed; uses are scoped to the caller's characters; the
+        # fighter and skill_card tables are public.
+        # Feed rows live 4 s: refuse a strike for each player now (the matrix's are long gone).
+        for label, token, _ in identities:
+            self.call(label, token, 'use_skill', ['strike', 0, 0.0, 0.0])
+        combat = {label: self.probe('combat-' + label, ['SELECT * FROM my_combat', 'SELECT * FROM my_skill_uses'], token, seconds=1)
+                  for label, token, _ in identities}
+        combat['anonymous'] = self.probe('combat-anonymous', ['SELECT * FROM my_combat', 'SELECT * FROM my_skill_uses'])
+        owners = {label: own for label, _, own in identities}
+        self.check('combat feed scoped to its viewer', all(
+            v['status'] == 'applied' and len(v['final']['combat']) > 0 and
+            all(r['viewer'] == v['identity'] for r in v['final']['combat']) and
+            any(r['kind'] == 9 and r['actor'] == owners[label] for r in v['final']['combat'])
+            for label, v in combat.items() if label != 'anonymous') and
+            combat['anonymous']['status'] == 'applied' and not combat['anonymous']['final']['combat'], 'combat-*.json',
+            ', '.join(f"{label} {len(v['final']['combat'])}" for label, v in combat.items()))
+        self.check('skill uses scoped to own characters', all(
+            len(v['final']['skill_uses']) > 0 and all(u['actor'] == owners[label] for u in v['final']['skill_uses']) and
+            any(u['skill'] == 'strike' and u['accepted_ms'] == 0 and 'refused' in u['outcome'] for u in v['final']['skill_uses'])
+            for label, v in combat.items() if label != 'anonymous') and not combat['anonymous']['final']['skill_uses'], 'combat-*.json')
+        public = self.probe('combat-public', ['SELECT * FROM fighter', 'SELECT * FROM skill_card'])
+        self.check('fighter and skill_card are public', public['status'] == 'applied' and public['final']['counts']['skill_card'] == 6, 'combat-public.json',
+                   f"fighter {public['final']['counts']['fighter']}, skill_card {public['final']['counts']['skill_card']}")
         drop_file = self.directory / 'drop-request'
         drop_file.unlink(missing_ok=True)
         with DropProxy(drop_file) as proxy:

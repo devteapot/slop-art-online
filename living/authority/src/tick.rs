@@ -50,6 +50,11 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         act::progress(ctx, a, now);
     }
     drop(phase);
+    // Missiles in flight are swept along their paths; what players saw expires.
+    let phase = common::span("tick.missiles");
+    crate::combat::missiles(ctx, now);
+    crate::combat::expire(ctx, now);
+    drop(phase);
     // 3. Wakes and this slot's evaluations.
     let phase = common::span("tick.wakes");
     let mut done = HashSet::new();
@@ -328,6 +333,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     }
 
     spoil(ctx, now);
+    crate::combat::housekeeping(ctx, now);
 
     // One pass over the characters: population counts for the stats row, and the living.
     let mut alive_people = 0u32;

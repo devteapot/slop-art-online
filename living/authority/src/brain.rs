@@ -100,7 +100,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         act::cancel(ctx, a, now, Some("you could not get to it in time"));
         cur = ctx.db.activity().id().find(id);
     }
-    let acting = cur.as_ref().map_or(false, |a| a.node == act::ACT);
+    let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
     let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting };
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && LATCHES.contains(&a.skill.as_str())).map(|a| a.node);
     ev.alerts();
@@ -448,7 +448,7 @@ impl<'a> Ev<'a> {
         if self.acting {
             // A deliberate act holds the body: the graph's work waits for it, but a reflex
             // (flee, dodge, block, attack, throw) takes the body back at once.
-            match self.ctx.db.activity().id().find(self.me.id).filter(|a| a.node == act::ACT) {
+            match self.ctx.db.activity().id().find(self.me.id).filter(|a| act::held(a.node)) {
                 Some(a) if living_rules::acts::REFLEXES.contains(&skill) => {
                     crate::acts::interrupt(self.ctx, a, skill, self.now);
                     self.acting = false;
@@ -711,7 +711,7 @@ impl<'a> Ev<'a> {
             Cond::Threatened(b) => {
                 let me = self.me.id;
                 let now = self.now;
-                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && matches!(a.skill.as_str(), "attack" | "throw" | "shoot" | "threaten"));
+                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && matches!(a.skill.as_str(), "attack" | "throw" | "shoot" | "threaten" | "strike" | "bowshot" | "firebolt"));
                 coming == *b
             }
             Cond::Believes(b) => self
@@ -1062,8 +1062,8 @@ impl<'a> Ev<'a> {
         // Interrupt an activity no running leaf owns anymore (the branch lost priority);
         // a deliberate act is not the graph's to interrupt (only a reflex does, in `leaf`).
         if let Some(a) = ctx.db.activity().id().find(id) {
-            if a.node == act::ACT {
-                self.running = Some(act::ACT);
+            if act::held(a.node) {
+                self.running = Some(a.node);
                 self.status = format!("{} (decided)", a.label);
                 self.path.clear();
             } else if self.running != Some(a.node) || a.revision != self.st.revision {
@@ -1099,7 +1099,7 @@ impl<'a> Ev<'a> {
             }
             self.noticed();
         }
-        if result != St::Run && self.running != Some(act::ACT) {
+        if result != St::Run && !self.running.is_some_and(act::held) {
             self.status = match result {
                 St::Ok => "done".into(),
                 _ => {
@@ -1148,6 +1148,11 @@ fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
         "enemy" => r.is_some() && (trust <= -25.0 || ["enemy", "rival", "threat", "thief"].iter().any(|l| label.contains(l))),
         "family" => ["family", "partner", "kin", "child", "parent", "sibling"].iter().any(|l| label.contains(l)),
         "stranger" => r.is_none() || label.contains("stranger"),
+        // Not of my community (everyone, when I belong to none).
+        "outsider" => match (ctx.db.membership().member().find(me), ctx.db.membership().member().find(other)) {
+            (Some(a), Some(b)) => a.community != b.community,
+            (Some(_), None) | (None, _) => true,
+        },
         "any" | "" => true,
         other => label.contains(&other.to_lowercase()),
     }

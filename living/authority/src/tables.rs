@@ -888,6 +888,158 @@ pub struct Pasture {
     pub at_ms: u64,
 }
 
+// ---- combat (docs/COMBAT.md) ---------------------------------------------------
+
+/// The starter skills' numbers as the rules state them (one row per skill on the bar),
+/// rewritten whenever a skill script is installed, so clients show costs and cooldowns
+/// without running the rules (public, static).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = skill_card, public)]
+pub struct SkillCard {
+    #[primary_key]
+    pub skill: String,
+    /// Place on the bar (`living_rules::combat::STARTER` order).
+    pub slot: u8,
+    /// Energy it takes; its windup, recovery and cooldown (ms); how far it reaches or flies.
+    pub cost: f32,
+    pub windup_ms: u32,
+    pub recover_ms: u32,
+    pub cooldown_ms: u32,
+    pub reach: f32,
+}
+
+/// What others can see of a character in a fight: the health band at a glance and the move
+/// under way, with its timing. Written when a move starts, releases or ends and when the band
+/// changes; clients receive it through their body window (a join on `body.id`). It holds
+/// what anyone looking at the body would see, nothing more (no exact health, no cooldowns).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = fighter, public)]
+pub struct Fighter {
+    #[primary_key]
+    pub id: u32,
+    /// `living_rules::combat::band`: 4 unhurt … 0 barely standing.
+    pub band: u8,
+    /// The move under way (`living_rules::combat::code`), 0 for none.
+    pub act: u8,
+    /// When it started, when its windup releases, and when its recovery (or a held guard)
+    /// ends (authority ms).
+    pub act_ms: u64,
+    pub release_ms: u64,
+    pub until_ms: u64,
+    /// Whom it is aimed at (0 for a point or nobody), and the direction it faces (unit).
+    pub target: u32,
+    pub aim_x: f32,
+    pub aim_y: f32,
+}
+
+/// What one human player's character perceived of a fight, for that player only (private;
+/// delivered through the per-sender `my_combat` view). Rows are transient: each expires a
+/// few seconds after it happened (`expires_ms`), so the table holds only what is current.
+/// Minds perceive fights through `experience`, as before.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = combat_seen)]
+pub struct CombatSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    #[index(btree)]
+    pub expires_ms: u64,
+    pub at_ms: u64,
+    /// `living_rules::combat::seen`.
+    pub kind: u8,
+    pub actor: u32,
+    pub target: u32,
+    /// `living_rules::combat::code`.
+    pub skill: u8,
+    pub x: f32,
+    pub y: f32,
+    pub dx: f32,
+    pub dy: f32,
+    /// Damage or healing, filled only for the two involved; a missile's speed.
+    pub amount: f32,
+    /// A missile's longest flight, a windup (ms).
+    pub ms: u32,
+    /// Why an attempt was refused (for the actor only).
+    pub note: String,
+}
+
+/// A missile in flight (private: clients draw it from its `LAUNCH` and `IMPACT` events).
+/// Swept along its path every tick (`next_ms`) against bodies and walls.
+#[derive(Clone, Debug)]
+#[spacetimedb::table(accessor = missile)]
+pub struct Missile {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub owner: u32,
+    pub skill: String,
+    /// Where it was at `t_ms`, its direction (unit), speed (tiles/s), the distance it may
+    /// still fly, its radius.
+    pub x: f32,
+    pub y: f32,
+    pub t_ms: u64,
+    pub dx: f32,
+    pub dy: f32,
+    pub speed: f32,
+    pub left: f32,
+    pub radius: f32,
+    #[index(btree)]
+    pub next_ms: u64,
+    /// The `skill_use` it belongs to.
+    pub use_id: u64,
+}
+
+/// One use of a combat skill, from the intention to what actually happened (private; kept
+/// for the last [`crate::combat::USES_KEPT`] uses per character). `accepted_ms` is 0 for an
+/// attempt the rules refused, with `outcome` saying why.
+#[derive(Clone, Debug)]
+#[spacetimedb::table(accessor = skill_use)]
+pub struct SkillUse {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub skill: String,
+    /// Who decided it: `player` (a person's input), `graph` (a behavior graph), `act`.
+    pub source: String,
+    pub at_ms: u64,
+    /// What it was aimed at: a creature (0 for none) and/or a point.
+    pub target: u32,
+    pub aim_x: f32,
+    pub aim_y: f32,
+    pub accepted_ms: u64,
+    pub released_ms: u64,
+    pub outcome: String,
+    pub outcome_ms: u64,
+}
+
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct Ready {
+    pub skill: String,
+    /// When its cooldown started and ends (authority ms).
+    pub from_ms: u64,
+    pub at_ms: u64,
+}
+
+/// A character's combat timing (private; the controller reads its own through the
+/// `my_readiness` view): cooldowns per skill, the recovery after the last release, and a
+/// movement a player asked for while rooted, applied once the move ends.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = readiness)]
+pub struct Readiness {
+    #[primary_key]
+    pub id: u32,
+    pub ready: Vec<Ready>,
+    pub busy_until: u64,
+    pub move_pending: bool,
+    pub move_dx: f32,
+    pub move_dy: f32,
+    pub move_run: bool,
+}
+
 // ---- schedules ---------------------------------------------------------------
 
 #[spacetimedb::table(accessor = tick_timer, scheduled(crate::tick::tick))]
