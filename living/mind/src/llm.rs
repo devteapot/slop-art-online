@@ -150,6 +150,11 @@ pub struct ModelsFile {
     /// `groups` and `species`.
     #[serde(default)]
     pub mixes: HashMap<String, HashMap<String, Choice>>,
+    /// The route (a profile or a mix) of residents woken into minds on a world whose
+    /// residents otherwise live on instinct (docs/TOWN_LIFE.md, "Layer 2"): over their group,
+    /// stage, rotation and the default; an assignment by name still wins.
+    #[serde(default)]
+    pub woken: Option<String>,
 }
 
 impl ModelsFile {
@@ -189,6 +194,9 @@ impl ModelsFile {
             }
         };
         route("default", &self.default)?;
+        if let Some(w) = &self.woken {
+            route("woken", w)?;
+        }
         for (k, v) in self.assign.iter().chain(&self.stages).chain(&self.groups) {
             route(k, v)?;
         }
@@ -723,6 +731,13 @@ impl Llm {
             return keyed(self.models.assign.get(name)).unwrap_or(g);
         }
         child.then(|| self.stage_profile("child")).flatten().unwrap_or_else(|| self.profile_for(id, name))
+    }
+
+    /// The route of a woken resident (`woken` in the models file), unless assigned one by name
+    /// or the route has no key.
+    pub fn woken_route(&self, name: &str) -> Option<String> {
+        let keyed = |p: Option<&String>| p.filter(|p| self.usable(p)).cloned();
+        keyed(self.models.woken.as_ref()).map(|w| keyed(self.models.assign.get(name)).unwrap_or(w))
     }
 
     /// Whether any group has a profile (otherwise groups need not be looked up).
@@ -1367,6 +1382,7 @@ mod tests {
             stages: Default::default(),
             groups: Default::default(),
             mixes: Default::default(),
+            woken: None,
         };
         let scheduler = Scheduler::new(&models, 1, 0.0);
         let mut q = scheduler.queue.lock().unwrap();
@@ -1394,6 +1410,7 @@ mod tests {
             stages: Default::default(),
             groups: Default::default(),
             mixes: Default::default(),
+            woken: None,
         };
         let scheduler = Scheduler::new(&models, 2, 30.0);
         let mut q = scheduler.queue.lock().unwrap();
@@ -1741,6 +1758,28 @@ mod tests {
         assert_eq!(llm.person_profile(1, "Tam", None, true), "glm", "and a stage naming an unusable mix is passed over");
         assert!(llm.staged());
         assert_eq!(llm.model_name("people"), "mix people");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn woken_residents_take_their_route_unless_assigned() {
+        let dir = std::env::temp_dir().join(format!("living-woken-{}", now_ms()));
+        let llm = Llm::new(mix_models(), dir.clone()).unwrap();
+        assert_eq!(llm.woken_route("Tam"), None, "no `woken` route: woken residents route like anyone");
+        let mut m = mix_models();
+        m.woken = Some("people".into());
+        m.assign.insert("Mara".into(), "ds".into());
+        m.check().unwrap();
+        let llm = Llm::new(m, dir.clone()).unwrap();
+        assert_eq!(llm.woken_route("Tam"), Some("people".into()));
+        assert_eq!(llm.woken_route("Mara"), Some("ds".into()), "an assignment by name still wins");
+        let mut m = mix_models();
+        m.woken = Some("broken".into());
+        let llm = Llm::new(m, dir.clone()).unwrap();
+        assert_eq!(llm.woken_route("Tam"), None, "a route with a profile without a key is passed over");
+        let mut m = mix_models();
+        m.woken = Some("nobody".into());
+        assert!(m.check().unwrap_err().to_string().contains("woken names nobody"));
         let _ = std::fs::remove_dir_all(dir);
     }
 

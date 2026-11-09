@@ -948,6 +948,18 @@ fn wakes(e) {
 // overheard speech 0.45), the same perception again within `repeat_s` counted in its slot,
 // someone who came into view noted again only after `sighted_s`. Measured on the island
 // (docs/TOWN_LIFE.md): without the floor a fifth of the slots held answered greetings.
+// What a woken resident's mind gets, read by the mind service: at most `cap` woken residents of
+// one settlement are on stage (thinking and talking at the full rate) at once; beyond it the
+// least recently engaged is off stage (0: no cap). A woken resident's first thought waits at
+// most `wait_s` for its mind to be made (its identity from the world's facts, then its ring).
+fn woken_stage(k) {
+    switch k {
+        "cap" => 6,
+        "wait_s" => 60,
+        _ => 0,
+    }
+}
+
 fn woken_ring(k) {
     switch k {
         "slots" => 24,

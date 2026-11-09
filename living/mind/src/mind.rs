@@ -28,6 +28,7 @@ pub mod lod;
 mod recall;
 mod sleep;
 mod talk;
+mod woken;
 
 pub enum Event {
     /// Speech heard (or unanswered) by one of this service's characters.
@@ -41,6 +42,8 @@ pub enum Event {
     Contact(u32),
     /// With `LIVING_PLAYER_MEMORY=1`: an experience of a character a person plays.
     Lived(Experience),
+    /// A resident was woken into a mind (docs/TOWN_LIFE.md, "Layer 2").
+    Woken(u32),
 }
 
 pub use lived::enabled as player_memory;
@@ -84,6 +87,10 @@ pub struct Minds {
     slow: Semaphore,
     talk: Mutex<talk::Talks>,
     only: Option<std::collections::HashSet<u32>>,
+    /// `LIVING_ONLY` names `woken`: residents woken into minds are this service's too.
+    only_woken: bool,
+    /// Woken residents whose minds are being made, and stage-cap reports (woken.rs).
+    wakes: woken::WakesLock,
     lod: lod::Lod,
     /// Pending deliberations by actor (kept only with the level of detail on, when many
     /// requests wait at once and scanning the view for each would be costly).
@@ -186,7 +193,9 @@ impl Minds {
         if let Some(j) = &jev {
             prompts::set_judgments(j.grammar());
         }
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg: lived::Config::from_env(), lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()) }))
+        let only_env = std::env::var("LIVING_ONLY").ok();
+        let only_woken = only_env.as_deref().is_some_and(|v| v.split(',').any(|x| x.trim() == "woken"));
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), only_woken, wakes: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg: lived::Config::from_env(), lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -201,7 +210,15 @@ impl Minds {
     /// configured. Otherwise assignment, rotation or the default. Logged when it changes.
     fn profile(&self, c: &Character) -> String {
         let group = if c.kind == "person" { self.group(c.id) } else { None };
-        let p = if c.kind == "person" { self.llm.person_profile(c.id, &c.name, group.as_deref(), c.stage <= 1) } else { self.llm.profile_for(c.id, &c.name) };
+        // A resident woken into a mind takes the models file's `woken` route when it has one.
+        let woken = (c.kind == "person" && self.is_woken(c.id)).then(|| self.llm.woken_route(&c.name)).flatten();
+        let p = if let Some(w) = woken {
+            w
+        } else if c.kind == "person" {
+            self.llm.person_profile(c.id, &c.name, group.as_deref(), c.stage <= 1)
+        } else {
+            self.llm.profile_for(c.id, &c.name)
+        };
         if self.routed.lock().unwrap().insert(c.id, p.clone()).as_ref() != Some(&p) {
             log::info!("{} (#{}) thinks with profile {p} ({}){}", c.name, c.id, self.llm.model_name(&p), group.map(|g| format!(", group {g}")).unwrap_or_default());
         }
@@ -227,9 +244,10 @@ impl Minds {
     }
 
     /// `LIVING_ONLY=3,7` limits this service to those characters (experiments on a seeded
-    /// world); the rest keep running on their instincts.
+    /// world); the rest keep running on their instincts. `woken` in the list admits every
+    /// resident woken into a mind as well (`LIVING_ONLY=12,woken`).
     fn allowed(&self, id: u32) -> bool {
-        self.only.as_ref().map_or(true, |o| o.contains(&id))
+        self.only.as_ref().map_or(true, |o| o.contains(&id) || (self.only_woken && self.is_woken(id)))
     }
 
     fn name(&self, id: u32) -> String {
@@ -476,6 +494,10 @@ impl Minds {
                 store.ensure_self(c.id, &c.name).await?;
             }
             if self.conn.db.persona().id().find(&c.id).is_none() {
+                if self.is_woken(c.id) {
+                    // Its mind is made from the world's facts and its ring (woken.rs, below).
+                    continue;
+                }
                 if let Some(bg) = self.authored(&c) {
                     // Installed as written (no model call), concurrently with the rest.
                     let me = self.clone();
@@ -511,6 +533,9 @@ impl Minds {
                     log::warn!("{}: projection at start failed: {e:#}", c.name);
                 }
             }
+        }
+        for c in self.mine().into_iter().filter(|c| self.is_woken(c.id)) {
+            self.clone().awaken(c.id);
         }
         for c in self.mine() {
             let model = match self.llm.species_profile(&c.kind, "think") {
@@ -938,12 +963,18 @@ impl Minds {
                         }
                     }
                     Some(Event::Contact(actor)) => {
-                        self.actors.lock().unwrap().entry(actor).or_default().onstage_until = Some(Instant::now() + self.lod.sticky);
+                        {
+                            let mut actors = self.actors.lock().unwrap();
+                            if self.admit(actor, &mut actors) {
+                                actors.entry(actor).or_default().onstage_until = Some(Instant::now() + self.lod.sticky);
+                            }
+                        }
                         if let Some(request) = self.pending.lock().unwrap().get(&actor) {
                             request.changed.notify_one();
                         }
                     }
                     Some(Event::Lived(e)) => self.lived_add(e),
+                    Some(Event::Woken(id)) => self.clone().awaken(id),
                     None => return Err(anyhow!("event channel closed")),
                 },
                 _ = tick.tick() => {
@@ -951,7 +982,9 @@ impl Minds {
                     self.clone().check_consolidation();
                     self.clone().check_sleep();
                     self.clone().check_judgments();
-                    self.clone().check_lived()
+                    self.clone().check_lived();
+                    let this = self.clone();
+                    tokio::spawn(async move { this.journal_cap_reports().await });
                 }
             }
         }
@@ -984,6 +1017,16 @@ impl Minds {
             let started = Instant::now();
             while self.lived_waiting(actor) && started.elapsed() < self.lived_cfg.takeover_wait {
                 tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+            // A resident just woken into a mind thinks once its mind is made: who it is from the
+            // world's facts, and what it perceived before (woken.rs; the `woken_stage("wait_s")` law).
+            if self.is_woken(actor) {
+                self.clone().awaken(actor);
+                let wait = Duration::from_secs_f64(prompts::woken_laws().wait_s);
+                let started = Instant::now();
+                while self.woken_waiting(actor) && started.elapsed() < wait {
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                }
             }
             let mut seen = 0u64;
             loop {
@@ -1081,10 +1124,16 @@ impl Minds {
             return true;
         }
         let seen = scene.and_then(|s| serde_json::from_str::<Value>(s).ok()).and_then(|v| v["creatures"].as_array().map(|cs| cs.iter().filter_map(|c| c["id"].as_u64()).any(|id| self.is_player(id as u32)))).unwrap_or(false);
-        if seen {
-            self.actors.lock().unwrap().entry(actor).or_default().onstage_until = Some(now + self.lod.sticky);
+        if !seen {
+            return false;
         }
-        seen
+        // A woken resident goes on stage only within its settlement's cap (woken.rs).
+        let mut actors = self.actors.lock().unwrap();
+        if !self.admit(actor, &mut actors) {
+            return false;
+        }
+        actors.entry(actor).or_default().onstage_until = Some(now + self.lod.sticky);
+        true
     }
 
     /// How much longer a pending deliberation waits under the level of detail (people, and
