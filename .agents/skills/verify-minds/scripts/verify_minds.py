@@ -323,7 +323,7 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r'minds-[a-zA-Z0-9-]+', args.run):
         parser.error('--run must start with minds-')
-    with urllib.request.urlopen('http://127.0.0.1:3300/v1/ping', timeout=5) as response:
+    with urllib.request.urlopen(shared.SERVER + '/v1/ping', timeout=5) as response:
         assert response.status == 200
     suite = ROOT / '.local/living/verify' / args.run
     suite.mkdir(parents=True, exist_ok=False)

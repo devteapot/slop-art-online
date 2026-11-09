@@ -1,4 +1,5 @@
 #!/bin/sh
 # SpacetimeDB CLI inside the living core's server container (see living/deploy/compose.yml).
 # Exec into the container directly: compose would need the git-ignored env file, which a git worktree lacks.
-exec docker exec -i sao-living_spacetimedb_1 spacetime "$@"
+# LIVING_STDB_CONTAINER names another container (the verify harness sets it from VERIFY_STDB_CONTAINER).
+exec docker exec -i "${LIVING_STDB_CONTAINER:-sao-living_spacetimedb_1}" spacetime "$@"

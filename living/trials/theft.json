@@ -1,0 +1,39 @@
+{
+ "title": "A theft in the square",
+ "about": "Morning in the town. The subject has set out a storage basket (a storage structure they own) with six berries, keeping two in hand. At minute 3 a resident walks up and takes four berries from it without a word, then goes back to their day. If the subject comes within 4 tiles of the thief afterwards, the thief says a scripted line (once).",
+ "world": {"seed": "island", "rules": {"minds": true}, "start_hour": 9.0},
+ "minutes": 15,
+ "budget": {"tokens": 220000, "calls_per_min": 12},
+ "subject": {
+  "pick": {"kind": "person", "stage": 2, "bg": {"town": "Elmwick"}, "fewest_know_how": true},
+  "clear_items": true,
+  "background": {"origin": "traveller", "sheet": {
+   "narrative": "I picked berries for three days on the hills and carried them to the town to trade for a knife. I set my basket down in the square this morning. I know no one here.",
+   "values": ["fair dealing", "keeping what is mine"],
+   "goals": ["trade my berries for a knife", "make a friend in town"],
+   "mood": "hopeful",
+   "relations": [], "memories": [], "stances": [], "places": []}}
+ },
+ "cast": {
+  "thief": {"pick": {"kind": "person", "stage": 2, "bg": {"town": "Brackenford"}}}
+ },
+ "timeline": [
+  {"at": "prepare", "do": "graph", "who": "subject", "graph": {"wait": 120}},
+  {"at": "start", "do": "place", "who": "subject", "to": {"town": "Brackenford", "offset": [16, 0]}},
+  {"at": "start", "do": "graph", "who": "subject", "graph": {"wait": 20}},
+  {"at": "start", "do": "items", "who": "subject", "items": {"berries": 8}},
+  {"at": "start", "do": "structure", "who": "subject", "kind": "storage"},
+  {"at": "start", "do": "act", "who": "subject", "act": {"do": "store", "target": {"nearest": "storage"}, "item": "berries", "qty": 6}, "after": 4},
+  {"at": "start", "do": "graph", "who": "subject", "graph": "instinct:person"},
+  {"at": "start", "do": "place", "who": "thief", "to": {"who": "subject", "offset": [14, 6]}},
+  {"at": 3, "steps": [
+   {"do": "place", "who": "thief", "to": {"who": "subject", "offset": [3, 2]}},
+   {"do": "act", "who": "thief", "act": {"do": "take", "target": {"nearest": "storage"}, "item": "berries", "qty": 4}, "after": 1},
+   {"do": "graph", "who": "thief", "graph": "original", "after": 8}
+  ]},
+  {"when": {"near": {"who": "subject", "of": "thief", "within": 4}}, "after_min": 3.3, "steps": [
+   {"do": "say", "who": "thief", "to": "$subject", "text": "What are you looking at? There's plenty more on the bushes.", "after": 1}
+  ]}
+ ],
+ "probes": ["said_to", "skills", "relations_end", "judgments_end", "talk_turns"]
+}

@@ -19,7 +19,10 @@ removes what the run started and keeps the evidence.
   verify.py cleanup --run R [--keep-db]
 
 Paths and ports: SpacetimeDB http://127.0.0.1:3300, the local container's port (LIVING_STDB_URL may
-only name that port, so publishing and HTTP calls always reach the same server); observer
+only name that port, so publishing and HTTP calls always reach the same server). On a host whose
+sao-living_spacetimedb_1 belongs to someone else, VERIFY_STDB_CONTAINER and VERIFY_STDB_PORT name
+another 2.14.1 container (e.g. the trials' slop-trials-stdb on 3320); it is started with `docker
+start`, never created or recomposed; observer
 http://127.0.0.1:8330 (VERIFY_OBSERVER_PORT); Chromium from Playwright's cache (VERIFY_CHROME).
 """
 import argparse
@@ -37,13 +40,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[4]
 LIVING = ROOT / "living"
 STDB = str(LIVING / "tools/stdb")
-URL = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
+CONTAINER = os.environ.get("VERIFY_STDB_CONTAINER", "sao-living_spacetimedb_1")
+PORT = os.environ.get("VERIFY_STDB_PORT", "3300")
+URL = os.environ.get("LIVING_STDB_URL", f"http://127.0.0.1:{PORT}").rstrip("/")
 # Publishing goes through the container's CLI, so HTTP must reach that same container.
-LOCAL_URLS = {"http://127.0.0.1:3300", "http://localhost:3300"}
+LOCAL_URLS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"}
+# living/tools/stdb execs into the same container.
+os.environ["LIVING_STDB_CONTAINER"] = CONTAINER
 OBS_PORT = int(os.environ.get("VERIFY_OBSERVER_PORT", "8330"))
 OBSERVER = ROOT / ".local/living/verify/observer.json"
 COMPOSE = ["docker", "compose", "--env-file", str(ROOT / ".local/living/neo4j.env"), "-f", str(LIVING / "deploy/compose.yml"), "-p", "sao-living"]
-CONTAINER = "sao-living_spacetimedb_1"
 # Worlds kept for reference. The helper only ever publishes or deletes `verify-*`.
 PREFIX = "verify-"
 
@@ -122,13 +128,16 @@ def launch(a):
     if not container_up():
         # `compose up --wait` can hang under podman-compose even after the container is
         # healthy, so start detached and poll the ping endpoint instead.
-        subprocess.run([*COMPOSE, "up", "-d", "--no-deps", "spacetimedb"], capture_output=True, timeout=300, check=False)
+        if CONTAINER == "sao-living_spacetimedb_1":
+            subprocess.run([*COMPOSE, "up", "-d", "--no-deps", "spacetimedb"], capture_output=True, timeout=300, check=False)
+        else:
+            subprocess.run(["docker", "start", CONTAINER], capture_output=True, timeout=120, check=False)
         st["started_container"] = True
         save(st)
         log(st, "started SpacetimeDB container")
     if not wait_ping(180):
         save(st)
-        sys.exit("SpacetimeDB did not answer /v1/ping within 180 s (see `docker logs sao-living_spacetimedb_1`)")
+        sys.exit(f"SpacetimeDB did not answer /v1/ping within 180 s (see `docker logs {CONTAINER}`)")
     env = dict(os.environ, LIVING_SEED=a.seed)
     # A non-default seed builds in its own target dir, as living/tools/lab.py does, so the
     # active world's module is never rebuilt with a lab seed. --target-dir overrides it.
@@ -386,7 +395,7 @@ def cleanup(a):
 
 def main():
     if URL not in LOCAL_URLS:
-        sys.exit(f"LIVING_STDB_URL={URL} is not the local container (http://127.0.0.1:3300); publishing and HTTP calls would reach different servers")
+        sys.exit(f"LIVING_STDB_URL={URL} is not the local container (http://127.0.0.1:{PORT}); publishing and HTTP calls would reach different servers")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("launch"); p.add_argument("--run", required=True); p.add_argument("--seed", default="world")

@@ -1,0 +1,27 @@
+{
+ "default": {
+  "about": "The repository's model configuration as it stands: default profile mistral-small (overflow luna), level of detail off, lessons off.",
+  "models": {},
+  "env": {}
+ },
+ "luna": {
+  "about": "The subject thinks with GPT-6 Luna through the carlid endpoint (overflow mistral-small); otherwise as default.",
+  "models": {"default": "luna"},
+  "env": {}
+ },
+ "lessons": {
+  "about": "Default profile with LIVING_LESSONS=1: consolidation keeps, with a memory, what it taught.",
+  "models": {},
+  "env": {"LIVING_LESSONS": "1"}
+ },
+ "grounds": {
+  "about": "Default profile with LIVING_GROUNDS=1: recall follows GROUNDS edges between stories and beliefs.",
+  "models": {},
+  "env": {"LIVING_GROUNDS": "1"}
+ },
+ "lod": {
+  "about": "Default profile with LIVING_LOD=1: no player is on stage, so deliberations wait LIVING_LOD_THINK_S unless urgent.",
+  "models": {},
+  "env": {"LIVING_LOD": "1"}
+ }
+}

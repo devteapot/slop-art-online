@@ -1,0 +1,197 @@
+{
+ "extends": "wolves",
+ "title": "Wolves at dusk (old valley: stage1-wolves)",
+ "world": {
+  "seed": "stage1-wolves",
+  "rules": {},
+  "start_hour": 16.0
+ },
+ "subject": {
+  "pick": {
+   "kind": "person",
+   "stage": 2,
+   "group": 0,
+   "fewest_know_how": true,
+   "bg": {}
+  }
+ },
+ "cast": {
+  "pack": {
+   "pick": {
+    "kind": "wolf",
+    "count": 4,
+    "nearest": {
+     "group": 0
+    }
+   }
+  }
+ },
+ "timeline": [
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "subject",
+   "graph": {
+    "wait": 120
+   }
+  },
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "pack",
+   "graph": {
+    "wait": 120
+   }
+  },
+  {
+   "at": "start",
+   "do": "place",
+   "who": "subject",
+   "to": {
+    "group": 0,
+    "offset": [
+     -20,
+     0
+    ]
+   }
+  },
+  {
+   "at": "start",
+   "do": "graph",
+   "who": "subject",
+   "graph": "instinct:person"
+  },
+  {
+   "at": "start",
+   "do": "items",
+   "who": "subject",
+   "items": {
+    "bow": 1,
+    "arrow": 30,
+    "berries": 4
+   }
+  },
+  {
+   "at": "start",
+   "do": "know",
+   "who": "subject",
+   "techniques": [
+    "fire",
+    "fire_bolt",
+    "mending"
+   ]
+  },
+  {
+   "at": 2,
+   "steps": [
+    {
+     "do": "place",
+     "who": "pack",
+     "to": {
+      "who": "subject",
+      "away": {
+       "group": 0
+      },
+      "distance": 30
+     }
+    },
+    {
+     "do": "graph",
+     "who": "pack",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "cond": {
+          "all": [
+           {
+            "hurt_within": 8
+           },
+           {
+            "health": {
+             "below": 20
+            }
+           }
+          ]
+         },
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "attacker"
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "hurt_within": 6
+         },
+         "then": {
+          "do": {
+           "skill": "attack",
+           "target": "attacker"
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "has": {
+           "item": "meat"
+          }
+         },
+         "then": {
+          "do": {
+           "skill": "eat",
+           "item": "meat"
+          }
+         }
+        }
+       },
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "goto",
+           "target": {
+            "at": "$subject_xy@pack:9"
+           }
+          }
+         },
+         {
+          "wait": 15
+         },
+         {
+          "if": {
+           "cond": {
+            "sees": {
+             "nearest": "person"
+            }
+           },
+           "then": {
+            "do": {
+             "skill": "attack",
+             "target": {
+              "nearest": "person"
+             }
+            }
+           },
+           "else": {
+            "do": {
+             "skill": "wander"
+            }
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "about": "As `wolves`, on the old 96x96 valley of stage 1 (one family band). The valley has six wolves of which two are grown, so the pack is the four nearest the band's camp, young ones included."
+}

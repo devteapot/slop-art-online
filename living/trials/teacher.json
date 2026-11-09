@@ -1,0 +1,215 @@
+{
+ "title": "A teacher before the cold night",
+ "about": "Late afternoon (15:30), outside the town walls with no shelter near. A resident greets the subject, warns of the cold, teaches the cloak (the ordinary teach skill; every Elmwick adult already knows fire), gives two hides and a fiber, and goes home. Night falls about 2.3 minutes in and lasts 5 minutes; a person without a fire, shelter or cloak loses health to the cold at night.",
+ "world": {
+  "seed": "island",
+  "rules": {
+   "minds": true
+  },
+  "start_hour": 15.5
+ },
+ "minutes": 15,
+ "budget": {
+  "tokens": 220000,
+  "calls_per_min": 12
+ },
+ "subject": {
+  "pick": {
+   "kind": "person",
+   "stage": 2,
+   "bg": {
+    "town": "Elmwick"
+   },
+   "lacks": [
+    "cloak"
+   ],
+   "fewest_know_how": true
+  },
+  "clear_items": true,
+  "background": {
+   "origin": "traveller",
+   "sheet": {
+    "narrative": "I am on my way along the coast road and meant to reach a village before dark, but I am slow. I travel light: no cloak, no blanket. At home someone always kept the hearth.",
+    "values": [
+     "learning from others",
+     "not being a burden"
+    ],
+    "goals": [
+     "get through the night",
+     "reach the next village"
+    ],
+    "mood": "uneasy",
+    "relations": [],
+    "memories": [],
+    "stances": [],
+    "places": []
+   }
+  }
+ },
+ "cast": {
+  "teacher": {
+   "pick": {
+    "kind": "person",
+    "stage": 2,
+    "bg": {
+     "town": "Brackenford"
+    }
+   }
+  }
+ },
+ "timeline": [
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "subject",
+   "graph": {
+    "wait": 120
+   }
+  },
+  {
+   "at": "prepare",
+   "do": "know",
+   "who": "teacher",
+   "techniques": [
+    "cloak"
+   ]
+  },
+  {
+   "at": "start",
+   "do": "place",
+   "who": "subject",
+   "to": {
+    "arrival": true,
+    "offset": [
+     -70,
+     15
+    ]
+   }
+  },
+  {
+   "at": "start",
+   "do": "graph",
+   "who": "subject",
+   "graph": "instinct:person"
+  },
+  {
+   "at": "start",
+   "do": "items",
+   "who": "subject",
+   "items": {
+    "berries": 3
+   }
+  },
+  {
+   "at": "start",
+   "do": "place",
+   "who": "teacher",
+   "to": {
+    "who": "subject",
+    "offset": [
+     2,
+     0
+    ]
+   }
+  },
+  {
+   "at": "start",
+   "do": "graph",
+   "who": "teacher",
+   "graph": {
+    "wait": 120
+   }
+  },
+  {
+   "at": "start",
+   "do": "items",
+   "who": "teacher",
+   "items": {
+    "hide": 2,
+    "fiber": 1
+   }
+  },
+  {
+   "at": 0.1,
+   "do": "say",
+   "who": "teacher",
+   "to": "$subject",
+   "text": "Evening. You're not from the town, are you? Night's coming, and it gets cold out here in the open."
+  },
+  {
+   "at": 0.5,
+   "steps": [
+    {
+     "do": "say",
+     "who": "teacher",
+     "to": "$subject",
+     "text": "Have you got nothing warmer than that? Watch me, I'll show you how to make a cloak."
+    },
+    {
+     "do": "act",
+     "who": "teacher",
+     "act": {
+      "do": "teach",
+      "target": "$subject",
+      "item": "cloak"
+     },
+     "after": 2
+    }
+   ]
+  },
+  {
+   "at": 1.2,
+   "steps": [
+    {
+     "do": "say",
+     "who": "teacher",
+     "to": "$subject",
+     "text": "Two hides and a bit of fiber, that's all a cloak takes. It'll keep the night off you. Here, take these."
+    },
+    {
+     "do": "act",
+     "who": "teacher",
+     "after": 2,
+     "acts": [
+      {
+       "do": "give",
+       "target": "$subject",
+       "item": "hide",
+       "qty": 2
+      },
+      {
+       "do": "give",
+       "target": "$subject",
+       "item": "fiber",
+       "qty": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "at": 1.8,
+   "steps": [
+    {
+     "do": "say",
+     "who": "teacher",
+     "to": "$subject",
+     "text": "I have to get home before dark. Good luck to you."
+    },
+    {
+     "do": "graph",
+     "who": "teacher",
+     "graph": "original",
+     "after": 2
+    }
+   ]
+  }
+ ],
+ "probes": [
+  "learned",
+  "built",
+  "hp_min",
+  "talk_turns",
+  "relations_end"
+ ]
+}
