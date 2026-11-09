@@ -1,0 +1,1490 @@
+{
+  "run": "floor-megacity-1",
+  "seed": 11,
+  "map": {
+    "kind": "land",
+    "size": 4096,
+    "params": {
+      "relief": {
+        "island_radius": 1.32,
+        "land_shift": [
+          0.25,
+          0.03
+        ],
+        "coast_warp": 0.1,
+        "coast_feature": 0.25,
+        "elongation": 1.0,
+        "lowland_m": 24.0,
+        "hills_m": 9.0,
+        "hills_feature_m": 520.0,
+        "peak_m": [
+          90.0,
+          170.0
+        ],
+        "range_half_width_m": 220.0,
+        "range_offset": 0.3,
+        "foothills_m": 30.0,
+        "islets": 0
+      },
+      "water": {
+        "dry_rivers": true,
+        "river_catchment_m2": 90000.0,
+        "river_min_length_m": 500.0,
+        "river_width_m": [
+          4.0,
+          22.0
+        ],
+        "lakes_per_km2": 0.0,
+        "natural_lakes": 0
+      },
+      "regions": {
+        "wetlands_per_km2": 0.0,
+        "old_forest_share": 0.05,
+        "forest_share": 0.12,
+        "looks": [
+          {
+            "kind": "sea",
+            "trees": 0.0,
+            "detail_m": 0.5,
+            "beach_m": 20.0,
+            "outcrops": 0.0,
+            "dirt": 0.0
+          },
+          {
+            "kind": "beach",
+            "trees": 0.0,
+            "detail_m": 0.6,
+            "beach_m": 24.0,
+            "outcrops": 0.02,
+            "dirt": 0.35
+          },
+          {
+            "kind": "meadow",
+            "trees": 0.01,
+            "detail_m": 0.9,
+            "beach_m": 6.0,
+            "outcrops": 0.02,
+            "dirt": 0.55
+          },
+          {
+            "kind": "forest",
+            "trees": 0.14,
+            "detail_m": 1.0,
+            "beach_m": 6.0,
+            "outcrops": 0.03,
+            "dirt": 0.4
+          },
+          {
+            "kind": "old_forest",
+            "trees": 0.3,
+            "detail_m": 1.2,
+            "beach_m": 5.0,
+            "outcrops": 0.03,
+            "dirt": 0.3
+          },
+          {
+            "kind": "spirit_grove",
+            "trees": 0.45,
+            "detail_m": 1.2,
+            "beach_m": 5.0,
+            "outcrops": 0.04,
+            "dirt": 0.2
+          },
+          {
+            "kind": "wetland",
+            "trees": 0.06,
+            "detail_m": 0.4,
+            "beach_m": 6.0,
+            "outcrops": 0.0,
+            "dirt": 0.4
+          },
+          {
+            "kind": "highland",
+            "trees": 0.02,
+            "detail_m": 2.5,
+            "beach_m": 4.0,
+            "outcrops": 0.12,
+            "dirt": 0.6
+          },
+          {
+            "kind": "peaks",
+            "trees": 0.0,
+            "detail_m": 4.0,
+            "beach_m": 2.0,
+            "outcrops": 0.3,
+            "dirt": 0.65
+          }
+        ]
+      },
+      "sites": [
+        {
+          "kind": "village",
+          "style": "outpost",
+          "min": 2,
+          "max": 3,
+          "per_km2": 0.4,
+          "radius_m": 70.0,
+          "spacing_m": 900.0,
+          "scale": 1.0,
+          "flatten": 0.7
+        },
+        {
+          "kind": "village",
+          "style": "salvage",
+          "min": 4,
+          "max": 6,
+          "per_km2": 0.8,
+          "radius_m": 30.0,
+          "spacing_m": 500.0,
+          "scale": 1.0,
+          "flatten": 0.5
+        },
+        {
+          "kind": "village",
+          "style": "ruin",
+          "min": 2,
+          "max": 4,
+          "per_km2": 0.5,
+          "radius_m": 55.0,
+          "spacing_m": 600.0,
+          "scale": 1.0,
+          "flatten": 0.3
+        },
+        {
+          "kind": "cave",
+          "min": 2,
+          "max": 3,
+          "per_km2": 0.5,
+          "radius_m": 5.0,
+          "spacing_m": 500.0,
+          "scale": 1.0,
+          "flatten": 0.0
+        }
+      ],
+      "metro": {}
+    }
+  },
+  "setting": "A floor four kilometres across: one city of towers fills most of it, ringed by highways and a wall, with works and docks on the bay. Outside the wall lie dry plains and hills, dry riverbeds, ruins, salvage camps and a few walled outposts.",
+  "rules": {
+    "minds": false
+  },
+  "towns": [
+    {
+      "name": "Spire Ward",
+      "site": "metro_town",
+      "walled": true,
+      "character": "the core of the city: towers round the central plaza, busy at every hour",
+      "occupations": {
+        "trader": 6,
+        "cook": 4,
+        "guard": 5,
+        "scribe": 3,
+        "healer": 2,
+        "builder": 2
+      },
+      "stores": {
+        "berries": 60,
+        "cooked_fish": 20,
+        "wood": 20,
+        "stone": 20
+      },
+      "ledger": "Spire Ward. The gates on the arterials are kept by the ward. Trade in the plaza is open to all."
+    },
+    {
+      "name": "Glasshollow",
+      "site": "metro_town",
+      "walled": false,
+      "character": "a ward of tall blocks between the first and second ring",
+      "occupations": {
+        "trader": 4,
+        "cook": 3,
+        "builder": 3,
+        "scribe": 2,
+        "healer": 1
+      },
+      "stores": {
+        "berries": 40,
+        "wood": 10,
+        "stone": 10
+      }
+    },
+    {
+      "name": "Saltline",
+      "site": "works_town",
+      "walled": false,
+      "character": "workshops and docks on the bay; loud by day, empty at night",
+      "occupations": {
+        "builder": 5,
+        "carpenter": 4,
+        "mason": 3,
+        "fisher": 5,
+        "cook": 2
+      },
+      "stores": {
+        "berries": 40,
+        "cooked_fish": 20,
+        "wood": 30,
+        "stone": 30
+      }
+    },
+    {
+      "name": "Tinbank",
+      "site": "slum_town",
+      "walled": false,
+      "character": "stacked shacks and narrow lanes at the city's poor edge",
+      "occupations": {
+        "trader": 4,
+        "cook": 3,
+        "builder": 3,
+        "hunter": 2,
+        "healer": 1
+      },
+      "stores": {
+        "berries": 30,
+        "wood": 10
+      }
+    }
+  ],
+  "villages": [
+    {
+      "name": "Dry Well",
+      "site": "outpost_village",
+      "walled": false,
+      "character": "a walled outpost on the plain, living from a deep well and the arterial road",
+      "occupations": {
+        "farmer": 4,
+        "hunter": 3,
+        "guard": 2,
+        "cook": 1
+      },
+      "stores": {
+        "berries": 30,
+        "wood": 10
+      }
+    },
+    {
+      "name": "Rustcombe",
+      "site": "salvage_village",
+      "walled": false,
+      "character": "a salvage camp among the ruins outside the wall",
+      "occupations": {
+        "hunter": 3,
+        "builder": 2,
+        "trader": 2
+      },
+      "stores": {
+        "berries": 20,
+        "wood": 10
+      }
+    }
+  ],
+  "animals": {
+    "deer": 40,
+    "wolf": 8
+  },
+  "newcomer": {
+    "items": {
+      "berries": 4
+    },
+    "knows": [
+      "fire"
+    ]
+  },
+  "weather": {
+    "spell_s": 240,
+    "rain_share": 0.15
+  },
+  "town_life": {
+    "places": {
+      "square": [
+        "plaza"
+      ],
+      "inn": [
+        "inn",
+        "hall",
+        "plaza"
+      ]
+    },
+    "evening": [
+      "inn",
+      "square"
+    ],
+    "work": {
+      "farmer": [
+        "field",
+        "garden",
+        "plaza"
+      ],
+      "fisher": [
+        "fishing_spot",
+        "plaza"
+      ],
+      "cook": [
+        "inn",
+        "hall",
+        "plaza"
+      ],
+      "innkeeper": [
+        "inn",
+        "plaza"
+      ],
+      "trader": [
+        "market_stall",
+        "plaza"
+      ],
+      "builder": [
+        "workshop",
+        "barn",
+        "plaza"
+      ],
+      "carpenter": [
+        "workshop",
+        "barn",
+        "plaza"
+      ],
+      "mason": [
+        "workshop",
+        "barn",
+        "plaza"
+      ],
+      "guard": [
+        "gate",
+        "tower",
+        "plaza"
+      ],
+      "scribe": [
+        "hall",
+        "chapel",
+        "plaza"
+      ],
+      "healer": [
+        "chapel",
+        "hall",
+        "plaza"
+      ],
+      "hunter": [
+        "barn",
+        "field",
+        "plaza"
+      ]
+    }
+  },
+  "ways": {
+    "common": {
+      "stay safe": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "hurt_within": 5
+                },
+                {
+                  "health": {
+                    "below": 40
+                  }
+                },
+                {
+                  "near": {
+                    "target": {
+                      "nearest": "wolf"
+                    },
+                    "within": 8
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "flee",
+              "target": "attacker"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "hurt_within": 5
+                },
+                {
+                  "health": {
+                    "below": 40
+                  }
+                },
+                {
+                  "not": {
+                    "near": {
+                      "target": {
+                        "nearest": "wolf"
+                      },
+                      "within": 8
+                    }
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "yield",
+              "target": "attacker"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "hurt_within": 2
+                },
+                {
+                  "health": {
+                    "below": 40
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "flee",
+              "target": "attacker"
+            }
+          },
+          {
+            "if": {
+              "hurt_within": 5
+            },
+            "then": {
+              "do": "attack",
+              "target": "attacker"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "near": {
+                    "target": {
+                      "nearest": "wolf"
+                    },
+                    "within": 10
+                  }
+                },
+                {
+                  "count": {
+                    "of": "person",
+                    "within": 8,
+                    "at_least": 2
+                  }
+                },
+                {
+                  "health": {
+                    "above": 60
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "attack",
+              "target": {
+                "nearest": "wolf"
+              }
+            }
+          },
+          {
+            "if": {
+              "near": {
+                "target": {
+                  "nearest": "wolf"
+                },
+                "within": 12
+              }
+            },
+            "then": {
+              "do": "flee",
+              "target": {
+                "nearest": "wolf"
+              }
+            }
+          }
+        ]
+      },
+      "get out of the rain": {
+        "first": [
+          {
+            "if": {
+              "near": {
+                "target": "home",
+                "within": 2.5
+              }
+            },
+            "then": {
+              "first": [
+                {
+                  "if": {
+                    "energy": {
+                      "below": 60
+                    }
+                  },
+                  "then": {
+                    "do": "sleep"
+                  }
+                },
+                {
+                  "do": "rest"
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "near": {
+                "target": {
+                  "nearest": "inn"
+                },
+                "within": 2.5
+              }
+            },
+            "then": {
+              "do": "rest"
+            }
+          },
+          {
+            "if": {
+              "near": {
+                "target": {
+                  "nearest": "hall"
+                },
+                "within": 2.5
+              }
+            },
+            "then": {
+              "do": "rest"
+            }
+          },
+          {
+            "if": {
+              "near": {
+                "target": {
+                  "nearest": "house"
+                },
+                "within": 2.5
+              }
+            },
+            "then": {
+              "do": "rest"
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "near": {
+                  "target": "home",
+                  "within": 40
+                }
+              }
+            },
+            "then": {
+              "first": [
+                {
+                  "do": "goto",
+                  "target": {
+                    "nearest": "inn"
+                  }
+                },
+                {
+                  "do": "goto",
+                  "target": {
+                    "nearest": "hall"
+                  }
+                },
+                {
+                  "do": "goto",
+                  "target": {
+                    "nearest": "house"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "do": "goto",
+            "target": "home"
+          }
+        ]
+      },
+      "sleep": {
+        "first": [
+          {
+            "if": {
+              "near": {
+                "target": "home",
+                "within": 2.5
+              }
+            },
+            "then": {
+              "do": "sleep"
+            }
+          },
+          {
+            "seq": [
+              {
+                "do": "goto",
+                "target": "home"
+              },
+              {
+                "do": "sleep"
+              }
+            ]
+          }
+        ]
+      },
+      "keep warm": {
+        "first": [
+          {
+            "if": {
+              "near": {
+                "target": "home",
+                "within": 2.5
+              }
+            },
+            "then": {
+              "first": [
+                {
+                  "if": {
+                    "energy": {
+                      "below": 90
+                    }
+                  },
+                  "then": {
+                    "do": "sleep"
+                  }
+                },
+                {
+                  "do": "rest"
+                }
+              ]
+            }
+          },
+          {
+            "do": "goto",
+            "target": "home"
+          }
+        ]
+      },
+      "answer a greeting": {
+        "first": [
+          {
+            "if": {
+              "near": {
+                "target": "hailer",
+                "within": 5
+              }
+            },
+            "then": {
+              "do": "nod",
+              "target": "hailer"
+            }
+          },
+          {
+            "do": "wave",
+            "target": "hailer"
+          }
+        ]
+      },
+      "watch what happens": {
+        "first": [
+          {
+            "do": "face",
+            "target": "commotion"
+          },
+          {
+            "wait": 2
+          }
+        ]
+      },
+      "mind the people near me": {
+        "first": [
+          {
+            "if": {
+              "all": [
+                {
+                  "heard_within": 4
+                },
+                {
+                  "near": {
+                    "target": "speaker",
+                    "within": 9
+                  }
+                }
+              ]
+            },
+            "then": {
+              "do": "face",
+              "target": "speaker"
+            }
+          },
+          {
+            "if": {
+              "all": [
+                {
+                  "moving": false
+                },
+                {
+                  "near": {
+                    "target": {
+                      "nearest": "person"
+                    },
+                    "within": 2.5
+                  }
+                }
+              ]
+            },
+            "then": {
+              "first": [
+                {
+                  "do": "step_aside",
+                  "target": {
+                    "nearest": "person"
+                  }
+                },
+                {
+                  "do": "face",
+                  "target": {
+                    "nearest": "person"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "spend the evening out": {
+        "if": {
+          "all": [
+            {
+              "hour": {
+                "above": 17.5,
+                "below": 22
+              }
+            },
+            {
+              "raining": false
+            }
+          ]
+        },
+        "then": {
+          "first": [
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "evening"
+                    },
+                    "within": 6
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "evening"
+                }
+              }
+            },
+            {
+              "if": {
+                "chance": 0.03
+              },
+              "then": {
+                "do": "nod",
+                "target": {
+                  "nearest": "person"
+                }
+              }
+            },
+            {
+              "do": "rest"
+            }
+          ]
+        }
+      }
+    },
+    "occupations": {
+      "farmer": {
+        "routine": "tend the fields",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "has": {
+                  "item": "berries",
+                  "at_least": 12
+                }
+              },
+              "then": {
+                "seq": [
+                  {
+                    "do": "goto",
+                    "target": {
+                      "place": "square"
+                    }
+                  },
+                  {
+                    "do": "store",
+                    "target": {
+                      "nearest": "storage"
+                    },
+                    "item": "berries",
+                    "qty": 8
+                  }
+                ]
+              }
+            },
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 10
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "gather",
+              "target": {
+                "nearest": "berry_bush"
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "fisher": {
+        "routine": "fishing",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "has": {
+                  "item": "fish",
+                  "at_least": 4
+                }
+              },
+              "then": {
+                "seq": [
+                  {
+                    "do": "goto",
+                    "target": {
+                      "place": "square"
+                    }
+                  },
+                  {
+                    "do": "store",
+                    "target": {
+                      "nearest": "storage"
+                    },
+                    "item": "fish",
+                    "qty": 4
+                  }
+                ]
+              }
+            },
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 6
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "gather",
+              "target": {
+                "nearest": "fishing_spot"
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "cook": {
+        "routine": "keep the kitchen",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "all": [
+                  {
+                    "has": {
+                      "item": "fish"
+                    }
+                  },
+                  {
+                    "sees": {
+                      "nearest": "campfire"
+                    }
+                  }
+                ]
+              },
+              "then": {
+                "do": "cook",
+                "target": {
+                  "nearest": "campfire"
+                },
+                "item": "fish"
+              }
+            },
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 4
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "innkeeper": {
+        "routine": "keep the inn",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "all": [
+                  {
+                    "has": {
+                      "item": "fish"
+                    }
+                  },
+                  {
+                    "sees": {
+                      "nearest": "campfire"
+                    }
+                  }
+                ]
+              },
+              "then": {
+                "do": "cook",
+                "target": {
+                  "nearest": "campfire"
+                },
+                "item": "fish"
+              }
+            },
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 4
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "trader": {
+        "routine": "keep the stall",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 3
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "builder": {
+        "routine": "work at the workshop",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 4
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "carpenter": {
+        "routine": "work at the workshop",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 4
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "mason": {
+        "routine": "work at the workshop",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 4
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "guard": {
+        "routine": "keep watch",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "sees": {
+                  "nearest": "wolf"
+                }
+              },
+              "then": {
+                "do": "face",
+                "target": {
+                  "nearest": "wolf"
+                }
+              }
+            },
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 4
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "scribe": {
+        "routine": "keep the records",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "near": {
+                  "target": {
+                    "nearest": "sign"
+                  },
+                  "within": 3
+                }
+              },
+              "then": {
+                "seq": [
+                  {
+                    "do": "read",
+                    "target": {
+                      "nearest": "sign"
+                    }
+                  },
+                  {
+                    "do": "keep"
+                  }
+                ]
+              }
+            },
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 4
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "healer": {
+        "routine": "tend the hurt",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "health_of": {
+                  "target": {
+                    "nearest": "person"
+                  },
+                  "below": 70
+                }
+              },
+              "then": {
+                "do": "tend",
+                "target": {
+                  "nearest": "person"
+                }
+              }
+            },
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 4
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "hunter": {
+        "routine": "keep the barn",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "not": {
+                  "near": {
+                    "target": {
+                      "place": "work"
+                    },
+                    "within": 6
+                  }
+                }
+              },
+              "then": {
+                "do": "goto",
+                "target": {
+                  "place": "work"
+                }
+              }
+            },
+            {
+              "do": "keep"
+            }
+          ]
+        }
+      },
+      "child": {
+        "routine": "play",
+        "graph": {
+          "first": [
+            {
+              "if": {
+                "all": [
+                  {
+                    "not": {
+                      "near": {
+                        "target": "home",
+                        "within": 14
+                      }
+                    }
+                  },
+                  {
+                    "not": {
+                      "near": {
+                        "target": {
+                          "place": "square"
+                        },
+                        "within": 14
+                      }
+                    }
+                  }
+                ]
+              },
+              "then": {
+                "do": "goto",
+                "target": "home"
+              }
+            },
+            {
+              "seq": [
+                {
+                  "do": "play"
+                },
+                {
+                  "do": "wander"
+                },
+                {
+                  "do": "play"
+                },
+                {
+                  "wait": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "top": {
+      "desires": [
+        {
+          "want": "safety",
+          "weight": {
+            "base": 2.0,
+            "threatened": 3,
+            "hurt": 1.2
+          },
+          "do": {
+            "routine": "stay safe"
+          }
+        },
+        {
+          "want": "shelter",
+          "weight": {
+            "base": -0.2,
+            "rain": 1.2
+          },
+          "do": {
+            "routine": "get out of the rain"
+          }
+        },
+        {
+          "want": "food",
+          "weight": {
+            "base": -0.5,
+            "hunger": 2.0,
+            "starving": 1.5
+          },
+          "do": {
+            "routine": "find food and eat"
+          }
+        },
+        {
+          "want": "sleep",
+          "weight": {
+            "base": -0.7,
+            "tired": 1.3,
+            "night": 0.6,
+            "exhausted": 1.0
+          },
+          "do": {
+            "routine": "sleep"
+          }
+        },
+        {
+          "want": "greet",
+          "weight": {
+            "hailed": 2.2
+          },
+          "do": {
+            "routine": "answer a greeting"
+          }
+        },
+        {
+          "want": "look",
+          "weight": {
+            "commotion": 1.6
+          },
+          "do": {
+            "routine": "watch what happens"
+          }
+        },
+        {
+          "want": "manners",
+          "weight": {
+            "base": 0.9
+          },
+          "do": {
+            "routine": "mind the people near me"
+          }
+        },
+        {
+          "want": "evening",
+          "weight": {
+            "base": 0.8
+          },
+          "do": {
+            "routine": "spend the evening out"
+          }
+        },
+        {
+          "want": "work",
+          "weight": {
+            "base": 0.2,
+            "day": 0.5
+          },
+          "do": {
+            "routine": "WORK"
+          }
+        },
+        {
+          "want": "home at night",
+          "weight": {
+            "base": -0.1,
+            "night": 0.5,
+            "winter": 0.3
+          },
+          "do": {
+            "routine": "keep warm"
+          }
+        },
+        {
+          "want": "a family",
+          "weight": {
+            "base": 0.2,
+            "hunger": -0.8,
+            "longing": 0.4,
+            "company": 0.2,
+            "courted": 0.8
+          },
+          "do": {
+            "routine": "keep close to my partner"
+          }
+        },
+        {
+          "want": "company",
+          "weight": {
+            "base": 0.15,
+            "alone": 0.3,
+            "longing": 0.3
+          },
+          "do": {
+            "routine": "be with people"
+          }
+        }
+      ]
+    }
+  }
+}

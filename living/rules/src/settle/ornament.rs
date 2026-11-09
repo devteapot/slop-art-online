@@ -87,6 +87,7 @@ impl<'a> Dress<'a> {
     /// Models of a prop kind in a style, those passing `ok`.
     fn models(&self, style: &str, kind: PropKind, ok: &dyn Fn(&ModelFootprint) -> bool) -> Vec<u32> {
         let id = kind.id();
+        let style = self.p.kit(style);
         (0..self.p.buildings.models.len() as u32).filter(|&i| {
             let m = &self.p.buildings.models[i as usize];
             m.style == style && m.kind == id && ok(m)
@@ -249,7 +250,7 @@ impl<'a> Dress<'a> {
         let centre = set.centre;
         let plaza = set.plaza.points.clone();
         let axis = norm(sub(plaza[0], centre));
-        let cyber = set.style == "cyberpunk";
+        let cyber = self.p.kit(&set.style) == "cyberpunk";
         // Where streets meet the plaza: (point on its edge, direction into it, half width).
         let exits: Vec<(V2, V2, f32)> = land
             .roads
