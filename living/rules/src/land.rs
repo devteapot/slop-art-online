@@ -16,7 +16,7 @@
 
 use crate::det::Det;
 use crate::map::{Map, Terrain, MAX_SIDE};
-use crate::settle::{self, Crossing, Lot, Prop, Road, SettleParams, Settlement};
+use crate::settle::{self, Crossing, Lot, MetroParams, Prop, Road, SettleParams, Settlement};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, VecDeque};
@@ -131,6 +131,10 @@ pub struct LandParams {
     pub min_pocket_tiles: u32,
     /// Roads, settlement layouts and building lots ([`crate::settle`]).
     pub settlements: SettleParams,
+    /// One city filling most of the land, laid out in wards between ring highways and
+    /// arterials ([`crate::settle::MetroParams`]); the sites above stand outside it. None: no city.
+    #[serde(default)]
+    pub metro: Option<MetroParams>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -166,6 +170,10 @@ pub struct Relief {
     pub ridge_feature_m: f32,
     pub islets: u32,
     pub islet_radius_m: [f32; 2],
+    /// Moves the coast's centre off the map's centre (fractions of the side), so the sea lies
+    /// along one side only.
+    #[serde(default)]
+    pub land_shift: [f32; 2],
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -191,6 +199,9 @@ pub struct Water {
     /// `natural_lakes`); other depressions are filled.
     pub lake_area_m2: [f32; 2],
     pub natural_lakes: u32,
+    /// Rivers run dry: their beds are cut and sanded but hold no water ([`Land::dry_beds`]).
+    #[serde(default)]
+    pub dry_rivers: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -254,7 +265,7 @@ pub struct SiteSpec {
 
 impl Default for LandParams {
     fn default() -> Self {
-        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60, settlements: SettleParams::default() }
+        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60, settlements: SettleParams::default(), metro: None }
     }
 }
 
@@ -280,6 +291,7 @@ impl Default for Relief {
             ridge_feature_m: 170.0,
             islets: 2,
             islet_radius_m: [25.0, 60.0],
+            land_shift: [0.0, 0.0],
         }
     }
 }
@@ -300,6 +312,7 @@ impl Default for Water {
             lake_rim_m: 3.0,
             lake_area_m2: [6_000.0, 120_000.0],
             natural_lakes: 1,
+            dry_rivers: false,
         }
     }
 }
@@ -379,9 +392,13 @@ pub struct Site {
     /// Direction the site faces (radians, x east, y south): downhill for a cave mouth.
     pub facing: f32,
     pub region: RegionKind,
-    flatten: f32,
+    pub(crate) flatten: f32,
     /// A settlement's building style when it is not its kind's first ([`SiteSpec::style`]).
     pub style: Option<String>,
+    /// A ward of the city ([`crate::settle::MetroParams`]): laid out by the city planner, not as a
+    /// town of its own.
+    #[serde(skip)]
+    pub(crate) ward: bool,
 }
 
 impl Site {
@@ -461,6 +478,8 @@ pub struct Land {
     pub regions: Vec<Region>,
     pub sites: Vec<Site>,
     pub rivers: Vec<River>,
+    /// Dry river beds ([`Water::dry_rivers`]): cut and sanded, no water.
+    pub dry_beds: Vec<River>,
     pub lakes: Vec<Lake>,
     pub ranges: Vec<Range>,
     /// Blocked tiles opened by the connectivity pass, and small pockets it closed.
@@ -833,6 +852,9 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
     let mut rng = Rng(seed ^ 0x1A2D);
     let scale = (s / 2048.0).clamp(0.6, 1.0);
     let r = &p.relief;
+    // The city's centre and radius, if the land holds one: no ranges or lakes inside it, and its
+    // ground is levelled.
+    let city: Option<((f32, f32), f32, f32)> = p.metro.as_ref().map(|m| ((m.centre[0] * s, m.centre[1] * s), m.radius * s * 0.5, m.flatten));
 
     // Island shape and ranges.
     let centre = (s * 0.5 + (rng.f() - 0.5) * s * 0.04, s * 0.5 + (rng.f() - 0.5) * s * 0.04);
@@ -843,9 +865,10 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         let l = dx.d_hypot(dy).max(1e-3);
         (dx / l, dy / l)
     };
+    let lc = (centre.0 + r.land_shift[0] * s, centre.1 + r.land_shift[1] * s);
     let landness = |x: f32, y: f32| {
-        let u = (x - centre.0) / (s * 0.5) + r.coast_warp * fbm(seed ^ 0x11, x, y, r.coast_feature * s, 4);
-        let v = (y - centre.1) / (s * 0.5) + r.coast_warp * fbm(seed ^ 0x12, x, y, r.coast_feature * s, 4);
+        let u = (x - lc.0) / (s * 0.5) + r.coast_warp * fbm(seed ^ 0x11, x, y, r.coast_feature * s, 4);
+        let v = (y - lc.1) / (s * 0.5) + r.coast_warp * fbm(seed ^ 0x12, x, y, r.coast_feature * s, 4);
         let (a, b) = ((u * axis.0 + v * axis.1) / r.elongation, (-u * axis.1 + v * axis.0) * r.elongation.sqrt());
         1.0 - a.d_hypot(b) / r.island_radius
     };
@@ -870,7 +893,21 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             let taper = smoothstep(-0.15, 0.25, t) * smoothstep(1.15, 0.75, t);
             foot += r.foothills_m * (g.crest_m / r.peak_m[1]) * (-(d / (2.2 * w)).powi(2)).d_exp() * taper * (0.6 + 0.4 * fbm(seed ^ 0x15, x, y, 300.0, 3));
         }
-        *e = low + hills + (mount + foot) * smoothstep(-0.12, 0.1, land);
+        *e = match city {
+            None => low + hills + (mount + foot) * smoothstep(-0.12, 0.1, land),
+            Some((cc, cr, flat)) => {
+                // Ranges rise only beyond the city's edge; inside it the ground is levelled
+                // toward the plain, keeping a little of its relief.
+                let d = (x - cc.0).d_hypot(y - cc.1);
+                let inside = 1.0 - smoothstep(cr * 0.95, cr * 1.3, d);
+                let raw = low + hills + (mount + foot) * smoothstep(-0.12, 0.1, land) * smoothstep(cr * 1.05, cr * 1.7, d);
+                if land > 0.0 {
+                    lerp(raw, r.lowland_m * 0.7 + 0.25 * hills, inside * flat)
+                } else {
+                    raw
+                }
+            }
+        };
     }
     let elev_at = |elev: &[f32], x: f32, y: f32| {
         let i = ((x / cell).round() as isize).clamp(0, n as isize - 1) as usize;
@@ -914,6 +951,9 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         let rad = rng.range(p.water.lake_radius_m) * scale.max(0.8);
         let spine = ranges.iter().map(|g| g.locate(x, y).0 / g.half_width_m).fold(f32::MAX, f32::min);
         if e < 6.0 || landness(x, y) < 0.22 || slope_of(&elev, k) > 0.07 || spine < 0.9 || spine > 4.0 {
+            continue;
+        }
+        if city.is_some_and(|(cc, cr, _)| (x - cc.0).d_hypot(y - cc.1) < cr * 1.15 + rad * 1.9) {
             continue;
         }
         if basins.iter().any(|b| (b.0 - x).d_hypot(b.1 - y) < 450.0) {
@@ -1177,6 +1217,14 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
     chamfer(n, n, cell, &mut wd, None);
     let mut sea_d: Vec<f32> = sea.iter().map(|w| if *w { 0.0 } else { f32::INFINITY }).collect();
     chamfer(n, n, cell, &mut sea_d, None);
+    // Dry beds still draw settlements and moisture (`wd` above) but hold no water surface.
+    if p.water.dry_rivers {
+        for k in 0..nn {
+            if !sea[k] && lake_of[k] == NONE && !rlevel[k].is_nan() {
+                water[k] = false;
+            }
+        }
+    }
 
     // Moisture: noise, nearby water, and a rain shadow behind high ground upwind.
     let wind = rng.f() * std::f32::consts::TAU;
@@ -1265,7 +1313,9 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             continue;
         }
         let (e, sl) = (mean(st, st.e), mean(st, st.sl));
-        kinds[g] = if e >= rp.peaks_fraction * max_e {
+        // Peaks are high ground relative to the highest point, and highland in their own right:
+        // on a low land (a levelled city's plain) the highest regions are not peaks.
+        kinds[g] = if e >= rp.peaks_fraction * max_e && e >= rp.highland_m {
             RegionKind::Peaks
         } else if e >= rp.highland_m || sl > 0.4 {
             RegionKind::Highland
@@ -1283,7 +1333,8 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             kinds[lowland.swap_remove(i)] = RegionKind::Beach;
         }
     }
-    let want_wet = ((land_km2 * rp.wetlands_per_km2).round() as usize).clamp(1, 3);
+    // A land that asks for no wetlands gets none; otherwise at least one.
+    let want_wet = if rp.wetlands_per_km2 <= 0.0 { 0 } else { ((land_km2 * rp.wetlands_per_km2).round() as usize).clamp(1, 3) };
     let mut wet_c: Vec<usize> = lowland.iter().cloned().filter(|&g| mean(&stats[g], stats[g].sl) < 0.06 && stats[g].wet / stats[g].land > 0.2).collect();
     wet_c.sort_by(|a, b| mean(&stats[*b], stats[*b].m).total_cmp(&mean(&stats[*a], stats[*a].m)));
     if wet_c.is_empty() {
@@ -1355,7 +1406,8 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
     // Sites.
     let mut still_d: Vec<f32> = (0..nn).map(|k| if sea[k] || lake_of[k] != NONE { 0.0 } else { f32::INFINITY }).collect();
     chamfer(n, n, cell, &mut still_d, None);
-    let sites = place_sites(&SiteCtx { p, n, cell, s, elev: &elev, wd: &wd, still_d: &still_d, sea_d: &sea_d, node_kind: &node_kind, max_e, land_km2, seed }, &|k| slope_of(&elev, k));
+    let avoid = city.map(|(cc, cr, _)| (cc, cr));
+    let sites = place_sites(&SiteCtx { p, n, cell, s, elev: &elev, wd: &wd, still_d: &still_d, sea_d: &sea_d, node_kind: &node_kind, max_e, land_km2, seed, avoid }, &|k| slope_of(&elev, k));
 
     let mut land = Land {
         seed,
@@ -1364,6 +1416,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         regions,
         sites,
         rivers: Vec::new(),
+        dry_beds: Vec::new(),
         lakes,
         ranges,
         opened_tiles: 0,
@@ -1426,14 +1479,15 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             if length >= next_ford && seg > 0.0 {
                 next_ford += p.water.ford_spacing_m;
                 let node = land.node_at(a[0], a[1]);
-                if still.bilinear(a[0], a[1]) < 0.01 && lake_of[node] == NONE {
+                if !p.water.dry_rivers && still.bilinear(a[0], a[1]) < 0.01 && lake_of[node] == NONE {
                     fords.push(((a[0], a[1]), ((b[0] - a[0]) / seg, (b[1] - a[1]) / seg), a[2] * 0.5));
                     river_fords.push((a[0], a[1]));
                 }
             }
         }
         let source_m = nodes.first().map(|&k| rlevel[k]).unwrap_or(0.0);
-        land.rivers.push(River { points: pts.iter().map(|q| (q[0], q[1])).collect(), width_m: pts.iter().map(|q| q[2]).collect(), length_m: length, source_m, fords: river_fords });
+        let beds = if p.water.dry_rivers { &mut land.dry_beds } else { &mut land.rivers };
+        beds.push(River { points: pts.iter().map(|q| (q[0], q[1])).collect(), width_m: pts.iter().map(|q| q[2]).collect(), length_m: length, source_m, fords: river_fords });
     }
 
     // Classify every tile.
@@ -1447,7 +1501,10 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             let h = t[k];
             let st = still.bilinear(x, y);
             let sf = land.surf.bilinear(x, y);
-            let c = if st > 0.02 && h < sf || rmask[k] == 2 {
+            let c = if rmask[k] == 2 && p.water.dry_rivers {
+                // A dry bed: sand and gravel where the water would run.
+                Terrain::Sand
+            } else if st > 0.02 && h < sf || rmask[k] == 2 {
                 Terrain::Water
             } else {
                 let tl = |a: usize, b: usize| t[b.min(w - 1) * w + a.min(w - 1)];
@@ -1575,7 +1632,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
     }
     land.sd = sd;
     land.map = Map { w: size_m, h: size_m, tiles, blocked: Default::default() };
-    settle::plan(&mut land, &p.settlements);
+    settle::plan(&mut land, &p.settlements, p.metro.as_ref());
     land
 }
 
@@ -1693,6 +1750,8 @@ struct SiteCtx<'a> {
     max_e: f32,
     land_km2: f32,
     seed: u64,
+    /// The city (centre, radius): sites stand outside it.
+    avoid: Option<((f32, f32), f32)>,
 }
 
 struct Survey {
@@ -1779,6 +1838,9 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
                 let (x, y) = ((k % n) as f32 * c.cell, (k / n) as f32 * c.cell);
                 let kind = c.node_kind[k];
                 let sr = if sp.kind == SiteKind::Cave { 12.0 } else { r };
+                if c.avoid.is_some_and(|(cc, cr)| (x - cc.0).d_hypot(y - cc.1) < cr * 1.12 + sr + 40.0) {
+                    continue;
+                }
                 let Some(sv) = survey(x, y, sr) else { continue };
                 // Wholly inland, unless the island leaves no room.
                 if sv.sea > if relax < 2.5 { 0.0 } else { 0.12 } {
@@ -1868,7 +1930,7 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
                 }
                 let Some((_, ci)) = best else { break };
                 let (_, x, y, mean, kind) = cands[ci];
-                placed.push(Site { kind: sp.kind, x, y, radius_m: r, ground_m: mean, scale: sp.scale, facing: 0.0, region: kind, flatten: sp.flatten, style: sp.style.clone() });
+                placed.push(Site { kind: sp.kind, x, y, radius_m: r, ground_m: mean, scale: sp.scale, facing: 0.0, region: kind, flatten: sp.flatten, style: sp.style.clone(), ward: false });
             }
         }
     }

@@ -33,8 +33,11 @@
 //! come from `data/buildings.json`, written by `living/tools/blender/buildings.py`: every
 //! generated model with its exact footprint, which a lot is sized to.
 
+mod metro;
 mod ornament;
 mod terrace;
+
+pub use metro::{District, MetroParams};
 
 pub(crate) use terrace::Terrace;
 
@@ -340,7 +343,9 @@ pub fn env_of(style: &str) -> &'static str {
         "giant" => "giants_city",
         "small" => "small_city",
         "steampunk" => "steampunk_city",
-        "cyberpunk" => "cyberpunk_city",
+        // The city's ward styles, and the wastes' outposts, camps and ruins, built from the
+        // cyberpunk kit (`Style::kit`).
+        "cyberpunk" | "metro" | "slum" | "works" | "outpost" | "salvage" | "ruin" => "cyberpunk_city",
         _ => "fantasy_city",
     }
 }
@@ -542,6 +547,10 @@ pub struct Style {
     pub site: SiteKind,
     /// `buildings.py` style of its models.
     pub buildings: String,
+    /// The `buildings.py` style its models come from when that is not `buildings`: a style of
+    /// its own (its own layout, ornaments and kind names) built from another style's kit.
+    #[serde(default)]
+    pub kit: Option<String>,
     /// Plaza length (along the main roads) and width; paved square or a green.
     pub plaza_m: [f32; 2],
     pub paved: bool,
@@ -698,6 +707,11 @@ impl Style {
 }
 
 impl SettleParams {
+    /// The `buildings.py` style whose models a settlement style uses ([`Style::kit`]).
+    pub fn kit<'s>(&'s self, style: &'s str) -> &'s str {
+        self.styles.iter().find(|s| s.buildings == style).and_then(|s| s.kit.as_deref()).unwrap_or(style)
+    }
+
     /// The style of a kind of site in a `buildings.py` style, else the kind's first style.
     pub fn style_for(&self, kind: SiteKind, buildings: &str) -> Option<&Style> {
         self.styles.iter().find(|s| s.site == kind && s.buildings == buildings).or_else(|| self.styles.iter().find(|s| s.site == kind))
@@ -825,6 +839,7 @@ impl Default for Style {
         Self {
             site: SiteKind::Village,
             buildings: "fantasy".into(),
+            kit: None,
             plaza_m: [24.0, 16.0],
             paved: false,
             trunk_m: 3.0,
@@ -1135,7 +1150,60 @@ fn default_styles() -> Vec<Style> {
         ornaments: Ornaments { centrepiece: Some(PropKind::MarketCross), bench_m: 12.0, plaza_trees: 2, banners: true, flower_box: 0.1, planter: 0.3, garden_tree: 0.3, washing: 0.2, washing_gap: 0.3, clutter: 0.9, kerbs: true, neon_street: true, cable_m: 12.0, billboards: 3, ..Ornaments::default() },
         ..Style::default()
     };
-    vec![town, village, giants, small, steampunk, cyberpunk]
+    // The city's wards ([`MetroParams`]) and the settlements of the land round it, all from
+    // the cyberpunk kit. Their layout comes from the city planner; these set their ornaments,
+    // pads and the kit's kind names. They follow the styles above, so a land without a city
+    // lays out as before.
+    let cyber_models = cyberpunk.models.clone();
+    let ward = Style {
+        site: SiteKind::Town,
+        buildings: "metro".into(),
+        kit: Some("cyberpunk".into()),
+        terrace_m: 0.0,
+        wall: None,
+        well: false,
+        stalls: 0,
+        skirt_m: 1.2,
+        margin_m: 0.15,
+        ornaments: Ornaments { centrepiece: Some(PropKind::Fountain), bench_m: 14.0, plaza_trees: 2, banners: false, flower_box: 0.0, planter: 0.2, fences: false, garden_tree: 0.0, washing: 0.0, washing_gap: 0.0, clutter: 0.5, signs: true, kerbs: false, street_tree_m: 0.0, neon_street: true, cable_m: 14.0, billboards: 4, pipes: false },
+        ..cyberpunk.clone()
+    };
+    let slum = Style {
+        buildings: "slum".into(),
+        models: vec![(LotKind::House, "kiosk".into()), (LotKind::Townhouse, "block".into()), (LotKind::Workshop, "workshop".into()), (LotKind::MarketStall, "food_stall".into()), (LotKind::Inn, "food_stall".into()), (LotKind::Lamp, "lamp".into())],
+        ornaments: Ornaments { centrepiece: None, bench_m: 0.0, plaza_trees: 0, washing: 0.5, washing_gap: 0.6, clutter: 0.9, billboards: 1, cable_m: 8.0, ..ward.ornaments.clone() },
+        ..ward.clone()
+    };
+    let works = Style {
+        buildings: "works".into(),
+        models: vec![(LotKind::House, "block".into()), (LotKind::Workshop, "workshop".into()), (LotKind::Barn, "workshop".into()), (LotKind::Inn, "market".into()), (LotKind::Hall, "tower".into())],
+        ornaments: Ornaments { centrepiece: None, neon_street: false, billboards: 2, clutter: 1.0, pipes: true, ..ward.ornaments.clone() },
+        ..ward.clone()
+    };
+    let wastes = |buildings: &str, models: Vec<(LotKind, String)>| Style {
+        site: SiteKind::Village,
+        buildings: buildings.into(),
+        kit: Some("cyberpunk".into()),
+        paved: false,
+        models,
+        garden: 0.0,
+        fields: 0.0,
+        barn: 0.0,
+        terrace_m: 0.0,
+        ornaments: Ornaments { fences: true, garden_tree: 0.0, flower_box: 0.0, washing: 0.3, washing_gap: 0.3, clutter: 0.9, signs: true, ..Ornaments::default() },
+        ..Style::default()
+    };
+    let outpost = Style { workshop: 0.25, fields: 0.2, ..wastes("outpost", cyber_models) };
+    let salvage = Style {
+        plaza_m: [14.0, 10.0],
+        landmark: None,
+        lane_m: 2.4,
+        workshop: 0.4,
+        outskirts_m: 20.0,
+        ..wastes("salvage", vec![(LotKind::House, "kiosk".into()), (LotKind::Workshop, "workshop".into()), (LotKind::Chapel, "food_stall".into()), (LotKind::Inn, "food_stall".into()), (LotKind::MarketStall, "food_stall".into())])
+    };
+    let ruin = Style { landmark: None, workshop: 0.3, ..wastes("ruin", vec![(LotKind::House, "block".into()), (LotKind::Workshop, "workshop".into())]) };
+    vec![town, village, giants, small, steampunk, cyberpunk, ward, slum, works, outpost, salvage, ruin]
 }
 
 // ------------------------------------------------------------------------------------------
@@ -1906,13 +1974,29 @@ struct Plan<'a> {
     catalog: Vec<(String, LotKind, Vec<u32>)>,
     /// Stairs between terraces, placed before the lots so lots keep clear of them.
     stairs: Vec<Prop>,
+    /// The city's centre and the radius roads between settlements keep out of.
+    city: Option<(V2, f32)>,
 }
 
 /// Plan every settlement and the island's roads, paint them into the tiles and shape the ground.
-pub(crate) fn plan(land: &mut Land, p: &SettleParams) {
+pub(crate) fn plan(land: &mut Land, p: &SettleParams, metro: Option<&MetroParams>) {
+    // 0. The city, if the land holds one: its highways, wards and streets come first, and the
+    // roads between the other settlements join its arterials outside the wall.
+    let city = metro.map(|mp| {
+        metro::clear(land, mp);
+        let c = metro::lay_out(land, mp);
+        land.sites.extend(c.sites.iter().cloned());
+        c
+    });
     // 1. Island roads, painted first so river crossings become land before profiles are sampled.
     let (roads, crossings) = {
         let mut pl = Plan::new(land, p);
+        if let Some(c) = &city {
+            for r in &c.roads {
+                pl.push_road(r.clone());
+            }
+            pl.city = Some((c.centre, c.radius * 1.03));
+        }
         pl.island_roads();
         pl.find_crossings();
         (pl.roads, pl.crossings)
@@ -1931,6 +2015,11 @@ pub(crate) fn plan(land: &mut Land, p: &SettleParams) {
     }
     pl.roads = roads;
     pl.crossings = crossings;
+    if let Some(c) = &city {
+        pl.settlements = c.settlements.clone();
+        pl.bounds = c.bounds.clone();
+        pl.walls = c.walls.clone();
+    }
     pl.lay_out_streets();
     pl.fix_junctions();
     pl.profiles();
@@ -1949,12 +2038,18 @@ pub(crate) fn plan(land: &mut Land, p: &SettleParams) {
     pl.walls = walls;
     pl.bounds = bounds;
     pl.place_stairs();
+    if let (Some(c), Some(mp)) = (&city, metro) {
+        metro::place_lots(&mut pl, c, mp);
+    }
     pl.place_lots();
     let pads = pl.pads();
     let Plan { roads, lots, settlements, crossings, stairs, .. } = pl;
     land.mods = Mods::build(land.size, segs, pads, terr);
     paint_roads(land, &roads, 1);
     paint_rest(land, &settlements, &lots);
+    if let (Some(c), Some(mp)) = (&city, metro) {
+        metro::pave(land, c, mp, &lots);
+    }
     // Stairs are walkable; then the drops nobody can climb become walls.
     terrace::paint_stairs(land, &stairs);
     terrace::paint_drops(land, &lots, &settlements, p);
@@ -1999,13 +2094,14 @@ impl<'a> Plan<'a> {
                 if catalog.iter().any(|c| c.0 == st.buildings && c.1 == kind) {
                     continue;
                 }
-                let ms: Vec<u32> = (0..p.buildings.models.len() as u32).filter(|&i| p.buildings.models[i as usize].style == st.buildings && p.buildings.models[i as usize].kind == id).collect();
+                let kit = st.kit.as_deref().unwrap_or(&st.buildings);
+                let ms: Vec<u32> = (0..p.buildings.models.len() as u32).filter(|&i| p.buildings.models[i as usize].style == kit && p.buildings.models[i as usize].kind == id).collect();
                 if !ms.is_empty() {
                     catalog.push((st.buildings.clone(), kind, ms));
                 }
             }
         }
-        Self { land, p, roads: Vec::new(), lots: Vec::new(), settlements: Vec::new(), crossings: Vec::new(), road_b: Buckets::new(s, 32.0), lot_b: Buckets::new(s, 32.0), walls: Vec::new(), bounds: Vec::new(), seed: land.seed ^ 0x5E77, catalog, stairs: Vec::new() }
+        Self { land, p, roads: Vec::new(), lots: Vec::new(), settlements: Vec::new(), crossings: Vec::new(), road_b: Buckets::new(s, 32.0), lot_b: Buckets::new(s, 32.0), walls: Vec::new(), bounds: Vec::new(), seed: land.seed ^ 0x5E77, catalog, stairs: Vec::new(), city: None }
     }
 
     fn style(&self, kind: SiteKind) -> Option<&'a Style> {
@@ -2048,13 +2144,38 @@ impl<'a> Plan<'a> {
     fn island_roads(&mut self) {
         let land = self.land;
         let rp = &self.p.roads;
-        let gr = Grid::new(land, rp);
+        let mut gr = Grid::new(land, rp);
         let n = gr.n;
         // Network cells: 0 none, else road id + 1, or SITE_MARK at the town's centre.
         let mut net = vec![0u32; n * n];
         let mut foot = vec![0u32; n * n];
-        let settled: Vec<usize> = (0..land.sites.len()).filter(|&i| land.sites[i].kind != SiteKind::Cave && self.site_style(i).is_some()).collect();
-        let Some(&town) = settled.iter().find(|&&i| land.sites[i].kind == SiteKind::Town).or(settled.first()) else { return };
+        let settled: Vec<usize> = (0..land.sites.len()).filter(|&i| land.sites[i].kind != SiteKind::Cave && !land.sites[i].ward && self.site_style(i).is_some()).collect();
+        // Roads laid out already (the city's highways and arterials) are the network's start;
+        // roads between settlements keep out of the city and join them outside its wall.
+        let pre = self.roads.len() as u32;
+        if let Some((cc, cr)) = self.city {
+            for k in 0..n * n {
+                if dist(gr.centre(k), cc) < cr {
+                    gr.cost[k] = f32::INFINITY;
+                }
+            }
+        }
+        for ri in 0..pre {
+            let r = &self.roads[ri as usize];
+            if r.class != RoadClass::Trunk {
+                continue;
+            }
+            for q in resample(&r.points, gr.g * 0.5) {
+                let k = gr.cell(q);
+                if net[k] == 0 {
+                    net[k] = ri + 1;
+                }
+            }
+        }
+        let town = if pre > 0 { None } else { settled.iter().find(|&&i| land.sites[i].kind == SiteKind::Town).or(settled.first()).copied() };
+        if pre == 0 && town.is_none() {
+            return;
+        }
         let mark = |net: &mut Vec<u32>, k: usize, v: u32| {
             let (i, j) = ((k % n) as isize, (k / n) as isize);
             for dy in -1..=1 {
@@ -2069,13 +2190,22 @@ impl<'a> Plan<'a> {
                 }
             }
         };
-        let tc = (land.sites[town].x, land.sites[town].y);
-        mark(&mut net, gr.cell(tc), SITE_MARK);
-        let mut connected = vec![town];
+        let tc = town.map_or((0.0, 0.0), |t| (land.sites[t].x, land.sites[t].y));
+        let town = town.unwrap_or(usize::MAX);
+        if town != usize::MAX {
+            mark(&mut net, gr.cell(tc), SITE_MARK);
+        }
+        let mut connected: Vec<usize> = if town != usize::MAX { vec![town] } else { Vec::new() };
         let mut todo: Vec<usize> = settled.iter().cloned().filter(|&i| i != town).collect();
         let mut raw: Vec<(Vec<usize>, RoadEnd, RoadEnd, f32, RoadClass)> = Vec::new();
+        let pre_roads = &self.roads;
         let dist_to_net = |raw: &[(Vec<usize>, RoadEnd, RoadEnd, f32, RoadClass)], connected: &[usize], q: V2| {
             let mut m = connected.iter().map(|&i| dist(q, (land.sites[i].x, land.sites[i].y))).fold(f32::MAX, f32::min);
+            for r in pre_roads.iter().filter(|r| r.class == RoadClass::Trunk) {
+                for p in r.points.iter().step_by(8) {
+                    m = m.min(dist(q, *p));
+                }
+            }
             for r in raw {
                 for &k in r.0.iter().step_by(4) {
                     m = m.min(dist(q, gr.centre(k)));
@@ -2100,14 +2230,14 @@ impl<'a> Plan<'a> {
             let hit = if net[last] != 0 { net[last] } else { foot[last] };
             path.reverse();
             let start = if hit == SITE_MARK { RoadEnd::Site(town as u16) } else { RoadEnd::Road(hit - 1) };
-            let id = raw.len() as u32;
+            let id = pre + raw.len() as u32;
             for &k in &path {
                 mark(if class == RoadClass::Path { &mut foot } else { &mut net }, k, id + 1);
             }
             raw.push((path, start, RoadEnd::Site(si as u16), style.trunk_m, class));
         }
         // A road from the town down to the sea, ending at a landing.
-        if rp.landing_m > 0.0 {
+        if rp.landing_m > 0.0 && town != usize::MAX {
             let best = (0..n * n).filter(|&k| gr.shore[k] && dist(gr.centre(k), tc) < rp.landing_m).min_by(|&a, &b| {
                 let score = |k: usize| dist(gr.centre(k), tc) - if land.map.at(gr.centre(k).0, gr.centre(k).1) == Terrain::Sand { 60.0 } else { 0.0 };
                 score(a).total_cmp(&score(b))
@@ -2119,7 +2249,7 @@ impl<'a> Plan<'a> {
                     let mut path = path;
                     path.reverse();
                     let start = if hit == SITE_MARK { RoadEnd::Site(town as u16) } else { RoadEnd::Road(hit - 1) };
-                    let id = raw.len() as u32;
+                    let id = pre + raw.len() as u32;
                     for &k in &path {
                         mark(&mut net, k, id + 1);
                     }
@@ -2146,7 +2276,7 @@ impl<'a> Plan<'a> {
                     let hit = if net[last] != 0 { net[last] } else { foot[last] };
                     path.reverse();
                     let start = if hit == SITE_MARK { RoadEnd::Site(town as u16) } else { RoadEnd::Road(hit - 1) };
-                    let id = raw.len() as u32;
+                    let id = pre + raw.len() as u32;
                     for &k in &path {
                         mark(&mut foot, k, id + 1);
                     }
@@ -2250,6 +2380,9 @@ impl<'a> Plan<'a> {
         let land = self.land;
         for (si, site) in land.sites.iter().enumerate() {
             if site.kind == SiteKind::Cave {
+                continue;
+            }
+            if site.ward {
                 continue;
             }
             let Some(style) = self.site_style(si) else { continue };
@@ -2995,6 +3128,9 @@ impl<'a> Plan<'a> {
 
     fn place_lots(&mut self) {
         for si in 0..self.settlements.len() {
+            if self.land.sites[self.settlements[si].site as usize].ward {
+                continue;
+            }
             let (bound, inner) = self.bounds[si].clone();
             let Some(st) = self.site_style(self.settlements[si].site as usize) else { continue };
             let start = self.lots.len() as u32;
@@ -3014,7 +3150,7 @@ impl<'a> Plan<'a> {
             let si = self.settlements[idx as usize].site as usize;
             let Some(z) = self.zone(si) else { continue };
             let st = self.set_style(idx);
-            let style = self.settlements[idx as usize].style.clone();
+            let style = self.p.kit(&self.settlements[idx as usize].style).to_string();
             let k = self.settlements[idx as usize].scale.max(0.3);
             let mut rng = Rng(self.seed ^ 0x57A1 ^ (idx as u64) << 8);
             let models: Vec<u32> = (0..self.p.buildings.models.len() as u32).filter(|&i| self.p.buildings.models[i as usize].style == style && self.p.buildings.models[i as usize].kind == "stairs").collect();
@@ -3172,7 +3308,8 @@ impl<'a> Plan<'a> {
 
     fn fp(&self, style: &str, kind: LotKind) -> (f32, f32) {
         let id = self.p.styles.iter().find(|s| s.buildings == style).and_then(|s| s.model_kind(kind)).or(kind.model());
-        match id.and_then(|id| self.p.buildings.kinds.iter().find(|f| f.style == style && f.kind == id)) {
+        let kit = self.p.kit(style);
+        match id.and_then(|id| self.p.buildings.kinds.iter().find(|f| f.style == kit && f.kind == id)) {
             Some(f) => (f.width_m, f.depth_m),
             None => (4.0, 4.0),
         }
@@ -3325,7 +3462,7 @@ impl<'a> Plan<'a> {
             }
         }
         // Walkable, dry ground, and not too steep to level.
-        let step = (r.hw.min(r.hd) * 0.5).clamp(0.25, 0.6);
+        let step = if cl.step > 0.0 { cl.step.min(r.hw.min(r.hd)) } else { (r.hw.min(r.hd) * 0.5).clamp(0.25, 0.6) };
         let (mut hmin, mut hmax) = (f32::MAX, f32::MIN);
         let u = r.u();
         let mut a = -r.hw;
@@ -3375,7 +3512,7 @@ impl<'a> Plan<'a> {
         let (centre, style, plaza, floor) = (set.centre, set.style.clone(), set.plaza.points.clone(), set.plaza.floor_m);
         let k = set.scale;
         let mut rng = Rng(self.seed ^ 0x107 ^ (idx as u64) << 8);
-        let base = Check { road_clear: 0.25 * k.max(0.4), plaza_clear: 0.4, min_gap: 99.0, water: 2.5 + st.skirt_m, cut: st.cut_m, fill: st.fill_m, level: true, on_wall: false, in_plaza: None };
+        let base = Check { road_clear: 0.25 * k.max(0.4), plaza_clear: 0.4, min_gap: 99.0, water: 2.5 + st.skirt_m, cut: st.cut_m, fill: st.fill_m, level: true, on_wall: false, in_plaza: None, step: 0.0 };
         let in_plaza = Check { in_plaza: Some(centre), level: false, water: 2.0, ..base };
         let make = |kind: LotKind, c: V2, front: V2, w: f32, d: f32, floor: f32, fr: Frontage| Lot { settlement: idx, kind, centre: c, width_m: w, depth_m: d, front: norm(front), yaw: 0.0, floor_m: floor, frontage: fr, landmark: false, model_file: None, height_m: 0.0 };
         // 1. The landmark, then the big buildings round the plaza.
@@ -3585,7 +3722,7 @@ impl<'a> Plan<'a> {
         }
         let exits: Vec<V2> = self.roads.iter().filter(|r| r.ends[1] == RoadEnd::Plaza(idx) || r.ends[0] == RoadEnd::Plaza(idx)).map(|r| if r.ends[1] == RoadEnd::Plaza(idx) { r.points[r.points.len() - 1] } else { r.points[0] }).collect();
         let others: Vec<V2> = self.lots.iter().rev().take_while(|l| l.settlement == idx).filter(|l| l.kind.big() || l.landmark).map(|l| l.centre).collect();
-        let base = Check { road_clear: 0.25 * k.max(0.4), plaza_clear: 0.4, min_gap: 99.0, water: 2.5 + st.skirt_m, cut: st.cut_m * 1.5, fill: st.fill_m * 1.5, level: true, on_wall: false, in_plaza: None };
+        let base = Check { road_clear: 0.25 * k.max(0.4), plaza_clear: 0.4, min_gap: 99.0, water: 2.5 + st.skirt_m, cut: st.cut_m * 1.5, fill: st.fill_m * 1.5, level: true, on_wall: false, in_plaza: None, step: 0.0 };
         let m = plaza.len();
         let spread = 60.0 * k.max(0.3);
         let mut cands: Vec<(f32, V2, V2)> = (0..2 * m)
@@ -3670,7 +3807,7 @@ impl<'a> Plan<'a> {
         let k = land.sites[self.settlements[idx as usize].site as usize].scale;
         let cl = cumlen(line);
         let total = *cl.last().unwrap();
-        let base = Check { road_clear: 0.25 * k.max(0.4), plaza_clear: 0.4 * k.max(0.5), min_gap: 99.0, water: 2.5 + st.skirt_m, cut: st.cut_m, fill: st.fill_m, level: true, on_wall: false, in_plaza: None };
+        let base = Check { road_clear: 0.25 * k.max(0.4), plaza_clear: 0.4 * k.max(0.5), min_gap: 99.0, water: 2.5 + st.skirt_m, cut: st.cut_m, fill: st.fill_m, level: true, on_wall: false, in_plaza: None, step: 0.0 };
         let walled = st.wall.is_some();
         let mut s = rng.f() * 2.0;
         let fail_step = (1.5 * k).max(0.4);
@@ -3883,7 +4020,7 @@ impl<'a> Plan<'a> {
         // Towers: one beside each gate, then along the runs.
         let style = self.settlements[idx as usize].style.clone();
         let mut rng = Rng(self.seed ^ 0x70E5 ^ (idx as u64) << 8);
-        let tower = Check { road_clear: 0.6, plaza_clear: 2.0, min_gap: 99.0, water: 2.0, cut: st.cut_m * 2.0, fill: st.fill_m * 2.0, level: true, on_wall: true, in_plaza: None };
+        let tower = Check { road_clear: 0.6, plaza_clear: 2.0, min_gap: 99.0, water: 2.0, cut: st.cut_m * 2.0, fill: st.fill_m * 2.0, level: true, on_wall: true, in_plaza: None, step: 0.0 };
         let mut towers: Vec<V2> = Vec::new();
         for (g, i, _) in &gates {
             let along = norm(sub(ring[(i + 1) % m], ring[*i]));
@@ -4005,6 +4142,8 @@ struct Check {
     level: bool,
     on_wall: bool,
     in_plaza: Option<V2>,
+    /// Spacing of the ground samples under the lot (0: a fine step from its size).
+    step: f32,
 }
 
 struct Trace<'b> {
@@ -4236,6 +4375,90 @@ mod tests {
 
     fn worlds() -> [&'static Land; 2] {
         [world(), small()]
+    }
+
+    /// The megacity floor (`seeds/floor-megacity.json`) at 2048 m: its city is a quarter the
+    /// area of the 4096 m floor, with the same planner and districts.
+    pub(crate) fn megacity_params() -> (u64, LandParams) {
+        let v: serde_json::Value = serde_json::from_str(include_str!("../../seeds/floor-megacity.json")).expect("seed json");
+        (v["seed"].as_u64().unwrap(), serde_json::from_value(v["map"]["params"].clone()).expect("map.params"))
+    }
+
+    fn megacity() -> &'static Land {
+        static L: OnceLock<Land> = OnceLock::new();
+        L.get_or_init(|| {
+            let (seed, p) = megacity_params();
+            crate::land::generate(seed, 2048, &p)
+        })
+    }
+
+    #[test]
+    fn megacity_lots_do_not_overlap_and_stand_on_dry_walkable_ground() {
+        let l = megacity();
+        lots_do_not_overlap_each_other_or_roads_on(l);
+        lots_sit_on_walkable_dry_land_on(l);
+        pads_are_level_on(l);
+    }
+
+    #[test]
+    fn megacity_lots_front_streets_and_name_their_models() {
+        let l = megacity();
+        every_lot_fronts_a_street_on(l);
+        lots_match_their_models_on(l);
+        ornaments_keep_doors_and_streets_clear_on(l);
+    }
+
+    #[test]
+    fn megacity_roads_connect_every_ward_and_settlement() {
+        roads_connect_every_settlement_on(megacity());
+    }
+
+    /// The city has its parts: a ward for the core and for every band and sector, towers in the
+    /// core, slums and works, a wall with a gate on every arterial, and the land's other
+    /// settlements outside it.
+    #[test]
+    fn megacity_has_core_rings_districts_and_wall() {
+        let l = megacity();
+        let (_, p) = megacity_params();
+        let mp = p.metro.clone().unwrap();
+        let wards: Vec<&Settlement> = l.settlements.iter().filter(|s| l.sites[s.site as usize].ward).collect();
+        assert_eq!(wards.len(), 1 + mp.rings.len() * mp.arterials as usize, "wards");
+        let core = wards[0];
+        let core_lots = &l.lots[core.lots.0 as usize..core.lots.1 as usize];
+        let towers = core_lots.iter().filter(|x| x.height_m >= 50.0).count();
+        assert!(towers >= 40, "core towers: {towers}");
+        for style in ["metro", "slum", "works"] {
+            assert!(wards.iter().any(|w| w.style == style), "no {style} ward");
+        }
+        let wall = core.wall.as_ref().expect("the city is walled");
+        assert_eq!(wall.gates.len(), mp.arterials as usize, "gates");
+        let c = (mp.centre[0] * 2048.0, mp.centre[1] * 2048.0);
+        let reach = wall.ring.iter().map(|q| dist(*q, c)).fold(0.0, f32::max);
+        for s in l.settlements.iter().filter(|s| !l.sites[s.site as usize].ward) {
+            assert!(dist(s.centre, c) > reach, "{} settlement at {:?} inside the wall", s.style, s.centre);
+        }
+        // Each ward has its square and is peopled with homes.
+        for w in &wards {
+            let homes = l.lots[w.lots.0 as usize..w.lots.1 as usize].iter().filter(|x| matches!(x.kind, LotKind::House | LotKind::Townhouse)).count();
+            assert!(homes >= 3 || w.style == "works", "{} ward has {homes} homes", w.style);
+            assert!(poly_area(&w.plaza.points).abs() > 100.0, "{} ward's square", w.style);
+        }
+        // Highways: every arterial runs out past the wall, and the rings are whole.
+        for r in l.roads.iter().take(mp.arterials as usize) {
+            let far = r.points.iter().map(|q| dist(*q, c)).fold(0.0, f32::max);
+            assert!(far > reach * 0.98 || r.ends[1] == RoadEnd::Shore, "arterial stops at {far} m");
+        }
+    }
+
+    #[test]
+    fn megacity_is_repeatable() {
+        let (seed, p) = megacity_params();
+        let a = crate::land::generate(seed, 1024, &p);
+        let b = crate::land::generate(seed, 1024, &p);
+        let (ma, _) = crate::host::hosted_map(&a, &p);
+        let (mb, _) = crate::host::hosted_map(&b, &p);
+        assert_eq!(crate::host::digests(&a, &ma), crate::host::digests(&b, &mb));
+        assert!(a.settlements.len() > 10 && a.lots.len() > 300, "{} settlements, {} lots at 1024 m", a.settlements.len(), a.lots.len());
     }
 
     fn in_plaza(l: &Land, lot: &Lot) -> bool {
@@ -4515,13 +4738,14 @@ mod tests {
                 assert!(lot.model_file.is_none(), "lot {i} {:?} names a model", lot.kind);
                 continue;
             };
-            let any = p.buildings.models.iter().any(|m| m.style == set.style && m.kind == kind);
+            let kit = p.kit(&set.style);
+            let any = p.buildings.models.iter().any(|m| m.style == kit && m.kind == kind);
             let Some(file) = lot.model_file.as_deref() else {
                 assert!(!any, "lot {i} {:?} names no model", lot.kind);
                 continue;
             };
             let m = p.buildings.model(file).unwrap_or_else(|| panic!("lot {i} names {file}, not in the table"));
-            assert_eq!((m.style.as_str(), m.kind.as_str()), (set.style.as_str(), kind), "lot {i}");
+            assert_eq!((m.style.as_str(), m.kind.as_str()), (kit, kind), "lot {i}");
             assert_eq!(lot.height_m, m.height_m);
             // Lamps and stalls take a smaller margin than buildings.
             let margin = st.margin_m * 2.0 + 1e-3;
@@ -4678,7 +4902,7 @@ mod tests {
             assert!((yaw_of(pr.front) - pr.yaw).abs() < 1e-4);
             let file = pr.model_file.as_deref().expect("a prop names its model");
             let m = p.buildings.model(file).unwrap_or_else(|| panic!("prop {i} names {file}, not in the table"));
-            assert_eq!((m.style.as_str(), m.kind.as_str()), (l.settlements[pr.settlement as usize].style.as_str(), pr.kind.id()), "prop {i}");
+            assert_eq!((m.style.as_str(), m.kind.as_str()), (p.kit(&l.settlements[pr.settlement as usize].style), pr.kind.id()), "prop {i}");
             if matches!(pr.kind, PropKind::Cable | PropKind::Kerb) || (pr.kind == PropKind::WashingLine && m.form.starts_with("span")) {
                 continue;
             }
