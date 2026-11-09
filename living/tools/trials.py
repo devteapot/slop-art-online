@@ -45,6 +45,8 @@ TRIALS = ROOT / "living/trials"
 OUT = ROOT / ".local/living/trials"
 CONTAINER = os.environ.get("TRIALS_STDB_CONTAINER", "slop-trials-stdb")
 PORT = int(os.environ.get("TRIALS_STDB_PORT", "3320"))
+# Where `up` publishes the port: loopback by default; 0.0.0.0 lets LAN observers watch.
+BIND = os.environ.get("TRIALS_STDB_BIND", "127.0.0.1")
 URL = f"http://127.0.0.1:{PORT}"
 NEO4J = os.environ.get("TRIALS_NEO4J_CONTAINER", "slop-trials-neo4j")
 NEO4J_PORT = int(os.environ.get("TRIALS_NEO4J_PORT", "7699"))
@@ -181,7 +183,7 @@ def up(_a=None):
     state = docker_state(CONTAINER)
     if state is None:
         sh("docker", "run", "-d", "--name", CONTAINER, "--restart", "no", "--stop-signal", "SIGINT",
-           "-p", f"127.0.0.1:{PORT}:3000", "-v", f"{CONTAINER}:/home/spacetime",
+           "-p", f"{BIND}:{PORT}:3000", "-v", f"{CONTAINER}:/home/spacetime",
            "-v", f"{OUT / 'wasm'}:/wasm:ro", IMAGE_STDB, "start", "--listen-addr", "0.0.0.0:3000")
     elif state != "running":
         sh("docker", "start", CONTAINER)

@@ -139,6 +139,7 @@ pub mod skill_use_type;
 pub mod slow_timer_type;
 pub mod spawn_battle_reducer;
 pub mod spawn_crowd_reducer;
+pub mod spawn_newcomer_reducer;
 pub mod spawn_skirmish_reducer;
 pub mod stats_table;
 pub mod stats_type;
@@ -297,6 +298,7 @@ pub use skill_use_type::SkillUse;
 pub use slow_timer_type::SlowTimer;
 pub use spawn_battle_reducer::spawn_battle;
 pub use spawn_crowd_reducer::spawn_crowd;
+pub use spawn_newcomer_reducer::spawn_newcomer;
 pub use spawn_skirmish_reducer::spawn_skirmish;
 pub use stats_table::*;
 pub use stats_type::Stats;
@@ -444,6 +446,9 @@ pub enum Reducer {
         n: u32,
         minded: bool,
     },
+    SpawnNewcomer {
+        name: String,
+    },
     SpawnSkirmish {
         n: u32,
         spacing: f32,
@@ -493,6 +498,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetWeather { .. } => "set_weather",
             Reducer::SpawnBattle { .. } => "spawn_battle",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
+            Reducer::SpawnNewcomer { .. } => "spawn_newcomer",
             Reducer::SpawnSkirmish { .. } => "spawn_skirmish",
             Reducer::UseSkill { .. } => "use_skill",
             _ => unreachable!(),
@@ -673,6 +679,11 @@ impl __sdk::Reducer for Reducer {
                 __sats::bsatn::to_vec(&spawn_crowd_reducer::SpawnCrowdArgs {
                     n: n.clone(),
                     minded: minded.clone(),
+                })
+            }
+            Reducer::SpawnNewcomer { name } => {
+                __sats::bsatn::to_vec(&spawn_newcomer_reducer::SpawnNewcomerArgs {
+                    name: name.clone(),
                 })
             }
             Reducer::SpawnSkirmish { n, spacing } => {
