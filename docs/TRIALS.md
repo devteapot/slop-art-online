@@ -30,7 +30,7 @@ Substitutions in steps: `"$<role>"` is that character as a target (`{"id": n}`),
 
 Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of`, `within`), `hour`; with `max`, `per_addressee`, `after_min`.
 
-**Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `"default": "luna"`) and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so the subject always thinks with the variant's default profile and its overflow.
+**Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds` and `lod`. In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
 
 ### How the script reaches the world
 
@@ -48,7 +48,7 @@ Scripted lines are test fixtures. They appear in `thought` rows of kind `trial`,
 python3 living/tools/trials.py up                       # trial SpacetimeDB 2.14.1 + Neo4j containers (idempotent)
 python3 living/tools/trials.py build wolves hungry ...   # living-mind and one module per trial world
 python3 living/tools/trials.py run --batch b1 wolves hungry teacher theft --replicates 3 --fake   # dry run, no provider
-python3 living/tools/trials.py run --batch b2 wolves hungry --variants default,luna --replicates 3
+python3 living/tools/trials.py run --batch b4 wolves hungry --variants default,deepseek-flash --replicates 3
 python3 living/tools/trials.py report --batch b2         # .local/living/trials/b2/report.md
 python3 living/tools/trials.py clean --batch b2          # delete databases and Neo4j minds; evidence kept
 python3 living/tools/trials.py ledger                    # real tokens per batch against the total cap

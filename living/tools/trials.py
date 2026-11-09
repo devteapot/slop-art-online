@@ -704,17 +704,20 @@ class Instance:
     # -- the mind
     def models(self):
         v = self.shared["variants"][self.variant]
-        if self.opts.fake:
-            p = {"base_url": f"http://127.0.0.1:{self.shared['fake_port']}/v1", "model": "fake-trials", "key_env": "LIVING_VERIFY_FAKE_KEY",
-                 "max_tokens": 512, "requests_per_minute": 6000, "reasoning_effort": {p: p for p in ("think", "deliberate", "consolidate", "talk")}}
-            return {"default": "fake", "profiles": {"fake": p}, "assign": {}, "rotate": [], "groups": {}, "stages": {}, "species": {}}
         # A variant names a whole models file (`models_file`) or patches the repository's.
         base = ROOT / v.get("models_file", "living/configs/models.json")
         m = json.loads(base.read_text())
         # People think with the variant's default profile: no groups, assignments, rotation
         # or stage profiles. `species` routing (animals' think/remember/compile) is kept.
-        m = {**m, "assign": {}, "rotate": [], "groups": {}, "stages": {}}
-        return deep_merge(m, v.get("models", {}))
+        m = deep_merge({**m, "assign": {}, "rotate": [], "groups": {}, "stages": {}}, v.get("models", {}))
+        if self.opts.fake:
+            # Same routing, every profile answered by the local fake server under the name
+            # `fake-<model>`, so the journal shows which profile each call was routed to.
+            port = self.shared["fake_port"]
+            m["profiles"] = {name: {"base_url": f"http://127.0.0.1:{port}/v1", "model": f"fake-{p['model']}", "key_env": "LIVING_VERIFY_FAKE_KEY",
+                                    "max_tokens": 512, "requests_per_minute": 6000, **({"overflow": p["overflow"]} if p.get("overflow") else {})}
+                             for name, p in m["profiles"].items()}
+        return m
 
     def start_mind(self):
         v = self.shared["variants"][self.variant]

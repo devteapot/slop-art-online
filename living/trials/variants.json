@@ -52,5 +52,21 @@
   "env": {
    "LIVING_LOD": "1"
   }
+ },
+ "glm-flash-low": {
+  "about": "People think with glm-flash sent with reasoning_effort low for every purpose. Replaying one real compile request (2026-11-09): as sent, 43.8 s with 5,742 reasoning tokens of 6,149 completion; with low, 3.4 s, 0 reasoning and 211 completion tokens; \"none\" is refused (HTTP 400).",
+  "models": {
+   "profiles": {
+    "glm-flash": {
+     "reasoning_effort": {
+      "deliberate": "low",
+      "consolidate": "low",
+      "talk": "low",
+      "think": "low"
+     }
+    }
+   }
+  },
+  "env": {}
  }
 }
