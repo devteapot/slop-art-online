@@ -49,13 +49,13 @@ The six starter skills and the older force skills (`attack`, `shoot`, `throw`) s
 - **While rooted** (a strike, shot, bolt or heal winding up, or a dodge dashing) a player's movement input is kept (`readiness.move_*`) and applied when the move ends; a walk under way when the move started resumes the same way.
 - **Damage, health and death** go through the existing `vitals` and `act::die`. Death is permanent: rejoining (`join`) makes a new character that inherits nothing; the seed's `newcomer` kit (island: a bow, 30 arrows, 4 berries; `fire`, `fire_bolt`, `mending`) is what every newcomer is given, not anything of a character before.
 
-Changes to existing rules that labs share: `dodge` and `block` now have cooldowns (900 and 400 ms) and energy costs, a person's dodge is 2.6 m at 5.2 m/s (was 2.4 at 9), and a guard covers only the front. Knacks: the new skills use the knack genes of `attack`, `shoot`, `throw` and `tend` (`genes::knack_of`), so founders draw exactly the genes they drew before.
+Changes to existing rules that labs share: `dodge` and `block` now have cooldowns (900 and 400 ms) and energy costs, a person's dodge is 2.6 m at 5.2 m/s (was 2.4 at 9), and a guard covers only the front. Knacks: the new skills use the knack genes of `attack`, `shoot`, `throw` and `tend` (each skill's `knack` in its `<skill>_combat()`), so founders draw exactly the genes they drew before.
 
 ### What others see, and what each player perceives
 
-- **`fighter`** (public, joined to the body window): the health band anyone sees at a glance (`living_rules::combat::band`: unhurt, scratched, hurt, badly hurt, barely standing; never exact health), the move under way (`act` code, start, release, end), its target and aim. A character gets a row at its first move or blow; housekeeping refreshes the bands of existing rows once a second; the row goes with death. Like `body`, the window is not a permission boundary; the row holds only what looking at the body shows.
+- **`fighter`** (public, joined to the body window): the health band anyone sees at a glance (`living_rules::combat::band`: unhurt, scratched, hurt, badly hurt, barely standing; never exact health), the move under way (`act`, its `skill_card.code`; start, release, end), its target and aim. A character gets a row at its first move or blow; housekeeping refreshes the bands of existing rows once a second; the row goes with death. Like `body`, the window is not a permission boundary; the row holds only what looking at the body shows.
 - **`combat_seen`** (private) through **`my_combat`** (per-sender view): one row per human viewer of what that viewer's character perceived: a release, a hit, a miss, a block, a dodge, a heal, a missile's launch and impact, a death, a refusal (actor only), and, for the one who died, who saw it. Recipients are the actor and target (always, with the amount) and the human players whose characters are within their own sight of where it happened (without the amount). Minds still perceive fights through `experience`, unchanged. Rows expire after 4 s (a death and its witnesses after 2 minutes).
-- **`skill_card`** (public, 6 rows): each starter skill's cost, windup, recovery, cooldown and reach, rewritten whenever a skill script is installed, so the skill bar shows the rules' numbers without running them.
+- **`skill_card`** (public, one row per combat skill: 13 with the shipped script): each combat skill's bar slot, cost, windup, recovery, cooldown, reach, presentation code, aim, missile radius, guard arc and the bar's needs hints, rewritten whenever a skill script is installed, so the client shows the bar and names the codes in `fighter` and `combat_seen` without running the rules (see "Where combat rules live").
 
 ### Data paths, readers and growth
 
@@ -84,6 +84,34 @@ No new whole-World scan was added to a routine action. The band refresh scans `f
 - `vfx.rs`: slash arcs on releases (red for an animal's bite), arrows and fire bolts flying along the authority's launch until its impact, the bolt's trail and burst, hit sparks, a block flash, a dodge ring, a heal glow, a raised guard's arc and a fire bolt's windup ember. All share six meshes and nine unlit additive materials made once; effects fade by shrinking.
 - `live.rs`: one-shot clips over locomotion (`sword_slash` / `sword_overhead` / `sword_thrust`, `bow_shoot`, `cast`, `block` held at its guard pose, `dodge_roll`, `hit`, `death` held), a body facing its move's aim, and corpses: someone I saw die stays where they fell for 7 s playing `death` after the authority removes the body. Animals are the procedural creatures and have no clips.
 - HUD (`ui/live.rs`, `ui/numbers.rs`): the skill bar from live cooldowns, `skill_card` costs, my inventory and know-how (no bow, no arrows, unknown, too tired); the target frame and nameplates with the perceived band; hostile stance for whoever's move is aimed at me; floating numbers for blows I dealt or took and heals; the death screen's cause and the witnesses my character's death was seen by.
+
+## Where combat rules live
+
+Decided 2026-11-09, after the first pass: the authority's Rust had chosen which skill is which by matching names (hostile-skill lists, `TIMED`/`AIMED`/`ROOTED`, `"bowshot" | "firebolt"`, `== "dodge"`, `== "block"`, `"attack" | "strike"`, a guard's `* 0.25`, `HOLD_MS`), so a new combat skill needed Rust edits in a dozen places.
+
+**The rule.** A combat skill is whatever `living/scripts/skills.rhai` says it is. Each one declares its shape in `<skill>_combat()`, a map of traits (the list and their meanings are in the script, above the shapes): `aim` (`creature`, `self_or_ally`, `point`, `facing`, `dash`, `none`), and the flags `timed`, `rooted`, `hostile`, `reflex`, `real_time`, `melee`, `closes_in`, `menace`, `force` and `dares`, the guard numbers `hold_ms`, `arc` and `takes`, the `knack` gene it uses, and the bar's hints `needs` and `knows`. Whether it fires a missile follows from `<skill>_missile` existing; a `point` skill without one is refused when the script is installed, as is an unknown trait. `skill_bar()` lists the bar in order. `use_skill` accepts only skills on the bar.
+
+**The engine keeps generic primitives** and picks one by trait, never by name: a dash (`aim: "dash"`: the motion, its immunity, `<skill>_dist` and `<skill>_speed`), a held guard (`facing`: faces the aim, takes `takes` of a covered blow within `arc`, held up to `hold_ms`), a missile (`point` + `<skill>_missile`), a melee blow meant to hurt or kill (`melee`: the mode item, the miss out of `reach + lunge(kind)`), a menace (`menace`), and the combat timing (`timed`). The older force skills (`attack`, `shoot`, `throw`, `threaten`, `yield`) and `seize`/`tend` declare shapes too, so there is one classification. The rules test `combat_shapes_classify_the_existing_skills_as_before` asserts that the shapes reproduce every name list they replaced.
+
+**Read once.** `Scripts::new` reads every `<skill>_combat()` and `skill_bar()` when the script compiles and keeps the result (`living_rules::combat::Shapes`) in the `Scripts` value the authority already caches per script revision. Lookups are a map lookup by name; no Rhai call was added to the tick or to a skill's use. The mind service reads the same shapes from the world's `script` row (`prompts::set_rules`) to tell real-time moves from acts.
+
+**Presentation codes.** `fighter.act` and `combat_seen.skill` stay `u8` (a fighter row is written at every move; a string would grow every update for every subscriber). A skill's code is its position among the script's combat skills in name order, from 1, published as `skill_card.code`; the client maps code → skill through `skill_card`, which it already subscribes. A new skill therefore reaches the client with no Rust edit on either side. When a script adds or removes a combat skill, codes after it shift: rows written under the old script (a `fighter.act` until its move ends, `combat_seen` rows for up to 4 s, a death's for 2 minutes, which carry no skill) may be misnamed until they expire. Script installs are rare and deliberate, so this was preferred over a code table kept stable across installs. `skill_use` records skill names, so the evidence never depends on codes.
+
+**The client** (`living/game`) reads its bar (slot by key: LMB, RMB, Q, E, R, Shift), targeting (by `aim`), reach, missile radius and guard arc from `skill_card`. How a skill looks (clip, effect, icon) is the client's own presentation: by name for the skills it was drawn for, otherwise from the card (`point` with radius ≥ 0.25 is a bolt, else an arrow; `facing` a guard; `dash` a roll; `creature` a slash). A skill the client has never seen plays that fallback.
+
+**Columns added to a live table.** `skill_card` gained `code`, `aim`, `radius`, `arc`, `needs` and `knows`, appended last with `#[default(..)]` so `just living-publish` migrates an existing world without `--delete-data` ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations), [default values](https://spacetimedb.com/docs/tables/default-values), docs version 2.0.0, checked against the 2.14.1 macro: a default must be constant, so `needs` and `knows` are comma-separated strings, not lists). The new values appear at the next `install_script`, which `living-publish` runs.
+
+**What a new combat skill needs.** Its functions in `skills.rhai` (`_combat`, `_check`, `_duration`, `_done`, and `_missile`/`_hit` for a skillshot), its timing in `combat_cooldown`/`combat_recover`/`combat_cost`, a place in `skill_bar()` if players use it, and its `SkillSpec` (help and reach) in `living/rules/src/catalog.rs`, which graph normalization and approach read. A player's `use_skill` of a `point` skill works without the `SkillSpec`; a graph leaf does not (it is an unknown skill until the catalog names it).
+
+**Still named in Rust, deliberately:**
+- `act.rs` `report`'s list of notable successes (`attack`, `threaten`, `yield` among `build`, `give`...): which outcomes become a mind's experience, not a combat classification.
+- Chronicle and percept kinds (`"attack"`, `"yield"`): event vocabulary, not skills.
+- `spawn_skirmish`'s graphs (`lib.rs`): content for the benchmark scene.
+- The walking and resting skills that are real-time (`combat::MOVES`: wander, flee, follow, wait, sleep, rest, graze) and `flee` as a reflex: engine motions, not combat skills.
+- The client's look table by name (presentation, with the fallback above) and one plural, "No arrows".
+- The lab observer (`living/viewer`) still reads activity skill names; it is the developer client the game will replace.
+
+One behavior moved with it: graph normalization now keeps a hurt/kill mode word on any skill that takes no item (it was kept only for `attack` and `strike`, because normalization has no script). The authority gives the mode meaning only for a `melee` skill and drops it from any other at `begin`, so what a character does is unchanged; a graph's stored and described form now shows a mode a model wrote on, say, a bow shot.
 
 ## Measurements
 
@@ -143,6 +171,29 @@ Code under test: `e0c9d1f` plus this change on the dev-box. The change was then 
 - a 100-fighter skirmish seen from 30 m at night: `watch-calm.png`, `watch-battle-1.png` to `-3.png`.
 
 Not covered: real input devices (mouse and keys were scripted through the same input path), effects timed under load, a person-vs-person kill by a player, the minds' reading of the new skills (no mind service ran), and how fights look in daylight in the town square.
+
+### The trait change ("Where combat rules live"), 2026-11-09
+
+On the Mac checkout (Apple Silicon, Docker Desktop, SpacetimeDB 2.14.1 in the shared `sao-living_spacetimedb_1`, load average 3–5 from other work throughout), scratch `verify-*` databases only, no model calls. Evidence under the git-ignored `.local/living/verify/`.
+
+| Surface | What was driven | Result | Evidence |
+|---|---|---|---|
+| Project check | `set -o pipefail; just living-check` | exit 0; rules 84 passed (adds `combat_shapes_classify_the_existing_skills_as_before` and `a_new_skill_needs_only_the_script`) | — |
+| Core | `cargo_checks.py` (rules 84, authority 10, mind 47, viewer sync 3); scenes `tick`, `needs`, `seize` (all pass, the yielded seizure included); `skirmish` 8 of 8; mechanics | mechanics: the first run crashed in the driver edit below (`place_at` given strings); after the fix 23 of 23 in two fresh worlds | `core-traits-1*/`, `core-traits-mech-1/`, `-2/` |
+| Player | `combat.py --fresh` on island worlds | 22 of 23 (the dodge scene's driver still waited for the old fixed code 1; fixed to read `skill_card.code`), then 19 of 23 (block front and back, dodge, heal: the resident attacker never struck; not reproduced, cause not established), then 23 of 23 | `player-traits-1/`, `-2/`, `-3/` |
+| Client | `verify-client/scripts/run.py` | 16 PASS and the 2 known XFAILs; `skill_card` has 13 rows | `client-traits-1/` |
+| Throwaway skills | `icebolt` (point, missile) and `shove` (creature, melee) added only to an installed copy of the script and the bar, plus two `SkillSpec` lines built into a private module (removed after): player windups show their codes, the bolt flies and strikes, the shove hurts and is refused out of reach; a graph leaf of each is recorded from acceptance and lands; a graph shove with `"item": "kill"` keeps its mode ("shove to kill") and kills through the death rule | 16 of 16 | `throwaway-traits-1/throwaway.json`, `throwaway.py` |
+
+**Skirmish of 200, tick time** (`bench.py`, 60 s from about 4 s after `spawn_skirmish(200, 12)`, island, no subscribers), base commit `25b7b7b` against this change on the same Mac:
+
+| | p50 | p95 | p99 | max | over 16.7 ms | `tick.combat` ms/s |
+|---|---|---|---|---|---|---|
+| base, run 2 | 3.17 | 8.48 | 11.50 | 41.4 | 4 of 3,594 | 56.3 |
+| base, run 3 | 3.36 | 8.65 | 11.00 | 16.0 | 0 of 3,594 | 61.1 |
+| change, run 1 | 3.43 | 8.50 | 11.42 | 24.8 | 3 of 3,594 | 57.6 |
+| change, run 2 | 3.50 | 8.41 | 11.58 | 18.3 | 3 of 3,598 | 62.0 |
+
+p95 and p99 are the same within run-to-run spread; p50 is 0.1–0.3 ms higher in both change runs, about the size of the spread between the two base runs, so a small per-move cost from the trait lookups is possible but not established. (Base run 1 was lost to a `bench.py` bug, a log line stamped on the exact second; fixed.) These Mac numbers are not comparable to the dev-box table above (1.95 / 16.19 ms). This is still a one-minute 200-fighter battle, not the contract's workload.
 
 ## What is missing
 

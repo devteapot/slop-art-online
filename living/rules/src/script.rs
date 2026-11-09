@@ -302,6 +302,7 @@ pub struct Scripts {
     engine: Engine,
     ast: AST,
     fns: HashSet<String>,
+    shapes: crate::combat::Shapes,
 }
 
 pub const MAX_SOURCE: usize = 64 * 1024;
@@ -329,14 +330,85 @@ impl Scripts {
         let engine = engine();
         let ast = engine.compile(source).map_err(|e| format!("script compile: {e}"))?.clone_functions_only();
         let fns = ast.iter_functions().map(|f| f.name.to_string()).collect();
-        let s = Self { engine, ast, fns };
+        let mut s = Self { engine, ast, fns, shapes: Default::default() };
         // Required entry points.
         for f in ["rates", "move_speed"] {
             if !s.fns.contains(f) {
                 return Err(format!("script must define `{f}(a)`"));
             }
         }
+        s.shapes = s.read_shapes()?;
         Ok(s)
+    }
+
+    /// What each combat skill is (`<skill>_combat()`) and the skill bar (`skill_bar()`), read
+    /// once here so the authority never asks the script per tick.
+    fn read_shapes(&self) -> Result<crate::combat::Shapes, String> {
+        use crate::combat::{Aim, Shape};
+        let mut shapes = std::collections::BTreeMap::new();
+        for f in self.fns.iter().filter(|f| f.ends_with("_combat")) {
+            let skill = f.trim_end_matches("_combat");
+            if skill.is_empty() {
+                continue;
+            }
+            let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
+            const KNOWN: &[&str] = &["aim", "timed", "rooted", "hostile", "reflex", "real_time", "melee", "closes_in", "menace", "force", "dares", "hold_ms", "arc", "takes", "knack", "needs", "knows"];
+            if let Some(k) = m.keys().find(|k| !KNOWN.contains(&k.as_str())) {
+                return Err(format!("{f}: unknown trait `{k}` (traits are {})", KNOWN.join(", ")));
+            }
+            let flag = |k: &str| m.get(k).map_or(Ok(false), |v| v.as_bool().map_err(|_| format!("{f}: `{k}` must be true or false")));
+            let num = |k: &str| m.get(k).map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `{k}` must be a number")));
+            let text = |k: &str| m.get(k).map_or(Ok(String::new()), |v| v.clone().into_string().map_err(|_| format!("{f}: `{k}` must be a string")));
+            let list = |k: &str| -> Result<Vec<String>, String> {
+                let Some(v) = m.get(k) else { return Ok(Vec::new()) };
+                let a = v.clone().try_cast::<Array>().ok_or_else(|| format!("{f}: `{k}` must be a list of names"))?;
+                a.into_iter().map(|x| x.into_string().map_err(|_| format!("{f}: `{k}` must be a list of names"))).collect()
+            };
+            let aim = Aim::parse(&text("aim")?).ok_or_else(|| format!("{f}: aim is one of none, creature, self_or_ally, point, facing, dash"))?;
+            let missile = self.has(&format!("{skill}_missile"));
+            if aim == Aim::Point && !missile {
+                return Err(format!("{f}: a skill aimed at a point is a skillshot and needs `{skill}_missile(a)`"));
+            }
+            let shape = Shape {
+                code: 0,
+                aim,
+                timed: flag("timed")?,
+                rooted: flag("rooted")?,
+                hostile: flag("hostile")?,
+                reflex: flag("reflex")?,
+                real_time: flag("real_time")?,
+                melee: flag("melee")?,
+                closes_in: flag("closes_in")?,
+                menace: flag("menace")?,
+                force: flag("force")?,
+                dares: flag("dares")?,
+                missile,
+                hold_ms: num("hold_ms")?.clamp(0.0, 600_000.0) as u32,
+                arc: num("arc")?.clamp(0.0, 180.0) as f32,
+                takes: num("takes")?.clamp(0.0, 1.0) as f32,
+                knack: text("knack")?,
+                needs: list("needs")?,
+                knows: list("knows")?,
+            };
+            shapes.insert(skill.to_string(), shape);
+        }
+        let bar = if self.has("skill_bar") {
+            let a = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "skill_bar", ()).map_err(|e| format!("skill_bar: {e}"))?.try_cast::<Array>().ok_or("skill_bar must return a list of skills")?;
+            a.into_iter().map(|x| x.into_string().map_err(|_| "skill_bar must return a list of skills".to_string())).collect::<Result<Vec<_>, _>>()?
+        } else {
+            Vec::new()
+        };
+        crate::combat::Shapes::new(shapes, bar)
+    }
+
+    /// What each combat skill is, and the skill bar.
+    pub fn shapes(&self) -> &crate::combat::Shapes {
+        &self.shapes
+    }
+
+    /// A combat skill's shape (None for any other skill).
+    pub fn combat(&self, skill: &str) -> Option<&crate::combat::Shape> {
+        self.shapes.get(skill)
     }
 
     pub fn has(&self, f: &str) -> bool {
@@ -345,7 +417,7 @@ impl Scripts {
 
     fn call(&self, f: &str, ctx: &SkillCtx) -> Result<Dynamic, String> {
         self.engine
-            .call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (to_map(ctx),))
+            .call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (to_map(ctx, self.shapes.knack(&ctx.skill)),))
             .map_err(|e| format!("{f}: {e}"))
     }
 
@@ -370,7 +442,10 @@ impl Scripts {
         }
         let v = number(&self.call(&f, ctx)?).ok_or_else(|| format!("{f} must return a number"))?;
         // A knack and practice make skilled work quicker.
-        let v = if crate::genes::paced(skill) { v / crate::genes::skill_factor(&ctx.actor.genes, &ctx.actor.practice, skill) as f64 } else { v };
+        // Combat moves are not: their timing is the other side's chance to react, so skill
+        // makes them hit harder (in the scripts), not faster.
+        let paced = crate::genes::is_skilled(skill) && !self.shapes.timed(skill);
+        let v = if paced { v / crate::genes::skill_factor(&ctx.actor.genes, &ctx.actor.practice, skill, self.shapes.knack(skill)) as f64 } else { v };
         Ok(v.clamp(0.0, 600_000.0) as u64)
     }
 
@@ -525,7 +600,7 @@ fn inv_map(inv: &[(String, u32)]) -> Map {
     m
 }
 
-fn to_map(c: &SkillCtx) -> Map {
+fn to_map(c: &SkillCtx, knack: &str) -> Map {
     let f = |v: f32| Dynamic::from_float(v as f64);
     let mut a = Map::new();
     a.insert("id".into(), Dynamic::from_int(c.actor.id as i64));
@@ -554,7 +629,7 @@ fn to_map(c: &SkillCtx) -> Map {
         a.insert(g.into(), f(crate::genes::gene(&c.actor.genes, g)));
     }
     // How good the actor is at the skill being performed (knack × practice).
-    a.insert("factor".into(), f(crate::genes::skill_factor(&c.actor.genes, &c.actor.practice, &c.skill)));
+    a.insert("factor".into(), f(crate::genes::skill_factor(&c.actor.genes, &c.actor.practice, &c.skill, knack)));
     let mut t = Map::new();
     t.insert("class".into(), c.target.class.clone().into());
     t.insert("id".into(), Dynamic::from_int(c.target.id as i64));
@@ -731,9 +806,85 @@ mod tests {
         c.qty = 0;
         assert_eq!(s.duration_ms("block", &c).unwrap(), 1_200);
         // Timing numbers are the rules' own.
-        for sk in crate::combat::STARTER {
+        assert_eq!(s.shapes().bar(), ["strike", "bowshot", "firebolt", "block", "heal", "dodge"]);
+        for sk in s.shapes().bar() {
             assert!(s.num_of("combat_cooldown", sk, -1.0) > 0.0, "{sk}");
         }
+    }
+
+    /// The shapes the script declares classify the existing skills exactly as the name lists
+    /// they replaced (2026-11-09) did.
+    #[test]
+    fn combat_shapes_classify_the_existing_skills_as_before() {
+        use crate::combat::Aim;
+        let s = scripts();
+        let sh = s.shapes();
+        let names: Vec<&str> = sh.iter().map(|(n, _)| n).collect();
+        let with = |t: fn(&crate::combat::Shape) -> bool| -> Vec<&str> { sh.iter().filter(|(_, x)| t(x)).map(|(n, _)| n).collect() };
+        let sorted = |mut v: Vec<&'static str>| {
+            v.sort();
+            v
+        };
+        assert_eq!(with(|x| x.timed), sorted(vec!["strike", "bowshot", "firebolt", "block", "heal", "dodge", "attack", "shoot", "throw"]));
+        assert_eq!(with(|x| x.missile), sorted(vec!["bowshot", "firebolt"]));
+        assert_eq!(with(|x| x.aim == Aim::Point), sorted(vec!["bowshot", "firebolt"]));
+        assert_eq!(with(|x| x.rooted), sorted(vec!["strike", "bowshot", "firebolt", "heal", "attack", "shoot"]));
+        assert_eq!(with(|x| x.hostile), sorted(vec!["attack", "throw", "shoot", "threaten", "strike", "bowshot", "firebolt"]));
+        assert_eq!(with(|x| x.force), sorted(vec!["attack", "throw", "shoot", "yield", "strike", "bowshot", "firebolt"]));
+        assert_eq!(with(|x| x.dares), sorted(vec!["attack", "seize", "strike"]));
+        assert_eq!(with(|x| x.melee), sorted(vec!["attack", "strike"]));
+        assert_eq!(with(|x| x.closes_in), sorted(vec!["attack", "threaten", "strike"]));
+        assert_eq!(with(|x| x.menace), vec!["threaten"]);
+        assert_eq!(with(|x| x.aim == Aim::Dash), vec!["dodge"]);
+        assert_eq!(with(|x| x.aim == Aim::Facing), vec!["block"]);
+        assert_eq!(with(|x| x.aim == Aim::SelfOrAlly), vec!["heal"]);
+        // Real-time behavior and reflexes, with the walking and resting skills.
+        let real: Vec<&str> = crate::catalog::SKILLS.iter().map(|k| k.name).filter(|n| sh.real_time(n)).collect();
+        let mut real = real;
+        real.sort();
+        assert_eq!(real, sorted(vec!["wander", "flee", "follow", "dodge", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"]));
+        let mut reflex: Vec<&str> = crate::catalog::SKILLS.iter().map(|k| k.name).filter(|n| sh.reflex(n)).collect();
+        reflex.sort();
+        assert_eq!(reflex, sorted(vec!["flee", "dodge", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "heal", "yield"]));
+        // Knacks: the starter skills share the older skills' genes.
+        for (sk, k) in [("strike", "attack"), ("bowshot", "shoot"), ("firebolt", "throw"), ("heal", "tend"), ("attack", "attack"), ("gather", "gather")] {
+            assert_eq!(sh.knack(sk), k);
+        }
+        // The guard's numbers, once in the script.
+        let g = sh.get("block").unwrap();
+        assert_eq!((g.hold_ms, g.arc, g.takes), (8_000, 75.0, 0.25));
+        // Every combat skill has a code; codes name their skills.
+        for n in &names {
+            assert_eq!(sh.name(sh.code(n)), *n);
+        }
+        assert_eq!(names.len(), 13);
+    }
+
+    /// A combat skill the authority has never heard of works from its script alone: its
+    /// shape, its missile, its check and its hit.
+    #[test]
+    fn a_new_skill_needs_only_the_script() {
+        let src = format!(
+            "{}\n{}",
+            include_str!("../../scripts/skills.rhai"),
+            r#"
+fn icebolt_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw" } }
+fn icebolt_check(a) { aim_check(a) }
+fn icebolt_duration(a) { 400 }
+fn icebolt_done(a) { [#{ op: "launch" }] + spent("icebolt") }
+fn icebolt_missile(a) { #{ speed: 20.0, range: 12.0, radius: 0.3 } }
+fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
+"#
+        );
+        let s = Scripts::new(&src).unwrap();
+        let ice = s.combat("icebolt").unwrap();
+        assert!(ice.missile && ice.timed && s.shapes().real_time("icebolt") && s.shapes().reflex("icebolt"));
+        assert_eq!(s.shapes().name(ice.code), "icebolt");
+        assert_eq!(s.missile("icebolt", &ctx()).unwrap().range, 12.0);
+        // A point skill without a missile, or a trait the engine does not know, is refused.
+        let refused = |extra: &str| Scripts::new(&format!("{}\n{extra}", include_str!("../../scripts/skills.rhai"))).err().unwrap_or_default();
+        assert!(refused(r#"fn zap_combat() { #{ aim: "point" } }"#).contains("zap_missile"));
+        assert!(refused(r#"fn zap_combat() { #{ aim: "creature", flying: true } }"#).contains("unknown trait `flying`"));
     }
 
     #[test]

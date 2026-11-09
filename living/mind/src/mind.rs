@@ -117,7 +117,8 @@ fn real_time_into_intent(v: &mut Value) {
         _ => a["skill"].as_str().map(|s| s.to_lowercase()),
     };
     let Some(acts) = v.get("acts").and_then(|a| a.as_array()).cloned() else { return };
-    let (moves, rest): (Vec<Value>, Vec<Value>) = acts.into_iter().partition(|a| skill_of(a).is_some_and(|s| living_rules::acts::REAL_TIME.contains(&s.as_str())));
+    let shapes = prompts::shapes();
+    let (moves, rest): (Vec<Value>, Vec<Value>) = acts.into_iter().partition(|a| skill_of(a).is_some_and(|s| shapes.real_time(&s)));
     if moves.is_empty() {
         return;
     }
@@ -136,7 +137,7 @@ pub(crate) fn acts_text(acts: &[String]) -> String {
         .map(|a| {
             serde_json::from_str::<Value>(a)
                 .ok()
-                .and_then(|v| living_rules::acts::parse(v, None).ok())
+                .and_then(|v| living_rules::acts::parse(v, None, &prompts::shapes()).ok())
                 .map(|x| living_rules::graph::describe(&living_rules::graph::Node::Do(x)))
                 .unwrap_or_else(|| a.chars().take(80).collect())
         })

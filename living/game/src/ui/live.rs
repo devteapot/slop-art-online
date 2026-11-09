@@ -12,8 +12,9 @@
 //! - my known places (`place` rows of my character) on the compass;
 //! - on a land world (the island, `live.rs`), nameplates and bubbles over the drawn characters.
 //!
-//! - combat (docs/COMBAT.md, `combat.rs`): the skill bar from `my_readiness` (cooldowns), the
-//!   rules' own costs (`skill_card`), my inventory and know-how; others' health band and
+//! - combat (docs/COMBAT.md, `combat.rs`): the skill bar from `skill_card` (the rules' bar
+//!   order, costs and what each skill needs), `my_readiness` (cooldowns), my inventory and
+//!   know-how; others' health band and
 //!   move from their `fighter` rows; floating numbers and who saw my death from `my_combat`.
 //!
 //! Not on the server yet, so omitted: interactions.
@@ -36,7 +37,7 @@ pub struct Last {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, mut last: Local<Last>) {
+pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, mut last: Local<Last>) {
     let now_ms = scene.now_ms;
     let now = now_ms / 1000.0;
     model.shown = true;
@@ -215,28 +216,26 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         (Some(id), Some(m)) => {
             let inv = |item: &str| conn.db.inventory().iter().filter(|r| r.owner == id as u64 && r.item == item).map(|r| r.qty).sum::<u32>();
             let knows = |t: &str| conn.db.know_how().iter().any(|k| k.actor == id && k.technique == t);
-            let guard = conn.db.fighter().id().find(&id).is_some_and(|f| f.act == living_rules::combat::code("block") && (now_ms as u64) < f.until_ms);
+            let me_f = conn.db.fighter().id().find(&id);
             let energy = m.energy;
-            default_bar(|key| {
-                let skill = skill_of(key);
-                if skill == "block" && (guard || combat.guarding) {
+            live_bar(&cards, |card| {
+                // A held guard: raised now (my fighter row says so) or my key is down.
+                if card.aim == "facing" && (combat.guarding || me_f.as_ref().is_some_and(|f| f.act == card.code && (now_ms as u64) < f.until_ms)) {
                     return SkillState::Active;
                 }
-                if let Some((left, total)) = crate::combat::cooldown(conn, id, skill, now_ms) {
+                if let Some((left, total)) = crate::combat::cooldown(conn, id, &card.skill, now_ms) {
                     return SkillState::Cooldown { left, total };
                 }
-                let missing = match skill {
-                    "bowshot" if inv("bow") == 0 => Some("No bow"),
-                    "bowshot" if inv("arrow") == 0 => Some("No arrows"),
-                    "firebolt" if !knows("fire_bolt") => Some("Unknown"),
-                    "heal" if !knows("mending") => Some("Unknown"),
-                    _ => None,
-                };
-                if let Some(why) = missing {
-                    return SkillState::Unavailable(why.into());
+                let (items, techniques) = crate::combat::needs(card);
+                let mut items = items;
+                let mut techniques = techniques;
+                if let Some(item) = items.find(|i| inv(i) == 0) {
+                    return SkillState::Unavailable(missing(item));
                 }
-                let cost = conn.db.skill_card().skill().find(&skill.to_string()).map_or(0.0, |c| c.cost);
-                if energy < cost {
+                if techniques.any(|t| !knows(t)) {
+                    return SkillState::Unavailable("Unknown".into());
+                }
+                if energy < card.cost {
                     return SkillState::Unavailable("Too tired".into());
                 }
                 SkillState::Ready
@@ -270,19 +269,31 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     };
 }
 
-/// The skill on a key of the bar.
-fn skill_of(key: Key) -> &'static str {
-    match key {
-        Key::Lmb => "strike",
-        Key::Rmb => "bowshot",
-        Key::Q => "firebolt",
-        Key::E => "block",
-        Key::R => "heal",
-        Key::Shift => "dodge",
+/// The keys of the bar, slot by slot (the rules' `skill_bar()` order).
+const KEYS: [Key; crate::combat::SLOTS] = [Key::Lmb, Key::Rmb, Key::Q, Key::E, Key::R, Key::Shift];
+
+/// The bar from the rules' combat skills: each slot's skill, its icon, its state.
+fn live_bar(cards: &crate::combat::Cards, state: impl Fn(&SkillCard) -> SkillState) -> Vec<Skill> {
+    KEYS.iter()
+        .enumerate()
+        .map(|(i, key)| match cards.slot(i) {
+            Some(card) => Skill { key: *key, icon: crate::combat::look(card).icon, state: state(card) },
+            None => Skill { key: *key, icon: SkillIcon::Empty, state: SkillState::Empty },
+        })
+        .collect()
+}
+
+/// What the bar says when an item a skill needs is not carried.
+fn missing(item: &str) -> String {
+    // Ammunition is counted, so it reads in the plural.
+    match item {
+        "arrow" => "No arrows".into(),
+        i => format!("No {}", i.replace('_', " ")),
     }
 }
 
-/// The starter skills on their keys (docs/GAME_BRIEF.md, 2026-11-09); F interacts.
+/// The starter skills on their keys (docs/GAME_BRIEF.md, 2026-11-09), for the UI sample with
+/// no world connected; F interacts.
 pub fn default_bar(state: impl Fn(Key) -> SkillState) -> Vec<Skill> {
     let slot = |key: Key, icon: SkillIcon| Skill { key, icon, state: if icon == SkillIcon::Empty { SkillState::Empty } else { state(key) } };
     vec![

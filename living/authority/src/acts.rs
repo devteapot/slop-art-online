@@ -35,7 +35,7 @@ pub fn submit(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, r
     }
     let mut notes = Vec::new();
     for raw in acts.iter().take(rules::MAX_QUEUED) {
-        let parsed = serde_json::from_str::<serde_json::Value>(raw).map_err(|e| format!("not JSON: {e}")).and_then(|v| rules::parse(v, sp.as_ref()));
+        let parsed = serde_json::from_str::<serde_json::Value>(raw).map_err(|e| format!("not JSON: {e}")).and_then(|v| rules::parse(v, sp.as_ref(), common::scripts(ctx).shapes()));
         let a = match parsed {
             Ok(a) => a,
             Err(why) => {

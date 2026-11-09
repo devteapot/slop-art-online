@@ -411,7 +411,7 @@ pub fn human_act(ctx: &ReducerContext, node: String) -> Result<(), String> {
     let me = my_character(ctx)?;
     let g = living_rules::graph::parse(&node)?;
     if let living_rules::graph::Node::Do(a) = &g.root {
-        if living_rules::acts::not_an_act(&a.skill).is_none() {
+        if living_rules::acts::not_an_act(&a.skill, common::scripts(ctx).shapes()).is_none() {
             acts::submit(ctx, me.id, &[g.to_json()], "human", true, common::now_ms(ctx));
             return Ok(());
         }
@@ -438,16 +438,19 @@ pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(
         return Ok(());
     }
     let dir = (dx != 0.0 || dy != 0.0).then_some((dx, dy));
+    // A raised guard (a skill the rules aim `facing`).
+    let sc = common::scripts(ctx);
+    let guard = |a: &Activity| sc.combat(&a.skill).is_some_and(|s| s.aim == living_rules::combat::Aim::Facing);
     if dir.is_some() {
         // Taking the controls: what was going on stops (a raised guard walks along), and the
         // plan becomes "wait".
-        if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill != "wait" && !(a.skill == "block" && a.node == act::PLAYER)) {
+        if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill != "wait" && !(guard(a) && a.node == act::PLAYER)) {
             act::cancel(ctx, a, now, Some("you moved"));
         }
         player_controls(ctx, me.id, now)?;
     }
     // A guard is held at a walk.
-    let guarding = ctx.db.activity().id().find(me.id).is_some_and(|a| a.skill == "block");
+    let guarding = ctx.db.activity().id().find(me.id).is_some_and(|a| guard(&a));
     motion::intent(ctx, me.id, dir, run && !guarding, || act::walk_speed(ctx, me.id, now), now)
 }
 

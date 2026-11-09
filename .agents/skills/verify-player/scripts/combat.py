@@ -113,6 +113,13 @@ def ready(st, skill):
         time.sleep(0.25)
 
 
+def code_of(st, skill):
+    """The presentation code `fighter.act` and `combat_seen.skill` carry for a skill: its
+    `skill_card.code` (assigned in skill-name order when the script is installed)."""
+    c = [r["code"] for r in sql(st, "SELECT skill, code FROM skill_card") if r["skill"] == skill]
+    return c[0] if c else 0
+
+
 def dummy(st, near, dx, dy, graph='{"wait":60}', name_hint=None):
     """A resident to fight: the nearest living person other than me, set to `graph`, placed
     (dx, dy) from `near`."""
@@ -176,7 +183,8 @@ def scene_strike(st):
     t0 = time.time()
     call(st, "use_skill", ["strike", d, p[0] + 1.2, p[1]])
     f = sql(st, f"SELECT * FROM fighter WHERE id = {cid}")
-    check(st, "the windup is visible to others (fighter.act = strike)", f and f[0]["act"] == 1 and f[0]["release_ms"] > f[0]["act_ms"], f)
+    code = code_of(st, "strike")
+    check(st, "the windup is visible to others (fighter.act = strike)", f and code > 0 and f[0]["act"] == code and f[0]["release_ms"] > f[0]["act_ms"], (f, code))
     u = wait_outcome(st, "strike", 3)
     h1 = hp(st, d)
     check(st, "strike lands: accepted, released, damage dealt", u and u["accepted_ms"] > 0 and u["released_ms"] >= u["accepted_ms"] + 300 and h1 is not None and h0 is not None and h1 < h0, f"{u and u['outcome']} hp {h0}->{h1} in {time.time()-t0:.2f}s")
@@ -269,11 +277,12 @@ def scene_dodge(st):
     p = body(st, cid)
     a = attacker(st, cid, p, 1.1)
     # Dodge once the windup has begun (strike windup 350 ms).
+    strike = code_of(st, "strike")
     t = time.time() + 3
     started = False
     while time.time() < t:
         f = sql(st, f"SELECT act, release_ms FROM fighter WHERE id = {a}")
-        if f and f[0]["act"] == 1 and f[0]["release_ms"] > time.time() * 1000:
+        if f and f[0]["act"] == strike and f[0]["release_ms"] > time.time() * 1000:
             started = True
             break
         time.sleep(0.03)

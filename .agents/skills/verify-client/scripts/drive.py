@@ -457,7 +457,7 @@ class Run:
             any(u['skill'] == 'strike' and u['accepted_ms'] == 0 and 'refused' in u['outcome'] for u in v['final']['skill_uses'])
             for label, v in combat.items() if label != 'anonymous') and not combat['anonymous']['final']['skill_uses'], 'combat-*.json')
         public = self.probe('combat-public', ['SELECT * FROM fighter', 'SELECT * FROM skill_card'])
-        self.check('fighter and skill_card are public', public['status'] == 'applied' and public['final']['counts']['skill_card'] == 6, 'combat-public.json',
+        self.check('fighter and skill_card are public', public['status'] == 'applied' and public['final']['counts']['skill_card'] >= 6, 'combat-public.json',
                    f"fighter {public['final']['counts']['fighter']}, skill_card {public['final']['counts']['skill_card']}")
         drop_file = self.directory / 'drop-request'
         drop_file.unlink(missing_ok=True)

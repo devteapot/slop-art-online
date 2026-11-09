@@ -890,15 +890,17 @@ pub struct Pasture {
 
 // ---- combat (docs/COMBAT.md) ---------------------------------------------------
 
-/// The starter skills' numbers as the rules state them (one row per skill on the bar),
-/// rewritten whenever a skill script is installed, so clients show costs and cooldowns
-/// without running the rules (public, static).
+/// Each combat skill as the rules state it (one row per skill with a `<skill>_combat()` in the
+/// script), rewritten whenever a skill script is installed, so clients show the bar, costs,
+/// cooldowns and aim, and name the codes in `fighter.act` and `combat_seen.skill`, without
+/// running the rules (public, static).
 #[derive(Clone, Debug, PartialEq)]
 #[spacetimedb::table(accessor = skill_card, public)]
 pub struct SkillCard {
     #[primary_key]
     pub skill: String,
-    /// Place on the bar (`living_rules::combat::STARTER` order).
+    /// Place on the bar (the rules' `skill_bar()` order); 255 (`combat::NOT_ON_BAR`) for a
+    /// skill that is not on it.
     pub slot: u8,
     /// Energy it takes; its windup, recovery and cooldown (ms); how far it reaches or flies.
     pub cost: f32,
@@ -906,6 +908,25 @@ pub struct SkillCard {
     pub recover_ms: u32,
     pub cooldown_ms: u32,
     pub reach: f32,
+    /// Its presentation code (`fighter.act`, `combat_seen.skill`; `Shapes::code`).
+    #[default(0)]
+    pub code: u8,
+    /// How a player aims it: creature, self_or_ally, point (a skillshot), facing (a held
+    /// guard) or dash.
+    #[default("")]
+    pub aim: String,
+    /// A skillshot's missile radius; a guard's arc either side of where it faces (degrees).
+    #[default(0.0)]
+    pub radius: f32,
+    #[default(0.0)]
+    pub arc: f32,
+    /// What the bar shows as missing before the rules are asked, comma-separated: items to
+    /// carry, techniques to know (the skill's check stays the rule). Plain strings, because a
+    /// column added to a live table needs a constant default.
+    #[default("")]
+    pub needs: String,
+    #[default("")]
+    pub knows: String,
 }
 
 /// What others can see of a character in a fight: the health band at a glance and the move
@@ -919,7 +940,7 @@ pub struct Fighter {
     pub id: u32,
     /// `living_rules::combat::band`: 4 unhurt … 0 barely standing.
     pub band: u8,
-    /// The move under way (`living_rules::combat::code`), 0 for none.
+    /// The move under way (its `skill_card.code`), 0 for none.
     pub act: u8,
     /// When it started, when its windup releases, and when its recovery (or a held guard)
     /// ends (authority ms).
@@ -951,7 +972,7 @@ pub struct CombatSeen {
     pub kind: u8,
     pub actor: u32,
     pub target: u32,
-    /// `living_rules::combat::code`.
+    /// The skill (its `skill_card.code`; 0 for none).
     pub skill: u8,
     pub x: f32,
     pub y: f32,

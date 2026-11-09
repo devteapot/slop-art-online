@@ -10,13 +10,12 @@
 use crate::graph::{self, Action, Node};
 use serde_json::Value;
 
-/// Skills that are ongoing or real-time: they belong in the behavior graph, not in an act.
-/// A single walk (`goto`) may be an act: minds use it as the step before an interaction
-/// ("go to the child, then teach"); in the first lab minutes 16 of 29 acts were such walks.
-pub const REAL_TIME: &[&str] = &["wander", "flee", "follow", "dodge", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"];
-
-/// Graph skills that interrupt an act in progress: reflexes win over deliberate acts.
-pub const REFLEXES: &[&str] = &["flee", "dodge", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "heal", "yield"];
+// Which skills are ongoing or real-time (they belong in the behavior graph, not in an act)
+// and which are reflexes (they take the body back from an act) is
+// `living_rules::combat::Shapes::real_time` / `reflex`: the walking and resting skills
+// (`combat::MOVES`), and each combat skill as its script declares. A single walk (`goto`) may
+// be an act: minds use it as the step before an interaction ("go to the child, then teach");
+// in the first lab minutes 16 of 29 acts were such walks.
 
 /// Most acts waiting for one body at a time.
 pub const MAX_QUEUED: usize = 4;
@@ -26,13 +25,13 @@ pub const APPROACH_MS: u64 = 90_000;
 pub const QUEUE_MS: u64 = 120_000;
 
 /// Why a skill cannot be a deliberate act, if it cannot.
-pub fn not_an_act(skill: &str) -> Option<String> {
-    REAL_TIME.contains(&skill).then(|| format!("`{skill}` is ongoing or real-time behavior: it belongs in your behavior graph, not in a one-off act"))
+pub fn not_an_act(skill: &str, shapes: &crate::combat::Shapes) -> Option<String> {
+    shapes.real_time(skill).then(|| format!("`{skill}` is ongoing or real-time behavior: it belongs in your behavior graph, not in a one-off act"))
 }
 
 /// A model-written act (flat `{"do": "give", ...}` or canonical form) as an action, normalized
-/// like a graph leaf (for a particular body, when given).
-pub fn parse(v: Value, body: Option<&crate::species::Species>) -> Result<Action, String> {
+/// like a graph leaf (for a particular body, when given), under the rules' combat shapes.
+pub fn parse(v: Value, body: Option<&crate::species::Species>, shapes: &crate::combat::Shapes) -> Result<Action, String> {
     let (g, _) = match body {
         Some(sp) => graph::from_value_for(v, sp)?,
         None => graph::from_value_lenient(v)?,
@@ -41,7 +40,7 @@ pub fn parse(v: Value, body: Option<&crate::species::Species>) -> Result<Action,
         Node::Do(a) => a,
         _ => return Err("an act is a single {\"do\": skill, ...} node".into()),
     };
-    if let Some(why) = not_an_act(&a.skill) {
+    if let Some(why) = not_an_act(&a.skill, shapes) {
         return Err(why);
     }
     Ok(a)
@@ -67,13 +66,13 @@ mod tests {
 
     #[test]
     fn acts_are_single_do_nodes() {
-        let a = parse(json!({"do": "conceive", "target": {"id": 6}}), None).unwrap();
+        let a = parse(json!({"do": "conceive", "target": {"id": 6}}), None, &Default::default()).unwrap();
         assert_eq!(a.skill, "conceive");
-        let t = parse(json!({"do": "offer", "target": {"id": 4}, "item": "fish", "qty": 2, "want": "wood", "want_qty": 3}), None).unwrap();
+        let t = parse(json!({"do": "offer", "target": {"id": 4}, "item": "fish", "qty": 2, "want": "wood", "want_qty": 3}), None, &Default::default()).unwrap();
         assert_eq!(t.want.as_deref(), Some("wood"));
         assert_eq!(from_json(&to_json(&t)).unwrap(), t);
-        assert!(parse(json!({"do": "flee", "target": {"nearest": "wolf"}}), None).unwrap_err().contains("behavior graph"));
-        assert!(parse(json!({"do": "goto", "target": {"place": "camp"}}), None).is_ok());
-        assert!(parse(json!({"first": [{"do": "eat", "item": "food"}]}), None).is_err());
+        assert!(parse(json!({"do": "flee", "target": {"nearest": "wolf"}}), None, &Default::default()).unwrap_err().contains("behavior graph"));
+        assert!(parse(json!({"do": "goto", "target": {"place": "camp"}}), None, &Default::default()).is_ok());
+        assert!(parse(json!({"first": [{"do": "eat", "item": "food"}]}), None, &Default::default()).is_err());
     }
 }

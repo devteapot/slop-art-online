@@ -1,68 +1,182 @@
 //! Combat vocabulary and geometry shared by the authority (which rules) and clients (which
 //! only present). Numbers that balance combat (windups, damage, costs, cooldowns, missile
-//! speeds) live in the Rhai skill script, not here; this module holds the codes clients and
-//! the authority agree on and the pure geometry both sides evaluate the same way.
+//! speeds) and what each combat skill is (its `<skill>_combat()` shape) live in the Rhai skill
+//! script, not here; this module holds the shape's vocabulary, the perception codes clients
+//! and the authority agree on, and the pure geometry both sides evaluate the same way.
 //!
 //! The six starter skills (docs/GAME_BRIEF.md, 2026-11-09) and the older force skills share
 //! one timing model: a **windup** (the skill's `_duration`, when others can see it coming),
 //! the **release** (effects apply, or a missile leaves), a **recovery** (no other combat move
 //! but a dodge) and a **cooldown** counted from the start. See docs/COMBAT.md.
 
-/// The starter skills on the game's skill bar, in bar order (LMB, RMB, Q, E, R, Shift).
-pub const STARTER: [&str; 6] = ["strike", "bowshot", "firebolt", "block", "heal", "dodge"];
-
-/// Combat skills whose timing (cooldown, recovery, busy) the authority enforces.
-pub const TIMED: [&str; 9] = ["strike", "bowshot", "firebolt", "block", "heal", "dodge", "attack", "shoot", "throw"];
-
-/// Skills whose target is a direction (a skillshot), not a creature.
-pub const AIMED: [&str; 2] = ["bowshot", "firebolt"];
-
-/// Skills during whose windup the body stands still.
-pub const ROOTED: [&str; 6] = ["strike", "bowshot", "firebolt", "heal", "attack", "shoot"];
-
-pub fn timed(skill: &str) -> bool {
-    TIMED.contains(&skill)
+/// How a player aims a combat skill, and which of the engine's primitives it is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Aim {
+    /// Not aimed by a player (or aimed by its graph leaf alone).
+    #[default]
+    None,
+    /// A creature within reach and sight.
+    Creature,
+    /// Yourself (no target) or a creature that is not fighting you.
+    SelfOrAlly,
+    /// A ground point: a skillshot (the skill must have a `<skill>_missile`).
+    Point,
+    /// A held guard facing the aimed point, taking part of a blow from the front.
+    Facing,
+    /// A dash toward the aimed point (or away from a threat); what lands during it misses.
+    Dash,
 }
 
-pub fn aimed(skill: &str) -> bool {
-    AIMED.contains(&skill)
-}
+impl Aim {
+    pub fn parse(s: &str) -> Option<Aim> {
+        Some(match s {
+            "" | "none" => Aim::None,
+            "creature" => Aim::Creature,
+            "self_or_ally" => Aim::SelfOrAlly,
+            "point" => Aim::Point,
+            "facing" => Aim::Facing,
+            "dash" => Aim::Dash,
+            _ => return None,
+        })
+    }
 
-/// Presentation code of a skill (`fighter.act`, `combat_seen.skill`); 0 for none or unknown.
-pub fn code(skill: &str) -> u8 {
-    match skill {
-        "strike" => 1,
-        "bowshot" => 2,
-        "firebolt" => 3,
-        "block" => 4,
-        "heal" => 5,
-        "dodge" => 6,
-        "attack" => 7,
-        "shoot" => 8,
-        "throw" => 9,
-        "threaten" => 10,
-        "tend" => 11,
-        "yield" => 12,
-        _ => 0,
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Aim::None => "none",
+            Aim::Creature => "creature",
+            Aim::SelfOrAlly => "self_or_ally",
+            Aim::Point => "point",
+            Aim::Facing => "facing",
+            Aim::Dash => "dash",
+        }
     }
 }
 
-/// The skill named by a presentation code.
-pub fn name(code: u8) -> &'static str {
-    match code {
-        1 => "strike",
-        2 => "bowshot",
-        3 => "firebolt",
-        4 => "block",
-        5 => "heal",
-        6 => "dodge",
-        7 => "attack",
-        8 => "shoot",
-        9 => "throw",
-        10 => "threaten",
-        11 => "tend",
-        12 => "yield",
-        _ => "",
+/// What a combat skill is, as its script declares it (`<skill>_combat()`, read once when the
+/// script compiles). The engine's primitives (a dash, a held guard, a missile, a melee blow
+/// meant to hurt or kill) are chosen by these traits, never by the skill's name.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Shape {
+    /// Presentation code (`fighter.act`, `combat_seen.skill`, `skill_card.code`): the skill's
+    /// place among the script's combat skills in name order, from 1; 0 is none.
+    pub code: u8,
+    pub aim: Aim,
+    /// Combat timing (one windup at a time, recovery, cooldown, `fighter`, `skill_use`).
+    pub timed: bool,
+    /// A player's movement waits while its windup runs.
+    pub rooted: bool,
+    /// Aimed against a creature: that creature is its victim, and sees it coming.
+    pub hostile: bool,
+    /// Takes the body back from a deliberate act.
+    pub reflex: bool,
+    /// Behavior of the moment: it belongs in a graph, not in a one-off act.
+    pub real_time: bool,
+    /// A blow in reach meant to hurt or to kill (its item), carrying the rules' `lunge(kind)`:
+    /// out of reach by more when it releases, it misses.
+    pub melee: bool,
+    /// The rules are weighed before walking into reach (no closing in on someone the rules
+    /// won't let you strike).
+    pub closes_in: bool,
+    /// A menace: made once per target in a while, and the target perceives it as a threat.
+    pub menace: bool,
+    /// A use of force: whether its actor has yielded is weighed.
+    pub force: bool,
+    /// The rules weigh the target before it: whether they yielded, and what a predator dares.
+    pub dares: bool,
+    /// It looses a missile (the script defines `<skill>_missile`).
+    pub missile: bool,
+    /// A held guard: the longest a player holds it (ms), how far either side of where it faces
+    /// it covers (degrees), and the share of a covered blow that still lands.
+    pub hold_ms: u32,
+    pub arc: f32,
+    pub takes: f32,
+    /// The skill whose knack gene makes one good at it (itself by default).
+    pub knack: String,
+    /// What a player's bar shows as missing before the rules are asked: items carried, and
+    /// techniques known. The skill's `_check` stays the rule.
+    pub needs: Vec<String>,
+    pub knows: Vec<String>,
+}
+
+/// Skills that are not combat skills but are behavior of the moment (walking, resting): they
+/// belong in a graph, not in an act. Combat skills say so themselves (`Shape::real_time`).
+pub const MOVES: &[&str] = &["wander", "flee", "follow", "wait", "sleep", "rest", "graze"];
+
+/// The combat skills a script declares, by name (the order their codes follow), and its
+/// skill bar.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Shapes {
+    by_name: std::collections::BTreeMap<String, Shape>,
+    names: Vec<String>,
+    bar: Vec<String>,
+}
+
+impl Shapes {
+    /// From each skill's declared shape (codes are given here) and the bar's skills in order.
+    pub fn new(shapes: std::collections::BTreeMap<String, Shape>, bar: Vec<String>) -> Result<Shapes, String> {
+        if shapes.len() > 254 {
+            return Err("at most 254 combat skills".into());
+        }
+        for s in &bar {
+            match shapes.get(s) {
+                None => return Err(format!("skill_bar: `{s}` has no `{s}_combat()`")),
+                Some(sh) if sh.aim == Aim::None => return Err(format!("skill_bar: `{s}` has no aim")),
+                _ => {}
+            }
+        }
+        let mut by_name = shapes;
+        let names: Vec<String> = by_name.keys().cloned().collect();
+        for (i, sh) in by_name.values_mut().enumerate() {
+            sh.code = i as u8 + 1;
+        }
+        Ok(Shapes { by_name, names, bar })
+    }
+
+    pub fn get(&self, skill: &str) -> Option<&Shape> {
+        self.by_name.get(skill)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Shape)> {
+        self.by_name.iter().map(|(k, v)| (k.as_str(), v))
+    }
+
+    /// The skills on the bar, in bar order.
+    pub fn bar(&self) -> &[String] {
+        &self.bar
+    }
+
+    pub fn on_bar(&self, skill: &str) -> bool {
+        self.bar.iter().any(|s| s == skill)
+    }
+
+    pub fn timed(&self, skill: &str) -> bool {
+        self.get(skill).is_some_and(|s| s.timed)
+    }
+
+    /// Presentation code of a skill; 0 for none or a skill that is not a combat skill.
+    pub fn code(&self, skill: &str) -> u8 {
+        self.get(skill).map_or(0, |s| s.code)
+    }
+
+    /// The skill a presentation code names ("" for none).
+    pub fn name(&self, code: u8) -> &str {
+        code.checked_sub(1).and_then(|i| self.names.get(i as usize)).map_or("", |s| s.as_str())
+    }
+
+    /// Ongoing or real-time behavior: it belongs in a graph, not in a one-off act.
+    pub fn real_time(&self, skill: &str) -> bool {
+        MOVES.contains(&skill) || self.get(skill).is_some_and(|s| s.real_time)
+    }
+
+    /// A reflex in a graph takes the body back from a deliberate act (fleeing, or a combat
+    /// skill that says so).
+    pub fn reflex(&self, skill: &str) -> bool {
+        skill == "flee" || self.get(skill).is_some_and(|s| s.reflex)
+    }
+
+    /// The skill whose knack gene serves this one.
+    pub fn knack<'a>(&'a self, skill: &'a str) -> &'a str {
+        self.get(skill).map(|s| s.knack.as_str()).filter(|k| !k.is_empty()).unwrap_or(skill)
     }
 }
 
@@ -189,12 +303,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn codes_round_trip() {
-        for s in TIMED.iter().chain(["threaten", "tend", "yield"].iter()) {
-            assert_eq!(name(code(s)), *s);
+    fn codes_follow_names_and_round_trip() {
+        let mut m = std::collections::BTreeMap::new();
+        for n in ["strike", "block", "attack"] {
+            m.insert(n.to_string(), Shape { aim: Aim::Creature, real_time: n != "attack", ..Default::default() });
         }
-        assert_eq!(code("gather"), 0);
-        assert_eq!(name(0), "");
+        let s = Shapes::new(m, vec!["strike".into()]).unwrap();
+        assert_eq!((s.code("attack"), s.code("block"), s.code("strike")), (1, 2, 3));
+        for n in ["strike", "block", "attack"] {
+            assert_eq!(s.name(s.code(n)), n);
+        }
+        assert_eq!((s.code("gather"), s.name(0), s.name(9)), (0, "", ""));
+        assert!(s.real_time("strike") && !s.real_time("attack") && s.real_time("wander") && !s.real_time("give"));
+        assert_eq!(s.knack("strike"), "strike");
+        let mut m = std::collections::BTreeMap::new();
+        m.insert("heal".to_string(), Shape::default());
+        assert!(Shapes::new(m, vec!["heal".into()]).unwrap_err().contains("no aim"));
+        assert!(Shapes::new(Default::default(), vec!["fly".into()]).unwrap_err().contains("fly_combat"));
     }
 
     #[test]

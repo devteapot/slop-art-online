@@ -81,7 +81,12 @@ type SkillIoTable = HashMap<String, (String, String)>;
 /// What each skill takes and gives, from the world's rule script (revision, table).
 static SKILL_IO: std::sync::RwLock<Option<(u32, Arc<SkillIoTable>)>> = std::sync::RwLock::new(None);
 
-/// Read what each skill takes and gives from the world's rule script (once per revision).
+/// What each combat skill is under the world's rule script (`<skill>_combat()`): which skills
+/// are real-time behavior rather than acts.
+static SHAPES: std::sync::RwLock<Option<Arc<living_rules::combat::Shapes>>> = std::sync::RwLock::new(None);
+
+/// Read what each skill takes and gives, and what each combat skill is, from the world's rule
+/// script (once per revision).
 pub fn set_rules(revision: u32, source: &str) {
     if SKILL_IO.read().unwrap().as_ref().is_some_and(|(r, _)| *r == revision) {
         return;
@@ -91,9 +96,19 @@ pub fn set_rules(revision: u32, source: &str) {
             let table: SkillIoTable = living_rules::catalog::SKILLS.iter().filter_map(|k| s.skill_io(k.name).map(|io| (k.name.to_string(), io))).collect();
             log::info!("rules revision {revision}: {} skills describe what they take and give", table.len());
             *SKILL_IO.write().unwrap() = Some((revision, Arc::new(table)));
+            *SHAPES.write().unwrap() = Some(Arc::new(s.shapes().clone()));
         }
         Err(e) => log::warn!("rules revision {revision} unreadable: {e}"),
     }
+}
+
+/// The world's combat shapes (the bundled rules' until the world's have been read).
+pub fn shapes() -> Arc<living_rules::combat::Shapes> {
+    if let Some(s) = SHAPES.read().unwrap().as_ref() {
+        return s.clone();
+    }
+    let bundled = Arc::new(living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).map(|s| s.shapes().clone()).unwrap_or_default());
+    SHAPES.write().unwrap().get_or_insert(bundled).clone()
 }
 
 fn skill_io() -> Arc<SkillIoTable> {

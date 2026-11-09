@@ -7,13 +7,13 @@
 //! All effects share a handful of meshes and unlit additive materials made once; they fade by
 //! shrinking, so no effect needs a material of its own.
 
-use crate::combat::Combat;
+use crate::combat::{look, Cards, Combat};
 use crate::net::Net;
 use crate::world::Scene;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use living_bindings::*;
-use living_rules::combat::{self as rules, seen};
+use living_rules::combat::seen;
 use std::collections::HashMap;
 
 pub struct VfxPlugin;
@@ -160,7 +160,7 @@ fn put(commands: &mut Commands, mesh: &Handle<Mesh>, mat: &Handle<StandardMateri
 }
 
 #[allow(clippy::too_many_arguments)]
-fn spawn(mut commands: Commands, a: Res<Assets3>, c: Res<Combat>, net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<crate::island::Island>>, mut flights: ResMut<Flights>, time: Res<Time>) {
+fn spawn(mut commands: Commands, a: Res<Assets3>, c: Res<Combat>, cards: Res<Cards>, net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<crate::island::Island>>, mut flights: ResMut<Flights>, time: Res<Time>) {
     let now = time.elapsed_secs();
     let kinds: HashMap<u32, String> = net.conn.as_ref().map(|conn| c.fresh.iter().flat_map(|e| [e.row.actor, e.row.target]).filter_map(|id| conn.db.body().id().find(&id).map(|b| (id, b.kind))).collect()).unwrap_or_default();
     for e in &c.fresh {
@@ -175,9 +175,11 @@ fn spawn(mut commands: Commands, a: Res<Assets3>, c: Res<Combat>, net: NonSend<N
             };
             Vec3::new(p.x, ground(&island, &scene, p) + lift, p.y)
         };
-        let skill = rules::name(r.skill);
+        // How the skill looks here (`skill_card` names its code).
+        let lk = cards.by_code(r.skill).map(look);
+        let bolt = lk.is_some_and(|l| l.bolt);
         match r.kind {
-            seen::RELEASE if matches!(skill, "strike" | "attack") => {
+            seen::RELEASE if lk.is_some_and(|l| l.slash) => {
                 let p = scene.shown.get(&r.actor).map_or(at2, |s| s.0);
                 let beast = kinds.get(&r.actor).is_some_and(|k| k != "person");
                 let from = chest(r.actor, p) + Vec3::new(dir.x, 0.0, dir.y) * 0.25;
@@ -188,7 +190,7 @@ fn spawn(mut commands: Commands, a: Res<Assets3>, c: Res<Combat>, net: NonSend<N
                 let from = Vec3::new(r.x, ground(&island, &scene, at2) + 1.25, r.y);
                 let vel = Vec3::new(dir.x, 0.0, dir.y) * r.amount.max(1.0);
                 let life = (r.ms as f32 / 1000.0).max(0.05);
-                let ent = if skill == "firebolt" {
+                let ent = if bolt {
                     put(&mut commands, &a.ball, &a.fire_core, Kind::Bolt, now, life, from, vel, (0.32, 0.32), Quat::IDENTITY, 0.0)
                 } else {
                     put(&mut commands, &a.arrow, &a.wood, Kind::Arrow, now, life, from, vel, (1.0, 1.0), face(dir), 0.0)
@@ -203,7 +205,7 @@ fn spawn(mut commands: Commands, a: Res<Assets3>, c: Res<Combat>, net: NonSend<N
                     }
                 }
                 let at = Vec3::new(r.x, ground(&island, &scene, at2) + 1.2, r.y);
-                if skill == "firebolt" {
+                if bolt {
                     put(&mut commands, &a.ball, &a.fire, Kind::Burst, now, 0.35, at, Vec3::ZERO, (0.3, 2.2), Quat::IDENTITY, 0.0);
                     put(&mut commands, &a.ball, &a.fire_core, Kind::Burst, now, 0.2, at, Vec3::ZERO, (0.2, 1.0), Quat::IDENTITY, 0.0);
                     let g = Vec3::new(r.x, ground(&island, &scene, at2) + 0.08, r.y);
@@ -243,7 +245,7 @@ fn spawn(mut commands: Commands, a: Res<Assets3>, c: Res<Combat>, net: NonSend<N
 
 /// A raised guard's arc and a fire bolt's ember, for as long as the fighter row says.
 #[allow(clippy::too_many_arguments)]
-fn persistent(mut commands: Commands, a: Res<Assets3>, net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<crate::island::Island>>, mut held: ResMut<Held>, mut q: Query<&mut Transform, With<Fx>>, time: Res<Time>) {
+fn persistent(mut commands: Commands, a: Res<Assets3>, cards: Res<Cards>, net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<crate::island::Island>>, mut held: ResMut<Held>, mut q: Query<&mut Transform, With<Fx>>, time: Res<Time>) {
     let now = time.elapsed_secs();
     let Some(conn) = net.conn.as_ref() else { return };
     let t = scene.now_ms as u64;
@@ -252,9 +254,10 @@ fn persistent(mut commands: Commands, a: Res<Assets3>, net: NonSend<Net>, scene:
         let Some(f) = conn.db.fighter().id().find(id) else { continue };
         let aim = Vec2::new(f.aim_x, f.aim_y).normalize_or(Vec2::Y);
         let g = ground(&island, &scene, *p);
-        match rules::name(f.act) {
-            "block" if t < f.until_ms => want.push(((*id, Kind::Guard), Vec3::new(p.x, g + 1.0, p.y), face(aim))),
-            "firebolt" if t < f.release_ms => {
+        let Some(card) = cards.by_code(f.act) else { continue };
+        match card.aim.as_str() {
+            "facing" if t < f.until_ms => want.push(((*id, Kind::Guard), Vec3::new(p.x, g + 1.0, p.y), face(aim))),
+            _ if look(card).bolt && t < f.release_ms => {
                 let side = Vec2::new(aim.y, -aim.x) * 0.25;
                 let hand = *p + aim * 0.45 + side;
                 want.push(((*id, Kind::Ember), Vec3::new(hand.x, g + 1.25, hand.y), Quat::IDENTITY));

@@ -326,8 +326,9 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     })?;
     out.insert("skill".into(), json!(skill));
     let item = action.get("item").or_else(|| action.get("what")).or_else(|| action.get("object")).or_else(|| action.get("kind")).cloned();
-    // An attack's item says what its blows are meant for: "hurt" or "kill".
-    if skill == "attack" || skill == "strike" {
+    // The item of a skill that takes none may say what its force is meant for: "hurt" or
+    // "kill" (the rules give it meaning for a melee blow, `<skill>_combat()`'s `melee`).
+    if !spec.needs_item {
         let mode = action.get("mode").or_else(|| action.get("intent")).or(item.as_ref()).and_then(|m| m.as_str()).and_then(attack_mode);
         if let Some(m) = mode {
             out.insert("item".into(), json!(m));
@@ -380,7 +381,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     if spec.needs_target && !out.contains_key("target") {
         return Err(format!("{path}.do: skill `{skill}` needs a target"));
     }
-    if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework" && skill != "attack" && skill != "strike") {
+    if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework" && spec.needs_item) {
         let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some();
         if !known {
             return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::ITEMS.iter().map(|x| x.name).collect::<Vec<_>>().join(", ")));
@@ -737,12 +738,12 @@ mod tests {
 
     #[test]
     fn rework_carries_its_new_version() {
-        let a = crate::acts::parse(json!({"do": "rework", "item": "Watch_The_Fire", "graph": {"first": [{"do": "rest"}]}}), None).unwrap();
+        let a = crate::acts::parse(json!({"do": "rework", "item": "Watch_The_Fire", "graph": {"first": [{"do": "rest"}]}}), None, &Default::default()).unwrap();
         assert_eq!(a.item.as_deref(), Some("watch the fire"));
         assert!(a.text.as_deref().unwrap().contains("rest"));
-        let r = crate::acts::parse(json!({"do": "rework", "item": "explore", "retire": true}), None).unwrap();
+        let r = crate::acts::parse(json!({"do": "rework", "item": "explore", "retire": true}), None, &Default::default()).unwrap();
         assert_eq!(r.text.as_deref(), Some("retire"));
-        assert!(crate::acts::parse(json!({"do": "rework", "item": "explore"}), None).is_err());
+        assert!(crate::acts::parse(json!({"do": "rework", "item": "explore"}), None, &Default::default()).is_err());
     }
 
     #[test]
@@ -760,9 +761,9 @@ mod tests {
         assert!(o.contains("attack hurt → attacker") && o.contains("attack kill → nearest wolf"), "{o}");
         assert!(o.contains("  attack → attacker"), "an unknown mode is dropped: {o}");
         assert!(o.contains("threaten → Grim") && o.contains("yield → attacker"), "{o}");
-        let a = crate::acts::parse(json!({"do": "threaten", "target": {"id": 4}}), None).unwrap();
+        let a = crate::acts::parse(json!({"do": "threaten", "target": {"id": 4}}), None, &Default::default()).unwrap();
         assert_eq!(a.skill, "threaten");
-        assert!(crate::acts::parse(json!({"do": "yield"}), None).is_ok());
+        assert!(crate::acts::parse(json!({"do": "yield"}), None, &Default::default()).is_ok());
     }
 
     #[test]

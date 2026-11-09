@@ -14,6 +14,12 @@ pub struct SkillCard {
     pub recover_ms: u32,
     pub cooldown_ms: u32,
     pub reach: f32,
+    pub code: u8,
+    pub aim: String,
+    pub radius: f32,
+    pub arc: f32,
+    pub needs: String,
+    pub knows: String,
 }
 
 impl __sdk::InModule for SkillCard {
@@ -31,6 +37,12 @@ pub struct SkillCardCols {
     pub recover_ms: __sdk::__query_builder::Col<SkillCard, u32>,
     pub cooldown_ms: __sdk::__query_builder::Col<SkillCard, u32>,
     pub reach: __sdk::__query_builder::Col<SkillCard, f32>,
+    pub code: __sdk::__query_builder::Col<SkillCard, u8>,
+    pub aim: __sdk::__query_builder::Col<SkillCard, String>,
+    pub radius: __sdk::__query_builder::Col<SkillCard, f32>,
+    pub arc: __sdk::__query_builder::Col<SkillCard, f32>,
+    pub needs: __sdk::__query_builder::Col<SkillCard, String>,
+    pub knows: __sdk::__query_builder::Col<SkillCard, String>,
 }
 
 impl __sdk::__query_builder::HasCols for SkillCard {
@@ -44,6 +56,12 @@ impl __sdk::__query_builder::HasCols for SkillCard {
             recover_ms: __sdk::__query_builder::Col::new(table_name, "recover_ms"),
             cooldown_ms: __sdk::__query_builder::Col::new(table_name, "cooldown_ms"),
             reach: __sdk::__query_builder::Col::new(table_name, "reach"),
+            code: __sdk::__query_builder::Col::new(table_name, "code"),
+            aim: __sdk::__query_builder::Col::new(table_name, "aim"),
+            radius: __sdk::__query_builder::Col::new(table_name, "radius"),
+            arc: __sdk::__query_builder::Col::new(table_name, "arc"),
+            needs: __sdk::__query_builder::Col::new(table_name, "needs"),
+            knows: __sdk::__query_builder::Col::new(table_name, "knows"),
         }
     }
 }

@@ -12,14 +12,21 @@
 //!   when a `REFUSED` arrives, or after [`PREDICT_MS`] without either. Movement is never
 //!   predicted: the dodge's dash is the authority's.
 //! - draws the aim and range indicators while a skill key is held.
+//!
+//! Which skill is which comes from the authority's `skill_card` rows ([`Cards`]): the bar's
+//! order, each skill's presentation code, how it is aimed, its reach, a missile's radius and a
+//! guard's arc. How a skill looks (its clip, effect and icon) is this client's own choice
+//! ([`look`]), by name for the skills it was drawn for and otherwise from how the rules aim it,
+//! so a skill the rules add shows without a client change.
 
 use crate::camera::Cam;
 use crate::controls::{Input, Target};
 use crate::net::Net;
+use crate::ui::model::SkillIcon;
 use crate::world::Scene;
 use bevy::prelude::*;
 use living_bindings::*;
-use living_rules::combat::{self as rules, seen};
+use living_rules::combat::seen;
 use spacetimedb_sdk::Table;
 use std::collections::{HashMap, HashSet};
 
@@ -86,13 +93,13 @@ pub struct Combat {
     /// What each drawn character plays now.
     pub actions: HashMap<u32, Action>,
     /// My pressed move awaiting the authority: (skill, pressed at display ms).
-    predicted: Option<(&'static str, f64)>,
+    predicted: Option<(String, f64)>,
     /// When I last pressed each skill (display ms), for the HUD until readiness arrives.
-    pub pressed: HashMap<&'static str, f64>,
+    pub pressed: HashMap<String, f64>,
     /// The last refusal (why, display ms).
     pub refusal: Option<(String, f64)>,
     /// Which skill key is held (indicators), and since when.
-    pub aiming: Option<&'static str>,
+    pub aiming: Option<String>,
     pub guarding: bool,
     /// Count of presses (alternating strike clips).
     strikes: u32,
@@ -100,13 +107,104 @@ pub struct Combat {
     script_aim: Option<Vec2>,
 }
 
+/// The rules' combat skills as the authority states them (`skill_card`), read each frame.
+#[derive(Resource, Default)]
+pub struct Cards {
+    pub all: Vec<SkillCard>,
+}
+
+/// `skill_card.slot` of a skill that is not on the bar.
+const NOT_ON_BAR: u8 = u8::MAX;
+/// Bar slots: LMB, RMB, Q, E, R, Shift.
+pub const SLOTS: usize = 6;
+
+impl Cards {
+    pub fn by_name(&self, skill: &str) -> Option<&SkillCard> {
+        self.all.iter().find(|c| c.skill == skill)
+    }
+
+    /// The skill a presentation code names (`fighter.act`, `combat_seen.skill`).
+    pub fn by_code(&self, code: u8) -> Option<&SkillCard> {
+        (code != 0).then(|| self.all.iter().find(|c| c.code == code)).flatten()
+    }
+
+    pub fn code(&self, skill: &str) -> u8 {
+        self.by_name(skill).map_or(0, |c| c.code)
+    }
+
+    /// The skill on a bar slot.
+    pub fn slot(&self, slot: usize) -> Option<&SkillCard> {
+        self.all.iter().find(|c| c.slot as usize == slot && c.slot != NOT_ON_BAR)
+    }
+
+    /// A skill on the bar, by name.
+    pub fn on_bar(&self, skill: &str) -> Option<&SkillCard> {
+        self.by_name(skill).filter(|c| c.slot != NOT_ON_BAR)
+    }
+}
+
+/// How a skill looks on this client.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Look {
+    /// Clips its move plays (one per press, in turn), their rate, and a pose to hold.
+    pub clips: &'static [&'static str],
+    pub rate: f32,
+    pub hold: Option<f32>,
+    /// Its release draws a slash.
+    pub slash: bool,
+    /// Its missile is a glowing bolt (else an arrow), with an ember while it winds up.
+    pub bolt: bool,
+    pub icon: SkillIcon,
+}
+
+/// A missile at least this wide is drawn as a bolt.
+const BOLT_RADIUS: f32 = 0.25;
+
+/// How a skill looks: the skills drawn for by name, any other from how the rules aim it.
+pub fn look(card: &SkillCard) -> Look {
+    let l = |clips: &'static [&'static str], rate: f32, hold: Option<f32>, icon: SkillIcon| Look { clips, rate, hold, slash: false, bolt: false, icon };
+    match card.skill.as_str() {
+        "strike" => Look { slash: true, ..l(&["sword_slash", "sword_overhead", "sword_thrust"], 2.8, None, SkillIcon::Sword) },
+        "attack" => Look { slash: true, ..l(&["sword_slash"], 2.0, None, SkillIcon::Sword) },
+        "bowshot" | "shoot" => l(&["bow_shoot"], 3.4, None, SkillIcon::Bow),
+        "throw" => l(&["attack"], 1.3, None, SkillIcon::Sword),
+        "firebolt" => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
+        "heal" => l(&["cast"], 2.6, None, SkillIcon::Heal),
+        "block" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
+        "dodge" => l(&["dodge_roll"], 3.3, None, SkillIcon::Dodge),
+        _ => match card.aim.as_str() {
+            "point" if card.radius >= BOLT_RADIUS => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
+            "point" => l(&["bow_shoot"], 3.4, None, SkillIcon::Bow),
+            "facing" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
+            "dash" => l(&["dodge_roll"], 3.3, None, SkillIcon::Dodge),
+            "self_or_ally" => l(&["cast"], 2.6, None, SkillIcon::Heal),
+            "creature" => Look { slash: true, ..l(&["sword_slash"], 2.0, None, SkillIcon::Sword) },
+            _ => l(&[], 1.0, None, SkillIcon::Empty),
+        },
+    }
+}
+
+/// The skill's items the bar shows as missing, and techniques it shows as unknown.
+pub fn needs(card: &SkillCard) -> (impl Iterator<Item = &str>, impl Iterator<Item = &str>) {
+    (card.needs.split(',').filter(|s| !s.is_empty()), card.knows.split(',').filter(|s| !s.is_empty()))
+}
+
+/// Read the rules' combat skills.
+fn read_cards(net: NonSend<Net>, mut cards: ResMut<Cards>) {
+    let Some(conn) = net.conn.as_ref() else { return };
+    if conn.db.skill_card().count() as usize != cards.all.len() || conn.db.skill_card().iter().zip(&cards.all).any(|(a, b)| a != *b) {
+        cards.all = conn.db.skill_card().iter().collect();
+    }
+}
+
 pub struct CombatPlugin;
 
 impl Plugin for CombatPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Combat>()
+            .init_resource::<Cards>()
             .init_resource::<Scripted>()
-            .add_systems(Update, (ingest, pick, input, actions).chain().after(crate::controls::movement).before(crate::camera::follow))
+            .add_systems(Update, (read_cards, ingest, pick, input, actions).chain().after(crate::controls::movement).before(crate::camera::follow))
             .add_systems(Update, indicators.after(crate::camera::follow));
     }
 }
@@ -145,7 +243,7 @@ fn now_ms(scene: &Scene) -> f64 {
 }
 
 /// New perceived events, numbers and deaths.
-pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, mut c: ResMut<Combat>) {
+pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c: ResMut<Combat>) {
     let now = now_ms(&scene);
     c.fresh.clear();
     let Some(conn) = net.conn.as_ref() else { return };
@@ -183,7 +281,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, mut c: ResMut<Combat>) {
             }
             seen::REFUSED => {
                 c.refusal = Some((r.note.clone(), now));
-                if c.predicted.is_some_and(|(s, _)| rules::code(s) == r.skill) {
+                if c.predicted.as_ref().is_some_and(|(s, _)| cards.code(s) == r.skill) {
                     c.predicted = None;
                 }
             }
@@ -236,62 +334,76 @@ pub fn input(
     input: Res<Input>,
     target: Res<Target>,
     ui: Res<crate::hud::UiWants>,
+    cards: Res<Cards>,
     mut scripted: ResMut<Scripted>,
     mut c: ResMut<Combat>,
 ) {
     let now = now_ms(&scene);
-    if c.predicted.is_some_and(|(_, t)| now - t > PREDICT_MS) {
+    if c.predicted.as_ref().is_some_and(|(_, t)| now - t > PREDICT_MS) {
         c.predicted = None;
     }
     let (Some(conn), Some(me_id), Some(me3)) = (net.conn.as_ref(), net.my_id, target.0) else { return };
     let me = Vec2::new(me3.x, me3.z);
     let typing = input.chat_open || ui.keyboard;
     let free_mouse = !ui.pointer;
-    let mut presses: Vec<(&'static str, Option<Vec2>, Option<u32>)> = Vec::new();
+    let mut presses: Vec<(String, Option<Vec2>, Option<u32>)> = Vec::new();
     // A script's indicator (headless photographs).
     let mut scripted_aiming = None;
     if let Some((skill, spec)) = scripted.aiming.clone() {
-        if let Some(s) = rules::STARTER.iter().find(|s| **s == skill) {
-            scripted_aiming = Some((*s, scripted_aim(conn, &scene, me_id, me, &spec, input.look)));
+        if let Some(card) = cards.on_bar(&skill) {
+            scripted_aiming = Some((card.skill.clone(), scripted_aim(conn, &scene, me_id, me, &spec, input.look)));
         }
     }
-    c.script_aim = scripted_aiming.map(|(_, (p, _))| p);
-    let mut releases: Vec<&'static str> = Vec::new();
+    c.script_aim = scripted_aiming.as_ref().map(|(_, (p, _))| *p);
+    let mut releases: Vec<String> = Vec::new();
+    // The bar's skills by slot (the rules' `skill_bar()`).
+    let slot = |i: usize| cards.slot(i).map(|card| card.skill.clone());
     if !input.demo && !typing {
         let held = |k| keys.pressed(k);
+        // Held keys show their skill's indicator: RMB, Q, LMB, R, E.
         c.aiming = if mouse.pressed(MouseButton::Right) && free_mouse {
-            Some("bowshot")
+            slot(1)
         } else if held(KeyCode::KeyQ) {
-            Some("firebolt")
+            slot(2)
         } else if mouse.pressed(MouseButton::Left) && free_mouse {
-            Some("strike")
+            slot(0)
         } else if held(KeyCode::KeyR) {
-            Some("heal")
+            slot(4)
         } else if held(KeyCode::KeyE) {
-            Some("block")
+            slot(3)
         } else {
             None
         };
-        if mouse.just_pressed(MouseButton::Left) && free_mouse {
-            presses.push(("strike", None, None));
-        }
-        if mouse.just_pressed(MouseButton::Right) && free_mouse {
-            presses.push(("bowshot", None, None));
-        }
-        if keys.just_pressed(KeyCode::KeyQ) {
-            presses.push(("firebolt", None, None));
-        }
-        if keys.just_pressed(KeyCode::KeyR) {
-            presses.push(("heal", None, None));
-        }
-        if keys.just_pressed(KeyCode::KeyE) {
-            presses.push(("block", None, None));
-        }
-        if keys.just_released(KeyCode::KeyE) {
-            releases.push("block");
-        }
-        if keys.just_pressed(KeyCode::ShiftLeft) || keys.just_pressed(KeyCode::ShiftRight) {
-            presses.push(("dodge", None, None));
+        let shift = |b: &ButtonInput<KeyCode>, f: fn(&ButtonInput<KeyCode>, KeyCode) -> bool| f(b, KeyCode::ShiftLeft) || f(b, KeyCode::ShiftRight);
+        let went_down = [
+            mouse.just_pressed(MouseButton::Left) && free_mouse,
+            mouse.just_pressed(MouseButton::Right) && free_mouse,
+            keys.just_pressed(KeyCode::KeyQ),
+            keys.just_pressed(KeyCode::KeyE),
+            keys.just_pressed(KeyCode::KeyR),
+            shift(&keys, |b, k| b.just_pressed(k)),
+        ];
+        let went_up = [
+            mouse.just_released(MouseButton::Left),
+            mouse.just_released(MouseButton::Right),
+            keys.just_released(KeyCode::KeyQ),
+            keys.just_released(KeyCode::KeyE),
+            keys.just_released(KeyCode::KeyR),
+            shift(&keys, |b, k| b.just_released(k)),
+        ];
+        // In bar order, as before: LMB, RMB, Q, then R before E, then Shift.
+        for i in [0, 1, 2, 4, 3, 5] {
+            if went_down[i] {
+                if let Some(s) = slot(i) {
+                    presses.push((s, None, None));
+                }
+            }
+            // A held guard is let go with its key.
+            if went_up[i] {
+                if let Some(card) = cards.slot(i).filter(|card| card.aim == "facing") {
+                    releases.push(card.skill.clone());
+                }
+            }
         }
     }
     if let Some((s, _)) = scripted_aiming {
@@ -300,45 +412,47 @@ pub fn input(
         c.aiming = None;
     }
     for (skill, spec) in std::mem::take(&mut scripted.press) {
-        if let Some(s) = rules::STARTER.iter().find(|s| **s == skill) {
+        if let Some(card) = cards.on_bar(&skill) {
             let (aim, tgt) = scripted_aim(conn, &scene, me_id, me, &spec, input.look);
-            presses.push((s, Some(aim), tgt));
+            presses.push((card.skill.clone(), Some(aim), tgt));
         }
     }
     for skill in std::mem::take(&mut scripted.release) {
-        if let Some(s) = rules::STARTER.iter().find(|s| **s == skill) {
-            releases.push(s);
+        if let Some(card) = cards.on_bar(&skill) {
+            releases.push(card.skill.clone());
         }
     }
     for (skill, aim, tgt) in presses {
+        let Some(card) = cards.by_name(&skill) else { continue };
         let aim = aim.unwrap_or_else(|| aim_point(&cam, me, &input));
-        let (target_id, point) = match skill {
-            "strike" => (tgt.or(c.target).or_else(|| nearest(&scene, me_id, me, aim, 2.6)).unwrap_or(0), aim),
-            "heal" => (tgt.or(c.target.filter(|t| !hostile(conn, *t, me_id))).unwrap_or(0), aim),
-            // A dodge goes the way I move, else back from where I face.
-            "dodge" => {
+        // Who or where it goes, by how the rules aim it.
+        let (target_id, point) = match card.aim.as_str() {
+            "creature" => (tgt.or(c.target).or_else(|| nearest(&scene, me_id, me, aim, card.reach + 0.4)).unwrap_or(0), aim),
+            "self_or_ally" => (tgt.or(c.target.filter(|t| !hostile(conn, *t, me_id))).unwrap_or(0), aim),
+            // A dash goes the way I move, else back from where I face.
+            "dash" => {
                 let d = if input.dir != Vec2::ZERO { input.dir } else { (me - aim).normalize_or(Vec2::NEG_Y) };
                 (0, me + d * 2.0)
             }
             _ => (tgt.unwrap_or(0), aim),
         };
-        let r = conn.reducers.use_skill_then(skill.to_string(), target_id, point.x, point.y, net.on_reply("skill"));
+        let r = conn.reducers.use_skill_then(skill.clone(), target_id, point.x, point.y, net.on_reply("skill"));
         net.report("skill", r);
-        c.pressed.insert(skill, now);
-        if skill == "strike" {
+        c.pressed.insert(skill.clone(), now);
+        if look(card).clips.len() > 1 {
             c.strikes = c.strikes.wrapping_add(1);
         }
-        if skill == "block" {
+        if card.aim == "facing" {
             c.guarding = true;
         }
         c.predicted = Some((skill, now));
     }
     for skill in releases {
-        let r = conn.reducers.release_skill_then(skill.to_string(), net.on_reply("release"));
+        let r = conn.reducers.release_skill_then(skill.clone(), net.on_reply("release"));
         net.report("release", r);
-        if skill == "block" {
+        if cards.by_name(&skill).is_some_and(|card| card.aim == "facing") {
             c.guarding = false;
-            if c.predicted.is_some_and(|(s, _)| s == "block") {
+            if c.predicted.as_ref().is_some_and(|(s, _)| *s == skill) {
                 c.predicted = None;
             }
         }
@@ -361,23 +475,15 @@ pub fn hostile(conn: &DbConnection, id: u32, me: u32) -> bool {
 }
 
 /// The clip a move plays, at what rate, and whether it holds a pose.
-fn clip_of(code: u8, variant: u32) -> Option<(&'static str, f32, Option<f32>)> {
-    Some(match rules::name(code) {
-        "strike" => (["sword_slash", "sword_overhead", "sword_thrust"][(variant % 3) as usize], 2.8, None),
-        "attack" => ("sword_slash", 2.0, None),
-        "bowshot" | "shoot" => ("bow_shoot", 3.4, None),
-        "throw" => ("attack", 1.3, None),
-        "firebolt" => ("cast", 2.2, None),
-        "heal" => ("cast", 2.6, None),
-        "block" => ("block", 2.2, Some(0.42)),
-        "dodge" => ("dodge_roll", 3.3, None),
-        _ => return None,
-    })
+fn clip_of(card: Option<&SkillCard>, variant: u32) -> Option<(&'static str, f32, Option<f32>)> {
+    let l = look(card?);
+    let clip = l.clips.get(variant as usize % l.clips.len().max(1))?;
+    Some((clip, l.rate, l.hold))
 }
 
 /// What each drawn character plays: its death, its move (mine predicted until confirmed),
 /// else a hit reaction.
-pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, mut c: ResMut<Combat>) {
+pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, cards: Res<Cards>, mut c: ResMut<Combat>) {
     let now = now_ms(&scene);
     let Some(conn) = net.conn.as_ref() else { return };
     let me = net.my_id;
@@ -394,18 +500,18 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, mut 
         let live = f.as_ref().filter(|f| f.act != 0 && (now as u64) < f.until_ms.max(f.release_ms) + 120);
         let face = live.and_then(|f| (f.aim_x != 0.0 || f.aim_y != 0.0).then(|| Vec2::new(f.aim_x, f.aim_y)));
         if let Some(f) = live {
-            if let Some((clip, rate, hold)) = clip_of(f.act, (f.act_ms / 7) as u32) {
+            if let Some((clip, rate, hold)) = clip_of(cards.by_code(f.act), (f.act_ms / 7) as u32) {
                 // A held guard stays up while the authority holds it.
                 out.insert(id, Action { clip, rate, start_ms: f.act_ms as f64, hold, face });
-                if Some(id) == me && c.predicted.is_some_and(|(s, t)| rules::code(s) == f.act && (f.act_ms as f64) >= t - 400.0) {
+                if Some(id) == me && c.predicted.as_ref().is_some_and(|(s, t)| cards.code(s) == f.act && (f.act_ms as f64) >= t - 400.0) {
                     c.predicted = None;
                 }
                 continue;
             }
         }
         if Some(id) == me {
-            if let Some((skill, t)) = c.predicted {
-                if let Some((clip, rate, hold)) = clip_of(rules::code(skill), c.strikes) {
+            if let Some((skill, t)) = c.predicted.clone() {
+                if let Some((clip, rate, hold)) = clip_of(cards.by_name(&skill), c.strikes) {
                     out.insert(id, Action { clip, rate, start_ms: t, hold, face: input.look });
                     continue;
                 }
@@ -420,8 +526,11 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, mut 
 }
 
 /// Aim and range indicators, subtle and only while a skill key is held.
-fn indicators(mut g: Gizmos, net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res<Target>, input: Res<Input>, island: Option<Res<crate::island::Island>>, c: Res<Combat>) {
-    let (Some(skill), Some(me3)) = (c.aiming.or(c.guarding.then_some("block")), target.0) else { return };
+#[allow(clippy::too_many_arguments)]
+fn indicators(mut g: Gizmos, net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res<Target>, input: Res<Input>, island: Option<Res<crate::island::Island>>, cards: Res<Cards>, c: Res<Combat>) {
+    // The held key's skill, else a raised guard's.
+    let guard = || c.guarding.then(|| cards.all.iter().find(|card| card.aim == "facing" && card.slot != NOT_ON_BAR)).flatten();
+    let (Some(card), Some(me3)) = (c.aiming.as_deref().and_then(|s| cards.by_name(s)).or_else(guard), target.0) else { return };
     let me = Vec2::new(me3.x, me3.z);
     let aim = c.script_aim.unwrap_or_else(|| aim_point(&cam, me, &input));
     let dir = (aim - me).normalize_or(Vec2::Y);
@@ -430,9 +539,9 @@ fn indicators(mut g: Gizmos, net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<
     let soft = Color::srgba(1.0, 0.97, 0.88, 0.32);
     let warm = Color::srgba(1.0, 0.62, 0.32, 0.45);
     let _ = &net;
-    match skill {
-        "bowshot" | "firebolt" => {
-            let (range, width, col) = if skill == "bowshot" { (22.0, 0.15, soft) } else { (16.0, 0.35, warm) };
+    match card.aim.as_str() {
+        "point" => {
+            let (range, width, col) = (card.reach, card.radius, if look(card).bolt { warm } else { soft });
             let side = Vec2::new(-dir.y, dir.x) * width;
             let steps = 24;
             for k in 0..steps {
@@ -443,25 +552,26 @@ fn indicators(mut g: Gizmos, net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<
             }
             g.circle(Isometry3d::new(ground(me + dir * range), flat), width + 0.2, col);
         }
-        "strike" => {
-            g.circle(Isometry3d::new(ground(me), flat), 1.6 + 0.6, soft);
+        "creature" => {
+            g.circle(Isometry3d::new(ground(me), flat), card.reach, soft);
             if let Some(t) = c.target.and_then(|t| scene.shown.get(&t)) {
-                let in_reach = t.0.distance(me) <= 2.2;
+                let in_reach = t.0.distance(me) <= card.reach;
                 g.circle(Isometry3d::new(ground(t.0), flat), 0.6, if in_reach { soft } else { Color::srgba(1.0, 0.4, 0.4, 0.45) });
             }
         }
-        "heal" => {
-            g.circle(Isometry3d::new(ground(me), flat), 8.0, Color::srgba(0.6, 1.0, 0.7, 0.28));
+        "self_or_ally" => {
+            g.circle(Isometry3d::new(ground(me), flat), card.reach, Color::srgba(0.6, 1.0, 0.7, 0.28));
             if let Some(t) = c.target.and_then(|t| scene.shown.get(&t)) {
                 g.circle(Isometry3d::new(ground(t.0), flat), 0.7, Color::srgba(0.6, 1.0, 0.7, 0.5));
             }
         }
-        "block" => {
-            // The guard's arc in front (75° either side).
+        "facing" => {
+            // The guard's arc in front (the rules' degrees either side).
             let a0 = dir.y.atan2(dir.x);
+            let half = card.arc.to_radians();
             let n = 16;
             for k in 0..n {
-                let (u, v) = (a0 - 1.31 + 2.62 * k as f32 / n as f32, a0 - 1.31 + 2.62 * (k + 1) as f32 / n as f32);
+                let (u, v) = (a0 - half + 2.0 * half * k as f32 / n as f32, a0 - half + 2.0 * half * (k + 1) as f32 / n as f32);
                 g.line(ground(me + Vec2::new(u.cos(), u.sin()) * 1.2), ground(me + Vec2::new(v.cos(), v.sin()) * 1.2), Color::srgba(0.7, 0.85, 1.0, 0.45));
             }
         }

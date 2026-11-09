@@ -230,15 +230,21 @@ def main():
     dx, dy = float(body["x"]), float(body["y"])
     # The nearest one that still holds some (a spot fished out by residents fails the gather).
     nearest = lambda kind, at_least=0: min(((float(r["x"]), float(r["y"])) for r in rows(db, f"SELECT x, y, amount FROM resource_node WHERE kind = '{kind}'") if float(r["amount"]) >= at_least), key=lambda p: (p[0] - dx) ** 2 + (p[1] - dy) ** 2)
-    spot = nearest("fishing_spot", 2)
-    # Earlier checks left D with a full pack: set the berries down first.
+    # Earlier checks left D with a full pack: set the berries down first, then make the net.
+    # These are their own sequence: a sequence restarts from its first step when a step fails,
+    # and with the berries already dropped a failed gather (a spot residents fished out
+    # meanwhile) left the walker failing `drop` forever, never gathering again.
     call(db, "set_behavior", str(D), seq(
         {"do": {"skill": "drop", "item": "berries", "qty": 60}},
         {"do": {"skill": "craft", "item": "net"}},
-        {"do": {"skill": "goto", "target": {"at": [spot[0], spot[1]]}}},
-        {"do": {"skill": "gather", "target": {"nearest": "fishing_spot"}}},
     ))
-    results["a net brings in two fish at once"] = bool(wait_for(lambda: have(D, "fish") >= fish0 + 2, timeout=150))
+    netted = wait_for(lambda: have(D, "net") >= 1, timeout=60)
+    # Then straight to a spot that holds some (placed, not walked, so residents cannot empty
+    # it on the way) and gather, again until it works.
+    spot = nearest("fishing_spot", 2)
+    call(db, "place_at", str(D), spot[0], spot[1])
+    call(db, "set_behavior", str(D), json.dumps({"first": [{"do": {"skill": "gather", "target": {"nearest": "fishing_spot"}}}, {"wait": 2}]}))
+    results["a net brings in two fish at once"] = bool(netted) and bool(wait_for(lambda: have(D, "fish") >= fish0 + 2, timeout=150))
     if not results["a net brings in two fish at once"]:
         print("  net:", [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {D}")][-6:], rows(db, f"SELECT item, qty FROM inventory WHERE owner = {D}"))
     call(db, "place_structure", str(D), "campfire")

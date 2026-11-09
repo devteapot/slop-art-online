@@ -1,12 +1,12 @@
 # Combat skills (the skill bar)
 
-A player's character uses the six starter skills (docs/COMBAT.md) through `use_skill(skill, target, x, y)` and lets go of a held guard with `release_skill(skill)`. Every attempt is recorded in `skill_use` (read through the player's `my_skill_uses` view); a refusal returns `Ok` and is told back as a `REFUSED` row in `my_combat`, so the record of the failed attempt survives.
+A player's character uses the skills on the bar (the script's `skill_bar()`, `skill_card.slot`; the six starter skills, docs/COMBAT.md) through `use_skill(skill, target, x, y)` and lets go of a held guard with `release_skill(skill)`. Every attempt is recorded in `skill_use` (read through the player's `my_skill_uses` view); a refusal returns `Ok` and is told back as a `REFUSED` row in `my_combat`, so the record of the failed attempt survives.
 
 ## Sub-features
 
 - An unknown skill is a reducer error ("not on the skill bar").
 - Refusals are recorded and told: a strike with no target, a strike out of reach (no walking into reach), a heal when unhurt, a second fire bolt inside its windup or cooldown.
-- A strike shows its windup (`fighter.act`), releases, deals damage, and the player perceives `RELEASE` and `HIT` with the amount; the target's band is public, its health is not.
+- A strike shows its windup (`fighter.act` equals the strike's `skill_card.code`), releases, deals damage, and the player perceives `RELEASE` and `HIT` with the amount; the target's band is public, its health is not.
 - A bow shot launches a missile that strikes the first body on its path (`LAUNCH`, `IMPACT`, damage); the arrow is spent.
 - A fire bolt burns the creature it meets.
 - A guard facing the blow blocks it (`BLOCKED`, reduced); facing away, the blow lands in full; letting go ends it.
@@ -34,3 +34,5 @@ $V cleanup --run $R
 - A missile strikes the first body on its line, which may be an earlier scene's dummy; aim off their lines.
 - `my_combat` rows expire after 4 s; filter by `at_ms` per scene.
 - SQL returns `Ready` rows positionally: `[skill, from_ms, at_ms]`.
+- Presentation codes are `skill_card.code`, assigned in skill-name order when a script is installed; read them from `skill_card`, never hard-code a number.
+- How `use_skill` aims a skill comes from its script shape (`aim`: creature, self_or_ally, point, facing, dash), not its name; the refusal text "no one there to <skill>" names the skill.

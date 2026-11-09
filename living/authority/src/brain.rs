@@ -449,7 +449,7 @@ impl<'a> Ev<'a> {
             // A deliberate act holds the body: the graph's work waits for it, but a reflex
             // (flee, dodge, block, attack, throw) takes the body back at once.
             match self.ctx.db.activity().id().find(self.me.id).filter(|a| act::held(a.node)) {
-                Some(a) if living_rules::acts::REFLEXES.contains(&skill) => {
+                Some(a) if common::scripts(self.ctx).shapes().reflex(skill) => {
                     crate::acts::interrupt(self.ctx, a, skill, self.now);
                     self.acting = false;
                 }
@@ -711,7 +711,8 @@ impl<'a> Ev<'a> {
             Cond::Threatened(b) => {
                 let me = self.me.id;
                 let now = self.now;
-                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && matches!(a.skill.as_str(), "attack" | "throw" | "shoot" | "threaten" | "strike" | "bowshot" | "firebolt"));
+                // Only a hostile move (its `<skill>_combat()` says so) names a victim.
+                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now);
                 coming == *b
             }
             Cond::Believes(b) => self

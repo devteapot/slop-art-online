@@ -750,8 +750,44 @@ fn combat_cooldown(skill) { switch skill { "strike" => 650, "bowshot" => 900, "f
 fn combat_cost(skill) { switch skill { "strike" => 2.0, "bowshot" => 1.5, "firebolt" => 12.0, "heal" => 15.0, "dodge" => 4.0, "block" => 1.0, _ => 0.0 } }
 fn spent(skill) { [#{ op: "vitals", energy: -combat_cost(skill) }] }
 fn winded(a) { if a.actor.energy < combat_cost(a.skill) { "too tired" } else { "" } }
-// A raised guard covers this many degrees either side of where it faces.
-fn block_arc(kind) { 75.0 }
+
+// What each combat skill is: `<skill>_combat()`, read once when the script is installed (the
+// authority never asks per tick). Every skill that has one is a combat skill, gets a
+// `skill_card` and a presentation code (its place in name order). Traits (all optional):
+//   aim        how a player aims it: "creature", "self_or_ally", "point" (a skillshot: it needs
+//              `<skill>_missile`), "facing" (a held guard), "dash" (a dodge), "none"
+//   timed      the combat timing above (one windup at a time, recovery, cooldown)
+//   rooted     a player's movement waits while it winds up
+//   hostile    aimed at a creature, that creature is its victim and sees it coming
+//   reflex     it takes the body back from a deliberate act
+//   real_time  behavior of the moment: a graph's, not a one-off act's
+//   melee      a blow meant to hurt or kill (its item), with `lunge(kind)`; out of reach, it misses
+//   closes_in  its rules are weighed before walking into reach
+//   menace     made once per target in a while; the target perceives a threat
+//   force      whether its actor has yielded is weighed
+//   dares      the target is weighed first: whether they yielded, what a predator dares
+//   hold_ms    a guard: the longest a player holds it
+//   arc        a guard: degrees either side of where it faces that it covers
+//   takes      a guard: the share of a covered blow that still lands
+//   knack      the skill whose knack gene serves it (itself by default)
+//   needs      items the skill bar shows as missing (the check stays the rule)
+//   knows      techniques the skill bar shows as unknown
+// A dash moves `<skill>_dist(kind)` tiles at `<skill>_speed(kind)` tiles/s.
+fn strike_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true, knack: "attack" } }
+fn bowshot_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "shoot", needs: ["bow", "arrow"] } }
+fn firebolt_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw", knows: ["fire_bolt"] } }
+fn block_combat() { #{ aim: "facing", timed: true, reflex: true, real_time: true, hold_ms: 8000, arc: 75.0, takes: 0.25 } }
+fn heal_combat() { #{ aim: "self_or_ally", timed: true, rooted: true, reflex: true, knack: "tend", knows: ["mending"] } }
+fn dodge_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true } }
+fn attack_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
+fn shoot_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
+fn throw_combat() { #{ aim: "creature", timed: true, hostile: true, reflex: true, real_time: true, force: true } }
+fn threaten_combat() { #{ aim: "creature", hostile: true, closes_in: true, menace: true } }
+fn yield_combat() { #{ reflex: true, force: true } }
+fn seize_combat() { #{ aim: "creature", dares: true } }
+fn tend_combat() { #{ aim: "creature" } }
+// The player's skill bar, in order (the game binds LMB, RMB, Q, E, R, Shift).
+fn skill_bar() { ["strike", "bowshot", "firebolt", "block", "heal", "dodge"] }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { switch kind { "wolf" => 2.4, "deer" => 2.8, _ => 2.6 } }
 fn dodge_speed(kind) { switch kind { "wolf" => 8.0, "deer" => 8.0, _ => 5.2 } }
@@ -759,10 +795,10 @@ fn dodge_speed(kind) { switch kind { "wolf" => 8.0, "deer" => 8.0, _ => 5.2 } }
 fn dodge_check(a) { if a.actor.energy < 5.0 { "too exhausted to dodge" } else { "" } }
 fn dodge_done(a) { spent("dodge") }
 
-// A guard is held for `qty` ms (a player holds it until they let go, at most 8 s), else a
-// moment. Holding it is tiring (see `rates`).
+// A guard is held for `qty` ms (a player holds it until they let go, at most its `hold_ms`),
+// else a moment. Holding it is tiring (see `rates`).
 fn block_check(a) { if a.actor.kind != "person" { return "only people can block"; } winded(a) }
-fn block_duration(a) { if a.qty > 0 { if a.qty > 8000 { 8000 } else { a.qty } } else { 1200 } }
+fn block_duration(a) { let most = block_combat().hold_ms; if a.qty > 0 { if a.qty > most { most } else { a.qty } } else { 1200 } }
 fn block_done(a) { [#{ op: "vitals", energy: -0.5 }] }
 
 // ---- the starter skills (docs/GAME_BRIEF.md): sword strike, bow shot, fire bolt, heal ------

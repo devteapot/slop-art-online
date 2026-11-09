@@ -842,6 +842,9 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
             let skills: Vec<String> = sp
                 .and_then(|s| s.skills)
                 .unwrap_or_else(|| living_rules::catalog::SKILLS.iter().map(|s| s.name.to_string()).collect());
+            // A skill that borrows another's knack (the rules' `<skill>_combat()`) draws none.
+            let sc = common::scripts(ctx);
+            let skills: Vec<String> = skills.into_iter().filter(|s| sc.shapes().knack(s) == s.as_str()).collect();
             living_rules::genes::founder(&temperament, &skills, &mut u)
         }
     };

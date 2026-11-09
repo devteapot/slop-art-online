@@ -55,12 +55,14 @@ fn clamp(name: &str, v: f32) -> f32 {
 }
 
 /// A founder's genes: temperament drawn within its species' ranges, body and knacks near 1.0.
+/// `skills` are the body's skills that have a knack of their own (not one that borrows
+/// another skill's knack).
 pub fn founder(temperament: &BTreeMap<String, [f32; 2]>, skills: &[String], u: &mut dyn FnMut() -> f32) -> Genes {
     let mut g = Genes::new();
     for (k, [lo, hi]) in temperament {
         g.insert(format!("trait:{k}"), (lo + (hi - lo) * u()).round());
     }
-    for k in BODY.iter().map(|s| s.to_string()).chain(skills.iter().filter(|s| !UNSKILLED.contains(&s.as_str()) && knack_of(s) == s.as_str()).map(|s| format!("knack:{s}"))) {
+    for k in BODY.iter().map(|s| s.to_string()).chain(skills.iter().filter(|s| !UNSKILLED.contains(&s.as_str())).map(|s| format!("knack:{s}"))) {
         let v = 1.0 + mutation(u, 0.06);
         g.insert(k.clone(), clamp(&k, v));
     }
@@ -94,27 +96,6 @@ pub fn gene(g: &Genes, name: &str) -> f32 {
     g.get(name).copied().unwrap_or(if is_trait(name) { 50.0 } else { 1.0 })
 }
 
-/// Combat moves: their timing is the other side's chance to react, so skill makes them hit
-/// harder (in the scripts), not faster.
-const TIMED: [&str; 9] = ["attack", "throw", "shoot", "dodge", "block", "strike", "bowshot", "firebolt", "heal"];
-
-/// The gene that makes one good at a skill. The starter combat skills (2026-11-09) share the
-/// knacks of the older skills nearest them, so founders draw the same genes as before.
-pub fn knack_of(skill: &str) -> &str {
-    match skill {
-        "strike" => "attack",
-        "bowshot" => "shoot",
-        "firebolt" => "throw",
-        "heal" => "tend",
-        s => s,
-    }
-}
-
-/// Whether skill makes a skill's work quicker.
-pub fn paced(skill: &str) -> bool {
-    is_skilled(skill) && !TIMED.contains(&skill)
-}
-
 /// Whether a skill improves with a knack and practice.
 pub fn is_skilled(skill: &str) -> bool {
     !UNSKILLED.contains(&skill)
@@ -126,11 +107,13 @@ pub fn practice_factor(uses: u32) -> f32 {
 }
 
 /// How good a body is at a skill: its inborn knack times its practice.
-pub fn skill_factor(g: &Genes, practice: &BTreeMap<String, u32>, skill: &str) -> f32 {
+/// `knack` is the skill whose knack gene serves this one (the rules' `<skill>_combat()` may
+/// name another: the starter skills share the knacks of the older skills nearest them).
+pub fn skill_factor(g: &Genes, practice: &BTreeMap<String, u32>, skill: &str, knack: &str) -> f32 {
     if UNSKILLED.contains(&skill) {
         return 1.0;
     }
-    gene(g, &format!("knack:{}", knack_of(skill))) * practice_factor(practice.get(skill).copied().unwrap_or(0))
+    gene(g, &format!("knack:{knack}")) * practice_factor(practice.get(skill).copied().unwrap_or(0))
 }
 
 /// Temperament for a persona: trait name → 0..100.
@@ -247,7 +230,7 @@ mod tests {
         assert!(g.contains_key("knack:gather") && !g.contains_key("knack:wait"));
         assert!(g.contains_key("trait:caution"));
         assert!(practice_factor(0) == 1.0 && practice_factor(60) > 1.3 && practice_factor(1000) < 1.61);
-        assert_eq!(skill_factor(&g, &BTreeMap::new(), "wait"), 1.0);
+        assert_eq!(skill_factor(&g, &BTreeMap::new(), "wait", "wait"), 1.0);
     }
 
     #[test]
