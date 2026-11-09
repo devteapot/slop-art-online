@@ -17,6 +17,9 @@ import urllib.error
 
 ROOT = Path(__file__).resolve().parents[4]
 SHARED = ROOT / '.agents/skills/verify/scripts/verify.py'
+# The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
+STDB_URL = os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/')
+STDB_CONTAINER = os.environ.get('LIVING_STDB_CONTAINER', 'sao-living_spacetimedb_1')
 FAKE = Path(__file__).with_name('fake_llm.py')
 CASES = ('basic', 'routing-group', 'routing-assign', 'routing-rotate', 'routing-child',
          'routing-default', 'overflow', 'retry-fallback', 'error-overflow', 'outage',
@@ -82,7 +85,7 @@ class Run:
 
     def harness(self, *args):
         if args[0] == 'launch':
-            result = self.command(['docker', 'inspect', 'sao-living_spacetimedb_1', '--format', '{{json .Mounts}}'])
+            result = self.command(['docker', 'inspect', STDB_CONTAINER, '--format', '{{json .Mounts}}'])
             mounts = json.loads(result.stdout)
             source = next((m.get('Source') for m in mounts if m.get('Destination') == '/wasm'), None)
             # Docker Desktop reports bind mounts by their path in its VM (/host_mnt/Users/...).
@@ -146,7 +149,7 @@ class Run:
         if len(matches) != 1:
             raise RuntimeError('could not find one admin JWT from stdb login show --token')
         self.token = matches[0]
-        env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER='http://127.0.0.1:3300',
+        env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=STDB_URL,
                    LIVING_DB=self.db, LIVING_RUN=self.db, LIVING_SEED='world', LIVING_MODELS=str(path),
                    LIVING_NEO4J='off', LIVING_NEO4J_PASSWORD='', LIVING_ONLY=','.join(map(str, ids)),
                    LIVING_LLM_PER_MIN='0', LIVING_CONCURRENCY='4', LIVING_TOKEN=self.token,
@@ -405,7 +408,7 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r'llm-[a-zA-Z0-9-]+', args.run):
         parser.error('--run must start with llm-')
-    with urllib.request.urlopen('http://127.0.0.1:3300/v1/ping', timeout=5) as response:
+    with urllib.request.urlopen(f'{STDB_URL}/v1/ping', timeout=5) as response:
         assert response.status == 200, 'the existing SpacetimeDB container must be running'
     suite = ROOT / '.local/living/verify' / args.run
     suite.mkdir(parents=True, exist_ok=False)

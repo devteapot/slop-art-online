@@ -22,6 +22,8 @@ removes what the run started and keeps the evidence.
 Paths and ports: SpacetimeDB http://127.0.0.1:3300, the local container's port (LIVING_STDB_URL may
 only name that port, so publishing and HTTP calls always reach the same server); observer
 http://127.0.0.1:8330 (VERIFY_OBSERVER_PORT); Chromium from Playwright's cache (VERIFY_CHROME).
+A worker with its own server sets LIVING_STDB_CONTAINER to that container's name and
+LIVING_STDB_URL to its published port on 127.0.0.1; the helper never starts or stops such a container.
 """
 import argparse
 import glob
@@ -39,14 +41,25 @@ ROOT = Path(__file__).resolve().parents[4]
 LIVING = ROOT / "living"
 STDB = str(LIVING / "tools/stdb")
 URL = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
-# Publishing goes through the container's CLI, so HTTP must reach that same container.
-LOCAL_URLS = {"http://127.0.0.1:3300", "http://localhost:3300"}
+# The shared server, or a worker's own (LIVING_STDB_CONTAINER, with LIVING_STDB_URL naming its
+# port). living/tools/stdb reads the same variable.
+SHARED = "sao-living_spacetimedb_1"
+CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", SHARED)
 OBS_PORT = int(os.environ.get("VERIFY_OBSERVER_PORT", "8330"))
 OBSERVER = ROOT / ".local/living/verify/observer.json"
 COMPOSE = ["docker", "compose", "--env-file", str(ROOT / ".local/living/neo4j.env"), "-f", str(LIVING / "deploy/compose.yml"), "-p", "sao-living"]
-CONTAINER = "sao-living_spacetimedb_1"
 # Worlds kept for reference. The helper only ever publishes or deletes `verify-*`.
 PREFIX = "verify-"
+
+
+def local_urls():
+    """Publishing goes through the container's CLI, so HTTP must reach that same container: its
+    port on 127.0.0.1 (3300 for the shared server, which the helper may still have to start)."""
+    if CONTAINER == SHARED:
+        return {"http://127.0.0.1:3300", "http://localhost:3300"}
+    r = subprocess.run(["docker", "port", CONTAINER, "3000/tcp"], capture_output=True, text=True)
+    ports = {line.rsplit(":", 1)[-1].strip() for line in r.stdout.splitlines() if line.startswith("127.0.0.1:")}
+    return {f"http://{h}:{p}" for p in ports for h in ("127.0.0.1", "localhost")}
 
 
 def wasm_mount():
@@ -122,6 +135,8 @@ def launch(a):
     st["seed"] = a.seed
     # Which tables players may read (docs/PERCEPTION.md): the build's LIVING_PERCEPTION.
     st["perception"] = os.environ.get("LIVING_PERCEPTION", "open")
+    if not container_up() and CONTAINER != SHARED:
+        sys.exit(f"container {CONTAINER} (LIVING_STDB_CONTAINER) is not running; start it yourself")
     if not container_up():
         # `compose up --wait` can hang under podman-compose even after the container is
         # healthy, so start detached and poll the ping endpoint instead.
@@ -131,7 +146,7 @@ def launch(a):
         log(st, "started SpacetimeDB container")
     if not wait_ping(180):
         save(st)
-        sys.exit("SpacetimeDB did not answer /v1/ping within 180 s (see `docker logs sao-living_spacetimedb_1`)")
+        sys.exit(f"SpacetimeDB did not answer /v1/ping within 180 s (see `docker logs {CONTAINER}`)")
     env = dict(os.environ, LIVING_SEED=a.seed)
     # A non-default seed builds in its own target dir, as living/tools/lab.py does, so the
     # active world's module is never rebuilt with a lab seed. --target-dir overrides it.
@@ -394,8 +409,9 @@ def cleanup(a):
 
 
 def main():
-    if URL not in LOCAL_URLS:
-        sys.exit(f"LIVING_STDB_URL={URL} is not the local container (http://127.0.0.1:3300); publishing and HTTP calls would reach different servers")
+    local = local_urls()
+    if URL not in local:
+        sys.exit(f"LIVING_STDB_URL={URL} is not the local container {CONTAINER} ({', '.join(sorted(local)) or 'not running'}); publishing and HTTP calls would reach different servers")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("launch"); p.add_argument("--run", required=True); p.add_argument("--seed", default="world")
