@@ -77,17 +77,30 @@ fn home(k: LotKind) -> bool {
     matches!(k, LotKind::House | LotKind::Townhouse)
 }
 
-/// Generate the land and plan what the world keeps of it.
-pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
+/// The land's side and parameters from a seed's `map`.
+pub fn params_of(m: &SeedMap) -> Result<(u32, LandParams), String> {
     let size = if m.size > 0 { m.size } else { m.w.max(m.h) };
     let params: LandParams = if m.params.is_null() { LandParams::default() } else { serde_json::from_value(m.params.clone()).map_err(|e| format!("map.params: {e}"))? };
+    Ok((size, params))
+}
+
+/// Generate the land in this call and plan what the world keeps of it.
+pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
+    let (size, params) = params_of(m)?;
     let land = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.land.generate");
         landgen::generate(seed, size, &params)
     };
     let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.land.host");
-    let (map, hosted) = host::hosted_map(&land, &params);
-    let d = host::digests(&land, &map);
+    Ok(host(seed, m, &land, &params))
+}
+
+/// Plan what the world keeps of a generated land: the hosted tiles, digests, settlements and
+/// lots.
+pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -> Hosted {
+    let size = land.size;
+    let (map, hosted) = host::hosted_map(land, params);
+    let d = host::digests(land, &map);
     log::info!(
         "land {seed} at {size} m: {} settlements, {} lots, {} roads, {} props (derived, not stored); buildings block {} tiles and cut off {}; digests tiles {:016x} heights {:016x} layout {:016x}",
         land.settlements.len(),
@@ -193,7 +206,7 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
         arrive_x: arrive.0,
         arrive_y: arrive.1,
     };
-    Ok(Hosted { map, info, settlements, lots })
+    Hosted { map, info, settlements, lots }
 }
 
 /// The seed's settlement entry for each planned settlement: the k-th entry of a site kind
@@ -222,10 +235,17 @@ pub fn layout(p: &Planned) -> Layout {
     Layout { center: p.centre, gates: p.gates.clone(), houses: p.homes.clone(), market: p.market.clone(), fields: p.fields.clone() }
 }
 
-/// Lot rows and the structures at their doors (owners are set as households move in).
+/// The `land` row, lot rows and the structures at their doors (owners are set as households
+/// move in).
 pub fn build(ctx: &ReducerContext, h: &Hosted, now: u64) {
     ctx.db.land().insert(h.info.clone());
-    for (i, l) in h.lots.iter().enumerate() {
+    build_lots(ctx, h, 0..h.lots.len(), now);
+}
+
+/// Lot rows `range` and the structures at their doors, in order (a staged world inserts them in
+/// batches; ids follow the order either way).
+pub fn build_lots(ctx: &ReducerContext, h: &Hosted, range: std::ops::Range<usize>, now: u64) {
+    for (i, l) in h.lots.iter().enumerate().skip(range.start).take(range.len()) {
         let structure = structure_kind(l.kind).map_or(0, |k| {
             common::invalidate_structures(ctx);
             ctx.db.structure().insert(Structure { id: 0, kind: k.into(), x: l.door.0, y: l.door.1, chunk: chunk_of(l.door.0, l.door.1), owner: 0, built_ms: now }).id

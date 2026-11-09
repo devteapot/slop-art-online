@@ -76,7 +76,15 @@ fn main() {
     let base = CUR.load(Relaxed);
     PEAK.store(base, Relaxed);
     let t0 = std::time::Instant::now();
-    let land = land::generate(seed, size, &params);
+    // Staged, as the authority runs it: one line per step with its time and live heap.
+    let mut g = land::Gen::new(seed, size, params.clone());
+    let mut steps = String::new();
+    while !g.is_done() {
+        let (label, ts) = (g.label(), std::time::Instant::now());
+        g.step();
+        let _ = writeln!(steps, "  step {:>2}/{} {:<28} {:>7.3} s  live {:>5.0} MB  peak {:>5.0} MB", g.done(), g.steps(), label, ts.elapsed().as_secs_f64(), mb(CUR.load(Relaxed) - base), mb(PEAK.load(Relaxed) - base));
+    }
+    let land = g.into_land();
     let gen_s = t0.elapsed().as_secs_f64();
     let gen_peak = PEAK.load(Relaxed) - base;
     let kept = CUR.load(Relaxed) - base;
@@ -94,6 +102,7 @@ fn main() {
     let mut out = String::new();
     let _ = writeln!(out, "seed {seed} size {size} m ({})", path);
     let _ = writeln!(out, "generate {gen_s:.2} s, peak {:.0} MB, Land kept {:.0} MB", mb(gen_peak), mb(kept));
+    out.push_str(&steps);
     let _ = writeln!(out, "hosted_map {host_s:.2} s, digests {digest_s:.2} s, their peak {:.0} MB", mb(host_peak));
     let _ = writeln!(out, "digests tiles {:016x} heights {:016x} layout {:016x}", d.tiles, d.heights, d.layout);
     let _ = writeln!(out, "blocked {} tiles, cut off {}", h.blocked_tiles, h.cut_off_tiles);

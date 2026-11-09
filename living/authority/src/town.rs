@@ -53,7 +53,7 @@ struct ClimateOf {
 }
 
 thread_local! {
-    static CLIMATE: SeedWeather = serde_json::from_str::<ClimateOf>(crate::seed::VALLEY).map(|c| c.weather).unwrap_or_default();
+    static CLIMATE: SeedWeather = serde_json::from_str::<ClimateOf>(&crate::seed::active()).map(|c| c.weather).unwrap_or_default();
 }
 
 /// The seed's own weather at `now`: whether the current spell rains, and when it ends.

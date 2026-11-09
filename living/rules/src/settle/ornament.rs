@@ -27,15 +27,52 @@ struct Spot {
     flat: f32,
 }
 
-pub(crate) fn dress(land: &Land, p: &SettleParams, stairs: Vec<Prop>) -> Vec<Prop> {
-    let mut d = Dress::new(land, p);
-    for s in stairs {
-        d.push(s);
+/// Settlements dressed per step of [`Dressing`].
+const PER_STEP: u16 = 1;
+
+/// Dressing every settlement, a few per step ([`super::Staged`]); settlements are dressed in
+/// order, so the props are the same however the steps fall.
+pub(crate) struct Dressing {
+    next: u16,
+    props: Vec<Prop>,
+    prop_b: Buckets,
+    lot_b: Buckets,
+    road_b: Buckets,
+    doors: Vec<(V2, V2)>,
+    door_b: Buckets,
+}
+
+impl Dressing {
+    pub(crate) fn new(land: &Land, p: &SettleParams, stairs: Vec<Prop>, metro: Option<&MetroParams>) -> Self {
+        let mut d = Dress::new(land, p);
+        for s in stairs {
+            d.push(s);
+        }
+        if let Some(mp) = metro {
+            d.city_works(mp);
+        }
+        d.park(0)
     }
-    for idx in 0..land.settlements.len() as u16 {
-        d.settlement(idx);
+
+    /// Steps left for `land`'s settlements, this one included.
+    pub(crate) fn steps_left(&self, land: &Land) -> u32 {
+        (land.settlements.len() as u16).saturating_sub(self.next).div_ceil(PER_STEP) as u32
     }
-    d.props
+
+    /// Dress the next few settlements; the props once every settlement is dressed.
+    pub(crate) fn step(self, land: &Land, p: &SettleParams) -> Result<Vec<Prop>, Self> {
+        let next = self.next;
+        let mut d = Dress::resume(land, p, self);
+        let end = (next + PER_STEP).min(land.settlements.len() as u16);
+        for idx in next..end {
+            d.settlement(idx);
+        }
+        if end >= land.settlements.len() as u16 {
+            Ok(d.props)
+        } else {
+            Err(d.park(end))
+        }
+    }
 }
 
 struct Dress<'a> {
@@ -76,6 +113,154 @@ impl<'a> Dress<'a> {
             }
         }
         Self { land, p, props: Vec::new(), prop_b: Buckets::new(s, 16.0), lot_b, road_b, doors, door_b, near: Vec::new() }
+    }
+
+    fn park(self, next: u16) -> Dressing {
+        let Dress { land: _, p: _, props, prop_b, lot_b, road_b, doors, door_b, near: _ } = self;
+        Dressing { next, props, prop_b, lot_b, road_b, doors, door_b }
+    }
+
+    fn resume(land: &'a Land, p: &'a SettleParams, k: Dressing) -> Self {
+        let Dressing { next: _, props, prop_b, lot_b, road_b, doors, door_b } = k;
+        Self { land, p, props, prop_b, lot_b, road_b, doors, door_b, near: Vec::new() }
+    }
+
+    /// The city's own structures, before any settlement is dressed: elevated highway pieces over
+    /// its arterials and rings inside the wall, and towers on the wall's corners. They stand over
+    /// the roads by design (presentation above street level), so they skip the spot checks.
+    fn city_works(&mut self, mp: &MetroParams) {
+        let land = self.land;
+        let Some(core) = land.settlements.first() else { return };
+        let Some(wall) = core.wall.as_ref() else { return };
+        let style = core.style.clone();
+        let mut rng = Rng(land.seed ^ 0x41A7);
+        if mp.highways {
+            let ring = &wall.ring;
+            for rd in land.roads.iter().filter(|r| r.class == RoadClass::Trunk && r.settlement.is_none()) {
+                let arterial = rd.ends[0] == RoadEnd::Plaza(0);
+                let form = if arterial { "arterial" } else { "ring" };
+                let ms = self.models(&style, PropKind::Highway, &|m: &ModelFootprint| m.form == form);
+                if ms.is_empty() {
+                    continue;
+                }
+                let cl = cumlen(&rd.points);
+                let total = *cl.last().unwrap();
+                let piece = self.p.buildings.models[ms[0] as usize].depth_m.max(4.0);
+                let mut s = piece * 0.5;
+                while s < total - piece * 0.25 {
+                    let (q, t) = at_s(&rd.points, &cl, s);
+                    s += piece;
+                    if !poly_contains(ring, q) || dist(q, core.plaza.centre) < mp.plaza_m + piece {
+                        continue;
+                    }
+                    let m = &self.p.buildings.models[ms[((rng.f() * ms.len() as f32) as usize).min(ms.len() - 1)] as usize];
+                    self.push(Prop { settlement: 0, kind: PropKind::Highway, centre: q, width_m: m.width_m, depth_m: m.depth_m, front: t, yaw: yaw_of(t), floor_m: land.height(q.0, q.1), model_file: Some(m.file.clone()), height_m: m.height_m });
+                }
+            }
+        }
+        if mp.wall_towers {
+            let ms = self.models(&style, PropKind::WallTower, &|_| true);
+            if !ms.is_empty() {
+                for &q in &wall.corners {
+                    if wall.gates.iter().any(|g| dist(g.at, q) < g.width_m + 12.0) {
+                        continue;
+                    }
+                    let out = norm(sub(q, core.plaza.centre));
+                    let m = &self.p.buildings.models[ms[((rng.f() * ms.len() as f32) as usize).min(ms.len() - 1)] as usize];
+                    self.push(Prop { settlement: 0, kind: PropKind::WallTower, centre: q, width_m: m.width_m, depth_m: m.depth_m, front: out, yaw: yaw_of(out), floor_m: land.height(q.0, q.1), model_file: Some(m.file.clone()), height_m: m.height_m });
+                }
+            }
+        }
+    }
+
+    /// Street dressing along a settlement's streets and lanes ([`Ornaments::street_kit`]).
+    fn street_kit(&mut self, idx: u16, o: &Ornaments, rng: &mut Rng) {
+        let land = self.land;
+        let k = land.settlements[idx as usize].scale.max(0.3);
+        let total_w: f32 = o.street_kit.iter().map(|x| x.1).sum();
+        if total_w <= 0.0 || o.street_kit_m <= 0.0 {
+            return;
+        }
+        let flat = Spot { flat: 0.4 * k, ..Spot::default() };
+        for ri in 0..land.roads.len() {
+            let rd = &land.roads[ri];
+            if rd.settlement != Some(idx) {
+                continue;
+            }
+            let (pts, hw) = (rd.points.clone(), rd.width_m * 0.5);
+            let cl = cumlen(&pts);
+            let total = *cl.last().unwrap();
+            for side in [1.0f32, -1.0] {
+                let mut s = 3.0 + rng.f() * o.street_kit_m;
+                while s < total - 3.0 {
+                    let (q, t) = at_s(&pts, &cl, s);
+                    s += o.street_kit_m * (0.6 + 0.8 * rng.f());
+                    let mut x = rng.f().max(1e-4);
+                    let Some(kind) = o.street_kit.iter().find_map(|&(kd, wt)| {
+                        x -= wt;
+                        (x <= 0.0).then_some(kd)
+                    }) else { continue };
+                    let n = mul(perp(t), side);
+                    // Vehicles park along the kerb; the rest stand at the edge, facing the street.
+                    let (off, front) = match kind {
+                        PropKind::Vehicle => (1.4, t),
+                        PropKind::Barrier => (0.6, t),
+                        _ => (0.9, mul(n, -1.0)),
+                    };
+                    let c = add(q, mul(n, hw + off * k));
+                    self.put(idx, kind, c, front, rng, flat, &|_| true);
+                }
+            }
+        }
+    }
+
+    /// Holograms round a settlement's square, scaffolds on tall buildings, port cranes over the
+    /// water and salvage piles.
+    fn city_dressing(&mut self, idx: u16, o: &Ornaments, rng: &mut Rng) {
+        let land = self.land;
+        let set = &land.settlements[idx as usize];
+        let k = set.scale.max(0.3);
+        let flat = Spot { flat: 0.4 * k, ..Spot::default() };
+        let centre = set.centre;
+        if o.holograms > 0 {
+            let plaza = set.plaza.points.clone();
+            let mut placed = 0;
+            for i in 0..plaza.len() {
+                if placed >= o.holograms {
+                    break;
+                }
+                let q = plaza[(i * 5 + 2) % plaza.len()];
+                let n = norm(sub(centre, q));
+                if self.put(idx, PropKind::Hologram, add(q, mul(n, 5.0 * k)), n, rng, Spot { plaza: true, ..flat }, &|_| true) {
+                    placed += 1;
+                }
+            }
+        }
+        for li in set.lots.0..set.lots.1 {
+            let l = land.lots[li as usize].clone();
+            if l.model_file.is_none() || !l.kind.padded() {
+                continue;
+            }
+            let u = perp(l.front);
+            let front_mid = add(l.centre, mul(l.front, l.depth_m * 0.5));
+            if o.scaffold > 0.0 && l.height_m >= 20.0 && rng.f() < o.scaffold {
+                let side = if rng.f() < 0.5 { 1.0f32 } else { -1.0 };
+                let c = add(add(front_mid, mul(u, side * l.width_m * 0.25)), mul(l.front, 0.8 * k));
+                self.put(idx, PropKind::Scaffold, c, l.front, rng, flat, &|_| true);
+            }
+            if o.cranes > 0.0 && rng.f() < o.cranes {
+                let probe = add(front_mid, mul(l.front, 30.0));
+                if land.map.at(probe.0, probe.1) == Terrain::Water {
+                    let c = add(front_mid, mul(l.front, 10.0 * k));
+                    self.put(idx, PropKind::Crane, c, mul(l.front, -1.0), rng, Spot { overhead: true, flat: 9.0, ..Spot::default() }, &|m: &ModelFootprint| m.form == "gantry");
+                }
+            }
+            if o.salvage > 0.0 && rng.f() < o.salvage {
+                let side = if rng.f() < 0.5 { 1.0f32 } else { -1.0 };
+                let c = add(l.centre, mul(u, side * (l.width_m * 0.5 + 3.0 * k)));
+                self.put(idx, PropKind::Salvage, c, l.front, rng, flat, &|_| true);
+            }
+        }
     }
 
     fn push(&mut self, pr: Prop) {
@@ -166,6 +351,17 @@ impl<'a> Dress<'a> {
             }
             if overhead && o.kind == pr.kind && r.gap(&orr) < 2.0 * k {
                 self.near = near;
+                return None;
+            }
+        }
+        // What blocks stands in a square or beside a building, never in the open (kiosks, stalls
+        // and vending machines line streets by design).
+        if pr.kind.blocks() && !spot.plaza && !matches!(pr.kind, PropKind::Kiosk | PropKind::FoodStall | PropKind::Vending) {
+            let mut near = std::mem::take(&mut self.near);
+            self.lot_b.query(lo, hi, &mut near);
+            let by_building = near.iter().any(|&li| land.lots[li as usize].kind.padded() && r.gap(&land.lots[li as usize].rect()) < 3.0);
+            self.near = near;
+            if !by_building {
                 return None;
             }
         }
@@ -426,6 +622,10 @@ impl<'a> Dress<'a> {
         if o.neon_street {
             self.neon_street(idx, &o, &mut rng);
         }
+        if !o.street_kit.is_empty() {
+            self.street_kit(idx, &o, &mut rng);
+        }
+        self.city_dressing(idx, &o, &mut rng);
         // 7. Inns, workshops, barns and stalls: clutter, signs and pipes.
         for li in lots.clone() {
             let l = land.lots[li as usize].clone();
@@ -721,24 +921,32 @@ impl<'a> Dress<'a> {
         ok
     }
 
-    /// Signs, kiosks and food stalls along the main street with the most buildings, and cables
-    /// strung across it.
+    /// Signs, kiosks and food stalls along the main streets with the most buildings, and cables
+    /// strung across them.
     fn neon_street(&mut self, idx: u16, o: &Ornaments, rng: &mut Rng) {
         let land = self.land;
         let set = &land.settlements[idx as usize];
-        let k = set.scale.max(0.3);
-        let flat = Spot { flat: 0.35 * k, ..Spot::default() };
-        let mut best: Option<(usize, u32)> = None;
+        // The busiest streets: most buildings fronting them (one, or `neon_streets`).
+        let mut ranked: Vec<(usize, u32)> = Vec::new();
         for (ri, rd) in land.roads.iter().enumerate() {
             if rd.settlement != Some(idx) || rd.class != RoadClass::Street {
                 continue;
             }
             let n = land.lots[set.lots.0 as usize..set.lots.1 as usize].iter().filter(|l| l.frontage == Frontage::Road(ri as u32) && l.kind.padded()).count();
-            if best.is_none_or(|b| n > b.0) {
-                best = Some((n, ri as u32));
-            }
+            ranked.push((n, ri as u32));
         }
-        let Some((_, rid)) = best else { return };
+        ranked.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        for &(_, rid) in ranked.iter().take(o.neon_streets.max(1) as usize) {
+            self.neon_one(idx, rid, o, rng);
+        }
+    }
+
+    /// The neon dressing of one street.
+    fn neon_one(&mut self, idx: u16, rid: u32, o: &Ornaments, rng: &mut Rng) {
+        let land = self.land;
+        let set = &land.settlements[idx as usize];
+        let k = set.scale.max(0.3);
+        let flat = Spot { flat: 0.35 * k, ..Spot::default() };
         let rd = &land.roads[rid as usize];
         let (pts, hw) = (rd.points.clone(), rd.width_m * 0.5);
         let cl = cumlen(&pts);

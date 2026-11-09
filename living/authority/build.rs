@@ -1,5 +1,6 @@
 //! Chooses the world seed compiled into the module: `seeds/$LIVING_SEED.json` (default
-//! `world`, the active world). Lab scenarios build their own module with another seed
+//! `world`, the active world), or none (`LIVING_SEED=none`: a floor module, seeded at runtime
+//! by `create_floor`). Lab scenarios build their own module with another seed
 //! without touching the active one. A seed may carry a `species` object whose entries are
 //! merged over `seeds/species.json` (e.g. an ecology lab varying the wolves' breeding).
 fn merge(base: &mut serde_json::Value, over: &serde_json::Value) {
@@ -22,10 +23,11 @@ fn main() {
     println!("cargo:rerun-if-changed={}", src.display());
     println!("cargo:rerun-if-changed={}", species_src.display());
     let out = std::path::Path::new(&std::env::var("OUT_DIR").unwrap()).to_path_buf();
-    let seed_text = std::fs::read_to_string(&src).unwrap_or_else(|e| panic!("seed {}: {e}", src.display()));
+    // `none`: a floor module, with no seed compiled in; `create_floor` gives it one at runtime.
+    let seed_text = if name == "none" { String::new() } else { std::fs::read_to_string(&src).unwrap_or_else(|e| panic!("seed {}: {e}", src.display())) };
     std::fs::write(out.join("seed.json"), &seed_text).unwrap();
     let mut species: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&species_src).unwrap()).expect("species.json");
-    let seed: serde_json::Value = serde_json::from_str(&seed_text).expect("seed json");
+    let seed: serde_json::Value = if seed_text.is_empty() { serde_json::json!({}) } else { serde_json::from_str(&seed_text).expect("seed json") };
     if let Some(over) = seed.get("species") {
         merge(&mut species, over);
     }
@@ -33,7 +35,22 @@ fn main() {
     // Behavior switches for lab arms. A seed may carry a `rules` object; each entry names a
     // rule the module normally enforces (true, the default) or hands to the minds instead
     // (false). The constants are compiled in, so each arm is its own module.
-    let flag = |name: &str| seed.get("rules").and_then(|r| r.get(name)).and_then(|v| v.as_bool()).unwrap_or(true);
+    // A floor module has no seed to read them from: `LIVING_RULES` names them instead
+    // (`minds=false,cry_prompts_carers=true`), and `create_floor` refuses a seed that differs.
+    println!("cargo:rerun-if-env-changed=LIVING_RULES");
+    let given: Vec<(String, bool)> = std::env::var("LIVING_RULES")
+        .unwrap_or_default()
+        .split(',')
+        .filter(|p| !p.trim().is_empty())
+        .map(|p| {
+            let (k, v) = p.split_once('=').unwrap_or_else(|| panic!("LIVING_RULES: `{p}` is not name=true|false"));
+            (k.trim().to_string(), v.trim().parse().unwrap_or_else(|_| panic!("LIVING_RULES: `{p}` is not name=true|false")))
+        })
+        .collect();
+    if !given.is_empty() && name != "none" {
+        panic!("LIVING_RULES is for floor modules (LIVING_SEED=none); a compiled seed's `rules` block sets them");
+    }
+    let flag = |name: &str| given.iter().find(|(k, _)| k == name).map(|(_, v)| *v).or_else(|| seed.get("rules").and_then(|r| r.get(name)).and_then(|v| v.as_bool())).unwrap_or(true);
     std::fs::write(
         out.join("rules_flags.rs"),
         format!(

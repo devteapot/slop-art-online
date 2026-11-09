@@ -841,9 +841,157 @@ pub fn generate_default(seed: u64, size_m: u32) -> Land {
     generate(seed, size_m, &LandParams::default())
 }
 
-/// Generate a square world `size_m` metres on a side.
+/// Generate a square world `size_m` metres on a side: every step of [`Gen`] in one call.
 pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
-    assert!((256..=MAX_SIDE).contains(&size_m), "land side {size_m} m outside 256..={MAX_SIDE}");
+    let mut g = Gen::new(seed, size_m, p.clone());
+    while !g.step() {}
+    g.into_land()
+}
+
+/// Tiles classified per step of [`Gen`]: rows are banded so each step stays well inside a
+/// SpacetimeDB reducer's fuel budget (`docs/FLOORS.md`, staged generation).
+const BAND_TILES: usize = 4 << 20;
+
+/// Generation in steps, each bounded in work, so a caller with a per-call budget (a SpacetimeDB
+/// reducer: 120 × 10⁹ instructions) can generate a land of any supported size across calls. The
+/// steps are the macro pass in two halves (relief and rivers; regions, sites, river beds), bands of tile rows, the
+/// connectivity pass, the shore distances, then [`settle::Staged`]'s planner steps. Running them
+/// all in order is [`generate`], so staged and one-shot generation give identical lands.
+pub struct Gen {
+    seed: u64,
+    size: u32,
+    p: LandParams,
+    next: Next,
+    hydro: Option<Box<Hydro>>,
+    work: Option<Box<Work>>,
+    land: Option<Land>,
+    plan: settle::Staged,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Next {
+    Hydro,
+    Macro,
+    Rows(usize),
+    Connect,
+    Shore(usize),
+    Plan,
+    Done,
+}
+
+/// What the tile steps need from the macro pass.
+struct Work {
+    land: Land,
+    rmask: Vec<u8>,
+    fords: Vec<((f32, f32), (f32, f32), f32)>,
+    still: Grid,
+    wet: Grid,
+    beach: Grid,
+    outcrops: Grid,
+    trees: Grid,
+    dirt: Grid,
+    tiles: Vec<u8>,
+    sd: Vec<i8>,
+}
+
+impl Gen {
+    pub fn new(seed: u64, size_m: u32, p: LandParams) -> Self {
+        assert!((256..=MAX_SIDE).contains(&size_m), "land side {size_m} m outside 256..={MAX_SIDE}");
+        Self { seed, size: size_m, p, next: Next::Hydro, hydro: None, work: None, land: None, plan: settle::Staged::default() }
+    }
+
+    fn band_rows(&self) -> usize {
+        (BAND_TILES / self.size as usize).max(1)
+    }
+
+    /// Steps in all, for progress: the macro pass, the bands, connect, shore and the planner.
+    pub fn steps(&self) -> u32 {
+        let bands = (self.size as usize).div_ceil(self.band_rows()) as u32;
+        2 + bands + 3 + self.plan.steps()
+    }
+
+    /// Steps done so far.
+    pub fn done(&self) -> u32 {
+        let bands = (self.size as usize).div_ceil(self.band_rows()) as u32;
+        match self.next {
+            Next::Hydro => 0,
+            Next::Macro => 1,
+            Next::Rows(j) => 2 + (j / self.band_rows()) as u32,
+            Next::Connect => 2 + bands,
+            Next::Shore(k) => 3 + bands + k as u32,
+            Next::Plan => 5 + bands + self.plan.done(),
+            Next::Done => self.steps(),
+        }
+    }
+
+    /// What the next step does.
+    pub fn label(&self) -> String {
+        match self.next {
+            Next::Hydro => "relief, lakes and rivers".into(),
+            Next::Macro => "water, regions and sites".into(),
+            Next::Rows(j) => format!("tiles, rows {j}..{}", (j + self.band_rows()).min(self.size as usize)),
+            Next::Connect => "connectivity".into(),
+            Next::Shore(0) => "shore distances on land".into(),
+            Next::Shore(_) => "shore distances in water".into(),
+            Next::Plan => format!("plan: {}", self.plan.label()),
+            Next::Done => "done".into(),
+        }
+    }
+
+    /// Run the next step; true once the land is complete ([`Gen::into_land`]).
+    pub fn step(&mut self) -> bool {
+        let w = self.size as usize;
+        match self.next {
+            Next::Hydro => {
+                self.hydro = Some(Box::new(hydro_pass(self.seed, self.size, &self.p)));
+                self.next = Next::Macro;
+            }
+            Next::Macro => {
+                self.work = Some(Box::new(macro_pass(*self.hydro.take().expect("hydro pass"), &self.p)));
+                self.next = Next::Rows(0);
+            }
+            Next::Rows(j0) => {
+                let j1 = (j0 + self.band_rows()).min(w);
+                tile_rows(self.work.as_mut().expect("macro pass"), &self.p, j0, j1);
+                self.next = if j1 >= w { Next::Connect } else { Next::Rows(j1) };
+            }
+            Next::Connect => {
+                connect_pass(self.work.as_mut().expect("tiles"), &self.p);
+                self.next = Next::Shore(0);
+            }
+            Next::Shore(k) => {
+                shore_pass(self.work.as_mut().expect("tiles"), k);
+                if k == 0 {
+                    self.next = Next::Shore(1);
+                } else {
+                    self.land = Some(finish_tiles(*self.work.take().expect("tiles")));
+                    self.next = Next::Plan;
+                }
+            }
+            Next::Plan => {
+                let land = self.land.as_mut().expect("land");
+                if self.plan.step(land, &self.p.settlements, self.p.metro.as_ref()) {
+                    self.next = Next::Done;
+                }
+            }
+            Next::Done => {}
+        }
+        self.next == Next::Done
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.next == Next::Done
+    }
+
+    /// The finished land (panics before the last step).
+    pub fn into_land(self) -> Land {
+        assert!(self.next == Next::Done, "land generation is not finished");
+        self.land.expect("land")
+    }
+}
+
+/// The first half of the macro pass, on the `cell_m` grid: relief, lakes, rivers and valleys.
+fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
     let s = size_m as f32;
     let cell = p.cell_m;
     let n = (s / cell).ceil() as usize + 1;
@@ -909,11 +1057,6 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             }
         };
     }
-    let elev_at = |elev: &[f32], x: f32, y: f32| {
-        let i = ((x / cell).round() as isize).clamp(0, n as isize - 1) as usize;
-        let j = ((y / cell).round() as isize).clamp(0, n as isize - 1) as usize;
-        elev[j * n + i]
-    };
     let slope_of = |elev: &[f32], k: usize| {
         let (i, j) = ((k % n) as isize, (k / n) as isize);
         let g = |a: isize, b: isize| elev[(b.clamp(0, n as isize - 1) as usize) * n + a.clamp(0, n as isize - 1) as usize];
@@ -1199,6 +1342,47 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         g.summit = best;
     }
 
+    Hydro { seed, size_m, rng, scale, city, elev, sea, lake_of, lakes, rlevel, acc, river_nodes, ranges, land_km2, max_e }
+}
+
+/// What the macro pass's second half needs from its first.
+struct Hydro {
+    seed: u64,
+    size_m: u32,
+    rng: Rng,
+    scale: f32,
+    city: Option<((f32, f32), f32, f32)>,
+    elev: Vec<f32>,
+    sea: Vec<bool>,
+    lake_of: Vec<u32>,
+    lakes: Vec<Lake>,
+    rlevel: Vec<f32>,
+    acc: Vec<f32>,
+    river_nodes: Vec<Vec<usize>>,
+    ranges: Vec<Range>,
+    land_km2: f32,
+    max_e: f32,
+}
+
+/// The second half of the macro pass: water distances, moisture, regions and sites on the
+/// `cell_m` grid, and the river beds rasterised into a tile mask.
+fn macro_pass(h: Hydro, p: &LandParams) -> Work {
+    let Hydro { seed, size_m, mut rng, scale, city, elev, sea, lake_of, lakes, rlevel, acc, river_nodes, ranges, land_km2, max_e } = h;
+    let s = size_m as f32;
+    let cell = p.cell_m;
+    let n = (s / cell).ceil() as usize + 1;
+    let nn = n * n;
+    let pos = |k: usize| ((k % n) as f32 * cell, (k / n) as f32 * cell);
+    let elev_at = |elev: &[f32], x: f32, y: f32| {
+        let i = ((x / cell).round() as isize).clamp(0, n as isize - 1) as usize;
+        let j = ((y / cell).round() as isize).clamp(0, n as isize - 1) as usize;
+        elev[j * n + i]
+    };
+    let slope_of = |elev: &[f32], k: usize| {
+        let (i, j) = ((k % n) as isize, (k / n) as isize);
+        let g = |a: isize, b: isize| elev[(b.clamp(0, n as isize - 1) as usize) * n + a.clamp(0, n as isize - 1) as usize];
+        ((g(i + 1, j) - g(i - 1, j)) / (2.0 * cell)).d_hypot((g(i, j + 1) - g(i, j - 1)) / (2.0 * cell))
+    };
     // Water sources: level and depth of the nearest water body.
     let mut level = vec![0f32; nn];
     let mut depth = vec![1f32; nn];
@@ -1441,7 +1625,6 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
     // ---- Tiles.
     let w = size_m as usize;
     let tn = w * w;
-    let t: Vec<f32> = (0..tn).map(|k| land.terrain((k % w) as f32 + 0.5, (k / w) as f32 + 0.5)).collect();
 
     // Rivers: smoothed centre lines rasterised with banks; fords at intervals.
     let mut rmask = vec![0u8; tn];
@@ -1490,15 +1673,25 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         beds.push(River { points: pts.iter().map(|q| (q[0], q[1])).collect(), width_m: pts.iter().map(|q| q[2]).collect(), length_m: length, source_m, fords: river_fords });
     }
 
-    // Classify every tile.
-    let mut tiles = vec![Terrain::Grass as u8; tn];
+    Work { land, rmask, fords, still, wet, beach, outcrops, trees, dirt, tiles: vec![Terrain::Grass as u8; tn], sd: Vec::new() }
+}
+
+/// Classify the tiles of rows `j0..j1`. Each tile's slope reads its neighbours' ground, so the
+/// band's ground is computed with a row of margin on each side.
+fn tile_rows(wk: &mut Work, p: &LandParams, j0: usize, j1: usize) {
+    let Work { land, rmask, still, wet, beach, outcrops, trees, dirt, tiles, .. } = wk;
+    let (seed, w) = (land.seed, land.size as usize);
+    let rp = &p.regions;
+    let lo = j0.saturating_sub(1);
+    let hi = j1.min(w - 1);
+    let t: Vec<f32> = (lo * w..(hi + 1) * w).map(|k| land.terrain((k % w) as f32 + 0.5, (k / w) as f32 + 0.5)).collect();
     let rock_slope = 0.85;
     let treeline = rp.treeline_m;
-    for j in 0..w {
+    for j in j0..j1 {
         for i in 0..w {
             let k = j * w + i;
             let (x, y) = (i as f32 + 0.5, j as f32 + 0.5);
-            let h = t[k];
+            let h = t[k - lo * w];
             let st = still.bilinear(x, y);
             let sf = land.surf.bilinear(x, y);
             let c = if rmask[k] == 2 && p.water.dry_rivers {
@@ -1507,7 +1700,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             } else if st > 0.02 && h < sf || rmask[k] == 2 {
                 Terrain::Water
             } else {
-                let tl = |a: usize, b: usize| t[b.min(w - 1) * w + a.min(w - 1)];
+                let tl = |a: usize, b: usize| t[(b.min(w - 1) - lo) * w + a.min(w - 1)];
                 let sx = (tl(i + 1, j) - tl(i.saturating_sub(1), j)) / 2.0;
                 let sy = (tl(i, j + 1) - tl(i, j.saturating_sub(1))) / 2.0;
                 let slope = sx.d_hypot(sy);
@@ -1537,10 +1730,15 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             tiles[k] = c as u8;
         }
     }
-    drop(t);
+}
 
+/// Fords, cleared settlement sites and cave mouths, then the connectivity pass: every walkable
+/// pocket is linked to the main one or closed.
+fn connect_pass(wk: &mut Work, p: &LandParams) {
+    let Work { land, rmask, fords, tiles, .. } = wk;
+    let w = land.size as usize;
     // Fords: a 3 m sand bar across the river.
-    for ((px, py), (dx, dy), half) in &fords {
+    for ((px, py), (dx, dy), half) in fords.iter() {
         let r = half + 3.0;
         for j in (py - r).floor() as i32..=(py + r).ceil() as i32 {
             for i in (px - r).floor() as i32..=(px + r).ceil() as i32 {
@@ -1557,7 +1755,6 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             }
         }
     }
-    drop(rmask);
 
     // Settlements clear their ground; cave mouths sit at the foot of rock.
     let mut sites = std::mem::take(&mut land.sites);
@@ -1608,14 +1805,23 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
     let keep: Vec<usize> = sites.iter().map(|s| (s.y.max(0.0) as usize).min(w - 1) * w + (s.x.max(0.0) as usize).min(w - 1)).collect();
     land.sites = sites;
 
-    let (opened, closed_pockets) = connect(&mut tiles, w, p.min_pocket_tiles, &keep, false);
+    let (opened, closed_pockets) = connect(tiles, w, p.min_pocket_tiles, &keep, false);
     land.opened_tiles = opened;
     land.closed_pockets = closed_pockets;
+    *rmask = Vec::new();
+}
 
-    // Signed distance to the water's edge.
+/// Signed distance to the water's edge: on land (`pass` 0), then in the water (1).
+fn shore_pass(wk: &mut Work, pass: usize) {
+    let Work { land, tiles, sd, .. } = wk;
+    let w = land.size as usize;
+    let tn = w * w;
+    if sd.is_empty() {
+        *sd = vec![0i8; tn];
+    }
     let mut d = vec![0f32; tn];
-    let mut sd = vec![0i8; tn];
-    for (pass, inside) in [(0, false), (1, true)] {
+    {
+        let inside = pass == 1;
         for k in 0..tn {
             let is_water = tiles[k] == Terrain::Water as u8;
             d[k] = if is_water != inside { 0.0 } else { f32::INFINITY };
@@ -1630,9 +1836,14 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             }
         }
     }
+}
+
+/// The finished tile map and shore distances in the land.
+fn finish_tiles(wk: Work) -> Land {
+    let Work { mut land, tiles, sd, .. } = wk;
+    let size_m = land.size;
     land.sd = sd;
     land.map = Map { w: size_m, h: size_m, tiles, blocked: Default::default(), opaque: Default::default() };
-    settle::plan(&mut land, &p.settlements, p.metro.as_ref());
     land
 }
 

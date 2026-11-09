@@ -5262,4 +5262,6 @@ def main():
             json.dump(dict(style=a.style, kind=a.kind, models=records), f, indent=1)
 
 
-main()
+if __name__ == "__main__":
+    # city.py imports this module for its helpers.
+    main()
