@@ -1,5 +1,18 @@
 # Internal mind validation
 
+## 2026-11-09 town life layer 2, phase 1 (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `14f3a72` plus the uncommitted town life layer 2 phase 1 change (docs/TOWN_LIFE.md, "Layer 2"): the `woken`, `prior` and `prior_head` tables, the `wakes` and `woken_ring` laws. Free tier only; no model calls.
+
+- `wake` (new case, island): `minds-wake-203130` failed (the line arriving while the woken resident deliberated is left to that deliberation; the fixture answered only through talk), `minds-wake-203416` failed (the answer comes from the think step's `say`), `minds-wake-203552` failed (no-store projection does not replace places; the case now sends the replacing `mind_update` itself), `minds-wake-203725` pass.
+- Full suite `minds-l2-210035`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight and wake pass; consolidation is its known XFAIL.
+
+## 2026-11-09 the Rhai boundary, rhai-1 (dev-box)
+
+- **Setup:** private container `rhai-stdb` (2.14.1), fake model, no paid calls. The mind compiles the installed script through the rules crate for `skill_io` and the combat shapes, so this checks that the new compile (analysis, name tables) serves it.
+- `minds-rhai1-184757` on `1bc1327`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover and sight pass. Consolidation is its known XFAIL.
+- `minds-rhai1-sight-192712` on `33e3185` (main merged): sight passes.
+
 ## 2026-11-09 takeover on the scoped default (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `acbbda7` plus the uncommitted change that lands the perception client and makes `scoped` the default build (docs/PERCEPTION.md, "Third change"). Fake model only; private `CARGO_TARGET_DIR`s; every scratch database answered 404 after cleanup. `minds-sd-182208 --case takeover` with `CARGO_TARGET_DIR` private: pass (takeover after 30.0 s, the held graph kept and reinstalled, a reply in flight refused); the mind's cargo tests 49 passed. The driver now runs the binary it built in `CARGO_TARGET_DIR` (`source-hashes.json` names it); before, it ran `living/target/release/living-mind` whatever it had built.
@@ -10,7 +23,7 @@ On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81
 
 ## 2026-11-09 `minds-20261109-110024` (DGX Spark, trial container) and trials
 
-The suite ran on the DGX Spark against the trial service (`VERIFY_STDB_CONTAINER=slop-trials-stdb VERIFY_STDB_PORT=3320`; the Spark's `sao-living_spacetimedb_1` belongs to other work), on `trials-1` before the town-life merge. Eight cases pass; `consolidation` stays XFAIL (the Neo4j-off known issue). Evidence: `.local/living/verify/minds-20261109-110024*/` in `~/dev/slop-trials` on the Spark.
+The suite ran on the DGX Spark against the trial service (`LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320`; the Spark's `sao-living_spacetimedb_1` belongs to other work), on `trials-1` before the town-life merge. Eight cases pass; `consolidation` stays XFAIL (the Neo4j-off known issue). Evidence: `.local/living/verify/minds-20261109-110024*/` in `~/dev/slop-trials` on the Spark.
 
 Trials (`living/tools/trials.py`, [trials](../features/trials.md)) were driven by fake batches `dry1`–`dry8`: setup and timeline steps, sampling, journal copy, death stop, `resume` after the runner was killed (minds adopted by pid and start time, clocks kept), a killed mind restarted by a life run, the same model routing as the real file in fake mode (wolves: impulse `ministral-8b`, compile and consolidation `ministral-14b`; people: the variant's profile), a wolf pack as the subject, and `clean` (SQL 404, Neo4j nodes removed). `spawn_newcomer` was refused to an anonymous caller (`admin only`). Real batches `b1`–`b4` and life runs `l1`–`l3` are in `docs/TRIALS.md`.
 
@@ -106,3 +119,8 @@ Official [documentation](https://spacetimedb.com/docs/), [subscriptions](https:/
 Each case used one mind connection, one selected adult and a local fake server. Reconnect briefly replaced its mind connection. The default seeded world continued ticking except for its short update pause. Initial subscription populations are retained in `cleanup-audit.json`; scene populations and actual requests remain in `people.json`, doctor output and fake logs. Player scenes place one player beside the actor. Scripted action rates vary by case; fake concurrency is four with no rate limit. No observer or full export ran. The LLM suite and focused reconnect probes overlapped some attempts on separate databases. No resource, latency, scale or long-duration claim follows from these scenes.
 
 Frontmatter, Python syntax, relative links, executable scripts and existing Claude/Cursor discovery links were checked. Codex and Mistral use the shared `.agents/skills/` tree. Interactive instruction loading in the other runtimes remains unverified. Paid model behavior, a module-induced disconnect, full LoD gap expiry, urgent live exceptions, off-stage talk/consolidation pacing, infant/newborn minds and store-dependent tests remain unverified. Store-backed projections and persistence belong to `verify-knowledge`; transport belongs to `verify-llm`. Other neighbouring checks are named in `SKILL.md`.
+
+
+## 2026-11-09, branch harness-1 (animals, night, jev)
+
+Private container `harness-stdb`. New cases: `night` and `jev` passed in `minds-h1-204530`; `animals` passed in `minds-h2-210016` after two fixes to the case (dawn reasons, since installing a graph counts as having just thought; the herd gathered in the open) and one to the fake server (a distinctive prompt wins over a purpose-named effort). The earlier cases were not rerun on this branch; the mind changes they touch (model routing through mixes, the `reorganize` purpose) are covered by verify-llm.

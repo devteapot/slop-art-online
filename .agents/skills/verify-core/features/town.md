@@ -26,3 +26,11 @@ Launch an island run (`$V launch --run core-<x> --seed island`) and drive `scrip
 - The natural weather is held dry for the run; without that a natural spell can rain on any scene.
 - `aside` needs a resident standing where at most 17 of the 25 surrounding tiles are walkable with a clear 6-tile approach; it retries for 30 s and reports when none is found.
 - Scenes assert shares and kinds, not exact counts: who stands where depends on the RNG and the hour the run started.
+
+## Layer 2: woken residents and their rings
+
+Since 2026-11-09 (docs/TOWN_LIFE.md, "Layer 2"). Rules side only; the player's engagements are verify-player's [waking](../../verify-player/features/waking.md), the minds' side verify-minds' `wake` case.
+
+- **Laws** (`living/scripts/skills.rhai`): `wakes("<what>:<by>")` (1 wakes, 0 not; what is `speech`, a skill aimed at the resident, `hurt` or `theft`; by `player`, `mind` or `instinct`) and `woken_ring("slots" | "repeat_s" | "sighted_s")`. Read through `Scripts::num_of`, cached per script revision. Without either law nobody wakes and no ring is kept, and `minds_near` leaves instinct-only people out as before.
+- **Rings:** `perceive::percept` sends an instinct-only person's percept (stage ≥ 1) to `woken::remember`: the slot `seq % slots` of `prior` is written in place, `prior_head.seq` counts; a repeat of the last slot within `repeat_s` bumps its `times`. Its behaviour is unchanged (no `common::wake`, no deliberation).
+- **Measuring:** `scripts/wake_many.py --run <run> --count 20` wakes residents the ordinary way (the player walks up to residents keeping their posts and speaks to them) for a tick measurement; the 2026-11-09 measurement drove it from a back-to-back bench of three island arms (docs/TOWN_LIFE.md, "Phase 1 measurements").

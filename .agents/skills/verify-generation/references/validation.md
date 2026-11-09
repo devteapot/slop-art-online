@@ -1,6 +1,15 @@
 # Validation record (generation)
 
 
+## 2026-11-09 the Rhai boundary, rhai-1 (dev-box)
+
+- **Setup:** private container `rhai-stdb` (2.14.1). The seed reads `max_hp` and `regrow` through the name tables now read at compile.
+- **`generation-rhai1-195746`** (`--feature all`, on `33e3185`, `rhai-1` with `origin/main` `2a64837` merged): 20 of 22 pass.
+  - The island fails "Fernhollow memberships" and "Reedmoor memberships". This is the known old-age flake: residents 129 and 182 died right after creation.
+  - The megacity fails "wolf count including dead founders": 5 against 8. All 5 are alive with contiguous ids, so the other 3 were never placed. `seed.rs` looks for a pack's spot in 200 random tiles of forest and stops when none is found; a 2 km city has little forest.
+- **`generation-rhai1base-200854`** (`--feature worlds`, on `origin/main` `2a64837`): the same megacity failure (5 wolves), and "Lanternquay memberships" on the island.
+- **Conclusion:** both failures are on main and not from this change. The megacity's wolf placement is a seed or generator finding, left for its owner.
+
 ## 2026-11-09 floors: the megacity land and native digests (dev-box)
 
 Own scratch container `slop-floors-stdb` (image `v2.14.1`, port 3330) through a `docker` name shim (`~/floors-shim`). The harness's hard-coded `127.0.0.1:3300` was patched to 3330 in the dev-box worktree only, not committed. Worktree `~/dev/slop-floors`, branch `floors-1` from `b7cf7fb`, uncommitted. The driver gained the derived seed `floor-megacity-2k` (`living/seeds/floor-megacity.json` at 2048 m, written into the run's directory and published through an absolute `--seed`), five city checks, and a native digest cross-check for every land seed (`floor_preview`).

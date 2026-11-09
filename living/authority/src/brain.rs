@@ -164,6 +164,8 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     if key == v.rate_key {
         return Some(v);
     }
+    // Profiled: what a recompute costs (the facts and the law), and how many there are.
+    let _timer = common::span("needs.rates");
     let facts = act::facts(ctx, me.id, now);
     let sc = common::scripts(ctx);
     let hour = common::hour(w, now);
@@ -755,6 +757,11 @@ impl<'a> Ev<'a> {
                 .filter(self.me.id)
                 .find(|j| j.key.eq_ignore_ascii_case(&b.key))
                 .map_or(false, |j| j.value > b.above),
+            Cond::Judged(j) => {
+                let now = self.now;
+                let row = self.ctx.db.judged().actor().filter(self.me.id).find(|x| x.q.eq_ignore_ascii_case(&j.q) && x.expires_ms > now);
+                j.test(row.as_ref().map(|r| (r.value, r.choice.as_str())))
+            }
             Cond::Can(a) => {
                 let target = match &a.target {
                     Some(t) => match self.sensed(t) {

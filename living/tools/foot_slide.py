@@ -10,6 +10,22 @@ the share of toe-frames planted, the mean and median slide speed (m/s and as a s
 body's speed), the drift over each whole contact (median and 90th percentile, cm), and the
 cadence: steps a second (both feet's contacts over the clip's time) and the stride (metres
 walked per step). The first `--skip` seconds (accelerating, crossfades) are left out.
+
+`--floors` prints the toe's and ankle's height over the ground on flat ground (a flat run);
+`--gap TOE:ANKLE` then reports, for another run (slopes, stairs), the supporting foot's gap to
+the ground under it: the lower of toe and ankle over the ground under each, less those heights
+(median signed and absolute, p90 absolute, cm; shares more than 2 cm into the ground or above
+it). `--stairs X,Z,DOWNX,DOWNZ,FLOOR` measures against a flight's treads instead of its ramp.
+
+`--bins 0.5` reports by the body's speed instead of by clip (for speed ramps, `LIVING_GAME_RAMP`,
+where clips change or blend), in bands of that width. It needs no planted-foot guess: in each
+frame the supporting foot is the slower of the feet within 5 cm of the floor (none: flight), and
+its horizontal speed is the slide (median, mean, p90, m/s, and as a share of the body's speed).
+A contact is a run of frames with the same supporting foot; its drift is how far that foot moved
+(cm). Steps a second count toe touchdowns (a toe coming within 3 cm of the floor after rising
+above 5 cm); step jitter is the median change between one step's duration and the next (s): a
+crossfade between unaligned cycles shows as stutter. Contacts and touchdowns belong to the band
+of the body's speed when they start. `--json` writes the table.
 """
 
 from __future__ import annotations
@@ -22,6 +38,9 @@ import sys
 from collections import defaultdict
 
 PLANT_M = 0.03
+LIFT_M = 0.05
+# A foot within this of the floor can be the supporting one (`--bins`).
+SUPPORT_M = 0.05
 MOVING = 0.3
 # A contact ends after its toe has been up this long (s).
 GAP_S = 0.08
@@ -74,7 +93,15 @@ def main() -> None:
     ap.add_argument("track")
     ap.add_argument("--skip", type=float, default=3.0)
     ap.add_argument("--json", default="")
+    ap.add_argument("--bins", type=float, default=0.0)
+    ap.add_argument("--gap", default="", help="TOE:ANKLE floors (m above the ground, from a flat-ground run's --floors)")
+    ap.add_argument("--floors", action="store_true")
+    ap.add_argument("--stairs", default="", help="X,Z,DOWNX,DOWNZ,FLOOR: measure against that flight's treads (17 rising 3 m over 5 m, buildings.py prop_stairs)")
     a = ap.parse_args()
+    if a.floors or a.gap:
+        return gaps(a)
+    if a.bins > 0:
+        return by_speed(a)
     rows = [json.loads(line) for line in open(a.track) if line.strip()]
     if not rows:
         sys.exit("no frames")
@@ -143,6 +170,140 @@ def main() -> None:
         }
     for clip, s in out.items():
         print(f"{clip:11s} {s['seconds']} s, body {s['body_mps']} m/s; cycle {s['cycle_s']} s ({s['steps_per_s']} steps/s, {s['step_m']} m a step); planted {s['planted_share']:.0%}; slide mean {s['slide_mps_mean']} m/s, median {s['slide_mps_median']} m/s ({s['slide_of_body_median']} of body); drift per contact median {s['drift_cm_median']} cm, p90 {s['drift_cm_p90']} cm over {s['contacts']} contacts")
+    if a.json:
+        json.dump(out, open(a.json, "w"), indent=1)
+
+
+def gaps(a) -> None:
+    """Foot-to-ground gap of the supporting foot (the slower one) while moving: the lower of its
+    toe's and its ankle's height over the ground under each, less that joint's height on flat
+    ground (`--floors` prints them from a flat run; `--gap TOE:ANKLE` uses them)."""
+    rows = [json.loads(line) for line in open(a.track) if line.strip()]
+    t0 = rows[0]["t"]
+    rows = [r for r in rows if r["t"] - t0 >= a.skip and "la" in r]
+    if a.stairs:
+        cx, cz, dx, dz, floor = (float(v) for v in a.stairs.split(","))
+        n = math.hypot(dx, dz)
+        dx, dz = dx / n, dz / n
+        for r in rows:
+            for k in ("l", "r", "la", "ra"):
+                x, z = r[k][0] - cx, r[k][2] - cz
+                u = 2.5 - (x * dx + z * dz)
+                if abs(-x * dz + z * dx) <= 1.2 and 0 <= u < 5.0:
+                    r[k][3] = floor + (math.floor(u * 17 / 5) + 1) * 3 / 17
+    pairs = []
+    for prev, cur in zip(rows, rows[1:]):
+        dt = cur["t"] - prev["t"]
+        if 0 < dt <= 0.1:
+            bv = math.dist((prev["root"][0], prev["root"][2]), (cur["root"][0], cur["root"][2])) / dt
+            if bv > MOVING:
+                pairs.append((prev, cur, dt, bv))
+    up = lambda r, k: r[k][1] - r[k][3]
+    if a.floors:
+        h = sorted(up(c, k) for _, c, _, _ in pairs for k in "lr")
+        g = sorted(up(c, k) for _, c, _, _ in pairs for k in ("la", "ra"))
+        print(f"{h[int(len(h) * 0.02)]:.4f}:{g[int(len(g) * 0.02)]:.4f}")
+        return
+    toe_f, ankle_f = (float(x) for x in a.gap.split(":"))
+    gap = []
+    for prev, cur, dt, bv in pairs:
+        speed = {s: math.dist((prev[s][0], prev[s][2]), (cur[s][0], cur[s][2])) / dt for s in "lr"}
+        s = min("lr", key=lambda x: speed[x])
+        gap.append(min(up(cur, s) - toe_f, up(cur, s + "a") - ankle_f))
+    ab = sorted(abs(x) for x in gap)
+    out = {
+        "frames": len(gap),
+        "gap_cm_median": round(100 * statistics.median(gap), 1),
+        "abs_gap_cm_median": round(100 * ab[len(ab) // 2], 1),
+        "abs_gap_cm_p90": round(100 * ab[int(len(ab) * 0.9)], 1),
+        "into_ground_over_2cm": round(sum(x < -0.02 for x in gap) / len(gap), 3),
+        "floating_over_2cm": round(sum(x > 0.02 for x in gap) / len(gap), 3),
+    }
+    print(json.dumps(out))
+    if a.json:
+        json.dump(out, open(a.json, "w"), indent=1)
+
+
+def by_speed(a) -> None:
+    """The ramp report: per band of body speed, the supporting foot's slide and the cadence."""
+    rows = [json.loads(line) for line in open(a.track) if line.strip()]
+    t0 = rows[0]["t"]
+    rows = [r for r in rows if r["t"] - t0 >= a.skip]
+    pairs = []
+    for prev, cur in zip(rows, rows[1:]):
+        dt = cur["t"] - prev["t"]
+        if 0 < dt <= 0.1:
+            bv = math.dist((prev["root"][0], prev["root"][2]), (cur["root"][0], cur["root"][2])) / dt
+            pairs.append((prev, cur, dt, bv))
+    moving = [p for p in pairs if p[3] > MOVING]
+    if len(moving) < 20:
+        sys.exit("too few moving frames")
+    # One floor for both toes (2nd percentile of toe height over the ground while moving).
+    h = sorted(c[k][1] - c[k][3] for _, c, _, _ in moving for k in "lr")
+    floor = h[max(0, int(len(h) * 0.02))]
+    lift = lambda r, side: r[side][1] - r[side][3] - floor
+    band = lambda v: int(v / a.bins)
+    stats = defaultdict(lambda: {"secs": 0.0, "support": 0.0, "slides": [], "rel": [], "drifts": [], "touch": []})
+    seg = None  # (side, start position, band, start time)
+    for prev, cur, dt, bv in pairs:
+        if bv <= MOVING:
+            seg = None
+            continue
+        st = stats[band(bv)]
+        st["secs"] += dt
+        low = [side for side in "lr" if lift(prev, side) <= SUPPORT_M and lift(cur, side) <= SUPPORT_M]
+        if not low:
+            seg = None  # flight
+            continue
+        speed = {side: math.dist((prev[side][0], prev[side][2]), (cur[side][0], cur[side][2])) / dt for side in low}
+        side = min(low, key=lambda x: speed[x])
+        st["support"] += dt
+        st["slides"].append(speed[side])
+        st["rel"].append(speed[side] / bv)
+        if seg is None or seg[0] != side:
+            if seg is not None and cur["t"] - seg[3] >= 0.1:
+                stats[seg[2]]["drifts"].append(math.dist(seg[1], seg[4]))
+            seg = [side, (prev[side][0], prev[side][2]), band(bv), prev["t"], None]
+        seg[4] = (cur[side][0], cur[side][2])
+    # Steps: a touchdown is a toe coming within PLANT_M of the floor after it rose above LIFT_M
+    # (hysteresis, so a toe skimming the floor is one step).
+    for side in "lr":
+        up = False
+        for prev, cur, dt, bv in pairs:
+            hh = lift(cur, side)
+            if hh > LIFT_M:
+                up = True
+            elif up and hh <= PLANT_M:
+                up = False
+                if bv > MOVING:
+                    stats[band(bv)]["touch"].append(cur["t"])
+    touches = sorted(t for st in stats.values() for t in st["touch"])
+    out = {}
+    for b in sorted(stats):
+        st = stats[b]
+        if st["secs"] < 0.5 or not st["slides"]:
+            continue
+        sl, rel, dr = sorted(st["slides"]), sorted(st["rel"]), sorted(st["drifts"])
+        mine = set(st["touch"])
+        idx = [i for i, t in enumerate(touches) if t in mine]
+        steps = [touches[i] - touches[i - 1] for i in idx if i > 0 and touches[i] - touches[i - 1] < 1.2]
+        jit = [abs(steps[i] - steps[i - 1]) for i in range(1, len(steps))]
+        out[f"{b * a.bins:.1f}-{(b + 1) * a.bins:.1f}"] = {
+            "seconds": round(st["secs"], 1),
+            "support_share": round(st["support"] / st["secs"], 3),
+            "slide_mps_median": round(statistics.median(sl), 3),
+            "slide_mps_mean": round(statistics.mean(sl), 3),
+            "slide_mps_p90": round(sl[int(len(sl) * 0.9)], 3),
+            "slide_of_body_median": round(statistics.median(rel), 3),
+            "contacts": len(dr),
+            "drift_cm_median": round(100 * dr[len(dr) // 2], 1) if dr else None,
+            "drift_cm_p90": round(100 * dr[int(len(dr) * 0.9)], 1) if dr else None,
+            "steps_per_s": round(len(st["touch"]) / st["secs"], 2),
+            "step_jitter_s": round(statistics.median(jit), 3) if jit else None,
+        }
+    print(f"{'m/s':9s} {'secs':>5s} {'supp':>5s} {'slide med':>9s} {'mean':>6s} {'p90':>6s} {'/body':>6s} {'drift med':>9s} {'p90':>6s} {'n':>4s} {'steps/s':>7s} {'jitter':>6s}")
+    for k, v in out.items():
+        print(f"{k:9s} {v['seconds']:5.1f} {v['support_share']:5.0%} {v['slide_mps_median']:9.3f} {v['slide_mps_mean']:6.3f} {v['slide_mps_p90']:6.3f} {v['slide_of_body_median']:6.3f} {v['drift_cm_median'] or 0:9.1f} {v['drift_cm_p90'] or 0:6.1f} {v['contacts']:4d} {v['steps_per_s']:7.2f} {v['step_jitter_s'] or 0:6.3f}")
     if a.json:
         json.dump(out, open(a.json, "w"), indent=1)
 

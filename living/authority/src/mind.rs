@@ -49,6 +49,16 @@ pub struct JudgmentIn {
     pub why: String,
 }
 
+/// One typed judgment from the mind service (see `Judged`).
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct JudgedIn {
+    pub q: String,
+    pub value: f32,
+    pub choice: String,
+    /// How long it holds from now, in milliseconds (at most ten minutes).
+    pub ttl_ms: u64,
+}
+
 #[derive(SpacetimeType, Clone, Debug)]
 pub struct PlaceIn {
     pub name: String,
@@ -418,6 +428,38 @@ pub fn mind_skip(ctx: &ReducerContext, actor: u32, seen_ms: u64, thought: Though
     Ok(())
 }
 
+/// Cache judgments the character's mind refreshed (Jev). Upserted by question; a character
+/// holds at most `JUDGED_PER_ACTOR`. Only the character's controller may write them.
+#[spacetimedb::reducer]
+pub fn mind_judged(ctx: &ReducerContext, actor: u32, items: Vec<JudgedIn>) -> Result<(), String> {
+    authorize(ctx, actor)?;
+    let now = common::now_ms(ctx);
+    for j in items.into_iter().take(JUDGED_PER_ACTOR) {
+        let q = j.q.trim().to_lowercase();
+        if q.is_empty() || q.len() > 64 || !j.value.is_finite() {
+            return Err("judged: q must be 1..=64 bytes and value finite".into());
+        }
+        let expires_ms = now + j.ttl_ms.min(600_000);
+        let choice: String = j.choice.chars().take(64).collect();
+        match ctx.db.judged().actor().filter(actor).find(|x| x.q == q) {
+            Some(mut row) => {
+                row.value = j.value;
+                row.choice = choice;
+                row.expires_ms = expires_ms;
+                row.updated_ms = now;
+                ctx.db.judged().id().update(row);
+            }
+            None => {
+                if ctx.db.judged().actor().filter(actor).count() >= JUDGED_PER_ACTOR {
+                    return Err(format!("judged: at most {JUDGED_PER_ACTOR} per character"));
+                }
+                ctx.db.judged().insert(Judged { id: 0, actor, q, value: j.value, choice, expires_ms, updated_ms: now });
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Record that the mind has integrated this character's experiences up to `upto`; the
 /// integrated experiences are removed (the inbox is transactional).
 #[spacetimedb::reducer]
@@ -459,7 +501,10 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
         for j in ctx.db.judgment().actor().filter(actor).filter(|j| !keep.contains(&j.key.to_lowercase())).map(|j| j.id).collect::<Vec<_>>() {
             ctx.db.judgment().id().delete(j);
         }
-        let keep: Vec<String> = update.places.iter().map(|p| p.name.trim().to_lowercase()).collect();
+        // A woken resident's places from before its mind (its work, square, evening spot) are
+        // world facts its starting ways walk to: kept unless the mind names them itself.
+        let mut keep: Vec<String> = update.places.iter().map(|p| p.name.trim().to_lowercase()).collect();
+        keep.extend(crate::woken::kept_places(ctx, actor));
         for p in ctx.db.place().actor().filter(actor).filter(|p| !keep.contains(&p.name.to_lowercase())).map(|p| p.id).collect::<Vec<_>>() {
             ctx.db.place().id().delete(p);
         }

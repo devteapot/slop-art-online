@@ -706,6 +706,11 @@ fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), Stri
     }
     act.ends_ms = now + dur.max(100);
     let id = act.id;
+    // An act aimed at someone engages them as it starts (a lesson, a trade, a blow): an
+    // instinct-only resident may wake into a mind (the `wakes` law).
+    if act.target.class == 3 && act.target.id as u32 != id {
+        crate::woken::engage(ctx, act.target.id as u32, id, &act.skill, now);
+    }
     let shape = shape_of(&sc, &act.skill);
     if shape.is_some_and(|s| s.timed) {
         // The windup starts: the cooldown runs, others see it coming, the use is accepted.
@@ -1137,6 +1142,10 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                         _ => false,
                     };
                     if s.owner != 0 && s.owner != me && !same_people(s.owner, me) {
+                        let owner_sees = ctx.db.body().id().find(s.owner).is_some_and(|b| crate::perception::sees(ctx, s.owner, pos(&b, now), at, &common::world(ctx), &common::map(ctx), now));
+                        if owner_sees {
+                            crate::woken::engage(ctx, s.owner, me, "theft", now);
+                        }
                         witnessed(ctx, now, at, "took", me, s.owner, &format!("{{a}} took {qty} {item} from {{b}}'s {}", s.kind), 0.5, &[me]);
                         if let Some(owner) = ctx.db.character().id().find(s.owner) {
                             if owner.alive && ctx.db.body().id().find(owner.id).map_or(false, |b| dist(pos(&b, now), at) <= living_rules::SIGHT) {
@@ -1704,8 +1713,10 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.experience().observer().delete(id);
     ctx.db.place().actor().delete(id);
     ctx.db.judgment().actor().delete(id);
+    ctx.db.judged().actor().delete(id);
     ctx.db.mind_cursor().actor().delete(id);
     ctx.db.act_queue().actor().delete(id);
+    crate::woken::forget_dead(ctx, id);
     for a in ctx.db.acquaintance().observer().filter(id).map(|a| a.id).collect::<Vec<_>>() {
         ctx.db.acquaintance().id().delete(a);
     }
@@ -1744,6 +1755,7 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
 /// health the victim dies. `skill` is the move that dealt it. Returns what came of it, in
 /// words.
 pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, skill: &str, from: (f32, f32), now: u64) -> String {
+    crate::woken::engage(ctx, victim, attacker, "hurt", now);
     let Some(mut v) = ctx.db.vitals().id().find(victim) else { return "they are gone".into() };
     let Some(vc) = ctx.db.character().id().find(victim) else { return "they are gone".into() };
     if !vc.alive {

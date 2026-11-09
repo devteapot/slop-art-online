@@ -49,6 +49,48 @@ pub(super) fn techniques_in(text: &str) -> Vec<&'static str> {
     living_rules::catalog::TECHNIQUES.iter().map(|t| t.name).filter(|n| words.iter().any(|w| w == n)).collect()
 }
 
+/// Token budgets for recalled text by call (`LIVING_RECALL_TOKENS`, default `decide=800`;
+/// `decide` covers think and compile, the others are `consolidate`, `animal` and `talk`;
+/// `off` for none). No entry: no budget beyond the counts. On the aske-coast journals a
+/// decision's recall was about 1,200 tokens of which the reply used about a fifth, and use
+/// barely depends on activation rank (docs/MIND_HARNESS.md, item 5).
+pub(super) fn recall_tokens(what: &str) -> Option<usize> {
+    static BUDGETS: std::sync::OnceLock<std::collections::HashMap<String, usize>> = std::sync::OnceLock::new();
+    BUDGETS
+        .get_or_init(|| {
+            std::env::var("LIVING_RECALL_TOKENS")
+                .unwrap_or_else(|_| "decide=800".into())
+                .split(',')
+                .filter_map(|kv| kv.split_once('=').and_then(|(k, v)| Some((k.trim().to_string(), v.trim().parse().ok()?))))
+                .collect()
+        })
+        .get(what)
+        .copied()
+}
+
+/// Keep recalled lines in the order they came to mind (beliefs by activation, then memories)
+/// while they fit the budget (tokens estimated as characters / 3, the ratio GLM Flash billed on
+/// these prompts). A line that does not fit is dropped and the rest are still tried.
+pub(super) fn within_tokens(mind: Vec<String>, memories: Vec<String>, tokens: Option<usize>) -> (Vec<String>, Vec<String>) {
+    let Some(tokens) = tokens else { return (mind, memories) };
+    let mut left = tokens * 3;
+    let mut keep = |v: Vec<String>| -> Vec<String> {
+        v.into_iter()
+            .filter(|l| {
+                let n = l.len() + 3;
+                let fits = n <= left;
+                if fits {
+                    left -= n;
+                }
+                fits
+            })
+            .collect()
+    };
+    let mind = keep(mind);
+    let memories = keep(memories);
+    (mind, memories)
+}
+
 impl Minds {
     /// People named in a text (by their names as words), for cues.
     pub(super) fn named_people(&self, text: &str) -> Vec<u32> {
@@ -161,7 +203,7 @@ impl Minds {
     }
 
     /// Recall from the character's mind and render it for a prompt.
-    pub(super) async fn recall_for(&self, actor: u32, cues: &Cues, budget: usize, mem_budget: usize) -> Recall {
+    pub(super) async fn recall_for(&self, actor: u32, cues: &Cues, budget: usize, mem_budget: usize, what: &str) -> Recall {
         let Some(store) = &self.store else { return Recall { judgments: self.judgments(actor), ..Default::default() } };
         let fmt = self.fmt_time();
         let r = match store.recall(actor, cues, budget, mem_budget).await {
@@ -185,12 +227,13 @@ impl Minds {
         if let Err(e) = store.rehearse(actor, &r.rehearse).await {
             log::warn!("rehearsal for {}: {e:#}", self.name(actor));
         }
-        let mind = r.facts.iter().map(|f| memory::render(f, &fmt)).collect();
-        let memories = r
+        let mind: Vec<String> = r.facts.iter().map(|f| memory::render(f, &fmt)).collect();
+        let memories: Vec<String> = r
             .memories
             .iter()
             .map(|(exp, t, gist)| if memory::is_authored_memory(*exp) { format!("[before all this] {gist}") } else { format!("[{}] {gist} (experience {exp})", fmt(*t)) })
             .collect();
+        let (mind, memories) = within_tokens(mind, memories, recall_tokens(what));
         let cued_stances = self
             .conn
             .db
@@ -238,5 +281,16 @@ mod tests {
         assert_eq!(super::techniques_in("you don't know how to cook (cooking: learn it from someone who knows it)"), vec!["cooking"]);
         assert_eq!(super::techniques_in("Ada taught you Fire."), vec!["fire"]);
         assert!(super::techniques_in("by the campfire, firewood stacked").is_empty());
+    }
+
+    #[test]
+    fn recall_keeps_what_came_to_mind_first_within_the_budget() {
+        let mind: Vec<String> = (0..5).map(|i| format!("{i}").repeat(27)).collect();
+        let memories = vec!["m".repeat(57)];
+        let (m, mem) = super::within_tokens(mind.clone(), memories.clone(), Some(30));
+        assert_eq!(m, mind[..3].to_vec(), "three 30-character lines fill 30 tokens");
+        assert!(mem.is_empty());
+        let (m, mem) = super::within_tokens(mind.clone(), memories.clone(), None);
+        assert_eq!((m.len(), mem.len()), (5, 1), "no budget, no cut");
     }
 }

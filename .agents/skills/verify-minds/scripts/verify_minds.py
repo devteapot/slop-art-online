@@ -19,7 +19,7 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight')
+         'takeover', 'sight', 'wake', 'animals', 'night', 'jev')
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
 UNWALKABLE = {2, 4, 7}      # water, rock, wall
 
@@ -101,10 +101,14 @@ def wall_spots(run):
 
 
 def run_case(run, case):
+    if case in ('animals', 'night', 'jev'):
+        return {'animals': animals_case, 'night': night_case, 'jev': jev_case}[case](run)
     if case == 'takeover':
         return takeover_case(run)
     if case == 'sight':
         return sight_case(run)
+    if case == 'wake':
+        return wake_case(run)
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -455,6 +459,173 @@ def sight_case(run):
             'hidden': names.get(other), 'open': names.get(third)}
 
 
+def animals_case(run):
+    """Cheaper animal minds (LIVING_ANIMAL_MINDS=salient,choose,pack; mind/animal.rs): one deer
+    picks one of a few options in one call and the graph built from it is installed; the deer it
+    sees reuse that decision without a call (pack); asked again with nothing new, it lives by
+    instinct without a call (salient)."""
+    run.harness('launch')
+    run.harness('doctor')
+    person = next(p for p in sorted(run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'), key=lambda p: p['id']) if p['alive'] and p['stage'] == 2)
+    deer = [d['id'] for d in sorted(run.sql("SELECT * FROM character WHERE kind = 'deer'", 'deer'), key=lambda d: d['id']) if d['alive'] and d['stage'] == 2][:3]
+    assert len(deer) == 3
+    # The herd stays where the lead deer grazes (in the open); the person comes to them.
+    at = run.sql(f"SELECT x, y FROM body WHERE id = {deer[0]}", 'lead-at')[0]
+    run.admin('set_behavior', person['id'], json.dumps({'wait': 300}))
+    run.admin('place_at', person['id'], at['x'] + 3, at['y'])
+    for i, d in enumerate(deer):
+        run.admin('set_behavior', d, json.dumps({'wait': 300}))
+        run.admin('place_at', d, at['x'] + (i % 2), at['y'] + (i // 2))
+    time.sleep(1.0)
+    models = model(run, {})
+    run.start(models, deer, extra_env={'LIVING_ANIMAL_MINDS': 'salient,choose,pack', 'LIVING_ANIMAL_PACK_S': '120'})
+    detail = lambda t: json.loads(t['detail']) if t['detail'] else {}
+    # Installing a graph counts as having just thought, and within its species' think_min_s
+    # (240 s) the authority asks an animal only for urgent reasons; dawn is one, and it is not
+    # news to the animal's salience check.
+    ask = lambda d, marker: run.admin('set_behavior', d, json.dumps({'think': f'Dawn of day 2. verify {marker}'}))
+    lead, *rest = deer
+    ask(lead, 'animal-lead')
+    first = run.wait(lambda: [t for t in run.thoughts(lead, 'lead-thoughts') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'choose'], 'a chosen option', 60)[0]
+    d0 = detail(first)
+    assert d0['valid_pick'] and len(d0['options']) >= 3 and set(d0['pack']) >= set(rest), d0
+    brain = run.sql(f'SELECT * FROM brain WHERE id = {lead}', 'lead-brain')[0]
+    assert brain['source'] == 'mind' or d0['options'][d0['pick']].startswith('carry on'), brain
+    for d in rest:
+        ask(d, 'animal-member')
+    shared_ = {d: run.wait(lambda d=d: [t for t in run.thoughts(d, f'member-{d}') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'pack'], f'pack decision for {d}', 60)[0] for d in rest}
+    assert all(detail(t)['by'] == lead for t in shared_.values())
+    chosen = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']
+    compiled = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
+    assert len(chosen) == 1 and not compiled, (len(chosen), len(compiled))
+    ask(lead, 'animal-again')
+    run.wait(lambda: any(t['kind'] == 'instinct' for t in run.thoughts(lead, 'lead-again')), 'a request answered by instinct', 60)
+    assert len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']) == 1, 'nothing new: no call'
+    return {'status': 'pass', 'lead': lead, 'pick': d0['options'][d0['pick']], 'weight': d0.get('weight'), 'members': rest, 'model_calls_for_three_deer': 1}
+
+
+def night_case(run):
+    """Reorganization at night (mind/sleep.rs): with LIVING_NIGHT covering the whole day and no
+    gap, a mind that integrated once goes to sleep in the night's batch round; under the timer
+    no night round happens. Neo4j is off here, so nothing is sent (an empty mind needs no
+    reorganization); verify-knowledge's sleep feature sends the batch."""
+    people = prepare(run)
+    actor = people[0]['id']
+    script = {'replies': {'deliberate': basic_reply()}}
+    models = model(run, script)
+    run.request(actor, 'night')
+    run.start(models, [actor], extra_env={'LIVING_REORGANIZE': 'night-batch', 'LIVING_NIGHT': '0-24', 'LIVING_REORGANIZE_GAP_S': '0', 'LIVING_REORGANIZE_MIN': '1'})
+    run.wait(lambda: ' integrated ' in run.log(), 'one integration', 120)
+    line = run.wait(lambda: re.search(r'night (\d+): 1 of 1 minds go to sleep \(1 in a batch, 0 direct; 1 due\)', run.log()), 'a night round', 30)
+    run.wait(lambda: re.search(r'sleep: .+ slept \((batch|direct), night Some\(\d+\)', run.log()), 'the sleep ends', 30)
+    assert 'reorganization: Config { mode: NightBatch' in run.log()
+    return {'status': 'pass', 'night': int(line[1])}
+
+
+def jev_case(run):
+    """A cached judgment drives a graph (mind/judge.rs; `judged` condition): a defender whose
+    graph flees while `fight_risk` is above 0.6 is struck; the fake Jev answers 0.9; the mind
+    caches it with mind_judged and the authority's tick takes the flee branch. The request
+    carries only the defender's own state."""
+    people = prepare(run)
+    defender, attacker = people[0]['id'], people[1]['id']
+    at = run.sql(f"SELECT x, y FROM body WHERE id = {defender}", 'defender-at')[0]
+    graph = {'desires': [{'want': 'this fight', 'weight': {'base': 1.0}, 'do': {'first': [
+        {'if': {'cond': {'judged': {'q': 'fight_risk', 'above': 0.6}}, 'then': {'do': {'skill': 'flee', 'target': 'attacker'}}}},
+        {'if': {'cond': {'hurt_within': 10}}, 'then': {'do': {'skill': 'strike', 'target': 'attacker'}}}, {'wait': 1}]}}]}
+    script = {'replies': {'deliberate': {'thought': 'I hold my ground.', 'graph': 'keep'}, 'think': {'thought': 'I hold my ground.', 'intend': [], 'say': None}},
+              'rules': [{'purpose': 'judge', 'noul': 0.9, 'times': -1}]}
+    models = model(run, script)
+    port = models['profiles']['local']['base_url'].split(':')[2].split('/')[0]
+    run.start(models, [defender], extra_env={'LIVING_JEV': '1', 'LIVING_JEV_URL': f'http://127.0.0.1:{port}/v1/systemone', 'TYPESAFE_API_KEY': 'fake-only'})
+    run.admin('place_at', defender, at['x'], at['y'])
+    run.admin('place_at', attacker, at['x'] - 1.2, at['y'])
+    run.admin('set_behavior', defender, json.dumps(graph))
+    run.admin('set_behavior', attacker, json.dumps({'seq': [{'do': {'skill': 'strike', 'target': {'id': defender}}}, {'wait': 2}]}))
+    cached = run.wait(lambda: run.private(f'SELECT * FROM judged WHERE actor = {defender}', 'judged'), 'a cached judgment', 60)
+    assert cached[0]['q'] == 'fight_risk' and abs(cached[0]['value'] - 0.9) < 1e-6 and cached[0]['expires_ms'] > cached[0]['updated_ms']
+    run.wait(lambda: any('flee' in (a['label'] or '').lower() for a in run.private(f'SELECT * FROM activity WHERE id = {defender}', 'activity')), 'the flee branch', 30)
+    asked = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'judge']
+    state = asked[0]['body']['state']
+    assert set(state) >= {'actor', 'body', 'recently_perceived'} and 'fight_risk' in asked[0]['body']['questions']
+    judged = [e for e in run.exchanges() if e['purpose'] == 'judge']
+    assert judged and judged[0]['judged'][0]['q'] == 'fight_risk'
+    return {'status': 'pass', 'judgments': len(judged), 'value': cached[0]['value']}
+def wake_case(run):
+    """On the island (`rules.minds = false`) a resident lives on its behaviour graph until a
+    player engages it: an offer and speech wake it, this service takes it up like any AI
+    character, it answers through `mind_say`, trades and teaches through its own acts, and its
+    consolidation keeps the places it knew before. It stays a mind afterwards."""
+    target = ROOT / '.local/living/target-wake-island'
+    run.harness('launch', '--seed', 'island', '--target-dir', str(target))
+    run.harness('doctor')
+    world = run.sql('SELECT * FROM world', 'world')[0]
+    run.harness('player', 'join', 'MindsNewcomer')
+    me = run.sql("SELECT id FROM character WHERE name = 'MindsNewcomer'", 'player')[0]['id']
+    # A resident keeping its post (its starting ways), with a technique the newcomer lacks.
+    mine = {k['technique'] for k in run.sql(f'SELECT technique FROM know_how WHERE actor = {me}', 'newcomer-know-how')}
+    def pick():
+        keeping = {a['id'] for a in run.sql("SELECT id, skill FROM activity", 'activities') if a['skill'] == 'keep'}
+        for c in run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'):
+            if c['id'] in keeping and c['alive'] and c['stage'] == 2 and not c['ai']:
+                knows = {k['technique'] for k in run.sql(f"SELECT technique FROM know_how WHERE actor = {c['id']}", 'resident-know-how')}
+                lesson = sorted(knows - mine)
+                if lesson:
+                    return c, lesson[0]
+        return None
+    resident, lesson = run.wait(pick, 'a resident at its post who knows something the newcomer does not', 60)
+    rid = resident['id']
+    assert resident['controller'] != world['admin'] and not run.private(f'SELECT * FROM woken WHERE id = {rid}', 'woken-before')
+    places_before = {p['name'] for p in run.sql(f'SELECT * FROM place WHERE actor = {rid}', 'places-before')}
+    run.admin('place_near', me, rid)
+    run.admin('grant_items', rid, 'wood', 2)
+    acts = [{'do': 'accept', 'target': {'id': me}},
+            {'do': 'teach', 'target': {'id': me}, 'item': lesson}]
+    # A line that arrives while the mind deliberates is left to that deliberation (talk.rs):
+    # its think step's `say` answers.
+    script = {'replies': {'think': {'thought': 'A newcomer.', 'intend': ['wait'], 'say': 'verify minds welcome, newcomer'},
+                          'deliberate': basic_reply(acts=acts),
+                          'talk': {'thought': 'A newcomer asks where I work.', 'say': 'verify minds talk answer', 'end': False},
+                          'consolidate': {'summary': 'verify minds met a newcomer',
+                                          'places': [{'name': 'verify after', 'x': 41, 'y': 61}],
+                                          'nodes': [], 'edges': []}},
+              'rules': [{'purpose': 'consolidate', 'delay_s': 1, 'times': -1}]}
+    models = model(run, script)
+    run.start(models, [rid], seed='island')
+    # The newcomer offers a trade, then speaks to the resident.
+    run.harness('player', 'act', json.dumps({'do': 'offer', 'target': {'id': rid}, 'item': 'berries', 'qty': 1, 'want': 'wood', 'want_qty': 1}))
+    woke = run.wait(lambda: run.private(f'SELECT * FROM woken WHERE id = {rid}', 'woken-after'), 'resident woken', 20)[0]
+    char = run.sql(f'SELECT * FROM character WHERE id = {rid}', 'resident-woken')[0]
+    assert woke['why'] == 'offer' and woke['by'] == me and char['ai'] and char['controller'] == world['admin'], (woke, char)
+    run.harness('player', 'say', 'verify minds: is there food and a bed here?', '--to', str(rid))
+    heard = lambda text, save: any(text in e['text'] and e['subject'] == rid for e in run.private(f'SELECT * FROM experience WHERE observer = {me}', save))
+    run.wait(lambda: heard('verify minds welcome', 'newcomer-heard'), 'the resident answers the newcomer (its deliberation says it)', 60)
+    # Its deliberation decides acts: it accepts the trade and teaches the lesson.
+    accepted(run, rid)
+    run.wait(lambda: any(c['kind'] == 'trade' and c['b'] == rid for c in run.sql(f'SELECT * FROM chronicle WHERE b = {rid}', 'trade')),
+             'trade accepted through mind_act', 60)
+    run.wait(lambda: any(k['technique'] == lesson for k in run.sql(f'SELECT * FROM know_how WHERE actor = {me}', 'newcomer-learned')),
+             'lesson taught through mind_act', 60)
+    # More lines force a consolidation; its projection keeps the places it knew before.
+    for line in ('verify minds: where do you work?', 'verify minds: who keeps the inn?', 'verify minds: thank you for the lesson.'):
+        time.sleep(2.2)
+        run.harness('player', 'say', line, '--to', str(rid))
+    run.wait(lambda: heard('verify minds talk answer', 'newcomer-heard-talk'), 'a later line gets a talk turn answered through mind_say', 60)
+    run.wait(lambda: any(t['kind'] == 'consolidate' for t in run.thoughts(rid, 'thoughts-consolidated')), 'consolidation', 90)
+    # Without Neo4j the service projects without `replace`; with a store it sends the mind's
+    # complete set (`replace: true`). Send that update as the service would: the places the
+    # resident knew before waking must survive a set that does not name them.
+    run.admin('mind_update', rid, {'persona': {'none': []}, 'relations': [], 'beliefs': {'none': []}, 'judgments': [],
+                                   'places': [{'name': 'verify after', 'x': 41.0, 'y': 61.0}], 'thought': {'none': []}, 'replace': True})
+    places = {p['name'] for p in run.sql(f'SELECT * FROM place WHERE actor = {rid}', 'places-after')}
+    assert 'verify after' in places and places_before <= places, (places_before, places)
+    final = run.sql(f'SELECT * FROM character WHERE id = {rid}', 'resident-final')[0]
+    assert final['ai'] and final['controller'] == world['admin']
+    talks = [e for e in run.exchanges() if e['purpose'] == 'talk']
+    return {'status': 'pass', 'resident': rid, 'woken': woke, 'lesson': lesson, 'talk_turns': len(talks),
+            'places_kept': sorted(places_before), 'places_after': sorted(places)}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', required=True, help='new suite name starting with minds-')
@@ -462,7 +633,7 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r'minds-[a-zA-Z0-9-]+', args.run):
         parser.error('--run must start with minds-')
-    with urllib.request.urlopen(shared.SERVER + '/v1/ping', timeout=5) as response:
+    with urllib.request.urlopen(os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/') + '/v1/ping', timeout=5) as response:
         assert response.status == 200
     suite = ROOT / '.local/living/verify' / args.run
     suite.mkdir(parents=True, exist_ok=False)

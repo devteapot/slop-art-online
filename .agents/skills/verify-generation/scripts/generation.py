@@ -25,7 +25,9 @@ TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
           "place", "routine")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
-CONTAINER = "sao-living_spacetimedb_1"
+# The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
+CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
+STDB_URL = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
 
 
 def write(path, value):
@@ -68,7 +70,7 @@ def snapshot(run, tables):
 
 def database_identity(database):
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:3300/v1/database/{database}/identity", timeout=30) as response:
+        with urllib.request.urlopen(f"{STDB_URL}/v1/database/{database}/identity", timeout=30) as response:
             return response.status, response.read().decode().strip()
     except urllib.error.HTTPError as error:
         return error.code, error.read().decode()

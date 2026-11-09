@@ -691,6 +691,7 @@ pub fn walk(
     island: Option<Res<crate::island::Island>>,
     time: Res<Time>,
     route: Option<Res<crate::route::Steer>>,
+    probe: Option<Res<crate::probe::Probe>>,
 ) {
     let dt = time.delta_secs();
     let (up, right) = cam.control_axes();
@@ -711,12 +712,19 @@ pub fn walk(
         None => route.as_ref().and_then(|r| r.0).map_or(d.normalize_or_zero(), |r| r.0),
     };
     let run = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) || auto.as_deref().is_some_and(|a| a.ends_with("run")) || route.as_ref().and_then(|r| r.0).is_some_and(|r| r.1);
+    // A speed ramp for measurements (`LIVING_GAME_RAMP`, probe.rs); standing at its ends.
+    let ramp = probe.as_ref().and_then(|p| p.ramp_speed(time.elapsed_secs()));
+    let d = if ramp.is_some_and(|s| s <= 0.0) { Vec2::ZERO } else { d };
     roam.moving = d != Vec2::ZERO;
+    if ramp.is_some() && !roam.moving {
+        roam.speed = 0.0;
+    }
     roam.running = run;
     input.moving = roam.moving;
     if roam.moving {
         // Walking and running at the speeds the authored clips were made for.
         let speed = route.as_ref().and_then(|r| r.0).map_or(if run { crate::lookdev::RUN_SPEED } else { crate::lookdev::WALK_SPEED }, |r| r.2);
+        let speed = ramp.unwrap_or(speed);
         roam.speed = speed;
         match &island {
             // On the island, water and rock stop you; slide along them.

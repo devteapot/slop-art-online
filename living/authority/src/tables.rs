@@ -680,6 +680,27 @@ pub struct Belief {
     pub updated_ms: u64,
 }
 
+/// Typed judgments a character's mind refreshes in the background (Jev; docs/MIND_HARNESS.md,
+/// item 4), read by the graph's `judged` condition: never waited on, private to the module.
+/// At most `JUDGED_PER_ACTOR` per character; an expired one reads as absent.
+#[spacetimedb::table(accessor = judged)]
+pub struct Judged {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub q: String,
+    /// The yes probability, or a score's expected level, or the chosen option's probability.
+    pub value: f32,
+    /// The chosen option of a choice (empty otherwise).
+    pub choice: String,
+    pub expires_ms: u64,
+    pub updated_ms: u64,
+}
+
+pub const JUDGED_PER_ACTOR: usize = 8;
+
 #[spacetimedb::table(accessor = judgment)]
 pub struct Judgment {
     #[primary_key]
@@ -1279,6 +1300,68 @@ pub struct Presence {
     /// character's and is installed again at the next takeover).
     pub ai_graph: String,
     pub ai_plan: String,
+}
+
+/// A resident someone engaged, who has had a mind since (private: the database owner reads
+/// it; no client does). One row per living resident woken from instinct only
+/// (`crate::woken`); a resident never goes back to instinct only.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = woken)]
+pub struct Woken {
+    #[primary_key]
+    pub id: u32,
+    /// Its settlement (`settlement.id`; `u16::MAX`: none), for a per-settlement stage cap.
+    #[index(btree)]
+    pub settlement: u16,
+    pub woken_ms: u64,
+    /// Who woke it, and with what (`speech`, the skill aimed at it such as `teach`, `hurt`,
+    /// `theft`: the `wakes` law's engagement).
+    pub by: u32,
+    pub why: String,
+    /// The last engagement by someone with a mind, and who.
+    pub engaged_ms: u64,
+    pub engaged_by: u32,
+    pub engagements: u32,
+    /// How many perceptions its ring had taken in before it woke (`prior.seq` up to this;
+    /// the last `woken_ring("slots")` are kept).
+    pub prior: u32,
+    /// The places it knew before waking (world facts its starting ways go to); its mind's
+    /// projection keeps them unless the mind names them itself.
+    pub places: Vec<String>,
+}
+
+/// What an instinct-only resident perceived, kept for the mind it may get (private). A fixed
+/// ring of `woken_ring("slots")` slots per resident (a law, at most 256), updated in place:
+/// `key` is the resident's id shifted left 8 bits plus the slot.
+#[spacetimedb::table(accessor = prior)]
+pub struct Prior {
+    #[primary_key]
+    pub key: u64,
+    #[index(btree)]
+    pub resident: u32,
+    /// The resident's nth perception (1-based; the newest has the highest).
+    pub seq: u32,
+    pub at_ms: u64,
+    /// As an experience's kind (`speech`, `gesture`, `gift`, `sighted`, …).
+    pub kind: String,
+    pub subject: u32,
+    pub object: u32,
+    pub x: f32,
+    pub y: f32,
+    /// As the resident perceived it (names only where it knew them).
+    pub text: String,
+    pub salience: f32,
+    /// The same perception again within `woken_ring("repeat_s")` is counted here.
+    pub times: u16,
+}
+
+/// How many perceptions a resident's ring has taken in (private; the next slot is
+/// `seq % woken_ring("slots")`).
+#[spacetimedb::table(accessor = prior_head)]
+pub struct PriorHead {
+    #[primary_key]
+    pub id: u32,
+    pub seq: u32,
 }
 
 // ---- schedules ---------------------------------------------------------------

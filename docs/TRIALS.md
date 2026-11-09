@@ -97,7 +97,7 @@ python3 living/tools/trials.py up && python3 living/tools/trials.py build wolves
 python3 living/tools/trials.py run --batch b3 wolves hungry --variants default,lessons --replicates 3
 ```
 
-The verify harness runs there too, against the trial container: `VERIFY_STDB_CONTAINER=slop-trials-stdb VERIFY_STDB_PORT=3320` make `verify.py`, `living/tools/stdb`, `verify-llm` and `verify-minds` use it instead of `sao-living_spacetimedb_1` on 3300. Other surface scripts (`verify-client`, `verify-generation`, `verify-knowledge`) still assume 3300.
+The verify harness runs there too, against the trial container: `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320` make `verify.py`, `living/tools/stdb`, `verify-llm` and `verify-minds` use it instead of `sao-living_spacetimedb_1` on 3300. Other surface scripts (`verify-client`, `verify-generation`, `verify-knowledge`) still assume 3300.
 
 ## Running wide (2026-11-09, measured)
 

@@ -581,6 +581,17 @@ Client presentation (`acbbda7`), recorded here after the fact.
 - **Arid lands:** a land whose rivers run dry (`water.dry_rivers`, the megacity floor's wastes) gets dry earth, cracked mud and gravel ground layers (16 in all) and its own dressing, `wastes`, `scrubland` and `badlands`. The megacity's wall line draws a 14 m cyberpunk wall. Look-dev draws any land seed with `LIVING_GAME_SEED=<seed.json>` ([floors](FLOORS.md)).
 - **Assets:** `just living-game-assets` now paints every texture set (`living-game-textures --set all`): the ground and the model surfaces that `style.rs` binds on scenery. Before, a fresh checkout got the ground only and no model detail.
 
+
+## Animation: gaits in step, upper-body layers, feet on the ground (2026-11-09)
+
+From Casey Muratori's animation-blending stream, checked against the client. Client presentation only.
+
+- **Foot-down markers.** Every clip's sidecar lists each foot's contact windows as phase 0–1, detected from the baked take (`animate.py`, `wolf.py`). People's gaits start on the right foot coming down; the wolf's on the left hind paw (`sync: "hl"`). Markers agree with recorded feet in 83–93% of foot-frames.
+- **Phase-synced gaits** (`anim.rs`). One graph per file; at most two gaits play, paused and set to one shared phase that advances at `speed / (stride × weighted metres per cycle)`. Walk ↔ brisk and run ↔ fast blend across their gap; brisk ↔ run only at 2.6–3.0 m/s; the wolf's gaits within ±10% of each boundary. Speed ramps 0 → 4 → 0 m/s: mean slide of the supporting foot 0.51 → 0.085 m/s (walk ↔ brisk), 0.96 → 0.17 (run ↔ fast); drift per contact 24 → 3.5 cm.
+- **Masked upper-body layers.** Clips marked `layer: "upper"` in `clips.json` (13: strikes, bow, cast, block, heal, wave, nod, appraise…) play on the spine, arms and head while the body moves, and whole-body when standing; override with a mask, not additive (VRoid clips are T-pose-relative, so an additive strike turns the arms twice). Dodge, death, sitting, standing up and `play` stay whole-body.
+- **Foot IK** (`ik.rs`, people only). During contact windows planted feet go to the ground (and stair treads: `Island::foot_height`), held at the heel or ball where they came down; the hips lower to reach, rise up to 0.18 m; feet tilt to the slope within 26°. Full within 25 m of the camera, gone by 30 m. Supporting-foot gap on stairs: median 3.5 → 1.7 cm, inside the surface 41% → 11%. Corrections blend rest-relative (`rest_relative`).
+- **Cost.** Frame times unchanged at the town, forest and hamlet; material counts identical. Per character: Bevy's animation step 16.5 → 13.9 µs (one graph per file), plus 0.5 µs for `anim.rs` and 4.6 µs per IK-solved character: about +2.5 µs a character overall.
+- **Open.** Stairs p90 still 15 cm (toes over step edges); stopping far from double support still drags; the wolf's blends are unmeasured and it has no IK. `probe.rs` is the look-dev harness (speed ramps, one-shots while walking, frame sequences); `foot_slide.py` gains `--bins`, `--floors`/`--gap` and `--stairs`.
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**

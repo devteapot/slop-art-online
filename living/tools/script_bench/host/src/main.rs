@@ -4,7 +4,8 @@
 //! whose deadline callback only logs and continues), WASM backtrace details on.
 //!
 //! usage: sb-host <module.wasm> <kind,kind,...> [--no-fuel] [--dumps DIR] [--batches N]
-//! Prints one JSON line per (engine, law).
+//!                [--laws rates,strike,cooldown,perceived,rates-law]
+//! Prints one JSON line per (engine, law). The laws default to the three every engine runs.
 
 use sb_bench::{Kind, Law};
 use std::time::{Duration, Instant};
@@ -23,6 +24,7 @@ fn main() -> anyhow::Result<()> {
     let opt = |name: &str| args.iter().position(|a| a == name).map(|i| args[i + 1].clone());
     let dumps = opt("--dumps");
     let batches: usize = opt("--batches").map_or(3000, |v| v.parse().unwrap());
+    let laws: Vec<Law> = opt("--laws").map_or(Law::ALL.to_vec(), |v| v.split(',').map(|n| Law::from_name(n).unwrap_or_else(|| panic!("unknown law {n}"))).collect());
 
     let mut config = Config::new();
     config.cranelift_opt_level(OptLevel::Speed).consume_fuel(fuel).epoch_interruption(true).wasm_backtrace_details(WasmBacktraceDetails::Enable);
@@ -92,7 +94,7 @@ fn main() -> anyhow::Result<()> {
             continue;
         }
         let mem_init = memory.data_size(&store);
-        for law in Law::ALL {
+        for law in laws.iter().copied() {
             refuel(&mut store);
             let len = dump.call(&mut store, (kind as u32, law as u32))?;
             let text = read_buf(&mut store, len)?;

@@ -37,6 +37,11 @@
 //!
 //! `LIVING_GAME_FPS_CAP=<hz>` sets the headless loop's rate (default 60; 0 runs uncapped, so
 //! frame times show the real cost).
+//!
+//! `LIVING_GAME_FRAMES=<file>` appends one line per frame, `unix_us,interval_us,work_us`: the
+//! wall clock at the frame's end, the real time since the previous frame (`Time<Real>`, what
+//! frame pacing is judged on) and the main schedule's own time from `First` to `Last` (without
+//! the runner's sleep up to the cap). For the immediate gate's frame pacing (docs/GATE_216.md).
 
 use bevy::prelude::*;
 
@@ -93,6 +98,11 @@ pub fn diagnostics(app: &mut App) {
     if let Some(n) = value("shadowmap") {
         app.insert_resource(bevy::light::DirectionalLightShadowMap { size: n as usize });
     }
+    if let Some(file) = std::env::var("LIVING_GAME_FRAMES").ok().filter(|f| !f.is_empty()).and_then(|f| std::fs::File::create(f).ok()) {
+        app.insert_resource(Frames { out: std::io::BufWriter::new(file), start: None, flushed: 0 });
+        app.add_systems(First, frame_start);
+        app.add_systems(Last, frame_end);
+    }
     if has("hitch") || value("hitch").is_some() {
         app.add_systems(Last, log_hitches);
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
@@ -139,6 +149,30 @@ fn log_hitches(
         info!("hitch: {ms:.1} ms at ({:.0}, {:.0}); this frame {now:?}; before {a:?}; two before {b:?}", roam.pos.x, roam.pos.y);
     }
     last.1 = [now, last.1[0], last.1[1]];
+}
+
+/// `LIVING_GAME_FRAMES`: the per-frame record.
+#[derive(Resource)]
+struct Frames {
+    out: std::io::BufWriter<std::fs::File>,
+    start: Option<std::time::Instant>,
+    flushed: u64,
+}
+
+fn frame_start(mut frames: ResMut<Frames>) {
+    frames.start = Some(std::time::Instant::now());
+}
+
+fn frame_end(mut frames: ResMut<Frames>, time: Res<bevy::time::Time<bevy::time::Real>>) {
+    use std::io::Write;
+    let work = frames.start.take().map_or(0, |s| s.elapsed().as_micros() as u64);
+    let unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_micros() as u64);
+    let _ = writeln!(frames.out, "{unix},{},{work}", time.delta().as_micros());
+    // At most one flush a second, so a killed run loses at most a second of frames.
+    if unix.saturating_sub(frames.flushed) > 1_000_000 {
+        let _ = frames.out.flush();
+        frames.flushed = unix;
+    }
 }
 
 #[derive(Resource)]

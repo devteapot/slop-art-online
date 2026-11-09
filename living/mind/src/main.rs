@@ -76,6 +76,8 @@ async fn main() -> Result<()> {
     prompts::set_world(seed["setting"].as_str().unwrap_or_default(), mw, mh, year_days, pace, life);
     let journal = root.join(".local/living/journal").join(&run);
     let llm = llm::Llm::new(models, journal)?;
+    // Who is on stage is tracked for the level of detail and for mixes that choose by it.
+    let attention = mind::lod::enabled() || llm.staged();
 
     let store = match std::env::var("LIVING_NEO4J_PASSWORD") {
         Ok(pw) if std::env::var("LIVING_NEO4J").as_deref() != Ok("off") => {
@@ -162,8 +164,8 @@ async fn main() -> Result<()> {
                 let _ = tx.send(mind::Event::Lived(e.clone()));
                 return;
             }
-            // Level of detail: a human player in what a character experiences puts it on stage.
-            if lod {
+            // A human player in what a character experiences puts it on stage.
+            if attention {
                 let me = ctx.identity();
                 let player = |id: u32| ctx.db.character().id().find(&id).is_some_and(|c| mind::lod::is_player(&c, me));
                 if player(e.subject) || player(e.object) {

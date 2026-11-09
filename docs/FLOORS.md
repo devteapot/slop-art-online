@@ -107,6 +107,9 @@ A character steps into floor A's gate and uses a `travel` skill. That makes it a
 
 ### What travels and what stays
 
+**Working rule (the user, 2026-11-09): only identity and mind travel.** A traveller keeps who they are — their soul (global id), name, persona and the mind's memories, which include the people, places and techniques they remember — and nothing else. On arrival they get floor B's defaults for a newcomer: a fresh body (health and needs as a newcomer has them), the floor's newcomer kit, its default skills and know-how, and the floor's instincts as a starting graph, which the mind then revises. What they remember knowing stays a memory: a fire bolt learned on floor A is remembered on floor B, and whether it can be relearned there is floor B's laws' business. Possessions, property, memberships, relations rows and experiences stay on the floor they belong to. We will refine this once floors exist ("then we figure it out"); the table below is the earlier proposal, kept for the open questions it raises.
+
+
 Per-character state today, from `authority/src/tables.rs` (all keyed by a floor-local `u32` character id, `#[auto_inc]` per database):
 
 | State | Table(s) today | Travels? | How |
@@ -250,7 +253,7 @@ Most of a per-character call is building the facts map (`script.rs:690-694`), no
 - **Client numbers.** A public `law_card` row, written by the authority at each install like `skill_card` (`authority/src/combat.rs:513-547`), carries the numbers clients need: speeds by kind and gait, sight by light, day length, season, warmth radii. The client never runs the script.
 - **Editing laws in play** (gods, WORLD_VISION) is installing a new overlay revision through an authorized skill, so it uses the same path.
 
-**Gap.** The script cap. `MAX_SOURCE` is 64 KiB (`script.rs:324`), and `skills.rhai` is already 56.9 KB, so an overlay composed as source has about 7 KB of room. Either the cap becomes a law of the host (measured, not guessed), or `Scripts` compiles the base and the overlay as two ASTs and merges them (Rhai's `AST::merge` gives later functions precedence). The second keeps each part under the cap. It needs `script.rs`, which is outside this change.
+**Gap (closed 2026-11-09).** The script cap. `MAX_SOURCE` was 64 KiB, and `skills.rhai` is already 56.9 KB, so an overlay composed as source had about 7 KB of room. Since `rhai-1` it is 256 KiB ([script engines](SCRIPT_ENGINES.md#what-changed-on-rhai-1)): compile time and memory grow about linearly with the source, and an install is rare. If overlays outgrow it, `Scripts` can compile the base and the overlay as two ASTs and merge them (Rhai's `AST::merge` gives later functions precedence), keeping each part under the cap.
 
 ### Technology and magic without forking the engine
 
@@ -591,7 +594,7 @@ Headless look-dev captures of the 4096 m floor, in the same folder:
 
 1. **Floor size.** The 4096 m megacity needs staged generation in the authority. Is 4096 m the floor size to build for, or should first floors be 2048–3072 m (which fit today), with 4096 m+ after phase 1?
 2. **One host or several.** IDC works within one server or cluster. Should all floors share one host to start (simplest transit, one identity), or should floors be spread across machines (the dev-box, the Spark) from the start, which needs the relay and an OIDC issuer?
-3. **What travels.** Is the table above right? In particular: do possessions left on a floor stay owned while you are away? Do relations travel? Does know-how work on floors whose laws lack it (proposed: it travels, and fails honestly)?
+3. **What travels.** *Decided 2026-11-09 (working rule above): identity and mind only; the destination's defaults for the rest.* Earlier question: is the table above right? In particular: do possessions left on a floor stay owned while you are away? Do relations travel? Does know-how work on floors whose laws lack it (proposed: it travels, and fails honestly)?
 4. **The tower in the world.** Is there one in-world tower that every gate leads into (a hub floor), or do gates link floors directly, as edges between floors?
 5. **Death and floors.** Should a soul's death on any floor be final everywhere (proposed), or can a floor's laws differ here (an underworld floor)?
 6. **Which floor second.** The sky archipelago (height as a rule) or the long winter (laws over seasons) as the first floor after the megacity?

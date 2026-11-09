@@ -11,6 +11,7 @@ mod clock;
 #[allow(dead_code)]
 mod sync;
 
+mod anim;
 mod bodies;
 mod camera;
 mod capture;
@@ -21,6 +22,7 @@ mod daylight;
 mod demo;
 mod envs;
 mod gait;
+mod ik;
 mod hud;
 mod island;
 mod live;
@@ -29,6 +31,7 @@ mod lookdev;
 mod net;
 mod perf;
 mod post;
+mod probe;
 mod route;
 mod sight;
 mod sky;
@@ -80,6 +83,8 @@ fn main() {
         .add_plugins(post::PostPlugin)
         .add_plugins(characters::CharactersPlugin)
         .add_plugins(gait::GaitPlugin)
+        .add_plugins(anim::AnimPlugin)
+        .add_plugins(ik::IkPlugin)
         .add_plugins(daylight::DaylightPlugin)
         .add_plugins(terrain::TerrainPlugin)
         .add_systems(PostUpdate, post::update)
@@ -116,6 +121,7 @@ fn main() {
     }
     if lookdev::enabled() {
         // Look-dev: a fixed scene of models from assets/lookdev, no server.
+        app.add_plugins(probe::ProbePlugin);
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())
             .add_systems(
                 Update,

@@ -12,7 +12,7 @@
 
 ## How to get to it (user POV)
 
-Characters need food, rest and warmth. Rates live in `living/scripts/skills.rhai:81`. The authority settles them at state changes in `living/authority/src/brain.rs:128`. `living/authority/src/common.rs:430` applies elapsed minutes to each anchor.
+Characters need food, rest and warmth. Rates live in `living/scripts/skills.rhai:121`. Since 2026-11-09 `rates(a)` returns the state's rates and parameters: the thresholds, the genes and exposure. The engine finishes them per body (`NeedLaw::rates`, `living/rules/src/script.rs:409`). One answer is kept per state (kind, stage, activity, warmth, cloak, night, rain, season) and shared by every body in it. The authority settles rates at state changes in `living/authority/src/brain.rs:133`, profiled as the `needs.rates` span. `living/authority/src/common.rs:517` applies elapsed minutes to each anchor.
 
 ## Driving it with scenes.py
 
@@ -28,6 +28,7 @@ After feeding the adults to prevent unrelated starvation/injury requests, a cloa
 - Worlds start at 07:00. Night starts after 390 seconds. The driver waits up to a full day for the boundary.
 - Genes vary rates. Compare the same actor before and after the cloak.
 - Fire and shelter prevent exposure. The scene checks warmth bits before asserting cold.
+- Cargo's `need_rates_match_the_whole_script_computation` compares the parameter rates with the script computing them whole, as before 2026-11-09, bit for bit over 24,576 states (kind, stage, activity, hunger and energy around each threshold, warmth, cloak, night, rain, season, two gene sets).
 - Cargo's `infant_appearance_agrees_with_cold_damage` crosses night, fire, shelter, cloak and season while holding hunger at 80 to isolate cold. `infant_appearance_reports_food_and_injury_separately` checks food and wounds. These test predicates, not live spatial placement.
 - The infant fixture holds food/energy thresholds and the cry cause stable; values still change through the real authority. Hunger stays below starvation during the measured interval. Reminder timing begins at the last prompt, not its completion. A pending request already carrying this infant's cry receives no same-cause refresh; an unrelated pending request receives the cry when the reminder is due. The witness has positive affinity, so parent-only routing is checked against an otherwise eligible caring adult. Dawn, personal drives and reflection may independently update requests; the counter excludes those updates rather than treating every request row change as a cry.
 - A cold infant can still heal if the positive healing rate exceeds the cold penalty. Compare the same infant's rates rather than assuming any cold appearance means net health loss.

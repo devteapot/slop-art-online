@@ -32,6 +32,14 @@ are made game-ready (`library_clip`):
   pin the heel or the ball of the foot in the game's world; between plants the correction blends;
   `solve_leg` reaches the targets, lowering the hips smoothly where a leg can't.
 - `grip: {"R": deg, "L": deg}` curls a hand that holds something (Kimodo's fingers stay relaxed).
+- Foot-down markers (`foot_markers`): every clip's summary gets `contacts: {"L": [[a, b], …],
+  "R": …}`, each foot's contact windows in normalised clip time, detected from the baked take
+  (heel or ball within 3 cm of the floor and slower than 0.3 m/s in the game's world). A gait's
+  loop is rotated to start where its right foot comes down (`sync: "R"`, `phase_shift`: the
+  fraction it was turned by), so phase 0 is the same event in every gait and the game blends
+  them at one shared phase (`living/game/src/anim.rs`).
+- `layer: "upper"` is copied to the summary: the game plays that clip on the spine, arms and
+  head only while the body moves, over its gait; otherwise (and standing) on the whole body.
 Hand-keyed entries: `keyed: <CLIPS name>`, or `overlay` (eased key curves on central bones over
 the neutral pose, for head gestures).
 
@@ -1228,6 +1236,83 @@ def plant_feet(sk, frames, contacts, belt_v, cyclic, stats, track=None):
     return out
 
 
+# A foot is down while its heel or ball is within this of the floor (game m) and moves slower than
+# MARK_STILL (game m/s, in the game's world: belt or path travel included).
+MARK_FLOOR = 0.03
+MARK_STILL = 0.3
+
+
+def foot_markers(sk, frames, belt_v, cyclic, track=None):
+    """Each foot's contact windows, detected from the baked take: per frame, whether the heel or
+    the ball of the foot is on the floor and still in the game's world (the clip on its belt, or
+    along its path). Returns {"L": [[a, b], …], "R": …} in normalised clip time (0–1; a loop's
+    windows that cross its seam are split at 1), the touchdown frame of each foot's longest
+    contact, and the per-frame flags."""
+    n = len(frames) - 1
+    count = n if cyclic else n + 1
+    legs = [bone(s, x) for s in "LR" for x in LEG]
+    fk = [fk_pose(sk, q, off, legs) for q, off in frames[:count]]
+    world = (lambda p, k: p + track[min(k, count - 1) if not cyclic else k % count]) if track is not None else (lambda p, k: p + belt_v * (k / n))
+    out, touch, flags = {}, {}, {}
+    for side in "LR":
+        f_ = sk.feet[side]
+        ft = bone(side, "Foot")
+        refs = (f_["heel"], Vector((f_["toe"].x, f_["sole"], f_["toe"].z)))
+
+        def pts(k):
+            rot, pos = fk[k % count]
+            return [world(pos[ft] + rot[ft] @ (r - f_["ankle"]), k) for r in refs]
+
+        down = []
+        for k in range(count):
+            a = pts(k)
+            # A one-shot's last frame has no next one: measure against the frame before.
+            b, dt = (pts(k + 1), 1) if (cyclic or k + 1 < count) else (pts(k - 1), -1)
+            on = False
+            for p, q in zip(a, b):
+                low = (p.y - f_["sole"]) / sk.unit <= MARK_FLOOR
+                still = math.hypot(q.x - p.x, q.z - p.z) / sk.unit * FPS <= MARK_STILL
+                on = on or (low and still)
+            down.append(on)
+        down = clean_contacts(down, cyclic, gap=2, short=2)
+        flags[side] = down
+        runs = []
+        if all(down):
+            runs = [(0, count)]
+        elif any(down):
+            start = next(k for k in range(count) if not down[k]) if cyclic else 0
+            k = start
+            while k < start + count:
+                if down[k % count]:
+                    j = k
+                    while j < start + count and down[j % count]:
+                        j += 1
+                    runs.append((k, j))
+                    k = j
+                else:
+                    k += 1
+        touch[side] = max(runs, key=lambda r: r[1] - r[0])[0] % count if runs else None
+        wins = []
+        for a, b in runs:
+            if cyclic and b > count and a < count:
+                wins += [(a / n, 1.0), (0.0, (b - count) / n)]
+            elif cyclic and a >= count:
+                wins.append(((a - count) / n, (b - count) / n))
+            else:
+                wins.append((a / n, min(b / n, 1.0)))
+        out[side] = sorted([round(a, 4), round(b, 4)] for a, b in wins)
+    return out, touch, flags
+
+
+def rotate_loop(frames, k):
+    """A loop (last frame equal to the first) started at frame k instead."""
+    n = len(frames) - 1
+    body = frames[:n]
+    body = body[k:] + body[:k]
+    copy = lambda fr: ({b: v.copy() for b, v in fr[0].items()}, fr[1].copy())
+    return [copy(f) for f in body] + [copy(body[0])]
+
+
 def loop_jerk(frames):
     """How much a loop pops at its seam: per bone, the change in angular step (degrees per
     frame) across the seam, against the largest such change anywhere else in the loop (and the
@@ -1271,7 +1356,7 @@ def overlay_clip(sk, spec, neutral):
     stats = {}
     frames = plant_feet(sk, frames, contacts, Vector(), False, stats)
     info = {"source": "hand-keyed overlay on the neutral pose", "kind": "once", "loop": False, "frames": n,
-            "seconds": round(n / FPS, 3), "speed": 0.0}
+            "seconds": round(n / FPS, 3), "speed": 0.0, "contacts": foot_markers(sk, frames, Vector(), False)[0]}
     return frames, info
 
 
@@ -1334,6 +1419,17 @@ def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
     track = [TURN @ Vector((float(t[0]), 0.0, float(t[2]))) * soma.k for t in w["track"]] if w["track"] is not None and n == w["n"] else None
     if spec.get("plant", True):
         frames = plant_feet(sk, frames, contacts, belt_v, kind == "loop", stats, track)
+    # Foot-down markers. A gait's loop starts where its right foot comes down (the start of the
+    # right foot's longest contact), so phase 0 is the same event in every gait and the game can
+    # play them all at one shared phase.
+    marks, touch, _ = foot_markers(sk, frames, belt_v, kind == "loop", track)
+    if kind == "loop" and loco and touch["R"]:
+        frames = rotate_loop(frames, touch["R"])
+        info["phase_shift"] = round(touch["R"] / n, 4)
+        marks, touch, _ = foot_markers(sk, frames, belt_v, True, track)
+    info["contacts"] = marks
+    if kind == "loop" and loco:
+        info["sync"] = "R"
     if kind == "loop":
         seam, inside, bone_ = loop_jerk(frames)
         info.update(seam_jerk_deg=round(seam, 2), max_jerk_inside_deg=round(inside, 2), max_jerk_bone=bone_)
@@ -1569,17 +1665,19 @@ def main():
         for name, e, seed in library_entries(lib, only, a.seeds):
             if "keyed" in e:
                 keyed(name, e["keyed"])
-                continue
-            if "overlay" in e:
+            elif "overlay" in e:
                 frames, info = overlay_clip(sk, e, neutral)
                 add(name, key_frames(arm, name, frames, {}))
                 summary[name] = info
-                continue
-            path = os.path.join(a.kimodo_dir, f"{e['name']}_s{seed}.npz")
-            frames, info = library_clip(sk, soma, e, path, neutral, speeds, a.max_scale)
-            stats = {k: v for k, v in info.items() if k not in ("source", "kind", "loop")}
-            add(name, key_frames(arm, name, frames, stats))
-            summary[name] = info
+            else:
+                path = os.path.join(a.kimodo_dir, f"{e['name']}_s{seed}.npz")
+                frames, info = library_clip(sk, soma, e, path, neutral, speeds, a.max_scale)
+                stats = {k: v for k, v in info.items() if k not in ("source", "kind", "loop", "contacts")}
+                add(name, key_frames(arm, name, frames, stats))
+                summary[name] = info
+            # Upper-body clips play over the gait while the body moves (the game's anim.rs).
+            if "layer" in e:
+                summary[name]["layer"] = e["layer"]
     if a.blend:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a.blend))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)

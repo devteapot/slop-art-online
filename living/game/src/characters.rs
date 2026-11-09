@@ -568,6 +568,14 @@ pub struct Shaped {
     helpers: HashMap<Entity, Entity>,
 }
 
+impl Shaped {
+    /// The hips translation was written after `hips` scaled it (foot IK lowering the hips): it is
+    /// final, not a fresh animated value to scale.
+    pub fn wrote(&mut self, translation: Vec3) {
+        self.written = translation;
+    }
+}
+
 /// Apply a recipe's proportions and height once its model is loaded and measured.
 #[allow(clippy::type_complexity)]
 pub fn shape(

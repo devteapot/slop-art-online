@@ -20,15 +20,14 @@ ROOT = Path(__file__).resolve().parents[4]
 # else living/target. Running another path would test whatever binary another checkout left.
 MIND_BIN = Path(os.environ.get('CARGO_TARGET_DIR') or ROOT / 'living/target') / 'release/living-mind'
 SHARED = ROOT / '.agents/skills/verify/scripts/verify.py'
+# The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
+STDB_URL = os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/')
+STDB_CONTAINER = os.environ.get('LIVING_STDB_CONTAINER', 'sao-living_spacetimedb_1')
 FAKE = Path(__file__).with_name('fake_llm.py')
-# The shared harness's container and port (see verify.py); defaults are the laptop's.
-CONTAINER = os.environ.get('VERIFY_STDB_CONTAINER', 'sao-living_spacetimedb_1')
-SERVER = f"http://127.0.0.1:{os.environ.get('VERIFY_STDB_PORT', '3300')}"
-os.environ['LIVING_STDB_CONTAINER'] = CONTAINER
 CASES = ('basic', 'routing-group', 'routing-assign', 'routing-rotate', 'routing-child',
          'routing-default', 'overflow', 'retry-fallback', 'error-overflow', 'outage',
-         'repair', 'deliberation-retry', 'retry-exhausted', 'timeout', 'missing-default-key')
-FIELDS = {'at_ms', 'actor', 'purpose', 'profile', 'model', 'latency_ms', 'request', 'reply', 'tokens', 'error', 'lane', 'queue_wait_ms', 'prompt_tokens', 'completion_tokens', 'cached_tokens'}
+         'repair', 'deliberation-retry', 'retry-exhausted', 'timeout', 'missing-default-key', 'mix')
+FIELDS = {'at_ms', 'actor', 'purpose', 'profile', 'model', 'latency_ms', 'request', 'reply', 'tokens', 'error', 'lane', 'queue_wait_ms', 'prompt_tokens', 'completion_tokens', 'cached_tokens', 'effort', 'mix', 'attention'}
 
 
 def rows(path):
@@ -89,7 +88,7 @@ class Run:
 
     def harness(self, *args):
         if args[0] == 'launch':
-            result = self.command(['docker', 'inspect', CONTAINER, '--format', '{{json .Mounts}}'])
+            result = self.command(['docker', 'inspect', STDB_CONTAINER, '--format', '{{json .Mounts}}'])
             mounts = json.loads(result.stdout)
             source = next((m.get('Source') for m in mounts if m.get('Destination') == '/wasm'), None)
             # Docker Desktop reports bind mounts by their path in its VM (/host_mnt/Users/...).
@@ -143,7 +142,7 @@ class Run:
     def exchanges(self):
         return [entry for path in self.journal.glob('*.jsonl') for entry in rows(path)]
 
-    def start(self, models, ids, *, lod=False, lod_think_s=600, lod_prompt_s=120, lod_sticky_s=600):
+    def start(self, models, ids, *, lod=False, lod_think_s=600, lod_prompt_s=120, lod_sticky_s=600, seed='world', extra_env=None):
         path = self.directory / 'models.json'
         path.write_text(json.dumps(models, indent=2))
         # Capture the admin token in memory only. Never write it or subprocess output to evidence.
@@ -153,13 +152,14 @@ class Run:
         if len(matches) != 1:
             raise RuntimeError('could not find one admin JWT from stdb login show --token')
         self.token = matches[0]
-        env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=SERVER,
-                   LIVING_DB=self.db, LIVING_RUN=self.db, LIVING_SEED='world', LIVING_MODELS=str(path),
+        env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=STDB_URL,
+                   LIVING_DB=self.db, LIVING_RUN=self.db, LIVING_SEED=seed, LIVING_MODELS=str(path),
                    LIVING_NEO4J='off', LIVING_NEO4J_PASSWORD='', LIVING_ONLY=','.join(map(str, ids)),
                    LIVING_LLM_PER_MIN='0', LIVING_CONCURRENCY='4', LIVING_TOKEN=self.token,
                    LIVING_VERIFY_FAKE_KEY='dummy-local-only', LIVING_VERIFY_MISSING_KEY='',
                    LIVING_LOD='1' if lod else '0', LIVING_LOD_THINK_S=str(lod_think_s),
                    LIVING_LOD_PROMPT_S=str(lod_prompt_s), LIVING_LOD_STICKY_S=str(lod_sticky_s), NO_PROXY='127.0.0.1,localhost', RUST_LOG='info,neo4rs=warn,spacetimedb_sdk=warn')
+        env.update(extra_env or {})
         self.env = env
         self.launch_mind()
         source_paths = ('living/mind/src/llm.rs', 'living/mind/src/main.rs', 'living/mind/src/mind.rs',
@@ -279,6 +279,12 @@ def run_case(run, case):
         script = {'rules': [{'purpose': 'deliberate', 'content': 'not JSON', 'times': -1}]}
     elif case == 'missing-default-key':
         models['profiles']['primary']['key_env'] = 'LIVING_VERIFY_MISSING_KEY'
+    elif case == 'mix':
+        # A named mix routes each purpose (and compile by stage of attention) with its own effort.
+        models['mixes'] = {'verify-mix': {'think': 'primary@low', 'deliberate': {'on_stage': 'alternate@high', 'off_stage': 'primary'},
+                                          'talk': 'alternate', 'consolidate': 'primary@high', '*': 'primary'}}
+        models['assign'] = {adults[0]['name']: 'verify-mix'}
+        expected = {adults[0]['name']: 'verify-mix'}
     first = run.fake(a, script, 'primary')
     alternate_script = {}
     if case == 'basic':
@@ -308,6 +314,19 @@ def run_case(run, case):
         def installed():
             return 'decided: verify fake wait' in (run.directory / 'mind.log').read_text()
         run.wait(installed, 'accepted graph')
+        if case == 'mix':
+            name = adults[0]['name']
+            mine = lambda: [e for e in run.exchanges() if e['actor'] == name]
+            # Nobody is near: the first compile is off stage. A player who speaks puts them on stage.
+            run.wait(lambda: any(e['purpose'] == 'deliberate' and e['attention'] == 'off_stage' for e in mine()), 'off-stage compile')
+            run.harness('player', 'join', 'LlmMixVerifier')
+            player = run.sql("SELECT id FROM character WHERE name = 'LlmMixVerifier'", 'mix-player')[0]['id']
+            run.admin('place_near', player, ids[0])
+            run.harness('player', 'say', 'Hello, can you hear me?', '--to', str(ids[0]))
+            run.wait(lambda: any(e['purpose'] == 'talk' for e in mine()), 'talk exchange', 40)
+            run.admin('set_behavior', ids[0], json.dumps({'think': 'verify mix on stage'}))
+            run.wait(lambda: any(e['purpose'] == 'deliberate' and e['attention'] == 'on_stage' and not e['error'] for e in mine()), 'on-stage compile', 90)
+            run.wait(lambda: any(e['purpose'] == 'consolidate' for e in mine()), 'consolidation', 150)
         if case.startswith('routing'):
             run.wait(lambda: all(any(e['actor'] == name and e['purpose'] == 'deliberate' and e['profile'] == target
                                     for e in run.exchanges()) for name, target in expected.items()), 'all routing choices')
@@ -396,6 +415,22 @@ def run_case(run, case):
             key = e['request'].get('prompt_cache_key')
             assert key
             assert keys.setdefault((e['profile'], e['purpose']), key) == key
+    if case == 'mix':
+        mine = [e for e in exchanges if e['actor'] == adults[0]['name']]
+        want = {('think', None): ('primary', 'low'), ('deliberate', 'off_stage'): ('primary', 'deliberate'),
+                ('deliberate', 'on_stage'): ('alternate', 'high'), ('talk', None): ('alternate', 'talk'), ('consolidate', None): ('primary', 'high')}
+        seen = {}
+        for e in mine:
+            assert e['mix'] == 'verify-mix', e
+            key = (e['purpose'], e['attention'])
+            assert key in want, f'unexpected purpose/attention {key}'
+            assert (e['profile'], e['effort']) == want[key], (key, e['profile'], e['effort'])
+            assert e['request'].get('reasoning_effort') == e['effort']
+            seen[key] = seen.get(key, 0) + 1
+        assert set(seen) == set(want), f'every purpose and stage was exercised: {seen}'
+        sent = rows(run.directory / 'primary-requests.jsonl') + rows(run.directory / 'alternate-requests.jsonl')
+        assert {(r['model'], r['reasoning_effort']) for r in sent} >= {('fake-primary', 'low'), ('fake-primary', 'deliberate'), ('fake-alternate', 'high'), ('fake-alternate', 'talk'), ('fake-primary', 'high')}
+        expected = {'journal': {f'{p}/{a}': n for (p, a), n in seen.items()}}
     if case.startswith('routing'):
         for actor, target in expected.items():
             assert all(e['profile'] == target for e in exchanges if e['actor'] == actor)
@@ -412,7 +447,7 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r'llm-[a-zA-Z0-9-]+', args.run):
         parser.error('--run must start with llm-')
-    with urllib.request.urlopen(SERVER + '/v1/ping', timeout=5) as response:
+    with urllib.request.urlopen(f'{STDB_URL}/v1/ping', timeout=5) as response:
         assert response.status == 200, 'the existing SpacetimeDB container must be running'
     suite = ROOT / '.local/living/verify' / args.run
     suite.mkdir(parents=True, exist_ok=False)
