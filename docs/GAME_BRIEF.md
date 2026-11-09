@@ -473,6 +473,42 @@ Open:
 
 **Animation gaps in Bevy 0.20** that need custom code: root motion, IK (feet), animation level of detail. Every bone is an entity, so CPU cost grows with bones × characters. Measure with Bevy's `many_foxes` example before scaling up.
 
+## Town life in the client (2026-11-09)
+
+Presentation only: the authority decides what every resident does ([town life](TOWN_LIFE.md)); the client draws it from public rows and sends my gestures through `human_act`. Code: `living/game/src/town.rs`, with `live.rs` (clips, facing, indoors), `net.rs` (subscriptions), `weather.rs`, `camera.rs` and the HUD.
+
+- **Data.** `act_card` (17 rows) and `weather` (one row) are subscribed once per connection; `doing` is joined to the near body window like `fighter` (`SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE <chunk ranges>`). No whole-world query. A connected client holds 21 live queries instead of 18.
+- **What residents are seen doing** comes from `doing.code` through `act_card`: by skill name for the skills drawn for, else by the card's `look`, else nothing over locomotion, so a skill the rules add shows without a client change.
+
+  | Skill (look) | Drawn as |
+  |---|---|
+  | `keep`, `cook`, `craft`, `store` (work) | `work`: busy hands at a stall or a door |
+  | `gather`, `plant`, `take`, `tend` (work) | `gather`: bending to a bush and back |
+  | `read` (work) | `idle_look` |
+  | `eat`, `play` | `eat`, `play` |
+  | `rest` | settling down (`sit_ground_down`), then sitting cross-legged (`sit_ground`); about 3 in 10 stand at ease (`listen`); in rain everyone stands (`idle_look`), under the eaves |
+  | `wave`, `nod` (gesture) | the clip once, toward the one greeted: a wave 2.1 s (×1.4), a nod 1.4 s; it plays to its end unless the body moves off |
+  | `face`, `step_aside` (turn, step) | only the body's own motion |
+  | `sleep` | not drawn (indoors) |
+
+  A working body faces its spot (`doing.x/y`) or the one it is aimed at. Unknown codes and looks fall back to idle and locomotion, as combat's do.
+- **Indoors: hidden, not a lit window.** A sleeper, or someone resting within 3.5 m of their own door (sheltering at home, keeping warm), is not drawn, gets no nameplate and is not targeted; they reappear at the door when they come out. A lit window would need per-house window geometry that buildings don't expose, and the island's windows already glow at night.
+- **Turning on the spot.** A standing body takes its facing from its own segment, `heading` + `turn` × elapsed (up to `turn_s`), so the turn before a gesture and `face` turn the body in place instead of sliding. Drawn yaw eases toward the wanted facing (1/16 s), so stops and new aims never snap.
+- **Rain** follows the `weather` row in connected mode (rain or clear), eased over 6 s; joining mid-spell shows the sky as it is. Look-dev keeps its schedule and `LIVING_GAME_WEATHER`.
+- **My gestures: G waves, B nods** (clear of WASD, the skill bar and F). They go to the person under or nearest the cursor, else the nearest in reach ahead (12 m for a wave, 6 m for a nod). My clip is predicted at the press, and my character turns to whom I greet. The answer is the resident's own `doing` row (the nod) and my `experience` ("… answers your greeting (nod)."). It shows plainly: their nameplate for 3.5 s, and the camera's conversation framing takes in both of us. No text.
+- **HUD.** No labels for activities. The only additions are that answerer's nameplate and no plate over someone indoors.
+- **New clips** (Kimodo on the Spark, `living/tools/blender/clips.json`; `gen_anim.sh` regenerates): `gather`, `work`, `eat`, `play`, `sit_ground_down`, `sit_ground`. 24 takes in 105 s; seeds picked by hip and head drop, hand travel and root drift.
+- **Cost on the Mac** (M4 Pro, uncapped, `LIVING_GAME_PERF=diag`, 30 s windows on the scratch island, one client at a time, base `f2a19f2`): calm village at 10:00, base 5.11 / this 5.04 ms mean (worst 8.1 / 8.3); busy inn crowd at 20:30 (30–40 residents within 30 m), 6.17 / 5.96 ms (worst 11.6 / 11.2). Toon materials (42), materials per view (36 calm, 35 busy) and the people's share (33) are identical across arms and do not grow with residents. Frame hitches (30–170 ms with nothing arriving in the frame) showed in both arms on other windows while the Mac was loaded by other work (load average 4–5); none is from this change. That is one window per arm, not a repeatability study.
+- **Bytes.** Whole-client bytes differ between world days more than between arms: the base client sent 3.8 kB/s at the inn at 20:18–21:39 one day and 8.3 kB/s in the same window the next, against this client's 5.6 kB/s. So the new queries were measured alone through verify-client's probe (`drive.py`, nothing else connected). The `doing` join sends 0.56 kB/s on the market street at 11:00 (44 rows initially, 1.5 kB) and 1.16 kB/s at the inn at 21:00 (65 rows, 2.1 kB), against 1.94 kB/s for `body` in the same day window. `act_card` costs 339 B once and `weather` 26 B. Rows arrive only for bodies in the window, at most one each.
+- **Proof** (2026-11-09, scratch `verify-townclient`, module from `b7cf7fb`): headless connected photographs at fixed spots. The town market at 10:12, the inn at 20:12 and close at 21:45, the market at 00:42, rain on the market and at the inn after 45 s of `set_weather`, my wave at a stall keeper answered by a nod (`skill_use`: `greeted Roli` → `answered Photographer` 1.27 s later), and a wolf placed in the market (10 residents fled, 13 attacked, 64 turned to face it in 12 s). Scenes were set with admin `place_at`, `set_weather` and `kill`; my gestures went through the game's own G/B path. verify-client's suite passed (17, the 2 known XFAILs, permission matrix 184 calls, 0 mismatches); verify-player's gestures passed 9 of 9.
+- **Still off:**
+  - At the fixed 22 m view a fight or a nod is small; only a greeting brings the camera in.
+  - The evening crowd stands and sits on one spot per place, overlapping: the authority sends everyone to the same point.
+  - Standing up from the ground is a 220 ms blend into the walk, with no `stand_up` clip yet.
+  - Gestures while walking slide (rare: the rules turn a standing body first).
+  - A hidden sleeper still animates.
+  - Clips are judged from stills, not in motion: `play` has one 41° jerk inside its loop.
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**

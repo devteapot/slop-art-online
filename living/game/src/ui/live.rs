@@ -17,6 +17,10 @@
 //!   know-how; others' health band and
 //!   move from their `fighter` rows; floating numbers and who saw my death from `my_combat`.
 //!
+//! - town life (docs/TOWN_LIFE.md, `town.rs`): no nameplate over someone indoors; a brief one
+//!   over whoever answered my greeting (my `experience`), and nothing else: what residents do
+//!   shows on their bodies, never as labels.
+//!
 //! Not on the server yet, so omitted: interactions.
 
 use super::model::*;
@@ -37,7 +41,7 @@ pub struct Last {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, mut last: Local<Last>) {
+pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, town: Res<crate::town::Town>, mut last: Local<Last>) {
     let now_ms = scene.now_ms;
     let now = now_ms / 1000.0;
     model.shown = true;
@@ -148,8 +152,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     let mut actors = Vec::new();
     for (id, (p, _)) in &scene.shown {
         let Some(c) = chars.get(id) else { continue };
-        // The client-side sight mock (F1): nothing over those out of sight.
-        if Some(*id) == me || my_pos.is_some_and(|m| !sight.shows(Vec2::new(m.x, m.z), *p)) {
+        // The client-side sight mock (F1): nothing over those out of sight, or indoors.
+        if Some(*id) == me || town.hidden(*id) || my_pos.is_some_and(|m| !sight.shows(Vec2::new(m.x, m.z), *p)) {
             continue;
         }
         let distance = my_pos.map_or(0.0, |m| Vec2::new(m.x, m.z).distance(*p));
@@ -166,6 +170,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             hovered: near_cursor < 1.2,
             targeted: false,
             talking: talking.contains(id),
+            greeted: town.answered.contains_key(id),
             stance: if hostile { Stance::Hostile } else { Stance::Neutral },
             hp: band(*id),
         });

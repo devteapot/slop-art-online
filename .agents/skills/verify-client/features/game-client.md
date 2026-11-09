@@ -5,13 +5,14 @@
 - The game client (`living/game`) subscribes in stages (`living/game/src/net.rs`, module comment):
   1. `world`, `land` and `settlement` whole (1, 1 and about 6 rows).
   2. On a land world (a `land` row exists), only its own characters: `SELECT * FROM character WHERE controller = :sender`. On a tile world it subscribes `terrain_chunk` and `character` whole, as before.
-  3. Its character's `body`, `vitals`, `experience` and `place` by id.
+  3. Its character's `body`, `vitals`, `experience`, `place`, `inventory` and `know_how` by id; for the connection, `my_combat`, `my_readiness`, `skill_card`, `act_card` and `weather` (the last two for town life: about 17 rows and one row; docs/TOWN_LIFE.md).
   4. Two chunk windows, each moved by subscribing the new one before dropping the old one:
-     - near, re-centred after 2 chunks: `body` within ±5 chunks, the characters on those bodies through a join, and `terrain_chunk` within ±3 chunks;
+     - near, re-centred after 2 chunks: `body` within ±5 chunks, the characters, `fighter` and `doing` rows on those bodies through joins, and `terrain_chunk` within ±3 chunks;
      - far, re-centred after 5 chunks: `lot` within ±11 chunks.
 - It regenerates the land from the `land` row and compares the three digests (`living/game/src/live.rs`, `land` and `regenerate`). It logs `digests match` or `DIGESTS DIFFER`.
 - It joins with `join`. The newcomer arrives at `land.arrive_x/arrive_y`, and the client moves only through `human_move` and `human_act` (`goto`).
 - It draws buildings from `lot` rows and characters from the bodies in the window. The HUD shows vitals, heard speech, death and rejoin (`living/game/src/ui/live.rs`).
+- Town life (`living/game/src/town.rs`): `doing.code` is named through `act_card` and drawn as a clip on the standing body (work, gather, eat, play, sitting, wave, nod); a sleeper, or someone resting within 3.5 m of their own door, is hidden (indoors). A standing body's facing follows its own segment (`heading` + `turn` × elapsed, up to `turn_s`), so turns at zero speed turn in place. Rain follows the `weather` row. The keys G and B send `human_act` wave and nod ([verify-player gestures](../../verify-player/features/gestures.md)).
 
 ## How to get to it (user POV)
 
@@ -35,7 +36,9 @@ Use a fresh `LIVING_GAME_TOKEN` path for each run. A reused token is an identity
 - `world kind: Land`;
 - `land: regenerated in … s; digests match: tiles …, heights …, layout …`;
 - `playing character #N`;
-- every 10 s, `live: cache body … character … lot … terrain_chunk … (N tiles edited) …; drawn … characters, … lots; window moves …`.
+- every 10 s, `live: cache body … character … doing … act_card … weather dry|rain|none lot … terrain_chunk … (N tiles edited) …; drawn … characters, … lots; window moves …` (`act_card` 17 and `weather` `dry` or `rain` on the island seed).
+
+Script steps for town life: `gesture:wave|nod[:ID]` (the G and B keys' path) and `sync:NAME` (waits for `<dir>/NAME.go`, so an outside driver can set a scene with admin reducers first; a number in the file sets the view's yaw).
 
 `island perf` lines report frame times every 2 s. They are capped at 60 Hz unless `LIVING_GAME_FPS_CAP=0`. They describe the machine and its load; they are not protocol evidence.
 
@@ -53,9 +56,12 @@ $D --run $R --as-player --save sender --seconds 2 --query "SELECT * FROM charact
 $D --run $R --save join --seconds 30 --query "SELECT character.* FROM character JOIN body ON character.id = body.id WHERE $(ranges body.chunk 21 31 10 20)"
 $D --run $R --save body --seconds 30 --query "SELECT * FROM body WHERE $(ranges chunk 21 31 10 20)"
 $D --run $R --save lots --seconds 3 --query "SELECT * FROM lot WHERE $(ranges chunk 15 37 4 26)"
+$D --run $R --save doing --seconds 30 --query "SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE $(ranges body.chunk 21 31 10 20)"
+$D --run $R --save acts --seconds 2 --query "SELECT * FROM act_card"
+$D --run $R --save weather --seconds 2 --query "SELECT * FROM weather"
 ```
 
-`:sender` must return exactly the harness player's character. The join must return one character per body in the window.
+`:sender` must return exactly the harness player's character. The join must return one character per body in the window, and the `doing` join only rows whose body is in the window (at most one per body).
 
 ### Volume
 
@@ -65,7 +71,7 @@ Bytes per query come from the server's `spacetime_num_bytes_sent_to_clients_tota
 - `Unsubscribe`: rows dropped when a window moves;
 - `Update`: live changes.
 
-`spacetime_active_queries{database_identity=…}` counts the live queries. While one game client walks, it must stay flat (12 on 2026-11-09). If it grows, a moved window was never dropped. The database identity is `GET /v1/database/<name>` → `database_identity`. Sample with nothing else connected, or each client's bytes count toward the same total.
+`spacetime_active_queries{database_identity=…}` counts the live queries. While one game client walks, it must stay flat (21 since town life on 2026-11-09, 18 before it: `act_card`, `weather` and the `doing` join added three). If it grows, a moved window was never dropped. The database identity is `GET /v1/database/<name>` → `database_identity`. Sample with nothing else connected, or each client's bytes count toward the same total.
 
 ## Gotchas
 

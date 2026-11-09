@@ -135,6 +135,8 @@ pub struct Actor {
     pub hovered: bool,
     pub targeted: bool,
     pub talking: bool,
+    /// Just answered my greeting (a nod or a wave back): their name shows for a moment.
+    pub greeted: bool,
     pub stance: Stance,
     /// Health fraction, only when perceived.
     pub hp: Option<f32>,

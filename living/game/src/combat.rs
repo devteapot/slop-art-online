@@ -301,7 +301,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
 }
 
 /// The creature under or nearest the cursor (within 3.5 m of it, 30 m of me).
-pub fn pick(net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res<Target>, mut c: ResMut<Combat>) {
+pub fn pick(net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res<Target>, town: Res<crate::town::Town>, mut c: ResMut<Combat>) {
     let (Some(cursor), Some(me_at)) = (cam.cursor_ground, target.0) else {
         c.target = None;
         return;
@@ -312,7 +312,7 @@ pub fn pick(net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res
     c.target = scene
         .shown
         .iter()
-        .filter(|(id, (p, _))| Some(**id) != me && p.distance(me_at) < 30.0 && !c.deaths.contains_key(id))
+        .filter(|(id, (p, _))| Some(**id) != me && p.distance(me_at) < 30.0 && !c.deaths.contains_key(id) && !town.hidden(**id))
         .map(|(id, (p, _))| (*id, p.distance(cursor)))
         .filter(|(_, d)| *d < 3.5)
         .min_by(|a, b| a.1.total_cmp(&b.1))

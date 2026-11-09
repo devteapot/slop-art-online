@@ -13,7 +13,7 @@ only drafts what is missing; delete a file to redraft that household.
 
 Output: `living/seeds/<world>.json`, a seed with authored `residents` per settlement.
 
-Usage: living/tools/author_world.py <world> [--profile luna] [--jobs 4] [--compile-only]
+Usage: living/tools/author_world.py <world> [--profile glm-flash] [--jobs 4] [--compile-only]
 The model is called through the mind's model config (`LIVING_MODELS` or
 `living/configs/models.json`) with keys from `.env`; nothing secret is printed.
 """
@@ -162,7 +162,7 @@ def check_sheet(name, sheet, names, notes):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("world")
-    ap.add_argument("--profile", default="luna")
+    ap.add_argument("--profile", default="glm-flash")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--compile-only", action="store_true")
     a = ap.parse_args()

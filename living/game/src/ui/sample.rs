@@ -145,6 +145,7 @@ pub fn fill(
                 hovered: Some(e) == hovered,
                 targeted: Some(e) == hovered,
                 talking: speakers.contains(&e),
+                greeted: false,
                 stance: if is_hostile { Stance::Hostile } else { Stance::Neutral },
                 hp: if is_hostile { Some(0.62) } else { None },
             }

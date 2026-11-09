@@ -15,12 +15,13 @@
 //!    - **tiles** (the lab worlds): `terrain_chunk` and `character` whole, as before.
 //! 3. My rows: `body`, `vitals`, `experience`, `place`, `inventory` and `know_how` of my
 //!    character; for the connection, my combat feed and timing (`my_combat`, `my_readiness`:
-//!    per-sender views) and the skill bar's `skill_card` (docs/COMBAT.md).
+//!    per-sender views) and the skill bar's `skill_card` (docs/COMBAT.md); the visible skills'
+//!    `act_card` and the one `weather` row (docs/TOWN_LIFE.md), both small and nearly static.
 //! 4. Windows round me:
 //!    - land, near: `body` and the characters on those bodies (a join on `body.id`) within
 //!      [`BODY_CHUNKS`], and `terrain_chunk` within [`TERRAIN_CHUNKS`] (only edits since world
-//!      creation matter there), and the `fighter` rows on those bodies (a join, as for
-//!      characters), re-centred when I walk [`RECENTRE`] chunks from its centre;
+//!      creation matter there), and the `fighter` and `doing` rows on those bodies (joins, as
+//!      for characters), re-centred when I walk [`RECENTRE`] chunks from its centre;
 //!    - land, far: `lot` within [`LOT_CHUNKS`] (buildings show to the island's draw distance),
 //!      re-centred after [`LOT_RECENTRE`] chunks. Lots never change, so this window has its own,
 //!      longer lifetime: re-sending it with every near move cost about 130 kB a move.
@@ -256,8 +257,9 @@ impl Net {
             // My combat feed and timing (per-sender views: only my identity's rows) for the
             // connection's lifetime, so the death screen keeps them after my character dies;
             // the rules' numbers for the skill bar (`skill_card`, 6 rows; docs/COMBAT.md).
-            Mode::Land => &["SELECT * FROM character WHERE controller = :sender", "SELECT * FROM my_combat", "SELECT * FROM my_readiness", "SELECT * FROM skill_card"],
-            _ => &["SELECT * FROM terrain_chunk", "SELECT * FROM character"],
+            // What residents are seen doing is named by `act_card` (17 rows); `weather` is one row.
+            Mode::Land => &["SELECT * FROM character WHERE controller = :sender", "SELECT * FROM my_combat", "SELECT * FROM my_readiness", "SELECT * FROM skill_card", "SELECT * FROM act_card", "SELECT * FROM weather"],
+            _ => &["SELECT * FROM terrain_chunk", "SELECT * FROM character", "SELECT * FROM weather"],
         };
         info!("world kind: {:?}", self.mode);
         let (ok, err) = (self.inbox.clone(), self.inbox.clone());
@@ -397,6 +399,8 @@ impl Net {
                 format!("SELECT character.* FROM character JOIN body ON character.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
                 // How the fighters in the window look: health band and the move under way.
                 format!("SELECT fighter.* FROM fighter JOIN body ON fighter.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
+                // What they are visibly doing (town life): one small row per character at most.
+                format!("SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
                 format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", tx, ty)),
             ],
             Which::Lots => vec![format!("SELECT * FROM lot WHERE {}", chunk_ranges("chunk", xs, ys))],
