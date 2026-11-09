@@ -208,7 +208,7 @@ def start_candidate(p, label, run, player, model, mode, batch_wait_s):
     import subprocess
     login = subprocess.run([str(ROOT / 'living/tools/stdb'), 'login', 'show', '--token'], capture_output=True, text=True, check=True)
     tokens = re.findall(r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', login.stdout)
-    env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER='http://127.0.0.1:3300', LIVING_DB=p.db, LIVING_RUN=run,
+    env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/'), LIVING_DB=p.db, LIVING_RUN=run,
                LIVING_SEED='island', LIVING_MODELS=str(p.directory / 'models.json'), LIVING_ONLY=str(player),
                LIVING_TOKEN=tokens[0], LIVING_NEO4J='on', LIVING_NEO4J_URI=p.state['uri'], LIVING_NEO4J_PASSWORD=p.state['password'],
                LIVING_CONCURRENCY='4', LIVING_LOD='0', LIVING_PLAYER_MEMORY='1', LIVING_PLAYER_MEMORY_EVERY_S='3',

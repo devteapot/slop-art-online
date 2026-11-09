@@ -19,7 +19,7 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'wake')
+         'takeover', 'sight', 'wake', 'animals', 'night', 'jev')
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
 UNWALKABLE = {2, 4, 7}      # water, rock, wall
 
@@ -101,6 +101,8 @@ def wall_spots(run):
 
 
 def run_case(run, case):
+    if case in ('animals', 'night', 'jev'):
+        return {'animals': animals_case, 'night': night_case, 'jev': jev_case}[case](run)
     if case == 'takeover':
         return takeover_case(run)
     if case == 'sight':
@@ -457,6 +459,98 @@ def sight_case(run):
             'hidden': names.get(other), 'open': names.get(third)}
 
 
+def animals_case(run):
+    """Cheaper animal minds (LIVING_ANIMAL_MINDS=salient,choose,pack; mind/animal.rs): one deer
+    picks one of a few options in one call and the graph built from it is installed; the deer it
+    sees reuse that decision without a call (pack); asked again with nothing new, it lives by
+    instinct without a call (salient)."""
+    run.harness('launch')
+    run.harness('doctor')
+    person = next(p for p in sorted(run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'), key=lambda p: p['id']) if p['alive'] and p['stage'] == 2)
+    deer = [d['id'] for d in sorted(run.sql("SELECT * FROM character WHERE kind = 'deer'", 'deer'), key=lambda d: d['id']) if d['alive'] and d['stage'] == 2][:3]
+    assert len(deer) == 3
+    # The herd stays where the lead deer grazes (in the open); the person comes to them.
+    at = run.sql(f"SELECT x, y FROM body WHERE id = {deer[0]}", 'lead-at')[0]
+    run.admin('set_behavior', person['id'], json.dumps({'wait': 300}))
+    run.admin('place_at', person['id'], at['x'] + 3, at['y'])
+    for i, d in enumerate(deer):
+        run.admin('set_behavior', d, json.dumps({'wait': 300}))
+        run.admin('place_at', d, at['x'] + (i % 2), at['y'] + (i // 2))
+    time.sleep(1.0)
+    models = model(run, {})
+    run.start(models, deer, extra_env={'LIVING_ANIMAL_MINDS': 'salient,choose,pack', 'LIVING_ANIMAL_PACK_S': '120'})
+    detail = lambda t: json.loads(t['detail']) if t['detail'] else {}
+    # Installing a graph counts as having just thought, and within its species' think_min_s
+    # (240 s) the authority asks an animal only for urgent reasons; dawn is one, and it is not
+    # news to the animal's salience check.
+    ask = lambda d, marker: run.admin('set_behavior', d, json.dumps({'think': f'Dawn of day 2. verify {marker}'}))
+    lead, *rest = deer
+    ask(lead, 'animal-lead')
+    first = run.wait(lambda: [t for t in run.thoughts(lead, 'lead-thoughts') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'choose'], 'a chosen option', 60)[0]
+    d0 = detail(first)
+    assert d0['valid_pick'] and len(d0['options']) >= 3 and set(d0['pack']) >= set(rest), d0
+    brain = run.sql(f'SELECT * FROM brain WHERE id = {lead}', 'lead-brain')[0]
+    assert brain['source'] == 'mind' or d0['options'][d0['pick']].startswith('carry on'), brain
+    for d in rest:
+        ask(d, 'animal-member')
+    shared_ = {d: run.wait(lambda d=d: [t for t in run.thoughts(d, f'member-{d}') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'pack'], f'pack decision for {d}', 60)[0] for d in rest}
+    assert all(detail(t)['by'] == lead for t in shared_.values())
+    chosen = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']
+    compiled = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
+    assert len(chosen) == 1 and not compiled, (len(chosen), len(compiled))
+    ask(lead, 'animal-again')
+    run.wait(lambda: any(t['kind'] == 'instinct' for t in run.thoughts(lead, 'lead-again')), 'a request answered by instinct', 60)
+    assert len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']) == 1, 'nothing new: no call'
+    return {'status': 'pass', 'lead': lead, 'pick': d0['options'][d0['pick']], 'weight': d0.get('weight'), 'members': rest, 'model_calls_for_three_deer': 1}
+
+
+def night_case(run):
+    """Reorganization at night (mind/sleep.rs): with LIVING_NIGHT covering the whole day and no
+    gap, a mind that integrated once goes to sleep in the night's batch round; under the timer
+    no night round happens. Neo4j is off here, so nothing is sent (an empty mind needs no
+    reorganization); verify-knowledge's sleep feature sends the batch."""
+    people = prepare(run)
+    actor = people[0]['id']
+    script = {'replies': {'deliberate': basic_reply()}}
+    models = model(run, script)
+    run.request(actor, 'night')
+    run.start(models, [actor], extra_env={'LIVING_REORGANIZE': 'night-batch', 'LIVING_NIGHT': '0-24', 'LIVING_REORGANIZE_GAP_S': '0', 'LIVING_REORGANIZE_MIN': '1'})
+    run.wait(lambda: ' integrated ' in run.log(), 'one integration', 120)
+    line = run.wait(lambda: re.search(r'night (\d+): 1 of 1 minds go to sleep \(1 in a batch, 0 direct; 1 due\)', run.log()), 'a night round', 30)
+    run.wait(lambda: re.search(r'sleep: .+ slept \((batch|direct), night Some\(\d+\)', run.log()), 'the sleep ends', 30)
+    assert 'reorganization: Config { mode: NightBatch' in run.log()
+    return {'status': 'pass', 'night': int(line[1])}
+
+
+def jev_case(run):
+    """A cached judgment drives a graph (mind/judge.rs; `judged` condition): a defender whose
+    graph flees while `fight_risk` is above 0.6 is struck; the fake Jev answers 0.9; the mind
+    caches it with mind_judged and the authority's tick takes the flee branch. The request
+    carries only the defender's own state."""
+    people = prepare(run)
+    defender, attacker = people[0]['id'], people[1]['id']
+    at = run.sql(f"SELECT x, y FROM body WHERE id = {defender}", 'defender-at')[0]
+    graph = {'desires': [{'want': 'this fight', 'weight': {'base': 1.0}, 'do': {'first': [
+        {'if': {'cond': {'judged': {'q': 'fight_risk', 'above': 0.6}}, 'then': {'do': {'skill': 'flee', 'target': 'attacker'}}}},
+        {'if': {'cond': {'hurt_within': 10}}, 'then': {'do': {'skill': 'strike', 'target': 'attacker'}}}, {'wait': 1}]}}]}
+    script = {'replies': {'deliberate': {'thought': 'I hold my ground.', 'graph': 'keep'}, 'think': {'thought': 'I hold my ground.', 'intend': [], 'say': None}},
+              'rules': [{'purpose': 'judge', 'noul': 0.9, 'times': -1}]}
+    models = model(run, script)
+    port = models['profiles']['local']['base_url'].split(':')[2].split('/')[0]
+    run.start(models, [defender], extra_env={'LIVING_JEV': '1', 'LIVING_JEV_URL': f'http://127.0.0.1:{port}/v1/systemone', 'TYPESAFE_API_KEY': 'fake-only'})
+    run.admin('place_at', defender, at['x'], at['y'])
+    run.admin('place_at', attacker, at['x'] - 1.2, at['y'])
+    run.admin('set_behavior', defender, json.dumps(graph))
+    run.admin('set_behavior', attacker, json.dumps({'seq': [{'do': {'skill': 'strike', 'target': {'id': defender}}}, {'wait': 2}]}))
+    cached = run.wait(lambda: run.private(f'SELECT * FROM judged WHERE actor = {defender}', 'judged'), 'a cached judgment', 60)
+    assert cached[0]['q'] == 'fight_risk' and abs(cached[0]['value'] - 0.9) < 1e-6 and cached[0]['expires_ms'] > cached[0]['updated_ms']
+    run.wait(lambda: any('flee' in (a['label'] or '').lower() for a in run.private(f'SELECT * FROM activity WHERE id = {defender}', 'activity')), 'the flee branch', 30)
+    asked = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'judge']
+    state = asked[0]['body']['state']
+    assert set(state) >= {'actor', 'body', 'recently_perceived'} and 'fight_risk' in asked[0]['body']['questions']
+    judged = [e for e in run.exchanges() if e['purpose'] == 'judge']
+    assert judged and judged[0]['judged'][0]['q'] == 'fight_risk'
+    return {'status': 'pass', 'judgments': len(judged), 'value': cached[0]['value']}
 def wake_case(run):
     """On the island (`rules.minds = false`) a resident lives on its behaviour graph until a
     player engages it: an offer and speech wake it, this service takes it up like any AI

@@ -229,6 +229,10 @@ pub enum Cond {
     HealthOf(HealthOfCond),
     /// A judgment the mind maintains from its beliefs.
     Believes(Believes),
+    /// A typed judgment of the character's own that its mind refreshes in the background (a
+    /// yes probability, a choice or a score), read from the cache: never waited on. While
+    /// there is none, or it has expired, the condition is its `else` (the fallback branch).
+    Judged(Judged),
     /// Whether a skill could go ahead now by the world's rules (the same check it passes when
     /// it starts), e.g. `{"can": {"do": "eat", "item": "food"}}`; its target must be in sight.
     Can(Action),
@@ -286,6 +290,32 @@ pub struct NearCond {
 
 fn near_default() -> f32 {
     3.0
+}
+
+/// `{"judged": {"q": "fight_risk", "above": 0.7, "else": false}}`: compares the cached value
+/// (a probability, or a score's expected level); `{"judged": {"q": "stranger", "is": "hostile"}}`
+/// holds while the cached choice is `hostile`.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Judged {
+    pub q: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub above: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub below: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is: Option<String>,
+    /// The condition's value while no fresh judgment exists.
+    #[serde(default, rename = "else", skip_serializing_if = "std::ops::Not::not")]
+    pub otherwise: bool,
+}
+
+impl Judged {
+    /// The condition against a fresh cached judgment (`None`: none, or expired).
+    pub fn test(&self, cached: Option<(f32, &str)>) -> bool {
+        let Some((value, choice)) = cached else { return self.otherwise };
+        self.is.as_ref().map_or(true, |c| c.eq_ignore_ascii_case(choice)) && self.above.map_or(true, |a| value > a) && self.below.map_or(true, |b| value < b)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -622,6 +652,14 @@ fn check_cond(c: &Cond, depth: usize) -> Result<(), String> {
                 return Err("judgment key must be 1..=64 bytes".into());
             }
         }
+        Cond::Judged(j) => {
+            if j.q.is_empty() || j.q.len() > 64 {
+                return Err("judged q must be 1..=64 bytes".into());
+            }
+            if j.above.is_none() && j.below.is_none() && j.is.is_none() {
+                return Err("judged needs above, below or is".into());
+            }
+        }
         _ => {}
     }
     Ok(())
@@ -801,6 +839,20 @@ pub fn describe_cond(c: &Cond) -> String {
         Cond::Moving(true) => "moving".into(),
         Cond::Moving(false) => "standing".into(),
         Cond::Believes(b) => format!("believes {} > {}", b.key, b.above),
+        Cond::Judged(j) => {
+            let mut s = format!("judged {}", j.q);
+            if let Some(c) = &j.is {
+                s.push_str(&format!(" is {c}"));
+            }
+            if let Some(a) = j.above {
+                s.push_str(&format!(" > {a}"));
+            }
+            if let Some(b) = j.below {
+                s.push_str(&format!(" < {b}"));
+            }
+            s.push_str(if j.otherwise { " (else yes)" } else { " (else no)" });
+            s
+        }
         Cond::Can(a) => format!("can {}", describe(&Node::Do(a.clone())).trim_start_matches("do ")),
         Cond::Chance(p) => format!("chance {p}"),
         Cond::All(v) => v.iter().map(describe_cond).collect::<Vec<_>>().join(" and "),
@@ -840,6 +892,24 @@ pub fn outline(root: &Node) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn judged_reads_a_cached_value_or_its_fallback() {
+        let g = from_value(serde_json::json!({"first": [
+            {"if": {"cond": {"judged": {"q": "fight_risk", "above": 0.7}}, "then": {"do": {"skill": "flee", "target": "attacker"}}}},
+            {"if": {"cond": {"judged": {"q": "stranger", "is": "hostile", "else": true}}, "then": {"do": {"skill": "wait"}}}},
+            {"do": {"skill": "wander"}}]})).unwrap();
+        let text = outline(&g.root);
+        assert!(text.contains("judged fight_risk > 0.7 (else no)") && text.contains("judged stranger is hostile (else yes)"), "{text}");
+        let j = |v: serde_json::Value| serde_json::from_value::<Judged>(v).unwrap();
+        let risk = j(serde_json::json!({"q": "fight_risk", "above": 0.7}));
+        assert!(risk.test(Some((0.9, ""))) && !risk.test(Some((0.4, ""))) && !risk.test(None), "no judgment: the fallback (false)");
+        let hostile = j(serde_json::json!({"q": "stranger", "is": "hostile", "else": true}));
+        assert!(hostile.test(Some((0.8, "Hostile"))) && !hostile.test(Some((0.8, "friendly"))) && hostile.test(None));
+        assert!(from_value(serde_json::json!({"if": {"cond": {"judged": {"q": "x"}}, "then": {"wait": 1}}})).is_err(), "a comparison is required");
+        let (lenient, _) = from_value_lenient(serde_json::json!({"if": {"judged": {"question": "fight_risk", "above": 0.6, "fallback": true}}, "then": {"do": "flee", "target": "attacker"}})).unwrap();
+        assert!(outline(&lenient.root).contains("judged fight_risk > 0.6 (else yes)"));
+    }
     use super::*;
 
     #[test]

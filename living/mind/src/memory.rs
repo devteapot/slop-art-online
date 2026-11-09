@@ -1160,9 +1160,21 @@ pub fn attribute(patch: &mut Patch, actor: u32, testimony: &dyn Fn(u64) -> Optio
     }
 }
 
+/// A fact's own properties for a prompt line, without a `rel` property that repeats the
+/// relationship's type (models often write it into the props; it was 8% of recalled text in
+/// the aske-coast journals: docs/MIND_HARNESS.md, item 5).
+fn extra_props(f: &Fact) -> String {
+    let props: Vec<&String> = f.extra.iter().filter(|p| !p.strip_prefix("rel: ").is_some_and(|r| r.eq_ignore_ascii_case(&f.rel))).collect();
+    if props.is_empty() {
+        String::new()
+    } else {
+        format!(" {{{}}}", props.iter().map(|p| p.as_str()).collect::<Vec<_>>().join(", "))
+    }
+}
+
 /// Render a fact with explicit keys (for reorganization, where the mind edits by key).
 pub fn render_keys(f: &Fact, time: &dyn Fn(u64) -> String) -> String {
-    let extra = if f.extra.is_empty() { String::new() } else { format!(" {{{}}}", f.extra.join(", ")) };
+    let extra = extra_props(f);
     format!("{} —{}{}→ {} ({:.0}%, {})", f.a, f.rel, extra, f.b, f.confidence * 100.0, time(f.t))
 }
 
@@ -1179,7 +1191,7 @@ pub fn render(f: &Fact, time: &dyn Fn(u64) -> String) -> String {
         }
         s
     };
-    let extra = if f.extra.is_empty() { String::new() } else { format!(" {{{}}}", f.extra.join(", ")) };
+    let extra = extra_props(f);
     format!(
         "{} —{}{}→ {} ({:.0}%, {})",
         who(&f.a, &f.a_name, &f.a_labels),
@@ -1324,6 +1336,16 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_rel_property_that_repeats_the_type_is_not_rendered_twice() {
+        let f = Fact { a: "person:24".into(), a_name: "Jorund".into(), a_labels: vec!["Person".into()], rel: "THREATENS".into(), b: "self".into(), b_name: String::new(), b_labels: vec![],
+                       confidence: 0.89, t: 0, extra: vec!["item: words".into(), "rel: THREATENS".into(), "note: stop the thefts".into()] };
+        let line = render(&f, &|_| "long ago".into());
+        assert_eq!(line, "Jorund (person:24) [Person] —THREATENS {item: words, note: stop the thefts}→ you (89%, long ago)");
+        let other = Fact { extra: vec!["rel: WARNS".into()], ..f };
+        assert!(render_keys(&other, &|_| String::new()).contains("{rel: WARNS}"), "a different rel is the mind's own detail");
+    }
 
     /// Against a live Neo4j (LIVING_NEO4J_PASSWORD set): `cargo test -p living-mind -- --ignored`.
     #[tokio::test]

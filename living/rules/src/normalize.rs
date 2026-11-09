@@ -55,7 +55,7 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
 const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion"];
-const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, raining, moving, believes, chance, all, any, not";
+const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, raining, moving, believes, judged, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -589,6 +589,20 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                         json!({"believes": {"key": key, "above": above}})
                     }
                     _ => return Err(format!("{p}: expected a judgment key")),
+                },
+                "judged" => match v {
+                    Value::String(q) => json!({"judged": {"q": q, "above": 0.5}}),
+                    Value::Object(o) => {
+                        let mut o = strip_nulls(o);
+                        if let Some(q) = o.remove("question").or_else(|| o.remove("id")).or_else(|| o.remove("key")) {
+                            o.entry("q").or_insert(q);
+                        }
+                        if let Some(f) = o.remove("fallback").or_else(|| o.remove("otherwise")) {
+                            o.entry("else").or_insert(f);
+                        }
+                        json!({"judged": o})
+                    }
+                    _ => return Err(format!("{p}: expected {{\"q\": judgment, \"above\": p}}")),
                 },
                 "hurt_within" | "heard_within" | "hailed" | "chance" => {
                     let n = match &v {

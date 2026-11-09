@@ -485,7 +485,7 @@ impl Minds {
         let (reply, v) = {
             let mut attempt = 0;
             loop {
-                let reply = self.llm.chat_in_lane(&profile, "talk", &c.name, &messages, lane).await?;
+                let reply = self.llm.chat_in_lane(&profile, self.attention(me, None), "talk", &c.name, &messages, lane).await?;
                 match llm::parse_json(&reply.content) {
                     Ok(v) => break (reply, v),
                     Err(e) if attempt == 0 && profile != self.llm.default_profile() => {
@@ -719,7 +719,7 @@ impl Minds {
         if let Some(p) = &plan {
             cues.text(p, 0.3);
         }
-        let recalled = self.recall_for(me, &cues.bounded(), 8, 3).await;
+        let recalled = self.recall_for(me, &cues.bounded(), 8, 3, "talk").await;
         let mut mind = recalled.mind;
         mind.extend(recalled.cued_stances.into_iter().take(3).map(|s| format!("you hold: {s}")));
         let convo: Vec<String> = lines

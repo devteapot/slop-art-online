@@ -1713,6 +1713,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.experience().observer().delete(id);
     ctx.db.place().actor().delete(id);
     ctx.db.judgment().actor().delete(id);
+    ctx.db.judged().actor().delete(id);
     ctx.db.mind_cursor().actor().delete(id);
     ctx.db.act_queue().actor().delete(id);
     crate::woken::forget_dead(ctx, id);
