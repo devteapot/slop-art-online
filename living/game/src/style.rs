@@ -24,10 +24,12 @@ pub struct ToonParams {
     pub band: Vec4,
     pub extra: Vec4,
     pub shade: Vec4,
-    /// Per-instance recolouring of the texture (characters.rs): x hue, y saturation, z value,
-    /// w mode (0 none, 1 shift the hue, 2 tint a grey texture).
+    /// Recolouring of the texture (characters.rs): x hue, y saturation, z value, w mode (0 none,
+    /// 1 shift the hue, 2 tint a grey texture, 3 per instance: the target colour is in each
+    /// mesh's `MeshTag` and the shader derives the rest).
     pub recolor: Vec4,
-    /// x: the texture's mean hue, y: how much of the texture's hue variation stays (mode 1).
+    /// x: the texture's mean hue, y: how much of the texture's hue variation stays (mode 1);
+    /// mode 3 also z and w: the texture's mean saturation and value.
     pub recolor_from: Vec4,
 }
 

@@ -61,6 +61,7 @@ fn main() {
         .add_plugins(EguiPlugin::default());
     }
     app.add_systems(PostUpdate, perf::apply.before(post::update));
+    perf::diagnostics(&mut app);
     app.add_systems(Update, lookdev::character_shadows);
     app.insert_resource(ClearColor(camera::SKY))
         .add_plugins(style::StylePlugin)

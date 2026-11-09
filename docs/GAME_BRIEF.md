@@ -363,6 +363,31 @@ Fixes:
 
 Other agents loaded the machine during these runs, so the figures are indicative.
 
+**Performance pass 2 (2026-11-09; same benchmark, both machines):**
+
+**Cause.** The island was limited by neither the GPU nor any one system. The development Mac's GPU ran at about 50% (25–30% of that from other apps), and the main and render threads mostly waited. The wait was in the render world's batching: each distinct material and mesh slab is a batch set in every view (camera and three shadow cascades) and pass. Every frame, each batch set writes its buffers through `queue.write_buffer`, and wgpu allocates and frees a staging buffer for every write. A CPU sample (`sample <pid> 4`) put most of the frame in `write_binned_instance_buffers`, `submit_pending_command_buffers` (the frees) and `prepare_preprocess_bind_groups`. Shadow-map size had no effect (1024 and 4096 alike), and neither did resolution (800×450 alike).
+
+**Fixes:**
+- **Toon materials are shared by content** (`lookdev::convert`). Every model file brought its own copies of the same materials: the environment kits hold 1,047 materials but only 14 distinct ones. Scenery in view went from hundreds of materials to 4.
+- **Characters share their base's materials** (`characters::recolor`, `toon.wesl`). The material holds its texture's mean colour, and each mesh's `MeshTag` holds its recipe colour; the shader derives the same remapping. Before, every character had about ten recoloured materials of its own, which put 90 materials in view for 12 people. Now there are 15, whatever the crowd's size.
+- **People per settlement doubled** (`island.rs`): up to 16 at house fronts and 8 in the square.
+
+Mean of the last three frame reports, two runs each, 1600×900 headless and uncapped. The development Mac is an M4 Pro (load average 9–11 from other agents' work). The dev-box is a Radeon 8060S on Vulkan (load average 5–8).
+
+| Spot | Mac before | Mac after, old cap | Mac after, new cap | Dev-box before | Dev-box after, old cap | Dev-box after, new cap |
+|---|---|---|---|---|---|---|
+| Small-folk hamlet (1776, 1456) | 17.6 / 18.8 ms | 4.6 / 4.8 ms | 5.1 / 5.1 ms | 13.5 / 15.6 ms | 4.7 / 5.3 ms | 5.8 / 5.7 ms |
+| Town square (416, 256) | 12.6 / 12.8 ms | 4.5 / 4.3 ms | 4.9 / 4.9 ms | 10.5 / 9.9 ms | 4.5 / 4.4 ms | 5.3 / 4.9 ms |
+| Forest (690, 1600) | 10.4 / 10.3 ms | 4.4 / 3.5 ms | 3.6 / 3.4 ms | 6.0 / 6.0 ms | 3.7 / 2.7 ms | 3.7 / 2.6 ms |
+
+Sharing the scenery materials alone took the Mac to 8.9, 7.05 and 3.7 ms. Crowds now cost little: about 25 people near the hamlet run at 5.1 ms, 49 at 6.1 ms and 73 at 7.2 ms on the Mac. At the same people count, screenshots are pixel-identical to before at the hamlet, the town street and the forest.
+
+What remains at the hamlet on the Mac: characters about 1.0 ms, sun shadows 1.2 ms, prepasses and edge lines 0.5 ms, and small things 0.1 ms.
+
+Open:
+- `living/tools/merge_primitives.py` duplicates the shared vertex buffer for every merged primitive. Vivi's hair meshes hold 420k and 290k vertices for 6.7k and 3.7k triangles. This costs memory and load time, not frame time.
+- `LIVING_GAME_PERF=diag` reports what each view draws (meshes, materials, triangles, characters' share) and Bevy's per-pass CPU times. Metal reports no GPU times; Vulkan should.
+
 **Claude–Blender integration** (research of 2026-11-08):
 - **Backbone: headless scripts** (`blender -b -P`), versioned in the repo. No socket or telemetry, reproducible, and N processes can run in parallel. The agent checks its work through rendered contact sheets and numeric checks (dimensions, triangle budget, silhouette against a reference, a re-import round trip), reviewed by a fresh-context subagent ([blender-game-skills](https://github.com/majidmanzarpour/blender-game-skills), [blender-kiln](https://github.com/elithril/blender-kiln)).
 - **Live inspection: the official [Blender Lab MCP server](https://www.blender.org/lab/mcp-server/)** (GPL-3.0, Blender 5.1+, the server behind Anthropic's Blender connector). It is optional. It runs model-written code unguarded, so use it on localhost only.

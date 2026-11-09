@@ -18,9 +18,11 @@
 //!   much longer this character's steps are than the 1.75 m default's.
 //!
 //! **Colours** recolour textured materials per instance in the toon shader (`recolor` in
-//! `ToonParams`): the hue moves and saturation and value are remapped so that the material's
+//! `toon.wesl`): the hue moves and saturation and value are remapped so that the material's
 //! mean texture colour becomes the recipe's colour, keeping the texture's detail. Grey textures
-//! are tinted instead. Groups go by VRoid's material names: `_HAIR` (and brows), `_SKIN`,
+//! are tinted instead. Characters share their base's materials, which hold the mean colour; each
+//! mesh's `MeshTag` holds its recipe colour, so crowds batch instead of drawing every character
+//! with materials of its own. Groups go by VRoid's material names: `_HAIR` (and brows), `_SKIN`,
 //! `EyeIris`, and `_CLOTH` as `Tops`, `Bottoms`, `Shoes` and anything else as the accent.
 //!
 //! **Spring bones** follow VRM 0.x (`extensions.VRM.secondaryAnimation`, UniVRM's
@@ -565,18 +567,11 @@ fn hsv(c: Vec3) -> Vec3 {
 /// How much of a texture's own hue variation a recoloured material keeps.
 const HUE_SPREAD: f32 = 0.4;
 
-/// Shader recolour parameters (`recolor`, `recolor_from`) that map a material's mean colour
-/// `mean` onto `target` (both linear): x the target hue, y saturation and z value as factors
-/// (≥ 0 scales toward 0, < 0 is `-f` scaling the distance to 1), w the mode (1 move the hues,
-/// 2 tint a grey texture); then the mean hue and the hue spread.
-fn recolor_params(mean: Vec3, target: Vec3) -> (Vec4, Vec4) {
-    let (m, t) = (hsv(mean), hsv(target));
-    let f = |m: f32, t: f32| if t <= m { if m > 1e-4 { t / m } else { 1.0 } } else { -((1.0 - t) / (1.0 - m).max(1e-4)).max(1e-4) };
-    if m.y < 0.12 {
-        (Vec4::new(t.x, t.y, f(m.z, t.z), 2.0), Vec4::ZERO)
-    } else {
-        (Vec4::new(t.x, f(m.y, t.y), f(m.z, t.z), 1.0), Vec4::new(m.x, HUE_SPREAD, 0.0, 0.0))
-    }
+/// A recipe colour packed for a mesh's tag: sRGB bytes, bit 24 marks it set (`toon.wesl`
+/// `recolor`).
+fn tag_color(c: Srgba) -> u32 {
+    let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u32;
+    b(c.red) | b(c.green) << 8 | b(c.blue) << 16 | 1 << 24
 }
 
 /// A material's mean colour (linear) over the texels its mesh's vertices use.
@@ -600,8 +595,12 @@ fn mean_color(toon: &Toon, mesh: &Mesh, images: &Assets<Image>) -> Option<Vec3> 
     (wsum > 0.0).then(|| sum / wsum * base)
 }
 
-/// Give each character's meshes their recipe's colours (per-instance toon materials).
-#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+/// Give each character's meshes their recipe's colours. Characters share their base file's toon
+/// materials, so their meshes batch: the material learns its texture's mean colour once
+/// (recolouring mode 3), and each mesh carries its recipe colour in its tag, which the shader
+/// turns into the remapping. A material per recipe colour split every character into about ten
+/// draws of its own in every view and pass.
+#[allow(clippy::type_complexity)]
 pub fn recolor(
     mut commands: Commands,
     q: Query<(Entity, &MeshMaterial3d<Toon>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), (With<Converted>, Without<Recolored>)>,
@@ -610,7 +609,7 @@ pub fn recolor(
     mut toons: ResMut<Assets<Toon>>,
     images: Res<Assets<Image>>,
     meshes: Res<Assets<Mesh>>,
-    mut cache: Local<(HashMap<(AssetId<Toon>, String), Handle<Toon>>, HashMap<AssetId<Toon>, Vec3>)>,
+    mut ready: Local<std::collections::HashSet<AssetId<Toon>>>,
 ) {
     for (e, mat, mesh, name) in &q {
         let mut cur = e;
@@ -632,26 +631,17 @@ pub fn recolor(
             commands.entity(e).insert(Recolored);
             continue;
         };
-        let key = (mat.0.id(), target.clone());
-        if let Some(h) = cache.0.get(&key) {
-            commands.entity(e).insert((MeshMaterial3d(h.clone()), Recolored));
-            continue;
-        }
-        let Some(toon) = toons.get(&mat.0) else { continue };
-        let mean = match cache.1.get(&mat.0.id()) {
-            Some(m) => *m,
-            None => {
-                let Some(m) = meshes.get(&mesh.0).and_then(|m| mean_color(toon, m, &images)) else { continue };
-                cache.1.insert(mat.0.id(), m);
-                m
+        if !ready.contains(&mat.0.id()) {
+            let Some(toon) = toons.get(&mat.0) else { continue };
+            let Some(mean) = meshes.get(&mesh.0).and_then(|m| mean_color(toon, m, &images)) else { continue };
+            let m = hsv(mean);
+            if let Some(mut t) = toons.get_mut(&mat.0) {
+                t.extension.params.recolor = Vec4::new(0.0, 0.0, 0.0, 3.0);
+                t.extension.params.recolor_from = Vec4::new(m.x, HUE_SPREAD, m.y, m.z);
             }
-        };
-        let l = LinearRgba::from(srgb);
-        let mut t = toon.clone();
-        (t.extension.params.recolor, t.extension.params.recolor_from) = recolor_params(mean, Vec3::new(l.red, l.green, l.blue));
-        let h = toons.add(t);
-        cache.0.insert(key, h.clone());
-        commands.entity(e).insert((MeshMaterial3d(h), Recolored));
+            ready.insert(mat.0.id());
+        }
+        commands.entity(e).insert((bevy::mesh::MeshTag::new(tag_color(srgb)), Recolored));
     }
 }
 

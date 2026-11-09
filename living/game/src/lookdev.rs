@@ -203,7 +203,7 @@ pub fn convert(
     q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), Without<Converted>>,
     parents: Query<&ChildOf>,
     models: Query<(&Model, Has<NoShadow>)>,
-    mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), Handle<Toon>>, HashSet<AssetId<Mesh>>)>,
+    mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), Handle<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, Handle<Toon>>)>,
 ) {
     for (e, mat, mesh, name) in &q {
         // Only meshes under a look-dev model.
@@ -232,16 +232,23 @@ pub fn convert(
         if owner.vrm && name.is_some_and(|n| n.0.contains("_FACE") || n.0.contains("_EYE") || n.0.contains("Face")) {
             commands.entity(e).insert((bevy::light::NotShadowCaster, FacePart));
         }
-        let toon = done
-            .0
+        let (by_source, _, by_content) = &mut *done;
+        let toon = by_source
             .entry((mat.0.id(), glow_key))
             .or_insert_with(|| {
                 let mut b = base.clone();
+                if owner.vrm && crate::perf::has("charopaque") && matches!(b.alpha_mode, AlphaMode::Mask(_)) {
+                    b.alpha_mode = AlphaMode::Opaque;
+                }
                 if let Some([r, g, bl]) = glow {
                     let c = b.base_color.to_linear();
                     b.emissive = LinearRgba::new(c.red * r, c.green * g, c.blue * bl, 1.0) * 8.0 + LinearRgba::new(r, g, bl, 1.0) * 2.0;
                 }
-                toons.add(if skin { style.skin(b) } else { style.toon(b) })
+                // Every model file brings its own copies of the same few materials (the
+                // environment kits share 14 between about a thousand). One toon material per
+                // distinct content lets their meshes share bind groups and batches; each extra
+                // material costs every view and pass a batch set and its per-frame buffer writes.
+                by_content.entry(format!("{skin} {b:?}")).or_insert_with(|| toons.add(if skin { style.skin(b) } else { style.toon(b) })).clone()
             })
             .clone();
         if done.1.insert(mesh.0.id()) {
@@ -253,10 +260,13 @@ pub fn convert(
         // outlines behind them); their lines come from the finishing pass, which respects what is
         // actually visible. Shell outlines on buildings drew their buried bases through hillsides.
         let mut ec = commands.entity(e);
+        if owner.vrm && crate::perf::has("nohair") && name.is_some_and(|n| n.0.contains("_HAIR")) {
+            ec.insert(Visibility::Hidden);
+        }
         ec.remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(toon), Converted));
         if owner.file.starts_with("lookdev/") || owner.file.starts_with("view/") {
             ec.insert(outline(Outlined::Thing, &style));
-        } else {
+        } else if !crate::perf::has("nostencil") {
             ec.insert(OutlineStencil::default());
         }
     }

@@ -162,7 +162,7 @@ pub fn setup(mut commands: Commands, mut mats: ResMut<Assets<StandardMaterial>>,
         Transform::from_xyz(-30.0, 60.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
         // Shadows were the largest single cost (12–18 ms of 19–29 ms on the island): three
         // cascades to 90 m, where the fog has mostly taken over, instead of four to 160 m.
-        bevy::light::CascadeShadowConfigBuilder { num_cascades: 3, first_cascade_far_bound: 18.0, maximum_distance: 90.0, ..default() }.build(),
+        bevy::light::CascadeShadowConfigBuilder { num_cascades: crate::perf::value("cascades").map_or(3, |n| n as usize), first_cascade_far_bound: 18.0, maximum_distance: crate::perf::value("shadowfar").unwrap_or(90.0), ..default() }.build(),
     ));
 }
 

@@ -131,7 +131,7 @@ impl Island {
                     }
                 }
             }
-            // People: at every other house front, and a few in the square.
+            // People: at house fronts, and some in the square.
             let folk = match st.kind {
                 SiteKind::Giants => "giant",
                 SiteKind::SmallFolk => "small",
@@ -139,11 +139,15 @@ impl Island {
                 _ => "adult",
             };
             let mut n = 0u32;
+            // Up to 16 at house fronts (about 60% of houses) and 8 in the square, twice the first
+            // cap. Characters share materials and batch, so crowds cost little on the development
+            // Mac: this cap adds about 0.5 ms over the old one, and 3× it about 2 ms (performance
+            // pass 2, docs/GAME_BRIEF.md).
+            // `LIVING_GAME_PERF=people=K` multiplies it (measurement only).
+            let crowd = crate::perf::value("people").unwrap_or(1.0);
             for li in st.lots.0..st.lots.1 {
                 let lot = &land.lots[li as usize];
-                // About a dozen per settlement for now: each VRoid character is ~95 meshes, until
-                // characters get a cheaper far form.
-                if !matches!(lot.kind.id(), "house" | "townhouse") || hash(li, 20) > 0.3 || n >= 8 {
+                if !matches!(lot.kind.id(), "house" | "townhouse") || hash(li, 20) > (0.6 * crowd).min(1.0) || n >= (16.0 * crowd) as u32 {
                     continue;
                 }
                 let (f, side) = (Vec2::new(lot.front.0, lot.front.1), Vec2::new(-lot.front.1, lot.front.0));
@@ -152,7 +156,7 @@ impl Island {
                 n += 1;
             }
             let plaza = Vec2::new(st.plaza.centre.0, st.plaza.centre.1);
-            for k in 0..4u32 {
+            for k in 0..(8.0 * crowd) as u32 {
                 let a = hash(si as u32 * 97 + k, 31) * std::f32::consts::TAU;
                 let at = plaza + Vec2::new(a.cos(), a.sin()) * (2.0 + 6.0 * hash(si as u32 * 97 + k, 32)) * st.scale;
                 put(Item { kind: "person".into(), at, yaw: hash(k, 33) * std::f32::consts::TAU, k: k as usize, person: Some((world.seed * 104_729 + (si as u64) * 31 + k as u64, folk)), ..default() });
@@ -485,7 +489,10 @@ pub fn stream(
         }
         if !island.ground.contains_key(&c) {
             let (g, w) = chunk_meshes(&land, c);
-            let mut es = vec![commands.spawn((EnvPart, Mesh3d(meshes.add(g)), MeshMaterial3d(palette.vertex.clone()), Transform::default(), OutlineStencil::default())).id()];
+            let mut es = vec![commands.spawn((EnvPart, Mesh3d(meshes.add(g)), MeshMaterial3d(palette.vertex.clone()), Transform::default())).id()];
+            if !crate::perf::has("nostencil") {
+                commands.entity(es[0]).insert(OutlineStencil::default());
+            }
             if let Some(w) = w {
                 es.push(commands.spawn((EnvPart, Mesh3d(meshes.add(w)), MeshMaterial3d(palette.water.clone()), Transform::default())).id());
             }

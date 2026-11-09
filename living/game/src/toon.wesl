@@ -9,6 +9,7 @@ import bevy_pbr::render::{
     shadows,
     mesh_view_types,
     clustered_forward,
+    mesh_functions,
 };
 
 @if(PREPASS_PIPELINE)
@@ -34,11 +35,12 @@ struct Toon {
     // Shadow colour by hue shift (Blue Protocol): x target hue (0..1), y how far toward it,
     // z saturation multiplier, w: 1 on skin (lighter, warmer shadows; see below).
     shade: vec4<f32>,
-    // Per-instance recolouring (characters.rs): x the target hue, y
-    // saturation and z value factors (>= 0 scales toward 0; < 0 scales the distance to 1 by
-    // -f), w mode: 0 none, 1 shift, 2 tint.
+    // Recolouring (characters.rs): x the target hue, y saturation and z value factors (>= 0
+    // scales toward 0; < 0 scales the distance to 1 by -f), w mode: 0 none, 1 shift, 2 tint,
+    // 3 per instance (the target colour is in the mesh's tag; see `recolor`).
     recolor: vec4<f32>,
-    // x: the texture's mean hue, y: how much of its hue variation stays (mode 1).
+    // x: the texture's mean hue, y: how much of its hue variation stays (mode 1); in mode 3,
+    // z and w: the texture's mean saturation and value.
     recolor_from: vec4<f32>,
 }
 
@@ -99,25 +101,56 @@ fn remap(c: f32, f: f32) -> f32 {
     return select(c * f, 1.0 - (1.0 - c) * (-f), f < 0.0);
 }
 
+// The factor that `remap` uses to move a mean `m` to a target `t`.
+fn factor(m: f32, t: f32) -> f32 {
+    if (t <= m) {
+        return select(1.0, t / m, m > 1e-4);
+    }
+    return -max((1.0 - t) / max(1.0 - m, 1e-4), 1e-4);
+}
+
+fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
+    return select(pow((c + 0.055) / 1.055, vec3(2.4)), c / 12.92, c <= vec3(0.04045));
+}
+
 // A character's own colours on a shared texture: the mean texture colour moves to the recipe's,
-// keeping the texture's detail.
-fn recolor(c: vec3<f32>) -> vec3<f32> {
-    let mode = toon.recolor.w;
+// keeping the texture's detail. Characters share their base's materials (so they batch); each
+// mesh's tag carries its recipe colour as sRGB bytes with bit 24 set (characters.rs `recolor`).
+fn recolor(c: vec3<f32>, tag: u32) -> vec3<f32> {
+    var mode = toon.recolor.w;
+    var goal = toon.recolor.xyz;
+    var mean_hue = toon.recolor_from.xy;
+    if (mode > 2.5) {
+        if ((tag & (1u << 24u)) == 0u) {
+            return c;
+        }
+        let target_srgb = vec3<f32>(f32(tag & 255u), f32((tag >> 8u) & 255u), f32((tag >> 16u) & 255u)) / 255.0;
+        let t = rgb_to_hsv(srgb_to_linear(target_srgb));
+        let m = vec3(toon.recolor_from.x, toon.recolor_from.z, toon.recolor_from.w);
+        // Grey textures are tinted; coloured ones have their hues moved.
+        if (m.y < 0.12) {
+            mode = 2.0;
+            goal = vec3(t.x, t.y, factor(m.z, t.z));
+        } else {
+            mode = 1.0;
+            goal = vec3(t.x, factor(m.y, t.y), factor(m.z, t.z));
+        }
+    }
     if (mode < 0.5) {
         return c;
     }
     var hsv = rgb_to_hsv(c);
     if (mode < 1.5) {
         // Hues gather round the target: a many-coloured garment becomes tones of one colour.
-        var d = hsv.x - toon.recolor_from.x;
+        var d = hsv.x - mean_hue.x;
         d = d - round(d);
-        hsv.x = fract(toon.recolor.x + d * toon.recolor_from.y + 1.0);
-        hsv.y = clamp(remap(hsv.y, toon.recolor.y), 0.0, 1.0);
+        hsv.x = fract(goal.x + d * mean_hue.y + 1.0);
+        hsv.y = clamp(remap(hsv.y, goal.y), 0.0, 1.0);
     } else {
-        hsv.x = toon.recolor.x;
-        hsv.y = toon.recolor.y;
+        hsv.x = goal.x;
+        hsv.y = goal.y;
     }
-    hsv.z = clamp(remap(hsv.z, toon.recolor.z), 0.0, 1.0);
+    hsv.z = clamp(remap(hsv.z, goal.z), 0.0, 1.0);
     return hsv_to_rgb(hsv);
 }
 
@@ -156,7 +189,7 @@ fn fragment(
 @if(PREPASS_PIPELINE) {
     out = deferred_output(in, pbr_input);
 } @else {
-    let albedo = vec4<f32>(recolor(pbr_input.material.base_color.rgb), pbr_input.material.base_color.a);
+    let albedo = vec4<f32>(recolor(pbr_input.material.base_color.rgb, mesh_functions::get_tag(in.instance_index)), pbr_input.material.base_color.a);
     let N = normalize(pbr_input.N);
     let V = normalize(pbr_input.V);
     let p = pbr_input.world_position;
