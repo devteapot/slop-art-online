@@ -967,7 +967,11 @@ class Instance:
                "dist": {r: round(min(dist(sp, positions[i]) for i in ids if i in positions), 1) for r, ids in self.roles.items() if r != "subject" and sp and any(i in positions for i in ids)},
                "cast_alive": {r: sum(1 for i in ids if alive.get(i)) for r, ids in self.roles.items() if r != "subject"}}
         if len(self.roles["subject"]) > 1:
-            # A subject of several (a pack): where each member is and whether it lives.
+            # A subject of several (a pack) lives while any member does: the run stops when the
+            # last one dies, not the first (w3 stopped at the lead's death; fixed after).
+            row["lead_alive"] = row["alive"]
+            row["alive"] = any(alive.get(i) for i in self.roles["subject"])
+            # Where each member is and whether it lives.
             row["members"] = {str(i): {"pos": [round(x, 1) for x in positions[i]] if i in positions else None, "alive": alive.get(i)}
                               for i in self.roles["subject"]}
         self.emit("samples", row)
