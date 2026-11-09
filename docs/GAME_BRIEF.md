@@ -24,6 +24,17 @@ Findings move from the lab to the game when a core version is released and the g
 - **Many human players.** No fixed number: as many as the core can support. This makes the scale gates of the [performance contract](PERFORMANCE_CONTRACT.md) game requirements.
 - **The world continues offline.** When a player leaves, their character keeps living under an AI mind. That mind's behavior should come from how the player actually played, so the character stays recognizably theirs. A custom external mind supplied by the player is a later option.
 - **Running cost** of model calls is set aside for now.
+- **Decisions of 2026-11-09 (user):**
+  - **Controls:** WASD movement, and you face the cursor. Left and right mouse are basic attacks; Q/E/R/F are skills; Shift is the dodge. Skillshots fire toward the cursor; targeted skills hit the enemy under or nearest the cursor.
+  - **Starter skills:** the mixed six (sword strike, targeted; bow shot, skillshot; fire bolt, skillshot spell; block, held; dodge roll; heal, targeted on an ally or yourself), and more where possible. These are shared skills any character can learn; classes emerge from combinations.
+  - **Death:** permanent, then you rejoin as a new identity. A development-only shortcut makes rejoining quick on scratch databases.
+  - **Day length:** tune freely for testing. The server's effective clock stays as it is for now.
+  - **HUD:** between minimal anime (Genshin, Blue Protocol) and classic MMO, not fully anime. Clean and readable, with enough information for combat: health and resources, the skill bar with cooldowns, a target frame, nameplates when relevant, and a proximity chat box.
+  - **Gameplay tracks, all wanted:** the island hosted by the server, town life, combat, and the HUD with proximity chat.
+    - Per AGENTS.md, rules stay authoritative in the server and the client only presents, so combat and town life are built on the server with no client-side simulation.
+    - Town residents are server characters on their behaviour graphs, which need no model calls. No scripted NPCs.
+  - **Atmosphere, all wanted:** a day-night cycle, regional moods that blend as you walk, weather (rain, fog banks, wind in trees and grass), and a stylised sky and toon water.
+  - **Unattended workers may touch:** the client, the tools, the rules crate, and the authority on scratch databases (never the lab worlds). No paid model calls.
 
 ## Open questions, with recommended defaults
 
