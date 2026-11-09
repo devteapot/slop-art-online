@@ -112,6 +112,21 @@ One trial service hosts every world, and each world's reducers run on its own sc
 
 At 40 worlds every tick but one stayed far inside the 16.7 ms budget, and memory is not the limit (about 0.2 GB per fresh island world, 0.9 GB of replica per six-hour world on disk). The load average is: at 40 worlds the host is busy, partly with the runner's own sampling (about 17 indexed SQL reads per subject per sample). Wide batches therefore sample every 5 s (`--sample-s 5`) and start instances 15 s apart (`--stagger 15`). A second SpacetimeDB container would add no cores on the same host, so wide batches use one. Fake minds call instantly; real minds add HTTP and parsing work in their own processes, so a real 40-run batch is watched for tick p99 and load as it ramps. `trials.py resume` was proven again at 16 worlds: the runner was killed mid-run and all 8 of its minds were adopted, with clocks kept and no false runaway.
 
+## The wide batch (2026-11-09, w1–w4)
+
+36 runs launched at 20:21–20:25 on `trials-1` **5bacc06** (main 2a64837: strict perception, presence and AI takeover, minds' shared sight rule, GLM Flash efforts per purpose with a 24k output cap, prompt caching, animals on GLM Flash, the one damage rule). Each run is 150 minutes (12.5 game days), with 5 s sampling and starts 15 s apart. Every arm has three replicates. The shipped island is the world unless the arm says otherwise. Every variant is single-profile for people.
+
+| Arm | Batch / trial × variants | What differs |
+| --- | --- | --- |
+| 1. models | `w1` `life` × `default`, `deepseek-flash` | default: glm-flash as in `living/configs/models.json` (`{"base_url": "https://api.mistral.ai/v1", "model": "zai-glm-5-3-flash", "key_env": "MISTRAL_API_KEY", "overflow": "deepseek-flash", "reasoning_effort": {"think": "low", "deliberate": "high", "talk": "high", "consolidate": "high", "internalize": "high"}, "prompt_cache_key": true, "max_tokens": 24000}`); deepseek-flash: `{"default": "deepseek-flash"}` (`deepseek-v4-1-flash-1017`, overflow glm-flash) |
+| 2. planning effort | `w1` `life` × `deliberate-low` (control: arm 1 `default`) | `{"profiles": {"glm-flash": {"reasoning_effort": {"deliberate": "low"}}}}` merged into the models file: compile low, everything else as default |
+| 3. world presets | `w2` `life-ruin`, `life-pressure`, `life-ladder` × `default` (control: arm 1 `default`) | ruin; pressure with its wolves moved off the arrival road; ladder = ruin plus a scribe at the house of signs who teaches writing when asked (proved in a dry run: question, scripted line, "taught you writing" 25 s later) |
+| 4. old world | `w2` `life-valley` × `default` (control: arm 1 `default`) | stage3-village with `rules.minds` false, the same newcomer background; the valley seed has no newcomer kit |
+| 5. lessons | `w1` `life` × `lessons` (control: arm 1 `default`) | `LIVING_LESSONS=1` |
+| 6. level of detail | `w1` `life` × `lod` (control: arm 1 `default`) | `LIVING_LOD=1`; a lone mind with no player near is off stage |
+| 7. wolf brains | `w3` `pack-life` × `default`, `instinct` | the shipped road pack of four as the subject in a `minds: true` island (models file's species map: glm-flash for think, remember and compile); `instinct`: no mind service at all |
+| 8. human, then AI | `w4` `life-takeover` × `default` | a 20-minute scripted player session through the player reducers, then takeover after `takeover_s` (30 s); proved in a dry run: the character became `ai`, controlled by the minds, 30 s after the last call |
+
 ## Notes for the mind-harness lab
 
 - **Models per purpose and per species.** A variant's `models` value is deep-merged into `living/configs/models.json` as given, or `models_file` names a whole file. Whatever keys the config grows (for example per-purpose mixes for people), a variant can carry them unchanged. Today `species` routes animals per purpose (`think`, `remember`, `compile`), proven in the fake run `dry8`: wolves impulse with `ministral-8b` and compile and consolidate with `ministral-14b`. **People have one profile for every purpose**: assign, rotate, groups, stages and the default all choose one profile. Per-purpose mixes for people need a change in the mind service (`llm.rs` profile choice), not in the runner. The current variants are single-profile for people.
