@@ -54,5 +54,24 @@
    }
   },
   "env": {}
+ },
+ "deliberate-low": {
+  "about": "As default, with glm-flash's deliberate (compile) effort lowered from high to low; think stays low, talk/consolidate/internalize stay high. A patch to living/configs/models.json, merged as given.",
+  "models": {
+   "profiles": {
+    "glm-flash": {
+     "reasoning_effort": {
+      "deliberate": "low"
+     }
+    }
+   }
+  },
+  "env": {}
+ },
+ "instinct": {
+  "about": "No mind: the subject lives on its graph alone (instinct-only control, e.g. for wolf packs).",
+  "mind": false,
+  "models": {},
+  "env": {}
  }
 }

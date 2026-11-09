@@ -277,6 +277,103 @@ class Stop(Exception):
     pass
 
 
+class Player:
+    """A scripted human session through the player reducers (`join`, `human_move`, `human_act`,
+    `human_say`) with the player's own non-admin identity, as a person at a keyboard would
+    play: no admin scene-setting. Every call opens and closes an HTTP connection, which is
+    presence; calls stay under `takeover_s` (30 s) apart until the session ends, after which
+    the character stands for `takeover_s` and the minds take it over. Each call is recorded
+    in `human.jsonl`; the identity's token stays in memory."""
+
+    def __init__(self, inst, name):
+        self.inst, self.name = inst, name
+        code, body = http("/v1/identity", {})
+        if code != 200:
+            raise RuntimeError(f"identity: {code} {body[:200]}")
+        j = json.loads(body)
+        self.token, self.identity = j["token"], j["identity"]
+
+    def call(self, reducer, *args):
+        code, body = http(f"/v1/database/{self.inst.db}/call/{reducer}", list(args), self.token)
+        self.inst.emit("human", {"t": self.inst.t(), "call": reducer, "args": list(args), "status": code, "error": body.strip()[:200] if code != 200 else ""})
+        return code == 200
+
+    def join(self):
+        if not self.call("join", self.name):
+            raise RuntimeError("player join refused")
+        time.sleep(1)
+        rows = [c for c in self.inst.rows(f"SELECT * FROM character WHERE name = '{self.name}'") if c["alive"]]
+        return max(c["id"] for c in rows)
+
+    def me(self):
+        b = self.inst.bodies([self.inst.subject])
+        return b.get(self.inst.subject)
+
+    def walk_toward(self, target, seconds):
+        """Steer toward a point in 3 s pulses (a held direction key)."""
+        end = time.time() + seconds
+        while time.time() < end:
+            here = self.me()
+            if not here:
+                return
+            dx, dy = target[0] - here[0], target[1] - here[1]
+            n = (dx * dx + dy * dy) ** 0.5
+            if n < 4:
+                break
+            self.call("human_move", dx / n, dy / n, False)
+            time.sleep(3)
+        self.call("human_move", 0.0, 0.0, False)
+
+    def residents_near(self, within):
+        here = self.me()
+        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] != self.inst.subject]
+        pos = self.inst.bodies([c["id"] for c in people])
+        near = sorted((dist(here, pos[c["id"]]), c) for c in people if c["id"] in pos and here)
+        return [(d, c) for d, c in near if d <= within]
+
+    def act(self, node):
+        return self.call("human_act", json.dumps(node))
+
+    def session(self, spec):
+        """About `minutes` of play: walk to the town, forage, meet people and tell them a plan,
+        make a camp by the gate, then leave (stop calling)."""
+        inst, end = self.inst, time.time() + spec.get("minutes", 20) * 60
+        try:
+            centre = inst.anchor({"town": spec.get("town", "Brackenford")})
+            self.call("human_say", "Hello? I'm " + self.name + ", just off the road.", 0)
+            self.walk_toward(centre, 150)
+            met = []
+            while time.time() < end:
+                phase = (time.time() - (end - spec.get("minutes", 20) * 60)) / 60
+                if phase < 9:
+                    self.act({"do": {"skill": "gather", "target": {"nearest": "berry_bush"}}})
+                    time.sleep(12)
+                    self.act({"do": {"skill": "eat", "item": "berries"}})
+                    time.sleep(6)
+                elif phase < 14:
+                    near = [(d, c) for d, c in self.residents_near(20) if c["id"] not in met]
+                    if near:
+                        d, c = near[0]
+                        self.walk_toward(inst.bodies([c["id"]]).get(c["id"], centre), 20)
+                        self.call("human_say", f"Good day, {c['name']}. I'm {self.name}. I mean to make my camp by the gate and gather berries to trade.", c["id"])
+                        self.act({"do": "wave", "target": {"id": c["id"]}})
+                        met.append(c["id"])
+                        inst.emit("events", {"t": inst.t(), "human_met": c["id"], "name": c["name"]})
+                    time.sleep(10)
+                elif phase < 18:
+                    self.act({"do": {"skill": "gather", "target": {"nearest": "tree"}}})
+                    time.sleep(14)
+                else:
+                    if not getattr(self, "built", False):
+                        self.built = self.act({"do": {"skill": "build", "item": "campfire"}})
+                        time.sleep(8)
+                        self.call("human_say", "This fire is my camp now. I'll be back by it at dusk.", 0)
+                    time.sleep(10)
+        except Exception as e:  # recorded, never raised into the run
+            inst.emit("events", {"t": inst.t(), "human_error": repr(e)[:300]})
+        inst.emit("events", {"t": inst.t(), "human_left": True, "takeover_due_s": 30})
+
+
 def proc_start(pid):
     """A process's start time from /proc, to tell it from a later process reusing its pid."""
     try:
@@ -564,6 +661,8 @@ class Instance:
             ids = self.ids(v)
             return {"id": ids[0]} if ids else v
         if isinstance(v, dict):
+            if list(v) == ["id"] and isinstance(v["id"], str) and v["id"].startswith("$"):
+                return {"id": self.ids(v["id"])[0]}  # a graph target written {"id": "$role"}
             return {k: (self.ids(x)[0] if k in ("to", "near_id") and isinstance(x, str) and x.startswith("$") else self.subst(x)) for k, x in v.items()}
         if isinstance(v, list):
             return [self.subst(x) for x in v]
@@ -731,6 +830,12 @@ class Instance:
 
     def start_mind(self):
         v = self.shared["variants"][self.variant]
+        if v.get("mind") is False:
+            # Instinct-only control: no mind service; the subject lives on its graph.
+            self.mind = None
+            self.log(f"no mind (variant {self.variant}): the subject lives on its instinct graph")
+            self.save()
+            return
         path = self.dir / "models.json"
         path.write_text(json.dumps(self.models(), indent=1))
         budget = self.trial.get("budget", {})
@@ -828,7 +933,7 @@ class Instance:
     def sample(self):
         S = self.subject
         others = [i for r, ids in self.roles.items() if r != "subject" for i in ids]
-        everyone = [S] + others
+        everyone = list(dict.fromkeys(self.roles["subject"] + others))
         ors = " OR ".join(f"id = {i}" for i in everyone)
         q = [f"SELECT * FROM vitals WHERE id = {S}", f"SELECT * FROM activity WHERE id = {S}",
              f"SELECT * FROM inventory WHERE owner = {S}", f"SELECT * FROM brain WHERE id = {S}",
@@ -861,6 +966,10 @@ class Instance:
                "plan": brain[0]["plan"][:160] if brain else None,
                "dist": {r: round(min(dist(sp, positions[i]) for i in ids if i in positions), 1) for r, ids in self.roles.items() if r != "subject" and sp and any(i in positions for i in ids)},
                "cast_alive": {r: sum(1 for i in ids if alive.get(i)) for r, ids in self.roles.items() if r != "subject"}}
+        if len(self.roles["subject"]) > 1:
+            # A subject of several (a pack): where each member is and whether it lives.
+            row["members"] = {str(i): {"pos": [round(x, 1) for x in positions[i]] if i in positions else None, "alive": alive.get(i)}
+                              for i in self.roles["subject"]}
         self.emit("samples", row)
         if brain and brain[0]["revision"] != self.brain_rev:
             self.brain_rev = brain[0]["revision"]
@@ -982,15 +1091,21 @@ class Instance:
         self.status = "publishing"
         self.publish()
         subj = self.trial["subject"]
-        if subj.get("spawn"):
+        if subj.get("join"):
+            self.player = Player(self, subj["join"]["name"])
+            self.roles["subject"] = [self.player.join()]
+        elif subj.get("spawn"):
             name = subj["spawn"]["name"]
             self.call("spawn_newcomer", name)
             self.roles["subject"] = [max(c["id"] for c in self.rows(f"SELECT * FROM character WHERE name = '{name}'"))]
         self.cast()
         self.status = "preparing"
-        if subj.get("clear_items", not subj.get("spawn")):
+        # A repurposed resident starts empty-handed and without its old routines. A spawned
+        # newcomer, a joined player (whose rows only the player may act on) and an animal do not.
+        repurposed = not subj.get("spawn") and not subj.get("join") and subj.get("pick", {}).get("kind", "person") == "person"
+        if subj.get("clear_items", repurposed):
             self.clear_items(self.subject)
-        if not subj.get("spawn"):
+        if subj.get("clear_routines", repurposed):
             self.step({"do": "clear_routines", "who": "subject"})
         if subj.get("background"):
             self.step({"do": "background", "who": "subject", "background": subj["background"]})
@@ -1006,6 +1121,9 @@ class Instance:
         self.run_phase("start")
         self.t0 = time.time()
         self.start_mind()
+        if self.trial.get("human"):
+            self.human = threading.Thread(target=self.player.session, args=(self.trial["human"],), daemon=True)
+            self.human.start()
 
     def loop(self):
         self.status = "running"
@@ -1032,10 +1150,10 @@ class Instance:
                 self.snapshot(row)
             if row["alive"] is False and self.died is None:
                 self.died = self.t()
-            mind_down = not self.mind.alive()
+            mind_down = self.mind is not None and not self.mind.alive()
             if mind_down and life and row["alive"] is not False:
                 # A life run keeps its world: the mind is restarted (as run-mind.sh does).
-                self.emit("events", {"t": self.t(), "mind_exit": self.mind.exit_code()})
+                self.emit("events", {"t": self.t(), "mind_exit": self.mind.exit_code() if self.mind else None})
                 self.start_mind()
                 mind_down = False
             why = self.runaway()
@@ -1048,7 +1166,7 @@ class Instance:
             elif self.died is not None and self.t() - self.died >= 20:
                 self.stopped_by = "subject died"
             elif mind_down:
-                self.stopped_by = f"mind exited ({self.mind.exit_code()})"
+                self.stopped_by = f"mind exited ({self.mind.exit_code() if self.mind else None})"
             elif self.shared.get("abort"):
                 self.stopped_by = "aborted"
             if self.stopped_by or time.time() - last_save > 30:
@@ -1069,7 +1187,7 @@ class Instance:
         try:
             if resume:
                 self.restore()
-                if not self.mind or not self.mind.alive():
+                if (not self.mind or not self.mind.alive()) and self.shared["variants"][self.variant].get("mind") is not False:
                     self.start_mind()
                 self.loop()
             else:
@@ -1251,6 +1369,22 @@ def summarize(d, trial, extra):
         v.pop("latency_ms")
     s["by_model"] = dict(by_model)
     s["by_purpose_model"] = purpose_model(j, thoughts)
+    members = [x for x in samples if x.get("members")]
+    if members:
+        pack = len(members[0]["members"])
+        hours = (members[-1]["t"] - members[0]["t"]) / 3600 or None
+        gaps = []
+        for x in members[::5]:
+            pts = [m["pos"] for m in x["members"].values() if m.get("alive") and m.get("pos")]
+            if len(pts) > 1:
+                gaps.append(statistics.mean(dist(a, b) for i, a in enumerate(pts) for b in pts[i + 1:]))
+        ids = {int(k) for k in members[0]["members"]}
+        kills = [c for c in chron if c.get("kind") == "death" and c.get("b") in ids]
+        s["pack"] = {"members": pack, "alive_end": sum(1 for m in members[-1]["members"].values() if m.get("alive")),
+                     "kills": len(kills), "killed": dict(Counter(re.sub(r" died.*", "", c["text"]) for c in kills).most_common(6)),
+                     "mean_pairwise_m": round(statistics.mean(gaps), 1) if gaps else None, "max_pairwise_m": round(max(gaps), 1) if gaps else None,
+                     "calls_per_wolf_hour": round(s["calls"] / (pack * hours), 1) if hours else None,
+                     "tokens_per_wolf_hour": round(s["tokens"] / (pack * hours)) if hours else None}
     s["talk_turns"] = by_purpose["talk"]["calls"] if "talk" in by_purpose else 0
     if extra.get("day_ms") and s["minutes_run"]:
         days = s["minutes_run"] * 60000 / extra["day_ms"]
