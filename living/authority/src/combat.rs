@@ -484,7 +484,7 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
     let mut dealt = String::new();
     for e in effects {
         if let living_rules::script::Effect::Damage { amount } = e {
-            dealt = act::damage(ctx, m.owner, victim, amount, "kill", &m.skill, from, now);
+            dealt = act::damage(ctx, m.owner, victim, amount, &m.skill, from, now);
         }
     }
     outcome_of(ctx, m.use_id, &format!("struck {}: {dealt}", common::display(ctx, victim)), now);

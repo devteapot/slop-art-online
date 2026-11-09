@@ -7,7 +7,8 @@ Each snapshot records, for the last interval:
 - people alive, born and dead (with causes) in all, hunger by settlement (mean, starving);
 - deer and wolves alive;
 - speech lines per person per minute and the share mentioning babies;
-- force: threats, beatings (assaults), attempts to kill a person (by people and by animals),
+- force: threats, attacks on a person (by people and by animals; worlds from before
+  2026-11-09 also logged beatings as assaults, and person-on-person attacks as attempts to kill),
   yields, people killed by people and by animals, and animals holding back from a person;
 - model calls per minute (by purpose and model), the share that errored, tokens per minute.
 
@@ -63,7 +64,7 @@ def force(db, kinds, since):
         if k in ("threat", "assault", "yield", "seize"):
             out[k] += n
         elif k == "attack" and b == "person":
-            out["kill attempt" if a == "person" else "animal attack on person"] += n
+            out["person attack on person" if a == "person" else "animal attack on person"] += n
         elif k == "killing":
             out["killed by person"] += n
         elif k == "death" and r["b"] != "0" and b not in (None, "person"):

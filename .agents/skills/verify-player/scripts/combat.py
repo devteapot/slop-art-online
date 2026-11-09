@@ -6,7 +6,7 @@ with admin test reducers (`place_at`, `set_behavior`, `grant_items`; named in th
 checks the outcome in the authority's rows: `my_skill_uses`, `my_combat` and `my_readiness`
 (the player's views), and `vitals`, `fighter`, `character` (public).
 
-    combat.py --run RUN [--scene all|refusals|strike|bow|bolt|block|dodge|heal|wolves|death]
+    combat.py --run RUN [--scene all|refusals|strike|kill|bow|bolt|block|dodge|heal|wolves|death]
 
 Needs `verify.py launch --run RUN --seed island` and `verify.py player --run RUN join NAME`
 first (the death scene rejoins with the same identity). Writes `RUN/combat.json`.
@@ -197,6 +197,47 @@ def scene_strike(st):
     return d
 
 
+def scene_kill(st):
+    """A blow does its damage: the player's strikes go on past a beaten resident's 40% and 10%
+    (the old hurt mode's stop and floor), and the strike that exceeds its health kills it."""
+    cid = me(st)
+    p = body(st, cid)
+    d = dummy(st, p, 1.2, 0.0)
+    time.sleep(0.4)
+    trail = []
+    final = None
+    t = time.time() + 45
+    while time.time() < t:
+        live = sql(st, f"SELECT alive FROM character WHERE id = {d}")
+        if not live or not live[0]["alive"]:
+            break
+        h = hp(st, d)
+        dp = body(st, d)
+        ready(st, "strike")
+        call(st, "use_skill", ["strike", d, dp[0], dp[1]])
+        u = wait_outcome(st, "strike", 3)
+        trail.append((round(h, 1), u and u["outcome"]))
+        if u and "killed" in u["outcome"]:
+            final = (h, u)
+            break
+        if u and "too tired" in u["outcome"]:
+            break
+    dead = sql(st, f"SELECT alive, cause FROM character WHERE id = {d}")
+    mine = sql(st, f"SELECT name FROM character WHERE id = {cid}")[0]["name"]
+    hits = [e for e in seen(st) if e["kind"] == 2 and e["actor"] == cid and e["target"] == d]
+    killing = sql(st, f"SELECT kind, a, b, text FROM chronicle WHERE kind = 'killing' AND a = {cid} AND b = {d}")
+    mh = sql(st, f"SELECT max_hp FROM vitals WHERE id = {d}")
+    mh = mh[0]["max_hp"] if mh else 100.0
+    low = [h for h, o in trail if h < 0.4 * mh]
+    landed = all(o and (o.startswith("hit for") or "killed" in o) for h, o in trail)
+    check(st, "strikes keep landing below 40% health (no beating stops short)", len(low) >= 1 and landed, {"max_hp": round(mh, 1), "trail": trail})
+    # Health was read before the strike's wait; vitals settle to the blow's instant, so allow a
+    # small drift.
+    check(st, "a strike that exceeds health kills a person",
+          final is not None and hits and hits[-1]["amount"] >= final[0] - 1.0 and dead and not dead[0]["alive"] and dead[0]["cause"] == f"killed by {mine}" and killing,
+          {"hp_before_last": final and round(final[0], 2), "last_hit": hits and round(hits[-1]["amount"], 2), "outcome": final and final[1]["outcome"], "character": dead, "chronicle": killing})
+
+
 def scene_bow(st):
     cid = me(st)
     p = body(st, cid)
@@ -231,7 +272,7 @@ def scene_bolt(st):
 
 
 def attacker(st, cid, p, dx):
-    g = json.dumps({"seq": [{"do": {"skill": "strike", "target": {"id": cid}, "item": "kill"}}, {"wait": 30}]})
+    g = json.dumps({"seq": [{"do": {"skill": "strike", "target": {"id": cid}}}, {"wait": 30}]})
     return dummy(st, p, dx, 0.0, g)
 
 
@@ -354,7 +395,7 @@ def scene_death(st):
     check(st, "rejoining makes a new identity with only the newcomer's kit", code == 200 and new and new != cid and {r["item"] for r in inv} <= {"bow", "arrow", "berries"}, f"{cid} -> {new}; {inv}; {[k['technique'] for k in know]}")
 
 
-SCENES = {"refusals": scene_refusals, "strike": scene_strike, "bow": scene_bow, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
+SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
 
 
 def main():

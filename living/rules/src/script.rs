@@ -104,9 +104,6 @@ pub struct SkillCtx {
     pub skill: String,
     /// The routine being reworked (rework only).
     pub routine: RoutineFacts,
-    /// Whether the rules shield someone who has yielded from blows meant only to hurt
-    /// (the seed's `rules` block may hand that mercy to the minds instead).
-    pub yield_shield: bool,
     /// It is raining (the world's weather).
     pub raining: bool,
 }
@@ -628,15 +625,6 @@ impl Scripts {
         (!takes.is_empty() || !gives.is_empty()).then_some((takes, gives))
     }
 
-    /// Text a rule function returns for an action, e.g. `attack_mode(a)`; None when the
-    /// script does not define it or it fails.
-    pub fn text(&self, f: &str, ctx: &SkillCtx) -> Option<String> {
-        if !self.has(f) {
-            return None;
-        }
-        self.call(f, ctx).ok()?.into_string().ok()
-    }
-
     /// Generic numeric query, e.g. `attack_cooldown`.
     pub fn number(&self, f: &str, ctx: &SkillCtx, default: f64) -> f64 {
         if !self.has(f) {
@@ -729,7 +717,6 @@ fn to_map(c: &SkillCtx, knack: &str) -> Map {
     m.insert("text".into(), c.text.clone().into());
     m.insert("topic".into(), c.topic.clone().into());
     m.insert("roll".into(), f(c.roll));
-    m.insert("yield_shield".into(), c.yield_shield.into());
     m.insert("raining".into(), c.raining.into());
     m.insert("skill".into(), c.skill.clone().into());
     m
@@ -1020,60 +1007,45 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
     }
 
     #[test]
-    fn force_between_people_is_graded() {
+    fn a_blow_does_its_damage_and_a_yield_holds_back_only_the_yielder() {
         let s = scripts();
         let mut c = ctx();
         c.skill = "attack".into();
         c.target = person(9, 100.0);
-        // Without an item, people fight people to hurt, and animals to kill.
-        assert_eq!(s.text("attack_mode", &c).as_deref(), Some("hurt"));
-        c.target.kind = "wolf".into();
-        assert_eq!(s.text("attack_mode", &c).as_deref(), Some("kill"));
-        c.target = person(9, 100.0);
-        c.item = "kill".into();
-        assert_eq!(s.text("attack_mode", &c).as_deref(), Some("kill"));
-        // A beating stops once they are badly hurt, and never takes them below the floor.
-        c.item = "hurt".into();
         c.actor.inv = vec![("spear".into(), 1)];
+        // One rule for every blow: its full damage, between people as with animals, however
+        // badly hurt the target already is.
         assert!(s.check("attack", &c).is_ok());
-        c.target.hp = 30.0;
-        let why = s.check("attack", &c).unwrap_err();
-        assert!(why.contains("hurt Grim enough") && why.contains("badly hurt"), "{why}");
-        // A slight person (40 health) at 17: a spear blow would take 18.
-        c.target.max_hp = 40.0;
-        c.target.hp = 17.0;
-        assert!(s.check("attack", &c).is_ok());
-        let d = damage(&s.done("attack", &c).unwrap());
-        assert!((d - 13.0).abs() < 1e-3, "a blow meant to hurt stops at the floor: {d}");
-        c.item = "kill".into();
-        assert!(damage(&s.done("attack", &c).unwrap()) > d, "a blow meant to kill is not held back");
-        c.target.max_hp = 100.0;
-        assert!(s.check("attack", &c).is_ok());
-        // Someone who has yielded: with the shield on, a beating is held back while the
-        // yield holds (killing is not); the one who yielded does not strike back. With the
-        // seed's shield handed to the minds, the beating lands and stays short of the floor.
+        let full = damage(&s.done("attack", &c).unwrap());
+        assert!((full - 18.0).abs() < 1e-3, "a spear blow: {full}");
+        c.target.hp = 5.0;
+        assert!(s.check("attack", &c).is_ok(), "no beating stops short of the badly hurt");
+        assert_eq!(damage(&s.done("attack", &c).unwrap()), full, "a blow that exceeds health is not held back");
+        c.skill = "strike".into();
+        assert!(s.check("strike", &c).is_ok());
+        assert!((damage(&s.done("strike", &c).unwrap()) - 15.0).abs() < 1e-3, "the starter strike too");
+        c.skill = "attack".into();
+        // A word about force on the item changes nothing.
+        for word in ["hurt", "kill"] {
+            c.item = word.into();
+            assert_eq!(damage(&s.done("attack", &c).unwrap()), full, "item {word}");
+        }
+        c.item = String::new();
+        // Someone who has yielded can still be struck (that is news, told by the authority);
+        // the one who yielded does not strike back.
         c.target.hp = 80.0;
         c.target.yielded_ago = Some(3000.0);
         assert!(s.check("attack", &c).is_ok());
-        c.item = "hurt".into();
-        c.yield_shield = true;
-        assert!(s.check("attack", &c).unwrap_err().contains("has yielded"));
-        c.yield_shield = false;
-        assert!(s.check("attack", &c).is_ok());
-        let d = damage(&s.done("attack", &c).unwrap());
-        assert!((d - 18.0).abs() < 1e-3, "without the shield the full blow lands on the yielded: {d}");
-        c.target.hp = 20.0;
-        let d = damage(&s.done("attack", &c).unwrap());
-        assert!((d - 10.0).abs() < 1e-3, "a beating of the yielded is still held at the floor: {d}");
-        c.target.hp = 80.0;
-        assert!(s.check("attack", &c).is_ok());
+        assert_eq!(damage(&s.done("attack", &c).unwrap()), full);
         c.actor.yielded_ago = Some(1000.0);
         assert!(s.check("attack", &c).unwrap_err().contains("you have yielded"));
         assert!(s.check("yield", &c).unwrap_err().contains("already yielded"));
         c.actor.yielded_ago = None;
         assert!(s.check("yield", &c).is_ok());
         assert_eq!(s.done("yield", &c).unwrap(), vec![Effect::Yield]);
-        // Threatening does no harm.
+        let io = s.skill_io("yield").unwrap().1;
+        assert!(io.contains("do not strike back") && !io.contains("meant only to hurt"), "{io}");
+        // Threatening does no harm: it is how to intimidate without hurting anyone.
         assert!(s.check("threaten", &c).is_ok());
         assert!(!s.done("threaten", &c).unwrap().iter().any(|e| matches!(e, Effect::Damage { .. })));
     }
@@ -1116,7 +1088,6 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         c.actor.hurt_ago = None;
         c.target.kind = "deer".into();
         assert!(s.check("attack", &c).is_ok(), "prey is prey");
-        assert_eq!(s.text("attack_mode", &c).as_deref(), Some("kill"));
     }
 
     #[test]

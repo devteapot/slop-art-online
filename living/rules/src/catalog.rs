@@ -41,7 +41,7 @@ pub const SKILLS: &[SkillSpec] = &[
     SkillSpec { name: "store", needs_target: true, needs_item: true, reach: 1.5, help: "put items into a storage" },
     SkillSpec { name: "drop", needs_target: false, needs_item: true, reach: 0.0, help: "set items down where you stand (they are left behind), e.g. to free your pack" },
     SkillSpec { name: "take", needs_target: true, needs_item: true, reach: 1.5, help: "take items from a storage or remains" },
-    SkillSpec { name: "attack", needs_target: true, needs_item: false, reach: 1.4, help: "strike a creature (spear hits harder); \"item\": \"hurt\" to beat them (stops when they are badly hurt or yield) or \"kill\"; without it, people fight people to hurt and animals to kill; killing game yields meat" },
+    SkillSpec { name: "attack", needs_target: true, needs_item: false, reach: 1.4, help: "strike a creature (spear hits harder); every blow does its full damage and whoever reaches 0 health dies; to frighten someone without harm, threaten; killing game yields meat" },
     SkillSpec { name: "seize", needs_target: true, needs_item: true, reach: 1.8, help: "take items from a person's pack against their will: only from someone who has yielded to force, or is badly hurt" },
     SkillSpec { name: "threaten", needs_target: true, needs_item: false, reach: 3.0, help: "menace a creature within a few tiles for 2 s, weapon raised; no harm is done, but they (and anyone watching) see it" },
     SkillSpec { name: "yield", needs_target: false, needs_item: false, reach: 12.0, help: "give in: guard down, hands up (target: whom you yield to; without one, whoever last hurt you); for a while you do not strike back" },

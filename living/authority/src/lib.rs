@@ -300,7 +300,7 @@ pub fn seed_communities(ctx: &ReducerContext) -> Result<(), String> {
 }
 
 /// Benchmark support: `n` spear-armed people packed into one small area, fighting the
-/// nearest person to kill. Even ids dodge incoming windups, odd ids block.
+/// nearest person. Even ids dodge incoming windups, odd ids block.
 #[spacetimedb::reducer]
 pub fn spawn_battle(ctx: &ReducerContext, n: u32) -> Result<(), String> {
     use spacetimedb::rand::Rng;
@@ -322,7 +322,7 @@ pub fn spawn_battle(ctx: &ReducerContext, n: u32) -> Result<(), String> {
         common::inv_add(ctx, id as u64, "spear", 1);
         let defend = if id % 2 == 0 { "dodge" } else { "block" };
         let graph = format!(
-            r#"{{"first":{{"label":"combat","children":[{{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},{{"do":{{"skill":"attack","target":{{"nearest":"person"}},"item":"kill"}}}}]}}}}"#
+            r#"{{"first":{{"label":"combat","children":[{{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},{{"do":{{"skill":"attack","target":{{"nearest":"person"}}}}}}]}}}}"#
         );
         mind::set_graph(ctx, id, &graph, "fight", "battle", now)?;
         made += 1;
@@ -370,7 +370,7 @@ pub fn spawn_skirmish(ctx: &ReducerContext, n: u32, spacing: f32) -> Result<(), 
             r#"{{"first":{{"label":"combat","children":[
               {{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},
               {{"if":{{"cond":{{"health":{{"below":45}}}},"then":{{"do":{{"skill":"heal","target":"self"}}}}}}}},
-              {{"if":{{"cond":{{"near":{{"target":{{"nearest":{{"kind":"person","relation":"outsider"}}}},"within":2}}}},"then":{{"do":{{"skill":"strike","target":{{"nearest":{{"kind":"person","relation":"outsider"}}}},"item":"kill"}}}}}}}},
+              {{"if":{{"cond":{{"near":{{"target":{{"nearest":{{"kind":"person","relation":"outsider"}}}},"within":2}}}},"then":{{"do":{{"skill":"strike","target":{{"nearest":{{"kind":"person","relation":"outsider"}}}}}}}}}}}},
               {{"if":{{"cond":{{"near":{{"target":{{"nearest":{{"kind":"person","relation":"outsider"}}}},"within":14}}}},"then":{{"do":{{"skill":"bowshot","target":{{"nearest":{{"kind":"person","relation":"outsider"}}}}}}}}}}}},
               {{"if":{{"cond":{{"sees":{{"nearest":{{"kind":"person","relation":"outsider"}}}}}},"then":{{"do":{{"skill":"goto","target":{{"nearest":{{"kind":"person","relation":"outsider"}}}}}}}}}}}},
               {{"do":{{"skill":"goto","target":{{"at":[{fx},{fy}]}}}}}}]}}}}"#,
