@@ -21,4 +21,8 @@ impl Engine for Native {
     fn cooldown(&mut self, skill: &str) -> f64 {
         combat_cooldown(skill)
     }
+    fn perceived(&mut self, p: &crate::RegardIn) -> crate::Regard {
+        // skills.rhai's `perceived_of` is the engine's own default rule.
+        crate::Regard::default_for(p)
+    }
 }

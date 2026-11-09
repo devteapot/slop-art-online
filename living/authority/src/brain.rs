@@ -164,6 +164,8 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     if key == v.rate_key {
         return Some(v);
     }
+    // Profiled: what a recompute costs (the facts and the law), and how many there are.
+    let _timer = common::span("needs.rates");
     let facts = act::facts(ctx, me.id, now);
     let sc = common::scripts(ctx);
     let hour = common::hour(w, now);

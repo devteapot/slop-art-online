@@ -12,6 +12,7 @@
 | Cheaper animal minds: one call picks among built options (choose), the deer it sees reuse it (pack), nothing new answers by instinct (salient) | `animals` | [animals.md](animals.md) |
 | Reorganization at night, in the night's batch round | `night` (scheduling, no store); `verify-knowledge` sleep stage (the batch job) | [sleep.md](sleep.md) |
 | A cached Jev judgment drives the graph: asked in the background, cached by `mind_judged`, read by `judged` | `jev` | [judgments.md](judgments.md) |
+| A woken island resident: an offer and speech wake it, this service takes it up, answers, takes talk turns, accepts the trade and teaches through its own acts, keeps its places through a replacing update | `wake` | [wake.md](wake.md) |
 | Player memory: switch off, cadence (session end by presence), the takeover's wait for its past, persona inferred, reconnect from `lived_upto`, batch mode | `verify-knowledge` `player_memory.py` | [player-memory.md](player-memory.md) |
 | Paid-wrapper dry safety and paid smoke check | dry safety; paid authorization required | [real-models.md](real-models.md) |
 

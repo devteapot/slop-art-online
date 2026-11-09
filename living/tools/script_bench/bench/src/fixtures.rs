@@ -11,6 +11,8 @@ pub struct Fixtures {
     pub strike: Vec<SkillCtx>,
     /// Skill names for `combat_cooldown(skill)`.
     pub skills: &'static [&'static str],
+    /// Observers looking at targets, for `perceived_of(p)`.
+    pub perceived: Vec<living_rules::script::RegardIn>,
 }
 
 struct Rng(u64);
@@ -190,5 +192,19 @@ pub fn build() -> Fixtures {
         world(&mut r, &mut c);
         strike.push(c);
     }
-    Fixtures { rates, strike, skills: &COOLDOWN_SKILLS }
+    let mut perceived = Vec::new();
+    for i in 0..16u32 {
+        let (observer, target) = [("person", "person"), ("person", "wolf"), ("wolf", "wolf"), ("wolf", "person")][(i % 4) as usize];
+        let knows = TECHNIQUES.iter().filter(|_| r.chance(0.5)).map(|t| t.to_string()).collect();
+        perceived.push(living_rules::script::RegardIn {
+            observer_kind: observer.into(),
+            knows,
+            target_kind: target.into(),
+            known: r.chance(0.5),
+            revealed: if r.chance(0.3) { vec!["health".into()] } else { vec![] },
+            own: i == 5,
+            night: r.chance(0.4),
+        });
+    }
+    Fixtures { rates, strike, skills: &COOLDOWN_SKILLS, perceived }
 }

@@ -4,7 +4,7 @@
 //! A "call" is what the authority pays: typed facts in, engine value built, law run, result
 //! decoded back to typed values. See docs/SCRIPT_ENGINES.md.
 
-pub use living_rules::script::{ActorFacts, Effect, Rates, SkillCtx, TargetFacts};
+pub use living_rules::script::{ActorFacts, Effect, Rates, Regard, RegardIn, SkillCtx, TargetFacts};
 use std::fmt::Write as _;
 
 pub mod ctx;
@@ -32,18 +32,31 @@ pub enum Law {
     Strike = 1,
     /// (c) `combat_cooldown(skill)`: a constant lookup by name.
     Cooldown = 2,
+    /// `perceived_of(p)`: what an observer perceives of a target (Rhai and native only).
+    Perceived = 3,
+    /// `rates(a)` asked every time: the law's own cost where the authority shares one answer
+    /// per state (`Scripts::rates_unshared`; other engines run `rates`).
+    RatesLaw = 4,
 }
 
 impl Law {
+    /// The laws every engine runs (run.sh's equivalence check).
     pub const ALL: [Law; 3] = [Law::Rates, Law::Strike, Law::Cooldown];
+    /// Cases added after the spike, run when asked (`sb-host --laws`).
+    pub const EXTRA: [Law; 2] = [Law::Perceived, Law::RatesLaw];
     pub fn from_u32(v: u32) -> Option<Law> {
-        Self::ALL.into_iter().find(|l| *l as u32 == v)
+        Self::ALL.into_iter().chain(Self::EXTRA).find(|l| *l as u32 == v)
+    }
+    pub fn from_name(n: &str) -> Option<Law> {
+        Self::ALL.into_iter().chain(Self::EXTRA).find(|l| l.name() == n)
     }
     pub fn name(self) -> &'static str {
         match self {
             Law::Rates => "rates",
             Law::Strike => "strike",
             Law::Cooldown => "cooldown",
+            Law::Perceived => "perceived",
+            Law::RatesLaw => "rates-law",
         }
     }
 }
@@ -55,6 +68,12 @@ pub trait Engine {
     fn rates(&mut self, c: &SkillCtx) -> Rates;
     fn strike(&mut self, c: &SkillCtx) -> StrikeOut;
     fn cooldown(&mut self, skill: &str) -> f64;
+    fn rates_law(&mut self, c: &SkillCtx) -> Rates {
+        self.rates(c)
+    }
+    fn perceived(&mut self, _p: &RegardIn) -> Regard {
+        unimplemented!("perceived_of is benchmarked for native and rhai only")
+    }
 }
 
 /// Engine ids shared by the module exports, the host and the calibration module.
@@ -165,6 +184,14 @@ pub fn run(e: &mut dyn Engine, fx: &fixtures::Fixtures, law: Law, cursor: &mut u
                 Err(s) => s.len() as u64,
             },
             Law::Cooldown => e.cooldown(fx.skills[i % fx.skills.len()]).to_bits(),
+            Law::Perceived => {
+                let r = e.perceived(&fx.perceived[i % fx.perceived.len()]);
+                r.name as u64 + 2 * r.health as u64
+            },
+            Law::RatesLaw => {
+                let r = e.rates_law(&fx.rates[i % fx.rates.len()]);
+                (r.hunger_per_min.to_bits() ^ r.energy_per_min.to_bits().rotate_left(7) ^ r.hp_per_min.to_bits().rotate_left(13)) as u64
+            },
         });
         i += 1;
     }
@@ -190,6 +217,17 @@ pub fn dump(e: &mut dyn Engine, fx: &fixtures::Fixtures, law: Law) -> String {
         Law::Cooldown => {
             for k in fx.skills {
                 let _ = writeln!(s, "{k} {:?}", e.cooldown(k));
+            }
+        },
+        Law::Perceived => {
+            for (i, p) in fx.perceived.iter().enumerate() {
+                let _ = writeln!(s, "{i} {:?}", e.perceived(p));
+            }
+        },
+        Law::RatesLaw => {
+            for (i, c) in fx.rates.iter().enumerate() {
+                let r = e.rates_law(c);
+                let _ = writeln!(s, "{i} {:?} {:?} {:?}", r.hunger_per_min, r.energy_per_min, r.hp_per_min);
             }
         },
     }

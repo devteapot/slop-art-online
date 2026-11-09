@@ -501,7 +501,10 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
         for j in ctx.db.judgment().actor().filter(actor).filter(|j| !keep.contains(&j.key.to_lowercase())).map(|j| j.id).collect::<Vec<_>>() {
             ctx.db.judgment().id().delete(j);
         }
-        let keep: Vec<String> = update.places.iter().map(|p| p.name.trim().to_lowercase()).collect();
+        // A woken resident's places from before its mind (its work, square, evening spot) are
+        // world facts its starting ways walk to: kept unless the mind names them itself.
+        let mut keep: Vec<String> = update.places.iter().map(|p| p.name.trim().to_lowercase()).collect();
+        keep.extend(crate::woken::kept_places(ctx, actor));
         for p in ctx.db.place().actor().filter(actor).filter(|p| !keep.contains(&p.name.to_lowercase())).map(|p| p.id).collect::<Vec<_>>() {
             ctx.db.place().id().delete(p);
         }

@@ -1,5 +1,28 @@
 # Core validation record
 
+## 2026-11-09 town life layer 2, phase 1 (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `14f3a72` plus the uncommitted town life layer 2 phase 1 change (docs/TOWN_LIFE.md, "Layer 2"): the `woken`, `prior` and `prior_head` tables, the `wakes` and `woken_ring` laws. Free tier only; no model calls.
+
+- `cargo_checks.py` (`core-cargo-l2`): rules 108, authority 10, mind 49, viewer sync 3.
+- `town.py` (`core-town-l2`, island): 21 of 21. The player's wave and speech now wake the resident they reach; its starting ways still answer and face.
+- Tick cost, `core-wakebench`: three fresh island arms back to back, 300 s each (base `14f3a72`, this change at rest, 20 residents woken by `wake_many.py`). p50 2.16 / 2.12 / 2.14 ms, p99 4.58 / 4.92 / 5.07 ms, none over 16.7 ms; the Mac's load average was 3.5–8.2 from other sessions. Ring: 1.45 entries a second at rest. Numbers and caveats in docs/TOWN_LIFE.md, "Phase 1 measurements".
+
+## 2026-11-09 the Rhai boundary, rhai-1 (dev-box)
+
+- **Setup:** a private container `rhai-stdb` (2.14.1, own volume, port 3392), driven through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`. Worktree `~/dev/slop-rhai`, branch `rhai-1`.
+- **Before the merge of main** (`1bc1327`), run `core-rhai1-184757`:
+  - `cargo_checks.py`: rules 108, authority 10, mind 49, viewer sync 3.
+  - `tick`, `needs`, `seize`, `sight` pass. In `needs`, the exposed and cloaked HP rates differ by 2, through the rates that are now parameters.
+  - `codes.py`: 14 of 14, including the three install refusals. Each names its function, and the revision stays 5.
+  - Skirmish (island): 8 of 8. Steering: 5 of 5.
+- **Mechanics:** the first run crashed in the yield scene. The walker who yielded heard no "had yielded" news and was later killed; the next `place_near` then found no body. Base (`9ea831f`) against branch, alternating, on fresh worlds (`rhai1-mech-ab`): branch 23 and 23, base 23 and 23. It did not reproduce, so it is recorded as this driver's intermittent failure, not as caused by the change.
+- **After merging `origin/main` `2a64837`** (`33e3185`, scoped perception):
+  - Town: `core-rhai1-town-192712` passed 20 of 21, failing "a resident faces someone who speaks to them".
+  - Town again, branch against main: branch 20 of 21 (failing "faces someone who comes up behind them"), main 20 of 21 (failing step-aside).
+  - That is the scene's movement flakiness on both arms.
+- **Not run:** the infant, lifecycle and wildlife scenes.
+
 ## 2026-11-09 minds' sight (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81b9dd8`/`dc5e41b` plus the uncommitted minds'-sight, projection and presence change (docs/PERCEPTION.md, "Second change"; docs/PLAYER_MEMORY.md, "Presence and the offline character"). Fake model only; every scratch database answered 404 after cleanup. `core-perc2`: `cargo_checks.py`, `tick`, `needs`, `seize`, `sight` (new: 6 of 6) pass; `core-perc2-skirmish` passes; `core-perc2-mechanics` and `-steering` pass. `core-perc2-town` 20 of 21: "a resident faces someone who comes up behind them" failed, and failed in three solo runs on one world; on a base (`972aefd`) world the scene passed once and failed on the next run, so it is the scene's known flakiness, not shown to be this change. The infant scene was not run.

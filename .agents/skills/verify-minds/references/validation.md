@@ -1,5 +1,18 @@
 # Internal mind validation
 
+## 2026-11-09 town life layer 2, phase 1 (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `14f3a72` plus the uncommitted town life layer 2 phase 1 change (docs/TOWN_LIFE.md, "Layer 2"): the `woken`, `prior` and `prior_head` tables, the `wakes` and `woken_ring` laws. Free tier only; no model calls.
+
+- `wake` (new case, island): `minds-wake-203130` failed (the line arriving while the woken resident deliberated is left to that deliberation; the fixture answered only through talk), `minds-wake-203416` failed (the answer comes from the think step's `say`), `minds-wake-203552` failed (no-store projection does not replace places; the case now sends the replacing `mind_update` itself), `minds-wake-203725` pass.
+- Full suite `minds-l2-210035`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight and wake pass; consolidation is its known XFAIL.
+
+## 2026-11-09 the Rhai boundary, rhai-1 (dev-box)
+
+- **Setup:** private container `rhai-stdb` (2.14.1), fake model, no paid calls. The mind compiles the installed script through the rules crate for `skill_io` and the combat shapes, so this checks that the new compile (analysis, name tables) serves it.
+- `minds-rhai1-184757` on `1bc1327`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover and sight pass. Consolidation is its known XFAIL.
+- `minds-rhai1-sight-192712` on `33e3185` (main merged): sight passes.
+
 ## 2026-11-09 takeover on the scoped default (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `acbbda7` plus the uncommitted change that lands the perception client and makes `scoped` the default build (docs/PERCEPTION.md, "Third change"). Fake model only; private `CARGO_TARGET_DIR`s; every scratch database answered 404 after cleanup. `minds-sd-182208 --case takeover` with `CARGO_TARGET_DIR` private: pass (takeover after 30.0 s, the held graph kept and reinstalled, a reply in flight refused); the mind's cargo tests 49 passed. The driver now runs the binary it built in `CARGO_TARGET_DIR` (`source-hashes.json` names it); before, it ran `living/target/release/living-mind` whatever it had built.

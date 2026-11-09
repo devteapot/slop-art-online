@@ -2,13 +2,25 @@
 //!
 //! Scripts are functions only. For a skill `x` the runtime calls, when defined:
 //! `x_check(a) -> ""|reason`, `x_duration(a) -> ms`, `x_done(a) -> [effect maps]`.
-//! `rates(a)` returns need rates for the actor's current state; `move_speed(a)` tiles/second.
-//! The context map `a` is built directly from typed facts (no JSON), and effects are
-//! validated and applied by the authority.
+//! `rates(a)` returns the need rates for the actor's state as parameters the engine finishes per
+//! body ([`NeedLaw`]); `move_speed(a)` tiles/second.
+//!
+//! The context map `a` is built directly from typed facts (no JSON), with only the fields each
+//! law reads ([`fields`], [`context`]), and effects are validated and applied by the authority.
+//! What does not change per call is read once when the script compiles: the laws, the combat
+//! shapes, and the numbers looked up by a name (`combat_cooldown("strike")`, `lunge("wolf")`).
+//! [`Scripts::validate`] runs every function on sample inputs before an install is accepted.
 
 use rhai::packages::Package;
 use rhai::{Array, Dynamic, Engine, Map, Scope, AST};
-use std::collections::HashSet;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
+
+mod check;
+pub mod context;
+pub mod fields;
+pub use check::Report;
 
 #[derive(Clone, Debug, Default)]
 pub struct ActorFacts {
@@ -362,40 +374,182 @@ pub struct Rates {
     pub hp_per_min: f32,
 }
 
+/// What `rates(a)` returns for a body's state: the state's rates, and the numbers by which the
+/// engine finishes them for each body's own levels and genes ([`NeedLaw::rates`]). The script
+/// decides every condition that has a name (sleeping, sheltered, elder, wet, cold); the
+/// engine applies the thresholds on the body's hunger and energy and its genes, which differ
+/// from one body to the next.
+#[derive(Clone, Debug, PartialEq)]
+pub enum NeedLaw {
+    /// The parameters (see `living/scripts/skills.rhai`, `rates`).
+    Params {
+        hunger: f64,
+        energy: f64,
+        starving_at: f64,
+        starving_hp: f64,
+        fed_below: f64,
+        rested_above: f64,
+        healing_hp: f64,
+        spent_at: f64,
+        spent_hp: f64,
+        healing: f64,
+        tiring_gene: String,
+        healing_gene: String,
+        wet_energy: f64,
+        cold_hp: f64,
+    },
+    /// A script whose `rates(a)` returns the finished rates (`hunger`, `energy`, `hp`).
+    Final(Rates),
+}
+
+impl NeedLaw {
+    /// The body's rates: health from its hunger and energy (starving drains it; fed and rested,
+    /// it heals by the state's share of healing), tiring divided by the tiring gene, healing
+    /// multiplied by the healing gene, and exposure added last.
+    pub fn rates(&self, a: &ActorFacts) -> Rates {
+        match self {
+            NeedLaw::Final(r) => *r,
+            NeedLaw::Params { hunger, energy, starving_at, starving_hp, fed_below, rested_above, healing_hp, spent_at, spent_hp, healing, tiring_gene, healing_gene, wet_energy, cold_hp } => {
+                let (h, e) = (a.hunger as f64, a.energy as f64);
+                let mut hp = 0.0f64;
+                if h >= *starving_at {
+                    hp += starving_hp;
+                } else if h < *fed_below && e > *rested_above {
+                    hp += healing_hp;
+                }
+                if e <= *spent_at {
+                    hp += spent_hp;
+                }
+                if hp > 0.0 {
+                    hp *= healing;
+                }
+                let mut energy = *energy;
+                if energy < 0.0 {
+                    energy /= crate::genes::gene(&a.genes, tiring_gene) as f64;
+                }
+                if hp > 0.0 {
+                    hp *= crate::genes::gene(&a.genes, healing_gene) as f64;
+                }
+                energy += wet_energy;
+                hp += cold_hp;
+                Rates { hunger_per_min: *hunger as f32, energy_per_min: energy as f32, hp_per_min: hp as f32 }
+            },
+        }
+    }
+}
+
 pub struct Scripts {
     engine: Engine,
     ast: AST,
     fns: HashSet<String>,
+    /// Functions of one parameter: the ones the engine can call with a context.
+    unary: HashSet<String>,
     shapes: crate::combat::Shapes,
     shows: crate::social::Shows,
+    /// What each function reads of its parameters.
+    fields: fields::Fields,
+    /// The context fields each law is called with, by law.
+    plans: RefCell<HashMap<String, Rc<context::Plan>>>,
+    /// Numbers looked up by a name (`combat_cooldown("strike")`), read at compile for every name
+    /// the engine asks and kept for any other the first time it is asked.
+    names: RefCell<HashMap<String, HashMap<String, Option<f64>>>>,
+    /// `rates(a)` by the values of the fields it reads: bodies in the same state share it.
+    needs: RefCell<HashMap<Vec<u8>, NeedLaw>>,
 }
 
-pub const MAX_SOURCE: usize = 64 * 1024;
+/// Largest script source accepted. `skills.rhai` is about 56 KB; compile time and memory grow
+/// about linearly (5 ms and 1.3 MB in the module for 55 KB, docs/SCRIPT_ENGINES.md).
+pub const MAX_SOURCE: usize = 256 * 1024;
+/// Rhai operations one call may take: about 2× the heaviest function measured on the install
+/// samples (`skill_io`, 864; the heaviest law, `teach_check`, 635; docs/SCRIPT_ENGINES.md).
+/// At about 600 WASM instructions per operation, a call that runs into it costs about 1.2 M
+/// instructions (about 0.1 ms in the module).
+pub const MAX_OPERATIONS: u64 = 2_000;
+/// Distinct states whose rates are kept before the memo starts over.
+const NEEDS_MEMO: usize = 4_096;
+
+/// The engine's limits on one call (Rhai's sandbox): operations, call depth, expression depth
+/// (outside and inside functions) and the size of strings, arrays and maps a script makes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Limits {
+    pub operations: u64,
+    pub call_levels: usize,
+    pub expr_depth: (usize, usize),
+    pub string: usize,
+    pub array: usize,
+    pub map: usize,
+}
+
+/// About 2–4× what the rules use on the install samples (`measure_limits`, 2026-11-09): call
+/// depth 3, expression depth 19 in and out of functions, strings 570 characters, arrays 26
+/// entries, maps 30 entries (`laws()` has 29). The string limit bounds what a script builds,
+/// not the text it is handed (a reworked routine arrives as up to 32,000 characters).
+pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 2_048, array: 64, map: 64 };
 
 fn engine() -> Engine {
+    engine_with(LIMITS)
+}
+
+fn engine_with(l: Limits) -> Engine {
     let mut e = Engine::new_raw();
     rhai::packages::StandardPackage::new().register_into_engine(&mut e);
-    e.set_max_operations(20_000);
-    e.set_max_call_levels(16);
-    e.set_max_expr_depths(32, 24);
-    e.set_max_string_size(4_096);
-    e.set_max_array_size(256);
-    e.set_max_map_size(256);
+    e.set_max_operations(l.operations);
+    e.set_max_call_levels(l.call_levels);
+    e.set_max_expr_depths(l.expr_depth.0, l.expr_depth.1);
+    e.set_max_string_size(l.string);
+    e.set_max_array_size(l.array);
+    e.set_max_map_size(l.map);
     for symbol in ["eval", "import", "print", "debug"] {
         e.disable_symbol(symbol);
     }
     e
 }
 
+/// Constant laws the engine looks up by a name, and the names it asks them for.
+fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
+    let skills: Vec<String> = s.shapes.names().map(String::from).chain(crate::catalog::SKILLS.iter().map(|k| k.name.to_string())).collect();
+    let kinds: Vec<String> = crate::catalog::CREATURES.iter().map(|k| k.to_string()).collect();
+    let items: Vec<String> = crate::catalog::ITEMS.iter().map(|i| i.name.to_string()).collect();
+    let resources: Vec<String> = crate::catalog::RESOURCES.iter().map(|(k, _)| k.to_string()).collect();
+    let mut out = Vec::new();
+    let mut add = |f: &str, d: &[String]| {
+        if s.has(f) {
+            let mut d = d.to_vec();
+            d.sort();
+            d.dedup();
+            out.push((f.to_string(), d));
+        }
+    };
+    for f in ["combat_cooldown", "combat_recover", "combat_cost"] {
+        add(f, &skills);
+    }
+    for f in ["lunge", "max_hp", "yield_ms", "carry_limit", "carried_spoil", "carcass_meat", "carcass_hide"] {
+        add(f, &kinds);
+    }
+    add("spoil_rate", &items);
+    add("regrow", &resources);
+    for f in ["trap_every_s", "trap_holds"] {
+        add(f, &["meat".to_string()]);
+    }
+    // A dash's and a step's distance and speed by kind.
+    let moves: Vec<String> = s.fns.iter().filter(|f| f.ends_with("_dist") || f.ends_with("_speed")).filter(|f| *f != "move_speed").cloned().collect();
+    for f in moves {
+        add(&f, &kinds);
+    }
+    out
+}
+
 impl Scripts {
     pub fn new(source: &str) -> Result<Self, String> {
         if source.len() > MAX_SOURCE {
-            return Err("script source exceeds 64 KiB".into());
+            return Err(format!("script source exceeds {} KiB", MAX_SOURCE / 1024));
         }
         let engine = engine();
         let ast = engine.compile(source).map_err(|e| format!("script compile: {e}"))?.clone_functions_only();
         let fns = ast.iter_functions().map(|f| f.name.to_string()).collect();
-        let mut s = Self { engine, ast, fns, shapes: Default::default(), shows: Default::default() };
+        let unary = ast.iter_functions().filter(|f| f.params.len() == 1).map(|f| f.name.to_string()).collect();
+        let fields = fields::Fields::analyze(&ast);
+        let mut s = Self { engine, ast, fns, unary, shapes: Default::default(), shows: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default() };
         // Required entry points.
         for f in ["rates", "move_speed"] {
             if !s.fns.contains(f) {
@@ -404,7 +558,41 @@ impl Scripts {
         }
         s.shapes = s.read_shapes()?;
         s.shows = s.read_shows()?;
+        for (f, names) in name_laws(&s) {
+            for n in names {
+                s.num_of(&f, &n, 0.0);
+            }
+        }
         Ok(s)
+    }
+
+    /// Call every law and skill function on sample inputs, the way the engine calls them, and
+    /// refuse the script if any fails, returns the wrong shape, reads a field the engine does
+    /// not provide or exceeds the engine's limits. Returns the operations each function took.
+    pub fn validate(&self) -> Result<Report, String> {
+        check::validate(self, LIMITS)
+    }
+
+    /// The fields a law is called with (all of them when the analysis cannot say).
+    fn plan(&self, f: &str) -> Rc<context::Plan> {
+        if let Some(p) = self.plans.borrow().get(f) {
+            return p.clone();
+        }
+        let p = Rc::new(context::Plan::of(f, self.fields.of(f, 1).and_then(|u| u.first()), false).unwrap_or_else(|_| context::Plan::all()));
+        self.plans.borrow_mut().insert(f.to_string(), p.clone());
+        p
+    }
+
+    /// The laws the engine calls with a context, by name.
+    fn ctx_laws(&self) -> Vec<String> {
+        let mut v: Vec<String> = self.unary.iter().filter(|f| check::CTX_LAWS.contains(&f.as_str()) || check::SKILL_PARTS.iter().any(|x| f.ends_with(x))).cloned().collect();
+        v.sort();
+        v
+    }
+
+    /// What each law reads of its context, for reports.
+    pub fn law_fields(&self) -> Vec<(String, Vec<String>)> {
+        self.ctx_laws().into_iter().map(|f| (f.clone(), self.plan(&f).describe())).collect()
     }
 
     /// What each combat skill is (`<skill>_combat()`) and the skill bar (`skill_bar()`), read
@@ -525,9 +713,8 @@ impl Scripts {
     }
 
     fn call(&self, f: &str, ctx: &SkillCtx) -> Result<Dynamic, String> {
-        self.engine
-            .call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (to_map(ctx, self.shapes.knack(&ctx.skill)),))
-            .map_err(|e| format!("{f}: {e}"))
+        let m = context::map(ctx, self.shapes.knack(&ctx.skill), &self.plan(f));
+        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (m,)).map_err(|e| format!("{f}: {e}"))
     }
 
     pub fn check(&self, skill: &str, ctx: &SkillCtx) -> Result<(), String> {
@@ -574,37 +761,50 @@ impl Scripts {
         if !self.has(&f) {
             return Err(format!("{skill} has no missile"));
         }
-        let m = self.call(&f, ctx)?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
-        let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("{f} missing {k}"));
-        Ok(crate::combat::MissileSpec { speed: g("speed")?.clamp(1.0, 120.0), range: g("range")?.clamp(0.5, 80.0), radius: g("radius")?.clamp(0.05, 3.0) })
+        decode_missile(&f, self.call(&f, ctx)?)
     }
 
     fn effects(&self, f: &str, ctx: &SkillCtx) -> Result<Vec<Effect>, String> {
         if !self.has(f) {
             return Ok(Vec::new());
         }
-        let r = self.call(&f, ctx)?;
-        let arr: Array = r.try_cast::<Array>().ok_or_else(|| format!("{f} must return an array"))?;
-        arr.into_iter().map(effect).collect()
+        decode_effects(f, self.call(f, ctx)?)
     }
 
+    /// The actor's need rates: `rates(a)` for its state (shared by every body in the same
+    /// state), finished for its own levels and genes.
     pub fn rates(&self, ctx: &SkillCtx) -> Result<Rates, String> {
-        let m = self.call("rates", ctx)?.try_cast::<Map>().ok_or("rates must return a map")?;
-        let g = |k: &str| m.get(k).and_then(number).unwrap_or(0.0) as f32;
-        Ok(Rates { hunger_per_min: g("hunger"), energy_per_min: g("energy"), hp_per_min: g("hp") })
+        Ok(self.need_law(ctx)?.rates(&ctx.actor))
+    }
+
+    /// The same rates, asking the law every time (benchmarks: what one call of the law costs).
+    #[doc(hidden)]
+    pub fn rates_unshared(&self, ctx: &SkillCtx) -> Result<Rates, String> {
+        let m = context::map(ctx, self.shapes.knack(&ctx.skill), &self.plan("rates"));
+        let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "rates", (m,)).map_err(|e| format!("rates: {e}"))?;
+        Ok(NeedLaw::from_dynamic(d)?.rates(&ctx.actor))
+    }
+
+    /// What `rates(a)` says for the actor's state.
+    pub fn need_law(&self, ctx: &SkillCtx) -> Result<NeedLaw, String> {
+        let plan = self.plan("rates");
+        let mut key = Vec::with_capacity(64);
+        context::key(ctx, self.shapes.knack(&ctx.skill), &plan, &mut key);
+        if let Some(l) = self.needs.borrow().get(&key) {
+            return Ok(l.clone());
+        }
+        let m = context::map(ctx, self.shapes.knack(&ctx.skill), &plan);
+        let law = NeedLaw::from_dynamic(self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "rates", (m,)).map_err(|e| format!("rates: {e}"))?)?;
+        let mut memo = self.needs.borrow_mut();
+        if memo.len() >= NEEDS_MEMO {
+            memo.clear();
+        }
+        memo.insert(key, law.clone());
+        Ok(law)
     }
 
     pub fn body_state(&self, ctx: &SkillCtx) -> Result<BodyState, String> {
-        let m = self.call("body_state", ctx)?.try_cast::<Map>().ok_or("body_state must return a map")?;
-        let flag = |k: &str| m.get(k).and_then(|v| v.clone().try_cast::<bool>()).ok_or_else(|| format!("body_state missing {k}"));
-        let wound = match m.get("wound").and_then(|v| v.clone().into_string().ok()).as_deref() {
-            Some("") => Wound::None,
-            Some("hurt") => Wound::Hurt,
-            Some("badly wounded") => Wound::BadlyWounded,
-            Some("barely alive") => Wound::BarelyAlive,
-            _ => return Err("body_state invalid wound".into()),
-        };
-        Ok(BodyState { cold: flag("cold")?, hungry: flag("hungry")?, starving: flag("starving")?, wound })
+        decode_body(self.call("body_state", ctx)?)
     }
 
     pub fn move_speed(&self, ctx: &SkillCtx) -> Result<f32, String> {
@@ -661,41 +861,23 @@ impl Scripts {
         if !self.has("perceived_of") {
             return Regard::default_for(p);
         }
-        let mut o = Map::new();
-        o.insert("kind".into(), p.observer_kind.clone().into());
-        o.insert("knows".into(), p.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
-        let mut t = Map::new();
-        t.insert("kind".into(), p.target_kind.clone().into());
-        t.insert("known".into(), p.known.into());
-        t.insert("revealed".into(), p.revealed.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
-        let mut m = Map::new();
-        m.insert("observer".into(), o.into());
-        m.insert("target".into(), t.into());
-        m.insert("self".into(), p.own.into());
-        m.insert("night".into(), p.night.into());
-        let Ok(r) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "perceived_of", (m,)) else { return Regard::default_for(p) };
-        let Some(r) = r.try_cast::<Map>() else { return Regard::default_for(p) };
-        let d = Regard::default_for(p);
-        let name = r.get("name").and_then(|v| v.as_bool().ok()).unwrap_or(d.name);
-        let health = match r.get("health").and_then(|v| v.clone().into_string().ok()).as_deref() {
-            Some("exact") => Precision::Exact,
-            Some("band") => Precision::Band,
-            Some("none") => Precision::None,
-            _ => d.health,
-        };
-        Regard { name, health }
+        let Ok(r) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "perceived_of", (regard_map(p),)) else { return Regard::default_for(p) };
+        decode_regard(r, p).unwrap_or_else(|_| Regard::default_for(p))
     }
 
-    /// Numeric function of one string argument, e.g. `max_hp("deer")`.
+    /// Numeric function of one string argument, e.g. `max_hp("deer")`. A function of a name
+    /// depends on nothing else, so each answer is read once and kept (the names the engine
+    /// asks are all read when the script compiles).
     pub fn num_of(&self, f: &str, arg: &str, default: f64) -> f64 {
+        if let Some(v) = self.names.borrow().get(f).and_then(|t| t.get(arg)) {
+            return v.unwrap_or(default);
+        }
         if !self.has(f) {
             return default;
         }
-        self.engine
-            .call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),))
-            .ok()
-            .and_then(|d| number(&d))
-            .unwrap_or(default)
+        let v = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok().and_then(|d| number(&d));
+        self.names.borrow_mut().entry(f.to_string()).or_default().insert(arg.to_string(), v);
+        v.unwrap_or(default)
     }
 
     /// What a skill takes and gives, as the rules describe it (`skill_io(name)`), for minds
@@ -726,85 +908,92 @@ fn number(d: &Dynamic) -> Option<f64> {
     d.as_float().ok()
 }
 
-fn inv_map(inv: &[(String, u32)]) -> Map {
-    let mut m = Map::new();
-    for (k, v) in inv {
-        m.insert(k.as_str().into(), Dynamic::from_int(*v as i64));
+fn decode_missile(f: &str, d: Dynamic) -> Result<crate::combat::MissileSpec, String> {
+    let m = d.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
+    let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("{f} missing {k}"));
+    Ok(crate::combat::MissileSpec { speed: g("speed")?.clamp(1.0, 120.0), range: g("range")?.clamp(0.5, 80.0), radius: g("radius")?.clamp(0.05, 3.0) })
+}
+
+fn decode_effects(f: &str, d: Dynamic) -> Result<Vec<Effect>, String> {
+    let arr: Array = d.try_cast::<Array>().ok_or_else(|| format!("{f} must return an array"))?;
+    arr.into_iter().map(effect).collect()
+}
+
+impl NeedLaw {
+    /// Decode what `rates(a)` returned.
+    pub fn from_dynamic(d: Dynamic) -> Result<NeedLaw, String> {
+        let m = d.try_cast::<Map>().ok_or("rates must return a map")?;
+        if !m.contains_key("starving_at") {
+            let g = |k: &str| m.get(k).and_then(number).unwrap_or(0.0) as f32;
+            return Ok(NeedLaw::Final(Rates { hunger_per_min: g("hunger"), energy_per_min: g("energy"), hp_per_min: g("hp") }));
+        }
+        let n = |k: &str| m.get(k).and_then(number).ok_or_else(|| format!("rates: `{k}` must be a number"));
+        let gene = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).ok_or_else(|| format!("rates: `{k}` must name a gene"));
+        Ok(NeedLaw::Params {
+            hunger: n("hunger")?,
+            energy: n("energy")?,
+            starving_at: n("starving_at")?,
+            starving_hp: n("starving_hp")?,
+            fed_below: n("fed_below")?,
+            rested_above: n("rested_above")?,
+            healing_hp: n("healing_hp")?,
+            spent_at: n("spent_at")?,
+            spent_hp: n("spent_hp")?,
+            healing: n("healing")?,
+            tiring_gene: gene("tiring_gene")?,
+            healing_gene: gene("healing_gene")?,
+            wet_energy: n("wet_energy")?,
+            cold_hp: n("cold_hp")?,
+        })
     }
+}
+
+fn decode_body(d: Dynamic) -> Result<BodyState, String> {
+    let m = d.try_cast::<Map>().ok_or("body_state must return a map")?;
+    let flag = |k: &str| m.get(k).and_then(|v| v.clone().try_cast::<bool>()).ok_or_else(|| format!("body_state missing {k}"));
+    let wound = match m.get("wound").and_then(|v| v.clone().into_string().ok()).as_deref() {
+        Some("") => Wound::None,
+        Some("hurt") => Wound::Hurt,
+        Some("badly wounded") => Wound::BadlyWounded,
+        Some("barely alive") => Wound::BarelyAlive,
+        _ => return Err("body_state invalid wound".into()),
+    };
+    Ok(BodyState { cold: flag("cold")?, hungry: flag("hungry")?, starving: flag("starving")?, wound })
+}
+
+/// The map `perceived_of(p)` is called with.
+fn regard_map(p: &RegardIn) -> Map {
+    let mut o = Map::new();
+    o.insert("kind".into(), p.observer_kind.clone().into());
+    o.insert("knows".into(), p.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
+    let mut t = Map::new();
+    t.insert("kind".into(), p.target_kind.clone().into());
+    t.insert("known".into(), p.known.into());
+    t.insert("revealed".into(), p.revealed.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
+    let mut m = Map::new();
+    m.insert("observer".into(), o.into());
+    m.insert("target".into(), t.into());
+    m.insert("self".into(), p.own.into());
+    m.insert("night".into(), p.night.into());
     m
 }
 
-fn to_map(c: &SkillCtx, knack: &str) -> Map {
-    let f = |v: f32| Dynamic::from_float(v as f64);
-    let mut a = Map::new();
-    a.insert("id".into(), Dynamic::from_int(c.actor.id as i64));
-    a.insert("kind".into(), c.actor.kind.clone().into());
-    a.insert("hp".into(), f(c.actor.hp));
-    a.insert("hunger".into(), f(c.actor.hunger));
-    a.insert("energy".into(), f(c.actor.energy));
-    a.insert("near_fire".into(), c.actor.near_fire.into());
-    a.insert("near_shelter".into(), c.actor.near_shelter.into());
-    a.insert("terrain".into(), c.actor.terrain.clone().into());
-    a.insert("activity".into(), c.actor.activity.clone().into());
-    a.insert("age".into(), f(c.actor.age));
-    a.insert("stage".into(), c.actor.stage.clone().into());
-    a.insert("life".into(), f(c.actor.life));
-    a.insert("knows".into(), c.actor.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
-    a.insert("inv".into(), inv_map(&c.actor.inv).into());
-    a.insert("kin_near".into(), Dynamic::from_int(c.actor.kin_near as i64));
-    a.insert("pasture".into(), f(c.actor.pasture));
-    let ago = |v: Option<f32>| v.map_or(Dynamic::UNIT, |x| Dynamic::from_float(x as f64));
-    a.insert("hurt_by".into(), Dynamic::from_int(c.actor.hurt_by as i64));
-    a.insert("hurt_ago".into(), ago(c.actor.hurt_ago));
-    a.insert("yielded_ago".into(), ago(c.actor.yielded_ago));
-    a.insert("sensed".into(), inv_map(&c.actor.sensed).into());
-    a.insert("bold".into(), c.actor.bold.into());
-    a.insert("room".into(), Dynamic::from_int(c.actor.room as i64));
-    for g in crate::genes::BODY {
-        a.insert(g.into(), f(crate::genes::gene(&c.actor.genes, g)));
-    }
-    // How good the actor is at the skill being performed (knack × practice).
-    a.insert("factor".into(), f(crate::genes::skill_factor(&c.actor.genes, &c.actor.practice, &c.skill, knack)));
-    let mut t = Map::new();
-    t.insert("class".into(), c.target.class.clone().into());
-    t.insert("id".into(), Dynamic::from_int(c.target.id as i64));
-    t.insert("kind".into(), c.target.kind.clone().into());
-    t.insert("name".into(), c.target.name.clone().into());
-    t.insert("amount".into(), f(c.target.amount));
-    t.insert("hp".into(), f(c.target.hp));
-    t.insert("max_hp".into(), f(c.target.max_hp));
-    t.insert("stage".into(), c.target.stage.clone().into());
-    t.insert("hurt_ago".into(), f(c.target.hurt_ago));
-    t.insert("alive".into(), c.target.alive.into());
-    t.insert("dist".into(), f(c.target.dist));
-    t.insert("inv".into(), inv_map(&c.target.inv).into());
-    t.insert("knows".into(), c.target.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
-    t.insert("activity".into(), c.target.activity.clone().into());
-    t.insert("yielded_ago".into(), ago(c.target.yielded_ago));
-    t.insert("near_fire".into(), c.target.near_fire.into());
-    t.insert("company".into(), Dynamic::from_int(c.target.company as i64));
-    t.insert("bearing".into(), f(c.target.bearing));
-    t.insert("closing".into(), f(c.target.closing));
-    let mut r = Map::new();
-    r.insert("exists".into(), c.routine.exists.into());
-    r.insert("ok".into(), Dynamic::from_int(c.routine.ok as i64));
-    r.insert("failed".into(), Dynamic::from_int(c.routine.failed as i64));
-    r.insert("changed_s".into(), f(c.routine.changed_s));
-    let mut m = Map::new();
-    m.insert("actor".into(), a.into());
-    m.insert("target".into(), t.into());
-    m.insert("routine".into(), r.into());
-    m.insert("item".into(), c.item.clone().into());
-    m.insert("qty".into(), Dynamic::from_int(c.qty as i64));
-    m.insert("night".into(), c.night.into());
-    m.insert("hour".into(), f(c.hour));
-    m.insert("season".into(), c.season.clone().into());
-    m.insert("text".into(), c.text.clone().into());
-    m.insert("topic".into(), c.topic.clone().into());
-    m.insert("roll".into(), f(c.roll));
-    m.insert("raining".into(), c.raining.into());
-    m.insert("skill".into(), c.skill.clone().into());
-    m
+/// The law's answer; a field it leaves out keeps the default.
+fn decode_regard(r: Dynamic, p: &RegardIn) -> Result<Regard, String> {
+    let r = r.try_cast::<Map>().ok_or("perceived_of must return a map")?;
+    let d = Regard::default_for(p);
+    let name = match r.get("name") {
+        None => d.name,
+        Some(v) => v.as_bool().map_err(|_| "perceived_of: `name` must be true or false")?,
+    };
+    let health = match r.get("health").map(|v| v.clone().into_string()) {
+        None => d.health,
+        Some(Ok(h)) if h == "exact" => Precision::Exact,
+        Some(Ok(h)) if h == "band" => Precision::Band,
+        Some(Ok(h)) if h == "none" => Precision::None,
+        Some(_) => return Err("perceived_of: `health` is \"exact\", \"band\" or \"none\"".into()),
+    };
+    Ok(Regard { name, health })
 }
 
 fn effect(d: Dynamic) -> Result<Effect, String> {
@@ -1283,6 +1472,119 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
                 }
             }
         }
+    }
+
+    /// `rates(a)` as it was before it returned parameters (2026-11-09, 9ea831f): the whole
+    /// computation in the script.
+    const RATES_BEFORE: &str = r#"
+fn rates(a) {
+    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 5.0 };
+    let energy = -3.0;
+    let hp = 0.0;
+    let act = a.actor.activity;
+    if act == "sleep" {
+        energy = if a.actor.near_shelter { 26.0 } else { 16.0 };
+        hunger *= 0.5;
+    } else if act == "rest" {
+        energy = 6.0;
+    } else if act == "block" {
+        energy = -12.0;
+    }
+    if a.actor.hunger >= 100.0 {
+        hp -= 6.0;
+    } else if a.actor.hunger < 70.0 && a.actor.energy > 15.0 {
+        hp += 3.0;
+    }
+    if a.actor.energy <= 0.0 {
+        hp -= 2.0;
+    }
+    if a.actor.stage == "elder" {
+        if hp > 0.0 { hp *= 0.5; }
+        energy *= 1.3;
+    }
+    if a.actor.stage == "infant" { hunger *= if a.actor.kind == "person" { 0.6 } else { 0.3 }; }
+    if energy < 0.0 { energy /= a.actor.endurance; }
+    if hp > 0.0 { hp *= a.actor.vitality; }
+    if wet(a) {
+        energy -= if inv(a, "cloak") > 0 { 1.0 } else { 2.5 };
+    }
+    if cold(a) {
+        hp -= if a.season == "winter" { 5.0 } else { 2.0 };
+    }
+    #{ hunger: hunger, energy: energy, hp: hp }
+}
+"#;
+
+    fn with_rates(rates: &str) -> String {
+        let src = include_str!("../../scripts/skills.rhai");
+        let (a, b) = (src.find("fn rates(a) {").unwrap(), src.find("fn move_speed(a) {").unwrap());
+        let start = src[..a].rfind("\n\n").unwrap();
+        format!("{}\n{rates}\n{}", &src[..start], &src[b..])
+    }
+
+    /// The need rates are the same, to the bit, whether the script computes them whole (as
+    /// before) or supplies the numbers the engine finishes per body.
+    #[test]
+    fn need_rates_match_the_whole_script_computation() {
+        let before = Scripts::new(&with_rates(RATES_BEFORE)).unwrap();
+        let now = scripts();
+        let mut n = 0;
+        for kind in ["person", "deer", "wolf"] {
+            for stage in ["infant", "child", "adult", "elder"] {
+                for activity in ["", "sleep", "rest", "block"] {
+                    for hunger in [0.0, 69.9, 70.0, 100.0] {
+                        for energy in [0.0, 15.0, 15.1, 80.0] {
+                            for bits in 0..64u32 {
+                                for (endurance, vitality) in [(1.0, 1.0), (0.83, 1.21)] {
+                                    let mut c = ctx();
+                                    let a = &mut c.actor;
+                                    (a.kind, a.stage, a.activity, a.hunger, a.energy) = (kind.into(), stage.into(), activity.into(), hunger, energy);
+                                    a.genes = [("endurance".to_string(), endurance), ("vitality".to_string(), vitality)].into();
+                                    a.near_fire = bits & 1 != 0;
+                                    a.near_shelter = bits & 2 != 0;
+                                    a.inv = if bits & 4 != 0 { vec![("cloak".into(), 1), ("wood".into(), 2)] } else { vec![("wood".into(), 2)] };
+                                    c.night = bits & 8 != 0;
+                                    c.raining = bits & 16 != 0;
+                                    c.season = if bits & 32 != 0 { "winter" } else { "summer" }.into();
+                                    let (x, y) = (before.rates(&c).unwrap(), now.rates(&c).unwrap());
+                                    assert_eq!(
+                                        (x.hunger_per_min.to_bits(), x.energy_per_min.to_bits(), x.hp_per_min.to_bits()),
+                                        (y.hunger_per_min.to_bits(), y.energy_per_min.to_bits(), y.hp_per_min.to_bits()),
+                                        "{kind} {stage} {activity:?} hunger {hunger} energy {energy} bits {bits:06b} genes {endurance}/{vitality}: {x:?} vs {y:?}"
+                                    );
+                                    n += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(n, 3 * 4 * 4 * 4 * 4 * 64 * 2);
+        // Bodies in the same state share one call of the law: the genes and levels are the
+        // engine's part.
+        assert!(now.needs.borrow().len() <= 3 * 4 * 4 * 64, "{} states", now.needs.borrow().len());
+    }
+
+    /// A number looked up by a name is read once; the table answers as the script does.
+    #[test]
+    fn numbers_by_name_are_tables_read_once() {
+        let s = scripts();
+        let src = include_str!("../../scripts/skills.rhai");
+        let fresh = Scripts::new(src).unwrap();
+        for (f, names) in name_laws(&s) {
+            for n in names {
+                let direct = fresh.engine.call_fn::<Dynamic>(&mut Scope::new(), &fresh.ast, &f, (n.clone(),)).ok().and_then(|d| number(&d));
+                assert_eq!(s.names.borrow().get(&f).and_then(|t| t.get(&n)).copied(), Some(direct), "{f}({n})");
+                assert_eq!(s.num_of(&f, &n, -1.0), direct.unwrap_or(-1.0));
+            }
+        }
+        assert_eq!(s.num_of("combat_cooldown", "strike", 0.0), 650.0);
+        assert_eq!(s.num_of("lunge", "wolf", 0.0), 1.8);
+        // A name the engine was not expected to ask is read the first time, then kept.
+        assert_eq!(s.num_of("carry_limit", "giant", 0.0), 6.0);
+        assert_eq!(s.names.borrow()["carry_limit"]["giant"], Some(6.0));
+        assert_eq!(s.num_of("no_such_law", "x", 7.0), 7.0);
     }
 
     #[test]

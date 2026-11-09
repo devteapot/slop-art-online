@@ -250,7 +250,7 @@ Most of a per-character call is building the facts map (`script.rs:690-694`), no
 - **Client numbers.** A public `law_card` row, written by the authority at each install like `skill_card` (`authority/src/combat.rs:513-547`), carries the numbers clients need: speeds by kind and gait, sight by light, day length, season, warmth radii. The client never runs the script.
 - **Editing laws in play** (gods, WORLD_VISION) is installing a new overlay revision through an authorized skill, so it uses the same path.
 
-**Gap.** The script cap. `MAX_SOURCE` is 64 KiB (`script.rs:324`), and `skills.rhai` is already 56.9 KB, so an overlay composed as source has about 7 KB of room. Either the cap becomes a law of the host (measured, not guessed), or `Scripts` compiles the base and the overlay as two ASTs and merges them (Rhai's `AST::merge` gives later functions precedence). The second keeps each part under the cap. It needs `script.rs`, which is outside this change.
+**Gap (closed 2026-11-09).** The script cap. `MAX_SOURCE` was 64 KiB, and `skills.rhai` is already 56.9 KB, so an overlay composed as source had about 7 KB of room. Since `rhai-1` it is 256 KiB ([script engines](SCRIPT_ENGINES.md#what-changed-on-rhai-1)): compile time and memory grow about linearly with the source, and an install is rare. If overlays outgrow it, `Scripts` can compile the base and the overlay as two ASTs and merge them (Rhai's `AST::merge` gives later functions precedence), keeping each part under the cap.
 
 ### Technology and magic without forking the engine
 

@@ -90,6 +90,12 @@ living-check: living-build
     cargo build --manifest-path living/viewer/Cargo.toml --target wasm32-unknown-unknown --profile wasm-dev --bin living-viewer
     cargo test --manifest-path living/Cargo.toml -p living-rules
 
+# Fuel budgets of the hot Rhai laws (rates, the strike path, perceived_of, a constant lookup) in
+# the module under SpacetimeDB's wasmtime config; fails over living/tools/script_bench/budgets.json
+# (docs/SCRIPT_ENGINES.md). Builds in its own target dir unless CARGO_TARGET_DIR is set.
+living-script-gate:
+    CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/.local/script-bench/target}" living/tools/script_bench/gate.sh
+
 
 # The game client's generated assets (git-ignored; the scripts are the source), on any machine
 # with Blender: CC0 look-dev models, nature, buildings, then the animated characters. The
