@@ -1735,8 +1735,13 @@ def reclaim(a):
         if not (code == 200 and json.loads(body)[0]["rows"][0][0]):
             unpaused += 1
             continue
-        last = sh("docker", "exec", CONTAINER, "spacetime", "logs", "-s", "local", db, "-n", "1", "--format", "json").stdout.strip().splitlines()
-        ts = json.loads(last[-1])["ts"] if last else None
+        ts = None
+        for line in reversed(sh("docker", "exec", CONTAINER, "spacetime", "logs", "-s", "local", db, "-n", "20", "--format", "json").stdout.strip().splitlines()):
+            try:
+                ts = json.loads(line)["ts"]
+                break
+            except (ValueError, KeyError):
+                continue  # e.g. a server line after a restart
         hit = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {base} && grep -l '\"ts\":{ts},' */module_logs/*.log", check=False).stdout.split()
         owners = {h.split("/")[0] for h in hit}
         if ts is None or len(owners) != 1:

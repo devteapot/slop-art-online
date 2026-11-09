@@ -140,9 +140,9 @@ A preset is a life trial that extends `life` with a world: seed overrides and `p
 | --- | --- | --- |
 | [`life`](../living/trials/life.json) (control) | the island as shipped | whatever the island offers a newcomer: gardens and wild food, a walled town with unowned houses, a bold pack on the road, cold nights, seasons |
 | [`life-ruin`](../living/trials/life-ruin.json): a place with history and a gated ladder | berry bushes at 40% (`resource_scale`); before the mind starts, a Brackenford resident given writing, fishing and smoking walks into the unowned house nearest the arrival point (about 20 m from it) and puts up two signs with the ordinary write skill ("This house kept nets on the river…", topic fishing; "Fish hung over smoke for a day keep through the winter.", topic smoking), then goes home | forage in a lean land → find the empty house and its signs → learn writing (experimenting with wood can reveal it; no newcomer has it) → read the signs: fishing, smoking → fish, smoke fish over a fire → food that keeps; the house is also a shelter |
-| [`life-pressure`](../living/trials/life-pressure.json): a pressure | berry bushes at 30%; a second bold pack of five ranging 120–200 m from the arrival point beside the shipped pack of four | survive the first nights on a wolf road → safety (the walled town and its gates, fire, shelter) → food where berries are scarce (the bow, fishing, trapping, the town's gardens and stores) → a place that holds |
+| [`life-pressure`](../living/trials/life-pressure.json): a pressure | berry bushes at 30%; **since the wide batch** no pack on the arrival road and two bold packs (five and four) 120–250 m around the first village, Elmwick. In l2/l3 it kept the shipped road pack and added a pack of five 120–200 m from the arrival point; that version measured only the road (two of three died there) | arrive in a lean land → feed yourself where berries are scarce (the bow, fishing, trapping, the town's gardens and stores) → meet wolves when ranging toward the villages → safety (fire, shelter, the walled town) → a place that holds |
 
-Measured: `resource_scale` thins the land's wild bushes but not the planted garden and field bushes. On the island, `life-ruin` has 12,158 berry bushes and `life-pressure` 9,219, against 18,216 in the control (67% and 51%, not 40% and 30%). `life-pressure` has 15 wolves (6 + 4 + 5).
+Measured: `resource_scale` thins the land's wild bushes but not the planted garden and field bushes. On the island, `life-ruin` has 12,158 berry bushes and `life-pressure` 9,219, against 18,216 in the control (67% and 51%, not 40% and 30%). `life-pressure` in l2/l3 had 15 wolves (6 + 4 + 5).
 
 **Engine features presets would need and do not have** (listed, not built):
 - a wolf range that grows over the days (packs have a fixed home; the runner could move them on a schedule, but that is a script, not a world);
@@ -275,4 +275,49 @@ The same person, played by the same model, did better in the old valley worlds. 
 
 ## Life runs (2026-11-09, l1–l3)
 
-(Results below, at 6 hours.)
+Seven open-ended runs on 378b2c1 (main up to 8f6ac72: three model tiers; town life; the one damage rule), started 13:19–13:23. Each subject is `Arlen`, a newcomer made by `spawn_newcomer` at the arrival point, with background `{"origin": "newcomer"}`. **GLM effort:** `life-default-r1` sent GLM 5.3 Flash with the profile's default (unset) reasoning effort; the `glm-flash-low` runs sent `reasoning_effort: low` for every purpose, which main has used since 694821c. The DeepSeek run is unaffected.
+
+**Interruptions, recorded in each run's `events.jsonl`:**
+- At about 36 minutes, a runner restart (to sample routines) hit a bug in my resume code: the watchdog counted the re-read journal as new calls and stopped four healthy runs. Their minds were stopped and their worlds paused for about two minutes, then reopened. The bug is fixed (bf16727).
+- At about 5.8 hours the Spark lost power, before the planned 6 hours. The four runs then alive are recorded as **stopped by the power outage** at their last valid sample (20,705–20,956 s). Their worlds were not resumed: a world's clock and needs run on wall time, so continuing would splice a jump the length of the outage.
+- On restart the server replayed every world without errors. The restored subject rows match the last sample or are a few seconds ahead of it (the server ran 10–18 s before the worlds were paused). Every Neo4j mind was intact. Each evidence file ends in one NUL-filled line from the cut, which the readers skip.
+
+| Run | GLM effort | Outcome | Game days | Calls | Tokens | Tokens / game day | Est. cost | Learned (how) | Built | Lines said (to people) |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |
+| `l1/life-default-r1` (glm-flash) | default | alive at the outage | 29.1 | 469 | 6,102,465 | 209,665 | $1.84 | nothing | nothing | 36 (2) |
+| `l1/life-glm-flash-low-r1` | low | alive at the outage | 29.1 | 914 | 6,429,283 | 220,931 | $1.07 | toolmaking, archery, torch on days 28–29 (experimenting) | 4 campfires | 147 (13) |
+| `l1/life-deepseek-flash-r1` | n/a | killed by Frost of the road pack, day 4 (47.4 min) | 4.0 | 99 | 672,573 | 169,094 | $0.14 | nothing | nothing | 23 (4) |
+| `l2/life-ruin-glm-flash-low-r1` | low | alive at the outage | 29.0 | 783 | 5,619,477 | 193,675 | $0.91 | fishing, trapping, shelter (day 19); toolmaking, storage, torch, archery (day 25), all by experimenting | 6 campfires, 6 storages; crafted a net and a torch | 182 (11) |
+| `l2/life-pressure-glm-flash-low-r1` (old preset) | low | killed by Frost, 48 s after arriving | 0.1 | 6 | 30,861 | – | $0.01 | – | – | 0 |
+| `l3/life-pressure-glm-flash-low-r1` (old preset) | low | killed by Rook, day 3 (30.8 min) | 2.6 | 73 | 494,636 | 192,715 | $0.07 | nothing | nothing | 22 (3) |
+| `l3/life-pressure-glm-flash-low-r2` (old preset) | low | alive at the outage | 28.8 | 789 | 5,662,550 | 196,913 | $0.91 | torch, medicine, toolmaking, archery, storage, trapping (days 4–6); writing (day 7), all by experimenting | 4 campfires, 3 storages, 2 signs; wrote 17 tablets | 100 (12) |
+
+Totals: 3,133 calls, 25.0M tokens, about $4.94 (GLM 5.3 Flash 23.2M tokens, $4.48; DeepSeek 4.1 Flash 1.8M, $0.46, mostly glm-flash's overflow). Per game day a living subject used 194k–221k tokens, about $0.03–0.06. GLM at default effort returned empty text in 238 of its 434 calls, at p50 latencies of 75 s (compile) and 71 s (consolidate). At low effort it returned 1 empty reply in 858 calls, at 6.5 s and 7.2 s. Mind restarts happened only at the runner's reopen. The watchdog found no runaway, and no stalls (10+ minutes within 15 m without a new graph) were found.
+
+### What kind of life emerged
+
+Summaries are from rows (timelines in each run's `timeline.md`, hourly `snapshots/`). Words in quotes are the subject's own (persona narrative and memories in the last snapshot). They state what it believed, not why the body did what it did.
+
+- **Every surviving newcomer became a forager camped outside the town.** All four ended 144–176 m from Brackenford's centre, outside the walls. None owned a house or slept inside, though unowned houses stand near the gate. Gathering and eating dominate every activity count (the low-effort control: gather 258, eat 243, sleep 125). The town did not take them in: they spoke 100–182 lines to 11–13 residents and never received an answer (no talk turns), because instinct-only residents answer gestures, not words. Their own summaries: "the gate still gives me only wind" (DeepSeek, day 4); "done calling on the silent" (low-effort control, day 29).
+- **Know-how came only from experimenting.** Thirteen techniques were worked out across three runs, none taught, none read. The pressure survivor turned this into a project. The "You alone know how to fire_bolt and mending" percept at arrival became a stated goal ("write my rare knowledge into tablets"). It worked out writing on day 7 and wrote 17 tablets and 2 signs: "Arlen's tablet: fire_bolt, mending, archery — the three things only I know. If I fall, read this and learn them…". The default-effort GLM run held the same goal from early on ("teach fire_bolt and mending to someone worthy, or write them on a tablet, before winter") and never acted on it.
+- **Default-effort GLM stalled in its head.** In 29 days it built nothing and learned nothing. Its graph revision counter ended at 93 (low effort: 711) and revised its identity 15 times around a rule it could not keep: "the vow is settled in my head and still breaks in my hands".
+- **Recurring wants that the world cannot meet.** Every long run's identity grew "the ache for a child of my own" (default effort: from day 20; ruin: "At dawn I admitted it plainly: I long for a child of my own") with no partner reachable.
+
+### Did they climb the presets' gradients?
+
+- **Ruin (lean berries; two signs in the empty house by the gate, fishing and smoking; reading needs writing).** Partly, and not by the intended route. At minute 1 it stood by the signs ("I've stood by your signs and can't read a word", to a resident) and tried to read: "read: you can't read". It experimented 16 times and never found writing, so it never read the signs. It reached the ladder's middle rung on its own instead: it worked out fishing by experimenting on day 19, crafted a net on day 21, and built a winter camp of 6 storages and 6 campfires. Smoking, the sign's other topic, was never reached. The rows do not show that the signs mattered: the control run and the pressure run worked out techniques from the same experiments.
+- **Pressure, old preset (road pack beside the arrival point, second pack 120–200 m out, lean berries).** Two of three subjects died on the arrival road (48 s and day 3). The third survived by moving its camp to the edge of the land around (559, 164), killing a wolf ("a wolf was killed by Arlen", day 5) and keeping fires. It measured the road, as the user observed. The preset is fixed for the next batch: no road pack, two bold packs 120–250 m around Elmwick.
+- **Control (the island as shipped).** The DeepSeek subject died to the road pack on day 4. Both GLM subjects survived 29 days as foragers outside the town.
+
+### Where it stalled or looped (rows)
+
+- **A phantom map.** The minds plan around remembered entity ids and named places that are gone or out of sight: berry bushes picked bare, fires that burnt out, places named by id ("fire #581 with real bush #19685 and tree #63051"). Failed `goto`s and gathers follow, and the subject's own memory turns it into a lesson ("My entire eastern map is phantom; only walking and seeing counts now"; "Stop naming bushes and fires by id"). It does not stop the habit: the ruin run went "out to gather at #92856 three times over — nothing there". Turning-back-and-forth feedback fired 2–8 times per long run, including toward (96, 96). Where that point comes from is not established; it may be a prompt example, or the old 96-tile valley's size.
+- **Invented skills.** Graph nodes for skills that do not exist (`say_to`, `if_no_answer_then_wander`, `greet`) were pruned with feedback, repeatedly.
+- **Asking the silent.** Long runs of addressed lines to residents who never answer.
+
+### Architecture limits the evidence points to
+
+- **Residents who cannot answer** cap any social progression: no trade, no lessons, no shelter by invitation. A newcomer among instinct-only residents can only forage and experiment. A social preset, or a gated ladder built on a resident's know-how, needs residents with at least a scripted or cheap-model reply path.
+- **Place memory refers to entities, not to what is there.** Places named by resource or structure id outlive the entity. Minds need the current perception (strict perception is on main since 2a64837) and feedback when a remembered thing is gone, before their plans rest on it.
+- **Reading has no entry.** Writing can only be learned from a person, a tablet (which needs reading) or experimenting. With no one to teach it, signs are noise. The ruin preset's gradient needs a teacher or a picture-sign path, or it is a matter of experimenting luck.
+- **Wants without affordances.** The longing for a child appears in every long life with no one to partner. That is identity drift from the consolidation prompt, or a desire with no path, and it should be reviewed against `feedback_no_injected_behavior`: it is not injected, but it is not grounded in anything the newcomer lived.
