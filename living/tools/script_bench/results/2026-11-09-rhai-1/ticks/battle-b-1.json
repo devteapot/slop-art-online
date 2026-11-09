@@ -1,0 +1,108 @@
+{
+  "db": "verify-rhai-b",
+  "seconds": 60.8,
+  "people": 351,
+  "animals": 34,
+  "ticks_per_s": 60.2,
+  "evals_per_s": 2154.4,
+  "motions_per_s": 204.2,
+  "completions_per_s": 144.6,
+  "experiences_per_s": 0.0,
+  "deliberation_requests_per_s": 0.0,
+  "max_tick_gap_ms_last_s": 18,
+  "combat": {
+    "hits": 242,
+    "dodged": 199,
+    "blocked": 124,
+    "people_left": 351
+  },
+  "body_writes": null,
+  "spans_ms": {
+    "housekeeping": {
+      "n": 45,
+      "p50": 0.956,
+      "p99": 1.392,
+      "max": 1.392,
+      "ms_per_s": 0.69
+    },
+    "housekeeping.spoil": {
+      "n": 45,
+      "p50": 0.062,
+      "p99": 0.244,
+      "max": 0.244,
+      "ms_per_s": 0.06
+    },
+    "needs.rates": {
+      "n": 9117,
+      "p50": 0.017,
+      "p99": 0.052,
+      "max": 0.148,
+      "ms_per_s": 2.88
+    },
+    "tick": {
+      "n": 2700,
+      "p50": 2.663,
+      "p99": 5.448,
+      "max": 7.987,
+      "ms_per_s": 120.87
+    },
+    "tick.activity": {
+      "n": 2698,
+      "p50": 0.218,
+      "p99": 1.683,
+      "max": 3.239,
+      "ms_per_s": 13.57
+    },
+    "tick.combat": {
+      "n": 2699,
+      "p50": 1.004,
+      "p99": 3.21,
+      "max": 4.507,
+      "ms_per_s": 50.6
+    },
+    "tick.missiles": {
+      "n": 2699,
+      "p50": 0.005,
+      "p99": 0.012,
+      "max": 0.039,
+      "ms_per_s": 0.24
+    },
+    "tick.motion": {
+      "n": 2699,
+      "p50": 0.302,
+      "p99": 1.247,
+      "max": 2.436,
+      "ms_per_s": 17.67
+    },
+    "tick.perception": {
+      "n": 1060,
+      "p50": 0.002,
+      "p99": 0.187,
+      "max": 0.264,
+      "ms_per_s": 0.08
+    },
+    "tick.slots": {
+      "n": 2699,
+      "p50": 0.371,
+      "p99": 0.899,
+      "max": 2.268,
+      "ms_per_s": 17.64
+    },
+    "tick.wakes": {
+      "n": 2699,
+      "p50": 0.392,
+      "p99": 1.19,
+      "max": 2.066,
+      "ms_per_s": 18.79
+    }
+  },
+  "tick_ms": {
+    "samples": 2700,
+    "p50": 2.663,
+    "p95": 4.449,
+    "p99": 5.448,
+    "max": 7.987,
+    "over_16_7ms": 0,
+    "over_budget_at_s": []
+  }
+}
