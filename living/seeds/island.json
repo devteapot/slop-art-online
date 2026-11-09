@@ -1,0 +1,58 @@
+{
+  "run": "island-1",
+  "seed": 7,
+  "map": { "kind": "land", "size": 2048 },
+  "setting": "An island about two kilometres across, with a mountain range along it, rivers to the sea and a few lakes. A walled town stands in the lowland, villages lie near water, giants live on a high shelf in the hills and small folk in a forest hollow. Roads join them.",
+  "rules": { "minds": false },
+  "towns": [
+    {
+      "name": "Brackenford",
+      "site": "town",
+      "walled": true,
+      "character": "the island's market town, walled, busy and proud of its square",
+      "occupations": { "farmer": 12, "builder": 5, "mason": 4, "carpenter": 5, "hunter": 6, "cook": 6, "guard": 8, "scribe": 3, "trader": 7, "healer": 3, "fisher": 8 },
+      "stores": { "berries": 120, "cooked_meat": 30, "wood": 60, "stone": 30, "fiber": 30, "clay": 20, "hide": 8 },
+      "ledger": "Brackenford. The gates are kept by the town. The market is for anyone who comes in peace."
+    },
+    {
+      "name": "Highshelf",
+      "site": "giants",
+      "walled": false,
+      "character": "the giants' settlement on its high shelf; slow-spoken, patient people who build in stone",
+      "occupations": { "builder": 3, "mason": 4, "hunter": 4, "farmer": 3 },
+      "stores": { "berries": 40, "cooked_meat": 20, "stone": 40, "wood": 30 }
+    },
+    {
+      "name": "Fernhollow",
+      "site": "small_folk",
+      "walled": false,
+      "character": "the small folk's hollow in the forest; quick, curious and fond of gardens",
+      "occupations": { "farmer": 10, "cook": 5, "carpenter": 4, "healer": 3, "fisher": 4, "trader": 3, "scribe": 3 },
+      "stores": { "berries": 60, "fiber": 20, "wood": 10 }
+    }
+  ],
+  "villages": [
+    {
+      "name": "Elmwick",
+      "walled": false,
+      "character": "a farming village by the water",
+      "occupations": { "farmer": 7, "hunter": 3, "fisher": 3, "cook": 2, "builder": 1 },
+      "stores": { "berries": 40, "wood": 20, "fiber": 10 }
+    },
+    {
+      "name": "Thornby",
+      "walled": false,
+      "character": "a village of fishers and hunters",
+      "occupations": { "fisher": 6, "hunter": 4, "farmer": 4, "cook": 2 },
+      "stores": { "berries": 40, "cooked_fish": 20, "wood": 20 }
+    },
+    {
+      "name": "Reedmoor",
+      "walled": false,
+      "character": "a small village at the edge of the reeds",
+      "occupations": { "farmer": 6, "fisher": 4, "cook": 2 },
+      "stores": { "berries": 30, "wood": 15 }
+    }
+  ],
+  "animals": { "deer": 24, "wolf": 6 }
+}

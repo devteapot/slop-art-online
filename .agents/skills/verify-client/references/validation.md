@@ -1,5 +1,14 @@
 # Client protocol validation
 
+
+## 2026-11-09 island land worlds (dev-box)
+
+Host: the dev-box (Fedora, rootless podman, SELinux), scratch container `slop-game-stdb` (image `v2.14.1`) through a `docker` name shim (`docs/ISLAND_AUTHORITY.md`, "Verification"). `living/` had the uncommitted island change on `dc34fdf`.
+
+- **`client-20261109-021430`** (`run.py`, default seed) exited 0. It recorded 13 PASS and the two known XFAILs (anonymous `experience` and `thought`), and cleanup was confirmed by SQL 404. The new public tables `land`, `settlement` and `lot` did not change the private-table or reducer inventories.
+- **The probe now reads and counts `land`, `settlement` and `lot`.** Before that, an ad-hoc `lot` query applied and the server sent 5,662 bytes, but `tables` came back empty.
+- **`client-island-1`** (`--seed island`) ran chunk-window queries through `drive.py --query`. Rows and bytes are in `client-island-1/subs.txt` and `docs/ISLAND_AUTHORITY.md`: the whole `terrain_chunk` is 16,384 rows (4.3 MB), and a 22 × 22 window is 484 rows (128 kB).
+
 ## 2026-11-08 SpacetimeDB 2.14.1 upgrade (macOS)
 
 Host: Apple Silicon laptop, Docker Desktop. Image `v2.14.1` on a fresh data volume (`living-stdb-2`). SDK, SATS and generated bindings were 2.14.1, and the bindings were regenerated with the in-container 2.14.1 CLI. `living/` had uncommitted upgrade changes on top of `0ea349c`.

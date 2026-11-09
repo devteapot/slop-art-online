@@ -21,7 +21,7 @@ Use a fresh run name. The driver calls the shared harness through its CLI for la
 
 Only cached compilation uses `.local/living/verify/<run>/source/living/`. That copy contains `author_world.py` and the Aske Coast bible, cast, template and cached sheets. The compiler derives its root from its script path and writes `living/seeds/aske-coast.json`; it has no output-path option. Copying those inputs keeps the tracked seed untouched. The malformed seed uses an absolute seed path under `.local` through `--seed`; `build.rs` accepts it without copying authority sources.
 
-Each database is `verify-<run>-<index>-<seed>`. The driver publishes `realm`, `valley`, `authored-test`, `aske-coast`, `stage3-village`, a second `realm`, and one malformed seed. Doctor first proves the world ticks. An admin `set_paused(true)` then holds it still for generation snapshots. No mind or browser observer starts.
+Each database is `verify-<run>-<index>-<seed>`. The driver publishes `realm`, `valley`, `authored-test`, `aske-coast`, `stage3-village`, `island` (the km-scale land, see `docs/ISLAND_AUTHORITY.md`), a second `realm`, and one malformed seed. Doctor first proves the world ticks. An admin `set_paused(true)` then holds it still for generation snapshots. No mind or browser observer starts.
 
 For a focused rerun:
 

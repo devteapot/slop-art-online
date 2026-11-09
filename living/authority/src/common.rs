@@ -172,31 +172,98 @@ pub fn flush_counts(k: &mut Clock) -> bool {
     any
 }
 
+/// Who controls a seeded or newborn character that has no player: the admin's minds, which
+/// deliberate and receive experiences (the default), or, with the seed's `rules.minds` false,
+/// the database itself, so the character lives on its behaviour graph alone and no
+/// experiences or deliberation requests are written for it.
+pub fn mind_controller(ctx: &ReducerContext) -> (spacetimedb::Identity, bool) {
+    if MINDS {
+        (world(ctx).admin, true)
+    } else {
+        (ctx.database_identity(), false)
+    }
+}
+
+thread_local! {
+    /// Chunks whose tiles a transaction patched in the cached map, with its timestamp. A later
+    /// transaction reloads just those rows (the patching one may have rolled back) instead of
+    /// rebuilding the whole map: on a 2048 m world that is 16,384 rows and 4 MiB.
+    static MAP_PATCHED: RefCell<(i64, Vec<u32>)> = const { RefCell::new((0, Vec::new())) };
+    /// Timestamp of the last transaction that opened or shut a gate (0 = none pending).
+    static GATES_CHANGED: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
+}
+
+/// Closed gates block like walls.
+fn gate_blocks(ctx: &ReducerContext, w: u32, h: u32) -> std::collections::HashSet<u32> {
+    ctx.db
+        .gate()
+        .iter()
+        .filter(|g| !g.open && g.x >= 0 && g.y >= 0 && (g.x as u32) < w && (g.y as u32) < h)
+        .map(|g| g.y as u32 * w + g.x as u32)
+        .collect()
+}
+
 pub fn map(ctx: &ReducerContext) -> Rc<Map> {
     MAP.with(|m| {
-        if let Some(map) = m.borrow().as_ref() {
+        let t = stamp(ctx);
+        let mut cached = m.borrow_mut();
+        if let Some(map) = cached.as_mut() {
+            // Revalidate what earlier transactions changed (committed or rolled back alike).
+            let reload = MAP_PATCHED.with(|p| {
+                let mut p = p.borrow_mut();
+                if p.0 != 0 && p.0 != t {
+                    p.0 = 0;
+                    std::mem::take(&mut p.1)
+                } else {
+                    Vec::new()
+                }
+            });
+            if !reload.is_empty() {
+                let mm = Rc::make_mut(map);
+                for id in reload {
+                    if let Some(row) = ctx.db.terrain_chunk().id().find(id) {
+                        mm.put_chunk(id, &row.tiles);
+                    }
+                }
+            }
+            let g = GATES_CHANGED.with(|g| g.get());
+            if g != 0 {
+                let mm = Rc::make_mut(map);
+                mm.blocked = gate_blocks(ctx, mm.w, mm.h);
+                if g != t {
+                    GATES_CHANGED.with(|c| c.set(0));
+                }
+            }
             return map.clone();
         }
+        // The whole map, once per module instance (and after world creation): every chunk row.
+        let _t = spacetimedb::log_stopwatch::LogStopwatch::new("map.rebuild");
         let w = world(ctx);
         let mut map = Map::from_chunks(w.width, w.height, ctx.db.terrain_chunk().iter().map(|c| (c.id, c.tiles)));
-        // Shut gates block like walls (few rows; rebuilt only when a gate or tile changes).
-        for g in ctx.db.gate().iter().filter(|g| !g.open) {
-            if g.x >= 0 && g.y >= 0 && (g.x as u32) < w.width && (g.y as u32) < w.height {
-                map.blocked.insert(g.y as u32 * w.width + g.x as u32);
-            }
-        }
+        map.blocked = gate_blocks(ctx, w.width, w.height);
         let map = Rc::new(map);
-        *m.borrow_mut() = Some(map.clone());
+        *cached = Some(map.clone());
         map
     })
 }
 
+/// Drop the whole cached map (world creation; the next read rebuilds it from every chunk).
 pub fn invalidate_map() {
     MAP.with(|m| *m.borrow_mut() = None);
+    MAP_PATCHED.with(|p| *p.borrow_mut() = (0, Vec::new()));
+    GATES_CHANGED.with(|g| g.set(0));
+}
+
+/// Call after a gate opens or shuts: the cached map re-reads the gate rows (a handful), not the
+/// terrain.
+pub fn invalidate_gates(ctx: &ReducerContext) {
+    GATES_CHANGED.with(|g| g.set(stamp(ctx)));
 }
 
 /// Change one terrain tile (a road laid, a wall built) and persist its chunk row.
 pub fn set_tile(ctx: &ReducerContext, x: i32, y: i32, t: living_rules::map::Terrain) -> Result<(), String> {
+    // Revalidate earlier transactions' patches first, so only this one's stay pending.
+    let _ = map(ctx);
     let w = world(ctx);
     if x < 0 || y < 0 || x as u32 >= w.width || y as u32 >= w.height {
         return Err("outside the world".into());
@@ -210,7 +277,21 @@ pub fn set_tile(ctx: &ReducerContext, x: i32, y: i32, t: living_rules::map::Terr
     }
     row.tiles[i] = t as u8;
     ctx.db.terrain_chunk().id().update(row);
-    invalidate_map();
+    // Patch the cached map in place and remember the chunk, so a later transaction re-reads
+    // that one row if this one rolls back.
+    let st = stamp(ctx);
+    MAP.with(|m| {
+        if let Some(map) = m.borrow_mut().as_mut() {
+            Rc::make_mut(map).set(x, y, t);
+        }
+    });
+    MAP_PATCHED.with(|p| {
+        let mut p = p.borrow_mut();
+        if !p.1.contains(&chunk) {
+            p.1.push(chunk);
+        }
+        p.0 = st;
+    });
     Ok(())
 }
 

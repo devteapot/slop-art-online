@@ -38,7 +38,7 @@ macro_rules! primary_tables {
             belief, judgment, place, thought, chronicle, stats, bond_offer, expecting,
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
             routine, routine_stat, script, community, membership, join_request, genome,
-            practice);
+            practice, land, settlement, lot);
     };
 }
 
@@ -142,7 +142,10 @@ fn snapshot(c: &DbConnection) -> Value {
         membership,
         join_request,
         genome,
-        practice
+        practice,
+        land,
+        settlement,
+        lot
     );
     let characters: Vec<_> = c.db.character().iter().map(|r| json!({
         "id":r.id,"name":r.name,"kind":r.kind,"controller":r.controller.to_hex().to_string(),

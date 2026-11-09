@@ -6,6 +6,7 @@
 mod act;
 mod acts;
 mod brain;
+mod island;
 mod mind;
 mod motion;
 mod perceive;
@@ -278,7 +279,8 @@ pub fn spawn_battle(ctx: &ReducerContext, n: u32) -> Result<(), String> {
     require_admin(ctx)?;
     let now = common::now_ms(ctx);
     let map = common::map(ctx);
-    let center = map.nearest_walkable(55.0, 60.0).ok_or("no room")?;
+    let spot = if ctx.db.land().id().find(0).is_some() { let a = island::arrival(ctx); (a.0, a.1 - 20.0) } else { (55.0, 60.0) };
+    let center = map.nearest_walkable(spot.0, spot.1).ok_or("no room")?;
     let mut made = 0;
     for _ in 0..n * 30 {
         if made >= n {
@@ -320,7 +322,8 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     }
     let now = common::now_ms(ctx);
     let map = common::map(ctx);
-    let at = map.nearest_walkable(40.0, 60.0).ok_or("no room")?;
+    let arrive = island::arrival(ctx);
+    let at = map.nearest_walkable(arrive.0, arrive.1).ok_or("no room")?;
     let id = seed::spawn_creature(ctx, &name, "person", ctx.sender(), false, at, now);
     mind::set_graph(ctx, id, r#"{"wait":30}"#, "waiting for you", "human", now)?;
     Ok(())

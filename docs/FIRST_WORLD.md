@@ -1,6 +1,6 @@
 # First world: a generic km-scale placeholder
 
-Started 2026-11-08. **This world is a placeholder to change later.** It gives the playable game a believable first place to test scale, travel and landmarks against. It is not the agreed world: the faction geography in [world vision](WORLD_VISION.md) is deferred, and no part of this world is named after a faction or a real company. This note is a design target and a measurement record. It is not an integration report; the authority does not host this world yet.
+Started 2026-11-08. **This world is a placeholder to change later.** It gives the playable game a believable first place to test scale, travel and landmarks against. It is not the agreed world: the faction geography in [world vision](WORLD_VISION.md) is deferred, and no part of this world is named after a faction or a real company. This note is a design target and a measurement record. Since 2026-11-09 the authority can host this world on scratch databases (seed kind `land`, [`living/seeds/island.json`](../living/seeds/island.json)); the design, storage and measurements are in [island authority](ISLAND_AUTHORITY.md). The game client does not connect to it yet.
 
 ## What exists
 
@@ -262,6 +262,8 @@ Settlement planning adds 0.09–0.12 s at 2048 m and 0.26 s at 3072 m. Each 2048
 Every town has one chapel (its landmark), inn and guildhall.
 
 ## What the authority would need
+
+*Superseded on 2026-11-09 by [island authority](ISLAND_AUTHORITY.md), which hosts this world: heights are derived from the seed with platform-independent math and checked by digests, building footprints block as `Wall` tiles, lots are rows, `Map::path` no longer allocates whole-map arrays, and a tile edit patches the cached map instead of rebuilding it. The analysis below is kept as written before that work.*
 
 Out of scope here; nothing in the authority, mind, viewer or game uses `land` yet. **Before designing storage or subscriptions for this world, consult the SpacetimeDB documentation as [AGENTS.md](../AGENTS.md) requires**: [tables](https://spacetimedb.com/docs/tables/), [performance](https://spacetimedb.com/docs/tables/performance/), [indexes](https://spacetimedb.com/docs/tables/indexes/), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) and [views](https://spacetimedb.com/docs/functions/views/). Check them against the pinned version.
 

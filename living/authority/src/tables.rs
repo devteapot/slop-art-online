@@ -129,6 +129,77 @@ pub struct TerrainChunk {
     pub tiles: Vec<u8>,
 }
 
+/// The generated land a `map.kind = "land"` world is built from (one row, id 0; absent for
+/// other map kinds). A client regenerates the same `living_rules::land::Land` from `seed`,
+/// `size` and `params` for ground height, water and roads, and checks it against the digests
+/// (`living_rules::host::digests`) before trusting it. The tiles in `terrain_chunk` stay the
+/// truth for walking. Written once, at world creation.
+#[derive(Clone)]
+#[spacetimedb::table(accessor = land, public)]
+pub struct LandInfo {
+    #[primary_key]
+    pub id: u8,
+    pub seed: u64,
+    /// Side in metres (= tiles).
+    pub size: u32,
+    /// The seed's partial `LandParams` override, as JSON (`{}` for the defaults).
+    pub params: String,
+    pub tiles_digest: u64,
+    pub heights_digest: u64,
+    pub layout_digest: u64,
+    /// Where newcomers arrive (outside the town's first gate, or its plaza).
+    pub arrive_x: f32,
+    pub arrive_y: f32,
+}
+
+/// A settlement of a land world (one row per `Land::settlements` entry, same index). Static
+/// after world creation.
+#[spacetimedb::table(accessor = settlement, public)]
+pub struct Settlement {
+    #[primary_key]
+    pub id: u16,
+    /// `town`, `village`, `giants`, `small_folk`.
+    pub kind: String,
+    /// The `buildings.py` style its models come from.
+    pub style: String,
+    pub x: f32,
+    pub y: f32,
+    pub radius_m: f32,
+    /// Its folk's height relative to a 1.75 m adult (the rules do not size bodies yet).
+    pub scale: f32,
+    /// The community its residents belong to (0: none seeded).
+    pub community: u32,
+}
+
+/// A building lot of a land world (one row per `Land::lots` entry, same index): what stands
+/// there and the authority entity at its door. Buildings block movement through `Wall` tiles
+/// under their footprint (`living_rules::host::footprint_tiles`). Static after world creation
+/// except through its structure.
+#[spacetimedb::table(accessor = lot, public)]
+pub struct Lot {
+    #[primary_key]
+    pub id: u32,
+    pub settlement: u16,
+    /// `living_rules::settle::LotKind::id()`.
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    pub width_m: f32,
+    pub depth_m: f32,
+    /// `Quat::from_rotation_y(yaw)` turns a model's front to the street (game x = x, z = y).
+    pub yaw: f32,
+    pub floor_m: f32,
+    pub height_m: f32,
+    /// The model's file under the client's `envs/` ("" for gardens and fields).
+    pub model: String,
+    pub door_x: f32,
+    pub door_y: f32,
+    /// The structure at its door (a house, inn, hall, workshop or storage; 0 for none).
+    pub structure: u64,
+    #[index(btree)]
+    pub chunk: u32,
+}
+
 #[spacetimedb::table(accessor = character, public)]
 pub struct Character {
     #[primary_key]

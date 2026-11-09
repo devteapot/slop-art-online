@@ -96,18 +96,29 @@ pub const SKILLS: &str = include_str!("../../scripts/skills.rhai");
 
 #[derive(Deserialize)]
 pub struct SeedMap {
-    /// `valley` (96×96 classic) or `realm` (any size, coast/rivers/towns/wilds).
+    /// `valley` (96×96 classic), `realm` (any size, coast/rivers/towns/wilds) or `land` (the
+    /// km-scale island of `living_rules::land`, see docs/ISLAND_AUTHORITY.md).
     pub kind: String,
     #[serde(default)]
     pub w: u32,
     #[serde(default)]
     pub h: u32,
+    /// `land`: the side in metres (256..=4096).
+    #[serde(default)]
+    pub size: u32,
+    /// `land`: a partial `LandParams` override (defaults when absent).
+    #[serde(default)]
+    pub params: serde_json::Value,
 }
 
 /// An established town, laid out around one of the realm's proposed town sites.
 #[derive(Deserialize)]
 pub struct SeedTown {
     pub name: String,
+    /// On a land map, the kind of settlement it is (`town`, `village`, `giants`,
+    /// `small_folk`); empty: `town` in `towns`, `village` in `villages`.
+    #[serde(default)]
+    pub site: String,
     /// What the town is known for (goes into residents' backgrounds).
     #[serde(default)]
     pub character: String,
@@ -442,15 +453,35 @@ pub fn instinct(kind: &str) -> String {
 
 pub fn seed(ctx: &ReducerContext, now: u64) {
     let s: Seed = serde_json::from_str(VALLEY).expect("seed json");
+    let mut hosted: Option<crate::island::Hosted> = None;
     let (mut map, realm) = match &s.map {
         Some(m) if m.kind == "realm" => {
             let r = living_rules::realm::generate(s.seed, m.w.max(64), m.h.max(64));
             (r.to_map(), Some(r))
         }
+        Some(m) if m.kind == "land" => {
+            let h = crate::island::generate(s.seed, m).expect("land seed");
+            let map = h.map.clone();
+            hosted = Some(h);
+            (map, None)
+        }
         _ => (living_rules::map::generate(s.seed), None),
     };
     // Settlements are laid out first: their walls and roads are part of the terrain.
     let mut settlements: Vec<(&SeedTown, living_rules::city::Layout)> = Vec::new();
+    // A land world's settlements are already laid out; seeded ones get residents.
+    let seeded: Vec<Option<&SeedTown>> = hosted.as_ref().map(|h| crate::island::match_seed(h, &s.towns, &s.villages)).unwrap_or_default();
+    if let Some(h) = &hosted {
+        for (p, t) in h.settlements.iter().zip(&seeded) {
+            if let Some(t) = t {
+                settlements.push((t, crate::island::layout(p)));
+            }
+        }
+        let unplaced = s.towns.len() + s.villages.len() - seeded.iter().flatten().count();
+        if unplaced > 0 {
+            log::warn!("{unplaced} seeded settlements found no site of their kind on this land");
+        }
+    }
     if let Some(r) = &realm {
         for (t, site) in s.towns.iter().zip(r.towns.iter()).chain(s.villages.iter().zip(r.villages.iter())) {
             let n = t.households();
@@ -477,15 +508,18 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         common::invalidate_calendar();
     }
     common::invalidate_map();
+    if let Some(h) = &hosted {
+        crate::island::build(ctx, h, now);
+    }
     RESOURCE_SCALE.with(|r| *r.borrow_mut() = s.resource_scale.clone());
     spawn_resources(ctx, &map, now);
     for (t, layout) in &settlements {
         settlement_resources(ctx, &map, t, layout.center, now);
     }
-    let admin = common::world(ctx).admin;
+    let (admin, minded) = common::mind_controller(ctx);
     for p in &s.people {
         let at = map.nearest_walkable(p.at[0], p.at[1]).unwrap_or((48.0, 48.0));
-        let id = spawn_creature(ctx, &p.name, "person", admin, true, at, now);
+        let id = spawn_creature(ctx, &p.name, "person", admin, minded, at, now);
         common::inv_add(ctx, id as u64, "berries", 5);
         for t in &p.knows {
             common::learn(ctx, id, t, "seed", now);
@@ -512,6 +546,9 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         authored.extend(town(ctx, &map, t, layout, now));
     }
     settle_authored(ctx, &s, &authored);
+    if let Some(h) = &hosted {
+        crate::island::settle(ctx, h, &seeded);
+    }
     // Townsfolk know where the other towns stand (they grew up hearing of them); what is
     // there and how the way goes, they learn by going. It is part of their background, which
     // their minds turn into remembered places.
@@ -527,7 +564,13 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
             ctx.db.background().id().update(bg);
         }
     }
-    if let Some(r) = &realm {
+    if hosted.is_some() {
+        // `homestead` scans the whole map against every food source, which does not scale to
+        // a km-scale land; bands there need wild sites first.
+        if !s.bands.is_empty() {
+            log::warn!("{} bands not placed: a land world has no wild sites yet", s.bands.len());
+        }
+    } else if let Some(r) = &realm {
         for (i, b) in s.bands.iter().enumerate() {
             if let Some(site) = r.wilds.get(i) {
                 band(ctx, &map, b, *site, now);
@@ -578,21 +621,21 @@ fn animal_ground(map: &living_rules::map::Map, kind: &str, x: i32, y: i32) -> bo
 /// controller) and a species body. Names come from the species list, then numbered.
 pub fn spawn_animal(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64) -> u32 {
     let name = animal_name(ctx, kind);
-    let admin = common::world(ctx).admin;
+    let (admin, minded) = common::mind_controller(ctx);
     // Seeded wildlife spans all ages (fractions of the lifespan).
     let w = common::world(ctx);
     // A living population has more young than old: ages skew young.
     let u: f32 = ctx.rng().gen_range(0.0f32..1.0);
     let f = 0.05 + 0.75 * u * u;
     let age = common::life_of(kind).age_at(f, common::pace(&w));
-    spawn_with(ctx, &name, kind, admin, true, at, now, age, (0, 0))
+    spawn_with(ctx, &name, kind, admin, minded, at, now, age, (0, 0))
 }
 
 /// A newborn animal: named from its species' list, beside its mother.
 pub fn spawn_young(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64, parents: (u32, u32)) -> u32 {
     let name = animal_name(ctx, kind);
-    let admin = common::world(ctx).admin;
-    spawn_with(ctx, &name, kind, admin, true, at, now, 0.0, parents)
+    let (admin, minded) = common::mind_controller(ctx);
+    spawn_with(ctx, &name, kind, admin, minded, at, now, 0.0, parents)
 }
 
 /// Newcomers from the wilds beyond the map: a group of grown ones of `kind` comes in near an
@@ -604,7 +647,7 @@ pub fn migrate(ctx: &ReducerContext, kind: &str, m: &living_rules::species::Migr
         log::warn!("no {kind} could come in: no fitting ground near the map's edges");
         return false;
     };
-    let admin = common::world(ctx).admin;
+    let (admin, minded) = common::mind_controller(ctx);
     let w = common::world(ctx);
     let life = common::life_of(kind);
     for _ in 0..m.group.max(1) {
@@ -615,7 +658,7 @@ pub fn migrate(ctx: &ReducerContext, kind: &str, m: &living_rules::species::Migr
         // Grown, and young enough to breed for a while.
         let f = ctx.rng().gen_range(life.child + 0.01..(life.child + life.elder) / 2.0);
         let name = animal_name(ctx, kind);
-        spawn_with(ctx, &name, kind, admin, true, spot, now, life.age_at(f, common::pace(&w)), (0, 0));
+        spawn_with(ctx, &name, kind, admin, minded, spot, now, life.age_at(f, common::pace(&w)), (0, 0));
     }
     common::chronicle(ctx, now, "arrival", 0, 0, at, m.story(kind, dir));
     true
@@ -843,14 +886,17 @@ fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64)
     let scale = ((map.w * map.h) as f32 / (96.0 * 96.0)).max(1.0);
     let abundance = |kind: &str| RESOURCE_SCALE.with(|r| r.borrow().get(kind).copied().unwrap_or(1.0));
     let cap = |n: u32| (n as f32 * scale) as u32;
-    let mut rng_tiles: Vec<(i32, i32)> = (0..map.h as i32).flat_map(|y| (0..map.w as i32).map(move |x| (x, y))).collect();
+    // Tile indices (`y * w + x`), shuffled with the same draws as before; 4 bytes a tile rather
+    // than 8 (a 2048 m land has 4.2M tiles).
+    let mut rng_tiles: Vec<u32> = (0..map.w * map.h).collect();
     // Deterministic shuffle from the reducer RNG.
     for i in (1..rng_tiles.len()).rev() {
         let j = ctx.rng().gen_range(0..=i);
         rng_tiles.swap(i, j);
     }
     let mut counts = std::collections::HashMap::<&str, u32>::new();
-    for (x, y) in rng_tiles {
+    for k in rng_tiles {
+        let (x, y) = ((k % map.w) as i32, (k / map.w) as i32);
         let t = map.get(x, y);
         let (kind, max, spacing, cap) = match t {
             Terrain::Forest if near(x, y, Terrain::Grass, 2) => ("tree", 8.0, 2.5, cap(70)),
@@ -958,6 +1004,23 @@ fn homestead(ctx: &ReducerContext, map: &living_rules::map::Map, taken: &[(f32, 
 
 fn walkable_near(map: &living_rules::map::Map, at: (f32, f32)) -> (f32, f32) {
     map.nearest_walkable(at.0, at.1).unwrap_or(at)
+}
+
+/// A household's house: the unowned house already standing at its door (a land world's lots),
+/// or a new one.
+fn house(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), owner: u32, now: u64) -> u64 {
+    let at = walkable_near(map, home);
+    let standing = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).find(|s| s.kind == "house" && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75);
+    match standing {
+        Some(mut s) => {
+            let id = s.id;
+            s.owner = owner;
+            common::invalidate_structures(ctx);
+            ctx.db.structure().id().update(s);
+            id
+        }
+        None => put(ctx, map, "house", home, owner, now),
+    }
 }
 
 fn put(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32, f32), owner: u32, now: u64) -> u64 {
@@ -1068,7 +1131,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
 /// Residents drawn from the town's `occupations`, grouped into households of 2-4 with
 /// generated names; returns their ids.
 fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) -> Vec<u32> {
-    let admin = common::world(ctx).admin;
+    let (admin, minded) = common::mind_controller(ctx);
     let center = layout.center;
     let mut roles: Vec<String> = t.occupations.iter().flat_map(|(o, n)| std::iter::repeat(o.clone()).take(*n as usize)).collect();
     for i in (1..roles.len()).rev() {
@@ -1090,7 +1153,7 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
             let at = (home.0 + (k as f32 - 1.0) * 0.5, home.1 + 0.6);
             // Working adults of all ages; sometimes a grandparent who still keeps a trade.
             let f = if k >= 2 && ctx.rng().gen_range(0.0f32..1.0) < 0.4 { ctx.rng().gen_range(0.76f32..0.9) } else { ctx.rng().gen_range(0.18f32..0.6) };
-            let id = spawn_with(ctx, &names[k], "person", admin, true, walkable_near(map, at), now, life.age_at(f, pace), (0, 0));
+            let id = spawn_with(ctx, &names[k], "person", admin, minded, walkable_near(map, at), now, life.age_at(f, pace), (0, 0));
             common::inv_add(ctx, id as u64, "berries", 4);
             common::learn(ctx, id, "fire", "seed", now);
             for tech in occupation_know_how(occ) {
@@ -1117,7 +1180,7 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
             for f in young {
                 let name = fresh_name(ctx);
                 let at = walkable_near(map, (home.0 + 0.4, home.1 + 0.9));
-                let id = spawn_with(ctx, &name, "person", admin, true, at, now, life.age_at(f, pace), (pa, pb));
+                let id = spawn_with(ctx, &name, "person", admin, minded, at, now, life.age_at(f, pace), (pa, pb));
                 if let Some(mut ch) = ctx.db.character().id().find(id) {
                     ch.home_x = home.0;
                     ch.home_y = home.1;
@@ -1130,7 +1193,7 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
             }
         }
         if h < layout.houses.len() {
-            put(ctx, map, "house", home, household_ids[0].0, now);
+            house(ctx, map, home, household_ids[0].0, now);
         }
         for (id, occ) in &household_ids {
             let kin: Vec<serde_json::Value> = household_ids.iter().filter(|(o, _)| o != id).map(|(o, oc)| serde_json::json!({"id": o, "name": common::name_of(ctx, *o), "occupation": oc})).collect();
@@ -1156,7 +1219,7 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
 /// background row; their sheets and any parents in later settlements are resolved once every
 /// settlement has its people (`settle_authored`).
 fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) -> Vec<(String, u32)> {
-    let admin = common::world(ctx).admin;
+    let (admin, minded) = common::mind_controller(ctx);
     let center = layout.center;
     let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
     let keys = household_keys(&t.residents);
@@ -1178,7 +1241,7 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
         if r.age >= life.years * life.old_age {
             log::warn!("{}: {} years is past the first deaths of old age; seeded just short of them", r.name, r.age);
         }
-        let id = spawn_with(ctx, &r.name, "person", admin, true, at, now, life.seeded_age(r.age, pace), (parents.first().copied().unwrap_or(0), parents.get(1).copied().unwrap_or(0)));
+        let id = spawn_with(ctx, &r.name, "person", admin, minded, at, now, life.seeded_age(r.age, pace), (parents.first().copied().unwrap_or(0), parents.get(1).copied().unwrap_or(0)));
         author_temperament(ctx, id, &r.sheet);
         let stage = ctx.db.character().id().find(id).map(|c| c.stage).unwrap_or(2);
         // The young live a child's day whatever the sheet calls them.
@@ -1215,7 +1278,7 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
     for (h, key) in keys.iter().enumerate() {
         let owner = spawned.iter().find(|(j, ..)| household_of(&t.residents[*j]) == *key).map(|s| s.1).unwrap_or(0);
         if h < layout.houses.len() {
-            put(ctx, map, "house", home_of(h), owner, now);
+            house(ctx, map, home_of(h), owner, now);
         }
     }
     for (i, id, occ) in &spawned {
@@ -1316,7 +1379,7 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)]) {
 
 /// A band of survivors with almost nothing: no structures, a little food, little know-how.
 fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: (f32, f32), now: u64) {
-    let admin = common::world(ctx).admin;
+    let (admin, minded) = common::mind_controller(ctx);
     let at = walkable_near(map, site);
     let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
     let mut ids = Vec::new();
@@ -1333,7 +1396,7 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
             };
             let young = matches!(m.stage.as_str(), "child" | "infant");
             let parents = if young && adults.len() >= 2 { (adults[0], adults[1]) } else { (0, 0) };
-            let id = spawn_with(ctx, &fresh_name(ctx), "person", admin, true, p, now, life.age_at(f, pace), parents);
+            let id = spawn_with(ctx, &fresh_name(ctx), "person", admin, minded, p, now, life.age_at(f, pace), parents);
             common::inv_add(ctx, id as u64, "berries", if young { 1 } else { 3 });
             // A hunter carries a spear.
             if m.occupation == "hunter" && !young {
@@ -1382,9 +1445,9 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
             let p = walkable_near(map, (at.0 + k as f32 * 0.8, at.1 + (k % 2) as f32));
             let id = if b.size >= 4 && k as u32 == b.size - 1 && ids.len() >= 2 {
                 // Larger bands carry a child of the first two.
-                spawn_with(ctx, name, "person", admin, true, p, now, life.age_at(ctx.rng().gen_range(life.infant * 2.0..life.child * 0.8), pace), (ids[0], ids[1]))
+                spawn_with(ctx, name, "person", admin, minded, p, now, life.age_at(ctx.rng().gen_range(life.infant * 2.0..life.child * 0.8), pace), (ids[0], ids[1]))
             } else {
-                spawn_with(ctx, name, "person", admin, true, p, now, life.age_at(ctx.rng().gen_range(0.18f32..0.7), pace), (0, 0))
+                spawn_with(ctx, name, "person", admin, minded, p, now, life.age_at(ctx.rng().gen_range(0.18f32..0.7), pace), (0, 0))
             };
             common::inv_add(ctx, id as u64, "berries", 3);
             let stage = ctx.db.character().id().find(id).map(|c| c.stage).unwrap_or(2);

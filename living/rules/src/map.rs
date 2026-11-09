@@ -139,6 +139,18 @@ impl Map {
         out
     }
 
+    /// Overwrite one chunk's tiles from its row bytes (as stored by `chunk_bytes`).
+    pub fn put_chunk(&mut self, id: u32, bytes: &[u8]) {
+        let (cx, cy) = chunk_xy(id);
+        for (k, b) in bytes.iter().enumerate() {
+            let x = cx * CHUNK + k as u32 % CHUNK;
+            let y = cy * CHUNK + k as u32 / CHUNK;
+            if x < self.w && y < self.h {
+                self.tiles[(y * self.w + x) as usize] = *b;
+            }
+        }
+    }
+
     pub fn from_chunks(w: u32, h: u32, chunks: impl IntoIterator<Item = (u32, Vec<u8>)>) -> Self {
         let mut tiles = vec![0u8; (w * h) as usize];
         for (id, bytes) in chunks {
@@ -205,9 +217,14 @@ impl Map {
         }
         let w = self.w as i32;
         let idx = |p: (i32, i32)| (p.1 * w + p.0) as usize;
+        // Cost so far and predecessor of each reached tile. A search touches at most
+        // `max_expansions` × 8 tiles, so it keeps them in a map sized by that budget instead of
+        // two arrays the size of the whole map (32 MiB per call on a 2048 m world, written in
+        // full before the search starts). Results are identical: missing entries read as the
+        // arrays' initial `u32::MAX`.
         let n = (self.w * self.h) as usize;
-        let mut g = vec![u32::MAX; n];
-        let mut came = vec![u32::MAX; n];
+        let mut seen: Reached = Reached::with_capacity_and_hasher((max_expansions * 2).min(n).min(1 << 16), Default::default());
+        let g_of = |seen: &Reached, i: usize| seen.get(&(i as u32)).map_or(u32::MAX, |e| e.0);
         let h = |p: (i32, i32)| {
             let dx = (p.0 - goal.0).unsigned_abs();
             let dy = (p.1 - goal.1).unsigned_abs();
@@ -226,7 +243,7 @@ impl Map {
             }
         }
         let mut open = BinaryHeap::new();
-        g[idx(start)] = 0;
+        seen.insert(idx(start) as u32, (0, u32::MAX));
         open.push(Open(h(start), 0, start));
         let mut expansions = 0;
         let mut found = false;
@@ -235,7 +252,7 @@ impl Map {
                 found = true;
                 break;
             }
-            if cost > g[idx(p)] {
+            if cost > g_of(&seen, idx(p)) {
                 continue;
             }
             expansions += 1;
@@ -252,9 +269,8 @@ impl Map {
                 }
                 let step = if dx != 0 && dy != 0 { 14 } else { 10 };
                 let nc = cost + step;
-                if nc < g[idx(q)] {
-                    g[idx(q)] = nc;
-                    came[idx(q)] = idx(p) as u32;
+                if nc < g_of(&seen, idx(q)) {
+                    seen.insert(idx(q) as u32, (nc, idx(p) as u32));
                     open.push(Open(nc + h(q), nc, q));
                 }
             }
@@ -265,7 +281,7 @@ impl Map {
         let mut cells = vec![goal];
         let mut cur = idx(goal);
         while cur != idx(start) {
-            let prev = came[cur];
+            let prev = seen.get(&(cur as u32)).map_or(u32::MAX, |e| e.1);
             if prev == u32::MAX {
                 break;
             }
@@ -291,6 +307,28 @@ impl Map {
             i = j + 1;
         }
         Some(out)
+    }
+}
+
+/// Tiles reached by a path search: index → (cost so far, predecessor index).
+type Reached = std::collections::HashMap<u32, (u32, u32), std::hash::BuildHasherDefault<TileHasher>>;
+
+/// Multiplicative hash for tile indices (the default SipHash is several times slower here,
+/// and the keys are not attacker-chosen).
+#[derive(Default)]
+struct TileHasher(u64);
+
+impl std::hash::Hasher for TileHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for b in bytes {
+            self.0 = (self.0 ^ *b as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        }
+    }
+    fn write_u32(&mut self, v: u32) {
+        self.0 = (v as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
     }
 }
 

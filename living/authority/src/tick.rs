@@ -261,14 +261,14 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
     let Some(at) = ctx.db.body().id().find(first.id).map(|bd| common::pos(&bd, now)) else { return };
     let kind = first.kind.clone();
     let litter = ctx.rng().gen_range(1..=common::life_of(&kind).litter.max(1));
-    let controller = if first.ai { first.controller } else { common::world(ctx).admin };
+    let (controller, minded) = if first.ai { (first.controller, true) } else { common::mind_controller(ctx) };
     let mut names = Vec::new();
     for _ in 0..litter {
         let id = if kind == "person" {
             let used: Vec<String> = ctx.db.character().kind().filter("person").map(|c| c.name).collect();
             let pick = ctx.rng().gen_range(0..NAMES.len());
             let name = (0..NAMES.len()).map(|i| NAMES[(pick + i) % NAMES.len()]).find(|n| !used.iter().any(|u| u == n)).map(String::from).unwrap_or_else(|| format!("Child{}", used.len()));
-            seed::spawn_with(ctx, &name, "person", controller, true, at, now, 0.0, (pa.id, pb.id))
+            seed::spawn_with(ctx, &name, "person", controller, minded, at, now, 0.0, (pa.id, pb.id))
         } else {
             seed::spawn_young(ctx, &kind, at, now, (pa.id, pb.id))
         };

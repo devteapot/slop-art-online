@@ -14,6 +14,7 @@
 //! [`Land::height`] combines both into a continuous ground height in metres. This module holds
 //! mechanics only; every size, count and threshold is a field of [`LandParams`].
 
+use crate::det::Det;
 use crate::map::{Map, Terrain, MAX_SIDE};
 use crate::settle::{self, Crossing, Lot, Road, SettleParams, Settlement};
 use serde::{Deserialize, Serialize};
@@ -406,7 +407,7 @@ impl Range {
             let (a, b) = (self.spine[s], self.spine[s + 1]);
             let (dx, dy) = (b.0 - a.0, b.1 - a.1);
             let u = (((x - a.0) * dx + (y - a.1) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
-            let d = (x - a.0 - u * dx).hypot(y - a.1 - u * dy);
+            let d = (x - a.0 - u * dx).d_hypot(y - a.1 - u * dy);
             if d < best {
                 best = d;
                 bt = (s as f32 + u) / segs as f32;
@@ -418,7 +419,7 @@ impl Range {
     fn crest(&self, t: f32) -> f32 {
         let taper = smoothstep(0.0, 0.2, t) * smoothstep(1.0, 0.8, t);
         let v = 0.5 + 0.5 * value(self.seed, t * self.length_m / 280.0, 3.7);
-        let bump = (-((t - self.main_t) * self.length_m / 240.0).powi(2)).exp();
+        let bump = (-((t - self.main_t) * self.length_m / 240.0).powi(2)).d_exp();
         self.crest_m * taper * (0.45 + 0.3 * v + 0.55 * bump).min(1.0)
     }
 }
@@ -529,7 +530,7 @@ impl Land {
             if s.flatten <= 0.0 {
                 continue;
             }
-            let d = (x - s.x).hypot(y - s.y);
+            let d = (x - s.x).d_hypot(y - s.y);
             let r = s.radius_m;
             if d < r * 1.5 {
                 let w = (1.0 - smoothstep(r * 0.8, r * 1.5, d)) * s.flatten;
@@ -808,14 +809,14 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
     let axis = {
         let sp = &ranges[0].spine;
         let (dx, dy) = (sp[sp.len() - 1].0 - sp[0].0, sp[sp.len() - 1].1 - sp[0].1);
-        let l = dx.hypot(dy).max(1e-3);
+        let l = dx.d_hypot(dy).max(1e-3);
         (dx / l, dy / l)
     };
     let landness = |x: f32, y: f32| {
         let u = (x - centre.0) / (s * 0.5) + r.coast_warp * fbm(seed ^ 0x11, x, y, r.coast_feature * s, 4);
         let v = (y - centre.1) / (s * 0.5) + r.coast_warp * fbm(seed ^ 0x12, x, y, r.coast_feature * s, 4);
         let (a, b) = ((u * axis.0 + v * axis.1) / r.elongation, (-u * axis.1 + v * axis.0) * r.elongation.sqrt());
-        1.0 - a.hypot(b) / r.island_radius
+        1.0 - a.d_hypot(b) / r.island_radius
     };
 
     // Raw elevation.
@@ -823,20 +824,20 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
     for (k, e) in elev.iter_mut().enumerate() {
         let (x, y) = pos(k);
         let land = landness(x, y);
-        let shape = (land * 3.0).tanh();
+        let shape = (land * 3.0).d_tanh();
         let low = if shape >= 0.0 { r.lowland_m * shape } else { r.sea_floor_m * shape };
         let hills = r.hills_m * fbm(seed ^ 0x13, x, y, r.hills_feature_m, 4) * smoothstep(-0.05, 0.3, land);
         let (mut mount, mut foot) = (0f32, 0f32);
         for g in &ranges {
             let (d, t) = g.locate(x, y);
             let w = g.half_width_m;
-            let prof = (-(d / w).powi(2)).exp();
+            let prof = (-(d / w).powi(2)).d_exp();
             if prof > 1e-4 {
                 let rn = ridged(seed ^ 0x14, x, y, r.ridge_feature_m, 4);
                 mount = mount.max(g.crest(t) * prof * (0.45 + 0.55 * rn));
             }
             let taper = smoothstep(-0.15, 0.25, t) * smoothstep(1.15, 0.75, t);
-            foot += r.foothills_m * (g.crest_m / r.peak_m[1]) * (-(d / (2.2 * w)).powi(2)).exp() * taper * (0.6 + 0.4 * fbm(seed ^ 0x15, x, y, 300.0, 3));
+            foot += r.foothills_m * (g.crest_m / r.peak_m[1]) * (-(d / (2.2 * w)).powi(2)).d_exp() * taper * (0.6 + 0.4 * fbm(seed ^ 0x15, x, y, 300.0, 3));
         }
         *e = low + hills + (mount + foot) * smoothstep(-0.12, 0.1, land);
     }
@@ -848,7 +849,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
     let slope_of = |elev: &[f32], k: usize| {
         let (i, j) = ((k % n) as isize, (k / n) as isize);
         let g = |a: isize, b: isize| elev[(b.clamp(0, n as isize - 1) as usize) * n + a.clamp(0, n as isize - 1) as usize];
-        ((g(i + 1, j) - g(i - 1, j)) / (2.0 * cell)).hypot((g(i, j + 1) - g(i, j - 1)) / (2.0 * cell))
+        ((g(i + 1, j) - g(i - 1, j)) / (2.0 * cell)).d_hypot((g(i, j + 1) - g(i, j - 1)) / (2.0 * cell))
     };
 
     // Islets just offshore.
@@ -884,7 +885,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         if e < 6.0 || landness(x, y) < 0.22 || slope_of(&elev, k) > 0.07 || spine < 0.9 || spine > 4.0 {
             continue;
         }
-        if basins.iter().any(|b| (b.0 - x).hypot(b.1 - y) < 450.0) {
+        if basins.iter().any(|b| (b.0 - x).d_hypot(b.1 - y) < 450.0) {
             continue;
         }
         let (rim, depth) = (p.water.lake_rim_m, p.water.lake_depth_m);
@@ -983,7 +984,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             }
             let area = comp.len() as f32 * cell * cell;
             let depth = comp.iter().map(|&k| fill[k] - route[k]).fold(0.0, f32::max);
-            let designated = basins.iter().any(|b| comp.iter().any(|&k| (pos(k).0 - b.0).hypot(pos(k).1 - b.1) < cell * 2.0));
+            let designated = basins.iter().any(|b| comp.iter().any(|&k| (pos(k).0 - b.0).d_hypot(pos(k).1 - b.1) < cell * 2.0));
             if designated && area <= p.water.lake_area_m2[1] * 2.5 {
                 kept.push(comp);
             } else if !designated && depth >= 1.5 && area >= p.water.lake_area_m2[0] && area <= p.water.lake_area_m2[1] {
@@ -1096,7 +1097,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
                 continue;
             }
             let q = vs[k] as usize;
-            let d = (pos(k).0 - pos(q).0).hypot(pos(k).1 - pos(q).1);
+            let d = (pos(k).0 - pos(q).0).d_hypot(pos(k).1 - pos(q).1);
             if d < 700.0 {
                 elev[k] = elev[k].min(lv.v[k].max(rlevel[q]) + p.water.valley_slope * d + p.water.valley_curve * d * d);
             }
@@ -1154,10 +1155,10 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             let mut up = 0f32;
             for i in 1..=8 {
                 let d = i as f32 * 80.0;
-                up = up.max(elev_at(&elev, x - wind.cos() * d, y - wind.sin() * d));
+                up = up.max(elev_at(&elev, x - wind.d_cos() * d, y - wind.d_sin() * d));
             }
             let shadow = smoothstep(0.0, 220.0, up - elev[k]);
-            0.5 + 0.35 * fbm(seed ^ 0x16, x, y, 520.0, 3) + 0.35 * (-wd[k] / 170.0).exp() - 0.35 * shadow
+            0.5 + 0.35 * fbm(seed ^ 0x16, x, y, 520.0, 3) + 0.35 * (-wd[k] / 170.0).d_exp() - 0.35 * shadow
         })
         .collect();
 
@@ -1186,7 +1187,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
                         continue;
                     }
                     let g = gy as usize * rg + gx as usize;
-                    let d = (seeds[g].0 - wx).hypot(seeds[g].1 - wy);
+                    let d = (seeds[g].0 - wx).d_hypot(seeds[g].1 - wy);
                     if d < best.0 {
                         best = (d, g);
                     }
@@ -1371,9 +1372,9 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         // Meander a little where the ground is gentle.
         let mut along = 0.0;
         for i in 1..pts.len().saturating_sub(1) {
-            along += (pts[i][0] - pts[i - 1][0]).hypot(pts[i][1] - pts[i - 1][1]);
+            along += (pts[i][0] - pts[i - 1][0]).d_hypot(pts[i][1] - pts[i - 1][1]);
             let (tx, ty) = (pts[i + 1][0] - pts[i - 1][0], pts[i + 1][1] - pts[i - 1][1]);
-            let l = tx.hypot(ty).max(1e-3);
+            let l = tx.d_hypot(ty).max(1e-3);
             let gentle = 1.0 - smoothstep(0.05, 0.25, slope_of(&land.elev.v, nodes[i]));
             let off = value(seed ^ 0x31, along / 110.0, ri as f32 * 7.3) * cell * 1.6 * gentle;
             pts[i][0] += -ty / l * off;
@@ -1387,7 +1388,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         let mut river_fords = Vec::new();
         for i in 0..pts.len().saturating_sub(1) {
             let (a, b) = (pts[i], pts[i + 1]);
-            let seg = (b[0] - a[0]).hypot(b[1] - a[1]);
+            let seg = (b[0] - a[0]).d_hypot(b[1] - a[1]);
             raster_segment(&mut rmask, w, a, b);
             length += seg;
             if length >= next_ford && seg > 0.0 {
@@ -1420,7 +1421,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
                 let tl = |a: usize, b: usize| t[b.min(w - 1) * w + a.min(w - 1)];
                 let sx = (tl(i + 1, j) - tl(i.saturating_sub(1), j)) / 2.0;
                 let sy = (tl(i, j + 1) - tl(i, j.saturating_sub(1))) / 2.0;
-                let slope = sx.hypot(sy);
+                let slope = sx.d_hypot(sy);
                 let wt = wet.bilinear(x, y);
                 if wt > 0.4 && fbm(seed ^ 0x41, x, y, 13.0, 2) > 0.72 - 0.4 * wt {
                     Terrain::Water
@@ -1475,7 +1476,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         let r = site.radius_m;
         if site.kind == SiteKind::Cave {
             let (gx, gy) = grad(&land.elev, site.x, site.y);
-            let gl = gx.hypot(gy).max(1e-4);
+            let gl = gx.d_hypot(gy).max(1e-4);
             let (ux, uy) = (gx / gl, gy / gl);
             let mut best: Option<(f32, f32, f32)> = None;
             for j in (site.y - 40.0) as i32..=(site.y + 40.0) as i32 {
@@ -1487,7 +1488,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
                         let (xx, yy) = (i as f32 + 0.5 + ux * *d as f32, j as f32 + 0.5 + uy * *d as f32);
                         xx >= 0.0 && yy >= 0.0 && (xx as usize) < w && (yy as usize) < w && tiles[yy as usize * w + xx as usize] == Terrain::Rock as u8
                     });
-                    let score = rock_up.count() as f32 - (i as f32 - site.x).hypot(j as f32 - site.y) * 0.03;
+                    let score = rock_up.count() as f32 - (i as f32 - site.x).d_hypot(j as f32 - site.y) * 0.03;
                     if best.is_none_or(|b| score > b.2) {
                         best = Some((i as f32 + 0.5, j as f32 + 0.5, score));
                     }
@@ -1496,12 +1497,12 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
             if let Some((bx, by, _)) = best {
                 (site.x, site.y) = (bx, by);
             }
-            site.facing = (-uy).atan2(-ux);
+            site.facing = (-uy).d_atan2(-ux);
         }
         let clear = if site.kind == SiteKind::Cave { 3.0 } else { r * 0.95 };
         for j in (site.y - clear) as i32..=(site.y + clear) as i32 {
             for i in (site.x - clear) as i32..=(site.x + clear) as i32 {
-                if i < 0 || j < 0 || i >= w as i32 || j >= w as i32 || (i as f32 + 0.5 - site.x).hypot(j as f32 + 0.5 - site.y) > clear {
+                if i < 0 || j < 0 || i >= w as i32 || j >= w as i32 || (i as f32 + 0.5 - site.x).d_hypot(j as f32 + 0.5 - site.y) > clear {
                     continue;
                 }
                 let k = j as usize * w + i as usize;
@@ -1561,7 +1562,7 @@ fn stamp(elev: &mut [f32], n: usize, cell: f32, c: (f32, f32), radius: f32, f: i
                 continue;
             }
             let (x, y) = (i as f32 * cell, j as f32 * cell);
-            let q = (x - c.0).hypot(y - c.1) / radius;
+            let q = (x - c.0).d_hypot(y - c.1) / radius;
             if q < 1.0 {
                 let k = j as usize * n + i as usize;
                 elev[k] = f(elev[k], q, x, y);
@@ -1601,7 +1602,7 @@ fn raster_segment(mask: &mut [u8], w: usize, a: [f32; 3], b: [f32; 3]) {
         for i in x0..=x1 {
             let (qx, qy) = (i as f32 + 0.5, j as f32 + 0.5);
             let u = (((qx - a[0]) * dx + (qy - a[1]) * dy) / l2).clamp(0.0, 1.0);
-            let d = (qx - a[0] - u * dx).hypot(qy - a[1] - u * dy);
+            let d = (qx - a[0] - u * dx).d_hypot(qy - a[1] - u * dy);
             let half = lerp(a[2], b[2], u) * 0.5;
             let k = j * w + i;
             if d < half {
@@ -1619,7 +1620,7 @@ fn plan_ranges(rng: &mut Rng, seed: u64, s: f32, centre: (f32, f32), scale: f32,
     let side = if rng.f() < 0.5 { 1.0 } else { -1.0 };
     let len = (s * r.range_length).min(r.range_max_length_m);
     let make = |rng: &mut Rng, c: (f32, f32), theta: f32, len: f32, crest: f32, width: f32, k: u64| {
-        let (dir, nrm) = ((theta.cos(), theta.sin()), (-theta.sin(), theta.cos()));
+        let (dir, nrm) = ((theta.d_cos(), theta.d_sin()), (-theta.d_sin(), theta.d_cos()));
         let bend = (rng.f() - 0.5) * 0.5 * len;
         let p0 = (c.0 - dir.0 * len * 0.5, c.1 - dir.1 * len * 0.5);
         let p2 = (c.0 + dir.0 * len * 0.5, c.1 + dir.1 * len * 0.5);
@@ -1634,12 +1635,12 @@ fn plan_ranges(rng: &mut Rng, seed: u64, s: f32, centre: (f32, f32), scale: f32,
         Range { spine, half_width_m: width, summit: (0.0, 0.0, 0.0), crest_m: crest, main_t: 0.3 + 0.4 * rng.f(), length_m: len, seed: seed ^ k }
     };
     let off = s * r.range_offset * side;
-    let nrm = (-theta.sin(), theta.cos());
+    let nrm = (-theta.d_sin(), theta.d_cos());
     let c1 = (centre.0 + nrm.0 * off, centre.1 + nrm.1 * off);
     let crest = rng.range(r.peak_m) * scale;
     let mut out = vec![make(rng, c1, theta, len, crest, r.range_half_width_m * scale, 0x61)];
     if two {
-        let c2 = (centre.0 - nrm.0 * off * 1.4 + (rng.f() - 0.5) * len * 0.3 * theta.cos(), centre.1 - nrm.1 * off * 1.4 + (rng.f() - 0.5) * len * 0.3 * theta.sin());
+        let c2 = (centre.0 - nrm.0 * off * 1.4 + (rng.f() - 0.5) * len * 0.3 * theta.d_cos(), centre.1 - nrm.1 * off * 1.4 + (rng.f() - 0.5) * len * 0.3 * theta.d_sin());
         let theta2 = theta + (rng.f() - 0.5) * 0.9;
         out.push(make(rng, c2, theta2, len * 0.55, crest * 0.62, r.range_half_width_m * scale * 0.8, 0x62));
     }
@@ -1688,7 +1689,7 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
             let dirs = if ring == 0 { 1 } else { 8 };
             for d in 0..dirs {
                 let a = d as f32 * std::f32::consts::TAU / 8.0 + ring as f32 * 0.4;
-                let (px, py) = (x + a.cos() * rr, y + a.sin() * rr);
+                let (px, py) = (x + a.d_cos() * rr, y + a.d_sin() * rr);
                 if px < 0.0 || py < 0.0 || px >= c.s || py >= c.s {
                     return None;
                 }
@@ -1804,7 +1805,7 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
                     let mut ok = true;
                     let mut nearest = 1200f32;
                     for q in &placed {
-                        let d = (q.x - x).hypot(q.y - y);
+                        let d = (q.x - x).d_hypot(q.y - y);
                         let need = if q.kind == sp.kind { (sp.spacing_m / relax.sqrt()).max(r + q.radius_m + 60.0) } else { r + q.radius_m + 120.0 };
                         if d < need {
                             ok = false;

@@ -1,0 +1,280 @@
+//! Land worlds (`map.kind = "land"`): the km-scale island of `living_rules::land`, hosted as
+//! authority data (see `docs/ISLAND_AUTHORITY.md`).
+//!
+//! World creation generates the land once, inside `init`, and keeps only what the rules use:
+//! - the tiles, with building footprints as `Wall` (`living_rules::host::hosted_map`), as the
+//!   usual `terrain_chunk` rows;
+//! - a `land` row with the seed, size, parameters and digests, so clients regenerate heights,
+//!   water and roads themselves instead of receiving them;
+//! - a `settlement` row per settlement and a `lot` row per lot, with a structure at the door
+//!   of every building that shelters or stores (house, inn, hall, workshop, storage);
+//! - each seeded settlement's layout for `seed::town` (hearth, stores, gates, homes, gardens).
+//!
+//! The `Land` itself (about 9 MB) is dropped before resources and people are placed.
+
+use crate::common;
+use crate::seed::{SeedMap, SeedTown};
+use crate::tables::*;
+use living_rules::city::Layout;
+use living_rules::host;
+use living_rules::land::{self as landgen, LandParams, SiteKind};
+use living_rules::map::{chunk_of, Map};
+use living_rules::settle::LotKind;
+use spacetimedb::{ReducerContext, Table};
+
+/// What world creation keeps from a generated land.
+pub struct Hosted {
+    pub map: Map,
+    pub info: LandInfo,
+    pub settlements: Vec<Planned>,
+    pub lots: Vec<PlannedLot>,
+}
+
+pub struct Planned {
+    pub kind: SiteKind,
+    pub style: String,
+    pub centre: (f32, f32),
+    pub radius_m: f32,
+    pub scale: f32,
+    /// Gate tiles (the wall's openings), hearth/sign/store spots and garden plantings.
+    pub gates: Vec<(i32, i32)>,
+    pub market: Vec<(f32, f32)>,
+    pub fields: Vec<(f32, f32)>,
+    /// Door points of the homes, nearest the plaza first.
+    pub homes: Vec<(f32, f32)>,
+}
+
+pub struct PlannedLot {
+    pub settlement: u16,
+    pub kind: LotKind,
+    pub centre: (f32, f32),
+    pub width_m: f32,
+    pub depth_m: f32,
+    pub yaw: f32,
+    pub floor_m: f32,
+    pub height_m: f32,
+    pub model: String,
+    pub door: (f32, f32),
+}
+
+/// The structure that stands at a lot's door: what the building does in the rules.
+fn structure_kind(k: LotKind) -> Option<&'static str> {
+    match k {
+        LotKind::House | LotKind::Townhouse => Some("house"),
+        LotKind::Inn => Some("inn"),
+        // A chapel shelters like a hall; the lot row says what it is.
+        LotKind::Hall | LotKind::Chapel => Some("hall"),
+        LotKind::Workshop => Some("workshop"),
+        LotKind::Barn => Some("storage"),
+        _ => None,
+    }
+}
+
+fn home(k: LotKind) -> bool {
+    matches!(k, LotKind::House | LotKind::Townhouse)
+}
+
+/// Generate the land and plan what the world keeps of it.
+pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
+    let size = if m.size > 0 { m.size } else { m.w.max(m.h) };
+    let params: LandParams = if m.params.is_null() { LandParams::default() } else { serde_json::from_value(m.params.clone()).map_err(|e| format!("map.params: {e}"))? };
+    let land = {
+        let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.land.generate");
+        landgen::generate(seed, size, &params)
+    };
+    let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.land.host");
+    let (map, hosted) = host::hosted_map(&land, &params);
+    let d = host::digests(&land, &map);
+    log::info!(
+        "land {seed} at {size} m: {} settlements, {} lots, {} roads; buildings block {} tiles and cut off {}; digests tiles {:016x} heights {:016x} layout {:016x}",
+        land.settlements.len(),
+        land.lots.len(),
+        land.roads.len(),
+        hosted.blocked_tiles,
+        hosted.cut_off_tiles,
+        d.tiles,
+        d.heights,
+        d.layout
+    );
+    let near = |p: (f32, f32)| map.nearest_walkable(p.0, p.1).unwrap_or(p);
+    let mut settlements = Vec::new();
+    for (si, s) in land.settlements.iter().enumerate() {
+        let mut gates = Vec::new();
+        if let Some(w) = &s.wall {
+            for g in &w.gates {
+                let (ox, oy) = g.out;
+                let (ux, uy) = (-oy, ox);
+                let r = (g.width_m + w.thickness_m).ceil() as i32 + 2;
+                let (cx, cy) = (g.at.0.floor() as i32, g.at.1.floor() as i32);
+                for j in cy - r..=cy + r {
+                    for i in cx - r..=cx + r {
+                        let (dx, dy) = (i as f32 + 0.5 - g.at.0, j as f32 + 0.5 - g.at.1);
+                        let (along, across) = (dx * ux + dy * uy, dx * ox + dy * oy);
+                        if along.abs() <= g.width_m * 0.5 + 1.0 && across.abs() <= w.thickness_m * 0.5 + 0.5 && map.walkable(i, j) && !gates.contains(&(i, j)) {
+                            gates.push((i, j));
+                        }
+                    }
+                }
+            }
+        }
+        // Hearth, sign and two stores on the plaza, clear of its well and stalls.
+        let c = s.plaza.centre;
+        let mut market: Vec<(f32, f32)> = Vec::new();
+        for off in [(3.0, 2.0), (-3.0, 2.5), (4.0, -3.0), (-4.0, -3.0)] {
+            let p = near((c.0 + off.0 * s.scale.max(0.5), c.1 + off.1 * s.scale.max(0.5)));
+            market.push(p);
+        }
+        let mut fields = Vec::new();
+        let mut homes: Vec<(f32, (f32, f32))> = Vec::new();
+        for l in land.lots.iter().filter(|l| l.settlement as usize == si) {
+            match l.kind {
+                LotKind::Garden => fields.push(near(l.centre)),
+                LotKind::Field => {
+                    // A few plantings along a field's middle line.
+                    let (ux, uy) = (-l.front.1, l.front.0);
+                    for k in [-0.3f32, 0.0, 0.3] {
+                        fields.push(near((l.centre.0 + ux * k * l.width_m, l.centre.1 + uy * k * l.width_m)));
+                    }
+                }
+                k if home(k) => homes.push(((l.centre.0 - c.0).hypot(l.centre.1 - c.1), near(host::door(l)))),
+                _ => {}
+            }
+        }
+        homes.sort_by(|a, b| a.0.total_cmp(&b.0));
+        settlements.push(Planned {
+            kind: s.kind,
+            style: s.style.clone(),
+            centre: c,
+            radius_m: s.radius_m,
+            scale: s.scale,
+            gates,
+            market,
+            fields,
+            homes: homes.into_iter().map(|h| h.1).collect(),
+        });
+    }
+    let lots = land
+        .lots
+        .iter()
+        .map(|l| PlannedLot {
+            settlement: l.settlement,
+            kind: l.kind,
+            centre: l.centre,
+            width_m: l.width_m,
+            depth_m: l.depth_m,
+            yaw: l.yaw,
+            floor_m: l.floor_m,
+            height_m: l.height_m,
+            model: l.model_file.clone().unwrap_or_default(),
+            door: near(host::door(l)),
+        })
+        .collect();
+    // Newcomers arrive outside the town's first gate, or on its plaza.
+    let town = land.settlements.iter().find(|s| s.kind == SiteKind::Town).or(land.settlements.first());
+    let arrive = town
+        .map(|s| match s.wall.as_ref().and_then(|w| w.gates.first().map(|g| (w, g))) {
+            Some((w, g)) => near((g.at.0 + g.out.0 * (w.thickness_m + 4.0), g.at.1 + g.out.1 * (w.thickness_m + 4.0))),
+            None => near(s.plaza.centre),
+        })
+        .unwrap_or_else(|| near((size as f32 / 2.0, size as f32 / 2.0)));
+    let info = LandInfo {
+        id: 0,
+        seed,
+        size,
+        params: if m.params.is_null() { "{}".into() } else { m.params.to_string() },
+        tiles_digest: d.tiles,
+        heights_digest: d.heights,
+        layout_digest: d.layout,
+        arrive_x: arrive.0,
+        arrive_y: arrive.1,
+    };
+    Ok(Hosted { map, info, settlements, lots })
+}
+
+/// The seed's settlement entry for each planned settlement: the k-th entry of a site kind
+/// (`site`, or `town` for `towns` and `village` for `villages`) takes the k-th settlement of
+/// that kind. Settlements without an entry stand empty.
+pub fn match_seed<'a>(h: &Hosted, towns: &'a [SeedTown], villages: &'a [SeedTown]) -> Vec<Option<&'a SeedTown>> {
+    let entries: Vec<(&str, &SeedTown)> = towns
+        .iter()
+        .map(|t| (if t.site.is_empty() { "town" } else { t.site.as_str() }, t))
+        .chain(villages.iter().map(|t| (if t.site.is_empty() { "village" } else { t.site.as_str() }, t)))
+        .collect();
+    let mut used = vec![false; entries.len()];
+    h.settlements
+        .iter()
+        .map(|s| {
+            let i = entries.iter().enumerate().position(|(i, (k, _))| !used[i] && *k == s.kind.id())?;
+            used[i] = true;
+            Some(entries[i].1)
+        })
+        .collect()
+}
+
+/// The layout `seed::town` builds a seeded settlement from.
+pub fn layout(p: &Planned) -> Layout {
+    Layout { center: p.centre, gates: p.gates.clone(), houses: p.homes.clone(), market: p.market.clone(), fields: p.fields.clone() }
+}
+
+/// Lot rows and the structures at their doors (owners are set as households move in).
+pub fn build(ctx: &ReducerContext, h: &Hosted, now: u64) {
+    ctx.db.land().insert(h.info.clone());
+    for (i, l) in h.lots.iter().enumerate() {
+        let structure = structure_kind(l.kind).map_or(0, |k| {
+            common::invalidate_structures(ctx);
+            ctx.db.structure().insert(Structure { id: 0, kind: k.into(), x: l.door.0, y: l.door.1, chunk: chunk_of(l.door.0, l.door.1), owner: 0, built_ms: now }).id
+        });
+        ctx.db.lot().insert(Lot {
+            id: i as u32,
+            settlement: l.settlement,
+            kind: l.kind.id().into(),
+            x: l.centre.0,
+            y: l.centre.1,
+            width_m: l.width_m,
+            depth_m: l.depth_m,
+            yaw: l.yaw,
+            floor_m: l.floor_m,
+            height_m: l.height_m,
+            model: l.model.clone(),
+            door_x: l.door.0,
+            door_y: l.door.1,
+            structure,
+            chunk: chunk_of(l.centre.0, l.centre.1),
+        });
+    }
+}
+
+/// Settlement rows, once their communities exist; residents' backgrounds name their folk.
+pub fn settle(ctx: &ReducerContext, h: &Hosted, seeded: &[Option<&SeedTown>]) {
+    for (i, p) in h.settlements.iter().enumerate() {
+        let community = seeded[i].and_then(|t| ctx.db.community().iter().find(|c| c.name == t.name)).map_or(0, |c| c.id);
+        ctx.db.settlement().insert(Settlement {
+            id: i as u16,
+            kind: p.kind.id().into(),
+            style: p.style.clone(),
+            x: p.centre.0,
+            y: p.centre.1,
+            radius_m: p.radius_m,
+            scale: p.scale,
+            community,
+        });
+        if community == 0 {
+            continue;
+        }
+        for m in ctx.db.membership().community().filter(community).collect::<Vec<_>>() {
+            let Some(mut bg) = ctx.db.background().id().find(m.member) else { continue };
+            let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&bg.text) else { continue };
+            v["folk"] = p.kind.id().into();
+            // Rounded in f64, so the JSON reads 0.35 rather than the f32's 0.3499999940395355.
+            v["body_scale"] = serde_json::json!((p.scale as f64 * 1000.0).round() / 1000.0);
+            v["settlement"] = serde_json::json!(i);
+            bg.text = v.to_string();
+            ctx.db.background().id().update(bg);
+        }
+    }
+}
+
+/// Where a newcomer arrives: outside a land world's town, else the classic spot.
+pub fn arrival(ctx: &ReducerContext) -> (f32, f32) {
+    ctx.db.land().id().find(0).map_or((40.0, 60.0), |l| (l.arrive_x, l.arrive_y))
+}

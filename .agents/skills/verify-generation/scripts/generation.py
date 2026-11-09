@@ -16,7 +16,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / ".local/living/verify"
-SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village")
+SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island")
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
@@ -80,7 +80,10 @@ def check_seed(seed, rows):
 
     w = rows["world"][0]
     m = seed.get("map", {})
-    size = [max(64, m.get(k, 0)) for k in ("w", "h")] if m.get("kind") == "realm" else [96, 96]
+    if m.get("kind") == "land":
+        size = [m.get("size") or max(m.get("w", 0), m.get("h", 0))] * 2
+    else:
+        size = [max(64, m.get(k, 0)) for k in ("w", "h")] if m.get("kind") == "realm" else [96, 96]
     equal("world dimensions", [w["width"], w["height"]], size)
     equal("world seed and run", [w["seed"], w["run"]], [seed["seed"], seed["run"]])
     ids = sorted((cy << 16) | cx for cy in range((size[1] + 15) // 16) for cx in range((size[0] + 15) // 16))
@@ -161,6 +164,72 @@ def check_seed(seed, rows):
         c = communities.get(community["name"], {})
         equal(f"{community['name']} home", [c.get("home_x"), c.get("home_y")], community["home"])
         equal(f"{community['name']} members", sorted(chars[m["member"]]["name"] for m in rows["membership"] if m["community"] == c.get("id")), sorted(community["members"]))
+    if m.get("kind") == "land":
+        checks.extend(check_land(seed, rows, size[0], tiles))
+    return checks
+
+
+WALKABLE = {0, 1, 3, 5, 6}  # grass, forest, sand, dirt, road (living_rules::map::Terrain)
+DOOR_KINDS = {"house": "house", "townhouse": "house", "inn": "inn", "hall": "hall", "chapel": "hall", "workshop": "workshop", "barn": "storage"}
+BLOCKING = {"house", "townhouse", "inn", "hall", "chapel", "workshop", "barn", "tower", "well", "market_stall"}
+
+
+def check_land(seed, rows, side, tiles):
+    """A `map.kind = "land"` world (docs/ISLAND_AUTHORITY.md): the land row, settlements, lots
+    with their door structures, blocked footprints, residents' folk and mindless control."""
+    checks = []
+
+    def present(name, condition, detail=None):
+        checks.append({"check": name, "pass": bool(condition), "detail": detail})
+
+    grid = {r["id"]: t for r, t in zip(rows["terrain_chunk"], tiles)}
+
+    def tile(x, y):
+        x, y = int(x // 1), int(y // 1)
+        if x < 0 or y < 0 or x >= side or y >= side:
+            return 4
+        return grid[((y // 16) << 16) | (x // 16)][(y % 16) * 16 + x % 16]
+
+    land = rows.get("land", [])
+    present("land row with seed and size", len(land) == 1 and land[0]["seed"] == seed["seed"] and land[0]["size"] == side, land)
+    present("land digests set", bool(land) and all(land[0][k] for k in ("tiles_digest", "heights_digest", "layout_digest")))
+    if land:
+        present("arrival point walkable", tile(land[0]["arrive_x"], land[0]["arrive_y"]) in WALKABLE, [land[0]["arrive_x"], land[0]["arrive_y"]])
+    settlements = rows.get("settlement", [])
+    communities = {r["name"]: r for r in rows["community"]}
+    entries = seed.get("towns", []) + seed.get("villages", [])
+    present("settlement rows", len(settlements) >= len(entries), {"rows": len(settlements), "seeded": len(entries)})
+    linked = {s["community"] for s in settlements if s["community"]}
+    present("every seeded settlement linked to its community", all(communities.get(t["name"], {}).get("id") in linked for t in entries), sorted(linked))
+    for t in entries:
+        want = t.get("site") or ("town" if t in seed.get("towns", []) else "village")
+        c = communities.get(t["name"], {}).get("id")
+        present(f"{t['name']} stands on a {want} site", any(s["community"] == c and s["kind"] == want for s in settlements))
+    lots = rows.get("lot", [])
+    structures = {s["id"]: s for s in rows["structure"]}
+    present("lot ids are 0..n", sorted(l["id"] for l in lots) == list(range(len(lots))), len(lots))
+    bad_door = [l["id"] for l in lots if l["kind"] in DOOR_KINDS and not (l["structure"] in structures and structures[l["structure"]]["kind"] == DOOR_KINDS[l["kind"]] and abs(structures[l["structure"]]["x"] - l["door_x"]) < 0.01 and abs(structures[l["structure"]]["y"] - l["door_y"]) < 0.01)]
+    present("every building lot has its structure at its door", not bad_door, bad_door[:20])
+    present("no structure on open lots", all(l["structure"] == 0 for l in lots if l["kind"] not in DOOR_KINDS))
+    present("doors are walkable", all(tile(l["door_x"], l["door_y"]) in WALKABLE for l in lots if l["structure"]), [l["id"] for l in lots if l["structure"] and tile(l["door_x"], l["door_y"]) not in WALKABLE][:20])
+    blocking = [l for l in lots if l["kind"] in BLOCKING]
+    walled = [l["id"] for l in blocking if tile(l["x"], l["y"]) == 7]
+    present("blocking lots stand on wall tiles", len(walled) == len(blocking), {"blocking": len(blocking), "wall_at_centre": len(walled), "open": [l["id"] for l in blocking if l["id"] not in walled][:20]})
+    present("open lots stay walkable", all(tile(l["x"], l["y"]) in WALKABLE | {2} for l in lots if l["kind"] in ("garden", "field", "lamp")))
+    houses = {s["id"] for s in structures.values() if s["kind"] == "house"}
+    lot_houses = {l["structure"] for l in lots if l["kind"] in ("house", "townhouse")}
+    present("houses are lot houses", houses == lot_houses, {"houses": len(houses), "lot_houses": len(lot_houses)})
+    owners = {structures[i]["owner"] for i in lot_houses if structures[i]["owner"]}
+    present("households own lot houses", len(owners) > 0, len(owners))
+    bgs = {r["id"]: json.loads(r["text"]) for r in rows["background"]}
+    folk = {s["community"]: s for s in settlements}
+    members = {m["member"]: m["community"] for m in rows["membership"]}
+    wrong = [i for i, c in members.items() if c in folk and (bgs.get(i, {}).get("folk") != folk[c]["kind"] or abs((bgs.get(i, {}).get("body_scale") or -1) - folk[c]["scale"]) > 1e-3)]
+    present("residents' backgrounds name their folk and scale", members and not wrong, wrong[:20])
+    if seed.get("rules", {}).get("minds") is False:
+        world = rows["world"][0]
+        minded = [c["id"] for c in rows["character"] if c["ai"] or c["controller"] == world["admin"]]
+        present("rules.minds false: nobody is mind-controlled", not minded, minded[:20])
     return checks
 
 

@@ -4789,6 +4789,7 @@ dependencies = [
 name = "living-rules"
 version = "0.1.0"
 dependencies = [
+ "libm",
  "rhai",
  "serde",
  "serde_json",

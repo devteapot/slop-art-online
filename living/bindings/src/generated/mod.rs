@@ -60,7 +60,11 @@ pub mod judgment_type;
 pub mod kill_reducer;
 pub mod know_how_table;
 pub mod know_how_type;
+pub mod land_info_type;
+pub mod land_table;
 pub mod leaf_result_type;
+pub mod lot_table;
+pub mod lot_type;
 pub mod mark_type;
 pub mod membership_table;
 pub mod membership_type;
@@ -110,6 +114,8 @@ pub mod set_background_reducer;
 pub mod set_behavior_reducer;
 pub mod set_paused_reducer;
 pub mod set_profile_reducer;
+pub mod settlement_table;
+pub mod settlement_type;
 pub mod slow_timer_type;
 pub mod spawn_battle_reducer;
 pub mod spawn_crowd_reducer;
@@ -188,7 +194,11 @@ pub use judgment_type::Judgment;
 pub use kill_reducer::kill;
 pub use know_how_table::*;
 pub use know_how_type::KnowHow;
+pub use land_info_type::LandInfo;
+pub use land_table::*;
 pub use leaf_result_type::LeafResult;
+pub use lot_table::*;
+pub use lot_type::Lot;
 pub use mark_type::Mark;
 pub use membership_table::*;
 pub use membership_type::Membership;
@@ -238,6 +248,8 @@ pub use set_background_reducer::set_background;
 pub use set_behavior_reducer::set_behavior;
 pub use set_paused_reducer::set_paused;
 pub use set_profile_reducer::set_profile;
+pub use settlement_table::*;
+pub use settlement_type::Settlement;
 pub use slow_timer_type::SlowTimer;
 pub use spawn_battle_reducer::spawn_battle;
 pub use spawn_crowd_reducer::spawn_crowd;
@@ -597,6 +609,8 @@ pub struct DbUpdate {
     join_request: __sdk::TableUpdate<JoinRequest>,
     judgment: __sdk::TableUpdate<Judgment>,
     know_how: __sdk::TableUpdate<KnowHow>,
+    land: __sdk::TableUpdate<LandInfo>,
+    lot: __sdk::TableUpdate<Lot>,
     membership: __sdk::TableUpdate<Membership>,
     mind_cursor: __sdk::TableUpdate<MindCursor>,
     mind_state: __sdk::TableUpdate<MindState>,
@@ -609,6 +623,7 @@ pub struct DbUpdate {
     routine: __sdk::TableUpdate<Routine>,
     routine_stat: __sdk::TableUpdate<RoutineStat>,
     script: __sdk::TableUpdate<Script>,
+    settlement: __sdk::TableUpdate<Settlement>,
     stats: __sdk::TableUpdate<Stats>,
     structure: __sdk::TableUpdate<Structure>,
     terrain_chunk: __sdk::TableUpdate<TerrainChunk>,
@@ -678,6 +693,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "know_how" => db_update
                     .know_how
                     .append(know_how_table::parse_table_update(table_update)?),
+                "land" => db_update
+                    .land
+                    .append(land_table::parse_table_update(table_update)?),
+                "lot" => db_update
+                    .lot
+                    .append(lot_table::parse_table_update(table_update)?),
                 "membership" => db_update
                     .membership
                     .append(membership_table::parse_table_update(table_update)?),
@@ -714,6 +735,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "script" => db_update
                     .script
                     .append(script_table::parse_table_update(table_update)?),
+                "settlement" => db_update
+                    .settlement
+                    .append(settlement_table::parse_table_update(table_update)?),
                 "stats" => db_update
                     .stats
                     .append(stats_table::parse_table_update(table_update)?),
@@ -815,6 +839,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.know_how = cache
             .apply_diff_to_table::<KnowHow>("know_how", &self.know_how)
             .with_updates_by_pk(|row| &row.id);
+        diff.land = cache
+            .apply_diff_to_table::<LandInfo>("land", &self.land)
+            .with_updates_by_pk(|row| &row.id);
+        diff.lot = cache
+            .apply_diff_to_table::<Lot>("lot", &self.lot)
+            .with_updates_by_pk(|row| &row.id);
         diff.membership = cache
             .apply_diff_to_table::<Membership>("membership", &self.membership)
             .with_updates_by_pk(|row| &row.id);
@@ -848,6 +878,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.script = cache
             .apply_diff_to_table::<Script>("script", &self.script)
             .with_updates_by_pk(|row| &row.name);
+        diff.settlement = cache
+            .apply_diff_to_table::<Settlement>("settlement", &self.settlement)
+            .with_updates_by_pk(|row| &row.id);
         diff.stats = cache
             .apply_diff_to_table::<Stats>("stats", &self.stats)
             .with_updates_by_pk(|row| &row.id);
@@ -932,6 +965,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "know_how" => db_update
                     .know_how
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "land" => db_update
+                    .land
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "lot" => db_update
+                    .lot
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "membership" => db_update
                     .membership
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -967,6 +1006,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "script" => db_update
                     .script
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "settlement" => db_update
+                    .settlement
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "stats" => db_update
                     .stats
@@ -1056,6 +1098,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "know_how" => db_update
                     .know_how
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "land" => db_update
+                    .land
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "lot" => db_update
+                    .lot
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "membership" => db_update
                     .membership
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1091,6 +1139,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "script" => db_update
                     .script
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "settlement" => db_update
+                    .settlement
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "stats" => db_update
                     .stats
@@ -1146,6 +1197,8 @@ pub struct AppliedDiff<'r> {
     join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
     know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
+    land: __sdk::TableAppliedDiff<'r, LandInfo>,
+    lot: __sdk::TableAppliedDiff<'r, Lot>,
     membership: __sdk::TableAppliedDiff<'r, Membership>,
     mind_cursor: __sdk::TableAppliedDiff<'r, MindCursor>,
     mind_state: __sdk::TableAppliedDiff<'r, MindState>,
@@ -1158,6 +1211,7 @@ pub struct AppliedDiff<'r> {
     routine: __sdk::TableAppliedDiff<'r, Routine>,
     routine_stat: __sdk::TableAppliedDiff<'r, RoutineStat>,
     script: __sdk::TableAppliedDiff<'r, Script>,
+    settlement: __sdk::TableAppliedDiff<'r, Settlement>,
     stats: __sdk::TableAppliedDiff<'r, Stats>,
     structure: __sdk::TableAppliedDiff<'r, Structure>,
     terrain_chunk: __sdk::TableAppliedDiff<'r, TerrainChunk>,
@@ -1200,6 +1254,8 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<Judgment>("judgment", &self.judgment, event);
         callbacks.invoke_table_row_callbacks::<KnowHow>("know_how", &self.know_how, event);
+        callbacks.invoke_table_row_callbacks::<LandInfo>("land", &self.land, event);
+        callbacks.invoke_table_row_callbacks::<Lot>("lot", &self.lot, event);
         callbacks.invoke_table_row_callbacks::<Membership>("membership", &self.membership, event);
         callbacks.invoke_table_row_callbacks::<MindCursor>("mind_cursor", &self.mind_cursor, event);
         callbacks.invoke_table_row_callbacks::<MindState>("mind_state", &self.mind_state, event);
@@ -1224,6 +1280,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Script>("script", &self.script, event);
+        callbacks.invoke_table_row_callbacks::<Settlement>("settlement", &self.settlement, event);
         callbacks.invoke_table_row_callbacks::<Stats>("stats", &self.stats, event);
         callbacks.invoke_table_row_callbacks::<Structure>("structure", &self.structure, event);
         callbacks.invoke_table_row_callbacks::<TerrainChunk>(
@@ -1913,6 +1970,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         join_request_table::register_table(client_cache);
         judgment_table::register_table(client_cache);
         know_how_table::register_table(client_cache);
+        land_table::register_table(client_cache);
+        lot_table::register_table(client_cache);
         membership_table::register_table(client_cache);
         mind_cursor_table::register_table(client_cache);
         mind_state_table::register_table(client_cache);
@@ -1925,6 +1984,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         routine_table::register_table(client_cache);
         routine_stat_table::register_table(client_cache);
         script_table::register_table(client_cache);
+        settlement_table::register_table(client_cache);
         stats_table::register_table(client_cache);
         structure_table::register_table(client_cache);
         terrain_chunk_table::register_table(client_cache);
@@ -1952,6 +2012,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "join_request",
         "judgment",
         "know_how",
+        "land",
+        "lot",
         "membership",
         "mind_cursor",
         "mind_state",
@@ -1964,6 +2026,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "routine",
         "routine_stat",
         "script",
+        "settlement",
         "stats",
         "structure",
         "terrain_chunk",

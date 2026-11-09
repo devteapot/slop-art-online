@@ -1,5 +1,16 @@
 # Validation record (generation)
 
+
+## 2026-11-09 island land worlds (dev-box)
+
+Host: the dev-box (Fedora, rootless podman, SELinux enforcing). SpacetimeDB 2.14.1 ran in scratch container `slop-game-stdb`, reached through a `docker` name shim; see `docs/ISLAND_AUTHORITY.md`, "Verification". This change added the `island` seed, the land checks (`check_land`) and the `land` map size to `generation.py`. Evidence is under `.local/living/verify/` in the dev-box worktree `~/dev/slop-game`.
+
+- **`generation-20261109-021430`** (`dc34fdf` plus the change) exited 1. `realm` ×2, `valley`, `authored-test`, `aske-coast`, `stage3-village`, authored compile, guards and repeatability passed. The island failed two of 56 checks, both real defects, since fixed:
+  - 12 market stalls and wells on the paved plaza did not block;
+  - `body_scale` was written as an f32 widened to f64.
+- **`generation-20261109-023510`** (`977a14c` plus the change and fixes) exited 1 with 19 of 20 results passing. The island passed 56 of 56: land row and digests, walkable arrival, 6 settlement rows linked to their communities and site kinds, 372 lots, door structures, walkable doors, wall tiles under all 263 blocking lots, owned lot houses, folk backgrounds, and no mind-controlled character.
+- **Finding (not caused by this change):** `realm` child 0 failed "Saltmere memberships". A drawn grandparent (`drawn_households` ages 0.76–0.9 of a lifespan) died of old age 1.2 s after `init`, and death cleanup removes memberships. The membership check expects every seeded resident, dead or alive. Repeatability and the second `realm` passed.
+
 ## 2026-10-04 fix round
 
 Commit `384fb50e379533b7db64698357efd0b2323f9452`, branch `living-core`. Host: Fedora, rootless podman, SELinux enforcing. The working tree had pre-existing changes, including `living/viewer/src/clock.rs`. This work edited only the generation skill and wrote scratch evidence. No product code or tracked seed was changed.

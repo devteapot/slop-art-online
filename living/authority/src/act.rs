@@ -1237,7 +1237,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 g.changed_by = me;
                 let p = (g.x as f32 + 0.5, g.y as f32 + 0.5);
                 ctx.db.gate().id().update(g);
-                common::invalidate_map();
+                common::invalidate_gates(ctx);
                 if !open {
                     motion::resteer_near(ctx, p, 6.0, now);
                 }

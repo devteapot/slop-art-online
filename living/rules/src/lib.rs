@@ -3,8 +3,10 @@
 
 pub mod acts;
 pub mod catalog;
+pub mod det;
 pub mod graph;
 pub mod height;
+pub mod host;
 pub mod land;
 pub mod settle;
 pub mod map;

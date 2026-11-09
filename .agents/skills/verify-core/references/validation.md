@@ -1,5 +1,14 @@
 # Core validation record
 
+
+## 2026-11-09 island land worlds (dev-box)
+
+`core-20261109-021430` ran on the dev-box with the scratch 2.14.1 container `slop-game-stdb` (`docs/ISLAND_AUTHORITY.md`, "Verification"), on `dc34fdf` plus the island change: patched map cache, `Map::path` without whole-map arrays, `rules.minds`.
+- **Cargo:** rules 72, authority 10, mind 47, viewer sync 3.
+- **Scenes:** `tick`, `needs` and `seize` passed.
+- **Drivers:** `verify_mechanics.py` passed 23 of 23, including road, wall and gate built, and gate shut and opened. `verify_steering.py` passed 5 of 5.
+- **Not run:** the infant, lifecycle and wildlife scenes (30 minutes or more each). The births change (`rules.minds`) keeps the old controller when the flag is on.
+
 ## 2026-10-04 fix round
 
 Ran the skill on Fedora with rootless podman and SELinux enforcing. Branch `living-core`, commit `384fb50e379533b7db64698357efd0b2323f9452`. The existing `living/viewer/src/clock.rs` change was preserved. This task changed only `.agents/skills/verify-core/`. No product source, shared harness, adapter, reference world or Neo4j A was changed.

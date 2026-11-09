@@ -25,6 +25,7 @@
 //! come from `data/buildings.json`, written by `living/tools/blender/buildings.py`: every
 //! generated model with its exact footprint, which a lot is sized to.
 
+use crate::det::Det;
 use crate::land::{hash, lerp, smoothstep, value, Land, RegionKind, SiteKind};
 use crate::map::Terrain;
 use serde::{Deserialize, Serialize};
@@ -749,7 +750,7 @@ fn cross(a: V2, b: V2) -> f32 {
 }
 #[inline]
 fn len(a: V2) -> f32 {
-    a.0.hypot(a.1)
+    a.0.d_hypot(a.1)
 }
 #[inline]
 fn dist(a: V2, b: V2) -> f32 {
@@ -766,12 +767,12 @@ fn perp(a: V2) -> V2 {
     (-a.1, a.0)
 }
 fn rot(a: V2, t: f32) -> V2 {
-    let (s, c) = t.sin_cos();
+    let (s, c) = t.d_sin_cos();
     (a.0 * c - a.1 * s, a.0 * s + a.1 * c)
 }
 /// Yaw that turns +Z (glTF front) onto `front` in the game's frame (x, z) = (land x, land y).
 fn yaw_of(front: V2) -> f32 {
-    front.0.atan2(front.1)
+    front.0.d_atan2(front.1)
 }
 
 /// Distance to segment ab, position along it (0..1) and signed offset (positive on perp(b - a)).
@@ -932,7 +933,7 @@ impl Rect {
     fn outside(&self, p: V2) -> f32 {
         let (a, b) = self.local(p);
         let (dx, dy) = ((a.abs() - self.hw).max(0.0), (b.abs() - self.hd).max(0.0));
-        dx.hypot(dy)
+        dx.d_hypot(dy)
     }
     fn overlaps(&self, o: &Rect) -> bool {
         for axis in [self.u(), self.f, o.u(), o.f] {
@@ -1221,7 +1222,7 @@ impl Mods {
             }
             let (mut num, mut den) = (0.0, 0.0);
             for &(d, surf) in &near[..n] {
-                let k = (-(d - dmin) / SOFT).exp();
+                let k = (-(d - dmin) / SOFT).d_exp();
                 num += k * surf;
                 den += k;
             }
@@ -1796,15 +1797,15 @@ impl<'a> Plan<'a> {
         for &r in &arriving {
             let pts = &self.roads[r as usize].points;
             let far = pts.iter().rev().find(|q| dist(**q, c0) > st.plaza_m[0]).or(pts.first()).copied().unwrap();
-            let a = (far.1 - c0.1).atan2(far.0 - c0.0);
-            s2 = add(s2, ((2.0 * a).cos(), (2.0 * a).sin()));
+            let a = (far.1 - c0.1).d_atan2(far.0 - c0.0);
+            s2 = add(s2, ((2.0 * a).d_cos(), (2.0 * a).d_sin()));
         }
         let axis = if len(s2) > 0.1 {
-            s2.1.atan2(s2.0) * 0.5
+            s2.1.d_atan2(s2.0) * 0.5
         } else {
             // Along the contour when nothing arrives.
             let g = self.grad(c0, 4.0);
-            g.1.atan2(g.0) + std::f32::consts::FRAC_PI_2
+            g.1.d_atan2(g.0) + std::f32::consts::FRAC_PI_2
         };
         // The plaza: an irregular oval on clean ground near the centre.
         let mut plaza = Vec::new();
@@ -1813,7 +1814,7 @@ impl<'a> Plan<'a> {
             for a in 0..(if ring == 0 { 1 } else { 8 }) {
                 let off = ring as f32 * st.plaza_m[1] * 0.35;
                 let ang = a as f32 * std::f32::consts::TAU / 8.0;
-                let c = add(c0, (ang.cos() * off, ang.sin() * off));
+                let c = add(c0, (ang.d_cos() * off, ang.d_sin() * off));
                 let poly = self.oval(c, axis, st.plaza_m[0] * 0.5, st.plaza_m[1] * 0.5, &mut rng);
                 if self.clean_poly(&poly, 3.0) {
                     centre = c;
@@ -1851,7 +1852,7 @@ impl<'a> Plan<'a> {
             let corners: Vec<V2> = (0..nv)
                 .map(|i| {
                     let a = a0 + (i as f32 + (rng.f() - 0.5) * 0.4) / nv as f32 * std::f32::consts::TAU;
-                    let d = (a.cos(), a.sin());
+                    let d = (a.d_cos(), a.d_sin());
                     add(centre, mul(d, radial_at(&lobed, centre, add(centre, d))))
                 })
                 .collect();
@@ -1866,7 +1867,7 @@ impl<'a> Plan<'a> {
             bound = (0..bound.len())
                 .map(|i| {
                     let a = i as f32 / bound.len() as f32 * std::f32::consts::TAU;
-                    let far = add(centre, (a.cos() * 1e4, a.sin() * 1e4));
+                    let far = add(centre, (a.d_cos() * 1e4, a.d_sin() * 1e4));
                     (0..nv).find_map(|k| seg_intersect(centre, far, corners[k], corners[(k + 1) % nv]).map(|(t, _)| t * 1e4)).unwrap_or(bound[i])
                 })
                 .collect();
@@ -1957,7 +1958,7 @@ impl<'a> Plan<'a> {
                     }
                     let t = (fcl[i] - s0) / l;
                     let tan = norm(sub(fine[(i + 1).min(fine.len() - 1)], fine[i.saturating_sub(1)]));
-                    let off = a1 * (std::f32::consts::PI * t).sin() + a2 * (std::f32::consts::TAU * t).sin();
+                    let off = a1 * (std::f32::consts::PI * t).d_sin() + a2 * (std::f32::consts::TAU * t).d_sin();
                     add(fine[i], mul(perp(tan), off))
                 })
                 .collect();
@@ -1973,7 +1974,7 @@ impl<'a> Plan<'a> {
         let mut exits: Vec<f32> = streets.iter().map(|&r| {
             let pts = &self.roads[r as usize].points;
             let q = pts.iter().rev().find(|q| dist(**q, centre) > st.plaza_m[0] * 0.8).or(pts.first()).copied().unwrap();
-            (q.1 - centre.1).atan2(q.0 - centre.0)
+            (q.1 - centre.1).d_atan2(q.0 - centre.0)
         }).collect();
         let mut tries = 0;
         while (exits.len() as u32) < st.radials && tries < 6 {
@@ -1995,7 +1996,7 @@ impl<'a> Plan<'a> {
                 }
                 best.1 + (rng.f() - 0.5) * 0.3
             };
-            let dir = (dir_a.cos(), dir_a.sin());
+            let dir = (dir_a.d_cos(), dir_a.d_sin());
             let start = self.plaza_exit(&plaza, centre, dir);
             let reach = r_max + st.outskirts_m * 0.5;
             let opts = Trace { step: st.street_m.max(st.lane_spacing_m / 9.0), max_len: reach, contour: 0.3, circle: 0.0, radial: 1.0, wander: st.wander * 1.3, hw: st.street_m * 0.5, sep: st.lane_sep_m * 0.6, centre, limit: None, parent: None, seed: rng.f().to_bits() as u64, settlement: idx, plaza: &plaza };
@@ -2117,7 +2118,7 @@ impl<'a> Plan<'a> {
         (0..n)
             .map(|i| {
                 let t = i as f32 / n as f32 * std::f32::consts::TAU + (rng.f() - 0.5) * 0.25;
-                let (ct, stt) = ((t).cos(), (t).sin());
+                let (ct, stt) = ((t).d_cos(), (t).d_sin());
                 let r = 1.0 / ((ct / a).powi(2) + (stt / b).powi(2)).sqrt() * (1.0 + 0.14 * value(self.seed ^ 0x9A, ph + t * 1.3, 0.5));
                 add(c, rot((ct * r, stt * r), axis))
             })
@@ -2157,7 +2158,7 @@ impl<'a> Plan<'a> {
         let raw: Vec<f32> = (0..n)
             .map(|i| {
                 let a = i as f32 / n as f32 * std::f32::consts::TAU;
-                let d = (a.cos(), a.sin());
+                let d = (a.d_cos(), a.d_sin());
                 let mut r = r_min;
                 while r < r_max {
                     let p = add(c, mul(d, r + 3.0));
@@ -2982,7 +2983,7 @@ impl<'a> Plan<'a> {
                         s += fail_step * 3.0;
                         continue;
                     }
-                    if rng.f() > (1.0 - out).powf(1.5) {
+                    if rng.f() > (1.0 - out).d_powf(1.5) {
                         s += rng.range(st.outskirt_gap_m);
                         continue;
                     }
@@ -3314,7 +3315,7 @@ fn sample_profile(cl: &[f32], h: &[f32], s: f32) -> f32 {
 /// Radius of a per-direction profile toward `p`.
 fn radial_at(bound: &[f32], c: V2, p: V2) -> f32 {
     let n = bound.len();
-    let a = (p.1 - c.1).atan2(p.0 - c.0).rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU * n as f32;
+    let a = (p.1 - c.1).d_atan2(p.0 - c.0).rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU * n as f32;
     let i = a.floor() as usize % n;
     lerp(bound[i], bound[(i + 1) % n], a.fract())
 }
@@ -3324,7 +3325,7 @@ fn ring_points(c: V2, bound: &[f32], k: f32) -> Vec<V2> {
     (0..n)
         .map(|i| {
             let a = i as f32 / n as f32 * std::f32::consts::TAU;
-            add(c, (a.cos() * bound[i] * k, a.sin() * bound[i] * k))
+            add(c, (a.d_cos() * bound[i] * k, a.d_sin() * bound[i] * k))
         })
         .collect()
 }

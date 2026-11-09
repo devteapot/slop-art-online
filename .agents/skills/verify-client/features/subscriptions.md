@@ -39,3 +39,14 @@ The recorded actor replaces `<actor>`. Experiences, routines, and joined stats m
 - The driver stops if the viewer query set differs from its copy. Update the skill with the viewer.
 - Full public subscriptions can reveal more than a player should perceive. The visibility feature tracks that defect separately.
 - This checks the client cache and protocol, not browser presentation or scale.
+
+## Land worlds: chunk windows
+
+A land world (`--seed island`, see `docs/ISLAND_AUTHORITY.md`) adds the public `land`, `settlement` and `lot` tables. The probe reads and counts them like every other primary-key table (`probe/src/main.rs`, `primary_tables!` and `snapshot`); when the schema gains a table, add it there too, or ad-hoc queries on it record empty `tables` even though the server sends rows. Subscription SQL in 2.14.1 has no `IN`. Express a window as one `id` (or `chunk`) range per row of chunks, joined by `OR`. Chunk ids are `(cy << 16) | cx`, so a row of chunks is one contiguous range:
+
+```bash
+.agents/skills/verify-client/scripts/drive.py --run "$R" --seconds 3 --save lot-window \
+  --query "SELECT * FROM lot WHERE (chunk >= 851991 AND chunk <= 851996) OR (chunk >= 917527 AND chunk <= 917532)"
+```
+
+The probe reports rows, not bytes. For volume, read the database's `spacetime_num_bytes_sent_to_clients_total` from `http://127.0.0.1:3300/v1/metrics` before and after. The 2026-11-09 measurements are in `docs/ISLAND_AUTHORITY.md`.

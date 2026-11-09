@@ -12,3 +12,6 @@ scripting = ["dep:rhai"]
 serde = { workspace = true }
 serde_json = { workspace = true }
 rhai = { workspace = true, optional = true }
+# Platform-independent transcendental functions: land generation must be bit-identical in
+# the WASM authority and a native client (src/det.rs).
+libm = "0.2"
