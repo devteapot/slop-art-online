@@ -1,5 +1,13 @@
 # Core validation record
 
+## 2026-11-09 town life layer 2, phase 1 (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `14f3a72` plus the uncommitted town life layer 2 phase 1 change (docs/TOWN_LIFE.md, "Layer 2"): the `woken`, `prior` and `prior_head` tables, the `wakes` and `woken_ring` laws. Free tier only; no model calls.
+
+- `cargo_checks.py` (`core-cargo-l2`): rules 108, authority 10, mind 49, viewer sync 3.
+- `town.py` (`core-town-l2`, island): 21 of 21. The player's wave and speech now wake the resident they reach; its starting ways still answer and face.
+- Tick cost, `core-wakebench`: three fresh island arms back to back, 300 s each (base `14f3a72`, this change at rest, 20 residents woken by `wake_many.py`). p50 2.16 / 2.12 / 2.14 ms, p99 4.58 / 4.92 / 5.07 ms, none over 16.7 ms; the Mac's load average was 3.5–8.2 from other sessions. Ring: 1.45 entries a second at rest. Numbers and caveats in docs/TOWN_LIFE.md, "Phase 1 measurements".
+
 ## 2026-11-09 the Rhai boundary, rhai-1 (dev-box)
 
 - **Setup:** a private container `rhai-stdb` (2.14.1, own volume, port 3392), driven through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`. Worktree `~/dev/slop-rhai`, branch `rhai-1`.

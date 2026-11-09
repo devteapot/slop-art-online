@@ -18,6 +18,7 @@ mod seed;
 mod tables;
 mod tick;
 mod town;
+mod woken;
 mod common;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};

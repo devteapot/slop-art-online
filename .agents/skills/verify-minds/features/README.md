@@ -9,6 +9,7 @@
 | Wait off stage and resume on stage | `lod` | [level-of-detail.md](level-of-detail.md) |
 | An offline player's character: takeover after `takeover_s`, thought for like any AI, handback (plan stops, graph held), a reply in flight refused | `takeover` | [takeover.md](takeover.md) |
 | A mind sees what its character sees: the scene the model is sent and the deaths it witnesses follow the sight line | `sight` | [sight.md](sight.md) |
+| A woken island resident: an offer and speech wake it, this service takes it up, answers, takes talk turns, accepts the trade and teaches through its own acts, keeps its places through a replacing update | `wake` | [wake.md](wake.md) |
 | Player memory: switch off, cadence (session end by presence), the takeover's wait for its past, persona inferred, reconnect from `lived_upto`, batch mode | `verify-knowledge` `player_memory.py` | [player-memory.md](player-memory.md) |
 | Paid-wrapper dry safety and paid smoke check | dry safety; paid authorization required | [real-models.md](real-models.md) |
 

@@ -908,6 +908,41 @@ fn welcome_done(a) { [#{ op: "welcome" }] }
 fn leave_duration(a) { 1000 }
 fn leave_done(a) { [#{ op: "leave" }] }
 
+// ---- residents who get a mind (docs/TOWN_LIFE.md, "Layer 2") -----------------------------
+// On a world whose residents live on their behaviour graphs alone, someone engaging a
+// resident can wake it into a mind, which it keeps. `e` is "<what>:<by>": what is `speech`
+// (spoken to), the name of a skill aimed at the resident as it starts (`wave`, `give`,
+// `teach`, `offer`, `attack`…), `hurt` (a blow or missile landed) or `theft` (taking from its
+// store as it watched); by is `player`, `mind` or `instinct`. 1 wakes, 0 does not. What an
+// instinct-only creature does (a neighbour's evening nod, a wolf's bite) stays at the level of
+// detail it happens at. Read once per script revision for each engagement.
+fn wakes(e) {
+    let p = e.split(":");
+    if p.len() < 2 || p[1] == "instinct" { return 0; }
+    let what = p[0];
+    if ["speech", "hurt", "theft"].contains(what) { return 1; }
+    // Kindness, dealings, lessons, asking to belong, and anything hostile.
+    if ["wave", "nod", "give", "offer", "accept", "teach", "tend", "heal", "join", "welcome"].contains(what) { return 1; }
+    if ["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 1; }
+    0
+}
+
+// What a resident without a mind keeps of what it perceives, for the mind it may get: a ring
+// of `slots` (at most 256; 0 keeps nothing) per resident, of perceptions at least
+// `min_salience` (an answered greeting is 0.15, a greeting 0.3, someone coming into view 0.2,
+// overheard speech 0.45), the same perception again within `repeat_s` counted in its slot,
+// someone who came into view noted again only after `sighted_s`. Measured on the island
+// (docs/TOWN_LIFE.md): without the floor a fifth of the slots held answered greetings.
+fn woken_ring(k) {
+    switch k {
+        "slots" => 24,
+        "min_salience" => 0.2,
+        "repeat_s" => 120,
+        "sighted_s" => 600,
+        _ => 0,
+    }
+}
+
 // ---- what each skill takes and gives -------------------------------------------------
 // Read by minds to compose routines from skills: keep these beside the rules above, and
 // build them from the same numbers so they change when the rules do.

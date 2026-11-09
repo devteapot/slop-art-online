@@ -1,5 +1,12 @@
 # Validation record (player)
 
+## 2026-11-09 town life layer 2, phase 1 (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `14f3a72` plus the uncommitted town life layer 2 phase 1 change (docs/TOWN_LIFE.md, "Layer 2"): the `woken`, `prior` and `prior_head` tables, the `wakes` and `woken_ring` laws. Free tier only; no model calls.
+
+- `wake.py` (new): `player-wake-1` 21 of 25 (no first deliberation: `think_min_s` counted the starting graph's install; a lesson to a walking resident never landed because waking was at the effect), `player-wake-2` 21 of 25 (empty rings on a fresh world; the lesson again), `player-wake-3` 25 of 25 after waking moved to the act's start and the first deliberation was freed, `player-wake-4` 25 of 25 on the final code (with `min_salience`).
+- `gesture.py` (`player-l2`): 10 of 10. `combat.py`: `player-l2` 23 of 25 (a bolt struck a resident who stepped into its path, an arrow struck a wall: scene geometry in the town), `player-l2b` 25 of 25 on a fresh world.
+
 ## 2026-11-09 the Rhai boundary, rhai-1 (dev-box)
 
 Private container `rhai-stdb` (2.14.1). Island runs on `33e3185` (`rhai-1` with `origin/main` `2a64837` merged; scoped perception). `player-rhai1-combat-192743`: 25 of 25. `player-rhai1-appraise-192825`: 10 of 10. `player-rhai1-gesture-192904`: 10 of 10. The player's skills now run on lean contexts, with cooldowns and costs from the tables read at compile.

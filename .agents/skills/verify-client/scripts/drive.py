@@ -60,7 +60,8 @@ PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            'persona', 'relation', 'belief', 'judgment', 'thought', 'chronicle', 'stats',
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
            'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
-           'projected', 'reveal', 'acquaintance', 'connection', 'presence']
+           'projected', 'reveal', 'acquaintance', 'connection', 'presence',
+           'woken', 'prior', 'prior_head']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
@@ -433,7 +434,7 @@ class Run:
             code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, raw=True)
             okay = subscription['status'] == 'rejected' and 'private' in subscription['error'].lower() and code != 200 and 'private' in error.lower()
             row = {'table': table, 'subscription': subscription, 'http_status': code, 'http_error': error}
-            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence']:
+            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'woken', 'prior', 'prior_head']:
                 as_player = self.probe('private-player-' + table, ['SELECT * FROM ' + table], player_token)
                 code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, player_token, raw=True)
                 okay = okay and as_player['status'] == 'rejected' and 'private' in as_player['error'].lower() and code != 200

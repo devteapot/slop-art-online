@@ -385,6 +385,15 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let left = had.len() + entered.len() != seen.len();
     for body in &entered {
         ctx.db.perceived().insert(Perceived { id: 0, viewer, body: *body, since_ms: now });
+        // An instinct-only resident who sees the player's character back keeps that it came
+        // into view, for the mind it may get (`woken`).
+        if let Some(r) = ctx.db.character().id().find(*body).filter(|r| crate::woken::resident(ctx, r) && crate::woken::rings_kept(ctx)) {
+            if let Some(eye) = ctx.db.body().id().find(*body).map(|rb| pos(&rb, now)) {
+                if in_sight(map, eye, here, common::dist(eye, here), common::sight_for(ctx, *body, w, now)) {
+                    crate::woken::sighted(ctx, &r, id, here, now);
+                }
+            }
+        }
     }
     // The projections follow: a row per creature in the scene (itself included), projected
     // when it comes into sight, and again only when an input of the law changed: whom the

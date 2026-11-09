@@ -19,7 +19,7 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight')
+         'takeover', 'sight', 'wake')
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
 UNWALKABLE = {2, 4, 7}      # water, rock, wall
 
@@ -105,6 +105,8 @@ def run_case(run, case):
         return takeover_case(run)
     if case == 'sight':
         return sight_case(run)
+    if case == 'wake':
+        return wake_case(run)
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -453,6 +455,81 @@ def sight_case(run):
     assert any(e['subject'] == third for e in deaths) and not any(e['subject'] == other for e in deaths), deaths
     return {'status': 'pass', 'scene_ids': ids, 'witnessed': [e['text'] for e in deaths],
             'hidden': names.get(other), 'open': names.get(third)}
+
+
+def wake_case(run):
+    """On the island (`rules.minds = false`) a resident lives on its behaviour graph until a
+    player engages it: an offer and speech wake it, this service takes it up like any AI
+    character, it answers through `mind_say`, trades and teaches through its own acts, and its
+    consolidation keeps the places it knew before. It stays a mind afterwards."""
+    target = ROOT / '.local/living/target-wake-island'
+    run.harness('launch', '--seed', 'island', '--target-dir', str(target))
+    run.harness('doctor')
+    world = run.sql('SELECT * FROM world', 'world')[0]
+    run.harness('player', 'join', 'MindsNewcomer')
+    me = run.sql("SELECT id FROM character WHERE name = 'MindsNewcomer'", 'player')[0]['id']
+    # A resident keeping its post (its starting ways), with a technique the newcomer lacks.
+    mine = {k['technique'] for k in run.sql(f'SELECT technique FROM know_how WHERE actor = {me}', 'newcomer-know-how')}
+    def pick():
+        keeping = {a['id'] for a in run.sql("SELECT id, skill FROM activity", 'activities') if a['skill'] == 'keep'}
+        for c in run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'):
+            if c['id'] in keeping and c['alive'] and c['stage'] == 2 and not c['ai']:
+                knows = {k['technique'] for k in run.sql(f"SELECT technique FROM know_how WHERE actor = {c['id']}", 'resident-know-how')}
+                lesson = sorted(knows - mine)
+                if lesson:
+                    return c, lesson[0]
+        return None
+    resident, lesson = run.wait(pick, 'a resident at its post who knows something the newcomer does not', 60)
+    rid = resident['id']
+    assert resident['controller'] != world['admin'] and not run.private(f'SELECT * FROM woken WHERE id = {rid}', 'woken-before')
+    places_before = {p['name'] for p in run.sql(f'SELECT * FROM place WHERE actor = {rid}', 'places-before')}
+    run.admin('place_near', me, rid)
+    run.admin('grant_items', rid, 'wood', 2)
+    acts = [{'do': 'accept', 'target': {'id': me}},
+            {'do': 'teach', 'target': {'id': me}, 'item': lesson}]
+    # A line that arrives while the mind deliberates is left to that deliberation (talk.rs):
+    # its think step's `say` answers.
+    script = {'replies': {'think': {'thought': 'A newcomer.', 'intend': ['wait'], 'say': 'verify minds welcome, newcomer'},
+                          'deliberate': basic_reply(acts=acts),
+                          'talk': {'thought': 'A newcomer asks where I work.', 'say': 'verify minds talk answer', 'end': False},
+                          'consolidate': {'summary': 'verify minds met a newcomer',
+                                          'places': [{'name': 'verify after', 'x': 41, 'y': 61}],
+                                          'nodes': [], 'edges': []}},
+              'rules': [{'purpose': 'consolidate', 'delay_s': 1, 'times': -1}]}
+    models = model(run, script)
+    run.start(models, [rid], seed='island')
+    # The newcomer offers a trade, then speaks to the resident.
+    run.harness('player', 'act', json.dumps({'do': 'offer', 'target': {'id': rid}, 'item': 'berries', 'qty': 1, 'want': 'wood', 'want_qty': 1}))
+    woke = run.wait(lambda: run.private(f'SELECT * FROM woken WHERE id = {rid}', 'woken-after'), 'resident woken', 20)[0]
+    char = run.sql(f'SELECT * FROM character WHERE id = {rid}', 'resident-woken')[0]
+    assert woke['why'] == 'offer' and woke['by'] == me and char['ai'] and char['controller'] == world['admin'], (woke, char)
+    run.harness('player', 'say', 'verify minds: is there food and a bed here?', '--to', str(rid))
+    heard = lambda text, save: any(text in e['text'] and e['subject'] == rid for e in run.private(f'SELECT * FROM experience WHERE observer = {me}', save))
+    run.wait(lambda: heard('verify minds welcome', 'newcomer-heard'), 'the resident answers the newcomer (its deliberation says it)', 60)
+    # Its deliberation decides acts: it accepts the trade and teaches the lesson.
+    accepted(run, rid)
+    run.wait(lambda: any(c['kind'] == 'trade' and c['b'] == rid for c in run.sql(f'SELECT * FROM chronicle WHERE b = {rid}', 'trade')),
+             'trade accepted through mind_act', 60)
+    run.wait(lambda: any(k['technique'] == lesson for k in run.sql(f'SELECT * FROM know_how WHERE actor = {me}', 'newcomer-learned')),
+             'lesson taught through mind_act', 60)
+    # More lines force a consolidation; its projection keeps the places it knew before.
+    for line in ('verify minds: where do you work?', 'verify minds: who keeps the inn?', 'verify minds: thank you for the lesson.'):
+        time.sleep(2.2)
+        run.harness('player', 'say', line, '--to', str(rid))
+    run.wait(lambda: heard('verify minds talk answer', 'newcomer-heard-talk'), 'a later line gets a talk turn answered through mind_say', 60)
+    run.wait(lambda: any(t['kind'] == 'consolidate' for t in run.thoughts(rid, 'thoughts-consolidated')), 'consolidation', 90)
+    # Without Neo4j the service projects without `replace`; with a store it sends the mind's
+    # complete set (`replace: true`). Send that update as the service would: the places the
+    # resident knew before waking must survive a set that does not name them.
+    run.admin('mind_update', rid, {'persona': {'none': []}, 'relations': [], 'beliefs': {'none': []}, 'judgments': [],
+                                   'places': [{'name': 'verify after', 'x': 41.0, 'y': 61.0}], 'thought': {'none': []}, 'replace': True})
+    places = {p['name'] for p in run.sql(f'SELECT * FROM place WHERE actor = {rid}', 'places-after')}
+    assert 'verify after' in places and places_before <= places, (places_before, places)
+    final = run.sql(f'SELECT * FROM character WHERE id = {rid}', 'resident-final')[0]
+    assert final['ai'] and final['controller'] == world['admin']
+    talks = [e for e in run.exchanges() if e['purpose'] == 'talk']
+    return {'status': 'pass', 'resident': rid, 'woken': woke, 'lesson': lesson, 'talk_turns': len(talks),
+            'places_kept': sorted(places_before), 'places_after': sorted(places)}
 
 
 def main():

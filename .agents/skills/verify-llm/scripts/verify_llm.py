@@ -142,7 +142,7 @@ class Run:
     def exchanges(self):
         return [entry for path in self.journal.glob('*.jsonl') for entry in rows(path)]
 
-    def start(self, models, ids, *, lod=False, lod_think_s=600, lod_prompt_s=120, lod_sticky_s=600):
+    def start(self, models, ids, *, lod=False, lod_think_s=600, lod_prompt_s=120, lod_sticky_s=600, seed='world'):
         path = self.directory / 'models.json'
         path.write_text(json.dumps(models, indent=2))
         # Capture the admin token in memory only. Never write it or subprocess output to evidence.
@@ -153,7 +153,7 @@ class Run:
             raise RuntimeError('could not find one admin JWT from stdb login show --token')
         self.token = matches[0]
         env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=STDB_URL,
-                   LIVING_DB=self.db, LIVING_RUN=self.db, LIVING_SEED='world', LIVING_MODELS=str(path),
+                   LIVING_DB=self.db, LIVING_RUN=self.db, LIVING_SEED=seed, LIVING_MODELS=str(path),
                    LIVING_NEO4J='off', LIVING_NEO4J_PASSWORD='', LIVING_ONLY=','.join(map(str, ids)),
                    LIVING_LLM_PER_MIN='0', LIVING_CONCURRENCY='4', LIVING_TOKEN=self.token,
                    LIVING_VERIFY_FAKE_KEY='dummy-local-only', LIVING_VERIFY_MISSING_KEY='',

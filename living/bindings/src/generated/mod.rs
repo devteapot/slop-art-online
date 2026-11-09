@@ -132,6 +132,10 @@ pub mod practice_table;
 pub mod practice_type;
 pub mod presence_table;
 pub mod presence_type;
+pub mod prior_head_table;
+pub mod prior_head_type;
+pub mod prior_table;
+pub mod prior_type;
 pub mod projected_table;
 pub mod projected_type;
 pub mod purge_dead_reducer;
@@ -205,6 +209,8 @@ pub mod wake_type;
 pub mod waypoint_type;
 pub mod weather_table;
 pub mod weather_type;
+pub mod woken_table;
+pub mod woken_type;
 pub mod world_table;
 pub mod world_type;
 
@@ -334,6 +340,10 @@ pub use practice_table::*;
 pub use practice_type::Practice;
 pub use presence_table::*;
 pub use presence_type::Presence;
+pub use prior_head_table::*;
+pub use prior_head_type::PriorHead;
+pub use prior_table::*;
+pub use prior_type::Prior;
 pub use projected_table::*;
 pub use projected_type::Projected;
 pub use purge_dead_reducer::purge_dead;
@@ -407,6 +417,8 @@ pub use wake_type::Wake;
 pub use waypoint_type::Waypoint;
 pub use weather_table::*;
 pub use weather_type::Weather;
+pub use woken_table::*;
+pub use woken_type::Woken;
 pub use world_table::*;
 pub use world_type::World;
 
@@ -862,6 +874,8 @@ pub struct DbUpdate {
     place: __sdk::TableUpdate<Place>,
     practice: __sdk::TableUpdate<Practice>,
     presence: __sdk::TableUpdate<Presence>,
+    prior: __sdk::TableUpdate<Prior>,
+    prior_head: __sdk::TableUpdate<PriorHead>,
     projected: __sdk::TableUpdate<Projected>,
     readiness: __sdk::TableUpdate<Readiness>,
     rearing: __sdk::TableUpdate<Rearing>,
@@ -890,6 +904,7 @@ pub struct DbUpdate {
     vitals: __sdk::TableUpdate<Vitals>,
     wake: __sdk::TableUpdate<Wake>,
     weather: __sdk::TableUpdate<Weather>,
+    woken: __sdk::TableUpdate<Woken>,
     world: __sdk::TableUpdate<World>,
 }
 
@@ -1052,6 +1067,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "presence" => db_update
                     .presence
                     .append(presence_table::parse_table_update(table_update)?),
+                "prior" => db_update
+                    .prior
+                    .append(prior_table::parse_table_update(table_update)?),
+                "prior_head" => db_update
+                    .prior_head
+                    .append(prior_head_table::parse_table_update(table_update)?),
                 "projected" => db_update
                     .projected
                     .append(projected_table::parse_table_update(table_update)?),
@@ -1136,6 +1157,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "weather" => db_update
                     .weather
                     .append(weather_table::parse_table_update(table_update)?),
+                "woken" => db_update
+                    .woken
+                    .append(woken_table::parse_table_update(table_update)?),
                 "world" => db_update
                     .world
                     .append(world_table::parse_table_update(table_update)?),
@@ -1288,6 +1312,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.presence = cache
             .apply_diff_to_table::<Presence>("presence", &self.presence)
             .with_updates_by_pk(|row| &row.id);
+        diff.prior = cache
+            .apply_diff_to_table::<Prior>("prior", &self.prior)
+            .with_updates_by_pk(|row| &row.key);
+        diff.prior_head = cache
+            .apply_diff_to_table::<PriorHead>("prior_head", &self.prior_head)
+            .with_updates_by_pk(|row| &row.id);
         diff.projected = cache
             .apply_diff_to_table::<Projected>("projected", &self.projected)
             .with_updates_by_pk(|row| &row.id);
@@ -1359,6 +1389,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.weather = cache
             .apply_diff_to_table::<Weather>("weather", &self.weather)
+            .with_updates_by_pk(|row| &row.id);
+        diff.woken = cache
+            .apply_diff_to_table::<Woken>("woken", &self.woken)
             .with_updates_by_pk(|row| &row.id);
         diff.world = cache
             .apply_diff_to_table::<World>("world", &self.world)
@@ -1560,6 +1593,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "presence" => db_update
                     .presence
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "prior" => db_update
+                    .prior
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "prior_head" => db_update
+                    .prior_head
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "projected" => db_update
                     .projected
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1643,6 +1682,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "weather" => db_update
                     .weather
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "woken" => db_update
+                    .woken
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "world" => db_update
                     .world
@@ -1813,6 +1855,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "presence" => db_update
                     .presence
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "prior" => db_update
+                    .prior
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "prior_head" => db_update
+                    .prior_head
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "projected" => db_update
                     .projected
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1897,6 +1945,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "weather" => db_update
                     .weather
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "woken" => db_update
+                    .woken
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "world" => db_update
                     .world
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1966,6 +2017,8 @@ pub struct AppliedDiff<'r> {
     place: __sdk::TableAppliedDiff<'r, Place>,
     practice: __sdk::TableAppliedDiff<'r, Practice>,
     presence: __sdk::TableAppliedDiff<'r, Presence>,
+    prior: __sdk::TableAppliedDiff<'r, Prior>,
+    prior_head: __sdk::TableAppliedDiff<'r, PriorHead>,
     projected: __sdk::TableAppliedDiff<'r, Projected>,
     readiness: __sdk::TableAppliedDiff<'r, Readiness>,
     rearing: __sdk::TableAppliedDiff<'r, Rearing>,
@@ -1994,6 +2047,7 @@ pub struct AppliedDiff<'r> {
     vitals: __sdk::TableAppliedDiff<'r, Vitals>,
     wake: __sdk::TableAppliedDiff<'r, Wake>,
     weather: __sdk::TableAppliedDiff<'r, Weather>,
+    woken: __sdk::TableAppliedDiff<'r, Woken>,
     world: __sdk::TableAppliedDiff<'r, World>,
     __unused: std::marker::PhantomData<&'r ()>,
 }
@@ -2095,6 +2149,8 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Place>("place", &self.place, event);
         callbacks.invoke_table_row_callbacks::<Practice>("practice", &self.practice, event);
         callbacks.invoke_table_row_callbacks::<Presence>("presence", &self.presence, event);
+        callbacks.invoke_table_row_callbacks::<Prior>("prior", &self.prior, event);
+        callbacks.invoke_table_row_callbacks::<PriorHead>("prior_head", &self.prior_head, event);
         callbacks.invoke_table_row_callbacks::<Projected>("projected", &self.projected, event);
         callbacks.invoke_table_row_callbacks::<Readiness>("readiness", &self.readiness, event);
         callbacks.invoke_table_row_callbacks::<Rearing>("rearing", &self.rearing, event);
@@ -2143,6 +2199,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Vitals>("vitals", &self.vitals, event);
         callbacks.invoke_table_row_callbacks::<Wake>("wake", &self.wake, event);
         callbacks.invoke_table_row_callbacks::<Weather>("weather", &self.weather, event);
+        callbacks.invoke_table_row_callbacks::<Woken>("woken", &self.woken, event);
         callbacks.invoke_table_row_callbacks::<World>("world", &self.world, event);
     }
 }
@@ -2855,6 +2912,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         place_table::register_table(client_cache);
         practice_table::register_table(client_cache);
         presence_table::register_table(client_cache);
+        prior_table::register_table(client_cache);
+        prior_head_table::register_table(client_cache);
         projected_table::register_table(client_cache);
         readiness_table::register_table(client_cache);
         rearing_table::register_table(client_cache);
@@ -2883,6 +2942,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         vitals_table::register_table(client_cache);
         wake_table::register_table(client_cache);
         weather_table::register_table(client_cache);
+        woken_table::register_table(client_cache);
         world_table::register_table(client_cache);
     }
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
@@ -2937,6 +2997,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "place",
         "practice",
         "presence",
+        "prior",
+        "prior_head",
         "projected",
         "readiness",
         "rearing",
@@ -2965,6 +3027,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "vitals",
         "wake",
         "weather",
+        "woken",
         "world",
     ];
 }
