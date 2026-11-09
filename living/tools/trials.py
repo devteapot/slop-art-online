@@ -54,7 +54,8 @@ IMAGE_NEO4J = "neo4j:2026.10.1"
 # Services that hold other people's worlds. The runner never addresses them.
 PROTECTED = {"sao-living_spacetimedb_1", "sao-living-neo4j-1"}
 PREFIX = "verify-trial-"
-TOTAL_CAP = int(os.environ.get("TRIALS_TOTAL_TOKENS", "6000000"))
+# No total cap unless one is asked for: trials measure tokens; the runaway watchdog stops loops.
+TOTAL_CAP = int(os.environ["TRIALS_TOTAL_TOKENS"]) if os.environ.get("TRIALS_TOTAL_TOKENS") else None
 FAKE = ROOT / ".agents/skills/verify-llm/scripts/fake_llm.py"
 FOOD = {"berries", "meat", "fish", "cooked_meat", "cooked_fish", "smoked_meat", "smoked_fish", "bread"}
 SAMPLE_S = 2.0
@@ -258,6 +259,47 @@ class Stop(Exception):
     pass
 
 
+def proc_start(pid):
+    """A process's start time from /proc, to tell it from a later process reusing its pid."""
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return None
+
+
+class Mind:
+    """A living-mind process: started by this runner (`popen`) or adopted after a runner restart."""
+
+    def __init__(self, pid, popen=None):
+        self.pid, self.popen = pid, popen
+
+    def alive(self):
+        if self.popen:
+            return self.popen.poll() is None
+        try:
+            os.kill(self.pid, 0)
+        except OSError:
+            return False
+        return proc_start(self.pid) is not None and "zombie" not in Path(f"/proc/{self.pid}/status").read_text().lower()
+
+    def exit_code(self):
+        return self.popen.poll() if self.popen else None
+
+    def stop(self):
+        try:
+            os.killpg(self.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        for _ in range(50):
+            if not self.alive():
+                return
+            time.sleep(0.2)
+        try:
+            os.killpg(self.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
 class Instance:
     def __init__(self, batch, trial, variant, rep, opts, shared):
         self.trial, self.variant, self.rep, self.opts, self.shared = trial, variant, rep, opts, shared
@@ -279,6 +321,13 @@ class Instance:
         self.last_rows = {}
         self.brain_rev = None
         self.kinds = {}
+        self.recent = []
+        self.starts = []
+        self.done_at = set()
+        self.died = None
+        self.snapshots = 0
+        self.runaway_seen = []
+        self.published = False
 
     # -- plumbing
     def log(self, line):
@@ -320,6 +369,7 @@ class Instance:
         wasm = self.shared["wasm"][self.trial["name"]]
         sh("docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}.wasm", self.db, "--delete-data", "-y", timeout=300)
         self.published = True
+        self.save()
         code, body = http(f"/v1/database/{self.db}/call/install_script", [(ROOT / "living/scripts/skills.rhai").read_text()], self.shared["token"])
         if code != 200:
             raise RuntimeError(f"install_script {code}: {body[:300]}")
@@ -397,13 +447,16 @@ class Instance:
     def cast(self):
         self.census_cache = self.census()
         taken = set()
-        self.roles["subject"] = self.pick(self.trial["subject"]["pick"], taken)[:1]
+        if "subject" not in self.roles:
+            self.roles["subject"] = self.pick(self.trial["subject"]["pick"], taken)[:1]
         taken |= set(self.roles["subject"])
         for role, spec in self.trial.get("cast", {}).items():
             self.roles[role] = self.pick(spec["pick"], taken)
             taken |= set(self.roles[role])
         self.subject = self.roles["subject"][0]
         chars = {c["id"]: c for c in self.census_cache[0]}
+        if self.subject not in chars:
+            chars[self.subject] = self.rows(f"SELECT * FROM character WHERE id = {self.subject}")[0]
         genome = self.rows(f"SELECT * FROM genome WHERE id = {self.subject}")
         self.cast_info = {r: [{"id": i, "name": chars[i]["name"], "kind": chars[i]["kind"], "background": self.census_cache[1].get(i, {})} for i in ids] for r, ids in self.roles.items()}
         (self.dir / "cast.json").write_text(json.dumps({"roles": self.cast_info, "subject_genome": genome}, indent=1))
@@ -430,8 +483,13 @@ class Instance:
         elif "structure" in a:
             near = self.anchor(a["near"])
             st = self.rows(f"SELECT * FROM structure WHERE kind = '{a['structure']}'")
+            if "owner" in a:
+                st = [x for x in st if x["owner"] == a["owner"]]
             s = min(st, key=lambda s: dist((s["x"], s["y"]), near))
             p = (s["x"], s["y"])
+        elif "home_of" in a:
+            c = self.rows(f"SELECT * FROM character WHERE id = {self.roles[a['home_of']][0]}")[0]
+            p = (c["home_x"], c["home_y"])
         elif "far_from" in a:
             ref = self.anchor(a["far_from"])
             corners = [(8, 8), (w - 8, 8), (8, h - 8), (w - 8, h - 8)]
@@ -560,8 +618,9 @@ class Instance:
         for e in self.trial.get("timeline", []):
             if e.get("at") == phase:
                 for s in e.get("steps", [e]):
+                    time.sleep(s.get("after", 0))
                     self.step(s)
-                    time.sleep(s.get("after", 0.3))
+                    time.sleep(0.3)
 
     def triggers(self, new_chron, positions, hour):
         for k, e in enumerate(self.trial.get("timeline", [])):
@@ -636,7 +695,8 @@ class Instance:
                    LIVING_SEED=self.shared["seed_rel"][self.trial["name"]], LIVING_MODELS=str(path),
                    LIVING_ONLY=str(self.subject), LIVING_TOKEN=self.shared["token"],
                    LIVING_NEO4J_URI=f"127.0.0.1:{NEO4J_PORT}", LIVING_NEO4J_PASSWORD=self.shared["neo4j_pw"],
-                   LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 12)), LIVING_CONCURRENCY="4",
+                   # Off (0) unless a trial asks for a rate: trials measure, they do not cap.
+                   LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 0)), LIVING_CONCURRENCY="4",
                    LIVING_VERIFY_FAKE_KEY="dummy-local-only", NO_PROXY="127.0.0.1,localhost",
                    RUST_LOG="info,neo4rs=warn,spacetimedb_sdk=warn")
         if self.opts.fake:
@@ -645,19 +705,56 @@ class Instance:
                 env[k] = ""
         env.update({k: str(x) for k, x in v.get("env", {}).items()})
         (self.dir / "mind-env.json").write_text(json.dumps({k: env[k] for k in sorted(env) if k.startswith("LIVING_") and k not in ("LIVING_TOKEN", "LIVING_NEO4J_PASSWORD")}, indent=1))
-        self.mind_log = open(self.dir / "mind.log", "a")
-        self.mind = subprocess.Popen([str(TARGET / "release/living-mind")], cwd=ROOT, env=env, stdout=self.mind_log, stderr=subprocess.STDOUT, start_new_session=True)
-        self.log(f"mind pid {self.mind.pid} LIVING_ONLY={self.subject} variant {self.variant}")
+        log = open(self.dir / "mind.log", "a")
+        p = subprocess.Popen([str(TARGET / "release/living-mind")], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        log.close()
+        self.mind = Mind(p.pid, p)
+        self.starts.append(time.time())
+        self.log(f"mind pid {p.pid} LIVING_ONLY={self.subject} variant {self.variant} (start {len(self.starts)})")
+        self.save()
 
     def stop_mind(self):
-        if self.mind and self.mind.poll() is None:
-            os.killpg(self.mind.pid, signal.SIGTERM)
-            try:
-                self.mind.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                os.killpg(self.mind.pid, signal.SIGKILL)
-                self.mind.wait(timeout=10)
-            self.log(f"mind stopped (exit {self.mind.returncode})")
+        if self.mind and self.mind.alive():
+            self.mind.stop()
+            self.log(f"mind stopped (pid {self.mind.pid})")
+
+    # -- state kept for `resume`
+    STATE = ("status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
+             "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen")
+
+    def save(self):
+        st = {k: getattr(self, k, None) for k in self.STATE}
+        st["fired"] = {json.dumps(k): v for k, v in self.fired.items()}
+        st["done_at"] = sorted(self.done_at)
+        st["mind_pid"] = self.mind.pid if self.mind else None
+        st["mind_start"] = proc_start(self.mind.pid) if self.mind else None
+        st["saved_graphs"] = {str(k): v for k, v in self.saved_graphs.items()}
+        tmp = self.dir / "state.json.tmp"
+        tmp.write_text(json.dumps(st))
+        tmp.replace(self.dir / "state.json")
+
+    def restore(self):
+        st = json.loads((self.dir / "state.json").read_text())
+        for k in self.STATE:
+            if k in st and st[k] is not None:
+                setattr(self, k, st[k])
+        self.saved_graphs = {int(k): v for k, v in (st.get("saved_graphs") or {}).items()}
+        if not self.subject:
+            raise RuntimeError("no subject in state.json: the run had not started; run it again instead")
+        self.fired = Counter({tuple(json.loads(k)) if k.startswith("[") else json.loads(k): v for k, v in st.get("fired", {}).items()})
+        self.done_at = set(self.done_at or [])
+        pid = st.get("mind_pid")
+        if pid and proc_start(pid) == st.get("mind_start") and proc_start(pid) is not None:
+            self.mind = Mind(pid)
+            self.log(f"resumed: adopted running mind pid {pid}")
+        self.world = self.rows("SELECT * FROM world")[0]
+        try:
+            self.land = next(iter(self.rows("SELECT * FROM land")), None)
+        except RuntimeError:
+            self.land = None
+        # The journal is re-read from its start so that token totals cover the whole run.
+        self.jpos = {}
+        self.tokens, self.calls = Counter(), Counter()
 
     def read_journal(self):
         """Tokens and calls from the journal's new lines (the actual model exchanges)."""
@@ -674,6 +771,7 @@ class Instance:
                         continue
                     tok = r.get("tokens") or 0
                     key = (r.get("purpose"), r.get("model"))
+                    self.recent.append((time.time(), r.get("purpose"), (r.get("error") or "")[:100]))
                     self.tokens[key] += tok
                     self.calls[key] += 1
                     if r.get("latency_ms"):
@@ -761,86 +859,195 @@ class Instance:
         if self.journal.exists():
             shutil.copytree(self.journal, self.dir / "journal", dirs_exist_ok=True)
 
+    # -- runaways: loops that cost calls without changing anything
+    def runaway(self):
+        """A retry storm or one failure repeated: recorded, and the run stopped, so that its
+        cause is fixed rather than hidden behind a cap."""
+        now = time.time()
+        self.recent = [r for r in self.recent if now - r[0] <= 300]
+        errors = [r for r in self.recent if r[2]]
+        same = Counter((r[1], r[2]) for r in errors).most_common(1)
+        last_min = sum(1 for r in self.recent if now - r[0] <= 60)
+        why = None
+        if len(errors) >= 30:
+            why = f"{len(errors)} failed model calls in 5 minutes"
+        elif same and same[0][1] >= 15:
+            why = f"the same failure {same[0][1]} times in 5 minutes ({same[0][0][0]}: {same[0][0][1]})"
+        elif last_min > 60:
+            why = f"{last_min} model calls in one minute"
+        recent_starts = [t for t in self.starts if now - t <= 1800]
+        if len(recent_starts) > 5:
+            why = f"the mind was restarted {len(recent_starts)} times in 30 minutes"
+        if why:
+            self.emit("events", {"t": self.t(), "runaway": why})
+            self.runaway_seen.append([self.t(), why])
+        return why
+
+    # -- hourly snapshots (life runs)
+    def snapshot(self, row):
+        S = self.subject
+        snap = {"t": self.t(), "hour_of_run": self.snapshots, "sample": row}
+        for name, q in (("know_how", f"SELECT * FROM know_how WHERE actor = {S}"), ("practice", f"SELECT * FROM practice WHERE actor = {S}"),
+                        ("relation", f"SELECT * FROM relation WHERE actor = {S}"), ("judgment", f"SELECT * FROM judgment WHERE actor = {S}"),
+                        ("place", f"SELECT * FROM place WHERE actor = {S}"), ("persona", f"SELECT * FROM persona WHERE id = {S}"),
+                        ("brain", f"SELECT * FROM brain WHERE id = {S}"), ("routine", f"SELECT * FROM routine WHERE actor = {S}"),
+                        ("inventory", f"SELECT * FROM inventory WHERE owner = {S}"), ("vitals", f"SELECT * FROM vitals WHERE id = {S}"),
+                        ("structure", f"SELECT * FROM structure WHERE owner = {S}"), ("settlement", "SELECT * FROM settlement")):
+            try:
+                snap[name] = self.rows(q)
+            except RuntimeError as e:
+                snap[name] = {"error": str(e)}
+        if row.get("pos") and isinstance(snap.get("settlement"), list) and snap["settlement"]:
+            near = min(snap["settlement"], key=lambda t: dist((t["x"], t["y"]), row["pos"]))
+            d = dist((near["x"], near["y"]), row["pos"])
+            names = self.settlement_names()
+            snap["region"] = {"nearest_settlement": names.get(near["id"], f"settlement {near['id']}"), "kind": near["kind"],
+                              "distance_m": round(d), "inside": d <= near["radius_m"]}
+        snap["memories"] = self.memories()
+        d = self.dir / "snapshots"
+        d.mkdir(exist_ok=True)
+        (d / f"h{self.snapshots:02d}.json").write_text(json.dumps(snap, indent=1))
+        self.snapshots += 1
+
+    def settlement_names(self):
+        if not hasattr(self, "_snames"):
+            names = {}
+            for b in self.rows("SELECT * FROM background"):
+                try:
+                    bg = json.loads(b["text"])
+                except ValueError:
+                    continue
+                if isinstance(bg.get("settlement"), int) and bg.get("town"):
+                    names.setdefault(bg["settlement"], bg["town"])
+            self._snames = names
+        return self._snames
+
+    def memories(self):
+        """The subject's kept memories, from the mind's own graph (read-only)."""
+        if self.opts.fake or docker_state(NEO4J) != "running":
+            return None
+        q = ("MATCH (m:Concept {run: $run, actor: $actor}) WHERE m:Memory AND NOT m:Forgotten "
+             "RETURN m.t AS t, m.gist AS gist, m.salience AS salience ORDER BY m.t DESC LIMIT 60")
+        r = sh("docker", "exec", NEO4J, "cypher-shell", "-u", "neo4j", "-p", self.shared["neo4j_pw"], "--format", "plain",
+               "-P", f"run => {json.dumps(self.db)}", "-P", f"actor => {self.subject}", q, check=False, timeout=60)
+        return r.stdout.splitlines()[1:] if r.returncode == 0 else {"error": r.stderr.strip()[:300]}
+
     # -- the whole run
-    def run(self):
-        try:
-            self.status = "publishing"
-            self.publish()
-            self.cast()
-            self.status = "preparing"
-            subj = self.trial["subject"]
-            if subj.get("clear_items", True):
-                self.clear_items(self.subject)
+    def setup(self):
+        self.status = "publishing"
+        self.publish()
+        subj = self.trial["subject"]
+        if subj.get("spawn"):
+            name = subj["spawn"]["name"]
+            self.call("spawn_newcomer", name)
+            self.roles["subject"] = [max(c["id"] for c in self.rows(f"SELECT * FROM character WHERE name = '{name}'"))]
+        self.cast()
+        self.status = "preparing"
+        if subj.get("clear_items", not subj.get("spawn")):
+            self.clear_items(self.subject)
+        if not subj.get("spawn"):
             self.step({"do": "clear_routines", "who": "subject"})
-            if subj.get("background"):
-                self.step({"do": "background", "who": "subject", "background": subj["background"]})
-            self.run_phase("prepare")
-            start_hour = self.trial["world"].get("start_hour")
-            self.status = "waiting"
-            while start_hour is not None:
-                hour = hour_of(self.now_ms(), self.rows("SELECT * FROM world")[0])
-                if hour >= start_hour:
-                    break
-                time.sleep(2)
-            self.status = "starting"
-            self.run_phase("start")
-            self.t0 = time.time()
-            self.start_mind()
-            self.status = "running"
-            minutes = self.opts.minutes or self.trial.get("minutes", 15)
-            cap = self.trial.get("budget", {}).get("tokens", 220000)
-            died = None
-            timeline = [(e.get("at"), e) for e in self.trial.get("timeline", []) if isinstance(e.get("at"), (int, float))]
-            done = set()
-            while True:
-                tick = time.time()
-                self.read_journal()
-                row, new_chron, positions, hour = self.sample()
-                for k, (at, e) in enumerate(timeline):
-                    if k not in done and self.t() >= at * 60:
-                        done.add(k)
-                        self.schedule(e, at * 60)
-                self.triggers(new_chron, positions, hour)
-                due = [p for p in self.pending if p[0] <= self.t()]
-                self.pending = [p for p in self.pending if p[0] > self.t()]
-                for _, s in sorted(due, key=lambda p: p[0]):
-                    self.step(s)
-                total = sum(self.tokens.values())
-                if row["alive"] is False and died is None:
-                    died = self.t()
-                if self.t() >= minutes * 60:
-                    self.stopped_by = "duration"
-                elif total >= cap:
-                    self.stopped_by = "trial token cap"
-                elif not self.opts.fake and self.shared["ledger_before"] + self.shared["spent"] >= TOTAL_CAP:
-                    self.stopped_by = "total token cap"
-                elif died is not None and self.t() - died >= 20:
-                    self.stopped_by = "subject died"
-                elif self.mind.poll() is not None:
-                    self.stopped_by = f"mind exited ({self.mind.returncode})"
-                elif self.shared.get("abort"):
-                    self.stopped_by = "aborted"
-                if self.stopped_by:
-                    break
-                time.sleep(max(0.0, SAMPLE_S - (time.time() - tick)))
-            self.status = "collecting"
-            self.stop_mind()
+        if subj.get("background"):
+            self.step({"do": "background", "who": "subject", "background": subj["background"]})
+        self.run_phase("prepare")
+        start_hour = self.trial["world"].get("start_hour")
+        self.status = "waiting"
+        while start_hour is not None:
+            hour = hour_of(self.now_ms(), self.rows("SELECT * FROM world")[0])
+            if hour >= start_hour:
+                break
+            time.sleep(2)
+        self.status = "starting"
+        self.run_phase("start")
+        self.t0 = time.time()
+        self.start_mind()
+
+    def loop(self):
+        self.status = "running"
+        life = self.trial.get("kind") == "life"
+        minutes = self.opts.minutes or self.trial.get("minutes", 15)
+        cap = self.trial.get("budget", {}).get("tokens")
+        timeline = [(e.get("at"), e) for e in self.trial.get("timeline", []) if isinstance(e.get("at"), (int, float))]
+        snap_s = self.trial.get("life", {}).get("snapshot_min", 60) * 60
+        last_save = 0
+        while True:
+            tick = time.time()
             self.read_journal()
-            self.final()
-            self.status = "done"
+            row, new_chron, positions, hour = self.sample()
+            for k, (at, e) in enumerate(timeline):
+                if k not in self.done_at and self.t() >= at * 60:
+                    self.done_at.add(k)
+                    self.schedule(e, at * 60)
+            self.triggers(new_chron, positions, hour)
+            due = [p for p in self.pending if p[0] <= self.t()]
+            self.pending = [p for p in self.pending if p[0] > self.t()]
+            for _, s in sorted(due, key=lambda p: p[0]):
+                self.step(s)
+            if life and self.t() >= self.snapshots * snap_s:
+                self.snapshot(row)
+            if row["alive"] is False and self.died is None:
+                self.died = self.t()
+            mind_down = not self.mind.alive()
+            if mind_down and life and row["alive"] is not False:
+                # A life run keeps its world: the mind is restarted (as run-mind.sh does).
+                self.emit("events", {"t": self.t(), "mind_exit": self.mind.exit_code()})
+                self.start_mind()
+                mind_down = False
+            why = self.runaway()
+            if self.t() >= minutes * 60:
+                self.stopped_by = "duration"
+            elif cap and sum(self.tokens.values()) >= cap:
+                self.stopped_by = "trial token cap"
+            elif why:
+                self.stopped_by = f"runaway: {why}"
+            elif self.died is not None and self.t() - self.died >= 20:
+                self.stopped_by = "subject died"
+            elif mind_down:
+                self.stopped_by = f"mind exited ({self.mind.exit_code()})"
+            elif self.shared.get("abort"):
+                self.stopped_by = "aborted"
+            if self.stopped_by or time.time() - last_save > 30:
+                self.save()
+                last_save = time.time()
+            if self.stopped_by:
+                break
+            time.sleep(max(0.0, SAMPLE_S - (time.time() - tick)))
+        self.status = "collecting"
+        self.stop_mind()
+        self.read_journal()
+        if life:
+            self.snapshot(row)
+        self.final()
+        self.status = "done"
+
+    def run(self, resume=False):
+        try:
+            if resume:
+                self.restore()
+                if not self.mind or not self.mind.alive():
+                    self.start_mind()
+                self.loop()
+            else:
+                self.setup()
+                self.loop()
         except Exception as e:
             self.stopped_by = self.stopped_by or f"error: {e}"
             self.status = "failed"
             self.log(f"FAILED: {e!r}")
             self.stop_mind()
         finally:
-            if self.mind:
-                self.mind_log.close()
+            self.save()
             summary = summarize(self.dir, self.trial, extra={"db": self.db, "variant": self.variant, "replicate": self.rep,
-                                "stopped_by": self.stopped_by, "fake": bool(self.opts.fake), "minutes_planned": self.opts.minutes or self.trial.get("minutes", 15)})
+                                "stopped_by": self.stopped_by, "fake": bool(self.opts.fake), "minutes_planned": self.opts.minutes or self.trial.get("minutes", 15),
+                                "runaways": self.runaway_seen, "mind_starts": len(self.starts),
+                                "day_ms": (getattr(self, "world", None) or {}).get("day_ms")})
             (self.dir / "summary.json").write_text(json.dumps(summary, indent=1))
-            if not self.opts.keep_db and getattr(self, "published", False):
+            keep = self.opts.keep_db or self.trial.get("keep_db")
+            if self.published and not keep and self.status != "failed-keep":
                 delete_db(self.db)
+            elif self.published and self.trial.get("kind") == "life":
+                # Kept, but stopped: a paused world does not tick or grow.
+                self.call("set_paused", True)
 
 
 def delete_db(db):
@@ -995,6 +1202,18 @@ def summarize(d, trial, extra):
         v.pop("latency_ms")
     s["by_model"] = dict(by_model)
     s["talk_turns"] = by_purpose["talk"]["calls"] if "talk" in by_purpose else 0
+    if extra.get("day_ms") and s["minutes_run"]:
+        days = s["minutes_run"] * 60000 / extra["day_ms"]
+        s["game_days"] = round(days, 2)
+        s["tokens_per_game_day"] = round(s["tokens"] / days) if days else None
+        s["calls_per_game_day"] = round(s["calls"] / days, 1) if days else None
+        per_day = defaultdict(lambda: Counter())
+        for r in j:
+            if samples and r.get("at_ms"):
+                day = int((r["at_ms"] - j[0]["at_ms"]) // extra["day_ms"]) + 1
+                per_day[day]["calls"] += 1
+                per_day[day]["tokens"] += r.get("tokens") or 0
+        s["by_game_day"] = {k: dict(v) for k, v in sorted(per_day.items())}
     s["memories_remembered"] = remembered
     s["exchanges"] = [{"ref": r["_ref"], "purpose": r.get("purpose"), "model": r.get("model"), "tokens": r.get("tokens"),
                        "reply": excerpt(r.get("reply"))} for r in j if r.get("purpose") in ("deliberate", "think", "talk")][:40]
@@ -1027,26 +1246,8 @@ def ledger():
     return json.loads(LEDGER.read_text()) if LEDGER.exists() else {"cap": TOTAL_CAP, "batches": {}}
 
 
-def run(a):
-    guard()
-    if not re.fullmatch(r"[a-z0-9]+", a.batch):
-        sys.exit("--batch must be lowercase letters and digits")
-    trials = [load_trial(t) for t in a.trials]
-    vs = variants()
-    names = a.variants.split(",")
-    for v in names:
-        if v not in vs:
-            sys.exit(f"unknown variant {v}; see living/trials/variants.json")
-    plan = [(t, v, r) for t in trials for v in names for r in range(1, a.replicates + 1)]
-    led = ledger()
-    spent = sum(b.get("tokens", 0) for b in led["batches"].values())
-    need = sum(t.get("budget", {}).get("tokens", 220000) for t, _, _ in plan)
-    print(f"batch {a.batch}: {len(plan)} instances; worst case {need:,} tokens; spent so far {spent:,} of {TOTAL_CAP:,}{' (fake: not counted)' if a.fake else ''}")
-    if not a.fake and spent + need > TOTAL_CAP and not a.allow_partial:
-        sys.exit("the batch's worst case exceeds the remaining total; lower the caps, run fewer, or pass --allow-partial (the total cap still stops it)")
-    if a.batch in led["batches"] and not a.fake:
-        sys.exit(f"batch {a.batch} already ran; choose a new name")
-    shared = {"token": admin_token(), "neo4j_pw": neo4j_password(), "variants": vs, "spent": 0, "ledger_before": spent, "wasm": {}, "seed_rel": {}}
+def shared_for(trials, a, bdir):
+    shared = {"token": admin_token(), "neo4j_pw": neo4j_password(), "variants": variants(), "spent": 0, "wasm": {}, "seed_rel": {}}
     for t in trials:
         name, rel, _ = world_seed(t["world"])
         if not (OUT / "wasm" / f"{name}.wasm").exists():
@@ -1054,27 +1255,23 @@ def run(a):
         shared["wasm"][t["name"]], shared["seed_rel"][t["name"]] = name, rel
     if not (TARGET / "release/living-mind").exists():
         sys.exit(f"no mind binary at {TARGET / 'release/living-mind'}: run `trials.py build`")
-    fake = None
-    bdir = OUT / a.batch
-    bdir.mkdir(parents=True, exist_ok=True)
-    (bdir / "batch.json").write_text(json.dumps({"trials": a.trials, "variants": names, "replicates": a.replicates, "fake": a.fake,
-                                                 "commit": sh("git", "-C", ROOT, "rev-parse", "--short", "HEAD").stdout.strip(),
-                                                 "dirty": bool(sh("git", "-C", ROOT, "status", "--porcelain", "living").stdout.strip()),
-                                                 "started": time.strftime("%Y-%m-%dT%H:%M:%S")}, indent=1))
     if a.fake:
         s = socket.socket()
         s.bind(("127.0.0.1", 0))
         shared["fake_port"] = s.getsockname()[1]
         s.close()
-        fake = subprocess.Popen([sys.executable, str(FAKE), "--port", str(shared["fake_port"]), "--log", str(bdir / "fake-requests.jsonl")],
-                                stdout=open(bdir / "fake.log", "a"), stderr=subprocess.STDOUT, start_new_session=True)
+        shared["fake"] = subprocess.Popen([sys.executable, str(FAKE), "--port", str(shared["fake_port"]), "--log", str(bdir / "fake-requests.jsonl")],
+                                          stdout=open(bdir / "fake.log", "a"), stderr=subprocess.STDOUT, start_new_session=True)
         time.sleep(1)
-    instances = [Instance(a.batch, t, v, r, a, shared) for t, v, r in plan]
+    return shared
+
+
+def execute(a, instances, shared, resume=False):
     sem = threading.Semaphore(a.parallel)
 
     def go(inst):
         with sem:
-            inst.run()
+            inst.run(resume=resume)
 
     threads = [threading.Thread(target=go, args=(i,), daemon=True) for i in instances]
     for th in threads:
@@ -1085,16 +1282,209 @@ def run(a):
         while any(th.is_alive() for th in threads):
             time.sleep(15)
             line = " ".join(f"{i.name}:{i.status}{'@' + str(round((i.t() or 0) / 60, 1)) + 'm' if i.status == 'running' else ''}" for i in instances)
-            print(f"[{time.strftime('%H:%M:%S')}] spent {shared['spent']:,} | {line}", flush=True)
+            print(f"[{time.strftime('%H:%M:%S')}] tokens {shared['spent']:,} | {line}", flush=True)
     finally:
         signal.signal(signal.SIGINT, old)
-        if fake:
-            os.killpg(fake.pid, signal.SIGTERM)
+        if shared.get("fake"):
+            os.killpg(shared["fake"].pid, signal.SIGTERM)
     if not a.fake:
         led = ledger()
-        led["batches"][a.batch] = {"tokens": shared["spent"], "instances": len(plan), "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        sums = [json.loads(p.read_text()) for p in (OUT / a.batch).glob("*/summary.json")]
+        led["batches"][a.batch] = {"tokens": sum(x.get("tokens", 0) for x in sums), "instances": len(sums), "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
         LEDGER.write_text(json.dumps(led, indent=1))
     report(argparse.Namespace(batch=a.batch))
+
+
+def run(a):
+    guard()
+    if not re.fullmatch(r"[a-z0-9]+", a.batch):
+        sys.exit("--batch must be lowercase letters and digits")
+    trials = [load_trial(t) for t in a.trials]
+    names = a.variants.split(",")
+    for v in names:
+        if v not in variants():
+            sys.exit(f"unknown variant {v}; see living/trials/variants.json")
+    plan = [(t, v, r) for t in trials for v in names for r in range(1, a.replicates + 1)]
+    led = ledger()
+    spent = sum(b.get("tokens", 0) for b in led["batches"].values())
+    print(f"batch {a.batch}: {len(plan)} instances; real tokens so far {spent:,}{f' of a cap of {TOTAL_CAP:,}' if TOTAL_CAP else ' (no cap)'}{' (fake: not counted)' if a.fake else ''}")
+    if TOTAL_CAP and not a.fake and spent >= TOTAL_CAP:
+        sys.exit("TRIALS_TOTAL_TOKENS is already spent")
+    bdir = OUT / a.batch
+    if (bdir / "batch.json").exists():
+        sys.exit(f"batch {a.batch} exists; choose a new name, or `trials.py resume --batch {a.batch}`")
+    bdir.mkdir(parents=True, exist_ok=True)
+    (bdir / "batch.json").write_text(json.dumps({"trials": a.trials, "variants": names, "replicates": a.replicates, "fake": a.fake,
+                                                 "minutes": a.minutes, "keep_db": a.keep_db, "parallel": a.parallel,
+                                                 "commit": sh("git", "-C", ROOT, "rev-parse", "--short", "HEAD").stdout.strip(),
+                                                 "dirty": bool(sh("git", "-C", ROOT, "status", "--porcelain", "living").stdout.strip()),
+                                                 "started": time.strftime("%Y-%m-%dT%H:%M:%S")}, indent=1))
+    shared = shared_for(trials, a, bdir)
+    execute(a, [Instance(a.batch, t, v, r, a, shared) for t, v, r in plan], shared)
+
+
+def resume(a):
+    """Continue a batch after the runner (or a mind) crashed, without resetting any world:
+    instances that had not finished reattach to their databases, adopt a mind that is still
+    running or start a new one, and go on from their saved cursors and clock."""
+    guard()
+    bdir = OUT / a.batch
+    meta = json.loads((bdir / "batch.json").read_text())
+    a = argparse.Namespace(batch=a.batch, fake=meta["fake"], minutes=meta.get("minutes"), keep_db=meta.get("keep_db"), parallel=meta.get("parallel") or 18)
+    trials = {t: load_trial(t) for t in meta["trials"]}
+    todo = []
+    for t in trials.values():
+        for v in meta["variants"]:
+            for r in range(1, meta["replicates"] + 1):
+                d = bdir / f"{t['name']}-{v}-r{r}"
+                st = json.loads((d / "state.json").read_text()) if (d / "state.json").exists() else {}
+                if st.get("status") in ("running", "starting", "collecting") and st.get("subject"):
+                    todo.append((t, v, r))
+                elif st.get("status") not in ("done", "failed"):
+                    print(f"{d.name}: status {st.get('status')}; not resumable (it had not started its mind)")
+    if not todo:
+        sys.exit("nothing to resume")
+    print(f"resuming {len(todo)} instances of {a.batch}: " + ", ".join(f"{t['name']}-{v}-r{r}" for t, v, r in todo))
+    shared = shared_for([t for t, _, _ in todo], a, bdir)
+    execute(a, [Instance(a.batch, t, v, r, a, shared) for t, v, r in todo], shared, resume=True)
+
+
+FIGHT = {"attack", "strike", "shoot", "bowshot", "firebolt", "block", "dodge", "throw", "threaten", "aim"}
+
+
+def graph_terms(g):
+    """Skills, items and labels a graph names: what a revision is about, for a diff summary."""
+    out = set()
+    def walk(x):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k == "skill" and isinstance(v, str):
+                    out.add(v)
+                elif k == "do" and isinstance(v, str):
+                    out.add(v)
+                elif k == "label" and isinstance(v, str):
+                    out.add(f"[{v}]")
+                elif k == "item" and isinstance(v, str):
+                    out.add(f"{v}")
+                walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    walk(g)
+    return out
+
+
+def life_report(a):
+    bdir = OUT / a.batch
+    for d in sorted(p.parent for p in bdir.glob("*/summary.json")):
+        samples = jsonl(d / "samples.jsonl")
+        if not samples:
+            continue
+        exps = jsonl(d / "experiences.jsonl")
+        chron = jsonl(d / "chronicle.jsonl")
+        graphs = jsonl(d / "graphs.jsonl")
+        rows = jsonl(d / "mind_rows.jsonl")
+        summ = json.loads((d / "summary.json").read_text())
+        snaps = sorted((d / "snapshots").glob("h*.json")) if (d / "snapshots").exists() else []
+        setts = json.loads(snaps[0].read_text()).get("settlement", []) if snaps else []
+        names = {}
+        for b in (json.loads((d / "cast.json").read_text())["roles"].get("subject", [])):
+            names[b["id"]] = b["name"]
+        S = next(iter(names), None)
+        day_ms = summ.get("day_ms") or 720000
+        tm = lambda t: f"day {int(t * 1000 // day_ms) + 1}, {t / 60:.0f} min"
+        first = {}
+
+        def once(key, t, what):
+            if key not in first:
+                first[key] = (t, what)
+
+        prev = None
+        for x in samples:
+            a_ = (x.get("activity") or [None])[0]
+            if a_ == "eat" or (prev and prev.get("hunger") is not None and x.get("hunger") is not None and x["hunger"] < prev["hunger"] - 3):
+                once("first meal", x["t"], (x.get("activity") or ["?", "?"])[1])
+            if a_ in FIGHT:
+                once("first fight", x["t"], (x.get("activity") or ["?", "?"])[1])
+            if a_ == "craft":
+                once("first craft", x["t"], x["activity"][1])
+            if a_ == "build":
+                once("first build", x["t"], x["activity"][1])
+            if a_ == "sleep":
+                once("first sleep", x["t"], x["activity"][1])
+            if a_ in ("gather", "take") and x.get("activity"):
+                once(f"first {a_}", x["t"], x["activity"][1])
+            prev = x
+        for c in chron:
+            if c.get("kind") == "speech" and c.get("a") == S and c.get("b"):
+                once("first conversation", c["t"], c["text"][:120])
+        for e in exps:
+            if e.get("kind") == "fight":
+                once("first fight", e["t"], e["text"][:120])
+        for r in rows:
+            if r["table"] == "structure":
+                for st in r["rows"]:
+                    if st["kind"] in ("shelter", "house", "campfire", "storage") and st.get("built_ms", 0) > 0:
+                        once(f"first {st['kind']} of my own", r["t"], f"{st['kind']} at ({st['x']:.0f}, {st['y']:.0f})")
+        deaths = [(e["t"], e["text"][:140]) for e in exps if e.get("kind") == "death"]
+        # Where: the nearest settlement, inside it or out in the wilds.
+        visits, last = [], None
+        for x in samples[::15]:
+            if not x.get("pos") or not setts:
+                continue
+            n = min(setts, key=lambda t: dist((t["x"], t["y"]), x["pos"]))
+            dd = dist((n["x"], n["y"]), x["pos"])
+            where = f"{'in' if dd <= n['radius_m'] else 'near' if dd <= 3 * n['radius_m'] else 'wilds beyond'} settlement {n['id']} ({n['kind']})"
+            if where != last:
+                visits.append((x["t"], where))
+                last = where
+        learned, seen = [], None
+        for r in rows:
+            if r["table"] == "know_how":
+                now_ = {k["technique"]: k["source"] for k in r["rows"]}
+                if seen is not None:
+                    for k, src in now_.items():
+                        if k not in seen:
+                            learned.append((r["t"], k, src))
+                seen = now_
+        revs, prev_terms = [], set()
+        for g in graphs:
+            try:
+                terms = graph_terms(json.loads(g["graph"]))
+            except (ValueError, TypeError):
+                terms = set()
+            added, removed = sorted(terms - prev_terms), sorted(prev_terms - terms)
+            revs.append((g["t"], g.get("source"), g.get("plan", "")[:120], added, removed))
+            prev_terms = terms
+        # Stalls: at least 10 minutes in which the subject stays within 15 m and keeps its graph.
+        stalls, i = [], 0
+        rev_t = [g["t"] for g in graphs]
+        while i < len(samples):
+            j = i
+            while j + 1 < len(samples) and samples[j + 1].get("pos") and samples[i].get("pos") and dist(samples[i]["pos"], samples[j + 1]["pos"]) < 15:
+                j += 1
+            span = samples[j]["t"] - samples[i]["t"]
+            if span >= 600 and not any(samples[i]["t"] < t <= samples[j]["t"] for t in rev_t):
+                acts = Counter((x.get("activity") or ["idle"])[0] for x in samples[i:j + 1])
+                stalls.append((samples[i]["t"], span, dict(acts.most_common(4))))
+            i = j + 1
+        plans = Counter(g.get("plan", "") for g in graphs if g.get("source") == "mind")
+        repeats = sum(1 for e in exps if e.get("kind") == "repeat")
+        flips = [e["text"][:120] for e in exps if "back and forth" in e.get("text", "")]
+        out = [f"# Life of {names.get(S, S)} ({d.name})", "",
+               f"Ran {summ.get('minutes_run')} min ({summ.get('game_days')} game days); stopped by {summ.get('stopped_by')}; survived: {summ.get('survived')}; "
+               f"{summ.get('calls')} model calls, {summ.get('tokens'):,} tokens ({summ.get('tokens_per_game_day')} per game day); mind starts: {summ.get('mind_starts')}; runaways: {summ.get('runaways') or 'none'}.", "",
+               "## Firsts", ""] + [f"- {k}: {tm(t)}: {w}" for k, (t, w) in sorted(first.items(), key=lambda kv: kv[1][0])] + \
+              ["", "## Deaths seen", ""] + ([f"- {tm(t)}: {w}" for t, w in deaths] or ["- none"]) + \
+              ["", "## Where", ""] + [f"- {tm(t)}: {w}" for t, w in visits] + \
+              ["", "## Learned", ""] + ([f"- {tm(t)}: {k} ({src})" for t, k, src in learned] or ["- nothing"]) + \
+              ["", f"## Graph revisions ({len(revs)})", ""] + [f"- {tm(t)} [{src}] {plan} | +{', '.join(ad) or '–'} | -{', '.join(rm) or '–'}" for t, src, plan, ad, rm in revs] + \
+              ["", "## Stretches where nothing changed (10+ min, within 15 m, no new graph)", ""] + ([f"- {tm(t)} for {span / 60:.0f} min: {acts}" for t, span, acts in stalls] or ["- none"]) + \
+              ["", "## Loops", "", f"- plans installed more than 3 times: {[(p, n) for p, n in plans.most_common(8) if n > 3] or 'none'}",
+               f"- lines the subject repeated almost word for word (feedback percepts): {repeats}",
+               f"- turning back and forth (feedback percepts): {len(flips)}" + (f", e.g. {flips[0]}" if flips else "")]
+        (d / "timeline.md").write_text("\n".join(out) + "\n")
+        print(f"written {d / 'timeline.md'}")
 
 
 def fmt(v):
@@ -1180,7 +1570,7 @@ def show_ledger(_a):
     total = sum(b.get("tokens", 0) for b in led["batches"].values())
     for k, b in led["batches"].items():
         print(f"{k}: {b['tokens']:,} tokens, {b['instances']} instances, {b['at']}")
-    print(f"total {total:,} of {TOTAL_CAP:,}")
+    print(f"total {total:,}" + (f" of {TOTAL_CAP:,}" if TOTAL_CAP else ""))
 
 
 def main():
@@ -1209,6 +1599,12 @@ def main():
     p.add_argument("--batch", required=True)
     p.set_defaults(f=clean)
     sub.add_parser("ledger").set_defaults(f=show_ledger)
+    p = sub.add_parser("resume")
+    p.add_argument("--batch", required=True)
+    p.set_defaults(f=resume)
+    p = sub.add_parser("life")
+    p.add_argument("--batch", required=True)
+    p.set_defaults(f=life_report)
     a = ap.parse_args()
     a.f(a)
 

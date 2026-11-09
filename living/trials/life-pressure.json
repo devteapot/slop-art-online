@@ -1,0 +1,9 @@
+{
+ "extends": "life",
+ "title": "A newcomer's life: a lean land and a second pack",
+ "about": "As `life`, with berry bushes at 30% of the island's density and a second bold pack of five wolves ranging 120-200 m from the arrival point (the seed's `packs`), beside the shipped pack of four at 40-75 m.",
+ "gradient": "Survive the first nights on a wolf road -> find safety (the walled town and its gates, a fire, a shelter) -> feed yourself where berries are scarce (hunt with the bow, fish, trap, or live off the town's gardens and stores) -> make a place that holds.",
+ "world": {"seed": "island", "rules": {"minds": false}, "overrides": {"resource_scale": {"berry_bush": 0.3}, "packs": [
+  {"kind": "wolf", "count": 4, "near": "arrival", "from_m": 40, "to_m": 75, "bold": true, "instinct": "wolf_bold", "name": "the wolves of the town road"},
+  {"kind": "wolf", "count": 5, "near": "arrival", "from_m": 120, "to_m": 200, "bold": true, "instinct": "wolf_bold", "name": "the hill pack"}]}}
+}

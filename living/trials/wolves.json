@@ -9,10 +9,6 @@
   "start_hour": 16.0
  },
  "minutes": 15,
- "budget": {
-  "tokens": 220000,
-  "calls_per_min": 12
- },
  "subject": {
   "pick": {
    "kind": "person",

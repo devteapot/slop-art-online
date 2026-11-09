@@ -414,6 +414,28 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Test support (trials, docs/TRIALS.md): a newcomer as `join` makes one — the same arrival
+/// point and the seed's newcomer kit, the species' instinct graph — but thought for by the
+/// admin's minds (`ai`), so one mind-backed character can live among residents that have no
+/// minds (`rules.minds = false`). It has no background; a caller that wants the mind to write
+/// it an identity sets one (`set_background`), as the trial runner does.
+#[spacetimedb::reducer]
+pub fn spawn_newcomer(ctx: &ReducerContext, name: String) -> Result<(), String> {
+    let w = require_admin(ctx)?;
+    let name = name.trim().to_string();
+    if name.is_empty() || name.len() > 24 {
+        return Err("name must be 1..=24 bytes".into());
+    }
+    let now = common::now_ms(ctx);
+    let map = common::map(ctx);
+    let arrive = island::arrival(ctx);
+    let at = map.nearest_walkable(arrive.0, arrive.1).ok_or("no room")?;
+    let id = seed::spawn_creature(ctx, &name, "person", w.admin, true, at, now);
+    seed::newcomer_kit(ctx, id, now);
+    log::info!("newcomer {name} (#{id}) arrives, thought for by the admin's minds");
+    Ok(())
+}
+
 fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
     ctx.db.character().controller().filter(ctx.sender()).find(|c| c.alive && !c.ai).ok_or_else(|| "you have no living character".into())
 }
