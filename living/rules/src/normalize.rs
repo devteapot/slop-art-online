@@ -54,8 +54,8 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 }
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
-const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted"];
-const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, night, believes, chance, all, any, not";
+const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion"];
+const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, raining, moving, believes, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -428,7 +428,8 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
             let l = s.trim().to_lowercase();
             match l.as_str() {
                 "self" | "me" | "myself" => json!("self"),
-                "attacker" | "speaker" | "home" | "wander" | "parent" | "suitor" | "partner" => json!(l),
+                "attacker" | "speaker" | "home" | "wander" | "parent" | "suitor" | "partner" | "hailer" | "commotion" => json!(l),
+                "greeter" => json!("hailer"),
                 _ if catalog::kind_class(&l).is_some() => json!({"nearest": l}),
                 _ => json!({"named": s.trim()}),
             }
@@ -478,7 +479,7 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
             if let (Some(x), Some(y)) = (o.get("x"), o.get("y")) {
                 return Ok(json!({"at": [x, y]}));
             }
-            return Err(format!("{path}: unknown target {:?}; use \"self\", \"attacker\", \"speaker\", \"suitor\", \"partner\", \"home\", {{\"nearest\": kind}}, {{\"id\": n}}, {{\"named\": name}}, {{\"place\": name}} or {{\"at\": [x, y]}}", o.keys().collect::<Vec<_>>()));
+            return Err(format!("{path}: unknown target {:?}; use \"self\", \"attacker\", \"speaker\", \"suitor\", \"partner\", \"hailer\", \"commotion\", \"home\", {{\"nearest\": kind}}, {{\"id\": n}}, {{\"named\": name}}, {{\"place\": name}} or {{\"at\": [x, y]}}", o.keys().collect::<Vec<_>>()));
         }
         other => return Err(format!("{path}: invalid target {other}")),
     })
@@ -519,6 +520,8 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                 "hp" => "health",
                 "hurt" | "attacked_within" => "hurt_within",
                 "heard" => "heard_within",
+                "greeted" | "greeted_within" | "hailed_within" => "hailed",
+                "rain" | "is_raining" => "raining",
                 "is_night" => "night",
                 "belief" | "judgment" => "believes",
                 "see" | "can_see" => "sees",
@@ -587,7 +590,7 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     }
                     _ => return Err(format!("{p}: expected a judgment key")),
                 },
-                "hurt_within" | "heard_within" | "chance" => {
+                "hurt_within" | "heard_within" | "hailed" | "chance" => {
                     let n = match &v {
                         Value::Bool(true) => if key == "chance" { 0.5 } else { 20.0 },
                         other => other.as_f64().or_else(|| other.get("seconds").and_then(|x| x.as_f64())).ok_or_else(|| format!("{p}: expected a number"))?,
@@ -638,6 +641,9 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     json!({"health_of": c})
                 }
                 "night" => json!({"night": v.as_bool().unwrap_or(true)}),
+                "raining" => json!({"raining": v.as_bool().unwrap_or(true)}),
+                "moving" | "walking" => json!({"moving": v.as_bool().unwrap_or(true)}),
+                "standing" | "still" => json!({"moving": !v.as_bool().unwrap_or(true)}),
                 "threatened" | "under_attack" | "incoming_attack" => json!({"threatened": v.as_bool().unwrap_or(true)}),
                 "day" => json!({"night": !v.as_bool().unwrap_or(true)}),
                 other => return Err(format!("{path}: unknown condition `{other}`; conditions are {CONDS}")),

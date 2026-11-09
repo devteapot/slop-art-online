@@ -1,6 +1,12 @@
 # Client protocol validation
 
 
+## 2026-11-09 town life tables and reducer (dev-box)
+
+Own scratch container `slop-townlife-stdb` (image `v2.14.1`) through a `docker` name shim; worktree `~/dev/slop-townlife`, branch `townlife-1` from `b12fa45` with the town-life change uncommitted; bindings regenerated (7 new files: `act_card`, `doing`, `weather` tables and types, the `set_weather` reducer; `mind_state` gained `hailed_ms` and `hailer`).
+
+- **`client-town-1`** (`run.py`, default seed) exited 0: every check passed except the two known XFAILs (anonymous `experience` and `thought`). The permission matrix made 184 calls with 0 mismatches (the 180 before plus `set_weather` from each non-admin identity, refused "admin only"). New check: `act_card`, `doing` and `weather` are public (`town-public.json`: 17 cards, 44 `doing` rows, 1 weather row).
+
 ## 2026-11-09 connected game client on the island (dev-box)
 
 The dev-box ran its own scratch container `slop-live-stdb` (image `v2.14.1`, own volume, `/wasm` from the worktree) through a `docker` name shim. The other worktrees' containers were not touched. The worktree was `c5a2c00`, with uncommitted `living/game` changes (the connected game client); the authority, rules and bindings were unchanged. Evidence was copied to the dev-box's `~/live-evidence/` before the worktree was removed.

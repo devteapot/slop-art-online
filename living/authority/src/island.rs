@@ -251,7 +251,7 @@ pub fn build(ctx: &ReducerContext, h: &Hosted, now: u64) {
 }
 
 /// Settlement rows, once their communities exist; residents' backgrounds name their folk.
-pub fn settle(ctx: &ReducerContext, h: &Hosted, seeded: &[Option<&SeedTown>]) {
+pub fn settle(ctx: &ReducerContext, h: &Hosted, seeded: &[Option<&SeedTown>], life: &crate::town::SeedTownLife) {
     for (i, p) in h.settlements.iter().enumerate() {
         let community = seeded[i].and_then(|t| ctx.db.community().iter().find(|c| c.name == t.name)).map_or(0, |c| c.id);
         ctx.db.settlement().insert(Settlement {
@@ -277,6 +277,9 @@ pub fn settle(ctx: &ReducerContext, h: &Hosted, seeded: &[Option<&SeedTown>]) {
             bg.text = v.to_string();
             ctx.db.background().id().update(bg);
         }
+        // The places its residents know: home, work, the square, where they spend evenings.
+        let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.town.seat");
+        crate::town::seat(ctx, h, i, community, life);
     }
 }
 

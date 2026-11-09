@@ -72,7 +72,70 @@
   ],
   "animals": { "deer": 24, "wolf": 6 },
   "newcomer": { "items": { "bow": 1, "arrow": 30, "berries": 4 }, "knows": ["fire", "fire_bolt", "mending"] },
+  "weather": { "spell_s": 180, "rain_share": 0.2 },
   "packs": [
     { "kind": "wolf", "count": 4, "near": "arrival", "from_m": 40, "to_m": 75, "bold": true, "instinct": "wolf_bold", "name": "the wolves of the town road" }
-  ]
+  ],
+  "ways": {
+    "common": {
+      "stay safe": {"first": [{"if": {"all": [{"hurt_within": 5}, {"health": {"below": 40}}, {"near": {"target": {"nearest": "wolf"}, "within": 8}}]}, "then": {"do": "flee", "target": "attacker"}}, {"if": {"all": [{"hurt_within": 5}, {"health": {"below": 40}}, {"not": {"near": {"target": {"nearest": "wolf"}, "within": 8}}}]}, "then": {"do": "yield", "target": "attacker"}}, {"if": {"all": [{"hurt_within": 2}, {"health": {"below": 40}}]}, "then": {"do": "flee", "target": "attacker"}}, {"if": {"hurt_within": 5}, "then": {"do": "attack", "target": "attacker"}}, {"if": {"all": [{"near": {"target": {"nearest": "wolf"}, "within": 10}}, {"count": {"of": "person", "within": 8, "at_least": 2}}, {"health": {"above": 60}}]}, "then": {"do": "attack", "target": {"nearest": "wolf"}}}, {"if": {"near": {"target": {"nearest": "wolf"}, "within": 12}}, "then": {"do": "flee", "target": {"nearest": "wolf"}}}]},
+      "get out of the rain": {"first": [{"if": {"near": {"target": "home", "within": 2.5}}, "then": {"first": [{"if": {"energy": {"below": 60}}, "then": {"do": "sleep"}}, {"do": "rest"}]}}, {"if": {"near": {"target": {"nearest": "inn"}, "within": 2.5}}, "then": {"do": "rest"}}, {"if": {"near": {"target": {"nearest": "hall"}, "within": 2.5}}, "then": {"do": "rest"}}, {"if": {"near": {"target": {"nearest": "house"}, "within": 2.5}}, "then": {"do": "rest"}}, {"if": {"not": {"near": {"target": "home", "within": 40}}}, "then": {"first": [{"do": "goto", "target": {"nearest": "inn"}}, {"do": "goto", "target": {"nearest": "hall"}}, {"do": "goto", "target": {"nearest": "house"}}]}}, {"do": "goto", "target": "home"}]},
+      "sleep": {"first": [{"if": {"near": {"target": "home", "within": 2.5}}, "then": {"do": "sleep"}}, {"seq": [{"do": "goto", "target": "home"}, {"do": "sleep"}]}]},
+      "keep warm": {"first": [{"if": {"near": {"target": "home", "within": 2.5}}, "then": {"first": [{"if": {"energy": {"below": 90}}, "then": {"do": "sleep"}}, {"do": "rest"}]}}, {"do": "goto", "target": "home"}]},
+      "answer a greeting": {"first": [{"if": {"near": {"target": "hailer", "within": 5}}, "then": {"do": "nod", "target": "hailer"}}, {"do": "wave", "target": "hailer"}]},
+      "watch what happens": {"first": [{"do": "face", "target": "commotion"}, {"wait": 2}]},
+      "mind the people near me": {"first": [{"if": {"all": [{"heard_within": 4}, {"near": {"target": "speaker", "within": 9}}]}, "then": {"do": "face", "target": "speaker"}}, {"if": {"all": [{"moving": false}, {"near": {"target": {"nearest": "person"}, "within": 2.5}}]}, "then": {"first": [{"do": "step_aside", "target": {"nearest": "person"}}, {"do": "face", "target": {"nearest": "person"}}]}}]},
+      "spend the evening out": {"if": {"all": [{"hour": {"above": 17.5, "below": 22}}, {"raining": false}]}, "then": {"first": [{"if": {"not": {"near": {"target": {"place": "evening"}, "within": 6}}}, "then": {"do": "goto", "target": {"place": "evening"}}}, {"if": {"chance": 0.03}, "then": {"do": "nod", "target": {"nearest": "person"}}}, {"do": "rest"}]}}
+    },
+    "occupations": {
+      "farmer": {"routine": "tend the fields", "graph": {"first": [{"if": {"has": {"item": "berries", "at_least": 12}}, "then": {"seq": [{"do": "goto", "target": {"place": "square"}}, {"do": "store", "target": {"nearest": "storage"}, "item": "berries", "qty": 8}]}}, {"if": {"not": {"near": {"target": {"place": "work"}, "within": 10}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "gather", "target": {"nearest": "berry_bush"}}, {"do": "keep"}]}},
+      "fisher": {"routine": "fishing", "graph": {"first": [{"if": {"has": {"item": "fish", "at_least": 4}}, "then": {"seq": [{"do": "goto", "target": {"place": "square"}}, {"do": "store", "target": {"nearest": "storage"}, "item": "fish", "qty": 4}]}}, {"if": {"not": {"near": {"target": {"place": "work"}, "within": 6}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "gather", "target": {"nearest": "fishing_spot"}}, {"do": "keep"}]}},
+      "cook": {"routine": "keep the kitchen", "graph": {"first": [{"if": {"all": [{"has": {"item": "fish"}}, {"sees": {"nearest": "campfire"}}]}, "then": {"do": "cook", "target": {"nearest": "campfire"}, "item": "fish"}}, {"if": {"not": {"near": {"target": {"place": "work"}, "within": 4}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "keep"}]}},
+      "innkeeper": {"routine": "keep the inn", "graph": {"first": [{"if": {"all": [{"has": {"item": "fish"}}, {"sees": {"nearest": "campfire"}}]}, "then": {"do": "cook", "target": {"nearest": "campfire"}, "item": "fish"}}, {"if": {"not": {"near": {"target": {"place": "work"}, "within": 4}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "keep"}]}},
+      "trader": {"routine": "keep the stall", "graph": {"first": [{"if": {"not": {"near": {"target": {"place": "work"}, "within": 3}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "keep"}]}},
+      "builder": {"routine": "work at the workshop", "graph": {"first": [{"if": {"not": {"near": {"target": {"place": "work"}, "within": 4}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "keep"}]}},
+      "carpenter": {"routine": "work at the workshop", "graph": {"first": [{"if": {"not": {"near": {"target": {"place": "work"}, "within": 4}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "keep"}]}},
+      "mason": {"routine": "work at the workshop", "graph": {"first": [{"if": {"not": {"near": {"target": {"place": "work"}, "within": 4}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "keep"}]}},
+      "guard": {"routine": "keep watch", "graph": {"first": [{"if": {"sees": {"nearest": "wolf"}}, "then": {"do": "face", "target": {"nearest": "wolf"}}}, {"if": {"not": {"near": {"target": {"place": "work"}, "within": 4}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "keep"}]}},
+      "scribe": {"routine": "keep the records", "graph": {"first": [{"if": {"near": {"target": {"nearest": "sign"}, "within": 3}}, "then": {"seq": [{"do": "read", "target": {"nearest": "sign"}}, {"do": "keep"}]}}, {"if": {"not": {"near": {"target": {"place": "work"}, "within": 4}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "keep"}]}},
+      "healer": {"routine": "tend the hurt", "graph": {"first": [{"if": {"health_of": {"target": {"nearest": "person"}, "below": 70}}, "then": {"do": "tend", "target": {"nearest": "person"}}}, {"if": {"not": {"near": {"target": {"place": "work"}, "within": 4}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "keep"}]}},
+      "hunter": {"routine": "keep the barn", "graph": {"first": [{"if": {"not": {"near": {"target": {"place": "work"}, "within": 6}}}, "then": {"do": "goto", "target": {"place": "work"}}}, {"do": "keep"}]}},
+      "child": {"routine": "play", "graph": {"first": [{"if": {"all": [{"not": {"near": {"target": "home", "within": 14}}}, {"not": {"near": {"target": {"place": "square"}, "within": 14}}}]}, "then": {"do": "goto", "target": "home"}}, {"seq": [{"do": "play"}, {"do": "wander"}, {"do": "play"}, {"wait": 2}]}]}}
+    },
+    "top": {"desires": [
+      {"want": "safety", "weight": {"base": 2.0, "threatened": 3, "hurt": 1.2}, "do": {"routine": "stay safe"}},
+      {"want": "shelter", "weight": {"base": -0.2, "rain": 1.2}, "do": {"routine": "get out of the rain"}},
+      {"want": "food", "weight": {"base": -0.5, "hunger": 2.0, "starving": 1.5}, "do": {"routine": "find food and eat"}},
+      {"want": "sleep", "weight": {"base": -0.7, "tired": 1.3, "night": 0.6, "exhausted": 1.0}, "do": {"routine": "sleep"}},
+      {"want": "greet", "weight": {"hailed": 2.2}, "do": {"routine": "answer a greeting"}},
+      {"want": "look", "weight": {"commotion": 1.6}, "do": {"routine": "watch what happens"}},
+      {"want": "manners", "weight": {"base": 0.9}, "do": {"routine": "mind the people near me"}},
+      {"want": "evening", "weight": {"base": 0.8}, "do": {"routine": "spend the evening out"}},
+      {"want": "work", "weight": {"base": 0.2, "day": 0.5}, "do": {"routine": "WORK"}},
+      {"want": "home at night", "weight": {"base": -0.1, "night": 0.5, "winter": 0.3}, "do": {"routine": "keep warm"}},
+      {"want": "a family", "weight": {"base": 0.2, "hunger": -0.8, "longing": 0.4, "company": 0.2, "courted": 0.8}, "do": {"routine": "keep close to my partner"}},
+      {"want": "company", "weight": {"base": 0.15, "alone": 0.3, "longing": 0.3}, "do": {"routine": "be with people"}}
+    ]}
+  },
+  "town_life": {
+    "places": {
+      "square": ["plaza"],
+      "inn": ["inn", "hall", "plaza"]
+    },
+    "evening": ["inn", "square"],
+    "work": {
+      "farmer": ["field", "garden", "plaza"],
+      "fisher": ["fishing_spot", "plaza"],
+      "cook": ["inn", "hall", "plaza"],
+      "innkeeper": ["inn", "plaza"],
+      "trader": ["market_stall", "plaza"],
+      "builder": ["workshop", "barn", "plaza"],
+      "carpenter": ["workshop", "barn", "plaza"],
+      "mason": ["workshop", "barn", "plaza"],
+      "guard": ["gate", "tower", "plaza"],
+      "scribe": ["hall", "chapel", "plaza"],
+      "healer": ["chapel", "hall", "plaza"],
+      "hunter": ["barn", "field", "plaza"]
+    }
+  }
 }

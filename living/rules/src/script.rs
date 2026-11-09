@@ -49,6 +49,9 @@ pub struct ActorFacts {
     /// A creature bold enough to attack people without the predator's usual fear (a seed's
     /// hostile pack; read from its background for an animal's attack on a person).
     pub bold: bool,
+    /// Walkable tiles in the 5x5 square around the actor (25 in the open, fewer in a narrow
+    /// street or a doorway); filled for a skill whose `_shows()` steps aside.
+    pub room: u32,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -77,6 +80,11 @@ pub struct TargetFacts {
     /// (not the target, not the actor) are within the `alone_within` law of it.
     pub near_fire: bool,
     pub company: u32,
+    /// For a creature or a place: how far the actor would have to turn to face it (radians,
+    /// 0 straight ahead .. pi behind), and how fast a creature is coming toward the actor
+    /// (tiles/s; negative when moving away).
+    pub bearing: f32,
+    pub closing: f32,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -99,6 +107,8 @@ pub struct SkillCtx {
     /// Whether the rules shield someone who has yielded from blows meant only to hurt
     /// (the seed's `rules` block may hand that mercy to the minds instead).
     pub yield_shield: bool,
+    /// It is raining (the world's weather).
+    pub raining: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -198,6 +208,8 @@ pub enum Effect {
     Leave,
     /// Loose the skill's missile (`<skill>_missile(a)`) toward the action's target point.
     Launch,
+    /// The target creature is greeted: it sees the gesture made at it (`hailed`, `hailer`).
+    Hail,
 }
 
 /// World laws that parameterize the engine. Read once per script revision (the `laws()`
@@ -247,6 +259,8 @@ pub struct Laws {
     pub pasture_regen: f32,
     /// Someone with no other person within this many tiles is alone (for predators' daring).
     pub alone_within: f32,
+    /// A body within this angle of facing something already faces it (radians).
+    pub face_slack: f32,
 }
 
 impl Laws {
@@ -287,6 +301,7 @@ impl Default for Laws {
             input_burst: 15.0,
             pasture_regen: 0.006,
             alone_within: 6.0,
+            face_slack: 0.35,
         }
     }
 }
@@ -303,6 +318,7 @@ pub struct Scripts {
     ast: AST,
     fns: HashSet<String>,
     shapes: crate::combat::Shapes,
+    shows: crate::social::Shows,
 }
 
 pub const MAX_SOURCE: usize = 64 * 1024;
@@ -330,7 +346,7 @@ impl Scripts {
         let engine = engine();
         let ast = engine.compile(source).map_err(|e| format!("script compile: {e}"))?.clone_functions_only();
         let fns = ast.iter_functions().map(|f| f.name.to_string()).collect();
-        let mut s = Self { engine, ast, fns, shapes: Default::default() };
+        let mut s = Self { engine, ast, fns, shapes: Default::default(), shows: Default::default() };
         // Required entry points.
         for f in ["rates", "move_speed"] {
             if !s.fns.contains(f) {
@@ -338,6 +354,7 @@ impl Scripts {
             }
         }
         s.shapes = s.read_shapes()?;
+        s.shows = s.read_shows()?;
         Ok(s)
     }
 
@@ -399,6 +416,42 @@ impl Scripts {
             Vec::new()
         };
         crate::combat::Shapes::new(shapes, bar)
+    }
+
+    /// What others see of a skill and what it means to them (`<skill>_shows()`), read once
+    /// here like the combat shapes.
+    fn read_shows(&self) -> Result<crate::social::Shows, String> {
+        let mut shows = std::collections::BTreeMap::new();
+        for f in self.fns.iter().filter(|f| f.ends_with("_shows")) {
+            let skill = f.trim_end_matches("_shows");
+            if skill.is_empty() {
+                continue;
+            }
+            let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
+            if let Some(k) = m.keys().find(|k| !crate::social::TRAITS.contains(&k.as_str())) {
+                return Err(format!("{f}: unknown trait `{k}` (traits are {})", crate::social::TRAITS.join(", ")));
+            }
+            let flag = |k: &str| m.get(k).map_or(Ok(false), |v| v.as_bool().map_err(|_| format!("{f}: `{k}` must be true or false")));
+            let look = m.get("look").map_or(Ok(String::new()), |v| v.clone().into_string().map_err(|_| format!("{f}: `look` must be a string")))?;
+            if look.is_empty() {
+                return Err(format!("{f}: `look` names how it looks (e.g. \"gesture\", \"work\", \"sleep\")"));
+            }
+            let aside = flag("aside")?;
+            if aside && !self.has(&format!("{skill}_dist")) {
+                return Err(format!("{f}: a skill that steps aside needs `{skill}_dist(kind)`"));
+            }
+            let turn = flag("turn")?;
+            if turn && !flag("faces")? {
+                return Err(format!("{f}: a skill that is only a turn must face its target (`faces: true`)"));
+            }
+            shows.insert(skill.to_string(), crate::social::Show { code: 0, look, faces: flag("faces")?, turn, aside, record: flag("record")? });
+        }
+        Ok(crate::social::Shows::new(shows))
+    }
+
+    /// What others see of each skill that declares it.
+    pub fn shows(&self) -> &crate::social::Shows {
+        &self.shows
     }
 
     /// What each combat skill is, and the skill bar.
@@ -539,6 +592,7 @@ impl Scripts {
             input_burst: g("input_burst", l.input_burst).clamp(1.0, 240.0),
             pasture_regen: g("pasture_regen", l.pasture_regen).clamp(0.0, 1.0),
             alone_within: g("alone_within", l.alone_within).clamp(0.0, 40.0),
+            face_slack: g("face_slack", l.face_slack).clamp(0.0, 3.0),
         };
         l
     }
@@ -625,6 +679,7 @@ fn to_map(c: &SkillCtx, knack: &str) -> Map {
     a.insert("yielded_ago".into(), ago(c.actor.yielded_ago));
     a.insert("sensed".into(), inv_map(&c.actor.sensed).into());
     a.insert("bold".into(), c.actor.bold.into());
+    a.insert("room".into(), Dynamic::from_int(c.actor.room as i64));
     for g in crate::genes::BODY {
         a.insert(g.into(), f(crate::genes::gene(&c.actor.genes, g)));
     }
@@ -648,6 +703,8 @@ fn to_map(c: &SkillCtx, knack: &str) -> Map {
     t.insert("yielded_ago".into(), ago(c.target.yielded_ago));
     t.insert("near_fire".into(), c.target.near_fire.into());
     t.insert("company".into(), Dynamic::from_int(c.target.company as i64));
+    t.insert("bearing".into(), f(c.target.bearing));
+    t.insert("closing".into(), f(c.target.closing));
     let mut r = Map::new();
     r.insert("exists".into(), c.routine.exists.into());
     r.insert("ok".into(), Dynamic::from_int(c.routine.ok as i64));
@@ -666,6 +723,7 @@ fn to_map(c: &SkillCtx, knack: &str) -> Map {
     m.insert("topic".into(), c.topic.clone().into());
     m.insert("roll".into(), f(c.roll));
     m.insert("yield_shield".into(), c.yield_shield.into());
+    m.insert("raining".into(), c.raining.into());
     m.insert("skill".into(), c.skill.clone().into());
     m
 }
@@ -711,6 +769,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "welcome" => Effect::Welcome,
         "leave" => Effect::Leave,
         "launch" => Effect::Launch,
+        "hail" => Effect::Hail,
         other => return Err(format!("unknown effect op `{other}`")),
     })
 }

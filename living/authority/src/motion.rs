@@ -507,6 +507,28 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
     (ev, dirty)
 }
 
+thread_local! {
+    /// Destinations a body recently found no path to (body, tile) -> when: a walk asked for
+    /// again within `UNREACHABLE_MS` fails at once with the same reason instead of searching
+    /// the whole budget again every second. Only a cache: a lost entry costs one search.
+    static UNREACHABLE: std::cell::RefCell<std::collections::HashMap<(u32, i32, i32), u64>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+const UNREACHABLE_MS: u64 = 15_000;
+
+fn unreachable(id: u32, at: (f32, f32), now: u64) -> bool {
+    UNREACHABLE.with(|u| u.borrow().get(&(id, at.0.floor() as i32, at.1.floor() as i32)).is_some_and(|t| now.saturating_sub(*t) < UNREACHABLE_MS && *t <= now))
+}
+
+fn no_path(id: u32, at: (f32, f32), now: u64) {
+    UNREACHABLE.with(|u| {
+        let mut u = u.borrow_mut();
+        if u.len() > 4096 {
+            u.retain(|_, t| now.saturating_sub(*t) < UNREACHABLE_MS);
+        }
+        u.insert((id, at.0.floor() as i32, at.1.floor() as i32), now);
+    });
+}
+
 /// Steer toward a new goal from the current pose and speed. Returns `None` when a point goal
 /// is already reached (nothing to do), otherwise what the first steering update found (an
 /// arrival or a loss the caller must act on at once).
@@ -528,7 +550,13 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
             if dist(p, at) <= 0.06 {
                 return Ok(None);
             }
-            let path = map.path(p, at, 6_000).ok_or("no path there")?;
+            if unreachable(id, at, now) {
+                return Err("no path there".into());
+            }
+            let Some(path) = map.path(p, at, 6_000) else {
+                no_path(id, at, now);
+                return Err("no path there".into());
+            };
             b.path = path.into_iter().map(|(x, y)| Waypoint { x, y }).collect();
         }
         GOAL_DIRECTION => {
@@ -575,6 +603,28 @@ pub fn stop(ctx: &ReducerContext, id: u32, now: u64) {
     b.path.clear();
     b.next_ms = IDLE;
     b.chunk = chunk_of(b.x, b.y);
+    put(ctx, b, before);
+}
+
+/// Turn a standing body where it stands to face `toward`, at the `turn_rate` law (one row
+/// write; observers see the turn as the segment's arc). A moving body is left alone: its
+/// steering keeps its heading.
+pub fn face(ctx: &ReducerContext, id: u32, toward: (f32, f32), now: u64) {
+    let Some(mut b) = ctx.db.body().id().find(id) else { return };
+    if b.next_ms != IDLE || b.vx != 0.0 || b.vy != 0.0 {
+        return;
+    }
+    let before = b.chunk;
+    anchor(&mut b, now);
+    let want = (toward.1 - b.y).atan2(toward.0 - b.x);
+    let d = geo::wrap(want - b.heading);
+    if d.abs() < 0.05 || (toward.0 - b.x).hypot(toward.1 - b.y) < 0.05 {
+        return;
+    }
+    let rate = common::laws(ctx).turn_rate.max(0.5);
+    let h = b.heading;
+    set_motion(&mut b, h, 0.0, rate * d.signum(), d.abs() / rate);
+    b.next_ms = IDLE;
     put(ctx, b, before);
 }
 

@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / ".local/living/verify"
 SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island")
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
-          "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory")
+          "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
+          "place", "routine")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
 CONTAINER = "sao-living_spacetimedb_1"
 
@@ -152,7 +153,9 @@ def check_seed(seed, rows):
     drawn_children = sum(c["parent_a"] != 0 and any(not t.get("residents") and bgs.get(c["id"], {}).get("town") == t["name"] for t in settlements) for c in by_name.values())
     equal("total people including drawn children", len(by_name), expected_people + drawn_children)
     for kind, count in seed["animals"].items():
-        equal(f"{kind} count including dead founders", sum(c["kind"] == kind for c in chars.values()), count)
+        # A seed's `packs` place animals of a kind on purpose, beside its `animals` (docs/COMBAT.md).
+        packed = sum(p.get("count", 0) for p in seed.get("packs", []) if p.get("kind") == kind)
+        equal(f"{kind} count including dead founders", sum(c["kind"] == kind for c in chars.values()), count + packed)
     present("resources generated", len(rows["resource_node"]) > 0)
     for structure in seed.get("structures", []):
         owner = by_name.get(structure.get("owner"), {}).get("id", 0)
@@ -227,6 +230,38 @@ def check_land(seed, rows, side, tiles):
     members = {m["member"]: m["community"] for m in rows["membership"]}
     wrong = [i for i, c in members.items() if c in folk and (bgs.get(i, {}).get("folk") != folk[c]["kind"] or abs((bgs.get(i, {}).get("body_scale") or -1) - folk[c]["scale"]) > 1e-3)]
     present("residents' backgrounds name their folk and scale", members and not wrong, wrong[:20])
+    # Town life (docs/TOWN_LIFE.md): residents know their places, found from their own
+    # settlement's lots, and start on the seed's own ways.
+    life = seed.get("town_life", {})
+    if life:
+        places = {}
+        for p in rows.get("place", []):
+            places.setdefault(p["actor"], {})[p["name"]] = (p["x"], p["y"])
+        residents = [i for i, c in members.items() if c in folk]
+        names = set(life.get("places", {})) | ({"evening"} if life.get("evening") else set())
+        missing = [i for i in residents if not names <= set(places.get(i, {}))]
+        present("residents know the seed's places (square, inn, evening)", residents and len(missing) <= 0.05 * len(residents), {"residents": len(residents), "missing": missing[:20]})
+        workers = [i for i in residents if bgs.get(i, {}).get("occupation") in life.get("work", {})]
+        no_work = [i for i in workers if "work" not in places.get(i, {})]
+        present("workers have a workplace", workers and len(no_work) <= 0.05 * len(workers), {"workers": len(workers), "without": no_work[:20]})
+        # In or by the settlement: within the search radius of its centre, or at one of its own
+        # lots (fields can lie farther out).
+        reach = {}
+        for l in lots:
+            s = next((x for x in settlements if x["id"] == l["settlement"]), None)
+            if s:
+                reach[s["community"]] = max(reach.get(s["community"], 0.0), ((l["x"] - s["x"]) ** 2 + (l["y"] - s["y"]) ** 2) ** 0.5 + max(l["width_m"], l["depth_m"]))
+        far = [i for i in workers if "work" in places.get(i, {}) and (lambda s, w: ((w[0] - s["x"]) ** 2 + (w[1] - s["y"]) ** 2) ** 0.5 > max(max(40.0, s["radius_m"]) * 1.5, reach.get(s["community"], 0.0)) + 6)(folk[members[i]], places[i]["work"])]
+        present("workplaces lie in or by their settlement", not far, far[:20])
+        present("workplaces are walkable", all(tile(*w["work"]) in WALKABLE for i, w in places.items() if "work" in w), [i for i, w in places.items() if "work" in w and tile(*w["work"]) not in WALKABLE][:20])
+        own = set(seed.get("ways", {}).get("common", {}))
+        routines = {}
+        for r in rows.get("routine", []):
+            routines.setdefault(r["actor"], set()).add(r["name"].lower())
+        # Infants have no ways yet: they start on their species' young instinct.
+        stage = {c["id"]: c.get("stage", 2) for c in rows["character"]}
+        lacking = [i for i in residents if bgs.get(i, {}).get("occupation") and stage.get(i, 2) >= 1 and not {n.lower() for n in own} <= routines.get(i, set())]
+        present("residents start on the seed's own ways", own and not lacking, lacking[:20])
     if seed.get("rules", {}).get("minds") is False:
         world = rows["world"][0]
         minded = [c["id"] for c in rows["character"] if c["ai"] or c["controller"] == world["admin"]]

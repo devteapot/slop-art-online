@@ -186,6 +186,11 @@ pub fn vary_ways(top: &Node, u: &mut dyn FnMut() -> f32) -> Option<Node> {
                 courted: vary(w.courted, u),
                 starving: vary(w.starving, u),
                 exhausted: vary(w.exhausted, u),
+                // Drawn after the older signals (and only when present), so ways without them
+                // vary exactly as before.
+                rain: vary(w.rain, u),
+                hailed: vary(w.hailed, u),
+                commotion: vary(w.commotion, u),
                 believes: w.believes.clone(),
             };
             Desire { want: d.want.clone(), weight, body: d.body.clone() }
