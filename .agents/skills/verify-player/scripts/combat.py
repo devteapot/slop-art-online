@@ -115,7 +115,7 @@ def ready(st, skill):
 
 def code_of(st, skill):
     """The presentation code `fighter.act` and `combat_seen.skill` carry for a skill: its
-    `skill_card.code` (assigned in skill-name order when the script is installed)."""
+    `skill_card.code` (the world's stable code for it, kept in the private `skill_code` table)."""
     c = [r["code"] for r in sql(st, "SELECT skill, code FROM skill_card") if r["skill"] == skill]
     return c[0] if c else 0
 

@@ -79,7 +79,7 @@ pub fn now_ms(ctx: &ReducerContext) -> u64 {
 
 /// The transaction's timestamp in microseconds: the key of caches that are valid only
 /// within one reducer call (a later call, or one rolled back, has another timestamp).
-fn stamp(ctx: &ReducerContext) -> i64 {
+pub(crate) fn stamp(ctx: &ReducerContext) -> i64 {
     ctx.timestamp.to_micros_since_unix_epoch()
 }
 
@@ -319,7 +319,9 @@ pub fn scripts(ctx: &ReducerContext) -> Rc<Scripts> {
             }
         }
         let src = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).unwrap_or_default();
-        let sc = Rc::new(Scripts::new(&src).expect("installed skills script compiles"));
+        let mut sc = Scripts::new(&src).expect("installed skills script compiles");
+        crate::codes::apply(ctx, &mut sc);
+        let sc = Rc::new(sc);
         *s.borrow_mut() = Some((rev, sc.clone()));
         sc
     })

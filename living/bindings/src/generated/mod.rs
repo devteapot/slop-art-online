@@ -6,6 +6,8 @@
 #![allow(unused, clippy::all)]
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
+pub mod act_card_table;
+pub mod act_card_type;
 pub mod activity_table;
 pub mod activity_type;
 pub mod artifact_table;
@@ -32,6 +34,8 @@ pub mod community_type;
 pub mod cry_prompt_type;
 pub mod cursor_type;
 pub mod deliberation_type;
+pub mod doing_table;
+pub mod doing_type;
 pub mod expecting_table;
 pub mod expecting_type;
 pub mod experience_table;
@@ -125,10 +129,12 @@ pub mod set_background_reducer;
 pub mod set_behavior_reducer;
 pub mod set_paused_reducer;
 pub mod set_profile_reducer;
+pub mod set_weather_reducer;
 pub mod settlement_table;
 pub mod settlement_type;
 pub mod skill_card_table;
 pub mod skill_card_type;
+pub mod skill_code_type;
 pub mod skill_use_type;
 pub mod slow_timer_type;
 pub mod spawn_battle_reducer;
@@ -153,9 +159,13 @@ pub mod vitals_table;
 pub mod vitals_type;
 pub mod wake_type;
 pub mod waypoint_type;
+pub mod weather_table;
+pub mod weather_type;
 pub mod world_table;
 pub mod world_type;
 
+pub use act_card_table::*;
+pub use act_card_type::ActCard;
 pub use activity_table::*;
 pub use activity_type::Activity;
 pub use artifact_table::*;
@@ -182,6 +192,8 @@ pub use community_type::Community;
 pub use cry_prompt_type::CryPrompt;
 pub use cursor_type::Cursor;
 pub use deliberation_type::Deliberation;
+pub use doing_table::*;
+pub use doing_type::Doing;
 pub use expecting_table::*;
 pub use expecting_type::Expecting;
 pub use experience_table::*;
@@ -275,10 +287,12 @@ pub use set_background_reducer::set_background;
 pub use set_behavior_reducer::set_behavior;
 pub use set_paused_reducer::set_paused;
 pub use set_profile_reducer::set_profile;
+pub use set_weather_reducer::set_weather;
 pub use settlement_table::*;
 pub use settlement_type::Settlement;
 pub use skill_card_table::*;
 pub use skill_card_type::SkillCard;
+pub use skill_code_type::SkillCode;
 pub use skill_use_type::SkillUse;
 pub use slow_timer_type::SlowTimer;
 pub use spawn_battle_reducer::spawn_battle;
@@ -303,6 +317,8 @@ pub use vitals_table::*;
 pub use vitals_type::Vitals;
 pub use wake_type::Wake;
 pub use waypoint_type::Waypoint;
+pub use weather_table::*;
+pub use weather_type::Weather;
 pub use world_table::*;
 pub use world_type::World;
 
@@ -417,6 +433,10 @@ pub enum Reducer {
     SetProfile {
         on: bool,
     },
+    SetWeather {
+        raining: bool,
+        secs: u32,
+    },
     SpawnBattle {
         n: u32,
     },
@@ -470,6 +490,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetBehavior { .. } => "set_behavior",
             Reducer::SetPaused { .. } => "set_paused",
             Reducer::SetProfile { .. } => "set_profile",
+            Reducer::SetWeather { .. } => "set_weather",
             Reducer::SpawnBattle { .. } => "spawn_battle",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
             Reducer::SpawnSkirmish { .. } => "spawn_skirmish",
@@ -639,6 +660,12 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetProfile { on } => {
                 __sats::bsatn::to_vec(&set_profile_reducer::SetProfileArgs { on: on.clone() })
             }
+            Reducer::SetWeather { raining, secs } => {
+                __sats::bsatn::to_vec(&set_weather_reducer::SetWeatherArgs {
+                    raining: raining.clone(),
+                    secs: secs.clone(),
+                })
+            }
             Reducer::SpawnBattle { n } => {
                 __sats::bsatn::to_vec(&spawn_battle_reducer::SpawnBattleArgs { n: n.clone() })
             }
@@ -674,6 +701,7 @@ impl __sdk::Reducer for Reducer {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct DbUpdate {
+    act_card: __sdk::TableUpdate<ActCard>,
     activity: __sdk::TableUpdate<Activity>,
     artifact: __sdk::TableUpdate<Artifact>,
     background: __sdk::TableUpdate<Background>,
@@ -684,6 +712,7 @@ pub struct DbUpdate {
     character: __sdk::TableUpdate<Character>,
     chronicle: __sdk::TableUpdate<Chronicle>,
     community: __sdk::TableUpdate<Community>,
+    doing: __sdk::TableUpdate<Doing>,
     expecting: __sdk::TableUpdate<Expecting>,
     experience: __sdk::TableUpdate<Experience>,
     fighter: __sdk::TableUpdate<Fighter>,
@@ -718,6 +747,7 @@ pub struct DbUpdate {
     thought: __sdk::TableUpdate<Thought>,
     trade_offer: __sdk::TableUpdate<TradeOffer>,
     vitals: __sdk::TableUpdate<Vitals>,
+    weather: __sdk::TableUpdate<Weather>,
     world: __sdk::TableUpdate<World>,
 }
 
@@ -727,6 +757,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_update in __sdk::transaction_update_iter_table_updates(raw) {
             match &table_update.table_name[..] {
+                "act_card" => db_update
+                    .act_card
+                    .append(act_card_table::parse_table_update(table_update)?),
                 "activity" => db_update
                     .activity
                     .append(activity_table::parse_table_update(table_update)?),
@@ -757,6 +790,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "community" => db_update
                     .community
                     .append(community_table::parse_table_update(table_update)?),
+                "doing" => db_update
+                    .doing
+                    .append(doing_table::parse_table_update(table_update)?),
                 "expecting" => db_update
                     .expecting
                     .append(expecting_table::parse_table_update(table_update)?),
@@ -859,6 +895,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "vitals" => db_update
                     .vitals
                     .append(vitals_table::parse_table_update(table_update)?),
+                "weather" => db_update
+                    .weather
+                    .append(weather_table::parse_table_update(table_update)?),
                 "world" => db_update
                     .world
                     .append(world_table::parse_table_update(table_update)?),
@@ -888,6 +927,9 @@ impl __sdk::DbUpdate for DbUpdate {
     ) -> AppliedDiff<'_> {
         let mut diff = AppliedDiff::default();
 
+        diff.act_card = cache
+            .apply_diff_to_table::<ActCard>("act_card", &self.act_card)
+            .with_updates_by_pk(|row| &row.skill);
         diff.activity = cache
             .apply_diff_to_table::<Activity>("activity", &self.activity)
             .with_updates_by_pk(|row| &row.id);
@@ -917,6 +959,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.community = cache
             .apply_diff_to_table::<Community>("community", &self.community)
+            .with_updates_by_pk(|row| &row.id);
+        diff.doing = cache
+            .apply_diff_to_table::<Doing>("doing", &self.doing)
             .with_updates_by_pk(|row| &row.id);
         diff.expecting = cache
             .apply_diff_to_table::<Expecting>("expecting", &self.expecting)
@@ -1008,6 +1053,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.vitals = cache
             .apply_diff_to_table::<Vitals>("vitals", &self.vitals)
             .with_updates_by_pk(|row| &row.id);
+        diff.weather = cache
+            .apply_diff_to_table::<Weather>("weather", &self.weather)
+            .with_updates_by_pk(|row| &row.id);
         diff.world = cache
             .apply_diff_to_table::<World>("world", &self.world)
             .with_updates_by_pk(|row| &row.id);
@@ -1025,6 +1073,9 @@ impl __sdk::DbUpdate for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_rows in raw.tables {
             match &table_rows.table[..] {
+                "act_card" => db_update
+                    .act_card
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "activity" => db_update
                     .activity
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1054,6 +1105,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "community" => db_update
                     .community
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "doing" => db_update
+                    .doing
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "expecting" => db_update
                     .expecting
@@ -1156,6 +1210,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "vitals" => db_update
                     .vitals
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "weather" => db_update
+                    .weather
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "world" => db_update
                     .world
@@ -1173,6 +1230,9 @@ impl __sdk::DbUpdate for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_rows in raw.tables {
             match &table_rows.table[..] {
+                "act_card" => db_update
+                    .act_card
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "activity" => db_update
                     .activity
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1202,6 +1262,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "community" => db_update
                     .community
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "doing" => db_update
+                    .doing
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "expecting" => db_update
                     .expecting
@@ -1304,6 +1367,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "vitals" => db_update
                     .vitals
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "weather" => db_update
+                    .weather
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "world" => db_update
                     .world
@@ -1323,6 +1389,7 @@ impl __sdk::DbUpdate for DbUpdate {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct AppliedDiff<'r> {
+    act_card: __sdk::TableAppliedDiff<'r, ActCard>,
     activity: __sdk::TableAppliedDiff<'r, Activity>,
     artifact: __sdk::TableAppliedDiff<'r, Artifact>,
     background: __sdk::TableAppliedDiff<'r, Background>,
@@ -1333,6 +1400,7 @@ pub struct AppliedDiff<'r> {
     character: __sdk::TableAppliedDiff<'r, Character>,
     chronicle: __sdk::TableAppliedDiff<'r, Chronicle>,
     community: __sdk::TableAppliedDiff<'r, Community>,
+    doing: __sdk::TableAppliedDiff<'r, Doing>,
     expecting: __sdk::TableAppliedDiff<'r, Expecting>,
     experience: __sdk::TableAppliedDiff<'r, Experience>,
     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
@@ -1367,6 +1435,7 @@ pub struct AppliedDiff<'r> {
     thought: __sdk::TableAppliedDiff<'r, Thought>,
     trade_offer: __sdk::TableAppliedDiff<'r, TradeOffer>,
     vitals: __sdk::TableAppliedDiff<'r, Vitals>,
+    weather: __sdk::TableAppliedDiff<'r, Weather>,
     world: __sdk::TableAppliedDiff<'r, World>,
     __unused: std::marker::PhantomData<&'r ()>,
 }
@@ -1381,6 +1450,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         event: &EventContext,
         callbacks: &mut __sdk::DbCallbacks<RemoteModule>,
     ) {
+        callbacks.invoke_table_row_callbacks::<ActCard>("act_card", &self.act_card, event);
         callbacks.invoke_table_row_callbacks::<Activity>("activity", &self.activity, event);
         callbacks.invoke_table_row_callbacks::<Artifact>("artifact", &self.artifact, event);
         callbacks.invoke_table_row_callbacks::<Background>("background", &self.background, event);
@@ -1391,6 +1461,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Character>("character", &self.character, event);
         callbacks.invoke_table_row_callbacks::<Chronicle>("chronicle", &self.chronicle, event);
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
+        callbacks.invoke_table_row_callbacks::<Doing>("doing", &self.doing, event);
         callbacks.invoke_table_row_callbacks::<Expecting>("expecting", &self.expecting, event);
         callbacks.invoke_table_row_callbacks::<Experience>("experience", &self.experience, event);
         callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
@@ -1453,6 +1524,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Thought>("thought", &self.thought, event);
         callbacks.invoke_table_row_callbacks::<TradeOffer>("trade_offer", &self.trade_offer, event);
         callbacks.invoke_table_row_callbacks::<Vitals>("vitals", &self.vitals, event);
+        callbacks.invoke_table_row_callbacks::<Weather>("weather", &self.weather, event);
         callbacks.invoke_table_row_callbacks::<World>("world", &self.world, event);
     }
 }
@@ -2114,6 +2186,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
     type QueryBuilder = __sdk::QueryBuilder;
 
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
+        act_card_table::register_table(client_cache);
         activity_table::register_table(client_cache);
         artifact_table::register_table(client_cache);
         background_table::register_table(client_cache);
@@ -2124,6 +2197,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         character_table::register_table(client_cache);
         chronicle_table::register_table(client_cache);
         community_table::register_table(client_cache);
+        doing_table::register_table(client_cache);
         expecting_table::register_table(client_cache);
         experience_table::register_table(client_cache);
         fighter_table::register_table(client_cache);
@@ -2158,9 +2232,11 @@ impl __sdk::SpacetimeModule for RemoteModule {
         thought_table::register_table(client_cache);
         trade_offer_table::register_table(client_cache);
         vitals_table::register_table(client_cache);
+        weather_table::register_table(client_cache);
         world_table::register_table(client_cache);
     }
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
+        "act_card",
         "activity",
         "artifact",
         "background",
@@ -2171,6 +2247,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "character",
         "chronicle",
         "community",
+        "doing",
         "expecting",
         "experience",
         "fighter",
@@ -2205,6 +2282,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "thought",
         "trade_offer",
         "vitals",
+        "weather",
         "world",
     ];
 }

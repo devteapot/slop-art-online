@@ -28,6 +28,8 @@ pub struct MindState {
     pub seen: Vec<Seen>,
     pub alerts: u32,
     pub fast_until: u64,
+    pub hailed_ms: u64,
+    pub hailer: u32,
 }
 
 impl __sdk::InModule for MindState {
@@ -54,6 +56,8 @@ pub struct MindStateCols {
     pub seen: __sdk::__query_builder::Col<MindState, Vec<Seen>>,
     pub alerts: __sdk::__query_builder::Col<MindState, u32>,
     pub fast_until: __sdk::__query_builder::Col<MindState, u64>,
+    pub hailed_ms: __sdk::__query_builder::Col<MindState, u64>,
+    pub hailer: __sdk::__query_builder::Col<MindState, u32>,
 }
 
 impl __sdk::__query_builder::HasCols for MindState {
@@ -76,6 +80,8 @@ impl __sdk::__query_builder::HasCols for MindState {
             seen: __sdk::__query_builder::Col::new(table_name, "seen"),
             alerts: __sdk::__query_builder::Col::new(table_name, "alerts"),
             fast_until: __sdk::__query_builder::Col::new(table_name, "fast_until"),
+            hailed_ms: __sdk::__query_builder::Col::new(table_name, "hailed_ms"),
+            hailer: __sdk::__query_builder::Col::new(table_name, "hailer"),
         }
     }
 }

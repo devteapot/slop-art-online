@@ -6,6 +6,7 @@
 mod act;
 mod acts;
 mod brain;
+mod codes;
 mod combat;
 mod island;
 mod mind;
@@ -14,6 +15,7 @@ mod perceive;
 mod seed;
 mod tables;
 mod tick;
+mod town;
 mod common;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};
@@ -54,8 +56,10 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         blocked: 0,
         missed: 0,
     });
-    let sc = living_rules::script::Scripts::new(seed::SKILLS)?;
+    let mut sc = living_rules::script::Scripts::new(seed::SKILLS)?;
+    codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);
+    town::cards(ctx, &sc);
     ctx.db.script().insert(Script { name: "skills".into(), source: seed::SKILLS.into(), revision: 1, updated_ms: now });
     for kind in ["person", "deer", "wolf"] {
         living_rules::graph::parse(&seed::instinct(kind)).map_err(|e| format!("{kind} instinct: {e}"))?;
@@ -87,7 +91,10 @@ pub fn set_paused(ctx: &ReducerContext, paused: bool) -> Result<(), String> {
 #[spacetimedb::reducer]
 pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String> {
     require_admin(ctx)?;
-    combat::cards(ctx, &living_rules::script::Scripts::new(&source)?);
+    let mut sc = living_rules::script::Scripts::new(&source)?;
+    codes::install(ctx, &mut sc)?;
+    combat::cards(ctx, &sc);
+    town::cards(ctx, &sc);
     let now = common::now_ms(ctx);
     let rev = ctx.db.script().name().find("skills".to_string()).map(|s| s.revision + 1).unwrap_or(1);
     ctx.db.script().name().delete("skills".to_string());
@@ -96,6 +103,15 @@ pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String
     k.scripts_rev = rev;
     ctx.db.clock().id().update(k);
     common::invalidate_scripts_rev();
+    Ok(())
+}
+
+/// Scene support (admin): hold the weather for `secs` seconds (0 hands it back to the seed's
+/// own weather). Verification scenes use it to bring rain; it never changes the day length.
+#[spacetimedb::reducer]
+pub fn set_weather(ctx: &ReducerContext, raining: bool, secs: u32) -> Result<(), String> {
+    require_admin(ctx)?;
+    town::force_weather(ctx, raining, secs.min(86_400), common::now_ms(ctx));
     Ok(())
 }
 

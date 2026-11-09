@@ -473,6 +473,12 @@ pub struct MindState {
     #[index(btree)]
     #[default(0u64)]
     pub fast_until: u64,
+    /// When someone last greeted this character with a gesture made at it (a skill whose
+    /// effects `hail`), and who (`hailed`, `hailer` in graphs).
+    #[default(0u64)]
+    pub hailed_ms: u64,
+    #[default(0u32)]
+    pub hailer: u32,
 }
 
 /// Immediate re-evaluation requests (consumed by the next tick).
@@ -1059,6 +1065,74 @@ pub struct Readiness {
     pub move_dx: f32,
     pub move_dy: f32,
     pub move_run: bool,
+}
+
+// ---- town life (docs/TOWN_LIFE.md) ------------------------------------------------
+
+/// The world's weather (one row, id 0): whether it is raining, since when and until when the
+/// current spell lasts. Drawn per spell from the world's seed and its climate (`weather` in the
+/// seed: `spell_s`, `rain_share`; a seed without one never rains),
+/// or set for a while by an admin scene (`set_weather`). Written by housekeeping only when it
+/// changes; clients draw the sky from it.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = weather, public)]
+pub struct Weather {
+    #[primary_key]
+    pub id: u8,
+    pub raining: bool,
+    pub since_ms: u64,
+    pub until_ms: u64,
+    /// An admin scene holds the weather until this time (0: the seed's own weather).
+    pub forced_until_ms: u64,
+}
+
+/// The presentation code each skill was given, per code space (`codes.rs`): kept across
+/// script installs and never reused, so `fighter.act`, `combat_seen.skill` and `doing.code`
+/// name the same skill before and after an install (private; clients read codes from
+/// `skill_card` and `act_card`).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = skill_code)]
+pub struct SkillCode {
+    /// `<space>:<skill>`, e.g. `combat:strike`, `shown:wave`.
+    #[primary_key]
+    pub key: String,
+    pub code: u8,
+}
+
+/// Each skill the rules say others can see (`<skill>_shows()` in the script), rewritten
+/// whenever a skill script is installed, so clients name the codes in `doing` and know how
+/// an unfamiliar skill looks (public, static).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = act_card, public)]
+pub struct ActCard {
+    #[primary_key]
+    pub skill: String,
+    /// Its presentation code (`doing.code`; `living_rules::social::Shows::code`).
+    pub code: u8,
+    /// How it looks: gesture, turn, step, play, work, eat, sleep, rest.
+    pub look: String,
+    /// The body turns to face its target when it starts.
+    pub faces: bool,
+    /// It is a pace to the side, out of someone's way.
+    pub aside: bool,
+}
+
+/// What a character is visibly doing right now, for a skill with an `act_card`: written when
+/// it starts being performed, deleted when it ends. Clients receive it through their body
+/// window (a join on `body.id`), like `fighter`. It holds what anyone looking would see.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = doing, public)]
+pub struct Doing {
+    #[primary_key]
+    pub id: u32,
+    /// Its `act_card.code`.
+    pub code: u8,
+    /// Whom it is aimed at (0 for nobody), and where its target is (a bush, a hearth, a person).
+    pub target: u32,
+    pub x: f32,
+    pub y: f32,
+    pub since_ms: u64,
+    pub until_ms: u64,
 }
 
 // ---- schedules ---------------------------------------------------------------

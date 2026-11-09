@@ -38,6 +38,8 @@ const DESIRE_MARK: u16 = 0xC000;
 const PLAN_DONE_MARK: u16 = 0xCFFF;
 /// How long an animal's impulse keeps any pull.
 const IMPULSE_MS: f32 = 60_000.0;
+/// How long being greeted weighs on the `hailed` desire signal.
+const HAILED_MS: u64 = 6_000;
 
 struct Scene {
     creatures: Vec<NearCreature>,
@@ -102,7 +104,9 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     }
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
     let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting };
-    ev.latched = cur.filter(|a| a.revision == ev.st.revision && LATCHES.contains(&a.skill.as_str())).map(|a| a.node);
+    // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
+    let sc = common::scripts(ctx);
+    ev.latched = cur.filter(|a| a.revision == ev.st.revision && (LATCHES.contains(&a.skill.as_str()) || sc.shows().aside(&a.skill))).map(|a| a.node);
     ev.alerts();
     let root = ev.g.clone();
     let result = ev.run(&root.root, 0);
@@ -155,14 +159,15 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
         | ((activity == "sleep") as u32) << 8
         | ((activity == "rest") as u32) << 9
         | (cloak as u32) << 10
-        | ((season == "winter") as u32) << 11;
+        | ((season == "winter") as u32) << 11
+        | (crate::town::raining(ctx) as u32) << 12;
     if key == v.rate_key {
         return Some(v);
     }
     let facts = act::facts(ctx, me.id, now);
     let sc = common::scripts(ctx);
     let hour = common::hour(w, now);
-    let sctx = living_rules::script::SkillCtx { actor: facts, night, hour, season: season.into(), ..Default::default() };
+    let sctx = living_rules::script::SkillCtx { actor: facts, night, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
     let _ = at;
     if let Ok(r) = sc.rates(&sctx) {
         common::settle(&mut v, now);
@@ -237,6 +242,9 @@ impl<'a> Ev<'a> {
         let winter = if common::season(self.ctx, now) == "winter" { 1.0 } else { 0.0 };
         let starving = if self.needs.hunger >= 90.0 { 1.0 } else { 0.0 };
         let exhausted = if self.needs.energy <= 10.0 { 1.0 } else { 0.0 };
+        let rain = if ds.iter().any(|d| d.weight.rain != 0.0) && crate::town::raining(self.ctx) { 1.0 } else { 0.0 };
+        let hailed = if self.hailed(HAILED_MS) { 1.0 } else { 0.0 };
+        let commotion = if ds.iter().any(|d| d.weight.commotion != 0.0) && self.resolve(&graph::Target::Commotion).is_some() { 1.0 } else { 0.0 };
         let courted = if ds.iter().any(|d| d.weight.courted != 0.0) && self.resolve(&graph::Target::Suitor).is_some() { 1.0 } else { 0.0 };
         let judgments: Vec<(String, f32)> = if ds.iter().any(|d| !d.weight.believes.is_empty()) {
             self.ctx.db.judgment().actor().filter(me).map(|j| (j.key.to_lowercase(), j.value)).collect()
@@ -260,7 +268,7 @@ impl<'a> Ev<'a> {
                 let w = &d.weight;
                 let last = self.st.marks.iter().find(|m| m.node == DESIRE_MARK | ids[i]).map(|m| m.at_ms);
                 let longing = last.map_or(1.0, |t| (now.saturating_sub(t) as f32 / 3_600_000.0).min(1.0));
-                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted;
+                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted + w.rain * rain + w.hailed * hailed + w.commotion * commotion;
                 for (k, v) in &w.believes {
                     let j = judgments.iter().find(|(key, _)| key == &k.to_lowercase()).map(|(_, x)| *x).unwrap_or(0.5);
                     s += v * j;
@@ -301,6 +309,11 @@ impl<'a> Ev<'a> {
         }
         self.set_cursor(id, 0);
         St::Fail
+    }
+
+    /// Someone greeted me within `ms` (an answer to my own greeting does not count).
+    fn hailed(&self, ms: u64) -> bool {
+        self.st.hailer != 0 && self.st.hailed_ms != 0 && self.now.saturating_sub(self.st.hailed_ms) <= ms
     }
 
     fn cursor(&self, node: u16) -> u16 {
@@ -564,6 +577,17 @@ impl<'a> Ev<'a> {
                     (x, y) => x.or(y),
                 }
             }
+            Target::Hailer => {
+                if self.hailed(60_000) {
+                    self.visible_creature(self.st.hailer)
+                } else {
+                    None
+                }
+            }
+            Target::Commotion => {
+                let sight = common::sight_for(self.ctx, self.me.id, &self.w, now);
+                crate::town::commotion(self.ctx, self.at, sight, now).map(Resolved::point)
+            }
             Target::Home => {
                 if let Some(p) = self.place("home") {
                     return Some(p);
@@ -707,6 +731,12 @@ impl<'a> Ev<'a> {
             Cond::HurtWithin(s) => self.vit.hurt_ms != 0 && self.now.saturating_sub(self.vit.hurt_ms) as f32 <= s * 1000.0,
             Cond::HeardWithin(s) => self.st.heard_ms != 0 && self.now.saturating_sub(self.st.heard_ms) as f32 <= s * 1000.0,
             Cond::Night(b) => common::night(&self.w, self.now) == *b,
+            Cond::Raining(b) => crate::town::raining(self.ctx) == *b,
+            Cond::Hailed(s) => self.hailed((s * 1000.0) as u64),
+            Cond::Moving(b) => {
+                let moving = self.ctx.db.body().id().find(self.me.id).is_some_and(|body| crate::town::motion_of(&body, self.now).1 != (0.0, 0.0));
+                moving == *b
+            }
             Cond::Hour(x) => x.test(common::hour(&self.w, self.now)),
             Cond::Threatened(b) => {
                 let me = self.me.id;

@@ -8,6 +8,7 @@
 | Identity-scoped `my_deliberations` view | [deliberations.md](deliberations.md) | `view-*.json` |
 | Reducer permissions and allowed effects for each identity | [permissions.md](permissions.md) | `reducers.md`, `reducers.json`, `reducer-effects.json` |
 | Combat: private combat tables, the `my_combat` and `my_skill_uses` views, public `fighter` and `skill_card` | [combat.md](combat.md) | `combat-*.json`, `visibility.json`, `reducers.json` |
+| Town life: public `act_card`, `doing` and `weather`; admin-only `set_weather` | [town.md](town.md) | `town-public.json`, `reducers.json` |
 | Dropped WebSocket connection and resubscription | [reconnect.md](reconnect.md) | `reconnect.json` |
 | Game client on a land world: staged subscriptions, chunk windows, regenerated land, join, speech, death and rejoin | [game-client.md](game-client.md) | game `game.log`, photographs, probe `.jsonl`, metric samples |
 

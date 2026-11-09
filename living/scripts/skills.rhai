@@ -22,6 +22,8 @@ fn laws() {
         pasture_regen: 0.0015,
         // Someone with no other person within this many tiles is alone (predators dare more).
         alone_within: 6.0,
+        // A body within this many radians of facing something already faces it.
+        face_slack: 0.35,
     }
 }
 
@@ -82,6 +84,8 @@ fn cold(a) {
     a.night && a.actor.kind == "person" && !a.actor.near_fire && !a.actor.near_shelter && inv(a, "cloak") == 0
 }
 
+fn wet(a) { a.raining && a.actor.kind == "person" && !a.actor.near_shelter }
+
 fn body_state(a) {
     let fraction = a.actor.hp / (max_hp(a.actor.kind) * a.actor.vitality);
     #{ cold: cold(a), hungry: a.actor.hunger > 55.0, starving: a.actor.hunger >= 100.0,
@@ -122,6 +126,10 @@ fn rates(a) {
     // Inborn endurance slows tiring; vitality speeds healing.
     if energy < 0.0 { energy /= a.actor.endurance; }
     if hp > 0.0 { hp *= a.actor.vitality; }
+    // Rain soaks people out from under a roof (a cloak keeps some of it off): it is tiring.
+    if wet(a) {
+        energy -= if inv(a, "cloak") > 0 { 1.0 } else { 2.5 };
+    }
     // Cold nights hurt people without a fire, shelter or warm cloak; winter nights are worse.
     if cold(a) {
         hp -= if a.season == "winter" { 5.0 } else { 2.0 };
@@ -966,6 +974,12 @@ fn skill_io(skill) {
         "sleep" => #{ takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" },
         "rest" => #{ takes: "8 seconds", gives: "a little energy" },
         "wait" => #{ takes: "time", gives: "nothing: time passes" },
+        "wave" => #{ takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them: a greeting, or an answer to theirs" },
+        "nod" => #{ takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them: a greeting, or an answer to theirs" },
+        "face" => #{ takes: "something or someone in sight", gives: "you turn where you stand to face it" },
+        "step_aside" => #{ takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" },
+        "keep" => #{ takes: "10 seconds at your post", gives: "you are seen at work there (a stall, a workshop, a gate)" },
+        "play" => #{ takes: "4 seconds, not a baby", gives: "a little fun; tires a little" },
         "build" => #{ takes: `its materials from your pack (campfire ${cost_text("campfire")}; shelter ${cost_text("shelter")}; storage ${cost_text("storage")}; house ${cost_text("house")}; wall ${cost_text("wall")}; gate ${cost_text("gate")}; trap ${cost_text("trap")}; bridge ${cost_text("bridge")}) and knowing its technique`,
             gives: `the structure here: a campfire warms within ${l.fire_warmth} tiles at night, a shelter or house within ${l.shelter_warmth} and makes sleep restful, a storage keeps items (food spoils slower), a trap catches game over time (take the meat from it), a bridge makes the water tile beside you a way across` },
         "pave" => #{ takes: cost_text("road"), gives: "road under you (faster walking)" },
@@ -999,3 +1013,73 @@ fn skill_io(skill) {
         _ => #{ takes: "", gives: "" },
     }
 }
+
+// ---- gestures and town life (docs/TOWN_LIFE.md) ---------------------------------------
+// A gesture is seen, not heard: its target must be in sight within the gesture's reach.
+// `hail` lets the one it is made at see that it was made at them (they may answer).
+fn gesture_check(a, reach) {
+    if a.target.class != "creature" || !a.target.alive { return "no one there"; }
+    if a.target.id == a.actor.id { return "not to yourself"; }
+    if a.actor.stage == "infant" { return "too small"; }
+    if a.actor.activity == "sleep" { return "you are asleep"; }
+    if a.target.dist > reach { return "too far for them to see it"; }
+    ""
+}
+fn wave_check(a) { gesture_check(a, 12.0) }
+fn wave_duration(a) { 1200 }
+fn wave_done(a) { [#{ op: "hail" }] }
+fn nod_check(a) { gesture_check(a, 6.0) }
+fn nod_duration(a) { 700 }
+fn nod_done(a) { [#{ op: "hail" }] }
+// Turning where one stands to face what one sees (already facing it within the `face_slack`
+// law, the engine refuses it before asking: there is nothing to do).
+fn face_check(a) {
+    if a.target.class == "none" { return "nothing to face"; }
+    if a.target.class == "creature" && a.target.id == a.actor.id { return "not yourself"; }
+    ""
+}
+fn face_duration(a) { 600 }
+fn face_done(a) { [] }
+// Making way: a pace aside for someone coming at you where there is little room to pass.
+fn step_aside_check(a) {
+    if a.target.class != "creature" || a.target.id == a.actor.id { return "no one to make way for"; }
+    if a.target.closing < 0.5 { return "no one is coming your way"; }
+    if a.actor.room > 19 { return "there is room enough to pass"; }
+    ""
+}
+fn step_aside_dist(kind) { 1.2 }
+// Keeping one's post: standing at a stall, a workshop or a gate, attending to who comes.
+fn keep_check(a) { if young(a) { return "too young to keep a post"; } if a.actor.activity == "sleep" { return "you are asleep"; } "" }
+fn keep_duration(a) { 10000 }
+fn keep_done(a) { [#{ op: "vitals", energy: -0.3 }] }
+fn play_check(a) { if a.actor.stage == "infant" { return "too small to play"; } "" }
+fn play_duration(a) { 4000 }
+fn play_done(a) { [#{ op: "vitals", energy: -0.5 }] }
+
+// What others see of a skill: `<skill>_shows()`, read once when the script is installed.
+// Every skill with one gets an `act_card` and a presentation code (its place in name order),
+// and while it is performed a `doing` row anyone in view can see. Traits:
+//   look    how it looks (clients draw a skill they know by name, any other by its look)
+//   faces   the body turns where it stands to face the skill's target when it starts
+//   turn    turning is all it does: facing its target already (`face_slack`), it is refused
+//           before its rules are asked
+//   aside   a short walk to the side of the creature it targets (`<skill>_dist(kind)`), only
+//           while that creature is coming toward the actor
+//   record  each use is kept in `skill_use`, from intention to outcome, like a combat move
+fn wave_shows() { #{ look: "gesture", faces: true, record: true } }
+fn nod_shows() { #{ look: "gesture", faces: true, record: true } }
+fn face_shows() { #{ look: "turn", faces: true, turn: true, record: true } }
+fn step_aside_shows() { #{ look: "step", aside: true, record: true } }
+fn play_shows() { #{ look: "play" } }
+fn keep_shows() { #{ look: "work" } }
+fn gather_shows() { #{ look: "work" } }
+fn plant_shows() { #{ look: "work" } }
+fn cook_shows() { #{ look: "work" } }
+fn store_shows() { #{ look: "work" } }
+fn take_shows() { #{ look: "work" } }
+fn craft_shows() { #{ look: "work" } }
+fn read_shows() { #{ look: "work" } }
+fn tend_shows() { #{ look: "work" } }
+fn eat_shows() { #{ look: "eat" } }
+fn sleep_shows() { #{ look: "sleep" } }
+fn rest_shows() { #{ look: "rest" } }

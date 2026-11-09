@@ -1,6 +1,13 @@
 # Validation record (generation)
 
 
+## 2026-11-09 town life: places and starting ways (dev-box)
+
+Own scratch container `slop-townlife-stdb` (image `v2.14.1`) through a `docker` name shim; worktree `~/dev/slop-townlife`, branch `townlife-1` from `b12fa45` with the town-life change (docs/TOWN_LIFE.md) uncommitted. The seed format gained `ways` and `town_life`; `place` and `routine` joined the snapshot tables, and the land check gained four town-life checks (places known, workers placed, workplaces in or by their settlement and walkable, residents on the seed's own ways).
+
+- **`generation-town-1`** (`--feature all`): every seed passed except the island, 68 of 71. Three failures, all in the harness: "wolf count including dead founders" (10 against 6) is drift from the combat change, which added the seed's `packs` (4 bold wolves) without the check counting them; "workplaces lie in or by their settlement" counted farm fields beyond 1.5 × the radius as far, though they are the settlement's own lots; "residents start on the seed's own ways" counted infants, who start on their species' young instinct. The three checks were corrected and re-run offline on the same snapshot (70 of 70), then live.
+- **`generation-town-2`** (`--feature worlds`): every result passes. The island passes 71 of 71: 269 residents know their places with none missing, 209 workers have a workplace, and every grown resident starts with the seed's `common` routines. Repeatability and cleanup passed.
+
 ## 2026-11-09 island ornaments, terraces and styled towns (dev-box)
 
 `generation-orn-20261109-035123`, on `c5a2c00` plus the ornaments change (`docs/FIRST_WORLD.md`, "Ornaments, terraces and styled towns"). SpacetimeDB 2.14.1 ran in a scratch container of the run's own, `slop-orn-stdb` on port 3310. Port 3300 belonged to another agent's container, so the harness's port was patched locally and not committed. This change made the land check accept a styled town's site id, `<style>_<kind>` (`steampunk_town`), against the settlement row's `kind` and `style`.
