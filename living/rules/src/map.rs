@@ -211,6 +211,37 @@ impl Map {
         true
     }
 
+    /// Whether one can see from `a` to `b`: no tile the segment crosses between the two ends
+    /// is opaque (wall, rock or a shut gate, as for missiles; water, forest and open ground
+    /// are not). The ends' own tiles never block, so someone standing in a gateway is seen.
+    /// Walks the exact tiles the segment crosses (a grid traversal), so its cost grows with
+    /// the distance in tiles, not with a sampling rate.
+    pub fn sight_clear(&self, a: (f32, f32), b: (f32, f32)) -> bool {
+        let (mut tx, mut ty) = (a.0.floor() as i32, a.1.floor() as i32);
+        let end = (b.0.floor() as i32, b.1.floor() as i32);
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let (sx, sy) = (dx.signum() as i32, dy.signum() as i32);
+        // Parameter t along the segment at the next vertical and horizontal tile edge.
+        let next = |p: f32, d: f32, t: i32| if d > 0.0 { (t as f32 + 1.0 - p) / d } else if d < 0.0 { (t as f32 - p) / d } else { f32::INFINITY };
+        let (mut tmx, mut tmy) = (next(a.0, dx, tx), next(a.1, dy, ty));
+        let (tdx, tdy) = (if dx != 0.0 { 1.0 / dx.abs() } else { f32::INFINITY }, if dy != 0.0 { 1.0 / dy.abs() } else { f32::INFINITY });
+        let mut guard = (end.0 - tx).abs() + (end.1 - ty).abs() + 2;
+        while (tx, ty) != end && guard > 0 {
+            guard -= 1;
+            if tmx < tmy {
+                tx += sx;
+                tmx += tdx;
+            } else {
+                ty += sy;
+                tmy += tdy;
+            }
+            if (tx, ty) != end && !self.passable_missile(tx as f32 + 0.5, ty as f32 + 0.5) {
+                return false;
+            }
+        }
+        true
+    }
+
     /// A* over the 8-connected tile grid followed by line-of-sight smoothing.
     /// Returns waypoints excluding the start, ending exactly at `to` when walkable.
     pub fn path(&self, from: (f32, f32), to: (f32, f32), max_expansions: usize) -> Option<Vec<(f32, f32)>> {
@@ -468,5 +499,36 @@ mod tests {
         assert_eq!(chunk_of(17.0, 1.0), 1);
         assert_eq!(chunk_of(1.0, 17.0), 1 << 16);
         assert_eq!(chunks_around(1.0, 1.0, 8.0), vec![0]);
+    }
+
+    #[test]
+    fn sight_is_stopped_by_walls_rock_and_shut_gates_only() {
+        let mut m = Map { w: 32, h: 32, tiles: vec![Terrain::Grass as u8; 32 * 32], blocked: Default::default() };
+        // A wall across x = 10 from y = 0 to y = 19, water at x = 20.
+        for y in 0..20 {
+            m.set(10, y, Terrain::Wall);
+            m.set(20, y, Terrain::Water);
+        }
+        assert!(!m.sight_clear((5.5, 5.5), (15.5, 5.5)), "a wall hides");
+        assert!(!m.sight_clear((5.2, 5.7), (15.9, 9.1)), "a slanted line through the wall");
+        assert!(m.sight_clear((5.5, 25.5), (15.5, 25.5)), "past the wall's end");
+        assert!(m.sight_clear((5.5, 21.5), (15.5, 21.5)), "the wall's end is not crossed");
+        assert!(m.sight_clear((15.5, 5.5), (25.5, 5.5)), "water does not hide");
+        assert!(m.sight_clear((10.5, 5.5), (5.5, 5.5)), "standing in the wall's own tile");
+        assert!(m.sight_clear((3.5, 3.5), (3.5, 3.5)), "the same tile");
+        m.set(3, 12, Terrain::Rock);
+        assert!(!m.sight_clear((3.5, 10.5), (3.5, 14.5)), "rock hides, vertically");
+        assert!(m.sight_clear((2.5, 10.5), (2.5, 14.5)), "beside the rock");
+        // A shut gate in a gap of the wall.
+        m.set(10, 5, Terrain::Grass);
+        assert!(m.sight_clear((5.5, 5.5), (15.5, 5.5)), "through an open gateway");
+        m.blocked.insert(5 * 32 + 10);
+        assert!(!m.sight_clear((5.5, 5.5), (15.5, 5.5)), "a shut gate hides");
+        // Exactly along a tile corner: the traversal must not slip diagonally between two
+        // walls touching at a corner.
+        let mut c = Map { w: 8, h: 8, tiles: vec![Terrain::Grass as u8; 64], blocked: Default::default() };
+        c.set(3, 4, Terrain::Wall);
+        c.set(4, 3, Terrain::Wall);
+        assert!(!c.sight_clear((2.5, 5.5), (5.5, 2.5)), "two walls meeting at a corner hide");
     }
 }

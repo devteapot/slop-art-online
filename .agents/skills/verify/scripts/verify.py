@@ -13,7 +13,8 @@ removes what the run started and keeps the evidence.
   verify.py player  --run R move DX DY [--run-gait]
   verify.py player  --run R act NODE_JSON
   verify.py player  --run R say TEXT [--to ID]
-  verify.py sql     --run R QUERY [--as-player | --as-admin] [--save NAME]
+  verify.py sql     --run R QUERY [--as-player | --anonymous] [--save NAME]
+                                            as the database owner unless told otherwise
   verify.py call    --run R REDUCER ARGS_JSON [--as-player | --as-admin] [--expect-refusal TEXT]
   verify.py observer --run R start|shot NAME|stop
   verify.py cleanup --run R [--keep-db]
@@ -119,6 +120,8 @@ def launch(a):
     if not st["db"].startswith(PREFIX):
         sys.exit(f"refusing to publish {st['db']}: verification databases start with {PREFIX}")
     st["seed"] = a.seed
+    # Which tables players may read (docs/PERCEPTION.md): the build's LIVING_PERCEPTION.
+    st["perception"] = os.environ.get("LIVING_PERCEPTION", "open")
     if not container_up():
         # `compose up --wait` can hang under podman-compose even after the container is
         # healthy, so start detached and poll the ping endpoint instead.
@@ -156,7 +159,7 @@ def launch(a):
     st["commit"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     st["dirty"] = bool(subprocess.run(["git", "status", "--porcelain", "living"], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     save(st)
-    log(st, f"published {st['db']} from {wasm} ({'updated in place, data kept' if keep else 'fresh'}; seed {a.seed}, commit {st['commit']}{' + uncommitted living/ changes' if st['dirty'] else ''})")
+    log(st, f"published {st['db']} from {wasm} ({'updated in place, data kept' if keep else 'fresh'}; seed {a.seed}, perception {st['perception']}, commit {st['commit']}{' + uncommitted living/ changes' if st['dirty'] else ''})")
 
 
 def doctor(a):
@@ -167,7 +170,9 @@ def doctor(a):
     checks["SpacetimeDB answers /v1/ping"] = code == 200
     r = subprocess.run(["docker", "inspect", CONTAINER, "--format", "{{.Config.Image}}"], capture_output=True, text=True)
     checks[f"server image is v2.14.1 ({r.stdout.strip() or 'none'})"] = r.stdout.strip().endswith(":v2.14.1")
-    q = lambda text: json.loads(http(f"/v1/database/{st['db']}/sql", text, raw=True)[1])[0]["rows"]
+    # `stats` is private developer truth: read it as the owner.
+    owner = admin_token()
+    q = lambda text: json.loads(http(f"/v1/database/{st['db']}/sql", text, owner, raw=True)[1])[0]["rows"]
     code, _ = http(f"/v1/database/{st['db']}/sql", "SELECT paused FROM world", raw=True)
     checks[f"database {st['db']} exists"] = code == 200
     if code == 200:
@@ -228,7 +233,9 @@ def admin_token():
 
 def sql(a):
     st = load(a.run)
-    token = admin_token() if getattr(a, "as_admin", False) else st.get("token") if getattr(a, "as_player", False) else None
+    # The owner by default: most tables are private developer truth (docs/PERCEPTION.md).
+    # `--anonymous` reads as a client with no identity, `--as-player` as the run's player.
+    token = None if getattr(a, "anonymous", False) else st.get("token") if getattr(a, "as_player", False) else admin_token()
     code, body = http(f"/v1/database/{st['db']}/sql", a.query, token, raw=True)
     if code != 200:
         sys.exit(f"sql: {code} {body}")
@@ -320,7 +327,9 @@ def observer(a):
         url = f"http://127.0.0.1:{OBS_PORT}/?db={st['db']}"
         # Software WebGL keeps the canvas renderable without a GPU; virtual time lets the
         # wasm load and the subscription fill before the capture.
-        subprocess.run([chrome(), "--headless=new", "--no-sandbox", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", f"--window-size={a.size}", f"--virtual-time-budget={a.wait_ms}", f"--screenshot={png}", url], capture_output=True, timeout=180)
+        # The observer reads private tables with the owner's token, passed in the page's
+        # fragment (never sent to a server); the logged URL leaves it out.
+        subprocess.run([chrome(), "--headless=new", "--no-sandbox", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", f"--window-size={a.size}", f"--virtual-time-budget={a.wait_ms}", f"--screenshot={png}", url + "#token=" + admin_token()], capture_output=True, timeout=180)
         if not png.exists():
             sys.exit("screenshot failed")
         log(st, f"observer screenshot {png.relative_to(ROOT)} of {url}")
@@ -396,7 +405,7 @@ def main():
     p = sub.add_parser("doctor"); p.add_argument("--run", required=True); p.set_defaults(f=doctor)
     p = sub.add_parser("player"); p.add_argument("--run", required=True); p.add_argument("action", choices=["join", "move", "act", "say"]); p.add_argument("args", nargs="+")
     p.add_argument("--run-gait", action="store_true"); p.add_argument("--to", type=int, default=0); p.set_defaults(f=player)
-    p = sub.add_parser("sql"); p.add_argument("--run", required=True); p.add_argument("query"); p.add_argument("--as-player", action="store_true"); p.add_argument("--as-admin", action="store_true"); p.add_argument("--save"); p.set_defaults(f=sql)
+    p = sub.add_parser("sql"); p.add_argument("--run", required=True); p.add_argument("query"); p.add_argument("--as-player", action="store_true"); p.add_argument("--anonymous", action="store_true"); p.add_argument("--as-admin", action="store_true", help="the default; kept for older callers"); p.add_argument("--save"); p.set_defaults(f=sql)
     p = sub.add_parser("call"); p.add_argument("--run", required=True); p.add_argument("reducer"); p.add_argument("args", help="JSON array, e.g. '[true]'")
     g = p.add_mutually_exclusive_group(); g.add_argument("--as-player", action="store_true"); g.add_argument("--as-admin", action="store_true")
     p.add_argument("--expect-refusal", metavar="TEXT", help="succeed only if the call is refused with TEXT in the error"); p.set_defaults(f=call)

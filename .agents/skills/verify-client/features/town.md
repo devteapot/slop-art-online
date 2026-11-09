@@ -2,13 +2,13 @@
 
 ## Sub-features
 
-- `act_card`, `doing` and `weather` are public (`town-public.json`). `act_card` holds one row per skill the installed script shows (`<skill>_shows()` in `living/scripts/skills.rhai`: 17 with the shipped script), with its presentation `code`, `look`, `faces` and `aside`; codes are stable across script installs (private `skill_code`), but they are the world's, not fixed numbers: read them from `act_card`. `doing` holds, per character performing a shown skill, its code, target, point and `since_ms`/`until_ms`; `weather` is one row written by housekeeping.
+- `act_card` and `weather` are public, and `doing` too in an open build (`town-public.json`); in a scoped build `doing` is private and a player receives what the creatures it perceives are doing through `seen_doing` ([perception.md](perception.md)). `act_card` holds one row per skill the installed script shows (`<skill>_shows()` in `living/scripts/skills.rhai`: 17 with the shipped script), with its presentation `code`, `look`, `faces` and `aside`; codes are stable across script installs (private `skill_code`), but they are the world's, not fixed numbers: read them from `act_card`. `doing` holds, per character performing a shown skill, its code, target, point and `since_ms`/`until_ms`; `weather` is one row written by housekeeping.
 - `set_weather` is admin-only, like the other scene reducers (`reducers.md`).
-- Like `fighter`, `doing` is joined to a body window by clients (`SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE …`); the window is not a permission boundary. `place` rows (a resident's `work`, `square`, `inn`, `evening`) are public too, as before.
+- In an open build, like `fighter`, `doing` is joined to a body window by clients (`SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE …`); the window is not a permission boundary. `place` rows (a resident's `work`, `square`, `inn`, `evening`) are public only in an open build; a player reads its own through `my_places`.
 
 ## How to get to it (user POV)
 
-`drive.py --run "$R"` probes the three tables anonymously after the combat checks, and the permission matrix calls `set_weather` as every non-admin identity. Design: `docs/TOWN_LIFE.md`.
+`drive.py --run "$R"` probes the public tables anonymously after the combat checks, and the permission matrix calls `set_weather` as every non-admin identity. Design: `docs/TOWN_LIFE.md`.
 
 ## Gotchas
 

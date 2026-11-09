@@ -53,6 +53,7 @@ $V launch --run <run> [--seed world]
 
 - Starts the SpacetimeDB container `sao-living_spacetimedb_1` (`http://127.0.0.1:3300`, image `v2.14.1`) if it is down, without Neo4j, and records that the run started it. Startup takes 1–2 minutes. The helper polls `/v1/ping` because `docker compose up --wait` can hang under podman-compose. The same name holds under Docker Compose (Docker Desktop on the laptop), because `compose.yml` pins `container_name`; the `/wasm` mount's `/host_mnt` prefix there is stripped.
 - Builds the module from the working tree. The default seed is `living/seeds/world.json` (`realm-4`: 512×512 tiles, about 190 people and 80 animals). Another `--seed <name>` builds in `living/target/verify-<seed>` and leaves the active module alone.
+- `LIVING_PERCEPTION=scoped` in the environment builds the module with the tables behind the perception views private (docs/PERCEPTION.md); the default `open` keeps the game client's tables public. The run's `state.json` records it as `perception`, and the launch log line names it.
 - Publishes a fresh `verify-<run>` with `--delete-data` and installs `living/scripts/skills.rhai`. The world ticks at 60 Hz right away. AI characters run their instinct graphs until a mind connects.
 - `--keep-data` updates the run's existing database in place instead, as `just living-publish` does for the active world. Use it to prove that minds and clients recover from a module update with their data intact.
 - `--target-dir DIR` builds the module in `DIR`, for example `.local/living/verify/<run>/target`, so a run never shares a build directory with another run. The module is copied into the server's `/wasm` mount as `living_authority_verify_<run>.wasm`, and cleanup removes the copy. The helper reads the mount from the container, so a run from a git worktree also publishes its own build this way instead of the main checkout's.
@@ -67,7 +68,7 @@ Read-only. It confirms:
 
 - the container is up and answers `/v1/ping`;
 - the image is `v2.14.1`;
-- `verify-<run>` exists, is not paused, and its `stats.ticks` advances;
+- `verify-<run>` exists, is not paused, and its `stats.ticks` advances (read as the owner; `stats` is private);
 - the module is newer than the authority sources;
 - the observer answers, when this run started it.
 
@@ -77,10 +78,10 @@ Run it before the first drive and after anything surprising.
 
 - `$V call --run <run> REDUCER 'ARGS_JSON' [--as-player | --as-admin] [--expect-refusal TEXT]` calls any reducer over HTTP. Without a flag it calls anonymously. `--expect-refusal TEXT` succeeds only if the call is refused with `TEXT` in the error, which proves a permission without putting a token on the command line, for example `$V call --run <run> set_paused '[true]' --as-player --expect-refusal "admin only"`.
 - `$V player --run <run> join|move|act|say …` calls the player reducers (`join`, `human_move`, `human_act`, `human_say`). It uses a fresh non-admin identity from `POST /v1/identity`, kept in `state.json`.
-- `$V sql --run <run> "<query>" [--as-player | --as-admin] [--save NAME]` runs SQL over HTTP.
-  - With no flag it runs anonymously and sees only public tables, as an observer does.
-  - `--as-player` uses the run's player identity.
-  - `--as-admin` uses the world admin's token, read from the container's CLI and kept in memory. It reaches private tables such as `deliberation`. Use it to inspect state, never to prove a permission.
+- `$V sql --run <run> "<query>" [--as-player | --anonymous] [--save NAME]` runs SQL over HTTP.
+  - With no flag it uses the world admin's token (the database owner), read from the container's CLI and kept in memory, as the observer and the mind service read. Since 2026-11-09 most tables are private developer truth (docs/PERCEPTION.md): `thought`, `persona`, `belief`, `brain`, `chronicle`, `stats` and the rest, and in a `scoped` build `body`, `character`, `vitals` and `experience` too. Use it to inspect state, never to prove a permission. `--as-admin` is accepted and means the same.
+  - `--as-player` uses the run's player identity; a player reads its own state through views (`SELECT * FROM my_characters`, `my_experience`, `seen_bodies`, …).
+  - `--anonymous` uses no identity and sees only public tables.
   - `--save` writes the rows to `<run>/NAME.json`.
 - Admin calls go through `living/tools/stdb` (the in-container CLI identity is the world admin), for example `living/tools/stdb call -s local verify-<run> place_near 12 40`. Admin calls only set up scenes; they never prove what a player or client can do.
 
@@ -91,7 +92,7 @@ $V observer --run <run> start            # trunk serve on :8330; the first build
 $V observer --run <run> shot <name>      # headless Chromium screenshot of ?db=verify-<run>
 ```
 
-One observer on `:8330` serves every run. `.local/living/verify/observer.json` records its process (pid and start time) and the runs using it. A second run's `start` joins it; each run's cleanup leaves it running until the last user leaves. An observer started outside verification is used but never stopped.
+The observer reads private tables as the database owner. `shot` hands it the owner's token in the page's fragment (`#token=…`, never sent to a server and left out of the log); a browser opened by hand needs the same fragment (`$V sql` does not print the token: take it from `living/tools/stdb login show --token`). One observer on `:8330` serves every run. `.local/living/verify/observer.json` records its process (pid and start time) and the runs using it. A second run's `start` joins it; each run's cleanup leaves it running until the last user leaves. An observer started outside verification is used but never stopped.
 
 ### Cleanup
 

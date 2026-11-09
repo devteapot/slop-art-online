@@ -2,33 +2,32 @@
 
 ## Sub-features
 
-- Refuse anonymous WebSocket subscriptions to all eleven private tables.
-- Refuse anonymous HTTP SQL reads of the same tables.
+- Refuse anonymous WebSocket subscriptions and HTTP SQL reads of every private table: the authority's bookkeeping, the private combat tables and, since 2026-11-09, developer audit truth (minds' state, thoughts, beliefs, personas, relations, judgments, routines, genomes, backgrounds, the chronicle, `stats`, offers, communities, `activity`, `practice`, `artifact`) and `perceived` (docs/PERCEPTION.md). `PRIVATE` in `drive.py` lists them.
+- In a `scoped` build (`LIVING_PERCEPTION=scoped`), refuse the same to the nine tables behind the perception views (`SCOPED` in `drive.py`: `body`, `character`, `fighter`, `doing`, `vitals`, `experience`, `place`, `inventory`, `know_how`), for anonymous and for a player identity.
+- Refuse a player's subscription and HTTP SQL to the scoped tables and to `thought`, `belief`, `persona`, `mind_state` and `perceived`: a player is not the owner.
+- `thought` (raw model replies included) is refused anonymously in every build; the owner still reads the scripted raw markers (`owner-thought.json`).
+- `experience` is refused anonymously in a scoped build. In an open build it stays public for today's game client, and the driver records the known issue as `XFAIL` (`privacy-experience.json`); `open-build-tables.json` proves the nine tables are public there.
 - Record the exact transport-specific refusal for each table.
-- KNOWN ISSUE: an anonymous client currently reads every character's `experience` rows.
-- KNOWN ISSUE: an anonymous client currently reads `thought.detail`, including raw replies.
 
 ## How to get to it (user POV)
 
-A client submits `SELECT * FROM <table>` on its connection. Table visibility is enforced by the authority, independently of the viewer's selected-character filter.
+A client submits `SELECT * FROM <table>` on its connection. Table visibility is enforced by the authority: a private table is "Visible only to reducers and the database owner" (2.14.1 resolves table names through the caller's read access, `crates/engine/src/sql/ast.rs`), independently of any client-side filter.
 
-The private tables are `clock`, `steer`, `wake`, `familiar`, `deliberation`, `rearing`, `act_queue`, `pasture`, `tick_timer`, `slow_timer`, and `infant_cry`. The latter stores infant needs and per-carer cry prompt times and has no client subscription. `living/authority/src/tables.rs` declares `experience` and `thought` public. The claim at the top of that file that percepts are private is contradicted by this access.
+`living/authority/src/tables.rs` declares the private tables without `public`. The scoped ones are declared twice under `cfg_attr(open_tables, …)` (public) and `cfg_attr(not(open_tables), …)` (private); `living/authority/build.rs` sets `open_tables` unless `LIVING_PERCEPTION=scoped`.
 
 ## Driving it with drive.py
 
 ```bash
-.agents/skills/verify-client/scripts/drive.py --run "$R"
+LIVING_PERCEPTION=scoped .agents/skills/verify-client/scripts/run.py --run "$R"
 ```
 
-Read `visibility.json` and `private-<table>.json`. Every subscription must be `rejected` with an error containing `private`. Every HTTP query must return a non-200 status and a private-table error. Each check uses a separate anonymous connection.
+Read `visibility.json` and `private-<table>.json` (and `private-player-<table>.json`). Every subscription must be `rejected` with an error containing `private`. Every HTTP query must return a non-200 status and a private-table error. Each check uses a separate connection.
 
-The intended privacy assertion is that anonymous subscriptions to `experience` and `thought` are refused. It currently records `XFAIL`. `privacy-experience.json` must contain perceptions for more than one observer. `privacy-thought.json` must contain scripted raw marker text for at least three actors. These are real authority rows created by ordinary authorized reducer calls, without model inference.
-
-When either table becomes private, its privacy check becomes `XPASS` and the driver exits 1. Update the expected-fail policy and any affected viewer queries as part of that product fix. A missing marker, transport failure, or empty fixture is a separate `FAIL`.
+The driver stops before driving if the private, scoped or view inventory in the source differs from its lists. Update the lists, this file and the views' feature map together.
 
 ## Gotchas
 
-- The existing public-table leak is a product issue. This skill does not fix it.
+- `XPASS` on the open build's experience check means it is no longer public there: update the expected-fail policy and the compatibility notes (docs/PERCEPTION.md) together.
 - Inspector filters are not permission checks. Another client can omit them.
-- The evidence contains perceptions and scripted reply detail from a scratch world. It remains under `.local/`.
-- Both privacy XFAILs track the KNOWN ISSUE in [LIVING_HANDOFF.md, Still open](../../../../docs/LIVING_HANDOFF.md). This skill changes no product code.
+- The owner's evidence holds perceptions and scripted reply detail from a scratch world. It remains under `.local/`.
+- `resource_node`, `structure`, `gate` and `terrain_chunk` stay public world data; their live state (amounts, owners, a gate's last opener) is readable beyond sight (docs/PERCEPTION.md).

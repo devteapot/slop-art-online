@@ -27,9 +27,12 @@ living-secrets:
 living-build:
     cargo build --manifest-path living/Cargo.toml -p living-authority --target wasm32-unknown-unknown --release
 
+# Private tables are included: the mind service and the lab observer read them as the database
+# owner (docs/PERCEPTION.md). The generated code is the same for `LIVING_PERCEPTION=open` and
+# `scoped`, which differ only in which tables are public.
 living-generate: living-build
     rm -rf .local/living/generated && mkdir -p .local/living/generated
-    {{living_compose}} run --rm --no-deps -T -v "$PWD/living/target/wasm32-unknown-unknown/release:/wasm:ro" --entrypoint sh spacetimedb -c 'spacetime generate -l rust -b /wasm/living_authority.wasm -o /tmp/gen -y >/dev/null 2>&1 && tar -C /tmp/gen -cf - .' | tar -C .local/living/generated -xf -
+    {{living_compose}} run --rm --no-deps -T -v "$PWD/living/target/wasm32-unknown-unknown/release:/wasm:ro" --entrypoint sh spacetimedb -c 'spacetime generate -l rust -b /wasm/living_authority.wasm -o /tmp/gen -y --include-private >/dev/null 2>&1 && tar -C /tmp/gen -cf - .' | tar -C .local/living/generated -xf -
     rm -rf living/bindings/src/generated && mv .local/living/generated living/bindings/src/generated
     rustfmt --edition 2021 living/bindings/src/generated/*.rs
 

@@ -1,0 +1,556 @@
+diff --git a/living/game/src/bodies.rs b/living/game/src/bodies.rs
+index 938f419..c4c9585 100644
+--- a/living/game/src/bodies.rs
++++ b/living/game/src/bodies.rs
+@@ -174,8 +174,8 @@ pub fn update(
+     let Some(conn) = &net.conn else { return };
+     let now = scene.clock.frame(net.body_t.swap(0, std::sync::atomic::Ordering::Relaxed));
+     scene.now_ms = now;
+-    let bodies: HashMap<u32, Body> = conn.db.body().iter().map(|b| (b.id, b)).collect();
+-    let chars: HashMap<u32, Character> = conn.db.character().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
++    let bodies: HashMap<u32, Body> = crate::net::bodies(conn).map(|b| (b.id, b)).collect();
++    let chars: HashMap<u32, Character> = conn.db.seen_characters().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
+     let scene = &mut *scene;
+     let dt = time.delta_secs().max(1e-4);
+     scene.tracks.retain(|id| bodies.contains_key(&id));
+diff --git a/living/game/src/camera.rs b/living/game/src/camera.rs
+index 0585e76..8382065 100644
+--- a/living/game/src/camera.rs
++++ b/living/game/src/camera.rs
+@@ -146,7 +146,7 @@ fn talk_partner(net: &Net, scene: &Scene, input: &Input, town: Option<&crate::to
+     use spacetimedb_sdk::Table;
+     let heard = conn
+         .db
+-        .experience()
++        .my_experience()
+         .iter()
+         .filter(|e| e.observer == me && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < 8_000.0 && near(e.subject, 8.0))
+         .max_by_key(|e| e.at_ms)
+@@ -154,7 +154,7 @@ fn talk_partner(net: &Net, scene: &Scene, input: &Input, town: Option<&crate::to
+     let typing = (input.chat_open || input.said.last().is_some_and(|(t, _)| scene.now_ms - (*t as f64) < 6_000.0))
+         .then(|| {
+             conn.db
+-                .body()
++                .seen_characters()
+                 .iter()
+                 .filter(|b| b.id != me && b.kind == "person")
+                 .filter_map(|b| scene.shown.get(&b.id).map(|(p, _)| (b.id, p.distance(*mine))))
+diff --git a/living/game/src/combat.rs b/living/game/src/combat.rs
+index c61115a..6fb16cf 100644
+--- a/living/game/src/combat.rs
++++ b/living/game/src/combat.rs
+@@ -229,7 +229,7 @@ fn scripted_aim(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, spec:
+     let pick = scene
+         .shown
+         .iter()
+-        .filter(|(id, _)| **id != me_id && kind.is_none_or(|k| conn.db.body().id().find(id).is_some_and(|b| b.kind == k)))
++        .filter(|(id, _)| **id != me_id && kind.is_none_or(|k| conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == k)))
+         .min_by(|a, b| a.1 .0.distance(me).total_cmp(&b.1 .0.distance(me)))
+         .map(|(id, (p, _))| (*p, *id));
+     match pick {
+@@ -269,7 +269,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
+             seen::DEATH => {
+                 c.deaths.insert(r.actor, now);
+                 // My own death: who killed me; the witnesses arrive beside it.
+-                if conn.db.character().id().find(&r.actor).is_some_and(|ch| ch.controller == net.me.unwrap_or_default()) {
++                if conn.db.my_characters().id().find(&r.actor).is_some() {
+                     c.killer = (r.target != 0).then_some(r.target);
+                     c.witnesses.clear();
+                 }
+@@ -471,7 +471,7 @@ fn nearest(scene: &Scene, me_id: u32, me: Vec2, toward: Vec2, within: f32) -> Op
+ 
+ /// Whether a creature looks hostile to me: its move under way is aimed at me.
+ pub fn hostile(conn: &DbConnection, id: u32, me: u32) -> bool {
+-    conn.db.fighter().id().find(&id).is_some_and(|f| f.target == me && f.act != 0)
++    conn.db.seen_fighters().id().find(&id).is_some_and(|f| f.target == me && f.act != 0)
+ }
+ 
+ /// The clip a move plays, at what rate, and whether it holds a pose.
+@@ -496,7 +496,7 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
+         if out.contains_key(&id) {
+             continue;
+         }
+-        let f = conn.db.fighter().id().find(&id);
++        let f = conn.db.seen_fighters().id().find(&id);
+         let live = f.as_ref().filter(|f| f.act != 0 && (now as u64) < f.until_ms.max(f.release_ms) + 120);
+         let face = live.and_then(|f| (f.aim_x != 0.0 || f.aim_y != 0.0).then(|| Vec2::new(f.aim_x, f.aim_y)));
+         if let Some(f) = live {
+diff --git a/living/game/src/hud.rs b/living/game/src/hud.rs
+index ed5a0dd..ee19ad4 100644
+--- a/living/game/src/hud.rs
++++ b/living/game/src/hud.rs
+@@ -50,7 +50,7 @@ pub fn draw(
+     if keys.just_pressed(KeyCode::F1) {
+         hud.tuning = !hud.tuning;
+     }
+-    let names: HashMap<u32, String> = net.conn.as_ref().map(|c| c.db.character().iter().map(|ch| (ch.id, ch.name)).collect()).unwrap_or_default();
++    let names: HashMap<u32, String> = net.conn.as_ref().map(|c| c.db.seen_characters().iter().chain(c.db.my_characters().iter()).map(|ch| (ch.id, ch.name)).collect()).unwrap_or_default();
+ 
+     // Status.
+     if hud.tuning {
+@@ -72,7 +72,7 @@ pub fn draw(
+                 }
+             }
+             if let (Some(c), Some(id)) = (&net.conn, net.my_id) {
+-                if let Some(v) = c.db.vitals().id().find(&id) {
++                if let Some(v) = c.db.my_vitals().id().find(&id) {
+                     ui.label(format!("health {:.0}/{:.0} · hunger {:.0} · energy {:.0}", v.hp, v.max_hp, v.hunger, v.energy));
+                 }
+             }
+diff --git a/living/game/src/live.rs b/living/game/src/live.rs
+index 62a549e..8a8e656 100644
+--- a/living/game/src/live.rs
++++ b/living/game/src/live.rs
+@@ -305,7 +305,7 @@ fn bodies(
+     let me = net.my_id;
+     // Who is speaking: lines I heard (the authority decides earshot), and my own last line.
+     let mut talking: HashSet<u32> = me
+-        .map(|id| conn.db.experience().iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
++        .map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
+         .unwrap_or_default();
+     if let (Some(id), Some((t, _))) = (me, input.said.last()) {
+         if scene.now_ms - (*t as f64) < TALKING_S * 1000.0 {
+@@ -341,7 +341,7 @@ fn bodies(
+         let aimed = action.and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
+         // Standing still, the body's own segment: its heading, turning on the spot by `turn` over
+         // `turn_s` (the display clock may trail the row's start: then the turn has not begun).
+-        let row = conn.db.body().id().find(&id);
++        let row = conn.db.seen_bodies().id().find(&id);
+         let standing = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| {
+             let into = ((scene.now_ms - b.t_ms as f64) / 1000.0).clamp(0.0, b.turn_s.max(0.0) as f64) as f32;
+             b.heading + if b.turn_s > 0.0 { b.turn * into } else { 0.0 }
+@@ -350,8 +350,8 @@ fn bodies(
+         let busy = show.face.filter(|_| slow).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
+         let h = aimed.or(look).or(busy).or(standing.filter(|_| slow)).or(heading);
+         if !live.shown.contains_key(&id) {
+-            let Some(body) = conn.db.body().id().find(&id) else { continue };
+-            let character = conn.db.character().id().find(&id);
++            let Some(body) = crate::net::find_body(conn, id) else { continue };
++            let character = conn.db.seen_characters().id().find(&id);
+             // Wait for a person's character row (folk, stage) before drawing them.
+             if body.kind == "person" && character.is_none() {
+                 continue;
+@@ -602,16 +602,16 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
+     });
+     info!(
+         "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
+-        conn.db.body().count(),
+-        conn.db.character().count(),
+-        conn.db.doing().count(),
++        conn.db.seen_bodies().count(),
++        conn.db.seen_characters().count(),
++        conn.db.seen_doing().count(),
+         conn.db.act_card().count(),
+         conn.db.weather().iter().next().map_or("none", |w| if w.raining { "rain" } else { "dry" }),
+         conn.db.lot().count(),
+         conn.db.terrain_chunk().count(),
+         edits,
+         conn.db.settlement().count(),
+-        conn.db.experience().count(),
++        conn.db.my_experience().count(),
+         live.shown.len(),
+         live.lots.values().filter(|e| !e.is_empty()).count(),
+         net.window_moves,
+diff --git a/living/game/src/net.rs b/living/game/src/net.rs
+index 3794c28..ae0992a 100644
+--- a/living/game/src/net.rs
++++ b/living/game/src/net.rs
+@@ -4,31 +4,31 @@
+ //! Subscriptions follow the SpacetimeDB subscription guidance (docs/ISLAND_AUTHORITY.md,
+ //! "SpacetimeDB documentation consulted"): small static tables whole, everything else by a
+ //! window of 16×16-tile chunks around the player, grouped by lifetime, and the next window
+-//! subscribed before the previous one is dropped. Fog of war is NOT enforced: the authority
+-//! still publishes these tables to anyone (docs/GAME_BRIEF.md).
++//! subscribed before the previous one is dropped. What my character perceives and its own
++//! state come from per-sender views on the authority, which enforces the perception boundary
++//! (docs/PERCEPTION.md): nothing of a creature beyond my sight or behind a wall reaches me.
+ //!
+ //! 1. On connect: `world`, `land` and `settlement` (1, 1 and about 6 rows).
+-//! 2. Then by the world's kind ([`Mode`]):
+-//!    - **land** (a `land` row exists; the island): my characters (`character.controller =
+-//!      :sender`, indexed). Terrain comes from regenerating the land (`live.rs`), so
+-//!      `terrain_chunk` is only subscribed in the window, for edits.
+-//!    - **tiles** (the lab worlds): `terrain_chunk` and `character` whole, as before.
+-//! 3. My rows: `body`, `vitals`, `experience`, `place`, `inventory` and `know_how` of my
+-//!    character; for the connection, my combat feed and timing (`my_combat`, `my_readiness`:
+-//!    per-sender views) and the skill bar's `skill_card` (docs/COMBAT.md); the visible skills'
+-//!    `act_card` and the one `weather` row (docs/TOWN_LIFE.md), both small and nearly static.
+-//! 4. Windows round me:
+-//!    - land, near: `body` and the characters on those bodies (a join on `body.id`) within
+-//!      [`BODY_CHUNKS`], and `terrain_chunk` within [`TERRAIN_CHUNKS`] (only edits since world
+-//!      creation matter there), and the `fighter` and `doing` rows on those bodies (joins, as
+-//!      for characters), re-centred when I walk [`RECENTRE`] chunks from its centre;
++//! 2. Then, for the connection's lifetime (so the death screen keeps its rows):
++//!    - what I perceive: `seen_bodies` (the narrow motion stream, mine included),
++//!      `seen_characters`, `seen_fighters` and `seen_doing`;
++//!    - my own state: `my_characters` (the dead included), `my_vitals`, `my_experience`,
++//!      `my_places`, `my_inventory`, `my_know_how`, my combat feed and timing (`my_combat`,
++//!      `my_readiness`) and the skill bar's `skill_card` (docs/COMBAT.md); the visible skills'
++//!      `act_card` and the one `weather` row (docs/TOWN_LIFE.md), both small and nearly static;
++//!    - by the world's kind ([`Mode`]): **land** (a `land` row exists; the island): terrain
++//!      comes from regenerating the land (`live.rs`), so `terrain_chunk` is only subscribed in
++//!      the window, for edits; **tiles** (the lab worlds): `terrain_chunk` whole.
++//! 3. Windows of static data round me:
++//!    - land, near: `terrain_chunk` within [`TERRAIN_CHUNKS`] (only edits since world creation
++//!      matter there), re-centred when I walk [`RECENTRE`] chunks from its centre;
+ //!    - land, far: `lot` within [`LOT_CHUNKS`] (buildings show to the island's draw distance),
+ //!      re-centred after [`LOT_RECENTRE`] chunks. Lots never change, so this window has its own,
+ //!      longer lifetime: re-sending it with every near move cost about 130 kB a move.
+ //!
+ //!    Subscription SQL has no `IN`, so a window is one id range per row of chunks (`id = (cy <<
+ //!    16) | cx`), joined by `OR`;
+-//!    - tiles: `body`, `resource_node` and `structure` per chunk within [`REGION_R`].
++//!    - tiles: `resource_node` and `structure` per chunk within [`REGION_R`].
+ 
+ use bevy::prelude::*;
+ use living_bindings::*;
+@@ -40,10 +40,8 @@ use std::sync::{Arc, Mutex};
+ 
+ /// Half-size (tiles) of the square of chunks kept subscribed around the player (tile worlds).
+ pub const REGION_R: f32 = 40.0;
+-/// Land worlds: chunks each side of the window's centre for bodies, their characters and
+-/// terrain edits (5 → an 11 × 11 square, ±88 m), and for lots (11 → 23 × 23, ±184 m, past the
+-/// island's 170 m draw distance).
+-pub const BODY_CHUNKS: i32 = 5;
++/// Land worlds: chunks each side of the window's centre for terrain edits (3 → a 7 × 7 square),
++/// and for lots (11 → 23 × 23, ±184 m, past the island's 170 m draw distance).
+ pub const TERRAIN_CHUNKS: i32 = 3;
+ pub const LOT_CHUNKS: i32 = 11;
+ /// Re-centre a window once I am this many chunks from its centre (either axis).
+@@ -51,6 +49,26 @@ pub const RECENTRE: i32 = 2;
+ pub const LOT_RECENTRE: i32 = 5;
+ 
+ const STATIC: &[&str] = &["SELECT * FROM world", "SELECT * FROM land", "SELECT * FROM settlement"];
++/// What my character perceives and its own state (per-sender views, docs/PERCEPTION.md), and
++/// the rules' cards, for the connection's lifetime.
++const PERCEIVED: &[&str] = &[
++    "SELECT * FROM seen_bodies",
++    "SELECT * FROM seen_characters",
++    "SELECT * FROM seen_fighters",
++    "SELECT * FROM seen_doing",
++    "SELECT * FROM my_characters",
++    "SELECT * FROM my_vitals",
++    "SELECT * FROM my_experience",
++    "SELECT * FROM my_places",
++    "SELECT * FROM my_inventory",
++    "SELECT * FROM my_know_how",
++    "SELECT * FROM my_combat",
++    "SELECT * FROM my_readiness",
++    "SELECT * FROM skill_card",
++    // What residents are seen doing is named by `act_card` (17 rows); `weather` is one row.
++    "SELECT * FROM act_card",
++    "SELECT * FROM weather",
++];
+ 
+ enum Signal {
+     Connection(Result<DbConnection, String>),
+@@ -146,7 +164,6 @@ pub struct Net {
+     retry_at: f64,
+     join_sent: bool,
+     base: Option<SubscriptionHandle>,
+-    mine: Option<Sub>,
+     near: Window,
+     far: Window,
+ }
+@@ -173,7 +190,6 @@ impl Default for Net {
+             retry_at: 0.0,
+             join_sent: false,
+             base: None,
+-            mine: None,
+             near: Window::default(),
+             far: Window::default(),
+         }
+@@ -194,6 +210,39 @@ pub fn chunk_ranges(col: &str, (cx0, cx1): (u32, u32), (cy0, cy1): (u32, u32)) -
+     (cy0..=cy1).map(|cy| format!("({col} >= {} AND {col} <= {})", chunk_id(cx0, cy), chunk_id(cx1, cy))).collect::<Vec<_>>().join(" OR ")
+ }
+ 
++/// A perceived body as the drawing code takes it: its motion row (`seen_bodies`, which carries
++/// no path, chunk or kind), with the creature's kind from its `seen_characters` row (both views
++/// hold the same creatures).
++pub fn body_of(conn: &DbConnection, m: Motion) -> Body {
++    let kind = conn.db.seen_characters().id().find(&m.id).map(|c| c.kind).unwrap_or_default();
++    Body {
++        id: m.id,
++        kind,
++        x: m.x,
++        y: m.y,
++        t_ms: m.t_ms,
++        vx: m.vx,
++        vy: m.vy,
++        path: Vec::new(),
++        speed: m.speed,
++        chunk: living_rules::map::chunk_of(m.x, m.y),
++        next_ms: m.next_ms,
++        heading: m.heading,
++        turn: m.turn,
++        turn_s: m.turn_s,
++    }
++}
++
++/// Every body my character perceives (mine included).
++pub fn bodies(conn: &DbConnection) -> impl Iterator<Item = Body> + '_ {
++    let rows: Vec<Motion> = conn.db.seen_bodies().iter().collect();
++    rows.into_iter().map(move |m| body_of(conn, m))
++}
++
++pub fn find_body(conn: &DbConnection, id: u32) -> Option<Body> {
++    conn.db.seen_bodies().id().find(&id).map(|m| body_of(conn, m))
++}
++
+ impl Net {
+     pub fn report(&self, what: &str, r: Result<(), spacetimedb_sdk::Error>) {
+         if let Err(e) = r {
+@@ -228,7 +277,11 @@ impl Net {
+             .with_token(token)
+             .on_connect(move |conn, identity, token| {
+                 applied.lock().unwrap().push(Signal::Identity(identity, token.to_string()));
+-                conn.db.body().on_update(move |_, _, new| {
++                let t = body_t.clone();
++                conn.db.seen_bodies().on_insert(move |_, new| {
++                    t.fetch_max(new.t_ms, Ordering::Relaxed);
++                });
++                conn.db.seen_bodies().on_update(move |_, _, new| {
+                     body_t.fetch_max(new.t_ms, Ordering::Relaxed);
+                 });
+                 let ok = applied.clone();
+@@ -253,14 +306,10 @@ impl Net {
+     fn subscribe_base(&mut self) {
+         let Some(conn) = self.conn.as_ref() else { return };
+         self.mode = if conn.db.land().count() > 0 { Mode::Land } else { Mode::Tiles };
+-        let queries: &[&str] = match self.mode {
+-            // My combat feed and timing (per-sender views: only my identity's rows) for the
+-            // connection's lifetime, so the death screen keeps them after my character dies;
+-            // the rules' numbers for the skill bar (`skill_card`, 6 rows; docs/COMBAT.md).
+-            // What residents are seen doing is named by `act_card` (17 rows); `weather` is one row.
+-            Mode::Land => &["SELECT * FROM character WHERE controller = :sender", "SELECT * FROM my_combat", "SELECT * FROM my_readiness", "SELECT * FROM skill_card", "SELECT * FROM act_card", "SELECT * FROM weather"],
+-            _ => &["SELECT * FROM terrain_chunk", "SELECT * FROM character", "SELECT * FROM weather"],
+-        };
++        let mut queries: Vec<&str> = PERCEIVED.to_vec();
++        if self.mode == Mode::Tiles {
++            queries.push("SELECT * FROM terrain_chunk");
++        }
+         info!("world kind: {:?}", self.mode);
+         let (ok, err) = (self.inbox.clone(), self.inbox.clone());
+         self.base = Some(
+@@ -281,14 +330,14 @@ impl Net {
+         Some(Sub { key, handle })
+     }
+ 
+-    /// My character: alive, not AI-driven, controlled by my identity.
++    /// My character: alive, not AI-driven, controlled by my identity (`my_characters` holds
++    /// only mine).
+     fn find_me(&self) -> Option<u32> {
+-        let (conn, me) = (self.conn.as_ref()?, self.me?);
+-        conn.db.character().iter().find(|c| c.controller == me && c.alive && !c.ai).map(|c| c.id)
++        self.conn.as_ref()?.db.my_characters().iter().find(|c| c.alive && !c.ai).map(|c| c.id)
+     }
+ 
+     pub fn my_body(&self) -> Option<Body> {
+-        self.conn.as_ref()?.db.body().id().find(&self.my_id?)
++        find_body(self.conn.as_ref()?, self.my_id?)
+     }
+ 
+     /// The land world's row, if this is one.
+@@ -312,22 +361,10 @@ impl Net {
+         }
+         if found != self.my_id {
+             self.my_id = found;
+-            self.mine = None;
+             self.near = Window::default();
+             self.far = Window::default();
+             if let Some(id) = found {
+                 info!("playing character #{id}");
+-                let q = vec![
+-                    format!("SELECT * FROM body WHERE id = {id}"),
+-                    format!("SELECT * FROM vitals WHERE id = {id}"),
+-                    format!("SELECT * FROM experience WHERE observer = {id}"),
+-                    // My character's known places, for the compass (`place.actor` is indexed).
+-                    format!("SELECT * FROM place WHERE actor = {id}"),
+-                    // What my skills need: arrows and a bow, and know-how (both indexed).
+-                    format!("SELECT * FROM inventory WHERE owner = {id}"),
+-                    format!("SELECT * FROM know_how WHERE actor = {id}"),
+-                ];
+-                self.mine = self.subscribe(q, vec![id]);
+             }
+         }
+         let Some(body) = self.my_body() else { return };
+@@ -362,9 +399,8 @@ impl Net {
+         if self.near.wanted() == Some(&chunks) {
+             return None;
+         }
+-        let mut q = Vec::with_capacity(chunks.len() * 3);
++        let mut q = Vec::with_capacity(chunks.len() * 2);
+         for c in &chunks {
+-            q.push(format!("SELECT * FROM body WHERE chunk = {c}"));
+             q.push(format!("SELECT * FROM resource_node WHERE chunk = {c}"));
+             q.push(format!("SELECT * FROM structure WHERE chunk = {c}"));
+         }
+@@ -378,7 +414,7 @@ impl Net {
+         let (nx, ny) = ((w / CHUNK) as i32, (h / CHUNK) as i32);
+         let here = ((body.x / CHUNK as f32).floor() as i32, (body.y / CHUNK as f32).floor() as i32);
+         let (window, recentre, r) = match which {
+-            Which::Near => (&self.near, RECENTRE, BODY_CHUNKS),
++            Which::Near => (&self.near, RECENTRE, TERRAIN_CHUNKS),
+             Which::Lots => (&self.far, LOT_RECENTRE, LOT_CHUNKS),
+         };
+         if let Some(key) = window.wanted() {
+@@ -390,19 +426,8 @@ impl Net {
+         let (cx, cy) = (here.0.clamp(0, nx - 1), here.1.clamp(0, ny - 1));
+         let span = |c: i32, n: i32, r: i32| ((c - r).max(0) as u32, (c + r).min(n - 1) as u32);
+         let (xs, ys) = (span(cx, nx, r), span(cy, ny, r));
+-        let (tx, ty) = (span(cx, nx, TERRAIN_CHUNKS), span(cy, ny, TERRAIN_CHUNKS));
+         let q = match which {
+-            Which::Near => vec![
+-                format!("SELECT * FROM body WHERE {}", chunk_ranges("chunk", xs, ys)),
+-                // The characters standing in the window (names, kind, life stage, home), through
+-                // their bodies: both join columns are primary keys.
+-                format!("SELECT character.* FROM character JOIN body ON character.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
+-                // How the fighters in the window look: health band and the move under way.
+-                format!("SELECT fighter.* FROM fighter JOIN body ON fighter.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
+-                // What they are visibly doing (town life): one small row per character at most.
+-                format!("SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
+-                format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", tx, ty)),
+-            ],
++            Which::Near => vec![format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", xs, ys))],
+             Which::Lots => vec![format!("SELECT * FROM lot WHERE {}", chunk_ranges("chunk", xs, ys))],
+         };
+         Some((vec![chunk_id(cx as u32, cy as u32)], q))
+@@ -462,7 +487,6 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
+                     let _ = c.disconnect();
+                 }
+                 net.base = None;
+-                net.mine = None;
+                 net.near = Window::default();
+                 net.far = Window::default();
+                 net.my_id = None;
+diff --git a/living/game/src/town.rs b/living/game/src/town.rs
+index 787b64c..2758d1e 100644
+--- a/living/game/src/town.rs
++++ b/living/game/src/town.rs
+@@ -182,7 +182,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
+     if let Some(me) = net.my_id {
+         // "X answers your greeting (nod)." arrives with the resident's `doing` row; the subject is
+         // the one who answered.
+-        let fresh: Vec<Experience> = conn.db.experience().iter().filter(|e| e.observer == me && !town.seen.contains(&e.id) && e.text.contains("answers your greeting")).collect();
++        let fresh: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && !town.seen.contains(&e.id) && e.text.contains("answers your greeting")).collect();
+         for e in fresh {
+             town.seen.insert(e.id);
+             if now - (e.at_ms as f64) < ANSWERED_MS {
+@@ -193,7 +193,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
+     town.answered.retain(|_, t| now - *t < ANSWERED_MS);
+     town.greeting = town.greeting.filter(|(_, t)| now - *t < ANSWERED_MS);
+     if town.seen.len() > 512 {
+-        let live: HashSet<u64> = conn.db.experience().iter().map(|e| e.id).collect();
++        let live: HashSet<u64> = conn.db.my_experience().iter().map(|e| e.id).collect();
+         town.seen.retain(|id| live.contains(id));
+     }
+ }
+@@ -202,7 +202,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
+ /// reach, ahead of me first.
+ #[allow(clippy::too_many_arguments)]
+ fn whom(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, ahead: Vec2, picked: Option<u32>, reach: f32, town: &Town) -> Option<u32> {
+-    let person = |id: &u32| *id != me_id && !town.hidden(*id) && conn.db.body().id().find(id).is_some_and(|b| b.kind == "person");
++    let person = |id: &u32| *id != me_id && !town.hidden(*id) && conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == "person");
+     if let Some(id) = picked.filter(person).filter(|id| scene.shown.get(id).is_some_and(|(p, _)| p.distance(me) <= reach)) {
+         return Some(id);
+     }
+@@ -292,7 +292,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
+     let ids: Vec<(u32, Vec2)> = scene.shown.iter().map(|(id, (p, _))| (*id, *p)).collect();
+     for (id, p) in ids {
+         let mut show = Show::default();
+-        let row = conn.db.doing().id().find(&id);
++        let row = conn.db.seen_doing().id().find(&id);
+         let card = row.as_ref().and_then(|d| acts.by_code(d.code));
+         // Where its target is now: the one it is aimed at (as drawn), else the row's spot.
+         let spot = row.as_ref().map(|d| scene.shown.get(&d.target).filter(|_| d.target != 0).map_or(Vec2::new(d.x, d.y), |s| s.0));
+@@ -323,7 +323,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
+                 show.face = toward.filter(|_| clip != "play");
+             }
+             (Some(d), Some(Pose::Rest)) => {
+-                let home = conn.db.character().id().find(&id).map(|c| Vec2::new(c.home_x, c.home_y)).filter(|h| *h != Vec2::ZERO);
++                let home = conn.db.seen_characters().id().find(&id).map(|c| Vec2::new(c.home_x, c.home_y)).filter(|h| *h != Vec2::ZERO);
+                 if home.is_some_and(|h| h.distance(p) <= INDOORS_M) {
+                     show.hidden = true;
+                 } else if raining || crate::world::hash(id, 0x5e47) < 0.3 {
+diff --git a/living/game/src/ui/live.rs b/living/game/src/ui/live.rs
+index 3375e48..6dcd8f8 100644
+--- a/living/game/src/ui/live.rs
++++ b/living/game/src/ui/live.rs
+@@ -63,7 +63,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+         *model = HudModel { shown: true, now, ..default() };
+         return;
+     };
+-    let chars: HashMap<u32, Character> = conn.db.character().iter().map(|c| (c.id, c)).collect();
++    // Who I perceive, and my own characters (the dead one stays for the death screen).
++    let chars: HashMap<u32, Character> = conn.db.seen_characters().iter().chain(conn.db.my_characters().iter()).map(|c| (c.id, c)).collect();
+ 
+     // Death: the character I played is no longer alive.
+     if let Some(prev) = last.id {
+@@ -87,7 +88,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+ 
+     let me = net.my_id;
+     let my_pos = target.0;
+-    let vit = me.and_then(|id| conn.db.vitals().id().find(&id));
++    let vit = me.and_then(|id| conn.db.my_vitals().id().find(&id));
+     model.me = me.zip(vit.as_ref()).map(|(id, v)| {
+         let m = (now_ms - v.at_ms as f64).max(0.0) as f32 / 60_000.0;
+         let hp = (v.hp + v.hp_rate * m).clamp(0.0, v.max_hp);
+@@ -120,11 +121,11 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+     let hostile_id = vit.as_ref().filter(|v| v.hurt_by != 0 && (now_ms - v.hurt_ms as f64) < 15_000.0).map(|v| v.hurt_by);
+     let hostile = |id: u32| hostile_id == Some(id) || me.is_some_and(|m| crate::combat::hostile(conn, id, m));
+     // Others' health as anyone sees it: the band of their `fighter` row, if they have fought.
+-    let band = |id: u32| conn.db.fighter().id().find(&id).map(|f| living_rules::combat::band_fraction(f.band));
+-    let busy = |id: u32| conn.db.fighter().id().find(&id).is_some_and(|f| f.act != 0 && (now_ms as u64) < f.until_ms);
++    let band = |id: u32| conn.db.seen_fighters().id().find(&id).map(|f| living_rules::combat::band_fraction(f.band));
++    let busy = |id: u32| conn.db.seen_fighters().id().find(&id).is_some_and(|f| f.act != 0 && (now_ms as u64) < f.until_ms);
+ 
+     // What I heard.
+-    let mut heard: Vec<Experience> = me.map(|id| conn.db.experience().iter().filter(|e| e.observer == id && e.kind == "speech").collect()).unwrap_or_default();
++    let mut heard: Vec<Experience> = me.map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech").collect()).unwrap_or_default();
+     heard.sort_by_key(|e| e.at_ms);
+     let talking: Vec<u32> = heard.iter().filter(|e| now_ms - (e.at_ms as f64) < 8_000.0).map(|e| e.subject).collect();
+     let name_of = |id: u32| chars.get(&id).map_or_else(|| "Someone".to_string(), |c| c.name.clone());
+@@ -219,9 +220,9 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+     // Skills: live cooldowns, held guard, and what the rules require (costs from `skill_card`).
+     model.skills = match (me, model.me.as_ref()) {
+         (Some(id), Some(m)) => {
+-            let inv = |item: &str| conn.db.inventory().iter().filter(|r| r.owner == id as u64 && r.item == item).map(|r| r.qty).sum::<u32>();
+-            let knows = |t: &str| conn.db.know_how().iter().any(|k| k.actor == id && k.technique == t);
+-            let me_f = conn.db.fighter().id().find(&id);
++            let inv = |item: &str| conn.db.my_inventory().iter().filter(|r| r.owner == id as u64 && r.item == item).map(|r| r.qty).sum::<u32>();
++            let knows = |t: &str| conn.db.my_know_how().iter().any(|k| k.actor == id && k.technique == t);
++            let me_f = conn.db.seen_fighters().id().find(&id);
+             let energy = m.energy;
+             live_bar(&cards, |card| {
+                 // A held guard: raised now (my fighter row says so) or my key is down.
+@@ -270,7 +271,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+         me: my_pos.map(|p| Vec2::new(p.x, p.z)),
+         facing: input.look,
+         yaw: cam.shown_yaw,
+-        pois: me.map(|id| conn.db.place().iter().filter(|p| p.actor == id).map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect()).unwrap_or_default(),
++        pois: me.map(|id| conn.db.my_places().iter().filter(|p| p.actor == id).map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect()).unwrap_or_default(),
+     };
+ }
+ 
+diff --git a/living/game/src/vfx.rs b/living/game/src/vfx.rs
+index 094493a..ae4c313 100644
+--- a/living/game/src/vfx.rs
++++ b/living/game/src/vfx.rs
+@@ -162,7 +162,7 @@ fn put(commands: &mut Commands, mesh: &Handle<Mesh>, mat: &Handle<StandardMateri
+ #[allow(clippy::too_many_arguments)]
+ fn spawn(mut commands: Commands, a: Res<Assets3>, c: Res<Combat>, cards: Res<Cards>, net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<crate::island::Island>>, mut flights: ResMut<Flights>, time: Res<Time>) {
+     let now = time.elapsed_secs();
+-    let kinds: HashMap<u32, String> = net.conn.as_ref().map(|conn| c.fresh.iter().flat_map(|e| [e.row.actor, e.row.target]).filter_map(|id| conn.db.body().id().find(&id).map(|b| (id, b.kind))).collect()).unwrap_or_default();
++    let kinds: HashMap<u32, String> = net.conn.as_ref().map(|conn| c.fresh.iter().flat_map(|e| [e.row.actor, e.row.target]).filter_map(|id| conn.db.seen_characters().id().find(&id).map(|c| (id, c.kind))).collect()).unwrap_or_default();
+     for e in &c.fresh {
+         let r = &e.row;
+         let at2 = Vec2::new(r.x, r.y);
+@@ -251,7 +251,7 @@ fn persistent(mut commands: Commands, a: Res<Assets3>, cards: Res<Cards>, net: N
+     let t = scene.now_ms as u64;
+     let mut want: Vec<((u32, Kind), Vec3, Quat)> = Vec::new();
+     for (id, (p, _)) in &scene.shown {
+-        let Some(f) = conn.db.fighter().id().find(id) else { continue };
++        let Some(f) = conn.db.seen_fighters().id().find(id) else { continue };
+         let aim = Vec2::new(f.aim_x, f.aim_y).normalize_or(Vec2::Y);
+         let g = ground(&island, &scene, *p);
+         let Some(card) = cards.by_code(f.act) else { continue };
