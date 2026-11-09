@@ -81,7 +81,9 @@ living-test:
 # Everything that must keep compiling after any change: authority (wasm), mind, the native
 # and browser observer, the game client, and the rules tests. Run before every commit.
 living-check: living-build
-    cargo build --manifest-path living/Cargo.toml -p living-mind -p living-viewer -p living-game
+    cargo build --manifest-path living/Cargo.toml -p living-mind -p living-viewer
+    # The game in release only: the build that is run, without a second ~10 GB debug tree.
+    cargo build --release --manifest-path living/Cargo.toml -p living-game
     cargo build --manifest-path living/viewer/Cargo.toml --target wasm32-unknown-unknown --profile wasm-dev --bin living-viewer
     cargo test --manifest-path living/Cargo.toml -p living-rules
 
