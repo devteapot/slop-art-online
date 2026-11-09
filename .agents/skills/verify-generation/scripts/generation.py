@@ -16,7 +16,11 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / ".local/living/verify"
-SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island")
+SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "floor-megacity-2k")
+# Seeds derived from a tracked seed in the run's directory (published through `--seed` with an
+# absolute path): the megacity floor (docs/FLOORS.md) at 2048 m, since its 4096 m size does not
+# fit one reducer's fuel budget in `init`.
+DERIVED = {"floor-megacity-2k": ("floor-megacity", {"size": 2048})}
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
           "place", "routine")
@@ -262,11 +266,42 @@ def check_land(seed, rows, side, tiles):
         stage = {c["id"]: c.get("stage", 2) for c in rows["character"]}
         lacking = [i for i in residents if bgs.get(i, {}).get("occupation") and stage.get(i, 2) >= 1 and not {n.lower() for n in own} <= routines.get(i, set())]
         present("residents start on the seed's own ways", own and not lacking, lacking[:20])
+    # A land with a city (`map.params.metro`, docs/FLOORS.md): its wards in their district
+    # styles, the core's towers, the wall's gates, and the land's other settlements outside it.
+    metro = seed.get("map", {}).get("params", {}).get("metro")
+    if metro is not None:
+        wards = [s for s in settlements if s["style"] in ("metro", "slum", "works")]
+        rings = len(metro.get("rings", [0.3, 0.58, 0.82]))
+        arterials = metro.get("arterials", 8)
+        present("city wards: the core and every band and sector", len(wards) == 1 + rings * arterials, {"wards": len(wards), "expected": 1 + rings * arterials})
+        present("ward districts include metro, slum and works", {"metro", "slum", "works"} <= {s["style"] for s in wards}, sorted({s["style"] for s in wards}))
+        core = wards[0] if wards else None
+        towers = [l for l in lots if core and l["settlement"] == core["id"] and l["height_m"] >= 50.0]
+        present("the core stands in towers of 50 m or more", len(towers) >= 40, len(towers))
+        reach = max(((s["x"] - core["x"]) ** 2 + (s["y"] - core["y"]) ** 2) ** 0.5 + s["radius_m"] for s in wards) if wards else 0.0
+        outside = [s for s in settlements if s not in wards]
+        present("the land's other settlements stand outside the city", outside and all(((s["x"] - core["x"]) ** 2 + (s["y"] - core["y"]) ** 2) ** 0.5 > reach * 0.9 for s in outside), [(s["style"], s["x"], s["y"]) for s in outside])
+        gates = rows.get("gate", [])
+        present("the city wall has gate tiles on its arterials", len(gates) >= arterials * 4, len(gates))
     if seed.get("rules", {}).get("minds") is False:
         world = rows["world"][0]
         minded = [c["id"] for c in rows["character"] if c["ai"] or c["controller"] == world["admin"]]
         present("rules.minds false: nobody is mind-controlled", not minded, minded[:20])
     return checks
+
+
+def native_digests(d, rows, target):
+    """The land row's digests against the same seed regenerated natively
+    (`living/rules/examples/floor_preview.rs`): the WASM authority and a native client must
+    derive the same tiles, heights and layout."""
+    code = command(["cargo", "run", "--release", "-q", "-p", "living-rules", "--example", "floor_preview", "--target-dir", str(target), "--",
+                    str(d / "seed.json"), "0", str(d / "native"), "16"], d / "native-digests.log", cwd=ROOT / "living", timeout=900)
+    text = (d / "native-digests.log").read_text()
+    found = re.search(r"digests tiles ([0-9a-f]{16}) heights ([0-9a-f]{16}) layout ([0-9a-f]{16})", text)
+    land = rows.get("land", [{}])[0]
+    row = [format(int(land.get(k, 0)), "016x") for k in ("tiles_digest", "heights_digest", "layout_digest")]
+    native = list(found.groups()) if found else None
+    return {"check": "land digests match the native generator", "pass": code == 0 and native == row, "authority": row, "native": native}
 
 
 def no_secrets(seed, rows):
@@ -371,10 +406,18 @@ def suite(args):
             active_run = f"{args.run}-{index}-{seed_name}"
             d = BASE / active_run
             d.mkdir(parents=True, exist_ok=False)
-            seed_path = directory / "malformed.json" if seed_name == "malformed" else ROOT / f"living/seeds/{seed_name}.json"
+            if seed_name in DERIVED:
+                source, change = DERIVED[seed_name]
+                derived = json.loads((ROOT / f"living/seeds/{source}.json").read_text())
+                derived["map"].update(change)
+                derived["run"] = seed_name
+                seed_path = directory / f"{seed_name}.json"
+                write(seed_path, derived)
+            else:
+                seed_path = directory / "malformed.json" if seed_name == "malformed" else ROOT / f"living/seeds/{seed_name}.json"
             write(d / "seed.json", json.loads(seed_path.read_text()))
             database = "verify-" + active_run
-            seed_arg = str(seed_path.with_suffix("")) if seed_name == "malformed" else seed_name
+            seed_arg = str(seed_path.with_suffix("")) if seed_name == "malformed" or seed_name in DERIVED else seed_name
             container = subprocess.run(["docker", "ps", "--filter", f"name=^{CONTAINER}$", "--format", "{{.Status}}"], capture_output=True, text=True, check=True, timeout=30)
             if not container.stdout.strip().startswith("Up"):
                 raise RuntimeError("existing SpacetimeDB container is down; start it before running this skill")
@@ -402,7 +445,7 @@ def suite(args):
                     readable = "animals" in text and "missing field" in text
                     rejected = launch_code != 0 and publication["publication_attempted"] and query_code != 0 and "sql: 404" in query
                     report = {"pass": rejected, "rejection": "PASS" if rejected else "FAIL",
-                              "known_issue": {"label": "KNOWN ISSUE", "reference": "docs/LIVING_HANDOFF.md, Still open", "source": "living/authority/src/seed.rs:444", "description": "initializer panics and publication does not name the missing field", "readable_error_asserted": False},
+                              "known_issue": {"label": "KNOWN ISSUE", "reference": "docs/LIVING_HANDOFF.md, Still open", "source": "living/authority/src/seed.rs:603", "description": "initializer panics and publication does not name the missing field", "readable_error_asserted": False},
                               "launch_exit_code": launch_code, "panic_reported": "::seed::seed" in trace and "rust_panic" in trace,
                               "missing_field_diagnostic_visible": readable, "database_launch_correlated": launch_key in trace}
                     write(d / "guards.json", report)
@@ -419,6 +462,8 @@ def suite(args):
                 public_tables = re.findall(r"#\[spacetimedb::table\(accessor = (\w+), public\)\]", (ROOT / "living/authority/src/tables.rs").read_text())
                 rows.update(snapshot(active_run, [t for t in public_tables if t not in rows]))
                 checks = check_seed(json.loads((d / "seed.json").read_text()), rows)
+                if json.loads((d / "seed.json").read_text()).get("map", {}).get("kind") == "land":
+                    checks.append(native_digests(d, rows, target))
                 checks.append({"check": "public tables exclude sheet secrets", **no_secrets(json.loads((d / "seed.json").read_text()), rows)})
                 write(d / "checks.json", checks)
                 results[active_run] = {"pass": all(c["pass"] for c in checks), "checks": len(checks), "failed": [c["check"] for c in checks if not c["pass"]]}

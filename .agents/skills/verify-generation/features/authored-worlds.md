@@ -8,7 +8,7 @@
 - Authored parser tests cover ages, households, sites, parent order and sheet resolution.
 - Published backgrounds preserve the resolved sheet while removing its top-level secret.
 
-`living/tools/author_world.py:168` reads the world bible, cast and cached sheets. Lines 176 and 215 guard the drafting passes; line 244 selects the compiled output path. `living/authority/src/seed.rs:251` removes the secret and resolves relations and memories. `settle_authored` at line 1250 installs the sheet.
+`living/tools/author_world.py:169-171` reads the world bible, cast and cached sheets. Lines 176 and 215 guard the drafting passes; line 244 selects the compiled output path. `resolve_sheet` at `living/authority/src/seed.rs:272` removes the secret and resolves relations and memories. `settle_authored` at line 1467 installs the sheet.
 
 ## How to get to it (user POV)
 
@@ -21,7 +21,7 @@ Author a bible and cast, draft household sheets once, then compile the cached sh
 .agents/skills/verify-generation/scripts/generation.py --run generation-authored-full-$(date +%Y%m%d-%H%M%S)
 ```
 
-The focused command captures compilation and comparison. The full command also runs parser tests and publishes both authored fixtures. Read `compile.log`, `network.json`, `authored.json`, `compile-differences.json`, `seed-tests.log`, and the authored child runs' `checks.json`.
+The focused command captures compilation and comparison. The full command also runs parser tests and publishes both authored fixtures. Read `compile.log`, `network.json`, `authored.json`, `compile-differences.json`, `seed-tests.log`, and the authored child runs' `checks.json`, all under `.local/living/verify/<run>/` (children in `<run>-<index>-<seed>/`). `results.json` there holds the "original seeds unchanged" check.
 
 ## Gotchas
 

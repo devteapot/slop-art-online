@@ -5,7 +5,18 @@
       "base_url": "https://api.mistral.ai/v1",
       "model": "zai-glm-5-3-flash",
       "key_env": "MISTRAL_API_KEY",
-      "overflow": "deepseek-flash"
+      "overflow": "deepseek-flash",
+      "reasoning_effort": {
+        "deliberate": "low",
+        "compile": "low",
+        "think": "low",
+        "talk": "low",
+        "consolidate": "low",
+        "reorganize": "low",
+        "identity": "low",
+        "remember": "low",
+        "birth": "low"
+      }
     },
     "deepseek-flash": {
       "base_url": "https://api.mistral.ai/v1",

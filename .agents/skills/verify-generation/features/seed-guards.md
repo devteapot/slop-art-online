@@ -7,7 +7,7 @@
 - Publication output and a filtered server traceback show the initializer's failure, including panic classification.
 - SQL records whether any world state remains. Cleanup confirms database absence.
 
-`living/authority/build.rs:29` parses generic JSON. `living/authority/src/seed.rs:444` parses the typed `Seed` with `expect("seed json")`. `living/authority/src/lib.rs:60` calls it during `init`. Parser tests start at `living/authority/src/seed.rs:1429`.
+`living/authority/build.rs:28` parses generic JSON. `living/authority/src/seed.rs:603` parses the typed `Seed` with `expect("seed json")`. `living/authority/src/lib.rs:67` calls it during `init`. Parser tests start at `living/authority/src/seed.rs:1640`. An absolute `--seed` path works because `build.rs:20` joins it onto the seeds directory, and joining an absolute path replaces the base.
 
 ## How to get to it (user POV)
 
@@ -19,7 +19,7 @@ Build and publish a seed. Invalid JSON fails during the build; valid JSON with a
 .agents/skills/verify-generation/scripts/generation.py --run generation-guards-$(date +%Y%m%d-%H%M%S) --feature guards
 ```
 
-Read `seed-tests.log` for five passing tests. The malformed child keeps `seed.json`, `launch.log`, `actions.log`, `module.log`, `publication.json`, `server-init.log`, `init-state.log`, `init-state.json`, `guards.json` and `cleanup.json`. Rejection is a required pass and does not require a panic or HTTP 500. The driver requires a publication attempt, a failed launch and SQL 404 with no usable world. The check asserts rejection only, so it is a plain pass. Error readability is an observation, not an assertion. The shared harness truncates publication stderr, so this check cannot certify the complete diagnostic. `docs/LIVING_HANDOFF.md`, "Still open", records the defect at `seed.rs:444`. The filtered server traceback records panic classification for diagnosis.
+Read `seed-tests.log` for five passing tests. The malformed child keeps `seed.json`, `launch.log`, `actions.log`, `module.log`, `publication.json`, `server-init.log`, `init-state.log`, `init-state.json`, `guards.json` and `cleanup.json`. Rejection is a required pass and does not require a panic or HTTP 500. The driver requires a publication attempt, a failed launch and SQL 404 with no usable world. The check asserts rejection only, so it is a plain pass. Error readability is an observation, not an assertion. The shared harness truncates publication stderr, so this check cannot certify the complete diagnostic. `docs/LIVING_HANDOFF.md`, "Still open", records the defect at `seed.rs:603`. The filtered server traceback records panic classification for diagnosis.
 
 ## Gotchas
 
