@@ -68,6 +68,8 @@ Add `--as-player` to subscribe with the harness player's identity after joining,
 
 ## The game client
 
+The suite also drives presence ([features/presence.md](features/presence.md)): it holds real WebSocket connections for `ClientSecond`, waits for the takeover after the `takeover_s` law (about 30 s, so the suite takes that much longer) and reconnects for the handback.
+
 The suite above drives the observer's query set (`living/viewer/src/net.rs`) as the owner, and a player's perception views ([features/perception.md](features/perception.md)). The game client (`living/game/src/net.rs`) subscribes differently on a land world. It subscribes static tables, its own characters by `:sender`, and chunk windows that include a join, and it moves those windows as it walks. [features/game-client.md](features/game-client.md) runs the real game client headless (`LIVING_GAME_LIVE`), sends each of its queries through `drive.py`, and measures bytes per query from the server's metrics.
 
 ## Checks and evidence
@@ -115,7 +117,7 @@ The reconnect proxy forwards bytes without logging them, drops only its own clie
 - Gameplay or mechanics correctness beyond these client observations. Use `verify-core` and `verify-player`.
 - World generation. Use `verify-generation`.
 - The mind service, authentic model replies, or personal knowledge. Use `verify-minds`, `verify-llm`, and `verify-knowledge`.
-- Browser controls, visual state, or the public observer tunnel. Use the future UI skill (not built; see `verify`).
+- Browser controls or visual state. Use the future UI skill (not built; see `verify`). The public observer tunnel was retired on 2026-11-09.
 - Population, latency, memory, retention, or long-run performance acceptance. Follow the performance contract and `AGENTS.md`.
 
 Use `maintain-verification-skill` when these tables, queries, views, or reducers change.

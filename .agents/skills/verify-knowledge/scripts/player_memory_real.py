@@ -126,6 +126,8 @@ def main():
         p.harness('doctor')
         p.start_neo4j()
         p.cargo(['build', '--release', '-p', 'living-mind'], 'mind-build.log')
+        # No takeover while the candidates internalize (each would think for the character).
+        p.takeover_after(3600)
         models = json.loads((ROOT / 'living/configs/models.json').read_text())
         (p.directory / 'models.json').write_text(json.dumps(models, indent=2))
         s = S.Session(p.name)
@@ -209,7 +211,7 @@ def start_candidate(p, label, run, player, model, mode, batch_wait_s):
     env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER='http://127.0.0.1:3300', LIVING_DB=p.db, LIVING_RUN=run,
                LIVING_SEED='island', LIVING_MODELS=str(p.directory / 'models.json'), LIVING_ONLY=str(player),
                LIVING_TOKEN=tokens[0], LIVING_NEO4J='on', LIVING_NEO4J_URI=p.state['uri'], LIVING_NEO4J_PASSWORD=p.state['password'],
-               LIVING_CONCURRENCY='4', LIVING_LOD='0', LIVING_PLAYER_MEMORY='1', LIVING_PLAYER_MEMORY_IDLE_S='3',
+               LIVING_CONCURRENCY='4', LIVING_LOD='0', LIVING_PLAYER_MEMORY='1', LIVING_PLAYER_MEMORY_EVERY_S='3',
                LIVING_PLAYER_MEMORY_MODE=mode, LIVING_PLAYER_MEMORY_MODEL=model, LIVING_PLAYER_MEMORY_POLL_S='15',
                LIVING_PLAYER_MEMORY_BATCH_WAIT_S=str(batch_wait_s), RUST_LOG='info,neo4rs=warn,spacetimedb_sdk=warn')
     keep = [k for k in env if k.startswith('LIVING_') and k not in ('LIVING_TOKEN', 'LIVING_NEO4J_PASSWORD')]

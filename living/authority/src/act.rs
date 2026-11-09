@@ -271,7 +271,10 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         if actor.kind != "person" && target.kind == "person" {
             let sight = common::sight_for(ctx, id, &w, now);
             let mut sensed: Vec<(String, u32)> = Vec::new();
-            for c in common::creatures_near(ctx, from, sight, now).into_iter().chain(common::smelled_near(ctx, &actor.kind, from, sight, now)) {
+            // Itself among them, as before; others when seen (a clear sight line) or smelled.
+            let map = common::map(ctx);
+            let seen = common::creatures_near(ctx, from, sight, now).into_iter().filter(|c| c.id == id || map.sight_clear(from, c.pos));
+            for c in seen.chain(common::smelled_near(ctx, &actor.kind, from, sight, now)) {
                 match sensed.iter_mut().find(|(k, _)| *k == *c.kind) {
                     Some(e) => e.1 += 1,
                     None => sensed.push((c.kind.to_string(), 1)),
@@ -316,7 +319,10 @@ fn label(skill: &str, item: &str, t: &Resolved) -> String {
     }
     match t.class {
         1 | 2 => s.push_str(&format!(" → {}", t.kind)),
-        3 => s.push_str(&format!(" → {}", if t.name.is_empty() { t.kind.clone() } else { t.name.clone() })),
+        // A creature by its kind: the label is what anyone sees of the activity (its doer's
+        // feedback, onlookers' scenes), and a name is known only to who knows it
+        // (docs/PERCEPTION.md); the outcome names the target as the doer perceives it.
+        3 => s.push_str(&format!(" → {}", t.kind)),
         4 if skill == "goto" => s.push_str(&format!(" → ({:.0},{:.0})", t.at.0, t.at.1)),
         _ => {}
     }
@@ -558,7 +564,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     }
     if node == PLAYER && target.class == 3 && target.id as u32 != id {
         let w = common::world(ctx);
-        if dist(here, target.at) > common::sight_for(ctx, id, &w, now) || !common::map(ctx).line_clear(here, target.at) {
+        if !crate::perception::in_sight(&common::map(ctx), here, target.at, dist(here, target.at), common::sight_for(ctx, id, &w, now)) {
             return Err("you cannot see them".into());
         }
     }
@@ -1007,6 +1013,10 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
     let me = a.id;
     let at = ctx.db.body().id().find(me).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     let my_name = common::name_of(ctx, me);
+    // How the actor refers to others in what it is told of its own acts (the chronicle, the
+    // developers' record, keeps names).
+    let me_c = ctx.db.character().id().find(me);
+    let seen_as = |id: u32| me_c.as_ref().map(|c| common::label_for(ctx, c, id)).unwrap_or_else(|| common::name_of(ctx, id));
     let mut notes = Vec::new();
     for e in effects {
         match e {
@@ -1053,7 +1063,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 }
                 if patient != me {
                     if let Some(pc) = ctx.db.character().id().find(patient) {
-                        percept(ctx, &pc, now, "care", me, patient, at, format!("{} tended your wounds.", common::label_for(ctx, &pc, me)), 0.6);
+                        percept(ctx, &pc, now, "care", me, patient, at, format!("{} tended your wounds.", common::label_cap(ctx, &pc, me)), 0.6);
                     }
                     witnessed(ctx, now, at, "care", me, patient, "{a} tended {b}'s wounds", 0.3, &[me, patient]);
                 }
@@ -1092,10 +1102,10 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 let to_name = common::name_of(ctx, to);
                 common::chronicle(ctx, now, "give", me, to, at, format!("{my_name} gave {qty} {item} to {to_name}"));
                 if let Some(c) = ctx.db.character().id().find(to) {
-                    percept(ctx, &c, now, "gift", me, to, at, format!("{my_name} gave you {qty} {item}"), 0.8);
+                    percept(ctx, &c, now, "gift", me, to, at, format!("{} gave you {qty} {item}", common::label_cap(ctx, &c, me)), 0.8);
                 }
                 witnessed(ctx, now, at, "gift", me, to, &format!("{{a}} gave {qty} {item} to {{b}}"), 0.35, &[me, to]);
-                notes.push(format!("gave {qty} {item} to {to_name}"));
+                notes.push(format!("gave {qty} {item} to {}", seen_as(to)));
             }
             Effect::Seize { item, qty } => {
                 let from = a.target.id as u32;
@@ -1105,10 +1115,10 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 let from_name = common::name_of(ctx, from);
                 common::chronicle(ctx, now, "seize", me, from, at, format!("{my_name} seized {qty} {item} from {from_name}"));
                 if let Some(c) = ctx.db.character().id().find(from) {
-                    percept(ctx, &c, now, "seize", me, from, at, format!("{my_name} took {qty} {item} from you by force"), 0.95);
+                    percept(ctx, &c, now, "seize", me, from, at, format!("{} took {qty} {item} from you by force", common::label_cap(ctx, &c, me)), 0.95);
                 }
                 witnessed(ctx, now, at, "seize", me, from, &format!("{{a}} took {qty} {item} from {{b}} by force"), 0.8, &[me, from]);
-                notes.push(format!("seized {qty} {item} from {from_name}"));
+                notes.push(format!("seized {qty} {item} from {}", seen_as(from)));
             }
             Effect::Store { item, qty } => {
                 common::inv_remove(ctx, me as u64, &item, qty)?;
@@ -1144,6 +1154,21 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
             }
             Effect::Yield => notes.push(give_in(ctx, me, a, at, now)),
             Effect::Hail => notes.push(crate::town::hail(ctx, me, a, at, now)?),
+            Effect::Reveal { what, secs } => {
+                if a.target.class != 3 {
+                    return Err("no one to look over".into());
+                }
+                let target = a.target.id as u32;
+                crate::perception::reveal(ctx, me, target, &what, secs, now);
+                // What the look shows, as the observer now perceives it (the same projection
+                // its scene and a player's view carry).
+                if let (Some(c), Some(t)) = (ctx.db.character().id().find(me), ctx.db.character().id().find(target)) {
+                    let p = crate::perception::project(ctx, &c, &t, now);
+                    let seen = if p.hp >= 0.0 { format!("{:.0} of {:.0} health", p.hp, p.max_hp) } else { living_rules::combat::band_words(p.band).to_string() };
+                    percept(ctx, &c, now, "appraise", target, 0, at, format!("You look {} over: {seen}.", p.label), 0.3);
+                    notes.push(format!("{} has {seen}", p.label));
+                }
+            }
             Effect::Launch => {
                 let sc = common::scripts(ctx);
                 let spec = sc.missile(&a.skill, &skill_ctx(ctx, me, a, now))?;
@@ -1162,11 +1187,11 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 }
                 let ln = common::name_of(ctx, learner);
                 if let Some(c) = ctx.db.character().id().find(learner) {
-                    percept(ctx, &c, now, "learned", me, learner, at, format!("{my_name} taught you {technique} ({}).", technique_help(&technique)), 0.85);
+                    percept(ctx, &c, now, "learned", me, learner, at, format!("{} taught you {technique} ({}).", common::label_cap(ctx, &c, me), technique_help(&technique)), 0.85);
                 }
                 common::chronicle(ctx, now, "learn", me, learner, at, format!("{my_name} taught {ln} {technique}"));
                 witnessed(ctx, now, at, "taught", me, learner, &format!("{{a}} taught {{b}} {technique}"), 0.4, &[me, learner]);
-                notes.push(format!("taught {ln} {technique}"));
+                notes.push(format!("taught {} {technique}", seen_as(learner)));
             }
             Effect::Learn { technique } => {
                 if living_rules::catalog::technique(&technique).is_some() && common::learn(ctx, me, &technique, "worked it out", now) {
@@ -1237,8 +1262,8 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                     ctx.db.trade_offer().id().delete(o);
                 }
                 ctx.db.trade_offer().insert(TradeOffer { id: 0, from: me, to, give_item: a.item.clone(), give_qty, want_item: a.want.clone(), want_qty: a.want_qty.max(1), at_ms: now });
-                let text = format!("{my_name} offers you {give_qty} {} for {} {}.", a.item, a.want_qty.max(1), a.want);
                 if let Some(c) = ctx.db.character().id().find(to) {
+                    let text = format!("{} offers you {give_qty} {} for {} {}.", common::label_cap(ctx, &c, me), a.item, a.want_qty.max(1), a.want);
                     percept(ctx, &c, now, "offer", me, to, at, text.clone(), 0.85);
                     if c.ai {
                         perceive::request_deliberation(ctx, to, &format!("{text} You may accept or not."), now);
@@ -1272,10 +1297,10 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 let deal = format!("{} {} for {} {}", offer.give_qty, offer.give_item, offer.want_qty, offer.want_item);
                 common::chronicle(ctx, now, "trade", from, me, at, format!("{fname} and {my_name} traded {deal}"));
                 if let Some(c) = ctx.db.character().id().find(from) {
-                    percept(ctx, &c, now, "trade", me, from, at, format!("{my_name} accepted your trade: {deal}."), 0.8);
+                    percept(ctx, &c, now, "trade", me, from, at, format!("{} accepted your trade: {deal}.", common::label_cap(ctx, &c, me)), 0.8);
                 }
                 witnessed(ctx, now, at, "trade", from, me, &format!("{{a}} and {{b}} traded {deal}"), 0.4, &[me, from]);
-                notes.push(format!("traded with {fname}: {deal}"));
+                notes.push(format!("traded with {}: {deal}", seen_as(from)));
             }
             Effect::Found => {
                 if ctx.db.membership().member().find(me).is_some() {
@@ -1287,6 +1312,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 }
                 let c = ctx.db.community().insert(Community { id: 0, name: name.clone(), founder: me, founded_ms: now, home_x: at.0, home_y: at.1 });
                 ctx.db.membership().insert(Membership { id: 0, community: c.id, member: me, since_ms: now });
+                crate::perception::knowledge_changed(None);
                 common::chronicle(ctx, now, "community", me, 0, at, format!("{my_name} founded {name}"));
                 witnessed(ctx, now, at, "community", me, 0, &format!("{{a}} founded a community called {name}"), 0.6, &[me]);
                 notes.push(format!("founded {name}"));
@@ -1303,7 +1329,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 ctx.db.join_request().insert(JoinRequest { id: 0, asker: me, community: m.community, at_ms: now });
                 let cname = ctx.db.community().id().find(m.community).map(|c| c.name).unwrap_or_default();
                 if let Some(c) = ctx.db.character().id().find(other) {
-                    percept(ctx, &c, now, "community", me, other, at, format!("{my_name} asks to join {cname}."), 0.85);
+                    percept(ctx, &c, now, "community", me, other, at, format!("{} asks to join {cname}.", common::label_cap(ctx, &c, me)), 0.85);
                     if c.ai {
                         perceive::request_deliberation(ctx, other, &format!("{my_name} asks to join {cname}. You may welcome them or not."), now);
                     }
@@ -1325,19 +1351,21 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                     ctx.db.membership().id().delete(old.id);
                 }
                 ctx.db.membership().insert(Membership { id: 0, community: mine.community, member: asker, since_ms: now });
+                crate::perception::knowledge_changed(None);
                 let cname = ctx.db.community().id().find(mine.community).map(|c| c.name).unwrap_or_default();
                 let an = common::name_of(ctx, asker);
                 common::chronicle(ctx, now, "community", asker, me, at, format!("{an} joined {cname}, welcomed by {my_name}"));
                 if let Some(c) = ctx.db.character().id().find(asker) {
-                    percept(ctx, &c, now, "community", me, asker, at, format!("{my_name} welcomed you into {cname}."), 0.9);
+                    percept(ctx, &c, now, "community", me, asker, at, format!("{} welcomed you into {cname}.", common::label_cap(ctx, &c, me)), 0.9);
                 }
                 witnessed(ctx, now, at, "community", asker, me, &format!("{{a}} joined {cname}, welcomed by {{b}}"), 0.5, &[me, asker]);
-                notes.push(format!("welcomed {an} into {cname}"));
+                notes.push(format!("welcomed {} into {cname}", seen_as(asker)));
             }
             Effect::Leave => {
                 let m = ctx.db.membership().member().find(me).ok_or("you belong to no community")?;
                 let cname = ctx.db.community().id().find(m.community).map(|c| c.name).unwrap_or_default();
                 ctx.db.membership().id().delete(m.id);
+                crate::perception::knowledge_changed(None);
                 common::chronicle(ctx, now, "community", me, 0, at, format!("{my_name} left {cname}"));
                 witnessed(ctx, now, at, "community", me, 0, &format!("{{a}} left {cname}"), 0.6, &[me]);
                 notes.push(format!("left {cname}"));
@@ -1515,7 +1543,7 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
     }
     ctx.db.bond_offer().insert(BondOffer { id: 0, from: me, to: other, at_ms: now });
     if let Some(c) = ctx.db.character().id().find(other) {
-        percept(ctx, &c, now, "family", me, other, at, format!("{my_name} wants to start a family with you (you would both have to choose it within two minutes)."), 0.9);
+        percept(ctx, &c, now, "family", me, other, at, format!("{} wants to start a family with you (you would both have to choose it within two minutes).", common::label_cap(ctx, &c, me)), 0.9);
         // Being asked is worth a thought (an animal answers by its instincts).
         if c.kind == "person" {
             crate::perceive::request_deliberation(ctx, other, &format!("{my_name} (#{me}) asks to start a family with you; it happens if you choose it toward them within two minutes."), now);
@@ -1658,7 +1686,7 @@ fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), sk
     common::count(|k| k.missed += 1);
     crate::combat::show(ctx, now, crate::combat::Seen { kind: living_rules::combat::seen::MISS, actor: attacker, target: victim, skill: common::scripts(ctx).shapes().code(skill), at: at_v, ..Default::default() });
     if let Some(vc) = ctx.db.character().id().find(victim) {
-        percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("{}'s blow missed: you were out of reach.", common::label_for(ctx, &vc, attacker)), 0.6);
+        percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("{}'s blow missed: you were out of reach.", common::label_cap(ctx, &vc, attacker)), 0.6);
         common::wake(ctx, victim);
     }
     if let Some(ac) = ctx.db.character().id().find(attacker) {
@@ -1678,6 +1706,12 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.judgment().actor().delete(id);
     ctx.db.mind_cursor().actor().delete(id);
     ctx.db.act_queue().actor().delete(id);
+    for a in ctx.db.acquaintance().observer().filter(id).map(|a| a.id).collect::<Vec<_>>() {
+        ctx.db.acquaintance().id().delete(a);
+    }
+    for r in ctx.db.reveal().observer().filter(id).map(|r| r.id).collect::<Vec<_>>() {
+        ctx.db.reveal().id().delete(r);
+    }
 }
 
 /// What only a living body uses goes with it, so active tables stay proportional to the
@@ -1749,7 +1783,7 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         let attacker_c = ctx.db.character().id().find(attacker);
         percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("You dodged {}'s attack.", common::label_for(ctx, &vc, attacker)), 0.6);
         if let Some(ac) = attacker_c {
-            percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} dodged your attack.", common::label_for(ctx, &ac, victim)), 0.6);
+            percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} dodged your attack.", common::label_cap(ctx, &ac, victim)), 0.6);
         }
         common::wake(ctx, victim);
         fight_report(ctx, victim, attacker, now);
@@ -1762,7 +1796,7 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     }
     let amount = if defense == Aim::Facing {
         if let Some(ac) = ctx.db.character().id().find(attacker) {
-            percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} blocked your blow.", common::label_for(ctx, &ac, victim)), 0.5);
+            percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} blocked your blow.", common::label_cap(ctx, &ac, victim)), 0.5);
         }
         percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("You blocked {}'s blow.", common::label_for(ctx, &vc, attacker)), 0.5);
         amount * takes
@@ -1787,7 +1821,7 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     let vn = common::display(ctx, victim);
     let by_person = ctx.db.character().id().find(attacker).map_or(false, |c| c.kind == "person");
     common::wake(ctx, victim);
-    let label = common::label_for(ctx, &vc, attacker);
+    let label = common::label_cap(ctx, &vc, attacker);
     let felt = if yielded { format!("{label} struck you though you had yielded ({amount:.0} damage)") } else { format!("{label} attacked you ({amount:.0} damage)") };
     percept(ctx, &vc, now, "attacked", attacker, victim, at, felt, 1.0);
     if yielded && !struck_since_yield {
@@ -1938,11 +1972,12 @@ fn give_in(ctx: &ReducerContext, me: u32, a: &Activity, at: (f32, f32), now: u64
     }
     common::chronicle(ctx, now, "yield", me, to, at, format!("{my_name} yielded to {}", common::display(ctx, to)));
     if let Some(tc) = ctx.db.character().id().find(to) {
-        percept(ctx, &tc, now, "yield", me, to, at, format!("{} yields to you: guard down, hands raised.", common::label_for(ctx, &tc, me)), 0.9);
+        percept(ctx, &tc, now, "yield", me, to, at, format!("{} yields to you: guard down, hands raised.", common::label_cap(ctx, &tc, me)), 0.9);
         common::wake(ctx, to);
     }
     witnessed(ctx, now, at, "yield", me, to, "{a} yields to {b}, guard down and hands raised", 0.6, &[me, to]);
-    format!("you yielded to {}; for {secs:.0} seconds you do not strike back", common::name_of(ctx, to))
+    let to_seen = ctx.db.character().id().find(me).map(|c| common::label_for(ctx, &c, to)).unwrap_or_else(|| common::name_of(ctx, to));
+    format!("you yielded to {to_seen}; for {secs:.0} seconds you do not strike back")
 }
 
 pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
@@ -1954,6 +1989,8 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
     c.alive = false;
     c.died_ms = now;
     c.cause = cause.into();
+    // A played character that dies under the minds is its person's again (the death screen).
+    crate::presence::died(ctx, &mut c);
     let name = c.name.clone();
     let kind = c.kind.clone();
     ctx.db.character().id().update(c);
@@ -1963,6 +2000,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
     }
     if let Some(m) = ctx.db.membership().member().find(id) {
         ctx.db.membership().id().delete(m.id);
+        crate::perception::knowledge_changed(None);
     }
     // What only this person knew how to do is gone unless they taught or wrote it down.
     for k in ctx.db.know_how().actor().filter(id).map(|k| k.id).collect::<Vec<_>>() {

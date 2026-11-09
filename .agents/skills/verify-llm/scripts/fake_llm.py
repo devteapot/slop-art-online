@@ -34,7 +34,8 @@ def cite(value, body):
     """Fill `$EXP:<word>` and `$PERSON` placeholders from the experience lines the request
     carried (`- [id] time text {Name=#id}`): `$EXP:<word>` becomes the id of the first line
     whose text contains <word> (0 if none), `$EXPS` all ids, `$PERSON` `person:<id>` of the
-    first person tagged, `$PERSON_ID` that id."""
+    first person tagged, `$PERSON_ID` that id. `$EXPSTR:<word>` and `$PERSON_IDSTR` give the
+    same ids as strings, the way GLM Flash writes them (docs/MODEL_COST.md, Part 2)."""
     user = '\n'.join(m.get('content', '') for m in body.get('messages', []) if m.get('role') == 'user')
     lines = re.findall(r'^- \[(\d+)\] (.*)$', user, re.M)
     people = re.findall(r'=#(\d+)', user)
@@ -50,6 +51,11 @@ def cite(value, body):
             return f'person:{people[0]}' if people else 'person:0'
         if v == '$PERSON_ID':
             return int(people[0]) if people else 0
+        if v == '$PERSON_IDSTR':
+            return people[0] if people else '0'
+        if isinstance(v, str) and v.startswith('$EXPSTR:'):
+            word = v[8:].lower()
+            return next((i for i, t in lines if word in t.lower()), '0')
         if isinstance(v, str) and v.startswith('$EXP:'):
             word = v[5:].lower()
             return next((int(i) for i, t in lines if word in t.lower()), 0)

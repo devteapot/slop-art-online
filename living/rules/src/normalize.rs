@@ -422,6 +422,8 @@ pub fn fix_item(i: &str) -> String {
 
 pub fn target(v: Value, path: &str) -> Result<Value, String> {
     Ok(match v {
+        // An id written as a string ("12", "#12"), as some models write it.
+        Value::String(s) if reply_id(&Value::String(s.clone())).is_some() => json!({"id": reply_id(&Value::String(s.clone()))}),
         Value::String(s) => {
             let l = s.trim().to_lowercase();
             match l.as_str() {
@@ -466,7 +468,7 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
                 return Ok(json!({"named": n}));
             }
             if let Some(i) = o.get("id") {
-                return Ok(json!({"id": i}));
+                return Ok(json!({"id": reply_id(i).map(Value::from).unwrap_or_else(|| i.clone())}));
             }
             if let Some(p) = o.get("place") {
                 return Ok(json!({"place": p}));
@@ -651,8 +653,25 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
     }
 }
 
+/// An id in a model's reply (a character, an experience): an integer, or one written as a
+/// string, `"392903"` or `"#392903"`, as some models write them (GLM Flash does in most of its
+/// memories: docs/MODEL_COST.md, Part 2). Anything else (`"215713-216671"`, `"Wren"`, a
+/// negative or fractional number) is not an id.
+pub fn reply_id(v: &Value) -> Option<u64> {
+    match v {
+        Value::Number(n) => n.as_u64().or_else(|| n.as_f64().filter(|f| *f >= 0.0 && f.fract() == 0.0 && *f < 9.0e15).map(|f| f as u64)),
+        Value::String(s) => {
+            let t = s.trim();
+            let t = t.strip_prefix('#').unwrap_or(t);
+            (!t.is_empty() && t.len() <= 19 && t.bytes().all(|b| b.is_ascii_digit())).then(|| t.parse().ok()).flatten()
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::{reply_id, target};
     use crate::graph::{from_value, outline};
     use serde_json::json;
 
@@ -780,5 +799,16 @@ mod tests {
         assert!(e.contains("graph.then"), "{e}");
         let e = from_value(json!({"if": {"mood": "sad"}, "then": {"do": "rest"}})).unwrap_err();
         assert!(e.contains("unknown condition `mood`"), "{e}");
+    }
+
+    #[test]
+    fn ids_written_as_strings_are_ids() {
+        for (v, want) in [(json!(392903), Some(392903)), (json!("392903"), Some(392903)), (json!(" #392903 "), Some(392903)), (json!(12.0), Some(12)),
+                          (json!("215713-216671"), None), (json!("Wren"), None), (json!(-3), None), (json!(1.5), None), (json!(""), None), (json!(null), None)] {
+            assert_eq!(reply_id(&v), want, "{v}");
+        }
+        // A graph's target given as a string id is the creature with that id.
+        assert_eq!(target(json!("#12"), "t").unwrap(), json!({"id": 12}));
+        assert_eq!(target(json!({"id": "12"}), "t").unwrap(), json!({"id": 12}));
     }
 }

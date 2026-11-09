@@ -105,8 +105,9 @@ async fn main() -> Result<()> {
             log::info!("connected as {identity}");
             let ready = ready.clone();
             let experiences = format!("SELECT * FROM experience WHERE controller = 0x{}", identity.to_hex());
-            // With player memory on: the experiences of characters people play (every other
-            // controller's; instinct-only characters have none), and where the settlements are.
+            // With player memory on (the default): the experiences of characters people play
+            // (every other controller's; instinct-only characters have none), and where the
+            // settlements are.
             let lived = format!("SELECT * FROM experience WHERE controller != 0x{}", identity.to_hex());
             let mut queries = vec![experiences.clone()];
             if mind::player_memory() {
@@ -142,6 +143,8 @@ async fn main() -> Result<()> {
                     "SELECT * FROM bond_offer",
                     "SELECT * FROM trade_offer",
                     "SELECT * FROM my_deliberations",
+                    // Whether the people who play characters are there (private; the owner reads it).
+                    "SELECT * FROM presence",
                 ].map(String::from)).collect::<Vec<String>>());
         })
         .on_disconnect(|_, e| {

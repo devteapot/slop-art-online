@@ -1,5 +1,9 @@
 # Client protocol validation
 
+## 2026-11-09 minds' sight, the projection and presence (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81b9dd8`/`dc5e41b` plus the uncommitted minds'-sight, projection and presence change (docs/PERCEPTION.md, "Second change"; docs/PLAYER_MEMORY.md, "Presence and the offline character"). Fake model only; every scratch database answered 404 after cleanup. `client-perc2-scoped2` (`LIVING_PERCEPTION=scoped`): 29 PASS, no XFAIL, including the new `seen_characters` projection check and the five presence checks (1 → 2 → 1 connections, takeover after 30 s, handback on a new connection, presence private). `client-perc2-open`: 30 PASS and the known `experience` XFAIL. A first scoped run (`client-perc2-scoped`) stopped at the inventory check: `projected` was missing from `PRIVATE`; fixed. The patched game client ran headless on a scoped island run (`perc2/game/`: digests match, 1–9 perceived characters, dress from `folk`/`style`).
+
 
 ## 2026-11-09 town life tables and reducer (dev-box)
 

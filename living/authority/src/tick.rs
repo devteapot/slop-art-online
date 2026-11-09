@@ -284,6 +284,9 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
         seed::inherit_ways(ctx, id, pa.id, pb.id, now);
         names.push((id, common::name_of(ctx, id)));
     }
+    // The parents know their children (and each other, through them).
+    crate::perception::knowledge_changed(Some(pa.id));
+    crate::perception::knowledge_changed(Some(pb.id));
     // A parent who died before the birth kept what the child inherits until now.
     for p in [&pa, &pb].into_iter().filter(|p| !p.alive) {
         crate::act::retire(ctx, p.id);
@@ -294,7 +297,7 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
         for p in &parents {
             crate::perceive::percept(ctx, p, now, "birth", names[0].0, p.id, at, format!("Your child {list} was born."), 1.0);
         }
-        crate::perceive::witnessed(ctx, now, at, "birth", names[0].0, first.id, &format!("{list} was born to {} and {}", pa.name, pb.name), 0.5, &[a, b, names[0].0]);
+        crate::perceive::witnessed(ctx, now, at, "birth", names[0].0, first.id, "A child was born to {b}", 0.5, &[a, b, names[0].0]);
     } else {
         for p in &parents {
             crate::perceive::percept(ctx, p, now, "birth", names[0].0, p.id, at, format!("Your young were born: {list}."), 1.0);
@@ -320,6 +323,8 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     common::set_profiling(k.profile);
     let _timer = common::span("housekeeping");
     crate::town::refresh_weather(ctx, now);
+    crate::presence::housekeeping(ctx, now);
+    crate::perception::expire(ctx, now);
     let hour = common::hour(&w, now) as u8;
     if hour != k.last_hour {
         let day = living_rules::day_of(now, w.epoch_ms, w.day_ms);

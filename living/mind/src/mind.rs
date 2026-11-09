@@ -410,7 +410,10 @@ impl Minds {
             if id != 0 && id != e.observer {
                 if let Some(c) = self.conn.db.character().id().find(&id) {
                     if c.kind == "person" && !who.iter().any(|w: &String| w.ends_with(&format!("#{id}"))) {
-                        who.push(format!("{}=#{id}", c.name));
+                        // A name only where the authority gave it (the character knows it):
+                        // otherwise the person stays as they were perceived, with an id to anchor.
+                        let label = if e.text.contains(&c.name) { c.name } else { "someone".into() };
+                        who.push(format!("{label}=#{id}"));
                     }
                 }
             }
@@ -593,7 +596,7 @@ impl Minds {
                 places.push(json!({"name": name, "x": at[0].as_f64().unwrap_or(0.0), "y": at[1].as_f64().unwrap_or(0.0)}));
             }
         }
-        let relations: Vec<Value> = v["relations"].as_array().cloned().unwrap_or_default().into_iter().filter(|r| r["id"].as_u64().map_or(false, |i| known.contains(&(i as u32)))).collect();
+        let relations: Vec<Value> = v["relations"].as_array().cloned().unwrap_or_default().into_iter().filter(|r| living_rules::normalize::reply_id(&r["id"]).map_or(false, |i| known.contains(&(i as u32)))).collect();
         if let Some(store) = &self.store {
             let mut patch = memory::Patch::default();
             for id in &known {
@@ -942,6 +945,12 @@ impl Minds {
         }
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(400)).await;
+            // A character the minds just took over thinks with its own past: what its person
+            // lived is internalized first (bounded by `LIVING_TAKEOVER_WAIT_S`).
+            let started = Instant::now();
+            while self.lived_waiting(actor) && started.elapsed() < self.lived_cfg.takeover_wait {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
             let mut seen = 0u64;
             loop {
                 let pending = if self.lod.on {
@@ -1062,8 +1071,10 @@ impl Minds {
     fn check_consolidation(self: Arc<Self>) {
         // One pass over the experience inbox for everyone (a scan per character would cost
         // characters × experiences every two seconds).
+        // Only what a character lived under this service's minds: rows its person lived while
+        // playing it are internalized as theirs (lived.rs).
         let mut inbox: HashMap<u32, Vec<Experience>> = HashMap::new();
-        for e in self.conn.db.experience().iter() {
+        for e in self.conn.db.experience().iter().filter(|e| e.controller == self.me) {
             inbox.entry(e.observer).or_default().push(e);
         }
         for c in self.mine() {
@@ -1320,7 +1331,7 @@ impl Minds {
                 if v["graph"].is_null() || v["graph"].as_str().map_or(false, |g| g.trim().eq_ignore_ascii_case("keep")) {
                     let (say, to) = match &v["say"] {
                         Value::String(s) => (s.clone(), 0),
-                        Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(|t| t.as_u64()).unwrap_or(0) as u32),
+                        Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(living_rules::normalize::reply_id).unwrap_or(0) as u32),
                         _ => (String::new(), 0),
                     };
                     let thought = v["thought"].as_str().unwrap_or_default().to_string();
@@ -1363,7 +1374,7 @@ impl Minds {
                     self.actors.lock().unwrap().entry(actor).or_default().pruned = pruned.clone();
                     let (say, to) = match &v["say"] {
                         Value::String(s) => (s.clone(), 0),
-                        Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(|t| t.as_u64()).unwrap_or(0) as u32),
+                        Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(living_rules::normalize::reply_id).unwrap_or(0) as u32),
                         _ => (String::new(), 0),
                     };
                     let plan = v["plan"].as_str().unwrap_or_default().to_string();
@@ -1530,7 +1541,7 @@ impl Minds {
         // A reply that ran too long failed: take fewer experiences at a time until it fits.
         let failures = self.actors.lock().unwrap().get(&actor).map_or(0, |m| m.failures);
         let take = (40 / (1 + failures as usize)).max(6);
-        let batch: Vec<Experience> = self.experiences(actor).into_iter().filter(|e| e.id > cursor).take(take).collect();
+        let batch: Vec<Experience> = self.experiences(actor).into_iter().filter(|e| e.id > cursor && e.controller == self.me).take(take).collect();
         let Some(upto) = batch.last().map(|e| e.id) else { return Ok(()) };
         // Only experiences that carry meaning go to the model; routine results are passed over.
         let meaningful: Vec<&Experience> = batch.iter().filter(|e| e.salience >= 0.2).collect();
@@ -1589,6 +1600,8 @@ impl Minds {
             }
         }
         self.name_people(&mut patch);
+        // Lived under the minds (a character's history shows both kinds: docs/PLAYER_MEMORY.md).
+        patch.lived_under = Some("ai".into());
 
         // Identity shifts slowly: at most once per 8 minutes unless something momentous happened.
         let momentous = meaningful.iter().any(|e| e.salience >= 0.9);

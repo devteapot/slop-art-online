@@ -2,13 +2,16 @@
 
 Started 2026-11-09. This note records how the living authority limits what a human player's client receives to what the player's character perceives now, plus the character's own state ([game brief](GAME_BRIEF.md#core-work-the-game-needs-engine-independent), core work 1; [island authority](ISLAND_AUTHORITY.md), "Perception-scoped subscriptions" and "A slimmer moving-body stream"). It covers the table audit, the SpacetimeDB documentation and source the design rests on, the design, the measured cost, the per-table decisions, the client change and the verification.
 
-**Status.** Implemented on branch `perception-1` and verified on scratch databases (`verify-*`) on the dev-box with SpacetimeDB 2.14.1, in its own container (`slop-perc-stdb`, port 3320). No lab or reference world was touched. The game client (`living/game`) was not edited: its change is the patch [perception-client.patch](perception-client.patch), described in [Client change](#client-change). Until it lands, the default build keeps the tables the game client reads public ([Compatibility](#compatibility-the-living_perception-build-switch)).
+**Status (second change, 2026-11-09, uncommitted on the Mac checkout).** Minds now perceive by the players' rule: sight by light and a clear sight line, in every perception path ([Minds see what their character sees](#minds-see-what-their-character-sees)). What one character perceives of another is a projection of its record through a law in the script, `perceived_of` ([What an observer perceives of a target](#what-an-observer-perceives-of-a-target)): `seen_characters` returns that projection (no controller, home or parents), minds' percepts and scenes use the same one, and a demonstration skill, `appraise`, reveals exact health for 20 s. Presence and the takeover of an offline player's character are in [player memory](PLAYER_MEMORY.md#presence-and-the-offline-character). Measured and verified as recorded in [Second change: measurements](#second-change-measurements) and [Second change: verification](#second-change-verification).
+
+**Status (first change).** Implemented on branch `perception-1` and verified on scratch databases (`verify-*`) on the dev-box with SpacetimeDB 2.14.1, in its own container (`slop-perc-stdb`, port 3320). No lab or reference world was touched. The game client (`living/game`) was not edited: its change is the patch [perception-client.patch](perception-client.patch), described in [Client change](#client-change). Until it lands, the default build keeps the tables the game client reads public ([Compatibility](#compatibility-the-living_perception-build-switch)).
 
 ## Rules this follows
 
 - **Perception is enforced on the authority** (AGENTS.md: "Spatial subscriptions are not permission boundaries by themselves"). A chunk window is a client's choice of what to subscribe to, so it bounds bandwidth, not knowledge. The perceived set is worked out by the authority with the rules' own sight.
 - **Current perception, remembered knowledge and developer audit truth are separate paths.** Current perception is the `seen_*` views, recomputed from the world as it is. What a player remembers is its own `experience` window, places and know-how (`my_*`). Audit truth (minds' state, thoughts, beliefs, personas, the chronicle) is private, read by the database owner: the mind service and the lab observer.
-- **One sight for every character.** The radius is `common::sight_for`, the one minds perceive by (day 11 tiles, night 6, a torch at night 9). Players also get a sight line; minds do not yet (see [Open](#open)).
+- **One sight for every character.** The radius is `common::sight_for` (day 11 tiles, night 6, a torch at night 9), and a clear sight line (`perception::in_sight`). Since the second change it holds for players and minds alike: "we should only observe what the actual NPC can see" (the user, 2026-11-09).
+- **What one perceives of another is decided by the rules, per observer.** Not a fixed public column set: the full record through `perceived_of(p)` in the script, a function of the observer, the target, what the observer knows and can do, and what a skill use revealed (the user, 2026-11-09).
 
 ## SpacetimeDB documentation consulted (2026-11-09)
 
@@ -32,6 +35,16 @@ Verified in the `v2.14.1` source, not stated (or stated differently) in the docs
 - **The owner reads private tables through SQL and subscriptions.** `owner_permissions` (`crates/lib/src/identity.rs`) grants `Read(Private)` only when the caller is the database owner, and subscription and SQL table resolution filter by it (`SchemaViewer`, `crates/engine/src/sql/ast.rs`). Anyone else gets an error naming a private table.
 - **Bindings for private tables** need `spacetime generate --include-private` (`crates/cli/src/subcommands/generate.rs`); the mind service and observer use them.
 - **Metrics:** a view call is reported under the per-reducer VM metrics with the view's name (`reducer_wasm_time_usec{reducer="seen_bodies"}`), `view_calls_triggered_by_reducer{reducer="tick"}` counts the views a reducer triggered, and `spacetime_reducer_plus_query_duration_sec{reducer="tick"}` covers the tick with its view refresh and subscription evaluation (a histogram whose smallest bucket is 5 ms, so only its sum and count resolve the 1–3 ms range).
+
+Consulted again for the second change (2026-11-09):
+
+| Page | What it says | What follows here |
+|---|---|---|
+| [Lifecycle reducers](https://spacetimedb.com/docs/functions/reducers/lifecycle/) (selector 2.0.0) | `#[reducer(client_connected)]` and `#[reducer(client_disconnected)]` take only the `ReducerContext`; client_connected "Runs for each distinct connection (WebSocket, HTTP call)" and "Receives the connection ID for the connection being opened"; "Failure disconnects the client"; client_disconnected "Runs when connection ends (close, timeout, error)". Restarts, crashes and republishing are not covered. | Presence keyed by `ConnectionId` (one row per open connection), counted per identity. HTTP calls are connections too, so a takeover waits for the `takeover_s` law. |
+| [Reducer context](https://spacetimedb.com/docs/functions/reducers/reducer-context/) | `connection_id` is `Option<ConnectionId>`, "if available". | A connection event without one changes no row. |
+| [Views](https://spacetimedb.com/docs/functions/views/) | A view returns rows of a product type (or a query) computed from what it reads. | `seen_characters` returns a narrow `SeenCharacter` type read from stored projections (below). |
+
+Verified in the `v2.14.1` source (`crates/core/src/host/host_controller.rs`, `module_host.rs`; `spacetimedb-2.14.1/src/lib.rs`): "If an error occurs in the disconnect reducer, the client is still recorded as disconnected"; `call_identity_connected` inserts an `st_client` row, and at launch the host runs `call_identity_disconnected` for every dangling `st_client` row ("Disconnect dangling clients"), so "every client connection eventually has `client_disconnected` invoked", crashes included. Observed on a scratch world: an HTTP `join` ran both reducers around the call (presence `connections` 0 afterwards, a takeover pending). Not verified: whether connections survive a module republish without a disconnect (a world that updates in place gets presence rows at each player's next connection).
 
 Not verified: how the per-sender views behave with thousands of subscribers (the docs warn of the cost; only 1–50 were measured), and whether 2.14.1 bounds a view's read set size.
 
@@ -71,6 +84,10 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 | `community`, `membership`, `join_request`, `bond_offer`, `trade_offer`, `expecting` | developer audit truth (social facts between characters; a player learns of them through its experiences) | private | private | mind service, observer (owner) |
 | `artifact` | developer audit truth (tablets and signs; reading one is an act, and its text reaches the reader as an experience) | private | private | observer (owner) |
 | `perceived` | private engine state (new: who each player perceives) | private | private | the `seen_*` views |
+| `projected` | private engine state (second change: what each player perceives of each creature in its scene, the `perceived_of` projection) | private | private | `seen_characters`, `seen_fighters` |
+| `reveal` | own private state (what a skill use revealed to an observer, until when) | private | private | the projection, rules only |
+| `acquaintance` | own private state (whose name a character was told) | private | private | the projection, rules only |
+| `connection`, `presence` | private engine state (open connections; whether a played character's person is there, and who controls it) | private | private | the mind service (owner) |
 | `skill_code` | private engine state (stable presentation codes per skill; clients read codes from `skill_card` and `act_card`) | private | private | rules only |
 | `clock`, `steer`, `wake`, `infant_cry`, `familiar`, `rearing`, `act_queue`, `pasture`, `missile`, `tick_timer`, `slow_timer` | private engine state | private | private | rules only |
 
@@ -94,8 +111,8 @@ All are per-sender (`ViewContext`), take no arguments, declare `primary_key = id
 | View | Returns | Reads (its read set) |
 |---|---|---|
 | `seen_bodies` | [`Motion`](#the-moving-body-stream) rows of my living character and every creature I perceive | my characters (`character.controller`), my `perceived` rows (`perceived.viewer`), those bodies (`body.id`) |
-| `seen_characters` | their `character` rows | the same, then `character.id` |
-| `seen_fighters` | their `fighter` rows | the same, then `fighter.id` |
+| `seen_characters` | `SeenCharacter`: what I perceive of each creature in my scene, mine included (`id`, `name` when known else empty, `label`, `kind`, `stage`, `folk`, `style`, `own`, `band`, exact `hp`/`max_hp` or -1) | my `projected` rows (`projected.viewer`) only |
+| `seen_fighters` | their `fighter` rows, with the band I perceive (the projection's; 255 when hidden) | my `projected` rows, then `fighter.id` |
 | `seen_doing` | their `doing` rows | the same, then `doing.id` |
 | `my_characters` | my characters, the dead included (the death screen) | `character.controller` |
 | `my_vitals` | my living characters' `vitals` | `character.controller`, `vitals.id` |
@@ -110,6 +127,34 @@ The existing `my_combat`, `my_readiness`, `my_skill_uses` and `my_deliberations`
 
 `seen_bodies` returns a narrow product type, `Motion`: `id`, `x`, `y`, `t_ms`, `vx`, `vy`, `heading`, `turn`, `turn_s`, `next_ms` (the segment's end, when steering looks again) and `speed` (the cruising speed of the movement, which tells walk from run). The client extrapolates with `living_rules::steer::pose` exactly as from a `body` row. It leaves out the path (16 B a corner), the chunk and the kind (on the creature's character row). That is 52 B of columns against `body`'s 70 B plus 16 B per path corner. No table was added and no column removed, so a running world updates in place: the view maps rows that are written anyway.
 
+### Minds see what their character sees
+
+Second change. Every path by which a mind, or a behaviour graph, learns about another creature now uses the rule players have, through one function, `perception::in_sight(map, eye, at, dist, sight)`: within the observer's own `sight_for` and with `Map::sight_clear` between. No second approximation was written.
+
+| Path | Before | Now |
+|---|---|---|
+| Witnessed events (`perceive::witnessed`: fights, deaths, gifts, building, births…) | anyone within the base sight of the place (no torch, no sight line) | each onlooker within its own sight (a torch at night) and a clear line from where it stands to the place |
+| A mind's scene (`perceive::scene_json`, the deliberation request) | creatures within sight | creatures within sight with a clear line (`perception::visible`), each described by its projection |
+| Behaviour graphs (`brain.rs` scene: `nearest`, `sees`, `visible_creature`, a resident noticing someone) | creatures within sight | the same `perception::visible` |
+| What an animal senses before attacking a person (`act.rs`, `sensed`) | creatures within sight, or smelled | seen with a clear line, or smelled (smell is unchanged) |
+| A player's aimed act ("you cannot see them", `act.rs`) | `Map::line_clear` (a walking line: water blocked it) | `in_sight` (water does not block sight; the line the player's perceived set uses) |
+| The combat feed (`combat::show`, `combat::died`: `my_combat` / `combat_seen`) | onlookers within their sight, no sight line | within their sight and a clear line |
+| An infant's cry seen by a carer (`perceive::infant_cry`) | within the carer's sight | within its sight and a clear line |
+| Speech, signals, smell | hearing and scent radii | unchanged: they are not sight |
+| Resources, structures and terrain in a scene | within sight | unchanged: static world data, which a player's client also draws by chunk window ([Open](#open)) |
+
+### What an observer perceives of a target
+
+What one character perceives of another is not a fixed set of public columns. It is the target's full record through a law in the script, so skills and knowledge can reveal more.
+
+- **The law.** `perceived_of(p)` in `living/scripts/skills.rhai` receives `p.observer` (`kind`, `knows`: its know-how), `p.target` (`kind`, `known`: the observer knows its name, `revealed`: the fields a skill use revealed and that still hold), `p.self` and `p.night`, and returns `#{ name: bool, health: "band" | "exact" | "none" }`. The shipped law: a name when known (animals know their own kind's), health as a band, exactly for oneself or while revealed. A script without the law gets the same rule from `Regard::default_for` (`living_rules::script`).
+- **Rust's primitives** (`perception.rs`): the full record (character, vitals, the settlement round its home), whom the observer knows (`knows_name`: itself, parents, children, the other parent of its children, its community, someone its mind has feelings about (`relation`), or someone who told it their name (`acquaintance`)), what still holds of a reveal (`reveal`), the perceived set and the sight line. `project(observer, target)` builds the projection: `name` (or empty), `label` (the name, or `a stranger`, `a child`, `a baby`, `an old stranger`, `a wolf`), `kind`, `stage`, `folk` and `style` (build and dress, from the settlement round the home: what the client drew from the home position), `band`, and exact `hp`/`max_hp` (to the whole point) or -1.
+- **Introductions.** Saying one's own name tells it to everyone who hears (`perceive::speak` writes an `acquaintance` row per hearer). Being told a third person's name is not built.
+- **Cadence.** The law's answer depends only on its input (`RegardIn`: kinds, know-how, known, revealed, self, night), so it is cached by that value per script revision: a world needs a handful of distinct inputs, and the law runs a few times per revision, not per observer × target. A player's projections are stored in `projected` rows. The sweep projects a creature when it comes into sight, and again only when an input changed: the viewer's knowledge epoch (bumped when it is told a name, when its mind's relations are projected, at a birth to its parents, when any community's members change), a reveal that holds or has just ended, and its own row (exact health). Health bands reach the rows through `perception::health_moved`, called where the fighter band is written (a blow, a heal, the 1 Hz follow-up), through the `projected.body` index. Nothing is re-projected on the 200 ms sweep otherwise.
+- **Delivery.** Two options were weighed. A view computing the projection on refresh would have to read everything the law depends on (each target's `vitals`, `relation`, `membership`, `acquaintance` and `reveal` rows), so its read set would re-run it on every needs settle of anyone in sight, and it would run the projection per perceived row per refresh. A private per-viewer table that the update writes and the view reads by viewer costs a write only when a projection changes, and the view's read set is the viewer's own rows. The table was chosen; its cost in the crowd case is in [Second change: measurements](#second-change-measurements). It is a table of its own, not columns on `perceived`, so a band change re-runs `seen_characters` and `seen_fighters` for those who see it, not `seen_bodies` and `seen_doing`.
+- **Minds use the same projection.** `common::label_for` is the projection's label, so every percept names others as the observer perceives them ("A stranger attacked you", "Wren said to you"), the act feedback a character gets of its own acts does too ("gave 3 berries to a stranger"), an activity's label (what anyone sees of it: the doer's feedback, onlookers' scenes) names a creature target by its kind ("wave → person"), not its name, and a mind's scene lists a creature's `name` only when known (else `who`: its label), its wound from the projected band, and `health: "34 of 60"` while an appraisal holds. The mind service tags people in experience lines with a name only where the authority's text already gives it (else `someone=#id`, keeping the id as the memory anchor). The chronicle and audit truth keep real names.
+- **`appraise`.** A skill declared in `skills.rhai` like any other (`appraise_check`, `_duration` 1.5 s, `_done` → `#{ op: "reveal", what: "health", secs: 20.0 }`, `_shows` a gesture, `skill_io`, the catalog's help). The new effect `reveal` writes a `reveal` row (observer, target, what, until); the observer is told what it saw ("You look a stranger over: 100 of 100 health."). It is open to players (`human_act`) and minds (a graph leaf or a deliberate act) alike. Ended reveals are deleted once a second by an index range.
+
 ### Compatibility: the `LIVING_PERCEPTION` build switch
 
 `living/authority/build.rs` reads `LIVING_PERCEPTION` at build time:
@@ -122,7 +167,7 @@ Developer audit truth is private in both. Table visibility is part of the module
 ### The mind service and the observer
 
 - **The mind service** connects with the CLI token, `LIVING_TOKEN` or `.local/living/token` (`living/mind/src/main.rs`), the publisher's identity: the database owner. Its subscriptions (`experience` by controller, `character`, `brain`, `persona`, `relation`, `judgment`, `place`, `know_how`, `community`, `membership`, `background`, `routine`, `routine_stat`, `genome`, `script`, offers, `my_deliberations`) keep working on private tables. Nothing in it changed.
-- **The lab observer** (`living/viewer`) connected anonymously. It now passes the owner's token: `LIVING_TOKEN` or `.local/living/token` natively, and on the web the page's `#token=…` fragment, which the browser never sends to a server. Without one, its subscription fails with a message saying so. **The public observer** (`https://sos.carlid.dev`) has no token, so after this change it can show nothing of minds, bodies (in a scoped build) or the chronicle. Giving it the owner's token would hand admin rights to whoever opens the page: that is the user's call ([Open](#open)).
+- **The lab observer** (`living/viewer`) connected anonymously. It now passes the owner's token: `LIVING_TOKEN` or `.local/living/token` natively, and on the web the page's `#token=…` fragment, which the browser never sends to a server. Without one, its subscription fails with a message saying so. **The public observer** (`https://sos.carlid.dev`) had no token, so after this change it could show nothing of minds, bodies (in a scoped build) or the chronicle. It was retired on 2026-11-09 (its services are stopped and disabled; [living core](LIVING_CORE.md#running)).
 - **The verification harness** reads SQL as the owner by default now (`verify.py sql`; `--anonymous` for public-only reads), and its observer screenshots pass the token in the fragment.
 - **Bindings** are generated with `--include-private` (`just living-generate`), identical for both builds.
 
@@ -134,6 +179,9 @@ Developer audit truth is private in both. Table visibility is part of the module
 | `seen_*` refresh | as in the table above | the view's ephemeral rows (no commitlog) | point lookups | that player | in the transaction that wrote a row it read: a perceived creature's steering update, fighter or doing change, someone coming into or going out of sight | — |
 | `my_*` refresh | the player's own rows | ephemeral rows | point lookups | that player | when the player's own rows change | `experience` ≤ 400 rows per character, as before |
 | Static windows | `terrain_chunk`, `lot` by chunk range | — | `lot.chunk`, PK | clients that subscribe | on edits | — |
+| Projection (second change) | the target's character, vitals and the settlement round its home; the observer's know-how, relations, membership, acquaintances, reveals; the cached law | `projected` insert on coming into sight; update when it changes; delete with the `perceived` row and at the target's death | `projected.viewer`, `projected.body`, `acquaintance.by_pair`, `relation.by_pair`, `membership.member`, `reveal.observer` | that player (`seen_characters`, `seen_fighters`) | on entering sight, knowledge or reveal changes, band changes | one row per creature in a player's scene, own included |
+| Minds' sight (second change) | per onlooker: its body, its sight, the cached map; per event or scene | — | PK, chunk-body cache | — | per witnessed event, per scene, per behaviour-graph scene | — |
+| Reveals, acquaintances | — | `reveal` insert per appraisal, deleted when ended (index range on `until_ms`, 1 Hz); `acquaintance` insert per hearer of a self-introduction | `reveal.observer`, `reveal.until_ms`, `acquaintance.observer`, `.by_pair` | — | per skill use, per introduction | acquaintances grow with introductions (deleted with the observer at death) |
 
 No routine action gained a whole-table scan. The sweep's cost is per player, not per world.
 
@@ -181,6 +229,107 @@ What the numbers say:
 - **Server CPU** was 0.11–0.22 cores at rest in both builds, 0.30 against 0.18 for the 50 walking. **Memory:** the world's module WASM memory was 74.8 MB in every run. The server container's memory grew from 2.8 to 3.8 GB over the matrix's ~40 publish-and-delete cycles of the bench database (service-wide allocator retention across databases, not one world's footprint; jemalloc resident about 1.7 GB).
 - **Not measured:** night (sight 6 tiles: smaller sets, cheaper), a battle seen by many players, the 216-character gate with its observers and minds, and durations past a minute.
 
+## Second change: measurements
+
+On the Mac checkout (Apple M-series, 14 cores, Docker Desktop; SpacetimeDB 2.14.1 in the shared `sao-living_spacetimedb_1`), scratch databases only (`verify-bench-sight`, `verify-bench-crowd`, deleted after). Back to back, alternating builds: **base** is main at `972aefd` (a detached worktree), **change** this change before the sight fast path, **change2** this change as it stands (with `Map::sight_clear`'s open-chunk fast path and the sweep that skips unchanged scenes). Load on the host: another session's process used about 4 of the 14 cores throughout, and another worker's `verify-polish` world was live on the same server (the 1-minute load average was 5–15). Read single maxima and single p99s as indications; the spread between two runs of one build is as large as most differences below.
+
+### The tick: at rest and a 200-character skirmish
+
+`living/tools/bench.py` (60 s windows of the tick's own LogStopwatch spans, no subscribers), on a fresh database per window pair: 60 s at rest after a 15 s settle, then `spawn_skirmish(200, 12)` and 60 s from about 4 s later. Two seeds: `island` as shipped (`rules.minds = false`: residents live on their graphs, no percepts are written), and a scratch copy with minds on (`verify-island-minded`: residents are AI characters, so percepts, witnessed events and deliberation requests are written; no mind service connected). Raw reports: `.local/living/bench/tick/` (git-ignored).
+
+"People" is the count alive at the window's end (the skirmish adds 200 and kills most). Tick times in ms.
+
+| Seed | Window | Build | Run | People | Animals | Ticks/s | Evals/s | Experiences/s | p50 | p95 | p99 | Max | >16.7 ms | tick ms/s | combat ms/s |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| island | rest | base | 1 | 258 | 34 | 59.8 | 367.1 | 0.0 | 2.03 | 3.58 | 4.48 | 7.4 | 0 of 3604 | 125 | 2.0 |
+| island | rest | base | 2 | 260 | 34 | 59.8 | 353.5 | 0.0 | 1.41 | 2.90 | 3.68 | 5.5 | 0 of 3604 | 93 | 0.2 |
+| island | rest | base | 3 | 254 | 34 | 59.8 | 373.3 | 0.0 | 1.82 | 3.39 | 4.54 | 10.5 | 0 of 3604 | 115 | 4.0 |
+| island | rest | base | 4 | 254 | 33 | 59.8 | 356.2 | 0.0 | 1.84 | 3.38 | 4.28 | 7.7 | 0 of 3604 | 116 | 2.2 |
+| island | rest | change | 1 | 262 | 34 | 59.8 | 349.2 | 0.0 | 1.52 | 2.94 | 3.60 | 6.5 | 0 of 3605 | 98 | 0.2 |
+| island | rest | change | 2 | 261 | 33 | 59.8 | 380.3 | 0.0 | 1.59 | 3.09 | 4.02 | 7.2 | 0 of 3604 | 103 | 3.0 |
+| island | rest | change2 | 1 | 252 | 34 | 59.8 | 338.4 | 0.0 | 1.78 | 3.19 | 4.16 | 6.9 | 0 of 3604 | 111 | 0.3 |
+| island | rest | change2 | 2 | 261 | 34 | 59.8 | 358.5 | 0.0 | 1.74 | 3.04 | 3.78 | 7.3 | 0 of 3605 | 109 | 0.2 |
+| island | skirmish | base | 1 | 302 | 33 | 59.2 | 1137.7 | 0.0 | 3.27 | 9.61 | 13.23 | 24.4 | 11 of 3575 | 241 | 81.3 |
+| island | skirmish | base | 2 | 308 | 34 | 59.4 | 1047.7 | 0.0 | 2.73 | 9.05 | 12.66 | 27.8 | 10 of 3585 | 209 | 54.7 |
+| island | skirmish | base | 3 | 289 | 34 | 58.4 | 1000.9 | 0.0 | 3.07 | 10.35 | 18.00 | 50.5 | 45 of 3534 | 237 | 59.7 |
+| island | skirmish | base | 4 | 263 | 33 | 58.6 | 931.3 | 0.0 | 3.36 | 9.77 | 16.13 | 29.1 | 29 of 3548 | 240 | 75.6 |
+| island | skirmish | change | 1 | 295 | 34 | 57.3 | 861.6 | 0.0 | 2.44 | 12.33 | 19.66 | 35.3 | 65 of 3469 | 215 | 55.6 |
+| island | skirmish | change | 2 | 277 | 30 | 57.4 | 915.1 | 0.0 | 2.51 | 11.31 | 23.42 | 93.3 | 74 of 3478 | 224 | 65.1 |
+| island | skirmish | change2 | 1 | 298 | 34 | 59.2 | 993.2 | 0.0 | 3.21 | 9.95 | 14.31 | 21.0 | 15 of 3571 | 237 | 56.8 |
+| island | skirmish | change2 | 2 | 283 | 34 | 58.2 | 976.2 | 0.0 | 2.69 | 10.82 | 18.29 | 70.4 | 50 of 3511 | 227 | 57.5 |
+| verify-island-minded | rest | base | 1 | 267 | 34 | 59.8 | 362.5 | 35.9 | 1.90 | 3.48 | 4.31 | 7.5 | 0 of 3604 | 119 | 0.2 |
+| verify-island-minded | rest | base | 2 | 262 | 34 | 59.8 | 365.8 | 40.3 | 2.06 | 3.81 | 4.76 | 8.9 | 0 of 3604 | 130 | 2.1 |
+| verify-island-minded | rest | base | 3 | 265 | 34 | 59.8 | 360.0 | 35.6 | 1.79 | 3.21 | 4.12 | 6.7 | 0 of 3603 | 112 | 0.2 |
+| verify-island-minded | rest | change | 1 | 254 | 34 | 59.8 | 342.9 | 34.2 | 1.77 | 3.46 | 4.29 | 14.4 | 0 of 3604 | 114 | 0.2 |
+| verify-island-minded | rest | change | 2 | 257 | 34 | 59.8 | 358.1 | 40.2 | 1.57 | 2.99 | 3.81 | 5.6 | 0 of 3604 | 100 | 1.6 |
+| verify-island-minded | rest | change2 | 1 | 254 | 34 | 59.8 | 343.4 | 35.1 | 2.18 | 3.88 | 4.70 | 7.1 | 0 of 3604 | 136 | 0.2 |
+| verify-island-minded | skirmish | base | 1 | 310 | 34 | 57.7 | 971.0 | 9.0 | 2.69 | 11.50 | 23.16 | 48.9 | 67 of 3503 | 246 | 61.4 |
+| verify-island-minded | skirmish | base | 2 | 292 | 34 | 58.6 | 917.1 | 9.6 | 3.03 | 9.63 | 16.68 | 44.4 | 36 of 3544 | 228 | 51.8 |
+| verify-island-minded | skirmish | base | 3 | 312 | 34 | 59.0 | 1047.2 | 11.4 | 3.19 | 9.54 | 13.76 | 31.6 | 15 of 3559 | 236 | 61.6 |
+| verify-island-minded | skirmish | change | 1 | 287 | 34 | 57.4 | 868.5 | 12.6 | 2.88 | 11.69 | 19.74 | 40.0 | 70 of 3481 | 231 | 59.1 |
+| verify-island-minded | skirmish | change | 2 | 286 | 34 | 59.1 | 943.3 | 12.5 | 2.53 | 9.24 | 13.76 | 23.1 | 17 of 3570 | 200 | 51.1 |
+| verify-island-minded | skirmish | change2 | 1 | 292 | 34 | 59.1 | 979.0 | 8.2 | 3.38 | 9.32 | 13.48 | 25.2 | 10 of 3568 | 235 | 52.9 |
+
+What it says:
+
+- **At rest the change costs nothing measurable** on either seed (p99 3.6–4.7 ms against 3.7–4.8 ms for base). The minds' sight lines (witnessed events, scenes, behaviour graphs) and the projection's labels run on events and evaluations that are rare at rest.
+- **In the skirmish, the first version was slower**: on the shipped seed p99 19.7 and 23.4 ms against 12.7–18.0, 65–74 ticks over budget against 10–45, and 15% fewer behaviour-graph evaluations per second (the evaluation budget was spent on sight lines). A packed battle puts about 200 creatures in every fighter's sight, so each evaluation traced about 200 sight lines.
+- **With the open-chunk fast path** (`Map::sight_clear` answers without a tile walk when no chunk the segment's box touches holds rock or wall and no shut gate lies in the box; the per-chunk table is built once and kept by `set` and `put_chunk`; a randomized test checks it against the walk) the skirmish is back within base's spread: p99 14.3 and 18.3 ms on the shipped seed, 13.5 ms with minds, evaluations 976–993/s against 931–1,138/s. This battle is on open ground north of the arrival point; a battle among walls (a town) still walks tiles, and was not measured.
+
+### The crowd case: 50 players clustered and walking
+
+`living/tools/perception_bench.py --mode scoped --players 50 --placement square --walk` (as in [Measurements](#measurements): 50 Rust SDK connections subscribing the views, walking in small circles in the walled town's square, 60 s after a 20 s settle), scoped builds of base and the change, each with its own `perception_load`. Raw reports: `.local/living/bench/crowd/`.
+
+Builds: base; change (first version); change2; change3, the code as it stands.
+
+| Build | Run | Tick code p50 / p95 / p99 / max (ms) | Tick tx mean (ms) | tx > 5 ms | tx > 10 ms | Sweep (ms/s) | View calls/s | seen_bodies / seen_characters / seen_fighters / seen_doing WASM (ms/s) | Wire B/s per player | Server CPU |
+|---|---|---|---|---|---|---|---|---|---|---|
+| base | 1 | 1.02 / 1.75 / 2.22 / 3.0 | 2.48 | 387 | 144 | 3.8 | 1633 | 27.0 / 4.2 / 1.8 / 3.2 | 4520 | 0.38 |
+| base | 2 | 1.03 / 1.82 / 2.29 / 2.9 | 2.60 | 413 | 146 | 4.0 | 1688 | 27.6 / 4.1 / 1.8 / 4.6 | 4573 | 0.39 |
+| base | 3 | 1.00 / 1.82 / 2.31 / 3.0 | 2.70 | 449 | 149 | 4.1 | 1753 | 30.4 / 4.6 / 1.9 / 4.7 | 4857 | 0.40 |
+| change | 1 | 1.01 / 2.76 / 3.84 / 4.9 | 2.67 | 418 | 162 | 10.0 | 1700 | 27.8 / 2.8 / 3.5 / 4.8 | 4333 | 0.39 |
+| change | 2 | 1.03 / 2.99 / 4.06 / 5.5 | 2.83 | 463 | 169 | 10.7 | 1736 | 30.2 / 2.9 / 3.5 / 5.0 | 4533 | 0.40 |
+| change2 (sweep skips unchanged scenes) | 1 | 1.10 / 2.76 / 3.85 / 8.6 | 2.92 | 483 | 186 | 9.7 | 1764 | 32.0 / 3.0 / 3.7 / 4.5 | 4642 | 0.41 |
+| change2 (sweep skips unchanged scenes) | 2 | 1.01 / 2.60 / 3.71 / 4.8 | 2.73 | 447 | 173 | 9.4 | 1726 | 28.7 / 2.9 / 3.6 / 5.2 | 4403 | 0.38 |
+| change3 (as it stands: own row once a second) | 1 | 1.01 / 2.58 / 3.61 / 7.6 | 2.79 | 440 | 169 | 9.2 | 1774 | 30.8 / 2.9 / 3.8 / 5.1 | 4648 | 0.37 |
+| change3 (as it stands: own row once a second) | 2 | 1.07 / 2.63 / 3.74 / 4.7 | 2.75 | 428 | 168 | 9.2 | 1704 | 28.9 / 2.9 / 3.6 / 4.2 | 4425 | 0.38 |
+
+- **The first version** cost the tick's own code about 1.6 ms at p99 (2.2 → 3.8–4.1 ms) and the sweep 4 → 10 ms/s: every sweep re-read and re-projected the viewer's rows. `seen_characters` costs less than on main (2.8–2.9 against 4.1–4.2 ms/s of view WASM: it reads only the viewer's own projected rows, not the characters'), `seen_fighters` more (3.5 against 1.8: it now reads the projections), and the tick transaction's mean rose 0.2–0.3 ms.
+- **As it stands** (change3: a sweep with no one coming or going and no input changed touches only the viewer's own row, and that row is projected again about once a second), the sweep is 9.2 ms/s against base's 3.8–4.1, the tick's own p99 3.6–3.7 ms against 2.2–2.3, and the tick transaction's mean 2.75–2.79 ms against 2.48–2.70 (ticks over 5 ms: 428–440 against 387–449). With everyone walking, someone comes into or goes out of each player's sight on nearly every sweep, so most of the remaining cost is projecting arrivals (3.3 a second per player) and reading the viewer's projected rows; the skip helps a crowd at rest, not this one. Bytes per player are unchanged (4.4–4.6 kB/s against 4.5–4.9).
+- **Cost per player**, worst case measured: about 0.1 ms of sweep work per second more than main (about 20 µs a sweep). A cheaper `project` (fewer index reads per arrival: know-how, family and membership looked up once per sweep instead of per target) is the next step if a crowd of players needs it; not done.
+
+## Second change: verification
+
+On the Mac checkout, scratch `verify-*` databases on the shared 2.14.1 container, the fake model server for every mind (no paid call was made). Code: main `81b9dd8` plus this change (uncommitted). Evidence under the git-ignored `.local/living/verify/` (directories named below); benchmark reports under `.local/living/bench/`.
+
+| Surface | What was driven | Result | Evidence |
+|---|---|---|---|
+| Build | `set -o pipefail; just living-check` | exit 0; rules 100 passed (new: `what_one_perceives_of_another_is_the_law_s`, `appraising_reveals_health_for_a_while`, `sight_over_open_chunks_agrees_with_the_tile_walk`, `ids_written_as_strings_are_ids`); mind 49 passed (new: `experience_ids_written_as_strings_are_kept`; the cadence test now ends a session by the takeover) | `perc2/check.log` |
+| Client, scoped | `verify-client` `run.py` with `LIVING_PERCEPTION=scoped`: the projection's columns, in sight, beyond sight and behind rock, presence (one, two, one, no connection; the takeover after 30 s; the handback on a new connection), the new private tables refused to players and anonymous clients | 29 PASS, no XFAIL (a first run stopped at the driver's table inventory, which lacked `projected`; fixed) | `client-perc2-scoped2/` (`client-perc2-scoped/` the stopped run) |
+| Client, open | the same on the default build | 30 PASS and the known XFAIL (`experience` public in the open build) | `client-perc2-open/` |
+| Game client | the updated [perception-client.patch](perception-client.patch), built in a temporary worktree at HEAD (release, no warnings), headless on the scoped island run: join, walk into the square, speak | digests match; 1–9 perceived bodies and characters as it walked in, `doing` rows, residents drawn in their towns' dress from `folk`/`style`, the speech bubble and log | `perc2/game/game.log`, `perc2/game/shots/` |
+| Player | `verify-player` `appraise.py` (new) and `gesture.py` on a scoped island run; `combat.py --fresh` | appraise 10 of 10; gestures 10 of 10 after a driver fix (it placed the player where a stall's building hid the resident, so the wave at someone unseen was refused: the sight rule at work; the driver now picks a spot from which the player sees the resident); combat: see below | `player-perc2/` |
+| Minds | `verify-minds`: `takeover` and `sight` (new), `roundtrip`, `acts`, `conversation`, `consolidation` | all pass, consolidation its known XFAIL; `takeover` passed on the third run after a driver fix (it looked for the plan's wait in the top-level graph, which the service writes as desires with a "current plan" routine) and an authority fix (a second takeover reinstalled the minds' graph before asking for a deliberation, and reinstalling counts as having just thought, so the request was refused by `think_min_s`) | `minds-perc2-*/`, `minds-perc2b-takeover/`, `minds-perc2c-takeover/` |
+| Core | `verify-core` `cargo_checks.py`; scenes `tick`, `needs`, `seize`, `sight` (new), `skirmish` (island); `town.py` (island); `verify_mechanics.py`, `verify_steering.py` | all pass except town 20 of 21 (see below) | `core-perc2*/` |
+| Knowledge | `verify-knowledge` `player_memory.py` (direct): switch off, switch on (provenance, projections, ids given as strings, the identity inferred), takeover (session end by presence, the past internalized before the first deliberation, `lived_under ai`), restart, recall, death | all pass on the fifth run (`knowledge-pmem-perc2e`); the earlier runs found what is fixed below and three driver gaps (a leak check that also matched the player's own words, a relation check made after the minds' consolidation had re-projected the relation, and a restart phase that still relied on idle detection) | `knowledge-pmem-perc2*/` |
+
+Product fixes the runs led to, all in this change:
+
+- **The takeover goes to the world's mind service on every seed.** It first used `common::mind_controller`, which on a seed with `rules.minds = false` (the island) is the database: an offline player's character would never have lived under a mind on the world people play.
+- **A second takeover asks for a deliberation before it reinstalls the minds' graph.** Reinstalling counts as having just thought (`set_graph` with source `mind` stamps `deliberated_ms`), so the request was refused by `think_min_s` and the character did not think until something urgent happened.
+- **An activity's label names a creature target by its kind**, not its name ("wave → person"): the label is what the doer is told of its act and what onlookers see in their scenes, so it leaked names the observer did not know.
+
+Behaviour changes, expected (row evidence in `core-perc2/sight-*.json`, `minds-perc2-sight/`, `player-perc2/gesture.json`):
+
+- Residents, animals and players' feeds no longer perceive creatures, fights or deaths behind rock, walls or shut gates within their sight radius ("a graph behind rock or a wall does not see it", "the resident behind the wall does not" witness the fight). Speech and smell still pass.
+- An act at someone unseen is refused: `gesture.py` first placed its player where a stall's building hid the resident, and the wave was refused.
+- Names follow knowledge: players and minds are told "a stranger said to you", "A stranger answers your greeting (nod).", "greeted a stranger" until someone says their name or a mind's relation knows them. Seeded residents still know their community, family and the people their minds have feelings about.
+- A mind's scene lists a stranger with `who` (its label) instead of `name`; its wound words come from the health band, so their thresholds moved slightly (barely alive under 20%, badly wounded under 40%, hurt under 65%; they were 15%, 35%, 60%).
+- AI speakers now get a `said` experience for each line.
+- A taken-over character's experience rows are no longer deleted at consolidation; a player's character keeps its 400-row window.
+
+Not established either way: `town.py`'s "a resident faces someone who comes up behind them" failed in the full town run and in three solo runs on one world; on base (`972aefd`) the same scene passed once and failed on the next run on the same world, so it is the scene's known flakiness ([first change: verification](#verification)), not shown to be caused by this change. Not covered: batch mode of player memory, the paid tiers (no model was called), `verify-core`'s infant scene (about 30 minutes; the infant cry's sight check changed and is covered only by code reading), a battle among walls, and module republish with players connected (presence rows come at their next connection).
+
 ## Decisions per current-perception table
 
 The choice for the four current-perception tables was between keeping them public (no view cost, but every position, health band and activity on the island readable by anyone subscribing to any chunk) and private behind the views. With the numbers above:
@@ -198,7 +347,7 @@ The follow-up for crowds: the cost is one full view refresh per player per tick 
 
 ## Client change
 
-The patch [perception-client.patch](perception-client.patch) applies to `living/game` on main at `8f6ac72` (after the town-life client, `da219a7`), which this branch has merged, and builds against this branch's bindings (`cargo build --release -p living-game`, no warnings). Here is what it changes, to redo by hand if the client moves on first:
+The patch [perception-client.patch](perception-client.patch) (updated 2026-11-09 for the projection; it applies to main at `dc5e41b` and builds there) first applied to `living/game` on main at `8f6ac72` (after the town-life client, `da219a7`), which this branch has merged, and builds against this branch's bindings (`cargo build --release -p living-game`, no warnings). Here is what it changes, to redo by hand if the client moves on first:
 
 1. **Subscriptions** (`net.rs`). After the static `world`, `land`, `settlement`, subscribe once per connection (`PERCEIVED`):
    ```sql
@@ -229,6 +378,13 @@ The patch [perception-client.patch](perception-client.patch) applies to `living/
    - `vitals()` → `my_vitals()`, `experience()` → `my_experience()`, `place()` → `my_places()`, `inventory()` → `my_inventory()`, `know_how()` → `my_know_how()`;
    - the HUD's row counts → the views.
 5. **After it lands:** build the authority with `LIVING_PERCEPTION=scoped` (or make it the default) and republish the island world.
+6. **The projection (second change).** `seen_characters` rows are `SeenCharacter`, not `Character`:
+   - names drawn over others (nameplates, the HUD's names, the log's speakers, a death's witnesses, the target panel) are the row's `label` (the name when the player knows it, else `a stranger`, `a wolf`); an animal the player knows by name shows "<name> the <kind>";
+   - build and dress come from the row's `folk` and `style` (`live.rs` `folk_of`), no longer from the settlement round `home_x/home_y`, which are not sent;
+   - a resting resident is hidden indoors when its `doing` row says `indoors` (the authority decides it from the home it no longer sends), not by the client's distance to the home (`town.rs`; the client's `INDOORS_M` goes);
+   - `ui/live.rs` keeps two maps, the perceived (`SeenCharacter`) and my own (`my_characters`, full `Character` rows, the death screen's cause and lifetime);
+   - the target panel and the nameplates' health show the exact fraction when the row carries `hp` (an appraisal, oneself), else the projected band from `seen_fighters` (255, hidden, shows none);
+   - `bodies.rs` draws every perceived body as living (a death takes it out of `seen_bodies`).
 
 What the client sees changes: creatures appear when they come into sight (within ~200 ms) and leave when they go out of it or behind a wall, rather than at the edge of a ±88 m window. A creature that dies in sight leaves `seen_bodies` with its body row; the death animation still comes from `my_combat`.
 
@@ -251,9 +407,12 @@ The verification skills were brought up to date for what this change touched (`m
 
 ## Open
 
-- **Minds see through walls.** Minds' percepts (`perceive::witnessed`, `scene_json`) and the combat feed's onlookers (`combat::show`) use the sight radius without a sight line. Players' bodies now need one. Giving every character the same sight line is a rules change for the labs as well, left for a decision.
-- **`seen_characters` returns the whole `character` row**, including `controller` (which tells a player from a resident), `home_x/y` (the client picks dress from it), parents and cause of death. A narrower row needs the client to stop reading home for dress.
+- **Minds see through walls:** closed by the second change ([Minds see what their character sees](#minds-see-what-their-character-sees)).
+- **`seen_characters` returns the whole `character` row:** closed by the second change (the `perceived_of` projection; the client patch reads `folk`, `style` and `doing.indoors` instead of the home).
+- **Resources, structures and terrain** are not filtered by the sight line, for minds or players (a player's client draws them by chunk window as public world data). A mind's scene lists resources and structures within its sight radius through walls. Making static world data perception-scoped is a separate change.
+- **What the `perceived_of` law decides** is minimal: a name or a label, and health's precision. Activity, dress, a tracker's reading of where someone came from, and remembered (not only current) reveals are open; the law already receives the observer's know-how, so a skill-gated reading needs only new inputs and fields.
+- **Introductions** cover saying one's own name. Being told a third person's name ("this is Wren") is not built. Labels are not distinct between strangers ("a stranger attacked a stranger").
 - **World data with live state** (`resource_node` amounts, `structure.owner`, `gate.changed_by`) is public, readable beyond sight by chunk window.
-- **The public observer** has no token after this change (see above).
+- **The public observer** was retired on 2026-11-09.
 - **The default build is still `open`** until the client patch lands; until then `experience` and the other eight tables stay public, and the verify-client open-build run records that as its one `XFAIL`.
 - **Scale:** measured to 50 players at rest and walking. The views' cost grows with players × perceived updates; a 200-character battle seen by many players was not measured.

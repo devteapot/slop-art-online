@@ -1,5 +1,5 @@
 diff --git a/living/game/src/bodies.rs b/living/game/src/bodies.rs
-index 938f419..c4c9585 100644
+index e821831..5e548ae 100644
 --- a/living/game/src/bodies.rs
 +++ b/living/game/src/bodies.rs
 @@ -174,8 +174,8 @@ pub fn update(
@@ -9,10 +9,20 @@ index 938f419..c4c9585 100644
 -    let bodies: HashMap<u32, Body> = conn.db.body().iter().map(|b| (b.id, b)).collect();
 -    let chars: HashMap<u32, Character> = conn.db.character().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
 +    let bodies: HashMap<u32, Body> = crate::net::bodies(conn).map(|b| (b.id, b)).collect();
-+    let chars: HashMap<u32, Character> = conn.db.seen_characters().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
++    let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
      let scene = &mut *scene;
      let dt = time.delta_secs().max(1e-4);
      scene.tracks.retain(|id| bodies.contains_key(&id));
+@@ -198,7 +198,8 @@ pub fn update(
+     for (id, b) in &bodies {
+         let Some((p, heading)) = scene.shown.get(id).copied() else { continue };
+         let c = chars.get(id);
+-        let alive = c.is_none_or(|c| c.alive);
++        // Only the living are in sight: a death takes the body out of `seen_bodies`.
++        let alive = true;
+         let mine = Some(*id) == net.my_id;
+         // My own character turns toward where I look (shown locally only: the authority has
+         // no look direction yet).
 diff --git a/living/game/src/camera.rs b/living/game/src/camera.rs
 index 0585e76..8382065 100644
 --- a/living/game/src/camera.rs
@@ -36,10 +46,10 @@ index 0585e76..8382065 100644
                  .filter(|b| b.id != me && b.kind == "person")
                  .filter_map(|b| scene.shown.get(&b.id).map(|(p, _)| (b.id, p.distance(*mine))))
 diff --git a/living/game/src/combat.rs b/living/game/src/combat.rs
-index c61115a..6fb16cf 100644
+index 61d4a14..3393ac1 100644
 --- a/living/game/src/combat.rs
 +++ b/living/game/src/combat.rs
-@@ -229,7 +229,7 @@ fn scripted_aim(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, spec:
+@@ -231,7 +231,7 @@ fn scripted_aim(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, spec:
      let pick = scene
          .shown
          .iter()
@@ -48,7 +58,7 @@ index c61115a..6fb16cf 100644
          .min_by(|a, b| a.1 .0.distance(me).total_cmp(&b.1 .0.distance(me)))
          .map(|(id, (p, _))| (*p, *id));
      match pick {
-@@ -269,7 +269,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
+@@ -271,7 +271,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
              seen::DEATH => {
                  c.deaths.insert(r.actor, now);
                  // My own death: who killed me; the witnesses arrive beside it.
@@ -57,7 +67,7 @@ index c61115a..6fb16cf 100644
                      c.killer = (r.target != 0).then_some(r.target);
                      c.witnesses.clear();
                  }
-@@ -471,7 +471,7 @@ fn nearest(scene: &Scene, me_id: u32, me: Vec2, toward: Vec2, within: f32) -> Op
+@@ -473,7 +473,7 @@ fn nearest(scene: &Scene, me_id: u32, me: Vec2, toward: Vec2, within: f32) -> Op
  
  /// Whether a creature looks hostile to me: its move under way is aimed at me.
  pub fn hostile(conn: &DbConnection, id: u32, me: u32) -> bool {
@@ -66,7 +76,7 @@ index c61115a..6fb16cf 100644
  }
  
  /// The clip a move plays, at what rate, and whether it holds a pose.
-@@ -496,7 +496,7 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
+@@ -498,7 +498,7 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
          if out.contains_key(&id) {
              continue;
          }
@@ -76,7 +86,7 @@ index c61115a..6fb16cf 100644
          let face = live.and_then(|f| (f.aim_x != 0.0 || f.aim_y != 0.0).then(|| Vec2::new(f.aim_x, f.aim_y)));
          if let Some(f) = live {
 diff --git a/living/game/src/hud.rs b/living/game/src/hud.rs
-index ed5a0dd..ee19ad4 100644
+index ed5a0dd..99a4d88 100644
 --- a/living/game/src/hud.rs
 +++ b/living/game/src/hud.rs
 @@ -50,7 +50,7 @@ pub fn draw(
@@ -84,7 +94,7 @@ index ed5a0dd..ee19ad4 100644
          hud.tuning = !hud.tuning;
      }
 -    let names: HashMap<u32, String> = net.conn.as_ref().map(|c| c.db.character().iter().map(|ch| (ch.id, ch.name)).collect()).unwrap_or_default();
-+    let names: HashMap<u32, String> = net.conn.as_ref().map(|c| c.db.seen_characters().iter().chain(c.db.my_characters().iter()).map(|ch| (ch.id, ch.name)).collect()).unwrap_or_default();
++    let names: HashMap<u32, String> = net.conn.as_ref().map(|c| c.db.seen_characters().iter().map(|ch| (ch.id, ch.label)).chain(c.db.my_characters().iter().map(|ch| (ch.id, ch.name))).collect()).unwrap_or_default();
  
      // Status.
      if hud.tuning {
@@ -98,10 +108,41 @@ index ed5a0dd..ee19ad4 100644
                  }
              }
 diff --git a/living/game/src/live.rs b/living/game/src/live.rs
-index 62a549e..8a8e656 100644
+index ac4ab45..9ea95bc 100644
 --- a/living/game/src/live.rs
 +++ b/living/game/src/live.rs
-@@ -305,7 +305,7 @@ fn bodies(
+@@ -278,21 +278,15 @@ fn stage_scale(stage: u8) -> f32 {
+     }
+ }
+ 
+-/// Folk and dress style from the settlement round a character's home.
+-fn folk_of(conn: &DbConnection, c: &Character) -> (&'static str, Option<String>) {
+-    let home = Vec2::new(c.home_x, c.home_y);
+-    let s = conn.db.settlement().iter().filter(|s| Vec2::new(s.x, s.y).distance(home) <= s.radius_m * 1.15).min_by(|a, b| Vec2::new(a.x, a.y).distance(home).total_cmp(&Vec2::new(b.x, b.y).distance(home)));
+-    match s {
+-        Some(s) => (
+-            match s.kind.as_str() {
+-                "giants" => "giant",
+-                "small_folk" => "small",
+-                _ => "adult",
+-            },
+-            Some(s.style.clone()),
+-        ),
+-        None => ("adult", None),
+-    }
++/// Folk and dress style as anyone sees them: the authority's projection (`seen_characters`
++/// `folk` and `style`, from the settlement the character lives in; no home position is sent).
++fn folk_of(c: &SeenCharacter) -> (&'static str, Option<String>) {
++    let folk = match c.folk.as_str() {
++        "giants" => "giant",
++        "small_folk" => "small",
++        _ => "adult",
++    };
++    (folk, (!c.style.is_empty()).then(|| c.style.clone()))
+ }
+ 
+ /// Facing as a Bevy yaw for a character model (0 faces +Z) from a sim direction.
+@@ -326,7 +320,7 @@ fn bodies(
      let me = net.my_id;
      // Who is speaking: lines I heard (the authority decides earshot), and my own last line.
      let mut talking: HashSet<u32> = me
@@ -110,7 +151,7 @@ index 62a549e..8a8e656 100644
          .unwrap_or_default();
      if let (Some(id), Some((t, _))) = (me, input.said.last()) {
          if scene.now_ms - (*t as f64) < TALKING_S * 1000.0 {
-@@ -341,7 +341,7 @@ fn bodies(
+@@ -362,7 +356,7 @@ fn bodies(
          let aimed = action.and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
          // Standing still, the body's own segment: its heading, turning on the spot by `turn` over
          // `turn_s` (the display clock may trail the row's start: then the turn has not begun).
@@ -119,7 +160,7 @@ index 62a549e..8a8e656 100644
          let standing = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| {
              let into = ((scene.now_ms - b.t_ms as f64) / 1000.0).clamp(0.0, b.turn_s.max(0.0) as f64) as f32;
              b.heading + if b.turn_s > 0.0 { b.turn * into } else { 0.0 }
-@@ -350,8 +350,8 @@ fn bodies(
+@@ -371,8 +365,8 @@ fn bodies(
          let busy = show.face.filter(|_| slow).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
          let h = aimed.or(look).or(busy).or(standing.filter(|_| slow)).or(heading);
          if !live.shown.contains_key(&id) {
@@ -130,7 +171,16 @@ index 62a549e..8a8e656 100644
              // Wait for a person's character row (folk, stage) before drawing them.
              if body.kind == "person" && character.is_none() {
                  continue;
-@@ -602,16 +602,16 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
+@@ -384,7 +378,7 @@ fn bodies(
+                 let mut recipe = if mine {
+                     std::env::var("LIVING_GAME_PLAYER").ok().and_then(|r| crate::characters::Recipe::parse(&r)).unwrap_or_else(|| crate::characters::Recipe::random(seed, "adult"))
+                 } else {
+-                    match folk_of(conn, c) {
++                    match folk_of(c) {
+                         (folk, Some(style)) => crate::characters::Recipe::random_in(seed, folk, &style),
+                         (folk, None) => crate::characters::Recipe::random(seed, folk),
+                     }
+@@ -661,16 +655,16 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
      });
      info!(
          "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
@@ -424,10 +474,19 @@ index 3794c28..ae0992a 100644
                  net.far = Window::default();
                  net.my_id = None;
 diff --git a/living/game/src/town.rs b/living/game/src/town.rs
-index 787b64c..2758d1e 100644
+index 787b64c..4dc0297 100644
 --- a/living/game/src/town.rs
 +++ b/living/game/src/town.rs
-@@ -182,7 +182,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
+@@ -34,8 +34,6 @@ pub const NOD: KeyCode = KeyCode::KeyB;
+ const PREDICT_MS: f64 = 600.0;
+ /// How long the nameplate of someone who answered my greeting shows (ms).
+ pub const ANSWERED_MS: f64 = 3500.0;
+-/// A body resting this close to its own door (m) is inside.
+-const INDOORS_M: f32 = 3.5;
+ /// A standing body turns toward its activity's spot only when it is at least this far (m).
+ const FACE_MIN_M: f32 = 0.4;
+ /// Gesture reach for choosing whom I greet (m), as the rules' wave and nod take.
+@@ -182,7 +180,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
      if let Some(me) = net.my_id {
          // "X answers your greeting (nod)." arrives with the resident's `doing` row; the subject is
          // the one who answered.
@@ -436,7 +495,7 @@ index 787b64c..2758d1e 100644
          for e in fresh {
              town.seen.insert(e.id);
              if now - (e.at_ms as f64) < ANSWERED_MS {
-@@ -193,7 +193,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
+@@ -193,7 +191,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
      town.answered.retain(|_, t| now - *t < ANSWERED_MS);
      town.greeting = town.greeting.filter(|(_, t)| now - *t < ANSWERED_MS);
      if town.seen.len() > 512 {
@@ -445,7 +504,7 @@ index 787b64c..2758d1e 100644
          town.seen.retain(|id| live.contains(id));
      }
  }
-@@ -202,7 +202,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
+@@ -202,7 +200,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
  /// reach, ahead of me first.
  #[allow(clippy::too_many_arguments)]
  fn whom(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, ahead: Vec2, picked: Option<u32>, reach: f32, town: &Town) -> Option<u32> {
@@ -454,7 +513,7 @@ index 787b64c..2758d1e 100644
      if let Some(id) = picked.filter(person).filter(|id| scene.shown.get(id).is_some_and(|(p, _)| p.distance(me) <= reach)) {
          return Some(id);
      }
-@@ -292,7 +292,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
+@@ -292,7 +290,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
      let ids: Vec<(u32, Vec2)> = scene.shown.iter().map(|(id, (p, _))| (*id, *p)).collect();
      for (id, p) in ids {
          let mut show = Show::default();
@@ -463,30 +522,52 @@ index 787b64c..2758d1e 100644
          let card = row.as_ref().and_then(|d| acts.by_code(d.code));
          // Where its target is now: the one it is aimed at (as drawn), else the row's spot.
          let spot = row.as_ref().map(|d| scene.shown.get(&d.target).filter(|_| d.target != 0).map_or(Vec2::new(d.x, d.y), |s| s.0));
-@@ -323,7 +323,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
+@@ -323,8 +321,8 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
                  show.face = toward.filter(|_| clip != "play");
              }
              (Some(d), Some(Pose::Rest)) => {
 -                let home = conn.db.character().id().find(&id).map(|c| Vec2::new(c.home_x, c.home_y)).filter(|h| *h != Vec2::ZERO);
-+                let home = conn.db.seen_characters().id().find(&id).map(|c| Vec2::new(c.home_x, c.home_y)).filter(|h| *h != Vec2::ZERO);
-                 if home.is_some_and(|h| h.distance(p) <= INDOORS_M) {
+-                if home.is_some_and(|h| h.distance(p) <= INDOORS_M) {
++                // A rest taken at home is indoors (the authority says so on the `doing` row).
++                if d.indoors {
                      show.hidden = true;
                  } else if raining || crate::world::hash(id, 0x5e47) < 0.3 {
+                     // Under the eaves, or standing at ease with the others.
 diff --git a/living/game/src/ui/live.rs b/living/game/src/ui/live.rs
-index 3375e48..6dcd8f8 100644
+index 3375e48..6c39027 100644
 --- a/living/game/src/ui/live.rs
 +++ b/living/game/src/ui/live.rs
-@@ -63,7 +63,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+@@ -63,11 +63,14 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
          *model = HudModel { shown: true, now, ..default() };
          return;
      };
 -    let chars: HashMap<u32, Character> = conn.db.character().iter().map(|c| (c.id, c)).collect();
-+    // Who I perceive, and my own characters (the dead one stays for the death screen).
-+    let chars: HashMap<u32, Character> = conn.db.seen_characters().iter().chain(conn.db.my_characters().iter()).map(|c| (c.id, c)).collect();
++    // Who I perceive, as I perceive them (name or label, health as I can tell it), and my own
++    // characters (the dead one stays for the death screen).
++    let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().map(|c| (c.id, c)).collect();
++    let mine: HashMap<u32, Character> = conn.db.my_characters().iter().map(|c| (c.id, c)).collect();
  
      // Death: the character I played is no longer alive.
      if let Some(prev) = last.id {
-@@ -87,7 +88,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+-        if net.my_id.is_none() && chars.get(&prev).is_some_and(|c| !c.alive) {
++        if net.my_id.is_none() && mine.get(&prev).is_some_and(|c| !c.alive) {
+             last.dead = Some(prev);
+         }
+     }
+@@ -75,10 +78,10 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+         last.id = net.my_id;
+         last.dead = None;
+     }
+-    model.death = last.dead.and_then(|id| chars.get(&id)).map(death).map(|mut d| {
++    model.death = last.dead.and_then(|id| mine.get(&id)).map(death).map(|mut d| {
+         // Who saw it, as my character perceived (the authority's `WITNESS` rows).
+         if !combat.witnesses.is_empty() {
+-            d.witnesses = Some(combat.witnesses.iter().map(|w| chars.get(w).map_or_else(|| "someone".to_string(), |c| if c.kind == "person" { c.name.clone() } else { format!("a {}", c.kind) })).collect());
++            d.witnesses = Some(combat.witnesses.iter().map(|w| chars.get(w).map_or_else(|| "someone".to_string(), |c| c.label.clone())).collect());
+         } else if combat.killer.is_some() {
+             d.witnesses = Some(Vec::new());
+         }
+@@ -87,7 +90,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
  
      let me = net.my_id;
      let my_pos = target.0;
@@ -495,13 +576,24 @@ index 3375e48..6dcd8f8 100644
      model.me = me.zip(vit.as_ref()).map(|(id, v)| {
          let m = (now_ms - v.at_ms as f64).max(0.0) as f32 / 60_000.0;
          let hp = (v.hp + v.hp_rate * m).clamp(0.0, v.max_hp);
-@@ -120,11 +121,11 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+@@ -114,20 +117,24 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+         } else if v.hp_rate > 0.0 && hp < v.max_hp {
+             statuses.push(Status { kind: StatusKind::Recovering, tone: Tone::Good });
+         }
+-        let name = chars.get(&id).map_or(net.name.clone(), |c| c.name.clone());
++        let name = mine.get(&id).map_or(net.name.clone(), |c| c.name.clone());
+         Me { name, hp, max_hp: v.max_hp, energy, max_energy: 100.0, statuses, hurt: if v.hurt_ms > 0 { (1.0 - since_hurt / 0.8).clamp(0.0, 1.0) } else { 0.0 } }
+     });
      let hostile_id = vit.as_ref().filter(|v| v.hurt_by != 0 && (now_ms - v.hurt_ms as f64) < 15_000.0).map(|v| v.hurt_by);
      let hostile = |id: u32| hostile_id == Some(id) || me.is_some_and(|m| crate::combat::hostile(conn, id, m));
      // Others' health as anyone sees it: the band of their `fighter` row, if they have fought.
 -    let band = |id: u32| conn.db.fighter().id().find(&id).map(|f| living_rules::combat::band_fraction(f.band));
 -    let busy = |id: u32| conn.db.fighter().id().find(&id).is_some_and(|f| f.act != 0 && (now_ms as u64) < f.until_ms);
-+    let band = |id: u32| conn.db.seen_fighters().id().find(&id).map(|f| living_rules::combat::band_fraction(f.band));
++    // Exact where I perceive it exactly (my look at them, an appraisal), else the band.
++    let band = |id: u32| match chars.get(&id).filter(|c| c.hp >= 0.0 && c.max_hp > 0.0) {
++        Some(c) => Some((c.hp / c.max_hp).clamp(0.0, 1.0)),
++        None => conn.db.seen_fighters().id().find(&id).filter(|f| f.band <= 4).map(|f| living_rules::combat::band_fraction(f.band)),
++    };
 +    let busy = |id: u32| conn.db.seen_fighters().id().find(&id).is_some_and(|f| f.act != 0 && (now_ms as u64) < f.until_ms);
  
      // What I heard.
@@ -509,8 +601,30 @@ index 3375e48..6dcd8f8 100644
 +    let mut heard: Vec<Experience> = me.map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech").collect()).unwrap_or_default();
      heard.sort_by_key(|e| e.at_ms);
      let talking: Vec<u32> = heard.iter().filter(|e| now_ms - (e.at_ms as f64) < 8_000.0).map(|e| e.subject).collect();
-     let name_of = |id: u32| chars.get(&id).map_or_else(|| "Someone".to_string(), |c| c.name.clone());
-@@ -219,9 +220,9 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+-    let name_of = |id: u32| chars.get(&id).map_or_else(|| "Someone".to_string(), |c| c.name.clone());
++    let name_of = |id: u32| chars.get(&id).map_or_else(|| "Someone".to_string(), |c| c.label.clone());
+     let mut log: Vec<LogLine> = heard
+         .iter()
+         .map(|e| LogLine { at: e.at_ms as f64 / 1000.0, who: name_of(e.subject), text: quoted(&e.text).to_string(), kind: if e.text.contains(" said to you:") { LogKind::ToMe } else { LogKind::Heard } })
+@@ -164,7 +171,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+         let hostile = hostile(*id);
+         actors.push(Actor {
+             id: *id as u64,
+-            name: c.name.clone(),
++            name: c.label.clone(),
+             head: head(*id, *p, &c.kind),
+             distance,
+             hovered: near_cursor < 1.2,
+@@ -190,7 +197,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+         } else {
+             None
+         };
+-        let name = if c.kind == "person" { c.name.clone() } else { format!("{} the {}", c.name, c.kind) };
++        let name = if c.kind != "person" && !c.name.is_empty() { format!("{} the {}", c.name, c.kind) } else { c.label.clone() };
+         Some(TargetInfo { name, doing, hp: band(id), stance: a.stance, distance: a.distance })
+     });
+ 
+@@ -219,9 +226,9 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
      // Skills: live cooldowns, held guard, and what the rules require (costs from `skill_card`).
      model.skills = match (me, model.me.as_ref()) {
          (Some(id), Some(m)) => {
@@ -523,7 +637,7 @@ index 3375e48..6dcd8f8 100644
              let energy = m.energy;
              live_bar(&cards, |card| {
                  // A held guard: raised now (my fighter row says so) or my key is down.
-@@ -270,7 +271,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
+@@ -270,7 +277,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
          me: my_pos.map(|p| Vec2::new(p.x, p.z)),
          facing: input.look,
          yaw: cam.shown_yaw,

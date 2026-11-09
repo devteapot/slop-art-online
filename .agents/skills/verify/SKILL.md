@@ -113,7 +113,7 @@ Run cleanup after failed attempts too.
 - `just living-reset` and `just living-publish` target the active world. Do not use them for verification.
 - Kill only processes your run started, by pid. Never `pkill -f` a pattern that also appears in your own command line.
 - Neo4j: `:7689` (A) is full and holds the paused worlds' minds; never write to it. Mind-side checks use run names starting with `verify-`, and their cleanup removes only nodes with that run.
-- The public observer (`sao-observer-web`, `sao-tunnel`, `https://sos.carlid.dev`) is a production service. Do not rebuild or restart it during verification.
+- The public observer (`sao-observer-web`, `sao-tunnel`, `https://sos.carlid.dev`) was retired on 2026-11-09; its services are stopped and disabled on the dev-box. Do not start them again during verification.
 - Concurrent runs share the SpacetimeDB server and the observer. Cleanup stops the container only if its own run started it and no other `verify-*` database is live. It stops the observer only when it is the last run using it.
 - `LIVING_STDB_URL` may only name the local container (`http://127.0.0.1:3300`). Publishing goes through the container's CLI, so any other URL would split one proof across two servers; the helper refuses it.
 

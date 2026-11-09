@@ -2,7 +2,7 @@
 // WILL NOT BE SAVED. MODIFY TABLES IN YOUR MODULE SOURCE CODE INSTEAD.
 
 #![allow(unused, clippy::all)]
-use super::character_type::Character;
+use super::seen_character_type::SeenCharacter;
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 /// Table handle for the table `seen_characters`.
@@ -14,7 +14,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 /// but to directly chain method calls,
 /// like `ctx.db.seen_characters().on_insert(...)`.
 pub struct SeenCharactersTableHandle<'ctx> {
-    imp: __sdk::TableHandle<Character>,
+    imp: __sdk::TableHandle<SeenCharacter>,
     ctx: std::marker::PhantomData<&'ctx super::RemoteTables>,
 }
 
@@ -22,7 +22,7 @@ pub struct SeenCharactersTableHandle<'ctx> {
 pub struct SeenCharactersTableAccessor;
 
 impl __sdk::TableAccessor<super::RemoteTables> for SeenCharactersTableAccessor {
-    type Row = Character;
+    type Row = SeenCharacter;
     type Handle<'db> = SeenCharactersTableHandle<'db>;
 
     fn get<'db>(db: &'db super::RemoteTables) -> Self::Handle<'db> {
@@ -43,7 +43,7 @@ pub trait SeenCharactersTableAccess {
 impl SeenCharactersTableAccess for super::RemoteTables {
     fn seen_characters(&self) -> SeenCharactersTableHandle<'_> {
         SeenCharactersTableHandle {
-            imp: self.imp.get_table::<Character>("seen_characters"),
+            imp: self.imp.get_table::<SeenCharacter>("seen_characters"),
             ctx: std::marker::PhantomData,
         }
     }
@@ -53,25 +53,25 @@ pub struct SeenCharactersInsertCallbackId(__sdk::CallbackId);
 pub struct SeenCharactersDeleteCallbackId(__sdk::CallbackId);
 
 impl<'ctx> __sdk::TableLike for SeenCharactersTableHandle<'ctx> {
-    type Row = Character;
+    type Row = SeenCharacter;
     type EventContext = super::EventContext;
 
     fn count(&self) -> u64 {
         self.imp.count()
     }
-    fn iter(&self) -> impl Iterator<Item = Character> + '_ {
+    fn iter(&self) -> impl Iterator<Item = SeenCharacter> + '_ {
         self.imp.iter()
     }
 }
 
 impl<'ctx> __sdk::Table for SeenCharactersTableHandle<'ctx> {
-    type Row = Character;
+    type Row = SeenCharacter;
     type EventContext = super::EventContext;
 
     fn count(&self) -> u64 {
         self.imp.count()
     }
-    fn iter(&self) -> impl Iterator<Item = Character> + '_ {
+    fn iter(&self) -> impl Iterator<Item = SeenCharacter> + '_ {
         self.imp.iter()
     }
 
@@ -172,7 +172,7 @@ impl<'ctx> __sdk::WithUpdate for SeenCharactersTableHandle<'ctx> {
 /// but to directly chain method calls,
 /// like `ctx.db.seen_characters().id().find(...)`.
 pub struct SeenCharactersIdUnique<'ctx> {
-    imp: __sdk::UniqueConstraintHandle<Character, u32>,
+    imp: __sdk::UniqueConstraintHandle<SeenCharacter, u32>,
     phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
 }
 
@@ -189,40 +189,40 @@ impl<'ctx> SeenCharactersTableHandle<'ctx> {
 impl<'ctx> SeenCharactersIdUnique<'ctx> {
     /// Find the subscribed row whose `id` column value is equal to `col_val`,
     /// if such a row is present in the client cache.
-    pub fn find(&self, col_val: &u32) -> Option<Character> {
+    pub fn find(&self, col_val: &u32) -> Option<SeenCharacter> {
         self.imp.find(col_val)
     }
 }
 
 #[doc(hidden)]
 pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
-    let _table = client_cache.get_or_make_table::<Character>("seen_characters");
+    let _table = client_cache.get_or_make_table::<SeenCharacter>("seen_characters");
     _table.add_unique_constraint::<u32>("id", |row| &row.id);
 }
 
 #[doc(hidden)]
 pub(super) fn parse_table_update(
     raw_updates: __ws::v2::TableUpdate,
-) -> __sdk::Result<__sdk::TableUpdate<Character>> {
+) -> __sdk::Result<__sdk::TableUpdate<SeenCharacter>> {
     __sdk::TableUpdate::parse_table_update(raw_updates).map_err(|e| {
-        __sdk::InternalError::failed_parse("TableUpdate<Character>", "TableUpdate")
+        __sdk::InternalError::failed_parse("TableUpdate<SeenCharacter>", "TableUpdate")
             .with_cause(e)
             .into()
     })
 }
 
 #[allow(non_camel_case_types)]
-/// Extension trait for query builder access to the table `Character`.
+/// Extension trait for query builder access to the table `SeenCharacter`.
 ///
 /// Implemented for [`__sdk::QueryTableAccessor`].
 pub trait seen_charactersQueryTableAccess {
     #[allow(non_snake_case)]
-    /// Get a query builder for the table `Character`.
-    fn seen_characters(&self) -> __sdk::__query_builder::Table<Character>;
+    /// Get a query builder for the table `SeenCharacter`.
+    fn seen_characters(&self) -> __sdk::__query_builder::Table<SeenCharacter>;
 }
 
 impl seen_charactersQueryTableAccess for __sdk::QueryTableAccessor {
-    fn seen_characters(&self) -> __sdk::__query_builder::Table<Character> {
+    fn seen_characters(&self) -> __sdk::__query_builder::Table<SeenCharacter> {
         __sdk::__query_builder::Table::new("seen_characters")
     }
 }

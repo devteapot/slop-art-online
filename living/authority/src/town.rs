@@ -135,6 +135,9 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
     }
 }
 
+/// How near its home a resting body is indoors (m).
+pub const INDOORS_M: f32 = 3.5;
+
 /// A shown skill starts being performed: anyone in view sees it (`doing`).
 pub fn shown(ctx: &ReducerContext, sc: &living_rules::script::Scripts, a: &Activity, at: Option<(f32, f32)>, now: u64) {
     let code = sc.shows().code(&a.skill);
@@ -142,7 +145,11 @@ pub fn shown(ctx: &ReducerContext, sc: &living_rules::script::Scripts, a: &Activ
         return;
     }
     let (x, y) = at.unwrap_or((a.target.x, a.target.y));
-    let row = Doing { id: a.id, code, target: if a.target.class == 3 { a.target.id as u32 } else { 0 }, x, y, since_ms: now, until_ms: a.ends_ms };
+    // A rest taken at one's own door is taken indoors (what clients drew from the home
+    // position, which is no longer sent to them).
+    let indoors = sc.shows().get(&a.skill).is_some_and(|s| s.look == "rest")
+        && ctx.db.character().id().find(a.id).zip(ctx.db.body().id().find(a.id)).is_some_and(|(c, b)| (c.home_x != 0.0 || c.home_y != 0.0) && common::dist(common::pos(&b, now), (c.home_x, c.home_y)) <= INDOORS_M);
+    let row = Doing { id: a.id, code, target: if a.target.class == 3 { a.target.id as u32 } else { 0 }, x, y, since_ms: now, until_ms: a.ends_ms, indoors };
     if ctx.db.doing().id().find(a.id).is_some() {
         ctx.db.doing().id().update(row);
     } else {
@@ -187,11 +194,11 @@ pub fn hail(ctx: &ReducerContext, me: u32, a: &Activity, at: (f32, f32), now: u6
         common::wake(ctx, them);
     }
     if let Some(c) = ctx.db.character().id().find(them) {
-        let who = common::label_for(ctx, &c, me);
+        let who = common::label_cap(ctx, &c, me);
         let text = if answer { format!("{who} answers your greeting ({}).", a.skill) } else { format!("{who} greets you ({}).", a.skill) };
         crate::perceive::percept(ctx, &c, now, "gesture", me, them, at, text, if answer { 0.15 } else { 0.3 });
     }
-    let name = common::name_of(ctx, them);
+    let name = ctx.db.character().id().find(me).map(|c| common::label_for(ctx, &c, them)).unwrap_or_else(|| common::name_of(ctx, them));
     Ok(if answer { format!("answered {name}") } else { format!("greeted {name}") })
 }
 

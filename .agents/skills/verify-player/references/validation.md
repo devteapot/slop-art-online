@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-09 minds' sight, the projection and presence (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81b9dd8`/`dc5e41b` plus the uncommitted minds'-sight, projection and presence change (docs/PERCEPTION.md, "Second change"; docs/PLAYER_MEMORY.md, "Presence and the offline character"). Fake model only; every scratch database answered 404 after cleanup. Run `player-perc2`, `--seed island`, scoped build. `appraise.py` (new) 10 of 10; `combat.py --fresh` 25 of 25; `gesture.py` 10 of 10 after a driver fix: it placed the player 3 m east of a resident at a stall whose building hid it, so the wave at someone unseen was refused (the new sight rule); the driver now picks a spot from which the player sees the resident (a new check). `gesture.py` was not executable in the checkout; `chmod +x`.
+
 ## 2026-11-09 gestures and town life (dev-box)
 
 Own scratch container `slop-townlife-stdb` (image `v2.14.1`, own volume, `/wasm` from the worktree's `.local/target`) through a `docker` name shim (`~/townlife-shim`); worktree `~/dev/slop-townlife` on branch `townlife-1` (from `b12fa45`, uncommitted at the time). Run `player-town-1`, `--seed island`; scenes set by admin `place_at`.

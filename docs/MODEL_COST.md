@@ -738,7 +738,7 @@ LIVING_PLAYER_MEMORY_MODE=batch
 #### Code and prompt changes proposed
 
 Not made here; they belong to the mind's owners.
-1. **`memory.rs` `patch_from`:** accept an integer written as a string (`"392903"`, `"#392903"`) for `remember[].exp` and `edges[].because`, and note what is still dropped. This restores most of GLM's player memories and its animal-memory evidence.
+1. **`memory.rs` `patch_from`:** accept an integer written as a string (`"392903"`, `"#392903"`) for `remember[].exp` and `edges[].because`, and note what is still dropped. This restores most of GLM's player memories and its animal-memory evidence. *Done 2026-11-09 (with the perception and presence change, uncommitted):* one parser, `living_rules::normalize::reply_id` (an integer, `"392903"` or `"#392903"`; a range such as `"215713-216671"`, a word, a negative or fractional number is not an id), reads `remember[].exp`, `edges[].because` and `relations[].id` in `patch_from`/`sugar_into`, `say.to` and talk ids in the mind service, and graph and act targets (`{"id": "12"}`, `"#12"`) in the rules' normalizer. What is still dropped is noted in the thought's `notes` ("memory of exp … dropped: not one of these experiences"). Tests: `memory::tests::experience_ids_written_as_strings_are_kept` (a GLM-shaped reply) and `normalize::tests::ids_written_as_strings_are_ids`.
 2. **`mind.rs` reorganization:**
    - make it due by the rule above and run it at night (world clock first);
    - collect the due sleepers per settlement into one job;

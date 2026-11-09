@@ -10,7 +10,7 @@ The run `aske-coast-3` ended on schedule at 06:55 local on 2026-09-29. This note
   - **Neo4j A** on :7689 (`sao-living_neo4j_1`) holds the minds of every run up to `aske-coast-2`. It has reached Neo4j's limit of 65,535 relationship types, so do not use it for new runs.
   - **Neo4j B** on :7690 (`sao-living-neo4j-2`) is used by new runs, through `LIVING_NEO4J_URI` in `.env`.
   - **The Codex proxy** for GPT-6 Luna is at `~/dev/codex-cursor-proxy`, the systemd user service `codex-cursor-proxy` on 127.0.0.1:8787. It has a local, unpushed commit `167b91e`, and its unit sets `--dns-result-order=ipv4first`.
-  - **The public observer** is `sao-observer-web` and `sao-tunnel`. Rebuild it with `just living-web-dist`.
+  - **The public observer** (`sao-observer-web`, `sao-tunnel`, `https://sos.carlid.dev`) was retired on 2026-11-09: both services are stopped and disabled on the dev-box ([living core](LIVING_CORE.md#running)).
 - **Models.**
   - **Split by town:** `groups` in the models config sends Brandholm to Luna, and Saltreach and Oathstone to Mistral Small.
   - **Overflow:** Luna and Mistral overflow into each other.

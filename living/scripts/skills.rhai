@@ -24,7 +24,21 @@ fn laws() {
         alone_within: 6.0,
         // A body within this many radians of facing something already faces it.
         face_slack: 0.35,
+        // Seconds a played character stands with no connection of its person before the
+        // world's minds take it over (it keeps living; the person takes it back on return).
+        takeover_s: 30.0,
     }
+}
+
+// What an observer perceives of a target it sees (docs/PERCEPTION.md). `p.observer` has
+// `kind` and `knows`; `p.target` has `kind`, `known` (its name is known to the observer) and
+// `revealed` (what a skill use such as `appraise` shows for a while); `p.self`, `p.night`.
+// Returns which fields the observer gets: `name` (else a label such as "a stranger") and
+// `health` ("band", "exact" or "none").
+fn perceived_of(p) {
+    let name = p.self || p.target.known || (p.observer.kind != "person" && p.observer.kind == p.target.kind);
+    let health = if p.self || p.target.revealed.contains("health") { "exact" } else { "band" };
+    #{ name: name, health: health }
 }
 
 fn knows(a, t) { a.actor.knows.contains(t) }
@@ -944,6 +958,7 @@ fn skill_io(skill) {
         "wait" => #{ takes: "time", gives: "nothing: time passes" },
         "wave" => #{ takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them: a greeting, or an answer to theirs" },
         "nod" => #{ takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them: a greeting, or an answer to theirs" },
+        "appraise" => #{ takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" },
         "face" => #{ takes: "something or someone in sight", gives: "you turn where you stand to face it" },
         "step_aside" => #{ takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" },
         "keep" => #{ takes: "10 seconds at your post", gives: "you are seen at work there (a stall, a workshop, a gate)" },
@@ -996,6 +1011,16 @@ fn gesture_check(a, reach) {
 fn wave_check(a) { gesture_check(a, 12.0) }
 fn wave_duration(a) { 1200 }
 fn wave_done(a) { [#{ op: "hail" }] }
+// Appraising: looking someone over closely shows exactly how hurt they are, for a while.
+fn appraise_check(a) {
+    if a.target.class != "creature" || !a.target.alive { return "no one there"; }
+    if a.target.id == a.actor.id { return "you know how you feel"; }
+    if a.actor.activity == "sleep" { return "you are asleep"; }
+    if a.target.dist > 6.0 { return "too far to look them over"; }
+    ""
+}
+fn appraise_duration(a) { 1500 }
+fn appraise_done(a) { [#{ op: "reveal", what: "health", secs: 20.0 }] }
 fn nod_check(a) { gesture_check(a, 6.0) }
 fn nod_duration(a) { 700 }
 fn nod_done(a) { [#{ op: "hail" }] }
@@ -1036,6 +1061,7 @@ fn play_done(a) { [#{ op: "vitals", energy: -0.5 }] }
 //   record  each use is kept in `skill_use`, from intention to outcome, like a combat move
 fn wave_shows() { #{ look: "gesture", faces: true, record: true } }
 fn nod_shows() { #{ look: "gesture", faces: true, record: true } }
+fn appraise_shows() { #{ look: "gesture", faces: true, record: true } }
 fn face_shows() { #{ look: "turn", faces: true, turn: true, record: true } }
 fn step_aside_shows() { #{ look: "step", aside: true, record: true } }
 fn play_shows() { #{ look: "play" } }

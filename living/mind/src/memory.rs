@@ -21,6 +21,7 @@
 //! about, so a story comes to mind with its lesson and a lesson with its story. Beliefs
 //! also carry their provenance (`firsthand`, `sources`, `hearsay`; see [`attribute`]).
 
+use living_rules::normalize::reply_id;
 use anyhow::Result;
 use neo4rs::{query, BoltType, Graph};
 use serde::{Deserialize, Serialize};
@@ -1111,7 +1112,7 @@ impl Store {
 /// mind edits: FEELS edges, JUDGES edges to `stance:` concepts and `place:` concepts.
 pub fn sugar_into(v: &Value, patch: &mut Patch, because: &[u64]) {
     for r in v["relations"].as_array().cloned().unwrap_or_default().into_iter().take(12) {
-        let Some(id) = r["id"].as_u64() else { continue };
+        let Some(id) = reply_id(&r["id"]) else { continue };
         let mut props = serde_json::Map::new();
         for k in ["trust", "affinity"] {
             props.insert(k.into(), json!(r[k].as_f64().unwrap_or(0.0).clamp(-100.0, 100.0)));
@@ -1289,7 +1290,15 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
         if ["WAS", "INVOLVES", "GROUNDS"].contains(&rel.as_str()) {
             continue;
         }
-        let because: Vec<u64> = e["because"].as_array().map(|a| a.iter().filter_map(|x| x.as_u64()).filter(|x| known.contains(x)).collect()).unwrap_or_default();
+        // Ids as integers or numeric strings ("392903", as GLM writes them); anything else, or
+        // an id not among these experiences, is dropped and noted.
+        let mut because = Vec::new();
+        for x in e["because"].as_array().map(|a| a.as_slice()).unwrap_or_default() {
+            match reply_id(x).filter(|x| known.contains(x)) {
+                Some(id) => because.push(id),
+                None => notes.push(format!("because {x} of {a} -{rel}-> {b} dropped: not one of these experiences")),
+            }
+        }
         patch.edges.push(EdgeOp { from: a, rel, to: b, confidence: e["confidence"].as_f64().unwrap_or(0.6).clamp(0.0, 1.0), because, props: props(&e["props"]), firsthand: false, sources: Vec::new() });
     }
     for r in v["retract"].as_array().cloned().unwrap_or_default().into_iter().take(16) {
@@ -1298,7 +1307,10 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
         }
     }
     for m in v["remember"].as_array().cloned().unwrap_or_default().into_iter().take(12) {
-        let Some(exp) = m["exp"].as_u64().filter(|x| known.contains(x)) else { continue };
+        let Some(exp) = reply_id(&m["exp"]).filter(|x| known.contains(x)) else {
+            notes.push(format!("memory of exp {} dropped: not one of these experiences", m["exp"]));
+            continue;
+        };
         let Some((t, salience, involves)) = exp_time(exp) else { continue };
         let gist: String = m["gist"].as_str().unwrap_or_default().chars().take(300).collect();
         if gist.is_empty() {
@@ -1561,7 +1573,33 @@ mod tests {
         assert_eq!(p.edges[0].because, vec![7]);
         assert_eq!(p.retract, vec![("self".into(), "TRUSTS".into(), "person:4".into())]);
         assert_eq!(p.remember.len(), 1);
-        assert_eq!(notes.len(), 1);
+        // The skipped edge, and the invented id 99 in `because` and in a memory, are noted.
+        assert_eq!(notes.len(), 3, "{notes:?}");
+        assert!(notes.iter().filter(|n| n.contains("99")).count() == 2, "{notes:?}");
+    }
+
+    /// GLM Flash writes experience ids as strings (docs/MODEL_COST.md, Part 2: 76% of its
+    /// internalize memories, 86–98% of animal-memory evidence). They are ids like any other;
+    /// a range or a word is still dropped, and noted.
+    #[test]
+    fn experience_ids_written_as_strings_are_kept() {
+        let v = json!({
+            "summary": "I arrived and a wolf attacked me.",
+            "remember": [{"exp": "392903", "gist": "A wolf attacked me near the ford."},
+                         {"exp": "#392904", "gist": "I asked a stranger where to find food."},
+                         {"exp": "215713-216671", "gist": "A range is not an id."},
+                         {"exp": 392905, "gist": "An integer, as before."}],
+            "edges": [{"from": "kind:wolf", "rel": "ATTACKED", "to": "self", "confidence": 0.9, "because": ["392903", 392905, "the fight"]}],
+            "relations": [{"id": "29", "trust": 10, "affinity": 5, "label": "stranger"}]
+        });
+        let known = [392903, 392904, 392905];
+        let (mut p, notes) = patch_from(&v, &known, &|id| known.contains(&id).then(|| (1000, 0.8, Vec::new())));
+        let exps: Vec<u64> = p.remember.iter().map(|m| m.exp).collect();
+        assert_eq!(exps, vec![392903, 392904, 392905]);
+        assert_eq!(p.edges[0].because, vec![392903, 392905]);
+        assert!(notes.iter().any(|n| n.contains("215713-216671")) && notes.iter().any(|n| n.contains("the fight")), "{notes:?}");
+        sugar_into(&v, &mut p, &[]);
+        assert!(p.edges.iter().any(|e| e.rel == "FEELS" && e.to == "person:29"), "a relation's id written as a string");
     }
 
     #[test]

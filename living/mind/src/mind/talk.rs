@@ -795,11 +795,7 @@ fn saying_ms(text: &str) -> u64 {
 }
 
 fn id_of(v: &Value) -> u32 {
-    match v {
-        Value::Number(n) => n.as_u64().unwrap_or(0) as u32,
-        Value::String(s) => s.trim().trim_start_matches('#').parse().unwrap_or(0),
-        _ => 0,
-    }
+    living_rules::normalize::reply_id(v).unwrap_or(0) as u32
 }
 
 fn flat(v: &Value) -> String {

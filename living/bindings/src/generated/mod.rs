@@ -6,6 +6,8 @@
 #![allow(unused, clippy::all)]
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
+pub mod acquaintance_table;
+pub mod acquaintance_type;
 pub mod act_card_table;
 pub mod act_card_type;
 pub mod act_queue_table;
@@ -28,12 +30,16 @@ pub mod character_table;
 pub mod character_type;
 pub mod chronicle_table;
 pub mod chronicle_type;
+pub mod client_connected_reducer;
+pub mod client_disconnected_reducer;
 pub mod clock_table;
 pub mod clock_type;
 pub mod combat_seen_table;
 pub mod combat_seen_type;
 pub mod community_table;
 pub mod community_type;
+pub mod connection_table;
+pub mod connection_type;
 pub mod cry_prompt_type;
 pub mod cursor_type;
 pub mod deliberation_table;
@@ -124,6 +130,10 @@ pub mod place_type;
 pub mod planned_act_type;
 pub mod practice_table;
 pub mod practice_type;
+pub mod presence_table;
+pub mod presence_type;
+pub mod projected_table;
+pub mod projected_type;
 pub mod purge_dead_reducer;
 pub mod readiness_table;
 pub mod readiness_type;
@@ -136,6 +146,8 @@ pub mod relation_type;
 pub mod release_skill_reducer;
 pub mod resource_node_table;
 pub mod resource_node_type;
+pub mod reveal_table;
+pub mod reveal_type;
 pub mod routine_in_type;
 pub mod routine_stat_table;
 pub mod routine_stat_type;
@@ -145,6 +157,7 @@ pub mod script_table;
 pub mod script_type;
 pub mod seed_communities_reducer;
 pub mod seen_bodies_table;
+pub mod seen_character_type;
 pub mod seen_characters_table;
 pub mod seen_doing_table;
 pub mod seen_fighters_table;
@@ -195,6 +208,8 @@ pub mod weather_type;
 pub mod world_table;
 pub mod world_type;
 
+pub use acquaintance_table::*;
+pub use acquaintance_type::Acquaintance;
 pub use act_card_table::*;
 pub use act_card_type::ActCard;
 pub use act_queue_table::*;
@@ -217,12 +232,16 @@ pub use character_table::*;
 pub use character_type::Character;
 pub use chronicle_table::*;
 pub use chronicle_type::Chronicle;
+pub use client_connected_reducer::client_connected;
+pub use client_disconnected_reducer::client_disconnected;
 pub use clock_table::*;
 pub use clock_type::Clock;
 pub use combat_seen_table::*;
 pub use combat_seen_type::CombatSeen;
 pub use community_table::*;
 pub use community_type::Community;
+pub use connection_table::*;
+pub use connection_type::Connection;
 pub use cry_prompt_type::CryPrompt;
 pub use cursor_type::Cursor;
 pub use deliberation_table::*;
@@ -313,6 +332,10 @@ pub use place_type::Place;
 pub use planned_act_type::PlannedAct;
 pub use practice_table::*;
 pub use practice_type::Practice;
+pub use presence_table::*;
+pub use presence_type::Presence;
+pub use projected_table::*;
+pub use projected_type::Projected;
 pub use purge_dead_reducer::purge_dead;
 pub use readiness_table::*;
 pub use readiness_type::Readiness;
@@ -325,6 +348,8 @@ pub use relation_type::Relation;
 pub use release_skill_reducer::release_skill;
 pub use resource_node_table::*;
 pub use resource_node_type::ResourceNode;
+pub use reveal_table::*;
+pub use reveal_type::Reveal;
 pub use routine_in_type::RoutineIn;
 pub use routine_stat_table::*;
 pub use routine_stat_type::RoutineStat;
@@ -334,6 +359,7 @@ pub use script_table::*;
 pub use script_type::Script;
 pub use seed_communities_reducer::seed_communities;
 pub use seen_bodies_table::*;
+pub use seen_character_type::SeenCharacter;
 pub use seen_characters_table::*;
 pub use seen_doing_table::*;
 pub use seen_fighters_table::*;
@@ -392,6 +418,8 @@ pub use world_type::World;
 /// to indicate which reducer caused the event.
 
 pub enum Reducer {
+    ClientConnected,
+    ClientDisconnected,
     GrantItems {
         id: u32,
         item: String,
@@ -531,6 +559,8 @@ impl __sdk::InModule for Reducer {
 impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
+            Reducer::ClientConnected => "client_connected",
+            Reducer::ClientDisconnected => "client_disconnected",
             Reducer::GrantItems { .. } => "grant_items",
             Reducer::GrantKnowHow { .. } => "grant_know_how",
             Reducer::GrantRepertoires => "grant_repertoires",
@@ -571,6 +601,12 @@ impl __sdk::Reducer for Reducer {
     #[allow(clippy::clone_on_copy)]
     fn args_bsatn(&self) -> Result<Vec<u8>, __sats::bsatn::EncodeError> {
         match self {
+            Reducer::ClientConnected => {
+                __sats::bsatn::to_vec(&client_connected_reducer::ClientConnectedArgs {})
+            }
+            Reducer::ClientDisconnected => {
+                __sats::bsatn::to_vec(&client_disconnected_reducer::ClientDisconnectedArgs {})
+            }
             Reducer::GrantItems { id, item, qty } => {
                 __sats::bsatn::to_vec(&grant_items_reducer::GrantItemsArgs {
                     id: id.clone(),
@@ -775,6 +811,7 @@ impl __sdk::Reducer for Reducer {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct DbUpdate {
+    acquaintance: __sdk::TableUpdate<Acquaintance>,
     act_card: __sdk::TableUpdate<ActCard>,
     act_queue: __sdk::TableUpdate<PlannedAct>,
     activity: __sdk::TableUpdate<Activity>,
@@ -789,6 +826,7 @@ pub struct DbUpdate {
     clock: __sdk::TableUpdate<Clock>,
     combat_seen: __sdk::TableUpdate<CombatSeen>,
     community: __sdk::TableUpdate<Community>,
+    connection: __sdk::TableUpdate<Connection>,
     deliberation: __sdk::TableUpdate<Deliberation>,
     doing: __sdk::TableUpdate<Doing>,
     expecting: __sdk::TableUpdate<Expecting>,
@@ -823,15 +861,18 @@ pub struct DbUpdate {
     persona: __sdk::TableUpdate<Persona>,
     place: __sdk::TableUpdate<Place>,
     practice: __sdk::TableUpdate<Practice>,
+    presence: __sdk::TableUpdate<Presence>,
+    projected: __sdk::TableUpdate<Projected>,
     readiness: __sdk::TableUpdate<Readiness>,
     rearing: __sdk::TableUpdate<Rearing>,
     relation: __sdk::TableUpdate<Relation>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
+    reveal: __sdk::TableUpdate<Reveal>,
     routine: __sdk::TableUpdate<Routine>,
     routine_stat: __sdk::TableUpdate<RoutineStat>,
     script: __sdk::TableUpdate<Script>,
     seen_bodies: __sdk::TableUpdate<Motion>,
-    seen_characters: __sdk::TableUpdate<Character>,
+    seen_characters: __sdk::TableUpdate<SeenCharacter>,
     seen_doing: __sdk::TableUpdate<Doing>,
     seen_fighters: __sdk::TableUpdate<Fighter>,
     settlement: __sdk::TableUpdate<Settlement>,
@@ -858,6 +899,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_update in __sdk::transaction_update_iter_table_updates(raw) {
             match &table_update.table_name[..] {
+                "acquaintance" => db_update
+                    .acquaintance
+                    .append(acquaintance_table::parse_table_update(table_update)?),
                 "act_card" => db_update
                     .act_card
                     .append(act_card_table::parse_table_update(table_update)?),
@@ -900,6 +944,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "community" => db_update
                     .community
                     .append(community_table::parse_table_update(table_update)?),
+                "connection" => db_update
+                    .connection
+                    .append(connection_table::parse_table_update(table_update)?),
                 "deliberation" => db_update
                     .deliberation
                     .append(deliberation_table::parse_table_update(table_update)?),
@@ -1002,6 +1049,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "practice" => db_update
                     .practice
                     .append(practice_table::parse_table_update(table_update)?),
+                "presence" => db_update
+                    .presence
+                    .append(presence_table::parse_table_update(table_update)?),
+                "projected" => db_update
+                    .projected
+                    .append(projected_table::parse_table_update(table_update)?),
                 "readiness" => db_update
                     .readiness
                     .append(readiness_table::parse_table_update(table_update)?),
@@ -1014,6 +1067,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "resource_node" => db_update
                     .resource_node
                     .append(resource_node_table::parse_table_update(table_update)?),
+                "reveal" => db_update
+                    .reveal
+                    .append(reveal_table::parse_table_update(table_update)?),
                 "routine" => db_update
                     .routine
                     .append(routine_table::parse_table_update(table_update)?),
@@ -1109,6 +1165,9 @@ impl __sdk::DbUpdate for DbUpdate {
     ) -> AppliedDiff<'_> {
         let mut diff = AppliedDiff::default();
 
+        diff.acquaintance = cache
+            .apply_diff_to_table::<Acquaintance>("acquaintance", &self.acquaintance)
+            .with_updates_by_pk(|row| &row.id);
         diff.act_card = cache
             .apply_diff_to_table::<ActCard>("act_card", &self.act_card)
             .with_updates_by_pk(|row| &row.skill);
@@ -1150,6 +1209,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.community = cache
             .apply_diff_to_table::<Community>("community", &self.community)
+            .with_updates_by_pk(|row| &row.id);
+        diff.connection = cache
+            .apply_diff_to_table::<Connection>("connection", &self.connection)
             .with_updates_by_pk(|row| &row.id);
         diff.deliberation = cache
             .apply_diff_to_table::<Deliberation>("deliberation", &self.deliberation)
@@ -1223,6 +1285,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.practice = cache
             .apply_diff_to_table::<Practice>("practice", &self.practice)
             .with_updates_by_pk(|row| &row.id);
+        diff.presence = cache
+            .apply_diff_to_table::<Presence>("presence", &self.presence)
+            .with_updates_by_pk(|row| &row.id);
+        diff.projected = cache
+            .apply_diff_to_table::<Projected>("projected", &self.projected)
+            .with_updates_by_pk(|row| &row.id);
         diff.readiness = cache
             .apply_diff_to_table::<Readiness>("readiness", &self.readiness)
             .with_updates_by_pk(|row| &row.id);
@@ -1234,6 +1302,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.resource_node = cache
             .apply_diff_to_table::<ResourceNode>("resource_node", &self.resource_node)
+            .with_updates_by_pk(|row| &row.id);
+        diff.reveal = cache
+            .apply_diff_to_table::<Reveal>("reveal", &self.reveal)
             .with_updates_by_pk(|row| &row.id);
         diff.routine = cache
             .apply_diff_to_table::<Routine>("routine", &self.routine)
@@ -1321,7 +1392,7 @@ impl __sdk::DbUpdate for DbUpdate {
             .apply_diff_to_table::<Motion>("seen_bodies", &self.seen_bodies)
             .with_updates_by_pk(|row| &row.id);
         diff.seen_characters = cache
-            .apply_diff_to_table::<Character>("seen_characters", &self.seen_characters)
+            .apply_diff_to_table::<SeenCharacter>("seen_characters", &self.seen_characters)
             .with_updates_by_pk(|row| &row.id);
         diff.seen_doing = cache
             .apply_diff_to_table::<Doing>("seen_doing", &self.seen_doing)
@@ -1336,6 +1407,9 @@ impl __sdk::DbUpdate for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_rows in raw.tables {
             match &table_rows.table[..] {
+                "acquaintance" => db_update
+                    .acquaintance
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "act_card" => db_update
                     .act_card
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1377,6 +1451,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "community" => db_update
                     .community
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "connection" => db_update
+                    .connection
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "deliberation" => db_update
                     .deliberation
@@ -1480,6 +1557,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "practice" => db_update
                     .practice
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "presence" => db_update
+                    .presence
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "projected" => db_update
+                    .projected
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "readiness" => db_update
                     .readiness
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1491,6 +1574,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "resource_node" => db_update
                     .resource_node
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "reveal" => db_update
+                    .reveal
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "routine" => db_update
                     .routine
@@ -1574,6 +1660,9 @@ impl __sdk::DbUpdate for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_rows in raw.tables {
             match &table_rows.table[..] {
+                "acquaintance" => db_update
+                    .acquaintance
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "act_card" => db_update
                     .act_card
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1615,6 +1704,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "community" => db_update
                     .community
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "connection" => db_update
+                    .connection
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "deliberation" => db_update
                     .deliberation
@@ -1718,6 +1810,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "practice" => db_update
                     .practice
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "presence" => db_update
+                    .presence
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "projected" => db_update
+                    .projected
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "readiness" => db_update
                     .readiness
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1729,6 +1827,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "resource_node" => db_update
                     .resource_node
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "reveal" => db_update
+                    .reveal
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "routine" => db_update
                     .routine
@@ -1814,6 +1915,7 @@ impl __sdk::DbUpdate for DbUpdate {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct AppliedDiff<'r> {
+    acquaintance: __sdk::TableAppliedDiff<'r, Acquaintance>,
     act_card: __sdk::TableAppliedDiff<'r, ActCard>,
     act_queue: __sdk::TableAppliedDiff<'r, PlannedAct>,
     activity: __sdk::TableAppliedDiff<'r, Activity>,
@@ -1828,6 +1930,7 @@ pub struct AppliedDiff<'r> {
     clock: __sdk::TableAppliedDiff<'r, Clock>,
     combat_seen: __sdk::TableAppliedDiff<'r, CombatSeen>,
     community: __sdk::TableAppliedDiff<'r, Community>,
+    connection: __sdk::TableAppliedDiff<'r, Connection>,
     deliberation: __sdk::TableAppliedDiff<'r, Deliberation>,
     doing: __sdk::TableAppliedDiff<'r, Doing>,
     expecting: __sdk::TableAppliedDiff<'r, Expecting>,
@@ -1862,15 +1965,18 @@ pub struct AppliedDiff<'r> {
     persona: __sdk::TableAppliedDiff<'r, Persona>,
     place: __sdk::TableAppliedDiff<'r, Place>,
     practice: __sdk::TableAppliedDiff<'r, Practice>,
+    presence: __sdk::TableAppliedDiff<'r, Presence>,
+    projected: __sdk::TableAppliedDiff<'r, Projected>,
     readiness: __sdk::TableAppliedDiff<'r, Readiness>,
     rearing: __sdk::TableAppliedDiff<'r, Rearing>,
     relation: __sdk::TableAppliedDiff<'r, Relation>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
+    reveal: __sdk::TableAppliedDiff<'r, Reveal>,
     routine: __sdk::TableAppliedDiff<'r, Routine>,
     routine_stat: __sdk::TableAppliedDiff<'r, RoutineStat>,
     script: __sdk::TableAppliedDiff<'r, Script>,
     seen_bodies: __sdk::TableAppliedDiff<'r, Motion>,
-    seen_characters: __sdk::TableAppliedDiff<'r, Character>,
+    seen_characters: __sdk::TableAppliedDiff<'r, SeenCharacter>,
     seen_doing: __sdk::TableAppliedDiff<'r, Doing>,
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
     settlement: __sdk::TableAppliedDiff<'r, Settlement>,
@@ -1902,6 +2008,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         event: &EventContext,
         callbacks: &mut __sdk::DbCallbacks<RemoteModule>,
     ) {
+        callbacks.invoke_table_row_callbacks::<Acquaintance>(
+            "acquaintance",
+            &self.acquaintance,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<ActCard>("act_card", &self.act_card, event);
         callbacks.invoke_table_row_callbacks::<PlannedAct>("act_queue", &self.act_queue, event);
         callbacks.invoke_table_row_callbacks::<Activity>("activity", &self.activity, event);
@@ -1916,6 +2027,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Clock>("clock", &self.clock, event);
         callbacks.invoke_table_row_callbacks::<CombatSeen>("combat_seen", &self.combat_seen, event);
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
+        callbacks.invoke_table_row_callbacks::<Connection>("connection", &self.connection, event);
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "deliberation",
             &self.deliberation,
@@ -1982,6 +2094,8 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Persona>("persona", &self.persona, event);
         callbacks.invoke_table_row_callbacks::<Place>("place", &self.place, event);
         callbacks.invoke_table_row_callbacks::<Practice>("practice", &self.practice, event);
+        callbacks.invoke_table_row_callbacks::<Presence>("presence", &self.presence, event);
+        callbacks.invoke_table_row_callbacks::<Projected>("projected", &self.projected, event);
         callbacks.invoke_table_row_callbacks::<Readiness>("readiness", &self.readiness, event);
         callbacks.invoke_table_row_callbacks::<Rearing>("rearing", &self.rearing, event);
         callbacks.invoke_table_row_callbacks::<Relation>("relation", &self.relation, event);
@@ -1990,6 +2104,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.resource_node,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<Reveal>("reveal", &self.reveal, event);
         callbacks.invoke_table_row_callbacks::<Routine>("routine", &self.routine, event);
         callbacks.invoke_table_row_callbacks::<RoutineStat>(
             "routine_stat",
@@ -1998,7 +2113,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<Script>("script", &self.script, event);
         callbacks.invoke_table_row_callbacks::<Motion>("seen_bodies", &self.seen_bodies, event);
-        callbacks.invoke_table_row_callbacks::<Character>(
+        callbacks.invoke_table_row_callbacks::<SeenCharacter>(
             "seen_characters",
             &self.seen_characters,
             event,
@@ -2689,6 +2804,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
     type QueryBuilder = __sdk::QueryBuilder;
 
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
+        acquaintance_table::register_table(client_cache);
         act_card_table::register_table(client_cache);
         act_queue_table::register_table(client_cache);
         activity_table::register_table(client_cache);
@@ -2703,6 +2819,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         clock_table::register_table(client_cache);
         combat_seen_table::register_table(client_cache);
         community_table::register_table(client_cache);
+        connection_table::register_table(client_cache);
         deliberation_table::register_table(client_cache);
         doing_table::register_table(client_cache);
         expecting_table::register_table(client_cache);
@@ -2737,10 +2854,13 @@ impl __sdk::SpacetimeModule for RemoteModule {
         persona_table::register_table(client_cache);
         place_table::register_table(client_cache);
         practice_table::register_table(client_cache);
+        presence_table::register_table(client_cache);
+        projected_table::register_table(client_cache);
         readiness_table::register_table(client_cache);
         rearing_table::register_table(client_cache);
         relation_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
+        reveal_table::register_table(client_cache);
         routine_table::register_table(client_cache);
         routine_stat_table::register_table(client_cache);
         script_table::register_table(client_cache);
@@ -2766,6 +2886,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         world_table::register_table(client_cache);
     }
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
+        "acquaintance",
         "act_card",
         "act_queue",
         "activity",
@@ -2780,6 +2901,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "clock",
         "combat_seen",
         "community",
+        "connection",
         "deliberation",
         "doing",
         "expecting",
@@ -2814,10 +2936,13 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "persona",
         "place",
         "practice",
+        "presence",
+        "projected",
         "readiness",
         "rearing",
         "relation",
         "resource_node",
+        "reveal",
         "routine",
         "routine_stat",
         "script",

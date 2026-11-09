@@ -4,14 +4,20 @@
 Free tier: the real `living-mind` against the shared fake model server and a scratch Neo4j,
 on a `verify-knowledge-*` island world. Phases:
 
-1. **off**: the mind runs with `LIVING_PLAYER_MEMORY` unset while the player talks to a minded
+The world's `takeover_s` law is raised to an hour (an installed copy of skills.rhai) so the player's
+HTTP calls never let the minds take the character over, except where phase 2 lowers it.
+
+1. **off**: the mind runs with `LIVING_PLAYER_MEMORY=0` while the player talks to a minded
    resident: no internalize request, no graph for the player, its experience rows untouched,
    the resident's conversation and consolidation as before.
 2. **on**: the mind restarts with the switch on; the scripted session (walk, gather, talk, wave,
-   fight a wolf) runs; the session-end cadence internalizes it: the request carries only the
-   player's experience lines; the graph holds memories and beliefs with `lived_under = human`
-   and `self.lived_upto`; relations, judgments and places are projected; no persona is set;
-   the player's experience rows remain.
+   fight a wolf) runs; then `takeover_s` drops to 5 s, the player stays away, and the world's
+   minds take the character over (the presence signal): that ends the session and internalizes
+   it: the request carries only the player's experience lines; the graph holds memories and
+   beliefs with `lived_under = human` and `self.lived_upto`; relations, judgments, places and the
+   identity inferred from the person's conduct are projected; the player's experience rows
+   remain. The taken-over character's first deliberation comes after the internalization, and
+   what it then lives is consolidated with `lived_under = ai`.
 3. **restart**: the mind is stopped, the player acts again, the mind starts again: the next
    internalization takes only experiences after `lived_upto`.
 4. **recall**: the resident's own memory of the player comes back in its talk prompt and its
@@ -45,18 +51,22 @@ S = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(S)
 ROOT = K.ROOT
 
+IDENTITY = {'narrative': 'I came to the island a stranger, asked my way to food and fought off a wolf.', 'values': ['asking before guessing'],
+            'traits': {'boldness': 70, 'caution': 45}, 'mood': 'wary', 'why': 'I stood my ground against a wolf and asked for directions.'}
 INTERNALIZE = {
     'summary': 'I arrived, gathered wood and berries, spoke with a resident and was attacked by a wolf.',
+    'identity': IDENTITY,
     'remember': [{'exp': '$EXP:gather', 'gist': 'I went gathering soon after I arrived.'},
                  {'exp': '$EXP:you said to', 'gist': 'I asked a resident where to find food.'},
-                 {'exp': '$EXP:wolf attacked you', 'gist': 'A wolf attacked me out in the wilds and I struck back.'}],
+                 # GLM-shaped: the id as a string (docs/MODEL_COST.md, Part 2); it must be kept.
+                 {'exp': '$EXPSTR:wolf attacked you', 'gist': 'A wolf attacked me out in the wilds and I struck back.'}],
     'nodes': [{'key': 'kind:wolf', 'labels': ['Danger'], 'name': 'wolf'}],
     'edges': [{'from': 'self', 'rel': 'WENT_GATHERING', 'to': 'kind:berry_bush', 'confidence': 0.9, 'because': ['$EXP:gather']},
               {'from': 'self', 'rel': 'ASKED_ABOUT_FOOD', 'to': '$PERSON', 'confidence': 0.9, 'because': ['$EXP:you said to']},
-              {'from': 'kind:wolf', 'rel': 'ATTACKED', 'to': 'self', 'confidence': 0.95, 'because': ['$EXP:wolf attacked you']},
+              {'from': 'kind:wolf', 'rel': 'ATTACKED', 'to': 'self', 'confidence': 0.95, 'because': ['$EXPSTR:wolf attacked you']},
               # A model slip: someone the player never perceived (an islander far away).
               {'from': 'self', 'rel': 'SAW', 'to': 'person:1', 'confidence': 0.5, 'because': ['$EXP:wolf attacked you']}],
-    'relations': [{'id': '$PERSON_ID', 'trust': 20, 'affinity': 25, 'label': 'acquaintance', 'note': 'answered when I spoke'}],
+    'relations': [{'id': '$PERSON_IDSTR', 'trust': 20, 'affinity': 25, 'label': 'acquaintance', 'note': 'answered when I spoke'}],
     'judgments': [{'key': 'wolves_attack_newcomers', 'value': 0.8, 'why': 'a wolf attacked me'}],
     'places': [{'name': 'Wolf ground', 'x': 500, 'y': 150}],
     'merge': [], 'retract': [],
@@ -105,8 +115,9 @@ class Proof(K.Run):
                    LIVING_LOD='0', NO_PROXY='127.0.0.1,localhost', RUST_LOG='info,neo4rs=warn,spacetimedb_sdk=warn')
         env.pop('LIVING_PLAYER_MEMORY', None)
         if on:
-            env.update(LIVING_PLAYER_MEMORY='1', LIVING_PLAYER_MEMORY_IDLE_S='15', LIVING_PLAYER_MEMORY_MODE=self.mode,
-                       LIVING_PLAYER_MEMORY_POLL_S='0.5')
+            env.update(LIVING_PLAYER_MEMORY_MODE=self.mode, LIVING_PLAYER_MEMORY_POLL_S='0.5')
+        else:
+            env.update(LIVING_PLAYER_MEMORY='0')
         binary = K.BUILD / 'release/living-mind'
         keep = ('LIVING_DB', 'LIVING_RUN', 'LIVING_SEED', 'LIVING_ONLY', 'LIVING_NEO4J_URI', 'LIVING_MODELS', 'LIVING_LOD')
         (self.directory / f'{label}-environment.json').write_text(json.dumps({k: env.get(k) for k in keep + tuple(k for k in env if k.startswith('LIVING_PLAYER_MEMORY'))}, indent=2))
@@ -126,6 +137,12 @@ class Proof(K.Run):
         nodes = self.cypher(f'MATCH (n:Concept {f}) RETURN n.key AS key, labels(n) AS labels, n.lived_under AS lived_under, n.lived_upto AS lived_upto, n.gist AS gist ORDER BY key;', f'{label}-nodes').stdout
         edges = self.cypher(f'MATCH (n:Concept {f})-[r]->(m:Concept) WHERE coalesce(r.open, true) RETURN n.key AS source, coalesce(r.rel, type(r)) AS rel, m.key AS target, r.lived_under AS lived_under, r.because AS because, r.thought AS thought ORDER BY source, rel, target;', f'{label}-edges').stdout
         return nodes, edges
+
+    def takeover_after(self, secs):
+        """Install skills.rhai with the `takeover_s` law set to `secs`."""
+        source = (ROOT / 'living/scripts/skills.rhai').read_text()
+        assert 'takeover_s: 30.0' in source
+        self.admin('install_script', source.replace('takeover_s: 30.0', f'takeover_s: {float(secs)}'))
 
     def thoughts(self, actor, kind):
         return [t for t in self.sql(f'SELECT * FROM thought WHERE actor = {actor}', f'thought-{actor}') if t['kind'] == kind]
@@ -157,6 +174,7 @@ def drive(p):
               for x in [*sorted((ROOT / 'living/mind/src').rglob('*.rs')), K.BUILD / 'release/living-mind']}
     (p.directory / 'source-hashes.json').write_text(json.dumps(hashes, indent=2))
     p.fake()
+    p.takeover_after(3600)
     s = S.Session(p.name)
     player = s.ensure_player('Wren')
     p.admin('spawn_crowd', 1, True)
@@ -183,20 +201,33 @@ def drive(p):
                    talk_requests=sum(r['purpose'] == 'talk' for r in p.requests()))
     p.stop_mind('mind-off')
 
-    # 2. Switch on: the backlog and the scripted session are internalized at session end.
+    # 2. Switch on (the default): the backlog and the scripted session are internalized when the
+    # session ends, which is the world's minds taking the character over once its person left.
     log = p.start_mind('mind-on', only, on=True)
     assert 'player memory on' in log.read_text()
     me, _ = S.run_session(s, 'Wren', resident)
     assert me == player
     session = {'player': player, 'resident': resident, 'steps': s.steps, **S.evidence(s, player)}
     (p.directory / 'session.json').write_text(json.dumps(session, indent=1))
+    p.takeover_after(5)
+    taken = p.wait(lambda: [r for r in p.sql(f'SELECT * FROM presence WHERE id = {player}', 'presence-taken') if r['ai']], 'takeover after the person left', 30)[0]
     # The off phase's backlog may be internalized on its own first; the session follows.
     p.wait(lambda: any('wolf attacked you' in user_text(r) for r in internalize_requests(p)), 'session internalize request', 120)
     first = p.wait(lambda: len(p.thoughts(player, 'internalize')) >= len(internalize_requests(p)) and p.thoughts(player, 'internalize'), 'internalization at session end', 60)
+    assert any(json.loads(t['detail'])['reason'] == 'session end' for t in first), [json.loads(t['detail'])['reason'] for t in first]
+    # The taken-over character thinks only after its past is internalized.
+    thought = p.wait(lambda: p.thoughts(player, 'deliberate'), 'the minds deliberate for the taken-over character', 120)
+    assert min(t['at_ms'] for t in thought) > max(t['at_ms'] for t in first), 'deliberated before its lived past was internalized'
     req = internalize_requests(p)
     body = '\n'.join(user_text(r) for r in req)
-    for want in ('You said to Walker1', 'gather →', 'Walker1 said to you', 'wolf attacked you', '@['):
+    # The player was never told the resident's name: it is "a stranger" in what it lived
+    # (the projection's label), anchored by id.
+    for want in ('You said to a stranger', 'gather →', 'stranger said to you', 'wolf attacked you', '@[', f'someone=#{resident}'):
         assert want in body, f'{want!r} missing from the internalize request'
+    # The player may say the name itself (its own words, as typed); nothing the authority told
+    # it names the resident.
+    told = [l for l in body.splitlines() if 'Walker1' in l and 'You said' not in l]
+    assert not told, f'a name the player was never told reached its memory: {told}'
     for never in ('human_move', 'human_act', 'use_skill', 'my_combat', 'deliberation'):
         assert never not in body, f'{never!r} leaked into the internalize request'
     if p.mode == 'batch':
@@ -209,36 +240,56 @@ def drive(p):
     assert any(l.startswith('"self"') and str(upto) in l for l in nodes.splitlines()), nodes
     lived = [l for l in edges.splitlines() if 'ASKED_ABOUT_FOOD' in l or 'WENT_GATHERING' in l or 'ATTACKED' in l]
     assert len(lived) == 3 and all('human' in l for l in lived), lived
+    # The wolf memory, its evidence and the relation came with ids written as strings (GLM's
+    # shape): the memory is in the graph (PRIVATE above), the edge keeps its experience id.
+    assert any('ATTACKED' in l and re.search(r'\[\d+', l) for l in lived), [l for l in lived if 'ATTACKED' in l]
     assert '"person:1"' not in nodes + edges, 'a person the player never perceived was written'
     assert any('person:1 dropped' in n for d in details for n in d['notes']), 'the dropped stranger is not noted'
     rel = p.sql(f'SELECT * FROM relation WHERE actor = {player}', 'on-player-relation')
-    assert any(r['other'] == resident and r['label'] == 'acquaintance' for r in rel) and not any(r['other'] == 1 for r in rel), rel
+    # The internalization's patch felt for the resident (its id given as a string); the projected
+    # row may already carry what the minds made of it since the takeover (their consolidation).
+    patches = [json.loads(t['detail'])['patch'] for t in first]
+    assert any(e['rel'] == 'FEELS' and e['to'] == f'person:{resident}' for pt in patches for e in pt['edges']), 'the relation given with a string id was dropped'
+    assert any(r['other'] == resident for r in rel) and not any(r['other'] == 1 for r in rel), rel
     assert any(r['key'] == 'wolves_attack_newcomers' for r in p.sql(f'SELECT * FROM judgment WHERE actor = {player}', 'on-player-judgment'))
     assert any(r['name'] == 'Wolf ground' for r in p.sql(f'SELECT * FROM place WHERE actor = {player}', 'on-player-place'))
-    assert not p.sql(f'SELECT * FROM persona WHERE id = {player}', 'on-player-persona'), 'a persona was set for the player'
-    # The authority takes projections for a played character from the mind service, never an identity.
-    persona = {'some': {'narrative': 'invented', 'values': [], 'goals': [], 'traits': '{}', 'mood': 'calm'}}
-    update = {'persona': persona, 'relations': [], 'beliefs': {'none': []}, 'judgments': [], 'places': [], 'thought': {'none': []}, 'replace': False}
-    p.harness('call', 'mind_update', json.dumps([player, update]), '--as-admin', '--expect-refusal', "identity is not projected")
+    # The identity is inferred from the person's conduct (goals stay: nobody perceived them).
+    persona = p.sql(f'SELECT * FROM persona WHERE id = {player}', 'on-player-persona')
+    assert persona and persona[0]['narrative'] == IDENTITY['narrative'] and persona[0]['mood'] == 'wary' and persona[0]['goals'] == [], persona
+    assert 'IDENTITY is the one place' in system_text(internalize_requests(p)[0]), 'the internalize prompt does not ask for an identity'
+    # What the minds live for it is theirs: consolidated with `lived_under = ai`.
+    ai_thought = p.wait(lambda: p.thoughts(player, 'consolidate'), 'consolidation of what the minds lived for it', 150)
+    _, ai_edges = p.graph(player, 'taken-player')
+    assert any('"ai"' in l for l in ai_edges.splitlines()), 'no edge lived under ai'
+    assert all(set(json.loads(t['detail'])['experiences']).isdisjoint(json.loads(f['detail'])['experiences']) for t in ai_thought for f in first), 'an experience was integrated twice'
+    p.takeover_after(3600)
     rows = p.sql(f'SELECT * FROM experience WHERE observer = {player}', 'on-player-experience')
     assert any(r['id'] <= upto for r in rows), 'player experience rows were consumed'
     p.pass_feature('switch on: session internalized with provenance and projections', ['mind-on.log', 'requests.jsonl', 'on-player-nodes.txt', 'on-player-edges.txt',
-                   'on-player-relation.json', 'on-player-judgment.json', 'on-player-place.json', 'on-player-persona.json', 'on-player-experience.json', 'session.json'],
+                   'on-player-relation.json', 'on-player-judgment.json', 'on-player-place.json', 'on-player-persona.json', 'on-player-experience.json', 'session.json',
+                   'presence-taken.json', 'taken-player-edges.txt'],
                    upto=upto, requests=len(req), experiences_sent=len(re.findall(r'^- \[\d+\]', body, re.M)),
                    request_tokens=[tokens(system_text(r) + user_text(r)) for r in req], same_system_prompt=len({system_text(r) for r in req}) == 1)
 
+    p.pass_feature('takeover: session end by presence, past first, identity inferred, lived under ai', ['presence-taken.json', 'thought-%d.json' % player, 'taken-player-edges.txt', 'on-player-persona.json'],
+                   takeover_ms=taken['control_ms'], persona=persona[0]['narrative'])
+
     # 3. Restart: stop, act, start again; only experiences after `lived_upto` are taken.
+    # (The first call hands the character back to its person.)
     p.stop_mind('mind-on')
     before = len(p.thoughts(player, 'internalize'))
     s.call('human_say', ['I am back. The wolves out there are dangerous.', resident])
     time.sleep(2.5)
     s.call('human_act', [json.dumps({'do': {'skill': 'gather', 'target': {'nearest': 'tree'}}})])
     time.sleep(9)
+    # The session ends when the minds take the character over (5 s after its last call).
+    p.takeover_after(5)
     log = p.start_mind('mind-restart', only, on=True)
     p.wait(lambda: 'internalized up to ' + str(upto) in log.read_text(), 'cursor read from the mind on restart', 60)
     second = p.wait(lambda: len(p.thoughts(player, 'internalize')) > before and p.thoughts(player, 'internalize'), 'internalization after restart', 120)
     later = json.loads(sorted(second, key=lambda t: t['id'])[-1]['detail'])
     assert later['experiences'] and min(later['experiences']) > upto, (upto, later['experiences'])
+    p.takeover_after(3600)
     p.pass_feature('restart resumes from lived_upto (no re-integration)', ['mind-restart.log', 'thought-%d.json' % player], first_upto=upto, second=later['experiences'])
 
     # 4. Recall: the resident remembers the player from its own experience, never the player's.

@@ -94,6 +94,11 @@ pub struct Map {
     pub tiles: Vec<u8>,
     /// Tiles closed by structures (a shut gate), by tile index; rebuilt when they change.
     pub blocked: std::collections::HashSet<u32>,
+    /// Per chunk (`cy * chunks_wide + cx`): whether any of its tiles is opaque (rock or wall),
+    /// built on the first sight test and kept by `set` and `put_chunk`, so a sight line over
+    /// open chunks needs no tile walk. Code that writes `tiles` directly does so while
+    /// generating a world, before any sight test.
+    pub opaque: std::sync::OnceLock<Vec<bool>>,
 }
 
 impl Map {
@@ -131,7 +136,52 @@ impl Map {
     pub fn set(&mut self, x: i32, y: i32, t: Terrain) {
         if x >= 0 && y >= 0 && x < self.w as i32 && y < self.h as i32 {
             self.tiles[(y as u32 * self.w + x as u32) as usize] = t as u8;
+            self.refresh_opaque(x as u32 / CHUNK, y as u32 / CHUNK);
         }
+    }
+
+    fn chunk_opaque(&self, cx: u32, cy: u32) -> bool {
+        (cy * CHUNK..((cy + 1) * CHUNK).min(self.h)).any(|y| (cx * CHUNK..((cx + 1) * CHUNK).min(self.w)).any(|x| matches!(Terrain::from_u8(self.tiles[(y * self.w + x) as usize]), Terrain::Wall | Terrain::Rock)))
+    }
+
+    fn opaque_chunks(&self) -> &[bool] {
+        self.opaque.get_or_init(|| {
+            let (cw, ch) = (self.w.div_ceil(CHUNK), self.h.div_ceil(CHUNK));
+            (0..ch).flat_map(|cy| (0..cw).map(move |cx| (cx, cy))).map(|(cx, cy)| self.chunk_opaque(cx, cy)).collect()
+        })
+    }
+
+    fn refresh_opaque(&mut self, cx: u32, cy: u32) {
+        let o = self.chunk_opaque(cx, cy);
+        let cw = self.w.div_ceil(CHUNK);
+        if let Some(f) = self.opaque.get_mut() {
+            if let Some(slot) = f.get_mut((cy * cw + cx) as usize) {
+                *slot = o;
+            }
+        }
+    }
+
+    /// Whether nothing between `a` and `b` can block sight, by chunk: no opaque tile in any
+    /// chunk the segment's box touches, and no shut gate in the box.
+    fn open_between(&self, a: (f32, f32), b: (f32, f32)) -> bool {
+        let (x0, x1) = (a.0.min(b.0).floor() as i32, a.0.max(b.0).floor() as i32);
+        let (y0, y1) = (a.1.min(b.1).floor() as i32, a.1.max(b.1).floor() as i32);
+        if x0 < 0 || y0 < 0 || x1 >= self.w as i32 || y1 >= self.h as i32 {
+            return false;
+        }
+        let f = self.opaque_chunks();
+        let cw = self.w.div_ceil(CHUNK);
+        for cy in y0 as u32 / CHUNK..=y1 as u32 / CHUNK {
+            for cx in x0 as u32 / CHUNK..=x1 as u32 / CHUNK {
+                if f.get((cy * cw + cx) as usize).copied().unwrap_or(true) {
+                    return false;
+                }
+            }
+        }
+        self.blocked.iter().all(|&i| {
+            let (x, y) = ((i % self.w) as i32, (i / self.w) as i32);
+            x < x0 || x > x1 || y < y0 || y > y1
+        })
     }
 
     /// Terrain bytes for one chunk, row-major within the chunk.
@@ -156,6 +206,7 @@ impl Map {
                 self.tiles[(y * self.w + x) as usize] = *b;
             }
         }
+        self.refresh_opaque(cx, cy);
     }
 
     pub fn from_chunks(w: u32, h: u32, chunks: impl IntoIterator<Item = (u32, Vec<u8>)>) -> Self {
@@ -172,7 +223,7 @@ impl Map {
                 }
             }
         }
-        Self { w, h, tiles, blocked: Default::default() }
+        Self { w, h, tiles, blocked: Default::default(), opaque: Default::default() }
     }
 
     /// Nearest walkable tile center to a point, searching outward.
@@ -217,6 +268,11 @@ impl Map {
     /// Walks the exact tiles the segment crosses (a grid traversal), so its cost grows with
     /// the distance in tiles, not with a sampling rate.
     pub fn sight_clear(&self, a: (f32, f32), b: (f32, f32)) -> bool {
+        self.open_between(a, b) || self.sight_walk(a, b)
+    }
+
+    /// The tile walk behind [`Map::sight_clear`].
+    fn sight_walk(&self, a: (f32, f32), b: (f32, f32)) -> bool {
         let (mut tx, mut ty) = (a.0.floor() as i32, a.1.floor() as i32);
         let end = (b.0.floor() as i32, b.1.floor() as i32);
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
@@ -471,7 +527,7 @@ pub fn generate(seed: u64) -> Map {
             }
         }
     }
-    Map { w: MAP_W, h: MAP_H, tiles, blocked: Default::default() }
+    Map { w: MAP_W, h: MAP_H, tiles, blocked: Default::default(), opaque: Default::default() }
 }
 
 #[cfg(test)]
@@ -503,7 +559,7 @@ mod tests {
 
     #[test]
     fn sight_is_stopped_by_walls_rock_and_shut_gates_only() {
-        let mut m = Map { w: 32, h: 32, tiles: vec![Terrain::Grass as u8; 32 * 32], blocked: Default::default() };
+        let mut m = Map { w: 32, h: 32, tiles: vec![Terrain::Grass as u8; 32 * 32], blocked: Default::default(), opaque: Default::default() };
         // A wall across x = 10 from y = 0 to y = 19, water at x = 20.
         for y in 0..20 {
             m.set(10, y, Terrain::Wall);
@@ -526,9 +582,40 @@ mod tests {
         assert!(!m.sight_clear((5.5, 5.5), (15.5, 5.5)), "a shut gate hides");
         // Exactly along a tile corner: the traversal must not slip diagonally between two
         // walls touching at a corner.
-        let mut c = Map { w: 8, h: 8, tiles: vec![Terrain::Grass as u8; 64], blocked: Default::default() };
+        let mut c = Map { w: 8, h: 8, tiles: vec![Terrain::Grass as u8; 64], blocked: Default::default(), opaque: Default::default() };
         c.set(3, 4, Terrain::Wall);
         c.set(4, 3, Terrain::Wall);
         assert!(!c.sight_clear((2.5, 5.5), (5.5, 2.5)), "two walls meeting at a corner hide");
+    }
+
+    #[test]
+    fn sight_over_open_chunks_agrees_with_the_tile_walk() {
+        let mut m = Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), opaque: Default::default() };
+        // Walls and rock in some chunks, none in others.
+        let mut r: u64 = 7;
+        let mut next = || {
+            r ^= r << 13;
+            r ^= r >> 7;
+            r ^= r << 17;
+            r
+        };
+        for _ in 0..60 {
+            let (x, y) = ((next() % 32) as i32, (next() % 64) as i32);
+            m.set(x, y, if next() % 2 == 0 { Terrain::Wall } else { Terrain::Rock });
+        }
+        for _ in 0..4000 {
+            let a = ((next() % 6400) as f32 / 100.0, (next() % 6400) as f32 / 100.0);
+            let b = ((a.0 + (next() % 2400) as f32 / 100.0 - 12.0).clamp(0.0, 63.9), (a.1 + (next() % 2400) as f32 / 100.0 - 12.0).clamp(0.0, 63.9));
+            assert_eq!(m.sight_clear(a, b), m.sight_walk(a, b), "{a:?} -> {b:?}");
+        }
+        // A wall built after the first sight test, in a chunk that was open, hides at once;
+        // so does a gate shut there.
+        assert!(m.sight_clear((40.5, 40.5), (50.5, 40.5)));
+        m.set(45, 40, Terrain::Wall);
+        assert!(!m.sight_clear((40.5, 40.5), (50.5, 40.5)), "a new wall hides");
+        m.set(45, 40, Terrain::Grass);
+        assert!(m.sight_clear((40.5, 40.5), (50.5, 40.5)), "and is gone");
+        m.blocked.insert(40 * 64 + 45);
+        assert!(!m.sight_clear((40.5, 40.5), (50.5, 40.5)), "a shut gate hides");
     }
 }

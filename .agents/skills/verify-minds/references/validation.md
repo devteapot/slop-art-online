@@ -1,5 +1,9 @@
 # Internal mind validation
 
+## 2026-11-09 minds' sight and the offline player's character (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81b9dd8`/`dc5e41b` plus the uncommitted minds'-sight, projection and presence change (docs/PERCEPTION.md, "Second change"; docs/PLAYER_MEMORY.md, "Presence and the offline character"). Fake model only; every scratch database answered 404 after cleanup. `minds-perc2`: `sight` (new), `roundtrip`, `acts`, `conversation` pass; `consolidation` its known XFAIL. `takeover` (new) passed on `minds-perc2c` after a driver fix (the minds' plan is a desires top level with a "current plan" routine, not a graph holding the wait) and an authority fix (a second takeover asked for a deliberation after reinstalling the held graph, inside `think_min_s`; the order is now request, then reinstall).
+
 ## 2026-10-18 `minds-20261018-205441` (macOS, Docker Desktop)
 
 After the knowledge-transmission changes (consolidation attributes provenance and marks childhood memories; the consolidation prompt names `know:<technique>` anchors and an off-by-default lesson clause). Commit `f3595c3` plus uncommitted changes. Eight cases pass; `consolidation` stays XFAIL (the Neo4j-off known issue). Every case's database answered 404 after cleanup; no mind or fake process survived. The first attempt (`minds-20261018-205344`) failed every case before publishing: `verify_llm.py` read Docker Desktop's `/host_mnt/...` mount path. It now strips that prefix, as the shared harness does.

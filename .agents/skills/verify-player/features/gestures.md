@@ -4,8 +4,8 @@ A player's character greets, answers and turns through the same skills residents
 
 ## Sub-features
 
-- `human_act {"do": "wave", "target": {"id": N}}` is accepted, shown to others as a `doing` row with the wave's `act_card` code, and recorded in `skill_use` (source `act`, outcome `greeted <name>`).
-- The resident answers with a nod (within 5 tiles) or a wave from its own graph (source `graph`, outcome `answered <player>`); the player perceives "… answers your greeting (nod)." as an experience.
+- `human_act {"do": "wave", "target": {"id": N}}` is accepted, shown to others as a `doing` row with the wave's `act_card` code, and recorded in `skill_use` (source `act`, outcome `greeted <label>`: the resident as the player perceives it, `a stranger` until it knows the name; docs/PERCEPTION.md).
+- The resident answers with a nod (within 5 tiles) or a wave from its own graph (source `graph`, outcome `answered <label>`: `answered a stranger` until the resident is told the player's name); the player perceives "… answers your greeting (nod)." as an experience.
 - An answer closes the greeting: the resident gestures once, not back and forth.
 - A nod after the greeting closed greets anew and is answered.
 - `face` turns the player's standing body toward its target (body `heading` + `turn` × `turn_s`).

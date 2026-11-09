@@ -34,7 +34,7 @@ Never use Neo4j A on 7689 or Neo4j B on 7690. Never change the shared fake model
 
 ## Player memory
 
-What a human-played character lives, internalized into its own graph with the switch `LIVING_PLAYER_MEMORY=1` ([feature](features/player-memory.md), design in `docs/PLAYER_MEMORY.md`), has its own runner on an island world, with the same scratch Neo4j, fake model and cleanup:
+What a human-played character lives, internalized into its own graph (player memory, on by default) ([feature](features/player-memory.md), design in `docs/PLAYER_MEMORY.md`), has its own runner on an island world, with the same scratch Neo4j, fake model and cleanup:
 
 ```bash
 .agents/skills/verify-knowledge/scripts/player_memory.py run --run knowledge-pmem-$(date +%Y%m%d-%H%M%S) --mode direct

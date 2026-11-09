@@ -18,7 +18,10 @@ ROOT = Path(__file__).resolve().parents[4]
 spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skills/verify-llm/scripts/verify_llm.py')
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
-CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod')
+CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
+         'takeover', 'sight')
+OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
+UNWALKABLE = {2, 4, 7}      # water, rock, wall
 
 
 class Run(shared.Run):
@@ -60,7 +63,48 @@ def basic_reply(graph=None, **extra):
     return {'graph': graph or {'wait': 120}, 'weight': 1.5, 'plan': 'verify minds wait', **extra}
 
 
+def terrain(run):
+    """The map's tiles from `terrain_chunk` (public)."""
+    world = run.sql('SELECT width, height FROM world', 'world-size')[0]
+    w, h = world['width'], world['height']
+    tiles = bytearray(w * h)
+    for row in run.sql('SELECT * FROM terrain_chunk', 'terrain'):
+        data = row['tiles']
+        data = bytes.fromhex(data.removeprefix('0x')) if isinstance(data, str) else bytes(data)
+        cx, cy = row['id'] & 0xFFFF, row['id'] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < w and y < h:
+                tiles[y * w + x] = t
+    return w, h, tiles
+
+
+def wall_spots(run):
+    """Two walkable tiles at most 4 apart on one axis with only rock or wall between (within
+    even night sight), and a third walkable tile 3 tiles from the first in the open."""
+    w, h, tiles = terrain(run)
+    at = lambda x, y: tiles[y * w + x] if 0 <= x < w and 0 <= y < h else 4
+    walk = lambda x, y: at(x, y) not in UNWALKABLE
+    for y in range(4, h - 4):
+        for x in range(4, w - 4):
+            if not walk(x, y):
+                continue
+            for dx, dy in [(1, 0), (0, 1)]:
+                for gap in (1, 2, 3):
+                    bx, by = x + (gap + 1) * dx, y + (gap + 1) * dy
+                    if walk(bx, by) and all(at(x + i * dx, y + i * dy) in OPAQUE for i in range(1, gap + 1)):
+                        # The open witness: 3 tiles the other way along the axis, nothing opaque between.
+                        ox, oy = x - 3 * dx, y - 3 * dy
+                        if all(walk(x - i * dx, y - i * dy) for i in range(1, 4)):
+                            return {'eye': (x + .5, y + .5), 'hidden': (bx + .5, by + .5), 'open': (ox + .5, oy + .5)}
+    raise RuntimeError('no wall geometry on this map')
+
+
 def run_case(run, case):
+    if case == 'takeover':
+        return takeover_case(run)
+    if case == 'sight':
+        return sight_case(run)
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -314,6 +358,101 @@ def run_case(run, case):
         return {'status': 'pass', 'hold_and_release': 'pass', 'urgent_release_s': urgent_release_s,
                 'plain_reason_handled': True, 'merged_reason_handled': True}
     return {'status': 'pass'}
+
+
+def takeover_case(run):
+    """A player's character passes to the minds when its person has been gone for the
+    `takeover_s` law, is thought for like any AI character, and comes back to its person at
+    once: the minds' plan stops, their graph is kept for the next takeover and not run, and a
+    reply still in flight is refused."""
+    prepare(run)
+    world = run.sql('SELECT * FROM world', 'world')[0]
+    run.harness('player', 'join', 'MindsAway')
+    me = run.sql("SELECT id FROM character WHERE name = 'MindsAway'", 'player')[0]['id']
+    script = {'replies': {'think': {'thought': 'Alone now, I wait.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply()},
+              # Replies take 8 s, so one can still be in flight when the person returns.
+              'rules': [{'purpose': 'deliberate', 'delay_s': 8, 'times': -1}]}
+    models = model(run, script)
+    run.start(models, [me])
+    # The join was an HTTP call: its connection is closed, so a takeover is pending.
+    pending = run.private(f'SELECT * FROM presence WHERE id = {me}', 'presence-joined')[0]
+    assert not pending['present'] and not pending['ai'] and pending['takeover_ms'] < 2**63, pending
+    taken = run.wait(lambda: [p for p in run.private(f'SELECT * FROM presence WHERE id = {me}', 'presence-taken') if p['ai']], 'takeover', 50)[0]
+    char = run.sql(f'SELECT * FROM character WHERE id = {me}', 'character-taken')[0]
+    assert char['ai'] and char['controller'] == world['admin'], char
+    accepted(run, me)
+    brain = run.sql(f'SELECT * FROM brain WHERE id = {me}', 'brain-taken')[0]
+    assert brain['source'] == 'mind' and brain['plan'] == 'verify minds wait', brain
+    installed = brain['graph']
+    lived = run.private(f'SELECT * FROM experience WHERE observer = {me}', 'experiences-taken')
+    # Back: the person's next call hands it back before it runs.
+    run.harness('player', 'move', '1', '0')
+    back = run.private(f'SELECT * FROM presence WHERE id = {me}', 'presence-back')[0]
+    char = run.sql(f'SELECT * FROM character WHERE id = {me}', 'character-back')[0]
+    brain = run.sql(f'SELECT * FROM brain WHERE id = {me}', 'brain-back')[0]
+    assert not back['ai'] and not char['ai'] and char['controller'] != world['admin'], (back, char)
+    assert brain['source'] == 'human', brain
+    # The minds' graph (their desires top level; the plan's wait is the "current plan" routine).
+    assert back['ai_graph'] == installed and back['ai_plan'] == 'verify minds wait', back
+    assert not run.private(f'SELECT * FROM deliberation WHERE actor = {me}', 'pending-back')
+    assert not run.private(f'SELECT * FROM act_queue WHERE actor = {me}', 'acts-back')
+    kept = run.private(f'SELECT * FROM experience WHERE observer = {me}', 'experiences-back')
+    assert {e['id'] for e in lived} <= {e['id'] for e in kept}, 'experiences lived under the minds must stay'
+    # Away again: the held graph is installed again; then a reply in flight is refused on return.
+    run.wait(lambda: [p for p in run.private(f'SELECT * FROM presence WHERE id = {me}', 'presence-taken-2') if p['ai']], 'second takeover', 50)
+    again = run.sql(f'SELECT * FROM brain WHERE id = {me}', 'brain-taken-2')[0]
+    assert again['source'] == 'mind' and again['plan'] == 'verify minds wait' and again['graph'] == installed, again
+    run.admin('set_behavior', me, json.dumps({'think': 'I finished my plan. verify in flight'}))
+    run.wait(lambda: any(e['purpose'] == 'deliberate' for e in shared.rows(run.directory / 'fake-requests.jsonl')
+                         if 'in flight' in json.dumps(e)), 'deliberation in flight', 40)
+    run.harness('player', 'move', '0', '1')
+    run.wait(lambda: 'not your character' in run.log(), 'in-flight reply refused', 30)
+    final = run.sql(f'SELECT * FROM brain WHERE id = {me}', 'brain-final')[0]
+    assert final['source'] == 'human', final
+    return {'status': 'pass', 'takeover_after_s': (taken['control_ms'] - pending['changed_ms']) / 1000,
+            'held_graph': 'kept and reinstalled', 'in_flight': 'refused'}
+
+
+def sight_case(run):
+    """A mind's scene and what it witnesses follow the sight rule: a creature behind rock or a
+    wall is not in the scene the model is sent, and its death is not witnessed; one in the open
+    is, and its death is."""
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    third = next(p['id'] for p in run.sql("SELECT * FROM character WHERE kind = 'person'", 'people-all')
+                 if p['ai'] and p['alive'] and p['stage'] == 2 and p['id'] not in (eye, other))
+    spots = wall_spots(run)
+    (run.directory / 'sight.json').write_text(json.dumps(spots, indent=2))
+    for who in (eye, other, third):
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    run.admin('place_at', eye, *spots['eye'])
+    run.admin('place_at', other, *spots['hidden'])
+    run.admin('place_at', third, *spots['open'])
+    time.sleep(1.0)
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    models = model(run, script)
+    pending = run.request(eye, 'sight')
+    run.start(models, [eye])
+    request = run.wait(lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')], 'scene sent to the model', 40)[0]
+    sent = '\n'.join(str(m.get('content', '')) for m in request['body'].get('messages', []))
+    (run.directory / 'sent-prompt.txt').write_text(sent)
+    mentions = lambda id: re.search(r'"id":\s*%d\b' % id, sent) is not None
+    names = {p['id']: p['name'] for p in run.sql('SELECT id, name FROM character', 'names')}
+    scene = json.loads(pending[0]['scene']) if pending else None
+    ids = [c['id'] for c in scene['creatures']] if scene else None
+    assert ids is None or (third in ids and other not in ids), ids
+    assert mentions(third) and not mentions(other), 'the model must be sent the creature in the open and not the hidden one'
+    # Deaths: behind the wall unseen, in the open witnessed.
+    since = max([e['id'] for e in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'before-deaths')] + [0])
+    run.admin('kill', other, 'verify hidden death')
+    run.admin('kill', third, 'verify open death')
+    time.sleep(1.0)
+    after = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'after-deaths') if e['id'] > since]
+    deaths = [e for e in after if e['kind'] == 'death']
+    assert any(e['subject'] == third for e in deaths) and not any(e['subject'] == other for e in deaths), deaths
+    return {'status': 'pass', 'scene_ids': ids, 'witnessed': [e['text'] for e in deaths],
+            'hidden': names.get(other), 'open': names.get(third)}
 
 
 def main():

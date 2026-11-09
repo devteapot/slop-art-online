@@ -109,13 +109,15 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
             told.push(id);
         }
     }
-    let reach = common::sight(ctx, &w, now).max(living_rules::TORCH_SIGHT);
+    let reach = crate::perception::widest_sight(ctx, &w, now);
+    let map = common::map(ctx);
     for c in common::creatures_near(ctx, ev.at, reach, now) {
         if told.contains(&c.id) {
             continue;
         }
         let Some(viewer) = human(ctx, c.id) else { continue };
-        if c.dist > common::sight_for(ctx, c.id, &w, now) {
+        // The onlooker's own sight, and a clear sight line to where it happened.
+        if !crate::perception::in_sight(&map, c.pos, ev.at, c.dist, common::sight_for(ctx, c.id, &w, now)) {
             continue;
         }
         told.push(c.id);
@@ -277,6 +279,7 @@ pub fn act_until(ctx: &ReducerContext, id: u32, until: u64) {
 /// Health changed (a blow, a heal): the band others see follows, written only when it moves;
 /// a first blow gives the character its `fighter` row.
 pub fn refresh_band(ctx: &ReducerContext, id: u32, now: u64) {
+    crate::perception::health_moved(ctx, id, now);
     let b = band_now(ctx, id, now);
     match ctx.db.fighter().id().find(id) {
         Some(mut f) if f.band != b => {
@@ -298,6 +301,7 @@ pub fn housekeeping(ctx: &ReducerContext, now: u64) {
     for f in rows {
         let b = band_now(ctx, f.id, now);
         if b != f.band {
+            crate::perception::health_moved(ctx, f.id, now);
             ctx.db.fighter().id().update(Fighter { band: b, ..f });
         }
     }
@@ -495,9 +499,10 @@ pub fn died(ctx: &ReducerContext, id: u32, killer: u32, at: (f32, f32), now: u64
     show(ctx, now, Seen { kind: seen::DEATH, actor: id, target: killer, at, ..Default::default() });
     if human(ctx, id).is_some() {
         let w = common::world(ctx);
-        let r = common::sight(ctx, &w, now).max(living_rules::TORCH_SIGHT);
+        let r = crate::perception::widest_sight(ctx, &w, now);
+        let map = common::map(ctx);
         for c in common::creatures_near(ctx, at, r, now) {
-            if c.id == id || c.dist > common::sight_for(ctx, c.id, &w, now) {
+            if c.id == id || !crate::perception::in_sight(&map, c.pos, at, c.dist, common::sight_for(ctx, c.id, &w, now)) {
                 continue;
             }
             show_to(ctx, id, now, Seen { kind: seen::WITNESS, actor: c.id, target: id, at: c.pos, ..Default::default() });
@@ -511,6 +516,7 @@ pub fn died(ctx: &ReducerContext, id: u32, killer: u32, at: (f32, f32), now: u64
     if let Some(viewer) = human(ctx, id) {
         crate::perception::forget(ctx, viewer);
     }
+    crate::perception::gone(ctx, id);
     invalidate_humans();
 }
 

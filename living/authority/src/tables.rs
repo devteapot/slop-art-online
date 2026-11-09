@@ -10,7 +10,7 @@
 //! `LIVING_PERCEPTION` is `open` (the default; `cfg(open_tables)`), and are private when it is
 //! `scoped`.
 
-use spacetimedb::{Identity, ScheduleAt, SpacetimeType};
+use spacetimedb::{ConnectionId, Identity, ScheduleAt, SpacetimeType};
 
 #[derive(Clone)]
 #[spacetimedb::table(accessor = world, public)]
@@ -1151,6 +1151,9 @@ pub struct Doing {
     pub y: f32,
     pub since_ms: u64,
     pub until_ms: u64,
+    /// A rest taken at home: indoors, out of sight of the street.
+    #[default(false)]
+    pub indoors: bool,
 }
 
 // ---- perception (docs/PERCEPTION.md) -------------------------------------------------
@@ -1169,6 +1172,113 @@ pub struct Perceived {
     pub viewer: Identity,
     pub body: u32,
     pub since_ms: u64,
+}
+
+/// What a human player perceives of each creature in its scene, its own character included
+/// (private): the `perceived_of` law's projection of the creature's record for this viewer.
+/// The perception sweep writes a row when a creature comes into sight and rewrites it only
+/// when the projection changes (whom the viewer knows, a reveal, a health band); it goes with
+/// the creature's `perceived` row. Kept apart from `perceived` so a projection change re-runs
+/// only the views that show it (`seen_characters`, `seen_fighters`), not `seen_bodies`.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = projected)]
+pub struct Projected {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    #[index(btree)]
+    pub body: u32,
+    /// The viewer's own character.
+    pub own: bool,
+    /// Its name when the viewer knows it, else empty.
+    pub name: String,
+    /// How the viewer refers to it: the name when known, else `a stranger`, `a child`, `a wolf`.
+    pub label: String,
+    pub kind: String,
+    pub stage: u8,
+    /// Its build and dress, from the settlement it lives in (`giants`, `small_folk` or empty;
+    /// the settlement's style), as anyone looking would see.
+    pub folk: String,
+    pub style: String,
+    /// `living_rules::combat::band` (4 unhurt … 0 barely standing), 255 when not perceived.
+    pub band: u8,
+    /// Exact health when the law grants it (oneself, or revealed), else -1.
+    pub hp: f32,
+    pub max_hp: f32,
+}
+
+/// What a skill use revealed to an observer about a target, until `until_ms` (private): the
+/// `perceived_of` law sees `what` among the target's `revealed` fields while it holds.
+#[spacetimedb::table(accessor = reveal)]
+pub struct Reveal {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub target: u32,
+    pub what: String,
+    #[index(btree)]
+    pub until_ms: u64,
+}
+
+/// Whose name a character has learned (private): someone told it their name. Family,
+/// community and the people a mind has feelings about are known without a row.
+#[spacetimedb::table(accessor = acquaintance, index(accessor = by_pair, btree(columns = [observer, known])))]
+pub struct Acquaintance {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub known: u32,
+    pub since_ms: u64,
+}
+
+// ---- presence (docs/PLAYER_MEMORY.md) --------------------------------------------------
+
+/// One open client connection (private), kept by the `client_connected` and
+/// `client_disconnected` lifecycle reducers. The host runs `client_disconnected` for every
+/// connection still recorded when it restarts, so a crash leaves no row behind.
+#[spacetimedb::table(accessor = connection)]
+pub struct Connection {
+    #[primary_key]
+    pub id: ConnectionId,
+    #[index(btree)]
+    pub identity: Identity,
+    pub since_ms: u64,
+}
+
+/// Whether the person who plays a character is there (private: the database owner reads it;
+/// no other client). One row per living character a person plays.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = presence)]
+pub struct Presence {
+    /// The character.
+    #[primary_key]
+    pub id: u32,
+    /// The person who plays it (its controller while they are in control).
+    #[index(btree)]
+    pub player: Identity,
+    /// The person's open connections now.
+    pub connections: u32,
+    /// At least one connection is open.
+    pub present: bool,
+    /// When `present` last changed.
+    pub changed_ms: u64,
+    /// The world's minds control the character (the person left, `takeover_s` ago or more).
+    pub ai: bool,
+    /// When control last passed (to the minds, or back to the person).
+    pub control_ms: u64,
+    /// When the minds take over if no connection opens (u64::MAX: not pending).
+    #[index(btree)]
+    pub takeover_ms: u64,
+    /// The behaviour the minds installed, kept while the person plays (it stays the
+    /// character's and is installed again at the next takeover).
+    pub ai_graph: String,
+    pub ai_plan: String,
 }
 
 // ---- schedules ---------------------------------------------------------------

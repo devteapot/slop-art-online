@@ -59,7 +59,8 @@ PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            'routine', 'routine_stat', 'background', 'brain', 'mind_state', 'mind_cursor',
            'persona', 'relation', 'belief', 'judgment', 'thought', 'chronicle', 'stats',
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
-           'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived']
+           'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
+           'projected', 'reveal', 'acquaintance', 'connection', 'presence']
 # Private when the module is built with LIVING_PERCEPTION=scoped; public while it is `open`
 # (the default until the game client subscribes the views).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
@@ -433,7 +434,7 @@ class Run:
             code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, raw=True)
             okay = subscription['status'] == 'rejected' and 'private' in subscription['error'].lower() and code != 200 and 'private' in error.lower()
             row = {'table': table, 'subscription': subscription, 'http_status': code, 'http_error': error}
-            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived']:
+            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence']:
                 as_player = self.probe('private-player-' + table, ['SELECT * FROM ' + table], player_token)
                 code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, player_token, raw=True)
                 okay = okay and as_player['status'] == 'rejected' and 'private' in as_player['error'].lower() and code != 200
@@ -518,6 +519,7 @@ class Run:
                    public['final']['counts']['skill_card'] >= 6, 'combat-public.json',
                    f"fighter {public['final']['counts']['fighter']}, skill_card {public['final']['counts']['skill_card']}")
         self.perception(identities, admin_token)
+        self.presence(identities, admin_token)
         drop_file = self.directory / 'drop-request'
         drop_file.unlink(missing_ok=True)
         with DropProxy(drop_file) as proxy:
@@ -589,6 +591,7 @@ class Run:
     def perception(self, identities, admin_token):
         """What a player receives is what its character perceives now, and its own state."""
         # Own state: only this identity's characters' rows.
+        admin_identity = (lambda v: (v[0] if isinstance(v, list) else v).lower().removeprefix('0x'))(self.sql_admin('SELECT admin FROM world')[0]['admin'])
         own = {}
         for label, token, _ in identities:
             own[label] = self.probe('own-' + label, ['SELECT * FROM ' + v for v in OWN], token, seconds=1)
@@ -599,7 +602,8 @@ class Run:
             mine = {c['id'] for c in p['my_characters']}
             return (v['status'] == 'applied' and mine and all(c['controller'] == v['identity'] and not c['ai'] for c in p['my_characters'])
                     and p['my_vitals'] and set(p['my_vitals']) <= mine and {e['observer'] for e in p['my_experience']} <= mine
-                    and all(e['controller'] == v['identity'] for e in p['my_experience'])
+                    # Lived by the person, or by the world's minds while the person was away.
+                    and all(e['controller'].lower().removeprefix('0x') in (v['identity'].lower().removeprefix('0x'), admin_identity) for e in p['my_experience'])
                     and set(p['my_places']) <= mine and set(p['my_inventory']) <= mine and set(p['my_know_how']) <= mine)
         anonymous = own['anonymous']['final']['perception']
         self.check('own-state views return only my characters\' rows', all(scoped_to_self(l, v) for l, v in own.items() if l != 'anonymous') and
@@ -630,6 +634,17 @@ class Run:
         self.check('in sight: both players receive each other\'s body and character', all(sees(near[me], other).values()) and
                    all(sees(near[other], me).values()) and me in near[me]['seen_bodies'] and other in near[other]['seen_bodies'],
                    'sight.json', f"3 tiles apart at {spots['open'][0]}")
+        # What a player perceives of another is the `perceived_of` projection: no controller,
+        # home, parents or cause of death, and a stranger's name only once it is known.
+        code, body = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM seen_characters', t1, raw=True)
+        res = json.loads(body)[-1] if code == 200 else {'schema': {'elements': []}, 'rows': []}
+        cols = [e['name'].get('some', '?') for e in res['schema']['elements']]
+        rows = [dict(zip(cols, r)) for r in res['rows']]
+        write(self.directory / 'seen-characters.json', {'columns': cols, 'rows': rows})
+        theirs = next((r for r in rows if r['id'] == other), None)
+        self.check('seen_characters is the projection: no controller, home or parents; a stranger by label',
+                   code == 200 and theirs and not {'controller', 'ai', 'home_x', 'home_y', 'parent_a', 'parent_b', 'cause'} & set(cols)
+                   and theirs['name'] == '' and theirs['label'] and theirs['hp'] < 0, 'seen-characters.json', f"columns {cols}; other {theirs and theirs['label']}")
         far = scene('beyond-sight', spots['open'][0], spots['far'])
         gone = lambda s, a, b: not any(b in s[a][t] for t in SEEN)
         self.check('beyond sight: no body, character, fighter or doing row', gone(far, me, other) and gone(far, other, me), 'sight.json',
@@ -637,6 +652,71 @@ class Run:
         hidden = scene('behind-wall', *spots['wall'])
         self.check('behind a wall or rock: no body, character, fighter or doing row', gone(hidden, me, other) and gone(hidden, other, me), 'sight.json',
                    f"{abs(spots['wall'][1][0] - spots['wall'][0][0]) + abs(spots['wall'][1][1] - spots['wall'][0][1]):.0f} tiles apart across tiles {spots['wall_tiles']}")
+
+    def sql_admin(self, q):
+        code, body = V.http(f"/v1/database/{self.state['db']}/sql", q, V.admin_token(), raw=True)
+        if code != 200:
+            raise RuntimeError(f'admin sql {q}: {code} {body}')
+        res = json.loads(body)[-1]
+        names = [e['name'].get('some', '?') for e in res['schema']['elements']]
+        return [dict(zip(names, r)) for r in res['rows']]
+
+    def presence(self, identities, admin_token):
+        """Presence follows the person's connections exactly (client_connected and
+        client_disconnected, several at once included); when the last one has been closed for
+        the `takeover_s` law the world's minds control the character, and a new connection
+        hands it back at once. Presence itself is private."""
+        _, token, me = identities[2]
+        row = lambda: self.sql_admin(f'SELECT * FROM presence WHERE id = {me}')[0]
+        who = lambda: self.sql_admin(f'SELECT ai, controller FROM character WHERE id = {me}')[0]
+        admin = self.sql_admin('SELECT admin FROM world')[0]['admin']
+        record = {'steps': []}
+
+        def step(name):
+            r, c = row(), who()
+            record['steps'].append({'step': name, 'at': time.time(), 'presence': r, 'character': c})
+            write(self.directory / 'presence.json', record)
+            return r, c
+
+        # Wait for any earlier HTTP call's connection to be gone.
+        time.sleep(1.0)
+        held = []
+
+        def hold(name, secs):
+            t = threading.Thread(target=lambda: held.append(self.probe(name, ['SELECT * FROM my_characters'], token, seconds=secs)), daemon=True)
+            t.start()
+            return t
+
+        one = hold('presence-one', 8)
+        time.sleep(3.0)
+        r1, _ = step('one connection')
+        two = hold('presence-two', 3)
+        time.sleep(2.0)
+        r2, _ = step('two connections')
+        two.join(timeout=20)
+        time.sleep(0.5)
+        r3, _ = step('one closed')
+        one.join(timeout=20)
+        time.sleep(0.5)
+        r4, c4 = step('both closed')
+        self.check('presence counts each open connection of the person', r1['present'] and r1['connections'] == 1 and r2['connections'] == 2 and r3['present'] and r3['connections'] == 1,
+                   'presence.json', f"{r1['connections']} → {r2['connections']} → {r3['connections']}")
+        self.check('presence ends when the last connection closes (a takeover is pending)', not r4['present'] and r4['connections'] == 0 and not r4['ai'] and r4['takeover_ms'] < 2**63 and not c4['ai'],
+                   'presence.json', f"present={r4['present']}, takeover in {(r4['takeover_ms'] - r4['changed_ms']) / 1000:.0f} s")
+        deadline = time.monotonic() + 45
+        while time.monotonic() < deadline and not row()['ai']:
+            time.sleep(1.0)
+        r5, c5 = step('taken over')
+        self.check('after takeover_s with no connection the world\'s minds control the character', r5['ai'] and c5['controller'] == admin,
+                   'presence.json', f"ai={c5['ai']}, controller is the admin: {c5['controller'] == admin}")
+        back = self.probe('presence-back', ['SELECT * FROM my_characters'], token, seconds=1)
+        mine = [c['id'] for c in back['final']['perception']['my_characters']] if back['status'] == 'applied' else []
+        hexid = lambda v: (v[0] if isinstance(v, list) else v).lower().removeprefix('0x')
+        r6, c6 = step('returned')
+        self.check('a new connection hands the character back at once (before the client subscribes)', not r6['ai'] and hexid(c6['controller']) == hexid(back['identity']) and not c6['ai'] and me in mine,
+                   'presence.json', f"my_characters {mine}")
+        refused = [self.probe('presence-player', ['SELECT * FROM presence'], token), self.probe('presence-anonymous', ['SELECT * FROM presence'])]
+        self.check('presence is private (not to the player, not to anonymous clients)', all(v['status'] == 'rejected' for v in refused), 'presence-player.json')
 
     def save(self):
         write(self.directory / 'results.json', self.results)

@@ -1,5 +1,9 @@
 # Knowledge validation
 
+## 2026-11-09 player memory with presence and the takeover (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81b9dd8`/`dc5e41b` plus the uncommitted minds'-sight, projection and presence change (docs/PERCEPTION.md, "Second change"; docs/PLAYER_MEMORY.md, "Presence and the offline character"). Fake model only; every scratch database answered 404 after cleanup. `player_memory.py run --mode direct`: all six phases pass on `knowledge-pmem-perc2e` (switch off with `LIVING_PLAYER_MEMORY=0`; switch on with ids given as strings and the identity inferred; takeover; restart; recall; death). Earlier attempts `-perc2` … `-perc2d` found an authority defect (the takeover on an island seed went to the database, not the minds; fixed), a name leak through activity labels ("wave → Walker1"; fixed) and three driver gaps (leak check, relation check order, restart relying on idle detection; fixed). Batch mode was not run.
+
 ## 2026-10-18 stories, hearsay and childhood (`knowledge-20261018-205004`)
 
 Host: macOS laptop, Docker Desktop 29.8.0 (first runs of this skill on Docker). Commit `f3595c3` plus the uncommitted knowledge-transmission changes (`living/mind/src/memory.rs`, `mind.rs`, `mind/recall.rs`, `mind/talk.rs`, `prompts.rs`) and harness portability fixes. SpacetimeDB 2.10.1, scratch Neo4j `neo4j:2026.09.0`. No paid model calls.

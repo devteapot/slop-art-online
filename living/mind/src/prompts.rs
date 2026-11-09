@@ -418,7 +418,8 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
 /// Memory for a character a human plays (docs/PLAYER_MEMORY.md). Nothing in it is about one
 /// character, so every player's request shares this prefix (provider-side prompt caching).
 /// The person's choices are the player's: their acts and words are recorded as acts and
-/// words, never with reasons nobody perceived; identity is not inferred.
+/// words, never with reasons nobody perceived. The identity (narrative, values, traits, mood)
+/// is inferred from that conduct (decided 2026-11-09), and only when it says something new.
 pub fn internalize_system() -> String {
     shared(format!(
         "You are the memory of the person described under # Who you are, in a persistent simulated world. \
@@ -430,7 +431,11 @@ things are). Never invent motives, feelings, plans or thoughts they did not expr
 promises...) and relationships named in your own words. REVISE: check the existing mind for anything these experiences contradict, \
 strengthen or make outdated, and change it (re-assert an edge with a new confidence, retract, relabel, merge). Prefer connecting to \
 existing concepts. Don't transcribe routine: keep meaning and change. Keep as memories only the few experiences the person would \
-still remember tomorrow (at most 4, often fewer), each with a gist in the person's own words that says what happened, not why.\n\n{}\n\n\
+still remember tomorrow (at most 4, often fewer), each with a gist in the person's own words that says what happened, not why. \
+IDENTITY is the one place where you read character from conduct: who the person shows themselves to be through what they did and said \
+(a first-person narrative of their life so far, values their acts keep to, traits 0-100 such as caution, warmth or boldness, and their \
+mood as their words and acts showed it). Infer it only from what these experiences and the mind show, revise the identity under \
+# Who you are rather than replace it, and give null when nothing new shows.\n\n{}\n\n\
 KEYS: anchors connect the mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \
 \"kind:<wolf|deer|berry_bush|tree|...>\", \"know:<technique>\". Any other key is yours to invent. Reuse existing keys shown in the mind.\n\
 How the person stands with people they met, from what passed between them (self -FEELS {{trust, affinity -100..100, label, note}}-> person:<id>), \
@@ -445,7 +450,8 @@ Reply with ONE JSON object, compact (at most 12 nodes and 20 edges):\n\
  \"merge\": [{{\"from\": \"key\", \"into\": \"key\"}}],\n\
  \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"stranger|acquaintance|friend|rival|enemy|...\", \"note\": \"short\"}}],\n\
  \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\"}}],\n\
- \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}]}}",
+ \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
+ \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what their conduct showed\"}}}}",
         world_rules()
     ))
 }

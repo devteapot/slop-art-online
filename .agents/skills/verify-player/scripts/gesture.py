@@ -112,8 +112,17 @@ def main():
         check(p, "a resident is standing at a post", False, "none found within 60 s")
         return finish(p)
     x, y = r["at"]
-    p.call("place_at", [me, x + 3.0, y + 0.5], "admin")
-    time.sleep(1.5)
+    # A spot 3 m from the resident from which the player sees it: gestures are seen, so since
+    # 2026-11-09 a wall or a stall's building between them hides the resident (and the act at
+    # it is refused, as for anyone out of sight).
+    sees = lambda: any(c["id"] == r["id"] for c in p.sql("SELECT id FROM seen_characters", "player"))
+    for dx, dy in [(3.0, 0.5), (-3.0, 0.5), (0.5, 3.0), (0.5, -3.0)]:
+        p.call("place_at", [me, x + dx, y + dy], "admin")
+        time.sleep(1.0)
+        if sees():
+            break
+    check(p, "the player stands where it sees the resident", sees(), f"{r['name']} (#{r['id']}) in the player's seen_characters")
+    time.sleep(0.5)
 
     # 1. A wave, answered.
     since = now_ms()
@@ -122,9 +131,13 @@ def main():
     mine_u = wait_for(lambda: next((u for u in p.uses(me, since) if u["skill"] == "wave" and u["outcome"]), None))
     answer = wait_for(lambda: next((u for u in p.uses(r["id"], since) if u["skill"] in ("wave", "nod") and u["target"] == me and u["outcome"]), None))
     card = {c["code"]: c["skill"] for c in p.sql("SELECT skill, code FROM act_card")}
-    check(p, "human_act wave is accepted and recorded (player's skill_use)", code == 200 and mine_u and mine_u["source"] == "act" and mine_u["accepted_ms"] and mine_u["outcome"] == f"greeted {r['name']}", f"{mine_u}")
+    # Names follow what one knows (docs/PERCEPTION.md): the newcomer greets "a stranger", unless
+    # its view already names the resident.
+    seen = next((c for c in p.sql("SELECT * FROM seen_characters", "player") if c["id"] == r["id"]), None)
+    label = seen["label"] if seen else r["name"]
+    check(p, "human_act wave is accepted and recorded (player's skill_use)", code == 200 and mine_u and mine_u["source"] == "act" and mine_u["accepted_ms"] and mine_u["outcome"] == f"greeted {label}", f"{mine_u}; the player perceives the resident as {label!r}")
     check(p, "others see the wave (doing row with the wave's act_card code)", shown and card.get(shown[0]["code"]) == "wave" and shown[0]["target"] == r["id"], f"{shown}")
-    check(p, "the resident answers the player's wave", answer and answer["source"] == "graph" and answer["outcome"] == f"answered {my_name}", f"{r['name']} (#{r['id']}): {answer}")
+    check(p, "the resident answers the player's wave", answer and answer["source"] == "graph" and answer["outcome"] in (f"answered {my_name}", "answered a stranger"), f"{r['name']} (#{r['id']}): {answer}")
     told = wait_for(lambda: [t for t in p.told(me, since) if "answers your greeting" in t])
     check(p, "the player perceives the answer as an experience", bool(told), f"{told}")
 

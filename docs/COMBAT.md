@@ -71,6 +71,8 @@ Changes to existing rules that labs share: `dodge` and `block` now have cooldown
 
 No new whole-World scan was added to a routine action. The band refresh scans `fighter` (one row per character that has ever fought, alive) once a second.
 
+**Since 2026-11-09 (second perception change):** a viewer in sight is one within its own sight (day, night, a torch) with a clear sight line to where it happened (`perception::in_sight`: walls, rock and shut gates hide), for the feed and for minds' fight percepts alike; the band others see is each viewer's projection (`seen_fighters` carries the band from `projected`, and a band change reaches those rows through `perception::health_moved`). See [perception](PERCEPTION.md#minds-see-what-their-character-sees).
+
 ### Hostile wildlife and residents
 
 - **A hostile pack by seed.** `packs` in the seed places animals on purpose: island seed, 4 wolves 40–75 m from the newcomers' arrival point outside the walled town, `bold` (their background says so; the rules' `dares` lets a bold animal attack a healthy adult) on the `wolf_bold` instinct graph in `instincts.json` (attack a person within 10 tiles, fight back, flee when badly hurt, return to their den beyond 25 tiles, hunt deer when hungry). The species, the other island wolves and the lab seeds are unchanged; a bold wolf's pups are not bold.

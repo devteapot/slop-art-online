@@ -1,12 +1,14 @@
-# Player memory cadence (`LIVING_PLAYER_MEMORY=1`)
+# Player memory cadence (on by default; `LIVING_PLAYER_MEMORY=0` turns it off)
 
 The mind service's part of [player memory](../../verify-knowledge/features/player-memory.md) (design: `docs/PLAYER_MEMORY.md`). The proof runs in `verify-knowledge`'s `player_memory.py`, because it needs a scratch Neo4j; this map names what it proves about the mind service.
 
 ## Sub-features
 
-- **Off by default:** without the switch the subscriptions are the old list (`experience WHERE controller = <me>` and the rest), the log has no "player memory on" line, no `internalize` request is made, and residents' conversation turns run as before (phase "switch off").
-- **Subscriptions with the switch on:** also `experience WHERE controller != <me>` and `settlement`. Rows of other controllers become `Event::Lived` only; they never start a conversation turn or a level-of-detail contact.
-- **Cadence:** buffer (`LIVING_PLAYER_MEMORY_BUFFER`, default 40 meaningful; `_CAP` 200 in all), game day (`_EVERY_S`, default the world's day), session end (`_IDLE_S`, default 180 s without a new experience), death (at once). The free tier drives session end with `_IDLE_S=15`.
+- **Switched off** (`LIVING_PLAYER_MEMORY=0`): the subscriptions are the old list (`experience WHERE controller = <me>` and the rest, plus `presence`), the log has no "player memory on" line, no `internalize` request is made, and residents' conversation turns run as before (phase "switch off").
+- **Subscriptions when on:** also `experience WHERE controller != <me>` and `settlement`. Rows of other controllers become `Event::Lived` only; they never start a conversation turn or a level-of-detail contact. A row's `controller` decides the path: rows its person lived are internalized (`lived_under human`), rows lived under this service's minds are consolidated (`lived_under ai`); nothing is integrated twice.
+- **Cadence:** buffer (`LIVING_PLAYER_MEMORY_BUFFER`, default 40 meaningful; `_CAP` 200 in all), game day (`_EVERY_S`, default the world's day), session end (the presence signal: the world's minds took the character over, `presence.ai`), death (at once). The free tier drives session end by lowering the `takeover_s` law to 5 s.
+- **The takeover waits for its past:** a taken-over character's first deliberation waits until what its person lived is internalized (at most `LIVING_TAKEOVER_WAIT_S`, default 120 s).
+- **Persona inferred:** the internalize reply's `identity` (narrative, values, traits, mood; goals kept) becomes the persona through `mind_update`.
 - **Off the real-time path:** background lane, the shared slow-work semaphore; the player's commands never wait on it.
 - **Reconnect:** `lived_upto` on the character's `self` node; a restarted service logs "internalized up to N" and takes only later ids (phase "restart").
 - **Modes:** `LIVING_PLAYER_MEMORY_MODE=direct|batch`, `_MODEL` (a profile), `_POLL_S`, `_BATCH_WAIT_S`.

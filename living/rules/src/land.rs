@@ -1631,7 +1631,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         }
     }
     land.sd = sd;
-    land.map = Map { w: size_m, h: size_m, tiles, blocked: Default::default() };
+    land.map = Map { w: size_m, h: size_m, tiles, blocked: Default::default(), opaque: Default::default() };
     settle::plan(&mut land, &p.settlements, p.metro.as_ref());
     land
 }

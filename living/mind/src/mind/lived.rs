@@ -1,9 +1,9 @@
-//! What a human-played character lives becomes its memory (opt-in: `LIVING_PLAYER_MEMORY=1`;
-//! off by default; design in docs/PLAYER_MEMORY.md).
+//! What a human-played character lives becomes its memory (on by default; `LIVING_PLAYER_MEMORY=0`
+//! turns it off; design in docs/PLAYER_MEMORY.md).
 //!
 //! A player's character receives the same experiences as everyone (the authority's
-//! `experience` rows, controlled by the player's identity). With the switch on, this service
-//! also subscribes to those rows, copies each into a per-character buffer as it arrives (the
+//! `experience` rows, controlled by the player's identity while the player controls it). This
+//! service subscribes to those rows, copies each into a per-character buffer as it arrives (the
 //! authority deletes a dead character's rows, and its window keeps only the last 400) and, on a
 //! slow cadence, integrates them into the character's Neo4j mind the way consolidation does
 //! for an AI character, off the real-time path:
@@ -11,19 +11,24 @@
 //! - **when:** a buffer of `LIVING_PLAYER_MEMORY_BUFFER` meaningful experiences (default 40) or
 //!   `LIVING_PLAYER_MEMORY_CAP` in all (default 200, below the authority's window); one game
 //!   day after the first experience waiting (`LIVING_PLAYER_MEMORY_EVERY_S` overrides); the end
-//!   of a session, taken as `LIVING_PLAYER_MEMORY_IDLE_S` (default 180 s) without a new
-//!   experience (the authority has no presence signal); and at once when the character dies;
+//!   of a session, which is the authority's presence signal: the world's minds took the
+//!   character over because its person left (`presence.ai`); and at once when it dies;
 //! - **with what:** `LIVING_PLAYER_MEMORY_MODEL` (a profile; default the models file's
 //!   default), with one system prompt shared by every player (`prompts::internalize_system`)
 //!   so a provider caches it;
 //! - **how:** `LIVING_PLAYER_MEMORY_MODE=direct` (one call per character) or `batch` (every
 //!   character due at once goes into one provider batch job, `llm::Llm::batch`);
 //! - **what is written:** the patch, with `lived_under = ["human"]` on every concept, memory
-//!   and belief it writes, a `thought` of kind `internalize`, and the relations, judgments,
-//!   places and beliefs projected from the graph (`mind_update`, which the authority accepts
-//!   from the mind service for a human-controlled character, never with an identity). How
-//!   far a character is internalized is kept on its `self` node (`lived_upto`); the player's
-//!   experience rows are left in place.
+//!   and belief it writes, a `thought` of kind `internalize`, the relations, judgments, places
+//!   and beliefs projected from the graph, and the identity (narrative, values, traits, mood)
+//!   inferred from the person's conduct when it shows something new (`mind_update`, which the
+//!   authority accepts from the mind service for a played character). How far a character is
+//!   internalized is kept on its `self` node (`lived_upto`); the experience rows stay in place.
+//!
+//! When the minds take a character over, its first deliberation waits until what its person
+//! lived is internalized (at most `LIVING_TAKEOVER_WAIT_S`, default 120 s), so it thinks with
+//! its own past. What it then lives under the minds is consolidated as for any AI character,
+//! with `lived_under = ["ai"]`.
 //!
 //! The model never sees the player's input, the reasons for their choices or anything the
 //! character did not perceive: only its experience rows, where they happened (its own
@@ -34,15 +39,16 @@ use crate::llm::{self, BatchItem, Lane, Msg};
 use crate::{memory, prompts};
 use anyhow::Result;
 use living_bindings::*;
-use serde_json::json;
+use serde_json::{json, Value};
 use spacetimedb_sdk::Table;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// Whether the switch is on (`LIVING_PLAYER_MEMORY=1`).
+/// Whether player memory is on (the default; `LIVING_PLAYER_MEMORY=0`, `off` or `false`
+/// turns it off). The takeover of an offline player's character depends on it for its past.
 pub fn enabled() -> bool {
-    matches!(std::env::var("LIVING_PLAYER_MEMORY").as_deref(), Ok("1") | Ok("on") | Ok("true"))
+    !matches!(std::env::var("LIVING_PLAYER_MEMORY").as_deref(), Ok("0") | Ok("off") | Ok("false"))
 }
 
 fn env<T: std::str::FromStr>(k: &str) -> Option<T> {
@@ -58,7 +64,8 @@ pub struct Config {
     pub buffer: usize,
     pub cap: usize,
     pub every: Option<Duration>,
-    pub idle: Duration,
+    /// Longest a taken-over character's first deliberation waits for its lived past.
+    pub takeover_wait: Duration,
     /// Experiences per integration at most (a larger backlog takes several).
     pub take: usize,
     pub profile: Option<String>,
@@ -74,7 +81,7 @@ impl Config {
             buffer: env("LIVING_PLAYER_MEMORY_BUFFER").unwrap_or(40),
             cap: env("LIVING_PLAYER_MEMORY_CAP").unwrap_or(200),
             every: env::<f64>("LIVING_PLAYER_MEMORY_EVERY_S").map(Duration::from_secs_f64),
-            idle: Duration::from_secs_f64(env("LIVING_PLAYER_MEMORY_IDLE_S").unwrap_or(180.0)),
+            takeover_wait: Duration::from_secs_f64(env("LIVING_TAKEOVER_WAIT_S").unwrap_or(120.0)),
             take: env("LIVING_PLAYER_MEMORY_TAKE").unwrap_or(120),
             profile: std::env::var("LIVING_PLAYER_MEMORY_MODEL").ok().filter(|s| !s.trim().is_empty()),
             batch: std::env::var("LIVING_PLAYER_MEMORY_MODE").as_deref() == Ok("batch"),
@@ -113,38 +120,37 @@ struct Prepared {
     reason: &'static str,
 }
 
-/// Why a character's waiting experiences are due for integration, if they are: it died, the
-/// buffer is full, a game day has passed since the oldest arrived (`waited`), or nothing new
-/// has reached it for the idle time (`wall` is now, in ms).
-fn reason_due<'a>(cfg: &Config, waiting: impl Iterator<Item = &'a Experience> + Clone, alive: bool, waited: Duration, every: Duration, wall: u64) -> Option<&'static str> {
+/// Why a character's waiting experiences are due for integration, if they are: it died, its
+/// person left (`away`: the minds took it over, the authority's presence signal), the buffer
+/// is full, or a game day has passed since the oldest arrived (`waited`).
+fn reason_due<'a>(cfg: &Config, waiting: impl Iterator<Item = &'a Experience> + Clone, alive: bool, away: bool, waited: Duration, every: Duration) -> Option<&'static str> {
     let all = waiting.clone().count();
     if all == 0 {
         return None;
     }
     let meaningful = waiting.clone().filter(|e| e.salience >= 0.2).count();
-    let newest = waiting.map(|e| e.at_ms).max().unwrap_or(0);
     if !alive {
         Some("death")
+    } else if away {
+        Some("session end")
     } else if meaningful >= cfg.buffer || all >= cfg.cap {
         Some("buffer")
     } else if meaningful > 0 && waited >= every {
         Some("game day")
-    } else if meaningful > 0 && wall.saturating_sub(newest) >= cfg.idle.as_millis() as u64 {
-        Some("session end")
     } else {
         None
     }
 }
 
 impl Minds {
-    /// A character a person plays (not a mind's, not on instinct).
-    fn human(&self, id: u32) -> bool {
-        self.conn.db.character().id().find(&id).is_some_and(|c| c.kind == "person" && !c.ai && c.controller != self.me)
-    }
-
-    /// An experience of a human-played character, as it arrives (or as found at start).
+    /// An experience a person lived through their character, as it arrives (or as found at
+    /// start): a row controlled by someone other than this service. The character may have
+    /// passed to the minds since; what its person lived is still theirs to internalize.
     pub(super) fn lived_add(&self, e: Experience) {
-        if !self.lived_cfg.on || self.store.is_none() || !self.allowed(e.observer) || !self.human(e.observer) {
+        if !self.lived_cfg.on || self.store.is_none() || !self.allowed(e.observer) || e.controller == self.me {
+            return;
+        }
+        if !self.conn.db.character().id().find(&e.observer).is_some_and(|c| c.kind == "person") {
             return;
         }
         let mut l = self.lived.lock().unwrap();
@@ -170,7 +176,6 @@ impl Minds {
         let day = self.conn.db.world().id().find(&0).map(|w| w.day_ms).unwrap_or(living_rules::DEFAULT_DAY_MS);
         let every = cfg.every.unwrap_or(Duration::from_millis(day));
         let now = Instant::now();
-        let wall = llm::now_ms();
         let mut due = Vec::new();
         let mut load = Vec::new();
         {
@@ -187,8 +192,9 @@ impl Minds {
                     continue;
                 }
                 let alive = self.conn.db.character().id().find(&id).is_some_and(|c| c.alive);
+                let away = self.conn.db.presence().id().find(&id).is_some_and(|p| p.ai);
                 let waited = p.since.map_or(Duration::ZERO, |t| now.duration_since(t));
-                if let Some(r) = reason_due(cfg, p.exps.values(), alive, waited, every, wall) {
+                if let Some(r) = reason_due(cfg, p.exps.values(), alive, away, waited, every) {
                     p.busy = true;
                     due.push((id, r));
                 }
@@ -233,6 +239,16 @@ impl Minds {
                 });
             }
         }
+    }
+
+    /// Whether what a person lived through this character is still waiting to be internalized
+    /// (a taken-over character's first thought waits for it).
+    pub(super) fn lived_waiting(&self, id: u32) -> bool {
+        if !self.lived_cfg.on || self.store.is_none() {
+            return false;
+        }
+        let l = self.lived.lock().unwrap();
+        l.players.get(&id).is_some_and(|p| p.busy || p.loading || p.cursor.is_none() || !p.exps.is_empty())
     }
 
     fn lived_profile(&self) -> String {
@@ -346,6 +362,16 @@ impl Minds {
         self.name_people(&mut patch);
         patch.lived_under = Some("human".into());
         store.apply(actor, &patch, &thought_ref, now).await?;
+        // Who the person shows themselves to be, read from their conduct (docs/PLAYER_MEMORY.md):
+        // only a real change becomes a new version of the identity.
+        let identity = match &v["identity"] {
+            Value::Object(p) if p.get("narrative").and_then(|n| n.as_str()).is_some_and(|n| !n.is_empty()) && self.persona_changed(actor, p) => Some(p.clone()),
+            _ => None,
+        };
+        if let Some(p) = &identity {
+            let version = self.conn.db.persona().id().find(&actor).map(|x| x.version + 1).unwrap_or(1);
+            store.set_identity(actor, version, &Value::Object(p.clone()), p.get("why").and_then(|w| w.as_str()).unwrap_or_default(), &thought_ref, now).await?;
+        }
         self.lived_advance(actor, prep.upto).await?;
         let summary = v["summary"].as_str().unwrap_or_default().to_string();
         log::info!(
@@ -366,9 +392,20 @@ impl Minds {
             model: reply.model,
             reference: thought_ref,
         };
+        // Goals are intentions nobody perceived: the current ones stay.
+        let persona = identity.map(|p| {
+            let cur = self.conn.db.persona().id().find(&actor);
+            PersonaIn {
+                narrative: p.get("narrative").and_then(|x| x.as_str()).unwrap_or_default().into(),
+                values: p.get("values").and_then(|x| x.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default(),
+                goals: cur.as_ref().map(|c| c.goals.clone()).unwrap_or_default(),
+                traits: p.get("traits").map(|t| t.to_string()).unwrap_or_else(|| "{}".into()),
+                mood: p.get("mood").and_then(|x| x.as_str()).unwrap_or_default().into(),
+            }
+        });
         // The graph is the memory; the projection is what the body and the observer read. An
         // authority that refuses it (an older module) leaves the memory in place.
-        if let Err(e) = self.project(actor, None, Some(thought)).await {
+        if let Err(e) = self.project(actor, persona, Some(thought)).await {
             log::warn!("projection for {} (played by a person) refused: {e:#}", prep.name);
         }
         Ok(())
@@ -456,7 +493,7 @@ mod tests {
     }
 
     fn cfg() -> Config {
-        Config { on: true, buffer: 3, cap: 5, every: None, idle: Duration::from_secs(180), take: 120, profile: None, batch: false, poll: Duration::from_secs(1), give_up: Duration::from_secs(1) }
+        Config { on: true, buffer: 3, cap: 5, every: None, takeover_wait: Duration::from_secs(120), take: 120, profile: None, batch: false, poll: Duration::from_secs(1), give_up: Duration::from_secs(1) }
     }
 
     #[test]
@@ -464,21 +501,23 @@ mod tests {
         let day = Duration::from_secs(720);
         let now = 1_000_000;
         let two = [exp(1, now - 1_000, 0.5), exp(2, now - 500, 0.1)];
-        // Recent, few, alive, within the day: wait.
-        assert_eq!(reason_due(&cfg(), two.iter(), true, Duration::from_secs(60), day, now), None);
+        // Recent, few, alive, present, within the day: wait.
+        assert_eq!(reason_due(&cfg(), two.iter(), true, false, Duration::from_secs(60), day), None);
         // The character died: at once, whatever else holds.
-        assert_eq!(reason_due(&cfg(), two.iter(), false, Duration::ZERO, day, now), Some("death"));
-        // Nothing new for the idle time: the session ended.
-        assert_eq!(reason_due(&cfg(), two.iter(), true, Duration::from_secs(60), day, now + 181_000), Some("session end"));
+        assert_eq!(reason_due(&cfg(), two.iter(), false, false, Duration::ZERO, day), Some("death"));
+        // Its person left and the minds took it over: the session ended.
+        assert_eq!(reason_due(&cfg(), two.iter(), true, true, Duration::from_secs(60), day), Some("session end"));
+        // Only routine experiences still end with the session (the cursor moves past them).
+        assert_eq!(reason_due(&cfg(), [exp(3, now, 0.05)].iter(), true, true, Duration::ZERO, day), Some("session end"));
         // A game day since the oldest arrived.
-        assert_eq!(reason_due(&cfg(), two.iter(), true, day, day, now), Some("game day"));
+        assert_eq!(reason_due(&cfg(), two.iter(), true, false, day, day), Some("game day"));
         // Enough meaningful experiences, or enough in all.
         let full: Vec<Experience> = (0..3).map(|i| exp(i, now, 0.4)).collect();
-        assert_eq!(reason_due(&cfg(), full.iter(), true, Duration::ZERO, day, now), Some("buffer"));
+        assert_eq!(reason_due(&cfg(), full.iter(), true, false, Duration::ZERO, day), Some("buffer"));
         let routine: Vec<Experience> = (0..5).map(|i| exp(i, now, 0.05)).collect();
-        assert_eq!(reason_due(&cfg(), routine.iter(), true, Duration::ZERO, day, now), Some("buffer"));
+        assert_eq!(reason_due(&cfg(), routine.iter(), true, false, Duration::ZERO, day), Some("buffer"));
         // Only routine experiences never start an integration by time alone.
-        assert_eq!(reason_due(&cfg(), routine[..2].iter(), true, day, day, now + 400_000), None);
-        assert_eq!(reason_due(&cfg(), [].iter(), false, day, day, now), None);
+        assert_eq!(reason_due(&cfg(), routine[..2].iter(), true, false, day, day), None);
+        assert_eq!(reason_due(&cfg(), [].iter(), false, true, day, day), None);
     }
 }
