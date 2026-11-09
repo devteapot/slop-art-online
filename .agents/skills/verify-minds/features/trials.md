@@ -13,19 +13,25 @@ Run on a trial service, never on a paused reference world:
 ```bash
 python3 living/tools/trials.py up
 python3 living/tools/trials.py build wolves
-python3 living/tools/trials.py run --batch dry1 wolves --replicates 1 --minutes 6 --fake --keep-db
+python3 living/tools/trials.py run --batch dry1 wolves --replicates 1 --minutes 6 --fake
 python3 living/tools/trials.py clean --batch dry1
 ```
 
-- `--fake` starts the shared [fake model server](../../verify-llm/scripts/fake_llm.py), writes a models file whose only profile points at it, and blanks the provider keys in the mind's environment. `fake-requests.jsonl` in the batch directory holds every request.
+- `--fake` starts the shared [fake model server](../../verify-llm/scripts/fake_llm.py), keeps the variant's models file with its routing but points every profile at that server, named `fake-<model>` (so the journal shows where each call was routed), and blanks the provider keys in the mind's environment. `fake-requests.jsonl` in the batch directory holds every request.
 - Each instance's `actions.log` shows every reducer call with its HTTP status; `events.jsonl` shows every timeline step and trigger as it fired, and any refused call.
 - `samples.jsonl` advances every 2 s from the start; `summary.json` exists for every instance, including failed ones (`stopped_by` says why).
 - `journal/` in the instance directory is a copy of the mind's journal (`.local/living/journal/<db>/`), with the actual requests and replies.
 - After `clean`, the batch's databases answer SQL with 404 and the Neo4j nodes of their runs are gone; the evidence directory remains.
 
+## Life runs, resume and disk
+
+- A `"kind": "life"` trial spawns its subject with the admin-only `spawn_newcomer` (a player's `join`, thought for by the minds), keeps no timeline, restarts a mind that exits, writes `snapshots/hNN.json` hourly and pauses its database at the end. `trials.py life --batch B` writes `timeline.md` from rows.
+- `trials.py resume --batch B` continues instances whose `state.json` says they were running: it adopts a mind whose pid and `/proc` start time still match, or starts one. Proven by killing the runner (`kill -KILL <runner pid>`; never `pkill -f` a pattern in your own command line) and resuming.
+- `trials.py reclaim` removes replica directories that deleted databases leave in the trial volume, keeping live ones (written in the last 5 minutes) and paused ones (matched by their last module-log timestamp). It refuses when the counts do not match.
+
 ## Paid tier
 
-Real batches spend tokens. Run only within an authorized budget: each trial's `budget.tokens` stops its mind, and the ledger (`.local/living/trials/ledger.json`, `trials.py ledger`) refuses a batch whose worst case exceeds what is left of `TRIALS_TOTAL_TOKENS` (default 6,000,000) unless `--allow-partial`, in which case the total cap still stops every mind.
+Real batches spend money. Run them only when the user has authorized them. There is no cap by default: `budget.tokens` in a trial or `TRIALS_TOTAL_TOKENS` sets one, and the ledger (`trials.py ledger`) records each batch's tokens. A runaway watchdog stops a run on 30 failed calls in 5 minutes, the same failure 15 times, more than 60 calls in a minute, or five mind restarts in 30 minutes, and records why in `events.jsonl` and `summary.json`. Summaries break calls, tokens, latency p50/p95, failures, empty replies, repaired and unparseable replies and estimated cost down per purpose × model (`by_purpose_model`); `trials.py resummarize` recomputes them from evidence.
 
 ## Not proven here
 

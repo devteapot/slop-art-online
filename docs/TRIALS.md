@@ -15,7 +15,7 @@ A trial is a JSON file in [`living/trials/`](../living/trials/). Fields:
 | `world.rules`, `world.overrides` | Merged over the seed. The runner writes the result as a derived seed, `.local/living/trials/seeds/trial-<seed>-<hash>.json`, which both the module build and the mind read (`LIVING_SEED` is resolved under `living/seeds/`, so a relative path works). |
 | `world.start_hour` | The world hour at which the trial starts (worlds start at 07:00 and a world hour is 30 real seconds, so 16:00 is 4.5 real minutes after publishing). |
 | `minutes` | Real minutes from the start until the runner stops the mind. |
-| `budget.tokens`, `budget.calls_per_min` | The trial's token cap (the runner stops the mind when the journal reaches it) and `LIVING_LLM_PER_MIN`. |
+| `budget.tokens`, `budget.calls_per_min` | Optional. A token cap (the runner stops the mind when the journal reaches it) and `LIVING_LLM_PER_MIN`. None of the shipped trials sets either: trials measure, they do not cap. |
 | `subject.pick` | Who the subject is: `kind`, `stage`, `bg` (background fields, e.g. `{"town": "Elmwick"}`), `group`/`not_group` (the k-th town or band in id order), `lacks` (techniques not known), `fewest_know_how`, `nearest` (an anchor), `count`. |
 | `subject.clear_items`, `subject.background` | Drop everything carried (through the ordinary `drop` act), and replace the background, usually with an authored sheet ([authored worlds](AUTHORED_WORLDS.md)) so that the subject starts as the same person in every replicate and world without a model call. |
 | `cast.<role>.pick` | Scripted characters, picked the same way. |
@@ -51,7 +51,12 @@ python3 living/tools/trials.py run --batch b1 wolves hungry teacher theft --repl
 python3 living/tools/trials.py run --batch b4 wolves hungry --variants default,deepseek-flash --replicates 3
 python3 living/tools/trials.py report --batch b2         # .local/living/trials/b2/report.md
 python3 living/tools/trials.py clean --batch b2          # delete databases and Neo4j minds; evidence kept
-python3 living/tools/trials.py ledger                    # real tokens per batch against the total cap
+python3 living/tools/trials.py ledger                    # real tokens per batch
+python3 living/tools/trials.py resume --batch b2          # continue after a runner or mind crash, without resetting worlds
+python3 living/tools/trials.py resummarize --batch b2     # recompute summaries from the evidence after a probe changes
+python3 living/tools/trials.py reclaim                    # remove replica directories deleted databases left behind
+python3 living/tools/trial_evidence.py b4 --quotes 2      # per instance: death, acts toward the cast, first replies with journal refs
+python3 living/tools/trial_evidence.py b1 b4 --table      # one row per trial x variant with spread
 python3 living/tools/trials.py down                      # stop the containers (kept)
 ```
 
@@ -64,7 +69,7 @@ Each instance is a database `verify-trial-<batch>-<trial>-<variant>-r<k>` on the
 - `journal/`: the mind's journal, with the actual requests and replies; `mind.log`, `models.json`, `mind-env.json` (no secrets);
 - `final.json`: the subject's rows at the end; `summary.json`: the probes.
 
-The run stops at `minutes`, at the trial's token cap, at the batch's total cap (`TRIALS_TOTAL_TOKENS`, default 6,000,000, counted across real batches in `.local/living/trials/ledger.json`), 20 s after the subject dies, or when the mind exits. A batch whose worst case (instances × each trial's cap) exceeds what is left is refused unless `--allow-partial`.
+The run stops at `minutes`, at a token cap if the trial or `TRIALS_TOTAL_TOKENS` sets one (none does by default), when the runaway watchdog fires (below), 20 s after the subject dies, or when the mind exits (a life run restarts it instead). Deleted databases leave their replica directories in the volume (about 0.4 GB each for an island world); run `trials.py reclaim` after large batches.
 
 ### Probes
 
@@ -93,6 +98,12 @@ python3 living/tools/trials.py run --batch b3 wolves hungry --variants default,l
 ```
 
 The verify harness runs there too, against the trial container: `VERIFY_STDB_CONTAINER=slop-trials-stdb VERIFY_STDB_PORT=3320` make `verify.py`, `living/tools/stdb`, `verify-llm` and `verify-minds` use it instead of `sao-living_spacetimedb_1` on 3300. Other surface scripts (`verify-client`, `verify-generation`, `verify-knowledge`) still assume 3300.
+
+## Notes for the mind-harness lab
+
+- **Models per purpose and per species.** A variant's `models` value is deep-merged into `living/configs/models.json` as given, or `models_file` names a whole file. Whatever keys the config grows (for example per-purpose mixes for people), a variant can carry them unchanged. Today `species` routes animals per purpose (`think`, `remember`, `compile`), proven in the fake run `dry8`: wolves impulse with `ministral-8b` and compile and consolidate with `ministral-14b`. **People have one profile for every purpose**: assign, rotate, groups, stages and the default all choose one profile. Per-purpose mixes for people need a change in the mind service (`llm.rs` profile choice), not in the runner. The current variants are single-profile for people.
+- **Summaries per purpose × model** (`by_purpose_model` in `summary.json`, and the batch report's table): calls, tokens, prompt and completion tokens, cached tokens, latency p50 and p95, failed calls, empty replies (no text, e.g. reasoning that used up `max_tokens`), replies that would need repair, unparseable replies, the profiles that served them (overflow shows as another profile), estimated cost; and per instance, deliberation retries, pruned graphs and rejections from the thought rows. The journal does not record whether the mind repaired a reply (repair happens after journaling); the summary re-checks each reply. An animal's impulse is journaled with purpose `deliberate`, so a wolf's impulse and compile appear as one purpose under two models.
+- **Animals with minds.** `subject.pick` with `kind: wolf` and `count: 4` makes the pack the subject (`LIVING_ONLY` names all four; samples follow the first). This needs a `minds: true` world, where seeded animals are thought for by the admin's minds, as in [`pack-mind.json`](../living/trials/pack-mind.json). The authority asks an animal's mind only while a person is within 25 tiles, so a pack far from people never thinks. A trial must keep people near it, or that rule must move to the shared notion of stage (LIVING_CORE.md, "Minds at scale").
 
 ## SpacetimeDB documentation checked (2026-11-09)
 
@@ -149,4 +160,119 @@ The trial service listens on the LAN: `http://192.168.1.103:3320` (container `sl
 
 ## Results
 
-(Filled in from the batches below.)
+Evidence for every row is under `.local/living/trials/<batch>/` on the Spark (`report.md` per batch, `summary.json` and `journal/` per instance). `living/tools/trial_evidence.py <batch>` prints each instance's death, what it did toward the cast and its first replies with journal references; `--table` prints the table below. Journal references below are relative to `.local/living/trials/`.
+
+**How to read the model's words.** Quotes are the model's reply (`thought`, `say`, `plan`). They are what the model reported as its reason, not proof of why the body did what it did. Causal claims below rest on rows: activities, distances, chronicle and percepts.
+
+### Batches and the rules they ran on
+
+| Batch | Commit (trials-1) | Rules | Models | What ran |
+| --- | --- | --- | --- | --- |
+| b1 | af8332d (main up to b7cf7fb) | before 0887d81: graded force (hurt or kill) | Mistral Small, the then default | 6 trials × 3 |
+| b2 | af8332d, runner files ahead of the commit (pack held away from town) | before 0887d81 | Mistral Small against GPT-6 Luna (since withdrawn) | wolves, hungry × 2 variants × 3 |
+| b3 | af8332d, runner files ahead (theft at the stall) | before 0887d81 | Mistral Small | theft × 3 |
+| b4 | 6589924 (main up to a4d79c0: one damage rule, GLM/DeepSeek models) | **current**: one damage rule | `default` = glm-flash as configured, against `deepseek-flash` | 6 trials × 2 variants × 3 |
+| l1–l3 | 378b2c1 (main up to 8f6ac72: three tiers, new buildings table) | current | life runs, below | |
+
+Batch b4 is the reference for current rules. Its island predates the buildings-table update in 3f3caf0 (lots and footprints changed; rules did not). b1–b3 are kept as history. Every variant is single-profile for people: one profile thinks, compiles, talks and consolidates for a person. The models config has no per-purpose mix for people yet. When it does, a variant names one through its `models` patch, which is merged into the config as given.
+
+### Tokens and cost
+
+| Batch | Calls | Tokens | Est. cost (USD) |
+| --- | ---: | ---: | ---: |
+| b1 (Mistral Small) | 773 | 5,938,919 | 1.41 |
+| b2 (Mistral Small, Luna) | 427 | 3,059,651 | Small part only; Luna unknown |
+| b3 (Mistral Small) | 127 | 905,964 | about 0.2 |
+| b4 (GLM 5.3 Flash 365 calls, 4,494,546 tokens; DeepSeek 4.1 Flash 721 calls, 4,678,652 tokens) | 1,086 | 9,173,198 | 1.36 + 0.92 = 2.28 |
+
+Prices are from Mistral's model pages (2026-11-09), with reasoning tokens priced as output, which the pages do not state: DeepSeek V4.1 Flash $0.30 input / $1.20 output / $0.007 cached per million; GLM 5.3 Flash $0.15 / $0.50 / $0.03; Ministral 3B, 8B and 14B $0.10, $0.15 and $0.20. A 15-minute scripted trial used 160k–470k tokens per game day. No runaway was detected in any batch.
+
+### GLM 5.3 Flash as configured: slow, and mostly empty
+
+Per purpose × model in b4 (all 18 instances of each arm):
+
+| Purpose / model | Calls | p50 latency | p95 | Empty text | Unparseable |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| think / deepseek-flash | 287 | 1.8 s | 107 s | 0 | 0 |
+| deliberate / deepseek-flash | 289 | 3.0 s | 32 s | 0 | 0 |
+| consolidate / deepseek-flash | 138 | 3.3 s | 34 s | 0 | 0 |
+| think / glm-flash | 86 | 29.6 s | 118 s | 0 | 1 |
+| deliberate / glm-flash | 165 | 67.4 s | 140 s | **112** | 2 |
+| consolidate / glm-flash | 114 | 52.4 s | 128 s | **41** | 9 |
+
+GLM 5.3 Flash reasons by default. In 112 of 162 compile calls and 41 of 112 consolidations it spent the whole `max_tokens` (8,000) on reasoning and returned no text. Those calls are billed (completion p50 8,000 tokens), and the mind retries the decision. One real compile request replayed against the API: as sent, 43.8 s, 5,742 reasoning tokens of 6,149 completion; with `reasoning_effort: "low"`, 3.4 s, 0 reasoning and 211 completion tokens, a usable reply; `"none"` is refused (HTTP 400). The `glm-flash-low` variant sets that through the profile's existing `reasoning_effort` map. **Recommendation:** set `reasoning_effort` low for the glm-flash profile in `living/configs/models.json` (not changed here; it is the user's default). DeepSeek's p95 tails (32–107 s) are occasional slow calls, not empty replies.
+
+What it does to behaviour, from rows: a GLM subject installed 2–4 graphs in 15 minutes against 11–20 for DeepSeek, and first ate at 1.5–3 minutes against 0.2–0.5. Its body kept running the instinct graph for the first minutes.
+
+### The table
+
+| Batch | Trial | Variant | n | Survived | Died at min | Lowest hp | First meal min | Lines said | Graph revisions | Calls | Tokens per game day | Trial-specific |
+| --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| b1 | hungry | default | 3 | 2/3 | 8.04 | 72 (15–100) | 0.33 (0.17–0.44) | 9.3 (6.0–13.0) | 13.3 (10.0–15.0) | 34 (27–39) | 236,097 (201,215–285,782) | peak hunger 44.8 (40.6–51.8); received food 3/3 |
+| b1 | hungry-village | default | 3 | 3/3 | – | 96 (88–100) | 0.36 (0.20–0.44) | 14.3 (12.0–18.0) | 16.7 (14.0–21.0) | 42 (38–51) | 250,569 (221,080–305,525) | peak hunger 46.9 (41.2–57.0); received food 3/3 |
+| b1 | teacher | default | 3 | 3/3 | – | 97 (93–100) | 0.28 (0.24–0.30) | 18.3 (9.0–27.0) | 21.0 (17.0–27.0) | 50 (44–61) | 311,961 (263,442–396,583) | learned cloak 2/3; crafted 1/3 |
+| b1 | theft | default | 3 | 3/3 | – | 95 (88–100) | 0.66 (0.64–0.67) | 25.7 (22.0–28.0) | 31.0 (28.0–36.0) | 71 (66–80) | 467,162 (412,133–558,158) | theft perceived 0/3; spoke to thief 2/3 |
+| b1 | wolves | default | 2 | 0/2 | 3.9, 2.7 | 10 (10–10) | 0.20 (0.10–0.30) | 6.5 (4.0–9.0) | 11.0 (10.0–12.0) | 28 (25–30) | 688,830 (509,406–868,255) | moved in 2 min after release 12.2 (10.8–13.6) m; struck at a wolf 2/2 |
+| b1 | wolves-valley | default | 3 | 2/3 | 12.77 | 68 (3–100) | 0.40 (0.27–0.50) | 11.3 (10.0–13.0) | 16.7 (16.0–18.0) | 42 (39–46) | 266,976 (229,622–324,802) | moved in 2 min after release 14.5 (3.6–23.1) m; struck at a wolf 1/3 |
+| b2 | hungry | default | 3 | 3/3 | – | 100 (100–100) | 0.55 (0.37–0.87) | 8.0 (6.0–10.0) | 15.0 (13.0–19.0) | 38 (32–51) | 229,113 (183,809–314,908) | peak hunger 45.6 (41.6–53.5); received food 0/3 |
+| b2 | hungry | luna | 3 | 3/3 | – | 100 (100–100) | 0.61 (0.30–1.17) | 12.3 (9.0–18.0) | 18.7 (14.0–21.0) | 45 (35–50) | 236,845 (179,793–270,361) | peak hunger 51.0 (45.6–54.2); received food 0/3 |
+| b2 | wolves | default | 3 | 0/3 | 7.7, 2.87, 7.14 | 10 (7–12) | 0.19 (0.13–0.27) | 6.7 (5.0–9.0) | 11.3 (8.0–14.0) | 29 (22–33) | 526,044 (256,164–964,100) | moved in 2 min after release 5.0 (3.5–7.0) m; struck at a wolf 1/3 |
+| b2 | wolves | luna | 3 | 0/3 | 3.7, 2.54, 8.93 | 23 (3–40) | 0.27 (0.20–0.34) | 5.7 (0.0–12.0) | 14.0 (6.0–21.0) | 34 (16–45) | 534,078 (350,126–849,606) | moved in 2 min after release 8.3 (3.1–13.5) m; struck at a wolf 3/3 |
+| b3 | theft | default | 3 | 3/3 | – | 100 (100–100) | 0.79 (0.64–1.10) | 12.0 (5.0–20.0) | 16.7 (12.0–23.0) | 42 (31–56) | 241,590 (168,318–326,000) | theft perceived 2/3; spoke to thief 2/3 |
+| b4 | hungry | deepseek-flash | 3 | 3/3 | – | 100 (100–100) | 0.34 (0.30–0.37) | 3.0 (1.0–6.0) | 12.3 (12.0–13.0) | 31 (31–31) | 157,908 (154,285–160,430) | peak hunger 41.4 (41.2–41.6); received food 0/3 |
+| b4 | hungry | default | 3 | 1/3 | 1.24, 14.37 | 44 (19–92) | 2.50 (1.93–3.07) | 4.7 (1.0–10.0) | 3.7 (1.0–6.0) | 17 (4–24) | 232,126 (199,635–265,819) | peak hunger 50.1 (45.8–55.1); received food 1/3 |
+| b4 | hungry-village | deepseek-flash | 3 | 3/3 | – | 100 (100–100) | 0.43 (0.17–0.57) | 19.0 (8.0–35.0) | 19.3 (9.0–35.0) | 49 (29–80) | 257,371 (138,790–449,456) | peak hunger 44.2 (42.9–45.1); received food 3/3 |
+| b4 | hungry-village | default | 3 | 3/3 | – | 100 (100–100) | 2.81 (2.20–3.27) | 2.0 (2.0–2.0) | 2.7 (2.0–4.0) | 21 (21–22) | 216,827 (208,947–227,368) | peak hunger 57.3 (51.2–65.5); received food 0/3 |
+| b4 | teacher | deepseek-flash | 3 | 3/3 | – | 99 (98–100) | 0.25 (0.14–0.37) | 15.0 (10.0–22.0) | 19.7 (15.0–25.0) | 47 (38–56) | 239,018 (185,934–296,423) | learned cloak 3/3; crafted 2/3 |
+| b4 | teacher | default | 3 | 3/3 | – | 100 (100–100) | 1.50 (0.90–1.80) | 4.7 (3.0–6.0) | 4.0 (3.0–6.0) | 24 (23–24) | 231,510 (206,758–257,002) | learned cloak 0/3; crafted 0/3 |
+| b4 | theft | deepseek-flash | 3 | 3/3 | – | 97 (92–100) | 0.65 (0.64–0.67) | 11.0 (7.0–19.0) | 16.3 (12.0–24.0) | 41 (33–56) | 207,001 (159,738–288,994) | theft perceived 1/3; spoke to thief 2/3 |
+| b4 | theft | default | 3 | 3/3 | – | 98 (97–100) | 3.24 (1.77–4.87) | 2.0 (0.0–5.0) | 2.7 (1.0–5.0) | 23 (19–28) | 219,443 (189,850–251,281) | theft perceived 0/3; spoke to thief 0/3 |
+| b4 | wolves | deepseek-flash | 3 | 1/3 | 6.87, 7.3 | 47 (36–60) | 0.20 (0.17–0.27) | 6.7 (3.0–13.0) | 11.3 (5.0–21.0) | 29 (16–49) | 206,457 (157,408–256,162) | moved in 2 min after release 0.0 (0.0–0.0) m; struck at a wolf 3/3 |
+| b4 | wolves | default | 3 | 2/3 | 8.3 | 43 (11–94) | 1.57 (1.57–1.57) | 3.3 (0.0–7.0) | 2.3 (0.0–4.0) | 19 (11–25) | 208,176 (190,829–235,537) | moved in 2 min after release 12.6 (0.0–28.5) m; struck at a wolf 1/3 |
+| b4 | wolves-valley | deepseek-flash | 3 | 3/3 | – | 91 (76–100) | 0.53 (0.34–0.87) | 11.0 (8.0–14.0) | 16.0 (14.0–19.0) | 42 (38–48) | 230,303 (188,178–273,718) | moved in 2 min after release 11.3 (1.6–23.9) m; struck at a wolf 0/3 |
+| b4 | wolves-valley | default | 3 | 3/3 | – | 97 (93–100) | 1.48 (1.47–1.50) | 1.0 (0.0–2.0) | 2.0 (1.0–4.0) | 20 (19–22) | 208,624 (197,822–229,704) | moved in 2 min after release 34.7 (19.4–46.5) m; struck at a wolf 1/3 |
+
+### What the minds did
+
+**Wolves at dusk (island and stage1-wolves valley).** On the island the pack killed 11 of 14 valid subjects across b1, b2 and b4: Mistral Small 2/2 (b1) and 3/3 (b2), Luna 3/3, GLM 1/3, DeepSeek 2/3. Deaths came at 2.5–8.9 minutes, 0.5–6.9 minutes after the pack arrived. In the old valley it killed 1 of 9 (b1 Mistral Small, at 12.8 min, after the pack had killed two of the subject's family). Most subjects who met the pack struck at it (b4: DeepSeek 3/3, GLM 1/3), and the farthest any moved in the two minutes after release was 0–28 m. They called for help:
+
+- `b4/wolves-deepseek-flash-r1/journal/Mocortha.jsonl:9` (think): "A wolf is on me at night, one bite already landed. I have a bow and arrows — I can put a fire_bolt into it before it bites again, and a house is two tiles off if it goes badly." says "Wolf! Help — someone at the houses, a wolf is on me!" Died 2.6 minutes later (chronicle: attacked Shade, then Storm; killed by Storm).
+- `b4/wolves-default-r2/journal/Renzo.jsonl:12` (GLM): "The gates stand open at last and a wolf is on me … Get through the gate, into the light and among people". Survived.
+- `b4/wolves-default-r3`: the subject yielded to one wolf and was killed by another ("killed by Frost the wolf, after yielding"). Under the one damage rule a yield stops only the yielder.
+
+No mind-written graph in force at the release kept a flee branch (b4: 4 mind graphs, none with `flee`). The two subjects still on the starting instinct (which has one) split one survival, one death, so these runs do not show that dropping the reflex killed them. The difference between worlds has a row-level cause, not a mental one. Under town life, the island's arrival road is a fight zone, and Brackenford's guards killed a held pack outright in b1 (`b1/wolves-default-r1`). In the valley, family members were nearer the wolves than the subject.
+
+**Hungry stranger (island and stage3-village).** Every subject ate within a minute or two (berry bushes are everywhere), and every subject asked for work rather than food:
+
+- `b4/hungry-village-deepseek-flash-r1/journal/Negarbor.jsonl:2`: "I'd rather earn my keep than take what isn't offered — I'll pick a few berries of my own and ask Yatuly whether there's work here".
+
+The words are the authored sheet's values ("I would rather work for a meal than beg for one") returned, so the food trigger's words seldom matched. In the village, people stand close and answer, and the subject received the scripted gift 3/3 with DeepSeek in b4 (0/3 GLM). On the island, food came from gathering. Island subjects died: b1 1/3 and b4 GLM 2/3, to the bold pack on the arrival road ("killed by Rook the wolf"), which the trial did not script. It is part of the shipped island.
+
+**A teacher before the cold night.** With DeepSeek the subject stayed, learned the cloak 3/3 and crafted it 2/3. With GLM it learned it 0/3. While its first decisions were pending (about 60 s each), its body wandered 12–30 tiles off on the instinct graph, and the 15 s teach act needs the learner in reach (`b4/teacher-default-r*/samples.jsonl`, distance to the teacher at 30–130 s). The minds spoke to the teacher at once:
+
+- `b4/teacher-deepseek-flash-r1/journal/Cormobor.jsonl:2`: "Arilo stands right beside me. The day is wearing on and I have no cloak — I should greet him and ask about shelter before night." One minute after being taught it tried to teach the cloak back ("teach cloak → Arilo: you don't know cloak yourself").
+
+**A theft in the square.** b1's version was invalid: the thief took from other people's storages. In b3 and b4 the theft fired only when the subject came back to its stall: 3 of 9 instances (b3 Mistral Small 2/3, b4 DeepSeek 1/3, b4 GLM 0/3; the others never returned after minute 3). Two of the three recognised it as theft afterwards, in their own words. None of the three said anything about it to the thief or asked for the berries back: their only lines to the thief were trade offers (chronicle, subject to thief).
+
+- `b4/theft-deepseek-flash-r1/journal/Mitha.jsonl:19` (consolidation, after the theft): "Vehan mocked me and then stole four berries from my storage — my trade goods, the whole point of coming here." Next think (`:21`): "I woke early, still stung by Vehan's theft". Its only line to Vehan, at the moment of the theft: "Not the bushes — I've picked my fill. I'm after a knife to trade my berries for."
+- `b3/theft-default-r1/journal/Rone.jsonl:26` (talk, at the theft): "I need to introduce myself and explain my berries before they take more, since they already took some." Later (`:29`): "Yawen has storage nearby with berries inside, but I don't want to repeat the theft."
+- `b3/theft-default-r3`: the percept came at 3.1 minutes, and the next deliberation (`journal/Lodel.jsonl:19`) said "My berries are safely stored". The model's stated belief contradicts the percept it had received half a minute earlier.
+
+From rows: the percept arrives as one line among many (the island square gives a stream of "For the first time you see …"), and in every case the next actions served the plan the subject already had, a knife trade. Note also that under minds-true island trials the subject keeps its seeded household relations (`relations_end` lists family as allies) even with a traveller's sheet. That leaks the resident's old life into the stranger's prompt. A trial should spawn its subject (as life runs do) or clear relations; no reducer clears them today.
+
+### Old worlds against the island
+
+The same person, played by the same model, did better in the old valley worlds. Wolves killed 1 of 9 there against 11 of 14 on the island, and fed hungry subjects 3/3 (DeepSeek) against 0–1/3. Rows point to world causes. The island is large, its arrival road has a bold pack of its own, its guards fight, and its residents are many and spread out (a speaker is answered only when the addressed person is in hearing). The valley camps keep a few people close. Both comparisons have three replicates per arm, and the subject's genome (temperament) differs between worlds.
+
+### What to evolve next
+
+- **Configuration.** Give glm-flash `reasoning_effort: low`, or move people off it for compile and consolidation. As configured, 69% of compiles return nothing.
+- **Architecture: reflexes under a slow mind.** No mind-written graph kept a flee branch, and a slow mind leaves the body on whatever graph it has (GLM subjects wandered away from a lesson). A bodily `first` layer the mind cannot silently drop would be injected behaviour, so it is not proposed. Better feedback is: tell a deliberation which reflexes its new graph drops ("your new plan has no answer to being attacked"), as the prune warnings already do for invalid branches.
+- **Prompt: salience of loss.** A theft arrives as one percept among many. One mind of three missed it, and the two that named it later still answered the thief with a trade offer. Recall cues could weight events done to the character's own things (took, seized, attacked) above first sightings, so consolidation and the next deliberation see them.
+- **Graphs: asking loops.** Subjects re-deliberate every 25–60 s to re-ask residents who never answer (instinct residents do not trade or reply). Feedback that a request went unanswered several times would give the mind something to change its plan on. The theft trial's 25 lines per subject in b1 came from this loop.
+- **Perception noise.** A newcomer's first percepts are eleven "You notice a gate" lines, one per gate tile (`l2/life-pressure-glm-flash-low-r1/experiences.jsonl`). A gate should be noticed once.
+- **Trial design.** Spawn scripted-trial subjects instead of repurposing residents (household relations leak through). Hold scripted packs out of town range.
+
+## Life runs (2026-11-09, l1–l3)
+
+(Results below, at 6 hours.)

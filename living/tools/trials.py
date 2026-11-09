@@ -1679,6 +1679,42 @@ def report(a):
     print(f"\nwritten {bdir / 'report.md'}")
 
 
+def reclaim(a):
+    """Remove the replica directories that deleted databases leave in the trial volume (as
+    living/tools/reclaim_disk.sh does for the lab container). A live world writes every
+    second, so its replica is recently modified. A paused (kept) world does not: its replica
+    is found by its module log, whose last line's microsecond timestamp appears in that
+    replica's log file only. Refuses unless every database maps to exactly one kept replica."""
+    guard()
+    dbs = databases()
+    token = admin_token()
+    base = "/home/spacetime/.local/share/spacetime/data/replicas"
+    listing = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {base} && for r in *; do if [ -n \"$(find $r -type f -mmin -{a.idle} -print -quit)\" ]; then echo live $r; else echo idle $r; fi; done").stdout.split("\n")
+    live = {l.split()[1] for l in listing if l.startswith("live ")}
+    idle = {l.split()[1] for l in listing if l.startswith("idle ")}
+    keep, unpaused = set(), 0
+    for db in dbs:
+        code, body = http(f"/v1/database/{db}/sql", "SELECT paused FROM world", token, raw=True)
+        if not (code == 200 and json.loads(body)[0]["rows"][0][0]):
+            unpaused += 1
+            continue
+        last = sh("docker", "exec", CONTAINER, "spacetime", "logs", "-s", "local", db, "-n", "1", "--format", "json").stdout.strip().splitlines()
+        ts = json.loads(last[-1])["ts"] if last else None
+        hit = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {base} && grep -l '\"ts\":{ts},' */module_logs/*.log", check=False).stdout.split()
+        owners = {h.split("/")[0] for h in hit}
+        if ts is None or len(owners) != 1:
+            sys.exit(f"refusing: cannot tell which replica holds the paused database {db}")
+        keep |= owners
+        print(f"keeping replica {next(iter(owners))} of paused {db}")
+    print(f"{len(dbs)} trial databases ({unpaused} live); {len(live)} replicas written in the last {a.idle} min; {len(idle)} idle")
+    if len(live - keep) != unpaused:
+        sys.exit("refusing: recently written replicas do not match the live databases")
+    gone = sorted(idle - keep)
+    for r in gone:
+        sh("docker", "exec", CONTAINER, "rm", "-rf", f"{base}/{r}")
+    print(f"removed {len(gone)} orphaned replicas; volume now {sh('docker', 'exec', CONTAINER, 'du', '-sh', base).stdout.split()[0]}")
+
+
 def resummarize(a):
     """Recompute every instance's summary from its kept evidence (after a probe changes)."""
     bdir = OUT / a.batch
@@ -1746,6 +1782,9 @@ def main():
     p = sub.add_parser("resume")
     p.add_argument("--batch", required=True)
     p.set_defaults(f=resume)
+    p = sub.add_parser("reclaim")
+    p.add_argument("--idle", type=int, default=5)
+    p.set_defaults(f=reclaim)
     p = sub.add_parser("resummarize")
     p.add_argument("--batch", required=True)
     p.set_defaults(f=resummarize)
