@@ -11,20 +11,6 @@
   },
   "env": {}
  },
- "glm": {
-  "about": "People think with glm (zai-glm-5-3, no overflow).",
-  "models": {
-   "default": "glm"
-  },
-  "env": {}
- },
- "mistral-large": {
-  "about": "People think with mistral-large (mistral-large-4, no overflow).",
-  "models": {
-   "default": "mistral-large"
-  },
-  "env": {}
- },
  "ministral-14b": {
   "about": "People think with ministral-14b (ministral-14b-latest).",
   "models": {

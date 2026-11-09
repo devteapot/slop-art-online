@@ -61,12 +61,22 @@ TOTAL_CAP = int(os.environ["TRIALS_TOTAL_TOKENS"]) if os.environ.get("TRIALS_TOT
 FAKE = ROOT / ".agents/skills/verify-llm/scripts/fake_llm.py"
 FOOD = {"berries", "meat", "fish", "cooked_meat", "cooked_fish", "smoked_meat", "smoked_fish", "bread"}
 SAMPLE_S = 2.0
-# Estimated USD per million prompt and completion tokens, for the report only (an assumption,
-# not an invoice), from third-party price lists of 2026-08 (Mistral's own page was not
-# reachable): Mistral Small $0.20 / $0.60 (batch b1-b3 only), Ministral 14B $0.20 / $0.20.
-# No price was found for GLM 5.3 Flash or DeepSeek 4.1 Flash on the Mistral platform: their
-# cost shows as unknown.
-PRICES = {"mistral-small-latest": (0.20, 0.60), "ministral-14b-latest": (0.20, 0.20), "ministral-8b-latest": (0.10, 0.10)}
+# Estimated USD per million tokens: (input, output, cached input), for the report only, not an
+# invoice. Mistral's model pages, read 2026-11-09 (docs.mistral.ai/models/...): DeepSeek V4.1
+# Flash 0.30 / 1.20 / 0.007; GLM 5.3 Flash 0.15 / 0.50 / 0.03; Ministral 3 3B, 8B and 14B
+# 0.10, 0.15 and 0.20 per million (one unlabeled price, taken as both input and output; no
+# cached price). Reasoning tokens are counted in completion tokens and priced as output (the
+# pages do not say). Mistral Small (batches b1-b3 only): third-party lists, 0.20 / 0.60.
+PRICES = {"deepseek-v4-1-flash-1017": (0.30, 1.20, 0.007), "zai-glm-5-3-flash": (0.15, 0.50, 0.03),
+          "ministral-3b-latest": (0.10, 0.10, 0.10), "ministral-8b-latest": (0.15, 0.15, 0.15),
+          "ministral-14b-latest": (0.20, 0.20, 0.20), "mistral-small-latest": (0.20, 0.60, 0.20)}
+
+
+def cost(model, prompt, completion, cached):
+    pr = PRICES.get(model)
+    if not pr:
+        return None
+    return ((prompt - cached) * pr[0] + cached * pr[2] + completion * pr[1]) / 1e6
 LEDGER = OUT / "ledger.json"
 _lock = threading.Lock()
 
@@ -1261,6 +1271,8 @@ def strictness(text):
     if not isinstance(text, str):
         return "invalid" if text is None else "strict"
     t = text.strip()
+    if not t:
+        return "empty"
     try:
         json.loads(t)
         return "strict"
@@ -1281,13 +1293,14 @@ def purpose_model(j, thoughts):
     """Per purpose x model: calls, tokens, latency p50/p95, failed calls, replies that needed
     repair or could not be parsed, estimated cost; and for deliberations, retries and pruned
     (normalized) graphs from the thought rows."""
-    out = defaultdict(lambda: {"calls": 0, "tokens": 0, "prompt": 0, "completion": 0, "lat": [], "errors": 0, "repaired": 0, "invalid": 0, "profiles": Counter()})
+    out = defaultdict(lambda: {"calls": 0, "tokens": 0, "prompt": 0, "completion": 0, "cached": 0, "reasoning": 0, "lat": [], "errors": 0, "empty": 0, "repaired": 0, "invalid": 0, "profiles": Counter()})
     for r in j:
         o = out[f"{r.get('purpose')} / {r.get('model')}"]
         o["calls"] += 1
         o["tokens"] += r.get("tokens") or 0
         o["prompt"] += r.get("prompt_tokens") or 0
         o["completion"] += r.get("completion_tokens") or 0
+        o["cached"] += r.get("cached_tokens") or 0
         if r.get("latency_ms"):
             o["lat"].append(r["latency_ms"])
         if r.get("error"):
@@ -1301,11 +1314,11 @@ def purpose_model(j, thoughts):
     for k, o in out.items():
         lat = sorted(o["lat"])
         model = k.split(" / ", 1)[1]
-        pr = PRICES.get(model)
+        c = cost(model, o["prompt"], o["completion"], o["cached"])
         res[k] = {"calls": o["calls"], "tokens": o["tokens"], "prompt": o["prompt"], "completion": o["completion"],
                   "latency_p50_ms": lat[len(lat) // 2] if lat else None, "latency_p95_ms": lat[min(len(lat) - 1, int(len(lat) * 0.95))] if lat else None,
-                  "errors": o["errors"], "repaired": o["repaired"], "invalid": o["invalid"], "profiles": dict(o["profiles"]),
-                  "cost_usd": round((o["prompt"] * pr[0] + o["completion"] * pr[1]) / 1e6, 4) if pr else None}
+                  "errors": o["errors"], "empty": o["empty"], "repaired": o["repaired"], "invalid": o["invalid"], "profiles": dict(o["profiles"]),
+                  "cached": o["cached"], "cost_usd": round(c, 4) if c is not None else None}
     retries = pruned = rejected = 0
     for t in thoughts:
         if t.get("kind") == "error":
@@ -1633,9 +1646,8 @@ def report(a):
             tok[m]["cached"] += v["cached"]
     out.append("| Model | Calls | Tokens | Prompt | Completion | Cached | Est. cost (USD) |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
     for m, v in tok.items():
-        pr = PRICES.get(m)
-        cost = f"{(v['prompt'] * pr[0] + v['completion'] * pr[1]) / 1e6:.2f}" if pr else "unknown"
-        out.append(f"| {m} | {v['calls']} | {v['tokens']:,} | {v['prompt']:,} | {v['completion']:,} | {v['cached']:,} | {cost} |")
+        c = cost(m, v["prompt"], v["completion"], v["cached"])
+        out.append(f"| {m} | {v['calls']} | {v['tokens']:,} | {v['prompt']:,} | {v['completion']:,} | {v['cached']:,} | {f'{c:.2f}' if c is not None else 'unknown'} |")
     out.append("")
     pm = defaultdict(lambda: Counter())
     lats = defaultdict(list)
@@ -1643,15 +1655,15 @@ def report(a):
         for k, v in (s_.get("by_purpose_model") or {}).items():
             if k == "deliberations":
                 continue
-            for f in ("calls", "tokens", "errors", "repaired", "invalid"):
+            for f in ("calls", "tokens", "errors", "empty", "repaired", "invalid"):
                 pm[k][f] += v[f]
             if v.get("latency_p50_ms"):
                 lats[k].append((v["latency_p50_ms"], v["latency_p95_ms"]))
     if pm:
-        out.append("| Purpose / model | Calls | Tokens | p50 ms (median of runs) | p95 ms (max of runs) | Failed | Repaired | Invalid |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+        out.append("| Purpose / model | Calls | Tokens | p50 ms (median of runs) | p95 ms (max of runs) | Failed | Empty text | Repaired | Invalid |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         for k, v in sorted(pm.items()):
             l50 = sorted(x for x, _ in lats[k])
-            out.append(f"| {k} | {v['calls']} | {v['tokens']:,} | {l50[len(l50) // 2] if l50 else '–'} | {max((y for _, y in lats[k]), default='–')} | {v['errors']} | {v['repaired']} | {v['invalid']} |")
+            out.append(f"| {k} | {v['calls']} | {v['tokens']:,} | {l50[len(l50) // 2] if l50 else '–'} | {max((y for _, y in lats[k]), default='–')} | {v['errors']} | {v['empty']} | {v['repaired']} | {v['invalid']} |")
         out.append("")
     for (trial, variant), ss in sorted(groups.items()):
         ss.sort(key=lambda s: s["replicate"])
