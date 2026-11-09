@@ -74,9 +74,16 @@ fn main() {
     let mut spots: Vec<(&str, (f32, f32, f32))> = Vec::new();
     // The core: from the central plaza toward its tallest tower.
     if let Some(&c) = wards(&land, &["corporate", "metro"]).iter().min_by(|a, b| dist(land.settlements[**a].plaza.centre, centre).total_cmp(&dist(land.settlements[**b].plaza.centre, centre))) {
-        let pc = land.settlements[c].plaza.centre;
-        if let Some(t) = land.lots.iter().filter(|l| dist(l.centre, pc) < 160.0).max_by(|a, b| a.height_m.total_cmp(&b.height_m)) {
-            spots.push(("core", (pc.0, pc.1, yaw_to(pc, t.centre))));
+        let set = &land.settlements[c];
+        let pc = set.plaza.centre;
+        // A building in the middle of the square (an arcology): stand out along the street it
+        // faces, 120 m from it, and look at it.
+        let inside = land.lots.iter().find(|l| l.settlement as usize == c && dist(l.centre, pc) < 1.0);
+        let at = inside.map_or(pc, |l| (pc.0 + l.front.0 * 120.0, pc.1 + l.front.1 * 120.0));
+        if let Some(l) = inside {
+            spots.push(("core", (at.0, at.1, yaw_to(at, l.centre))));
+        } else if let Some(t) = land.lots.iter().filter(|l| dist(l.centre, pc) < 160.0).max_by(|a, b| a.height_m.total_cmp(&b.height_m)) {
+            spots.push(("core", (at.0, at.1, yaw_to(at, t.centre))));
         }
     }
     // A neon street: the 40 m with the most neon signs, looking along its street.

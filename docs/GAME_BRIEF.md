@@ -581,6 +581,54 @@ Client presentation (`acbbda7`), recorded here after the fact.
 - **Arid lands:** a land whose rivers run dry (`water.dry_rivers`, the megacity floor's wastes) gets dry earth, cracked mud and gravel ground layers (16 in all) and its own dressing, `wastes`, `scrubland` and `badlands`. The megacity's wall line draws a 14 m cyberpunk wall. Look-dev draws any land seed with `LIVING_GAME_SEED=<seed.json>` ([floors](FLOORS.md)).
 - **Assets:** `just living-game-assets` now paints every texture set (`living-game-textures --set all`): the ground and the model surfaces that `style.rs` binds on scenery. Before, a fresh checkout got the ground only and no model detail.
 
+## The megacity kit (2026-11-09)
+
+Built on `megacity-1` for the megacity floor's second pass ([floors](FLOORS.md#the-megacity-second-pass)). `living/tools/blender/city.py` builds on `buildings.py`'s helpers and conventions. `buildings.py` now runs its `main()` only as a script, so `city.py` can import it. `gen_city.sh` (in `just living-game-assets`) writes `envs/cyberpunk_megacity/<kind>/` and refreshes `living/rules/data/buildings.json`: 327 models in about 10 s.
+
+- **Buildings:**
+
+  | Kind | Forms | Height | Triangles, mean and max |
+  |---|---|---|---|
+  | megatower | blade, stepped, twin, needle | 170-326 m | 6.5k / 10.2k |
+  | arcology | arcology | 187-225 m | 13.9k / 14.5k |
+  | megablock | slab, court, stack | 61-111 m | 22.2k / 33.5k |
+  | neon_tower | neon | 51-57 m | 3.5k |
+  | old_block | narrow, wide | 19-31 m | 3.7k / 5.0k |
+  | block, market, workshop | as the cyberpunk kit, in the city's palette | | |
+  | shanty | shack, stack, lean | 3-13 m | 0.3k / 0.9k |
+  | container | stack2, stack3, home2, home3 | 5-9 m | 0.7k / 1.1k |
+  | warehouse | shed, sawtooth | 18-22 m | 0.8k / 1.0k |
+  | ruin | shell, stump | 4-14 m | 0.5k / 0.7k |
+  | wall_tower | tower | 33-38 m | 0.4k |
+
+- **Transport:** highway (ring: a 22 m deck at 9 m; arterial: 16 m at 17 m; 24 m long on a hammerhead pier, with barriers, a lit strip, lane marks, lamp masts and sometimes a sign gantry), about 0.5k triangles.
+- **Street dressing:** vending (banks of 2 or 3), vent (stack, grate), trash (bags, bins, heap), barrier (jersey, bollards, checkpoint), vehicle (car, van, bike, truck), hologram (pole, disc), scaffold, crane (port gantry, tower crane), salvage (heap, wreck), all under 1.1k triangles. The cyberpunk lamps, kiosks, food stalls, neon signs, billboards, cables, crates, walkway, wall and street props are made again in the same folder, so a ward finds every model in one environment.
+- **Our own text and marks.**
+  - A 14-segment neon font writes real words on signs: brands (KAIROS, HALCYON, VANTA, ORRERY, MERIDIAN, NOVA, TESSER, OKAPI) with their marks (ring, sun, chevron, orbit, bar, star, cube); trades (NOODLE, RAMEN, 24H, HOTEL, KARAOKE, REPAIR…); road signs (RING 1, PORT, CORE…).
+  - All names are invented here, and nothing comes from an existing game or franchise.
+  - The kit's other pseudo-glyph boards are `buildings.py`'s.
+- **Lit windows.** Megatowers and arcologies use curtain walls with lit runs per storey, so a few quads per storey stand for a whole floor of offices. Megablocks use punched windows lit per household. A share of floors stays dark.
+- **Materials and surfaces.** These are the shared ones: `Body`, `Glow`, and the neon colours `GlowPink`, `GlowCyan`, `GlowAmber`, `GlowRed` and `GlowWhite`. No building has materials of its own. Parts carry the existing surface tags in their vertex alpha: concrete, metal, glass, plastic, cloth, brick, plaster, planks, leaves and earth. Grime is a vertex-colour gradient and streaks; neon is the glow materials. No new texture layers were added. A metal-panel or grime layer would change `surfaces.py`, `paint.py` and the game's table (`style.rs`) together, and the game draws no detail when `material.txt` does not match its table, so that is a client change for later.
+- **Measured in the captures.** Near the core: 180-210 models and about 900 meshes in view. At the market and the overpass: 580-660 models and 2,100-2,600 meshes. Frame times are in [floors](FLOORS.md#staged-generation-and-the-largest-floor).
+
+### Client notes for the megacity floor
+
+Nothing in `living/game` was changed on `megacity-1`.
+- **Drawn already.** The client draws the new lots and props through their model files and kind folders, and the folder's `cyberpunk` prefix dresses its people in the cyberpunk look (`characters::place_style`).
+- **The patch.** [`docs/patches/megacity-client.patch`](patches/megacity-client.patch) (`git apply` from the repository root) does two things; the captures used a private build with it applied:
+  - `island.rs` `road_layer` asks `living_rules::settle::road_surface(style)` for the paving, so the new district styles get pavers, setts, earth or gravel, and future styles need no client change. Without it, the corporate, neon, megablock and market wards draw cobbles.
+  - `assets/envs/cyberpunk_megacity.json` is a showcase environment whose `lamp` and `neon_sign` slots carry the glow that lights the floor's lamps at night. Without it, megacity lamps get no point lights, because the island takes a lamp's light from its environment's slot.
+
+**Further work, by priority:**
+1. **The world being made.** Subscribe to the public `genesis` row and show progress (`step`, `steps`, `label`) while a floor is created: 20 s at 4096 m and 90 s at 8192 m on the dev-box. Wait for `done` before drawing the land.
+2. **A land cache by digest.** At 8192 m the client regenerates the land for 37-39 s with about 0.8 GB, and look-dev's tour photographs before it is ready (its first shot waits a fixed 6 s). Cache the generated land under the `land` row's digests, and gate tours and arrival on the land being in.
+3. **The floor's own night.** The judge of the blind A/B found the haze beyond about 50 m and the flat blue-violet palette the main weaknesses. `island.json`'s mood curve applies to every land; a floor needs its own curve (longer fog distances at night, a warmer key, stronger bloom on neon), read from the seed or the environment.
+4. **Light from props.** Props get no point lights (`Item::glow` is unset for props). Holograms, neon signs and wall towers' floodlights could take the environment slot's glow as lots do, capped like lamps.
+5. **Windows through the evening.** Every glowing part scales together with the hour. A per-window hash against the hour, in `toon.wesl`'s glow path, would switch offices off one by one through the night without new materials.
+6. **Steam.** `vent` props are the places for rising steam: a small flipbook or particle effect at their position, more in rain.
+7. **Large models and the cutaway.** The arcology is about 100 m across. The cutaway's reach comes from a model's fitted size, so it works, but standing beside such a building hides it in vistas taken from the far side. Judge the cutaway by the camera's line, not only by nearness.
+8. **Two-sided signs.** Text on container homes reads mirrored from behind. The kit can make those signs two-sided; the client needs no change.
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**

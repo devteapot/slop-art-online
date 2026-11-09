@@ -45,6 +45,9 @@ pub struct Planned {
     pub fields: Vec<(f32, f32)>,
     /// Door points of the homes, nearest the plaza first.
     pub homes: Vec<(f32, f32)>,
+    /// Where one stands on the square: its middle, or, when that is built on, walkable points
+    /// round its edge (each resident takes the nearest it can reach).
+    pub square: Vec<(f32, f32)>,
 }
 
 pub struct PlannedLot {
@@ -134,8 +137,14 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
                 }
             }
         }
-        // Hearth, sign and two stores on the plaza, clear of its well and stalls.
-        let c = s.plaza.centre;
+        // Hearth, sign and two stores on the plaza, clear of its well and stalls. A square whose
+        // middle is built on (the megacity core's arcology) has its heart on its walkable edge.
+        let square: Vec<(f32, f32)> = if map.walkable(s.plaza.centre.0 as i32, s.plaza.centre.1 as i32) {
+            vec![s.plaza.centre]
+        } else {
+            s.plaza.points.iter().step_by(2).map(|q| (q.0 * 0.9 + s.plaza.centre.0 * 0.1, q.1 * 0.9 + s.plaza.centre.1 * 0.1)).filter(|q| map.walkable(q.0 as i32, q.1 as i32)).collect()
+        };
+        let c = square.first().copied().unwrap_or(s.plaza.centre);
         let mut market: Vec<(f32, f32)> = Vec::new();
         for off in [(3.0, 2.0), (-3.0, 2.5), (4.0, -3.0), (-4.0, -3.0)] {
             let p = near((c.0 + off.0 * s.scale.max(0.5), c.1 + off.1 * s.scale.max(0.5)));
@@ -169,6 +178,7 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
             market,
             fields,
             homes: homes.into_iter().map(|h| h.1).collect(),
+            square,
         });
     }
     let lots = land
