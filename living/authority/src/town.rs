@@ -200,7 +200,7 @@ pub fn hail(ctx: &ReducerContext, me: u32, a: &Activity, at: (f32, f32), now: u6
 /// How recent a blow, threat or death must be to draw the eye.
 const COMMOTION_MS: u64 = 8_000;
 /// The chronicle's event kinds that are a fight or a death.
-const COMMOTION_KINDS: &[&str] = &["attack", "assault", "threat", "killing", "death"];
+const COMMOTION_KINDS: &[&str] = &["attack", "threat", "killing", "death"];
 
 /// Where the nearest recent fight or death within `sight` of `at` is (a fight's chronicle
 /// row is refreshed at every blow, so it stays recent while the fight lasts).

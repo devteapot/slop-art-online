@@ -53,8 +53,8 @@ impl Aim {
 }
 
 /// What a combat skill is, as its script declares it (`<skill>_combat()`, read once when the
-/// script compiles). The engine's primitives (a dash, a held guard, a missile, a melee blow
-/// meant to hurt or kill) are chosen by these traits, never by the skill's name.
+/// script compiles). The engine's primitives (a dash, a held guard, a missile, a melee blow)
+/// are chosen by these traits, never by the skill's name.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Shape {
     /// Presentation code (`fighter.act`, `combat_seen.skill`, `skill_card.code`), stable across
@@ -72,8 +72,8 @@ pub struct Shape {
     pub reflex: bool,
     /// Behavior of the moment: it belongs in a graph, not in a one-off act.
     pub real_time: bool,
-    /// A blow in reach meant to hurt or to kill (its item), carrying the rules' `lunge(kind)`:
-    /// out of reach by more when it releases, it misses.
+    /// A blow in reach, carrying the rules' `lunge(kind)`: out of reach by more when it
+    /// releases, it misses.
     pub melee: bool,
     /// The rules are weighed before walking into reach (no closing in on someone the rules
     /// won't let you strike).

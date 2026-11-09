@@ -195,3 +195,12 @@ Own scratch container `slop-combat-stdb` (v2.14.1); worktree at `e0c9d1f` plus t
 A first skirmish benchmark showed no blocks or dodges: `{"threatened": true}` counted only the older attack skills. It now counts `strike`, `bowshot` and `firebolt` windups too.
 
 Mechanics: the net check (and the smoking/crafting check chained to it) failed in 3 of 3 fresh worlds with the change, against 0 of 2 on the base commit (`core-base-mech-1`, `-2`: 23 and 22, the 22 failing forest clearing). An instrumented copy of the driver showed "the fishing_spot is depleted": residents had emptied the walker's nearest spot. The driver now takes the nearest spot holding at least two fish (features/mechanics.md, "A fished-out spot"). Afterwards `core-combat-mech-4`, `-5` and `core-combat-dbg3`: 21 (net again, no recorded reason), 21 (conception and expecting parent) and 23 of 23. Evidence copied to the Mac checkout's `.local/living/verify/combat-evidence/`.
+
+## 2026-11-09 one damage rule (Mac)
+
+Shared container `sao-living_spacetimedb_1` (v2.14.1), Mac checkout at `b7cf7fb` plus the change removing the hurt/kill mode (docs/COMBAT.md "One damage rule"). Scratch databases only, no model calls. Evidence under `.local/living/verify/`.
+
+- `core-fm-base`: `cargo_checks.py` pass (rules 87, authority 10, mind 47, viewer sync 3); `tick` 6/6, `needs` 6/6, `seize` 6/6. The seize scene's last check is now "a blow can kill someone who yielded, and striking them is news": `seize-struck-yielded.json` ("Walker1 struck Walker2, though Walker2 had yielded"), `seize-killed.json` ("killed by Walker1, after yielding"), `seize-killing.json`.
+- Mechanics: `core-fm-mechanics` 22 of 23. The new check "blows land on the yielded, and striking them is news" failed in the driver, not the rule: the yield, the news and J's "though you had yielded" percept were all present, but J's health was read after the post-yield blow had landed. The check now reads the damage J was told. With that: `core-fm-mechanics-2` and `-3` 23 of 23.
+- `core-fm-skirmish` (island) 8/8; `core-fm-town` (island) 21/21; `core-fm-codes` 10/10.
+- Every database was deleted by cleanup and absent from `stdb list` afterwards.

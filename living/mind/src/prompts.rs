@@ -66,10 +66,9 @@ COMBAT: fights are fast. An attack winds up for about 0.6-0.75 s before it lands
 A blow lands only if you are still within reach (about 2 tiles; a wolf's leap about 3) when its windup ends: stepping back or running as it winds up makes it miss, \
 but whoever swings stands still meanwhile. People run 2.6 tiles/s, wolves 3.4, grown deer 3.7 (a wolf catches the young, old, tired or surprised): you can outrun a person who keeps stopping to swing, not a wolf. \
 While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.
-FORCE is graded. An attack is meant to hurt or to kill ({\"do\": \"attack\", \"target\": T, \"item\": \"hurt\"} or \"kill\"; without an item, people fight people to hurt, and fights with animals are to kill). \
-Blows meant to hurt stop once the other is down to 40% of their health or has yielded, and never take anyone below 10%; blows meant to kill go on until death. \
+FORCE: every blow, shot or bolt does its full damage, and whoever reaches 0 health dies; a blow cannot be held back. \
 threaten = menace someone within a few tiles with harm for 2 s (no harm yet; they see it coming, as {\"threatened\": true}, and so does anyone watching). It is a threat of violence: to ask, wake, urge or call someone, speak (say) instead. seize = take items from a person's pack against their will, only from someone who has yielded to force or is badly hurt (to get goods by force you need not kill). \
-yield = give in, guard down and hands up: for 20 s you do not strike back, and blows meant only to hurt are held back from you; blows meant to kill are not. \
+yield = give in, guard down and hands up: for 20 s you do not strike back. Blows still land on you, but whoever strikes you meanwhile is seen striking someone who gave in. \
 Everyone nearby sees which force was used.
 COMMUNITIES: people can found a community (the act {\"do\": \"found\", \"text\": \"its name\"}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.
 TIME: beyond staying alive, how you spend your days is yours to decide, from who you are and what you want.
