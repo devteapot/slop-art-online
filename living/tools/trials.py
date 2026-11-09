@@ -1396,7 +1396,8 @@ def execute(a, instances, shared, resume=False):
     threads = [threading.Thread(target=go, args=(i,), daemon=True) for i in instances]
     for th in threads:
         th.start()
-        time.sleep(2)
+        # Starts are staggered so world creation (seeding, births) does not land at once.
+        time.sleep(getattr(a, "stagger", 2) or 2)
     old = signal.signal(signal.SIGINT, lambda *_: shared.__setitem__("abort", True))
     try:
         while any(th.is_alive() for th in threads):
@@ -1450,7 +1451,7 @@ def resume(a):
     guard()
     bdir = OUT / a.batch
     meta = json.loads((bdir / "batch.json").read_text())
-    a = argparse.Namespace(batch=a.batch, fake=meta["fake"], minutes=meta.get("minutes"), keep_db=meta.get("keep_db"), parallel=meta.get("parallel") or 18)
+    a = argparse.Namespace(batch=a.batch, fake=meta["fake"], minutes=meta.get("minutes"), keep_db=meta.get("keep_db"), parallel=meta.get("parallel") or 18, stagger=2)
     trials = {t: load_trial(t) for t in meta["trials"]}
     todo = []
     for t in trials.values():
@@ -1812,6 +1813,7 @@ def main():
     p.add_argument("--fake", action="store_true", help="answer every model call from the local fake server (no provider keys)")
     p.add_argument("--parallel", type=int, default=18)
     p.add_argument("--keep-db", action="store_true")
+    p.add_argument("--stagger", type=float, default=2, help="seconds between instance starts")
     p.add_argument("--allow-partial", action="store_true")
     p.set_defaults(f=run)
     p = sub.add_parser("report")
