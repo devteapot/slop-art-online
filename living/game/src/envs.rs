@@ -576,6 +576,9 @@ pub fn switch(
                 let model = Model { vrm, file: file.clone(), height: pl.height, ground_y: y, glow: slot.glow };
                 let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
                 let mut e = commands.spawn((EnvPart, model, WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(pl.yaw)), Visibility::Hidden));
+                if pl.height <= 1.6 {
+                    e.insert(crate::lookdev::NoShadow);
+                }
                 if pl.height >= 3.0 {
                     e.insert(Occluder { height: pl.height });
                 }

@@ -394,6 +394,9 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     if it.height >= 3.0 {
         e.insert(Occluder { height: it.height });
     }
+    if it.height <= SMALL {
+        e.insert(crate::lookdev::NoShadow);
+    }
     let mut out = vec![e.id()];
     if let Some((light, tf)) = crate::envs::local_light(&it.kind, it.glow, it.height, it.k) {
         out.push(commands.spawn((EnvPart, light, Transform::from_translation(at + tf.translation))).id());
@@ -492,6 +495,7 @@ pub fn stream(
         }
         if d <= NEAR && !island.small.contains_key(&c) && island.ground.contains_key(&c) {
             let items: Vec<Item> = island.site_items.get(&c).cloned().unwrap_or_default().into_iter().chain(island.wild_items(c)).collect();
+            let items: Vec<Item> = items.into_iter().filter(|it| !(crate::perf::has("nopeople") && it.person.is_some()) && !(crate::perf::has("nosmall") && it.person.is_none())).collect();
             let es: Vec<Entity> = items.iter().filter(|it| it.height <= SMALL || it.person.is_some()).flat_map(|it| spawn_item(&mut commands, &assets, &land, it)).collect();
             island.small.insert(c, es);
             built += 1;

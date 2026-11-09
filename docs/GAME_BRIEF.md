@@ -298,6 +298,33 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
   - In the giants' and steampunk cities the gameplay camera sees mostly plaza.
   - Outlines draw through heavy fog.
 
+**Performance pass 1 (2026-11-09; island, headless 1600×900, uncapped, development Mac):**
+
+`LIVING_GAME_PERF` flags switch one cost off at a time, and `LIVING_GAME_FPS_CAP=0` runs uncapped (`living/game/src/perf.rs`).
+
+Measured costs in the town square (21.8 ms in total):
+
+| Cost | Time |
+|---|---|
+| Shadows of scenery | about 4.3 ms |
+| Shadows of characters | about 5.7 ms |
+| Drawing characters | about 2.3 ms |
+| Edge lines, outlines, bloom and prepasses | 1–3 ms each, or less |
+
+Fixes:
+- the sun's shadows use three cascades to 90 m (was four to 160 m);
+- things under 1.6 m cast no shadow;
+- characters' face parts never cast one, and characters beyond 26 m cast none;
+- `living/tools/merge_primitives.py` merges a GLB's same-material primitives within each mesh. VRoid hair is dozens of primitives: Vivi goes from 95 to 17 draws per pass, Shino from 67 to 18. It currently runs by hand on `assets/lookdev/anim/*.glb`, and still has to be folded into `gen_anim.sh`.
+
+| Spot | Before | After |
+|---|---|---|
+| Town square | 21.8 ms | about 14 ms |
+| Forest edge | 19.3 ms | about 11–13 ms |
+| Small-folk hamlet (many props and people) | 29 ms | about 20–25 ms |
+
+Other agents loaded the machine during these runs, so the figures are indicative.
+
 **Claude–Blender integration** (research of 2026-11-08):
 - **Backbone: headless scripts** (`blender -b -P`), versioned in the repo. No socket or telemetry, reproducible, and N processes can run in parallel. The agent checks its work through rendered contact sheets and numeric checks (dimensions, triangle budget, silhouette against a reference, a re-import round trip), reviewed by a fresh-context subagent ([blender-game-skills](https://github.com/majidmanzarpour/blender-game-skills), [blender-kiln](https://github.com/elithril/blender-kiln)).
 - **Live inspection: the official [Blender Lab MCP server](https://www.blender.org/lab/mcp-server/)** (GPL-3.0, Blender 5.1+, the server behind Anthropic's Blender connector). It is optional. It runs model-written code unguarded, so use it on localhost only.

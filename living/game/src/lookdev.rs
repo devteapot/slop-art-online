@@ -70,6 +70,49 @@ pub struct Fitted {
     pub center: Vec3,
 }
 
+/// On a model's root: its meshes cast no shadow (grass, flowers, small props: many, and their
+/// shadows barely read).
+#[derive(Component)]
+pub struct NoShadow;
+
+/// A character's face mesh: never casts a shadow (see `convert`, `character_shadows`).
+#[derive(Component)]
+pub struct FacePart;
+
+/// Characters cast shadows only near the camera: a VRoid body is ~95 meshes drawn into every
+/// shadow cascade, the largest single cost on the island (≈5.7 ms for a dozen people), and a far
+/// character's shadow is a few pixels.
+pub fn character_shadows(
+    mut commands: Commands,
+    cams: Query<&GlobalTransform, With<Camera3d>>,
+    mut chars: Query<(Entity, &GlobalTransform, &mut CastsShadow), (With<crate::characters::Character>, With<Fitted>)>,
+    children: Query<&Children>,
+    meshes: Query<(), (With<Mesh3d>, Without<FacePart>)>,
+) {
+    const NEAR: f32 = 26.0;
+    let Ok(cam) = cams.single() else { return };
+    for (e, g, mut casts) in &mut chars {
+        let want = g.translation().distance(cam.translation()) < NEAR;
+        if casts.0 == Some(want) {
+            continue;
+        }
+        casts.0 = Some(want);
+        for d in children.iter_descendants(e) {
+            if meshes.contains(d) {
+                if want {
+                    commands.entity(d).remove::<bevy::light::NotShadowCaster>();
+                } else {
+                    commands.entity(d).insert(bevy::light::NotShadowCaster);
+                }
+            }
+        }
+    }
+}
+
+/// Whether a character's body currently casts shadows (None until first decided).
+#[derive(Component, Default)]
+pub struct CastsShadow(Option<bool>);
+
 /// A mesh entity already given the toon material and outline.
 #[derive(Component)]
 pub struct Converted;
@@ -159,7 +202,7 @@ pub fn convert(
     mut meshes: ResMut<Assets<Mesh>>,
     q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), Without<Converted>>,
     parents: Query<&ChildOf>,
-    models: Query<&Model>,
+    models: Query<(&Model, Has<NoShadow>)>,
     mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), Handle<Toon>>, HashSet<AssetId<Mesh>>)>,
 ) {
     for (e, mat, mesh, name) in &q {
@@ -173,7 +216,10 @@ pub fn convert(
                 break;
             }
         }
-        let Some(owner) = owner else { continue };
+        let Some((owner, no_shadow)) = owner else { continue };
+        if no_shadow {
+            commands.entity(e).insert(bevy::light::NotShadowCaster);
+        }
         // A slot's glow lights up models with no glow of their own (kits without emissive
         // materials); models that carry emissive materials keep exactly those.
         let glow = owner.glow.filter(|_| !has_glow(&owner.file));
@@ -181,6 +227,11 @@ pub fn convert(
         let Some(base) = standards.get(&mat.0) else { continue };
         // VRoid names materials …_SKIN, …_FACE, …_EYE, …_HAIR, …_CLOTH.
         let skin = name.is_some_and(|n| n.0.ends_with("_SKIN") || n.0.contains("Skin") || n.0.contains("skin"));
+        // Face parts (eyes, lashes, brows, mouth, the face itself) are many small morphing
+        // meshes whose shadows never read: they never cast one.
+        if owner.vrm && name.is_some_and(|n| n.0.contains("_FACE") || n.0.contains("_EYE") || n.0.contains("Face")) {
+            commands.entity(e).insert((bevy::light::NotShadowCaster, FacePart));
+        }
         let toon = done
             .0
             .entry((mat.0.id(), glow_key))

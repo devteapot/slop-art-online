@@ -244,7 +244,7 @@ pub fn spawn(commands: &mut Commands, assets: &AssetServer, recipe: &Recipe, at:
     // VRM 0.x models face −Z.
     let model = Model { vrm: true, file, height: recipe.height, ground_y: at.y, glow: None };
     commands
-        .spawn((model, Character { recipe: recipe.clone(), stride: 1.0 }, WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw + PI)), Visibility::Hidden))
+        .spawn((model, Character { recipe: recipe.clone(), stride: 1.0 }, crate::lookdev::CastsShadow::default(), WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw + PI)), Visibility::Hidden))
         .id()
 }
 

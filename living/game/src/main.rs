@@ -22,6 +22,7 @@ mod hud;
 mod island;
 mod lookdev;
 mod net;
+mod perf;
 mod post;
 mod sight;
 mod style;
@@ -44,7 +45,7 @@ fn main() {
                 .set(WindowPlugin { primary_window: None, exit_condition: bevy::window::ExitCondition::DontExit, ..default() })
                 .disable::<bevy::winit::WinitPlugin>(),
         )
-        .add_plugins(bevy::app::ScheduleRunnerPlugin::run_loop(std::time::Duration::from_secs_f64(1.0 / 60.0)))
+        .add_plugins(bevy::app::ScheduleRunnerPlugin::run_loop(perf::cap()))
         .add_systems(PreStartup, capture::setup)
         .add_systems(PostUpdate, capture::attach.before(post::update));
     } else {
@@ -58,6 +59,8 @@ fn main() {
         }))
         .add_plugins(EguiPlugin::default());
     }
+    app.add_systems(PostUpdate, perf::apply.before(post::update));
+    app.add_systems(Update, lookdev::character_shadows);
     app.insert_resource(ClearColor(camera::SKY))
         .add_plugins(style::StylePlugin)
         .add_plugins(post::PostPlugin)

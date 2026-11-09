@@ -160,7 +160,9 @@ pub fn setup(mut commands: Commands, mut mats: ResMut<Assets<StandardMaterial>>,
     commands.spawn((
         DirectionalLight { color: Color::srgb(1.0, 0.96, 0.88), illuminance: 9_000.0, shadow_maps_enabled: true, ..default() },
         Transform::from_xyz(-30.0, 60.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
-        bevy::light::CascadeShadowConfigBuilder { first_cascade_far_bound: 30.0, maximum_distance: 160.0, ..default() }.build(),
+        // Shadows were the largest single cost (12–18 ms of 19–29 ms on the island): three
+        // cascades to 90 m, where the fog has mostly taken over, instead of four to 160 m.
+        bevy::light::CascadeShadowConfigBuilder { num_cascades: 3, first_cascade_far_bound: 18.0, maximum_distance: 90.0, ..default() }.build(),
     ));
 }
 
