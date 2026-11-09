@@ -18,7 +18,7 @@ import bevy_render::globals::Globals;
 // In the prepass's view bind group the globals sit at binding 1 (bevy_pbr prepass/mod.rs).
 @group(0) @binding(1) var<uniform> prepass_globals: Globals;
 
-// Must match `Toon` in toon.wesl (only `atmo` is read here).
+// Must match `Toon` in toon.wesl (only `atmo` and `shade` are read here).
 struct Toon {
     shadow: vec4<f32>,
     rim: vec4<f32>,
@@ -28,6 +28,8 @@ struct Toon {
     recolor: vec4<f32>,
     recolor_from: vec4<f32>,
     atmo: vec4<f32>,
+    face: vec4<f32>,
+    hair: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)

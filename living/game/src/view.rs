@@ -8,8 +8,9 @@
 //!   `living/tools/view_assets.sh` wraps this and makes one contact sheet per model.
 //! - `LIVING_GAME_VIEW_SHOTS=<shot>[,<shot>…]` picks the shots (default `views,clips`):
 //!   - a view: `front`, `three-quarter`, `side`, `back`, `above`, `game` (the default game
-//!     camera, 28° down, 22 m) or `YAW:PITCH[:ZOOM]` (degrees; yaw 0 faces the model's front;
-//!     zoom 1 frames the model, 0.5 is twice as close);
+//!     camera, 28° down, 22 m) or `YAW:PITCH[:ZOOM[:AIM]]` (degrees; yaw 0 faces the model's
+//!     front; zoom 1 frames the model, 0.5 is twice as close; aim is the height looked at as a
+//!     fraction of the model's, 0.92 for a character's face);
 //!   - `views`: the five angles and `game`;
 //!   - `<clip>`: six frames of that clip from the side; `<clip>/<view>` from that view;
 //!     `<clip>@<seconds>` or `<clip>@<seconds>/<view>`: one frame;
@@ -19,6 +20,7 @@
 //! - `LIVING_GAME_VIEW_HEIGHT=<m>` scales every model to that height (default: the file's own
 //!   size, which is real size for our generated assets).
 //! - `LIVING_GAME_VIEW_ENV=<environment id>` lights the view with that environment's mood.
+//! - `LIVING_GAME_HOUR=<h>` puts the sun at that hour's place (east at 6, west at 18).
 //! - `LIVING_GAME_VIEW_CLIP=<name>[,<name>…]`: the clips to play and photograph (default: the
 //!   first four).
 //!
@@ -48,7 +50,8 @@ const CLIP_FRAMES: usize = 6;
 
 #[derive(Clone, Copy, Debug)]
 enum Pose {
-    Orbit { yaw: f32, pitch: f32, zoom: f32 },
+    /// `aim`: the height looked at, as a fraction of the model's height (default its middle).
+    Orbit { yaw: f32, pitch: f32, zoom: f32, aim: Option<f32> },
     Game,
 }
 
@@ -65,15 +68,15 @@ fn parse_view(s: &str) -> Option<(String, Pose)> {
         return Some(("game".into(), Pose::Game));
     }
     if let Some((n, yaw, pitch)) = ANGLES.iter().find(|a| a.0 == s) {
-        return Some((n.to_string(), Pose::Orbit { yaw: *yaw, pitch: *pitch, zoom: 1.0 }));
+        return Some((n.to_string(), Pose::Orbit { yaw: *yaw, pitch: *pitch, zoom: 1.0, aim: None }));
     }
     let n: Vec<f32> = s.split(':').map(|x| x.parse().ok()).collect::<Option<_>>()?;
-    (n.len() >= 2).then(|| (s.replace(':', "_"), Pose::Orbit { yaw: n[0], pitch: n[1], zoom: n.get(2).copied().unwrap_or(1.0) }))
+    (n.len() >= 2).then(|| (s.replace(':', "_"), Pose::Orbit { yaw: n[0], pitch: n[1], zoom: n.get(2).copied().unwrap_or(1.0), aim: n.get(3).copied() }))
 }
 
 /// The shots for a model with these clips (see the module docs for the grammar).
 fn parse_shots(spec: &str, clips: &[(String, f32)], default_clips: &[usize], file: &str) -> Vec<Shot> {
-    let side = Pose::Orbit { yaw: 90.0, pitch: 8.0, zoom: 1.0 };
+    let side = Pose::Orbit { yaw: 90.0, pitch: 8.0, zoom: 1.0, aim: None };
     let film = |c: usize, view: &str, pose: Pose| -> Vec<Shot> {
         (0..CLIP_FRAMES).map(|f| Shot { name: format!("{}-{f}{}", sanitize(&clips[c].0), view), pose, clip: Some((c, clips[c].1 * f as f32 / CLIP_FRAMES as f32)) }).collect()
     };
@@ -212,6 +215,7 @@ pub fn setup(
     mut lights: Query<&mut DirectionalLight>,
     mut cams: Query<&mut DistanceFog, With<Camera3d>>,
     mut clear: ResMut<ClearColor>,
+    mut clock: Option<ResMut<crate::daylight::Clock>>,
 ) {
     let files = requested();
     let height: f32 = std::env::var("LIVING_GAME_VIEW_HEIGHT").ok().and_then(|h| h.parse().ok()).unwrap_or(0.0);
@@ -226,6 +230,16 @@ pub fn setup(
                 ground = def.ground.color;
             }
             None => warn!("view: no environment {id}"),
+        }
+    }
+    // `LIVING_GAME_HOUR` moves the sun (east at 6, overhead at 12, west at 18), to light a
+    // model from other angles.
+    // The day clock (daylight.rs) writes the hour every frame, so it is set and stopped there.
+    if let Some(h) = std::env::var("LIVING_GAME_HOUR").ok().and_then(|h| h.parse::<f32>().ok()) {
+        look.hour = h;
+        if let Some(clock) = clock.as_mut() {
+            clock.hours = h as f64;
+            clock.day_minutes = 0.0;
         }
     }
     // A 1 m checker, as an outline stencil.
@@ -466,7 +480,7 @@ pub fn batch(
     let settle = if step == 0 { 1.5 } else { 0.6 };
     let name = if let Some(shot) = item.shots.get(step) {
         match shot.pose {
-            Pose::Orbit { yaw, pitch, zoom } => place_camera(&mut tf, &mut proj, c, h, yaw, pitch, zoom),
+            Pose::Orbit { yaw, pitch, zoom, aim } => place_camera(&mut tf, &mut proj, aim.map_or(c, |a| Vec3::new(c.x, c.y - h.y + 2.0 * h.y * a, c.z)), h, yaw, pitch, zoom),
             Pose::Game => game_camera(&mut tf, &mut proj, Vec3::new(c.x, 0.0, c.z)),
         }
         if let (Some((clip, t)), Some((_, nodes, p))) = (shot.clip, &item.graph) {

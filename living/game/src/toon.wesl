@@ -44,10 +44,44 @@ struct Toon {
     recolor_from: vec4<f32>,
     // Weather (weather.rs): x wind strength (the vertex shaders sway plants), y wetness.
     atmo: vec4<f32>,
+    // Faces: x shadow-edge softness, y face shadow depth (times skin's), z how far eyes and
+    // mouth darken in shadow, w face rim.
+    face: vec4<f32>,
+    // Hair: x angel-ring strength, y ring width, z ring position (tangent shift), w rim.
+    hair: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> toon: Toon;
+// A face's shadow map (style.rs `ToonExt::face`); a white fallback elsewhere.
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
+var face_map: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(102)
+var face_sampler: sampler;
+
+// What the material shades (style.rs `Kind`, in `shade.w`).
+fn is_kind(k: f32) -> bool {
+    return abs(toon.shade.w - k) < 0.5;
+}
+
+// How lit a face's texel is, from its shadow map (living/tools/face_normals.py) and the sun's
+// horizontal angle round the head: anime faces take one clean shadow shape that sweeps across
+// as the light turns, whatever the sun's height. `fwd` is the head's forward (x, z) in world.
+fn face_lit(uv: vec2<f32>, fwd: vec2<f32>, L: vec3<f32>) -> f32 {
+    let len = length(L.xz);
+    if (len < 1e-3) {
+        return 1.0;
+    }
+    let l = L.xz / len;
+    let f = fwd / max(length(fwd), 1e-5);
+    let r = vec2<f32>(-f.y, f.x);
+    let a = acos(clamp(dot(l, f), -1.0, 1.0)) / 3.14159265;
+    let m = textureSampleLevel(face_map, face_sampler, uv, 0.0).rg;
+    let th = select(m.g, m.r, dot(l, r) >= 0.0);
+    // A sun nearly overhead has no meaningful side: the face is lit.
+    let overhead = 1.0 - smoothstep(0.04, 0.2, len);
+    return max(smoothstep(-toon.face.x, toon.face.x, th - a), overhead);
+}
 
 fn hash3(p: vec3<f32>) -> f32 {
     let q = fract(p * 0.1031);
@@ -161,19 +195,56 @@ fn recolor(c: vec3<f32>, tag: u32) -> vec3<f32> {
 fn shadow_of(lit: vec3<f32>, value: f32, scene_hue: f32) -> vec3<f32> {
     var hsv = rgb_to_hsv(lit);
     // Skin keeps a warm shadow (toward red-orange) instead of the scene's cool target, so faces
-    // never turn purple or flushed.
-    let skin = toon.shade.w > 0.5;
+    // never turn purple or flushed. Coloured hair darkens in its own hue, richer, as anime hair
+    // does; near-grey hair (white, black) has no hue of its own and keeps the scene's tint,
+    // which gives it depth.
+    let skin = is_kind(1.0) || is_kind(2.0);
+    let hair = is_kind(4.0);
+    let own = select(0.0, smoothstep(0.12, 0.35, hsv.y), hair);
     let target_hue = select(scene_hue, 0.015, skin);
     // Reds and oranges reach a violet target through magenta, which reads as pink roofs and
     // cloth; they take a quarter of the shift and simply deepen instead.
     let red = 1.0 - smoothstep(0.05, 0.12, abs(hsv.x - round(hsv.x)));
-    let shift = select(toon.shade.y * (1.0 - 0.75 * red), 0.35, skin);
+    let shift = select(toon.shade.y * (1.0 - 0.75 * red), 0.35, skin) * (1.0 - own);
     var d = target_hue - hsv.x;
     d = d - round(d);
     hsv.x = fract(hsv.x + d * shift);
-    hsv.y = clamp(hsv.y * toon.shade.z, 0.0, 1.0);
+    hsv.y = clamp(hsv.y * mix(toon.shade.z, max(toon.shade.z, 1.12), own), 0.0, 1.0);
     hsv.z = hsv.z * value;
     return hsv_to_rgb(hsv);
+}
+
+// Anime hair light (multiplied by the sun): an "angel ring", a band of highlight round the head
+// where the strands (running down the surface, from the crown) are square to the half vector
+// (Kajiya-Kay, with the tangent made from the normal and up, shifted to place the band), broken
+// into comb teeth along the strands; and a rim in the hair's own lightened colour.
+fn hair_light(albedo: vec3<f32>, N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, lit: f32, fresnel: f32, in: VertexOutput) -> vec3<f32> {
+    let up = vec3<f32>(0.0, 1.0, 0.0);
+    let along = up - N * dot(N, up);
+    let T = normalize(along * select(1.0, 0.0, length(along) < 1e-3) + N * toon.hair.z + vec3<f32>(0.0, 1e-4, 0.0));
+    // Mostly the view: the ring is a drawn shape that stays in sight, nudged by the light.
+    let H = normalize(V * 0.75 + L * 0.25);
+    let d = abs(dot(T, H));
+    let w = toon.hair.y;
+    var ring = 1.0 - smoothstep(w * 0.55, w, d);
+    // Comb teeth: the band's edge breaks along the strands (across the hair's UVs).
+@if(VERTEX_UVS_A) {
+    let teeth = noise3(vec3<f32>(in.uv.x * 90.0, in.uv.y * 9.0, 0.0));
+    ring = ring * smoothstep(0.25, 0.5, teeth + (1.0 - d / w) * 0.35);
+}
+    // Only on the upper, outward side of the hair, and fainter in shadow.
+    ring = ring * smoothstep(0.2, 0.45, N.y) * mix(0.25, 1.0, lit);
+    // Lighter in the hair's own hue; the lift keeps that hue, so dark hair shows a coloured ring
+    // rather than a grey one.
+    let lifted = albedo * 1.3 + 0.08 * albedo / max(max(albedo.r, max(albedo.g, albedo.b)), 1e-3);
+    // A little paler than the hair, so a ring on brown or orange hair reads as light, not as a
+    // more saturated stain.
+    let light = mix(lifted, vec3<f32>(dot(lifted, vec3<f32>(0.3, 0.59, 0.11))), 0.35);
+    // The rim stays off surfaces facing down (bang undersides), which it lit like plastic.
+    let rim = pow(fresnel, 3.0) * toon.hair.w * (0.3 + 0.7 * lit) * smoothstep(-0.25, 0.15, N.y);
+    // Pale hair needs less added light to show a ring (and would clip).
+    let room = clamp(1.1 - dot(albedo, vec3<f32>(0.3, 0.59, 0.11)) * 1.2, 0.25, 1.0);
+    return light * ring * toon.hair.x * room + (albedo + vec3<f32>(0.04)) * rim;
 }
 
 @fragment
@@ -224,23 +295,41 @@ fn fragment(
         let L = (*light).direction_to_light;
         var shadow = 1.0;
         if (((*light).flags & mesh_view_types::DIRECTIONAL_LIGHT_FLAGS_SHADOWS_ENABLED_BIT) != 0u) {
-            shadow = shadows::fetch_directional_shadow(0u, p, pbr_input.world_normal, view_z, in.position.xy);
+            // A face looks up its shadow a hand's width in front of it (along its flattened
+            // normal): bangs then cast no blotches across it, while a roof or a wall still shades
+            // the whole face. Eyes keep the plain lookup; their normals point into the head.
+            let lift = select(0.0, 0.12, is_kind(2.0));
+            shadow = shadows::fetch_directional_shadow(0u, vec4<f32>(p.xyz + N * lift, p.w), pbr_input.world_normal, view_z, in.position.xy);
         }
         // Lambert's 1/π, at the camera's exposure: the sunlit level of a white surface.
         sun = (*light).color.rgb * view_bindings::view.exposure / 3.14159265 * toon.extra.w;
         let ndl = dot(N, L);
         let brush = (noise3(p.xyz * toon.extra.x) - 0.5) * toon.band.z;
         let t = toon.band.x + brush;
-        let band = smoothstep(t - toon.band.y, t + toon.band.y, ndl);
+        var band = smoothstep(t - toon.band.y, t + toon.band.y, ndl);
+        // Faces take their shadow from their map; eyes, brows, lashes and mouth only from what
+        // casts a shadow on them (anime draws them unshaded).
+        let face = is_kind(2.0);
+        let part = is_kind(3.0);
+@if(VERTEX_UVS_A && VERTEX_UVS_B) {
+        if (face) {
+            band = face_lit(in.uv, in.uv_b, L);
+        }
+}
+        if (part) {
+            band = 1.0;
+        }
         // A darker core band where the surface turns fully away.
         let core = smoothstep(-0.35 + brush, -0.15 + brush, ndl);
         lit = band * shadow;
         let away = mix(toon.extra.z, 1.0, core);
         let lit_color = albedo.rgb * sun;
         // Skin shadows are much lighter (anime faces stay clean), and its far side isn't darkened.
-        let skin = toon.shade.w > 0.5;
-        let depth = select(toon.shadow.a, toon.shadow.a * 0.45, skin);
-        let shadow_color = shadow_of(lit_color, (1.0 - depth) * select(away, 1.0, skin), scene_hue) * toon.shadow.rgb + albedo.rgb * sun * toon.extra.y;
+        let skin = is_kind(1.0) || face;
+        var depth = select(toon.shadow.a, toon.shadow.a * 0.45, skin);
+        depth = select(depth, depth * toon.face.y, face);
+        depth = select(depth, toon.shadow.a * toon.face.z, part);
+        let shadow_color = shadow_of(lit_color, (1.0 - depth) * select(away, 1.0, skin || part), scene_hue) * toon.shadow.rgb + albedo.rgb * sun * toon.extra.y;
         var color = mix(shadow_color, lit_color, lit);
         // Sky fill: lifts shadows most, so night stays readable.
         color = color + albedo.rgb * fill * mix(1.0, 0.45, lit);
@@ -258,8 +347,13 @@ fn fragment(
 }
         }
         // Rim light on silhouettes, stronger on the lit side.
-        let rim = pow(clamp(1.0 - max(dot(N, V), 0.0), 0.0, 1.0), toon.band.w) * toon.rim.a * (0.35 + 0.65 * lit);
+        let fresnel = clamp(1.0 - max(dot(N, V), 0.0), 0.0, 1.0);
+        let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part);
+        let rim = pow(fresnel, toon.band.w) * rim_strength * (0.35 + 0.65 * lit);
         color = color + toon.rim.rgb * sun * rim;
+        if (is_kind(4.0)) {
+            color = color + hair_light(albedo.rgb, N, V, L, lit, fresnel, in) * sun;
+        }
         // Local lights (point lights: lamps, crystals, neon), banded like the sun, no shadows.
         let cluster = clustered_forward::view_fragment_cluster_index(pbr_input.frag_coord.xy, view_z, pbr_input.is_orthographic);
         let ranges = clustered_forward::unpack_clusterable_object_index_ranges(cluster);

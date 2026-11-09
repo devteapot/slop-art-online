@@ -6,7 +6,7 @@
 //! four sides, at sunset, and without the toon look, then quits.
 
 use crate::camera::Cam;
-use crate::style::{outline, Outlined, Style, Toon};
+use crate::style::{outline, Kind, Outlined, Style, Toon};
 use crate::world::{rgb, MeshBuf, Palette};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
@@ -198,6 +198,7 @@ pub fn convert(
     mut toons: ResMut<Assets<Toon>>,
     standards: Res<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    assets: Res<AssetServer>,
     q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), Without<Converted>>,
     parents: Query<&ChildOf>,
     models: Query<(&Model, Has<NoShadow>)>,
@@ -223,8 +224,21 @@ pub fn convert(
         let glow = owner.glow.filter(|_| !has_glow(&owner.file));
         let glow_key = glow.map_or(0, |g| (g[0] * 255.0) as u32 | ((g[1] * 255.0) as u32) << 8 | ((g[2] * 255.0) as u32) << 16 | 1 << 24);
         let Some(base) = standards.get(&mat.0) else { continue };
-        // VRoid names materials …_SKIN, …_FACE, …_EYE, …_HAIR, …_CLOTH.
-        let skin = name.is_some_and(|n| n.0.ends_with("_SKIN") || n.0.contains("Skin") || n.0.contains("skin"));
+        // VRoid names materials …_SKIN, …_FACE, …_EYE, …_HAIR, …_CLOTH; the face's own skin is
+        // `…Face_00_SKIN`.
+        let n = name.map_or("", |n| n.0.as_str());
+        let skin = n.ends_with("_SKIN") || n.contains("Skin") || n.contains("skin");
+        let kind = match () {
+            _ if owner.vrm && n.contains("_HAIR") => Kind::Hair,
+            _ if owner.vrm && skin && n.contains("Face") => Kind::Face,
+            _ if skin => Kind::Skin,
+            _ if owner.vrm && (n.contains("_FACE") || n.contains("_EYE")) => Kind::FacePart,
+            _ => Kind::Plain,
+        };
+        // A face's shadow map sits beside its file (living/tools/face_normals.py, run by
+        // gen_anim.sh); without one the face shades as skin.
+        let face_map = (kind == Kind::Face).then(|| owner.file.trim_end_matches(".glb").to_string() + ".face.png").filter(|f| std::path::Path::new(&asset_root()).join(f).exists());
+        let kind = if kind == Kind::Face && face_map.is_none() { Kind::Skin } else { kind };
         // Face parts (eyes, lashes, brows, mouth, the face itself) are many small morphing
         // meshes whose shadows never read: they never cast one.
         if owner.vrm && name.is_some_and(|n| n.0.contains("_FACE") || n.0.contains("_EYE") || n.0.contains("Face")) {
@@ -246,7 +260,13 @@ pub fn convert(
                 // environment kits share 14 between about a thousand). One toon material per
                 // distinct content lets their meshes share bind groups and batches; each extra
                 // material costs every view and pass a batch set and its per-frame buffer writes.
-                by_content.entry(format!("{skin} {b:?}")).or_insert_with(|| toons.add(if skin { style.skin(b) } else { style.toon(b) })).clone()
+                by_content
+                    .entry(format!("{kind:?} {face_map:?} {b:?}"))
+                    .or_insert_with(|| {
+                        let map = face_map.as_ref().map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
+                        toons.add(style.kind(b, kind, map))
+                    })
+                    .clone()
             })
             .clone();
         if done.1.insert(mesh.0.id()) {
@@ -262,7 +282,9 @@ pub fn convert(
             ec.insert(Visibility::Hidden);
         }
         ec.remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(toon), Converted));
-        if owner.file.starts_with("lookdev/") || owner.file.starts_with("view/") {
+        if owner.vrm {
+            ec.insert(outline(Outlined::Person, &style));
+        } else if owner.file.starts_with("lookdev/") || owner.file.starts_with("view/") {
             ec.insert(outline(Outlined::Thing, &style));
         } else if !crate::perf::has("nostencil") {
             ec.insert(OutlineStencil::default());

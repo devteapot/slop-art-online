@@ -12,7 +12,7 @@ import bevy_pbr::render::{
     mesh_view_bindings::globals,
 };
 
-// Must match `Toon` in toon.wesl (only `atmo` is read here).
+// Must match `Toon` in toon.wesl (only `atmo` and `shade` are read here).
 struct Toon {
     shadow: vec4<f32>,
     rim: vec4<f32>,
@@ -23,6 +23,8 @@ struct Toon {
     recolor_from: vec4<f32>,
     // x: wind strength, y: wetness.
     atmo: vec4<f32>,
+    face: vec4<f32>,
+    hair: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -116,6 +118,14 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     out.uv = vertex.uv;
 @if(VERTEX_UVS_B)
     out.uv_b = vertex.uv_b;
+    // A face's skin (`shade.w` 2) carries its rest-pose forward (x, z) in its second UVs
+    // (living/tools/face_normals.py). Turned by the skinning, it tells the fragment shader which
+    // way this head faces, for the face's shadow map.
+@if(VERTEX_UVS_B && SKINNED)
+    if (abs(toon.shade.w - 2.0) < 0.5) {
+        let f = (world_from_local * vec4<f32>(vertex.uv_b.x, 0.0, vertex.uv_b.y, 0.0)).xz;
+        out.uv_b = f / max(length(f), 1e-5);
+    }
 
 @if(VERTEX_TANGENTS)
     out.world_tangent = mesh_functions::mesh_tangent_local_to_world(

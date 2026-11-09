@@ -15,6 +15,27 @@ pub type Toon = ExtendedMaterial<StandardMaterial, ToonExt>;
 pub struct ToonExt {
     #[uniform(100)]
     pub params: ToonParams,
+    /// A face's shadow map (`living/tools/face_normals.py`): per texel, the light angle up to
+    /// which it stays lit, for light from the face's right (R) and left (G). Only face skin
+    /// materials have one; it is one per base file, so characters still share materials.
+    #[texture(101)]
+    #[sampler(102)]
+    pub face: Option<Handle<Image>>,
+}
+
+/// What a toon material shades (`ToonParams::shade.w`; `toon.wesl` branches on it).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Kind {
+    Plain = 0,
+    /// Lighter, warmer shadows.
+    Skin = 1,
+    /// A face's skin with a shadow map: its shadow edge comes from the map and the sun's angle
+    /// round the head, not from N·L.
+    Face = 2,
+    /// Eyes, brows, lashes and mouth: hardly shaded, as in anime.
+    FacePart = 3,
+    /// Hair: an angel-ring highlight, a rim, and shadows toward the hair's own colour.
+    Hair = 4,
 }
 
 #[derive(Clone, Copy, Debug, Default, Reflect, bevy::render::render_resource::ShaderType)]
@@ -33,6 +54,12 @@ pub struct ToonParams {
     pub recolor_from: Vec4,
     /// Weather (weather.rs): x wind strength (sways meshes tagged as plants), y wetness.
     pub atmo: Vec4,
+    /// Faces: x shadow-edge softness (fraction of 180°), y how dark face shadows get relative
+    /// to other skin, z how far face parts (eyes, mouth) darken in shadow, w face rim strength.
+    pub face: Vec4,
+    /// Hair: x angel-ring strength, y ring width, z ring position (tangent shift), w rim
+    /// strength.
+    pub hair: Vec4,
 }
 
 impl MaterialExtension for ToonExt {
@@ -102,6 +129,18 @@ pub struct Style {
     /// material): wind strength for swaying plants, and how wet surfaces are.
     pub wind: f32,
     pub wet: f32,
+    /// Characters (`Kind`): the face's shadow-edge softness (fraction of 180°), face shadow
+    /// depth relative to skin, how far eyes and mouth darken in shadow, and face rim strength.
+    pub face_softness: f32,
+    pub face_shadow: f32,
+    pub face_parts: f32,
+    pub face_rim: f32,
+    /// Hair's angel ring: strength, width and position (tangent shift, + moves it up the head),
+    /// and the hair's rim strength.
+    pub hair_ring: f32,
+    pub hair_ring_width: f32,
+    pub hair_ring_shift: f32,
+    pub hair_rim: f32,
 }
 
 impl Default for Style {
@@ -127,8 +166,8 @@ impl Default for Style {
             rim: 0.35,
             rim_width: 3.5,
             outlines: true,
-            outline_color: [0.12, 0.09, 0.1],
-            outline_people: 2.0,
+            outline_color: [0.17, 0.11, 0.1],
+            outline_people: 1.8,
             outline_things: 1.2,
             edges: true,
             line_color: [0.35, 0.28, 0.32],
@@ -144,6 +183,14 @@ impl Default for Style {
             saturation: 1.08,
             wind: 0.0,
             wet: 0.0,
+            face_softness: 0.012,
+            face_shadow: 1.25,
+            face_parts: 0.25,
+            face_rim: 0.15,
+            hair_ring: 0.7,
+            hair_ring_width: 0.05,
+            hair_ring_shift: 0.35,
+            hair_rim: 0.2,
         }
     }
 }
@@ -161,18 +208,20 @@ impl Style {
             recolor: Vec4::ZERO,
             recolor_from: Vec4::ZERO,
             atmo: Vec4::new(self.wind, self.wet, 0.0, 0.0),
+            face: Vec4::new(self.face_softness.max(0.001), self.face_shadow, self.face_parts, self.face_rim),
+            hair: Vec4::new(self.hair_ring, self.hair_ring_width.max(0.01), self.hair_ring_shift, self.hair_rim),
         }
     }
 
     pub fn toon(&self, base: StandardMaterial) -> Toon {
-        Toon { base, extension: ToonExt { params: self.params() } }
+        self.kind(base, Kind::Plain, None)
     }
 
-    /// A toon material for skin: lighter, warmer shadows.
-    pub fn skin(&self, base: StandardMaterial) -> Toon {
-        let mut t = self.toon(base);
-        t.extension.params.shade.w = 1.0;
-        t
+    /// A toon material for one kind of surface; a `Face` takes its shadow map.
+    pub fn kind(&self, base: StandardMaterial, kind: Kind, face: Option<Handle<Image>>) -> Toon {
+        let mut params = self.params();
+        params.shade.w = kind as u8 as f32;
+        Toon { base, extension: ToonExt { params, face } }
     }
 }
 
@@ -210,16 +259,37 @@ impl Plugin for StylePlugin {
 /// Outlines draw on their own: they ignore fog and a hidden parent (a building the cut-away
 /// hides), so they would remain as bare line drawings. Show one only where its object shows and
 /// the fog has not mostly swallowed it.
-fn fog_outlines(style: Res<Style>, cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>, mut outlines: Query<(&mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>), With<Outlined>>) {
+/// Characters' lines also thin with distance, as drawn anime lines do: full width within
+/// `PERSON_NEAR` metres, `PERSON_THIN` of it from `PERSON_FAR` on (a fixed pixel width made
+/// distant people look inked heavier than near ones). Widths change in steps, so a crowd
+/// rewrites its outlines only when someone crosses one.
+const PERSON_NEAR: f32 = 8.0;
+const PERSON_FAR: f32 = 30.0;
+const PERSON_THIN: f32 = 0.6;
+
+fn person_width(style: &Style, distance: f32) -> f32 {
+    let t = ((distance - PERSON_NEAR) / (PERSON_FAR - PERSON_NEAR)).clamp(0.0, 1.0);
+    let w = style.outline_people * (1.0 - (1.0 - PERSON_THIN) * t);
+    (w * 8.0).round() / 8.0
+}
+
+fn fog_outlines(style: Res<Style>, cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>, mut outlines: Query<(&Outlined, &mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>)>) {
     let Ok((cam, fog)) = cams.single() else { return };
     let FogFalloff::Linear { start, end } = fog.falloff else { return };
     let cutoff = start + (end - start) * 0.55;
     let eye = cam.translation();
     let on = style.outlines && style.enabled;
-    for (mut o, g, shown) in &mut outlines {
-        let want = on && shown.is_none_or(|v| v.get()) && g.translation().distance(eye) < cutoff;
+    for (kind, mut o, g, shown) in &mut outlines {
+        let d = g.translation().distance(eye);
+        let want = on && shown.is_none_or(|v| v.get()) && d < cutoff;
         if o.visible != want {
             o.visible = want;
+        }
+        if want && matches!(kind, Outlined::Person) {
+            let w = person_width(&style, d);
+            if o.width != w {
+                o.width = w;
+            }
         }
     }
 }
@@ -232,10 +302,10 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         style.params()
     } else {
         // Plain look: no bands, no tint, no rim (for comparison).
-        ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0), recolor: Vec4::ZERO, recolor_from: Vec4::ZERO, atmo: Vec4::new(style.wind, style.wet, 0.0, 0.0) }
+        ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0), recolor: Vec4::ZERO, recolor_from: Vec4::ZERO, atmo: Vec4::new(style.wind, style.wet, 0.0, 0.0), face: Vec4::new(0.3, 1.0, 1.0, 0.0), hair: Vec4::new(0.0, 0.1, 0.0, 0.0) }
     };
     for (_, m) in toons.iter_mut() {
-        // Keep each material's own flags (skin) and recolouring.
+        // Keep each material's own kind (skin, face, hair) and recolouring.
         let old = m.extension.params;
         m.extension.params = p;
         m.extension.params.shade.w = old.shade.w;
