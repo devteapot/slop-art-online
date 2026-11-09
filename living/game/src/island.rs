@@ -10,8 +10,9 @@
 //! An environment whose JSON has a `world` section (`assets/envs/island.json`) is the island:
 //! its mood lights it, and instead of a ground disc and slots, this module streams the island
 //! around you in 64 m chunks:
-//! - ground meshes from the island's heights and terrain, with water surfaces at the water's
-//!   level (the sea at 0, lakes level, rivers sloping);
+//! - ground meshes from the island's heights and terrain, vertex-coloured and painted with the
+//!   ground's detail layers (`terrain.rs`), with water surfaces at the water's level (the sea at
+//!   0, lakes level, rivers sloping);
 //! - each region dressed with its environment's assets (`RegionKind::env`) at that environment's
 //!   scatter densities, small things only near you;
 //! - each settlement's wall pieces along town walls, and in look-dev a building on every lot at
@@ -22,6 +23,7 @@
 
 use crate::envs::{EnvDef, EnvPart, Occluder};
 use crate::lookdev::Model;
+use crate::terrain::{Blend, GroundMat, Layer};
 use crate::world::{hash, rgb, scale, Palette};
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -378,16 +380,58 @@ fn ground_colour(t: Terrain, kind: RegionKind, v: f32) -> [f32; 4] {
     scale(base, 0.94 + 0.12 * v)
 }
 
-/// Ground colour averaged over a few metres, so region borders and single tiles blend instead
-/// of switching along straight polygon edges.
-fn blended_colour(land: &Land, x: f32, z: f32, v: f32) -> [f32; 4] {
+/// The ground's painted detail (`terrain.rs`) by terrain class and region, mirroring
+/// [`ground_colour`]: up to two layers and their shares. Roads are [`road_layer`].
+fn ground_layers(t: Terrain, kind: RegionKind) -> [(Layer, f32); 2] {
+    let one = |l: Layer| [(l, 1.0), (l, 0.0)];
+    match t {
+        // Lake and river beds are mud; the sea's floor and shallows are sand.
+        Terrain::Water => one(if matches!(kind, RegionKind::Sea | RegionKind::Beach) { Layer::Sand } else { Layer::Mud }),
+        Terrain::Sand => one(Layer::Sand),
+        Terrain::Rock | Terrain::Wall => one(Layer::Rock),
+        Terrain::Dirt => one(Layer::Dirt),
+        Terrain::Road => one(Layer::Cobble),
+        Terrain::Forest => one(if kind == RegionKind::SpiritGrove { Layer::SpiritMoss } else { Layer::ForestFloor }),
+        Terrain::Grass => match kind {
+            RegionKind::SpiritGrove => one(Layer::SpiritMoss),
+            RegionKind::Wetland => [(Layer::LushGrass, 0.6), (Layer::Mud, 0.4)],
+            RegionKind::Forest | RegionKind::OldForest => one(Layer::LushGrass),
+            RegionKind::Highland | RegionKind::Peaks | RegionKind::Beach => one(Layer::DryGrass),
+            _ => one(Layer::Grass),
+        },
+    }
+}
+
+/// A road's surface, by the settlement's style (zones differ by their contents): a steampunk
+/// town is all setts, a cyberpunk town's streets and square are large panels, and elsewhere a
+/// paved square is flagstones and streets are cobbled. Between settlements, a packed earth track.
+fn road_layer(land: &Land, x: f32, z: f32) -> Layer {
+    for st in &land.settlements {
+        let (dx, dz) = (x - st.centre.0, z - st.centre.1);
+        if dx * dx + dz * dz > (st.radius_m * 1.15).powi(2) {
+            continue;
+        }
+        return match st.style.as_str() {
+            "steampunk" => Layer::Cobble,
+            "cyberpunk" => Layer::Pavers,
+            _ if st.plaza.paved && st.in_plaza((x, z)) => Layer::Flagstone,
+            _ => Layer::Cobble,
+        };
+    }
+    Layer::Dirt
+}
+
+/// Ground colour and detail layers averaged over a few metres, so region borders and single
+/// tiles blend instead of switching along straight polygon edges.
+fn blended_ground(land: &Land, x: f32, z: f32, v: f32) -> ([f32; 4], Blend) {
     // Roads and paved squares stay crisp, and don't bleed into the blend around them.
     let here = land.map.at(x + 0.01, z + 0.01);
     if here == Terrain::Road {
-        return ground_colour(here, land.kind_at(x, z), v);
+        return (ground_colour(here, land.kind_at(x, z), v), Blend::one(road_layer(land, x, z)));
     }
     const RING: [(f32, f32); 9] = [(0.0, 0.0), (6.0, 0.0), (-6.0, 0.0), (0.0, 6.0), (0.0, -6.0), (13.0, 9.0), (-13.0, -9.0), (9.0, -13.0), (-9.0, 13.0)];
     let mut acc = [0.0f32; 4];
+    let mut blend = Blend::default();
     for (k, (dx, dz)) in RING.iter().enumerate() {
         // The centre sample counts most; the ring spreads the change over about 25 m.
         let w = if k == 0 { 3.0 } else { 1.0 };
@@ -396,12 +440,16 @@ fn blended_colour(land: &Land, x: f32, z: f32, v: f32) -> [f32; 4] {
             Terrain::Road => Terrain::Grass,
             t => t,
         };
-        let c = ground_colour(t, land.kind_at(px, pz), v);
+        let kind = land.kind_at(px, pz);
+        let c = ground_colour(t, kind, v);
         for i in 0..4 {
             acc[i] += c[i] * w;
         }
+        for (layer, share) in ground_layers(t, kind) {
+            blend.add(layer, share * w);
+        }
     }
-    acc.map(|c| c / 11.0)
+    (acc.map(|c| c / 11.0), blend)
 }
 
 /// A chunk's ground (indexed 1 m grid, smooth normals) and its water surface.
@@ -410,12 +458,15 @@ fn chunk_meshes(land: &Land, c: (i32, i32)) -> (Mesh, Option<Mesh>) {
     let (x0, z0) = (c.0 * CHUNK, c.1 * CHUNK);
     let mut pos = Vec::with_capacity((n + 1) * (n + 1));
     let mut col = Vec::with_capacity((n + 1) * (n + 1));
+    let mut blends = Vec::with_capacity((n + 1) * (n + 1));
     for j in 0..=n {
         for i in 0..=n {
             let (x, z) = ((x0 + i as i32) as f32, (z0 + j as i32) as f32);
             pos.push([x, land.height(x, z), z]);
             let v = hash((x0 + i as i32) as u32, (z0 + j as i32) as u32);
-            col.push(blended_colour(land, x, z, v));
+            let (c, b) = blended_ground(land, x, z, v);
+            col.push(c);
+            blends.push(b);
         }
     }
     let mut idx = Vec::with_capacity(n * n * 6);
@@ -431,6 +482,7 @@ fn chunk_meshes(land: &Land, c: (i32, i32)) -> (Mesh, Option<Mesh>) {
         .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
         .with_inserted_indices(Indices::U32(idx));
     ground.compute_smooth_normals();
+    crate::terrain::insert_blend(&mut ground, &blends);
     // Water: a quad per metre on water tiles and the tiles touching them (so banks meet it),
     // at the water's level. The level alone is not enough: the nearest water's surface can stand
     // above dry ground well away from it.
@@ -525,6 +577,7 @@ pub fn stream(
     island: Option<ResMut<Island>>,
     roam: Res<crate::envs::Roam>,
     palette: Res<Palette>,
+    ground_mat: Res<GroundMat>,
     assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     alive: Query<(), With<EnvPart>>,
@@ -567,7 +620,14 @@ pub fn stream(
         }
         if !island.ground.contains_key(&c) {
             let (g, w) = chunk_meshes(&land, c);
-            let mut es = vec![commands.spawn((EnvPart, Mesh3d(meshes.add(g)), MeshMaterial3d(palette.vertex.clone()), Transform::default())).id()];
+            // The painted ground material (terrain.rs); `noterrain` for A/B with the plain toon.
+            let mut ground = commands.spawn((EnvPart, Mesh3d(meshes.add(g)), Transform::default()));
+            if crate::perf::has("noterrain") {
+                ground.insert(MeshMaterial3d(palette.vertex.clone()));
+            } else {
+                ground.insert(MeshMaterial3d(ground_mat.0.clone()));
+            }
+            let mut es = vec![ground.id()];
             if !crate::perf::has("nostencil") {
                 commands.entity(es[0]).insert(OutlineStencil::default());
             }

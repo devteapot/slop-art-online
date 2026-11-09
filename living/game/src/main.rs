@@ -29,6 +29,7 @@ mod post;
 mod sight;
 mod sky;
 mod style;
+mod terrain;
 mod ui;
 mod view;
 mod water;
@@ -73,6 +74,7 @@ fn main() {
         .add_plugins(post::PostPlugin)
         .add_plugins(characters::CharactersPlugin)
         .add_plugins(daylight::DaylightPlugin)
+        .add_plugins(terrain::TerrainPlugin)
         .add_systems(PostUpdate, post::update)
         .init_non_send::<net::Net>()
         .init_non_send::<world::Scene>()

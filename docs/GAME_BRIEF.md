@@ -419,6 +419,25 @@ Open:
   - no cloud shadows yet;
   - the connected clock path is untested live.
 
+**Textures, phase 1: the ground (2026-11-09; client presentation only).** The user found everything flat.
+- **Textures** (`living/tools/textures/paint.py`, `just living-game-textures`; git-ignored output in `assets/textures/`):
+  - painted procedurally with numpy and Pillow from brush dabs, shape clusters and posterised value patches, all periodic, so the tiles are seamless and regenerate identically;
+  - 512 px each, as factors round mid-grey with a height channel in alpha; the vertex colours still carry every palette and regional colour;
+  - ground kinds: grass, lush grass, dry grass, forest floor, dirt, sand, rock, cobble, flagstone, mud, spirit moss, and pavers for the cyberpunk town;
+  - `--set material` already paints bark, planks, plaster, stone, brick, shingles, metal and leaves for phase 2.
+- **Material** (`terrain.rs`, `terrain.wesl`): one extension material for every island chunk and look-dev ground disc, so the ground stays a single batch set.
+  - Its lighting copies `toon.wesl`'s plain-surface path: bands, hue-shifted shadows, night fill, rim, point lights, rain darkening and puddles, which now gather in the joints between stones. Toon parameters are copied from the toon materials whenever they differ.
+  - Chunks carry one blend weight per layer: three `Unorm8x4` vertex attributes, main pass only. The weights come from terrain class and region, blended over about 25 m like the colours.
+  - Roads stay crisp, and their surface follows the settlement's style: flagstone squares and cobbled streets, all setts in Kettlebridge, panels in Lanternquay, earth tracks between settlements.
+  - The shader samples the strongest four layers here, blends them by height and projects triplanar on slopes, which turn to rock. Patches about three tiles wide switch between two scales and angles of each layer, and a slow macro layer varies value and hue. Detail fades to plain colour between 30 and 85 m.
+- **Cost:** within noise at the town, forest and hamlet (5.1, 4.2 and 5.2 ms, before and after alike), and +0.14 ms on the town vista. The scenery here is limited by per-batch CPU work, not by the GPU, so fragment cost hardly shows on this Mac. `LIVING_GAME_PERF=noterrain` draws the ground with the plain toon material for A/B.
+- **Blind A/B:** textured beat plain in 23 of 24 pairs (6 spots, noon and dusk, default and vista shots), with 1 tie under the grove's canopy. A softening of grass and moss was indistinguishable and was dropped. Removing the forest floor's posterised patches, whose lattice repeated, won 7 of 8 pairs with sides swapped.
+- **Open:**
+  - The pavers' grid reads a little mechanical.
+  - Roads and paths keep their stair-stepped 1 m edges.
+  - The ground's GPU cost should be checked on a GPU-bound machine.
+  - Model textures (phase 2) belong in the toon shader.
+
 **Claude–Blender integration** (research of 2026-11-08):
 - **Backbone: headless scripts** (`blender -b -P`), versioned in the repo. No socket or telemetry, reproducible, and N processes can run in parallel. The agent checks its work through rendered contact sheets and numeric checks (dimensions, triangle budget, silhouette against a reference, a re-import round trip), reviewed by a fresh-context subagent ([blender-game-skills](https://github.com/majidmanzarpour/blender-game-skills), [blender-kiln](https://github.com/elithril/blender-kiln)).
 - **Live inspection: the official [Blender Lab MCP server](https://www.blender.org/lab/mcp-server/)** (GPL-3.0, Blender 5.1+, the server behind Anthropic's Blender connector). It is optional. It runs model-written code unguarded, so use it on localhost only.

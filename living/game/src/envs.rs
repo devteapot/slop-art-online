@@ -479,6 +479,7 @@ pub fn switch(
     mut lights: Query<&mut DirectionalLight>,
     mut cams: Query<&mut DistanceFog, With<Camera3d>>,
     mut clear: ResMut<ClearColor>,
+    ground_mat: Res<crate::terrain::GroundMat>,
 ) {
     if envs.current == Some(envs.want) {
         return;
@@ -542,7 +543,12 @@ pub fn switch(
             mesh.quad([p(x0, z0), p(x0, z0 + step), p(x0 + step, z0 + step), p(x0 + step, z0)], c);
         }
     }
-    commands.spawn((EnvPart, Mesh3d(meshes.add(mesh.build())), MeshMaterial3d(palette.vertex.clone()), Transform::default(), OutlineStencil::default()));
+    // Painted with the environment's ground layer (terrain.rs).
+    let mut disc = mesh.build();
+    let blend = crate::terrain::Blend::one(crate::terrain::disc_layer(&def.id, &g.surface));
+    let count = disc.count_vertices();
+    crate::terrain::insert_blend(&mut disc, &vec![blend; count]);
+    commands.spawn((EnvPart, Mesh3d(meshes.add(disc)), MeshMaterial3d(ground_mat.0.clone()), Transform::default(), OutlineStencil::default()));
     // Slots: real models where the folders have them, placeholders otherwise.
     let mut taken: Vec<(Vec2, f32)> = vec![(Vec2::ZERO, 2.0)];
     let limit = r - 1.0;

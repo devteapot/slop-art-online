@@ -23,3 +23,5 @@ __pycache__/
 /living/game/assets/lookdev/
 /living/game/assets/view/
 /living/game/assets/envs/*/
+# Painted textures (living/tools/textures/paint.py; `just living-game-textures`)
+/living/game/assets/textures/
