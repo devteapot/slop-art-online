@@ -6,7 +6,8 @@
 //!   the body window), and my own timing (`my_readiness`);
 //! - maps the skill bar's keys to `use_skill` / `release_skill`, aiming skillshots at the
 //!   cursor's ground point and targeted skills at the creature under or nearest the cursor;
-//! - picks the clip each drawn character plays for its move, a hit or its death;
+//! - picks the clip each drawn character plays for its move, a hit or its death (an animal's
+//!   from its own clips by the move's aim, [`animal_clip`]);
 //! - predicts only my own move's clip at the moment I press (the authority's answer arrives a
 //!   round trip later): the prediction ends when the authority's `fighter` row confirms it,
 //!   when a `REFUSED` arrives, or after [`PREDICT_MS`] without either. Movement is never
@@ -106,6 +107,9 @@ pub struct Combat {
     strikes: u32,
     /// Where a script aims an indicator (instead of the cursor).
     script_aim: Option<Vec2>,
+    /// Drawn bodies that are animals (not people), remembered past their body row so a
+    /// corpse keeps playing its own death.
+    animals: HashSet<u32>,
 }
 
 /// The rules' combat skills as the authority states them (`skill_card`), read each frame.
@@ -476,6 +480,28 @@ pub fn hostile(conn: &DbConnection, id: u32, me: u32) -> bool {
     conn.db.fighter().id().find(&id).is_some_and(|f| f.target == me && f.act != 0)
 }
 
+/// An animal's move: its own clip by how the rules aim the skill (`skill_card.aim`), never by
+/// the skill's name, so a skill the rules give animals shows without a client change. The
+/// wolf's bite (wolf.py) snaps at 0.55 s, the rules' 550 ms `attack_duration` for a wolf, so it
+/// plays at rate 1 from the move's start; its leap (0.5 s) plays faster, as a dash is short.
+pub fn animal_clip(card: &SkillCard) -> Option<(&'static str, f32, Option<f32>)> {
+    match card.aim.as_str() {
+        "creature" => Some(("bite", 1.0, None)),
+        "dash" => Some(("leap", 1.67, None)),
+        _ => None,
+    }
+}
+
+/// A death seen at `t` (display ms), held on its last pose: an animal's (wolf.py) ends lying on
+/// its side, a person's on the ground.
+pub fn death(animal: bool, t: f64) -> Action {
+    if animal {
+        Action { clip: "death", rate: 1.0, start_ms: t, hold: Some(0.995), face: None }
+    } else {
+        Action { clip: "death", rate: 1.1, start_ms: t, hold: Some(0.97), face: None }
+    }
+}
+
 /// The clip a move plays, at what rate, and whether it holds a pose.
 fn clip_of(card: Option<&SkillCard>, variant: u32) -> Option<(&'static str, f32, Option<f32>)> {
     let l = look(card?);
@@ -490,10 +516,17 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
     let Some(conn) = net.conn.as_ref() else { return };
     let me = net.my_id;
     let mut out: HashMap<u32, Action> = HashMap::new();
-    for (&id, &t) in &c.deaths {
-        out.insert(id, Action { clip: "death", rate: 1.1, start_ms: t, hold: Some(0.97), face: None });
-    }
     let ids: Vec<u32> = scene.shown.keys().copied().collect();
+    for &id in &ids {
+        if !c.animals.contains(&id) && conn.db.body().id().find(&id).is_some_and(|b| b.kind != "person") {
+            c.animals.insert(id);
+        }
+    }
+    let Combat { animals, deaths, .. } = &mut *c;
+    animals.retain(|id| scene.shown.contains_key(id) || deaths.contains_key(id));
+    for (&id, &t) in &c.deaths {
+        out.insert(id, death(c.animals.contains(&id), t));
+    }
     for id in ids {
         if out.contains_key(&id) {
             continue;
@@ -501,8 +534,10 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
         let f = conn.db.fighter().id().find(&id);
         let live = f.as_ref().filter(|f| f.act != 0 && (now as u64) < f.until_ms.max(f.release_ms) + 120);
         let face = live.and_then(|f| (f.aim_x != 0.0 || f.aim_y != 0.0).then(|| Vec2::new(f.aim_x, f.aim_y)));
+        let animal = c.animals.contains(&id);
         if let Some(f) = live {
-            if let Some((clip, rate, hold)) = clip_of(cards.by_code(f.act), (f.act_ms / 7) as u32) {
+            let clip = if animal { cards.by_code(f.act).and_then(animal_clip) } else { clip_of(cards.by_code(f.act), (f.act_ms / 7) as u32) };
+            if let Some((clip, rate, hold)) = clip {
                 // A held guard stays up while the authority holds it.
                 out.insert(id, Action { clip, rate, start_ms: f.act_ms as f64, hold, face });
                 if Some(id) == me && c.predicted.as_ref().is_some_and(|(s, t)| cards.code(s) == f.act && (f.act_ms as f64) >= t - 400.0) {
@@ -524,7 +559,8 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
         }
         // A hit reaction for a blow that landed on them just now.
         if let Some(e) = c.recent.iter().rev().find(|e| e.row.target == id && e.row.kind == seen::HIT && now - e.seen_ms < HIT_MS) {
-            out.insert(id, Action { clip: "hit", rate: 2.0, start_ms: e.seen_ms, hold: None, face: None });
+            // An animal's flinch is HIT_MS long at rate 1 (wolf.py); people's hit clip is twice that.
+            out.insert(id, Action { clip: "hit", rate: if animal { 1.0 } else { 2.0 }, start_ms: e.seen_ms, hold: None, face: None });
         }
     }
     c.actions = out;

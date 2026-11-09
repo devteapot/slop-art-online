@@ -17,6 +17,11 @@
 //! line-up and crowds (`lookdev.rs`) all pick through [`Gaits::pick`]. Files without the sidecar
 //! use the walk and run at the look-dev's 1.4 and 3.6 m/s.
 //!
+//! **Animals** (the wolf, `living/tools/blender/wolf.py`) have one family of gaits, `walk`,
+//! `trot` and `run` (natural 1.3, 3.4 and 7.0 m/s), listed in their sidecar's `clips` array: the
+//! nearest in natural speed plays at `speed / natural speed` (× stride, a pup's smaller steps),
+//! with the same hold between two gaits.
+//!
 //! `LIVING_GAME_FEET=<file>` writes, every frame, where your character's toes are and the ground
 //! under them (JSON lines), for measuring foot slide (`living/tools/foot_slide.py`).
 
@@ -43,23 +48,44 @@ pub struct Gait {
     pub run: bool,
 }
 
-/// A character file's locomotion clips.
+/// A character file's locomotion clips, and whether they split into walking and running
+/// families at [`WALK_MAX`] (people) or are one family (animals).
 #[derive(Debug)]
-pub struct Gaits(Vec<Gait>);
+pub struct Gaits {
+    clips: Vec<Gait>,
+    split: bool,
+}
 
 /// The clips this module chooses between, and whether each is a run.
 const LOCOMOTION: [(&str, bool); 4] = [("walk", false), ("walk_brisk", false), ("run", true), ("run_fast", true)];
+/// An animal's gaits, one family.
+const ANIMAL: [&str; 3] = ["walk", "trot", "run"];
 
 impl Gaits {
     fn fallback() -> Self {
-        Self(vec![
-            Gait { clip: "walk", speed: crate::lookdev::WALK_SPEED, natural: crate::lookdev::WALK_SPEED, run: false },
-            Gait { clip: "run", speed: crate::lookdev::RUN_SPEED, natural: crate::lookdev::RUN_SPEED, run: true },
-        ])
+        Self {
+            clips: vec![
+                Gait { clip: "walk", speed: crate::lookdev::WALK_SPEED, natural: crate::lookdev::WALK_SPEED, run: false },
+                Gait { clip: "run", speed: crate::lookdev::RUN_SPEED, natural: crate::lookdev::RUN_SPEED, run: true },
+            ],
+            split: true,
+        }
     }
 
-    /// From a `clips.json` sidecar: its looping locomotion clips with a speed.
+    /// From a `clips.json` sidecar: its looping locomotion clips with a speed. A character's
+    /// sidecar maps clip names to clips; an animal's lists them under `clips`.
     fn parse(json: &serde_json::Value) -> Self {
+        if let Some(list) = json.get("clips").and_then(|c| c.as_array()) {
+            let clips: Vec<Gait> = ANIMAL
+                .iter()
+                .filter_map(|&clip| {
+                    let c = list.iter().find(|c| c["name"].as_str() == Some(clip))?;
+                    let speed = c["speed"].as_f64()? as f32;
+                    (speed > 0.1 && c["loop"].as_bool() != Some(false)).then_some(Gait { clip, speed, natural: speed, run: false })
+                })
+                .collect();
+            return if clips.is_empty() { Self::fallback() } else { Self { clips, split: false } };
+        }
         let clips = LOCOMOTION
             .iter()
             .filter_map(|&(clip, run)| {
@@ -70,7 +96,7 @@ impl Gaits {
             })
             .collect::<Vec<_>>();
         if clips.iter().any(|g| !g.run) && clips.iter().any(|g| g.run) {
-            Self(clips)
+            Self { clips, split: true }
         } else {
             Self::fallback()
         }
@@ -81,15 +107,15 @@ impl Gaits {
     pub fn pick(&self, speed: f32, stride: f32, current: Option<&str>) -> (&'static str, f32) {
         let stride = stride.max(0.05);
         let s = speed / stride;
-        let now = self.0.iter().find(|g| Some(g.clip) == current);
+        let now = self.clips.iter().find(|g| Some(g.clip) == current);
         let walk_max = match now {
             Some(g) if g.run => WALK_MAX - HOLD_MS,
             Some(_) => WALK_MAX + HOLD_MS,
             None => WALK_MAX,
         };
-        let run = s > walk_max;
+        let run = self.split && s > walk_max;
         let cost = |g: &Gait| (s / g.natural).ln().abs() - if Some(g.clip) == current { HOLD_LOG } else { 0.0 };
-        let best = self.0.iter().filter(|g| g.run == run).min_by(|a, b| cost(a).total_cmp(&cost(b))).or_else(|| self.0.first());
+        let best = self.clips.iter().filter(|g| g.run == run).min_by(|a, b| cost(a).total_cmp(&cost(b))).or_else(|| self.clips.first());
         match best {
             Some(g) => (g.clip, speed / (g.speed * stride)),
             None => ("walk", 1.0),
@@ -109,7 +135,7 @@ pub fn of(file: &str) -> Arc<Gaits> {
         Some(json) => Gaits::parse(&json),
         None => Gaits::fallback(),
     });
-    debug!("gait: {file}: {:?}", gaits.0);
+    debug!("gait: {file}: {:?}", gaits.clips);
     cache.lock().unwrap().insert(file.to_string(), gaits.clone());
     gaits
 }
@@ -200,7 +226,7 @@ mod tests {
         for (speed, clip) in [(1.4, "walk"), (2.6, "walk_brisk"), (3.0, "run"), (3.6, "run_fast"), (3.9, "run_fast")] {
             let (c, rate) = g.pick(speed, 1.0, None);
             assert_eq!(c, clip, "at {speed} m/s");
-            let baked = g.0.iter().find(|x| x.clip == c).unwrap().speed;
+            let baked = g.clips.iter().find(|x| x.clip == c).unwrap().speed;
             assert!((rate * baked - speed).abs() < 1e-4, "feet move at the body's speed");
         }
     }
@@ -220,6 +246,45 @@ mod tests {
         assert_eq!(g.pick(WALK_MAX + 0.05, 1.0, Some("walk_brisk")).0, "walk_brisk");
         assert_eq!(g.pick(WALK_MAX - 0.05, 1.0, Some("run")).0, "run");
         assert_eq!(g.pick(WALK_MAX + 0.05, 1.0, None).0, "run");
+    }
+
+    /// The wolf's sidecar (`assets/lookdev/anim/wolf.clips.json`, from wolf.py).
+    fn wolf() -> Gaits {
+        Gaits::parse(&serde_json::json!({"model": "wolf", "clips": [
+            {"name": "idle", "seconds": 3.0, "loop": true},
+            {"name": "walk", "seconds": 0.8, "loop": true, "speed": 1.3},
+            {"name": "trot", "seconds": 0.44, "loop": true, "speed": 3.4},
+            {"name": "run", "seconds": 0.32, "loop": true, "speed": 7.0},
+            {"name": "bite", "seconds": 0.85, "loop": false},
+        ]}))
+    }
+
+    #[test]
+    fn an_animal_walks_trots_and_runs_by_speed_at_its_natural_cadence() {
+        let g = wolf();
+        for (speed, clip, rate) in [(1.3, "walk", 1.0), (1.0, "walk", 1.0 / 1.3), (3.4, "trot", 1.0), (4.1, "trot", 4.1 / 3.4), (7.0, "run", 1.0), (5.5, "run", 5.5 / 7.0)] {
+            let (c, r) = g.pick(speed, 1.0, None);
+            assert_eq!(c, clip, "at {speed} m/s");
+            assert!((r - rate).abs() < 1e-4, "{clip} at {speed} m/s plays at {r}, not {rate}");
+        }
+        // No walk/run split for animals: 2.9 m/s (past people's WALK_MAX) is a trot.
+        assert_eq!(g.pick(2.9, 1.0, None).0, "trot");
+        // A pup (stage scale 0.42) takes smaller steps: faster cadence at the same speed.
+        let (c, r) = g.pick(1.3, 0.42, None);
+        assert_eq!(c, "trot");
+        assert!((r - 1.3 / (3.4 * 0.42)).abs() < 1e-4);
+    }
+
+    #[test]
+    fn an_animal_holds_its_gait_near_a_boundary() {
+        let g = wolf();
+        // walk/trot meet at sqrt(1.3 × 3.4) = 2.10 m/s, trot/run at sqrt(3.4 × 7) = 4.88.
+        assert_eq!(g.pick(2.13, 1.0, Some("walk")).0, "walk");
+        assert_eq!(g.pick(2.13, 1.0, None).0, "trot");
+        assert_eq!(g.pick(2.075, 1.0, Some("trot")).0, "trot");
+        assert_eq!(g.pick(2.075, 1.0, None).0, "walk");
+        assert_eq!(g.pick(4.8, 1.0, Some("run")).0, "run");
+        assert_eq!(g.pick(4.8, 1.0, None).0, "trot");
     }
 
     #[test]

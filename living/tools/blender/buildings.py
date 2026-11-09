@@ -93,6 +93,7 @@ FOLK = {"human": 1.75, "giant": 5.0, "small": 0.6}
 HEIGHTS = {
     ("fantasy", "tower"): 24.0,
     ("fantasy", "wall"): 5.5,
+    ("cyberpunk", "wall"): 14.0,
     ("fantasy", "market_stall"): 2.6,
     ("fantasy", "lamp"): 3.6,
     ("steampunk", "factory"): 15.0,
@@ -4066,6 +4067,55 @@ def cyber_lamp(k, H):
         cp_blade(k, Face((0, 0, 0), -Y if rng.random() < 0.5 else Y, 1), 0.0, H - 1.0, 1.6, 0.8, rng.choice(["pink", "cyan", "amber"]), mul(pal["dark"], 1.6))
 
 
+def cyber_wall(k, H):
+    """One segment of the megacity's border wall (settle/metro.rs `WallSpec`: 14 m high, 4 m
+    thick), 5.1 m along X so 5 m pieces overlap round the curve; outer face -Y. Precast concrete
+    panels on a plinth, a hazard band at the foot outside, a parapet over a service walk, a cold
+    strip light under the coping, conduits down the inner face; sometimes a buttress inside, a
+    floodlight on top or a warning panel."""
+    rng, pal = k.rng, k.pal
+    conc = k.choice(pal["concrete"])
+    L, T = 2.55, 2.0
+    walk = H - 1.5
+
+    def panels(c, dirty=8.0):
+        # Panel joints every 3 m up and at the segment's ends (where pieces meet), darker.
+        g = grime(c, dirty, 0.62)
+
+        def fn(co, n):
+            joint = (co.z % 3.0) < 0.09 or abs(abs(co.x) - L) < 0.08
+            return mul(g(co, n), 0.72 if joint else 1.0)
+        return fn
+    out, inner = Face((0, -T, 0), X, 2 * L), Face((0, T, 0), -X, 2 * L)
+    k.add(box((-L, -T - 0.45, 0), (L, T + 0.35, 1.2), 0.04), grime(mul(conc, 0.78), 1.5, 0.6))
+    k.add(box((-L, -T, 1.1), (L, T, walk), 0.03), panels(conc))
+    k.add(out.box(-L, L, 1.25, 1.7, 0.0, 0.06), hazard(pal["trim"][0], pal["dark"]), ao=False)
+    # The walk: outer parapet with its coping, deck, low inner rail.
+    k.add(box((-L, -T, walk - 0.05), (L, -T + 0.45, H - 0.2), 0.03), panels(mul(conc, 1.04)))
+    k.add(box((-L, -T - 0.18, H - 0.2), (L, -T + 0.6, H), 0.02), pal["metal"])
+    k.add(box((-L, -T + 0.45, walk - 0.12), (L, T - 0.3, walk)), mul(conc, 0.85), vary=0, ao=False)
+    k.add(box((-L, T - 0.3, walk - 0.05), (L, T, walk + 1.0), 0.02), panels(conc))
+    k.add(out.box(-L + 0.15, L - 0.15, H - 0.95, H - 0.8, 0.0, 0.1), None, glow="white", ao=False)
+    # Conduits down the inner face, clamped.
+    for x in (-1.3, 1.1):
+        k.add(cyl((x, T + 0.16, 1.2), (x, T + 0.16, walk - 0.2), 0.11, 0.11, 8), pal["metal"], ao=False)
+        for z in (3.0, 6.0, 9.0):
+            k.add(box((x - 0.16, T, z), (x + 0.16, T + 0.3, z + 0.12)), pal["iron"], ao=False, vary=0)
+    v = rng.random()
+    if v < 0.3:
+        k.add(box((-0.7, T, 1.2), (0.7, T + 1.4, walk - 2.0), 0.04), panels(mul(conc, 0.95)))
+        k.add(prism([(T + 1.4, walk - 2.0), (T, walk - 0.4), (T, walk - 2.0)], -0.7, 0.7, lambda a, s, z: Vector((a, s, z))), panels(mul(conc, 0.95)))
+    elif v < 0.5:
+        # A floodlight on the inner rail, below the coping (the model's top stays at H).
+        k.add(box((-0.1, T - 0.25, walk + 1.0), (0.1, T - 0.05, H - 0.3)), pal["metal"], ao=False)
+        k.add(box((-0.35, T - 0.5, H - 0.55), (0.35, T - 0.05, H - 0.25)), pal["dark"], ao=False)
+        k.add(box((-0.3, T - 0.52, H - 0.52), (0.3, T - 0.5, H - 0.28)), None, glow="white", ao=False)
+    elif v < 0.62:
+        k.add(out.box(-0.9, 0.9, 3.2, 4.4, 0.0, 0.05), pal["dark"], ao=False)
+        k.add(out.box(-0.8, 0.8, 3.3, 3.45, 0.05, 0.07), None, glow="red", ao=False)
+        k.add(out.box(-0.8, 0.8, 3.6, 4.3, 0.05, 0.06), hazard(pal["trim"][0], pal["dark"], 0.25), ao=False)
+
+
 def cyber_crate(k, H):
     """Street clutter: stacked plastic crates, drums and boxes, about H high."""
     rng, pal = k.rng, k.pal
@@ -5035,6 +5085,7 @@ KINDS = {
     ("cyberpunk", "walkway"): cyber_walkway,
     ("cyberpunk", "lamp"): cyber_lamp,
     ("cyberpunk", "crate"): cyber_crate,
+    ("cyberpunk", "wall"): cyber_wall,
 }
 
 # Kinds that come in forms: the generator reads k.form (and k.corner, the side of a corner

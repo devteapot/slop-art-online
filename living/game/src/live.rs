@@ -12,8 +12,10 @@
 //!   ([`Island::spawn_lot`]); none from the client's own planner.
 //! - **Characters** from the bodies in the window: people as recipe characters (seeded by
 //!   character id; folk and dress from the settlement round their home, `settlement.kind`,
-//!   `settlement.style`; children smaller by life stage), animals as the procedural creatures of
-//!   `bodies.rs`. Clips follow the displayed motion: idle, walk or run by speed (the authority's
+//!   `settlement.style`; children smaller by life stage), wolves as the rigged wolf
+//!   ([`crate::bodies::spawn_beast`]: walk, trot or run by speed, its bite, leap, flinch and
+//!   death; scaled by life stage), other animals as the procedural creatures of `bodies.rs`.
+//!   Clips follow the displayed motion: idle, walk or run by speed (the authority's
 //!   walk is about 2.6 m/s and its run about 4.1), talk while speaking, and over a standing body
 //!   what it is seen doing (`town.rs`: work, gathering, eating, play, sitting, a wave or a nod).
 //!   Positions come from the shared body tracks (`sync.rs`, filled by `bodies::update`).
@@ -30,6 +32,7 @@
 //! `LIVING_GAME_LIVE=<dir>` runs a script headless and writes photographs there
 //! (`LIVING_GAME_LIVE_PLAN`, [`Script`]).
 
+use crate::bodies::stage_scale;
 use crate::camera::Cam;
 use crate::controls::{Input, Target};
 use crate::envs::Roam;
@@ -111,6 +114,7 @@ struct Built {
     hosted: Arc<Map>,
     /// (digest, ours, the authority's)
     digests: [(&'static str, u64, u64); 3],
+    params: LandParams,
     secs: f32,
 }
 
@@ -120,6 +124,8 @@ struct Shown {
     last: Vec2,
     speed: f32,
     person: bool,
+    /// A rigged creature ([`crate::bodies::Beast`]): faces +Z, sized by life stage here.
+    beast: bool,
     /// Drawn facing (sim angle), eased toward the wanted one.
     yaw: f32,
     /// Where the body is drawn (sim metres): the authority's position, except while a sitter
@@ -136,6 +142,9 @@ struct Shown {
 /// seat while the clip plays, then catches up at up to [`CATCH_UP`] m/s faster than the body.
 const STAND_UP: (&str, f32, f64) = ("stand_up_ground", 1.6, 2467.0 / 1.6);
 const CATCH_UP: f32 = 1.2;
+/// A body this far (m) from where it is drawn is drawn there at once: a teleport (an admin
+/// `place_at`) used to crawl in at [`CATCH_UP`], tens of seconds for a few tens of metres.
+const SNAP_M: f32 = 6.0;
 
 /// How fast drawn yaw takes up a new facing (1/s): about 90% in 0.15 s.
 const YAW_RATE: f32 = 16.0;
@@ -224,7 +233,7 @@ fn land(
     live.hosted = Some(built.hosted);
     let arrive = Vec2::new(row.arrive_x, row.arrive_y);
     roam.pos = arrive;
-    commands.insert_resource(Island::hosted(built.land, &defs, arrive));
+    commands.insert_resource(Island::hosted(built.land, &defs, arrive, &built.params));
 }
 
 fn regenerate(row: &LandInfo) -> Result<Built, String> {
@@ -240,6 +249,7 @@ fn regenerate(row: &LandInfo) -> Result<Built, String> {
         land: Arc::new(land),
         hosted: Arc::new(hosted),
         digests: [("tiles", d.tiles, row.tiles_digest), ("heights", d.heights, row.heights_digest), ("layout", d.layout, row.layout_digest)],
+        params,
         secs: t0.elapsed().as_secs_f32(),
     })
 }
@@ -268,15 +278,6 @@ fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, 
     }
 }
 
-/// Size by life stage (as `bodies.rs`): infant, child, adult, elder.
-fn stage_scale(stage: u8) -> f32 {
-    match stage {
-        0 => 0.42,
-        1 => 0.72,
-        3 => 0.96,
-        _ => 1.0,
-    }
-}
 
 /// Folk and dress style from the settlement round a character's home.
 fn folk_of(conn: &DbConnection, c: &Character) -> (&'static str, Option<String>) {
@@ -302,6 +303,9 @@ fn yaw_of(d: Vec2) -> f32 {
 
 /// What `bodies` reads and writes of a drawn body.
 type Drawn = (&'static mut Transform, Option<&'static Fitted>, Option<&'static mut Model>, Option<&'static crate::characters::Character>, &'static mut LiveBody, Option<&'static mut Visibility>);
+
+/// A drawn wolf's height (m) for nameplates and bubbles, at adult size.
+const WOLF_TALL: f32 = 0.9;
 
 /// Draw the window's bodies: spawn, place on the island's ground, face, and pick clips.
 #[allow(clippy::too_many_arguments)]
@@ -335,8 +339,16 @@ fn bodies(
     }
     let gone: Vec<u32> = live.shown.keys().copied().filter(|id| !scene.shown.contains_key(id)).collect();
     for id in gone {
-        // Someone I saw die stays where they fell for a while, playing their death.
-        if let Some(a) = combat.deaths.contains_key(&id).then(|| combat.actions.get(&id).copied()).flatten() {
+        // Someone I saw die stays where they fell for a while, playing their death. The body row
+        // goes in the same update as the death's `my_combat` row, and `combat::ingest` runs after
+        // this system, so a death arriving this frame is read here from the row itself.
+        let fresh = || {
+            conn.db.my_combat().iter().any(|r| r.kind == living_rules::combat::seen::DEATH && r.actor == id).then(|| {
+                let animal = live.shown.get(&id).is_some_and(|s| !s.person);
+                crate::combat::death(animal, scene.now_ms)
+            })
+        };
+        if let Some(a) = combat.deaths.contains_key(&id).then(|| combat.actions.get(&id).copied()).flatten().or_else(fresh) {
             if let Some(s) = live.shown.get(&id) {
                 if let Ok((_, _, _, _, mut lb, _)) = q.get_mut(s.entity) {
                     lb.action = Some(a);
@@ -378,7 +390,8 @@ fn bodies(
                 continue;
             }
             let h = h.unwrap_or(body.heading);
-            let (entity, height, person) = if body.kind == "person" {
+            let size = character.as_ref().map_or(1.0, |c| stage_scale(c.stage));
+            let (entity, height, person, beast) = if body.kind == "person" {
                 let c = character.as_ref().unwrap();
                 let seed = island.land.seed.wrapping_mul(0x9E37_79B9).wrapping_add(id as u64);
                 let mut recipe = if mine {
@@ -391,17 +404,19 @@ fn bodies(
                 };
                 recipe.height *= stage_scale(c.stage);
                 let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, yaw_of(Vec2::new(h.cos(), h.sin())));
-                (e, recipe.height, true)
+                (e, recipe.height, true, false)
+            } else if let Some(e) = crate::bodies::spawn_beast(&mut commands, &assets, &body.kind, at, yaw_of(Vec2::new(h.cos(), h.sin())), size) {
+                (e, WOLF_TALL * size, false, true)
             } else {
                 let tf = Transform::from_translation(at).with_rotation(Quat::from_rotation_y(-h));
                 let e = crate::bodies::spawn(&mut commands, &mut meshes, &palette, &style, &body.kind, id, false, tf, p);
-                (e, if body.kind == "wolf" { 0.9 } else { 1.4 }, false)
+                (e, if body.kind == "wolf" { WOLF_TALL } else { 1.4 }, false, false)
             };
             commands.entity(entity).insert(LiveBody { clip: "idle", rate: 1.0, action: None });
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, yaw: h, drawn: p, sitting: false, rising: None });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None });
             live.heights.insert(id, height);
             continue;
         }
@@ -422,7 +437,7 @@ fn bodies(
                 s.rising = None;
                 let gap = p - s.drawn;
                 let step = (auth_v.min(20.0) + CATCH_UP) * dt;
-                s.drawn = if gap.length() <= step { p } else { s.drawn + gap / gap.length() * step };
+                s.drawn = if gap.length() <= step || gap.length() > SNAP_M { p } else { s.drawn + gap / gap.length() * step };
             }
         }
         // The gait follows the drawn motion, so a catching-up body's feet match its steps.
@@ -435,12 +450,24 @@ fn bodies(
             s.yaw += living_rules::steer::wrap(h - s.yaw) * (1.0 - (-dt * YAW_RATE).exp());
             s.yaw = living_rules::steer::wrap(s.yaw);
         }
-        let (speed, person, yaw) = (s.speed, s.person, s.yaw);
+        let (speed, person, beast, yaw) = (s.speed, s.person, s.beast, s.yaw);
         let rising = held.map(|_| s.rising.map_or(0.0, |(t, _)| t));
         let Ok((mut tf, fitted, mut model, ch, mut lb, vis)) = q.get_mut(s.entity) else { continue };
         tf.translation.x = p.x;
         tf.translation.z = p.y;
-        tf.rotation = if person { Quat::from_rotation_y(yaw_of(Vec2::new(yaw.cos(), yaw.sin())) + PI) } else { Quat::from_rotation_y(-yaw) };
+        let dir = Vec2::new(yaw.cos(), yaw.sin());
+        tf.rotation = if person {
+            Quat::from_rotation_y(yaw_of(dir) + PI)
+        } else if beast {
+            Quat::from_rotation_y(yaw_of(dir))
+        } else {
+            Quat::from_rotation_y(-yaw)
+        };
+        // A rigged creature is drawn at its file's size times its life stage's (it grows up).
+        let size = if beast { conn.db.character().id().find(&id).map_or(1.0, |c| stage_scale(c.stage)) } else { 1.0 };
+        if beast {
+            tf.scale = Vec3::splat(size);
+        }
         // Indoors (asleep, or resting at the door): not drawn. Never my own character.
         let want = if show.hidden && !mine { Visibility::Hidden } else { Visibility::Inherited };
         match vis {
@@ -451,12 +478,14 @@ fn bodies(
             _ => {}
         }
         match (fitted, model.as_mut()) {
+            // `fit` measured a creature at its file's size (height 0 keeps it).
+            (Some(fit), _) if beast => tf.translation.y = ground + fit.y_off * size,
             (Some(fit), _) => tf.translation.y = ground + fit.y_off,
             (None, Some(m)) => m.ground_y = ground,
             (None, None) => tf.translation.y = ground,
         }
         // The gait and its rate from the displayed speed, so feet don't slide (`gait.rs`).
-        let stride = ch.map_or(1.0, |c| c.stride);
+        let stride = ch.map_or(size, |c| c.stride);
         let (clip, rate) = if speed < MOVING {
             (if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") }, 1.0)
         } else {
@@ -511,7 +540,7 @@ fn clips(
     gltfs: Res<Assets<Gltf>>,
     anims: Res<Assets<AnimationClip>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
-    new: Query<(Entity, &Model, Option<&ClipFile>), (With<LiveBody>, With<crate::lookdev::Rig>, Without<ClipSet>)>,
+    new: Query<(Entity, &Model, Option<&ClipFile>), (With<LiveBody>, Or<(With<crate::lookdev::Rig>, (With<crate::bodies::Beast>, With<Fitted>))>, Without<ClipSet>)>,
     mut playing: Query<(Entity, &mut ClipSet, &LiveBody)>,
     children: Query<&Children>,
     mut players: Query<(&mut AnimationPlayer, Option<&mut AnimationTransitions>)>,
@@ -689,6 +718,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `wait:S`; `shot:NAME` (`<dir>/NAME.png`);
 /// - `walk:DEG:S[:run]`: hold a direction (0 = north, 90 = east) through `human_move`;
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
+///   `view:PITCH:DISTANCE[:FOV]`: the game camera's pitch (deg), distance (m) and field of view
+///   (photographing small things up close);
 /// - `say:TEXT`: proximity chat (`human_say`);
 /// - `skill:NAME[:AIM]`: use a skill-bar skill through `use_skill` (`combat.rs`); AIM is
 ///   `nearest`, a creature kind (`wolf`) or `DX,DY` metres from me; `release:NAME` lets go of
@@ -784,6 +815,15 @@ fn script(
         }
         "yaw" => {
             cam.set_yaw(arg.parse().unwrap_or(0.0));
+            true
+        }
+        "view" => {
+            let v: Vec<f32> = arg.split(':').filter_map(|x| x.parse().ok()).collect();
+            if v.len() >= 2 {
+                cam.rig.view = crate::camera::View { pitch: v[0], distance: v[1], fov: v.get(2).copied().unwrap_or(cam.rig.view.fov) };
+            } else {
+                warn!("live script: view wants PITCH:DISTANCE[:FOV], got {arg}");
+            }
             true
         }
         "say" => {
