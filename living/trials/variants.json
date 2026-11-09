@@ -1,6 +1,6 @@
 {
  "default": {
-  "about": "living/configs/models.json as it stands: people think with its default profile (glm-flash, zai-glm-5-3-flash; overflow deepseek-flash); animals by its species map (think ministral, remember and compile ministral-14b). Level of detail and lessons off.",
+  "about": "living/configs/models.json as it stands. Since 694821c/b8cfdba people think with glm-flash (zai-glm-5-3-flash) at reasoning effort low for think and high for deliberate, talk, consolidate and internalize, max_tokens 24000, prompt caching on, overflow deepseek-flash; animals think, remember and compile with glm-flash. Level of detail and lessons off.",
   "models": {},
   "env": {}
  },
@@ -40,7 +40,7 @@
   }
  },
  "glm-flash-low": {
-  "about": "People think with glm-flash sent with reasoning_effort low for every purpose. Replaying one real compile request (2026-11-09): as sent, 43.8 s with 5,742 reasoning tokens of 6,149 completion; with low, 3.4 s, 0 reasoning and 211 completion tokens; \"none\" is refused (HTTP 400).",
+  "about": "People think with glm-flash sent with reasoning_effort low for every purpose. Replaying one real compile request (2026-11-09): as sent, 43.8 s with 5,742 reasoning tokens of 6,149 completion; with low, 3.4 s, 0 reasoning and 211 completion tokens; \"none\" is refused (HTTP 400). Before 694821c the profile sent no effort; since 694821c/b8cfdba main sets per-purpose efforts, and this variant overrides them all to low.",
   "models": {
    "profiles": {
     "glm-flash": {

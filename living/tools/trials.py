@@ -1056,7 +1056,7 @@ class Instance:
                 last_save = time.time()
             if self.stopped_by:
                 break
-            time.sleep(max(0.0, SAMPLE_S - (time.time() - tick)))
+            time.sleep(max(0.0, (getattr(self.opts, "sample_s", None) or SAMPLE_S) - (time.time() - tick)))
         self.status = "collecting"
         self.stop_mind()
         self.read_journal()
@@ -1436,7 +1436,7 @@ def run(a):
         sys.exit(f"batch {a.batch} exists; choose a new name, or `trials.py resume --batch {a.batch}`")
     bdir.mkdir(parents=True, exist_ok=True)
     (bdir / "batch.json").write_text(json.dumps({"trials": a.trials, "variants": names, "replicates": a.replicates, "fake": a.fake,
-                                                 "minutes": a.minutes, "keep_db": a.keep_db, "parallel": a.parallel,
+                                                 "minutes": a.minutes, "keep_db": a.keep_db, "parallel": a.parallel, "sample_s": a.sample_s,
                                                  "commit": sh("git", "-C", ROOT, "rev-parse", "--short", "HEAD").stdout.strip(),
                                                  "dirty": bool(sh("git", "-C", ROOT, "status", "--porcelain", "living").stdout.strip()),
                                                  "started": time.strftime("%Y-%m-%dT%H:%M:%S")}, indent=1))
@@ -1451,7 +1451,7 @@ def resume(a):
     guard()
     bdir = OUT / a.batch
     meta = json.loads((bdir / "batch.json").read_text())
-    a = argparse.Namespace(batch=a.batch, fake=meta["fake"], minutes=meta.get("minutes"), keep_db=meta.get("keep_db"), parallel=meta.get("parallel") or 18, stagger=2)
+    a = argparse.Namespace(batch=a.batch, fake=meta["fake"], minutes=meta.get("minutes"), keep_db=meta.get("keep_db"), parallel=meta.get("parallel") or 18, stagger=2, sample_s=meta.get("sample_s"))
     trials = {t: load_trial(t) for t in meta["trials"]}
     todo = []
     for t in trials.values():
@@ -1814,6 +1814,7 @@ def main():
     p.add_argument("--parallel", type=int, default=18)
     p.add_argument("--keep-db", action="store_true")
     p.add_argument("--stagger", type=float, default=2, help="seconds between instance starts")
+    p.add_argument("--sample-s", type=float, default=SAMPLE_S, help="seconds between samples of each subject (default 2)")
     p.add_argument("--allow-partial", action="store_true")
     p.set_defaults(f=run)
     p = sub.add_parser("report")

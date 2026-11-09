@@ -99,6 +99,19 @@ python3 living/tools/trials.py run --batch b3 wolves hungry --variants default,l
 
 The verify harness runs there too, against the trial container: `VERIFY_STDB_CONTAINER=slop-trials-stdb VERIFY_STDB_PORT=3320` make `verify.py`, `living/tools/stdb`, `verify-llm` and `verify-minds` use it instead of `sao-living_spacetimedb_1` on 3300. Other surface scripts (`verify-client`, `verify-generation`, `verify-knowledge`) still assume 3300.
 
+## Running wide (2026-11-09, measured)
+
+One trial service hosts every world, and each world's reducers run on its own schedule. Measured on the Spark with fake-model life runs (`living/tools/trial_scale.py <batch>`: every world's tick span over 60 s, `docker stats`, each mind's resident memory, the host's free memory). Seven paused life worlds were also loaded:
+
+| Live worlds | Tick p99 per world (median, max) | Ticks over 16.7 ms | Server CPU | Server memory | Host MemAvailable | Load (20 cores) | Mind RSS |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3 (real life runs, before the outage) | 2.45, 2.53 ms | 0 | 45% | 4.5 GB | 108.6 GB | 2 | 56–59 MB |
+| 8 | 2.95, 3.31 ms | 0 | 97% | 2.9 GB | 110.0 GB | 4.7 | 44–49 MB |
+| 16 | 2.0–3.1, 3.48 ms | 0 | 150–340% | 4.4 GB | 108.1 GB | 8.5 | 45–51 MB |
+| 40 | 2.0–3.1, 3.64 ms | 1 (of about 144,000) | 430% | 9.3 GB | 102.1 GB | 21–24 | 44–50 MB |
+
+At 40 worlds every tick but one stayed far inside the 16.7 ms budget, and memory is not the limit (about 0.2 GB per fresh island world, 0.9 GB of replica per six-hour world on disk). The load average is: at 40 worlds the host is busy, partly with the runner's own sampling (about 17 indexed SQL reads per subject per sample). Wide batches therefore sample every 5 s (`--sample-s 5`) and start instances 15 s apart (`--stagger 15`). A second SpacetimeDB container would add no cores on the same host, so wide batches use one. Fake minds call instantly; real minds add HTTP and parsing work in their own processes, so a real 40-run batch is watched for tick p99 and load as it ramps. `trials.py resume` was proven again at 16 worlds: the runner was killed mid-run and all 8 of its minds were adopted, with clocks kept and no false runaway.
+
 ## Notes for the mind-harness lab
 
 - **Models per purpose and per species.** A variant's `models` value is deep-merged into `living/configs/models.json` as given, or `models_file` names a whole file. Whatever keys the config grows (for example per-purpose mixes for people), a variant can carry them unchanged. Today `species` routes animals per purpose (`think`, `remember`, `compile`), proven in the fake run `dry8`: wolves impulse with `ministral-8b` and compile and consolidate with `ministral-14b`. **People have one profile for every purpose**: assign, rotate, groups, stages and the default all choose one profile. Per-purpose mixes for people need a change in the mind service (`llm.rs` profile choice), not in the runner. The current variants are single-profile for people.
