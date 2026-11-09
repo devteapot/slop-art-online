@@ -1,0 +1,20 @@
+[package]
+name = "sb-module"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# One wasm32-unknown-unknown bench module per engine: build with a single engine feature.
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+rhai = ["sb-bench/rhai"]
+rune = ["sb-bench/rune"]
+wasmi = ["sb-bench/wasmi"]
+piccolo = ["sb-bench/piccolo"]
+koto = ["sb-bench/koto"]
+mlua = ["sb-bench/mlua"]
+
+[dependencies]
+sb-bench = { path = "../bench" }

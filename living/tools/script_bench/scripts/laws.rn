@@ -1,0 +1,108 @@
+// Port of three laws from living/scripts/skills.rhai to Rune (same map-shaped input `a`).
+
+pub fn inv(a, item) {
+    match a.actor.inv.get(item) { Some(n) => n, None => 0 }
+}
+
+fn count(m, key) {
+    match m.get(key) { Some(n) => n, None => 0 }
+}
+
+fn within(ago, ms) {
+    match ago { Some(x) => x < ms, None => false }
+}
+
+fn cold(a) {
+    a.night && a.actor.kind == "person" && !a.actor.near_fire && !a.actor.near_shelter && inv(a, "cloak") == 0
+}
+
+fn wet(a) { a.raining && a.actor.kind == "person" && !a.actor.near_shelter }
+
+pub fn rates(a) {
+    let actor = a.actor;
+    let hunger = match actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 5.0 };
+    let energy = -3.0;
+    let hp = 0.0;
+    let act = actor.activity;
+    if act == "sleep" {
+        energy = if actor.near_shelter { 26.0 } else { 16.0 };
+        hunger *= 0.5;
+    } else if act == "rest" {
+        energy = 6.0;
+    } else if act == "block" {
+        energy = -12.0;
+    }
+    if actor.hunger >= 100.0 {
+        hp -= 6.0;
+    } else if actor.hunger < 70.0 && actor.energy > 15.0 {
+        hp += 3.0;
+    }
+    if actor.energy <= 0.0 {
+        hp -= 2.0;
+    }
+    if actor.stage == "elder" {
+        if hp > 0.0 { hp *= 0.5; }
+        energy *= 1.3;
+    }
+    if actor.stage == "infant" { hunger *= if actor.kind == "person" { 0.6 } else { 0.3 }; }
+    if energy < 0.0 { energy /= actor.endurance; }
+    if hp > 0.0 { hp *= actor.vitality; }
+    if wet(a) {
+        energy -= if inv(a, "cloak") > 0 { 1.0 } else { 2.5 };
+    }
+    if cold(a) {
+        hp -= if a.season == "winter" { 5.0 } else { 2.0 };
+    }
+    #{ hunger: hunger, energy: energy, hp: hp }
+}
+
+pub fn combat_cooldown(skill) {
+    match skill { "strike" => 650, "bowshot" => 900, "firebolt" => 4000, "heal" => 8000, "dodge" => 900, "block" => 400, _ => 0 }
+}
+fn combat_cost(skill) {
+    match skill { "strike" => 2.0, "bowshot" => 1.5, "firebolt" => 12.0, "heal" => 15.0, "dodge" => 4.0, "block" => 1.0, _ => 0.0 }
+}
+fn spent(skill) { [#{ op: "vitals", energy: -combat_cost(skill) }] }
+fn winded(a) { if a.actor.energy < combat_cost(a.skill) { "too tired" } else { "" } }
+
+fn young(a) { a.actor.stage == "infant" || a.actor.stage == "child" }
+fn yielding(a) { within(a.actor.yielded_ago, 20000.0) }
+
+fn dares(a) {
+    let kind = a.actor.kind;
+    if kind == "person" || a.target.kind != "person" { return ""; }
+    if a.actor.bold { return ""; }
+    if a.actor.hurt_by == a.target.id && within(a.actor.hurt_ago, 10000.0) { return ""; }
+    let prey = 0;
+    if kind == "wolf" { prey += count(a.actor.sensed, "deer"); }
+    if a.actor.hunger >= 85.0 && prey == 0 { return ""; }
+    let t = a.target;
+    if t.stage == "infant" || t.stage == "child" { return ""; }
+    if t.max_hp > 0.0 && t.hp < 0.35 * t.max_hp { return ""; }
+    if !t.near_fire && (t.activity == "sleep" || (a.night && t.company == 0)) { return ""; }
+    "you do not dare: people are dangerous"
+}
+
+fn attack_check(a) {
+    if a.actor.kind == "person" && young(a) { return "too young to fight"; }
+    if a.target.class != "creature" || !a.target.alive { return "nothing to attack"; }
+    if a.target.id == a.actor.id { return "cannot attack yourself"; }
+    if yielding(a) { return "you have yielded: you do not strike back while it holds"; }
+    let wary = dares(a);
+    if wary != "" { return wary; }
+    ""
+}
+
+pub fn strike_check(a) {
+    let why = attack_check(a);
+    if why != "" { return why; }
+    winded(a)
+}
+
+fn armor(a) { if count(a.target.inv, "armor") < 1 { 1.0 } else { 0.65 } }
+
+pub fn strike_done(a) {
+    let dmg = if inv(a, "spear") > 0 { 15.0 } else { 10.0 };
+    let dmg = dmg * a.actor.strength * a.actor.factor * armor(a);
+    [#{ op: "damage", amount: dmg }, #{ op: "vitals", energy: -combat_cost("strike") }]
+}

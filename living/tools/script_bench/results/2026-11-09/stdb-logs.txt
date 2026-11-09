@@ -1,0 +1,117 @@
+2026-11-09T14:52:34.278190Z  INFO: bench_init: Timing span "init rhai": 5.353025ms
+2026-11-09T14:52:34.464598Z  INFO: bench: Timing span "rhai rates x1000": 35.668148ms
+2026-11-09T14:52:34.618508Z  INFO: bench_digest stdb/src/lib.rs:94: digest rhai rates b06873ba5ed567f2
+2026-11-09T14:53:01.348605Z  INFO: bench: Timing span "rhai rates x0": 2.845µs
+2026-11-09T14:53:01.389872Z  INFO: bench: Timing span "rhai rates x1000": 40.736886ms
+2026-11-09T14:53:01.430776Z  INFO: bench: Timing span "rhai rates x1000": 40.296836ms
+2026-11-09T14:53:01.470379Z  INFO: bench: Timing span "rhai rates x1000": 39.077808ms
+2026-11-09T14:56:35.519018Z  INFO: bench_init: Timing span "init native": 2.044µs
+2026-11-09T14:56:35.690681Z  INFO: bench_digest stdb/src/lib.rs:95: digest native rates b06873ba5ed567f2
+2026-11-09T14:56:35.802839Z  INFO: bench: Timing span "native rates x0": 2.274µs
+2026-11-09T14:56:35.805058Z  INFO: bench: Timing span "native rates x20000": 1.960839ms
+2026-11-09T14:56:35.807891Z  INFO: bench: Timing span "native rates x20000": 2.681979ms
+2026-11-09T14:56:35.809951Z  INFO: bench: Timing span "native rates x20000": 1.890967ms
+2026-11-09T14:56:35.811932Z  INFO: bench: Timing span "native rates x20000": 1.887962ms
+2026-11-09T14:56:35.813923Z  INFO: bench: Timing span "native rates x20000": 1.877792ms
+2026-11-09T14:56:35.925513Z  INFO: bench_digest stdb/src/lib.rs:95: digest native strike e85418015e7d01c1
+2026-11-09T14:56:36.040406Z  INFO: bench: Timing span "native strike x0": 2.655µs
+2026-11-09T14:56:36.046527Z  INFO: bench: Timing span "native strike x20000": 5.896772ms
+2026-11-09T14:56:36.052541Z  INFO: bench: Timing span "native strike x20000": 5.887545ms
+2026-11-09T14:56:36.058513Z  INFO: bench: Timing span "native strike x20000": 5.802435ms
+2026-11-09T14:56:36.064516Z  INFO: bench: Timing span "native strike x20000": 5.799619ms
+2026-11-09T14:56:36.070509Z  INFO: bench: Timing span "native strike x20000": 5.835087ms
+2026-11-09T14:56:36.188871Z  INFO: bench_digest stdb/src/lib.rs:95: digest native cooldown 2b1015385ac072ce
+2026-11-09T14:56:36.305438Z  INFO: bench: Timing span "native cooldown x0": 1.422µs
+2026-11-09T14:56:36.307166Z  INFO: bench: Timing span "native cooldown x400000": 1.543271ms
+2026-11-09T14:56:36.308851Z  INFO: bench: Timing span "native cooldown x400000": 1.549623ms
+2026-11-09T14:56:36.310620Z  INFO: bench: Timing span "native cooldown x400000": 1.54281ms
+2026-11-09T14:56:36.312360Z  INFO: bench: Timing span "native cooldown x400000": 1.549082ms
+2026-11-09T14:56:36.314064Z  INFO: bench: Timing span "native cooldown x400000": 1.517462ms
+2026-11-09T14:56:36.458038Z  INFO: bench_init: Timing span "init rhai": 5.435031ms
+2026-11-09T14:56:36.621598Z  INFO: bench_digest stdb/src/lib.rs:95: digest rhai rates b06873ba5ed567f2
+2026-11-09T14:56:36.761440Z  INFO: bench: Timing span "rhai rates x0": 2.665µs
+2026-11-09T14:56:36.790909Z  INFO: bench: Timing span "rhai rates x1000": 29.138623ms
+2026-11-09T14:56:36.820986Z  INFO: bench: Timing span "rhai rates x1000": 29.165794ms
+2026-11-09T14:56:36.851256Z  INFO: bench: Timing span "rhai rates x1000": 29.351916ms
+2026-11-09T14:56:36.881598Z  INFO: bench: Timing span "rhai rates x1000": 29.320726ms
+2026-11-09T14:56:36.913631Z  INFO: bench: Timing span "rhai rates x1000": 30.973234ms
+2026-11-09T14:56:37.033224Z  INFO: bench_digest stdb/src/lib.rs:95: digest rhai strike e85418015e7d01c1
+2026-11-09T14:56:37.149837Z  INFO: bench: Timing span "rhai strike x0": 2.144µs
+2026-11-09T14:56:37.207210Z  INFO: bench: Timing span "rhai strike x1000": 57.157695ms
+2026-11-09T14:56:37.264413Z  INFO: bench: Timing span "rhai strike x1000": 56.695533ms
+2026-11-09T14:56:37.322279Z  INFO: bench: Timing span "rhai strike x1000": 56.993505ms
+2026-11-09T14:56:37.380064Z  INFO: bench: Timing span "rhai strike x1000": 56.994547ms
+2026-11-09T14:56:37.437559Z  INFO: bench: Timing span "rhai strike x1000": 56.572771ms
+2026-11-09T14:56:37.566996Z  INFO: bench_digest stdb/src/lib.rs:95: digest rhai cooldown 2b1015385ac072ce
+2026-11-09T14:56:37.687705Z  INFO: bench: Timing span "rhai cooldown x0": 2.114µs
+2026-11-09T14:56:37.709364Z  INFO: bench: Timing span "rhai cooldown x20000": 21.43918ms
+2026-11-09T14:56:37.731048Z  INFO: bench: Timing span "rhai cooldown x20000": 21.354511ms
+2026-11-09T14:56:37.752815Z  INFO: bench: Timing span "rhai cooldown x20000": 21.411478ms
+2026-11-09T14:56:37.774513Z  INFO: bench: Timing span "rhai cooldown x20000": 21.381852ms
+2026-11-09T14:56:37.796642Z  INFO: bench: Timing span "rhai cooldown x20000": 21.790052ms
+2026-11-09T14:56:37.923255Z  INFO: bench_init: Timing span "init rhai-lean": 5.435753ms
+2026-11-09T14:56:38.104007Z  INFO: bench_digest stdb/src/lib.rs:95: digest rhai-lean rates b06873ba5ed567f2
+2026-11-09T14:56:38.225686Z  INFO: bench: Timing span "rhai-lean rates x0": 1.753µs
+2026-11-09T14:56:38.238936Z  INFO: bench: Timing span "rhai-lean rates x1000": 12.976777ms
+2026-11-09T14:56:38.251689Z  INFO: bench: Timing span "rhai-lean rates x1000": 12.544092ms
+2026-11-09T14:56:38.264419Z  INFO: bench: Timing span "rhai-lean rates x1000": 12.584488ms
+2026-11-09T14:56:38.277154Z  INFO: bench: Timing span "rhai-lean rates x1000": 12.584668ms
+2026-11-09T14:56:38.289879Z  INFO: bench: Timing span "rhai-lean rates x1000": 12.577655ms
+2026-11-09T14:56:38.408720Z  INFO: bench_digest stdb/src/lib.rs:95: digest rhai-lean strike e85418015e7d01c1
+2026-11-09T14:56:38.529005Z  INFO: bench: Timing span "rhai-lean strike x0": 1.553µs
+2026-11-09T14:56:38.562652Z  INFO: bench: Timing span "rhai-lean strike x1000": 33.360878ms
+2026-11-09T14:56:38.596779Z  INFO: bench: Timing span "rhai-lean strike x1000": 33.167362ms
+2026-11-09T14:56:38.630944Z  INFO: bench: Timing span "rhai-lean strike x1000": 33.281207ms
+2026-11-09T14:56:38.664849Z  INFO: bench: Timing span "rhai-lean strike x1000": 33.137566ms
+2026-11-09T14:56:38.699001Z  INFO: bench: Timing span "rhai-lean strike x1000": 33.343044ms
+2026-11-09T14:56:38.821190Z  INFO: bench_digest stdb/src/lib.rs:95: digest rhai-lean cooldown 2b1015385ac072ce
+2026-11-09T14:56:38.935499Z  INFO: bench: Timing span "rhai-lean cooldown x0": 1.853µs
+2026-11-09T14:56:38.955265Z  INFO: bench: Timing span "rhai-lean cooldown x20000": 19.549807ms
+2026-11-09T14:56:38.975113Z  INFO: bench: Timing span "rhai-lean cooldown x20000": 19.58376ms
+2026-11-09T14:56:38.994761Z  INFO: bench: Timing span "rhai-lean cooldown x20000": 19.332576ms
+2026-11-09T14:56:39.014515Z  INFO: bench: Timing span "rhai-lean cooldown x20000": 19.364276ms
+2026-11-09T14:56:39.034230Z  INFO: bench: Timing span "rhai-lean cooldown x20000": 19.366591ms
+2026-11-09T14:56:39.174254Z  INFO: bench_init: Timing span "init rune": 6.709366ms
+2026-11-09T14:56:39.352315Z  INFO: bench_digest stdb/src/lib.rs:95: digest rune rates b06873ba5ed567f2
+2026-11-09T14:56:39.473725Z  INFO: bench: Timing span "rune rates x0": 2.334µs
+2026-11-09T14:56:39.486047Z  INFO: bench: Timing span "rune rates x1000": 11.917069ms
+2026-11-09T14:56:39.497502Z  INFO: bench: Timing span "rune rates x1000": 11.278575ms
+2026-11-09T14:56:39.508941Z  INFO: bench: Timing span "rune rates x1000": 11.286309ms
+2026-11-09T14:56:39.520712Z  INFO: bench: Timing span "rune rates x1000": 11.539977ms
+2026-11-09T14:56:39.532319Z  INFO: bench: Timing span "rune rates x1000": 11.342675ms
+2026-11-09T14:56:39.667008Z  INFO: bench_digest stdb/src/lib.rs:95: digest rune strike e85418015e7d01c1
+2026-11-09T14:56:39.781323Z  INFO: bench: Timing span "rune strike x0": 2.585µs
+2026-11-09T14:56:39.802563Z  INFO: bench: Timing span "rune strike x1000": 20.943806ms
+2026-11-09T14:56:39.823668Z  INFO: bench: Timing span "rune strike x1000": 20.793552ms
+2026-11-09T14:56:39.844938Z  INFO: bench: Timing span "rune strike x1000": 20.835922ms
+2026-11-09T14:56:39.866310Z  INFO: bench: Timing span "rune strike x1000": 20.899222ms
+2026-11-09T14:56:39.888008Z  INFO: bench: Timing span "rune strike x1000": 21.141428ms
+2026-11-09T14:56:40.006946Z  INFO: bench_digest stdb/src/lib.rs:95: digest rune cooldown 2b1015385ac072ce
+2026-11-09T14:56:40.136592Z  INFO: bench: Timing span "rune cooldown x0": 1.773µs
+2026-11-09T14:56:40.141960Z  INFO: bench: Timing span "rune cooldown x20000": 5.15262ms
+2026-11-09T14:56:40.147244Z  INFO: bench: Timing span "rune cooldown x20000": 5.117422ms
+2026-11-09T14:56:40.153104Z  INFO: bench: Timing span "rune cooldown x20000": 5.694812ms
+2026-11-09T14:56:40.158319Z  INFO: bench: Timing span "rune cooldown x20000": 5.048002ms
+2026-11-09T14:56:40.163576Z  INFO: bench: Timing span "rune cooldown x20000": 5.033424ms
+2026-11-09T14:56:40.294928Z  INFO: bench_init: Timing span "init wasmi": 1.031105ms
+2026-11-09T14:56:40.458313Z  INFO: bench_digest stdb/src/lib.rs:95: digest wasmi rates b06873ba5ed567f2
+2026-11-09T14:56:40.580593Z  INFO: bench: Timing span "wasmi rates x0": 2.094µs
+2026-11-09T14:56:40.597966Z  INFO: bench: Timing span "wasmi rates x1000": 17.119763ms
+2026-11-09T14:56:40.615545Z  INFO: bench: Timing span "wasmi rates x1000": 17.038218ms
+2026-11-09T14:56:40.632230Z  INFO: bench: Timing span "wasmi rates x1000": 16.209335ms
+2026-11-09T14:56:40.648891Z  INFO: bench: Timing span "wasmi rates x1000": 16.212782ms
+2026-11-09T14:56:40.665739Z  INFO: bench: Timing span "wasmi rates x1000": 16.364838ms
+2026-11-09T14:56:40.796004Z  INFO: bench_digest stdb/src/lib.rs:95: digest wasmi strike e85418015e7d01c1
+2026-11-09T14:56:40.909678Z  INFO: bench: Timing span "wasmi strike x0": 2.004µs
+2026-11-09T14:56:40.929606Z  INFO: bench: Timing span "wasmi strike x1000": 19.728252ms
+2026-11-09T14:56:40.949526Z  INFO: bench: Timing span "wasmi strike x1000": 19.651869ms
+2026-11-09T14:56:40.969170Z  INFO: bench: Timing span "wasmi strike x1000": 19.391317ms
+2026-11-09T14:56:40.988805Z  INFO: bench: Timing span "wasmi strike x1000": 19.352013ms
+2026-11-09T14:56:41.008533Z  INFO: bench: Timing span "wasmi strike x1000": 19.404362ms
+2026-11-09T14:56:41.134643Z  INFO: bench_digest stdb/src/lib.rs:95: digest wasmi cooldown 2b1015385ac072ce
+2026-11-09T14:56:41.271661Z  INFO: bench: Timing span "wasmi cooldown x0": 1.673µs
+2026-11-09T14:56:41.288003Z  INFO: bench: Timing span "wasmi cooldown x20000": 15.863914ms
+2026-11-09T14:56:41.303955Z  INFO: bench: Timing span "wasmi cooldown x20000": 15.784775ms
+2026-11-09T14:56:41.320152Z  INFO: bench: Timing span "wasmi cooldown x20000": 15.821413ms
+2026-11-09T14:56:41.336416Z  INFO: bench: Timing span "wasmi cooldown x20000": 15.821313ms
+2026-11-09T14:56:41.352641Z  INFO: bench: Timing span "wasmi cooldown x20000": 15.843114ms

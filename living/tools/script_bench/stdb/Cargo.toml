@@ -1,0 +1,14 @@
+[package]
+name = "sb-stdb"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Calibration: the same bench code in a real SpacetimeDB 2.14.1 module.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+spacetimedb = "=2.14.1"
+log = "0.4"
+sb-bench = { path = "../bench", features = ["rhai", "rune", "wasmi"] }

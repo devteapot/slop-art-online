@@ -1,0 +1,129 @@
+# Note: Koto's `not` binds looser than `and` (`not x and y` is `not (x and y)`), hence the
+# parentheses.
+# Port of three laws from living/scripts/skills.rhai to Koto (same map-shaped input `a`).
+
+count = |m, key|
+  n = m.get(key)
+  if n == null then 0 else n
+
+inv = |a, item| count(a.actor.inv, item)
+
+within = |ago, ms| ago != null and ago < ms
+
+cold = |a|
+  a.night and a.actor.kind == 'person' and (not a.actor.near_fire) and (not a.actor.near_shelter) and inv(a, 'cloak') == 0
+
+wet = |a| a.raining and a.actor.kind == 'person' and (not a.actor.near_shelter)
+
+export rates = |a|
+  actor = a.actor
+  hunger = match actor.kind
+    'deer' then 6.0
+    'wolf' then 1.5
+    else 5.0
+  energy = -3.0
+  hp = 0.0
+  act = actor.activity
+  if act == 'sleep'
+    energy = if actor.near_shelter then 26.0 else 16.0
+    hunger *= 0.5
+  else if act == 'rest'
+    energy = 6.0
+  else if act == 'block'
+    energy = -12.0
+  if actor.hunger >= 100.0
+    hp -= 6.0
+  else if actor.hunger < 70.0 and actor.energy > 15.0
+    hp += 3.0
+  if actor.energy <= 0.0
+    hp -= 2.0
+  if actor.stage == 'elder'
+    if hp > 0.0
+      hp *= 0.5
+    energy *= 1.3
+  if actor.stage == 'infant'
+    hunger *= if actor.kind == 'person' then 0.6 else 0.3
+  if energy < 0.0
+    energy /= actor.endurance
+  if hp > 0.0
+    hp *= actor.vitality
+  if wet(a)
+    energy -= if inv(a, 'cloak') > 0 then 1.0 else 2.5
+  if cold(a)
+    hp -= if a.season == 'winter' then 5.0 else 2.0
+  {hunger, energy, hp}
+
+export combat_cooldown = |skill|
+  match skill
+    'strike' then 650
+    'bowshot' then 900
+    'firebolt' then 4000
+    'heal' then 8000
+    'dodge' then 900
+    'block' then 400
+    else 0
+
+combat_cost = |skill|
+  match skill
+    'strike' then 2.0
+    'bowshot' then 1.5
+    'firebolt' then 12.0
+    'heal' then 15.0
+    'dodge' then 4.0
+    'block' then 1.0
+    else 0.0
+
+winded = |a| if a.actor.energy < combat_cost(a.skill) then 'too tired' else ''
+
+young = |a| a.actor.stage == 'infant' or a.actor.stage == 'child'
+
+yielding = |a| within(a.actor.yielded_ago, 20000.0)
+
+dares = |a|
+  kind = a.actor.kind
+  if kind == 'person' or a.target.kind != 'person'
+    return ''
+  if a.actor.bold
+    return ''
+  if a.actor.hurt_by == a.target.id and within(a.actor.hurt_ago, 10000.0)
+    return ''
+  prey = 0
+  if kind == 'wolf'
+    prey += count(a.actor.sensed, 'deer')
+  if a.actor.hunger >= 85.0 and prey == 0
+    return ''
+  t = a.target
+  if t.stage == 'infant' or t.stage == 'child'
+    return ''
+  if t.max_hp > 0.0 and t.hp < 0.35 * t.max_hp
+    return ''
+  if (not t.near_fire) and (t.activity == 'sleep' or (a.night and t.company == 0))
+    return ''
+  'you do not dare: people are dangerous'
+
+attack_check = |a|
+  if a.actor.kind == 'person' and young(a)
+    return 'too young to fight'
+  if a.target.class != 'creature' or (not a.target.alive)
+    return 'nothing to attack'
+  if a.target.id == a.actor.id
+    return 'cannot attack yourself'
+  if yielding(a)
+    return 'you have yielded: you do not strike back while it holds'
+  wary = dares(a)
+  if wary != ''
+    return wary
+  ''
+
+export strike_check = |a|
+  why = attack_check(a)
+  if why != ''
+    return why
+  winded(a)
+
+armor = |a| if count(a.target.inv, 'armor') < 1 then 1.0 else 0.65
+
+export strike_done = |a|
+  dmg = if inv(a, 'spear') > 0 then 15.0 else 10.0
+  dmg = dmg * a.actor.strength * a.actor.factor * armor(a)
+  [{op: 'damage', amount: dmg}, {op: 'vitals', energy: -combat_cost('strike')}]

@@ -1,0 +1,16 @@
+# Script engine spike (docs/SCRIPT_ENGINES.md). Standalone: not a member of living/Cargo.toml.
+[workspace]
+resolver = "2"
+members = ["bench", "module", "guest", "host", "stdb"]
+
+[workspace.dependencies]
+living-rules = { path = "../../rules" }
+rhai = { version = "=1.27.0", default-features = false, features = ["std", "no_time"] }
+
+# The authority's profile (living/Cargo.toml): opt-level 3, no LTO.
+[profile.release]
+opt-level = 3
+
+# The guest laws for wasmi are small Rust compiled to WASM.
+[profile.release.package.sb-guest]
+opt-level = 3
