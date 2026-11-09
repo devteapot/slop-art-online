@@ -3,33 +3,40 @@
 Run headless:
     blender -b -P living/tools/blender/buildings.py -- --style fantasy --kind house --count 8 --out DIR
 
-Styles and kinds (see HEIGHTS):
-- fantasy: house (cottage), townhouse, tower, wall, market_stall, lamp: timber frame and
-  plaster on stone, steep stepped-shingle roofs, chimneys, dormers, warm lit windows;
-- steampunk: house, factory, chimney, pipe, crate, lamp: brick, riveted metal bands, copper
-  roofs and domes, pipes, gears, smokestacks;
-- giant: house, tower, lamp: the fantasy grammar built for 5 m giants (doors ~6 m, steps ~0.5 m);
-- small: house, tower: burrows, mushroom and stump dwellings for 0.6 m small folk.
+Styles and kinds (KINDS and FORM_KINDS):
+- fantasy: houses (cottage, house, longhouse, L-house, corner house), townhouses (narrow, wide,
+  corner), inn, guildhall, chapel, workshop (smithy, workshop), barn (barn, shed), tower, wall,
+  market_stall, lamp, well: timber frame and plaster on stone, steep stepped-shingle roofs
+  (gable, hip, half-hip, cross gables), jetties, dormers, lean-tos, chimneys, lit windows;
+- steampunk: house (narrow, wide), factory, chimney, pipe, crate, lamp: brick, riveted metal
+  bands, copper mansards and domes, pipes, gears, smokestacks;
+- giant: houses and a longhall in the fantasy grammar for 5 m giants (doors ~6 m), tower, lamp,
+  well;
+- small: burrows, big mounds, mushroom and stump houses, a mushroom hall, tower, well for 0.6 m
+  small folk.
 
-Conventions (as nature.py): metres, origin at the base centre, +Z up in Blender (+Y in glTF),
-fronts face -Y in Blender (+Z in glTF, the asset view's "front"). Colour is per-vertex
-("Color", exported as COLOR_0) on a white "Body" material so the game's toon material does
-the shading; lit windows and lamps use a "Glow" material with emission.
+Conventions (as nature.py): metres, origin at the floor centred on the footprint, +Z up in
+Blender (+Y in glTF), fronts face -Y in Blender (+Z in glTF, the asset view's "front"). Colour is
+per-vertex ("Color", exported as COLOR_0) on a white "Body" material so the game's toon material
+does the shading; lit windows and lamps use a "Glow" material with emission. Generators work in
+metres for a 1.75 m person, and the result is scaled by the inhabitants' height (FOLK), so doors
+stay door-sized.
 
-Every model of a kind is scaled to exactly that kind's height (HEIGHTS) above its floor, and the
-environment slots use the same height, so the harness never rescales a building: doors stay
-door-sized.
+Heights: a kind in KINDS is scaled to exactly its HEIGHTS entry (the environment slots use the
+same number). A kind in FORM_KINDS comes in forms (size classes and shapes) whose storeys, plan
+and roof vary per model; it keeps its designed size and its height is measured.
 
-Foundations: the origin is the floor (where the building meets level ground). Below it every
-model has a stepped stone foundation under its whole ground outline, about 1.8 m deep for a
-person's house (FOUNDATION, scaled with the inhabitants: about 5 m for giants, 0.6 m for small
-folk), so on a slope it reaches down into the ground instead of floating; on flat ground it is
-hidden. The settlement planner (`living/rules/src/settle.rs`) levels each lot to the floor.
+Foundations: below the floor every model has a stepped stone foundation under its whole ground
+outline, about 1.8 m deep for a person's house (FOUNDATION, scaled with the inhabitants: about
+5 m for giants, 0.6 m for small folk), so on a slope it reaches down into the ground instead of
+floating; on flat ground it is hidden. The settlement planner (`living/rules/src/settle.rs`)
+levels each lot to the floor.
 
-Footprints: every model of a kind fits inside ENVELOPES (width along the front, depth front to
-back, roof overhangs and steps included); a model that does not prints WARN. `--table PATH`
-writes HEIGHTS, ENVELOPES and foundation depths as the JSON the planner reads
-(`living/rules/data/buildings.json`); `gen_buildings.sh` refreshes it.
+Footprints: each run writes `gen-<kind>-<style>.json` beside its models with every model's form,
+footprint (width along the front, depth front to back, roof overhangs, steps and yards included),
+height, foundation depth and triangles. `--table PATH --envs ROOT` gathers them into the JSON the
+planner reads (`living/rules/data/buildings.json`): every model with its file under `envs/`,
+plus each kind's envelope; `gen_buildings.sh` refreshes it.
 """
 
 import argparse
@@ -50,24 +57,20 @@ X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 # Inhabitant heights: everything is designed around the door its folk need.
 FOLK = {"human": 1.75, "giant": 5.0, "small": 0.6}
 
-# Exact model height (m) per (style, kind); the env JSON slots use the same numbers.
+# Exact model height (m) per fixed (style, kind); the env JSON slots use the same numbers. Kinds
+# with forms (FORM_KINDS) have no fixed height.
 HEIGHTS = {
-    ("fantasy", "house"): 8.0,
-    ("fantasy", "townhouse"): 12.0,
     ("fantasy", "tower"): 24.0,
     ("fantasy", "wall"): 5.5,
     ("fantasy", "market_stall"): 2.6,
     ("fantasy", "lamp"): 3.6,
-    ("steampunk", "house"): 12.0,
     ("steampunk", "factory"): 15.0,
     ("steampunk", "chimney"): 20.0,
     ("steampunk", "pipe"): 2.0,
     ("steampunk", "crate"): 1.0,
     ("steampunk", "lamp"): 4.0,
-    ("giant", "house"): 8.0 * 5.0 / 1.75,
     ("giant", "tower"): 13.3 * 5.0 / 1.75,
     ("giant", "lamp"): 3.6 * 5.0 / 1.75,
-    ("small", "house"): 1.6,
     ("small", "tower"): 3.5,
     ("fantasy", "well"): 3.4,
     ("giant", "well"): 3.4 * 5.0 / 1.75,
@@ -77,32 +80,6 @@ HEIGHTS = {
 # Foundation depth below the floor, in a person's metres (scaled with the inhabitants).
 FOUNDATION = {"lamp": 0.6, "market_stall": 0.5, "crate": 0.4, "pipe": 0.5}
 FOUNDATION_DEFAULT = 1.8
-
-# Footprint envelope (width along the front, depth front to back; metres, as built) of every model
-# of a kind: the maximum over 32 seeds, foundations included, plus a little. The planner sizes
-# lots by these, so changing a generator's proportions means re-measuring them.
-ENVELOPES = {
-    ("fantasy", "house"): (10.1, 9.5),
-    ("fantasy", "lamp"): (2.0, 0.7),
-    ("fantasy", "market_stall"): (4.2, 2.0),
-    ("fantasy", "tower"): (8.7, 8.7),
-    ("fantasy", "townhouse"): (10.4, 8.8),
-    ("fantasy", "wall"): (5.0, 3.8),
-    ("fantasy", "well"): (3.0, 2.4),
-    ("giant", "house"): (29.3, 27.1),
-    ("giant", "lamp"): (5.7, 1.8),
-    ("giant", "tower"): (21.2, 21.2),
-    ("giant", "well"): (8.4, 6.7),
-    ("small", "house"): (3.1, 3.5),
-    ("small", "tower"): (2.5, 2.5),
-    ("small", "well"): (1.0, 0.9),
-    ("steampunk", "chimney"): (7.1, 7.1),
-    ("steampunk", "crate"): (1.9, 1.4),
-    ("steampunk", "factory"): (17.0, 17.4),
-    ("steampunk", "house"): (9.1, 9.1),
-    ("steampunk", "lamp"): (1.7, 0.9),
-    ("steampunk", "pipe"): (7.2, 0.9),
-}
 
 PALETTES = {
     "fantasy": dict(
@@ -197,12 +174,12 @@ class Builder:
                 loop[self.col] = (*color_fn(loop.vert.co, nf.normal), 1.0)
         part.free()
 
-    def finish(self, name, height):
-        """Scale uniformly so the top is exactly `height` above the floor (z=0, kept as the
-        origin; the foundation reaches below it), centre the footprint on the origin, then make
-        the object."""
+    def finish(self, name, height=None, scale=1.0):
+        """Scale uniformly, so the top is exactly `height` above the floor if given (z=0, kept as
+        the origin; the foundation reaches below it), else by `scale`; centre the footprint on
+        the origin, then make the object."""
         hi = max(v.co.z for v in self.bm.verts)
-        k = height / max(hi, 1e-6)
+        k = height / max(hi, 1e-6) if height else scale
         # Centred on its footprint, so a lot centred on the origin fits it snugly.
         xs = [v.co.x for v in self.bm.verts]
         ys = [v.co.y for v in self.bm.verts]
@@ -386,11 +363,13 @@ class Kit:
 
 
 def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, sides=(-1, 1), course=0.48,
-               th=0.1, sag=0.06, barge=None, cap=True):
+               th=0.1, sag=0.06, barge=None, cap=True, clip=0.0, cut=(1.1, 2.8)):
     """A gable (or, with one side, lean-to) roof of stepped, slightly uneven shingle courses.
 
     `centre` is the middle of the ridge (z = ridge height); the slopes run down across `axis` to
-    the wall lines at `half_span`, where they are at `zw`, then on past them by `oh_e`."""
+    the wall lines at `half_span`, where they are at `zw`, then on past them by `oh_e`.
+    `clip` > 0 makes a half-hip (jerkinhead): the top `clip` of each gable is hipped back at the
+    roof's own pitch. `cut` is the range of shingle-piece lengths (longer on big roofs)."""
     rng = k.rng
     centre, A = Vector(centre), Vector(axis).normalized()
     C = Vector((-A.y, A.x, 0))
@@ -400,6 +379,11 @@ def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, side
     L = half_len + oh_g
     barge = barge or k.pal.get("timber", (0.3, 0.2, 0.15))
     under = k.pal.get("under", (0.3, 0.2, 0.15))
+    # Half-hip: slope length hipped at each end, and the inset of the ridge's ends.
+    tc = clip * half_span / math.cos(p)
+
+    def reach(t):
+        return L - max(0.0, tc - t) * math.cos(p)
 
     def droop(a, t):
         return sag * (1 - min(1.0, (a / L) ** 2)) * (1 - 0.6 * t / S)
@@ -410,15 +394,20 @@ def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, side
 
         def fn(q, D=D, N=N):
             return centre + A * q.x + D * q.y + N * q.z - Z * droop(q.x, q.y)
-        k.add(lbox(Vector((-L, -0.05, -0.18)), Vector((L, S, 0.0)), fn), under, ao=False)
+        if tc > 0:
+            k.add(lbox(Vector((-reach(0), -0.05, -0.18)), Vector((reach(0), tc, 0.0)), fn), under, ao=False)
+            k.add(lbox(Vector((-L, tc, -0.18)), Vector((L, S, 0.0)), fn), under, ao=False)
+        else:
+            k.add(lbox(Vector((-L, -0.05, -0.18)), Vector((L, S, 0.0)), fn), under, ao=False)
         n = max(3, round(S / course))
         for i in range(n):
             t0, t1 = S * i / n - (0.14 if i else 0.06), S * (i + 1) / n
+            Lc = reach(max(t0, 0.0))
             # Each course is a few pieces of uneven length, butt and thickness: hand-laid.
-            cuts = [-L - rng.uniform(0.0, 0.08)]
-            while cuts[-1] < L - 0.6:
-                cuts.append(cuts[-1] + rng.uniform(1.1, 2.8))
-            cuts[-1] = L + rng.uniform(0.0, 0.08)
+            cuts = [-Lc - rng.uniform(0.0, 0.08)]
+            while cuts[-1] < Lc - 0.6:
+                cuts.append(cuts[-1] + rng.uniform(*cut))
+            cuts[-1] = Lc + rng.uniform(0.0, 0.08)
             for a0, a1 in zip(cuts, cuts[1:]):
                 jl, jr = rng.uniform(-0.05, 0.05), rng.uniform(-0.05, 0.05)
                 thick = th * rng.uniform(0.8, 1.2)
@@ -437,12 +426,38 @@ def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, side
         if barge:
             for e in (-1, 1):
                 a0 = e * L
-                k.add(lbox(Vector((min(a0, a0 + e * 0.16), -0.08, -0.22)), Vector((max(a0, a0 + e * 0.16), S + 0.04, th * 2.0)), fn), barge, ao=False)
+                k.add(lbox(Vector((min(a0, a0 + e * 0.16), tc - 0.08, -0.22)), Vector((max(a0, a0 + e * 0.16), S + 0.04, th * 2.0)), fn), barge, ao=False)
+    if tc > 0 and len(sides) == 2:
+        # The hipped ends: a triangle from the ridge's end down to the top of each gable.
+        h, dz = tc * math.cos(p), tc * math.sin(p)
+        for e in (-1, 1):
+            apex = centre + A * (e * (L - h)) + Z * 0.02
+            pts = [apex, centre + A * (e * L) + C * h - Z * dz, centre + A * (e * L) - C * h - Z * dz]
+            nrm = (pts[1] - pts[0]).cross(pts[2] - pts[0]).normalized()
+            if nrm.dot(A * e + Z) < 0:
+                nrm = -nrm
+            k.add(slab(pts, nrm * 0.14, -nrm * 0.1), jitter(color, rng, 0.05), ao=False, vary=0)
     if cap and len(sides) == 2:
         def fc(q):
             return centre + A * q.x + C * q.y + Z * q.z - Z * droop(q.x, 0)
-        k.add(lbox(Vector((-L - 0.12, -0.2, -0.05)), Vector((L + 0.12, 0.2, th * 2.6)), fc, bevel=0.05), mul(color, 0.7), ao=False)
+        Lr = reach(0)
+        k.add(lbox(Vector((-Lr - 0.12, -0.2, -0.05)), Vector((Lr + 0.12, 0.2, th * 2.6)), fc, bevel=0.05), mul(color, 0.7), ao=False)
     return p
+
+
+def slab(pts, up, down=None):
+    """A flat polygon thickened between `down` and `up` offsets (vectors)."""
+    down = down if down is not None else Vector((0, 0, 0))
+    bm = bmesh.new()
+    a = [bm.verts.new(Vector(p) + down) for p in pts]
+    b = [bm.verts.new(Vector(p) + up) for p in pts]
+    bm.faces.new(a)
+    bm.faces.new(list(reversed(b)))
+    n = len(pts)
+    for i in range(n):
+        j = (i + 1) % n
+        bm.faces.new([a[i], a[j], b[j], b[i]])
+    return bm
 
 
 def hip_roof(k, cx, cy, hx, hy, zw, zr, oh, color, course=0.55, lip=0.07, swap=False):
@@ -512,7 +527,7 @@ def window(k, f, a, z0, w, h, frame, lit=None, shutters=None, mullion=True, box_
     rng = k.rng
     lit = rng.random() < 0.6 if lit is None else lit
     if lit:
-        k.add(f.box(a - w / 2, a + w / 2, z0, z0 + h, -0.05, 0.03), None, glow=True)
+        k.add(f.quad(a - w / 2, a + w / 2, z0, z0 + h, 0.03), None, glow=True, closed=False)
     else:
         k.add(f.quad(a - w / 2, a + w / 2, z0, z0 + h, 0.03), k.pal["glass"], closed=False, ao=False)
     fw = 0.12
@@ -532,8 +547,8 @@ def window(k, f, a, z0, w, h, frame, lit=None, shutters=None, mullion=True, box_
             k.add(f.box(min(a0, a1) + 0.04, max(a0, a1) - 0.04, z0 + h * 0.48, z0 + h * 0.52, 0.08, 0.1), mul(shutters, 0.75))
     if box_color and lit is not None:
         k.add(f.box(a - w / 2 - 0.05, a + w / 2 + 0.05, z0 - 0.32, z0 - 0.1, 0.05, 0.32), k.pal["timber"])
-        for i in range(4):
-            aa = a - w / 2 + (i + 0.5) * w / 4
+        for i in range(3):
+            aa = a - w / 2 + (i + 0.5) * w / 3
             k.add(sphere(f.p(aa, z0 - 0.05, 0.2), 0.11, 0), jitter(box_color, rng, 0.1), ao=False)
 
 
@@ -639,224 +654,881 @@ def stone_quoins(k, f, z0, z1, stone, size=0.36):
         i += 1
 
 
-def fantasy_house(k, H, town=False):
+def house_colours(k):
+    """One building's colours: plaster, timber, roof, door paint, shutters, window boxes."""
     rng, pal = k.rng, k.pal
-    plaster = k.choice(pal["plaster"])
-    timber = jitter(pal["timber"], rng, 0.08)
-    stone = pal["stone"]
-    roofc = k.choice(pal["roof"])
-    paint = k.choice(pal["paint"])
-    shut = k.choice(pal["paint"]) if rng.random() < 0.6 else None
-    storeys = rng.choice([2, 2, 3]) if town else 1
-    knee = 0.0 if town else rng.choice([0.0, 0.0, 0.8])
-    plinth = rng.uniform(0.38, 0.5)
-    hs = 2.75 if town else 3.0
-    jetty = 0.4 if storeys >= 2 and rng.random() < 0.75 else 0.0
-    stone_ground = rng.random() < (0.55 if town else 0.35)
-    hip = town and rng.random() < 0.3
-    ridge_x = hip or rng.random() < (0.55 if not town else 0.45)
-    ridge = H - rng.uniform(0.45, 0.85)
+    return dict(plaster=k.choice(pal["plaster"]), timber=jitter(pal["timber"], rng, 0.08), stone=pal["stone"],
+                roof=k.choice(pal["roof"]), paint=k.choice(pal["paint"]),
+                shut=k.choice(pal["paint"]) if rng.random() < 0.6 else None,
+                flowers=k.choice([(0.9, 0.3, 0.35), (0.95, 0.75, 0.3), (0.85, 0.45, 0.8)]) if rng.random() < 0.4 else None)
+
+
+def block(k, P, x0, x1, y0, y1, storeys, hs=2.75, plinth=0.45, knee=0.0, jetty=0.0, jetty_back=False,
+          ground="plaster", entry=None, skip=(), roof="gable", axis="x", pitch=55.0, oh_e=0.5, oh_g=0.35,
+          clip=0.0, attic=0.75, shop=False, plinth_box=True, wins=None, win=(0.9, 1.15), course=0.55,
+          cut=(1.4, 3.2), lamp=0.5, hood=None, door_w=1.1):
+    """A storeyed rectangular block, x0..x1 along the front and y0 (front) to y1 (back), on a stone
+    plinth, timber-framed plaster (or stone) storeys, each upper storey jettied `jetty` further out
+    at the front (and back), and a roof: "gable" or "hip", ridge along `axis`, `clip` for a
+    half-hip; None for no roof. `entry` is the door: (face, position as a fraction of its length), `wins`
+    the chance of a window per bay and face, `skip` faces hidden by another part.
+
+    Returns the top storey's extents and the roof's heights for chimneys, dormers and wings."""
+    rng = k.rng
+    timber, plaster, stone = P["timber"], P["plaster"], P["stone"]
+    cx, hx = (x0 + x1) / 2, (x1 - x0) / 2
+    if plinth_box and plinth > 0:
+        k.add(box((x0 - 0.08, y0 - 0.08, 0), (x1 + 0.08, y1 + 0.08, plinth), 0.05), k.pal["stone_dark"])
+    wins = dict({"front": 0.85, "back": 0.45, "left": 0.45, "right": 0.45}, **(wins or {}))
     zw = plinth + storeys * hs + knee
-    rise = ridge - zw
-    pitch = math.radians(rng.uniform(52, 60))
-    span = min(3.6 if not town else 3.5, max(2.2, rise / math.tan(pitch)))
-    along = rng.uniform(5.4, 7.6) if not town else rng.uniform(5.0, 6.6)
-    if ridge_x:
-        W, D = along, 2 * (span - jetty)
-    else:
-        W, D = 2 * span, along - 2 * jetty
-    hx, hy = W / 2, D / 2
-    hyu = hy + jetty
-    # Footprint parts: main box, maybe a front cross-wing or a side lean-to.
-    wing = None
-    if not town and ridge_x and not hip and rng.random() < 0.5:
-        ww = rng.uniform(2.6, 3.2)
-        wx = rng.choice([-1, 1]) * (hx - ww / 2 - rng.uniform(0.3, 0.8))
-        wing = (wx, ww, rng.uniform(1.6, 2.2))
-    lean = None
-    if rng.random() < 0.45:
-        lean = (rng.choice([-1, 1]), rng.uniform(1.6, 2.1), rng.uniform(0.55, 0.8) * D)
-    # Plinth and storeys.
-    k.add(box((-hx - 0.08, -hy - 0.08, 0), (hx + 0.08, hy + 0.08, plinth), 0.05), pal["stone_dark"])
-    door_side = "front"
+    ww, wh = win
     for s in range(storeys):
         z0 = plinth + s * hs
         z1 = z0 + hs + (knee if s == storeys - 1 else 0)
-        yy = hy if s == 0 else hyu
-        mat = stone if (s == 0 and stone_ground) else plaster
-        k.add(box((-hx, -yy, z0 - 0.02), (hx, yy, z1), 0.07), mat, vary=0.02)
-        if s == 1 and jetty > 0:
-            # Jetty: joist ends and a bressumer beam under the overhang.
-            for e in (-1, 1):
-                k.add(box((-hx, e * hyu - (0.2 if e > 0 else 0), z0 - 0.24), (hx, e * hyu + (0 if e > 0 else 0.2), z0)), timber)
-                n = int(W / 0.65)
+        jf = jetty * s
+        jb = jf if jetty_back else 0.0
+        Y0, Y1 = y0 - jf, y1 + jb
+        cy, hy = (Y0 + Y1) / 2, (Y1 - Y0) / 2
+        mat = stone if (ground == "stone" and s == 0) or ground == "all_stone" else plaster
+        k.add(box((x0, Y0, z0 - 0.02), (x1, Y1, z1), 0.07), mat, vary=0.02)
+        if s >= 1 and jetty > 0:
+            # Jetty: a bressumer beam and the joist ends under each overhang.
+            for e, ya, yb in ((-1, Y0, Y0 + jetty), (1, Y1 - jetty, Y1)):
+                if e > 0 and not jetty_back:
+                    continue
+                yo = ya if e < 0 else yb
+                k.add(box((x0, min(yo, yo - e * 0.2), z0 - 0.24), (x1, max(yo, yo - e * 0.2), z0)), timber)
+                n = max(2, int(2 * hx / 0.7))
                 for i in range(n):
-                    x = -hx + (i + 0.5) * W / n
-                    k.add(box((x - 0.08, min(e * hy, e * hyu), z0 - 0.4), (x + 0.08, max(e * hy, e * hyu), z0 - 0.24)), timber)
-        faces = box_faces(0, 0, hx, yy)
-        for name, f in faces.items():
-            L = f.length
-            if wing and name == "front" and s == 0:
+                    x = x0 + (i + 0.5) * 2 * hx / n
+                    k.add(box((x - 0.08, ya, z0 - 0.4), (x + 0.08, yb, z0 - 0.24)), timber)
+        for name, f in box_faces(cx, cy, hx, hy).items():
+            if name in skip or (name, s) in skip:
                 continue
+            L = f.length
             bays = max(1, round(L / 2.3))
             bw = L / bays
-            door_bay = None
-            if s == 0 and name == door_side:
-                door_bay = rng.randrange(bays) if bays < 3 else bays // 2 + rng.choice([0, 0, -1, 1]) * (bays > 3)
+            door_bay = shop_bay = None
+            if s == 0 and entry and name == entry[0]:
+                door_bay = min(range(bays), key=lambda i: abs(-L / 2 + (i + 0.5) * bw - entry[1] * L))
+            if s == 0 and shop and name == "front" and bays >= 2:
+                shop_bay = 0 if door_bay is None else door_bay + 1 if door_bay + 1 < bays else door_bay - 1
             openings = []
             for i in range(bays):
                 a = -L / 2 + (i + 0.5) * bw
                 if i == door_bay:
                     openings.append("door")
-                elif rng.random() < (0.8 if name in ("front", "back") else 0.55) and bw > 1.5:
-                    w = min(0.9, bw - 0.7)
-                    openings.append((a, z0 + 0.95, w, 1.15))
+                elif i == shop_bay:
+                    openings.append("shop")
+                elif rng.random() < wins.get(name, 0.5) and bw > ww + 0.6:
+                    openings.append((a, z0 + 0.95, min(ww, bw - 0.7), wh))
                 else:
                     openings.append(None)
+            front = name == "front"
             if mat is stone:
-                stone_quoins(k, f, z0, z1, mul(stone, 0.92))
+                # Quoins on the front and back faces cover all four corners.
+                if name in ("front", "back"):
+                    stone_quoins(k, f, z0, z1, mul(stone, 0.92), size=0.45)
             else:
-                timber_storey(k, f, z0, z1, bays, [o if o != "door" else None for o in openings] if True else openings, timber, braces=True)
+                timber_storey(k, f, z0, z1, bays, [o if isinstance(o, tuple) else None for o in openings], timber, braces=front or rng.random() < 0.6)
+            frame = timber if mat is plaster else mul(stone, 0.88)
             for i, op in enumerate(openings):
                 a = -L / 2 + (i + 0.5) * bw
                 if op == "door":
-                    door(k, f, a, plinth, 1.1, 2.15, paint, timber if mat is plaster else mul(stone, 0.85), hood=roofc if (not ridge_x and rng.random() < 0.6) else None, arch=mat is stone and rng.random() < 0.5)
-                    if rng.random() < 0.5:
-                        lantern(k, f.p(a + 0.95, plinth + 2.0, 0.28))
+                    door(k, f, a, plinth, door_w, 2.15, P["paint"], frame, hood=hood, arch=mat is stone and rng.random() < 0.5)
+                    if rng.random() < lamp:
+                        lantern(k, f.p(a + door_w * 0.5 + 0.4, plinth + 2.0, 0.28))
+                elif op == "shop":
+                    shopfront(k, f, a, z0, min(2.2, bw - 0.5), P)
                 elif op:
-                    window(k, f, *op, frame=timber if mat is plaster else mul(stone, 0.88), shutters=shut,
-                           box_color=k.choice([(0.9, 0.3, 0.35), (0.95, 0.75, 0.3), (0.85, 0.45, 0.8)]) if rng.random() < 0.25 else None)
-    # Roof over the top storey.
-    if hip:
-        hip_roof(k, 0, 0, hx, hyu, zw, ridge, 0.5, roofc)
-    elif ridge_x:
-        gable_roof(k, (0, 0, ridge), X, hx, hyu, zw, 0.5, 0.35, roofc, barge=timber)
-        gables = [Face((hx, 0, 0), Y, 2 * hyu), Face((-hx, 0, 0), -Y, 2 * hyu)]
+                    window(k, f, *op, frame=frame, shutters=P["shut"] if front or rng.random() < 0.3 else None, mullion=front, sill=front,
+                           box_color=P["flowers"] if front and s > 0 and rng.random() < 0.5 else None)
+    jf = jetty * (storeys - 1)
+    Y0, Y1 = y0 - jf, y1 + (jf if jetty_back else 0.0)
+    cy, hy = (Y0 + Y1) / 2, (Y1 - Y0) / 2
+    p = math.radians(pitch)
+    half_span, half_len = (hy, hx) if axis == "x" else (hx, hy)
+    ridge = zw + half_span * math.tan(p)
+    info = dict(x0=x0, x1=x1, y0=y0, y1=y1, Y0=Y0, Y1=Y1, cx=cx, cy=cy, hx=hx, hy=hy, zw=zw, ridge=ridge, plinth=plinth,
+                hs=hs, axis=axis, roof=roof, pitch=p, storeys=storeys, clip=clip)
+    if roof is None:
+        return info
+    if roof == "hip":
+        hip_roof(k, cx, cy, hx, hy, zw, ridge, oh_e, P["roof"], course=course + 0.07)
+        return info
+    A = X if axis == "x" else Y
+    gable_roof(k, (cx, cy, ridge), A, half_len, half_span, zw, oh_e, oh_g, P["roof"], barge=timber, clip=clip, course=course, cut=cut)
+    if axis == "x":
+        gables = [("right", Face((x1, cy, 0), Y, 2 * hy)), ("left", Face((x0, cy, 0), -Y, 2 * hy))]
     else:
-        gable_roof(k, (0, 0, ridge), Y, hyu, hx, zw, 0.5, 0.35, roofc, barge=timber)
-        gables = [Face((0, -hyu, 0), X, 2 * hx), Face((0, hyu, 0), -X, 2 * hx)]
-    if not hip:
-        for f in gables:
-            half = f.length / 2
-            pts = [(-half, zw - 0.02), (half, zw - 0.02), (0, ridge - 0.05)]
-            k.add(f.poly(pts, -0.3, 0.0), plaster, vary=0.02)
-            # King post, collar and a small attic window.
-            k.add(f.box(-0.09, 0.09, zw, ridge - 0.25, 0.0, 0.06), timber)
-            cz = zw + (ridge - zw) * 0.38
-            cw = half * (1 - 0.38) - 0.1
-            k.add(f.box(-cw, cw, cz, cz + 0.17, 0.0, 0.07), timber)
-            for e in (-1, 1):
-                ln = math.hypot(half - 0.1, ridge - zw) - 0.2
-                ang = math.atan2(ridge - zw, half) * e
-                k.add(f.obox(e * -half / 2, zw + (ridge - zw) / 2 - 0.08, ln, 0.17, 0.0, 0.06, ang), timber)
-            if ridge - cz > 1.6 and rng.random() < 0.75:
-                ww = min(0.7, cw * 0.5)
-                for e in ((-1, 1) if cw > 1.6 and rng.random() < 0.5 else (0,)):
-                    window(k, f, e * cw * 0.5, cz + 0.4, ww, 0.85, timber, mullion=False, sill=True)
-    # Dormers on the front slope (cottages with a knee wall or a tall roof).
-    if ridge_x and not hip and (knee > 0 or rise > 3.6):
-        tanp = rise / hyu
-        n = 1 if W < 6.4 else rng.choice([1, 2])
-        xs = [rng.uniform(-0.6, 0.6)] if n == 1 else [-W / 4, W / 4]
-        if wing:
-            xs = [x for x in xs if abs(x - wing[0]) > wing[1] / 2 + 0.9] or []
-        for xd in xs:
-            yf = -hyu + 0.3
-            zd0, zd1 = zw - 0.1, zw + 1.35
-            zdr = zd1 + 0.75
-            yb = -(ridge - zdr - 0.25) / tanp
-            if yb <= yf + 0.4:
-                continue
-            k.add(box((xd - 0.75, yf, zd0), (xd + 0.75, yb, zd1)), plaster, vary=0.02)
-            fd = Face((xd, yf, 0), X, 1.5)
-            k.add(fd.poly([(-0.75, zd1 - 0.02), (0.75, zd1 - 0.02), (0, zdr - 0.03)], -0.25, 0.0), plaster)
-            window(k, fd, 0, zd0 + 0.3, 0.75, 0.85, timber, shutters=None, sill=False)
-            k.add(fd.box(-0.75, -0.6, zd0, zd1, 0.0, 0.06), timber)
-            k.add(fd.box(0.6, 0.75, zd0, zd1, 0.0, 0.06), timber)
-            gable_roof(k, (xd, (yf - 0.3 + yb) / 2, zdr), Y, (yb - yf + 0.3) / 2, 0.75, zd1, 0.22, 0.0, roofc, course=0.45, th=0.08, sag=0.0, barge=timber)
-    # Front cross-wing: a one-storey gabled bay with its own lower ridge.
-    if wing:
-        wx, ww, wd = wing
-        y0, y1 = -hy - wd, -hy + 0.05
-        wz = plinth + hs
-        mat = stone if stone_ground else plaster
-        k.add(box((wx - ww / 2, y0, plinth - 0.02), (wx + ww / 2, y1, wz)), mat, vary=0.02)
-        k.add(box((wx - ww / 2 - 0.08, y0 - 0.08, 0), (wx + ww / 2 + 0.08, y1, plinth), bevel=0.04), pal["stone_dark"])
-        wr = wz + math.tan(pitch) * ww / 2
-        wr = min(wr, ridge - 0.6)
-        tanp = rise / hyu
-        ym = -(ridge - wr) / tanp
-        fw = Face((wx, y0, 0), X, ww)
-        if mat is plaster:
-            timber_storey(k, fw, plinth, wz, 1, [(0, plinth + 0.95, 0.9, 1.15)], timber)
+        gables = [("front", Face((cx, Y0, 0), X, 2 * hx)), ("back", Face((cx, Y1, 0), -X, 2 * hx))]
+    for name, f in gables:
+        if name not in skip:
+            gable_wall(k, P, f, zw, ridge, clip, attic if name != "back" else attic * 0.5)
+    return info
+
+
+def gable_wall(k, P, f, zw, ridge, clip=0.0, attic=0.75):
+    """The plaster gable under a roof's end: king post, collar, braces and an attic window."""
+    rng, timber, plaster = k.rng, P["timber"], P["plaster"]
+    half = f.length / 2
+    zc = ridge - clip * (ridge - zw)
+    hc = clip * half
+    pts = [(-half, zw - 0.02), (half, zw - 0.02)] + ([(hc, zc), (-hc, zc)] if clip > 0 else [(0, ridge - 0.05)])
+    k.add(f.poly(pts, -0.3, 0.0), plaster, vary=0.02)
+    k.add(f.box(-0.09, 0.09, zw, min(zc, ridge - 0.25), 0.0, 0.06), timber)
+    cz = zw + (ridge - zw) * 0.38
+    cw = half * (1 - 0.38) - 0.1
+    k.add(f.box(-cw, cw, cz, cz + 0.17, 0.0, 0.07), timber)
+    if clip == 0:
+        for e in (-1, 1):
+            ln = math.hypot(half - 0.1, ridge - zw) - 0.2
+            ang = math.atan2(ridge - zw, half) * e
+            k.add(f.obox(e * -half / 2, zw + (ridge - zw) / 2 - 0.08, ln, 0.17, 0.0, 0.06, ang), timber)
+    if zc - cz > 1.5 and rng.random() < attic:
+        ww = min(0.7, cw * 0.5)
+        for e in ((-1, 1) if cw > 1.6 and rng.random() < 0.5 else (0,)):
+            window(k, f, e * cw * 0.5, cz + 0.4, ww, 0.85, timber, mullion=False, sill=True)
+
+
+def shopfront(k, f, a, z0, w, P):
+    """A medieval shop: a wide window with a counter board that folds down and a pentice above."""
+    rng = k.rng
+    h = 1.3
+    zb = z0 + 0.8
+    k.add(f.box(a - w / 2, a + w / 2, zb, zb + h, -0.05, 0.03), None, glow=rng.random() < 0.8)
+    k.add(f.box(a - w / 2 - 0.12, a + w / 2 + 0.12, zb + h, zb + h + 0.16, 0.0, 0.14), P["timber"])
+    for e in (-1, 1):
+        k.add(f.box(a + e * w / 2 - 0.08, a + e * w / 2 + 0.08, zb, zb + h, 0.0, 0.12), P["timber"])
+    k.add(f.box(a - w / 2 - 0.1, a + w / 2 + 0.1, zb - 0.08, zb + 0.02, 0.0, 0.62), mul(P["timber"], 1.35))
+    for e in (-1, 1):
+        k.add(f.obox(a + e * (w / 2 - 0.15), zb - 0.32, 0.6, 0.06, 0.05, 0.12, 0.8 * e), P["timber"])
+    goods = k.choice([(0.85, 0.2, 0.18), (0.95, 0.6, 0.15), (0.55, 0.75, 0.25), (0.82, 0.74, 0.55)])
+    for i in range(int(w / 0.45)):
+        k.add(sphere(f.p(a - w / 2 + 0.25 + i * 0.45, zb + 0.12, 0.35), 0.13, 0), jitter(goods, rng, 0.1), ao=False)
+    if rng.random() < 0.6:
+        # A striped cloth awning.
+        cloth = k.choice([(0.82, 0.26, 0.22), (0.25, 0.46, 0.72), (0.28, 0.56, 0.36), (0.88, 0.66, 0.24)])
+        n = max(3, int(w / 0.5))
+        for i in range(n):
+            a0 = a - w / 2 - 0.1 + i * (w + 0.2) / n
+            k.add(prism([(0.0, zb + h + 0.45), (1.0, zb + h - 0.05), (1.0, zb + h + 0.0), (0.0, zb + h + 0.5)], a0, a0 + (w + 0.2) / n,
+                        lambda q, s_, z: f.p(q, z, s_)), cloth if i % 2 == 0 else (0.96, 0.93, 0.84), ao=False)
+    else:
+        gable_roof(k, f.p(a, zb + h + 0.75, 0.05), f.u, w / 2 + 0.2, 0.75, zb + h + 0.25, 0.1, 0.05, P["roof"], sides=(1,) if f.n.cross(f.u).z > 0 else (-1,),
+                   course=0.35, th=0.07, sag=0.0, cap=False)
+
+
+def chimney(k, P, info, where="ridge", x=None):
+    """A stone chimney through the roof near the ridge, or up the outside of a gable wall."""
+    rng, stone = k.rng, P["stone"]
+    top = info["ridge"] + rng.uniform(0.7, 1.2)
+    ax = info["axis"]
+    if where == "gable" and info["roof"] != "hip":
+        e = rng.choice([-1, 1]) if x is None else x
+        if ax == "x":
+            cx, cy = info["cx"] + e * (info["hx"] + 0.5), info["cy"] + rng.uniform(-0.4, 0.4)
         else:
-            stone_quoins(k, fw, plinth, wz, mul(stone, 0.92))
-        window(k, fw, 0, plinth + 0.95, 1.0, 1.2, timber if mat is plaster else mul(stone, 0.88), shutters=shut)
-        k.add(fw.poly([(-ww / 2, wz - 0.02), (ww / 2, wz - 0.02), (0, wr - 0.05)], -0.3, 0.0), plaster)
-        k.add(fw.box(-0.09, 0.09, wz, wr - 0.2, 0.0, 0.06), timber)
-        gable_roof(k, (wx, (y0 + ym) / 2, wr), Y, (ym - y0) / 2, ww / 2, wz, 0.4, 0.3, roofc, barge=timber)
-        # The main front still needs its door, beside the wing.
-        f = Face((0, -hy, 0), X, W)
-        free0, free1 = (-hx, wx - ww / 2) if wx > 0 else (wx + ww / 2, hx)
-        if free1 - free0 > 3.0:
-            # Door and a window side by side in the free stretch of front wall.
-            da = free0 + (free1 - free0) * 0.32
-            window(k, f, free0 + (free1 - free0) * 0.74, plinth + 0.95, 0.9, 1.15, timber, shutters=shut)
+            cx, cy = info["cx"] + rng.uniform(-0.5, 0.5), (info["Y1"] + 0.5)
+        k.add(box((cx - 0.55, cy - 0.6, 0), (cx + 0.55, cy + 0.6, info["zw"] + 0.3), bevel=0.06), stone)
+        k.add(box((cx - 0.4, cy - 0.42, info["zw"] + 0.25), (cx + 0.4, cy + 0.42, top - 0.3), bevel=0.05), stone)
+    else:
+        if ax == "x":
+            cx = info["cx"] + (rng.uniform(-0.6, 0.6) * info["hx"] if x is None else x)
+            cy = info["cy"] + rng.uniform(0.4, 1.0)
         else:
-            da = (free0 + free1) / 2
-        door(k, f, da, plinth, 1.1, 2.15, paint, timber, hood=None)
-        if stone_ground:
-            k.add(f.box(-hx, hx, plinth, plinth + hs, -0.01, 0.0), stone)
-        else:
-            timber_storey(k, f, plinth, plinth + hs, 1, [None], timber, braces=False)
-    # Side lean-to shed.
-    if lean:
-        e, lw, ld = lean
-        xw = e * hx
-        y0 = rng.uniform(-hy, hy - ld)
-        top_in = min(plinth + hs + 0.2, zw - 0.55 * math.tan(pitch) - 0.25) if not ridge_x else plinth + hs + 0.3
-        top_out = top_in - lw * 0.55
-        shed = jitter((0.52, 0.43, 0.33), rng, 0.06)
-        k.add(box((min(xw, xw + e * lw), y0, 0), (max(xw, xw + e * lw), y0 + ld, top_out)), shed, vary=0)
-        side = Face((xw + e * lw, y0 + ld / 2, 0), Y * e, ld)
-        nb = max(2, int(ld / 0.35))
-        for i in range(nb):
-            a = -ld / 2 + (i + 0.5) * ld / nb
-            k.add(side.box(a - ld / nb / 2 + 0.02, a + ld / nb / 2 - 0.02, 0.0, top_out - 0.05, 0.0, 0.05), jitter(shed, rng, 0.08), vary=0)
-        gable_roof(k, (xw, y0 + ld / 2, top_in), Y, ld / 2, lw, top_out, 0.3, 0.25, roofc, sides=(-e,), course=0.5, sag=0.0, barge=timber)
+            cx = info["cx"] + rng.uniform(0.4, 1.0) * rng.choice([-1, 1])
+            cy = info["cy"] + (rng.uniform(0.1, 0.6) * info["hy"] if x is None else x)
+        k.add(box((cx - 0.4, cy - 0.4, info["zw"] - 0.6), (cx + 0.4, cy + 0.4, top - 0.3), bevel=0.05), stone)
+    c = Vector((cx, cy, 0))
+    k.add(box(c + Vector((-0.52, -0.52, top - 0.42)), c + Vector((0.52, 0.52, top - 0.2)), 0.04), mul(stone, 0.85))
+    k.add(box(c + Vector((-0.17, -0.17, top - 0.25)), c + Vector((0.17, 0.17, top))), (0.62, 0.36, 0.25))
+
+
+def dormers(k, P, info, xs, w=1.5):
+    """Gabled dormers on the front slope of a roof whose ridge runs along X."""
+    if info["axis"] != "x" or info["roof"] == "hip":
+        return
+    ridge, zw, Y0, cy = info["ridge"], info["zw"], info["Y0"], info["cy"]
+    tanp = (ridge - zw) / info["hy"]
+    hw = w / 2
+    for xd in xs:
+        yf = Y0 + 0.3
+        zd0, zd1 = zw - 0.1, zw + 1.35
+        zdr = zd1 + 0.75 * w / 1.5
+        yb = cy - (ridge - zdr - 0.25) / tanp
+        if yb <= yf + 0.4:
+            continue
+        k.add(box((xd - hw, yf, zd0), (xd + hw, yb, zd1)), P["plaster"], vary=0.02)
+        fd = Face((xd, yf, 0), X, w)
+        k.add(fd.poly([(-hw, zd1 - 0.02), (hw, zd1 - 0.02), (0, zdr - 0.03)], -0.25, 0.0), P["plaster"])
+        window(k, fd, 0, zd0 + 0.3, min(0.75, w - 0.7), 0.85, P["timber"], shutters=None, sill=False)
+        k.add(fd.box(-hw, -hw + 0.15, zd0, zd1, 0.0, 0.06), P["timber"])
+        k.add(fd.box(hw - 0.15, hw, zd0, zd1, 0.0, 0.06), P["timber"])
+        gable_roof(k, (xd, (yf - 0.3 + yb) / 2, zdr), Y, (yb - yf + 0.3) / 2, hw, zd1, 0.22, 0.0, P["roof"], course=0.45, th=0.08, sag=0.0, barge=P["timber"])
+
+
+def lean_to(k, P, info, e, depth=None, length=None):
+    """A board shed with a lean-to roof against a side wall (e = -1 left, 1 right)."""
+    rng = k.rng
+    lw = depth or rng.uniform(1.6, 2.1)
+    D = info["y1"] - info["y0"]
+    ld = length or rng.uniform(0.55, 0.8) * D
+    xw = info["cx"] + e * info["hx"]
+    y0 = rng.uniform(info["y0"], info["y1"] - ld)
+    if info["axis"] == "x" or info["roof"] == "hip":
+        top_in = info["plinth"] + min(info["hs"], 3.0) + 0.3
+    else:
+        top_in = info["zw"] - 0.55 * math.tan(info["pitch"]) - 0.25
+    top_out = top_in - lw * 0.55
+    shed = jitter((0.52, 0.43, 0.33), rng, 0.06)
+    k.add(box((min(xw, xw + e * lw), y0, 0), (max(xw, xw + e * lw), y0 + ld, top_out)), boards(shed), vary=0)
+    gable_roof(k, (xw, y0 + ld / 2, top_in), Y, ld / 2, lw, top_out, 0.3, 0.25, P["roof"], sides=(-e,), course=0.5, sag=0.0, barge=P["timber"])
+    if rng.random() < 0.6:
         # A woodpile under the eave.
-        if rng.random() < 0.6:
-            fr = Face((xw + e * lw / 2, y0, 0), -X * e, lw)
-            for r in range(3):
-                for i in range(4 - r):
-                    a = -0.6 + (i + 0.5 * r) * 0.32
-                    k.add(cyl(fr.p(a, 0.15 + r * 0.26, 0.05), fr.p(a, 0.15 + r * 0.26, 0.75), 0.14, 0.14, 6), (0.55, 0.40, 0.26), ao=False)
-    # Chimney: through the back slope or up the outside of a gable.
-    cz_top = H
-    if ridge_x and not hip and rng.random() < 0.45:
-        e = rng.choice([-1, 1])
-        if lean and lean[0] == e:
-            e = -e
-        cx = e * (hx + 0.5)
-        cy = rng.uniform(-0.4, 0.4)
-        k.add(box((cx - 0.55, cy - 0.6, 0), (cx + 0.55, cy + 0.6, zw + 0.3), bevel=0.06), stone)
-        k.add(box((cx - 0.4, cy - 0.42, zw + 0.25), (cx + 0.4, cy + 0.42, cz_top - 0.3), bevel=0.05), stone)
-        stack_c = Vector((cx, cy, 0))
-        sw = 0.4
+        fr = Face((xw + e * lw / 2, y0, 0), -X * e, lw)
+        for r in range(3):
+            for i in range(4 - r):
+                a = -0.6 + (i + 0.5 * r) * 0.32
+                k.add(cyl(fr.p(a, 0.15 + r * 0.26, 0.05), fr.p(a, 0.15 + r * 0.26, 0.75), 0.14, 0.14, 6), (0.55, 0.40, 0.26), ao=False)
+
+
+def boards(c, w=0.32):
+    """Vertical weatherboards as colour stripes (no extra geometry)."""
+    def fn(co, n):
+        u = co.x if abs(n.y) > abs(n.x) else co.y
+        stripe = (0.9, 1.0, 0.95, 1.04)[int(math.floor(u / w)) % 4]
+        return mul(c, stripe * (0.8 + 0.2 * min(1.0, co.z / 1.2)))
+    return fn
+
+
+def wing(k, P, info, wx, ww, depth, d=-1, storeys=1, ground="plaster", wins=None, entry=None, pitch=None, roof_clip=0.0):
+    """A gabled wing `ww` wide at x = wx, `depth` out of the main block's front (d = -1) or back
+    (d = 1), `storeys` high; its ridge runs back into the main roof (a cross gable)."""
+    if d < 0:
+        ya, yb = info["y0"] - depth, info["y0"] + 0.05
     else:
-        ca = rng.uniform(-0.6, 0.6) * hx if not ridge_x else rng.choice([-1, 1]) * (hx - 1.0)
-        cb = rng.uniform(0.5, 1.1) if ridge_x else rng.uniform(-0.6, 0.6) * hyu
-        cx, cy = (ca, cb) if ridge_x else (rng.choice([-1, 1]) * rng.uniform(0.6, 1.1), ca * 0 + cb)
-        k.add(box((cx - 0.4, cy - 0.4, zw - 0.6), (cx + 0.4, cy + 0.4, cz_top - 0.3), bevel=0.05), stone)
-        stack_c = Vector((cx, cy, 0))
-        sw = 0.4
-    k.add(box(stack_c + Vector((-sw - 0.12, -sw - 0.12, cz_top - 0.42)), stack_c + Vector((sw + 0.12, sw + 0.12, cz_top - 0.2)), 0.04), mul(stone, 0.85))
-    k.add(box(stack_c + Vector((-0.17, -0.17, cz_top - 0.25)), stack_c + Vector((0.17, 0.17, cz_top))), (0.62, 0.36, 0.25))
-    # Hand-made lean: shear the whole building a little.
+        ya, yb = info["y1"] - 0.05, info["y1"] + depth
+    wi = block(k, P, wx - ww / 2, wx + ww / 2, ya, yb, storeys, hs=info["hs"], plinth=info["plinth"], ground=ground,
+               entry=entry, skip=("back",) if d < 0 else ("front",), roof=None, wins=wins, lamp=0.3)
+    zww = wi["zw"]
+    p = math.radians(pitch) if pitch else info["pitch"]
+    wr = min(zww + math.tan(p) * ww / 2, info["ridge"] - 0.5)
+    tanp_main = (info["ridge"] - info["zw"]) / info["hy"]
+    ym = info["cy"] + d * (info["ridge"] - wr) / tanp_main
+    yo = ya if d < 0 else yb
+    lo, hi = min(yo, ym), max(yo, ym)
+    gable_roof(k, (wx, (lo + hi) / 2, wr), Y, (hi - lo) / 2, ww / 2, zww, 0.4, 0.3, P["roof"], barge=P["timber"], clip=roof_clip)
+    f = Face((wx, ya, 0), X, ww) if d < 0 else Face((wx, yb, 0), -X, ww)
+    gable_wall(k, P, f, zww, wr, roof_clip, 0.8)
+    return wi
+
+
+def turret(k, P, x, y, r, z0, z1, top, stone=False):
+    """A round corner turret (an oriel on a corbel from z0) with a cone roof up to `top`."""
+    rng = k.rng
+    wall = P["stone"] if stone else P["plaster"]
+    k.add(cyl((x, y, z0 - 1.0), (x, y, z0), r * 0.25, r, 12), mul(P["stone"], 0.9))
+    k.add(cyl((x, y, z0), (x, y, z1), r, r, 12), wall, vary=0.02)
+    z = z0
+    while z < z1 - 0.5:
+        k.add(cyl((x, y, z), (x, y, z + 0.18), r + 0.05, r + 0.05, 12), P["timber"])
+        z += 2.75
+    k.add(cyl((x, y, z1 - 0.2), (x, y, z1), r + 0.06, r + 0.06, 12), P["timber"])
+    out = math.atan2(x, -y) if abs(x) + abs(y) > 0 else 0.0
+    z = z0 + 0.8
+    while z < z1 - 1.4:
+        for da in (-0.9, 0.0, 0.9):
+            window(k, cyl_face_at((x, y), r - 0.04, out + da), 0, z, 0.45, 1.0, P["timber"], mullion=False, sill=False)
+        z += 2.75
+    cone_roof(k, (x, y, 0), r, z1, top, P["roof"], oh=0.3, course=0.45, sides=12, flare=rng.uniform(0.0, 0.4))
+    k.add(cyl((x, y, top - 0.2), (x, y, top + 0.6), 0.05, 0.03, 5), k.pal["iron"], ao=False)
+
+
+def cyl_face_at(c, r, ang):
+    """As cyl_face, about a vertical axis through c (x, y)."""
+    f = cyl_face(r, ang)
+    f.o = f.o + Vector((c[0], c[1], 0))
+    return f
+
+
+def lean(k):
+    """Hand-made lean: shear the whole building a little."""
+    rng = k.rng
     lx, ly = rng.uniform(-0.012, 0.012), rng.uniform(-0.008, 0.008)
     for v in k.b.bm.verts:
         v.co.x += lx * v.co.z
         v.co.y += ly * v.co.z
+
+
+def roof_choice(rng, opts):
+    """(roof, axis, clip) from weighted options [(weight, roof, axis, clip)]."""
+    t = rng.random() * sum(o[0] for o in opts)
+    for w, roof, axis, clip in opts:
+        t -= w
+        if t <= 0:
+            return roof, axis, clip
+    return opts[-1][1:]
+
+
+def fantasy_house(k):
+    """Houses by form: cottage, house, longhouse, L-house and corner house."""
+    rng, form = k.rng, k.form
+    u = rng.uniform
+    P = house_colours(k)
+    stone_ground = rng.random() < 0.35
+    ground = "stone" if stone_ground else "plaster"
+    plinth = u(0.38, 0.5)
+    if form == "cottage":
+        W, D = u(5.0, 7.0), u(4.4, 5.6)
+        roof, axis, clip = roof_choice(rng, [(0.65, "gable", "x", 0.0), (0.35, "gable", "x", 0.38)])
+        knee = rng.choice([0.0, 0.5, 0.9])
+        info = block(k, P, -W / 2, W / 2, -D / 2, D / 2, 1, hs=3.0, plinth=plinth, knee=knee, ground=ground,
+                     entry=("front", u(-0.25, 0.25)), roof=roof, axis=axis, pitch=u(50, 58), clip=clip,
+                     hood=P["roof"] if rng.random() < 0.4 else None)
+        if knee > 0 or info["ridge"] - info["zw"] > 3.4:
+            dormers(k, P, info, [u(-0.6, 0.6)] if W < 6.4 else rng.choice([[u(-0.6, 0.6)], [-W / 4, W / 4]]))
+        if rng.random() < 0.5:
+            lean_to(k, P, info, rng.choice([-1, 1]))
+        chimney(k, P, info, rng.choice(["ridge", "gable"]))
+    elif form == "house":
+        W, D = u(6.2, 8.0), u(5.0, 6.4)
+        roof, axis, clip = roof_choice(rng, [(0.4, "gable", "x", 0.0), (0.25, "gable", "y", 0.0), (0.15, "hip", "x", 0.0), (0.2, "gable", "x", 0.35)])
+        if axis == "y":
+            W, D = u(5.6, 6.8), u(6.4, 8.0)
+        jetty = 0.4 if rng.random() < 0.75 else 0.0
+        info = block(k, P, -W / 2, W / 2, -D / 2, D / 2, 2, plinth=plinth, jetty=jetty, jetty_back=rng.random() < 0.5, ground=ground,
+                     entry=("front", u(-0.3, 0.3)), roof=roof, axis=axis, pitch=u(52, 60), clip=clip,
+                     hood=P["roof"] if axis == "y" and rng.random() < 0.6 else None)
+        if rng.random() < 0.35:
+            lean_to(k, P, info, rng.choice([-1, 1]))
+        chimney(k, P, info, rng.choice(["ridge", "gable"]))
+    elif form == "longhouse":
+        W, D = u(11.0, 14.0), u(5.2, 6.2)
+        roof, axis, clip = roof_choice(rng, [(0.45, "gable", "x", 0.0), (0.55, "gable", "x", 0.4)])
+        e = rng.choice([-1, 1])
+        info = block(k, P, -W / 2, W / 2, -D / 2, D / 2, 1, hs=3.0, plinth=plinth, knee=u(0.2, 0.6), ground=ground,
+                     entry=("front", -e * u(0.12, 0.25)), roof=roof, axis=axis, pitch=u(48, 54), clip=clip,
+                     course=0.55, cut=(1.6, 3.4))
+        # The byre end: a wide plank door for the beasts.
+        f = Face((0, -D / 2, 0), X, W)
+        bx = e * (W / 2 - 1.8)
+        k.add(f.box(bx - 1.0, bx + 1.0, plinth, plinth + 2.3, -0.04, 0.05), mul(P["timber"], 1.3))
+        k.add(f.obox(bx, plinth + 1.15, 2.4, 0.14, 0.05, 0.11, 0.85), P["timber"])
+        k.add(f.box(bx - 1.15, bx + 1.15, plinth + 2.3, plinth + 2.5, 0.0, 0.14), P["timber"])
+        if rng.random() < 0.4:
+            dormers(k, P, info, [-e * W / 4])
+        if rng.random() < 0.4:
+            lean_to(k, P, info, e)
+        chimney(k, P, info, "ridge", x=-e * u(0.5, 2.5))
+        if rng.random() < 0.5:
+            chimney(k, P, info, "gable", x=-e)
+    elif form in ("lhouse", "corner"):
+        W, D = u(7.5, 9.5), u(5.4, 6.4)
+        side = k.corner if form == "corner" else rng.choice([-1, 1])
+        ww = u(3.2, 4.0)
+        wx = side * (W / 2 - ww / 2 - (0.0 if form == "corner" else u(0.3, 0.8)))
+        front_wing = form == "lhouse" and rng.random() < 0.55
+        storeys = 2 if (form == "corner" or rng.random() < 0.7) else 1
+        knee = 0.0 if storeys == 2 else 0.8
+        wins = {"right": 0.9, "left": 0.3} if side > 0 else {"left": 0.9, "right": 0.3}
+        da = (-side * 0.2) if front_wing else side * 0.3
+        info = block(k, P, -W / 2, W / 2, -D / 2, D / 2, storeys, plinth=plinth, knee=knee, ground=ground,
+                     entry=("front", da), roof="gable", axis="x", pitch=u(52, 58), wins=wins if form == "corner" else None,
+                     hood=P["roof"] if rng.random() < 0.4 else None)
+        depth = u(2.4, 3.6) if front_wing else u(4.0, 6.0)
+        wing(k, P, info, wx, ww, depth, d=-1 if front_wing else 1, storeys=storeys, ground=ground,
+             wins={"right": 0.9, "left": 0.5} if side > 0 else {"left": 0.9, "right": 0.5})
+        if rng.random() < 0.3 and not front_wing:
+            lean_to(k, P, info, -side)
+        chimney(k, P, info, "ridge", x=-side * u(0.5, 2.0))
+    else:
+        raise ValueError(form)
+    lean(k)
+
+
+def fantasy_townhouse(k):
+    """Townhouses by form: narrow (2-3 bays, gable to the street), wide (4-5 bays) and corner."""
+    rng, form = k.rng, k.form
+    u = rng.uniform
+    P = house_colours(k)
+    ground = "stone" if rng.random() < 0.45 else "plaster"
+    plinth = u(0.38, 0.5)
+    if form == "narrow":
+        W, D = u(4.4, 5.8), u(7.5, 9.5)
+        storeys = rng.choice([2, 3, 3])
+        jetty = 0.35 if rng.random() < 0.7 else 0.0
+        info = block(k, P, -W / 2, W / 2, -D / 2, D / 2, storeys, hs=2.65, plinth=plinth, jetty=jetty, ground=ground,
+                     entry=("front", rng.choice([-0.3, 0.3])), roof="gable", axis="y", pitch=u(56, 62), oh_e=0.3,
+                     shop=rng.random() < 0.5, wins={"left": 0.2, "right": 0.2, "back": 0.5}, attic=0.95,
+                     hood=P["roof"] if rng.random() < 0.3 else None)
+        if rng.random() < 0.35:
+            # A hoist beam out of the front gable, for goods to the attic.
+            zt = info["zw"] + (info["ridge"] - info["zw"]) * 0.72
+            f = Face((0, info["Y0"], 0), X, W)
+            k.add(f.box(-0.1, 0.1, zt - 0.1, zt + 0.1, 0.0, 1.1), P["timber"])
+            k.add(f.box(-0.02, 0.02, zt - 1.6, zt - 0.1, 0.95, 0.99), (0.75, 0.66, 0.48), ao=False)
+            k.add(cyl(f.p(0, zt - 0.12, 0.97), f.p(0, zt - 0.3, 0.97), 0.1, 0.1, 6), P["timber"], ao=False)
+        chimney(k, P, info, "ridge", x=u(0.2, 0.6) * info["hy"])
+    elif form == "wide":
+        W, D = u(8.0, 10.5), u(6.6, 8.2)
+        storeys = rng.choice([2, 2, 3])
+        roof, axis, clip = roof_choice(rng, [(0.5, "gable", "x", 0.0), (0.25, "gable", "x", 0.33), (0.25, "hip", "x", 0.0)])
+        jetty = 0.4 if rng.random() < 0.7 else 0.0
+        cross = roof != "hip" and rng.random() < 0.45
+        info = block(k, P, -W / 2, W / 2, -D / 2, D / 2, storeys, hs=2.7, plinth=plinth, jetty=jetty, ground=ground,
+                     entry=("front", rng.choice([-0.35, 0.0, 0.35])), roof=roof, axis=axis, pitch=u(50, 57), clip=clip,
+                     shop=rng.random() < 0.4, wins={"left": 0.35, "right": 0.35, "back": 0.45}, course=0.62, cut=(1.8, 3.8))
+        if cross:
+            # A wall gable: the front's middle bays rise into their own gable.
+            ww = u(3.0, 3.8)
+            wing(k, P, info, u(-0.15, 0.15) * W, ww, u(0.5, 0.9) + jetty * (storeys - 1), d=-1, storeys=storeys, ground="plaster",
+                 wins={"front": 0.95, "left": 0.4, "right": 0.4})
+        elif roof != "hip":
+            dormers(k, P, info, rng.choice([[-W / 4, W / 4], [-W / 3, 0.0, W / 3], [0.0]]))
+        chimney(k, P, info, "ridge")
+        if rng.random() < 0.5:
+            chimney(k, P, info, "gable")
+    elif form == "corner":
+        side = k.corner
+        W, D = u(7.0, 8.6), u(7.4, 9.0)
+        storeys = rng.choice([2, 3, 3])
+        roof, axis, clip = roof_choice(rng, [(0.45, "hip", "x", 0.0), (0.35, "gable", "y", 0.0), (0.2, "gable", "x", 0.35)])
+        jetty = 0.0
+        wins = {"right": 0.85, "left": 0.2} if side > 0 else {"left": 0.85, "right": 0.2}
+        info = block(k, P, -W / 2, W / 2, -D / 2, D / 2, storeys, hs=2.7, plinth=plinth, jetty=jetty, ground=ground,
+                     entry=("front", -side * 0.3), roof=roof, axis=axis, pitch=u(52, 58), clip=clip,
+                     shop=rng.random() < 0.6, wins=dict(wins, back=0.4), course=0.62, cut=(1.8, 3.8))
+        r = u(1.1, 1.35)
+        tx, ty = side * (W / 2 + 0.15), -D / 2 - 0.15
+        turret(k, P, tx, ty, r, info["plinth"] + info["hs"], info["zw"] + 0.4, info["ridge"] + u(0.5, 2.0), stone=ground == "stone" and rng.random() < 0.3)
+        chimney(k, P, info, "ridge", x=-side * u(0.5, 1.5) if axis == "x" else None)
+    else:
+        raise ValueError(form)
+    lean(k)
+
+
+def fantasy_inn(k):
+    """An inn: a long two- or three-storey house on the square, a hanging sign, lanterns, benches
+    and barrels at the door, maybe a carriage arch into its yard."""
+    rng = k.rng
+    u = rng.uniform
+    P = house_colours(k)
+    P["shut"] = P["shut"] or k.choice(k.pal["paint"])
+    W, D = u(13.0, 16.0), u(8.8, 10.4)
+    storeys = rng.choice([2, 2, 3])
+    roof, axis, clip = roof_choice(rng, [(0.5, "gable", "x", 0.0), (0.5, "gable", "x", 0.35)])
+    ground = "stone" if rng.random() < 0.55 else "plaster"
+    plinth = u(0.45, 0.6)
+    jetty = 0.45 if rng.random() < 0.7 else 0.0
+    info = block(k, P, -W / 2, W / 2, -D / 2, D / 2, storeys, hs=2.9, plinth=plinth, jetty=jetty, ground=ground,
+                 entry=("front", 0.0), roof=roof, axis=axis, pitch=u(48, 54), clip=clip, course=0.72, cut=(2.2, 4.4),
+                 wins={"front": 0.95, "back": 0.3, "left": 0.3, "right": 0.3}, lamp=0.0, hood=P["roof"], door_w=1.5)
+    dormers(k, P, info, rng.choice([[-W / 4, W / 4], [-W / 3, 0.0, W / 3]]), w=1.7)
+    chimney(k, P, info, "gable", x=-1)
+    chimney(k, P, info, "gable", x=1)
+    f = Face((0, -D / 2, 0), X, W)
+    for e in (-1, 1):
+        lantern(k, f.p(e * 1.35, plinth + 2.1, 0.28), 1.2)
+    # The sign: an iron bracket out of the wall over the door, a painted board hanging from it.
+    sz = plinth + 2.9 + (0.4 if jetty else 0.0)
+    sa = rng.choice([-1, 1]) * u(1.8, 2.6)
+    sy = -D / 2 - jetty
+    iron = k.pal["iron"]
+    k.add(box((sa - 0.05, sy - 1.5, sz - 0.05), (sa + 0.05, sy, sz + 0.05)), iron, ao=False)
+    k.add(lbox(Vector((-0.03, -1.05, -0.03)), Vector((0.03, 0.0, 0.03)), fn=lambda q: Vector((sa + q.x, sy + q.y, sz - 0.55 - q.y * 0.5 + q.z))), iron, ao=False)
+    board = k.choice(k.pal["paint"])
+    k.add(box((sa - 0.05, sy - 1.35, sz - 1.25), (sa + 0.05, sy - 0.3, sz - 0.25), 0.02), board)
+    k.add(box((sa - 0.07, sy - 1.4, sz - 1.3), (sa + 0.07, sy - 0.25, sz - 1.2)), P["timber"])
+    k.add(box((sa - 0.07, sy - 1.4, sz - 0.3), (sa + 0.07, sy - 0.25, sz - 0.2)), P["timber"])
+    emblem = k.choice([(0.95, 0.78, 0.3), (0.92, 0.9, 0.82), (0.85, 0.3, 0.25)])
+    for e in (-1, 1):
+        k.add(sphere((sa + e * 0.07, sy - 0.82, sz - 0.75), 0.24, 1, squash=0.9), emblem, ao=False)
+    for dy in (-1.2, -0.4):
+        k.add(box((sa - 0.01, sy + dy - 0.01, sz - 0.25), (sa + 0.01, sy + dy + 0.01, sz)), iron, ao=False)
+    # Benches and barrels along the front.
+    wood = mul(P["timber"], 1.3)
+    for e in (-1, 1):
+        bx = e * u(3.2, W / 2 - 1.5)
+        k.add(box((bx - 0.9, -D / 2 - 0.75, 0), (bx + 0.9, -D / 2 - 0.35, 0.45)), wood)
+        k.add(box((bx - 1.0, -D / 2 - 0.8, 0.42), (bx + 1.0, -D / 2 - 0.3, 0.5)), mul(wood, 1.1))
+        barrel(k, (bx + e * 1.5, -D / 2 - 0.6, 0), 0.34, 0.85, P["timber"])
+    if rng.random() < 0.6:
+        # A carriage arch at one end: a stone screen wall with a gateway into the yard behind.
+        e = rng.choice([-1, 1])
+        x0, x1 = (W / 2, W / 2 + 3.6) if e > 0 else (-W / 2 - 3.6, -W / 2)
+        stone = P["stone"]
+        hz = plinth + 2.9 + 1.0
+        fa = Face(((x0 + x1) / 2, -D / 2 + 0.6, 0), X, x1 - x0)
+        k.add(fa.box(-1.8, 1.8, 0, hz, -0.1, 0.5), stone, vary=0.03)
+        n = 7
+        k.add(fa.poly([(-1.3, 0.0), (1.3, 0.0)] + [(math.cos(math.pi * i / n) * 1.3, 2.6 + math.sin(math.pi * i / n) * 0.75) for i in range(n + 1)], 0.45, 0.53), (0.16, 0.13, 0.12))
+        for i in range(n):
+            a0, a1 = math.pi * i / n, math.pi * (i + 1) / n
+            q = [(math.cos(a0) * 1.32, 2.6 + math.sin(a0) * 0.77), (math.cos(a0) * 1.6, 2.6 + math.sin(a0) * 1.0),
+                 (math.cos(a1) * 1.6, 2.6 + math.sin(a1) * 1.0), (math.cos(a1) * 1.32, 2.6 + math.sin(a1) * 0.77)]
+            k.add(fa.poly(q, 0.45, 0.58), mul(stone, rng.uniform(0.85, 0.95)), vary=0)
+        k.add(fa.box(-1.95, 1.95, hz, hz + 0.25, -0.2, 0.75), mul(stone, 0.85))
+        gable_roof(k, ((x0 + x1) / 2, -D / 2 + 0.85, hz + 0.75), X, 1.8, 0.65, hz + 0.25, 0.15, 0.1, P["roof"], course=0.35, th=0.07, sag=0.0, barge=P["timber"])
+    lean(k)
+
+
+def fantasy_hall(k):
+    """A guildhall: an open stone arcade on the ground floor, a tall timber-framed hall above,
+    a steep roof with a little bell turret on the ridge, and the guild's arms on the front."""
+    rng = k.rng
+    u = rng.uniform
+    P = house_colours(k)
+    W, D = u(14.0, 18.0), u(9.4, 11.2)
+    hx, hy = W / 2, D / 2
+    stone = P["stone"]
+    za = u(3.6, 4.2)
+    # Arcade: piers and round arches round the front and sides, a dark hall floor behind.
+    k.add(box((-hx - 0.12, -hy - 0.12, 0), (hx + 0.12, hy + 0.12, 0.35), 0.05), k.pal["stone_dark"])
+    k.add(box((-hx + 1.4, -hy + 1.4, 0.3), (hx - 1.4, hy - 0.05, za), 0.05), mul(P["plaster"], 0.8))
+    k.add(box((-hx, hy - 1.4, 0.3), (hx, hy, za)), stone, vary=0.02)
+    for name, f in box_faces(0, 0, hx, hy).items():
+        if name == "back":
+            continue
+        L = f.length
+        n = max(2, round(L / 3.3))
+        span = L / n
+        pier = 0.65
+        for i in range(n + 1):
+            a = -L / 2 + i * span
+            a0, a1 = max(-L / 2, a - pier / 2), min(L / 2, a + pier / 2)
+            k.add(f.box(a0, a1, 0.3, za, 0.0, 1.0 if name == "front" else 1.3), mul(stone, rng.uniform(0.95, 1.05)), vary=0)
+        for i in range(n):
+            ac = -L / 2 + (i + 0.5) * span
+            r = span / 2 - pier / 2
+            spring = za - 0.45 - r
+            m = 6
+            pts = [(ac - r, spring - 0.01), (ac - r - 0.05, za), (ac + r + 0.05, za), (ac + r, spring - 0.01)]
+            pts += [(ac + math.cos(math.pi * j / m) * r, spring + math.sin(math.pi * j / m) * r) for j in range(1, m)]
+            k.add(f.poly(pts, 0.0, 0.6), stone, vary=0.03)
+        k.add(f.box(-L / 2 - 0.1, L / 2 + 0.1, za - 0.25, za + 0.05, 0.0, 1.1), mul(stone, 0.88))
+    door(k, Face((0, -hy + 1.4, 0), X, W - 2.8), 0, 0.35, 1.4, 2.4, P["paint"], mul(stone, 0.85), arch=True)
+    # Lanterns under the arcade.
+    for x in (-hx / 2, hx / 2):
+        lantern(k, (x, -hy + 0.7, za - 0.9), 1.1)
+    # The hall storey above.
+    ground = "plaster" if rng.random() < 0.65 else "all_stone"
+    roof, axis, clip = roof_choice(rng, [(0.55, "hip", "x", 0.0), (0.45, "gable", "x", 0.3)])
+    info = block(k, P, -hx, hx, -hy, hy, 1, hs=u(4.0, 4.6), plinth=za, plinth_box=False, knee=0.3, ground=ground,
+                 roof=roof, axis=axis, pitch=u(54, 60), clip=clip, win=(1.0, 2.2), course=0.7, cut=(2.0, 4.2),
+                 wins={"front": 1.0, "back": 0.6, "left": 0.8, "right": 0.8}, attic=0.9)
+    # The guild's arms between the middle windows.
+    f = Face((0, -hy, 0), X, W)
+    arms = k.choice(k.pal["paint"])
+    zc = za + 2.6
+    k.add(f.poly([(-0.55, zc + 0.6), (0.55, zc + 0.6), (0.55, zc - 0.1), (0.0, zc - 0.75), (-0.55, zc - 0.1)], 0.05, 0.16), arms)
+    k.add(f.poly([(-0.25, zc + 0.3), (0.25, zc + 0.3), (0.25, zc - 0.05), (0.0, zc - 0.35), (-0.25, zc - 0.05)], 0.16, 0.2), (0.95, 0.8, 0.35), ao=False)
+    # A bell turret on the ridge: an open belfry and a slender spire.
+    ridge = info["ridge"]
+    tb = 0.85
+    zt0 = ridge - 0.9
+    k.add(box((-tb, -tb, zt0), (tb, tb, ridge + 0.5)), P["timber"])
+    for dx in (-1, 1):
+        for dy in (-1, 1):
+            k.add(box((dx * (tb - 0.12) - 0.12, dy * (tb - 0.12) - 0.12, ridge + 0.5), (dx * (tb - 0.12) + 0.12, dy * (tb - 0.12) + 0.12, ridge + 2.0)), P["timber"])
+    k.add(cyl((0, 0, ridge + 1.75), (0, 0, ridge + 1.15), 0.32, 0.45, 8), k.pal.get("brass", (0.85, 0.65, 0.3)), ao=False)
+    k.add(box((-tb - 0.1, -tb - 0.1, ridge + 2.0), (tb + 0.1, tb + 0.1, ridge + 2.2)), P["timber"])
+    cone_roof(k, (0, 0, 0), tb + 0.1, ridge + 2.2, ridge + u(4.0, 5.5), P["roof"], oh=0.2, course=0.45, sides=8)
+    k.add(cyl((0, 0, ridge + 4.0), (0, 0, ridge + 6.2), 0.04, 0.03, 5), k.pal["iron"], ao=False)
+    chimney(k, P, info, "ridge", x=-hx * 0.6)
+
+
+def fantasy_chapel(k):
+    """A stone chapel: a buttressed nave with lancet windows, a west tower with a belfry and a
+    spire (or a pyramid roof) over the door, maybe an apse and a sacristy."""
+    rng = k.rng
+    u = rng.uniform
+    pal = k.pal
+    stone = jitter(pal["stone"], rng, 0.04)
+    dark = pal["stone_dark"]
+    slate = k.choice([(0.34, 0.36, 0.42), (0.28, 0.40, 0.62), (0.46, 0.43, 0.42), (0.74, 0.33, 0.22)])
+    P = dict(plaster=stone, timber=mul(stone, 0.8), stone=stone, roof=slate, paint=k.choice(pal["paint"]))
+    W, Ln = u(7.6, 9.4), u(13.0, 16.5)
+    hx, hy = W / 2, Ln / 2
+    hw = u(6.4, 7.8)
+    k.add(box((-hx - 0.15, -hy - 0.15, 0), (hx + 0.15, hy + 0.15, 0.6), 0.05), dark)
+    k.add(box((-hx, -hy, 0.55), (hx, hy, hw), 0.06), stone, vary=0.02)
+    nb = max(3, round(Ln / 3.3))
+    for e in (-1, 1):
+        f = Face((e * hx, 0, 0), Y * e, Ln)
+        for i in range(nb + 1):
+            a = -Ln / 2 + i * Ln / nb
+            a = max(-Ln / 2 + 0.35, min(Ln / 2 - 0.35, a))
+            k.add(f.box(a - 0.35, a + 0.35, 0.0, hw * 0.72, 0.0, 0.85), mul(stone, 0.93))
+            k.add(prism([(0.85, hw * 0.72), (0.0, hw - 0.2), (0.0, hw * 0.72)], a - 0.35, a + 0.35, lambda q, s_, z, f=f: f.p(q, z, s_)), mul(stone, 0.93))
+        for i in range(nb):
+            a = -Ln / 2 + (i + 0.5) * Ln / nb
+            arch_window(k, f, a, 2.2, 0.8, hw - 4.0, mul(stone, 0.85), lit=rng.random() < 0.75, bars=False)
+        k.add(f.box(-Ln / 2, Ln / 2, hw - 0.3, hw, 0.0, 0.25), mul(stone, 0.88))
+    pitch = math.radians(u(54, 60))
+    ridge = hw + hx * math.tan(pitch)
+    gable_roof(k, (0, 0, ridge), Y, hy, hx, hw, 0.45, 0.3, slate, course=0.6, cut=(1.8, 3.6), barge=mul(stone, 0.85))
+    # Stone gables with a coping, a cross on the east one.
+    for e, f in ((-1, Face((0, -hy, 0), X, W)), (1, Face((0, hy, 0), -X, W))):
+        k.add(f.poly([(-hx, hw - 0.02), (hx, hw - 0.02), (0, ridge - 0.05)], -0.3, 0.0), stone)
+        for s_ in (-1, 1):
+            ln = math.hypot(hx + 0.2, ridge - hw)
+            k.add(f.obox(s_ * -(hx + 0.2) / 2, (hw + ridge) / 2 + 0.1, ln, 0.3, -0.1, 0.25, math.atan2(ridge - hw, hx + 0.2) * s_), mul(stone, 0.88))
+        if e > 0:
+            k.add(f.box(-0.08, 0.08, ridge, ridge + 1.2, 0.0, 0.16), mul(stone, 0.9))
+            k.add(f.box(-0.4, 0.4, ridge + 0.65, ridge + 0.85, 0.0, 0.16), mul(stone, 0.9))
+    # The apse: a half-round east end under a half cone.
+    if rng.random() < 0.6:
+        ra = hx - 0.4
+        za = hw * 0.85
+        k.add(cyl((0, hy, 0.55), (0, hy, za), ra, ra, 14), stone, vary=0.02)
+        k.add(cyl((0, hy, 0), (0, hy, 0.6), ra + 0.15, ra + 0.15, 14), dark)
+        for ang in (math.pi - 0.75, math.pi, math.pi + 0.75):
+            arch_window(k, cyl_face_at((0, hy), ra - 0.03, ang), 0, 2.2, 0.6, za - 4.0, mul(stone, 0.85), lit=rng.random() < 0.7, bars=False)
+        cone_roof(k, (0, hy, 0), ra, za, za + ra * math.tan(pitch) * 0.9, slate, oh=0.35, course=0.6, sides=14)
+    # A sacristy on one side.
+    if rng.random() < 0.45:
+        e = rng.choice([-1, 1])
+        sx0 = e * hx
+        sx1 = e * (hx + 3.0)
+        sy0 = u(0.0, hy - 4.0)
+        k.add(box((min(sx0, sx1), sy0, 0), (max(sx0, sx1), sy0 + 3.8, 3.4), 0.05), stone)
+        gable_roof(k, (sx0, sy0 + 1.9, 4.6), Y, 1.9, 3.0, 3.3, 0.3, 0.25, slate, sides=(-e,), course=0.55, sag=0.0, barge=mul(stone, 0.85))
+        door(k, Face((sx1, sy0 + 1.9, 0), Y * e, 3.8), 0, 0.3, 1.0, 2.1, P["paint"], mul(stone, 0.8), arch=True)
+    # The west tower, its door the chapel's door.
+    ts = u(3.8, 4.6)
+    tz = u(13.0, 16.0)
+    ty0 = -hy - ts * 0.6
+    tc = Vector((0, ty0 + ts / 2, 0))
+    th = ts / 2
+    k.add(box((-th - 0.25, ty0 - 0.25, 0), (th + 0.25, ty0 + ts + 0.25, 0.9), 0.05), dark)
+    k.add(box((-th, ty0, 0.85), (th, ty0 + ts, tz), 0.06), stone, vary=0.02)
+    for f in box_faces(0, tc.y, th, th).values():
+        stone_quoins(k, f, 0.9, tz, mul(stone, 0.9), size=0.5)
+    faces = box_faces(0, tc.y, th, th)
+    fr = faces["front"]
+    door(k, fr, 0, 0.5, 1.5, 2.6, P["paint"], mul(stone, 0.8), arch=True)
+    rw = [(math.cos(i / 12 * math.tau) * 0.75, 5.2 + math.sin(i / 12 * math.tau) * 0.75) for i in range(12)]
+    k.add(fr.poly(rw, -0.05, 0.08), mul(stone, 0.82))
+    k.add(fr.poly([(x * 0.75, 5.2 + (z - 5.2) * 0.75) for x, z in rw], 0.08, 0.12), None, glow=True)
+    for name, f in faces.items():
+        if name != "front" and rng.random() < 0.6:
+            window(k, f, 0, 6.0, 0.4, 1.1, mul(stone, 0.85), lit=rng.random() < 0.4, mullion=False)
+        # Belfry: paired louvred openings.
+        for e in (-0.6, 0.6):
+            pts = [(e - 0.35, tz - 3.4), (e + 0.35, tz - 3.4)] + [(e + math.cos(math.pi * i / 6) * 0.35, tz - 1.8 + math.sin(math.pi * i / 6) * 0.35) for i in range(7)]
+            k.add(f.poly(pts, -0.05, 0.04), (0.12, 0.11, 0.12))
+            for zz in (tz - 3.0, tz - 2.6, tz - 2.2):
+                k.add(f.box(e - 0.33, e + 0.33, zz, zz + 0.1, 0.0, 0.08), mul(P["timber"], 0.7), ao=False)
+        k.add(f.box(-th - 0.1, th + 0.1, tz - 0.35, tz, 0.0, 0.2), mul(stone, 0.85))
+    if rng.random() < 0.6:
+        top = tz + u(8.0, 11.0)
+        cone_roof(k, tc, th * 1.15, tz, top, slate, oh=0.25, course=0.6, sides=8, flare=u(0.0, 0.3))
+    else:
+        top = tz + u(3.5, 5.0)
+        hip_roof(k, 0, tc.y, th, th, tz, top, 0.35, slate, course=0.55)
+    k.add(cyl(tc + Z * (top - 0.3), tc + Z * (top + 1.3), 0.06, 0.04, 6), pal["iron"], ao=False)
+    k.add(sphere(tc + Z * (top + 0.2), 0.16, 1), (0.85, 0.65, 0.3), ao=False)
+    k.add(box(tc + Vector((-0.45, -0.04, top + 0.85)), tc + Vector((0.45, 0.04, top + 0.97))), pal["iron"], ao=False)
+
+
+def fantasy_workshop(k):
+    """A smithy (open forge bay, big chimney, a fenced yard with an anvil) or a workshop (cart
+    doors, a hoist, a yard of stacked timber)."""
+    rng, form = k.rng, k.form
+    u = rng.uniform
+    P = house_colours(k)
+    plinth = u(0.3, 0.42)
+    e = rng.choice([-1, 1])
+    yard_w = u(3.4, 4.8)
+    if form == "smithy":
+        W, D = u(6.4, 8.2), u(5.4, 6.4)
+        ground = "all_stone" if rng.random() < 0.55 else "stone"
+        info = block(k, P, -W / 2, W / 2, -D / 2, D / 2, 1, hs=3.2, plinth=plinth, knee=u(0.2, 0.6), ground=ground,
+                     entry=("front", -e * 0.3), roof="gable", axis="x", pitch=u(42, 50), wins={"front": 0.4})
+        # The forge bay: a wide dark opening with the fire glowing inside.
+        f = Face((0, -D / 2, 0), X, W)
+        fa = e * (W / 2 - 1.7)
+        k.add(f.box(fa - 1.3, fa + 1.3, plinth, plinth + 2.4, -0.02, 0.03), (0.13, 0.11, 0.1))
+        k.add(f.box(fa - 1.45, fa + 1.45, plinth + 2.4, plinth + 2.65, 0.0, 0.2), P["timber"])
+        k.add(f.box(fa - 0.5, fa + 0.5, plinth + 0.7, plinth + 1.0, -0.6, -0.02), None, glow=True)
+        k.add(f.box(fa - 0.6, fa + 0.6, plinth, plinth + 0.7, -0.7, -0.02), mul(P["stone"], 0.6))
+        # The forge chimney, big and sooty.
+        cx = e * (W / 2 - 0.9)
+        top = info["ridge"] + u(1.4, 2.2)
+        k.add(box((cx - 0.75, D / 2 - 1.6, 0), (cx + 0.75, D / 2 + 0.2, top - 0.3), 0.06), lambda co, n: mul(P["stone"], 0.95 - 0.35 * max(0.0, (co.z - top + 2.0) / 2.0)))
+        k.add(box((cx - 0.9, D / 2 - 1.75, top - 0.35), (cx + 0.9, D / 2 + 0.35, top), 0.04), (0.2, 0.18, 0.18))
+        # The yard: fence, anvil on a stump, quench trough, iron bars.
+        xw, xo = e * W / 2, e * (W / 2 + yard_w)
+        yx0, yx1 = min(xw, xo), max(xw, xo)
+        fence(k, P, [(xw, -D / 2 + 0.2), (xo, -D / 2 + 0.2), (xo, D / 2 - 0.2), (xw, D / 2 - 0.2)], gate=0)
+        ax = (yx0 + yx1) / 2
+        k.add(cyl((ax, 0, 0), (ax, 0, 0.55), 0.32, 0.3, 8), (0.5, 0.38, 0.26))
+        k.add(box((ax - 0.35, -0.12, 0.55), (ax + 0.25, 0.12, 0.8)), k.pal["iron"], ao=False)
+        k.add(cyl((ax + 0.25, 0, 0.72), (ax + 0.55, 0, 0.72), 0.1, 0.02, 6), k.pal["iron"], ao=False)
+        k.add(box((ax - 0.5, D / 2 - 1.4, 0), (ax + 0.5, D / 2 - 0.7, 0.55), 0.04), mul(P["timber"], 1.2))
+        k.add(box((ax - 0.42, D / 2 - 1.32, 0.45), (ax + 0.42, D / 2 - 0.78, 0.52)), (0.15, 0.22, 0.3), ao=False)
+        barrel(k, (ax + e * 1.0, -D / 2 + 1.0, 0), 0.3, 0.8, P["timber"])
+        if rng.random() < 0.5:
+            lean_to(k, P, info, e, depth=yard_w * 0.6, length=D * 0.5)
+    else:
+        W, D = u(8.0, 10.0), u(5.8, 7.0)
+        info = block(k, P, -W / 2, W / 2, -D / 2, D / 2, 1, hs=3.2, plinth=plinth, knee=u(0.7, 1.1), ground="stone" if rng.random() < 0.4 else "plaster",
+                     entry=("front", e * 0.3), roof="gable", axis="x", pitch=u(48, 55), wins={"front": 0.7})
+        # Cart doors: two broad braced leaves.
+        f = Face((0, -D / 2, 0), X, W)
+        da = -e * (W / 2 - 2.0)
+        for s_ in (-1, 1):
+            k.add(f.box(da + min(0, s_ * 1.25), da + max(0, s_ * 1.25), plinth, plinth + 2.7, -0.03, 0.06), mul(P["timber"], 1.3))
+            k.add(f.obox(da + s_ * 0.62, plinth + 1.35, 2.9, 0.14, 0.06, 0.12, 1.1 * s_), P["timber"])
+        k.add(f.box(da - 1.4, da + 1.4, plinth + 2.7, plinth + 2.95, 0.0, 0.16), P["timber"])
+        dormers(k, P, info, [da])
+        zt = info["zw"] + 1.3
+        k.add(box((da - 0.1, -D / 2 - 1.2, zt + 0.5), (da + 0.1, -D / 2 + 0.6, zt + 0.7)), P["timber"])
+        k.add(box((da - 0.02, -D / 2 - 1.1, zt - 1.2), (da + 0.02, -D / 2 - 1.06, zt + 0.5)), (0.75, 0.66, 0.48), ao=False)
+        # The yard: a fence round stacked planks and logs under a pent roof.
+        xw, xo = e * W / 2, e * (W / 2 + yard_w)
+        yx0, yx1 = min(xw, xo), max(xw, xo)
+        fence(k, P, [(xw, -D / 2 + 0.3), (xo, -D / 2 + 0.3), (xo, D / 2 - 0.3), (xw, D / 2 - 0.3)], gate=0)
+        for r in range(3):
+            for i in range(5 - r):
+                y = -1.0 + (i + 0.5 * r) * 0.42
+                k.add(cyl(((yx0 + yx1) / 2 - 1.2, y, 0.2 + r * 0.36), ((yx0 + yx1) / 2 + 1.2, y, 0.2 + r * 0.36), 0.19, 0.19, 7), (0.58, 0.43, 0.28), ao=False)
+        for i in range(4):
+            k.add(box((yx0 + 0.5, D / 2 - 1.6, i * 0.12), (yx1 - 0.5, D / 2 - 0.6, i * 0.12 + 0.1)), jitter((0.8, 0.66, 0.45), rng, 0.06), vary=0, ao=False)
+        chimney(k, P, info, "ridge")
+    lean(k)
+
+
+def fence(k, P, pts, gate=None, h=1.1):
+    """A post-and-rail fence along a polyline; segment `gate` is left open."""
+    wood = mul(P["timber"], 1.25)
+    for i, (a, b) in enumerate(zip(pts, pts[1:])):
+        a, b = Vector((*a, 0)), Vector((*b, 0))
+        L = (b - a).length
+        n = max(1, round(L / 1.6))
+        for j in range(n + 1):
+            p = a + (b - a) * (j / n)
+            k.add(box(p + Vector((-0.07, -0.07, 0)), p + Vector((0.07, 0.07, h))), wood)
+        if i == gate:
+            continue
+        d = (b - a).normalized()
+        nrm = Vector((-d.y, d.x, 0))
+        for z in (h * 0.45, h * 0.85):
+            k.add(lbox(Vector((0, -0.03, z - 0.05)), Vector((L, 0.03, z + 0.05)), fn=lambda q, a=a, d=d, nrm=nrm: a + d * q.x + nrm * q.y + Z * q.z), wood)
+
+
+def fantasy_barn(k):
+    """A barn (board walls, great doors, a big roof, maybe thatch) or a small shed."""
+    rng, form = k.rng, k.form
+    u = rng.uniform
+    P = house_colours(k)
+    wood = k.choice([(0.52, 0.40, 0.28), (0.45, 0.38, 0.32), (0.56, 0.27, 0.20), (0.40, 0.33, 0.26)])
+    thatch = rng.random() < 0.4
+    if thatch:
+        P["roof"] = jitter((0.74, 0.62, 0.38), rng, 0.05)
+    if form == "barn":
+        W, D = u(9.0, 13.0), u(6.8, 8.6)
+        hx, hy = W / 2, D / 2
+        hw = u(3.6, 4.6)
+        k.add(box((-hx - 0.1, -hy - 0.1, 0), (hx + 0.1, hy + 0.1, 0.6), 0.05), k.pal["stone_dark"])
+        k.add(box((-hx, -hy, 0.55), (hx, hy, hw)), boards(wood), vary=0)
+        for f in box_faces(0, 0, hx, hy).values():
+            for a in (-f.length / 2, f.length / 2):
+                k.add(f.box(a - 0.12 if a > 0 else a, a if a > 0 else a + 0.12, 0.55, hw, 0.0, 0.08), P["timber"])
+            k.add(f.box(-f.length / 2, f.length / 2, hw - 0.2, hw, 0.0, 0.08), P["timber"])
+        f = Face((0, -hy, 0), X, W)
+        dw, dh = u(3.0, 3.6), u(3.2, 3.6)
+        dh = min(dh, hw - 0.3)
+        for s_ in (-1, 1):
+            k.add(f.box(min(0, s_ * dw / 2), max(0, s_ * dw / 2), 0.1, dh, -0.03, 0.07), boards(mul(wood, 1.15), 0.28), vary=0)
+            k.add(f.obox(s_ * dw / 4, dh / 2, math.hypot(dw / 2, dh) - 0.2, 0.14, 0.07, 0.13, math.atan2(dh, dw / 2) * s_), P["timber"])
+            k.add(f.box(min(0, s_ * dw / 2), max(0, s_ * dw / 2), dh / 2 - 0.08, dh / 2 + 0.08, 0.07, 0.13), P["timber"])
+        k.add(f.box(-dw / 2 - 0.2, dw / 2 + 0.2, dh, dh + 0.2, 0.0, 0.12), P["timber"])
+        clip = 0.35 if rng.random() < 0.45 else 0.0
+        pitch = math.radians(u(45, 52) if not thatch else u(52, 58))
+        ridge = hw + hy * math.tan(pitch)
+        gable_roof(k, (0, 0, ridge), X, hx, hy, hw, 0.55 if not thatch else 0.7, 0.4, P["roof"], course=0.7 if not thatch else 0.55,
+                   th=0.1 if not thatch else 0.22, cut=(2.0, 4.0), clip=clip, barge=P["timber"] if not thatch else None)
+        for e in (-1, 1):
+            g = Face((e * hx, 0, 0), Y * e, D)
+            zc = ridge - clip * (ridge - hw)
+            pts = [(-hy, hw - 0.02), (hy, hw - 0.02)] + ([(clip * hy, zc), (-clip * hy, zc)] if clip else [(0, ridge - 0.05)])
+            k.add(g.poly(pts, -0.3, 0.0), boards(wood), vary=0)
+            k.add(g.box(-0.6, 0.6, hw + 0.4, hw + 1.6, -0.02, 0.06), (0.13, 0.11, 0.1))
+            k.add(g.box(-0.7, 0.7, hw + 1.6, hw + 1.75, 0.0, 0.12), P["timber"])
+        if rng.random() < 0.5:
+            # Hay bales by the door.
+            for i in range(rng.randint(2, 4)):
+                bx = rng.choice([-1, 1]) * u(dw / 2 + 0.8, hx - 0.6)
+                k.add(cyl((bx, -hy - 0.7, 0.55), (bx, -hy - 1.6, 0.55), 0.55, 0.55, 10), (0.86, 0.74, 0.42), ao=False)
+    else:
+        W, D = u(3.4, 5.0), u(2.8, 3.6)
+        hx, hy = W / 2, D / 2
+        hw = u(2.2, 2.6)
+        k.add(box((-hx - 0.06, -hy - 0.06, 0), (hx + 0.06, hy + 0.06, 0.25), 0.04), k.pal["stone_dark"])
+        k.add(box((-hx, -hy, 0.2), (hx, hy, hw)), boards(wood), vary=0)
+        f = Face((0, -hy, 0), X, W)
+        k.add(f.box(-0.5, 0.5, 0.25, 2.0, -0.03, 0.06), boards(mul(wood, 1.15), 0.25), vary=0)
+        k.add(f.obox(0, 1.1, 1.8, 0.12, 0.06, 0.11, 1.05), P["timber"])
+        if rng.random() < 0.5:
+            gable_roof(k, (0, hy, hw + 0.9), X, hx, D, hw - 0.1, 0.35, 0.25, P["roof"], sides=(-1,), course=0.45, sag=0.0, barge=P["timber"])
+        else:
+            gable_roof(k, (0, 0, hw + hy * 0.95), X, hx, hy, hw, 0.35, 0.25, P["roof"], course=0.45, sag=0.02, barge=P["timber"])
+        for r in range(3):
+            for i in range(4 - r):
+                a = -0.6 + (i + 0.5 * r) * 0.3
+                k.add(cyl((hx + 0.5, a, 0.15 + r * 0.25), (hx + 1.0, a, 0.15 + r * 0.25), 0.13, 0.13, 6), (0.55, 0.40, 0.26), ao=False)
+    lean(k)
+
+
+def giant_hall(k):
+    """The giants' longhall: low stave walls under a huge steep roof, a porch over a great door,
+    crossed gable boards, painted shields and a smoke-hole lantern on the ridge."""
+    rng = k.rng
+    u = rng.uniform
+    P = house_colours(k)
+    W, D = u(13.0, 15.5), u(6.6, 7.6)
+    hx, hy = W / 2, D / 2
+    hw = u(2.7, 3.1)
+    k.add(box((-hx - 0.12, -hy - 0.12, 0), (hx + 0.12, hy + 0.12, 0.6), 0.05), k.pal["stone_dark"])
+    k.add(box((-hx, -hy, 0.55), (hx, hy, hw)), boards(mul(P["timber"], 1.35), 0.4), vary=0)
+    for f in box_faces(0, 0, hx, hy).values():
+        n = max(2, round(f.length / 2.0))
+        for i in range(n + 1):
+            a = -f.length / 2 + i * f.length / n
+            a = max(-f.length / 2 + 0.15, min(f.length / 2 - 0.15, a))
+            k.add(f.box(a - 0.15, a + 0.15, 0.55, hw, 0.0, 0.12), P["timber"])
+    pitch = math.radians(u(58, 63))
+    ridge = hw + hy * math.tan(pitch)
+    clip = 0.25 if rng.random() < 0.5 else 0.0
+    gable_roof(k, (0, 0, ridge), X, hx, hy, hw, 0.9, 0.5, P["roof"], course=0.7, cut=(2.2, 4.4), clip=clip, barge=P["timber"])
+    for e in (-1, 1):
+        g = Face((e * hx, 0, 0), Y * e, D)
+        zc = ridge - clip * (ridge - hw)
+        k.add(g.poly([(-hy, hw - 0.02), (hy, hw - 0.02)] + ([(clip * hy, zc), (-clip * hy, zc)] if clip else [(0, ridge - 0.05)]), -0.3, 0.0), boards(mul(P["timber"], 1.35), 0.4), vary=0)
+        # Crossed gable boards over the apex.
+        if not clip:
+            for s_ in (-1, 1):
+                k.add(g.obox(s_ * 0.55 * math.cos(pitch), ridge + 0.55 * math.sin(pitch), 1.9, 0.24, 0.05, 0.22, s_ * pitch), P["timber"])
+        window(k, g, 0, hw + 1.0, 0.7, 1.0, P["timber"], mullion=False)
+    # Porch over the great door.
+    f = Face((0, -hy, 0), X, W)
+    door(k, f, 0, 0.6, 1.5, 2.3, P["paint"], P["timber"], arch=False)
+    for s_ in (-1, 1):
+        k.add(box((s_ * 1.4 - 0.15, -hy - 1.9, 0), (s_ * 1.4 + 0.15, -hy - 1.6, hw + 0.4)), P["timber"])
+    gable_roof(k, (0, -hy - 0.6, hw + 1.8), Y, 1.5, 1.8, hw + 0.3, 0.3, 0.2, P["roof"], course=0.5, barge=P["timber"])
+    # Shields along the front, lanterns by the door.
+    for i, a in enumerate((-hx * 0.75, -hx * 0.42, hx * 0.42, hx * 0.75)):
+        c = k.choice(k.pal["paint"])
+        sf = Face(f.p(a, 0, 0.12), X, 1)
+        k.add(sf.poly([(math.cos(j / 12 * math.tau) * 0.55, hw * 0.55 + math.sin(j / 12 * math.tau) * 0.55) for j in range(12)], 0.0, 0.08), c)
+        k.add(sf.poly([(math.cos(j / 8 * math.tau) * 0.15, hw * 0.55 + math.sin(j / 8 * math.tau) * 0.15) for j in range(8)], 0.08, 0.14), (0.85, 0.7, 0.35), ao=False)
+    for s_ in (-1, 1):
+        lantern(k, f.p(s_ * 1.2, 2.5, 0.5), 1.1)
+    # Smoke-hole lantern on the ridge.
+    k.add(box((-0.7, -0.5, ridge - 0.6), (0.7, 0.5, ridge + 0.6)), P["timber"])
+    gable_roof(k, (0, 0, ridge + 1.2), X, 0.8, 0.75, ridge + 0.55, 0.15, 0.15, P["roof"], course=0.4, sag=0.0)
 
 
 def cyl_face(r, ang):
@@ -1188,16 +1860,20 @@ def brick_fn(c, rng, band=None):
     return fn
 
 
-def steampunk_house(k, H):
+def steampunk_house(k, H=None):
+    """A brick townhouse with a copper mansard: narrow (2-3 floors over the shop) or wide (1-2)."""
     rng, pal = k.rng, k.pal
     brick = k.choice(pal["brick"])
     stone, copper, iron, brass = pal["stone"], k.choice(pal["copper"]), pal["iron"], pal["brass"]
     paint = k.choice(pal["paint"])
-    W, D = rng.uniform(6.2, 8.0), rng.uniform(6.0, 7.5)
+    if k.form == "wide":
+        W, D, ups = rng.uniform(8.4, 10.0), rng.uniform(6.4, 7.8), rng.choice([1, 2, 2])
+    else:
+        W, D, ups = rng.uniform(5.4, 6.6), rng.uniform(6.6, 8.0), rng.choice([2, 3, 3])
     hx, hy = W / 2, D / 2
     plinth, g, s = 0.55, 3.4, 2.9
-    ups = 2
     zw = plinth + g + ups * s
+    H = H or zw + 0.35 + 2.4 + 0.7
     k.add(box((-hx - 0.1, -hy - 0.1, 0), (hx + 0.1, hy + 0.1, plinth), 0.05), pal["stone_dark"])
     k.add(box((-hx, -hy, plinth - 0.02), (hx, hy, plinth + g), 0.05), stone, vary=0.02)
     k.add(box((-hx, -hy, plinth + g - 0.02), (hx, hy, zw), 0.05), brick_fn(brick, rng))
@@ -1281,7 +1957,7 @@ def steampunk_house(k, H):
     k.add(box((-hx + inset - 0.1, -hy + inset - 0.1, top - 0.05), (hx - inset + 0.1, hy - inset + 0.1, top + 0.12)), brass)
     # Mansard dormers.
     slope_y = lambda z: -hy - 0.05 + (z - zm0) / (top - zm0) * (inset + 0.05)
-    for xd in ([-W / 4, W / 4] if W > 6.8 else [0.0]):
+    for xd in ([-W / 3, 0.0, W / 3] if W > 9.0 else [-W / 4, W / 4] if W > 6.8 else [0.0]):
         z0, z1 = zm0 + 0.25, zm0 + 1.65
         yf = slope_y(z0) - 0.15
         z1 = zm0 + 1.35
@@ -1565,9 +2241,11 @@ def steampunk_lamp(k, H):
 # Small folk (designed in human-equivalent metres, then scaled down to their height)
 
 
-def burrow(k, H):
+def burrow(k, H, R=None):
+    """A turf mound with a stone front, round door and windows; a big mound (R > 4.8) has four
+    windows and two chimneys."""
     rng, pal = k.rng, k.pal
-    R = rng.uniform(3.4, 4.2)
+    R = R or rng.uniform(3.4, 4.2)
     mh = H - rng.uniform(0.9, 1.3)
     grass = k.choice(pal["grass"])
     bm = bmesh.new()
@@ -1599,9 +2277,9 @@ def burrow(k, H):
     disc = [(math.cos(i / 16 * math.tau) * dr, dr + 0.15 + math.sin(i / 16 * math.tau) * dr) for i in range(16)]
     k.add(f.poly(disc, 0.12, 0.38), k.choice(pal["paint"]))
     k.add(sphere(f.p(0, dr + 0.15, 0.45), 0.13, 1), (0.9, 0.72, 0.3), ao=False)
-    for e in (-1, 1):
-        wa = e * R * 0.48
-        wz = mh * 0.38
+    big = R > 4.8
+    for e, wa in [(e, e * R * f_) for e in (-1, 1) for f_ in ((0.36, 0.6) if big else (0.48,))]:
+        wz = mh * (0.33 if big else 0.38)
         k.add(f.poly([(wa + math.cos(i / 12 * math.tau) * 0.62, wz + math.sin(i / 12 * math.tau) * 0.62) for i in range(12)], 0.1, 0.24), pal["timber"])
         k.add(f.poly([(wa + math.cos(i / 12 * math.tau) * 0.45, wz + math.sin(i / 12 * math.tau) * 0.45) for i in range(12)], 0.12, 0.27), None, glow=rng.random() < 0.7)
         k.add(f.box(wa - 0.07, wa + 0.07, wz - 0.45, wz + 0.45, 0.24, 0.32), pal["timber"])
@@ -1609,9 +2287,10 @@ def burrow(k, H):
     for i in range(3):
         sx = rng.uniform(-0.2, 0.2)
         k.add(cyl(f.p(sx, 0.0, -0.6 - i * 1.0), f.p(sx, 0.12, -0.6 - i * 1.0), 0.55, 0.5, 7), jitter(pal["stone"], rng, 0.08), ao=False)
-    cx, cy = rng.uniform(-0.4, 0.4) * R, R * 0.2
-    k.add(box((cx - 0.4, cy - 0.4, mh * 0.6), (cx + 0.4, cy + 0.4, H - 0.25), 0.06), pal["stone"])
-    k.add(box((cx - 0.5, cy - 0.5, H - 0.3), (cx + 0.5, cy + 0.5, H), 0.04), mul(pal["stone"], 0.85))
+    for cx in ([-R * 0.35, R * 0.4] if big else [rng.uniform(-0.4, 0.4) * R]):
+        cy = R * 0.2
+        k.add(box((cx - 0.4, cy - 0.4, mh * 0.6), (cx + 0.4, cy + 0.4, H - 0.25), 0.06), pal["stone"])
+        k.add(box((cx - 0.5, cy - 0.5, H - 0.3), (cx + 0.5, cy + 0.5, H), 0.04), mul(pal["stone"], 0.85))
     for _ in range(rng.randint(5, 9)):
         a = rng.uniform(0.3, math.pi - 0.3)
         x, y = math.cos(a) * R * 0.95, front - 0.2
@@ -1696,9 +2375,57 @@ def stump_house(k, H):
     k.add(cyl((0, 0, H - 0.5), (0, 0, H), 0.05, 0.03, 5), pal["iron"], ao=False)
 
 
-def small_house(k, H):
-    v = k.rng.random()
-    (burrow if v < 0.4 else mushroom_house if v < 0.75 else stump_house)(k, H)
+def small_house(k):
+    """Small folk's houses by form: burrow, big mound, mushroom and tree-stump houses (design
+    metres for a person; scaled to small folk)."""
+    u = k.rng.uniform
+    if k.form == "burrow":
+        burrow(k, u(4.3, 5.0))
+    elif k.form == "mound":
+        burrow(k, u(5.6, 6.4), R=u(5.2, 6.0))
+    elif k.form == "mushroom":
+        mushroom_house(k, u(4.6, 5.6))
+    else:
+        stump_house(k, u(4.4, 5.4))
+
+
+def mushroom_hall(k):
+    """The small folk's hall: a great mushroom with a wide double door, a ring of round windows
+    and two little mushroom annexes."""
+    rng, pal = k.rng, k.pal
+    u = rng.uniform
+    H = u(8.5, 10.0)
+    sr, sh = u(2.6, 3.0), u(4.2, 4.8)
+    cream = pal["cream"]
+    k.add(cyl((0, 0, 0), (0, 0, sh), sr * 1.15, sr * 0.95, 16), lambda co, n: mul(cream, 0.8 + 0.2 * min(1.0, co.z / 2.0)))
+    f = cyl_face(sr * 1.15 - 0.1, 0)
+    door(k, Face(f.p(0, 0, 0.0), X, 2), 0, 0.25, 1.7, 2.1, k.choice(pal["paint"]), pal["timber"], arch=True)
+    for row, z in enumerate((1.7, 3.3)):
+        for a in (0.75, 1.5, 2.3, 3.14, -0.75, -1.5, -2.3):
+            if row == 0 and abs(a) < 0.8:
+                continue
+            rr = sr * 1.15 + (sr * 0.95 - sr * 1.15) * z / sh
+            wf = cyl_face(rr - 0.06, a)
+            k.add(wf.poly([(math.cos(i / 10 * math.tau) * 0.42, z + math.sin(i / 10 * math.tau) * 0.42) for i in range(10)], 0.0, 0.13), pal["timber"])
+            k.add(wf.poly([(math.cos(i / 10 * math.tau) * 0.3, z + math.sin(i / 10 * math.tau) * 0.3) for i in range(10)], 0.02, 0.16), None, glow=rng.random() < 0.8)
+    mushroom_cap(k, (0, 0, sh - 0.5), u(5.0, 5.8), H - sh + 0.5, k.choice(pal["cap"]), spots=(12, 18), droop=0.22)
+    for e in (-1, 1):
+        ax = e * (sr + u(2.2, 2.6))
+        ay = u(0.4, 1.4)
+        ar, ah = u(0.9, 1.1), u(2.4, 2.9)
+        k.add(cyl((ax, ay, 0), (ax, ay, ah), ar * 1.15, ar * 0.95, 12), lambda co, n: mul(cream, 0.82 + 0.18 * min(1.0, co.z / 1.5)))
+        wf = cyl_face(ar * 1.1, 0)
+        wf.o = wf.o + Vector((ax, ay, 0))
+        k.add(wf.poly([(math.cos(i / 10 * math.tau) * 0.35, 1.3 + math.sin(i / 10 * math.tau) * 0.35) for i in range(10)], 0.0, 0.13), pal["timber"])
+        k.add(wf.poly([(math.cos(i / 10 * math.tau) * 0.24, 1.3 + math.sin(i / 10 * math.tau) * 0.24) for i in range(10)], 0.02, 0.16), None, glow=True)
+        mushroom_cap(k, (ax, ay, ah - 0.3), u(1.7, 2.1), u(1.1, 1.5), k.choice(pal["cap"]), spots=(4, 7))
+        lantern(k, (e * 1.5, -sr * 1.15 - 0.6, 2.2), 1.2)
+        k.add(box((e * 1.5 - 0.06, -sr * 1.15 - 0.66, 0), (e * 1.5 + 0.06, -sr * 1.15 - 0.54, 1.95)), pal["timber"])
+    k.add(cyl((1.6, 0.8, sh), (1.6, 0.8, H - 0.1), 0.22, 0.22, 8), pal["iron"], ao=False)
+    k.add(cyl((1.6, 0.8, H - 0.1), (1.6, 0.8, H + 0.2), 0.34, 0.3, 8), pal["iron"], ao=False)
+    for i in range(4):
+        sx = rng.uniform(-0.2, 0.2)
+        k.add(cyl((sx, -sr * 1.15 - 0.5 - i * 0.95, 0), (sx, -sr * 1.15 - 0.5 - i * 0.95, 0.1), 0.48, 0.44, 7), jitter(pal["stone"], rng, 0.08), ao=False)
 
 
 def mushroom_tower(k, H):
@@ -1820,31 +2547,78 @@ def well(k, H):
 
 
 KINDS = {
-    ("fantasy", "house"): lambda k, H: fantasy_house(k, H),
-    ("fantasy", "townhouse"): lambda k, H: fantasy_house(k, H, town=True),
     ("fantasy", "tower"): fantasy_tower,
     ("fantasy", "wall"): fantasy_wall,
     ("fantasy", "market_stall"): market_stall,
     ("fantasy", "lamp"): fantasy_lamp,
-    ("steampunk", "house"): steampunk_house,
     ("steampunk", "factory"): steampunk_factory,
     ("steampunk", "chimney"): steampunk_chimney,
     ("steampunk", "pipe"): steampunk_pipe,
     ("steampunk", "crate"): steampunk_crate,
     ("steampunk", "lamp"): steampunk_lamp,
-    ("giant", "house"): lambda k, H: fantasy_house(k, H),
     ("giant", "tower"): fantasy_tower,
     ("giant", "lamp"): fantasy_lamp,
-    ("small", "house"): small_house,
     ("small", "tower"): small_tower,
     ("fantasy", "well"): well,
     ("giant", "well"): well,
     ("small", "well"): well,
 }
 
+# Kinds that come in forms: the generator reads k.form (and k.corner, the side of a corner
+# building's second street front: 1 = +X, -1 = -X) and builds to its own size.
+FORM_KINDS = {
+    ("fantasy", "house"): (fantasy_house, ["cottage", "house", "longhouse", "lhouse", "corner"]),
+    ("fantasy", "townhouse"): (fantasy_townhouse, ["narrow", "wide", "corner"]),
+    ("fantasy", "inn"): (fantasy_inn, ["inn"]),
+    ("fantasy", "hall"): (fantasy_hall, ["guildhall"]),
+    ("fantasy", "chapel"): (fantasy_chapel, ["chapel"]),
+    ("fantasy", "workshop"): (fantasy_workshop, ["smithy", "workshop"]),
+    ("fantasy", "barn"): (fantasy_barn, ["barn", "shed"]),
+    ("giant", "house"): (fantasy_house, ["cottage", "house", "longhouse", "lhouse"]),
+    ("giant", "hall"): (giant_hall, ["longhall"]),
+    ("small", "house"): (small_house, ["burrow", "mound", "mushroom", "stump"]),
+    ("small", "hall"): (mushroom_hall, ["mushroom_hall"]),
+    ("steampunk", "house"): (steampunk_house, ["narrow", "wide"]),
+}
+
 # Who lives there: generators work in metres for a 1.75 m person, and the result is scaled to
-# the kind's height, so a giant's door is 5/1.75 times a person's and a small folk's 0.6/1.75.
+# the inhabitants, so a giant's door is 5/1.75 times a person's and a small folk's 0.6/1.75.
 STYLE_FOLK = {"fantasy": "human", "steampunk": "human", "giant": "giant", "small": "small"}
+
+
+def up(x):
+    """Round up to the centimetre, so a lot sized by the table always holds the model."""
+    return math.ceil(x * 100 - 1e-6) / 100
+
+
+def write_table(path, root):
+    """Gather every set's footprint sidecar under the envs root into the planner's table."""
+    import glob
+    models = []
+    for side in sorted(glob.glob(os.path.join(root, "*", "*", "gen-*.json"))):
+        with open(side) as f:
+            d = json.load(f)
+        rel = os.path.relpath(os.path.dirname(side), root)
+        for m in d["models"]:
+            models.append(dict(style=d["style"], kind=d["kind"], form=m["form"], file=f"{rel}/{m['file']}", width_m=m["width_m"],
+                               depth_m=m["depth_m"], height_m=m["height_m"], foundation_m=m["foundation_m"], corner=m["corner"], tris=m["tris"]))
+    models.sort(key=lambda m: (m["style"], m["kind"], m["file"]))
+    kinds = {}
+    for m in models:
+        e = kinds.setdefault((m["style"], m["kind"]), dict(style=m["style"], kind=m["kind"], width_m=0.0, depth_m=0.0, height_m=0.0, foundation_m=0.0))
+        for key in ("width_m", "depth_m", "height_m", "foundation_m"):
+            e[key] = max(e[key], m[key])
+    note = ("Written by living/tools/blender/buildings.py --table (gen_buildings.sh). models: every generated model, its file "
+            "under envs/, form, footprint (width along the front, depth front to back, overhangs, steps and yards included), "
+            "height above the floor, foundation depth below it, corner (the side of a corner building's second street front "
+            "in the model's frame: 1 = +X, -1 = -X) and triangles. kinds: the envelope of every model of a kind.")
+    with open(path, "w") as f:
+        f.write("{\n " + json.dumps("note") + ": " + json.dumps(note) + ",\n \"kinds\": [\n")
+        f.write(",\n".join("  " + json.dumps(kinds[key]) for key in sorted(kinds)))
+        f.write("\n ],\n \"models\": [\n")
+        f.write(",\n".join("  " + json.dumps(m) for m in models))
+        f.write("\n ]\n}\n")
+    print(f"TABLE {path} {len(kinds)} kinds, {len(models)} models")
 
 
 def main():
@@ -1852,58 +2626,65 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", choices=sorted(PALETTES))
     ap.add_argument("--kind")
-    ap.add_argument("--table", help="write the footprint table (JSON) the settlement planner reads, and exit")
-    ap.add_argument("--count", type=int, default=8)
+    ap.add_argument("--form", help="only this form of a kind with forms")
+    ap.add_argument("--table", help="write the footprint table (JSON) the settlement planner reads from --envs, and exit")
+    ap.add_argument("--envs", default="living/game/assets/envs", help="root of the generated sets, for --table")
+    ap.add_argument("--count", type=int, default=8, help="models per form")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--out")
     ap.add_argument("--profile", action="store_true", help="print triangles per generator function")
     a = ap.parse_args(argv)
     global PROFILE
     if a.table:
-        kinds = []
-        for (style, kind), H in sorted(HEIGHTS.items()):
-            scale = FOLK[STYLE_FOLK[style]] / FOLK["human"]
-            w, d = ENVELOPES[(style, kind)]
-            kinds.append({"style": style, "kind": kind, "width_m": w, "depth_m": d, "height_m": round(H, 3),
-                          "foundation_m": round(FOUNDATION.get(kind, FOUNDATION_DEFAULT) * scale, 3)})
-        with open(a.table, "w") as f:
-            json.dump({"note": "Written by living/tools/blender/buildings.py --table (gen_buildings.sh). Envelope of every "
-                       "model of a kind: width along the front, depth front to back, height above the floor; "
-                       "foundation depth below the floor.", "kinds": kinds}, f, indent=1)
-            f.write("\n")
-        print(f"TABLE {a.table} {len(kinds)} kinds")
+        write_table(a.table, a.envs)
         return
     if not (a.style and a.kind and a.out):
         sys.exit("--style, --kind and --out are required unless --table is given")
-    if (a.style, a.kind) not in KINDS:
-        sys.exit(f"unknown kind {a.kind} for style {a.style}; known: {sorted(KINDS)}")
+    key = (a.style, a.kind)
+    if key not in KINDS and key not in FORM_KINDS:
+        sys.exit(f"unknown kind {a.kind} for style {a.style}; known: {sorted(KINDS) + sorted(FORM_KINDS)}")
     os.makedirs(a.out, exist_ok=True)
-    H = HEIGHTS[(a.style, a.kind)]
-    # Design height, in metres for a 1.75 m person.
-    Hd = H * FOLK["human"] / FOLK[STYLE_FOLK[a.style]]
-    for i in range(a.count):
+    folk = FOLK[STYLE_FOLK[a.style]] / FOLK["human"]
+    if key in FORM_KINDS:
+        gen, forms = FORM_KINDS[key]
+        forms = [f for f in forms if a.form in (None, f)]
+        jobs = [(form, i, random.Random(f"{a.seed}-{a.style}-{a.kind}-{form}-{i}")) for form in forms for i in range(a.count)]
+    else:
+        H = HEIGHTS[key]
+        jobs = [("std", i, random.Random(a.seed * 1000 + i)) for i in range(a.count)]
+    records = []
+    for form, i, rng in jobs:
         reset()
-        rng = random.Random(a.seed * 1000 + i)
         PROFILE = {} if a.profile else None
         k = Kit(rng, PALETTES[a.style], ao=1.2)
-        KINDS[(a.style, a.kind)](k, Hd)
-        foundation(k, FOUNDATION.get(a.kind, FOUNDATION_DEFAULT))
-        obj, s = k.b.finish(f"{a.kind}_{a.style}_{i:02d}", H)
+        k.form = form
+        k.corner = (1 if i % 2 == 0 else -1) if "corner" in form else 0
+        if key in FORM_KINDS:
+            gen(k)
+            foundation(k, FOUNDATION.get(a.kind, FOUNDATION_DEFAULT))
+            obj, s = k.b.finish(f"{a.kind}_{a.style}_{form}_{i:02d}", scale=folk)
+            name = f"gen-{a.kind}-{a.style}-{form}-{i:02d}.glb"
+        else:
+            # Design height, in metres for a 1.75 m person.
+            KINDS[key](k, H / folk)
+            foundation(k, FOUNDATION.get(a.kind, FOUNDATION_DEFAULT))
+            obj, s = k.b.finish(f"{a.kind}_{a.style}_{i:02d}", height=H)
+            name = f"gen-{a.kind}-{a.style}-{i:02d}.glb"
         tris = sum(len(p.vertices) - 2 for p in obj.data.polygons)
-        dims = obj.dimensions
-        path = os.path.join(a.out, f"gen-{a.kind}-{a.style}-{i:02d}.glb")
+        path = os.path.join(a.out, name)
         bpy.ops.object.select_all(action="SELECT")
         bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", export_vertex_color="ACTIVE", export_normals=True, export_yup=True, use_selection=False)
-        print(f"GEN {path} tris={tris} size={dims.x:.2f}x{dims.y:.2f}x{dims.z:.2f} fit=x{s * Hd / H:.3f}")
         # Lots are centred on the origin: the footprint is twice the farthest reach from it.
-        fw = 2 * max(abs(v.co.x) for v in obj.data.vertices)
-        fd = 2 * max(abs(v.co.y) for v in obj.data.vertices)
-        print(f"FOOT {a.style} {a.kind} {fw:.3f} {fd:.3f} below={-min(v.co.z for v in obj.data.vertices):.2f}")
-        env = ENVELOPES.get((a.style, a.kind))
-        if env and (fw > env[0] + 1e-3 or fd > env[1] + 1e-3):
-            print(f"WARN {path} footprint {fw:.2f}x{fd:.2f} exceeds the envelope {env[0]}x{env[1]}")
+        vs = obj.data.vertices
+        fw, fd = 2 * max(abs(v.co.x) for v in vs), 2 * max(abs(v.co.y) for v in vs)
+        top, below = max(v.co.z for v in vs), -min(v.co.z for v in vs)
+        print(f"GEN {path} form={form} tris={tris} foot={fw:.2f}x{fd:.2f} h={top:.2f} below={below:.2f}")
+        records.append(dict(file=name, form=form, width_m=up(fw), depth_m=up(fd), height_m=round(top, 2), foundation_m=round(below, 2), corner=k.corner, tris=tris))
         if PROFILE:
             print("  " + " ".join(f"{n}={t}" for n, t in sorted(PROFILE.items(), key=lambda x: -x[1])))
+    if a.form is None:
+        with open(os.path.join(a.out, f"gen-{a.kind}-{a.style}.json"), "w") as f:
+            json.dump(dict(style=a.style, kind=a.kind, models=records), f, indent=1)
 
 
 main()

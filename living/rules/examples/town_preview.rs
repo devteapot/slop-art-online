@@ -88,6 +88,11 @@ fn kind_colour(k: LotKind) -> [u8; 3] {
     match k {
         LotKind::House => [214, 120, 80],
         LotKind::Townhouse => [178, 64, 58],
+        LotKind::Inn => [230, 60, 160],
+        LotKind::Hall => [40, 190, 170],
+        LotKind::Chapel => [250, 250, 250],
+        LotKind::Workshop => [120, 90, 60],
+        LotKind::Barn => [150, 110, 40],
         LotKind::Tower => [92, 70, 160],
         LotKind::Well => [60, 150, 220],
         LotKind::MarketStall => [240, 200, 60],
@@ -408,6 +413,22 @@ fn legend(land: &Land, gen_s: f32, bare_s: f32, town_ns: f64, map_ns: f64) -> St
             *counts.entry(l.kind.id()).or_insert(0) += 1;
         }
         let c: Vec<String> = counts.iter().map(|(k, n)| format!("{k} {n}")).collect();
+        // Variety: distinct footprints and forms of the buildings people live in, and corners.
+        let table = living_rules::settle::Buildings::default();
+        let homes: Vec<_> = lots.iter().filter(|l| matches!(l.kind, LotKind::House | LotKind::Townhouse)).collect();
+        let mut feet: Vec<(i32, i32)> = homes.iter().map(|l| ((l.width_m * 2.0).round() as i32, (l.depth_m * 2.0).round() as i32)).collect();
+        feet.sort();
+        feet.dedup();
+        let mut forms: std::collections::BTreeMap<String, u32> = Default::default();
+        let mut corners = 0;
+        for l in &homes {
+            if let Some(m) = l.model_file.as_deref().and_then(|f| table.model(f)) {
+                *forms.entry(format!("{} {}", m.kind, m.form)).or_insert(0) += 1;
+                corners += (m.corner != 0) as u32;
+            }
+        }
+        let forms: Vec<String> = forms.iter().map(|(k, n)| format!("{k} {n}")).collect();
+        let named = lots.iter().filter(|l| l.model_file.is_some()).count();
         let mut worst = 0.0f32;
         for l in lots.iter().filter(|l| l.kind.padded()) {
             for (a, b) in [(0.0, 0.0), (0.45, 0.45), (-0.45, 0.45), (0.45, -0.45), (-0.45, -0.45)] {
@@ -418,7 +439,7 @@ fn legend(land: &Land, gen_s: f32, bare_s: f32, town_ns: f64, map_ns: f64) -> St
         }
         let _ = writeln!(
             o,
-            "settlement {i} {} at ({:.0}, {:.0}) r {:.0} m, plaza {:.0} m floor, {} roads, wall {}, gates {}: {} | pads off level by at most {:.4} m",
+            "settlement {i} {} at ({:.0}, {:.0}) r {:.0} m, plaza {:.0} m floor, {} roads, wall {}, gates {}: {} | pads off level by at most {:.4} m\n  {named} lots name a model; homes: {} footprints (0.5 m), {corners} corner buildings; {}",
             s.kind.id(),
             s.centre.0,
             s.centre.1,
@@ -428,7 +449,9 @@ fn legend(land: &Land, gen_s: f32, bare_s: f32, town_ns: f64, map_ns: f64) -> St
             s.wall.as_ref().map_or("none".to_string(), |w| format!("{} runs", w.runs.len())),
             s.wall.as_ref().map_or(0, |w| w.gates.len()),
             c.join(", "),
-            worst
+            worst,
+            feet.len(),
+            forms.join(", ")
         );
     }
     o

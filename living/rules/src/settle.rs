@@ -11,7 +11,10 @@
 //! - lanes branching off them that bend with the slope (along contours) and around the centre,
 //!   joining other streets or ending in a dead end;
 //! - building lots along every street and round the plaza, each facing its street, denser near
-//!   the centre and thinning out into gardens and fields beyond the edge;
+//!   the centre and thinning out into gardens and fields beyond the edge; each lot is sized to
+//!   a generated model it names (narrow townhouses beside wide ones, cottages, longhouses,
+//!   corner buildings at junctions), and the big buildings (an inn, a hall, a chapel) take the
+//!   plaza's edge;
 //! - for a walled town, a wall following a terrain-aware boundary, with gates where roads cross
 //!   it, towers along it and a lane inside it.
 //!
@@ -19,7 +22,8 @@
 //! skirt), and lays roads along a smoothed profile with a slight cross-fall.
 //!
 //! Mechanics only: every size, count and kind is a field of [`SettleParams`]. Building footprints
-//! come from `data/buildings.json`, written by `living/tools/blender/buildings.py`.
+//! come from `data/buildings.json`, written by `living/tools/blender/buildings.py`: every
+//! generated model with its exact footprint, which a lot is sized to.
 
 use crate::land::{hash, lerp, smoothstep, value, Land, RegionKind, SiteKind};
 use crate::map::Terrain;
@@ -38,6 +42,11 @@ pub type V2 = (f32, f32);
 pub enum LotKind {
     House,
     Townhouse,
+    Inn,
+    Hall,
+    Chapel,
+    Workshop,
+    Barn,
     Tower,
     Well,
     MarketStall,
@@ -53,6 +62,11 @@ impl LotKind {
         match self {
             Self::House => "house",
             Self::Townhouse => "townhouse",
+            Self::Inn => "inn",
+            Self::Hall => "hall",
+            Self::Chapel => "chapel",
+            Self::Workshop => "workshop",
+            Self::Barn => "barn",
             Self::Tower => "tower",
             Self::Well => "well",
             Self::MarketStall => "market_stall",
@@ -60,6 +74,26 @@ impl LotKind {
             Self::Garden => "garden",
             Self::Field => "field",
         }
+    }
+
+    pub const ALL: [LotKind; 13] = [
+        Self::House,
+        Self::Townhouse,
+        Self::Inn,
+        Self::Hall,
+        Self::Chapel,
+        Self::Workshop,
+        Self::Barn,
+        Self::Tower,
+        Self::Well,
+        Self::MarketStall,
+        Self::Lamp,
+        Self::Garden,
+        Self::Field,
+    ];
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.id() == id)
     }
 
     /// The `buildings.py` kind (asset folder `envs/<site env>/<kind>/`), if a model stands here.
@@ -73,7 +107,12 @@ impl LotKind {
     /// Whether the ground is levelled to the lot's floor. Small things on the street or in a
     /// level plaza stand on their own foundations.
     pub fn padded(self) -> bool {
-        matches!(self, Self::House | Self::Townhouse | Self::Tower | Self::Well)
+        matches!(self, Self::House | Self::Townhouse | Self::Inn | Self::Hall | Self::Chapel | Self::Workshop | Self::Barn | Self::Tower | Self::Well)
+    }
+
+    /// A building that stands on the plaza's edge as one of the settlement's big lots.
+    pub fn big(self) -> bool {
+        matches!(self, Self::Inn | Self::Hall | Self::Chapel)
     }
 }
 
@@ -95,7 +134,8 @@ pub struct Lot {
     pub settlement: u16,
     pub kind: LotKind,
     pub centre: V2,
-    /// Along the front, and from front to back (metres). A model of the kind fits inside.
+    /// Along the front, and from front to back (metres): the model's footprint plus the style's
+    /// margin on every side.
     pub width_m: f32,
     pub depth_m: f32,
     /// Unit vector from the centre toward what the lot faces.
@@ -108,6 +148,13 @@ pub struct Lot {
     pub floor_m: f32,
     pub frontage: Frontage,
     pub landmark: bool,
+    /// The model that stands here: a `buildings.py` file under the client's `envs/` (for
+    /// example `fantasy_city/house/gen-house-fantasy-cottage-03.glb`), chosen from
+    /// `data/buildings.json` among the models that fit. None for gardens and fields, or when the
+    /// table has no models of the kind.
+    pub model_file: Option<String>,
+    /// That model's height above the floor (0 without one).
+    pub height_m: f32,
 }
 
 impl Lot {
@@ -362,6 +409,14 @@ pub struct Style {
     pub landmark: Option<LotKind>,
     /// The landmark stands in the middle of the plaza, else on its edge.
     pub landmark_centre: bool,
+    /// Big buildings on the plaza's edge after the landmark (or along a main street near it when
+    /// the edge has no room), in order.
+    pub plaza_lots: Vec<LotKind>,
+    /// Chance that a lot outside the core is a workshop, and that an outskirts lot is a barn.
+    pub workshop: f32,
+    pub barn: f32,
+    /// Space between a model's footprint and its lot's edge, on every side.
+    pub margin_m: f32,
     pub well: bool,
     pub stalls: u32,
     /// Street lamps along main streets this far apart (0: none).
@@ -387,10 +442,35 @@ pub struct WallSpec {
     pub gate_m: f32,
 }
 
-/// Building footprints per `buildings.py` style and kind.
+/// Building footprints per `buildings.py` style and kind, and of every generated model.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Buildings {
     pub kinds: Vec<Footprint>,
+    #[serde(default)]
+    pub models: Vec<ModelFootprint>,
+}
+
+/// One generated model: its file under the client's `envs/`, form and exact footprint.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModelFootprint {
+    pub style: String,
+    pub kind: String,
+    /// Size class and shape within the kind (cottage, longhouse, narrow, wide, corner...).
+    pub form: String,
+    pub file: String,
+    /// Along the front, front to back (roof overhangs, steps and yards included), and above the
+    /// floor; the model is centred on its footprint with its origin at the floor.
+    pub width_m: f32,
+    pub depth_m: f32,
+    pub height_m: f32,
+    pub foundation_m: f32,
+    /// A corner building's second street front, in the model's frame (glTF +X = 1, -X = -1;
+    /// 0: not a corner building). Placed with [`Lot::yaw`], the model's +X points along
+    /// `(front.1, -front.0)` on the map.
+    #[serde(default)]
+    pub corner: i8,
+    #[serde(default)]
+    pub tris: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -408,12 +488,7 @@ pub struct Footprint {
 
 impl Default for Buildings {
     fn default() -> Self {
-        #[derive(Deserialize)]
-        struct File {
-            kinds: Vec<Footprint>,
-        }
-        let f: File = serde_json::from_str(include_str!("../data/buildings.json")).expect("data/buildings.json");
-        Self { kinds: f.kinds }
+        serde_json::from_str(include_str!("../data/buildings.json")).expect("data/buildings.json")
     }
 }
 
@@ -421,6 +496,11 @@ impl Buildings {
     pub fn get(&self, style: &str, kind: LotKind) -> Option<&Footprint> {
         let id = kind.model()?;
         self.kinds.iter().find(|f| f.style == style && f.kind == id)
+    }
+
+    /// The model a lot names.
+    pub fn model(&self, file: &str) -> Option<&ModelFootprint> {
+        self.models.iter().find(|m| m.file == file)
     }
 }
 
@@ -497,6 +577,10 @@ impl Default for Style {
             step_m: 0.1,
             landmark: Some(LotKind::Well),
             landmark_centre: true,
+            plaza_lots: Vec::new(),
+            workshop: 0.0,
+            barn: 0.0,
+            margin_m: 0.15,
             well: false,
             stalls: 0,
             lamp_m: 0.0,
@@ -534,13 +618,16 @@ fn default_styles() -> Vec<Style> {
         core_kind: LotKind::Townhouse,
         outer_kind: LotKind::House,
         core_share: 0.3,
-        core_gap_m: [0.3, 0.8],
+        core_gap_m: [0.25, 0.6],
         gap_m: [1.0, 3.5],
         setback_m: 1.0,
         garden: 0.7,
         garden_m: [6.0, 15.0],
-        landmark: Some(LotKind::Tower),
+        landmark: Some(LotKind::Chapel),
         landmark_centre: false,
+        plaza_lots: vec![LotKind::Inn, LotKind::Hall],
+        workshop: 0.12,
+        barn: 0.3,
         well: true,
         stalls: 10,
         lamp_m: 24.0,
@@ -548,7 +635,7 @@ fn default_styles() -> Vec<Style> {
         outskirts_m: 110.0,
         ..Style::default()
     };
-    let village = Style { site: SiteKind::Village, branch: 0.7, ..Style::default() };
+    let village = Style { site: SiteKind::Village, branch: 0.7, plaza_lots: vec![LotKind::Chapel, LotKind::Inn], workshop: 0.1, barn: 0.35, ..Style::default() };
     let giants = Style {
         site: SiteKind::Giants,
         buildings: "giant".into(),
@@ -581,6 +668,8 @@ fn default_styles() -> Vec<Style> {
         step_m: 0.3,
         landmark: Some(LotKind::Tower),
         landmark_centre: false,
+        plaza_lots: vec![LotKind::Hall],
+        margin_m: 0.4,
         well: true,
         lamp_m: 60.0,
         outskirts_m: 90.0,
@@ -623,6 +712,8 @@ fn default_styles() -> Vec<Style> {
         step_m: 0.04,
         landmark: Some(LotKind::Tower),
         landmark_centre: true,
+        plaza_lots: vec![LotKind::Hall],
+        margin_m: 0.05,
         outskirts_m: 22.0,
         outskirt_gap_m: [2.0, 5.0],
         fields: 0.5,
@@ -1372,6 +1463,8 @@ struct Plan<'a> {
     /// Per settlement: edge radius per direction, and the inner edge (inside its wall lane).
     bounds: Vec<(Vec<f32>, Vec<f32>)>,
     seed: u64,
+    /// Models per (style, kind), as indices into `p.buildings.models`.
+    catalog: Vec<(String, LotKind, Vec<u32>)>,
 }
 
 /// Plan every settlement and the island's roads, paint them into the tiles and shape the ground.
@@ -1446,7 +1539,15 @@ pub(crate) fn plan(land: &mut Land, p: &SettleParams) {
 impl<'a> Plan<'a> {
     fn new(land: &'a Land, p: &'a SettleParams) -> Self {
         let s = land.size as f32;
-        Self { land, p, roads: Vec::new(), lots: Vec::new(), settlements: Vec::new(), crossings: Vec::new(), road_b: Buckets::new(s, 32.0), lot_b: Buckets::new(s, 32.0), walls: Vec::new(), bounds: Vec::new(), seed: land.seed ^ 0x5E77 }
+        let mut catalog: Vec<(String, LotKind, Vec<u32>)> = Vec::new();
+        for (i, m) in p.buildings.models.iter().enumerate() {
+            let Some(kind) = LotKind::from_id(&m.kind) else { continue };
+            match catalog.iter_mut().find(|c| c.0 == m.style && c.1 == kind) {
+                Some(c) => c.2.push(i as u32),
+                None => catalog.push((m.style.clone(), kind, vec![i as u32])),
+            }
+        }
+        Self { land, p, roads: Vec::new(), lots: Vec::new(), settlements: Vec::new(), crossings: Vec::new(), road_b: Buckets::new(s, 32.0), lot_b: Buckets::new(s, 32.0), walls: Vec::new(), bounds: Vec::new(), seed: land.seed ^ 0x5E77, catalog }
     }
 
     fn style(&self, kind: SiteKind) -> Option<&'a Style> {
@@ -2416,6 +2517,79 @@ impl<'a> Plan<'a> {
         }
     }
 
+    fn models(&self, style: &str, kind: LotKind) -> &[u32] {
+        self.catalog.iter().find(|c| c.0 == style && c.1 == kind).map_or(&[], |c| &c.2)
+    }
+
+    /// A model of the kind, at random among those no wider than `max_w`: corner buildings with
+    /// that `corner` side only, or no corner buildings for 0. With `deep`, the deeper of two
+    /// picks (main streets get the deeper houses).
+    fn pick(&self, style: &str, kind: LotKind, rng: &mut Rng, corner: i8, deep: bool, max_w: f32) -> Option<u32> {
+        let ms = &self.p.buildings.models;
+        let cands: Vec<u32> = self.models(style, kind).iter().copied().filter(|&m| ms[m as usize].corner == corner && ms[m as usize].width_m <= max_w).collect();
+        if cands.is_empty() {
+            return None;
+        }
+        let mut one = || cands[((rng.f() * cands.len() as f32) as usize).min(cands.len() - 1)];
+        let a = one();
+        if deep {
+            let b = one();
+            if ms[b as usize].depth_m > ms[a as usize].depth_m {
+                return Some(b);
+            }
+        }
+        Some(a)
+    }
+
+    /// A lot's width and depth for a model (its footprint plus the margin all round), or the
+    /// kind's envelope when the table has no models of it.
+    fn dims(&self, style: &str, kind: LotKind, m: Option<u32>, margin: f32) -> (f32, f32) {
+        let (w, d) = match m {
+            Some(m) => (self.p.buildings.models[m as usize].width_m, self.p.buildings.models[m as usize].depth_m),
+            None => self.fp(style, kind),
+        };
+        (w + 2.0 * margin, d + 2.0 * margin)
+    }
+
+    /// A lot that names its model.
+    fn dressed(&self, mut lot: Lot, m: Option<u32>) -> Lot {
+        if let Some(m) = m {
+            let mf = &self.p.buildings.models[m as usize];
+            lot.model_file = Some(mf.file.clone());
+            lot.height_m = mf.height_m;
+        }
+        lot
+    }
+
+    /// A model and its lot size for a small thing (a lamp, a stall, a well, a tower).
+    fn thing(&self, style: &str, kind: LotKind, rng: &mut Rng, margin: f32) -> (Option<u32>, f32, f32) {
+        let m = self.pick(style, kind, rng, 0, false, f32::MAX);
+        let (w, d) = self.dims(style, kind, m, margin);
+        (m, w, d)
+    }
+
+    /// Which side of a lot (+1 along `perp(front)`, -1 against it) has another road running past
+    /// it within `reach`: a corner lot at a junction.
+    fn side_road(&self, c: V2, front: V2, w: f32, fr: Frontage, reach: f32) -> Option<f32> {
+        let u = perp(front);
+        let mut near = Vec::new();
+        for sigma in [1.0f32, -1.0] {
+            let q = add(c, mul(u, sigma * w * 0.5));
+            self.road_b.query((q.0 - reach - 8.0, q.1 - reach - 8.0), (q.0 + reach + 8.0, q.1 + reach + 8.0), &mut near);
+            for &rid in &near {
+                if fr == Frontage::Road(rid) {
+                    continue;
+                }
+                let rd = &self.roads[rid as usize];
+                let (d, _, _, np) = nearest_on(&rd.points, q);
+                if d - rd.width_m * 0.5 < reach && dot(norm(sub(np, c)), mul(u, sigma)) > 0.5 {
+                    return Some(sigma);
+                }
+            }
+        }
+        None
+    }
+
     /// Try a lot; returns its index when it fits.
     fn try_lot(&mut self, mut lot: Lot, gap: f32, cl: &Check) -> Option<u32> {
         let land = self.land;
@@ -2458,7 +2632,8 @@ impl<'a> Plan<'a> {
             }
             let inside_ok = cl.in_plaza == Some(s.plaza.centre);
             if !inside_ok {
-                let d = r.corners().iter().chain(std::iter::once(&r.c)).map(|q| poly_outside(&s.plaza.points, *q)).fold(f32::MAX, f32::min);
+                // Both ways: the plaza's outline can bulge into a long side between its corners.
+                let d = r.corners().iter().chain(std::iter::once(&r.c)).map(|q| poly_outside(&s.plaza.points, *q)).chain(s.plaza.points.iter().map(|q| r.outside(*q))).fold(f32::MAX, f32::min);
                 let crossing = s.plaza.points.iter().any(|q| r.outside(*q) == 0.0);
                 if d < cl.plaza_clear || crossing {
                     return None;
@@ -2523,69 +2698,51 @@ impl<'a> Plan<'a> {
         let mut rng = Rng(self.seed ^ 0x107 ^ (idx as u64) << 8);
         let base = Check { road_clear: 0.25 * k.max(0.4), plaza_clear: 0.4, min_gap: 99.0, water: 2.5 + st.skirt_m, cut: st.cut_m, fill: st.fill_m, level: true, on_wall: false, in_plaza: None };
         let in_plaza = Check { in_plaza: Some(centre), level: false, water: 2.0, ..base };
-        let make = |kind: LotKind, c: V2, front: V2, w: f32, d: f32, floor: f32, fr: Frontage| Lot { settlement: idx, kind, centre: c, width_m: w, depth_m: d, front: norm(front), yaw: 0.0, floor_m: floor, frontage: fr, landmark: false };
-        // Exits from the plaza, for placing its landmark away from them.
-        let exits: Vec<V2> = self.roads.iter().filter(|r| r.ends[1] == RoadEnd::Plaza(idx) || r.ends[0] == RoadEnd::Plaza(idx)).map(|r| if r.ends[1] == RoadEnd::Plaza(idx) { r.points[r.points.len() - 1] } else { r.points[0] }).collect();
-        // 1. The landmark.
+        let make = |kind: LotKind, c: V2, front: V2, w: f32, d: f32, floor: f32, fr: Frontage| Lot { settlement: idx, kind, centre: c, width_m: w, depth_m: d, front: norm(front), yaw: 0.0, floor_m: floor, frontage: fr, landmark: false, model_file: None, height_m: 0.0 };
+        // 1. The landmark, then the big buildings round the plaza.
         if let Some(lk) = st.landmark {
-            let (w, d) = self.fp(&style, lk);
             let placed = if st.landmark_centre {
-                let c = centre;
-                let lot = make(lk, c, (0.0, 1.0), w, d, floor, Frontage::Plaza(idx));
+                let (m, w, d) = self.thing(&style, lk, &mut rng, st.margin_m);
+                let lot = self.dressed(make(lk, centre, (0.0, 1.0), w, d, floor, Frontage::Plaza(idx)), m);
                 self.try_lot(lot, 0.5, &Check { level: true, cut: 99.0, fill: 99.0, ..in_plaza })
             } else {
                 // On the plaza's edge, facing in, as far from the roads in as it can be.
-                let m = plaza.len();
-                let mut cands: Vec<(f32, V2, V2)> = (0..2 * m)
-                    .map(|i| {
-                        let (a, b) = (plaza[i / 2], plaza[(i / 2 + 1) % m]);
-                        let mid = if i % 2 == 0 { mul(add(a, b), 0.5) } else { b };
-                        let score = exits.iter().map(|e| dist(*e, mid)).fold(f32::MAX, f32::min);
-                        (score, mid, norm(sub(centre, mid)))
-                    })
-                    .collect();
-                cands.sort_by(|a, b| b.0.total_cmp(&a.0));
-                let mut got = None;
-                for (_, mid, inward) in cands {
-                    let c = sub(mid, mul(inward, d * 0.5 + 1.5 * k.max(0.5)));
-                    let lot = make(lk, c, inward, w, d, floor + st.step_m, Frontage::Plaza(idx));
-                    if let Some(id) = self.try_lot(lot, 0.5, &Check { cut: st.cut_m * 1.5, fill: st.fill_m * 1.5, ..base }) {
-                        got = Some(id);
-                        break;
-                    }
-                }
-                got
+                self.big_lot(idx, st, &style, lk, false, bound, &mut rng)
             };
             if let Some(id) = placed {
                 self.lots[id as usize].landmark = true;
                 self.settlements[idx as usize].landmark = Some(id);
             }
         }
+        for &bk in &st.plaza_lots {
+            // The inn by a road into the square; the others away from the roads and each other.
+            let _ = self.big_lot(idx, st, &style, bk, bk == LotKind::Inn, bound, &mut rng);
+        }
         // 2. A well and market stalls in the plaza.
         let axis = norm(sub(plaza[0], centre));
         if st.well && st.landmark != Some(LotKind::Well) {
-            let (w, d) = self.fp(&style, LotKind::Well);
+            let (m, w, d) = self.thing(&style, LotKind::Well, &mut rng, st.margin_m);
             for off in [0.0f32, 0.2, -0.2, 0.35, -0.35] {
                 let c = add(centre, mul(axis, off * st.plaza_m[0]));
-                let lot = make(LotKind::Well, c, perp(axis), w, d, floor, Frontage::Plaza(idx));
+                let lot = self.dressed(make(LotKind::Well, c, perp(axis), w, d, floor, Frontage::Plaza(idx)), m);
                 if self.try_lot(lot, 0.5, &Check { level: true, cut: 99.0, fill: 99.0, ..in_plaza }).is_some() {
                     break;
                 }
             }
         }
         if st.stalls > 0 {
-            let (w, d) = self.fp(&style, LotKind::MarketStall);
             let aisle = 4.0 * k;
             let mut placed = 0;
             let half = st.plaza_m[0] * 0.5;
             let mut a = -half;
             while a < half && placed < st.stalls {
+                let (m, w, d) = self.thing(&style, LotKind::MarketStall, &mut rng, st.margin_m * 0.5);
                 for side in [1.0f32, -1.0] {
                     let n = mul(perp(axis), side);
                     let c = add(add(centre, mul(axis, a)), mul(n, aisle * 0.5 + d * 0.5));
                     let corners = Rect { c, f: mul(n, -1.0), hw: w * 0.5, hd: d * 0.5 }.corners();
                     if corners.iter().all(|q| poly_outside(&plaza, *q) == 0.0 && poly_contains(&plaza, *q)) && dist(c, centre) > 4.0 * k {
-                        let lot = make(LotKind::MarketStall, c, mul(n, -1.0), w, d, floor, Frontage::Plaza(idx));
+                        let lot = self.dressed(make(LotKind::MarketStall, c, mul(n, -1.0), w, d, floor, Frontage::Plaza(idx)), m);
                         if self.try_lot(lot, 0.6, &in_plaza).is_some() {
                             placed += 1;
                         }
@@ -2601,7 +2758,6 @@ impl<'a> Plan<'a> {
         // 4. Lamps along the main streets.
         let my_roads: Vec<u32> = self.settlement_roads(idx, centre, bound, st);
         if st.lamp_m > 0.0 {
-            let (w, d) = self.fp(&style, LotKind::Lamp);
             for &rid in &my_roads {
                 let rd = &self.roads[rid as usize];
                 if !matches!(rd.class, RoadClass::Street | RoadClass::Trunk) {
@@ -2615,10 +2771,11 @@ impl<'a> Plan<'a> {
                 while s < total {
                     let (p, t) = at_s(&pts, &cl, s);
                     if dist(p, centre) < radial_at(bound, centre, p) {
+                        let (m, w, d) = self.thing(&style, LotKind::Lamp, &mut rng, 0.05);
                         let n = mul(perp(t), side);
                         let c = add(p, mul(n, hw + d * 0.5 + 0.1));
                         let h = land.height(p.0, p.1);
-                        let lot = Lot { settlement: idx, kind: LotKind::Lamp, centre: c, width_m: w, depth_m: d, front: mul(n, -1.0), yaw: 0.0, floor_m: h, frontage: Frontage::Road(rid), landmark: false };
+                        let lot = self.dressed(Lot { settlement: idx, kind: LotKind::Lamp, centre: c, width_m: w, depth_m: d, front: mul(n, -1.0), yaw: 0.0, floor_m: h, frontage: Frontage::Road(rid), landmark: false, model_file: None, height_m: 0.0 }, m);
                         let _ = self.try_lot(lot, 0.3, &Check { level: false, road_clear: 0.05, water: 1.0, ..base });
                     }
                     side = -side;
@@ -2665,6 +2822,92 @@ impl<'a> Plan<'a> {
         }
     }
 
+    /// A big building (an inn, a hall, a chapel, a landmark) on the plaza's edge facing in: near
+    /// a road into the plaza (`near_exits`, for an inn) or far from them, and away from the other
+    /// big buildings; failing that, along a main street as near the plaza as it fits.
+    #[allow(clippy::too_many_arguments)]
+    fn big_lot(&mut self, idx: u16, st: &Style, style: &str, kind: LotKind, near_exits: bool, bound: &[f32], rng: &mut Rng) -> Option<u32> {
+        let land = self.land;
+        let set = &self.settlements[idx as usize];
+        let (centre, plaza, floor) = (set.centre, set.plaza.points.clone(), set.plaza.floor_m);
+        let k = land.sites[set.site as usize].scale;
+        // Every model of the kind, in a random order (the envelope when there are none).
+        let mut models: Vec<Option<u32>> = self.models(style, kind).iter().map(|&m| Some(m)).collect();
+        if models.is_empty() {
+            models.push(None);
+        }
+        for i in (1..models.len()).rev() {
+            let j = ((rng.f() * (i + 1) as f32) as usize).min(i);
+            models.swap(i, j);
+        }
+        let exits: Vec<V2> = self.roads.iter().filter(|r| r.ends[1] == RoadEnd::Plaza(idx) || r.ends[0] == RoadEnd::Plaza(idx)).map(|r| if r.ends[1] == RoadEnd::Plaza(idx) { r.points[r.points.len() - 1] } else { r.points[0] }).collect();
+        let others: Vec<V2> = self.lots.iter().rev().take_while(|l| l.settlement == idx).filter(|l| l.kind.big() || l.landmark).map(|l| l.centre).collect();
+        let base = Check { road_clear: 0.25 * k.max(0.4), plaza_clear: 0.4, min_gap: 99.0, water: 2.5 + st.skirt_m, cut: st.cut_m * 1.5, fill: st.fill_m * 1.5, level: true, on_wall: false, in_plaza: None };
+        let m = plaza.len();
+        let spread = 60.0 * k.max(0.3);
+        let mut cands: Vec<(f32, V2, V2)> = (0..2 * m)
+            .map(|i| {
+                let (a, b) = (plaza[i / 2], plaza[(i / 2 + 1) % m]);
+                let mid = if i % 2 == 0 { mul(add(a, b), 0.5) } else { b };
+                let de = exits.iter().map(|e| dist(*e, mid)).fold(f32::MAX, f32::min).min(spread * 2.0);
+                let dother = others.iter().map(|o| dist(*o, mid)).fold(spread, f32::min);
+                let score = if near_exits { -(de - 14.0 * k.max(0.3)).abs() } else { de } + 0.7 * dother;
+                (score, mid, norm(sub(centre, mid)))
+            })
+            .collect();
+        cands.sort_by(|a, b| b.0.total_cmp(&a.0));
+        for (_, mid, inward) in cands.iter().take(24) {
+            for &mo in &models {
+                let (w, d) = self.dims(style, kind, mo, st.margin_m);
+                for off in [1.5f32, 2.5, 3.5] {
+                    let c = sub(*mid, mul(*inward, d * 0.5 + off * k.max(0.5)));
+                    let lot = self.dressed(Lot { settlement: idx, kind, centre: c, width_m: w, depth_m: d, front: *inward, yaw: 0.0, floor_m: floor + st.step_m, frontage: Frontage::Plaza(idx), landmark: false, model_file: None, height_m: 0.0 }, mo);
+                    if let Some(id) = self.try_lot(lot, 0.5, &base) {
+                        return Some(id);
+                    }
+                }
+            }
+        }
+        // Along a main street, nearest the plaza first.
+        let mut spots: Vec<(f32, u32, f32)> = Vec::new();
+        for rid in self.settlement_roads(idx, centre, bound, st) {
+            let rd = &self.roads[rid as usize];
+            if !matches!(rd.class, RoadClass::Street | RoadClass::Trunk) {
+                continue;
+            }
+            let cl = cumlen(&rd.points);
+            let mut s = 0.0;
+            while s < *cl.last().unwrap() {
+                let p = at_s(&rd.points, &cl, s).0;
+                let dc = dist(p, centre);
+                if dc < radial_at(bound, centre, p) * 0.75 {
+                    spots.push((dc, rid, s));
+                }
+                s += 3.0 * k.max(0.3);
+            }
+        }
+        spots.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let check = Check { cut: st.cut_m * 1.2, fill: st.fill_m * 1.2, ..base };
+        for &(_, rid, s) in spots.iter().take(80) {
+            let (pts, hw) = (self.roads[rid as usize].points.clone(), self.roads[rid as usize].width_m * 0.5);
+            let cl = cumlen(&pts);
+            for side in [1.0f32, -1.0] {
+                for &mo in &models {
+                    let (w, d) = self.dims(style, kind, mo, st.margin_m);
+                    let (pm, t) = at_s(&pts, &cl, s + w * 0.5);
+                    let n = mul(perp(t), side);
+                    let c = add(pm, mul(n, hw + st.setback_m + d * 0.5));
+                    let fp = add(pm, mul(n, hw));
+                    let lot = self.dressed(Lot { settlement: idx, kind, centre: c, width_m: w, depth_m: d, front: mul(n, -1.0), yaw: 0.0, floor_m: land.height(fp.0, fp.1) + st.step_m, frontage: Frontage::Road(rid), landmark: false, model_file: None, height_m: 0.0 }, mo);
+                    if let Some(id) = self.try_lot(lot, 0.5, &check) {
+                        return Some(id);
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Roads that run through a settlement's built-up area or outskirts.
     fn settlement_roads(&self, idx: u16, centre: V2, bound: &[f32], st: &Style) -> Vec<u32> {
         let reach = bound.iter().cloned().fold(0.0, f32::max) + st.outskirts_m + 20.0;
@@ -2690,6 +2933,28 @@ impl<'a> Plan<'a> {
         let fail_step = (1.5 * k).max(0.4);
         let edge = |p: V2| radial_at(if walled { inner } else { bound }, centre, p);
         let outer_edge = |p: V2| radial_at(bound, centre, p) + if walled { st.wall.as_ref().unwrap().thickness_m + 3.0 } else { 0.0 };
+        let main = matches!(fr, Frontage::Plaza(_)) || matches!(fr, Frontage::Road(r) if self.roads[r as usize].class == RoadClass::Street);
+        // How far beside a lot another road makes it a corner lot.
+        let reach = st.setback_m + 3.0 * k.max(0.4);
+        // A lot `w` wide and `d` deep from `start` along the line, and its direction away from it.
+        let place = |start: f32, w: f32, d: f32, kind: LotKind| {
+            let (pm, t) = at_s(line, &cl, start + w * 0.5);
+            let n = mul(perp(t), side);
+            let setback = if kind == LotKind::Field { st.setback_m + 1.0 * k } else { st.setback_m };
+            let c = add(pm, mul(n, hw + setback + d * 0.5));
+            let front_pt = add(pm, mul(n, hw));
+            let floor = match fixed_floor {
+                Some(f) => f + st.step_m,
+                None => land.height(front_pt.0, front_pt.1) + st.step_m,
+            };
+            (Lot { settlement: idx, kind, centre: c, width_m: w, depth_m: d, front: mul(n, -1.0), yaw: 0.0, floor_m: floor, frontage: fr, landmark: false, model_file: None, height_m: 0.0 }, n)
+        };
+        // Lots inside a wall stay inside it; outskirts stay outside.
+        let inside = |q: V2, d: f32| dist(q, centre) <= edge(q) + if walled { 0.0 } else { d * 0.3 };
+        let in_zone = |lot: &Lot| match zone {
+            Zone::Plaza | Zone::Inside => lot.rect().corners().iter().all(|q| inside(*q, lot.depth_m)),
+            _ => lot.rect().corners().iter().all(|q| dist(*q, centre) > outer_edge(*q)),
+        };
         while s < total {
             let (p, _) = at_s(line, &cl, s);
             let r = dist(p, centre);
@@ -2701,10 +2966,11 @@ impl<'a> Plan<'a> {
                         s += fail_step * 2.0;
                         continue;
                     }
-                    let main = matches!(fr, Frontage::Plaza(_)) || matches!(fr, Frontage::Road(r) if self.roads[r as usize].class == RoadClass::Street);
                     let zz = if main { z * 0.75 } else { z };
                     if zz < st.core || rng.f() < st.core_share {
                         (st.core_kind, rng.range(st.core_gap_m))
+                    } else if zone == Zone::Inside && rng.f() < st.workshop {
+                        (LotKind::Workshop, rng.range(st.gap_m))
                     } else {
                         (st.outer_kind, rng.range(st.gap_m))
                     }
@@ -2720,7 +2986,8 @@ impl<'a> Plan<'a> {
                         s += rng.range(st.outskirt_gap_m);
                         continue;
                     }
-                    (st.outer_kind, rng.range(st.outskirt_gap_m) * (0.6 + out))
+                    let kind = if rng.f() < st.barn { LotKind::Barn } else { st.outer_kind };
+                    (kind, rng.range(st.outskirt_gap_m) * (0.6 + out))
                 }
                 Zone::Fields => {
                     let oe = outer_edge(p);
@@ -2732,38 +2999,66 @@ impl<'a> Plan<'a> {
                     (LotKind::Field, rng.range([1.0, 3.0]) * k.max(0.3))
                 }
             };
-            let (w, d) = if kind == LotKind::Field { (rng.range(st.field_w_m), rng.range(st.field_d_m)) } else { self.fp(style, kind) };
-            let (pm, t) = at_s(line, &cl, s + w * 0.5);
-            let n = mul(perp(t), side);
-            let setback = if kind == LotKind::Field { st.setback_m + 1.0 * k } else { st.setback_m };
-            let c = add(pm, mul(n, hw + setback + d * 0.5));
-            let front_pt = add(pm, mul(n, hw));
-            let floor = match fixed_floor {
-                Some(f) => f + st.step_m,
-                None => land.height(front_pt.0, front_pt.1) + st.step_m,
-            };
-            let lot = Lot { settlement: idx, kind, centre: c, width_m: w, depth_m: d, front: mul(n, -1.0), yaw: 0.0, floor_m: floor, frontage: fr, landmark: false };
-            let chk = if kind == LotKind::Field { Check { level: false, water: 1.5, ..base } } else { base };
-            // Lots inside a wall stay inside it; outskirts stay outside.
-            let inside = |q: V2| dist(q, centre) <= edge(q) + if walled { 0.0 } else { d * 0.3 };
-            let ok_zone = match zone {
-                Zone::Plaza | Zone::Inside => lot.rect().corners().iter().all(|q| inside(*q)),
-                _ => lot.rect().corners().iter().all(|q| dist(*q, centre) > outer_edge(*q)),
-            };
-            if !ok_zone {
-                s += fail_step;
-                continue;
+            // The lot that fits: (id, where it ends along the line, its direction from the line).
+            let mut placed: Option<(u32, f32, V2)> = None;
+            if kind == LotKind::Field {
+                let (w, d) = (rng.range(st.field_w_m), rng.range(st.field_d_m));
+                let (lot, n) = place(s, w, d, kind);
+                if in_zone(&lot) {
+                    placed = self.try_lot(lot, gap, &Check { level: false, water: 1.5, ..base }).map(|id| (id, s + w, n));
+                }
+            } else {
+                // A model for the lot (the deeper of two on main streets); a corner building where
+                // another road passes its side; narrower models when it does not fit.
+                let mut max_w = f32::MAX;
+                'models: for attempt in 0..3 {
+                    let m = self.pick(style, kind, rng, 0, main && zone != Zone::Outskirts && attempt == 0, max_w);
+                    if m.is_none() && attempt > 0 {
+                        break;
+                    }
+                    let (w, d) = self.dims(style, kind, m, st.margin_m);
+                    let mut options: Vec<(Option<u32>, f32, f32, f32, Option<f32>)> = Vec::new();
+                    let (probe, _) = place(s, w, d, kind);
+                    if let Some(sigma) = self.side_road(probe.centre, probe.front, w, fr, reach) {
+                        // The model's +X is -perp(front): a front on the sigma side is corner -sigma.
+                        if let Some(cm) = self.pick(style, kind, rng, -sigma as i8, false, f32::MAX) {
+                            let (cw, cd) = self.dims(style, kind, Some(cm), st.margin_m);
+                            // Keep the edge beside the other road where it was.
+                            let start = if sigma * side > 0.0 { s + w - cw } else { s };
+                            options.push((Some(cm), start, cw, cd, Some(sigma)));
+                        }
+                    }
+                    options.push((m, s, w, d, None));
+                    for (mo, start, w, d, corner) in options {
+                        let (lot, n) = place(start, w, d, kind);
+                        // A corner building must still have the other road on its corner side.
+                        if !in_zone(&lot) || corner.is_some_and(|sg| self.side_road(lot.centre, lot.front, w, fr, reach) != Some(sg)) {
+                            continue;
+                        }
+                        let lot = self.dressed(lot, mo);
+                        if let Some(id) = self.try_lot(lot, gap, &base) {
+                            placed = Some((id, start + w, n));
+                            break 'models;
+                        }
+                    }
+                    if m.is_none() {
+                        break;
+                    }
+                    max_w = w - 2.0 * st.margin_m - 0.5 * k.max(0.3);
+                }
             }
-            match self.try_lot(lot, gap, &chk) {
-                Some(id) => {
-                    s += w + gap;
+            match placed {
+                Some((id, end, n)) => {
+                    s = end + gap;
+                    let (c, w, d) = (self.lots[id as usize].centre, self.lots[id as usize].width_m, self.lots[id as usize].depth_m);
                     let chance = if kind == st.core_kind && zone != Zone::Outskirts { st.garden * 0.8 } else { st.garden };
                     if matches!(kind, LotKind::House | LotKind::Townhouse) && rng.f() < chance {
-                        let gd = rng.range(st.garden_m);
+                        // Burgage plots: deeper behind the main streets.
+                        let gd = rng.range(st.garden_m) * if main { 1.35 } else { 1.0 };
                         let gc = add(c, mul(n, d * 0.5 + 0.4 * k.max(0.5) + gd * 0.5));
-                        let g = Lot { settlement: idx, kind: LotKind::Garden, centre: gc, width_m: w, depth_m: gd, front: mul(n, -1.0), yaw: 0.0, floor_m: 0.0, frontage: Frontage::Lot(id), landmark: false };
+                        let g = Lot { settlement: idx, kind: LotKind::Garden, centre: gc, width_m: w, depth_m: gd, front: mul(n, -1.0), yaw: 0.0, floor_m: 0.0, frontage: Frontage::Lot(id), landmark: false, model_file: None, height_m: 0.0 };
                         let okz = match zone {
-                            Zone::Inside | Zone::Plaza => g.rect().corners().iter().all(|q| inside(*q)),
+                            Zone::Inside | Zone::Plaza => g.rect().corners().iter().all(|q| inside(*q, gd)),
                             _ => true,
                         };
                         if okz {
@@ -2844,15 +3139,16 @@ impl<'a> Plan<'a> {
         let runs: Vec<Vec<V2>> = runs.into_iter().map(|r| rdp(&r, 0.3)).filter(|r| r.len() >= 2).collect();
         // Towers: one beside each gate, then along the runs.
         let style = self.settlements[idx as usize].style.clone();
-        let (w, d) = self.fp(&style, LotKind::Tower);
+        let mut rng = Rng(self.seed ^ 0x70E5 ^ (idx as u64) << 8);
         let tower = Check { road_clear: 0.6, plaza_clear: 2.0, min_gap: 99.0, water: 2.0, cut: st.cut_m * 2.0, fill: st.fill_m * 2.0, level: true, on_wall: true, in_plaza: None };
         let mut towers: Vec<V2> = Vec::new();
         for (g, i, _) in &gates {
             let along = norm(sub(ring[(i + 1) % m], ring[*i]));
+            let (tm, w, d) = self.thing(&style, LotKind::Tower, &mut rng, st.margin_m);
             for side in [1.0f32, -1.0] {
                 let c = add(add(g.at, mul(along, side * (g.width_m * 0.5 + w * 0.5 + 0.8))), mul(g.out, d * 0.5 - ws.thickness_m * 0.5 - 0.3));
                 let floor = land.height(c.0, c.1);
-                let lot = Lot { settlement: idx, kind: LotKind::Tower, centre: c, width_m: w, depth_m: d, front: mul(g.out, -1.0), yaw: 0.0, floor_m: floor, frontage: Frontage::Wall(idx), landmark: false };
+                let lot = self.dressed(Lot { settlement: idx, kind: LotKind::Tower, centre: c, width_m: w, depth_m: d, front: mul(g.out, -1.0), yaw: 0.0, floor_m: floor, frontage: Frontage::Wall(idx), landmark: false, model_file: None, height_m: 0.0 }, tm);
                 if self.try_lot(lot, 1.0, &tower).is_some() {
                     towers.push(c);
                     break;
@@ -2872,9 +3168,10 @@ impl<'a> Plan<'a> {
                 continue;
             }
             let out = norm(sub(p, centre));
+            let (tm, w, d) = self.thing(&style, LotKind::Tower, &mut rng, st.margin_m);
             let c = add(p, mul(out, d * 0.5 - ws.thickness_m * 0.5 - 0.3));
             let floor = land.height(c.0, c.1);
-            let lot = Lot { settlement: idx, kind: LotKind::Tower, centre: c, width_m: w, depth_m: d, front: mul(out, -1.0), yaw: 0.0, floor_m: floor, frontage: Frontage::Wall(idx), landmark: false };
+            let lot = self.dressed(Lot { settlement: idx, kind: LotKind::Tower, centre: c, width_m: w, depth_m: d, front: mul(out, -1.0), yaw: 0.0, floor_m: floor, frontage: Frontage::Wall(idx), landmark: false, model_file: None, height_m: 0.0 }, tm);
             if self.try_lot(lot, 1.0, &tower).is_some() {
                 towers.push(c);
             }
@@ -3446,10 +3743,124 @@ mod tests {
     }
 
     #[test]
+    fn lots_match_their_models() {
+        for l in worlds() {
+            lots_match_their_models_on(l);
+        }
+    }
+
+    /// Every lot with a model kind names a model of its settlement's style and kind (when the
+    /// table has some), and is that model's footprint plus the style's margin all round.
+    fn lots_match_their_models_on(l: &Land) {
+        let p = SettleParams::default();
+        for (i, lot) in l.lots.iter().enumerate() {
+            let set = &l.settlements[lot.settlement as usize];
+            let st = p.styles.iter().find(|s| s.site == set.kind).unwrap();
+            let Some(kind) = lot.kind.model() else {
+                assert!(lot.model_file.is_none(), "lot {i} {:?} names a model", lot.kind);
+                continue;
+            };
+            let any = p.buildings.models.iter().any(|m| m.style == set.style && m.kind == kind);
+            let Some(file) = lot.model_file.as_deref() else {
+                assert!(!any, "lot {i} {:?} names no model", lot.kind);
+                continue;
+            };
+            let m = p.buildings.model(file).unwrap_or_else(|| panic!("lot {i} names {file}, not in the table"));
+            assert_eq!((m.style.as_str(), m.kind.as_str()), (set.style.as_str(), kind), "lot {i}");
+            assert_eq!(lot.height_m, m.height_m);
+            // Lamps and stalls take a smaller margin than buildings.
+            let margin = st.margin_m * 2.0 + 1e-3;
+            for (lot_m, model_m, what) in [(lot.width_m, m.width_m, "width"), (lot.depth_m, m.depth_m, "depth")] {
+                assert!(lot_m >= model_m - 1e-3 && lot_m <= model_m + margin, "lot {i} {:?} {what} {lot_m} for a model {model_m} wide ({file})", lot.kind);
+            }
+        }
+    }
+
+    #[test]
+    fn a_town_has_an_inn_a_hall_and_a_chapel() {
+        for l in worlds() {
+            a_town_has_an_inn_a_hall_and_a_chapel_on(l);
+        }
+    }
+
+    fn a_town_has_an_inn_a_hall_and_a_chapel_on(l: &Land) {
+        let town = l.settlements.iter().find(|s| s.kind == SiteKind::Town).unwrap();
+        let lots = &l.lots[town.lots.0 as usize..town.lots.1 as usize];
+        for kind in [LotKind::Inn, LotKind::Hall, LotKind::Chapel] {
+            assert_eq!(lots.iter().filter(|x| x.kind == kind).count(), 1, "{} m: the town has no single {kind:?}", l.size);
+        }
+        let landmark = &l.lots[town.landmark.expect("the town has a landmark") as usize];
+        assert_eq!(landmark.kind, LotKind::Chapel, "the town's landmark");
+        // Big buildings stand on the square (or a main street) and are bigger than any house.
+        let biggest_home = lots.iter().filter(|x| matches!(x.kind, LotKind::House | LotKind::Townhouse)).map(|x| x.width_m * x.depth_m).fold(0.0, f32::max);
+        for x in lots.iter().filter(|x| x.kind.big()) {
+            assert!(x.width_m * x.depth_m > biggest_home, "{:?} is {} m² against a {biggest_home} m² house", x.kind, x.width_m * x.depth_m);
+            assert!(matches!(x.frontage, Frontage::Plaza(_)) || matches!(x.frontage, Frontage::Road(r) if l.roads[r as usize].class != RoadClass::Lane));
+        }
+    }
+
+    #[test]
+    fn towns_vary() {
+        for l in worlds() {
+            towns_vary_on(l);
+        }
+    }
+
+    /// The town's homes come in many footprints and forms, with corner buildings at junctions.
+    fn towns_vary_on(l: &Land) {
+        let p = SettleParams::default();
+        let town = l.settlements.iter().find(|s| s.kind == SiteKind::Town).unwrap();
+        let homes: Vec<&Lot> = l.lots[town.lots.0 as usize..town.lots.1 as usize].iter().filter(|x| matches!(x.kind, LotKind::House | LotKind::Townhouse)).collect();
+        let mut feet: Vec<(i32, i32)> = homes.iter().map(|x| ((x.width_m * 2.0).round() as i32, (x.depth_m * 2.0).round() as i32)).collect();
+        feet.sort();
+        feet.dedup();
+        assert!(feet.len() >= 20, "{} m: only {} distinct footprints among {} homes", l.size, feet.len(), homes.len());
+        let mut forms: Vec<(&str, &str)> = homes.iter().map(|x| p.buildings.model(x.model_file.as_deref().unwrap()).unwrap()).map(|m| (m.kind.as_str(), m.form.as_str())).collect();
+        forms.sort();
+        forms.dedup();
+        assert!(forms.len() >= 6, "{} m: only the forms {forms:?}", l.size);
+        let widths: Vec<f32> = homes.iter().map(|x| x.width_m).collect();
+        let (lo, hi) = (widths.iter().cloned().fold(f32::MAX, f32::min), widths.iter().cloned().fold(0.0, f32::max));
+        assert!(hi > lo * 1.8, "{} m: frontages only run {lo}-{hi} m", l.size);
+    }
+
+    #[test]
+    fn corner_buildings_turn_to_both_streets() {
+        for l in worlds() {
+            corner_buildings_turn_to_both_streets_on(l);
+        }
+    }
+
+    /// A corner building's second street front faces a road other than its own.
+    fn corner_buildings_turn_to_both_streets_on(l: &Land) {
+        let p = SettleParams::default();
+        let mut n = 0;
+        for (i, lot) in l.lots.iter().enumerate() {
+            let Some(m) = lot.model_file.as_deref().and_then(|f| p.buildings.model(f)) else { continue };
+            if m.corner == 0 {
+                continue;
+            }
+            n += 1;
+            let st = p.styles.iter().find(|s| s.site == l.settlements[lot.settlement as usize].kind).unwrap();
+            let k = l.settlements[lot.settlement as usize].scale;
+            // The model's +X is (front.1, -front.0) on the map.
+            let side = mul((lot.front.1, -lot.front.0), m.corner as f32);
+            let q = add(lot.centre, mul(side, lot.width_m * 0.5));
+            let near = l.roads.iter().enumerate().any(|(ri, rd)| lot.frontage != Frontage::Road(ri as u32) && nearest_on(&rd.points, q).0 - rd.width_m * 0.5 < st.setback_m + 3.0 * k.max(0.4) + 0.5);
+            assert!(near, "corner lot {i} at {:?} has no road on its corner side", lot.centre);
+        }
+        assert!(n >= 4, "{} m: only {n} corner buildings", l.size);
+    }
+
+    #[test]
     fn params_and_footprints_are_data() {
         let p = SettleParams::default();
-        for kind in [LotKind::House, LotKind::Townhouse, LotKind::Tower, LotKind::Well, LotKind::MarketStall, LotKind::Lamp] {
+        for kind in [LotKind::House, LotKind::Townhouse, LotKind::Inn, LotKind::Hall, LotKind::Chapel, LotKind::Workshop, LotKind::Barn, LotKind::Tower, LotKind::Well, LotKind::MarketStall, LotKind::Lamp] {
             assert!(p.buildings.get("fantasy", kind).is_some(), "no fantasy {kind:?} footprint");
+            assert!(p.buildings.models.iter().any(|m| m.style == "fantasy" && m.kind == kind.id()), "no fantasy {kind:?} models");
+        }
+        for k in LotKind::ALL {
+            assert_eq!(LotKind::from_id(k.id()), Some(k));
         }
         let json = serde_json::to_string(&p).unwrap();
         let back: SettleParams = serde_json::from_str(&json).unwrap();
@@ -3473,6 +3884,10 @@ mod tests {
                 every_lot_fronts_a_street_on(&l);
                 roads_connect_every_settlement_on(&l);
                 pads_are_level_on(&l);
+                lots_match_their_models_on(&l);
+                a_town_has_an_inn_a_hall_and_a_chapel_on(&l);
+                towns_vary_on(&l);
+                corner_buildings_turn_to_both_streets_on(&l);
             }
         }
     }

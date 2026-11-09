@@ -181,7 +181,7 @@ Second pass (2026-11-09, user feedback):
 - **Camera:** see the camera notes in [game brief](GAME_BRIEF.md).
 
 Settlements in the client (2026-11-09):
-- **Lots:** `island.rs` places a building on every planner lot at its levelled floor, facing its street, in the model's own size. Look-dev's fit stands models with foundations on their origin.
+- **Lots:** `island.rs` places a building on every planner lot at its levelled floor, facing its street, in the model's own size. It spawns the exact model the lot names (`Lot::model_file`) when that file is on disk, else a random model of the kind. Look-dev's fit stands models with foundations on their origin.
 - **Walls:** wall pieces run along town walls.
 - **Roads:** roads and paved squares draw crisply in the ground, and no wild scatter lands on them.
 - **People:** each settlement gets recipe characters of its folk (adults, giants, small folk) at house fronts and in the square, capped at about a dozen for now. Each VRoid character is about 95 meshes; a cheaper far form is part of the performance work.
@@ -209,13 +209,13 @@ The cities were the environment JSON's grid and ring slots round each site, whic
 
 **A settlement**, in order:
 1. A plaza: an irregular oval stretched along the arriving roads, on clean ground near the centre. The town's is a paved market square (62 × 38 m) with a well and two rows of stalls; villages have a green with a well.
-2. A landmark: the town's and giants' tower on the plaza edge away from the roads in; the small folk's tower in the middle of their green.
+2. A landmark and the big buildings: the town's chapel (the giants' tower) on the plaza edge away from the roads in; the small folk's tower in the middle of their green. Then, on the plaza edge away from the roads and from each other, the town's inn (near a road in) and guildhall, a village's chapel and inn, the giants' longhall and the small folk's mushroom hall. Where the edge has no room, they go on a main street as near the plaza as they fit.
 3. The edge, per direction: out to the site radius, stopping short of water, rock or steep relief.
 4. For the town, a wall of straight curtains between corners round a lobed version of that edge, with gates where roads cross it, a tower beside each gate and at most corners, and a lane just inside it. The wall breaks where it would stand in water.
 5. Main streets: the arriving roads, bent gently between the edge and the plaza, plus radial streets out through the widest gaps (at least 4 for the town and giants, 2 for villages, 3 for small folk).
 6. Lanes branching off every street (and the wall lane, inward) that steer along contours on slopes and round the centre on flat ground, wander a little, and join the next street or end as dead ends. They keep a distance from parallel streets.
-7. Lots along both sides of every street and round the plaza, facing the street: townhouses in the core and along main streets, houses outside it, gardens behind them (burgage plots), and street lamps along main streets.
-8. Outskirts: houses along the roads out, thinning with distance, then fields (strips along the roads, some ploughed to dirt).
+7. Lots along both sides of every street and round the plaza, facing the street: townhouses in the core and along main streets, houses outside it with some workshops, gardens behind them (burgage plots, deeper on main streets), and street lamps along main streets. Each lot first picks a model from `data/buildings.json` (the deeper of two on main streets) and takes its footprint plus the style's margin (`margin_m`) all round, so frontages vary with the models: narrow townhouses beside wide ones, cottages beside longhouses. Where another road passes a lot's side (a junction, or a road leaving the plaza), the lot takes a corner model whose second front faces that road. When a model does not fit, narrower ones are tried.
+8. Outskirts: houses and barns along the roads out, thinning with distance, then fields (strips along the roads, some ploughed to dirt).
 
 Styles per site kind: villages are small and loose; the giants' settlement is built to their scale (12 m streets, 29 × 27 m house lots, 60 m lamp spacing, lanes along contours); the small folk's is tiny and organic (0.9–1.2 m paths that wander, 3 × 3.5 m burrow and mushroom-house lots round a green).
 
@@ -228,13 +228,13 @@ Styles per site kind: villages are small and loose; the giants' settlement is bu
 
 **Data for the client** (all public on `Land`):
 - `settlements`: kind, `buildings.py` style, centre, scale, radius, `plaza` (outline, floor, paved), `wall` (ring, corners, `runs`, `gates`, height, thickness; `Wall::pieces(len, centre)` spreads wall-segment models along the runs), the lot range and the landmark.
-- `lots`: settlement, `kind` (`LotKind::model()` names the `buildings.py` kind and asset folder; gardens and fields have no model), `centre`, `width_m` × `depth_m`, `front` (unit vector toward the street), `yaw` (`Quat::from_rotation_y(yaw)` turns a model's +Z front to `front`, with game x = land x and game z = land y), `floor_m` (where the model's origin goes) and `frontage`.
+- `lots`: settlement, `kind` (`LotKind::model()` names the `buildings.py` kind and asset folder; gardens and fields have no model), `centre`, `width_m` × `depth_m` (the model's footprint plus the margin), `front` (unit vector toward the street), `yaw` (`Quat::from_rotation_y(yaw)` turns a model's +Z front to `front`, with game x = land x and game z = land y), `floor_m` (where the model's origin goes), `frontage`, `model_file` (the model's path under `envs/`) and `height_m` (its height above the floor).
 - `roads`: class (trunk, street, lane, path), points with surface heights, width, cross-fall per segment, and what each end joins.
 - `crossings`: road, ford or bridge, position, direction and span.
 
 Tiles: roads and paved plazas become `Road`, the wall `Wall` (gates stay open, and the connectivity pass links any pocket a wall closes through water or rock, never through a wall), forest under lots becomes grass, and some fields become dirt.
 
-**Tests** (`cargo test -p living-rules settle::`, on seed 7 at 2048 m and seed 5 at 1024 m): every settlement is laid out with a landmark and the town has gates; lots overlap neither each other nor roads; lots stand on walkable, dry land; every lot faces its road, its plaza, its house (gardens) or stands on its wall (towers); the road graph joins every settlement; pads and plazas are level to 2 mm; trunk roads follow their profile to 2 cm; height is continuous through the town; the parameters round-trip as data. `settle::tests::settle_sweep` (ignored, release) repeats the layout checks for seeds 5, 7, 9, 11 and 23 at 1, 2 and 3 km.
+**Tests** (`cargo test -p living-rules settle::`, on seed 7 at 2048 m and seed 5 at 1024 m): every settlement is laid out with a landmark and the town has gates; every lot names a model of its style and kind and is that model's footprint plus the margin; the town has one inn, hall and chapel (its landmark), each bigger than any house, on the plaza or a main street; the town's homes have at least 20 distinct footprints, 6 forms and frontages from narrowest to at least 1.8× that; every corner building has a road on its corner side, and a town has at least 4; lots overlap neither each other nor roads; lots stand on walkable, dry land; every lot faces its road, its plaza, its house (gardens) or stands on its wall (towers); the road graph joins every settlement; pads and plazas are level to 2 mm; trunk roads follow their profile to 2 cm; height is continuous through the town; the parameters round-trip as data. `settle::tests::settle_sweep` (ignored, release) repeats the layout checks for seeds 5, 7, 9, 11 and 23 at 1, 2 and 3 km.
 
 **Preview:** `cargo run --release -p living-rules --example town_preview --manifest-path living/Cargo.toml -- SEED SIZE_M OUT_DIR` draws the road network and a close-up of each settlement (lots coloured by kind with a white bar on each front, gardens, fields, wall, gates, contours) and writes a legend with counts, timings, grades and a pad check.
 
@@ -250,6 +250,16 @@ Tiles: roads and paved plazas become `Road`, the wall `Wall` (gates stay open, a
 | steepest 10 m of trunk road | 53% | 44% | 50% |
 
 Settlement planning adds 0.09–0.12 s at 2048 m and 0.26 s at 3072 m. Each 2048 m world has about 350–410 lots.
+
+**Model-sized lots (2026-11-09; one run each, same seeds and machine):** planning takes 0.12–0.15 s at 2048 m. `height()` is unchanged (153, 179 and 161 ns inside settlements).
+
+| | seed 7 | seed 11 | seed 23 |
+|---|---|---|---|
+| town lots (townhouses, houses, workshops, barns, gardens, towers) | 202 (70, 46, 3, 0, 39, 9) | 226 (85, 51, 6, 5, 36, 12) | 188 (50, 44, 1, 6, 33, 8) |
+| town's distinct home footprints (0.5 m), corner buildings | 31, 9 | 40, 7 | 33, 6 |
+| giants' houses, small folk's houses | 16, 58 | 16, 56 | 12, 74 |
+
+Every town has one chapel (its landmark), inn and guildhall.
 
 ## What the authority would need
 
@@ -288,9 +298,9 @@ Existing patterns that would not hold at this size, measured from source and not
   - Mountain roads: the 4 m routing grid makes short switchbacks, and smoothing them steepens the climb, so trunk roads up to the giants reach 44–53% over 10 m and cave paths up to 63%. Streets and lanes stay under 18%. Fixing it needs routing that penalises turns, or a coarser grid with real switchbacks.
   - On flat ground the main streets are the routed roads, nearly straight; their gentle bend helps but towns on flat land still read as a spider web round the plaza.
   - Lanes sometimes branch twice from about the same point and form small teardrop loops, and on steep giants' ground they wriggle.
-  - The giants' settlement holds only 9 houses on its shelf in these seeds; a site on steep ground fits few 29 m lots.
-  - Block interiors in the town stay as gardens and open green; there are no back lanes, courtyards or yards.
-  - There are no halls, churches, inns or workshops yet, only the `buildings.py` kinds, so the town's landmark is a watchtower.
+  - The giants' settlement holds about 16 houses on its shelf in seed 7 (2048 m), and none of their 36–45 m longhouses fits.
+  - Block interiors in the town stay as gardens and open green; there are no back lanes or courtyards. Only workshops have yards, built into their models.
+  - Cottages and narrow townhouses outnumber the other forms (about 20 of 46 houses and 47 of 70 townhouses in seed 7), because a lot that does not fit tries narrower models.
   - A village in a cramped spot can end with only a few houses and no well.
   - The client still dresses settlements from the environment JSON slots; the lots are not drawn yet.
 

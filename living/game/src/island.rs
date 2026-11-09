@@ -103,12 +103,15 @@ impl Island {
                 continue;
             }
             let slot = envs.get(env).and_then(|d| d.slots.iter().find(|s| s.kind == kind));
+            // The exact model the planner sized the lot for, when it is on disk.
+            let exact = lot.model_file.as_ref().map(|f| format!("envs/{f}")).filter(|f| files.contains(f));
+            let height = if exact.is_some() { lot.height_m } else { slot.map_or(6.0, |s| s.height[1]) };
             put(Item {
                 kind: kind.to_string(),
-                file: pick(&files, li, 11),
+                file: exact.unwrap_or_else(|| pick(&files, li, 11)),
                 at: Vec2::new(lot.centre.0, lot.centre.1),
                 yaw: lot.yaw,
-                height: slot.map_or(6.0, |s| s.height[1]),
+                height,
                 glow: slot.and_then(|s| s.glow),
                 k: li,
                 floor: Some(lot.floor_m),
