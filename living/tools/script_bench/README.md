@@ -4,8 +4,8 @@ Research spike: the cost of running skill and law scripts inside the SpacetimeDB
 module, across Rhai, Rune, wasmi (laws in Rust compiled to WASM), piccolo (pure-Rust Lua),
 Koto, mlua (native only) and native Rust. Findings: [docs/SCRIPT_ENGINES.md](../../../docs/SCRIPT_ENGINES.md).
 
-Standalone crate tree with its own `[workspace]`: not a member of `living/Cargo.toml`, and it
-changes no authority, rules or mind code (it depends on `living-rules` by path).
+Standalone crate tree with its own `[workspace]`: not a member of `living/Cargo.toml` (it
+depends on `living-rules` by path, so its `rhai` engine is the authority's call path).
 
 | Path | What |
 |---|---|
@@ -18,7 +18,13 @@ changes no authority, rules or mind code (it depends on `living-rules` by path).
 | `stdb/` | Calibration module for a real SpacetimeDB 2.14.1 (admin-only reducers) |
 | `stdb_energy.py` | Reads energy per reducer call over the v1 JSON websocket |
 | `run.sh`, `report.py` | Build and run everything; print the tables |
+| `gate.sh`, `budgets.json` | The fuel budget gate for the hot laws (`just living-script-gate`) |
 | `results/2026-11-09/` | The run behind the doc (JSONL, sizes, imports, calibration logs) |
+| `results/2026-11-09-rhai-1/` | Base against `rhai-1`: bench JSONL, the authority's tick runs and nightfall, limits |
+
+Laws: `rates`, `strike` and `cooldown` run on every engine; `perceived` (`perceived_of`) and
+`rates-law` (the `rates` law asked every time, where the authority shares one answer per state)
+were added on `rhai-1` and run when named: `sb-host MODULE rhai --laws rates,rates-law,strike,cooldown,perceived`.
 
 ```sh
 CARGO_TARGET_DIR=~/scratch/sb-target OUT=~/scratch/sb-out PIN="taskset -c 6" ./run.sh
