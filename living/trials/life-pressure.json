@@ -1,0 +1,39 @@
+{
+ "extends": "life",
+ "title": "A newcomer's life: a lean land and a second pack",
+ "about": "As `life`, with berry bushes at 30% of the island's density and the wolves moved off the arrival road: no pack on the town road, and two bold packs (five and four) ranging 120-250 m around the first village, Elmwick (a seed `packs` entry can only be placed near the arrival point or the first settlement of a kind). In l2/l3 (378b2c1) the preset kept the shipped road pack and added a second pack by the arrival point: both finished replicates died to wolves on the arrival road (48 s and day 3), so it measured that one road.",
+ "gradient": "Arrive safely in a lean land -> find food where berries are scarce (the bow, fishing, trapping, the town's gardens and stores) -> meet wolves when ranging toward the villages -> safety (fire, shelter, the walled town) -> a place that holds.",
+ "world": {
+  "seed": "island",
+  "rules": {
+   "minds": false
+  },
+  "overrides": {
+   "resource_scale": {
+    "berry_bush": 0.3
+   },
+   "packs": [
+    {
+     "kind": "wolf",
+     "count": 5,
+     "near": "village",
+     "from_m": 120,
+     "to_m": 250,
+     "bold": true,
+     "instinct": "wolf_bold",
+     "name": "the hill pack"
+    },
+    {
+     "kind": "wolf",
+     "count": 4,
+     "near": "village",
+     "from_m": 120,
+     "to_m": 250,
+     "bold": true,
+     "instinct": "wolf_bold",
+     "name": "the marsh pack"
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,17 @@
+{
+ "extends": "life",
+ "title": "Human, then AI takeover",
+ "about": "The subject joins as a player (its own non-admin identity, the ordinary `join`), and the runner plays it for 20 minutes through the player reducers: it greets the road, walks to Brackenford, gathers and eats berries, walks up to residents and tells them its name and plan ('I mean to make my camp by the gate and gather berries to trade'), waves, gathers wood, builds a campfire and says 'This fire is my camp now'. Then it stops calling: presence ends, the character stands for takeover_s (30 s), and the minds take it over (presence, takeover and player memory, 9ea831f). The mind service runs from the start with LIVING_ONLY on the character.",
+ "gradient": "Continuity: after the takeover, does the mind build on what the person did (the camp, the people met, the stated plan) without inventing a past?",
+ "subject": {
+  "join": {
+   "name": "Arlen"
+  },
+  "background": null,
+  "spawn": null
+ },
+ "human": {
+  "minutes": 20,
+  "town": "Brackenford"
+ }
+}

@@ -1,0 +1,241 @@
+{
+ "title": "Wolves at dusk",
+ "about": "The subject is alone outside town in the late afternoon with the newcomer kit (a bow, 30 arrows, 4 berries; fire, fire_bolt, mending). The world starts at 16:00; a world hour is 30 real seconds. At minute 2, nightfall (20:00), a bold pack of four is set down 30 tiles from the subject, on the side away from the settlement. It closes to 9 tiles of where the subject stood, holds there in view for 15 s, then attacks the nearest person it sees (or wanders when it sees none). A wolf hurt fights back; a badly hurt one flees. Until then the pack waits 250 m out from the town (town guards killed a pack held by the gate in batch b1).",
+ "world": {
+  "seed": "island",
+  "rules": {
+   "minds": true
+  },
+  "start_hour": 16.0
+ },
+ "minutes": 15,
+ "subject": {
+  "pick": {
+   "kind": "person",
+   "stage": 2,
+   "bg": {
+    "town": "Elmwick"
+   },
+   "fewest_know_how": true
+  },
+  "clear_items": true,
+  "background": {
+   "origin": "traveller",
+   "sheet": {
+    "narrative": "I came over the water two days ago with a bow and little else. I am walking to the town to find work and a roof. I have hunted rabbits, never anything that hunts back.",
+    "values": [
+     "staying alive",
+     "paying my own way"
+    ],
+    "goals": [
+     "reach the town",
+     "find work and a place to sleep"
+    ],
+    "mood": "tired but hopeful",
+    "relations": [],
+    "memories": [],
+    "stances": [],
+    "places": []
+   }
+  }
+ },
+ "cast": {
+  "pack": {
+   "pick": {
+    "kind": "wolf",
+    "stage": 2,
+    "count": 4,
+    "nearest": {
+     "arrival": true
+    }
+   }
+  }
+ },
+ "timeline": [
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "subject",
+   "graph": {
+    "wait": 120
+   }
+  },
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "pack",
+   "graph": {
+    "wait": 120
+   }
+  },
+  {
+   "at": "prepare",
+   "do": "place",
+   "who": "pack",
+   "to": {
+    "arrival": true,
+    "away": {
+     "town": "Brackenford"
+    },
+    "distance": 250
+   }
+  },
+  {
+   "at": "start",
+   "do": "place",
+   "who": "subject",
+   "to": {
+    "arrival": true,
+    "offset": [
+     -60,
+     0
+    ]
+   }
+  },
+  {
+   "at": "start",
+   "do": "graph",
+   "who": "subject",
+   "graph": "instinct:person"
+  },
+  {
+   "at": "start",
+   "do": "items",
+   "who": "subject",
+   "items": {
+    "bow": 1,
+    "arrow": 30,
+    "berries": 4
+   }
+  },
+  {
+   "at": "start",
+   "do": "know",
+   "who": "subject",
+   "techniques": [
+    "fire",
+    "fire_bolt",
+    "mending"
+   ]
+  },
+  {
+   "at": 2,
+   "steps": [
+    {
+     "do": "place",
+     "who": "pack",
+     "to": {
+      "who": "subject",
+      "away": {
+       "town": "Brackenford"
+      },
+      "distance": 30
+     }
+    },
+    {
+     "do": "graph",
+     "who": "pack",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "cond": {
+          "all": [
+           {
+            "hurt_within": 8
+           },
+           {
+            "health": {
+             "below": 20
+            }
+           }
+          ]
+         },
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "attacker"
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "hurt_within": 6
+         },
+         "then": {
+          "do": {
+           "skill": "attack",
+           "target": "attacker"
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "has": {
+           "item": "meat"
+          }
+         },
+         "then": {
+          "do": {
+           "skill": "eat",
+           "item": "meat"
+          }
+         }
+        }
+       },
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "goto",
+           "target": {
+            "at": "$subject_xy@pack:9"
+           }
+          }
+         },
+         {
+          "wait": 15
+         },
+         {
+          "if": {
+           "cond": {
+            "sees": {
+             "nearest": "person"
+            }
+           },
+           "then": {
+            "do": {
+             "skill": "attack",
+             "target": {
+              "nearest": "person"
+             }
+            }
+           },
+           "else": {
+            "do": {
+             "skill": "wander"
+            }
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "probes": [
+  "survived",
+  "hp_min",
+  "fled_m",
+  "min_dist",
+  "skills",
+  "lines_said"
+ ]
+}
