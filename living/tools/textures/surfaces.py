@@ -7,10 +7,12 @@ its vertex colour, so the game picks a layer per vertex while every model keeps 
 material. Untagged parts (alpha 1) get no detail.
 """
 
-SURFACES = ["bark", "leaves", "wood", "planks", "plaster", "stone", "boulder", "brick", "shingles", "tiles", "thatch", "metal", "copper", "concrete", "cloth", "glass"]
+SURFACES = ["bark", "leaves", "wood", "planks", "plaster", "stone", "boulder", "brick", "shingles", "tiles", "thatch", "metal", "copper", "concrete", "cloth", "glass",
+            "plastic", "earth"]
 
-# Alpha codes: surface k is (k + 0.5) / 32; the shader takes floor(alpha * 32) and treats 16
-# and up (alpha 1) as untagged. Byte colours keep about 1/255, well inside each step.
+# Alpha codes: surface k is (k + 0.5) / 32; the shader takes floor(alpha * 32) and treats codes
+# from len(SURFACES) up (alpha 1) as untagged. Byte colours keep about 1/255, well inside each
+# step. New surfaces go at the end, so the codes of the others never change.
 STEPS = 32
 
 

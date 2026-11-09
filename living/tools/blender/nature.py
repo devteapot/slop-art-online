@@ -149,8 +149,15 @@ FLAT, SMOOTH = 0, -1
 
 # The painted surface (living/tools/textures/surfaces.py) of each material's parts, which the
 # game multiplies into their vertex colours; it travels in the colours' alpha, so materials stay
-# shared. "Tree" holds bark and leaves alike: parts with a crown centre are foliage.
-SURFACE_OF = {"Bark": "bark", "Stone": "boulder", "Leaves": "leaves", "Tree": "bark"}
+# shared. "Tree" holds bark and leaves alike: parts with a crown centre are foliage. Glowing
+# parts are tagged too (the game takes their light from the material, so the surface shows in
+# what they reflect by day): spirit trees' vines and glowing leaves are leaves, their bark lines
+# bark, lantern fruit and mushroom flesh soft plaster, crystal tips glass; parts that differ
+# (mushroom caps, bulbs, crystal shards on the shared "Glow") pass their own. Grass blades,
+# flowers' petals and blossom stay plain.
+SURFACE_OF = {"Bark": "bark", "Stone": "boulder", "Leaves": "leaves", "Tree": "bark", "Stem": "leaves",
+              "Glow": "leaves", "GlowLeaf": "leaves", "GlowLine": "bark", "GlowFruit": "plaster",
+              "GlowGills": "plaster", "GlowSpot": "plaster", "GlowTip": "glass"}
 
 
 class Builder:
@@ -1549,12 +1556,12 @@ def mushroom(b, st, rng, base, h, cap_mat, gill_mat, stem_mat, spot_mat, spots=(
     lean = Vector((rng.uniform(-0.15, 0.15), rng.uniform(-0.15, 0.15), 0)) * h
     top = base + UP * h + lean
     b.add(tube(curve(base, top, lean * -0.3, 2), [h * 0.09, h * 0.065, h * 0.06], 5, cap=False), stem_mat,
-          lambda co, n: jitter(lerp((0.35, 0.42, 0.45), (0.75, 0.85, 0.85), (co.z - base.z) / h), rng, 0.04), smooth=True)
+          lambda co, n: jitter(lerp((0.35, 0.42, 0.45), (0.75, 0.85, 0.85), (co.z - base.z) / h), rng, 0.04), smooth=True, surface="plaster")
     r = h * rng.uniform(0.38, 0.5)
     glow_c = st["glow"]
     height = rng.uniform(0.45, 0.65)
     b.add(dome(top - UP * r * 0.05, r, rng, height=height), cap_mat,
-          lambda co, n: lerp(scale(glow_c, 0.55), lerp(glow_c, (1, 1, 1), 0.25), max(0, n.z)), top - UP * r * 0.6, flat=0.15)
+          lambda co, n: lerp(scale(glow_c, 0.55), lerp(glow_c, (1, 1, 1), 0.25), max(0, n.z)), top - UP * r * 0.6, flat=0.15, surface="plaster")
     b.add(disc(top - UP * r * 0.05, r * 0.97, 10, rise=r * 0.25), gill_mat, solid(scale(glow_c, 0.5), rng, 0.0))
     # Hot spots: small, much brighter than the cap, so bloom haloes them and the cap keeps its hue.
     base = top - UP * r * 0.05
@@ -1601,7 +1608,7 @@ def glow_plant(rng, st):
         h = rng.uniform(0.45, 1.0)
         top = Vector((math.cos(a) * h * 0.2, math.sin(a) * h * 0.2, h))
         b.add(tube(curve(Vector((0, 0, 0)), top, Vector((math.cos(a), math.sin(a), 0)) * -0.08, 3), [0.02, 0.016, 0.012, 0.01], 4, cap=False), stem, solid(hi, rng))
-        b.add(blob(top + UP * 0.03, rng.uniform(0.06, 0.09), rng, subdiv=1, roughness=0.05, squash=1.3), bulb, solid(lerp(st["bloom"], (1, 1, 1), 0.1), rng, 0.0))
+        b.add(blob(top + UP * 0.03, rng.uniform(0.06, 0.09), rng, subdiv=1, roughness=0.05, squash=1.3), bulb, solid(lerp(st["bloom"], (1, 1, 1), 0.1), rng, 0.0), surface="plaster")
     return b
 
 
@@ -1625,7 +1632,7 @@ def crystal(rng, st):
         off = Vector((rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), -0.1))
         for part, mat in ((bm, shard), (tip, hot)):
             bmesh.ops.transform(part, matrix=Matrix.Translation(off) @ tilt, verts=part.verts)
-            b.add(part, mat, lambda co, n: lerp(scale(hue, 0.25), lerp(hue, (1, 1, 1), 0.3), max(0, n.z) * 0.6 + 0.4 * min(1, co.z / 2)))
+            b.add(part, mat, lambda co, n: lerp(scale(hue, 0.25), lerp(hue, (1, 1, 1), 0.3), max(0, n.z) * 0.6 + 0.4 * min(1, co.z / 2)), surface="glass")
     lump(b, stone, dict(rock=(0.06, 0.06, 0.08), moss=(0.08, 0.08, 0.12)), rng, Vector((0, 0, -0.15)), 0.55)
     return b
 
