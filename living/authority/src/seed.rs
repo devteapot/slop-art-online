@@ -23,20 +23,28 @@ thread_local! {
 /// that call them. It is theirs: the mind keeps, changes or drops any of it.
 pub fn give_repertoire(ctx: &ReducerContext, id: u32, occupation: &str, now: u64) {
     let r: serde_json::Value = serde_json::from_str(REPERTOIRE).expect("repertoire json");
-    // A seed may start its people on another set of work habits (e.g. `makers`).
-    let habits = serde_json::from_str::<Seed>(VALLEY).map(|s| s.habits).unwrap_or_default();
-    let occ = (!habits.is_empty())
-        .then(|| r[habits.as_str()].get(occupation))
-        .flatten()
+    // A seed may start its people on another set of work habits (e.g. `makers`), or on ways
+    // of its own (`ways`), which come first.
+    let seed = WAYS.with(|w| w.clone());
+    let habits = seed.habits.as_str();
+    let occ = seed
+        .ways
+        .occupations
+        .get(occupation)
+        .or_else(|| (!habits.is_empty()).then(|| r[habits].get(occupation)).flatten())
         .or_else(|| r["occupations"].get(occupation))
         .or_else(|| r["occupations"].get("forager"))
         .cloned()
         .unwrap_or_default();
     let work = occ["routine"].as_str().unwrap_or("forage").to_string();
-    let mut routines: Vec<crate::mind::RoutineIn> = r["common"].as_object().map(|m| m.iter().map(|(k, g)| crate::mind::RoutineIn { name: k.clone(), graph: g.to_string() }).collect()).unwrap_or_default();
+    let mut common = r["common"].as_object().cloned().unwrap_or_default();
+    for (k, g) in &seed.ways.common {
+        common.insert(k.clone(), g.clone());
+    }
+    let mut routines: Vec<crate::mind::RoutineIn> = common.iter().map(|(k, g)| crate::mind::RoutineIn { name: k.clone(), graph: g.to_string() }).collect();
     routines.push(crate::mind::RoutineIn { name: work.clone(), graph: occ["graph"].to_string() });
     let _ = crate::mind::set_routines(ctx, id, &routines, &format!("habit ({occupation})"), now);
-    let top = r["top"].to_string().replace("\"WORK\"", &serde_json::to_string(&work).unwrap_or_default());
+    let top = seed.ways.top.as_ref().unwrap_or(&r["top"]).to_string().replace("\"WORK\"", &serde_json::to_string(&work).unwrap_or_default());
     if let Ok(g) = living_rules::graph::parse(&top) {
         let _ = crate::mind::set_graph(ctx, id, &g.to_json(), &format!("my way of life ({occupation})"), "habit", now);
     }
@@ -377,10 +385,6 @@ pub struct Seed {
     pub structures: Vec<SeedStructure>,
     #[serde(default)]
     pub communities: Vec<SeedCommunity>,
-    /// Which work habits people start with: `occupations` (default) or another set in
-    /// `repertoire.json` (e.g. `makers`), falling back to `occupations` per occupation.
-    #[serde(default)]
-    pub habits: String,
     /// What every newcomer (a player's new character) arrives with: items and know-how. A
     /// starter kit of the world, not anything of a character before.
     #[serde(default)]
@@ -388,6 +392,37 @@ pub struct Seed {
     /// Animal groups placed on purpose (e.g. a hostile pack near the arrival point).
     #[serde(default)]
     pub packs: Vec<SeedPack>,
+    /// Where settled residents work and which places they know (land worlds).
+    #[serde(default)]
+    pub town_life: crate::town::SeedTownLife,
+}
+
+#[derive(Deserialize, Default)]
+pub struct SeedWays {
+    #[serde(default)]
+    pub common: serde_json::Map<String, serde_json::Value>,
+    #[serde(default)]
+    pub occupations: serde_json::Map<String, serde_json::Value>,
+    #[serde(default)]
+    pub top: Option<serde_json::Value>,
+}
+
+/// The parts of the seed that starting ways read (parsed once per module instance).
+#[derive(Deserialize, Default)]
+struct WaysOf {
+    /// Which work habits people start with: `occupations` (default) or another set in
+    /// `repertoire.json` (e.g. `makers`), falling back to `occupations` per occupation.
+    #[serde(default)]
+    habits: String,
+    /// This world's own starting ways for its settled people (docs/TOWN_LIFE.md): `common`
+    /// routines that replace or add to the repertoire's by name, `occupations` (routine and
+    /// graph per occupation) and the desires `top`. Starting graphs only; people own them.
+    #[serde(default)]
+    ways: SeedWays,
+}
+
+thread_local! {
+    static WAYS: std::rc::Rc<WaysOf> = std::rc::Rc::new(serde_json::from_str::<WaysOf>(VALLEY).unwrap_or_default());
 }
 
 #[derive(Deserialize, Default)]
@@ -660,7 +695,7 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     }
     settle_authored(ctx, &s, &authored);
     if let Some(h) = &hosted {
-        crate::island::settle(ctx, h, &seeded);
+        crate::island::settle(ctx, h, &seeded, &s.town_life);
     }
     // Townsfolk know where the other towns stand (they grew up hearing of them); what is
     // there and how the way goes, they learn by going. It is part of their background, which
@@ -884,6 +919,8 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         seen: Vec::new(),
         alerts: 0,
         fast_until: 0,
+        hailed_ms: 0,
+        hailer: 0,
     });
     if kind == "person" && parents.0 == 0 {
         common::chronicle(ctx, now, "arrival", id, 0, at, format!("{name} arrived"));
@@ -1624,7 +1661,7 @@ mod tests {
         let s: Seed = serde_json::from_str(include_str!("../../seeds/aske-coast.json")).expect("aske-coast seed");
         let people: usize = s.towns.iter().chain(s.villages.iter()).map(|t| t.residents.len()).sum();
         assert_eq!((s.towns.len(), s.villages.len(), people), (2, 1, 72));
-        assert_eq!(s.habits, "makers");
+        assert_eq!(serde_json::from_str::<WaysOf>(include_str!("../../seeds/aske-coast.json")).unwrap().habits, "makers");
         assert!(s.towns.iter().chain(s.villages.iter()).flat_map(|t| &t.residents).all(|r| r.sheet["narrative"].as_str().is_some_and(|n| !n.is_empty())));
     }
 

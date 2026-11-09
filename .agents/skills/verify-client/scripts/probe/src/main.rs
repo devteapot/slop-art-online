@@ -38,7 +38,7 @@ macro_rules! primary_tables {
             belief, judgment, place, thought, chronicle, stats, bond_offer, expecting,
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
             routine, routine_stat, script, community, membership, join_request, genome,
-            practice, land, settlement, lot, fighter, skill_card);
+            practice, land, settlement, lot, fighter, skill_card, act_card, doing, weather);
     };
 }
 
@@ -148,6 +148,9 @@ fn snapshot(c: &DbConnection) -> Value {
         lot,
         fighter,
         skill_card,
+        act_card,
+        doing,
+        weather,
         my_combat,
         my_readiness,
         my_skill_uses

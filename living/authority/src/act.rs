@@ -186,6 +186,7 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         yielded_ago: None,
         sensed: Vec::new(),
         bold: false,
+        room: 0,
     }
 }
 
@@ -267,6 +268,18 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
     let mut target = target_facts(ctx, &a.target, from, now);
     // Force: whether either side has yielded, and what a predator weighs before daring a person.
     let sc = common::scripts(ctx);
+    // Where the target is from where the actor faces, and whether it comes at the actor.
+    if let (Some(b), Some(tp)) = (ctx.db.body().id().find(id), target_pos(ctx, &a.target, now)) {
+        target.bearing = living_rules::social::bearing(from, crate::town::motion_of(&b, now).0, tp);
+        if a.target.class == 3 && a.target.id as u32 != id {
+            if let Some(tb) = ctx.db.body().id().find(a.target.id as u32) {
+                target.closing = living_rules::social::closing(from, tp, crate::town::motion_of(&tb, now).1);
+            }
+        }
+    }
+    if sc.shows().aside(&a.skill) {
+        actor.room = crate::town::room(ctx, from);
+    }
     if has(&sc, &a.skill, |s| s.force) {
         actor.yielded_ago = yielded_ago(ctx, id, now);
     }
@@ -305,6 +318,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         skill: a.skill.clone(),
         routine,
         yield_shield: common::YIELD_SHIELD,
+        raining: crate::town::raining(ctx),
     }
 }
 
@@ -423,7 +437,26 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     let here = pos(&me, now);
     let mut target = target;
     let mut item = item.to_string();
+    let aside = sc.shows().aside(skill);
+    // Making way: the rules weigh whom it is for; the walk goes to a point beside their path.
+    let mut aside_from: Option<Resolved> = None;
     match skill {
+        _ if aside => {
+            if target.class != 3 || target.id as u32 == id {
+                return Err("no one to make way for".into());
+            }
+            let tb = ctx.db.body().id().find(target.id as u32).ok_or("they are gone")?;
+            let v = crate::town::motion_of(&tb, now).1;
+            if living_rules::social::closing(here, target.at, v) <= 0.0 {
+                return Err("no one is coming your way".into());
+            }
+            let kind = ctx.db.character().id().find(id).map(|c| c.kind).unwrap_or_default();
+            let len = sc.num_of(&format!("{skill}_dist"), &kind, 1.2) as f32;
+            let map = common::map(ctx);
+            let spot = living_rules::social::aside_point(here, target.at, v, len).into_iter().find(|p| map.free(p.0, p.1) && map.line_clear(here, *p)).ok_or("no room to step aside")?;
+            aside_from = Some(target.clone());
+            target = Resolved::point(spot);
+        }
         _ if aim == Aim::Dash && target.class == 4 => {
             // Aimed (a player's dodge): dash that way, as far as there is room.
             let kind = ctx.db.character().id().find(id).map(|c| c.kind).unwrap_or_default();
@@ -532,8 +565,14 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         }
         _ => {}
     }
+    // A turn and nothing else: already facing its target, there is nothing to do.
+    if sc.shows().get(skill).is_some_and(|s| s.turn) && target.class != 0 && !(target.class == 3 && target.id as u32 == id) {
+        if living_rules::social::bearing(here, crate::town::motion_of(&me, now).0, target.at) < common::laws(ctx).face_slack {
+            return Err("you already face it".into());
+        }
+    }
     let r = reach(skill);
-    let moving_skill = matches!(skill, "goto" | "wander" | "flee" | "follow") || aim == Aim::Dash;
+    let moving_skill = matches!(skill, "goto" | "wander" | "flee" | "follow") || aim == Aim::Dash || aside;
     // A skillshot at a point and a guard turn toward their point; they never walk to it.
     let in_place = target.class == 4 && matches!(aim, Aim::Point | Aim::Facing);
     let mut needs_approach = !in_place && target.class != 0 && target.class != 5 && (moving_skill || dist(here, target.at) > r);
@@ -588,8 +627,12 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     }
     // An action that would start right here must pass its rules first, too; so must force
     // against someone farther off (no closing in on someone the rules won't let you strike).
-    if !needs_approach || shape.is_some_and(|s| s.closes_in) {
-        if let Err(why) = sc.check(&act.skill, &skill_ctx(ctx, id, &act, now)) {
+    if !needs_approach || shape.is_some_and(|s| s.closes_in) || aside_from.is_some() {
+        let probe = match &aside_from {
+            Some(t) => Activity { target: t.to_ref(), ..act.clone() },
+            None => act.clone(),
+        };
+        if let Err(why) = sc.check(&act.skill, &skill_ctx(ctx, id, &probe, now)) {
             if melee {
                 balked(ctx, id, &target, &why, now);
             }
@@ -618,6 +661,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             "follow" if creature => Goal::creature(target.id as u32, r, sp, 0),
             "goto" if creature => Goal::creature(target.id as u32, r, sp, motion::FLAG_EARLY),
             "goto" | "wander" | "follow" => Goal::point(target.at, sp, motion::FLAG_EARLY),
+            _ if aside => Goal::point(target.at, sp * 0.8, 0),
             // Closing in on a creature: every look checks whether it is within reach.
             _ if creature => Goal::creature(target.id as u32, (r - 0.25).max(0.4), sp, motion::FLAG_EACH),
             _ => {
@@ -641,6 +685,17 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         if let Some(first) = motion::start(ctx, id, goal, now)? {
             if aim == Aim::Dash {
                 dashed(ctx, &act, now);
+            }
+            if aside {
+                if let Some(t) = &aside_from {
+                    act.target = t.to_ref();
+                    let at = Some(target.at);
+                    if sc.shows().record(skill) {
+                        crate::combat::accepted(ctx, &act, now);
+                    }
+                    crate::town::shown(ctx, &sc, &act, at, now);
+                    act.target = target.to_ref();
+                }
             }
             ctx.db.activity().insert(act);
             if let Some(ev) = first {
@@ -689,6 +744,19 @@ fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), Stri
         engage(ctx, act.victim, now);
         common::wake(ctx, act.victim);
     }
+    // What others see: the body turns to its target, the use is kept, the doing is shown.
+    if let Some(s) = sc.shows().get(&act.skill) {
+        let at = target_pos(ctx, &act.target, now);
+        if s.faces && !(act.target.class == 3 && act.target.id as u32 == id) {
+            if let Some(p) = at {
+                motion::face(ctx, id, p, now);
+            }
+        }
+        if s.record {
+            crate::combat::accepted(ctx, &act, now);
+        }
+        crate::town::shown(ctx, &sc, &act, at, now);
+    }
     let menace = shape.is_some_and(|s| s.menace).then_some(act.victim).filter(|v| *v != 0);
     if ctx.db.activity().id().find(id).is_some() {
         ctx.db.activity().id().update(act);
@@ -715,8 +783,14 @@ pub fn refresh_rates(ctx: &ReducerContext, id: u32) {
 pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
     let id = a.id;
     ctx.db.activity().id().delete(id);
-    if common::scripts(ctx).shapes().timed(&a.skill) {
+    let sc = common::scripts(ctx);
+    crate::town::unshown(ctx, &sc, id, &a.skill);
+    let timed = sc.shapes().timed(&a.skill);
+    // A combat move's or a recorded gesture's use is kept to its outcome.
+    if timed || sc.shows().record(&a.skill) {
         crate::combat::outcome(ctx, id, &a.skill, &format!("broken off{}", why.map(|w| format!(": {w}")).unwrap_or_default()), now);
+    }
+    if timed {
         crate::combat::act_until(ctx, id, now);
         if a.node == PLAYER {
             crate::combat::resume_move(ctx, id, now);
@@ -810,9 +884,13 @@ fn routine_outcome(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now:
 
 fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
     let sc = common::scripts(ctx);
-    if sc.shapes().timed(&a.skill) {
+    crate::town::unshown(ctx, &sc, a.id, &a.skill);
+    let timed = sc.shapes().timed(&a.skill);
+    if timed || sc.shows().record(&a.skill) {
         let what = if ok { why.to_string() } else { format!("failed: {why}") };
         crate::combat::outcome(ctx, a.id, &a.skill, &what, now);
+    }
+    if timed {
         // A dash or a guard has no release: its recovery starts when it ends.
         if matches!(aim_of(&sc, &a.skill), Aim::Dash | Aim::Facing) {
             let until = crate::combat::recovering(ctx, a.id, &a.skill, now);
@@ -859,7 +937,7 @@ pub fn progress(ctx: &ReducerContext, a: Activity, now: u64) {
         }
         // A movement that found itself already there.
         "goto" | "wander" | "flee" => finish(ctx, a, true, "", now),
-        s if aim_of(&common::scripts(ctx), s) == Aim::Dash => finish(ctx, a, true, "", now),
+        s if aim_of(&common::scripts(ctx), s) == Aim::Dash || common::scripts(ctx).shows().aside(s) => finish(ctx, a, true, "", now),
         // Approaches are driven by steering events.
         _ => {
             let mut a = a;
@@ -890,7 +968,7 @@ pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
         }
         Event::Arrived => match a.skill.as_str() {
             "goto" | "wander" | "flee" => finish(ctx, a, true, "", now),
-            s if aim_of(&common::scripts(ctx), s) == Aim::Dash => finish(ctx, a, true, "", now),
+            s if aim_of(&common::scripts(ctx), s) == Aim::Dash || common::scripts(ctx).shows().aside(s) => finish(ctx, a, true, "made way", now),
             "follow" => {}
             _ => {
                 let here = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
@@ -1100,6 +1178,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                 notes.push(perceive::signal(ctx, me, &a.item, now)?);
             }
             Effect::Yield => notes.push(give_in(ctx, me, a, at, now)),
+            Effect::Hail => notes.push(crate::town::hail(ctx, me, a, at, now)?),
             Effect::Launch => {
                 let sc = common::scripts(ctx);
                 let spec = sc.missile(&a.skill, &skill_ctx(ctx, me, a, now))?;
@@ -1953,6 +2032,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
     motion::remove(ctx, id);
     common::invalidate_bodies();
     ctx.db.activity().id().delete(id);
+    ctx.db.doing().id().delete(id);
     ctx.db.mind_state().id().delete(id);
     ctx.db.infant_cry().infant().delete(id);
     ctx.db.vitals().id().delete(id);

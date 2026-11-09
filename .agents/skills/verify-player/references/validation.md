@@ -1,5 +1,12 @@
 # Validation record (player)
 
+## 2026-11-09 gestures and town life (dev-box)
+
+Own scratch container `slop-townlife-stdb` (image `v2.14.1`, own volume, `/wasm` from the worktree's `.local/target`) through a `docker` name shim (`~/townlife-shim`); worktree `~/dev/slop-townlife` on branch `townlife-1` (from `b12fa45`, uncommitted at the time). Run `player-town-1`, `--seed island`; scenes set by admin `place_at`.
+
+- **`scripts/gesture.py`, 9 of 9** ([features/gestures.md](../features/gestures.md)): `human_act` wave accepted and kept in `skill_use` (source `act`, outcome `greeted Feka`); its `doing` row with the wave's `act_card` code and target; the resident answered with a nod from its own graph (`answered Visitor`) and the player perceived "Feka answers your greeting (nod)."; one answer only; a nod 8 s later greeted anew and was answered; `face` turned the player's body to within 0.00 rad; waving at oneself refused by the rules ("not to yourself", told as an act experience); `use_skill("wave")` refused ("wave is not on the skill bar").
+- **`scripts/combat.py`, 23 of 23** on the same world, as a regression check of the act path this change touched (`act::begin`, `perform`, `finish`, `cancel`).
+
 ## 2026-11-09 combat skills on the island (dev-box)
 
 Own scratch container `slop-combat-stdb` (image `v2.14.1`, own volume) through a `docker` name shim (`~/combat-shim`); worktree `~/dev/slop-combat` at `e0c9d1f` plus the uncommitted combat change (docs/COMBAT.md). Run `player-combat-20261109-054716`, `--seed island`, recipe `features/combat.md`: `scripts/combat.py` with the player identity, scenes set by admin `place_at`, `set_behavior`, `kill` and a second `join`.

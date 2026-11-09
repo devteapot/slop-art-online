@@ -1,6 +1,16 @@
 # Core validation record
 
 
+## 2026-11-09 town life (dev-box)
+
+Own scratch container `slop-townlife-stdb` (image `v2.14.1`, own volume, `/wasm` from the worktree's `.local/target`) through a `docker` name shim (`~/townlife-shim`); worktree `~/dev/slop-townlife`, branch `townlife-1` from `b12fa45` with the town-life change uncommitted (docs/TOWN_LIFE.md). No mind service, no model calls. Evidence under the worktree's `.local/living/verify/`.
+
+- **Cargo** (`core-town-cargo2`): rules 87 (adds `island_ways_are_valid` and two `social` tests), authority 10, mind 47, viewer sync 3. A first run (`core-town-cargo`) did not compile the authority tests: one still read `Seed::habits`, which moved to the seed's ways; fixed.
+- **Baseline** (`core-town-base`, default seed): `tick`, `needs` and `seize` passed; `skirmish` passed 8 of 8 on an island run. `verify_mechanics.py`: 21 of 23 (`-mechanics-1`, failing the documented conception and expecting-parent pair) and 23 of 23 (`-mechanics-2`). `verify_steering.py`: 5 of 5. These ran before the climate moved from the script's laws into the seed (until then a default-seed world could rain); on the final code `core-town-final-mechanics` passed 23 of 23. Both drivers were given the default-seed module explicitly (`--wasm living_authority_verify_core_town_base.wasm`): this container's `/wasm` mount is the island build directory, so its `living_authority.wasm` is the island's.
+- **Town life** ([features/town.md](../features/town.md), `scripts/town.py`): `core-town-4` 18 of 19 (the first step-aside scene found no guard at a gate; rewritten to find any narrow spot), `core-town-5` 21 of 21, `core-town-6` 20 of 21 on the final rules (the approach scene placed the player on unwalkable ground behind the resident; the driver now picks a walkable lane from behind and walks until close). `core-town-7` re-ran greet, approach, speak and aside on the final code: the first three passed, step-aside did not get a response (residents look once a second; the walker can pass the 2.5 tiles between two looks), so the scene now makes up to three approaches; `core-town-8` passed on the first. Making way was seen on 3 of 4 single approaches across runs, and the step itself was "broken off" after 0.4 s until `aside` skills latched like finishing work (`brain.rs`).
+- **Census** (`core-town-census`, `--scene census`): the hour-by-hour table in docs/TOWN_LIFE.md.
+- **Not run here:** the infant, lifecycle and wildlife scenes (30 minutes or more each); this change does not touch those rules, and with no `weather` in their seeds those worlds never rain.
+
 ## 2026-11-09 island land worlds (dev-box)
 
 `core-20261109-021430` ran on the dev-box with the scratch 2.14.1 container `slop-game-stdb` (`docs/ISLAND_AUTHORITY.md`, "Verification"), on `dc34fdf` plus the island change: patched map cache, `Map::path` without whole-map arrays, `rules.minds`.

@@ -95,6 +95,15 @@ pub struct Weight {
     /// The body is exhausted (energy 10 or less: 0 or 1).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub exhausted: f32,
+    /// It is raining (0 or 1).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rain: f32,
+    /// Someone has just greeted me (a wave or a nod at me within the last few seconds: 0 or 1).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub hailed: f32,
+    /// A fight or a death within sight right now (0 or 1).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub commotion: f32,
     /// The character's own stances (judgment value 0..1) by key.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub believes: std::collections::BTreeMap<String, f32>,
@@ -202,6 +211,13 @@ pub enum Cond {
     /// Heard speech within the last N seconds.
     HeardWithin(f32),
     Night(bool),
+    /// It is raining (the world's weather, which falls everywhere at once).
+    Raining(bool),
+    /// Someone greeted me (a gesture made at me, such as a wave or a nod) within the last N
+    /// seconds. Answering my own greeting does not count: that closes it.
+    Hailed(f32),
+    /// My body is walking or running right now (false: standing).
+    Moving(bool),
     /// Hour of the day (0..24), e.g. `{"hour": {"above": 6, "below": 12}}`.
     Hour(Cmp),
     /// Someone's attack or throw aimed at me is winding up right now, or someone is
@@ -316,6 +332,10 @@ pub enum Target {
     Suitor,
     /// The other parent of my youngest child, when in sight.
     Partner,
+    /// Whoever most recently greeted me (a wave or a nod at me), when in sight.
+    Hailer,
+    /// Where a fight or a death is happening within sight (a point).
+    Commotion,
     Nearest(Filter),
     /// A perceived character by name.
     Named(String),
@@ -582,6 +602,11 @@ fn check_cond(c: &Cond, depth: usize) -> Result<(), String> {
                 return Err(format!("unknown item `{}`", h.item));
             }
         }
+        Cond::Hailed(s) => {
+            if !(0.5..=600.0).contains(s) {
+                return Err("hailed must be 0.5..=600 seconds".into());
+            }
+        }
         Cond::Hunger(c) | Cond::Energy(c) | Cond::Health(c) | Cond::Hour(c) => {
             if c.above.is_none() && c.below.is_none() {
                 return Err("comparison needs above or below".into());
@@ -677,7 +702,7 @@ pub fn describe(n: &Node) -> String {
 /// A desire's weight in words, e.g. "0.2 + hunger×1.5 + night×0.4".
 pub fn describe_weight(w: &Weight) -> String {
     let mut parts = vec![format!("{}", w.base)];
-    for (k, v) in [("hunger", w.hunger), ("tired", w.tired), ("hurt", w.hurt), ("night", w.night), ("day", w.day), ("threatened", w.threatened), ("alone", w.alone), ("company", w.company), ("winter", w.winter), ("longing", w.longing), ("courted", w.courted), ("starving", w.starving), ("exhausted", w.exhausted)] {
+    for (k, v) in [("hunger", w.hunger), ("tired", w.tired), ("hurt", w.hurt), ("night", w.night), ("day", w.day), ("threatened", w.threatened), ("alone", w.alone), ("company", w.company), ("winter", w.winter), ("longing", w.longing), ("courted", w.courted), ("starving", w.starving), ("exhausted", w.exhausted), ("rain", w.rain), ("hailed", w.hailed), ("commotion", w.commotion)] {
         if v != 0.0 {
             parts.push(format!("{k}×{v}"));
         }
@@ -702,6 +727,8 @@ pub fn describe_target(t: &Target) -> String {
         Target::Parent => "parent".into(),
         Target::Suitor => "suitor".into(),
         Target::Partner => "partner".into(),
+        Target::Hailer => "whoever greeted me".into(),
+        Target::Commotion => "the commotion".into(),
         Target::Nearest(f) => {
             let mut s = format!("nearest {}", f.kind);
             if let Some(r) = &f.relation {
@@ -768,6 +795,11 @@ pub fn describe_cond(c: &Cond) -> String {
         }
         Cond::Night(true) => "night".into(),
         Cond::Night(false) => "day".into(),
+        Cond::Raining(true) => "raining".into(),
+        Cond::Raining(false) => "not raining".into(),
+        Cond::Hailed(s) => format!("greeted in last {s}s"),
+        Cond::Moving(true) => "moving".into(),
+        Cond::Moving(false) => "standing".into(),
         Cond::Believes(b) => format!("believes {} > {}", b.key, b.above),
         Cond::Can(a) => format!("can {}", describe(&Node::Do(a.clone())).trim_start_matches("do ")),
         Cond::Chance(p) => format!("chance {p}"),
@@ -889,6 +921,49 @@ mod seed_repertoire_tests {
         let (g, pruned) = from_value_lenient(v).unwrap();
         assert!(pruned.is_empty(), "{pruned:?}");
         assert_eq!(g.root, once);
+    }
+
+    /// The island's own starting ways (docs/TOWN_LIFE.md): every routine fits a person's body
+    /// with nothing pruned, and each occupation's compiled top level (the repertoire's common
+    /// routines, overridden by the seed's) stays within the compiled limits.
+    #[test]
+    fn island_ways_are_valid() {
+        let seed: serde_json::Value = serde_json::from_str(include_str!("../../seeds/island.json")).unwrap();
+        let r: serde_json::Value = serde_json::from_str(include_str!("../../seeds/repertoire.json")).unwrap();
+        let person = crate::species::parse(include_str!("../../seeds/species.json")).unwrap().remove("person").unwrap();
+        let ways = &seed["ways"];
+        let mut common = r["common"].as_object().unwrap().clone();
+        for (k, g) in ways["common"].as_object().unwrap() {
+            common.insert(k.clone(), g.clone());
+        }
+        let mut routines = std::collections::HashMap::new();
+        for (name, g) in &common {
+            let (g, pruned) = from_value_for(g.clone(), &person).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(pruned.is_empty(), "{name}: {pruned:?}");
+            routines.insert(name.clone(), g.root);
+        }
+        let top = ways["top"].to_string();
+        for (occ, o) in ways["occupations"].as_object().unwrap() {
+            let (g, pruned) = from_value_for(o["graph"].clone(), &person).unwrap_or_else(|e| panic!("{occ}: {e}"));
+            assert!(pruned.is_empty(), "{occ}: {pruned:?}");
+            let work = o["routine"].as_str().unwrap().to_string();
+            let mut mine = routines.clone();
+            mine.insert(work.clone(), g.root);
+            let t = parse(&top.replace("\"WORK\"", &serde_json::to_string(&work).unwrap())).unwrap();
+            for called in routines_called(&t.root) {
+                assert!(mine.contains_key(&called), "{occ}: missing routine {called}");
+            }
+            validate_compiled(expand(&t.root, &|n: &str| mine.get(n).cloned())).unwrap_or_else(|e| panic!("{occ}: {e}"));
+        }
+        // Every occupation the seed's settlements draw has a workplace and starting ways.
+        for set in ["towns", "villages"] {
+            for t in seed[set].as_array().unwrap() {
+                for occ in t["occupations"].as_object().unwrap().keys() {
+                    assert!(seed["town_life"]["work"].get(occ).is_some(), "{occ} has no workplace");
+                    assert!(ways["occupations"].get(occ).is_some(), "{occ} has no starting ways");
+                }
+            }
+        }
     }
 
     #[test]

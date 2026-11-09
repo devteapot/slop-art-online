@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws, needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws, needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm, places, weather, gestures), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
 ---
 
 # Verify the core rules and loop
@@ -41,6 +41,14 @@ mkdir -p ".local/living/verify/$K"
 python3 "$V" launch --run "$K" --seed island > ".local/living/verify/$K/launch.txt" 2>&1
 python3 "$C/scenes.py" skirmish --run "$K" > ".local/living/verify/$K/skirmish.txt" 2>&1
 python3 "$V" cleanup --run "$K" > ".local/living/verify/$K/cleanup.txt" 2>&1
+
+# Town life on an island world: the daily rhythm by the world's own hours (about 14 min),
+# rain, a wolf in town, gestures and making way (features/town.md, docs/TOWN_LIFE.md).
+T=$R-town
+mkdir -p ".local/living/verify/$T"
+python3 "$V" launch --run "$T" --seed island > ".local/living/verify/$T/launch.txt" 2>&1
+python3 "$C/town.py" --run "$T" > ".local/living/verify/$T/town.txt" 2>&1
+python3 "$V" cleanup --run "$T" > ".local/living/verify/$T/cleanup.txt" 2>&1
 
 # Infant assertions use their own small, long-lived family fixture.
 I=$R-infant

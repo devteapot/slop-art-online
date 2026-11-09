@@ -66,7 +66,7 @@ ADMIN = {
     'set_background': [0, '{}'], 'grant_items': [0, 'berries', 0],
     'place_structure': [0, 'shelter'], 'set_behavior': [0, '{"wait":30}'],
     'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0],
-    'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0],
+    'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0], 'set_weather': [False, 0],
 }
 
 
@@ -456,6 +456,11 @@ class Run:
             len(v['final']['skill_uses']) > 0 and all(u['actor'] == owners[label] for u in v['final']['skill_uses']) and
             any(u['skill'] == 'strike' and u['accepted_ms'] == 0 and 'refused' in u['outcome'] for u in v['final']['skill_uses'])
             for label, v in combat.items() if label != 'anonymous') and not combat['anonymous']['final']['skill_uses'], 'combat-*.json')
+        # Town life (docs/TOWN_LIFE.md): what others see a character doing, the cards that
+        # name its codes, and the weather are public; housekeeping writes the weather row.
+        town = self.probe('town-public', ['SELECT * FROM act_card', 'SELECT * FROM doing', 'SELECT * FROM weather'])
+        self.check('act_card, doing and weather are public', town['status'] == 'applied' and town['final']['counts']['act_card'] >= 5 and town['final']['counts']['weather'] == 1, 'town-public.json',
+                   f"act_card {town['final']['counts']['act_card']}, doing {town['final']['counts']['doing']}, weather {town['final']['counts']['weather']}")
         public = self.probe('combat-public', ['SELECT * FROM fighter', 'SELECT * FROM skill_card'])
         self.check('fighter and skill_card are public', public['status'] == 'applied' and public['final']['counts']['skill_card'] >= 6, 'combat-public.json',
                    f"fighter {public['final']['counts']['fighter']}, skill_card {public['final']['counts']['skill_card']}")

@@ -315,6 +315,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     let mut k = common::clock(ctx);
     common::set_profiling(k.profile);
     let _timer = common::span("housekeeping");
+    crate::town::refresh_weather(ctx, now);
     let hour = common::hour(&w, now) as u8;
     if hour != k.last_hour {
         let day = living_rules::day_of(now, w.epoch_ms, w.day_ms);

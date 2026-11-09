@@ -18,6 +18,7 @@ pub mod realm;
 pub mod normalize;
 #[cfg(feature = "scripting")]
 pub mod script;
+pub mod social;
 pub mod species;
 pub mod steer;
 
