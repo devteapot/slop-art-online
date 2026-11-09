@@ -1,6 +1,6 @@
 {
  "title": "A theft in the square",
- "about": "Morning in the town. The subject has set out a storage basket (a storage structure they own) with six berries, keeping two in hand. At minute 3 a resident walks up and takes four berries from it without a word, then goes back to their day. If the subject comes within 4 tiles of the thief afterwards, the thief says a scripted line (once).",
+ "about": "Morning in Brackenford. The subject has set out a storage basket (a storage structure they own) with six berries, keeping two in hand. From minute 3, the first time the subject is within 8 tiles of the basket, a resident steps up beside it and takes four berries without a word (the ordinary take skill), then goes back to their day. If the subject comes within 4 tiles of the thief afterwards, the thief says a scripted line (once). Batch b1 placed the thief by the subject rather than by the basket; that version took from other people's storages and is reported as invalid.",
  "world": {
   "seed": "island",
   "rules": {
@@ -126,16 +126,33 @@
    }
   },
   {
-   "at": 3,
+   "when": {
+    "near": {
+     "who": "subject",
+     "to": {
+      "structure": "storage",
+      "owner": "$subject",
+      "near": {
+       "who": "subject"
+      }
+     },
+     "within": 8
+    }
+   },
+   "after_min": 3,
    "steps": [
     {
      "do": "place",
      "who": "thief",
      "to": {
-      "who": "subject",
+      "structure": "storage",
+      "owner": "$subject",
+      "near": {
+       "who": "subject"
+      },
       "offset": [
-       3,
-       2
+       1,
+       0
       ]
      }
     },

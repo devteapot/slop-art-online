@@ -8,6 +8,7 @@
 | Validate graphs, restrict actors, recover connection | `prune`, `reject`, `only`, `reconnect` | [robustness.md](robustness.md) |
 | Wait off stage and resume on stage | `lod` | [level-of-detail.md](level-of-detail.md) |
 | Paid-wrapper dry safety and paid smoke check | dry safety; paid authorization required | [real-models.md](real-models.md) |
+| Trials: one mind in a scripted or open-ended world (`living/tools/trials.py`) | `--fake` dry batch; real batches measured, uncapped | [trials.md](trials.md) |
 
 Each free case launches its own database through `verify.py` and passes doctor before driving the real mind binary. Admin calls arrange scenes only. Requests go through the production HTTP model boundary, and replies return through production mind reducers. Public snapshots use shared SQL; private deliberations use shared `sql --as-admin` with the token held in memory. Store-backed projections belong to `verify-knowledge`.
 

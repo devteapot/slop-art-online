@@ -61,6 +61,10 @@ TOTAL_CAP = int(os.environ["TRIALS_TOTAL_TOKENS"]) if os.environ.get("TRIALS_TOT
 FAKE = ROOT / ".agents/skills/verify-llm/scripts/fake_llm.py"
 FOOD = {"berries", "meat", "fish", "cooked_meat", "cooked_fish", "smoked_meat", "smoked_fish", "bread"}
 SAMPLE_S = 2.0
+# Estimated USD per million prompt and completion tokens, for the report only (an assumption,
+# not an invoice). Mistral Small: third-party price lists of 2026-08 ($0.20 / $0.60); Mistral's
+# own page was not reachable. Models not listed (Luna on the carlid route) show no cost.
+PRICES = {"mistral-small-latest": (0.20, 0.60), "ministral-8b-latest": (0.10, 0.10), "mistral-medium-3-5": (0.40, 2.00)}
 LEDGER = OUT / "ledger.json"
 _lock = threading.Lock()
 
@@ -480,13 +484,16 @@ class Instance:
             homes = [(c["home_x"], c["home_y"]) for c in ids if c["home_x"] or c["home_y"]]
             p = tuple(centre) if centre else (sum(x for x, _ in homes) / len(homes), sum(y for _, y in homes) / len(homes))
         elif "who" in a:
-            ids = self.roles[a["who"]]
-            p = self.bodies(ids[:1])[ids[0]]
+            pos = self.bodies(self.roles[a["who"]])
+            if not pos:
+                raise RuntimeError(f"role {a['who']} has no living member")
+            p = next(iter(pos.values()))
         elif "structure" in a:
             near = self.anchor(a["near"])
             st = self.rows(f"SELECT * FROM structure WHERE kind = '{a['structure']}'")
             if "owner" in a:
-                st = [x for x in st if x["owner"] == a["owner"]]
+                owner = self.ids(a["owner"])[0] if isinstance(a["owner"], str) else a["owner"]
+                st = [x for x in st if x["owner"] == owner]
             s = min(st, key=lambda s: dist((s["x"], s["y"]), near))
             p = (s["x"], s["y"])
         elif "home_of" in a:
@@ -527,17 +534,16 @@ class Instance:
         m = re.fullmatch(r"\$(\w+)_xy@(\w+):([\d.]+)", v) if isinstance(v, str) else None
         if m:
             # "$subject_xy@pack:9": 9 tiles from where the subject stands, toward the pack.
-            a_id, b_id = self.ids(m.group(1))[0], self.ids(m.group(2))[0]
-            pos = self.bodies([a_id, b_id])
-            (ax, ay), (bx, by) = pos[a_id], pos[b_id]
+            pa, pb = self.bodies(self.ids(m.group(1))), self.bodies(self.ids(m.group(2)))
+            (ax, ay), (bx, by) = next(iter(pa.values())), next(iter(pb.values()))
             n = max(1e-6, ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5)
             d = float(m.group(3))
             return [round(ax + (bx - ax) / n * d, 1), round(ay + (by - ay) / n * d, 1)]
         m = re.fullmatch(r"\$(\w+)_xy(?:\+(-?[\d.]+),(-?[\d.]+))?", v) if isinstance(v, str) else None
         if m:
             # "$subject_xy+9,0": where that role stands now, plus an offset in tiles.
-            ids = self.ids(m.group(1))
-            x, y = self.bodies(ids[:1])[ids[0]]
+            pos = self.bodies(self.ids(m.group(1)))
+            x, y = next(iter(pos.values()))
             dx, dy = float(m.group(2) or 0), float(m.group(3) or 0)
             return [round(x + dx, 1), round(y + dy, 1)]
         if isinstance(v, str) and v.startswith("$"):
@@ -560,6 +566,15 @@ class Instance:
         kind = s["do"]
         who = self.ids(s.get("who"))
         self.emit("events", {"t": self.t(), "do": kind, "who": who, **{k: v for k, v in s.items() if k not in ("do", "who", "when", "at", "steps")}})
+        if who and kind in ("place", "graph", "say", "act", "items", "know", "structure"):
+            # Members who died (or were removed) since the cast was picked are skipped, and said so.
+            have = set(self.bodies(who))
+            gone = [x for x in who if x not in have]
+            if gone:
+                self.emit("events", {"t": self.t(), "skipped": gone, "do": kind, "why": "no living body"})
+                who = [x for x in who if x in have]
+                if not who:
+                    return
         for i, actor in enumerate(who or [None]):
             if kind == "place":
                 x, y = self.anchor(s["to"], i)
@@ -657,8 +672,14 @@ class Instance:
                     self.schedule(self.subst_addressee(e, c["b"]), self.t())
                     break
             elif "near" in w:
-                a, b = self.ids(w["near"].get("who", "subject")), self.ids(w["near"]["of"])
-                if any(dist(positions.get(x, (1e9, 1e9)), positions.get(y, (-1e9, -1e9))) <= w["near"]["within"] for x in a for y in b):
+                a = self.ids(w["near"].get("who", "subject"))
+                if "to" in w["near"]:
+                    spot = self.anchor(w["near"]["to"])
+                    close = any(dist(positions.get(x, (1e9, 1e9)), spot) <= w["near"]["within"] for x in a)
+                else:
+                    b = self.ids(w["near"]["of"])
+                    close = any(dist(positions.get(x, (1e9, 1e9)), positions.get(y, (-1e9, -1e9))) <= w["near"]["within"] for x in a for y in b)
+                if close:
                     self.fired[k] += 1
                     self.schedule(e, self.t())
             elif "hour" in w and hour >= w["hour"] and self.t() > 0:
@@ -1510,7 +1531,7 @@ def spread(vals):
     return f"mean {statistics.mean(nums):.2f}, range {min(nums):g}–{max(nums):g}"
 
 
-ROWS = ["subject", "stopped_by", "minutes_run", "survived", "died_min", "hp_min", "hunger_start", "hunger_max", "hunger_end",
+ROWS = ["subject", "stopped_by", "minutes_run", "game_days", "tokens_per_game_day", "survived", "died_min", "hp_min", "hunger_start", "hunger_max", "hunger_end",
         "first_eat_min", "food_gained", "skills", "min_dist", "fled_m", "lines_said", "said_to", "talk_turns", "graph_revisions",
         "refusals", "learned", "built", "relations_end", "judgments_end", "memories_remembered", "calls", "tokens"]
 
@@ -1532,9 +1553,11 @@ def report(a):
             tok[m]["prompt"] += v["prompt"]
             tok[m]["completion"] += v["completion"]
             tok[m]["cached"] += v["cached"]
-    out.append("| Model | Calls | Tokens | Prompt | Completion | Cached |\n| --- | ---: | ---: | ---: | ---: | ---: |")
+    out.append("| Model | Calls | Tokens | Prompt | Completion | Cached | Est. cost (USD) |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
     for m, v in tok.items():
-        out.append(f"| {m} | {v['calls']} | {v['tokens']:,} | {v['prompt']:,} | {v['completion']:,} | {v['cached']:,} |")
+        pr = PRICES.get(m)
+        cost = f"{(v['prompt'] * pr[0] + v['completion'] * pr[1]) / 1e6:.2f}" if pr else "unknown"
+        out.append(f"| {m} | {v['calls']} | {v['tokens']:,} | {v['prompt']:,} | {v['completion']:,} | {v['cached']:,} | {cost} |")
     out.append("")
     for (trial, variant), ss in sorted(groups.items()):
         ss.sort(key=lambda s: s["replicate"])

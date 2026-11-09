@@ -109,6 +109,44 @@ The pinned version is 2.14.1 (`living/Cargo.toml`, server image `v2.14.1`). The 
 
 Data paths a trial adds, per instance: one database (island: 287 characters, about 68,000 resource nodes); one mind subscription set as in the labs; with `minds: true` every seeded character writes percepts into `experience` (bounded at 400 rows each when no mind consumes them) and keeps one pending `deliberation` row; the runner's reads are indexed point lookups. Nothing is retained after `clean` except the evidence directory.
 
+## Open-ended life runs and world presets
+
+A life trial (`"kind": "life"`, [`life.json`](../living/trials/life.json)) has no timeline. One mind-backed newcomer lives in the island world for `minutes` (360: six hours, 30 game days at the 12-minute day). Every other character is an instinct-only resident: the island as shipped (`rules.minds` false), with town life layer 1 (daily rhythm, gestures, weather, the wolves of the town road, guards).
+
+- **The newcomer** is made by `spawn_newcomer(name)`, an admin-only reducer added for this (the only authority change; [lib.rs](../living/authority/src/lib.rs)). It does what a player's `join` does (the arrival point outside Brackenford's first gate, the seed's newcomer kit: a bow, 30 arrows, 4 berries; fire, fire_bolt, mending; the person instinct), but the character is controlled by the admin's minds (`ai`), so the mind service thinks for it. A player cannot call it (`admin only`, checked on the trial service). Its background says only `{"origin": "newcomer", "arrived": "today, on foot, by the road to Brackenford's gate"}`, so the mind writes an identity from it as it does for any resident with a background. The prompt carries no goal.
+- **Death is permanent** and ends the run (the runner stops 20 s after). Nothing respawns.
+- **Crash recovery.** The runner saves each instance's state (`state.json`: subject, cast, clock, cursors, the mind's pid and start time) every 30 s. A mind that exits is restarted (the world is not reset); `trials.py resume --batch <b>` reattaches after a runner crash, adopts minds that are still running and goes on from the saved clock. Five restarts within 30 minutes count as a runaway.
+- **What is kept:** the journal, unchanged; an hourly snapshot (`snapshots/hNN.json`: position and the nearest settlement, vitals, inventory, know-how, practice, relations, judgments, places, persona, the current graph and routines, structures owned, and the subject's 60 most recent kept memories read from the trial Neo4j); the samples and rows as for any trial. `trials.py life --batch <b>` writes `timeline.md` from those rows without model calls: firsts (meal, fight, conversation, craft, build, sleep, gathering, own campfire or shelter), deaths seen, where the subject was over time, what it learned and from where, every graph revision with the skills and items it added and dropped, stretches of 10+ minutes within 15 m with no new graph, and loops (plans installed more than three times, lines repeated nearly word for word, turning back and forth).
+- **Kept worlds.** A finished life run's database is paused (`set_paused`), not deleted. They are deleted only if the Spark's disk use passes 100 GB.
+
+**Measurement, not caps.** Trials run with `LIVING_LLM_PER_MIN` off and no token cap (a trial file can still set `budget.tokens` or `budget.calls_per_min`). The runner counts calls and tokens per model, per purpose and per game day from the journal. A watchdog stops a run and records why when it shows a runaway: 30 failed calls in 5 minutes, the same failure 15 times in 5 minutes, more than 60 calls in a minute, or five mind restarts in 30 minutes.
+
+### World presets
+
+A preset is a life trial that extends `life` with a world: seed overrides and `prepare` steps, using only what seeds and admin scene reducers can already express. The progression has to come from the world's state and affordances. The prompt is what any character gets, and nothing steers decisions.
+
+| Preset | World | Intended progression gradient |
+| --- | --- | --- |
+| [`life`](../living/trials/life.json) (control) | the island as shipped | whatever the island offers a newcomer: gardens and wild food, a walled town with unowned houses, a bold pack on the road, cold nights, seasons |
+| [`life-ruin`](../living/trials/life-ruin.json): a place with history and a gated ladder | berry bushes at 40% (`resource_scale`); before the mind starts, a Brackenford resident given writing, fishing and smoking walks into the unowned house nearest the arrival point (about 20 m from it) and puts up two signs with the ordinary write skill ("This house kept nets on the river…", topic fishing; "Fish hung over smoke for a day keep through the winter.", topic smoking), then goes home | forage in a lean land → find the empty house and its signs → learn writing (experimenting with wood can reveal it; no newcomer has it) → read the signs: fishing, smoking → fish, smoke fish over a fire → food that keeps; the house is also a shelter |
+| [`life-pressure`](../living/trials/life-pressure.json): a pressure | berry bushes at 30%; a second bold pack of five ranging 120–200 m from the arrival point beside the shipped pack of four | survive the first nights on a wolf road → safety (the walled town and its gates, fire, shelter) → food where berries are scarce (the bow, fishing, trapping, the town's gardens and stores) → a place that holds |
+
+Measured: `resource_scale` thins the land's wild bushes but not the planted garden and field bushes. On the island, `life-ruin` has 12,158 berry bushes and `life-pressure` 9,219, against 18,216 in the control (67% and 51%, not 40% and 30%). `life-pressure` has 15 wolves (6 + 4 + 5).
+
+**Engine features presets would need and do not have** (listed, not built):
+- a wolf range that grows over the days (packs have a fixed home; the runner could move them on a schedule, but that is a script, not a world);
+- a scarcity knob per season or region (winter already stops regrowth; nothing makes one season or one place leaner);
+- resources by region, for a richer, more dangerous frontier such as the unroaded eastern massif (`resource_scale` is global);
+- residents who respond: instinct-only residents never teach, trade or answer a request, so a social hook (an ailing elder, a household short of a worker, a stall that needs goods) has no one to make it a hook; town life layer 1 answers gestures only;
+- residents with minds beside the subject: that is a lab, and costs one mind each.
+
+### Watching a run live
+
+The trial service listens on the LAN: `http://192.168.1.103:3320` (container `slop-trials-stdb`, started with `TRIALS_STDB_BIND=0.0.0.0`). Anonymous connections see the public tables, which is everything a watcher needs; no admin identity is involved.
+
+- **Observer (read-only, recommended):** native, from a checkout on any LAN machine: `LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --manifest-path living/Cargo.toml --release -p living-viewer`; or the web observer, `just living-web` and then `http://127.0.0.1:8330/?server=http://192.168.1.103:3320&db=<database>`. It subscribes and never calls a reducer. Life-run databases are `verify-trial-<batch>-life-<preset>-<variant>-r1`, listed by `trials.py report --batch <batch>`.
+- **Game client:** `LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --release --manifest-path living/Cargo.toml -p living-game` connects, but it always calls `join` when its identity has no living character. That puts a player newcomer into the trial world, who is perceived by the main character and changes the run. The client has no spectator mode, so a watcher cannot attach without joining. Joining needs no admin rights (a fresh identity, its token kept in `.local/living/game/<db>.token` or `LIVING_GAME_TOKEN`), but it is not watching. Following the main character from the game client needs a watch mode in the client, not built (UI work, listed).
+
 ## Results
 
 (Filled in from the batches below.)

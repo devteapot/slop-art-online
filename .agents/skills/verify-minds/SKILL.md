@@ -32,6 +32,18 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 `--case` can repeat. Cases are `roundtrip`, `acts`, `conversation`, `consolidation`, `prune`, `reject`, `only`, `reconnect` and `lod`. Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
 
 
+## Trials
+
+`living/tools/trials.py` runs the real mind for one subject in scripted worlds (and open-ended life runs) on its own SpacetimeDB service; see [trials](features/trials.md) and `docs/TRIALS.md`. Its free tier is a `--fake` batch:
+
+```bash
+python3 living/tools/trials.py up && python3 living/tools/trials.py build wolves life
+python3 living/tools/trials.py run --batch dry1 wolves life --replicates 1 --minutes 6 --fake
+python3 living/tools/trials.py life --batch dry1 && python3 living/tools/trials.py clean --batch dry1
+```
+
+On a host whose `sao-living_spacetimedb_1` belongs to other work (the DGX Spark), run this skill's suite against the trial container: `VERIFY_STDB_CONTAINER=slop-trials-stdb VERIFY_STDB_PORT=3320 .agents/skills/verify-minds/scripts/verify_minds.py --run minds-…`.
+
 ## Evidence and cleanup
 
 Each case writes `.local/living/verify/<suite>-<case>/`. Keep `actions.log`, `driver.log`, `fake-requests.jsonl`, `mind.log`, copied `journal/`, table snapshots, `result.json` and `cleanup.json`. The suite keeps build and test logs and source hashes. Full requests and replies stay in the fake log and journal. Authority snapshots prove their application.
