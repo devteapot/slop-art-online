@@ -31,11 +31,23 @@ pub struct ToonParams {
     /// x: the texture's mean hue, y: how much of the texture's hue variation stays (mode 1);
     /// mode 3 also z and w: the texture's mean saturation and value.
     pub recolor_from: Vec4,
+    /// Weather (weather.rs): x wind strength (sways meshes tagged as plants), y wetness.
+    pub atmo: Vec4,
 }
 
 impl MaterialExtension for ToonExt {
     fn fragment_shader() -> ShaderRef {
         "embedded://living_game/toon.wesl".into()
+    }
+
+    // Wind sways plants in every pass alike (main, depth/normal prepass and shadows), so their
+    // lines, depth test and shadows stay with them.
+    fn vertex_shader() -> ShaderRef {
+        "embedded://living_game/toon_vertex.wesl".into()
+    }
+
+    fn prepass_vertex_shader() -> ShaderRef {
+        "embedded://living_game/toon_prepass.wesl".into()
     }
 }
 
@@ -86,6 +98,10 @@ pub struct Style {
     pub grade_color: [f32; 3],
     pub grade: f32,
     pub saturation: f32,
+    /// Weather, written by weather.rs in coarse steps (each change re-prepares every toon
+    /// material): wind strength for swaying plants, and how wet surfaces are.
+    pub wind: f32,
+    pub wet: f32,
 }
 
 impl Default for Style {
@@ -126,6 +142,8 @@ impl Default for Style {
             grade_color: [1.0, 0.92, 0.8],
             grade: 0.22,
             saturation: 1.08,
+            wind: 0.0,
+            wet: 0.0,
         }
     }
 }
@@ -142,6 +160,7 @@ impl Style {
             shade: Vec4::new(self.shadow_hue, self.hue_shift, self.shadow_saturation, 0.0),
             recolor: Vec4::ZERO,
             recolor_from: Vec4::ZERO,
+            atmo: Vec4::new(self.wind, self.wet, 0.0, 0.0),
         }
     }
 
@@ -178,6 +197,8 @@ pub struct StylePlugin;
 impl Plugin for StylePlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "toon.wesl");
+        embedded_asset!(app, "toon_vertex.wesl");
+        embedded_asset!(app, "toon_prepass.wesl");
         app.add_plugins(MaterialPlugin::<Toon>::default())
             .add_plugins(bevy_mod_outline::OutlinePlugin::EXTRUDE_VERTEX)
             .init_resource::<Style>()
@@ -211,7 +232,7 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         style.params()
     } else {
         // Plain look: no bands, no tint, no rim (for comparison).
-        ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0), recolor: Vec4::ZERO, recolor_from: Vec4::ZERO }
+        ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0), recolor: Vec4::ZERO, recolor_from: Vec4::ZERO, atmo: Vec4::new(style.wind, style.wet, 0.0, 0.0) }
     };
     for (_, m) in toons.iter_mut() {
         // Keep each material's own flags (skin) and recolouring.

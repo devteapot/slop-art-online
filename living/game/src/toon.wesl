@@ -42,6 +42,8 @@ struct Toon {
     // x: the texture's mean hue, y: how much of its hue variation stays (mode 1); in mode 3,
     // z and w: the texture's mean saturation and value.
     recolor_from: vec4<f32>,
+    // Weather (weather.rs): x wind strength (the vertex shaders sway plants), y wetness.
+    atmo: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -156,12 +158,12 @@ fn recolor(c: vec3<f32>, tag: u32) -> vec3<f32> {
 
 // A shadow colour from a lit colour: the hue moved toward a target, saturation kept (or
 // raised), brightness lowered.
-fn shadow_of(lit: vec3<f32>, value: f32) -> vec3<f32> {
+fn shadow_of(lit: vec3<f32>, value: f32, scene_hue: f32) -> vec3<f32> {
     var hsv = rgb_to_hsv(lit);
     // Skin keeps a warm shadow (toward red-orange) instead of the scene's cool target, so faces
     // never turn purple or flushed.
     let skin = toon.shade.w > 0.5;
-    let target_hue = select(toon.shade.x, 0.015, skin);
+    let target_hue = select(scene_hue, 0.015, skin);
     // Reds and oranges reach a violet target through magenta, which reads as pink roofs and
     // cloth; they take a quarter of the shift and simply deepen instead.
     let red = 1.0 - smoothstep(0.05, 0.12, abs(hsv.x - round(hsv.x)));
@@ -189,8 +191,22 @@ fn fragment(
 @if(PREPASS_PIPELINE) {
     out = deferred_output(in, pbr_input);
 } @else {
-    let albedo = vec4<f32>(recolor(pbr_input.material.base_color.rgb, mesh_functions::get_tag(in.instance_index)), pbr_input.material.base_color.a);
+    let tag = mesh_functions::get_tag(in.instance_index);
+    var albedo = vec4<f32>(recolor(pbr_input.material.base_color.rgb, tag), pbr_input.material.base_color.a);
     let N = normalize(pbr_input.N);
+    // The time of day and the region (daylight.rs) arrive through the scene's ambient light: its
+    // colour is the sky's fill (it lifts shadows and dark scenes, and its hue is the shadows'
+    // target hue), its alpha how strongly glowing things shine (0: no atmosphere; the
+    // material's own shadow hue applies and nothing is lifted).
+    let amb = view_bindings::lights.ambient_color;
+    let atmo = amb.a > 0.0;
+    let fill = select(vec3<f32>(0.0), amb.rgb, atmo);
+    let fill_hsv = rgb_to_hsv(fill);
+    let scene_hue = select(toon.shade.x, fill_hsv.x, atmo && fill_hsv.y > 0.02);
+    let glow = select(1.0, amb.a, atmo);
+    // Rain darkens surfaces, upward ones most.
+    let wet = toon.atmo.y;
+    albedo = vec4<f32>(albedo.rgb * (1.0 - wet * (0.16 + 0.14 * clamp(N.y, 0.0, 1.0))), albedo.a);
     let V = normalize(pbr_input.V);
     let p = pbr_input.world_position;
     let view_z = dot(vec4<f32>(
@@ -224,8 +240,23 @@ fn fragment(
         // Skin shadows are much lighter (anime faces stay clean), and its far side isn't darkened.
         let skin = toon.shade.w > 0.5;
         let depth = select(toon.shadow.a, toon.shadow.a * 0.45, skin);
-        let shadow_color = shadow_of(lit_color, (1.0 - depth) * select(away, 1.0, skin)) * toon.shadow.rgb + albedo.rgb * sun * toon.extra.y;
+        let shadow_color = shadow_of(lit_color, (1.0 - depth) * select(away, 1.0, skin), scene_hue) * toon.shadow.rgb + albedo.rgb * sun * toon.extra.y;
         var color = mix(shadow_color, lit_color, lit);
+        // Sky fill: lifts shadows most, so night stays readable.
+        color = color + albedo.rgb * fill * mix(1.0, 0.45, lit);
+        // Puddles: on wet flat ground, small dark patches that mirror the fog's sky colour, with
+        // a light rim.
+        if (wet > 0.05 && N.y > 0.97 && (tag & (1u << 24u)) == 0u) {
+            let n = noise3(vec3<f32>(p.x * 0.55, 0.0, p.z * 0.55)) * 0.65 + noise3(vec3<f32>(p.x * 1.7, 3.0, p.z * 1.7)) * 0.35;
+            let th = 0.77 - 0.05 * wet;
+            let puddle = smoothstep(th, th + 0.02, n) * smoothstep(0.05, 0.6, wet);
+            let rim = (smoothstep(th - 0.015, th, n) - smoothstep(th + 0.01, th + 0.025, n)) * smoothstep(0.05, 0.6, wet);
+@if(DISTANCE_FOG) {
+            let sky = view_bindings::fog.base_color.rgb;
+            color = mix(color, color * 0.62 + sky * 0.12, puddle);
+            color = color + sky * rim * 0.2;
+}
+        }
         // Rim light on silhouettes, stronger on the lit side.
         let rim = pow(clamp(1.0 - max(dot(N, V), 0.0), 0.0, 1.0), toon.band.w) * toon.rim.a * (0.35 + 0.65 * lit);
         color = color + toon.rim.rgb * sun * rim;
@@ -243,8 +274,8 @@ fn fragment(
             let b = smoothstep(-0.05, 0.12, dot(N, normalize(to))) * 0.8 + 0.2;
             color = color + albedo.rgb * (*l).color_inverse_square_range.rgb * fall * b * view_bindings::view.exposure / 3.14159265 * toon.extra.w;
         }
-        // Emission (fires, lamps) on top.
-        color = color + pbr_input.material.emissive.rgb * view_bindings::view.exposure;
+        // Emission (fires, lamps) on top; it reads stronger at night.
+        color = color + pbr_input.material.emissive.rgb * view_bindings::view.exposure * glow;
         out.color = vec4<f32>(color, albedo.a);
     } else {
         out.color = vec4<f32>(albedo.rgb * toon.extra.y, albedo.a);

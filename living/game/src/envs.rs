@@ -7,7 +7,10 @@
 //! - **ground:** colour, relief, and `open`, `paved` or `cave`;
 //! - **slots:** what stands where, by kind (`tree`, `house`, `glow_mushroom`, `neon_sign`…),
 //!   with a placement rule (`scatter` in a disc, a `grid` of blocks, a `ring` round the edge), a
-//!   height range in metres, and an optional glow colour.
+//!   height range in metres, and an optional glow colour;
+//! - **atmosphere** (optional; the island's): a day curve, regional and weather shifts of the
+//!   mood (daylight.rs, weather.rs). With it the time of day, region and weather drive light, sky,
+//!   fog and grading; without it the mood above stays fixed.
 //!
 //! Assets plug in by folder: any GLB/glTF in `assets/envs/<id>/<kind>/` (or `assets/envs/shared/
 //! <kind>/`) is used for that kind, scaled to the slot's height, so a pack's own units don't
@@ -129,6 +132,9 @@ pub struct EnvDef {
     /// A generated world instead of a ground disc and slots (`island.rs`).
     #[serde(default)]
     pub world: Option<crate::island::WorldDef>,
+    /// The time of day, regional moods and weather (daylight.rs); without it the mood is fixed.
+    #[serde(default)]
+    pub atmosphere: Option<crate::daylight::AtmoDef>,
 }
 
 /// The environments, the current one and the one asked for.
@@ -410,8 +416,9 @@ fn placeholder(kind: &str, seed: u32) -> (Mesh, Option<Mesh>) {
 }
 
 /// A point light for a glowing thing (lamps, signs, crystals, some mushrooms), at ~90% of its
-/// height, no shadows.
-pub(crate) fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: usize) -> Option<(PointLight, Transform)> {
+/// height, no shadows. With the atmosphere, only the nearest few are lit, lamps only at night
+/// (daylight.rs `lamps`).
+pub(crate) fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: usize) -> Option<((PointLight, crate::daylight::Lamp), Transform)> {
     let [r, g, b] = glow?;
     let (lumens, range) = match kind {
         "lamp" => (60_000.0, 12.0),
@@ -421,7 +428,8 @@ pub(crate) fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: us
         _ => return None,
     };
     let light = PointLight { color: Color::srgb(r, g, b), intensity: lumens, range, shadow_maps_enabled: false, ..default() };
-    Some((light, Transform::from_xyz(0.0, height * 0.9, 0.0)))
+    let lamp = crate::daylight::Lamp { lumens, lit_at_night: matches!(kind, "lamp" | "neon_sign") };
+    Some(((light, lamp), Transform::from_xyz(0.0, height * 0.9, 0.0)))
 }
 
 /// Hide tall things that stand between the camera and you, or close to you on the camera's side.

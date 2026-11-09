@@ -1,5 +1,7 @@
 //! The finishing pass (`edges.wesl`): edge lines from the depth and normal prepasses, a
-//! screen-space rim light and the film gradient. Structured after Bevy 0.20's
+//! screen-space rim light and the film gradient; with the atmosphere (daylight.rs) also drifting
+//! fog banks (marched through the depth to each pixel) and rain streaks in layers that stop at
+//! nearer things. Structured after Bevy 0.20's
 //! `custom_post_processing` example: settings are a camera component extracted to the render
 //! world; a render system draws a full-screen triangle in `Core3dSystems::PostProcess`.
 
@@ -28,16 +30,44 @@ pub struct Edges {
     pub sun: Vec4,
     pub grade: Vec4,
     pub screen: Vec4,
+    /// World position from clip position (fog banks reconstruct points along each pixel's ray).
+    pub world_from_clip: Mat4,
+    /// xyz: camera position, w: the shader clock (wrapped seconds).
+    pub eye: Vec4,
+    /// Fog banks: x density (0 = none), y the ground level they lie on, z their depth (m),
+    /// w how far they are marched (m).
+    pub bank: Vec4,
+    /// rgb: fog bank colour (linear), a: drift along x.
+    pub bank_color: Vec4,
+    /// Rain: x amount (0 = none), y slant, z brightness, w drift along z (fog banks).
+    pub rain: Vec4,
 }
 
 /// Feed the finishing pass from the style profile, the sun and the camera.
+#[allow(clippy::type_complexity)]
 pub fn update(
     style: Res<crate::style::Style>,
-    mut cams: Query<(&Camera, &GlobalTransform, &Projection, &mut Edges, &mut bevy::render::view::ColorGrading, Option<&mut bevy::post_process::bloom::Bloom>)>,
+    atmo: Option<Res<crate::daylight::Atmo>>,
+    time: Res<Time>,
+    mut drift: Local<Vec2>,
+    mut cams: Query<(&Camera, &GlobalTransform, &Projection, &mut Edges, &mut bevy::render::view::ColorGrading, Option<&mut bevy::post_process::bloom::Bloom>, Option<&DistanceFog>)>,
     lights: Query<&GlobalTransform, With<DirectionalLight>>,
 ) {
-    let Ok((camera, gtf, proj, mut e, mut grading, bloom)) = cams.single_mut() else { return };
-    let s = &*style;
+    let Ok((camera, gtf, proj, mut e, mut grading, bloom, fog)) = cams.single_mut() else { return };
+    // With the atmosphere, grading, bloom and line fade follow it (they change through the day
+    // and with the fog), without touching the style profile, which the materials hang on.
+    let mut s = *style;
+    let atmo = atmo.filter(|a| a.active);
+    if let Some(a) = &atmo {
+        s.saturation = a.saturation;
+        s.grade_color = a.grade;
+        s.grade = a.grade_strength;
+        s.bloom = a.bloom;
+        if let Some(FogFalloff::Linear { start, end }) = fog.map(|f| f.falloff.clone()) {
+            s.line_fade = [s.line_fade[0].min(start * 0.6), s.line_fade[1].min(start + (end - start) * 0.45)];
+        }
+    }
+    let s = &s;
     let on = s.enabled && s.edges;
     let (w, h) = camera.physical_viewport_size().map_or((1600.0, 900.0), |s| (s.x as f32, s.y as f32));
     let near = if let Projection::Perspective(p) = proj { p.near } else { 0.1 };
@@ -60,7 +90,20 @@ pub fn update(
         sun: screen_sun.extend(0.0).extend(0.0),
         grade: Vec4::new(gr, gg, gb, if on { s.grade } else { 0.0 }),
         screen: Vec4::new(w, h, 1.0 / w, 1.0 / h),
+        world_from_clip: gtf.to_matrix() * camera.clip_from_view().inverse(),
+        eye: gtf.translation().extend(time.elapsed_secs_wrapped()),
+        ..default()
     };
+    if let Some(a) = &atmo {
+        // Banks drift with the wind.
+        *drift += Vec2::new(0.94, 0.34) * (0.6 + 2.5 * a.wind) * time.delta_secs();
+        let fog_c = a.fog * 1.06 + a.fill * 0.5;
+        e.bank = Vec4::new(a.banks, a.ground, 5.0, 150.0);
+        e.bank_color = fog_c.extend(drift.x);
+        // Rain catches the light: brighter by day.
+        let level = (a.lux / 9000.0).clamp(0.08, 1.0);
+        e.rain = Vec4::new(a.rain, 0.12 + 0.18 * a.wind, 0.22 * level + 0.03 + a.flash * 0.3, drift.y);
+    }
     if let Some(mut b) = bloom {
         if b.intensity != s.bloom {
             b.intensity = s.bloom;

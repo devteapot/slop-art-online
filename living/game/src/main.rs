@@ -16,6 +16,7 @@ mod camera;
 mod capture;
 mod characters;
 mod controls;
+mod daylight;
 mod demo;
 mod envs;
 mod hud;
@@ -25,9 +26,12 @@ mod net;
 mod perf;
 mod post;
 mod sight;
+mod sky;
 mod style;
 mod ui;
 mod view;
+mod water;
+mod weather;
 mod world;
 
 use bevy::prelude::*;
@@ -67,6 +71,7 @@ fn main() {
         .add_plugins(style::StylePlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(characters::CharactersPlugin)
+        .add_plugins(daylight::DaylightPlugin)
         .add_systems(PostUpdate, post::update)
         .init_non_send::<net::Net>()
         .init_non_send::<world::Scene>()

@@ -40,7 +40,8 @@ impl Default for Draw {
 #[derive(Resource, Default)]
 pub struct Palette {
     terrain: Handle<Toon>,
-    pub water: Handle<StandardMaterial>,
+    /// The toon water (water.rs), shared by every water surface.
+    pub water: Handle<crate::water::Water>,
     pub vertex: Handle<Toon>,
     pub tree: Handle<Toon>,
     pub tree_faded: Handle<Toon>,
@@ -138,17 +139,11 @@ pub struct Thing(pub Vec2);
 #[derive(Component)]
 pub struct Tree;
 
-pub fn setup(mut commands: Commands, mut mats: ResMut<Assets<StandardMaterial>>, mut toons: ResMut<Assets<Toon>>, mut meshes: ResMut<Assets<Mesh>>, mut palette: ResMut<Palette>, style: Res<Style>) {
+pub fn setup(mut commands: Commands, mut waters: ResMut<Assets<crate::water::Water>>, mut toons: ResMut<Assets<Toon>>, mut meshes: ResMut<Assets<Mesh>>, mut palette: ResMut<Palette>, style: Res<Style>) {
     let white = |r: f32| StandardMaterial { base_color: Color::WHITE, perceptual_roughness: r, ..default() };
     palette.terrain = toons.add(style.toon(white(0.95)));
     palette.vertex = toons.add(style.toon(white(0.85)));
-    palette.water = mats.add(StandardMaterial {
-        base_color: Color::srgba(0.16, 0.38, 0.56, 0.78),
-        alpha_mode: AlphaMode::Blend,
-        perceptual_roughness: 0.06,
-        reflectance: 0.7,
-        ..default()
-    });
+    palette.water = waters.add(crate::water::Water::default());
     palette.tree = toons.add(style.toon(white(0.9)));
     palette.tree_faded = toons.add(style.toon(StandardMaterial { base_color: Color::srgba(1.0, 1.0, 1.0, 0.2), alpha_mode: AlphaMode::Blend, ..white(0.9) }));
     palette.trees = [meshes.add(tree_mesh(false)), meshes.add(tree_mesh(true))];
@@ -156,7 +151,9 @@ pub fn setup(mut commands: Commands, mut mats: ResMut<Assets<StandardMaterial>>,
         toons.add(style.toon(StandardMaterial { base_color: Color::srgb(0.5, 0.5, 0.55), ..white(0.9) })),
         toons.add(style.toon(StandardMaterial { base_color: Color::srgb(0.12, 0.13, 0.16), ..white(1.0) })),
     ];
-    commands.insert_resource(GlobalAmbientLight { color: Color::srgb(0.75, 0.8, 0.95), brightness: 420.0, ..default() });
+    // The atmosphere (daylight.rs) sets the ambient light as the sky's fill; its alpha 0 means
+    // none, and the toon shader then ignores it.
+    commands.insert_resource(GlobalAmbientLight { color: Color::srgba(0.75, 0.8, 0.95, 0.0), brightness: 420.0, ..default() });
     commands.spawn((
         DirectionalLight { color: Color::srgb(1.0, 0.96, 0.88), illuminance: 9_000.0, shadow_maps_enabled: true, ..default() },
         Transform::from_xyz(-30.0, 60.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),

@@ -405,6 +405,20 @@ Open:
 - Fixed: `living/tools/merge_primitives.py` used to copy a shared vertex buffer once per merged primitive (Vivi's hair held about 420k vertices for 6.7k triangles). It now copies each distinct vertex set once, and the animated Vivi file shrank from 63 MB to 22 MB.
 - `LIVING_GAME_PERF=diag` reports what each view draws (meshes, materials, triangles, characters' share) and Bevy's per-pass CPU times. Metal reports no GPU times; Vulkan should.
 
+**Atmosphere (2026-11-09; client presentation only):**
+- **Day-night:** `daylight.rs` follows a mood curve stored as data in `island.json`: sun and moon arcs, light, sky, fog, shadow hue, grading, bloom and glow. Windows and lamps glow at night; lamp lights are capped to the nearest 14. Connected, the hour comes from the authority's `world` clock. Offline: `LIVING_GAME_HOUR`, and `LIVING_GAME_DAY_MINUTES` (24 by default).
+- **Regional moods** blend from the region kinds round you: spirit grove dusky and glowing, wetlands misty, highlands crisp, beach bright.
+- **Weather** (`weather.rs`): clear, rain, fog and storm in spells taken from the world clock, so every client sees the same weather. Rain streaks, wet surfaces and puddles; drifting fog banks; lightning; wind sway for plants in every pass through mesh tags, with no per-instance materials. `LIVING_GAME_WEATHER` forces a state.
+- **Sky** (`sky.rs`): a gradient dome with toon clouds, sun, moon and stars. **Water** (`water.rs`): a shared toon material with banded depth, shore foam, animated bands, a sky reflection and rain rings.
+- **Cost:** none in clear weather (town 5.0, forest 3.5, hamlet 5.3 ms); fog at dawn adds about 0.5 ms in the forest. `LIVING_GAME_PERF=noatmo` turns it off.
+- **Open:**
+  - dawn in the town is heavily orange-brown;
+  - storms read flat;
+  - fog washes out vistas beyond about 40 m;
+  - the spirit grove is low in contrast;
+  - no cloud shadows yet;
+  - the connected clock path is untested live.
+
 **Claude–Blender integration** (research of 2026-11-08):
 - **Backbone: headless scripts** (`blender -b -P`), versioned in the repo. No socket or telemetry, reproducible, and N processes can run in parallel. The agent checks its work through rendered contact sheets and numeric checks (dimensions, triangle budget, silhouette against a reference, a re-import round trip), reviewed by a fresh-context subagent ([blender-game-skills](https://github.com/majidmanzarpour/blender-game-skills), [blender-kiln](https://github.com/elithril/blender-kiln)).
 - **Live inspection: the official [Blender Lab MCP server](https://www.blender.org/lab/mcp-server/)** (GPL-3.0, Blender 5.1+, the server behind Anthropic's Blender connector). It is optional. It runs model-written code unguarded, so use it on localhost only.
