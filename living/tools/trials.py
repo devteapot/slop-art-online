@@ -1679,6 +1679,19 @@ def report(a):
     print(f"\nwritten {bdir / 'report.md'}")
 
 
+def resummarize(a):
+    """Recompute every instance's summary from its kept evidence (after a probe changes)."""
+    bdir = OUT / a.batch
+    keep = ("db", "variant", "replicate", "stopped_by", "fake", "minutes_planned", "runaways", "mind_starts", "day_ms")
+    for p in sorted(bdir.glob("*/summary.json")):
+        old = json.loads(p.read_text())
+        extra = {k: old.get(k) for k in keep}
+        if not extra.get("day_ms"):
+            extra["day_ms"] = 720000  # every trial world so far has the 12-minute day
+        p.write_text(json.dumps(summarize(p.parent, load_trial(old["trial"]), extra), indent=1))
+    report(argparse.Namespace(batch=a.batch))
+
+
 def clean(a):
     guard()
     bdir = OUT / a.batch
@@ -1733,6 +1746,9 @@ def main():
     p = sub.add_parser("resume")
     p.add_argument("--batch", required=True)
     p.set_defaults(f=resume)
+    p = sub.add_parser("resummarize")
+    p.add_argument("--batch", required=True)
+    p.set_defaults(f=resummarize)
     p = sub.add_parser("life")
     p.add_argument("--batch", required=True)
     p.set_defaults(f=life_report)
