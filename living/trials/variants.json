@@ -73,5 +73,26 @@
   "mind": false,
   "models": {},
   "env": {}
+ },
+ "people": {
+  "about": "People think with the `people` mix of living/configs/models.json as their default (think glm-flash; deliberate deepseek-flash@low on stage, glm-flash off stage; talk deepseek-flash; consolidate and reorganize glm-flash).",
+  "models": {
+   "default": "people"
+  },
+  "env": {}
+ },
+ "recall600": {
+  "about": "Default with LIVING_RECALL_TOKENS=decide=600 (main's default is decide=800).",
+  "models": {},
+  "env": {
+   "LIVING_RECALL_TOKENS": "decide=600"
+  }
+ },
+ "animal-switches": {
+  "about": "Default with LIVING_ANIMAL_MINDS=pack,salient,choose: one mind per pack, think on salient change, one-call choice from a menu (docs/MIND_HARNESS.md item 3).",
+  "models": {},
+  "env": {
+   "LIVING_ANIMAL_MINDS": "pack,salient,choose"
+  }
  }
 }

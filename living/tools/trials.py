@@ -148,18 +148,25 @@ def neo4j_password():
 
 
 def load_trial(name):
-    path = TRIALS / f"{name}.json"
+    # A name is a file in living/trials/, or a path to a trial file elsewhere (an iteration's).
+    path = Path(name) if name.endswith(".json") else TRIALS / f"{name}.json"
     t = json.loads(path.read_text())
     if "extends" in t:
         base = load_trial(t.pop("extends"))
         # Lists (the timeline) are replaced as a whole; objects are merged.
         t = deep_merge(base, t)
-    t["name"] = name
+    t["name"] = Path(name).stem if name.endswith(".json") else name
     return t
 
 
 def variants():
-    return json.loads((TRIALS / "variants.json").read_text())
+    """living/trials/variants.json, plus any in the file TRIALS_VARIANTS names (an iteration's
+    variants, kept out of the tracked list)."""
+    v = json.loads((TRIALS / "variants.json").read_text())
+    extra = os.environ.get("TRIALS_VARIANTS")
+    if extra:
+        v.update(json.loads(Path(extra).read_text()))
+    return v
 
 
 def world_seed(world):
