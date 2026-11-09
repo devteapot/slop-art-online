@@ -9,7 +9,7 @@ A player's character greets, answers and turns through the same skills residents
 - An answer closes the greeting: the resident gestures once, not back and forth.
 - A nod after the greeting closed greets anew and is answered.
 - `face` turns the player's standing body toward its target (body `heading` + `turn` × `turn_s`).
-- The game client sends the same `human_act` from its keys: **G** waves, **B** nods (`living/game/src/town.rs`), at the person under or nearest the cursor, else the nearest person within the gesture's reach (12 m for a wave, 6 m for a nod), ahead first. With nobody in reach it sends the gesture without a target and the rules refuse it. Its own clip is predicted at the press and dropped after 600 ms unless the player's `doing` row confirms it.
+- The game client sends the same `human_act` from its keys: **G** waves, **B** nods, **V** looks someone over (`appraise`, [perception](perception.md); any creature within 6 m) (`living/game/src/town.rs`, `MY_ACTS`), at the person under or nearest the cursor, else the nearest person within the gesture's reach (12 m for a wave, 6 m for a nod), ahead first. With nobody in reach it sends the gesture without a target and the rules refuse it. Its own clip is predicted at the press and dropped after 600 ms unless the player's `doing` row confirms it.
 - Refusals: waving at oneself is refused by the rules ("not to yourself", told back as an act experience); `use_skill("wave", …)` is refused because a gesture is not on the skill bar.
 
 ## How to get to it (user POV)

@@ -61,8 +61,7 @@ PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
            'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
            'projected', 'reveal', 'acquaintance', 'connection', 'presence']
-# Private when the module is built with LIVING_PERCEPTION=scoped; public while it is `open`
-# (the default until the game client subscribes the views).
+# Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
@@ -189,7 +188,7 @@ class Run:
         if self.state.get('started_container'):
             raise ValueError('this task requires the shared container to be up before launch')
         self.directory = V.run_dir(name)
-        self.mode = self.state.get('perception', 'open')
+        self.mode = self.state.get('perception', 'scoped')
         self.results = []
         self.matrix = []
         self.secrets = [self.state.get('token', '')]
@@ -455,7 +454,7 @@ class Run:
             self.check('anonymous experience privacy', leaked['status'] == 'rejected' and 'private' in leaked.get('error', '').lower(),
                        'privacy-experience.json')
         else:
-            # The compatibility build keeps the game client's tables public (docs/PERCEPTION.md).
+            # The open build (LIVING_PERCEPTION=open, diagnostics) makes these tables public (docs/PERCEPTION.md).
             leaked = self.probe('privacy-experience', ['SELECT * FROM experience'])
             observable = leaked['status'] == 'applied' and len({e['observer'] for e in leaked['final']['experiences']}) > 1
             self.check('KNOWN ISSUE anonymous experience privacy (open build)', leaked['status'] == 'rejected', 'privacy-experience.json',

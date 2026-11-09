@@ -561,17 +561,14 @@ Headless look-dev captures of the 4096 m floor, in the same folder:
 | The wasteland edge | 600, 1903 | 17 | `edge-*.png` | the arterial leaving a western gate, the skyline in haze behind it |
 | A salvage camp | 928, 736 | 16 | `salvage-*.png` | kiosk shacks and a garage round a dirt square, residents |
 
-**What the captures show that the maps do not:**
-- **The wastes look green.** The client dresses every region with its environment's plants (`RegionKind::env`: meadow, forest), whatever the tiles say. An arid floor needs an environment of its own, chosen per land (a `KindLook.env` field the client reads) and assets for it.
-- **The wall is not drawn:** the cyberpunk kit has no wall model.
+**What the captures show that the maps do not** (the first two are addressed since, `acbbda7`):
+- **The wastes looked green.** The client dressed every region with its environment's plants (`RegionKind::env`: meadow, forest), whatever the tiles say. *Since `acbbda7`*, a land whose rivers run dry (`water.dry_rivers`) is arid in the client (`island.rs`, `Climate::Arid`): its open country is dressed from three environments of its own, `wastes`, `scrubland` and `badlands` (`living/game/assets/envs/`: dry grass, scrub, dead trees, rocks and rubble from `nature.py`), on ground layers of its own (dry earth, cracked mud and gravel, 16 layers in all; `terrain.rs`, `paint.py`). Seeds still don't name a look per region: the client infers the climate from the land's parameters, and a `KindLook.env` field in the rules' data remains the proper home.
+- **The wall was not drawn:** the cyberpunk kit had no wall model. *Since `acbbda7`* the megacity's wall line draws a 14 m cyberpunk wall (`buildings.py`, rows in `living/rules/data/buildings.json`); the megacity core renders at 4.7 ms a frame, island frame times and material counts unchanged.
 - **The night is very dark and hazy:** GAME_BRIEF already lists "cyberpunk at night reads too dark and hazy".
 
 ### Not done
 
-- **Look-dev captures** need a client change: `Island::new` calls `generate_default(seed, size)`, ignoring a seed's `params` (`living/game/src/island.rs:110`), and no env var loads a land seed by path.
-  - The captures above used a private build with a 9-line change: `LIVING_GAME_LAND=<seed.json>` makes `Island::new` call `land::generate(seed, size, params)`. It was not committed, because `living/game` is another worker's.
-  - Proposed for the game worker: read `map.params` in look-dev (the env's `world` section or that variable), as connected mode already does from the `land` row.
-  - Its log line still prints the env's `seed 7 2048 m`, so do not trust that line.
+- **Look-dev captures** of a land seed: *done in `acbbda7`*. `LIVING_GAME_SEED=<seed.json>` makes look-dev draw that seed's land (its `seed`, `map.size` and `map.params`, as the authority builds it from that file; for example `living/seeds/floor-megacity.json`), generated on a worker thread; without it look-dev draws the environment's `world` on the default parameters. The log line names the seed, size and source file it drew. The captures above predate it: they used a private build with a 9-line `LIVING_GAME_LAND` change that was not committed.
 - **The 4096 m floor in the authority.** Staged generation, above.
 - **People.** The seed peoples six settlements with 96 residents and copies the island's `town_life` and `ways`: the core (`Spire Ward`), a dense ward, a works ward, a slum ward, an outpost and a salvage camp. The other 25 settlements stand empty. Peopling every ward means one seed entry each (`"site": "metro_town"`: the k-th entry takes the k-th ward), which a world preset would generate.
 - **Elevated highways, megatower and megablock models, slum shacks, port cranes.** Presentation and assets (above).
@@ -583,7 +580,7 @@ Headless look-dev captures of the 4096 m floor, in the same folder:
 | Phase | What | What it proves | Verification surface |
 |---|---|---|---|
 | 0 (this change) | The megacity generator at 2048/4096 m in the rules, the floor-law composition, the design | A city-scale floor can be generated deterministically on both sides; the size limits are known | `cargo test -p living-rules`; `verify-generation` with the new seed at 2048 m |
-| 1 | Staged generation in `create_floor`; the seed passed at runtime instead of compiled in; the client's land cache by digest; the client reads `map.params` in look-dev | One module build hosts any floor up to 4–8 km within the fuel budget; a client joins a 4096 m floor in seconds | `verify-generation` (a 4096 m floor), `verify-client` (land row, digests, cache) |
+| 1 | Staged generation in `create_floor`; the seed passed at runtime instead of compiled in; the client's land cache by digest (the client reading `map.params` in look-dev is done: `LIVING_GAME_SEED`) | One module build hosts any floor up to 4–8 km within the fuel budget; a client joins a 4096 m floor in seconds | `verify-generation` (a 4096 m floor), `verify-client` (land row, digests, cache) |
 | 2 | Laws as data: the inventory above moved behind law functions with their cadence; `law_card`; `rates_key`; overlay composition with AST merge | One build, several floors with different laws; no per-arm builds for labs | `verify-core` (law scenes per floor), `verify-minds` (the mind reads the floor's laws) |
 | 3 | The tower database, soul ids, transit by IDC on one host; memory keyed by `(realm, soul)`; the client's floor switch | A character leaves floor A and arrives on floor B with exactly what should travel, and nothing duplicates or vanishes across crashes | New `verify-transit` skill (create with `create-verification-skill`): scripted tier (two scratch floors and a scratch tower; kill the server between each step and resume), and a player tier through `verify-player` |
 | 4 | The second and third floors (steampunk valley, sky archipelago) with their laws | Floors differ in generation, technology and physics without engine forks | `verify-generation`, `verify-core` |

@@ -10,7 +10,9 @@
 //!   aimed at), and whether the body is indoors and not drawn (asleep, or resting at its own
 //!   door: the house is where it is);
 //! - sends my own gestures through `human_act` ([`WAVE`] waves, [`NOD`] nods, at the person under
-//!   or nearest the cursor, else the nearest one ahead), predicting only my clip;
+//!   or nearest the cursor, else the nearest one ahead), predicting only my clip; [`APPRAISE`]
+//!   looks a person or an animal over the same way (the rules' `appraise`: for a while the
+//!   authority's projection of them carries their exact health, which the nameplate shows);
 //! - notes who answered my greeting (my `experience` rows), so their nameplate shows briefly;
 //! - hands the public `weather` row to `weather.rs`, so everyone sees the rain residents
 //!   shelter from.
@@ -26,21 +28,22 @@ use living_bindings::*;
 use spacetimedb_sdk::Table;
 use std::collections::{HashMap, HashSet};
 
-/// Gesture keys: G waves (greets), B nods. Clear of WASD, the skill bar (LMB, RMB, Q, E, R,
-/// Shift) and F (interact).
+/// Gesture keys: G waves (greets), B nods, V looks someone over (`appraise`). Clear of WASD, the
+/// skill bar (LMB, RMB, Q, E, R, Shift) and F (interact).
 pub const WAVE: KeyCode = KeyCode::KeyG;
 pub const NOD: KeyCode = KeyCode::KeyB;
+pub const APPRAISE: KeyCode = KeyCode::KeyV;
 /// How long my predicted gesture waits for the authority's `doing` row (ms).
 const PREDICT_MS: f64 = 600.0;
 /// How long the nameplate of someone who answered my greeting shows (ms).
 pub const ANSWERED_MS: f64 = 3500.0;
-/// A body resting this close to its own door (m) is inside.
-const INDOORS_M: f32 = 3.5;
 /// A standing body turns toward its activity's spot only when it is at least this far (m).
 const FACE_MIN_M: f32 = 0.4;
 /// Gesture reach for choosing whom I greet (m), as the rules' wave and nod take.
 const WAVE_REACH: f32 = 12.0;
 const NOD_REACH: f32 = 6.0;
+/// Reach for looking someone over (m), as the rules' `appraise_check` takes.
+const APPRAISE_REACH: f32 = 6.0;
 
 /// The rules' visible skills (`act_card`), read each frame.
 #[derive(Resource, Default)]
@@ -72,6 +75,25 @@ pub enum Pose {
 /// A gesture's clip, rate and seconds on screen (the clips: wave 2.97 s, nod 1.4 s).
 const WAVE_LOOK: Pose = Pose::Once("wave", 1.4, 2.1);
 const NOD_LOOK: Pose = Pose::Once("nod", 1.0, 1.4);
+/// Looking someone over: a glance held for the rules' 1.5 s.
+const APPRAISE_LOOK: Pose = Pose::Once("idle_look", 1.0, 1.5);
+
+/// One of my own acts sent through `human_act` from a key: whom it may be aimed at, how far, and
+/// the clip predicted at the press.
+struct MyAct {
+    skill: &'static str,
+    key: KeyCode,
+    reach: f32,
+    /// People only (a greeting), or any creature (looking an animal over too).
+    people: bool,
+    look: Pose,
+}
+
+const MY_ACTS: [MyAct; 3] = [
+    MyAct { skill: "wave", key: WAVE, reach: WAVE_REACH, people: true, look: WAVE_LOOK },
+    MyAct { skill: "nod", key: NOD, reach: NOD_REACH, people: true, look: NOD_LOOK },
+    MyAct { skill: "appraise", key: APPRAISE, reach: APPRAISE_REACH, people: false, look: APPRAISE_LOOK },
+];
 /// Settling down to sit plays this long (s; `sit_ground_down` is 2.97 s).
 const SIT_DOWN_S: f64 = 2.9;
 
@@ -80,6 +102,7 @@ pub fn look(card: &ActCard) -> Pose {
     match card.skill.as_str() {
         "wave" => WAVE_LOOK,
         "nod" => NOD_LOOK,
+        "appraise" => APPRAISE_LOOK,
         "gather" | "plant" | "take" | "tend" => Pose::Loop("gather"),
         "keep" | "cook" | "craft" | "store" => Pose::Loop("work"),
         "read" => Pose::Loop("idle_look"),
@@ -182,7 +205,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
     if let Some(me) = net.my_id {
         // "X answers your greeting (nod)." arrives with the resident's `doing` row; the subject is
         // the one who answered.
-        let fresh: Vec<Experience> = conn.db.experience().iter().filter(|e| e.observer == me && !town.seen.contains(&e.id) && e.text.contains("answers your greeting")).collect();
+        let fresh: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && !town.seen.contains(&e.id) && e.text.contains("answers your greeting")).collect();
         for e in fresh {
             town.seen.insert(e.id);
             if now - (e.at_ms as f64) < ANSWERED_MS {
@@ -193,16 +216,16 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
     town.answered.retain(|_, t| now - *t < ANSWERED_MS);
     town.greeting = town.greeting.filter(|(_, t)| now - *t < ANSWERED_MS);
     if town.seen.len() > 512 {
-        let live: HashSet<u64> = conn.db.experience().iter().map(|e| e.id).collect();
+        let live: HashSet<u64> = conn.db.my_experience().iter().map(|e| e.id).collect();
         town.seen.retain(|id| live.contains(id));
     }
 }
 
-/// The person I greet: under or nearest the cursor (combat's pick), else the nearest within
-/// reach, ahead of me first.
+/// Whom my act goes to: under or nearest the cursor (combat's pick), else the nearest within
+/// reach, ahead of me first; a person, or any creature I perceive when `people` is false.
 #[allow(clippy::too_many_arguments)]
-fn whom(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, ahead: Vec2, picked: Option<u32>, reach: f32, town: &Town) -> Option<u32> {
-    let person = |id: &u32| *id != me_id && !town.hidden(*id) && conn.db.body().id().find(id).is_some_and(|b| b.kind == "person");
+fn whom(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, ahead: Vec2, picked: Option<u32>, reach: f32, people: bool, town: &Town) -> Option<u32> {
+    let person = |id: &u32| *id != me_id && !town.hidden(*id) && conn.db.seen_characters().id().find(id).is_some_and(|c| !people || c.kind == "person");
     if let Some(id) = picked.filter(person).filter(|id| scene.shown.get(id).is_some_and(|(p, _)| p.distance(me) <= reach)) {
         return Some(id);
     }
@@ -216,7 +239,7 @@ fn whom(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, ahead: Vec2, p
         .map(|(id, _)| id)
 }
 
-/// My gesture keys (and a script's), through `human_act`.
+/// My gesture and appraise keys (and a script's), through `human_act`.
 #[allow(clippy::too_many_arguments)]
 fn input(
     net: NonSend<Net>,
@@ -240,34 +263,36 @@ fn input(
         }
     }
     let me = Vec2::new(me3.x, me3.z);
-    let mut presses: Vec<(&'static str, Option<u32>, bool)> = Vec::new();
+    let mut presses: Vec<(&MyAct, Option<u32>)> = Vec::new();
     if !controls.demo && !controls.chat_open && !ui.keyboard {
-        if keys.just_pressed(WAVE) {
-            presses.push(("wave", None, false));
-        } else if keys.just_pressed(NOD) {
-            presses.push(("nod", None, false));
+        if let Some(a) = MY_ACTS.iter().find(|a| keys.just_pressed(a.key)) {
+            presses.push((a, None));
         }
     }
     for (skill, spec) in std::mem::take(&mut scripted.press) {
-        let skill = if skill == "nod" { "nod" } else { "wave" };
-        presses.push((skill, spec.parse().ok(), true));
+        match MY_ACTS.iter().find(|a| a.skill == skill) {
+            Some(a) => presses.push((a, spec.parse().ok())),
+            None => warn!("live script: gesture wants wave, nod or appraise, got {skill}"),
+        }
     }
     let ahead = controls.look.unwrap_or(roam.facing);
-    for (skill, id, _) in presses {
-        let reach = if skill == "nod" { NOD_REACH } else { WAVE_REACH };
-        let to = id.or_else(|| whom(conn, &scene, me_id, me, ahead, combat.target, reach, &town));
-        // With nobody to greet the rules refuse it; the refusal is logged, nothing plays.
+    for (act, id) in presses {
+        let to = id.or_else(|| whom(conn, &scene, me_id, me, ahead, combat.target, act.reach, act.people, &town));
+        // With nobody there the rules refuse it; the refusal is logged, nothing plays.
         let node = match to {
-            Some(t) => serde_json::json!({"do": skill, "target": {"id": t}}),
-            None => serde_json::json!({"do": skill}),
+            Some(t) => serde_json::json!({"do": act.skill, "target": {"id": t}}),
+            None => serde_json::json!({"do": act.skill}),
         };
-        let r = conn.reducers.human_act_then(node.to_string(), net.on_reply(skill));
-        net.report(skill, r);
+        let r = conn.reducers.human_act_then(node.to_string(), net.on_reply(act.skill));
+        net.report(act.skill, r);
         if let Some(t) = to {
-            // I turn to whom I greet (the authority turns my body too; my look would not).
+            // I turn to whom I greet or look over (the authority turns my body too; my look
+            // would not).
             let face = scene.shown.get(&t).map(|(p, _)| *p - me).filter(|d| d.length_squared() > 1e-4);
-            town.predicted = Some((if skill == "nod" { NOD_LOOK } else { WAVE_LOOK }, now, face));
-            town.greeting = Some((t, now));
+            town.predicted = Some((act.look, now, face));
+            if act.people {
+                town.greeting = Some((t, now));
+            }
         }
     }
 }
@@ -292,7 +317,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
     let ids: Vec<(u32, Vec2)> = scene.shown.iter().map(|(id, (p, _))| (*id, *p)).collect();
     for (id, p) in ids {
         let mut show = Show::default();
-        let row = conn.db.doing().id().find(&id);
+        let row = conn.db.seen_doing().id().find(&id);
         let card = row.as_ref().and_then(|d| acts.by_code(d.code));
         // Where its target is now: the one it is aimed at (as drawn), else the row's spot.
         let spot = row.as_ref().map(|d| scene.shown.get(&d.target).filter(|_| d.target != 0).map_or(Vec2::new(d.x, d.y), |s| s.0));
@@ -323,8 +348,8 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
                 show.face = toward.filter(|_| clip != "play");
             }
             (Some(d), Some(Pose::Rest)) => {
-                let home = conn.db.character().id().find(&id).map(|c| Vec2::new(c.home_x, c.home_y)).filter(|h| *h != Vec2::ZERO);
-                if home.is_some_and(|h| h.distance(p) <= INDOORS_M) {
+                // A rest taken at home is indoors (the authority says so on the `doing` row).
+                if d.indoors {
                     show.hidden = true;
                 } else if raining || crate::world::hash(id, 0x5e47) < 0.3 {
                     // Under the eaves, or standing at ease with the others.

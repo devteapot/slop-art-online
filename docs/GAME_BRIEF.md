@@ -101,7 +101,7 @@ The user's idea: seeing only what is in front of you makes sense, and skills, pa
    - shared views by map region for the physical world (`body`, `structure`, `resource_node` and `terrain_chunk` are already indexed by 16×16-tile chunk);
    - per-player views keyed on the caller for private state;
    - mind tables made private, with a separate developer path for the observer.
-   - *Built 2026-11-09* ([perception](PERCEPTION.md)): the authority works out each player's perceived set (sight by day and night, a torch, a sight line through walls and rock), per-sender `seen_*` and `my_*` views deliver it with a narrow motion row, and minds' and audit tables are private, read by the mind service and the observer as the database owner. Region views were not needed: a per-sender view moves with the character on the authority. The game client switches with [perception-client.patch](perception-client.patch); until then the default build keeps its tables public.
+   - *Built 2026-11-09* ([perception](PERCEPTION.md)): the authority works out each player's perceived set (sight by day and night, a torch, a sight line through walls and rock), per-sender `seen_*` and `my_*` views deliver it with a narrow motion row, and minds' and audit tables are private, read by the mind service and the observer as the database owner. Region views were not needed: a per-sender view moves with the character on the authority. The game client reads only those views, and `scoped` is the default build since the client landed the same day ([what the client shows of others](#what-the-client-shows-of-others-2026-11-09)).
 2. **A typed player API.** `human_act` takes behavior-graph JSON. The game needs typed actions, aim directions and the projectile or area mechanics that skillshots require.
 3. **Controller handoff.** Move a character between the player and a mind on disconnect and reconnect. Today `mind_*` reducers authorize by `character.controller`.
 4. **A mind learned from play.** The player's own experiences and choices must be consolidated into the persona and routines the offline mind uses.
@@ -478,7 +478,7 @@ Open:
 
 Presentation only: the authority decides what every resident does ([town life](TOWN_LIFE.md)); the client draws it from public rows and sends my gestures through `human_act`. Code: `living/game/src/town.rs`, with `live.rs` (clips, facing, indoors), `net.rs` (subscriptions), `weather.rs`, `camera.rs` and the HUD.
 
-- **Data.** `act_card` (17 rows) and `weather` (one row) are subscribed once per connection; `doing` is joined to the near body window like `fighter` (`SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE <chunk ranges>`). No whole-world query. A connected client holds 21 live queries instead of 18.
+- **Data** (as first built; since the perception views the client reads `seen_doing` instead of the join, [below](#what-the-client-shows-of-others-2026-11-09)). `act_card` (17 rows) and `weather` (one row) are subscribed once per connection; `doing` is joined to the near body window like `fighter` (`SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE <chunk ranges>`). No whole-world query. A connected client holds 21 live queries instead of 18.
 - **What residents are seen doing** comes from `doing.code` through `act_card`: by skill name for the skills drawn for, else by the card's `look`, else nothing over locomotion, so a skill the rules add shows without a client change.
 
   | Skill (look) | Drawn as |
@@ -493,7 +493,7 @@ Presentation only: the authority decides what every resident does ([town life](T
   | `sleep` | not drawn (indoors) |
 
   A working body faces its spot (`doing.x/y`) or the one it is aimed at. Unknown codes and looks fall back to idle and locomotion, as combat's do.
-- **Indoors: hidden, not a lit window.** A sleeper, or someone resting within 3.5 m of their own door (sheltering at home, keeping warm), is not drawn, gets no nameplate and is not targeted; they reappear at the door when they come out. A lit window would need per-house window geometry that buildings don't expose, and the island's windows already glow at night.
+- **Indoors: hidden, not a lit window.** A sleeper, or someone resting within 3.5 m of their own door (sheltering at home, keeping warm; the authority now says so on the `doing` row, `indoors`), is not drawn, gets no nameplate and is not targeted; they reappear at the door when they come out. A lit window would need per-house window geometry that buildings don't expose, and the island's windows already glow at night.
 - **Turning on the spot.** A standing body takes its facing from its own segment, `heading` + `turn` × elapsed (up to `turn_s`), so the turn before a gesture and `face` turn the body in place instead of sliding. Drawn yaw eases toward the wanted facing (1/16 s), so stops and new aims never snap.
 - **Rain** follows the `weather` row in connected mode (rain or clear), eased over 6 s; joining mid-spell shows the sky as it is. Look-dev keeps its schedule and `LIVING_GAME_WEATHER`.
 - **My gestures: G waves, B nods** (clear of WASD, the skill bar and F). They go to the person under or nearest the cursor, else the nearest in reach ahead (12 m for a wave, 6 m for a nod). My clip is predicted at the press, and my character turns to whom I greet. The answer is the resident's own `doing` row (the nod) and my `experience` ("… answers your greeting (nod)."). It shows plainly: their nameplate for 3.5 s, and the camera's conversation framing takes in both of us. No text.
@@ -543,6 +543,43 @@ Client presentation and the clip tools only (`living/game`, `living/tools`).
 - **Still off:** the dawn haze still washes out the middle distance, and the town's terracotta paving reads orange at dawn in both versions. Storm shadows stay sharp under trees. Puddles on grass still read as patches.
 
 **Clippy:** the two `approx_constant` errors (TAU in `bodies.rs` and `world.rs`) are fixed. The remaining warnings are the same as at `da219a7`.
+
+## What the client shows of others (2026-11-09)
+
+The client receives only what its character perceives ([perception](PERCEPTION.md); `scoped` is the default build) and draws only that. Code: `living/game/src/net.rs` (the views), `live.rs`, `town.rs`, `ui/live.rs`, `ui/overhead.rs`.
+
+- **Who is drawn:** every body in `seen_bodies`, which holds the creatures within sight (11 tiles by day, 6 at night, more with a torch) with a clear sight line. Someone behind a wall, a fence, a stall or rock is not drawn, and nobody gets a nameplate there. Creatures appear within about 200 ms of coming into sight.
+- **Names:** a name only when my character knows it, otherwise the label the authority gives (`a stranger`, `a child`, `a wolf`). It shows on nameplates, speech bubbles, the log, the target panel and the death screen. Someone who says their own name is known from then on. The death screen names my killer and the witnesses as I last perceived them.
+- **Health:** others' health is a band on the nameplate's bar. While an appraisal holds (**V**, below), the bar is exact and a small `hp / max` figure sits under it; the plate stays up for those 20 s and the figure goes when the reveal ends. It has no label and no other new HUD element.
+- **Dress:** build and dress come from the projection's `folk` and `style`: the settlement the character lives in, since the home position is no longer sent.
+- **Indoors:** a resting resident is hidden when its `doing` row says `indoors` (the authority decides it from the home). A sleeper is hidden as before.
+- **V looks someone over** (`appraise`, through `human_act` like G and B). It goes to the creature under or nearest the cursor, else the nearest one within 6 m ahead, people or animals. My character glances (`idle_look`, 1.5 s). The answer is the projection's exact health for 20 s and my experience "You look a stranger over: 94 of 94 health." No text is shown on screen.
+- **Cost**, measured on the Mac (M4 Pro), headless and uncapped (`LIVING_GAME_PERF=diag`). Each arm is the real game client on a fresh scratch island, two runs per arm, 40 s windows at the same world hours: a village at 10:45–12:00 (calm, about 10 bodies within 40 m) and the walled town's square at 12:20–13:40 (busy, about 40). Bytes were counted by the perception bench's TCP proxy. Another session's database had a client connected throughout.
+
+  | | `acbbda7` client, `open` build | this client, `scoped` build |
+  |---|---|---|
+  | calm: bytes to the client | 2.37 / 1.73 kB/s | 0.23 / 0.48 kB/s |
+  | busy: bytes to the client | 2.78 / 3.48 kB/s | 1.22 / 0.66 kB/s |
+  | calm: frame mean (worst) | 5.18 (14.6) / 5.16 (8.4) ms | 4.79 (8.0) / 4.40 (9.5) ms |
+  | busy: frame mean (worst) | 6.29 (8.8) / 6.58 (10.6) ms | 5.14 (9.3) / 4.96 (8.4) ms |
+  | characters drawn, calm / busy | 17–20 / 55–58 | 3–6 / 10–13 |
+  | live queries | 21 | 20 |
+
+  The frame time drops because the client draws only those in sight, not every body within the ±5-chunk window. Bytes vary with what the people in sight do: one run per world, not a repeatability study.
+- **Still off:**
+  - My own `my_characters` row carries `cause` as the authority writes it ("killed by Rook the wolf"). The death screen no longer shows it, but the name reaches the client: the authority should project its own death cause too.
+  - A greeting from a resident frozen by a test graph gets no answer, so its nameplate does not show; ordinary residents answer.
+  - Rock tiles are drawn as flat stone ground, so a person hidden by rock is hidden by something the eye reads as ground.
+  - Labels don't tell strangers apart ("a stranger" twice in the log).
+
+## Wolves and arid lands (2026-11-09)
+
+Client presentation (`acbbda7`), recorded here after the fact.
+
+- **Wolves** are the rigged `wolf.glb` (`living/tools/blender/wolf.py`, run by `gen_anim.sh`; git-ignored), in the shared vertex-colour toon, so a pack adds no material. Gaits come from one family, walk, trot and run (1.3, 3.4 and 7.0 m/s natural), through `gait.rs`. A move plays the bite or the leap, chosen by the skill card's aim (`creature` or `dash`), never by the skill's name (`combat::animal_clip`). They also have a flinch and a death held on its last pose. A wolf is scaled by life stage. Deer are still the box creature.
+- **Two `live.rs` fixes:** a corpse no longer vanishes when the death's row arrives in the same update as the body leaves, and a body more than 6 m from where it is drawn (a teleport) snaps there.
+- **Arid lands:** a land whose rivers run dry (`water.dry_rivers`, the megacity floor's wastes) gets dry earth, cracked mud and gravel ground layers (16 in all) and its own dressing, `wastes`, `scrubland` and `badlands`. The megacity's wall line draws a 14 m cyberpunk wall. Look-dev draws any land seed with `LIVING_GAME_SEED=<seed.json>` ([floors](FLOORS.md)).
+- **Assets:** `just living-game-assets` now paints every texture set (`living-game-textures --set all`): the ground and the model surfaces that `style.rs` binds on scenery. Before, a fresh checkout got the ground only and no model detail.
 
 ## World look and camera research (2026-11-08)
 

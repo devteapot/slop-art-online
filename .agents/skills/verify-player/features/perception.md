@@ -8,6 +8,7 @@ Since 2026-11-09 (docs/PERCEPTION.md, "What an observer perceives of a target").
 - `human_act {"do": "appraise", "target": {"id": N}}` is carried out (`skill_use` outcome "a stranger has 100 of 100 health"), and the appraiser's `seen_characters` row for N then carries exact `hp`/`max_hp`; a bystander beside it still has `hp` -1 and a band. The appraiser's `my_experience` holds "You look a stranger over: … of … health."
 - After the reveal's 20 s the appraiser sees a band again.
 - The appraiser says "Hello, I am <name>." and the bystander, who heard it, perceives the appraiser by name (`name`, `label`) and its experience reads "<name> said: …".
+- The game client sends the same act from its **V** key (or the script step `gesture:appraise[:ID]`), at the creature under or nearest the cursor, else the nearest within 6 m, people or animals. While the row carries `hp`, the nameplate shows and carries a small `hp / max` under its bar; when the reveal ends the readout goes ([verify-client game-client](../../verify-client/features/game-client.md)).
 
 ## How to get to it (user POV)
 

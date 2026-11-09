@@ -97,13 +97,14 @@ living-check: living-build
 # living/tools/kimodo/spark.sh, or copy it from a machine that has it.
 living-game-assets:
     living/tools/lookdev_assets.sh
-    just living-game-textures
+    just living-game-textures --set all
     living/tools/blender/gen_nature.sh
     living/tools/blender/gen_buildings.sh
     living/tools/blender/gen_anim.sh
 
-# The game's painted, tileable textures (git-ignored): the ground's layers for terrain.rs, from
-# living/tools/textures/paint.py (numpy and Pillow through uv). `--set material` paints the
-# model kinds (bark, planks, plaster, stone, brick, shingles, metal, leaves), not used yet.
+# The game's painted, tileable textures (git-ignored), from living/tools/textures/paint.py
+# (numpy and Pillow through uv): `--set ground` (the default) the ground's layers for
+# terrain.rs, `--set material` the model surfaces (bark, planks, plaster, stone, brick,
+# shingles, metal, leaves) that style.rs binds on scenery, `--set all` both.
 living-game-textures *args:
     uv run living/tools/textures/paint.py {{args}}

@@ -14,5 +14,5 @@ What a client receives of fights (docs/COMBAT.md). The fixed suite (`drive.py`) 
 
 - `my_combat` rows expire 4 s after they happen; probe right after the reducer matrix.
 - Event tables were not used for the feed: RLS is unimplemented in 2.14.1, so a public event table would broadcast to anyone (docs/COMBAT.md).
-- The game client subscribes `my_combat`, `my_readiness` and `skill_card` with its connection and `fighter` through its body window join (`seen_fighters` once it takes the client patch in docs/PERCEPTION.md); [game-client.md](game-client.md) measures those bytes.
+- The game client subscribes `my_combat`, `my_readiness` and `skill_card` with its connection and the fighters it perceives through `seen_fighters`; [game-client.md](game-client.md) measures those bytes.
 - `my_combat` tells onlookers within sight radius without a sight line (as minds' percepts are told); see docs/PERCEPTION.md, open items.

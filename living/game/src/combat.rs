@@ -235,7 +235,7 @@ fn scripted_aim(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, spec: 
     let pick = scene
         .shown
         .iter()
-        .filter(|(id, _)| **id != me_id && kind.is_none_or(|k| conn.db.body().id().find(id).is_some_and(|b| b.kind == k)))
+        .filter(|(id, _)| **id != me_id && kind.is_none_or(|k| conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == k)))
         .min_by(|a, b| a.1 .0.distance(me).total_cmp(&b.1 .0.distance(me)))
         .map(|(id, (p, _))| (*p, *id));
     match pick {
@@ -275,7 +275,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
             seen::DEATH => {
                 c.deaths.insert(r.actor, now);
                 // My own death: who killed me; the witnesses arrive beside it.
-                if conn.db.character().id().find(&r.actor).is_some_and(|ch| ch.controller == net.me.unwrap_or_default()) {
+                if conn.db.my_characters().id().find(&r.actor).is_some() {
                     c.killer = (r.target != 0).then_some(r.target);
                     c.witnesses.clear();
                 }
@@ -477,7 +477,7 @@ fn nearest(scene: &Scene, me_id: u32, me: Vec2, toward: Vec2, within: f32) -> Op
 
 /// Whether a creature looks hostile to me: its move under way is aimed at me.
 pub fn hostile(conn: &DbConnection, id: u32, me: u32) -> bool {
-    conn.db.fighter().id().find(&id).is_some_and(|f| f.target == me && f.act != 0)
+    conn.db.seen_fighters().id().find(&id).is_some_and(|f| f.target == me && f.act != 0)
 }
 
 /// An animal's move: its own clip by how the rules aim the skill (`skill_card.aim`), never by
@@ -518,7 +518,7 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
     let mut out: HashMap<u32, Action> = HashMap::new();
     let ids: Vec<u32> = scene.shown.keys().copied().collect();
     for &id in &ids {
-        if !c.animals.contains(&id) && conn.db.body().id().find(&id).is_some_and(|b| b.kind != "person") {
+        if !c.animals.contains(&id) && conn.db.seen_characters().id().find(&id).is_some_and(|c| c.kind != "person") {
             c.animals.insert(id);
         }
     }
@@ -531,7 +531,7 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
         if out.contains_key(&id) {
             continue;
         }
-        let f = conn.db.fighter().id().find(&id);
+        let f = conn.db.seen_fighters().id().find(&id);
         let live = f.as_ref().filter(|f| f.act != 0 && (now as u64) < f.until_ms.max(f.release_ms) + 120);
         let face = live.and_then(|f| (f.aim_x != 0.0 || f.aim_y != 0.0).then(|| Vec2::new(f.aim_x, f.aim_y)));
         let animal = c.animals.contains(&id);

@@ -140,6 +140,8 @@ pub struct Actor {
     pub stance: Stance,
     /// Health fraction, only when perceived.
     pub hp: Option<f32>,
+    /// Exact health and its maximum, only while I perceive it exactly (an appraisal holds).
+    pub exact: Option<(f32, f32)>,
 }
 
 pub struct TargetInfo {

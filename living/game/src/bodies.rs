@@ -215,8 +215,8 @@ pub fn update(
     let Some(conn) = &net.conn else { return };
     let now = scene.clock.frame(net.body_t.swap(0, std::sync::atomic::Ordering::Relaxed));
     scene.now_ms = now;
-    let bodies: HashMap<u32, Body> = conn.db.body().iter().map(|b| (b.id, b)).collect();
-    let chars: HashMap<u32, Character> = conn.db.character().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
+    let bodies: HashMap<u32, Body> = crate::net::bodies(conn).map(|b| (b.id, b)).collect();
+    let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
     let scene = &mut *scene;
     let dt = time.delta_secs().max(1e-4);
     scene.tracks.retain(|id| bodies.contains_key(&id));
@@ -239,7 +239,8 @@ pub fn update(
     for (id, b) in &bodies {
         let Some((p, heading)) = scene.shown.get(id).copied() else { continue };
         let c = chars.get(id);
-        let alive = c.is_none_or(|c| c.alive);
+        // Only the living are in sight: a death takes the body out of `seen_bodies`.
+        let alive = true;
         let mine = Some(*id) == net.my_id;
         // My own character turns toward where I look (shown locally only: the authority has
         // no look direction yet).

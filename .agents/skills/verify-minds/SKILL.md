@@ -5,7 +5,7 @@ description: Verify the living core's internal mind service with the real living
 
 # Verify internal minds
 
-Read the [`verify` entry point](../verify/SKILL.md) first. It owns scratch database launch, doctor, identities, SQL, observer and cleanup. This skill drives the real `living/target/release/living-mind` through its subscriptions and `mind_*` reducers.
+Read the [`verify` entry point](../verify/SKILL.md) first. It owns scratch database launch, doctor, identities, SQL, observer and cleanup. This skill drives the real `living-mind` it builds, `$CARGO_TARGET_DIR/release/living-mind` (else `living/target/release/living-mind`), through its subscriptions and `mind_*` reducers. Set a private `CARGO_TARGET_DIR`: other sessions overwrite `living/target`, and the driver runs the binary it built, from that directory.
 
 ## Run the free tier
 

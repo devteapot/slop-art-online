@@ -162,7 +162,7 @@ fn put(commands: &mut Commands, mesh: &Handle<Mesh>, mat: &Handle<StandardMateri
 #[allow(clippy::too_many_arguments)]
 fn spawn(mut commands: Commands, a: Res<Assets3>, c: Res<Combat>, cards: Res<Cards>, net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<crate::island::Island>>, mut flights: ResMut<Flights>, time: Res<Time>) {
     let now = time.elapsed_secs();
-    let kinds: HashMap<u32, String> = net.conn.as_ref().map(|conn| c.fresh.iter().flat_map(|e| [e.row.actor, e.row.target]).filter_map(|id| conn.db.body().id().find(&id).map(|b| (id, b.kind))).collect()).unwrap_or_default();
+    let kinds: HashMap<u32, String> = net.conn.as_ref().map(|conn| c.fresh.iter().flat_map(|e| [e.row.actor, e.row.target]).filter_map(|id| conn.db.seen_characters().id().find(&id).map(|c| (id, c.kind))).collect()).unwrap_or_default();
     for e in &c.fresh {
         let r = &e.row;
         let at2 = Vec2::new(r.x, r.y);
@@ -251,7 +251,7 @@ fn persistent(mut commands: Commands, a: Res<Assets3>, cards: Res<Cards>, net: N
     let t = scene.now_ms as u64;
     let mut want: Vec<((u32, Kind), Vec3, Quat)> = Vec::new();
     for (id, (p, _)) in &scene.shown {
-        let Some(f) = conn.db.fighter().id().find(id) else { continue };
+        let Some(f) = conn.db.seen_fighters().id().find(id) else { continue };
         let aim = Vec2::new(f.aim_x, f.aim_y).normalize_or(Vec2::Y);
         let g = ground(&island, &scene, *p);
         let Some(card) = cards.by_code(f.act) else { continue };

@@ -279,21 +279,15 @@ fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, 
 }
 
 
-/// Folk and dress style from the settlement round a character's home.
-fn folk_of(conn: &DbConnection, c: &Character) -> (&'static str, Option<String>) {
-    let home = Vec2::new(c.home_x, c.home_y);
-    let s = conn.db.settlement().iter().filter(|s| Vec2::new(s.x, s.y).distance(home) <= s.radius_m * 1.15).min_by(|a, b| Vec2::new(a.x, a.y).distance(home).total_cmp(&Vec2::new(b.x, b.y).distance(home)));
-    match s {
-        Some(s) => (
-            match s.kind.as_str() {
-                "giants" => "giant",
-                "small_folk" => "small",
-                _ => "adult",
-            },
-            Some(s.style.clone()),
-        ),
-        None => ("adult", None),
-    }
+/// Folk and dress style as anyone sees them: the authority's projection (`seen_characters`
+/// `folk` and `style`, from the settlement the character lives in; no home position is sent).
+fn folk_of(c: &SeenCharacter) -> (&'static str, Option<String>) {
+    let folk = match c.folk.as_str() {
+        "giants" => "giant",
+        "small_folk" => "small",
+        _ => "adult",
+    };
+    (folk, (!c.style.is_empty()).then(|| c.style.clone()))
 }
 
 /// Facing as a Bevy yaw for a character model (0 faces +Z) from a sim direction.
@@ -330,7 +324,7 @@ fn bodies(
     let me = net.my_id;
     // Who is speaking: lines I heard (the authority decides earshot), and my own last line.
     let mut talking: HashSet<u32> = me
-        .map(|id| conn.db.experience().iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
+        .map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
         .unwrap_or_default();
     if let (Some(id), Some((t, _))) = (me, input.said.last()) {
         if scene.now_ms - (*t as f64) < TALKING_S * 1000.0 {
@@ -374,7 +368,7 @@ fn bodies(
         let aimed = action.and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
         // Standing still, the body's own segment: its heading, turning on the spot by `turn` over
         // `turn_s` (the display clock may trail the row's start: then the turn has not begun).
-        let row = conn.db.body().id().find(&id);
+        let row = conn.db.seen_bodies().id().find(&id);
         let standing = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| {
             let into = ((scene.now_ms - b.t_ms as f64) / 1000.0).clamp(0.0, b.turn_s.max(0.0) as f64) as f32;
             b.heading + if b.turn_s > 0.0 { b.turn * into } else { 0.0 }
@@ -383,8 +377,8 @@ fn bodies(
         let busy = show.face.filter(|_| slow).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
         let h = aimed.or(look).or(busy).or(standing.filter(|_| slow)).or(heading);
         if !live.shown.contains_key(&id) {
-            let Some(body) = conn.db.body().id().find(&id) else { continue };
-            let character = conn.db.character().id().find(&id);
+            let Some(body) = crate::net::find_body(conn, id) else { continue };
+            let character = conn.db.seen_characters().id().find(&id);
             // Wait for a person's character row (folk, stage) before drawing them.
             if body.kind == "person" && character.is_none() {
                 continue;
@@ -397,7 +391,7 @@ fn bodies(
                 let mut recipe = if mine {
                     std::env::var("LIVING_GAME_PLAYER").ok().and_then(|r| crate::characters::Recipe::parse(&r)).unwrap_or_else(|| crate::characters::Recipe::random(seed, "adult"))
                 } else {
-                    match folk_of(conn, c) {
+                    match folk_of(c) {
                         (folk, Some(style)) => crate::characters::Recipe::random_in(seed, folk, &style),
                         (folk, None) => crate::characters::Recipe::random(seed, folk),
                     }
@@ -464,7 +458,7 @@ fn bodies(
             Quat::from_rotation_y(-yaw)
         };
         // A rigged creature is drawn at its file's size times its life stage's (it grows up).
-        let size = if beast { conn.db.character().id().find(&id).map_or(1.0, |c| stage_scale(c.stage)) } else { 1.0 };
+        let size = if beast { conn.db.seen_characters().id().find(&id).map_or(1.0, |c| stage_scale(c.stage)) } else { 1.0 };
         if beast {
             tf.scale = Vec3::splat(size);
         }
@@ -690,16 +684,16 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
     });
     info!(
         "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
-        conn.db.body().count(),
-        conn.db.character().count(),
-        conn.db.doing().count(),
+        conn.db.seen_bodies().count(),
+        conn.db.seen_characters().count(),
+        conn.db.seen_doing().count(),
         conn.db.act_card().count(),
         conn.db.weather().iter().next().map_or("none", |w| if w.raining { "rain" } else { "dry" }),
         conn.db.lot().count(),
         conn.db.terrain_chunk().count(),
         edits,
         conn.db.settlement().count(),
-        conn.db.experience().count(),
+        conn.db.my_experience().count(),
         live.shown.len(),
         live.lots.values().filter(|e| !e.is_empty()).count(),
         net.window_moves,
@@ -724,8 +718,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `skill:NAME[:AIM]`: use a skill-bar skill through `use_skill` (`combat.rs`); AIM is
 ///   `nearest`, a creature kind (`wolf`) or `DX,DY` metres from me; `release:NAME` lets go of
 ///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
-/// - `gesture:wave|nod[:ID]`: greet through `human_act` as the G and B keys do (`town.rs`), at
-///   character ID, else whom the keys would pick;
+/// - `gesture:wave|nod|appraise[:ID]`: greet, or look someone over, through `human_act` as the
+///   G, B and V keys do (`town.rs`), at character ID, else whom the keys would pick;
 /// - `sync:NAME`: until `<dir>/NAME.go` exists (an outside driver sets the scene: the hour, the
 ///   weather, where I stand), then delete it; a number in the file turns the view to that yaw;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:

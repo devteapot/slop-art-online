@@ -13,12 +13,12 @@ Preconditions: run from the repository root with the shared container up on `htt
 
 ```bash
 R=client-$(date +%Y%m%d-%H%M%S)
-LIVING_PERCEPTION=scoped .agents/skills/verify-client/scripts/run.py --run "$R"
+CARGO_TARGET_DIR="$PWD/.local/living/verify/target-module" .agents/skills/verify-client/scripts/run.py --run "$R"
 cat ".local/living/verify/$R/results.md"
 cat ".local/living/verify/$R/cleanup-proof.json"
 ```
 
-`LIVING_PERCEPTION` picks the module build (docs/PERCEPTION.md): `scoped` makes the tables behind the perception views private and proves the boundary; the default `open` keeps the game client's tables public. A change to visibility, views or subscriptions runs the suite once per build, each with a fresh run name. The harness records the build in the run's `state.json` (`perception`) and `drive.py` checks what that build promises.
+`LIVING_PERCEPTION` picks the module build (docs/PERCEPTION.md): `scoped`, the default, makes the tables behind the perception views private and proves the boundary; `LIVING_PERCEPTION=open` makes those nine tables public again (a diagnostic build). A change to visibility, views or subscriptions runs the suite once per build, each with a fresh run name (`LIVING_PERCEPTION=open` before the second; the two builds share the target directory and rebuild only the authority crate when the switch changes). A private `CARGO_TARGET_DIR` keeps the module the harness publishes from being one another checkout left in `living/target`. The harness records the build in the run's `state.json` (`perception`) and `drive.py` checks what that build promises.
 
 `run.py` builds the probe, calls the shared harness for launch, doctor, and `player join ClientPrimary`, drives every mapped feature, then calls shared cleanup even after a failure. It refuses an existing run directory and a stopped shared container. It never restarts the container. The harness confirms SQL returns HTTP 404 after deletion. The wrapper records that cleanup result, token removal, the shared container's status and whether `.local/living/token` changed. It uses the harness's container and HTTP helpers.
 
@@ -70,7 +70,7 @@ Add `--as-player` to subscribe with the harness player's identity after joining,
 
 The suite also drives presence ([features/presence.md](features/presence.md)): it holds real WebSocket connections for `ClientSecond`, waits for the takeover after the `takeover_s` law (about 30 s, so the suite takes that much longer) and reconnects for the handback.
 
-The suite above drives the observer's query set (`living/viewer/src/net.rs`) as the owner, and a player's perception views ([features/perception.md](features/perception.md)). The game client (`living/game/src/net.rs`) subscribes differently on a land world. It subscribes static tables, its own characters by `:sender`, and chunk windows that include a join, and it moves those windows as it walks. [features/game-client.md](features/game-client.md) runs the real game client headless (`LIVING_GAME_LIVE`), sends each of its queries through `drive.py`, and measures bytes per query from the server's metrics.
+The suite above drives the observer's query set (`living/viewer/src/net.rs`) as the owner, and a player's perception views ([features/perception.md](features/perception.md)). The game client (`living/game/src/net.rs`) subscribes differently on a land world. It subscribes static tables and the perception views (`seen_*`, `my_*`) once per connection, and two chunk windows of public world data (`terrain_chunk`, `lot`) that it moves as it walks. [features/game-client.md](features/game-client.md) runs the real game client headless (`LIVING_GAME_LIVE`), sends each of its queries through `drive.py`, and measures bytes per query from the server's metrics.
 
 ## Checks and evidence
 
@@ -82,7 +82,7 @@ Every subscription uses `living/bindings` over WebSocket. The probe waits for `o
 
 Evidence stays in `.local/living/verify/<run>/`. It includes `source-inventory.json`, `observer-base.json`, `anonymous-base.json`, `inspected-character.json`, `visibility.json`, `privacy-*.json`, `owner-thought.json`, `view-*.json`, `own-*.json`, `sight.json`, `sight-*.json`, `reducers.json`, `reducers.md`, `reducer-effects.json`, `reconnect.json`, `adhoc-suite.jsonl`, `results.md`, and `cleanup-proof.json`. The probe snapshots the rows it actually receives; the owner's snapshots include every character's perceptions and scripted thoughts. Keep evidence local.
 
-`PASS` means the assertion held. `FAIL` means a required behavior or fixture failed. `XFAIL` means a known issue is still observable: since 2026-11-09 only the open build's public `experience` (the compatibility path for today's game client, docs/PERCEPTION.md). `XPASS` means that assertion now holds. The driver exits 1 for `FAIL` or `XPASS`, so a change triggers review of the expected-fail check. A transport error or an empty fixture is a failure, never a known-issue success. The anonymous `thought` leak and, in a scoped build, the anonymous `experience` leak are closed and checked as ordinary assertions.
+`PASS` means the assertion held. `FAIL` means a required behavior or fixture failed. `XFAIL` means a known issue is still observable: since 2026-11-09 only the open build's public `experience` (the diagnostic build, docs/PERCEPTION.md); the default scoped build has none. `XPASS` means that assertion now holds. The driver exits 1 for `FAIL` or `XPASS`, so a change triggers review of the expected-fail check. A transport error or an empty fixture is a failure, never a known-issue success. The anonymous `thought` leak and, in a scoped build, the anonymous `experience` leak are closed and checked as ordinary assertions.
 
 Tokens stay in process memory except the shared harness's primary player token in `state.json`. The anonymous connection transfers its issued token through an inherited pipe so later HTTP calls use that same identity. The second player's token comes from `POST /v1/identity`. The admin (owner) SDK connections, the observer's among them, use the shared harness's `admin_token()` helper. Admin scene setup uses `verify.py call --as-admin`. No token is printed or saved into evidence. Cleanup removes the primary token and a credential scan checks the evidence.
 

@@ -2,9 +2,11 @@
 
 Started 2026-11-09. This note records how the living authority limits what a human player's client receives to what the player's character perceives now, plus the character's own state ([game brief](GAME_BRIEF.md#core-work-the-game-needs-engine-independent), core work 1; [island authority](ISLAND_AUTHORITY.md), "Perception-scoped subscriptions" and "A slimmer moving-body stream"). It covers the table audit, the SpacetimeDB documentation and source the design rests on, the design, the measured cost, the per-table decisions, the client change and the verification.
 
-**Status (second change, 2026-11-09, uncommitted on the Mac checkout).** Minds now perceive by the players' rule: sight by light and a clear sight line, in every perception path ([Minds see what their character sees](#minds-see-what-their-character-sees)). What one character perceives of another is a projection of its record through a law in the script, `perceived_of` ([What an observer perceives of a target](#what-an-observer-perceives-of-a-target)): `seen_characters` returns that projection (no controller, home or parents), minds' percepts and scenes use the same one, and a demonstration skill, `appraise`, reveals exact health for 20 s. Presence and the takeover of an offline player's character are in [player memory](PLAYER_MEMORY.md#presence-and-the-offline-character). Measured and verified as recorded in [Second change: measurements](#second-change-measurements) and [Second change: verification](#second-change-verification).
+**Status (third change, 2026-11-09, uncommitted on the Mac checkout).** `scoped` is the default build. The game client reads only the perception views: the former patch is applied to `living/game`, merged by hand with the wolves and arid lands of `acbbda7` and the polish of `dc5e41b`, and deleted. The client draws what the projection gives (names or labels, health as a band or exact while appraised, dress from `folk`/`style`, residents resting indoors hidden), and its **V** key sends `appraise` ([Client change](#client-change)). `LIVING_PERCEPTION=open` remains for diagnostics ([Compatibility](#compatibility-the-living_perception-build-switch)). Verified as recorded in [Third change: verification](#third-change-verification).
 
-**Status (first change).** Implemented on branch `perception-1` and verified on scratch databases (`verify-*`) on the dev-box with SpacetimeDB 2.14.1, in its own container (`slop-perc-stdb`, port 3320). No lab or reference world was touched. The game client (`living/game`) was not edited: its change is the patch [perception-client.patch](perception-client.patch), described in [Client change](#client-change). Until it lands, the default build keeps the tables the game client reads public ([Compatibility](#compatibility-the-living_perception-build-switch)).
+**Status (second change, 2026-11-09).** Minds now perceive by the players' rule: sight by light and a clear sight line, in every perception path ([Minds see what their character sees](#minds-see-what-their-character-sees)). What one character perceives of another is a projection of its record through a law in the script, `perceived_of` ([What an observer perceives of a target](#what-an-observer-perceives-of-a-target)): `seen_characters` returns that projection (no controller, home or parents), minds' percepts and scenes use the same one, and a demonstration skill, `appraise`, reveals exact health for 20 s. Presence and the takeover of an offline player's character are in [player memory](PLAYER_MEMORY.md#presence-and-the-offline-character). Measured and verified as recorded in [Second change: measurements](#second-change-measurements) and [Second change: verification](#second-change-verification).
+
+**Status (first change).** Implemented on branch `perception-1` and verified on scratch databases (`verify-*`) on the dev-box with SpacetimeDB 2.14.1, in its own container (`slop-perc-stdb`, port 3320). No lab or reference world was touched. The game client (`living/game`) was not edited then: its change was a patch (`docs/perception-client.patch`, deleted when it landed in the third change), described in [Client change](#client-change). Until it landed, the default build kept the tables the game client read public ([Compatibility](#compatibility-the-living_perception-build-switch)).
 
 ## Rules this follows
 
@@ -159,10 +161,10 @@ What one character perceives of another is not a fixed set of public columns. It
 
 `living/authority/build.rs` reads `LIVING_PERCEPTION` at build time:
 
-- **`open`** (the default): the nine tables today's game client reads (`body`, `character`, `fighter`, `doing`, `vitals`, `experience`, `place`, `inventory`, `know_how`) stay public, so main never breaks the game client of 2026-11-09. The views exist and are correct, but the tables beside them are not a boundary.
-- **`scoped`**: those nine are private (`cfg_attr(not(open_tables), …)` in `tables.rs`), so a player receives only what the views return.
+- **`scoped`** (the default since the third change, and when the variable is unset): the nine tables behind the views (`body`, `character`, `fighter`, `doing`, `vitals`, `experience`, `place`, `inventory`, `know_how`) are private (`cfg_attr(not(open_tables), …)` in `tables.rs`), so a player receives only what the views return.
+- **`open`** (`LIVING_PERCEPTION=open`): those nine are public again. It is for diagnostics, such as reading a table with an anonymous client, and for comparing against the scoped build. The views exist and are correct, but the tables beside them are not a boundary. The lab observer does not need it: it reads as the owner in both builds.
 
-Developer audit truth is private in both. Table visibility is part of the module, so switching is a republish; 2.14.1's automatic migration allows "public → private" (`crates/schema/src/auto_migrate`), so a world can switch in place with `--keep-data`. Once the client patch lands, make `scoped` the default (one line in `build.rs`).
+Developer audit truth is private in both. Table visibility is part of the module, so switching is a republish; 2.14.1's automatic migration allows "public → private" (`crates/schema/src/auto_migrate`), so a world can switch in place with `--keep-data`. The reverse, private → public, is a republish too. A world published from an `open` build before the third change becomes scoped at its next republish from the default build.
 
 ### The mind service and the observer
 
@@ -307,7 +309,7 @@ On the Mac checkout, scratch `verify-*` databases on the shared 2.14.1 container
 | Build | `set -o pipefail; just living-check` | exit 0; rules 100 passed (new: `what_one_perceives_of_another_is_the_law_s`, `appraising_reveals_health_for_a_while`, `sight_over_open_chunks_agrees_with_the_tile_walk`, `ids_written_as_strings_are_ids`); mind 49 passed (new: `experience_ids_written_as_strings_are_kept`; the cadence test now ends a session by the takeover) | `perc2/check.log` |
 | Client, scoped | `verify-client` `run.py` with `LIVING_PERCEPTION=scoped`: the projection's columns, in sight, beyond sight and behind rock, presence (one, two, one, no connection; the takeover after 30 s; the handback on a new connection), the new private tables refused to players and anonymous clients | 29 PASS, no XFAIL (a first run stopped at the driver's table inventory, which lacked `projected`; fixed) | `client-perc2-scoped2/` (`client-perc2-scoped/` the stopped run) |
 | Client, open | the same on the default build | 30 PASS and the known XFAIL (`experience` public in the open build) | `client-perc2-open/` |
-| Game client | the updated [perception-client.patch](perception-client.patch), built in a temporary worktree at HEAD (release, no warnings), headless on the scoped island run: join, walk into the square, speak | digests match; 1–9 perceived bodies and characters as it walked in, `doing` rows, residents drawn in their towns' dress from `folk`/`style`, the speech bubble and log | `perc2/game/game.log`, `perc2/game/shots/` |
+| Game client | the updated client patch (`docs/perception-client.patch`, since applied and deleted), built in a temporary worktree at HEAD (release, no warnings), headless on the scoped island run: join, walk into the square, speak | digests match; 1–9 perceived bodies and characters as it walked in, `doing` rows, residents drawn in their towns' dress from `folk`/`style`, the speech bubble and log | `perc2/game/game.log`, `perc2/game/shots/` |
 | Player | `verify-player` `appraise.py` (new) and `gesture.py` on a scoped island run; `combat.py --fresh` | appraise 10 of 10; gestures 10 of 10 after a driver fix (it placed the player where a stall's building hid the resident, so the wave at someone unseen was refused: the sight rule at work; the driver now picks a spot from which the player sees the resident); combat: see below | `player-perc2/` |
 | Minds | `verify-minds`: `takeover` and `sight` (new), `roundtrip`, `acts`, `conversation`, `consolidation` | all pass, consolidation its known XFAIL; `takeover` passed on the third run after a driver fix (it looked for the plan's wait in the top-level graph, which the service writes as desires with a "current plan" routine) and an authority fix (a second takeover reinstalled the minds' graph before asking for a deliberation, and reinstalling counts as having just thought, so the request was refused by `think_min_s`) | `minds-perc2-*/`, `minds-perc2b-takeover/`, `minds-perc2c-takeover/` |
 | Core | `verify-core` `cargo_checks.py`; scenes `tick`, `needs`, `seize`, `sight` (new), `skirmish` (island); `town.py` (island); `verify_mechanics.py`, `verify_steering.py` | all pass except town 20 of 21 (see below) | `core-perc2*/` |
@@ -330,6 +332,62 @@ Behaviour changes, expected (row evidence in `core-perc2/sight-*.json`, `minds-p
 
 Not established either way: `town.py`'s "a resident faces someone who comes up behind them" failed in the full town run and in three solo runs on one world; on base (`972aefd`) the same scene passed once and failed on the next run on the same world, so it is the scene's known flakiness ([first change: verification](#verification)), not shown to be caused by this change. Not covered: batch mode of player memory, the paid tiers (no model was called), `verify-core`'s infant scene (about 30 minutes; the infant cry's sight check changed and is covered only by code reading), a battle among walls, and module republish with players connected (presence rows come at their next connection).
 
+## Third change: the client lands
+
+On main `acbbda7`, uncommitted. `git apply --3way docs/perception-client.patch` merged all nine files with `dc5e41b` (polish) and `acbbda7` (wolves, arid lands) without a textual conflict, but `acbbda7` added two reads of tables that are now private, which the patch did not know. They were resolved by hand:
+
+| Where | `acbbda7` read | Now |
+|---|---|---|
+| `live.rs`, a rigged creature's size by life stage | `character().id().find(id)` | `seen_characters()` (the projection carries `stage`) |
+| `combat.rs` `actions`, which drawn bodies are animals (their own clips, their death pose) | `body().id().find(id)` → `kind` | `seen_characters()` → `kind` |
+
+Kept from both sides:
+- the wolf model and clips (`bodies::spawn_beast`, `Beast`, `combat::animal_clip`, `combat::death`, the gait family);
+- the corpse fix: it works from drawn entities, and in a scoped build a death takes the body out of `seen_bodies` in the same update as the `my_combat` `DEATH` row that keeps the corpse;
+- the teleport snap (`SNAP_M`);
+- the patch's `folk_of` from `seen_characters`, which replaces the settlement lookup round `home_x/home_y` that `acbbda7` still had.
+
+New with this change:
+- **V** sends `appraise` through `human_act`, at any creature within 6 m. Wave, nod and appraise are one table, `town::MY_ACTS`, and the headless script takes `gesture:appraise[:ID]`.
+- `Actor.exact` and the nameplate's `hp / max` show while the projection carries `hp` (`ui/overhead.rs`). A plate stays up while it does.
+- The death screen names the killer and the witnesses by the labels last perceived (`ui/live.rs`). Before, it took the killer from the authority's `cause` text, which named a wolf my character never knew, and the witnesses came out as "someone", because a death deletes the player's projected rows in the same update.
+- `build.rs`: `scoped` by default, `open` on request.
+- Harness:
+  - `verify.py launch` honours `CARGO_TARGET_DIR` on the default seed (it published `living/target`'s module whatever it had built);
+  - the recorded build defaults to `scoped`;
+  - `verify_llm.py` and `verify_minds.py` run the mind binary they built (`MIND_BIN`).
+
+## Third change: verification
+
+On the Mac, scratch `verify-*` databases on the shared 2.14.1 container, the fake model server only, private `CARGO_TARGET_DIR`s. Evidence under `.local/living/verify/` (named below); photographs also in the session's scratchpad (`scoped-default/`).
+
+| Surface | What was driven | Result | Evidence |
+|---|---|---|---|
+| Build | `set -o pipefail; just living-check` | exit 0; rules 100 passed; the viewer's one linker warning (`__eh_frame`) is unchanged | `scoped-default/check.log` |
+| Client, default (scoped) | `verify-client` `run.py`, no `LIVING_PERCEPTION` (recorded `perception scoped`) | 30 PASS, no XFAIL; the observer's query set as the owner, the anonymous base refused | `client-sd-scoped-181103/` |
+| Client, open | the same with `LIVING_PERCEPTION=open` | 30 PASS and the known XFAIL (`experience` public in the open build) | `client-sd-open-181103/` |
+| Game client | headless on a scoped island (`client-sd-game`), scenes set with admin `place_at`, `place_near`, `set_behavior` | see below | `client-sd-game/game*/` (photographs, `snap/*.json`, `game.log`, `driver.log`) |
+| Player | `verify-player` on a scoped island: `gesture.py`, `appraise.py`, `combat.py --scene all` | gestures 10 of 10; appraise 10 of 10; combat 24 of 25: the bow's arrow struck a resident who walked into its path and the fire bolt the appraise scene's bystander, so the dummy took no damage; `--scene bow` alone passed | `player-sd/` |
+| Minds | `verify-minds --case takeover` on the scoped build | pass: takeover after 30.0 s, the graph held and reinstalled, a reply in flight refused; mind tests 49 passed | `minds-sd-182208-takeover/` |
+
+The game client, from the photographs and the game identity's own views at each one:
+- digests match, and `live: cache body` is 1 at the arrival and 13–18 in a town square;
+- residents are drawn in their towns' dress (fantasy, steampunk, cyberpunk; the giants' town was too foggy to judge);
+- a resident is `a stranger` in the bubble and the log, and after its line "Well met. I'm Renferen." it is `Renferen` in both, with the same label in `seen_characters`;
+- V/appraise shows `96 / 96` under Renferen's nameplate at 3 s and 13 s, and at 24 s the figure is gone and the row has `hp` -1;
+- nobody is drawn 2–3 tiles away behind a stall's wall tiles, a fence or rock, while someone 4 tiles away in the open is, and owner truth puts them where the picture is empty;
+- the wolf pack is drawn with its gaits and bite, and the nameplate reads `a wolf`;
+- the HUD and the skill bar work from the views;
+- the death screen reads "Killed by a wolf", seen by `a wolf` ×3, after the fix above.
+
+`spacetime_active_queries` stayed at 20 for this client. Cost: [game brief](GAME_BRIEF.md#what-the-client-shows-of-others-2026-11-09).
+
+Not covered:
+- a browser screenshot of the lab observer (no Chromium on this Mac; its exact query set passed as the owner);
+- the knowledge and core surfaces, whose code this change does not touch;
+- a republish of a running world from `open` to `scoped` with `--keep-data`;
+- players connected at a republish.
+
 ## Decisions per current-perception table
 
 The choice for the four current-perception tables was between keeping them public (no view cost, but every position, health band and activity on the island readable by anyone subscribing to any chunk) and private behind the views. With the numbers above:
@@ -341,13 +399,13 @@ The choice for the four current-perception tables was between keeping them publi
 | `fighter` | each move's start, release and end; band changes at 1 Hz | 0.02–0.05 ms/s at rest, 2 ms/s walking | **private behind `seen_fighters`**. |
 | `doing` | each shown skill's start and end | 0.4–1.4 ms/s at rest (residents' gestures and work), 4.4 ms/s walking | **private behind `seen_doing`**. |
 
-All four are behind the `LIVING_PERCEPTION=scoped` switch with the five own-state tables, and stay public in the default `open` build until the client patch lands.
+All four are private in the default `scoped` build with the five own-state tables, and public only in a `LIVING_PERCEPTION=open` build.
 
 The follow-up for crowds: the cost is one full view refresh per player per tick in which anything it sees moves. Two ways to cut it without giving up the boundary are a per-viewer refresh rate below the tick rate (the sweep could write a per-viewer frame at 10–20 Hz that the view reads instead of the bodies themselves; clients already extrapolate between segments), and splitting `seen_bodies` so a refresh rewrites only the rows that changed (2.14.1 rewrites the whole result). Neither is built.
 
 ## Client change
 
-The patch [perception-client.patch](perception-client.patch) (updated 2026-11-09 for the projection; it applies to main at `dc5e41b` and builds there) first applied to `living/game` on main at `8f6ac72` (after the town-life client, `da219a7`), which this branch has merged, and builds against this branch's bindings (`cargo build --release -p living-game`, no warnings). Here is what it changes, to redo by hand if the client moves on first:
+**Landed (third change).** The patch (`docs/perception-client.patch`, updated for the projection at `dc5e41b`) was applied to `living/game` on main at `acbbda7` and then deleted. `git apply --3way` merged it with `dc5e41b` and `acbbda7`; [what was resolved by hand](#third-change-the-client-lands) is recorded below. What it changed:
 
 1. **Subscriptions** (`net.rs`). After the static `world`, `land`, `settlement`, subscribe once per connection (`PERCEIVED`):
    ```sql
@@ -377,7 +435,7 @@ The patch [perception-client.patch](perception-client.patch) (updated 2026-11-09
    - `fighter()` → `seen_fighters()`; `doing()` → `seen_doing()` (`town.rs`); a resident's home for its dress → `seen_characters()` (`town.rs`); answered greetings → `my_experience()` (`town.rs`);
    - `vitals()` → `my_vitals()`, `experience()` → `my_experience()`, `place()` → `my_places()`, `inventory()` → `my_inventory()`, `know_how()` → `my_know_how()`;
    - the HUD's row counts → the views.
-5. **After it lands:** build the authority with `LIVING_PERCEPTION=scoped` (or make it the default) and republish the island world.
+5. **The default build is `scoped`** (`build.rs`); republish the island world from it.
 6. **The projection (second change).** `seen_characters` rows are `SeenCharacter`, not `Character`:
    - names drawn over others (nameplates, the HUD's names, the log's speakers, a death's witnesses, the target panel) are the row's `label` (the name when the player knows it, else `a stranger`, `a wolf`); an animal the player knows by name shows "<name> the <kind>";
    - build and dress come from the row's `folk` and `style` (`live.rs` `folk_of`), no longer from the settlement round `home_x/home_y`, which are not sent;
@@ -398,7 +456,7 @@ Free tiers only: scratch `verify-*` databases on the dev-box's own 2.14.1 contai
 | Bindings | `spacetime generate --include-private` from the scoped and the open build, then after the merges | identical for both builds; unchanged by the merges | `living/bindings/src/generated/` |
 | Client, scoped build | `verify-client` `run.py` with `LIVING_PERCEPTION=scoped` on the default seed: the observer as owner, refusals of 49 private tables to anonymous clients and players (WebSocket and HTTP SQL), the reducer matrix, the combat and town views, own-state views, two players in sight, beyond sight (20 tiles) and behind rock (3 tiles), reconnect, ad-hoc query | 24 PASS, no XFAIL: the two anonymous-privacy known issues (`experience`, `thought`) now pass; again 24 PASS on the final merge | `client-perc-scoped-132031/`, `client-perc-final-140954/` |
 | Client, open build | the same suite on the default build | 24 PASS and 1 XFAIL: `experience` is still public in the compatibility build, by design; `thought` is private | `client-perc-open-132338/` |
-| Game client | the patched client (`perception-client.patch`), headless on a scoped island world: join, walk into the square, speak | digests match; `seen_bodies` held 1–9 bodies as it walked (8–9 in the square, 2–4 `doing` rows), 182 lots drawn; the HUD, skill bar, speech bubble and log from the views | `client-perc-game2/game.log`, `shots/` |
+| Game client | the patched client (the patch since applied and deleted), headless on a scoped island world: join, walk into the square, speak | digests match; `seen_bodies` held 1–9 bodies as it walked (8–9 in the square, 2–4 `doing` rows), 182 lots drawn; the HUD, skill bar, speech bubble and log from the views | `client-perc-game2/game.log`, `shots/` |
 | Player | `verify-player` `combat.py` (all scenes) and `gesture.py` on scoped island worlds; `combat.py` also on the open build and on unchanged origin/main | gestures 9 of 9; combat 25 of 25 scoped, 25 of 25 open, 25 of 25 on main. A first scoped run gave 21 of 25: block, dodge and heal saw no blow within their 4 s while the mind suite and the game client ran on the host; those scenes alone and two full reruns passed | `player-perc-scoped/`, `player-perc-all/`, `player-perc-all-open/`, `player-perc-combat2/` |
 | Minds | `verify-minds` on a scoped build: roundtrip, acts, conversation, consolidation, prune, reject, only, reconnect, level of detail | 8 pass and the known consolidation XFAIL (no-store projection, docs/LIVING_HANDOFF.md): the mind service reads everything it needs as the owner | `minds-perc-scoped*/` |
 | Core | `verify-core` `town.py` (all scenes) on a scoped island world, for its player lookup through `my_characters` | 18 of 21 in the full run; the 3 failures (face on approach, face on speech, step aside) are residents' reactions this change does not touch. Rerun alone: approach and aside pass; speech failed 2 of 5 runs on this branch and 2 of 3 on unchanged origin/main, so it is flaky there too | `core-perc-town/`, `core-perc-town3/`, `core-perc-speak/`, `core-base-speak/` (main) |
@@ -414,5 +472,5 @@ The verification skills were brought up to date for what this change touched (`m
 - **Introductions** cover saying one's own name. Being told a third person's name ("this is Wren") is not built. Labels are not distinct between strangers ("a stranger attacked a stranger").
 - **World data with live state** (`resource_node` amounts, `structure.owner`, `gate.changed_by`) is public, readable beyond sight by chunk window.
 - **The public observer** was retired on 2026-11-09.
-- **The default build is still `open`** until the client patch lands; until then `experience` and the other eight tables stay public, and the verify-client open-build run records that as its one `XFAIL`.
+- **The default build was `open`** until the client landed: closed by the third change (`scoped` is the default; `experience` and the other eight tables are public only in a `LIVING_PERCEPTION=open` build, whose verify-client run records that as its one `XFAIL`).
 - **Scale:** measured to 50 players at rest and walking. The views' cost grows with players × perceived updates; a 200-character battle seen by many players was not measured.

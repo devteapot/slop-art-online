@@ -3,10 +3,10 @@
 ## Sub-features
 
 - Refuse anonymous WebSocket subscriptions and HTTP SQL reads of every private table: the authority's bookkeeping, the private combat tables and, since 2026-11-09, developer audit truth (minds' state, thoughts, beliefs, personas, relations, judgments, routines, genomes, backgrounds, the chronicle, `stats`, offers, communities, `activity`, `practice`, `artifact`) and `perceived` (docs/PERCEPTION.md). `PRIVATE` in `drive.py` lists them.
-- In a `scoped` build (`LIVING_PERCEPTION=scoped`), refuse the same to the nine tables behind the perception views (`SCOPED` in `drive.py`: `body`, `character`, `fighter`, `doing`, `vitals`, `experience`, `place`, `inventory`, `know_how`), for anonymous and for a player identity.
+- In a `scoped` build (the default), refuse the same to the nine tables behind the perception views (`SCOPED` in `drive.py`: `body`, `character`, `fighter`, `doing`, `vitals`, `experience`, `place`, `inventory`, `know_how`), for anonymous and for a player identity.
 - Refuse a player's subscription and HTTP SQL to the scoped tables and to `thought`, `belief`, `persona`, `mind_state` and `perceived`: a player is not the owner.
 - `thought` (raw model replies included) is refused anonymously in every build; the owner still reads the scripted raw markers (`owner-thought.json`).
-- `experience` is refused anonymously in a scoped build. In an open build it stays public for today's game client, and the driver records the known issue as `XFAIL` (`privacy-experience.json`); `open-build-tables.json` proves the nine tables are public there.
+- `experience` is refused anonymously in a scoped build. In an open build (`LIVING_PERCEPTION=open`, diagnostics) it is public, and the driver records the known issue as `XFAIL` (`privacy-experience.json`); `open-build-tables.json` proves the nine tables are public there.
 - Record the exact transport-specific refusal for each table.
 
 ## How to get to it (user POV)
