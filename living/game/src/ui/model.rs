@@ -69,12 +69,12 @@ pub enum Key {
     Q,
     E,
     R,
-    F,
     Shift,
 }
 
 impl Key {
-    pub const BAR: [Key; 7] = [Key::Lmb, Key::Rmb, Key::Q, Key::E, Key::R, Key::F, Key::Shift];
+    /// F is the interaction key, not a skill (user, 2026-11-09).
+    pub const BAR: [Key; 6] = [Key::Lmb, Key::Rmb, Key::Q, Key::E, Key::R, Key::Shift];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -83,7 +83,6 @@ impl Key {
             Self::Q => "Q",
             Self::E => "E",
             Self::R => "R",
-            Self::F => "F",
             Self::Shift => "Shift",
         }
     }

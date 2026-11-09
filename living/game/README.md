@@ -115,12 +115,12 @@ The simulation logs its cost every 3 s. A 78-joint character costs about 9 µs o
 | Right click | walk to that point (`human_act` with `goto`) |
 | Enter | say something; only characters within earshot hear it (`human_say`). Enter says it, Esc cancels |
 | Mouse cursor | where you face and aim (turning the view by pointing at screen sides is an F1 option, off by default) |
-| `R`, or a middle mouse tap | turn the view until the direction you face is straight ahead; the cursor moves with the ground meanwhile, so you keep facing the same spot |
+| A middle mouse tap | turn the view until the direction you face is straight ahead; the cursor moves with the ground meanwhile, so you keep facing the same spot |
 | `[` / `]` held, or middle mouse drag | rotate the view (90°/s for the keys); it stays where you leave it |
 | Alt + mouse | glance around; the view eases back on release |
 | F1 | developer panels in egui (status, camera, look, sight, look-dev); hidden by default |
 
-The line from your character to the cursor shows where an aimed skill would go. There are no skills yet: the skill bar shows LMB, RMB, Q, E, R, F and Shift (docs/GAME_BRIEF.md, 2026-11-09), unavailable until combat is on the server. `R` still aligns the view; it will clash with the R skill once skills are wired.
+The line from your character to the cursor shows where an aimed skill would go. There are no skills yet: the skill bar shows LMB, RMB, Q, E, R and Shift (docs/GAME_BRIEF.md, 2026-11-09), unavailable until combat is on the server. `F` interacts (talk, pick up); the middle-button tap aligns the view.
 
 ## Game UI
 

@@ -204,7 +204,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     };
 }
 
-/// The starter skills on their keys (docs/GAME_BRIEF.md, 2026-11-09); F is free for the next.
+/// The starter skills on their keys (docs/GAME_BRIEF.md, 2026-11-09); F interacts.
 pub fn default_bar(state: impl Fn(Key) -> SkillState) -> Vec<Skill> {
     let slot = |key: Key, icon: SkillIcon| Skill { key, icon, state: if icon == SkillIcon::Empty { SkillState::Empty } else { state(key) } };
     vec![
@@ -213,7 +213,6 @@ pub fn default_bar(state: impl Fn(Key) -> SkillState) -> Vec<Skill> {
         slot(Key::Q, SkillIcon::Fire),     // fire bolt
         slot(Key::E, SkillIcon::Shield),   // block (held)
         slot(Key::R, SkillIcon::Heal),     // heal
-        slot(Key::F, SkillIcon::Empty),
         slot(Key::Shift, SkillIcon::Dodge), // dodge roll
     ]
 }

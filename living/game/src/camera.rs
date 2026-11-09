@@ -7,7 +7,7 @@
 //!   pointing toward a screen side is an option, off by default.
 //! - **Rotation:** hold `[` or `]`, or drag with the middle button; the view stays where you leave
 //!   it. Alt + mouse glances around and springs back.
-//! - **Align (on request only):** press `R` or tap the middle button, and the view turns until
+//! - **Align (on request only):** tap the middle button, and the view turns until
 //!   the direction you face is straight ahead. The mouse cursor moves with the ground meanwhile,
 //!   so you keep facing the same spot (a fixed cursor would make the view keep turning).
 //! - **Context:** conversations frame both speakers, until you rotate or the talk ends.
@@ -238,10 +238,9 @@ pub fn follow(
         manual += motion.delta.x * 0.3;
         cam.middle_moved += motion.delta.length();
     }
-    // Align on request: R, or a middle-button tap (released having moved under 6 px).
+    // Align on request: a middle-button tap (released having moved under 6 px). R is a skill key.
     let tapped = mouse.just_released(MouseButton::Middle) && cam.middle_moved < 6.0 && !ui.pointer;
-    let pressed_r = !ui.keyboard && !input.chat_open && keys.just_pressed(KeyCode::KeyR);
-    if tapped || pressed_r || std::mem::take(&mut cam.align_request) {
+    if tapped || std::mem::take(&mut cam.align_request) {
         if let Some(l) = input.look.filter(|l| l.length_squared() > 1e-4) {
             let face = l.y.atan2(l.x).to_degrees() + 90.0;
             let lock = cam.cursor_ground.filter(|_| !input.demo);

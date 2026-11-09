@@ -158,7 +158,7 @@ pub fn fill(
         distance: a.distance,
     });
     // Only near something you can use.
-    model.hint = model.target.as_ref().filter(|t| t.stance != Stance::Hostile && t.distance < 6.0).map(|_| Hint { key: "E".into(), label: "Talk".into() });
+    model.hint = model.target.as_ref().filter(|t| t.stance != Stance::Hostile && t.distance < 6.0).map(|_| Hint { key: "F".into(), label: "Talk".into() });
 
     // Several speakers at once.
     model.bubbles.clear();

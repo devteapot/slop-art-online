@@ -94,7 +94,7 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
             root.spawn((HintRoot, Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(9.0), margin: UiRect::bottom(Val::Px(18.0)), padding: UiRect::new(Val::Px(6.0), Val::Px(14.0), Val::Px(5.0), Val::Px(5.0)), border: UiRect::all(Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(999.0)), ..default() }, theme::panel(999.0)))
                 .with_children(|h| {
                     h.spawn((Node { width: Val::Px(26.0), height: Val::Px(26.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: UiRect::all(Val::Px(1.5)), border_radius: BorderRadius::all(Val::Px(7.0)), ..default() }, BackgroundColor(theme::INK_SOLID), BorderColor::all(theme::GOLD)))
-                        .with_child((HintKey, Text::new("E"), f.body(14.0, 800), TextColor(theme::GOLD)));
+                        .with_child((HintKey, Text::new("F"), f.body(14.0, 800), TextColor(theme::GOLD)));
                     h.spawn((HintLabel, Text::new(""), f.body(15.0, 650), TextColor(theme::TEXT)));
                 });
             // Status pills, left-aligned over the bars.

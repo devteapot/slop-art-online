@@ -25,7 +25,7 @@ Findings move from the lab to the game when a core version is released and the g
 - **The world continues offline.** When a player leaves, their character keeps living under an AI mind. That mind's behavior should come from how the player actually played, so the character stays recognizably theirs. A custom external mind supplied by the player is a later option.
 - **Running cost** of model calls is set aside for now.
 - **Decisions of 2026-11-09 (user):**
-  - **Controls:** WASD movement, and you face the cursor. Left and right mouse are basic attacks; Q/E/R/F are skills; Shift is the dodge. Skillshots fire toward the cursor; targeted skills hit the enemy under or nearest the cursor.
+  - **Controls:** WASD movement, and you face the cursor. Left and right mouse are basic attacks; Q/E/R are skills; Shift is the dodge; F interacts (talk, pick up; Genshin-style). The camera aligns on a middle-button tap only, so R is free for a skill. Skillshots fire toward the cursor; targeted skills hit the enemy under or nearest the cursor.
   - **Starter skills:** the mixed six (sword strike, targeted; bow shot, skillshot; fire bolt, skillshot spell; block, held; dodge roll; heal, targeted on an ally or yourself), and more where possible. These are shared skills any character can learn; classes emerge from combinations.
   - **Death:** permanent, then you rejoin as a new identity. A development-only shortcut makes rejoining quick on scratch databases.
   - **Day length:** tune freely for testing. The server's effective clock stays as it is for now.
@@ -76,7 +76,7 @@ The user's idea: seeing only what is in front of you makes sense, and skills, pa
   | Face and aim | the cursor |
   | Turn by pointing | the cursor toward a side of the screen (**dropped as the default**: the user disliked it, 2026-11-08; an F1 option) |
   | Rotate the view | `[` / `]` or middle-drag; stays where you leave it |
-  | Turn to where you face | `R` or a middle tap, on request only (user, 2026-11-08). The cursor moves with the ground while the view turns, so the facing doesn't change and the turn ends with it straight ahead |
+  | Turn to where you face | A middle tap, on request only (user, 2026-11-08; `R` was dropped on 2026-11-09 to free it for skills). The cursor moves with the ground while the view turns, so the facing doesn't change and the turn ends with it straight ahead |
   | Glance | Alt + mouse; springs back |
 
   The zoom stays fixed at the default mid-way view for now, with the wheel off, "to see how it works".
