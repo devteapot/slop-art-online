@@ -14,12 +14,19 @@ parts use a material whose name starts with "Glow" and that has emission.
 Readability rules, judged through the game's renderer at the gameplay camera (40° down, 16 m):
 - Small things come as clumps or patches (flowers, grass tufts, mushroom clusters), never as
   one 30 cm stem.
-- Foliage clumps get custom normals pointing out from the clump's centre, and grass and flower
-  heads point up, so they shade as soft masses (Genshin-style), not noisy facets.
+- Foliage is built as a Crown of lobes (see Crown): buried faces dropped, leafy points poked out
+  at the silhouette, and normals pointing out from near the crown's centre, so a crown shades as
+  one soft mass with a jagged, leafy edge (Genshin and Ghibli foliage), not as separate balls.
+  Grass and flower heads point up, so they shade like the ground.
 - Forest trees carry their crowns high on long trunks, so a 40°/16 m camera sees trunks and
   the floor beneath instead of a lid of canopy. Open-grown meadow trees keep broad crowns.
 - A forest reads as one when its trees differ in species, age and growth form, not only in size:
   each tree kind draws crown shape, lean, curvature, limbs and leaf tint from the seed (see Trees).
+- Young trees and saplings carry tall, uneven crowns that start low on the stem, never a ball
+  on a stick. Conifer skirts are pads of branch arms of uneven length with turned-up tips and
+  dark undersides; some pines are old Scots pines with flat, layered pads.
+- Rocks are convex hulls of a few points on a stretched ellipsoid (boulder, slab, standing
+  stone, block): a few big, crisp facets give a strong silhouette.
 - Triangle budgets: under about 3k per large tree, under 800 per sapling or snag.
 - Emission is in nits: Bevy's default camera exposure (EV100 9.7) multiplies emissive by about
   1/1000, so `glow(level)` writes level × 1000 as the glTF emissive strength; level 1 is about
@@ -148,18 +155,20 @@ class Builder:
         self.shade_layer = self.bm.faces.layers.int.new("shade")
         self.mats = []
         self.centres = []
+        self.pinned = {}  # merged vertex -> normal, overriding its shading
 
     def slot(self, mat):
         if mat not in self.mats:
             self.mats.append(mat)
         return self.mats.index(mat)
 
-    def add(self, bm_part, mat, color_fn, centre=None, flat=0.15, smooth=False, two_sided=False, per_face=False):
+    def add(self, bm_part, mat, color_fn, centre=None, flat=0.15, smooth=False, two_sided=False, per_face=False, pin=None):
         """Merge a part: color_fn(vertex_co, face_normal) -> rgb.
 
         centre: foliage normals point out from it (lerped `flat` towards the face normal).
         smooth: averaged vertex normals (trunks, stems). two_sided: add back faces too.
         per_face: one colour per face, from its centre (crisp bark marks).
+        pin: {part vertex: normal} for vertices whose normal is set, not derived.
         """
         idx = self.slot(mat)
         if centre is not None:
@@ -169,6 +178,8 @@ class Builder:
             shade = SMOOTH if smooth else FLAT
         for reverse in ((False, True) if two_sided else (False,)):
             mapping = {v: self.bm.verts.new(v.co) for v in bm_part.verts}
+            for v, n in (pin or {}).items():
+                self.pinned[mapping[v]] = n
             for f in bm_part.faces:
                 vs = [mapping[v] for v in f.verts]
                 try:
@@ -190,6 +201,8 @@ class Builder:
     def finish(self, name):
         mesh = bpy.data.meshes.new(name)
         shade = [f[self.shade_layer] for f in self.bm.faces]
+        self.bm.verts.index_update()
+        pinned = {v.index: n for v, n in self.pinned.items() if v.is_valid}
         self.bm.to_mesh(mesh)
         self.bm.free()
         for m in self.mats:
@@ -207,7 +220,9 @@ class Builder:
             s = shade[poly.index]
             for li in poly.loop_indices:
                 vi = mesh.loops[li].vertex_index
-                if s > 0:
+                if s > 0 and vi in pinned:
+                    normals[li] = pinned[vi]
+                elif s > 0:
                     c, flat = self.centres[s - 1]
                     n = (mesh.vertices[vi].co - c).normalized()
                     normals[li] = n.lerp(poly.normal, flat).normalized()
@@ -385,10 +400,12 @@ def crown_colour(st, rng, lo, hi, centre, rx, rz, top=1.0, stops=None):
     stops = stops or [jitter(s, rng, 0.08) for s in st["leaf"]]
 
     def f(co, n):
+        # From position only (not the facet's normal), so leafy points don't speckle the mass.
         tz = (co.z - lo) / max(hi - lo, 1e-3)
         d = co - centre
         out = math.sqrt((d.x / rx) ** 2 + (d.y / rx) ** 2 + (d.z / rz) ** 2)
-        return jitter(ramp(stops, top * (0.55 * tz + 0.3 * min(out, 1.2) + 0.15 * max(0, n.z) - 0.1)), rng, 0.04)
+        up = max(0.0, d.z / max(d.length, 1e-3))
+        return jitter(ramp(stops, top * (0.55 * tz + 0.3 * min(out, 1.2) + 0.15 * up - 0.1)), rng, 0.03)
     return f
 
 
@@ -468,38 +485,104 @@ def tris(b):
     return sum(len(f.verts) - 2 for f in b.bm.faces)
 
 
-def cluster(b, mat, rng, c, r, col, crown_c, sats=2, subdiv=2, squash=0.8, rough=0.18, pull=0.45):
-    """A branch's leaf mass: a main clump and smaller clumps on its outer, upper side. The whole
-    cluster shades as one soft mass (normals out from a point between it and the crown's centre)."""
-    nc = c.lerp(crown_c, pull)
-    b.add(blob(c, r, rng, subdiv=subdiv, squash=squash, roughness=rough), mat, col, nc, flat=0.1)
-    out = c - crown_c
-    out.z = 0
-    out = out.normalized() if out.length > 1e-3 else Vector((0, 0, 0))
-    for _ in range(sats):
-        e = rng.uniform(-0.1, 0.9)
-        d = (heading(rng) * math.cos(e) + UP * math.sin(e) + out * 0.8).normalized()
-        sc = c + d * r * rng.uniform(0.55, 0.75)
-        b.add(blob(sc, r * rng.uniform(0.45, 0.62), rng, subdiv=2, squash=squash, roughness=rough), mat, col, nc, flat=0.1)
+class Crown:
+    """A tree's leaf mass, gathered as lobes and built in one go (Genshin- and Ghibli-style
+    foliage: a soft mass with leafy edges):
+    - faces buried inside a neighbouring lobe are dropped, so overlapping lobes cost little;
+    - a share of the exposed, outward faces is poked out into leafy points that lean out and
+      droop, so the silhouette breaks into leaf clumps;
+    - every lobe's normals point out from a point pulled towards the crown's centre, so the
+      lobes shade together as one mass and only its big notches and gaps read as form."""
+
+    def __init__(self, centre, col, pull=0.85, jag=0.5, tip=0.22, droop=0.6):
+        self.c = Vector(centre)
+        self.col, self.pull, self.jag, self.tip, self.droop = col, pull, jag, tip, droop
+        self.lobes = []
+
+    def lobe(self, c, r, squash=0.9, rough=0.16, sub=2, nc=None, jag=None):
+        """One leaf lobe; `nc` overrides the point its normals point out from."""
+        self.lobes.append(dict(c=Vector(c), r=r, sq=squash, rough=rough, sub=sub, nc=nc, jag=jag))
+
+    def cluster(self, rng, c, r, sats=1, squash=0.85, sub=2, rough=0.18):
+        """A branch's leaf mass: a main lobe and smaller ones on its outer, upper side."""
+        self.lobe(c, r, squash, rough, sub)
+        out = c - self.c
+        out.z = 0
+        out = out.normalized() if out.length > 1e-3 else Vector((0, 0, 0))
+        for _ in range(sats):
+            e = rng.uniform(-0.1, 0.9)
+            d = (heading(rng) * math.cos(e) + UP * math.sin(e) + out * 0.8).normalized()
+            self.lobe(c + d * r * rng.uniform(0.55, 0.75), r * rng.uniform(0.45, 0.62), squash, rough, min(sub, 2) if r > 1.2 else 1)
+
+    def inside(self, p, skip, k=0.9):
+        for j, l in enumerate(self.lobes):
+            if j == skip:
+                continue
+            d = p - l["c"]
+            r = l["r"] * k
+            if (d.x / r) ** 2 + (d.y / r) ** 2 + (d.z / (r * l["sq"])) ** 2 < 1.0:
+                return True
+        return False
+
+    def build(self, b, mat, rng):
+        for i, l in enumerate(self.lobes):
+            c, r = l["c"], l["r"]
+            bm = blob(c, r, rng, subdiv=l["sub"], squash=l["sq"], roughness=l["rough"])
+            bm.normal_update()
+            buried = [f for f in bm.faces if all(self.inside(v.co, i) for v in f.verts)]
+            if len(buried) < len(bm.faces):
+                bmesh.ops.delete(bm, geom=buried, context="FACES")
+            jag = self.jag if l["jag"] is None else l["jag"]
+            pick = []
+            for f in bm.faces:
+                m = f.calc_center_median()
+                # Long points on the sides and underside, where the outline is; short, flat-lying
+                # ones on the sunlit top, where long ones would speckle the mass with shadow.
+                if f.normal.dot(m - self.c) > 0 and not self.inside(m, i, 1.0) and rng.random() < (jag if f.normal.z < 0.55 else jag * 0.6):
+                    pick.append(f)
+            nc = l["nc"] if l["nc"] is not None else c.lerp(self.c, self.pull)
+            pin = {}
+            if pick:
+                tips = bmesh.ops.poke(bm, faces=pick)["verts"]
+                for v in tips:
+                    # A leafy point shades as the surface it grows from: only the outline changes.
+                    pin[v] = (v.co - nc).normalized()
+                    out = ((v.co - c).normalized() + (v.co - self.c).normalized()).normalized()
+                    top = out.z > 0.55
+                    d = (out - UP * self.droop * max(0.2, 1 - out.z) - (UP * out.z * 0.8 if top else Vector())).normalized()
+                    v.co += d * r * self.tip * rng.uniform(0.6, 1.25) * (0.45 if top else 1.0)
+            b.add(bm, mat, self.col, nc, flat=0.0, pin=pin)
 
 
-def tier(axis, r, th, rng, sides=10, droop=0.28, notch=0.72, wobble=0.0, shift=None):
-    """One conifer skirt: a jagged, drooping cone of needles, open underneath."""
+def tier(axis, r, th, rng, sides=10, droop=0.28, notch=0.72, wobble=0.0, shift=None, arms=0.22, curl=0.08, bulge=0.18):
+    """One conifer skirt of branch arms: a convex pad that swells out from the apex, then droops
+    to jagged arm tips of uneven length (`arms`), whose ends turn up a little (`curl`); deep
+    notches between arms; open underneath."""
     bm = bmesh.new()
     shift = shift if shift is not None else Vector((0, 0, 0))
     apex = bm.verts.new(axis + UP * th)
     inner = bm.verts.new(axis + UP * th * 0.3 + shift * 0.5)
-    rim = []
+    mid, rim = [], []
     a0 = rng.uniform(0, math.tau)
     off = rng.random() * 50
-    for k in range(sides * 2):
-        a = a0 + k / (sides * 2) * math.tau
-        rr = r * (1.0 if k % 2 == 0 else notch) * (1 + wobble * noise.noise(Vector((math.cos(a) * 1.5 + off, math.sin(a) * 1.5, 0))))
-        dr = r * (droop if k % 2 == 0 else droop * 0.45)
-        rim.append(bm.verts.new(axis + shift + Vector((math.cos(a) * rr, math.sin(a) * rr, -dr))))
-    for k in range(sides * 2):
-        bm.faces.new((apex, rim[k], rim[(k + 1) % (sides * 2)]))
-        bm.faces.new((inner, rim[(k + 1) % (sides * 2)], rim[k]))
+    n = sides * 2
+    for k in range(n):
+        a = a0 + (k + rng.uniform(-0.18, 0.18)) / n * math.tau
+        tip = k % 2 == 0
+        reach = (1.0 + rng.uniform(-arms, arms)) if tip else notch
+        rr = r * reach * (1 + wobble * noise.noise(Vector((math.cos(a) * 1.5 + off, math.sin(a) * 1.5, 0))))
+        dr = r * (droop if tip else droop * 0.4)
+        d = Vector((math.cos(a), math.sin(a), 0))
+        end = axis + shift + d * rr + UP * (-dr + (r * curl if tip else 0.0))
+        # The pad bulges above the straight line from apex to rim, so each tier reads as a shelf.
+        m = axis + UP * th + (end - axis - UP * th) * 0.55 + UP * (th * bulge + (0.0 if tip else -th * 0.12))
+        mid.append(bm.verts.new(m))
+        rim.append(bm.verts.new(end))
+    for k in range(n):
+        j = (k + 1) % n
+        bm.faces.new((apex, mid[k], mid[j]))
+        bm.faces.new((mid[k], rim[k], rim[j], mid[j]))
+        bm.faces.new((inner, rim[j], rim[k]))
     return bm
 
 
@@ -511,12 +594,13 @@ def needle_col(stops, rng, lo_z, hi_z, t):
 
 
 def conifer_crown(b, mat, rng, stops, h, lo, top, rmax, tiers, sides=10, droop=0.28, notch=0.72, lean=None,
-                  profile=1.0, skip=0.0, wobble=0.12, sway=0.0, flat_top=False, at=None):
+                  profile=1.0, skip=0.0, wobble=0.12, sway=0.0, flat_top=False, at=None, arms=0.22, curl=0.08, overlap=1.6):
     """Stacked skirts from `lo` to `top`, widest at the bottom (`profile` shapes the taper), each
-    nudged sideways by up to `sway` × its radius so the cone isn't a lathe."""
+    nudged sideways by up to `sway` × its radius so the cone isn't a lathe. `overlap` is each
+    skirt's height in tier spacings: below about 1.7 the dark underside of each shelf shows."""
     lean = lean if lean is not None else Vector((0, 0, 0))
     foot = Vector((at.x, at.y, 0)) if at is not None else Vector((0, 0, 0))
-    th = (top - lo) / tiers * 1.9
+    th = (top - lo) / tiers * overlap
     for i in range(tiers):
         t = i / max(tiers - 1, 1)
         if 0 < i < tiers - 2 and rng.random() < skip:
@@ -525,7 +609,7 @@ def conifer_crown(b, mat, rng, stops, h, lo, top, rmax, tiers, sides=10, droop=0
         axis = foot + Vector((0, 0, z)) + lean * (z / h) ** 2
         r = rmax * ((1 - t * 0.82) ** profile if not flat_top else 1 - 0.5 * t ** 2.5) * rng.uniform(0.88, 1.12)
         shift = heading(rng) * r * rng.uniform(0, sway)
-        b.add(tier(axis, r, th, rng, sides, droop, notch, wobble, shift), mat, needle_col(stops, rng, z - r * 0.3, z + th, t), axis + UP * th * 0.2, flat=0.2)
+        b.add(tier(axis, r, th, rng, sides, droop, notch, wobble, shift, arms, curl), mat, needle_col(stops, rng, z - r * 0.3, z + th, t), axis + UP * th * 0.2, flat=0.2)
     if not flat_top:
         tip = foot + Vector((0, 0, top)) + lean * (top / h) ** 2
         b.add(tube([tip, foot + Vector((0, 0, h)) + lean], [rmax * 0.12, 0], 6, cap=False), mat, lambda co, n: jitter(stops[2], rng, 0.04), tip - UP * h * 0.05, flat=0.3)
@@ -552,11 +636,8 @@ def broadleaf(rng, st):
     centre = Vector((0, 0, lo + rz)) + shift
     r0 = h * p.get("girth", 0.03) * rng.uniform(0.85, 1.2)
     bark_col = bark_colour(jitter(st["bark"], rng, 0.1), rng)
-    big = 1700  # main clumps get the finer sphere while the tree is under this many triangles
     col = crown_colour(st, rng, lo, h, centre, rx, rz, stops=stops)
-
-    def sub():
-        return 3 if tris(b) < big else 2
+    crown = Crown(centre, col)
 
     if form == "fork":
         # The trunk splits below the crown into two or three leaders, each with its own sub-crown.
@@ -573,13 +654,13 @@ def broadleaf(rng, st):
             c = Vector((shift.x, shift.y, top_z)) + out * rx * rng.uniform(0.35, 0.55)
             lead = curve(pts[-1], c, UP * 0.4 - out * rx * 0.15, 3)
             b.add(tube(lead, [radii[-1] * 0.8, r0 * 0.5, r0 * 0.38, r0 * 0.25], 6), wood, bark_col, smooth=True)
-            cr = rx * rng.uniform(0.48, 0.6)
-            cluster(b, wood, rng, c, cr, col, centre, sats=2, subdiv=sub(), squash=0.85)
+            cr = rx * rng.uniform(0.55, 0.66)
+            crown.cluster(rng, c, cr, sats=1, squash=0.85)
             low = lead[1].lerp(lead[2], 0.5)
             side = (out + heading(rng) * 0.6).normalized()
             e = low + side * rx * rng.uniform(0.4, 0.6) + UP * rz * 0.15
             limb(b, wood, bark_col, low, e, r0 * 0.3, r0 * 0.12)
-            cluster(b, wood, rng, e, cr * 0.62, col, centre, sats=1, subdiv=2, squash=0.8)
+            crown.cluster(rng, e, cr * 0.62, sats=0, squash=0.8)
     else:
         top_z = centre.z + rz * (0.1 if form != "oval" else 0.4)
         pts = stem(top_z, rng, 6, lean=Vector((shift.x, shift.y, 0)), lean_pow=0.75 if leaning else 2.0,
@@ -589,7 +670,8 @@ def broadleaf(rng, st):
         roots(b, wood, bark_col, r0, rng.randint(3, 5), rng)
         spots = []  # (centre, radius, squash)
         if form in ("round", "onesided"):
-            n = rng.randint(4, 6)
+            # A few big lobes round a small core: one mass whose rim has deep notches.
+            n = rng.randint(4, 5)
             phase = rng.uniform(0, math.tau)
             for i in range(n):
                 y = 0.85 - (i + 0.5) / n * 1.3
@@ -598,46 +680,47 @@ def broadleaf(rng, st):
                 d = direction(a)
                 if form == "onesided" and d.dot(way) < -0.3:
                     d = (d + way * 1.2).normalized()  # crowded on one side: limbs reach to the light
-                c = centre + d * r * rx * 0.6 + UP * y * rz * 0.55
-                spots.append((c, min(rx, rz) * rng.uniform(0.5, 0.62), 0.85))
-            core = (centre + UP * rz * 0.1, min(rx, rz) * 0.75, rz / max(rx, rz) * 1.05)
+                c = centre + d * r * rx * 0.55 + UP * y * rz * 0.5
+                spots.append((c, min(rx, rz) * rng.uniform(0.62, 0.74), 0.85))
+            core = (centre + UP * rz * 0.05, min(rx, rz) * 0.72, rz / max(rx, rz) * 1.0)
         elif form == "oval":
-            n = rng.randint(5, 6)
+            n = rng.randint(4, 5)
             phase = rng.uniform(0, math.tau)
             for i in range(n):
                 u = (i + 0.5) / n
                 z = lo + rz * 0.35 + (h - lo - rz * 0.6) * u
-                c = Vector((shift.x, shift.y, z)) + direction(phase + i * 2.39996) * rx * 0.5 * math.sin(math.pi * (0.15 + 0.85 * u))
-                spots.append((c, rx * rng.uniform(0.55, 0.68), 0.95))
-            core = (centre + UP * rz * 0.15, rx * 0.7, rz / rx * 0.9)
+                c = Vector((shift.x, shift.y, z)) + direction(phase + i * 2.39996) * rx * 0.42 * math.sin(math.pi * (0.15 + 0.85 * u))
+                spots.append((c, rx * rng.uniform(0.66, 0.78), 0.95))
+            core = (centre + UP * rz * 0.15, rx * 0.72, rz / rx * 0.9)
         else:  # layered: a wide low tier and a small top, with a gap you can see through
             n = rng.randint(4, 5)
             phase = rng.uniform(0, math.tau)
             for i in range(n):
                 c = Vector((shift.x, shift.y, lo + rz * 0.45)) + direction(phase + i / n * math.tau + rng.uniform(-0.3, 0.3)) * rx * rng.uniform(0.6, 0.8)
-                spots.append((c, rx * rng.uniform(0.38, 0.46), 0.6))
+                spots.append((c, rx * rng.uniform(0.42, 0.5), 0.6))
             for i in range(2):
                 c = Vector((pts[-1].x, pts[-1].y, h - rz * 0.5)) + direction(phase + 1 + i * math.pi) * rx * 0.25
-                spots.append((c, rx * rng.uniform(0.38, 0.46), 0.8))
+                spots.append((c, rx * rng.uniform(0.4, 0.48), 0.8))
             core = None
-        for c, cr, sq in spots:
+        for j, (c, cr, sq) in enumerate(spots):
             t = at_height(pts, min(c.z - cr * 0.6, pts[-1].z))
             start = along(pts, max(0.55, t))
             if (c - start).length > cr * 0.6:
                 limb(b, wood, bark_col, start, c, along_r(radii, t) * 0.55, r0 * 0.15)
-            cluster(b, wood, rng, c, cr, col, centre, sats=rng.randint(1, 2), subdiv=sub(), squash=sq)
+            crown.cluster(rng, c, cr, sats=1 if j % 2 == 0 else 0, squash=sq)
         if core:
-            b.add(blob(core[0], core[1], rng, subdiv=2, squash=core[2]), wood, col, centre, flat=0.1)
+            crown.lobe(core[0], core[1], core[2], sub=2)
     # Side lobes: a limb leaves the trunk below the crown and carries its own small clump.
     for _ in range(rng.randint(*p.get("lobes", (0, 0)))):
         out = heading(rng)
         z = lo - rz * rng.uniform(0.1, 0.45)
         t = at_height(pts, z)
         start = along(pts, t)
-        c = start + out * rx * rng.uniform(0.6, 0.8) + UP * rz * 0.45
-        lr = min(rx, rz) * rng.uniform(0.42, 0.52)
+        c = start + out * rx * rng.uniform(0.6, 0.75) + UP * rz * 0.7
+        lr = min(rx, rz) * rng.uniform(0.5, 0.6)
         limb(b, wood, bark_col, start, c, along_r(radii, t) * 0.5, r0 * 0.18)
-        cluster(b, wood, rng, c, lr, col, c, sats=1, subdiv=2, squash=0.8)
+        crown.cluster(rng, c, lr, sats=1, squash=0.8)
+    crown.build(b, wood, rng)
     return b
 
 
@@ -662,6 +745,7 @@ def oak(rng, st):
     cz = lo + rz
     centre = Vector((lean.x, lean.y, cz))
     col = crown_colour(st, rng, lo, h, centre, rx, rz, stops=stops)
+    crown = Crown(centre, col, pull=0.7)
     top = pts[-1]
     n = rng.randint(4, 5)
     a0 = rng.uniform(0, math.tau)
@@ -675,8 +759,8 @@ def oak(rng, st):
         side = Vector((-out.y, out.x, 0)) * rng.uniform(-0.2, 0.2) * reach
         b.add(tube(curve(top, e, UP * reach * 0.15 - out * reach * 0.12 + side, 3),
                    [r0 * 0.5, r0 * 0.38, r0 * 0.27, r0 * 0.16], 6), wood, bark_col, smooth=True)
-        cr = rx * rng.uniform(0.36, 0.44)
-        cluster(b, wood, rng, e, cr, col, centre, sats=1, subdiv=3 if i < 2 else 2, squash=0.78)
+        cr = rx * rng.uniform(0.4, 0.48)
+        crown.cluster(rng, e, cr, sats=1, squash=0.78)
         # A lower, outer branch droops towards the rim.
         if rng.random() < 0.75:
             s = top.lerp(e, rng.uniform(0.4, 0.6))
@@ -684,9 +768,10 @@ def oak(rng, st):
             e2 = s + o2 * reach * rng.uniform(0.6, 0.85)
             e2.z = cz - rz * rng.uniform(0.3, 0.6)
             limb(b, wood, bark_col, s, e2, r0 * 0.2, r0 * 0.09, arch=0.12)
-            cluster(b, wood, rng, e2, cr * rng.uniform(0.62, 0.75), col, centre, sats=1, subdiv=2, squash=0.8)
-    b.add(blob(Vector((lean.x, lean.y, h - rz * 0.6)), rx * 0.48, rng, subdiv=2, squash=0.65), wood, col, centre, flat=0.1)
-    b.add(blob(centre + UP * rz * 0.05, rx * 0.7, rng, subdiv=2, squash=rz / rx * 1.15), wood, col, centre, flat=0.1)
+            crown.cluster(rng, e2, cr * rng.uniform(0.62, 0.75), sats=0, squash=0.8)
+    crown.lobe(Vector((lean.x, lean.y, h - rz * 0.6)), rx * 0.5, 0.65)
+    crown.lobe(centre + UP * rz * 0.05, rx * 0.62, rz / rx * 1.15)
+    crown.build(b, wood, rng)
     return b
 
 
@@ -731,6 +816,7 @@ def birch(rng, st):
         centre = along(pts, 0.5 + 0.5 * at_height(pts, lo))
         rz = (hs - lo) / 2
         col = crown_colour(st, rng, lo, hs, centre, rx, rz, stops=stops)
+        crown = Crown(centre, col, pull=0.65, jag=0.45, tip=0.28, droop=0.8)
         n = rng.randint(6, 8) if stems == 1 else rng.randint(4, 5)
         phase = rng.uniform(0, math.tau)
         for i in range(n):
@@ -738,33 +824,78 @@ def birch(rng, st):
             t = at_height(pts, lo + (hs - lo) * u * 0.92)
             start = along(pts, t)
             out = direction(phase + i * 2.39996)
-            reach = rx * (0.3 + 0.45 * math.sin(math.pi * (0.2 + 0.7 * u))) * rng.uniform(0.8, 1.1)
+            reach = rx * (0.22 + 0.35 * math.sin(math.pi * (0.2 + 0.7 * u))) * rng.uniform(0.8, 1.1)
             e = start + out * reach + UP * rng.uniform(-0.2, 0.5)
             limb(b, wood, birch_bark(st, rng, h), start, e, along_r(radii, t) * 0.5, 0.02, arch=0.3, sides=4)
             cr = rx * rng.uniform(0.5, 0.62) * (1.15 - 0.4 * u)
             # Hanging twigs: clusters a little taller than wide, just below their limb's tip.
-            cluster(b, wood, rng, e - UP * cr * 0.3, cr, col, centre, sats=1, subdiv=2, squash=1.15, rough=0.24, pull=0.3)
-        cluster(b, wood, rng, pts[-1] - UP * rx * 0.15, rx * 0.32, col, centre, sats=1, subdiv=2, squash=1.2, rough=0.24, pull=0.3)
+            crown.cluster(rng, e - UP * cr * 0.3, cr, sats=1 if i % 2 else 0, squash=1.15, sub=2 if cr > 0.9 else 1, rough=0.24)
+        crown.cluster(rng, pts[-1] - UP * rx * 0.15, rx * 0.32, sats=1, squash=1.2, sub=1, rough=0.24)
+        crown.lobe(centre, rx * 0.55, rz / rx * 0.55, sub=2)
+        crown.build(b, wood, rng)
     return b
 
 
 def pine(rng, st):
-    """A pine of jagged, drooping skirts on a warm upper trunk. Forest pines lose their lower tiers,
-    as in a stand; some have a flat old top, an uneven crown or a missing tier."""
+    """A pine on a warm upper trunk: either a cone of jagged, drooping skirts (forest pines lose
+    their lower tiers, as in a stand; some have a flat old top or a missing tier), or an old
+    Scots pine whose crooked upper limbs carry flat, layered pads of needles."""
     b = Builder()
     wood = material("Tree")
     stops = leaf_stops(st, rng, "needle")
     h = rng.uniform(12, 16)
     lean = heading(rng) * h * rng.uniform(0, 0.035)
     r0 = h * rng.uniform(0.02, 0.027)
-    pts = stem(h * 0.9, rng, 5, lean=lean, bow=h * rng.uniform(0, 0.02))
     warm = st.get("pine_bark", st["bark"])
     bark_col = lambda co, n: jitter(lerp(scale(st["bark"], 0.7), warm, min(1, max(0.0, co.z - 2) / (h * 0.5))), rng, 0.05)
+    if rng.random() < 0.45:
+        return scots_pine(b, wood, rng, st, stops, h, lean, r0, bark_col)
+    pts = stem(h * 0.9, rng, 5, lean=lean, bow=h * rng.uniform(0, 0.02))
     b.add(tube(pts, taper(r0, len(pts), top=0.3, flare=0.3), 7), wood, bark_col, smooth=True)
     roots(b, wood, bark_col, r0, 3, rng, reach=2.6)
     old = rng.random() < 0.2
-    conifer_crown(b, wood, rng, stops, h, h * rng.uniform(0.28, 0.48), h * 0.86, h * rng.uniform(0.14, 0.2), rng.randint(5, 8),
-                  lean=lean, skip=0.06, sway=0.15, wobble=0.15, flat_top=old, profile=rng.uniform(0.8, 1.2))
+    conifer_crown(b, wood, rng, stops, h, h * rng.uniform(0.28, 0.48), h * 0.86, h * rng.uniform(0.15, 0.21), rng.randint(5, 7),
+                  lean=lean, skip=0.08, sway=0.18, wobble=0.15, flat_top=old, profile=rng.uniform(0.8, 1.2),
+                  notch=0.55, arms=0.28, curl=0.1, overlap=1.5)
+    return b
+
+
+def scots_pine(b, wood, rng, st, stops, h, lean, r0, bark_col):
+    """An old Scots pine: a tall bare trunk that kinks near the top into a few crooked limbs, each
+    holding a flat cloud of needles; pads overlap in layers, lit on top and dark beneath."""
+    top = h * rng.uniform(0.78, 0.86)
+    r0 *= 1.25
+    pts = stem(top, rng, 6, lean=lean * 1.5, lean_pow=2.5, bow=h * rng.uniform(0.02, 0.05), wiggle=0.35)
+    radii = taper(r0, len(pts), top=0.4, flare=0.3)
+    b.add(tube(pts, radii, 7), wood, bark_col, smooth=True)
+    roots(b, wood, bark_col, r0, 3, rng, reach=2.4)
+    lo = h * rng.uniform(0.58, 0.66)
+    span = h * rng.uniform(0.2, 0.26)
+
+    def col(co, n):
+        tz = (co.z - lo) / max(h - lo, 1e-3)
+        return jitter(ramp(stops, 0.25 + 0.45 * tz + 0.3 * max(0.0, n.z)), rng, 0.04)
+    crown = Crown(Vector((pts[-1].x, pts[-1].y, (lo + h) / 2)), col, jag=0.4, tip=0.22, droop=0.25)
+    n = rng.randint(5, 7)
+    a0 = rng.uniform(0, math.tau)
+    for i in range(n):
+        u = i / max(n - 1, 1)
+        z = lo + (h - lo) * (0.1 + 0.62 * u) + rng.uniform(-0.3, 0.3)
+        t = at_height(pts, min(z - 1.0, top))
+        s = along(pts, t)
+        out = direction(a0 + i * 2.39996 + rng.uniform(-0.3, 0.3))
+        reach = span * (0.8 - 0.4 * u) * rng.uniform(0.75, 1.15)
+        c = Vector((s.x, s.y, z)) + out * reach
+        # A crooked limb: up, then out.
+        limb(b, wood, bark_col, s, c - UP * 0.3, along_r(radii, t) * 0.6, r0 * 0.18, arch=0.35, sides=5)
+        r = span * rng.uniform(0.5, 0.65) * (1.05 - 0.35 * u)
+        crown.lobe(c, r, rng.uniform(0.45, 0.55), rough=0.22, nc=c - UP * r * 0.7)
+        if rng.random() < 0.7:
+            c2 = c + heading(rng) * r * 0.55 - UP * r * 0.12
+            crown.lobe(c2, r * 0.65, 0.5, rough=0.22, sub=1, nc=c2 - UP * r * 0.5)
+    tp = Vector((pts[-1].x, pts[-1].y, h - span * 0.2))
+    crown.lobe(tp, span * 0.4, 0.55, rough=0.2, nc=tp - UP * span * 0.3)
+    crown.build(b, wood, rng)
     return b
 
 
@@ -786,8 +917,9 @@ def spruce(rng, st):
         s = along(pts, at_height(pts, z))
         e = s + heading(rng) * rng.uniform(0.4, 1.0) + UP * rng.uniform(-0.2, 0.1)
         b.add(tube([s, e], [r0 * 0.15, 0.0], 3, cap=False), wood, solid(scale(st["bark"], 1.4), rng))
-    conifer_crown(b, wood, rng, stops, h, lo, h * 0.9, h * rng.uniform(0.13, 0.16), rng.randint(12, 15), sides=8,
-                  droop=0.42, notch=0.6, lean=lean, skip=0.06, sway=0.12, wobble=0.18, profile=rng.uniform(0.85, 1.15))
+    conifer_crown(b, wood, rng, stops, h, lo, h * 0.9, h * rng.uniform(0.14, 0.17), rng.randint(10, 13), sides=8,
+                  droop=0.5, notch=0.5, lean=lean, skip=0.08, sway=0.14, wobble=0.18, profile=rng.uniform(0.85, 1.15),
+                  arms=0.3, curl=0.14, overlap=1.55)
     return b
 
 
@@ -805,6 +937,7 @@ def coppice(rng, st):
     centre = Vector((0, 0, h * 0.7))
     rx = h * 0.4
     col = crown_colour(st, rng, h * 0.3, h, centre, rx, h * 0.35, stops=stops)
+    crown = Crown(centre, col, pull=0.55)
     a0 = rng.uniform(0, math.tau)
     for i in range(n):
         out = direction(a0 + i / n * math.tau + rng.uniform(-0.4, 0.4))
@@ -818,10 +951,11 @@ def coppice(rng, st):
         radii = [r * (1.2 - 0.85 * k / 5) for k in range(6)]
         b.add(tube(pts, radii, 5), wood, bark_col, smooth=True)
         # Leaves along the upper part of each stem, not only at its tip.
-        cluster(b, wood, rng, top, cr, col, centre, sats=1, subdiv=2, squash=0.95, pull=0.45)
+        crown.cluster(rng, top, cr * 1.1, sats=1 if i % 2 == 0 else 0, squash=0.95, sub=2 if i < 3 else 1)
         s = along(pts, rng.uniform(0.6, 0.72))
-        cluster(b, wood, rng, s + out * cr * 0.5, cr * rng.uniform(0.7, 0.85), col, centre, sats=0, subdiv=2, squash=1.0, pull=0.45)
-    b.add(blob(centre - UP * h * 0.05, h * 0.24, rng, subdiv=2, squash=1.1), wood, col, centre, flat=0.1)
+        crown.lobe(s + out * cr * 0.5, cr * rng.uniform(0.7, 0.85), 1.0, sub=1)
+    crown.lobe(centre - UP * h * 0.05, h * 0.2, 1.1, sub=1)
+    crown.build(b, wood, rng)
     return b
 
 
@@ -831,8 +965,9 @@ def young_conifer(b, wood, rng, st, h, at=None, bark=None, sides=8):
     lean = heading(rng) * h * rng.uniform(0, 0.04)
     pts = stem(h * 0.85, rng, 3, base=at + UP * -SINK * min(1.0, h / 5), lean=lean, wiggle=0.05)
     b.add(tube(pts, taper(h * 0.022, len(pts), top=0.3, flare=0.2), 5), wood, bark or bark_colour(st["bark"], rng), smooth=True)
-    conifer_crown(b, wood, rng, stops, h, h * rng.uniform(0.04, 0.12), h * 0.86, h * rng.uniform(0.17, 0.22),
-                  rng.randint(4, 7), sides=sides, droop=0.32, lean=lean, sway=0.1, wobble=0.1, at=at)
+    conifer_crown(b, wood, rng, stops, h, h * rng.uniform(0.04, 0.12), h * 0.86, h * rng.uniform(0.18, 0.24),
+                  rng.randint(4, 6), sides=sides, droop=0.36, notch=0.55, lean=lean, sway=0.14, wobble=0.12, at=at,
+                  arms=0.3, curl=0.12, overlap=1.5)
 
 
 def young(rng, st):
@@ -852,21 +987,39 @@ def young(rng, st):
     radii = taper(r0, len(pts), top=0.25, flare=0.25)
     bark_col = bark_colour(jitter(st["bark"], rng, 0.1), rng)
     b.add(tube(pts, radii, 5), wood, bark_col, smooth=True)
-    lo = h * rng.uniform(0.2, 0.32)
-    rx = h * rng.uniform(0.17, 0.23)
-    centre = along(pts, 0.5 + 0.5 * at_height(pts, lo))
-    col = crown_colour(st, rng, lo, h, centre, rx, (h - lo) / 2, stops=stops)
-    # A loose oval mass round the upper stem, with a few clusters standing out of it.
+    lo = h * rng.uniform(0.2, 0.28)
+    rx = h * rng.uniform(0.18, 0.23)
     rz = (h - lo) / 2
-    b.add(blob(centre, rx * 0.8, rng, subdiv=2, squash=rz / rx * 0.85, roughness=0.22), wood, col, centre, flat=0.1)
-    n = rng.randint(3, 5)
+    centre = along(pts, 0.5 + 0.5 * at_height(pts, lo))
+    col = crown_colour(st, rng, lo, h, centre, rx, rz, stops=stops)
+    crown = Crown(centre, col, pull=0.75, jag=0.45, tip=0.28)
+    # Not a ball on a stick: a tall, uneven crown that starts low on the stem, built from lobes
+    # that sit on alternate sides up the stem round a slim core, with a leader at the top and a
+    # low branch or two standing out, so the outline is long and lumpy and the stem shows below.
+    side = heading(rng)
+    crown.lobe(centre + side * rx * 0.15, rx * 0.62, rz / rx * 0.62, sub=2)
+    n = rng.randint(4, 5)
     phase = rng.uniform(0, math.tau)
     for i in range(n):
         u = (i + 0.5) / n
-        t = at_height(pts, lo + (h - lo) * (0.12 + 0.68 * u))
+        t = at_height(pts, lo + (h - lo) * (0.08 + 0.78 * u))
         s = along(pts, t)
-        e = s + direction(phase + i * 2.39996) * rx * rng.uniform(0.45, 0.7) * (1.15 - 0.5 * u)
-        cluster(b, wood, rng, e, rx * rng.uniform(0.5, 0.62) * (1.1 - 0.35 * u), col, centre, sats=1 if u < 0.7 else 0, subdiv=2, squash=0.95, pull=0.5)
+        out = direction(phase + i * 2.39996 + rng.uniform(-0.3, 0.3))
+        reach = rx * (0.7 - 0.35 * u) * rng.uniform(0.85, 1.15)
+        e = s + out * reach + UP * reach * rng.uniform(0.2, 0.5)
+        if reach > rx * 0.45:
+            limb(b, wood, bark_col, s - UP * reach * 0.3, e, along_r(radii, t) * 0.6, r0 * 0.15, arch=0.2, sides=4)
+        crown.lobe(e, rx * rng.uniform(0.5, 0.62) * (1.1 - 0.3 * u), rng.uniform(0.95, 1.2), sub=2 if i < 2 else 1)
+    crown.lobe(pts[-1] - UP * rx * 0.3, rx * rng.uniform(0.38, 0.46), 1.4, sub=1)
+    if rng.random() < 0.7:
+        # A low branch with its own tuft, below the crown.
+        t = at_height(pts, lo * rng.uniform(0.75, 0.95))
+        s = along(pts, t)
+        out = (-side + heading(rng) * 0.5).normalized()
+        e = s + out * rx * rng.uniform(0.8, 1.0) + UP * rx * 0.4
+        limb(b, wood, bark_col, s, e, along_r(radii, t) * 0.5, r0 * 0.12, arch=0.25, sides=4)
+        crown.lobe(e, rx * rng.uniform(0.32, 0.4), 0.85, sub=1)
+    crown.build(b, wood, rng)
     return b
 
 
@@ -891,12 +1044,19 @@ def sapling(rng, st):
         b.add(tube(pts, [0.022 * h, 0.016 * h, 0.011 * h, 0.006 * h], 4, cap=False), wood, bark_col, smooth=True)
         centre = along(pts, 0.7)
         col = crown_colour(st, rng, h * 0.3, h, centre, h * 0.25, h * 0.3, stops=stops)
-        # Leafy along most of the stem: a tall soft mass and a few sprigs standing out of it.
-        b.add(blob(centre, h * 0.13, rng, subdiv=2 if s == 0 else 1, squash=1.7, roughness=0.3), wood, col, centre, flat=0.1)
-        for k in range(rng.randint(3, 4) if s == 0 else 1):
-            c = along(pts, rng.uniform(0.45, 0.95)) + heading(rng) * h * 0.12
-            b.add(blob(c, h * rng.uniform(0.09, 0.13), rng, subdiv=2 if s == 0 else 1, squash=0.9, roughness=0.25),
-                  wood, col, centre, flat=0.1)
+        crown = Crown(centre, col, pull=0.4, jag=0.55, tip=0.38, droop=0.6)
+        # Leafy sprigs up the stem on alternate sides and a tuft at the top: a small, uneven spire
+        # with the stem showing between its leaves, not a ball.
+        k = rng.randint(3, 4) if s == 0 else 2
+        a0 = rng.uniform(0, math.tau)
+        for i in range(k):
+            u = (i + 0.5) / k
+            q = along(pts, 0.35 + 0.5 * u)
+            out = direction(a0 + i * math.pi * rng.uniform(0.8, 1.2))
+            r = h * rng.uniform(0.12, 0.16) * (1.15 - 0.4 * u)
+            crown.lobe(q + out * r * 0.9 + UP * r * 0.3, r, rng.uniform(0.8, 1.1), rough=0.25, sub=1)
+        crown.lobe(pts[-1] - UP * h * 0.05, h * 0.09, 1.4, rough=0.25, sub=1)
+        crown.build(b, wood, rng)
     return b
 
 
@@ -1018,6 +1178,7 @@ def spirit_tree(rng, st):
 
     def crown(c0, rx, rz, n, droop, from_pt):
         col = crown_colour(st, rng, c0.z - rz * (1 + droop), c0.z + rz, c0, rx, rz, stops=stops)
+        mass = Crown(c0, col, pull=0.6, jag=0.35, tip=0.24, droop=0.7 if droop else 0.45)
         phase = rng.uniform(0, math.tau)
         out = []
         for i in range(n):
@@ -1026,9 +1187,10 @@ def spirit_tree(rng, st):
             c = c0 + direction(a) * r + UP * (rng.uniform(-0.3, 0.2) - droop * r / rx) * rz
             cr = rx * rng.uniform(0.32, 0.42)
             b.add(tube(curve(from_pt, c, UP * rz * 0.5, 3), [r0 * 0.6, r0 * 0.45, r0 * 0.3, r0 * 0.15], 5), wood, bark_col, smooth=True)
-            b.add(blob(c, cr, rng, subdiv=2, squash=0.6 if not droop else 0.8), wood, col, c.lerp(c0, 0.4), flat=0.1)
+            mass.lobe(c, cr * 1.08, 0.6 if not droop else 0.8, sub=2 if i % 2 == 0 else 1)
             out.append((c, cr))
-        b.add(blob(c0 + UP * rz * 0.3, rx * 0.62, rng, subdiv=2 if form == "tiered" else 3, squash=0.45 if not droop else 0.6), wood, col, c0, flat=0.1)
+        mass.lobe(c0 + UP * rz * 0.3, rx * 0.62, 0.45 if not droop else 0.6, sub=2)
+        mass.build(b, wood, rng)
         return out
 
     droop = 0.9 if form == "weeping" else 0.0
@@ -1120,6 +1282,7 @@ def spirit_giant(rng, st):
         c0 = Vector((pts[-1].x, pts[-1].y, cz)) + (heading(rng) * h * rng.uniform(0.02, 0.07) if j else Vector((0, 0, 0)))
         rz = h * 0.1
         col = crown_colour(st, rng, cz - rz, cz + rz * 2, c0, rx, rz, stops=stops)
+        mass = Crown(c0, col, pull=0.6, jag=0.3, tip=0.22)
         phase = rng.uniform(0, math.tau)
         src = pts[-2] if j == 0 else pts[-1]
         if j:
@@ -1131,9 +1294,10 @@ def spirit_giant(rng, st):
             c = c0 + direction(a) * r + UP * rng.uniform(-0.2, 0.3) * rz
             cr = rx * rng.uniform(0.3, 0.38)
             b.add(tube(curve(src, c, UP * rz * 0.8, 3), [r0 * 0.42, r0 * 0.3, r0 * 0.2, r0 * 0.1], 5), wood, bark_col, smooth=True)
-            b.add(blob(c, cr, rng, subdiv=2, squash=0.55), wood, col, c.lerp(c0, 0.4), flat=0.1)
+            mass.lobe(c, cr * 1.05, 0.55, sub=2 if i % 2 == 0 else 1)
             clumps.append((c, cr))
-        b.add(blob(c0 + UP * rz * 0.4, rx * 0.66, rng, subdiv=2, squash=0.4), wood, col, c0, flat=0.1)
+        mass.lobe(c0 + UP * rz * 0.4, rx * 0.66, 0.4, sub=2)
+        mass.build(b, wood, rng)
     # Glow tips and vines go on in turn round the crown until the triangle budget is spent.
     rng.shuffle(clumps)
     for c, cr in clumps:
@@ -1203,22 +1367,24 @@ def giant(rng, st):
 # Undergrowth, rocks and glowing things
 
 def bush(rng, st):
+    """A bush: a few jagged lobes shading as one soft mound, sometimes flowering or berried."""
     b = Builder()
     leaves = material("Leaves")
     r = rng.uniform(0.5, 0.9)
     centre = Vector((0, 0, r * 0.55))
     lo, hi = 0, r * 1.5
     col = crown_colour(st, rng, lo, hi, centre, r * 1.2, r * 0.8, top=0.62)
+    crown = Crown(centre - UP * r * 0.2, col, pull=0.7, jag=0.45, tip=0.3, droop=0.5)
     clumps = []
-    for i in range(rng.randint(4, 5)):
+    for i in range(rng.randint(3, 5)):
         a = rng.uniform(0, math.tau)
         c = centre + Vector((math.cos(a) * r * 0.6, math.sin(a) * r * 0.6, rng.uniform(-0.1, 0.35) * r))
-        cr = r * rng.uniform(0.5, 0.7)
-        bm = blob(c, cr, rng, squash=0.8, roughness=0.12)
-        for v in bm.verts:
-            v.co.z = max(v.co.z, 0.0)
-        b.add(bm, leaves, col, c.lerp(centre, 0.6), flat=0.15)
+        cr = r * rng.uniform(0.55, 0.75)
+        crown.lobe(c, cr, 0.8, rough=0.14, sub=2 if i < 2 else 1)
         clumps.append((c, cr))
+    crown.build(b, leaves, rng)
+    for v in b.bm.verts:
+        v.co.z = max(v.co.z, 0.0)
 
     def on_surface():
         # A point on a clump's upper outside, not hidden inside a neighbour.
@@ -1244,7 +1410,45 @@ def bush(rng, st):
     return b
 
 
-def one_rock(b, stone, st, rng, at, r):
+def one_rock(b, stone, st, rng, at, r, shape=None):
+    """A rock with a strong silhouette: the convex hull of points on a stretched ellipsoid, so it
+    breaks into a few big flat facets (crisp under the toon bands), with chamfered edges that
+    catch the light. Shapes: a boulder, a leaning slab, a standing stone or a squat block. Moss
+    on facets facing up, darker at the foot."""
+    shape = shape or rng.choice(["boulder", "boulder", "slab", "standing", "block"])
+    sx, sy, sz, n, tilt = dict(boulder=(1.0, 0.85, 0.72, 16, 0.12), slab=(1.35, 0.7, 0.45, 12, 0.35),
+                               standing=(0.6, 0.5, 1.35, 12, 0.18), block=(1.0, 0.9, 0.8, 9, 0.1))[shape]
+    rot = Matrix.Rotation(rng.uniform(0, math.tau), 3, "Z") @ Matrix.Rotation(rng.uniform(-tilt, tilt), 3, "X") @ Matrix.Rotation(rng.uniform(-tilt, tilt), 3, "Y")
+    bm = bmesh.new()
+    for i in range(n):
+        # Even-ish points on a sphere, pushed in and out a little.
+        z = 1 - 2 * (i + 0.5) / n
+        a = i * 2.39996 + rng.uniform(-0.3, 0.3)
+        q = Vector((math.cos(a) * math.sqrt(1 - z * z), math.sin(a) * math.sqrt(1 - z * z), z)) * rng.uniform(0.78, 1.08)
+        bm.verts.new(rot @ Vector((q.x * sx, q.y * sy, q.z * sz)) * r)
+    bmesh.ops.convex_hull(bm, input=list(bm.verts))
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    bmesh.ops.bevel(bm, geom=list(bm.edges), offset=r * 0.06, segments=1, affect="EDGES", clamp_overlap=True)
+    lo = min(v.co.z for v in bm.verts)
+    for v in bm.verts:
+        # Planted: the lowest third is cut flat into the ground.
+        v.co.z = max(v.co.z - lo - (r * sz * 0.3), -0.05)
+    bmesh.ops.translate(bm, vec=at, verts=bm.verts)
+    rock_c, moss = jitter(st["rock"], rng, 0.1), st["moss"]
+    top = max(v.co.z for v in bm.verts) - at.z
+
+    def col(co, n):
+        # Moss on top facets, stone below, darker at the foot and on steep facets (painted
+        # light, so the facets read even in flat light); each facet its own shade.
+        c = lerp(rock_c, lerp(rock_c, moss, 0.6), min(1.0, max(0, n.z - 0.6) / 0.3))
+        k = (0.7 + 0.3 * min(1, (co.z - at.z) / max(top * 0.8, 1e-3))) * (0.62 + 0.45 * max(0.0, n.z))
+        return jitter(scale(c, k), rng, 0.14)
+    b.add(bm, stone, col, per_face=True)
+
+
+def lump(b, stone, st, rng, at, r):
+    """A rounded, noisy lump of rock sitting on `at`: a crystal cluster's foot (the faceted rocks
+    above hid it; the blind A/B kept this one)."""
     bm = bmesh.new()
     bmesh.ops.create_icosphere(bm, subdivisions=2, radius=r)
     off = Vector((rng.random() * 50, rng.random() * 50, 0))
@@ -1256,7 +1460,6 @@ def one_rock(b, stone, st, rng, at, r):
     rock_c, moss = jitter(st["rock"], rng, 0.1), st["moss"]
 
     def col(co, n):
-        # Moss on top faces, stone below, darker at the foot.
         c = lerp(rock_c, moss, max(0, n.z - 0.6) / 0.4)
         return jitter(scale(c, 0.75 + 0.25 * min(1, (co.z - at.z) / (r * 0.6))), rng, 0.06)
     b.add(bm, stone, col)
@@ -1265,11 +1468,13 @@ def one_rock(b, stone, st, rng, at, r):
 def rock(rng, st):
     b = Builder()
     stone = material("Stone")
-    r = rng.uniform(0.5, 1.4)
-    one_rock(b, stone, st, rng, Vector((0, 0, 0)), r)
+    r = rng.uniform(0.6, 1.4)
+    shape = rng.choice(["boulder", "boulder", "slab", "standing", "block"])
+    one_rock(b, stone, st, rng, Vector((0, 0, 0)), r, shape)
     for _ in range(rng.choice([0, 1, 1, 2])):
         a = rng.uniform(0, math.tau)
-        one_rock(b, stone, st, rng, Vector((math.cos(a), math.sin(a), 0)) * r * rng.uniform(0.9, 1.3), r * rng.uniform(0.25, 0.45))
+        one_rock(b, stone, st, rng, Vector((math.cos(a), math.sin(a), 0)) * r * rng.uniform(0.9, 1.3), r * rng.uniform(0.28, 0.45),
+                 rng.choice(["boulder", "block", "slab"]))
     return b
 
 
@@ -1407,12 +1612,13 @@ def crystal(rng, st):
         for part, mat in ((bm, shard), (tip, hot)):
             bmesh.ops.transform(part, matrix=Matrix.Translation(off) @ tilt, verts=part.verts)
             b.add(part, mat, lambda co, n: lerp(scale(hue, 0.25), lerp(hue, (1, 1, 1), 0.3), max(0, n.z) * 0.6 + 0.4 * min(1, co.z / 2)))
-    one_rock(b, stone, dict(rock=(0.06, 0.06, 0.08), moss=(0.08, 0.08, 0.12)), rng, Vector((0, 0, -0.15)), 0.55)
+    lump(b, stone, dict(rock=(0.06, 0.06, 0.08), moss=(0.08, 0.08, 0.12)), rng, Vector((0, 0, -0.15)), 0.55)
     return b
 
 
 def log(rng, st):
-    """A fallen log, mossy on top, with a broken stub."""
+    """A fallen log, mossy on top: a torn root plate at one end, a jagged broken end at the other,
+    and a stub branch, so it reads as a fallen tree, not a tube."""
     b = Builder()
     bark = material("Bark")
     length = rng.uniform(2.5, 4.5)
@@ -1422,11 +1628,32 @@ def log(rng, st):
     pts = curve(a, e, Vector((0, rng.uniform(-0.2, 0.2), 0.05)), 4)
     col = lambda co, n: jitter(lerp(st["bark"], st["moss"], max(0, n.z - 0.45) / 0.55), rng, 0.06)
     b.add(tube(pts, [r * (1.05 - 0.15 * i / 4) for i in range(5)], 8), bark, col, smooth=True)
-    # Pale broken wood at both ends.
-    for p, d in ((pts[0], pts[0] - pts[1]), (pts[-1], pts[-1] - pts[-2])):
-        b.add(tube([p, p + d.normalized() * 0.04], [r * 0.95, r * 0.6], 8), bark, solid((0.45, 0.33, 0.2), rng))
-    s = pts[2] + Vector((0, 0, r * 0.7))
-    b.add(tube([s, s + Vector((0.25, rng.uniform(-0.2, 0.2), 0.5))], [r * 0.3, r * 0.15], 5), bark, col, smooth=True)
+    pale = (0.45, 0.33, 0.2)
+    # The broken end: pale splinters standing out of the break.
+    p, d = pts[-1], (pts[-1] - pts[-2]).normalized()
+    b.add(tube([p, p + d * 0.04], [r * 0.95, r * 0.6], 8), bark, solid(pale, rng))
+    side = Vector((-d.y, d.x, 0))
+    for k in range(rng.randint(3, 5)):
+        ang = k / 4 * math.tau + rng.uniform(-0.4, 0.4)
+        o = (side * math.cos(ang) + UP * math.sin(ang)) * r * rng.uniform(0.3, 0.75)
+        b.add(tube([p + o - d * 0.05, p + o * 1.1 + d * rng.uniform(0.25, 0.6)], [r * rng.uniform(0.18, 0.3), 0.0], 3, cap=False), bark, solid(pale, rng))
+    # The root plate: roots fanned out round the foot, earth still caught between them.
+    p, d = pts[0], (pts[0] - pts[1]).normalized()
+    side = Vector((-d.y, d.x, 0))
+    earth = (0.16, 0.12, 0.08)
+    disc_ = blob(p + d * 0.08, r * 1.5, rng, subdiv=1, roughness=0.3)
+    bmesh.ops.scale(disc_, vec=Vector((0.35, 1.0, 1.0)) if abs(d.x) > abs(d.y) else Vector((1.0, 0.35, 1.0)), space=Matrix.Translation(-(p + d * 0.08)), verts=disc_.verts)
+    for v in disc_.verts:
+        v.co.z = max(v.co.z, -0.05)
+    b.add(disc_, bark, solid(earth, rng, 0.1))
+    for k in range(rng.randint(5, 7)):
+        ang = k / 6 * math.tau + rng.uniform(-0.3, 0.3)
+        o = side * math.cos(ang) + UP * math.sin(ang)
+        end = p + o * r * rng.uniform(2.0, 2.8) + d * rng.uniform(0.0, 0.3)
+        end.z = max(end.z, 0.02)
+        b.add(tube(curve(p + o * r * 0.6, end, d * 0.2, 2), [r * 0.32, r * 0.2, r * 0.05], 4, cap=False), bark, col, smooth=True)
+    s_ = pts[2] + Vector((0, 0, r * 0.7))
+    b.add(tube([s_, s_ + Vector((0.25, rng.uniform(-0.2, 0.2), 0.5))], [r * 0.3, r * 0.15], 5), bark, col, smooth=True)
     return b
 
 

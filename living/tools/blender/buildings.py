@@ -22,6 +22,13 @@ does the shading; lit windows and lamps use a "Glow" material with emission. Gen
 metres for a 1.75 m person, and the result is scaled by the inhabitants' height (FOLK), so doors
 stay door-sized.
 
+Reading at game distance: windows, doors and shopfronts in storeyed blocks sit RECESS back in
+holes cut through the wall (wall_skin), with lit or shadowed reveals; roofs have thick decks,
+heavy eave and barge boards, a big ridge cap and courses that darken towards their butts; ridges
+sag and wave and chimneys lean and kink a little; plinths carry a paler capping course. That
+hand-made detail draws from a separate detail stream (Kit.pr, Kit.extra), so it never changes a
+model's design, and with it its footprint in the settlement table.
+
 Heights: a kind in KINDS is scaled to exactly its HEIGHTS entry (the environment slots use the
 same number). A kind in FORM_KINDS comes in forms (size classes and shapes) whose storeys, plan
 and roof vary per model; it keeps its designed size and its height is measured.
@@ -213,11 +220,14 @@ class Builder:
         return obj, k
 
 
-def lbox(lo, hi, fn=None, bevel=0.0, warp=None):
-    """A box from lo to hi in local coordinates, optionally warped (local) and mapped (fn)."""
+def lbox(lo, hi, fn=None, bevel=0.0, warp=None, open_bottom=False):
+    """A box from lo to hi in local coordinates, optionally warped (local) and mapped (fn);
+    `open_bottom` leaves out its (hidden) bottom face."""
     bm = bmesh.new()
     bmesh.ops.create_cube(bm, size=1.0)
     size = hi - lo
+    if open_bottom:
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.normal.z < -0.5], context="FACES_ONLY")
     for v in bm.verts:
         v.co = Vector((lo.x + (v.co.x + 0.5) * size.x, lo.y + (v.co.y + 0.5) * size.y, lo.z + (v.co.z + 0.5) * size.z))
     if bevel > 0:
@@ -285,16 +295,17 @@ class Face:
     def p(self, a, z, w):
         return self.o + self.u * a + Z * z + self.n * w
 
-    def box(self, a0, a1, z0, z1, w0, w1, bevel=0.0):
-        return lbox(Vector((a0, z0, w0)), Vector((a1, z1, w1)), fn=lambda q: self.p(q.x, q.y, q.z), bevel=bevel)
+    def box(self, a0, a1, z0, z1, w0, w1, bevel=0.0, back=True):
+        """A box on the wall; back=False leaves out its back face (at w0, against the wall)."""
+        return lbox(Vector((a0, z0, w0)), Vector((a1, z1, w1)), fn=lambda q: self.p(q.x, q.y, q.z), bevel=bevel, open_bottom=not back)
 
-    def obox(self, a, z, la, lz, w0, w1, angle):
+    def obox(self, a, z, la, lz, w0, w1, angle, back=True):
         """A beam centred at (a, z), la long, lz thick, rotated in the wall plane."""
         c, s = math.cos(angle), math.sin(angle)
 
         def fn(q):
             return self.p(a + q.x * c - q.y * s, z + q.x * s + q.y * c, q.z)
-        return lbox(Vector((-la / 2, -lz / 2, w0)), Vector((la / 2, lz / 2, w1)), fn=fn)
+        return lbox(Vector((-la / 2, -lz / 2, w0)), Vector((la / 2, lz / 2, w1)), fn=fn, open_bottom=not back)
 
     def quad(self, a0, a1, z0, z1, w):
         bm = bmesh.new()
@@ -318,16 +329,25 @@ def box_faces(cx, cy, hx, hy):
 
 
 class Kit:
-    """A Builder with a palette, an RNG and shading helpers."""
+    """A Builder with a palette, an RNG and shading helpers.
 
-    def __init__(self, rng, pal, ao=1.2):
+    `rng` is the design stream: every size, form and feature choice, and the colour jitter of
+    each `add`, draws from it in order, so a model's footprint follows from its seed. `pr` is a
+    separate stream for hand-made detail (crooked chimneys, uneven ridges, sills, linings);
+    detail added through `extra` and `pr` leaves the design stream, and so every model's
+    footprint and features, as they were."""
+
+    def __init__(self, rng, pal, ao=1.2, pr=None):
         self.b = Builder()
         self.rng, self.pal = rng, pal
+        self.pr = pr or random.Random(0)
         self.body = material("Body")
         self.glow_mat = material("Glow", (1, 1, 1), emission=pal["glow"], strength=2.6)
         self.ao = ao
 
-    def add(self, bm, color, glow=False, soft=None, closed=True, vary=0.04, ao=True):
+    def add(self, bm, color, glow=False, soft=None, closed=True, vary=0.04, ao=True, tint=None):
+        """Add a part in `color` (jittered by `vary`, darkened near the ground unless `ao` is
+        off, and multiplied by `tint(co, n)` if given); a callable colour is used as it is."""
         if PROFILE is not None:
             import inspect
             who = inspect.stack()[1].function
@@ -348,8 +368,16 @@ class Kit:
         def fn(co, n):
             # Ground contact darkens a little (painted ambient occlusion).
             k = 0.8 + 0.2 * min(1.0, max(0.0, co.z / aoh)) if ao else 1.0
-            return mul(c, k)
+            return mul(c, k * (tint(co, n) if tint else 1.0))
         self.b.add(bm, self.body, fn, soft, closed)
+
+    def extra(self, *a, **kw):
+        """`add` with colour jitter from the detail stream, leaving the design stream alone."""
+        main, self.rng = self.rng, self.pr
+        try:
+            self.add(*a, **kw)
+        finally:
+            self.rng = main
 
     def choice(self, xs):
         return self.rng.choice(xs)
@@ -363,19 +391,32 @@ class Kit:
 
 
 def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, sides=(-1, 1), course=0.48,
-               th=0.1, sag=0.06, barge=None, cap=True, clip=0.0, cut=(1.1, 2.8)):
-    """A gable (or, with one side, lean-to) roof of stepped, slightly uneven shingle courses.
+               th=None, sag=0.1, barge=None, cap=True, clip=0.0, cut=(1.1, 2.8), deck=None):
+    """A gable (or, with one side, lean-to) roof of stepped, slightly uneven shingle courses on a
+    thick deck, with a heavy eave board, barge boards and ridge cap, so its thickness and
+    overhang read from the game camera; each course darkens towards its butt, so the courses
+    read as lines. The ridge sags (`sag`) and, by the detail stream, tilts and waves a little.
 
     `centre` is the middle of the ridge (z = ridge height); the slopes run down across `axis` to
     the wall lines at `half_span`, where they are at `zw`, then on past them by `oh_e`.
     `clip` > 0 makes a half-hip (jerkinhead): the top `clip` of each gable is hipped back at the
-    roof's own pitch. `cut` is the range of shingle-piece lengths (longer on big roofs)."""
+    roof's own pitch. `cut` is the range of shingle-piece lengths (longer on big roofs). `deck`
+    is the roof's thickness under the shingles (default: twice a course's, within 0.12-0.3 m).
+    `th` is a course's thickness; by default 0.15 m on slopes pulled in so that the eave's outer
+    edge stays where 0.1 m courses put it (the settlement table's footprints)."""
     rng = k.rng
+    th, th_ref = (0.15, 0.1) if th is None else (th, th)
+    deck = deck if deck is not None else min(0.3, max(0.12, th * 2))
     centre, A = Vector(centre), Vector(axis).normalized()
     C = Vector((-A.y, A.x, 0))
     rise = centre.z - zw
     p = math.atan2(rise, half_span)
     S = (half_span + oh_e) / math.cos(p)
+    n = max(3, round(S / course))
+    # Thicker courses stand further out at the eave: pull the slope in by as much. Shingle cuts
+    # are still counted along the slope's design length S0, so the design stream is unchanged.
+    S0 = S
+    S -= 2.4 * (th - th_ref) * math.tan(p)
     L = half_len + oh_g
     barge = barge or k.pal.get("timber", (0.3, 0.2, 0.15))
     under = k.pal.get("under", (0.3, 0.2, 0.15))
@@ -385,8 +426,12 @@ def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, side
     def reach(t):
         return L - max(0.0, tc - t) * math.cos(p)
 
+    # Hand-made: one end a little lower, and a slow wave along the ridge (detail stream).
+    tilt, wave, ph = k.pr.uniform(-1, 1) * sag * 0.8, sag * k.pr.uniform(0.2, 0.5), k.pr.uniform(0, math.tau)
+
     def droop(a, t):
-        return sag * (1 - min(1.0, (a / L) ** 2)) * (1 - 0.6 * t / S)
+        f = min(1.0, abs(a) / L)
+        return (sag * (1 - f ** 2) + tilt * a / L + wave * math.sin(ph + 2.5 * a / L)) * (1 - 0.6 * t / S)
 
     for sgn in sides:
         D = C * (sgn * math.cos(p)) - Z * math.sin(p)
@@ -395,14 +440,15 @@ def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, side
         def fn(q, D=D, N=N):
             return centre + A * q.x + D * q.y + N * q.z - Z * droop(q.x, q.y)
         if tc > 0:
-            k.add(lbox(Vector((-reach(0), -0.05, -0.18)), Vector((reach(0), tc, 0.0)), fn), under, ao=False)
-            k.add(lbox(Vector((-L, tc, -0.18)), Vector((L, S, 0.0)), fn), under, ao=False)
+            k.add(lbox(Vector((-reach(0), -0.05, -deck)), Vector((reach(0), tc, 0.0)), fn), under, ao=False)
+            k.add(lbox(Vector((-L, tc, -deck)), Vector((L, S, 0.0)), fn), under, ao=False)
         else:
-            k.add(lbox(Vector((-L, -0.05, -0.18)), Vector((L, S, 0.0)), fn), under, ao=False)
-        n = max(3, round(S / course))
+            k.add(lbox(Vector((-L, -0.05, -deck)), Vector((L, S, 0.0)), fn), under, ao=False)
+        # A heavy eave board along the foot of the slope.
+        k.extra(lbox(Vector((-L + 0.02, S - 0.1, -deck - 0.06)), Vector((L - 0.02, S, th * 1.4)), fn), mul(barge, 0.95), ao=False, vary=0.03)
         for i in range(n):
             t0, t1 = S * i / n - (0.14 if i else 0.06), S * (i + 1) / n
-            Lc = reach(max(t0, 0.0))
+            Lc = reach(max(S0 * i / n - (0.14 if i else 0.06), 0.0))
             # Each course is a few pieces of uneven length, butt and thickness: hand-laid.
             cuts = [-Lc - rng.uniform(0.0, 0.08)]
             while cuts[-1] < Lc - 0.6:
@@ -411,6 +457,11 @@ def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, side
             for a0, a1 in zip(cuts, cuts[1:]):
                 jl, jr = rng.uniform(-0.05, 0.05), rng.uniform(-0.05, 0.05)
                 thick = th * rng.uniform(0.8, 1.2)
+
+                def butt(co, n, t0=t0, t1=t1, D=D):
+                    # Darker towards the butt: the shadow line under the course above.
+                    t = ((co - centre).dot(D) - t0) / max(t1 - t0, 1e-3)
+                    return 1.0 - 0.2 * min(1.0, max(0.0, t)) ** 2 - (0.12 if n.dot(D) > 0.5 else 0.0)
 
                 def warp(q, t0=t0, t1=t1, jl=jl, jr=jr, a0=a0, a1=a1, thick=thick):
                     f = (q.x - a0) / max(a1 - a0, 1e-3)
@@ -421,12 +472,12 @@ def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, side
                         q.z = thick * (0.4 + 1.6 * (q.y - t0) / max(t1 - t0, 1e-3))
                     return q
                 r = rng.random()
-                c = jitter(color, rng, 0.06) if r > 0.2 else mul(color, rng.uniform(0.8, 0.88)) if r > 0.08 else mul(color, 1.12)
-                k.add(lbox(Vector((a0 + 0.015, t0, 0.0)), Vector((a1 - 0.015, t1, 1.0)), fn, warp=warp), c, ao=False, vary=0)
+                c = jitter(color, rng, 0.04) if r > 0.2 else mul(color, rng.uniform(0.88, 0.93)) if r > 0.08 else mul(color, 1.07)
+                k.add(lbox(Vector((a0 + 0.015, t0, 0.0)), Vector((a1 - 0.015, t1, 1.0)), fn, warp=warp, open_bottom=True), c, ao=False, vary=0, tint=butt)
         if barge:
             for e in (-1, 1):
                 a0 = e * L
-                k.add(lbox(Vector((min(a0, a0 + e * 0.16), tc - 0.08, -0.22)), Vector((max(a0, a0 + e * 0.16), S + 0.04, th * 2.0)), fn), barge, ao=False)
+                k.add(lbox(Vector((min(a0, a0 + e * 0.16), tc - 0.08, -deck - 0.12)), Vector((max(a0, a0 + e * 0.16), S + 0.04, 2.0 * th_ref + 2.4 * (th - th_ref))), fn), barge, ao=False)
     if tc > 0 and len(sides) == 2:
         # The hipped ends: a triangle from the ridge's end down to the top of each gable.
         h, dz = tc * math.cos(p), tc * math.sin(p)
@@ -441,7 +492,7 @@ def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, side
         def fc(q):
             return centre + A * q.x + C * q.y + Z * q.z - Z * droop(q.x, 0)
         Lr = reach(0)
-        k.add(lbox(Vector((-Lr - 0.12, -0.2, -0.05)), Vector((Lr + 0.12, 0.2, th * 2.6)), fc, bevel=0.05), mul(color, 0.7), ao=False)
+        k.add(lbox(Vector((-Lr - 0.12, -0.27, -0.05)), Vector((Lr + 0.12, 0.27, th * 3.0)), fc, bevel=0.07), mul(color, 0.7), ao=False)
     return p
 
 
@@ -488,14 +539,17 @@ def hip_roof(k, cx, cy, hx, hy, zw, zr, oh, color, course=0.55, lip=0.07, swap=F
             bm.faces.new([vb[i], vb[j], vt[j], vt[i]])
         return bm
     under = k.pal.get("under", (0.3, 0.2, 0.15))
-    k.add(frustum(rect(0, -0.02, -0.16), rect(1, -0.02, -0.16)), under, ao=False)
+    k.add(frustum(rect(0, -0.02, -0.3), rect(1, -0.02, -0.3)), under, ao=False)
+    # A thick eave band round the foot: the roof's edge reads as a slab, not a sheet.
+    k.extra(frustum(rect(0, lip - 0.03, -0.36), rect(0, lip - 0.03, -0.02)), mul(k.pal.get("timber", under), 0.95), ao=False, vary=0.03)
     for i in range(n):
         f0, f1 = i / n, (i + 1) / n
-        c = jitter(color, rng, 0.07) if rng.random() > 0.15 else mul(color, rng.uniform(0.82, 0.9))
-        k.add(frustum(rect(f0, lip + rng.uniform(-0.02, 0.02), -0.04), rect(min(1, f1 + 0.02), 0, 0.02)), c, ao=False, vary=0)
+        c = jitter(color, rng, 0.05) if rng.random() > 0.15 else mul(color, rng.uniform(0.88, 0.93))
+        k.add(frustum(rect(f0, lip + rng.uniform(-0.02, 0.02), -0.12), rect(min(1, f1 + 0.02), 0, 0.03)), c, ao=False, vary=0,
+              tint=lambda co, nn: 0.86 if nn.z < 0.35 else 1.0)
     a, b = (Vector((cx - (0 if swap else ridge), cy - (ridge if swap else 0), zr)), Vector((cx + (0 if swap else ridge), cy + (ridge if swap else 0), zr)))
     if ridge > 0.1:
-        k.add(cyl(a - (b - a).normalized() * 0.2, b + (b - a).normalized() * 0.2, 0.17, 0.17, 6), mul(color, 0.7), ao=False)
+        k.add(cyl(a - (b - a).normalized() * 0.2, b + (b - a).normalized() * 0.2, 0.24, 0.24, 6), mul(color, 0.7), ao=False)
     return p
 
 
@@ -514,36 +568,39 @@ def cone_roof(k, c, r, zb, zt, color, oh=0.4, course=0.6, sides=14, lip=0.08, fl
         g = lambda f: f ** (1 - flare) if flare else f
         r0 = (r + oh) * (1 - g(f0)) + lip
         r1 = max(0.02, (r + oh) * (1 - g(f1)))
-        z0, z1 = ze + (zt - ze) * f0 - 0.03, ze + (zt - ze) * f1
-        cc = jitter(color, rng, 0.07) if rng.random() > 0.15 else mul(color, rng.uniform(0.82, 0.9))
-        k.add(cyl(c + Z * z0, c + Z * z1, r0, r1, sides), cc, ao=False, vary=0)
+        z0, z1 = ze + (zt - ze) * f0 - 0.1, ze + (zt - ze) * f1
+        cc = jitter(color, rng, 0.05) if rng.random() > 0.15 else mul(color, rng.uniform(0.88, 0.93))
+        k.add(cyl(c + Z * z0, c + Z * z1, r0, r1, sides), cc, ao=False, vary=0, tint=lambda co, nn: 0.86 if nn.z < 0.0 else 1.0)
 
 
 # ---------------------------------------------------------------------------------------------
 # Openings and wall details (human metres; giants and small folk scale whole models)
 
 
-def window(k, f, a, z0, w, h, frame, lit=None, shutters=None, mullion=True, box_color=None, sill=True):
+def window(k, f, a, z0, w, h, frame, lit=None, shutters=None, mullion=True, box_color=None, sill=True, recess=0.0):
+    """A framed window; with `recess` its pane and glazing bars sit that far back, in a hole cut
+    by wall_skin, and the frame stays on the wall's face."""
     rng = k.rng
     lit = rng.random() < 0.6 if lit is None else lit
+    wp = 0.03 if recess == 0 else 0.02 - recess  # the pane: on the wall, or just before the core
     if lit:
-        k.add(f.quad(a - w / 2, a + w / 2, z0, z0 + h, 0.03), None, glow=True, closed=False)
+        k.add(f.quad(a - w / 2, a + w / 2, z0, z0 + h, wp), None, glow=True, closed=False)
     else:
-        k.add(f.quad(a - w / 2, a + w / 2, z0, z0 + h, 0.03), k.pal["glass"], closed=False, ao=False)
+        k.add(f.quad(a - w / 2, a + w / 2, z0, z0 + h, wp), k.pal["glass"], closed=False, ao=False)
     fw = 0.12
-    k.add(f.box(a - w / 2 - fw, a + w / 2 + fw, z0 + h, z0 + h + fw * 1.2, 0.0, 0.12), frame)
-    k.add(f.box(a - w / 2 - fw, a - w / 2, z0, z0 + h, 0.0, 0.1), frame)
-    k.add(f.box(a + w / 2, a + w / 2 + fw, z0, z0 + h, 0.0, 0.1), frame)
+    k.add(f.box(a - w / 2 - fw, a + w / 2 + fw, z0 + h, z0 + h + fw * 1.2, 0.0, 0.12, back=False), frame)
+    k.add(f.box(a - w / 2 - fw, a - w / 2, z0, z0 + h, 0.0, 0.1, back=False), frame)
+    k.add(f.box(a + w / 2, a + w / 2 + fw, z0, z0 + h, 0.0, 0.1, back=False), frame)
     if sill:
         k.add(f.box(a - w / 2 - fw * 1.6, a + w / 2 + fw * 1.6, z0 - 0.1, z0 + 0.02, 0.0, 0.18), frame)
     if mullion:
-        k.add(f.box(a - 0.035, a + 0.035, z0, z0 + h, 0.02, 0.07), frame)
-        k.add(f.box(a - w / 2, a + w / 2, z0 + h * 0.58, z0 + h * 0.58 + 0.07, 0.02, 0.07), frame)
+        k.add(f.box(a - 0.035, a + 0.035, z0, z0 + h, 0.02 - recess, 0.07 - recess), frame)
+        k.add(f.box(a - w / 2, a + w / 2, z0 + h * 0.58, z0 + h * 0.58 + 0.07, 0.02 - recess, 0.07 - recess), frame)
     if shutters:
         for e in (-1, 1):
             a0 = a + e * (w / 2 + fw + 0.02)
             a1 = a0 + e * w * 0.5
-            k.add(f.box(min(a0, a1), max(a0, a1), z0 - 0.02, z0 + h + 0.02, 0.02, 0.08), shutters)
+            k.add(f.box(min(a0, a1), max(a0, a1), z0 - 0.02, z0 + h + 0.02, 0.02, 0.08, back=False), shutters)
             k.add(f.box(min(a0, a1) + 0.04, max(a0, a1) - 0.04, z0 + h * 0.48, z0 + h * 0.52, 0.08, 0.1), mul(shutters, 0.75))
     if box_color and lit is not None:
         k.add(f.box(a - w / 2 - 0.05, a + w / 2 + 0.05, z0 - 0.32, z0 - 0.1, 0.05, 0.32), k.pal["timber"])
@@ -552,24 +609,26 @@ def window(k, f, a, z0, w, h, frame, lit=None, shutters=None, mullion=True, box_
             k.add(sphere(f.p(aa, z0 - 0.05, 0.2), 0.11, 0), jitter(box_color, rng, 0.1), ao=False)
 
 
-def door(k, f, a, z0, w, h, color, frame, hood=None, arch=False):
-    """A plank door with a frame and, from the floor level z0 down to the ground, steps."""
+def door(k, f, a, z0, w, h, color, frame, hood=None, arch=False, recess=0.0):
+    """A plank door with a frame and, from the floor level z0 down to the ground, steps; with
+    `recess` the door stands that far back, in a hole cut by wall_skin."""
     rng = k.rng
     planks = 3 if w < 1.2 else 4
+    r = recess
     for i in range(planks):
         a0 = a - w / 2 + i * w / planks
-        k.add(f.box(a0 + 0.01, a0 + w / planks - 0.01, z0, z0 + h - (0.0 if not arch else 0.0), -0.04, 0.04 + rng.uniform(0, 0.015)), jitter(color, rng, 0.06), vary=0)
+        k.add(f.box(a0 + 0.01, a0 + w / planks - 0.01, z0, z0 + h - (0.0 if not arch else 0.0), -0.04 - r, 0.04 - r + rng.uniform(0, 0.015)), jitter(color, rng, 0.06), vary=0)
     if arch:
         n = 6
         pts = [(a + math.cos(math.pi * i / n) * w / 2, z0 + h + math.sin(math.pi * i / n) * w * 0.35) for i in range(n + 1)]
-        k.add(f.poly(pts, -0.04, 0.05), color)
+        k.add(f.poly(pts, -0.04 - r, 0.05 - r), color)
     fw = 0.16
     top = z0 + h + (w * 0.35 if arch else 0)
     k.add(f.box(a - w / 2 - fw, a - w / 2, z0, z0 + h, 0.0, 0.14), frame)
     k.add(f.box(a + w / 2, a + w / 2 + fw, z0, z0 + h, 0.0, 0.14), frame)
     k.add(f.box(a - w / 2 - fw * 1.4, a + w / 2 + fw * 1.4, top, top + 0.2, 0.0, 0.16), frame)
-    k.add(f.box(a + w / 2 - 0.2, a + w / 2 - 0.12, z0 + h * 0.45, z0 + h * 0.5, 0.04, 0.1), k.pal["iron"], ao=False)
-    k.add(f.box(a - w / 2 + 0.05, a + w / 2 - 0.05, z0 + h * 0.8, z0 + h * 0.83, 0.04, 0.07), k.pal["iron"], ao=False)
+    k.add(f.box(a + w / 2 - 0.2, a + w / 2 - 0.12, z0 + h * 0.45, z0 + h * 0.5, 0.04 - r, 0.1 - r), k.pal["iron"], ao=False)
+    k.add(f.box(a - w / 2 + 0.05, a + w / 2 - 0.05, z0 + h * 0.8, z0 + h * 0.83, 0.04 - r, 0.07 - r), k.pal["iron"], ao=False)
     steps = max(0, round(z0 / 0.18))
     for i in range(steps):
         zt = z0 - i * z0 / max(steps, 1)
@@ -602,13 +661,13 @@ def timber_storey(k, f, z0, z1, bays, openings, timber, braces=True):
     rng = k.rng
     L = f.length
     tw, out = 0.17, 0.06
-    k.add(f.box(-L / 2, L / 2, z0, z0 + 0.2, 0.0, out + 0.02), timber)
-    k.add(f.box(-L / 2, L / 2, z1 - 0.22, z1, 0.0, out + 0.02), timber)
+    k.add(f.box(-L / 2, L / 2, z0, z0 + 0.2, 0.0, out + 0.02, back=False), timber)
+    k.add(f.box(-L / 2, L / 2, z1 - 0.22, z1, 0.0, out + 0.02, back=False), timber)
     edges = [-L / 2 + i * L / bays for i in range(bays + 1)]
     for i, e in enumerate(edges):
         a0 = e if i < bays else e - tw
         a0 = max(-L / 2, min(L / 2 - tw, a0 - (0 if i in (0, bays) else tw / 2)))
-        k.add(f.box(a0, a0 + tw, z0, z1, 0.0, out), timber)
+        k.add(f.box(a0, a0 + tw, z0, z1, 0.0, out, back=False), timber)
     if not braces:
         return
     for i in range(bays):
@@ -620,13 +679,13 @@ def timber_storey(k, f, z0, z1, bays, openings, timber, braces=True):
             if rng.random() < 0.5:
                 ln = math.hypot(a1 - a0, h)
                 ang = math.atan2(h, a1 - a0) * (1 if rng.random() < 0.5 else -1)
-                k.add(f.obox((a0 + a1) / 2, (z0 + z1) / 2, ln, tw * 0.9, 0.0, out * 0.8, ang), timber)
+                k.add(f.obox((a0 + a1) / 2, (z0 + z1) / 2, ln, tw * 0.9, 0.0, out * 0.8, ang, back=False), timber)
             else:
                 mid = (a0 + a1) / 2
                 for e in (-1, 1):
                     ln = math.hypot((a1 - a0) / 2, h)
                     ang = math.atan2(h, (a1 - a0) / 2) * e
-                    k.add(f.obox((mid + (a0 if e > 0 else a1)) / 2, (z0 + z1) / 2, ln, tw * 0.9, 0.0, out * 0.8, ang), timber)
+                    k.add(f.obox((mid + (a0 if e > 0 else a1)) / 2, (z0 + z1) / 2, ln, tw * 0.9, 0.0, out * 0.8, ang, back=False), timber)
         else:
             a, oz, w, h = op
             if oz - z0 > 0.6 and (a1 - a0) > w + 0.5:
@@ -636,7 +695,7 @@ def timber_storey(k, f, z0, z1, bays, openings, timber, braces=True):
                     xe = a1 if e > 0 else a0
                     ln = math.hypot(xe - x0, oz - z0 - 0.3)
                     ang = math.atan2(oz - z0 - 0.3, abs(xe - x0)) * (-e)
-                    k.add(f.obox((x0 + xe) / 2, (z0 + 0.2 + oz - 0.1) / 2, ln, tw * 0.8, 0.0, out * 0.8, ang * -1), timber)
+                    k.add(f.obox((x0 + xe) / 2, (z0 + 0.2 + oz - 0.1) / 2, ln, tw * 0.8, 0.0, out * 0.8, ang * -1, back=False), timber)
 
 
 def stone_quoins(k, f, z0, z1, stone, size=0.36):
@@ -652,6 +711,41 @@ def stone_quoins(k, f, z0, z1, stone, size=0.36):
             k.add(f.box(min(a, a - e * ln), max(a, a - e * ln), z + 0.02, z + h - 0.02, -0.02, 0.05), jitter(stone, rng, 0.07), vary=0)
         z += h
         i += 1
+
+
+# How far windows and doors sit back in a wall (a person's metres).
+RECESS = 0.24
+
+
+def facing(bm, pts, normal):
+    """A face through pts, wound to face `normal`."""
+    f = bm.faces.new([bm.verts.new(p) for p in pts])
+    f.normal_update()
+    if f.normal.dot(normal) < 0:
+        f.normal_flip()
+    return f
+
+
+def wall_skin(f, z0, z1, holes, depth):
+    """A wall face from z0 to z1 with rectangular holes [(a0, a1, zb, zt)] cut through it, and
+    the reveals of each hole running `depth` back to the wall's core: (face, reveals)."""
+    L = f.length
+    skin, rev = bmesh.new(), bmesh.new()
+
+    def q(a0, a1, za, zb):
+        if a1 - a0 > 1e-4 and zb - za > 1e-4:
+            facing(skin, [f.p(a0, za, 0), f.p(a1, za, 0), f.p(a1, zb, 0), f.p(a0, zb, 0)], f.n)
+    prev = -L / 2
+    for a0, a1, zb, zt in sorted(holes):
+        q(prev, a0, z0, z1)
+        q(a0, a1, z0, zb)
+        q(a0, a1, zt, z1)
+        prev = a1
+        for pts, nrm in (([(a0, zb), (a0, zt)], f.u), ([(a1, zb), (a1, zt)], -f.u), ([(a0, zb), (a1, zb)], Z), ([(a0, zt), (a1, zt)], -Z)):
+            (pa, za), (pb, zz) = pts
+            facing(rev, [f.p(pa, za, 0), f.p(pb, zz, 0), f.p(pb, zz, -depth), f.p(pa, za, -depth)], nrm)
+    q(prev, L / 2, z0, z1)
+    return skin, rev
 
 
 def house_colours(k):
@@ -679,6 +773,8 @@ def block(k, P, x0, x1, y0, y1, storeys, hs=2.75, plinth=0.45, knee=0.0, jetty=0
     cx, hx = (x0 + x1) / 2, (x1 - x0) / 2
     if plinth_box and plinth > 0:
         k.add(box((x0 - 0.08, y0 - 0.08, 0), (x1 + 0.08, y1 + 0.08, plinth), 0.05), k.pal["stone_dark"])
+        # A paler capping course with a weathered edge, so the plinth reads as its own band.
+        k.extra(box((x0 - 0.12, y0 - 0.12, plinth - 0.12), (x1 + 0.12, y1 + 0.12, plinth + 0.02), 0.045), mul(k.pal["stone"], 1.04))
     wins = dict({"front": 0.85, "back": 0.45, "left": 0.45, "right": 0.45}, **(wins or {}))
     zw = plinth + storeys * hs + knee
     ww, wh = win
@@ -690,7 +786,11 @@ def block(k, P, x0, x1, y0, y1, storeys, hs=2.75, plinth=0.45, knee=0.0, jetty=0
         Y0, Y1 = y0 - jf, y1 + jb
         cy, hy = (Y0 + Y1) / 2, (Y1 - Y0) / 2
         mat = stone if (ground == "stone" and s == 0) or ground == "all_stone" else plaster
-        k.add(box((x0, Y0, z0 - 0.02), (x1, Y1, z1), 0.07), mat, vary=0.02)
+        # The storey is a core set back by RECESS and a skin on each face with its openings cut
+        # through, so windows and doors sit in the wall. One colour per storey (design stream).
+        R = RECESS
+        wall_c = jitter(mat, rng, 0.02)
+        k.extra(box((x0 + R, Y0 + R, z0 - 0.02), (x1 - R, Y1 - R, z1)), wall_c, vary=0)
         if s >= 1 and jetty > 0:
             # Jetty: a bressumer beam and the joist ends under each overhang.
             for e, ya, yb in ((-1, Y0, Y0 + jetty), (1, Y1 - jetty, Y1)):
@@ -704,6 +804,7 @@ def block(k, P, x0, x1, y0, y1, storeys, hs=2.75, plinth=0.45, knee=0.0, jetty=0
                     k.add(box((x - 0.08, ya, z0 - 0.4), (x + 0.08, yb, z0 - 0.24)), timber)
         for name, f in box_faces(cx, cy, hx, hy).items():
             if name in skip or (name, s) in skip:
+                k.extra(wall_skin(f, z0 - 0.02, z1, [], R)[0], wall_c, vary=0, closed=False)
                 continue
             L = f.length
             bays = max(1, round(L / 2.3))
@@ -732,17 +833,27 @@ def block(k, P, x0, x1, y0, y1, storeys, hs=2.75, plinth=0.45, knee=0.0, jetty=0
             else:
                 timber_storey(k, f, z0, z1, bays, [o if isinstance(o, tuple) else None for o in openings], timber, braces=front or rng.random() < 0.6)
             frame = timber if mat is plaster else mul(stone, 0.88)
+            holes = []
             for i, op in enumerate(openings):
                 a = -L / 2 + (i + 0.5) * bw
                 if op == "door":
-                    door(k, f, a, plinth, door_w, 2.15, P["paint"], frame, hood=hood, arch=mat is stone and rng.random() < 0.5)
+                    arch = mat is stone and rng.random() < 0.5
+                    door(k, f, a, plinth, door_w, 2.15, P["paint"], frame, hood=hood, arch=arch, recess=R)
+                    holes.append((a - door_w / 2, a + door_w / 2, plinth, plinth + 2.15 + (door_w * 0.35 if arch else 0.0)))
                     if rng.random() < lamp:
                         lantern(k, f.p(a + door_w * 0.5 + 0.4, plinth + 2.0, 0.28))
                 elif op == "shop":
-                    shopfront(k, f, a, z0, min(2.2, bw - 0.5), P)
+                    sw = min(2.2, bw - 0.5)
+                    shopfront(k, f, a, z0, sw, P, recess=R)
+                    holes.append((a - sw / 2, a + sw / 2, z0 + 0.8, z0 + 2.1))
                 elif op:
                     window(k, f, *op, frame=frame, shutters=P["shut"] if front or rng.random() < 0.3 else None, mullion=front, sill=front,
-                           box_color=P["flowers"] if front and s > 0 and rng.random() < 0.5 else None)
+                           box_color=P["flowers"] if front and s > 0 and rng.random() < 0.5 else None, recess=R)
+                    oa, oz, ow, oh = op
+                    holes.append((oa - ow / 2, oa + ow / 2, oz, oz + oh))
+            skin, rev = wall_skin(f, z0 - 0.02, z1, holes, R)
+            k.extra(skin, wall_c, vary=0, closed=False)
+            k.extra(rev, mul(wall_c, 0.75), vary=0, closed=False, ao=False)
     jf = jetty * (storeys - 1)
     Y0, Y1 = y0 - jf, y1 + (jf if jetty_back else 0.0)
     cy, hy = (Y0 + Y1) / 2, (Y1 - Y0) / 2
@@ -791,12 +902,12 @@ def gable_wall(k, P, f, zw, ridge, clip=0.0, attic=0.75):
             window(k, f, e * cw * 0.5, cz + 0.4, ww, 0.85, timber, mullion=False, sill=True)
 
 
-def shopfront(k, f, a, z0, w, P):
+def shopfront(k, f, a, z0, w, P, recess=0.0):
     """A medieval shop: a wide window with a counter board that folds down and a pentice above."""
     rng = k.rng
     h = 1.3
     zb = z0 + 0.8
-    k.add(f.box(a - w / 2, a + w / 2, zb, zb + h, -0.05, 0.03), None, glow=rng.random() < 0.8)
+    k.add(f.box(a - w / 2, a + w / 2, zb, zb + h, -0.05 - recess, 0.03 - recess), None, glow=rng.random() < 0.8)
     k.add(f.box(a - w / 2 - 0.12, a + w / 2 + 0.12, zb + h, zb + h + 0.16, 0.0, 0.14), P["timber"])
     for e in (-1, 1):
         k.add(f.box(a + e * w / 2 - 0.08, a + e * w / 2 + 0.08, zb, zb + h, 0.0, 0.12), P["timber"])
@@ -820,18 +931,38 @@ def shopfront(k, f, a, z0, w, P):
 
 
 def chimney(k, P, info, where="ridge", x=None):
-    """A stone chimney through the roof near the ridge, or up the outside of a gable wall."""
+    """A stone chimney through the roof near the ridge, or up the outside of a gable wall. Above
+    the eaves it leans a little and kinks (a gable chimney only along its wall, so the model's
+    footprint stays put), and it ends in a heavy cap with one or two pots, sooty at the top."""
     rng, stone = k.rng, P["stone"]
     top = info["ridge"] + rng.uniform(0.7, 1.2)
     ax = info["axis"]
-    if where == "gable" and info["roof"] != "hip":
+    zb = info["zw"]
+    pr = k.pr
+    lean = Vector((pr.uniform(-1, 1), pr.uniform(-1, 1), 0)).normalized() * pr.uniform(0.05, 0.08)
+    kink = pr.uniform(0.35, 0.65)
+    gable = where == "gable" and info["roof"] != "hip"
+    if gable:
+        lean = Vector((0, lean.y, 0)) if ax == "x" else Vector((lean.x, 0, 0))
+
+    def bend(q):
+        # Lean grows above the eaves, and turns a little at the kink: built by hand, settled since.
+        h = max(0.0, q.z - zb)
+        hk = max(0.0, q.z - (zb + (top - zb) * kink))
+        return q + lean * h - lean * hk * 0.8
+
+    def sooty(co, n):
+        return 1.0 - 0.35 * max(0.0, min(1.0, (co.z - top + 1.2) / 1.0))
+    if gable:
         e = rng.choice([-1, 1]) if x is None else x
         if ax == "x":
             cx, cy = info["cx"] + e * (info["hx"] + 0.5), info["cy"] + rng.uniform(-0.4, 0.4)
         else:
             cx, cy = info["cx"] + rng.uniform(-0.5, 0.5), (info["Y1"] + 0.5)
         k.add(box((cx - 0.55, cy - 0.6, 0), (cx + 0.55, cy + 0.6, info["zw"] + 0.3), bevel=0.06), stone)
-        k.add(box((cx - 0.4, cy - 0.42, info["zw"] + 0.25), (cx + 0.4, cy + 0.42, top - 0.3), bevel=0.05), stone)
+        # A sloped weathering where the breast steps in to the stack.
+        k.extra(lbox(Vector((cx - 0.55, cy - 0.6, info["zw"] + 0.28)), Vector((cx + 0.55, cy + 0.6, info["zw"] + 0.42)), bevel=0.05), mul(stone, 0.85))
+        k.add(lbox(Vector((cx - 0.4, cy - 0.42, info["zw"] + 0.25)), Vector((cx + 0.4, cy + 0.42, top - 0.3)), bevel=0.05, warp=bend), stone, tint=sooty)
     else:
         if ax == "x":
             cx = info["cx"] + (rng.uniform(-0.6, 0.6) * info["hx"] if x is None else x)
@@ -839,10 +970,16 @@ def chimney(k, P, info, where="ridge", x=None):
         else:
             cx = info["cx"] + rng.uniform(0.4, 1.0) * rng.choice([-1, 1])
             cy = info["cy"] + (rng.uniform(0.1, 0.6) * info["hy"] if x is None else x)
-        k.add(box((cx - 0.4, cy - 0.4, info["zw"] - 0.6), (cx + 0.4, cy + 0.4, top - 0.3), bevel=0.05), stone)
+        k.add(lbox(Vector((cx - 0.4, cy - 0.4, info["zw"] - 0.6)), Vector((cx + 0.4, cy + 0.4, top - 0.3)), bevel=0.05, warp=bend), stone, tint=sooty)
     c = Vector((cx, cy, 0))
-    k.add(box(c + Vector((-0.52, -0.52, top - 0.42)), c + Vector((0.52, 0.52, top - 0.2)), 0.04), mul(stone, 0.85))
-    k.add(box(c + Vector((-0.17, -0.17, top - 0.25)), c + Vector((0.17, 0.17, top))), (0.62, 0.36, 0.25))
+    k.add(lbox(c + Vector((-0.56, -0.56, top - 0.48)), c + Vector((0.56, 0.56, top - 0.2)), bevel=0.05, warp=bend), mul(stone, 0.8))
+    pots = [Vector((0, 0, 0))] if pr.random() < 0.6 else [Vector((-0.2, 0, 0)), Vector((0.2, 0, 0))]
+    for i, o in enumerate(pots):
+        q = bend(c + o + Z * (top - 0.25))
+        r = 0.17 if len(pots) == 1 else 0.14
+        hh = pr.uniform(0.2, 0.28)
+        part = lbox(q + Vector((-r, -r, 0)), q + Vector((r, r, hh)))
+        (k.add if i == 0 else k.extra)(part, (0.62, 0.36, 0.25), tint=lambda co, n, z=q.z + hh: 0.6 if co.z > z - 0.05 and n.z > 0.5 else 1.0)
 
 
 def dormers(k, P, info, xs, w=1.5):
@@ -2518,7 +2655,8 @@ def foundation(k, depth):
         for a in range(n):
             b = (a + 1) % n
             bm.faces.new([bot[a], bot[b], top[b], top[a]])
-        shade = 0.92 - 0.06 * i + (0.04 if i % 2 else 0.0)
+        # The top course pale, then alternating, so the courses read where a slope bares them.
+        shade = 1.02 if i == 0 else 0.84 - 0.04 * i + (0.1 if i % 2 else 0.0)
         k.add(bm, mul(stone, shade), ao=False, vary=0.03)
 
 
@@ -2656,7 +2794,7 @@ def main():
     for form, i, rng in jobs:
         reset()
         PROFILE = {} if a.profile else None
-        k = Kit(rng, PALETTES[a.style], ao=1.2)
+        k = Kit(rng, PALETTES[a.style], ao=1.2, pr=random.Random(f"detail-{a.seed}-{a.style}-{a.kind}-{form}-{i}"))
         k.form = form
         k.corner = (1 if i % 2 == 0 else -1) if "corner" in form else 0
         if key in FORM_KINDS:

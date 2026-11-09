@@ -302,6 +302,13 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
   - **Materials:** bark and leaves share one material per tree, which cut the meshes at the island forest edge from about 3,600 to 2,100.
   - **Open:** the sapling slots cost about 2 ms per frame on the island for an unknown reason (to profile with static-prop merging).
 
+- **Scenery polish 1 (2026-11-09):**
+  - **Broadleaf crowns** are built as a few big lobes with hidden faces dropped. Leafy points stick out at the silhouette, and normals point out from the crown's centre, so each crown shades as one mass. Broadleaf triangles roughly halved.
+  - **Conifers** have tiered pads with notches and dark undersides; about 45% of pines are flat-topped Scots pines.
+  - **Rocks** come in four crisp shapes, and **logs** have root plates.
+  - **Buildings:** thick roofs that darken towards the eaves with sagging ridges, windows and doors set into the walls, leaning chimneys, and capped plinths. Footprints are unchanged, so the planner's table still matches.
+  - **Blind A/B test** (46 pairs, order randomised, labels hidden): the new trees, rocks and props won; the buildings tied at game distance; the crystal base was reverted.
+
 - **Buildings (2026-11-08):** `living/tools/blender/buildings.py` generates:
   - **fantasy:** timber-frame houses, townhouses, watchtowers, wall segments, market stalls and lamps;
   - **steampunk:** brick townhouses with copper mansards, factories, smokestacks, pipes, crates and lamps;
