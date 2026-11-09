@@ -20,7 +20,7 @@ Diagnosis of the legacy stack (source inspection, 2026-09-25):
 | Approach | New lean core alongside the legacy code. |
 | Scripting / audit | Keep Rhai for skill rules behind a typed boundary evaluated only at action start/completion; defer the exhaustive per-event audit. Causal evidence is kept at meaningful-event granularity (chronicle, percepts, full LLM exchange journal). |
 | World view | Bevy in-game observer. |
-| Models | `gpt-6-luna` (Carlid endpoint) plus Mistral-served `mistral-medium-3-5` and `mistral-small-latest`, rotated across characters to compare behavior ([models.json](../living/configs/models.json)). `zai-glm-5-3` is configured but out of rotation: its thinking mode took 100–180 s per deliberation. |
+| Models | Since 2026-11-09 (Luna is no longer available; the user dropped Mistral Small and Medium as not worth their cost): people think with `zai-glm-5-3-flash` (default, overflowing to `deepseek-v4-1-flash-1017`; Brandholm uses DeepSeek Flash for comparison), animals feel with `ministral-8b` and remember and compile with `ministral-14b`; `zai-glm-5-3`, `mistral-large-4` and `ministral-3b` are configured for lab comparisons ([models.json](../living/configs/models.json)). All are served by the Mistral platform. GLM and Large 4 reply with thinking parts, which `llm.rs` (`content_text`) drops. Smoke test, one tiny call each from the Mac: DeepSeek Flash 0.34 s, the ministrals 0.26–0.42 s, GLM Flash 0.74 s, GLM 0.81 s, Large 4 0.82 s. Earlier rows of this document describe the Luna and Mistral Small era. |
 | Services | SpacetimeDB 2.14.1 (since 2026-11-08; 2.10.1 before) and Neo4j run in Docker ([compose.yml](../living/deploy/compose.yml)); only Docker and Rust are needed on the host. |
 
 ## Architecture
