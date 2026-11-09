@@ -19,14 +19,27 @@
 //!   it, towers along it and a lane inside it.
 //!
 //! [`Land::height`] levels the ground under every building lot to its floor (a pad with a smooth
-//! skirt), and lays roads along a smoothed profile with a slight cross-fall.
+//! skirt), and lays roads along a smoothed profile with a slight cross-fall. Where a site has
+//! relief and its style terraces, the ground steps down the hill in level terraces with drops
+//! between them; streets ramp across the drops, lanes stop short of them, and stairs join the
+//! levels ([`terrace`]).
+//!
+//! After the lots, [`ornament`] dresses each settlement with props ([`Prop`]): benches, a
+//! fountain or market cross, barrels and carts by inns and workshops, fenced gardens with trees
+//! and washing lines, flower boxes, signs, banners, kerbs, street trees, the cyberpunk street's
+//! neon, and the terraces' stairs and retaining walls.
 //!
 //! Mechanics only: every size, count and kind is a field of [`SettleParams`]. Building footprints
 //! come from `data/buildings.json`, written by `living/tools/blender/buildings.py`: every
 //! generated model with its exact footprint, which a lot is sized to.
 
+mod ornament;
+mod terrace;
+
+pub(crate) use terrace::Terrace;
+
 use crate::det::Det;
-use crate::land::{hash, lerp, smoothstep, value, Land, RegionKind, SiteKind};
+use crate::land::{hash, lerp, smoothstep, value, Land, RegionKind, Site, SiteKind};
 use crate::map::Terrain;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -310,6 +323,174 @@ pub struct Settlement {
     pub landmark: Option<u32>,
     /// Roads that belong to it (streets and lanes; trunk roads have no settlement).
     pub roads: Vec<u32>,
+    /// Height of one terrace step when its ground is terraced (0: not terraced).
+    pub terrace_m: f32,
+}
+
+impl Settlement {
+    /// Whether a point lies in the plaza.
+    pub fn in_plaza(&self, p: V2) -> bool {
+        poly_contains(&self.plaza.points, p)
+    }
+}
+
+/// The client's environment folder (`envs/<folder>/<kind>/`) of a `buildings.py` style.
+pub fn env_of(style: &str) -> &'static str {
+    match style {
+        "giant" => "giants_city",
+        "small" => "small_city",
+        "steampunk" => "steampunk_city",
+        "cyberpunk" => "cyberpunk_city",
+        _ => "fantasy_city",
+    }
+}
+
+/// The `buildings.py` kind of a model file (`steampunk_city/clocktower/gen-....glb` is a
+/// `clocktower`): the folder its kind's assets are in.
+pub fn asset_kind(model_file: &str) -> Option<&str> {
+    model_file.split('/').nth(1)
+}
+
+/// A street ornament, or a piece of terracing. Its `buildings.py` kind has the same id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PropKind {
+    Barrel,
+    Crate,
+    Cart,
+    Bench,
+    Fountain,
+    MarketCross,
+    Fence,
+    Gate,
+    Planter,
+    FlowerBox,
+    Sign,
+    Banner,
+    WashingLine,
+    Tree,
+    Kerb,
+    /// A flight of steps from one terrace down to the next; the ground under it rises with it.
+    Stairs,
+    /// A wall along a drop, its face toward the lower ground.
+    RetainingWall,
+    NeonSign,
+    Billboard,
+    Cable,
+    Kiosk,
+    FoodStall,
+    Pipe,
+}
+
+impl PropKind {
+    pub const ALL: [PropKind; 23] = [
+        Self::Barrel,
+        Self::Crate,
+        Self::Cart,
+        Self::Bench,
+        Self::Fountain,
+        Self::MarketCross,
+        Self::Fence,
+        Self::Gate,
+        Self::Planter,
+        Self::FlowerBox,
+        Self::Sign,
+        Self::Banner,
+        Self::WashingLine,
+        Self::Tree,
+        Self::Kerb,
+        Self::Stairs,
+        Self::RetainingWall,
+        Self::NeonSign,
+        Self::Billboard,
+        Self::Cable,
+        Self::Kiosk,
+        Self::FoodStall,
+        Self::Pipe,
+    ];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Barrel => "barrel",
+            Self::Crate => "crate",
+            Self::Cart => "cart",
+            Self::Bench => "bench",
+            Self::Fountain => "fountain",
+            Self::MarketCross => "market_cross",
+            Self::Fence => "fence",
+            Self::Gate => "gate",
+            Self::Planter => "planter",
+            Self::FlowerBox => "flower_box",
+            Self::Sign => "sign",
+            Self::Banner => "banner",
+            Self::WashingLine => "washing_line",
+            Self::Tree => "tree",
+            Self::Kerb => "kerb",
+            Self::Stairs => "stairs",
+            Self::RetainingWall => "retaining_wall",
+            Self::NeonSign => "neon_sign",
+            Self::Billboard => "billboard",
+            Self::Cable => "cable",
+            Self::Kiosk => "kiosk",
+            Self::FoodStall => "food_stall",
+            Self::Pipe => "pipe",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.id() == id)
+    }
+
+    /// Whether it stands in the way: its footprint becomes `Wall` tiles where the land is
+    /// hosted ([`crate::host::hosted_map`]). Retaining walls block through the drop they stand
+    /// on ([`terrace::paint_drops`]); the rest are posts, low things or overhead.
+    pub fn blocks(self) -> bool {
+        matches!(self, Self::Fountain | Self::MarketCross | Self::Cart | Self::Kiosk | Self::FoodStall)
+    }
+}
+
+/// A prop the planner placed. Props are derived from the layout on both the authority and
+/// clients, not stored per row (see `docs/ISLAND_AUTHORITY.md`).
+#[derive(Clone, Debug, Serialize)]
+pub struct Prop {
+    pub settlement: u16,
+    pub kind: PropKind,
+    pub centre: V2,
+    /// Along the front, and front to back: the model's footprint.
+    pub width_m: f32,
+    pub depth_m: f32,
+    /// Unit vector the model's front (+Z in glTF) faces: toward the street or the square, down
+    /// the stairs, out of a retaining wall toward the lower ground.
+    pub front: V2,
+    /// As [`Lot::yaw`].
+    pub yaw: f32,
+    /// Where the model's origin goes: the ground under it (stairs and retaining walls: the
+    /// lower ground).
+    pub floor_m: f32,
+    /// The model (a `buildings.py` file under the client's `envs/`), chosen from
+    /// `data/buildings.json` among the models of its style and kind.
+    pub model_file: Option<String>,
+    /// That model's height above the floor.
+    pub height_m: f32,
+}
+
+impl Prop {
+    pub fn corners(&self) -> [V2; 4] {
+        self.rect().corners()
+    }
+
+    fn rect(&self) -> Rect {
+        Rect { c: self.centre, f: self.front, hw: self.width_m * 0.5, hd: self.depth_m * 0.5 }
+    }
+
+    /// What takes room on the ground: the footprint, but a tree's trunk and ring, not its crown.
+    fn base(&self) -> Rect {
+        let r = self.rect();
+        match self.kind {
+            PropKind::Tree => Rect { hw: r.hw.min(self.width_m * 0.22), hd: r.hd.min(self.width_m * 0.22), ..r },
+            _ => r,
+        }
+    }
 }
 
 // ------------------------------------------------------------------------------------------
@@ -430,6 +611,105 @@ pub struct Style {
     pub fields: f32,
     pub field_w_m: [f32; 2],
     pub field_d_m: [f32; 2],
+    /// The `buildings.py` kind on a lot kind where it is not the lot kind's own id (a
+    /// steampunk landmark tower is a `clocktower`, a cyberpunk house a `block`).
+    pub models: Vec<(LotKind, String)>,
+    /// Terraces: height of one step (0: never terraced), and the least relief across the site
+    /// that is terraced (flatter sites stay as they are). Stairs between terraces about
+    /// `stair_m` apart along each drop.
+    pub terrace_m: f32,
+    pub terrace_relief_m: f32,
+    pub stair_m: f32,
+    /// Lamps along lanes this far apart (0: none).
+    pub lane_lamp_m: f32,
+    /// Wells in the neighbourhoods, where lanes leave the main streets away from the plaza.
+    pub wells: u32,
+    pub ornaments: Ornaments,
+}
+
+/// What a settlement is dressed with, and where ([`ornament`]). Chances are per candidate spot.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Ornaments {
+    /// A fountain or a market cross in the plaza (None: none).
+    pub centrepiece: Option<PropKind>,
+    /// Benches round the plaza's edge facing in, this far apart (0: none); trees on it.
+    pub bench_m: f32,
+    pub plaza_trees: u32,
+    /// Banners on both sides of the streets into the plaza, and inside the town's gates.
+    pub banners: bool,
+    /// Per house: a flower box beside the door, a planter at a front corner.
+    pub flower_box: f32,
+    pub planter: f32,
+    /// Gardens: fenced with a gate; a tree, a washing line.
+    pub fences: bool,
+    pub garden_tree: f32,
+    pub washing: f32,
+    /// A washing line across a 2-6 m gap between neighbouring houses.
+    pub washing_gap: f32,
+    /// Barrels, crates and carts by inns, workshops, barns and market stalls.
+    pub clutter: f32,
+    /// Hanging signs at inns and workshops, signposts where streets leave the plaza.
+    pub signs: bool,
+    /// Kerbs along paved main streets, and paving edges round a paved plaza.
+    pub kerbs: bool,
+    /// Trees along the main streets this far apart (0: none).
+    pub street_tree_m: f32,
+    /// A neon street: signs, kiosks and food stalls along the main street with the most
+    /// buildings, cables across it this far apart; billboards round the plaza.
+    pub neon_street: bool,
+    pub cable_m: f32,
+    pub billboards: u32,
+    /// Pipes along the sides of works and factories.
+    pub pipes: bool,
+}
+
+impl Default for Ornaments {
+    fn default() -> Self {
+        Self {
+            centrepiece: None,
+            bench_m: 12.0,
+            plaza_trees: 1,
+            banners: false,
+            flower_box: 0.3,
+            planter: 0.1,
+            fences: true,
+            garden_tree: 0.5,
+            washing: 0.3,
+            washing_gap: 0.2,
+            clutter: 0.7,
+            signs: true,
+            kerbs: false,
+            street_tree_m: 0.0,
+            neon_street: false,
+            cable_m: 0.0,
+            billboards: 0,
+            pipes: false,
+        }
+    }
+}
+
+impl Style {
+    /// The `buildings.py` kind of the models on a lot kind.
+    pub fn model_kind(&self, k: LotKind) -> Option<&str> {
+        k.model()?;
+        Some(self.models.iter().find(|m| m.0 == k).map_or_else(|| k.model().unwrap(), |m| m.1.as_str()))
+    }
+}
+
+impl SettleParams {
+    /// The style of a kind of site in a `buildings.py` style, else the kind's first style.
+    pub fn style_for(&self, kind: SiteKind, buildings: &str) -> Option<&Style> {
+        self.styles.iter().find(|s| s.site == kind && s.buildings == buildings).or_else(|| self.styles.iter().find(|s| s.site == kind))
+    }
+
+    /// The style a site is laid out in: its own ([`crate::land::SiteSpec::style`]) or its kind's first.
+    pub fn style_for_site(&self, site: &Site) -> Option<&Style> {
+        match &site.style {
+            Some(b) => self.styles.iter().find(|s| s.site == site.kind && &s.buildings == b),
+            None => self.styles.iter().find(|s| s.site == site.kind),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -591,6 +871,13 @@ impl Default for Style {
             fields: 0.6,
             field_w_m: [14.0, 26.0],
             field_d_m: [22.0, 40.0],
+            models: Vec::new(),
+            terrace_m: 0.0,
+            terrace_relief_m: 7.0,
+            stair_m: 34.0,
+            lane_lamp_m: 0.0,
+            wells: 0,
+            ornaments: Ornaments::default(),
         }
     }
 }
@@ -634,9 +921,23 @@ fn default_styles() -> Vec<Style> {
         lamp_m: 24.0,
         wall: Some(WallSpec::default()),
         outskirts_m: 110.0,
+        terrace_m: 3.0,
+        lane_lamp_m: 42.0,
+        wells: 2,
+        ornaments: Ornaments { centrepiece: Some(PropKind::MarketCross), bench_m: 10.0, banners: true, flower_box: 0.4, planter: 0.15, garden_tree: 0.55, washing_gap: 0.35, clutter: 0.85, kerbs: true, ..Ornaments::default() },
         ..Style::default()
     };
-    let village = Style { site: SiteKind::Village, branch: 0.7, plaza_lots: vec![LotKind::Chapel, LotKind::Inn], workshop: 0.1, barn: 0.35, ..Style::default() };
+    let village = Style {
+        site: SiteKind::Village,
+        branch: 0.7,
+        plaza_lots: vec![LotKind::Chapel, LotKind::Inn],
+        workshop: 0.1,
+        barn: 0.35,
+        terrace_m: 3.0,
+        terrace_relief_m: 6.0,
+        ornaments: Ornaments { plaza_trees: 2, garden_tree: 0.6, washing: 0.4, ..Ornaments::default() },
+        ..Style::default()
+    };
     let giants = Style {
         site: SiteKind::Giants,
         buildings: "giant".into(),
@@ -678,6 +979,7 @@ fn default_styles() -> Vec<Style> {
         fields: 0.4,
         field_w_m: [36.0, 60.0],
         field_d_m: [50.0, 80.0],
+        ornaments: Ornaments { bench_m: 32.0, flower_box: 0.0, planter: 0.15, washing_gap: 0.0, clutter: 0.5, ..Ornaments::default() },
         ..Style::default()
     };
     let small = Style {
@@ -720,9 +1022,120 @@ fn default_styles() -> Vec<Style> {
         fields: 0.5,
         field_w_m: [3.0, 5.0],
         field_d_m: [4.0, 7.0],
+        ornaments: Ornaments { bench_m: 3.5, flower_box: 0.4, planter: 0.2, garden_tree: 0.4, washing: 0.2, washing_gap: 0.0, clutter: 0.3, signs: false, ..Ornaments::default() },
         ..Style::default()
     };
-    vec![town, village, giants, small]
+    // A hillside town of brick and iron: a clock tower in the middle of its square, the
+    // exchange, a pub and the market arcade round it, works and factories on the outskirts,
+    // terraces with stairs where the hill is steep.
+    let steampunk = Style {
+        site: SiteKind::Town,
+        buildings: "steampunk".into(),
+        plaza_m: [52.0, 36.0],
+        paved: true,
+        trunk_m: 3.6,
+        street_m: 5.0,
+        lane_m: 3.0,
+        radials: 4,
+        lane_spacing_m: 32.0,
+        lane_m_max: 130.0,
+        lane_m_min: 14.0,
+        lane_sep_m: 19.0,
+        branch: 0.8,
+        depth: 2,
+        contour: 0.9,
+        circle: 0.3,
+        wander: 0.25,
+        bound: 0.9,
+        relief_m: 45.0,
+        core: 0.6,
+        core_kind: LotKind::Townhouse,
+        outer_kind: LotKind::House,
+        core_share: 0.4,
+        core_gap_m: [0.2, 0.5],
+        gap_m: [0.8, 3.0],
+        setback_m: 1.2,
+        garden: 0.45,
+        garden_m: [5.0, 11.0],
+        skirt_m: 1.2,
+        // A house may back into the terrace above (its back wall holds the drop).
+        cut_m: 3.5,
+        step_m: 0.15,
+        landmark: Some(LotKind::Tower),
+        landmark_centre: true,
+        plaza_lots: vec![LotKind::Inn, LotKind::Hall, LotKind::Chapel],
+        models: vec![(LotKind::Tower, "clocktower".into()), (LotKind::Chapel, "arcade".into()), (LotKind::Townhouse, "house".into()), (LotKind::Workshop, "works".into()), (LotKind::Barn, "factory".into())],
+        workshop: 0.14,
+        barn: 0.3,
+        lamp_m: 22.0,
+        outskirts_m: 80.0,
+        fields: 0.35,
+        terrace_m: 3.0,
+        terrace_relief_m: 6.0,
+        stair_m: 30.0,
+        lane_lamp_m: 36.0,
+        wells: 0,
+        ornaments: Ornaments { centrepiece: Some(PropKind::Fountain), bench_m: 9.0, plaza_trees: 2, banners: true, flower_box: 0.3, planter: 0.2, garden_tree: 0.4, washing_gap: 0.4, clutter: 0.9, kerbs: true, street_tree_m: 18.0, pipes: true, ..Ornaments::default() },
+        ..Style::default()
+    };
+    // A dense harbour town of concrete blocks: a megatower on its square, the food court and a
+    // tower round it, a neon street of signs, stalls and cables, garages on the outskirts.
+    let cyberpunk = Style {
+        site: SiteKind::Town,
+        buildings: "cyberpunk".into(),
+        plaza_m: [40.0, 26.0],
+        paved: true,
+        trunk_m: 4.0,
+        street_m: 6.0,
+        lane_m: 3.4,
+        radials: 4,
+        lane_spacing_m: 30.0,
+        lane_m_max: 120.0,
+        lane_m_min: 14.0,
+        lane_sep_m: 21.0,
+        branch: 0.85,
+        depth: 2,
+        contour: 0.4,
+        circle: 0.2,
+        wander: 0.12,
+        bound: 0.9,
+        relief_m: 26.0,
+        core: 0.7,
+        core_kind: LotKind::Townhouse,
+        outer_kind: LotKind::House,
+        core_share: 0.6,
+        core_gap_m: [0.1, 0.4],
+        gap_m: [0.6, 2.0],
+        setback_m: 0.8,
+        garden: 0.12,
+        garden_m: [4.0, 8.0],
+        skirt_m: 1.2,
+        landmark: Some(LotKind::Chapel),
+        landmark_centre: false,
+        plaza_lots: vec![LotKind::Inn, LotKind::Hall],
+        models: vec![
+            (LotKind::Chapel, "landmark".into()),
+            (LotKind::Inn, "market".into()),
+            (LotKind::Hall, "tower".into()),
+            (LotKind::Townhouse, "block".into()),
+            (LotKind::House, "block".into()),
+            (LotKind::Barn, "workshop".into()),
+            (LotKind::MarketStall, "food_stall".into()),
+        ],
+        workshop: 0.2,
+        barn: 0.3,
+        stalls: 6,
+        lamp_m: 18.0,
+        outskirts_m: 70.0,
+        fields: 0.15,
+        terrace_m: 3.0,
+        terrace_relief_m: 6.0,
+        stair_m: 30.0,
+        lane_lamp_m: 30.0,
+        ornaments: Ornaments { centrepiece: Some(PropKind::MarketCross), bench_m: 12.0, plaza_trees: 2, banners: true, flower_box: 0.1, planter: 0.3, garden_tree: 0.3, washing: 0.2, washing_gap: 0.3, clutter: 0.9, kerbs: true, neon_street: true, cable_m: 12.0, billboards: 3, ..Ornaments::default() },
+        ..Style::default()
+    };
+    vec![town, village, giants, small, steampunk, cyberpunk]
 }
 
 // ------------------------------------------------------------------------------------------
@@ -1079,6 +1492,9 @@ struct Pad {
     skirt: f32,
     /// Within this distance of the pad, other pads' skirts give way, so every pad stays level.
     gate: f32,
+    /// A stair's pad rises: from `floor` at its front edge, by `.1` metres over its depth, in
+    /// the direction opposite its front `.0`.
+    rise: Option<(V2, f32)>,
 }
 
 impl Pad {
@@ -1087,6 +1503,17 @@ impl Pad {
         match &self.shape {
             Shape::Rect(r) => r.outside(p),
             Shape::Poly(q) => poly_outside(q, p),
+        }
+    }
+
+    #[inline]
+    fn floor_at(&self, p: V2) -> f32 {
+        match (&self.shape, self.rise) {
+            (Shape::Rect(r), Some((front, rise))) => {
+                let along = dot(sub(p, r.c), front);
+                self.floor + rise * ((r.hd - along) / (2.0 * r.hd)).clamp(0.0, 1.0)
+            }
+            _ => self.floor,
         }
     }
 }
@@ -1102,6 +1529,8 @@ pub(crate) struct Mods {
     pad_ids: Vec<u32>,
     segs: Vec<Seg>,
     pads: Vec<Pad>,
+    /// Terraced settlements' ground, applied before roads and pads.
+    pub(crate) terr: Vec<Terrace>,
 }
 
 const MOD_CELL: f32 = 16.0;
@@ -1136,7 +1565,7 @@ fn csr(n: usize, cell: f32, boxes: &[(V2, V2)]) -> (Vec<u32>, Vec<u32>) {
 }
 
 impl Mods {
-    fn build(size: u32, segs: Vec<Seg>, pads: Vec<Pad>) -> Self {
+    fn build(size: u32, segs: Vec<Seg>, pads: Vec<Pad>, terr: Vec<Terrace>) -> Self {
         let cell = MOD_CELL;
         let n = (size as f32 / cell).ceil() as usize + 1;
         let sb: Vec<(V2, V2)> = segs
@@ -1164,7 +1593,7 @@ impl Mods {
             .collect();
         let (seg_at, seg_ids) = csr(n, cell, &sb);
         let (pad_at, pad_ids) = csr(n, cell, &pb);
-        Self { cell, n, seg_at, seg_ids, pad_at, pad_ids, segs, pads }
+        Self { cell, n, seg_at, seg_ids, pad_at, pad_ids, segs, pads, terr }
     }
 
     /// Shape `h`, the natural ground at (x, y), where `sd` is the signed distance to water.
@@ -1180,7 +1609,7 @@ impl Mods {
         let k = j as usize * self.n + i as usize;
         let (s0, s1) = (self.seg_at[k] as usize, self.seg_at[k + 1] as usize);
         let (p0, p1) = (self.pad_at[k] as usize, self.pad_at[k + 1] as usize);
-        if s0 == s1 && p0 == p1 {
+        if s0 == s1 && p0 == p1 && self.terr.is_empty() {
             return h;
         }
         // Shaping fades out at the water's edge, so banks and beds keep following the water.
@@ -1190,6 +1619,15 @@ impl Mods {
         }
         let p = (x, y);
         let mut t = h;
+        // Terraces keep off banks altogether: `Land::height` lifts any ground lowered below the
+        // water within 6.5 m of it, and a terrace must not lean on that.
+        let wt = smoothstep(6.5, 14.0, sd);
+        for z in &self.terr {
+            t = z.apply(p, t, wt);
+        }
+        if s0 == s1 && p0 == p1 {
+            return t;
+        }
         // Each road gives one surface: a soft-minimum over its own segments, so on the centre
         // line it is the road's profile and between segments it stays continuous. Roads apply
         // in order, each blended in over its shoulder.
@@ -1252,7 +1690,7 @@ impl Mods {
                 }
             }
             w *= wf;
-            num += w * (pa.floor - t);
+            num += w * (pa.floor_at(p) - t);
             den += w;
         }
         t + num / den.max(1.0)
@@ -1466,6 +1904,8 @@ struct Plan<'a> {
     seed: u64,
     /// Models per (style, kind), as indices into `p.buildings.models`.
     catalog: Vec<(String, LotKind, Vec<u32>)>,
+    /// Stairs between terraces, placed before the lots so lots keep clear of them.
+    stairs: Vec<Prop>,
 }
 
 /// Plan every settlement and the island's roads, paint them into the tiles and shape the ground.
@@ -1481,6 +1921,9 @@ pub(crate) fn plan(land: &mut Land, p: &SettleParams) {
     for c in changed {
         land.update_sd(c.0, c.1);
     }
+    // Terraces where a settlement's site has relief: streets are traced over them.
+    let terr = terrace::terraces(land, p);
+    land.mods = Mods::build(land.size, Vec::new(), Vec::new(), terr.clone());
     // 2. Settlement streets and lanes, then profiles, then lots against the graded roads.
     let mut pl = Plan::new(land, p);
     for (i, r) in roads.iter().enumerate() {
@@ -1495,7 +1938,7 @@ pub(crate) fn plan(land: &mut Land, p: &SettleParams) {
     let (roads, crossings, settlements_streets) = (std::mem::take(&mut pl.roads), std::mem::take(&mut pl.crossings), std::mem::take(&mut pl.settlements));
     let (walls, bounds) = (std::mem::take(&mut pl.walls), std::mem::take(&mut pl.bounds));
     drop(pl);
-    land.mods = Mods::build(land.size, segs.clone(), Vec::new());
+    land.mods = Mods::build(land.size, segs.clone(), Vec::new(), terr.clone());
     let mut pl = Plan::new(land, p);
     for (i, r) in roads.iter().enumerate() {
         pl.add_road_index(i as u32, r);
@@ -1505,12 +1948,16 @@ pub(crate) fn plan(land: &mut Land, p: &SettleParams) {
     pl.settlements = settlements_streets;
     pl.walls = walls;
     pl.bounds = bounds;
+    pl.place_stairs();
     pl.place_lots();
     let pads = pl.pads();
-    let Plan { roads, lots, settlements, crossings, .. } = pl;
-    land.mods = Mods::build(land.size, segs, pads);
+    let Plan { roads, lots, settlements, crossings, stairs, .. } = pl;
+    land.mods = Mods::build(land.size, segs, pads, terr);
     paint_roads(land, &roads, 1);
     paint_rest(land, &settlements, &lots);
+    // Stairs are walkable; then the drops nobody can climb become walls.
+    terrace::paint_stairs(land, &stairs);
+    terrace::paint_drops(land, &lots, &settlements, p);
     // Walls must not seal anyone in: link any pocket they made through water or rock, never
     // through a wall.
     let water: Vec<u32> = (0..land.map.tiles.len() as u32).filter(|&k| land.map.tiles[k as usize] == Terrain::Water as u8).collect();
@@ -1531,28 +1978,53 @@ pub(crate) fn plan(land: &mut Land, p: &SettleParams) {
     for b in boxes {
         land.update_sd(b.0, b.1);
     }
+    // Fords change the ground near them: wall any drop that left.
+    terrace::paint_drops(land, &lots, &settlements, p);
     land.roads = roads;
     land.lots = lots;
     land.settlements = settlements;
     land.crossings = crossings;
+    // 3. Ornaments, retaining walls and the stairs, on the finished ground.
+    land.props = ornament::dress(land, p, stairs);
 }
 
 impl<'a> Plan<'a> {
     fn new(land: &'a Land, p: &'a SettleParams) -> Self {
         let s = land.size as f32;
+        // Each style's models per lot kind, through the style's kind names.
         let mut catalog: Vec<(String, LotKind, Vec<u32>)> = Vec::new();
-        for (i, m) in p.buildings.models.iter().enumerate() {
-            let Some(kind) = LotKind::from_id(&m.kind) else { continue };
-            match catalog.iter_mut().find(|c| c.0 == m.style && c.1 == kind) {
-                Some(c) => c.2.push(i as u32),
-                None => catalog.push((m.style.clone(), kind, vec![i as u32])),
+        for st in &p.styles {
+            for kind in LotKind::ALL {
+                let Some(id) = st.model_kind(kind) else { continue };
+                if catalog.iter().any(|c| c.0 == st.buildings && c.1 == kind) {
+                    continue;
+                }
+                let ms: Vec<u32> = (0..p.buildings.models.len() as u32).filter(|&i| p.buildings.models[i as usize].style == st.buildings && p.buildings.models[i as usize].kind == id).collect();
+                if !ms.is_empty() {
+                    catalog.push((st.buildings.clone(), kind, ms));
+                }
             }
         }
-        Self { land, p, roads: Vec::new(), lots: Vec::new(), settlements: Vec::new(), crossings: Vec::new(), road_b: Buckets::new(s, 32.0), lot_b: Buckets::new(s, 32.0), walls: Vec::new(), bounds: Vec::new(), seed: land.seed ^ 0x5E77, catalog }
+        Self { land, p, roads: Vec::new(), lots: Vec::new(), settlements: Vec::new(), crossings: Vec::new(), road_b: Buckets::new(s, 32.0), lot_b: Buckets::new(s, 32.0), walls: Vec::new(), bounds: Vec::new(), seed: land.seed ^ 0x5E77, catalog, stairs: Vec::new() }
     }
 
     fn style(&self, kind: SiteKind) -> Option<&'a Style> {
         self.p.styles.iter().find(|s| s.site == kind)
+    }
+
+    /// The style a site is laid out in.
+    fn site_style(&self, si: usize) -> Option<&'a Style> {
+        self.p.style_for_site(&self.land.sites[si])
+    }
+
+    /// The style of a laid-out settlement.
+    fn set_style(&self, idx: u16) -> &'a Style {
+        self.site_style(self.settlements[idx as usize].site as usize).expect("a settlement has a style")
+    }
+
+    /// The terraces of a site, if its ground is terraced.
+    fn zone(&self, si: usize) -> Option<&'a Terrace> {
+        self.land.mods.terr.iter().find(|z| z.site as usize == si)
     }
 
     fn add_road_index(&mut self, id: u32, r: &Road) {
@@ -1581,7 +2053,7 @@ impl<'a> Plan<'a> {
         // Network cells: 0 none, else road id + 1, or SITE_MARK at the town's centre.
         let mut net = vec![0u32; n * n];
         let mut foot = vec![0u32; n * n];
-        let settled: Vec<usize> = (0..land.sites.len()).filter(|&i| land.sites[i].kind != SiteKind::Cave && self.style(land.sites[i].kind).is_some()).collect();
+        let settled: Vec<usize> = (0..land.sites.len()).filter(|&i| land.sites[i].kind != SiteKind::Cave && self.site_style(i).is_some()).collect();
         let Some(&town) = settled.iter().find(|&&i| land.sites[i].kind == SiteKind::Town).or(settled.first()) else { return };
         let mark = |net: &mut Vec<u32>, k: usize, v: u32| {
             let (i, j) = ((k % n) as isize, (k / n) as isize);
@@ -1617,7 +2089,7 @@ impl<'a> Plan<'a> {
             let (ti, _) = todo.iter().enumerate().map(|(ti, &i)| (ti, dist_to_net(&raw, &connected, (land.sites[i].x, land.sites[i].y)))).min_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
             let si = todo.swap_remove(ti);
             let s = &land.sites[si];
-            let Some(style) = self.style(s.kind) else { continue };
+            let Some(style) = self.site_style(si) else { continue };
             let from = gr.cell((s.x, s.y));
             let class = if s.kind == SiteKind::SmallFolk { RoadClass::Path } else { RoadClass::Trunk };
             // A road never joins a footpath; a footpath may join anything.
@@ -1780,7 +2252,7 @@ impl<'a> Plan<'a> {
             if site.kind == SiteKind::Cave {
                 continue;
             }
-            let Some(style) = self.style(site.kind) else { continue };
+            let Some(style) = self.site_style(si) else { continue };
             self.lay_out_settlement(si, style);
         }
     }
@@ -1833,8 +2305,21 @@ impl<'a> Plan<'a> {
                 s += land.height(q.0, q.1);
                 n += 1.0;
             }
-            s / n
+            // On terraces the square is one of them, above any water beside it.
+            match self.zone(si) {
+                Some(z) => {
+                    let wet = plaza.iter().chain(std::iter::once(&centre)).filter(|q| land.sd_at(q.0, q.1) < 8.0).map(|q| land.water_level(q.0, q.1) + 0.3).fold(f32::MIN, f32::max);
+                    let mut lvl = z.snap(s / n);
+                    while lvl < wet {
+                        lvl += z.step;
+                    }
+                    lvl
+                }
+                None => s / n,
+            }
         };
+        // Lanes on terraces stop short of a drop (stairs continue them); main streets ramp.
+        let drop = self.zone(si).map_or(0.0, |z| z.step * 0.5);
         // Edge of the built-up area, per direction.
         let r_max = site.radius_m * st.bound;
         let bound = self.boundary(centre, len(sub(plaza[0], centre)).max(st.plaza_m[0] * 0.5) + 10.0 * site.scale, r_max, st.relief_m, &mut rng);
@@ -1999,7 +2484,7 @@ impl<'a> Plan<'a> {
             let dir = (dir_a.d_cos(), dir_a.d_sin());
             let start = self.plaza_exit(&plaza, centre, dir);
             let reach = r_max + st.outskirts_m * 0.5;
-            let opts = Trace { step: st.street_m.max(st.lane_spacing_m / 9.0), max_len: reach, contour: 0.3, circle: 0.0, radial: 1.0, wander: st.wander * 1.3, hw: st.street_m * 0.5, sep: st.lane_sep_m * 0.6, centre, limit: None, parent: None, seed: rng.f().to_bits() as u64, settlement: idx, plaza: &plaza };
+            let opts = Trace { step: st.street_m.max(st.lane_spacing_m / 9.0), max_len: reach, contour: 0.3, circle: 0.0, radial: 1.0, wander: st.wander * 1.3, hw: st.street_m * 0.5, sep: st.lane_sep_m * 0.6, centre, limit: None, parent: None, seed: rng.f().to_bits() as u64, settlement: idx, plaza: &plaza, drop: 0.0, zone: None };
             exits.push(dir_a);
             if let Some((pts, end)) = self.trace(start, dir, &opts) {
                 if cumlen(&pts).last().copied().unwrap_or(0.0) > st.lane_m_min * 2.0 {
@@ -2073,7 +2558,7 @@ impl<'a> Plan<'a> {
                             continue;
                         }
                         let start = add(p, mul(n, phw + 0.3));
-                        let opts = Trace { step: (st.lane_spacing_m / 10.0).max(0.6), max_len: st.lane_m_max, contour: st.contour, circle: st.circle, radial: 0.0, wander: st.wander, hw: st.lane_m * 0.5, sep: st.lane_sep_m, centre, limit: Some(&limit), parent: Some(pid), seed: rng.f().to_bits() as u64, settlement: idx, plaza: &plaza };
+                        let opts = Trace { step: (st.lane_spacing_m / 10.0).max(0.6), max_len: st.lane_m_max, contour: st.contour, circle: st.circle, radial: 0.0, wander: st.wander, hw: st.lane_m * 0.5, sep: st.lane_sep_m, centre, limit: Some(&limit), parent: Some(pid), seed: rng.f().to_bits() as u64, settlement: idx, plaza: &plaza, drop, zone: self.zone(si) };
                         if let Some((mut pts, end)) = self.trace(start, n, &opts) {
                             let l = cumlen(&pts).last().copied().unwrap_or(0.0);
                             let joins = matches!(end, RoadEnd::Road(_) | RoadEnd::Plaza(_));
@@ -2108,6 +2593,7 @@ impl<'a> Plan<'a> {
             lots: (0, 0),
             landmark: None,
             roads: mine,
+            terrace_m: self.zone(si).map_or(0.0, |z| z.step),
         });
         self.bounds.push((bound, inner));
     }
@@ -2208,7 +2694,11 @@ impl<'a> Plan<'a> {
         let mut near = Vec::new();
         let mut end = RoadEnd::Free;
         while s < o.max_len {
-            let g = self.grad(p, o.step.max(1.5));
+            // On terraces the ground is flat: steer by the hill they step down.
+            let g = match o.zone {
+                Some(z) => z.smooth(p).1,
+                None => self.grad(p, o.step.max(1.5)),
+            };
             let slope = len(g);
             let mut want = mul(d, 1.6);
             if slope > 1e-3 {
@@ -2249,6 +2739,9 @@ impl<'a> Plan<'a> {
             let q = add(p, mul(d, o.step));
             let t = land.map.at(q.0, q.1);
             if !t.walkable() || t == Terrain::Wall || land.sd_at(q.0, q.1) < 2.0 + o.hw {
+                break;
+            }
+            if o.drop > 0.0 && (land.height(q.0, q.1) - land.height(p.0, p.1)).abs() > o.drop {
                 break;
             }
             if let Some(lim) = o.limit {
@@ -2503,16 +2996,183 @@ impl<'a> Plan<'a> {
     fn place_lots(&mut self) {
         for si in 0..self.settlements.len() {
             let (bound, inner) = self.bounds[si].clone();
-            let site = &self.land.sites[self.settlements[si].site as usize];
-            let Some(st) = self.style(site.kind) else { continue };
+            let Some(st) = self.site_style(self.settlements[si].site as usize) else { continue };
             let start = self.lots.len() as u32;
             self.settlement_lots(si as u16, st, &bound, &inner);
             self.settlements[si].lots = (start, self.lots.len() as u32);
         }
     }
 
+    // -------------------------------------------------------------------------------------
+    // Stairs between terraces
+
+    /// Stairs down the terraces' drops: first where a lane stops short of one, then along each
+    /// drop about `stair_m` apart. Placed before the lots, which keep clear of them.
+    fn place_stairs(&mut self) {
+        let land = self.land;
+        for idx in 0..self.settlements.len() as u16 {
+            let si = self.settlements[idx as usize].site as usize;
+            let Some(z) = self.zone(si) else { continue };
+            let st = self.set_style(idx);
+            let style = self.settlements[idx as usize].style.clone();
+            let k = self.settlements[idx as usize].scale.max(0.3);
+            let mut rng = Rng(self.seed ^ 0x57A1 ^ (idx as u64) << 8);
+            let models: Vec<u32> = (0..self.p.buildings.models.len() as u32).filter(|&i| self.p.buildings.models[i as usize].style == style && self.p.buildings.models[i as usize].kind == "stairs").collect();
+            // Lane ends that stopped short of a drop.
+            let mut wishes: Vec<(V2, V2, u32)> = Vec::new();
+            for (rid, rd) in self.roads.iter().enumerate() {
+                if rd.settlement != Some(idx) || !matches!(rd.class, RoadClass::Lane | RoadClass::Path) {
+                    continue;
+                }
+                for e in 0..2 {
+                    if rd.ends[e] != RoadEnd::Free {
+                        continue;
+                    }
+                    let n = rd.points.len();
+                    let (a, b) = if e == 1 { (rd.points[n - 2], rd.points[n - 1]) } else { (rd.points[1], rd.points[0]) };
+                    let dir = norm(sub(b, a));
+                    let i0 = z.index(b);
+                    let mut t = 0.5;
+                    while t < 7.0 * k {
+                        let q = add(b, mul(dir, t));
+                        if z.index(q) != i0 {
+                            wishes.push((q, dir, rid as u32));
+                            break;
+                        }
+                        t += 0.5;
+                    }
+                }
+            }
+            for (q, _, rid) in wishes {
+                self.try_stair(idx, z, q, &models, &mut rng, Some(rid), 10.0 * k);
+            }
+            if st.stair_m <= 0.0 {
+                continue;
+            }
+            for (_, line) in z.risers(land) {
+                let cl = cumlen(&line);
+                let total = *cl.last().unwrap();
+                let mut s = st.stair_m * rng.range([0.3, 0.7]);
+                while s < total {
+                    let q = at_s(&line, &cl, s).0;
+                    let placed = self.try_stair(idx, z, q, &models, &mut rng, None, st.stair_m * 0.6);
+                    s += if placed { st.stair_m } else { 3.0 * k };
+                }
+            }
+        }
+    }
+
+    /// A flight of stairs across the drop nearest `q`, square to it, from the lower terrace
+    /// up to the next; `lane` is the lane it continues (it may end at the stair's foot or head).
+    #[allow(clippy::too_many_arguments)]
+    fn try_stair(&mut self, idx: u16, z: &Terrace, q: V2, models: &[u32], rng: &mut Rng, lane: Option<u32>, spacing: f32) -> bool {
+        let land = self.land;
+        let set = &self.settlements[idx as usize];
+        let k = set.scale.max(0.3);
+        let (_, g) = z.smooth(q);
+        if len(g) < 0.03 {
+            return false;
+        }
+        let down = mul(norm(g), -1.0);
+        // The drop's middle along the slope: where `level` is halfway between its plateaus.
+        let i_up = z.index(sub(q, mul(down, 3.0 * k)));
+        let i_lo = i_up - 1;
+        let mid = z.plateau(i_lo) + z.step * 0.5;
+        let mut c = None;
+        let mut t = -5.0 * k;
+        let mut prev = (t, z.level(add(q, mul(down, t))) - mid);
+        while t < 5.0 * k {
+            t += 0.25;
+            let f = z.level(add(q, mul(down, t))) - mid;
+            if prev.1 > 0.0 && f <= 0.0 {
+                let tt = lerp(prev.0, t, prev.1 / (prev.1 - f));
+                c = Some(add(q, mul(down, tt)));
+                break;
+            }
+            prev = (t, f);
+        }
+        let Some(c) = c else { return false };
+        let m = if models.is_empty() { None } else { Some(models[((rng.f() * models.len() as f32) as usize).min(models.len() - 1)]) };
+        let (w, d, h, file) = match m {
+            Some(m) => {
+                let mf = &self.p.buildings.models[m as usize];
+                (mf.width_m, mf.depth_m, mf.height_m, Some(mf.file.clone()))
+            }
+            None => (2.4 * k, z.step / 0.6, z.step + 1.0 * k, None),
+        };
+        let stair = Prop { settlement: idx, kind: PropKind::Stairs, centre: c, width_m: w, depth_m: d, front: down, yaw: yaw_of(down), floor_m: z.plateau(i_lo), model_file: file, height_m: h };
+        let r = stair.rect();
+        let foot = add(c, mul(down, d * 0.5 + 1.0 * k));
+        let head = sub(c, mul(down, d * 0.5 + 1.0 * k));
+        // A whole step between full terraces, on dry walkable ground inside the settlement.
+        if z.index(foot) != i_lo || z.index(head) != i_up || z.weight(foot) < 0.98 || z.weight(head) < 0.98 || land.sd_at(foot.0, foot.1) < 14.0 || land.sd_at(head.0, head.1) < 14.0 {
+            return false;
+        }
+        // Level landings: flat terrace for 2 m beyond each end, not the next drop.
+        for t in [0.3f32, 1.0, 2.0] {
+            let f = add(c, mul(down, d * 0.5 + t * k));
+            let h = sub(c, mul(down, d * 0.5 + t * k));
+            if (z.level(f) - z.plateau(i_lo)).abs() > 0.05 || (z.level(h) - z.plateau(i_up)).abs() > 0.05 {
+                return false;
+            }
+        }
+        let (bound, _) = &self.bounds[idx as usize];
+        if dist(c, set.centre) > radial_at(bound, set.centre, c) + 12.0 * k {
+            return false;
+        }
+        for p in r.corners().iter().chain([foot, head].iter()) {
+            if !land.map.at(p.0, p.1).walkable() || land.map.at(p.0, p.1) == Terrain::Wall || land.sd_at(p.0, p.1) < 3.0 || poly_outside(&set.plaza.points, *p) < 1.5 * k {
+                return false;
+            }
+        }
+        if self.stairs.iter().any(|o| dist(o.centre, c) < spacing) {
+            return false;
+        }
+        for (_, hw, ring) in &self.walls {
+            let mm = ring.len();
+            if (0..mm).any(|i| r.seg_dist(ring[i], ring[(i + 1) % mm]) < hw + 2.0) {
+                return false;
+            }
+        }
+        // Along a drop, a stair joins two streets on different levels: a road near its foot and
+        // another near its head.
+        if lane.is_none() {
+            let nearest = |q: V2| {
+                let mut near = Vec::new();
+                let r = 16.0 * k;
+                self.road_b.query((q.0 - r, q.1 - r), (q.0 + r, q.1 + r), &mut near);
+                near.iter().map(|&rid| (nearest_on(&self.roads[rid as usize].points, q).0 - self.roads[rid as usize].width_m * 0.5, rid)).filter(|x| x.0 < r).min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1))).map(|x| x.1)
+            };
+            match (nearest(foot), nearest(head)) {
+                (Some(a), Some(b)) if a != b => {}
+                _ => return false,
+            }
+        }
+        // Clear of roads along the flight (its ends may meet a street); away from ramps, which
+        // join the terraces already.
+        let mid_r = Rect { hd: (d * 0.5 - 1.2 * k).max(0.3), ..r };
+        let mut near = Vec::new();
+        self.road_b.query((c.0 - 12.0 * k, c.1 - 12.0 * k), (c.0 + 12.0 * k, c.1 + 12.0 * k), &mut near);
+        for &rid in &near {
+            let rd = &self.roads[rid as usize];
+            let hw = rd.width_m * 0.5;
+            for i in 0..rd.points.len() - 1 {
+                let (a, b) = (rd.points[i], rd.points[i + 1]);
+                if mid_r.seg_dist(a, b) < hw + 0.3 * k {
+                    return false;
+                }
+                if Some(rid) != lane && seg_near(c, a, b).0 < hw + 4.0 * k {
+                    return false;
+                }
+            }
+        }
+        self.stairs.push(stair);
+        true
+    }
+
     fn fp(&self, style: &str, kind: LotKind) -> (f32, f32) {
-        match self.p.buildings.get(style, kind) {
+        let id = self.p.styles.iter().find(|s| s.buildings == style).and_then(|s| s.model_kind(kind)).or(kind.model());
+        match id.and_then(|id| self.p.buildings.kinds.iter().find(|f| f.style == style && f.kind == id)) {
             Some(f) => (f.width_m, f.depth_m),
             None => (4.0, 4.0),
         }
@@ -2641,6 +3301,20 @@ impl<'a> Plan<'a> {
                 }
             }
         }
+        // Clear of stairs and their 2 m landings, by more than a pad's skirt, so no pad dips the
+        // ground beside them.
+        if !self.stairs.is_empty() {
+            let k = self.settlements[lot.settlement as usize].scale.max(0.3);
+            let clear = if lot.kind.padded() { self.set_style(lot.settlement).skirt_m + 0.3 * k } else { 0.5 * k };
+            for s in &self.stairs {
+                if dist(s.centre, r.c) < r.hw + r.hd + s.width_m + s.depth_m + 8.0 * k {
+                    let sr = Rect { hd: s.depth_m * 0.5 + 2.0 * k, ..s.rect() };
+                    if r.gap(&sr) < clear {
+                        return None;
+                    }
+                }
+            }
+        }
         // Clear of other lots, by more where floors differ.
         self.lot_b.query(lo, hi, &mut near);
         for &li in &near {
@@ -2681,6 +3355,10 @@ impl<'a> Plan<'a> {
                 return None;
             }
         } else {
+            // A lamp stands on even ground, not on a terrace's edge or a cutting beside a ramp.
+            if lot.kind == LotKind::Lamp && hmax - hmin > 0.4 {
+                return None;
+            }
             lot.floor_m = (hmin + hmax) * 0.5;
         }
         lot.yaw = yaw_of(lot.front);
@@ -2704,8 +3382,15 @@ impl<'a> Plan<'a> {
         if let Some(lk) = st.landmark {
             let placed = if st.landmark_centre {
                 let (m, w, d) = self.thing(&style, lk, &mut rng, st.margin_m);
-                let lot = self.dressed(make(lk, centre, (0.0, 1.0), w, d, floor, Frontage::Plaza(idx)), m);
-                self.try_lot(lot, 0.5, &Check { level: true, cut: 99.0, fill: 99.0, ..in_plaza })
+                // The middle of the square, else along its long axis.
+                let axis = norm(sub(plaza[0], centre));
+                let mid = [0.0f32, 0.15, -0.15, 0.28, -0.28].iter().find_map(|&off| {
+                    let c = add(centre, mul(axis, off * st.plaza_m[0]));
+                    let lot = self.dressed(make(lk, c, (0.0, 1.0), w, d, floor, Frontage::Plaza(idx)), m);
+                    self.try_lot(lot, 0.5, &Check { level: true, cut: 99.0, fill: 99.0, ..in_plaza })
+                });
+                // A square too small for it: its edge.
+                mid.or_else(|| self.big_lot(idx, st, &style, lk, false, bound, &mut rng))
             } else {
                 // On the plaza's edge, facing in, as far from the roads in as it can be.
                 self.big_lot(idx, st, &style, lk, false, bound, &mut rng)
@@ -2718,6 +3403,15 @@ impl<'a> Plan<'a> {
         for &bk in &st.plaza_lots {
             // The inn by a road into the square; the others away from the roads and each other.
             let _ = self.big_lot(idx, st, &style, bk, bk == LotKind::Inn, bound, &mut rng);
+        }
+        // No room anywhere for the landmark: the biggest building on the square stands for it.
+        if st.landmark.is_some() && self.settlements[idx as usize].landmark.is_none() {
+            let first = self.lots.iter().rposition(|l| l.settlement != idx).map_or(0, |i| i + 1);
+            let best = (first..self.lots.len()).filter(|&i| self.lots[i].kind.big()).max_by(|&a, &b| (self.lots[a].width_m * self.lots[a].depth_m).total_cmp(&(self.lots[b].width_m * self.lots[b].depth_m)));
+            if let Some(i) = best {
+                self.lots[i].landmark = true;
+                self.settlements[idx as usize].landmark = Some(i as u32);
+            }
         }
         // 2. A well and market stalls in the plaza.
         let axis = norm(sub(plaza[0], centre));
@@ -2758,16 +3452,22 @@ impl<'a> Plan<'a> {
         }
         // 4. Lamps along the main streets.
         let my_roads: Vec<u32> = self.settlement_roads(idx, centre, bound, st);
-        if st.lamp_m > 0.0 {
+        if st.lamp_m > 0.0 || st.lane_lamp_m > 0.0 {
             for &rid in &my_roads {
                 let rd = &self.roads[rid as usize];
-                if !matches!(rd.class, RoadClass::Street | RoadClass::Trunk) {
+                // Main streets at `lamp_m`, lanes at `lane_lamp_m`.
+                let spacing = match rd.class {
+                    RoadClass::Street | RoadClass::Trunk => st.lamp_m,
+                    RoadClass::Lane if rd.settlement == Some(idx) => st.lane_lamp_m,
+                    _ => 0.0,
+                };
+                if spacing <= 0.0 {
                     continue;
                 }
                 let (pts, hw) = (rd.points.clone(), rd.width_m * 0.5);
                 let cl = cumlen(&pts);
                 let total = *cl.last().unwrap();
-                let mut s = st.lamp_m * 0.5;
+                let mut s = spacing * 0.5;
                 let mut side = 1.0f32;
                 while s < total {
                     let (p, t) = at_s(&pts, &cl, s);
@@ -2777,10 +3477,52 @@ impl<'a> Plan<'a> {
                         let c = add(p, mul(n, hw + d * 0.5 + 0.1));
                         let h = land.height(p.0, p.1);
                         let lot = self.dressed(Lot { settlement: idx, kind: LotKind::Lamp, centre: c, width_m: w, depth_m: d, front: mul(n, -1.0), yaw: 0.0, floor_m: h, frontage: Frontage::Road(rid), landmark: false, model_file: None, height_m: 0.0 }, m);
-                        let _ = self.try_lot(lot, 0.3, &Check { level: false, road_clear: 0.05, water: 1.0, ..base });
+                        // At the road's level: not up a cutting or down an embankment beside it.
+                        if (land.height(c.0, c.1) - h).abs() < 0.5 * k.max(0.4) {
+                            let _ = self.try_lot(lot, 0.3, &Check { level: false, road_clear: 0.05, water: 1.0, ..base });
+                        }
                     }
                     side = -side;
-                    s += st.lamp_m;
+                    s += spacing;
+                }
+            }
+        }
+        // 4b. Wells in the neighbourhoods: beside lanes where they leave a main street, spread
+        // round the town, away from the plaza.
+        if st.wells > 0 {
+            let mut cands: Vec<(f32, u32)> = my_roads
+                .iter()
+                .copied()
+                .filter(|&r| {
+                    let rd = &self.roads[r as usize];
+                    rd.class == RoadClass::Lane && rd.settlement == Some(idx) && matches!(rd.ends[0], RoadEnd::Road(p) if matches!(self.roads[p as usize].class, RoadClass::Street | RoadClass::Trunk))
+                })
+                .map(|r| (dist(self.roads[r as usize].points[0], centre) / radial_at(bound, centre, self.roads[r as usize].points[0]), r))
+                .filter(|&(z, _)| (0.35..0.85).contains(&z))
+                .collect();
+            cands.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+            let mut done: Vec<V2> = Vec::new();
+            for (_, rid) in cands {
+                if done.len() as u32 >= st.wells {
+                    break;
+                }
+                let rd = &self.roads[rid as usize];
+                let RoadEnd::Road(parent) = rd.ends[0] else { continue };
+                let (p0, p1, lhw, phw) = (rd.points[0], rd.points[1.min(rd.points.len() - 1)], rd.width_m * 0.5, self.roads[parent as usize].width_m * 0.5);
+                if done.iter().any(|q| dist(*q, p0) < radial_at(bound, centre, p0) * 0.8) {
+                    continue;
+                }
+                let dir = norm(sub(p1, p0));
+                let (m, w, d) = self.thing(&style, LotKind::Well, &mut rng, st.margin_m);
+                for side in [1.0f32, -1.0] {
+                    let n = mul(perp(dir), side);
+                    let c = add(add(p0, mul(dir, phw + w * 0.5 + 1.2 * k)), mul(n, lhw + d * 0.5 + 0.6 * k));
+                    let fp = add(c, mul(n, -(d * 0.5 + 0.6 * k)));
+                    let lot = self.dressed(make(LotKind::Well, c, mul(n, -1.0), w, d, land.height(fp.0, fp.1) + st.step_m, Frontage::Road(rid)), m);
+                    if self.try_lot(lot, 0.8, &base).is_some() {
+                        done.push(p0);
+                        break;
+                    }
                 }
             }
         }
@@ -3185,9 +3927,9 @@ impl<'a> Plan<'a> {
     fn pads(&self) -> Vec<Pad> {
         let mut pads: Vec<Pad> = Vec::new();
         let mut owner: Vec<Option<u32>> = Vec::new();
-        for s in &self.settlements {
-            let st = self.style(s.kind).unwrap();
-            pads.push(Pad { shape: Shape::Poly(s.plaza.points.clone()), floor: s.plaza.floor_m, skirt: (st.skirt_m * 2.0).max(1.0), gate: 0.0 });
+        for (i, s) in self.settlements.iter().enumerate() {
+            let st = self.set_style(i as u16);
+            pads.push(Pad { shape: Shape::Poly(s.plaza.points.clone()), floor: s.plaza.floor_m, skirt: (st.skirt_m * 2.0).max(1.0), gate: 0.0, rise: None });
             owner.push(None);
         }
         for (i, l) in self.lots.iter().enumerate() {
@@ -3195,9 +3937,15 @@ impl<'a> Plan<'a> {
             if !l.kind.padded() || poly_contains(&self.settlements[l.settlement as usize].plaza.points, l.centre) {
                 continue;
             }
-            let st = self.style(self.settlements[l.settlement as usize].kind).unwrap();
-            pads.push(Pad { shape: Shape::Rect(l.rect()), floor: l.floor_m, skirt: st.skirt_m, gate: 0.0 });
+            let st = self.set_style(l.settlement);
+            pads.push(Pad { shape: Shape::Rect(l.rect()), floor: l.floor_m, skirt: st.skirt_m, gate: 0.0, rise: None });
             owner.push(Some(i as u32));
+        }
+        // Stairs: a ramp from their foot to their head, with a short skirt.
+        for st in &self.stairs {
+            let k = self.settlements[st.settlement as usize].scale.max(0.3);
+            pads.push(Pad { shape: Shape::Rect(st.rect()), floor: st.floor_m, skirt: 0.3 * k, gate: 0.0, rise: Some((st.front, self.settlements[st.settlement as usize].terrace_m)) });
+            owner.push(None);
         }
         // Gates: a fraction of the clearance to the nearest other pad, so pads stay level.
         let mut b = Buckets::new(self.land.size as f32, 32.0);
@@ -3274,6 +4022,10 @@ struct Trace<'b> {
     seed: u64,
     settlement: u16,
     plaza: &'b [V2],
+    /// Stop before a step that rises or falls more than this (0: never).
+    drop: f32,
+    /// The settlement's terraces, if any.
+    zone: Option<&'b Terrace>,
 }
 
 fn pad_gap(a: &Pad, b: &Pad) -> f32 {
@@ -3577,7 +4329,9 @@ mod tests {
                 let ok = match t {
                     Terrain::Water | Terrain::Rock => false,
                     // Towers stand on their wall; lamps at a road's edge; plaza lots on paving.
-                    Terrain::Wall => lot.frontage == Frontage::Wall(lot.settlement),
+                    // On terraces, gardens and fields step over a drop's wall, and a building's
+                    // edge (which blocks where the land is hosted) or a lamp post may stand by one.
+                    Terrain::Wall => lot.frontage == Frontage::Wall(lot.settlement) || (l.settlements[lot.settlement as usize].terrace_m > 0.0 && (matches!(lot.kind, LotKind::Garden | LotKind::Field | LotKind::Lamp) || crate::host::blocks(lot.kind))),
                     Terrain::Road => lot.kind == LotKind::Lamp || in_plaza(l, lot),
                     _ => true,
                 };
@@ -3756,8 +4510,8 @@ mod tests {
         let p = SettleParams::default();
         for (i, lot) in l.lots.iter().enumerate() {
             let set = &l.settlements[lot.settlement as usize];
-            let st = p.styles.iter().find(|s| s.site == set.kind).unwrap();
-            let Some(kind) = lot.kind.model() else {
+            let st = p.style_for(set.kind, &set.style).unwrap();
+            let Some(kind) = st.model_kind(lot.kind) else {
                 assert!(lot.model_file.is_none(), "lot {i} {:?} names a model", lot.kind);
                 continue;
             };
@@ -3842,8 +4596,9 @@ mod tests {
                 continue;
             }
             n += 1;
-            let st = p.styles.iter().find(|s| s.site == l.settlements[lot.settlement as usize].kind).unwrap();
-            let k = l.settlements[lot.settlement as usize].scale;
+            let set = &l.settlements[lot.settlement as usize];
+            let st = p.style_for(set.kind, &set.style).unwrap();
+            let k = set.scale;
             // The model's +X is (front.1, -front.0) on the map.
             let side = mul((lot.front.1, -lot.front.0), m.corner as f32);
             let q = add(lot.centre, mul(side, lot.width_m * 0.5));
@@ -3889,7 +4644,256 @@ mod tests {
                 a_town_has_an_inn_a_hall_and_a_chapel_on(&l);
                 towns_vary_on(&l);
                 corner_buildings_turn_to_both_streets_on(&l);
+                ornaments_keep_doors_and_streets_clear_on(&l);
+                stairs_connect_levels_on(&l);
+                terraces_are_level_on(&l);
+                walkable_ground_has_no_cliffs_on(&l);
             }
         }
+    }
+
+    /// Ornaments stand off every carriageway, out of buildings and away from doors and the way
+    /// out of them; the ones that block stand in a plaza or beside a building, never in a lane.
+    #[test]
+    fn ornaments_keep_doors_and_streets_clear() {
+        for l in worlds() {
+            ornaments_keep_doors_and_streets_clear_on(l);
+        }
+        // The island's settlements are dressed with what their styles ask for.
+        let l = world();
+        let count = |k: PropKind| l.props.iter().filter(|p| p.kind == k).count();
+        for k in [PropKind::Bench, PropKind::Fence, PropKind::Gate, PropKind::Tree, PropKind::Barrel, PropKind::Kerb, PropKind::Banner, PropKind::Sign, PropKind::FlowerBox, PropKind::MarketCross, PropKind::Fountain] {
+            assert!(count(k) > 0, "no {k:?} on the island");
+        }
+        eprintln!("props on the island: {}", l.props.len());
+        for s in l.settlements.iter().filter(|s| s.kind != SiteKind::SmallFolk) {
+            let i = l.settlements.iter().position(|x| std::ptr::eq(x, s)).unwrap() as u16;
+            assert!(l.props.iter().any(|p| p.settlement == i && p.kind == PropKind::Bench), "{:?} {} has no bench", s.kind, s.style);
+        }
+    }
+
+    fn ornaments_keep_doors_and_streets_clear_on(l: &Land) {
+        let p = SettleParams::default();
+        for (i, pr) in l.props.iter().enumerate() {
+            assert!((yaw_of(pr.front) - pr.yaw).abs() < 1e-4);
+            let file = pr.model_file.as_deref().expect("a prop names its model");
+            let m = p.buildings.model(file).unwrap_or_else(|| panic!("prop {i} names {file}, not in the table"));
+            assert_eq!((m.style.as_str(), m.kind.as_str()), (l.settlements[pr.settlement as usize].style.as_str(), pr.kind.id()), "prop {i}");
+            if matches!(pr.kind, PropKind::Cable | PropKind::Kerb) || (pr.kind == PropKind::WashingLine && m.form.starts_with("span")) {
+                continue;
+            }
+            let r = pr.base();
+            for rd in &l.roads {
+                for k in 0..rd.points.len() - 1 {
+                    let (a, b) = (rd.points[k], rd.points[k + 1]);
+                    if seg_near(r.c, a, b).0 < r.hw + r.hd + rd.width_m {
+                        // Stairs may meet a street at their foot or head.
+                        let need = if pr.kind == PropKind::Stairs { 0.0 } else { rd.width_m * 0.5 };
+                        let rr = if pr.kind == PropKind::Stairs { Rect { hd: (r.hd - 1.2).max(0.3), ..r } } else { r };
+                        assert!(rr.seg_dist(a, b) >= need - 1e-3, "prop {i} {:?} at {:?} is on a road", pr.kind, pr.centre);
+                    }
+                }
+            }
+            for (j, lot) in l.lots.iter().enumerate() {
+                if dist(lot.centre, r.c) > lot.width_m + lot.depth_m + r.hw + r.hd {
+                    continue;
+                }
+                if lot.kind.padded() || matches!(lot.kind, LotKind::MarketStall) {
+                    // Signs and flower boxes stand against the wall, in the lot's margin.
+                    let attached = matches!(pr.kind, PropKind::Sign | PropKind::NeonSign | PropKind::FlowerBox);
+                    let shrunk = Rect { hw: lot.width_m * 0.5 - p.style_for(l.settlements[lot.settlement as usize].kind, &l.settlements[lot.settlement as usize].style).unwrap().margin_m, hd: lot.depth_m * 0.5 - p.style_for(l.settlements[lot.settlement as usize].kind, &l.settlements[lot.settlement as usize].style).unwrap().margin_m, ..lot.rect() };
+                    let gap = if attached { r.gap(&shrunk) } else { r.gap(&lot.rect()) };
+                    assert!(gap > 0.0, "prop {i} {:?} at {:?} stands in lot {j} {:?}", pr.kind, pr.centre, lot.kind);
+                }
+                if lot.kind.padded() && !matches!(lot.kind, LotKind::Well | LotKind::Tower) && pr.kind != PropKind::RetainingWall {
+                    let door = add(lot.centre, mul(lot.front, lot.depth_m * 0.5 + 0.5));
+                    let k = l.settlements[lot.settlement as usize].scale.max(0.3);
+                    assert!(r.outside(door) > 0.5 * k, "prop {i} {:?} at {:?} blocks the door of lot {j}", pr.kind, pr.centre);
+                }
+            }
+            if pr.kind.blocks() {
+                let set = &l.settlements[pr.settlement as usize];
+                let in_plaza = poly_contains(&set.plaza.points, pr.centre);
+                let by_building = l.lots.iter().any(|lot| lot.kind.padded() && r.gap(&lot.rect()) < 3.0);
+                assert!(in_plaza || by_building || pr.kind == PropKind::Kiosk || pr.kind == PropKind::FoodStall, "blocking prop {i} {:?} stands in the open at {:?}", pr.kind, pr.centre);
+            }
+        }
+    }
+
+    /// Every stair climbs one terrace step, its ground rising evenly from foot to head, and
+    /// every tile along it is walkable with no step a person cannot climb.
+    #[test]
+    fn stairs_connect_levels() {
+        for l in worlds() {
+            stairs_connect_levels_on(l);
+        }
+    }
+
+    fn stairs_connect_levels_on(l: &Land) {
+        for (i, st) in l.props.iter().enumerate().filter(|(_, p)| p.kind == PropKind::Stairs) {
+            let set = &l.settlements[st.settlement as usize];
+            let rise = set.terrace_m;
+            assert!(rise > 0.0, "stairs {i} in a settlement without terraces");
+            let k = set.scale.max(0.3);
+            let n = 12;
+            let mut prev = f32::MIN;
+            for j in 0..=n {
+                // From the foot (front) to the head.
+                let t = st.depth_m * (0.5 - j as f32 / n as f32);
+                let q = add(st.centre, mul(st.front, t));
+                let h = l.height(q.0, q.1);
+                let want = st.floor_m + rise * j as f32 / n as f32;
+                assert!((h - want).abs() < 0.05 * k + rise * 0.02, "stairs {i}: ground {h} at {j}/{n}, wanted {want}");
+                assert!(h >= prev - 1e-3, "stairs {i} do not climb");
+                prev = h;
+                // The flight's own tiles (not the edge tiles its ends share with the landings).
+                let tile = (q.0.floor() as i32, q.1.floor() as i32);
+                if j > 0 && j < n {
+                    assert!(l.map.walkable(tile.0, tile.1), "stairs {i}: tile {tile:?} ({j}/{n}) is not walkable");
+                }
+            }
+            // Walking tile by tile (4-connected, no step over CLIMB_M) from just beyond its foot
+            // reaches just beyond its head, through the stair's own tiles.
+            let climb = terrace::CLIMB_M * k + 1e-3;
+            let tile = |p: V2| (p.0.floor() as i32, p.1.floor() as i32);
+            let foot = tile(add(st.centre, mul(st.front, st.depth_m * 0.5 + 0.7 * k)));
+            let head = tile(sub(st.centre, mul(st.front, st.depth_m * 0.5 + 0.7 * k)));
+            let around = Rect { hw: st.width_m * 0.5 + 1.0, hd: st.depth_m * 0.5 + 2.0 * k, ..st.rect() };
+            let h = |t: (i32, i32)| l.height(t.0 as f32 + 0.5, t.1 as f32 + 0.5);
+            let mut seen = vec![foot];
+            let mut stack = vec![foot];
+            while let Some(t) = stack.pop() {
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let q = (t.0 + dx, t.1 + dy);
+                    if seen.contains(&q) || !l.map.walkable(q.0, q.1) || around.outside((q.0 as f32 + 0.5, q.1 as f32 + 0.5)) > 0.0 || (h(q) - h(t)).abs() > climb {
+                        continue;
+                    }
+                    seen.push(q);
+                    stack.push(q);
+                }
+            }
+            assert!(l.map.walkable(foot.0, foot.1) && l.map.walkable(head.0, head.1), "stairs {i}: an end is blocked");
+            assert!(seen.contains(&head), "stairs {i} at {:?}: no walk from foot to head", st.centre);
+        }
+    }
+
+    /// A terraced settlement's ground is level on each terrace (away from roads, pads, stairs
+    /// and drops), and its plaza is one of the terraces.
+    #[test]
+    fn terraces_are_level() {
+        for l in worlds() {
+            terraces_are_level_on(l);
+        }
+    }
+
+    fn terraces_are_level_on(l: &Land) {
+        for z in &l.mods.terr {
+            let set = l.settlements.iter().find(|s| s.site == z.site).unwrap();
+            assert!((z.snap(set.plaza.floor_m) - set.plaza.floor_m).abs() < 1e-3, "plaza off its terrace");
+            let mut checked = 0;
+            let r = z.r_in * 0.9;
+            let mut y = z.c.1 - r;
+            while y < z.c.1 + r {
+                let mut x = z.c.0 - r;
+                while x < z.c.0 + r {
+                    let q = (x, y);
+                    x += 3.1;
+                    if dist(q, z.c) > r || l.sd_at(q.0, q.1) < 14.0 || z.weight(q) < 1.0 {
+                        continue;
+                    }
+                    let i = z.index(q);
+                    let lvl = z.plateau(i);
+                    if (z.level(q) - lvl).abs() > 1e-4 {
+                        continue; // on a drop
+                    }
+                    let skirt = SettleParams::default().style_for(set.kind, &set.style).unwrap().skirt_m;
+                    let quiet = l.roads.iter().all(|rd| nearest_on(&rd.points, q).0 > rd.width_m * 1.5 + 3.5)
+                        && l.lots.iter().all(|lot| lot.rect().outside(q) > skirt + 1.5)
+                        && l.props.iter().filter(|p| p.kind == PropKind::Stairs).all(|p| p.rect().outside(q) > 1.0)
+                        && l.settlements.iter().all(|s| poly_outside(&s.plaza.points, q) > skirt * 2.0 + 1.5);
+                    if quiet {
+                        let h = l.height(q.0, q.1);
+                        assert!((h - lvl).abs() < 2e-3, "terrace at {q:?} is {h}, its level {lvl}");
+                        checked += 1;
+                    }
+                }
+                y += 3.1;
+            }
+            eprintln!("terraces of site {}: {checked} points level", z.site);
+        }
+    }
+
+    /// Inside terraced settlements, no two neighbouring walkable tiles differ by more than a
+    /// person can step: drops are walled except where roads, ramps and stairs cross them.
+    #[test]
+    fn walkable_ground_has_no_cliffs() {
+        for l in worlds() {
+            walkable_ground_has_no_cliffs_on(l);
+        }
+    }
+
+    fn walkable_ground_has_no_cliffs_on(l: &Land) {
+        // What the authority hosts: buildings block.
+        let (hosted, _) = crate::host::hosted_map(l, &LandParams::default());
+        let l_map = &hosted;
+        for z in &l.mods.terr {
+            let climb = terrace::CLIMB_M * (z.drop_m / 0.8);
+            let r = z.r_out as i32;
+            let mut worst = 0.0f32;
+            for y in z.c.1 as i32 - r..z.c.1 as i32 + r {
+                for x in z.c.0 as i32 - r..z.c.0 as i32 + r {
+                    if !l_map.walkable(x, y) {
+                        continue;
+                    }
+                    let h = l.height(x as f32 + 0.5, y as f32 + 0.5);
+                    for (dx, dy) in [(1, 0), (0, 1)] {
+                        if l_map.walkable(x + dx, y + dy) {
+                            let d = (h - l.height((x + dx) as f32 + 0.5, (y + dy) as f32 + 0.5)).abs();
+                            // Road against road is the roads' own grading (a road's edge by a
+                            // river, where shaping fades out, can step); reported, not walled.
+                            let both_road = l_map.get(x, y) == Terrain::Road && l_map.get(x + dx, y + dy) == Terrain::Road;
+                            if both_road {
+                                worst = worst.max(d);
+                            } else {
+                                assert!(d <= climb + 1e-3, "a {d} m step between walkable tiles at ({x}, {y})");
+                            }
+                        }
+                    }
+                }
+            }
+            eprintln!("terraces of site {}: no step over {climb} m off the roads; steepest road-to-road step {worst:.2} m", z.site);
+        }
+    }
+
+    /// The island has a steampunk and a cyberpunk town of their own: laid out in their styles,
+    /// with their landmarks, and reachable by road (`roads_connect_every_settlement`).
+    #[test]
+    fn styled_towns_stand_on_the_island() {
+        let l = world();
+        let p = SettleParams::default();
+        for (style, landmark) in [("steampunk", "clocktower"), ("cyberpunk", "landmark")] {
+            let (i, s) = l.settlements.iter().enumerate().find(|(_, s)| s.style == style).unwrap_or_else(|| panic!("no {style} town"));
+            assert_eq!(s.kind, SiteKind::Town);
+            assert_eq!(l.sites[s.site as usize].id(), format!("{style}_town"));
+            let lm = &l.lots[s.landmark.expect("a landmark") as usize];
+            assert_eq!(p.buildings.model(lm.model_file.as_deref().unwrap()).unwrap().kind, landmark, "{style} landmark");
+            let lots = &l.lots[s.lots.0 as usize..s.lots.1 as usize];
+            assert!(lots.iter().filter(|x| matches!(x.kind, LotKind::House | LotKind::Townhouse)).count() >= 20, "{style}: few homes");
+            assert!(lots.iter().all(|x| x.model_file.as_deref().is_none_or(|f| f.starts_with(env_of(style)))), "{style}: a lot of another style");
+            eprintln!("{style} town {i} at {:?}: {} lots, terraces {} m", s.centre, lots.len(), s.terrace_m);
+        }
+        // The hill town is terraced: its buildings stand on at least three levels, and stairs join them.
+        let hill = l.settlements.iter().position(|s| s.style == "steampunk").unwrap();
+        let z = l.mods.terr.iter().find(|z| z.site == l.settlements[hill].site).expect("the steampunk town is terraced");
+        let mut levels: Vec<i32> = l.lots[l.settlements[hill].lots.0 as usize..l.settlements[hill].lots.1 as usize].iter().filter(|x| x.kind.padded()).map(|x| z.index(x.centre)).collect();
+        levels.sort();
+        levels.dedup();
+        assert!(levels.len() >= 3, "the hill town's buildings stand on levels {levels:?}");
+        let stairs = l.props.iter().filter(|p| p.kind == PropKind::Stairs && p.settlement == hill as u16).count();
+        let walls = l.props.iter().filter(|p| p.kind == PropKind::RetainingWall && p.settlement == hill as u16).count();
+        assert!(stairs >= 3 && walls >= 10, "the hill town has {stairs} stairs and {walls} retaining walls");
+        // Flat towns stay flat: the walled town is not terraced.
+        let town = l.settlements.iter().find(|s| s.kind == SiteKind::Town && s.style == "fantasy").unwrap();
+        eprintln!("walled town terraces: {} m", town.terrace_m);
     }
 }

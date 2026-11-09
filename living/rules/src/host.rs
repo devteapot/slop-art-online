@@ -1,6 +1,7 @@
 //! What the authority hosts from a generated [`Land`] (see `docs/ISLAND_AUTHORITY.md`), shared
 //! with clients so both derive the same things from the same seed:
-//! - which tiles buildings block ([`hosted_map`]), since a lot's model stands on its footprint;
+//! - which tiles buildings block ([`hosted_map`]), since a lot's model stands on its footprint,
+//!   and which tiles the props that stand in the way block (fountains, carts, kiosks...);
 //! - where each building's door is ([`door`]), the walkable point in front of its lot;
 //! - digests of the tiles, the ground height and the layout ([`Digests`]), so a client that
 //!   regenerates the land can prove it matches the authority's before it trusts its heights.
@@ -8,7 +9,7 @@
 use crate::det::{fnv1a, FNV_OFFSET};
 use crate::land::{Land, LandParams};
 use crate::map::{Map, Terrain};
-use crate::settle::{Lot, LotKind};
+use crate::settle::{Lot, LotKind, Prop};
 
 /// Lots whose model blocks movement: buildings, towers, wells and market stalls. Lamps are
 /// posts, and gardens and fields are open ground.
@@ -18,22 +19,29 @@ pub fn blocks(kind: LotKind) -> bool {
 
 /// The style margin round a settlement's models (lots are the model's footprint plus this).
 pub fn margin_of(land: &Land, p: &LandParams, lot: &Lot) -> f32 {
-    let kind = land.settlements.get(lot.settlement as usize).map(|s| s.kind);
-    p.settlements.styles.iter().find(|s| Some(s.site) == kind).map_or(0.0, |s| s.margin_m)
+    land.settlements.get(lot.settlement as usize).and_then(|s| p.settlements.style_for(s.kind, &s.style)).map_or(0.0, |s| s.margin_m)
 }
 
 /// Tiles under a lot's model footprint: tiles whose centre lies inside the lot shrunk by the
 /// margin.
 pub fn footprint_tiles(lot: &Lot, margin_m: f32) -> Vec<(i32, i32)> {
-    let (hw, hd) = ((lot.width_m * 0.5 - margin_m).max(0.25), (lot.depth_m * 0.5 - margin_m).max(0.25));
-    let (fx, fy) = lot.front;
+    rect_tiles(lot.centre, lot.front, (lot.width_m * 0.5 - margin_m).max(0.25), (lot.depth_m * 0.5 - margin_m).max(0.25))
+}
+
+/// Tiles under a prop's footprint (tiles whose centre lies inside it).
+pub fn prop_tiles(prop: &Prop) -> Vec<(i32, i32)> {
+    rect_tiles(prop.centre, prop.front, (prop.width_m * 0.5).max(0.25), (prop.depth_m * 0.5).max(0.25))
+}
+
+fn rect_tiles(centre: (f32, f32), front: (f32, f32), hw: f32, hd: f32) -> Vec<(i32, i32)> {
+    let (fx, fy) = front;
     let (ux, uy) = (-fy, fx);
-    let r = hw.hypot(hd).ceil() as i32 + 1;
-    let (cx, cy) = (lot.centre.0.floor() as i32, lot.centre.1.floor() as i32);
+    let r = (hw * hw + hd * hd).sqrt().ceil() as i32 + 1;
+    let (cx, cy) = (centre.0.floor() as i32, centre.1.floor() as i32);
     let mut out = Vec::new();
     for j in cy - r..=cy + r {
         for i in cx - r..=cx + r {
-            let (dx, dy) = (i as f32 + 0.5 - lot.centre.0, j as f32 + 0.5 - lot.centre.1);
+            let (dx, dy) = (i as f32 + 0.5 - centre.0, j as f32 + 0.5 - centre.1);
             let (a, b) = (dx * ux + dy * uy, dx * fx + dy * fy);
             if a.abs() <= hw && b.abs() <= hd {
                 out.push((i, j));
@@ -52,7 +60,7 @@ pub fn door(lot: &Lot) -> (f32, f32) {
 /// What [`hosted_map`] changed.
 #[derive(Clone, Debug, Default)]
 pub struct Hosted {
-    /// Tiles turned into `Wall` under building footprints.
+    /// Tiles turned into `Wall` under building footprints and the props that block.
     pub blocked_tiles: u32,
     /// Walkable tiles that buildings cut off from the main walkable area (enclosed yards); they
     /// stay as they are, but nothing is placed there.
@@ -62,17 +70,28 @@ pub struct Hosted {
 }
 
 /// The land's tiles as the authority hosts them: building footprints become `Wall` (they block
-/// like walls). Water under a footprint is left alone, and so are roads, except under the wells
-/// and market stalls that stand on a paved plaza by design. Also marks the main walkable area,
-/// found from the first settlement's plaza.
+/// like walls). Water under a footprint is left alone, and so are roads, except under what
+/// stands in a paved plaza by design: wells, market stalls and a landmark (a clock tower). Props that stand in the way
+/// ([`crate::settle::PropKind::blocks`]: fountains, market crosses, carts, kiosks, food stalls)
+/// block every walkable tile under them; the planner keeps them off streets and door paths.
+/// (Terrace drops and stair tiles are already in the land's own tiles.) Also marks the main
+/// walkable area, found from the first settlement's plaza.
 pub fn hosted_map(land: &Land, p: &LandParams) -> (Map, Hosted) {
     let mut map = land.map.clone();
     let mut h = Hosted::default();
     for lot in land.lots.iter().filter(|l| blocks(l.kind)) {
-        let on_plaza = matches!(lot.kind, LotKind::Well | LotKind::MarketStall);
+        let on_plaza = matches!(lot.kind, LotKind::Well | LotKind::MarketStall) || land.settlements.get(lot.settlement as usize).is_some_and(|s| s.in_plaza(lot.centre));
         for (x, y) in footprint_tiles(lot, margin_of(land, p, lot)) {
             let t = map.get(x, y);
             if t.walkable() && (t != Terrain::Road || on_plaza) {
+                map.set(x, y, Terrain::Wall);
+                h.blocked_tiles += 1;
+            }
+        }
+    }
+    for prop in land.props.iter().filter(|p| p.kind.blocks()) {
+        for (x, y) in prop_tiles(prop) {
+            if map.get(x, y).walkable() {
                 map.set(x, y, Terrain::Wall);
                 h.blocked_tiles += 1;
             }
@@ -117,7 +136,8 @@ pub struct Digests {
     pub tiles: u64,
     /// `Land::height` and `Land::water_level` on a lattice every `HEIGHT_STEP_M` metres.
     pub heights: u64,
-    /// Settlements, lots (kind, centre, size, front, floor, model) and roads (points, heights).
+    /// Settlements, lots (kind, centre, size, front, floor, model), roads (points, heights) and
+    /// props (kind, centre, size, front, floor, model).
     pub layout: u64,
 }
 
@@ -160,6 +180,13 @@ pub fn digests(land: &Land, hosted: &Map) -> Digests {
     }
     for l in &land.lots {
         layout = fnv1a(layout, l.model_file.as_deref().unwrap_or("").as_bytes());
+    }
+    for pr in &land.props {
+        layout = fnv1a(layout, &[pr.kind as u8]);
+        for v in [pr.centre.0, pr.centre.1, pr.width_m, pr.depth_m, pr.front.0, pr.front.1, pr.floor_m, pr.height_m] {
+            layout = fnv1a(layout, &v.to_bits().to_le_bytes());
+        }
+        layout = fnv1a(layout, pr.model_file.as_deref().unwrap_or("").as_bytes());
     }
     Digests { tiles, heights, layout }
 }

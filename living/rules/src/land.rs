@@ -16,7 +16,7 @@
 
 use crate::det::Det;
 use crate::map::{Map, Terrain, MAX_SIDE};
-use crate::settle::{self, Crossing, Lot, Road, SettleParams, Settlement};
+use crate::settle::{self, Crossing, Lot, Prop, Road, SettleParams, Settlement};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, VecDeque};
@@ -239,6 +239,17 @@ pub struct SiteSpec {
     pub scale: f32,
     /// How strongly the ground is levelled inside the site (0..1).
     pub flatten: f32,
+    /// The `buildings.py` style of a settlement that differs from its kind's first style in
+    /// [`crate::settle::SettleParams::styles`] (a steampunk or cyberpunk town, say).
+    #[serde(default)]
+    pub style: Option<String>,
+    /// Relief (highest less lowest ground across the site, metres) the site wants; empty for
+    /// its kind's own rule. A town that wants relief is terraced.
+    #[serde(default)]
+    pub relief_m: Option<[f32; 2]>,
+    /// Prefer a site near the sea.
+    #[serde(default)]
+    pub coast: bool,
 }
 
 impl Default for LandParams {
@@ -321,12 +332,16 @@ impl Default for Regions {
 }
 
 fn default_sites() -> Vec<SiteSpec> {
-    let spec = |kind, min, max, per_km2, radius_m, spacing_m, scale, flatten| SiteSpec { kind, min, max, per_km2, radius_m, spacing_m, scale, flatten };
+    let spec = |kind, min, max, per_km2, radius_m, spacing_m, scale, flatten| SiteSpec { kind, min, max, per_km2, radius_m, spacing_m, scale, flatten, style: None, relief_m: None, coast: false };
     vec![
         spec(SiteKind::Town, 1, 1, 0.0, 150.0, 0.0, 1.0, 0.8),
         spec(SiteKind::Giants, 1, 1, 0.0, 130.0, 0.0, 3.0, 0.85),
         spec(SiteKind::SmallFolk, 1, 1, 0.0, 28.0, 0.0, 0.35, 0.6),
         spec(SiteKind::Village, 2, 3, 1.2, 50.0, 450.0, 1.0, 0.75),
+        // Two more towns in their own building styles, from about 1.6 km² of land: one on a
+        // hillside (terraced), one by the sea.
+        SiteSpec { style: Some("steampunk".into()), relief_m: Some([12.0, 44.0]), ..spec(SiteKind::Town, 0, 1, 0.6, 105.0, 500.0, 1.0, 0.4) },
+        SiteSpec { style: Some("cyberpunk".into()), relief_m: Some([0.0, 24.0]), coast: true, ..spec(SiteKind::Town, 0, 1, 0.6, 100.0, 500.0, 1.0, 0.65) },
         spec(SiteKind::Cave, 2, 4, 1.2, 5.0, 300.0, 1.0, 0.0),
     ]
 }
@@ -365,6 +380,19 @@ pub struct Site {
     pub facing: f32,
     pub region: RegionKind,
     flatten: f32,
+    /// A settlement's building style when it is not its kind's first ([`SiteSpec::style`]).
+    pub style: Option<String>,
+}
+
+impl Site {
+    /// What a seed calls this kind of site: the kind (`town`, `village`, ...), or
+    /// `<style>_<kind>` for a site with its own style (`steampunk_town`).
+    pub fn id(&self) -> String {
+        match &self.style {
+            Some(st) => format!("{st}_{}", self.kind.id()),
+            None => self.kind.id().to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -446,6 +474,9 @@ pub struct Land {
     pub roads: Vec<Road>,
     /// Fords and bridges where roads cross rivers.
     pub crossings: Vec<Crossing>,
+    /// Street ornaments, stairs and retaining walls of every settlement, derived from the
+    /// layout (not stored by the authority; see `docs/ISLAND_AUTHORITY.md`).
+    pub props: Vec<Prop>,
     pub(crate) mods: settle::Mods,
     n: usize,
     cell: f32,
@@ -1341,6 +1372,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         lots: Vec::new(),
         roads: Vec::new(),
         crossings: Vec::new(),
+        props: Vec::new(),
         mods: settle::Mods::default(),
         n,
         cell,
@@ -1724,18 +1756,21 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
     use RegionKind as K;
     let mut placed: Vec<Site> = Vec::new();
     let mut order: Vec<&SiteSpec> = c.p.sites.iter().collect();
+    // Towns in their own style come after the villages, so the first sites stay where they were.
     order.sort_by_key(|sp| match sp.kind {
-        SiteKind::Town => 0,
+        SiteKind::Town if sp.style.is_none() => 0,
         SiteKind::Giants => 1,
         SiteKind::SmallFolk => 2,
         SiteKind::Village => 3,
-        SiteKind::Cave => 4,
+        SiteKind::Town => 4,
+        SiteKind::Cave => 5,
     });
     for sp in order {
         let want = ((c.land_km2 * sp.per_km2).round() as u32).clamp(sp.min, sp.max) as usize;
         let r = sp.radius_m;
+        let mine = |q: &Site| q.kind == sp.kind && q.style == sp.style;
         for relax in [1.0f32, 1.6, 2.5, 4.0] {
-            let have = placed.iter().filter(|q| q.kind == sp.kind).count();
+            let have = placed.iter().filter(|q| mine(q)).count();
             if have >= want {
                 break;
             }
@@ -1758,6 +1793,17 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
                 }
                 let jitter = hash(c.seed ^ 0x71 ^ sp.kind as u64, x as i32, y as i32);
                 let score = match sp.kind {
+                    SiteKind::Town if sp.relief_m.is_some() => {
+                        // A town in its own style: the relief it wants (a hillside to terrace, or
+                        // flat ground), near the sea if it likes the coast.
+                        let [lo, hi] = sp.relief_m.unwrap();
+                        let ok_kind = matches!(kind, K::Meadow | K::Forest | K::Beach | K::Highland) || relax > 1.0 && matches!(kind, K::OldForest);
+                        if !ok_kind || sv.still > 0.04 * (relax - 1.0) || sv.wetland > 0.1 * relax || sv.water > 0.1 * relax || rough < lo / relax || rough > hi * relax || sv.mean < 2.0 || sv.mean > 140.0 * relax {
+                            continue;
+                        }
+                        let coast = if sp.coast && c.sea_d[k] < r * 2.5 { 14.0 } else { 0.0 };
+                        -(rough - (lo + hi) * 0.5).abs() * 0.3 - 0.02 * c.wd[k].min(400.0) + coast + jitter * 4.0
+                    }
                     SiteKind::Town => {
                         let ok_kind = matches!(kind, K::Meadow | K::Forest | K::Beach) || relax > 1.0 && matches!(kind, K::OldForest | K::Wetland);
                         if !ok_kind || sv.still > 0.04 * (relax - 1.0) || sv.wetland > 0.1 * relax || sv.water > 0.08 * relax || rough > 20.0 * relax || sv.mean < 2.0 || sv.mean > 80.0 * relax {
@@ -1799,14 +1845,14 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
                 };
                 cands.push((score, x, y, sv.mean, kind));
             }
-            while placed.iter().filter(|q| q.kind == sp.kind).count() < want {
+            while placed.iter().filter(|q| mine(q)).count() < want {
                 let mut best: Option<(f32, usize)> = None;
                 for (ci, &(score, x, y, _, _)) in cands.iter().enumerate() {
                     let mut ok = true;
                     let mut nearest = 1200f32;
                     for q in &placed {
                         let d = (q.x - x).d_hypot(q.y - y);
-                        let need = if q.kind == sp.kind { (sp.spacing_m / relax.sqrt()).max(r + q.radius_m + 60.0) } else { r + q.radius_m + 120.0 };
+                        let need = if mine(q) { (sp.spacing_m / relax.sqrt()).max(r + q.radius_m + 60.0) } else if q.kind == sp.kind && q.kind != SiteKind::Cave { (sp.spacing_m.max(q.radius_m * 3.0) / relax.sqrt()).max(r + q.radius_m + 120.0) } else { r + q.radius_m + 120.0 };
                         if d < need {
                             ok = false;
                             break;
@@ -1822,7 +1868,7 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
                 }
                 let Some((_, ci)) = best else { break };
                 let (_, x, y, mean, kind) = cands[ci];
-                placed.push(Site { kind: sp.kind, x, y, radius_m: r, ground_m: mean, scale: sp.scale, facing: 0.0, region: kind, flatten: sp.flatten });
+                placed.push(Site { kind: sp.kind, x, y, radius_m: r, ground_m: mean, scale: sp.scale, facing: 0.0, region: kind, flatten: sp.flatten, style: sp.style.clone() });
             }
         }
     }
@@ -2042,7 +2088,7 @@ mod tests {
             assert!(l.regions.iter().any(|r| r.kind == kind), "no {kind:?} region at {} m", l.size);
         }
         assert_eq!(l.regions.iter().filter(|r| r.kind == RegionKind::SpiritGrove).count(), 1);
-        let count = |k: SiteKind| l.sites.iter().filter(|s| s.kind == k).count();
+        let count = |k: SiteKind| l.sites.iter().filter(|s| s.kind == k && s.style.is_none()).count();
         assert_eq!(count(SiteKind::Town), 1);
         assert!(count(SiteKind::Village) >= 2);
         assert_eq!(count(SiteKind::Giants), 1);

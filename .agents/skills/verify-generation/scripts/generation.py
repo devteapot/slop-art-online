@@ -204,7 +204,8 @@ def check_land(seed, rows, side, tiles):
     for t in entries:
         want = t.get("site") or ("town" if t in seed.get("towns", []) else "village")
         c = communities.get(t["name"], {}).get("id")
-        present(f"{t['name']} stands on a {want} site", any(s["community"] == c and s["kind"] == want for s in settlements))
+        # A town in its own style is named by its site id, `<style>_<kind>` (steampunk_town).
+        present(f"{t['name']} stands on a {want} site", any(s["community"] == c and want in (s["kind"], f"{s['style']}_{s['kind']}") for s in settlements))
     lots = rows.get("lot", [])
     structures = {s["id"]: s for s in rows["structure"]}
     present("lot ids are 0..n", sorted(l["id"] for l in lots) == list(range(len(lots))), len(lots))

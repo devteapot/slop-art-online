@@ -3,6 +3,10 @@
 # Usage: living/tools/blender/gen_buildings.sh [count] [seed] [out_root]
 #   count is models per form (kinds with forms, such as houses, make count per form);
 #   out_root defaults to living/game/assets/envs; pass a scratch folder to preview a set.
+# Street props (benches, fences, stairs, retaining walls...; buildings.py PROPS and
+# PROP_STYLES) make PROP_COUNT (default 4) per form. ONLY=props regenerates just the props, and
+# ONLY=buildings just the buildings; the table is gathered from every set under out_root either
+# way. JOBS (default 12) Blender processes run at once.
 # Fixed kinds (towers, walls, lamps...) have the exact heights in buildings.py HEIGHTS, matching
 # the env JSON slots; houses, halls and the like come in forms of varying size. Models have their
 # origin at the floor, with a foundation below it. Each set writes gen-<kind>-<style>.json with
@@ -14,6 +18,9 @@ count=${1:-8}
 seed=${2:-1}
 envs=${3:-living/game/assets/envs}
 blender=${BLENDER:-blender}
+prop_count=${PROP_COUNT:-4}
+only=${ONLY:-all}
+jobs_max=${JOBS:-12}
 # style kind folder
 specs=(
   "fantasy house fantasy_city/house"
@@ -63,16 +70,30 @@ specs=(
   "small well small_city/well"
   "small hall small_city/hall"
 )
-pids=()
+[ "$only" = props ] && specs=()
+# Street props per style (keep in step with buildings.py PROP_STYLES): style env kinds...
+prop_sets=(
+  "fantasy fantasy_city barrel crate cart bench fountain market_cross fence gate planter flower_box sign banner washing_line tree kerb stairs retaining_wall"
+  "steampunk steampunk_city barrel cart bench fountain market_cross fence gate planter flower_box sign banner washing_line tree kerb stairs retaining_wall"
+  "cyberpunk cyberpunk_city barrel cart bench fountain market_cross fence gate planter flower_box banner washing_line tree kerb stairs retaining_wall"
+  "giant giants_city barrel crate cart bench fence gate planter sign tree washing_line"
+  "small small_city barrel crate bench fence gate planter flower_box tree"
+)
+if [ "$only" != buildings ]; then
+  for set in "${prop_sets[@]}"; do
+    read -r style env kinds <<<"$set"
+    for kind in $kinds; do specs+=("$style $kind $env/$kind $prop_count"); done
+  done
+fi
 for spec in "${specs[@]}"; do
-  read -r style kind dir <<<"$spec"
+  read -r style kind dir n <<<"$spec"
   rm -f "$envs/$dir"/gen-*.glb "$envs/$dir"/gen-*.json
   # Giants share the fantasy grammar; a different seed keeps their houses from being copies.
   s=$seed; [ "$style" = giant ] && s=$((seed + 50))
+  while [ "$(jobs -rp | wc -l)" -ge "$jobs_max" ]; do wait -n || true; done
   ("$blender" -b --python-exit-code 1 -P living/tools/blender/buildings.py -- \
-    --style "$style" --kind "$kind" --count "$count" --seed "$s" --out "$envs/$dir" 2>&1 | grep -E '^GEN|Error|Traceback' || true) &
-  pids+=($!)
+    --style "$style" --kind "$kind" --count "${n:-$count}" --seed "$s" --out "$envs/$dir" 2>&1 | grep -E '^GEN|Error|Traceback' || true) &
 done
-for p in "${pids[@]}"; do wait "$p"; done
+wait
 # The footprint table the settlement planner reads (committed, unlike the models).
 "$blender" -b --python-exit-code 1 -P living/tools/blender/buildings.py -- --table living/rules/data/buildings.json --envs "$envs" 2>&1 | grep -E '^TABLE|Error|Traceback' || true

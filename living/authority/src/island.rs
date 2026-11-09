@@ -32,6 +32,9 @@ pub struct Hosted {
 
 pub struct Planned {
     pub kind: SiteKind,
+    /// What a seed's `site` names it: `town`, `village`, ..., or `steampunk_town` for a town in
+    /// its own style (`living_rules::land::Site::id`).
+    pub site_id: String,
     pub style: String,
     pub centre: (f32, f32),
     pub radius_m: f32,
@@ -86,10 +89,11 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
     let (map, hosted) = host::hosted_map(&land, &params);
     let d = host::digests(&land, &map);
     log::info!(
-        "land {seed} at {size} m: {} settlements, {} lots, {} roads; buildings block {} tiles and cut off {}; digests tiles {:016x} heights {:016x} layout {:016x}",
+        "land {seed} at {size} m: {} settlements, {} lots, {} roads, {} props (derived, not stored); buildings block {} tiles and cut off {}; digests tiles {:016x} heights {:016x} layout {:016x}",
         land.settlements.len(),
         land.lots.len(),
         land.roads.len(),
+        land.props.len(),
         hosted.blocked_tiles,
         hosted.cut_off_tiles,
         d.tiles,
@@ -143,6 +147,7 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
         homes.sort_by(|a, b| a.0.total_cmp(&b.0));
         settlements.push(Planned {
             kind: s.kind,
+            site_id: land.sites[s.site as usize].id(),
             style: s.style.clone(),
             centre: c,
             radius_m: s.radius_m,
@@ -169,7 +174,7 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
             door: near(host::door(l)),
         })
         .collect();
-    // Newcomers arrive outside the town's first gate, or on its plaza.
+    // Newcomers arrive outside the (first) town's first gate, or on its plaza.
     let town = land.settlements.iter().find(|s| s.kind == SiteKind::Town).or(land.settlements.first());
     let arrive = town
         .map(|s| match s.wall.as_ref().and_then(|w| w.gates.first().map(|g| (w, g))) {
@@ -193,7 +198,8 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
 
 /// The seed's settlement entry for each planned settlement: the k-th entry of a site kind
 /// (`site`, or `town` for `towns` and `village` for `villages`) takes the k-th settlement of
-/// that kind. Settlements without an entry stand empty.
+/// that kind. A town in its own style is its own kind (`steampunk_town`). Settlements without
+/// an entry stand empty.
 pub fn match_seed<'a>(h: &Hosted, towns: &'a [SeedTown], villages: &'a [SeedTown]) -> Vec<Option<&'a SeedTown>> {
     let entries: Vec<(&str, &SeedTown)> = towns
         .iter()
@@ -204,7 +210,7 @@ pub fn match_seed<'a>(h: &Hosted, towns: &'a [SeedTown], villages: &'a [SeedTown
     h.settlements
         .iter()
         .map(|s| {
-            let i = entries.iter().enumerate().position(|(i, (k, _))| !used[i] && *k == s.kind.id())?;
+            let i = entries.iter().enumerate().position(|(i, (k, _))| !used[i] && *k == s.site_id)?;
             used[i] = true;
             Some(entries[i].1)
         })

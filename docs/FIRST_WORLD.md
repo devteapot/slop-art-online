@@ -82,6 +82,8 @@ Unlike [`height.rs`](../living/rules/src/height.rs), this height **does not foll
 | village | 2–3 (1.2 per km²) | 50 m (100 m) | adults | flat, within 160 m of water, at least 450 m apart; out of wetland unless placement relaxes |
 | giants | 1 | 130 m (260 m) | 3× adult, about 5.25 m | highland, mean ground at least 90 m, up to 70 m of relief before levelling (85% levelled, so their lots fit) |
 | small folk | 1 | 28 m (56 m) | 0.35× adult, about 0.6 m | forest or hills, 20–220 m |
+| steampunk town (`steampunk_town`) | 0–1 (1 from about 1.6 km² of land) | 105 m | adults | 12–44 m of relief across the site (a hillside to terrace), at least 500 m from the town; levelled 40%; placed after the villages |
+| cyberpunk town (`cyberpunk_town`) | 0–1 (as above) | 100 m | adults | up to 24 m of relief, prefers the coast; levelled 65%; placed after the villages |
 | cave mouth | 2–4 (1.2 per km²) | 5 m | — | mountain flank (slope 0.45–1.6), moved to the foot of rock and facing downhill; caverns are separate spaces, not in this height map |
 
 Settlements avoid the spirit grove. When a site does not fit, placement relaxes its limits in steps, so a cramped 1 km island still gets a town.
@@ -261,6 +263,92 @@ Settlement planning adds 0.09–0.12 s at 2048 m and 0.26 s at 3072 m. Each 2048
 
 Every town has one chapel (its landmark), inn and guildhall.
 
+## Ornaments, terraces and styled towns (2026-11-09)
+
+User requests: street ornaments ("right now it's just a bunch of buildings"), elevation within towns ("stairs and things like that"), and steampunk and cyberpunk towns on the island. The planner does all three in the shared rules, so the authority and clients derive the same result from the seed ([island authority](ISLAND_AUTHORITY.md#ornaments-terraces-and-styled-towns-2026-11-09)).
+
+### Styled towns
+
+Two more site specs of kind `town` carry a building style (`SiteSpec::style`), a relief range and a coast preference. They are placed after the villages, so the earlier sites stay where they were. Each has its own `Style` in `SettleParams::styles`, with the same street, plaza, landmark and lot logic. `Style::models` maps lot kinds to the style's own `buildings.py` kinds.
+
+| | Steampunk (hill town) | Cyberpunk (harbour town) |
+|---|---|---|
+| Square | 52 × 36 m, paved; the **clock tower** in the middle (`Tower` → `clocktower`), a fountain beside it | 40 × 26 m, paved; the **megatower** on its edge (`Chapel` → `landmark`), an info pylon in it |
+| Round the square | the pub (`inn`), the exchange (`hall`) and the iron-and-glass market arcade (`Chapel` → `arcade`) | the food court (`Inn` → `market`) and a slender tower (`Hall` → `tower`) |
+| Homes | narrow, wide and corner brick houses (`house`) | narrow, wide and corner blocks (`block`) |
+| Outskirts | works (`Workshop` → `works`) and factories (`Barn` → `factory`) | garages and fabs (`Workshop`, `Barn` → `workshop`) |
+| Streets | lanes follow the contours (`contour` 0.9); street trees every 18 m; pipes along works | wider main streets (6 m), straighter lanes (`wander` 0.12); a **neon street** |
+| Terraces | yes (seed 7: 3 m steps) | where the site has the relief (seed 7: flat, so none) |
+
+The client finds their models through `living_rules::settle::env_of(style)` (`steampunk_city`, `cyberpunk_city`) and each model file's kind folder (`settle::asset_kind`). Site ids for seeds are `steampunk_town` and `cyberpunk_town` (`land::Site::id`).
+
+On seed 7 at 2048 m the steampunk town stands at (743, 841), above a river in the hills, with 63 lots, 32 homes, 6 stairs and 202 retaining walls. The cyberpunk town stands at (576, 1600) by the west coast, with 86 lots and 41 blocks.
+
+### Terraces
+
+A style terraces with `terrace_m` (3 m for every person-sized style). A site is terraced when its built-up area has at least `terrace_relief_m` of relief (6–7 m), so flat towns stay flat. On seed 7 only the steampunk town is terraced; the walled town and the villages are too flat.
+
+- **Ground** ([`settle/terrace.rs`](../living/rules/src/settle/terrace.rs)): the site's ground is smoothed over about 12 m. Level `i` is flat at `base + i × 3 m`, and the drop to the next level is 0.8 m wide wherever the hill is steeper than that allows. The zone fades back to the natural ground over 16 m past the built-up edge, and within 6.5–14 m of water, so banks stay natural. Terraces apply before roads and pads in `Land::height`, so the heights digest covers them.
+- **The square** is one of the terraces: its floor snaps to a level, and where the slope crosses it, its edge becomes a drop with retaining walls.
+- **Streets:** main streets cross the drops as ramps, because their profiles average over the terraced ground. Lanes steer by the smoothed hill rather than the flat terrace, so they run along the terraces, and they stop short of a drop.
+- **Stairs** are flights rising 3 m over 5 m (about 0.18 m risers), square to the drop:
+  - one where a lane stops short of a drop;
+  - others about `stair_m` (30–34 m) apart along each drop, wherever a street lies near the foot and another near the head.
+
+  The ground under a stair rises with it (a sloped pad), and its tiles are road. Lots keep clear of stairs and their landings.
+- **Retaining walls** stand along every drop and round a square cut into the slope, wherever the finished ground drops at least 1.35 m across the line. Each is a 4 m piece facing the lower ground, low (1.5 m) or high (3 m) by the drop.
+- **Walking agrees with the ground:** of two neighbouring tiles whose ground differs by more than 0.8 m, the upper one becomes `Wall`, or the lower one when the upper is a road, a stair, water or a building. The levels then join only by streets, ramps and stairs. Slivers sealed between drops, water and rock (under 150 tiles) are closed, like the land's small pockets.
+- **Houses** may back into the terrace above (`cut_m` 3.5 in the steampunk style), so a row of houses on the uphill side of a lane holds the next drop.
+
+### Ornaments
+
+[`settle/ornament.rs`](../living/rules/src/settle/ornament.rs) dresses each settlement after its lots. Each rule is a field of `Ornaments` in the style. Models come from `data/buildings.json`: 432 new prop models from `buildings.py`, mostly under 500 triangles, with the steampunk clock pillar and fountain about 1,300–1,500.
+
+| Kind | Where | Styles |
+|---|---|---|
+| fountain / market cross | the square's centrepiece, else along its axis: a market cross in the walled town, a fountain in the steampunk square, an info pylon in the cyberpunk one | fantasy, steampunk (fountain with gears, clock pillar), cyberpunk (lit basin, info pylon) |
+| bench | round the square's edge every 9–12 m, facing in, away from street entries; beside an inn's door | all |
+| tree | 1–2 on the square (in a ring or grate on paving, a shade tree on a green); behind houses in gardens; along steampunk main streets | all |
+| banner | both sides of every street entering the square, inside town gates | fantasy, steampunk, cyberpunk (holo strip) |
+| sign | a shop sign beside inn and workshop doors; a signpost where streets leave the square | fantasy, steampunk; cyberpunk uses its neon signs |
+| barrel, crate, cart | by inns (three spots), workshops and barns (two), behind market stalls; a rain barrel by some houses | all |
+| flower box, planter | beside house doors (at least 1.8 m from the door), at front corners | all |
+| fence, gate | round every garden's three open sides in 2–4 m sections, a gate in the back | all |
+| washing line | across some gardens on posts; across 1.6–6 m gaps between neighbouring houses, 3.3 m up | all |
+| kerb | both edges of paved main streets and round a paved square, in 4 m pieces | fantasy town, steampunk, cyberpunk |
+| neon sign, kiosk, food stall, cable | the cyberpunk main street with the most buildings: signs and stalls wherever the frontage leaves room, cables across it every 12 m between buildings | cyberpunk |
+| billboard | round the cyberpunk square | cyberpunk |
+| pipe | along the sides of steampunk works and factories | steampunk |
+| well | 2 more wells in the walled town, beside lanes where they leave a main street (lots, not props) | fantasy |
+| lamp | lanes now have lamps too: 42 m apart in the walled town, 36 m steampunk, 30 m cyberpunk (lots) | town styles |
+
+Placement rules, checked for every prop:
+- Off every carriageway (kerbs on its edge) and out of buildings. Signs and flower boxes may stand in a lot's margin against the wall, never in the model's footprint. A tree takes room at its trunk, and its crown overhangs.
+- Clear of doors (0.9 m) and of the 2 m way out of each door. Stairs keep their landings.
+- On even ground (not across a drop), in the plaza only when meant to be, clear of town walls.
+- Fountains, market crosses, carts, kiosks and food stalls block movement (`PropKind::blocks`). The rest are posts, low things or overhead.
+
+Seed 7 at 2048 m has 1,302 props: 446 fence sections, 230 kerbs, 202 retaining walls, 95 flower boxes, 61 gates, 53 barrels, 46 benches, 44 trees, 32 washing lines, 22 signs, 19 banners and fewer of the rest. The walled town alone has 617.
+
+### Tests
+
+`cargo test -p living-rules` (77 tests). New ones run on seed 7 at 2048 m and seed 5 at 1024 m:
+- `ornaments_keep_doors_and_streets_clear`: every prop names a model of its settlement's style and kind; it stands off carriageways and out of buildings (attached ones out of the model's footprint), clear of every door (0.5 m, scaled with the folk); blocking ones stand in a plaza or beside a building. The island has every common kind, and every settlement but the small folk's has a bench.
+- `stairs_connect_levels`: every stair's ground rises evenly by one step from foot to head, its tiles are walkable, and a walk from just beyond its foot to just beyond its head exists, tile by tile, with no step over 0.8 m.
+- `terraces_are_level`: away from roads, pads, stairs and drops, a terrace's ground is its level to 2 mm (1,510 points on the steampunk town); the plaza's floor is a terrace level.
+- `walkable_ground_has_no_cliffs`: on the hosted tiles inside terraced settlements, no two neighbouring walkable tiles differ by more than 0.8 m, except road against road (reported: up to 1.4 m on seed 7, where a trunk road runs within 1 m of a river and road shaping fades out at the water's edge; up to 2.0 m at a lane junction in a 1 km village).
+- `styled_towns_stand_on_the_island`: both towns exist with their site ids, landmarks (`clocktower`, `landmark`) and at least 20 homes, and every lot names a model of the town's own style. The steampunk town is terraced, its buildings stand on at least 3 levels, and it has at least 3 stairs and 10 retaining walls.
+- `host::tests::hosted_island_keeps_doors_reachable` now hosts the props as well: 327 doors, none stranded; 35,205 tiles blocked and 235 walkable tiles cut off (19 before this change).
+- Changed: lamps stand only where their ground is within 0.5 m of the road and even. Gardens and fields may cross a terrace's drop.
+
+`settle_sweep` (ignored, release) also runs the four new checks. It passes on seeds 5, 7, 9, 11 and 23 at 1, 2 and 3 km; all 15 worlds at 2 and 3 km place both styled towns. It found five defects, all fixed: a lamp on a drop wall, a town with no room for its landmark, stair landings on the next drop or dipped by a neighbouring pad, and a square snapped below a river's level.
+
+### Preview
+
+`town_preview` (above) now names each image by site id (`town-SEED-<n>-steampunk_town.ppm`), draws a core close-up of every town, and draws the props: stairs orange with treads, retaining walls dark brown, kerbs pale grey, cables and washing lines as white lines, the rest as small marks by kind. Its legend counts props per settlement and notes terraces.
+
+Measured on the dev-box while other builds ran (seed 7 at 2048 m, release; not an A/B against the earlier code): generation 1.55 s with settlements and 1.21 s without; `height()` 282 ns inside settlements and 135 ns over the map.
+
 ## What the authority would need
 
 *Superseded on 2026-11-09 by [island authority](ISLAND_AUTHORITY.md), which hosts this world: heights are derived from the seed with platform-independent math and checked by digests, building footprints block as `Wall` tiles, lots are rows, `Map::path` no longer allocates whole-map arrays, and a tile edit patches the cached map instead of rebuilding it. The analysis below is kept as written before that work.*
@@ -286,6 +374,17 @@ Existing patterns that would not hold at this size, measured from source and not
 - **Subscriptions:** clients should subscribe by area, not to every chunk. The camera spike already loads only nearby chunks; the lab observer was not checked.
 
 ## What still looks weak
+
+*Ornaments, terraces and styled towns (2026-11-09):*
+- **Fences** double up where two gardens touch, and fence sections are fixed lengths (2, 3 and 4 m), so a garden side ends in a gap of up to 1 m. Fences do not block movement.
+- **Steep road pairs:** road shaping fades out at the water's edge, so a road's edge tiles beside a river can step up to 1.4 m against the road's middle. Some lane junctions between terraces step up to 2 m. These are walkable road tiles; the drop walls do not cover them.
+- **The hill town** is small (32 homes) because its slope (up to about 30%) leaves narrow terraces. The far side of its river stays empty farmland on terraces. Lanes end at stairs more often than they join.
+- **Retaining walls** run through the terraced fields beyond the town too (202 pieces). That is consistent with the ground, but costly to draw.
+- **Cyberpunk neon street:** its plaza is small, and the dense blocks leave little frontage for stalls (one kiosk and 8 neon signs on seed 7). Cables need buildings on both sides within 3 m of the street's edge; only 4 qualify.
+- **Kerbs** are separate 4 m models, 230 on the island. They are cheap (under 130 triangles), but they are many small meshes until static props are merged.
+- **Body size:** giants' and small folk's props are the fantasy props scaled to them.
+
+*Earlier:*
 
 - **Causeways:** islets join the island by straight 3 m sand causeways, because every land tile must be reachable on foot.
 - **Passes:** the connectivity passes through rock are straight 3 m staircases, readable as cut lines on the map. They are paths, not designed passes.

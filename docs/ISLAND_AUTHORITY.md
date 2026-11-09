@@ -2,7 +2,7 @@
 
 Started 2026-11-09. This note records how the living authority hosts the generic island of [first world](FIRST_WORLD.md) (`living_rules::land`, seed 7, 2048 m) as a world. It covers the design decisions, the documentation they rest on, what was built and what was measured. The lab worlds (`realm.rs`, 512 m) keep their seeds and behaviour.
 
-**Status.** Implemented on scratch databases (`verify-*`) on the dev-box with SpacetimeDB 2.14.1. No lab or reference world was touched. The game client does not connect to an island world yet; [what the client needs](#what-the-client-needs-next) lists its part.
+**Status.** Implemented on scratch databases (`verify-*`) on the dev-box with SpacetimeDB 2.14.1. No lab or reference world was touched. Since 2026-11-09 the game client connects to an island world and draws it ([connected client](#connected-client-2026-11-09)). The authority was not changed for that.
 
 ## SpacetimeDB documentation consulted (2026-11-09)
 
@@ -56,6 +56,7 @@ At 2048 m, generation runs in the WASM module in 1.89 s; natively on the Mac it 
 | Lots | `lot`: kind, centre, size, yaw, floor, model file, door point, door structure, chunk (btree) | 375 | 69 kB | init | clients by chunk (`lot.chunk`) |
 | Buildings' function (shelter, inn, hall, workshop, storage) | `structure` at the lot's door (existing table; owner set as households move in) | 238 of 361 | 38 kB (all structures) | init; ownership | rules (shelter warmth, sleep, homes), clients by chunk |
 | Town gates | `gate` + `structure` per tile across each wall opening | 109 | — | init; open/shut | rules (shut gates block), clients |
+| Street ornaments, stairs and retaining walls (`Land::props`) | **derived**, like heights; blocking ones as `Wall` tiles; see [ornaments and terraces](#ornaments-terraces-and-styled-towns-2026-11-09) | 0 (1,302 props derived) | 0 | — | clients (presentation) |
 | Resources | `resource_node` (unchanged per-area density) | 68,175 | 7.66 MB + 0.82 MB | init; gathering | rules by chunk, clients by chunk |
 
 **Heights are derived, not stored.** The rules do not use height yet (movement is flat), so the authority does not keep the `Land` after init: it drops its 9 MB, and only the hosted tiles and the planned rows survive. FIRST_WORLD.md flagged the risk of regenerating on clients: `f32` transcendental functions can differ between the native and WASM math libraries.
@@ -138,6 +139,32 @@ Backgrounds name the folk (`folk`, `body_scale`, `settlement`). **Bodies are not
 - World creation scans every tile once to place resources. It now shuffles 4-byte tile indices instead of 8-byte pairs (16 MiB instead of 32 MiB at 2048 m), with the same RNG draws, so a lab world's resources come out the same as before for the same RNG stream.
 
 No new whole-World scan was added to a routine action.
+
+### Ornaments, terraces and styled towns (2026-11-09)
+
+The planner now dresses settlements with props, terraces sloping sites, and lays out a steampunk and a cyberpunk town of their own ([first world](FIRST_WORLD.md#ornaments-terraces-and-styled-towns-2026-11-09)). What the authority keeps of them:
+
+**Props are derived, not rows.** Seed 7 at 2048 m has 1,302 props: 507 fence and gate sections, 230 kerbs, 202 retaining walls, 95 flower boxes, 53 barrels, 46 benches, 44 trees and the rest. They are fixed at world creation, and no rule reads them except to block movement.
+- **Documentation consulted (2026-11-09).** The live pages show version 2.0.0; the pin is 2.14.1, as above. No storage changes, so no versioned source was needed.
+  - [Tables](https://spacetimedb.com/docs/tables/): "organize data by access pattern, not by the entity it describes", and "SpacetimeDB keeps hot data in memory for extremely low latency and high throughput access, keeps colder data on disk, and automatically persists all data".
+  - [Table performance](https://spacetimedb.com/docs/tables/performance/): "Be mindful of unbounded table growth"; splitting tables "Allows more targeted subscriptions".
+  - [Subscriptions](https://spacetimedb.com/docs/clients/subscriptions/): "SpacetimeDB sends all matching rows immediately", and keep subscriptions small.
+  - None of these pages gives a row-count limit or a per-row cost, so the decision rests on the access pattern, not on a measured cost of the rows.
+- **Why derived:**
+  - Props are static presentation. Clients already regenerate the land from the `land` row, so a `prop` table would only resend what they compute, through one more chunk subscription per client.
+  - Lots stay rows because gameplay attaches to them: doors, structures and, later, owners and damage.
+  - A prop that gains gameplay (a bench to sit on, a cart that moves, a market stall's stock) moves to a table keyed by chunk, like `lot`.
+- **Check:** the layout digest now covers every prop (kind, centre, size, front, floor, height, model file), after the lots. A client compares it as before.
+- **Blocking:** fountains, market crosses, carts, kiosks and food stalls block every walkable tile under their footprint in [`host::hosted_map`](../living/rules/src/host.rs) (`host::prop_tiles`). The planner keeps them off carriageways, doors and the way out of doors. The tiles digest covers them.
+
+**Terraces are ground and tiles.**
+- Their levels are part of `Land::height`, so the heights digest covers them.
+- A drop that no one can step up (more than 0.8 m between neighbouring tiles) is `Wall` in the land's own tiles. Stair tiles are `Road`. Sealed slivers of under 150 tiles are closed, like the land's small pockets.
+- Movement goes by tiles, so the authority needs no new code: terraces connect only through streets, ramps and stairs.
+
+**Styled towns are settlements of kind `town`** whose `settlement.style` names their models (`steampunk`, `cyberpunk`).
+- Their site has its own id (`living_rules::land::Site::id`: `steampunk_town`, `cyberpunk_town`). `island::match_seed` matches seed entries by that id, so `"site": "steampunk_town"` in [`island.json`](../living/seeds/island.json) peoples Kettlebridge and `"cyberpunk_town"` peoples Lanternquay.
+- `SiteKind` gains no variant: client code matches it exhaustively. Newcomers still arrive at the first (walled) town.
 
 ## Measurements
 
@@ -240,28 +267,30 @@ Free tiers only, on `verify-*` scratch databases, through the shared harness (`v
 | Project check | `just living-check` on both bases | exit 0 | dev-box `~/island-logs/check-*.log`, `p2-check.log` |
 | Bindings | `just living_compose=~/island-shim/compose living-generate` | three new tables; regenerating again at `977a14c` changed nothing | `living/bindings/src/generated/` |
 
+**Ornaments, terraces and styled towns (2026-11-09).** `generation.py` ran on `c5a2c00` plus this change, as `generation-orn-20261109-035123` on the dev-box:
+- **Result:** 19 of 20 results pass: every seed, authored compilation, guards, repeatability, and cleanup with SQL 404 for every database. The island passes 65 of 66 checks: 8 settlement rows, each seeded settlement on its site, including `steampunk_town` and `cyberpunk_town`; 546 lots; door structures; wall tiles under every blocking lot; folk backgrounds.
+- **The one failure is the known flake:** "Reedmoor memberships". Hanmo, a seeded grandparent of that unchanged village, died of old age right after creation, as Saltmere's did in the second pass above.
+- **World:** 443 structures, 109 gate tiles, 287 characters and 67,694 resource nodes.
+- **Digests:** the WASM authority's `land` row reads tiles `c19cc98e8f1471f0`, heights `16412fd044a2b0b0` and layout `d45f735150add4ba`. Native x86_64 (`host::tests::print_digests`, rustc 1.97.1) prints the same.
+- **Not measured:** `init` time and memory, and aarch64.
+- **Defects the driver found, since fixed:**
+  - the clock tower in the paved square did not block: `hosted_map` now blocks road tiles under any lot standing in its plaza;
+  - its "stands on a site" check compared the seed's `site` with the row's `kind`: it now accepts `<style>_<kind>`.
+- **Harness:** port 3300 was held by another agent's container (`slop-live-stdb`, with that worktree mounted at `/wasm`), so this run used a container of its own: `slop-orn-stdb` (2.14.1, port 3310, the run's own worktree at `/wasm`), behind a `docker` name shim. The harness's hard-coded 3300 was patched to 3310 in that worktree only, not committed. The container, its volume and the worktree (with the run's evidence under `.local/`) were removed afterwards; the results, island checks and cleanup records went with the task's report.
+
 **Dev-box harness shim.** On the dev-box the name `sao-living_spacetimedb_1` belongs to another checkout's stopped 2.10.1 container, which had to stay untouched. A `docker` wrapper on `PATH` (`~/island-shim/docker`) mapped that name to the scratch container `slop-game-stdb`: image `v2.14.1`, its own volume, `--security-opt label=disable` for SELinux, and the worktree's `/wasm` mount. A `compose` wrapper ran the bindings recipe's one-off `compose run` as a `docker run` of the same image. The harness, the scripts and every reducer call were otherwise unchanged.
 
 ## What the client needs next
 
-The game client (`living/game`) is not changed here. To connect to an island world it needs these changes:
+*Ornaments (2026-11-09):* the look-dev client draws `Land::props` from the regenerated land, in connected mode too, since they are not rows. A settlement's assets come from its style (`living_rules::settle::env_of`), and a lot's or prop's kind folder from its model file (`settle::asset_kind`). That is how the steampunk and cyberpunk towns find `steampunk_city` and `cyberpunk_city`.
+
+The list as written before the client was built. Items 1 to 3 and 5 are done ([connected client](#connected-client-2026-11-09)). Item 4 uses the settlement round each character's home. Item 6 does not apply, because the client predicts no movement. To connect to an island world, the game client needed these changes:
 1. **Read the `land` row** and, when present, generate `living_rules::land::generate(seed, size, params)` instead of its hard-coded seed 7. Compute `living_rules::host::hosted_map` and `digests`, then compare all three digests with the row. On a mismatch, log it and keep walking by `terrain_chunk`.
 2. **Stop subscribing to `terrain_chunk` whole.** `net.rs` subscribes `SELECT * FROM terrain_chunk` (5.4 MB and 16,384 rows on the island). Use the chunk window, either as one range per chunk row (`SELECT * FROM terrain_chunk WHERE id >= a AND id <= b`) or as `id = c` per chunk. A window is only needed for edits; initial tiles can come from the regenerated land once the tiles digest matches.
 3. **Subscribe `lot` by chunk** alongside `body`, `resource_node` and `structure` (`SELECT * FROM lot WHERE chunk = c`). Draw `lot.model` at `(x, floor_m, y)` with `yaw`, instead of planning lots itself. `settlement` (6 rows) and `land` (1 row) can be subscribed whole.
 4. **Draw folk at size:** a character's `background` names `folk` and `body_scale`; `settlement.scale` gives the same per settlement.
 5. **Spawn and camera:** `join` places a newcomer at `land.arrive_x/arrive_y`, outside the town's first gate.
 6. **Collision prediction:** `living_rules::host::footprint_tiles` gives the same blocked tiles the authority uses, if the client predicts movement.
-
-## Open risks
-
-- **Long paths:** `Map::path` keeps its 6,000-expansion budget. Across a 2 km island, a route around a lake or over a ford 400 m away can exhaust it, so a click-to-move to a far point fails ("no path there"). Hierarchical routing (road graph, then tiles) is needed before long travel.
-- **Module caches:** the map cache and the other caches rely on module instances being reused between transactions, which the docs call undefined behaviour. A fresh instance rebuilds the map from all 16,384 chunk rows (8.6 ms measured). The patch-and-revalidate scheme is correct for rollbacks in a single instance, but not if two instances ever run reducers concurrently.
-- **Generation in `init` grows with size:** 1.9 s at 2048 m. Island edits after creation are ordinary tile writes. A persistent game world updates the module in place and never regenerates (`--keep-data`), so a changed generator changes only new worlds. Its digests then differ from an old world's row, which is the intended signal.
-- **Gates are per tile:** shutting a gate means shutting every tile across it (109 gate tiles for the town's openings). A mind or player shutting "the gate" shuts one tile.
-- **Resources:** 68k nodes at the lab's per-area density (7.7 MB). Per-chunk reads are unchanged, but world creation's per-kind scans in `settlement_resources` would be slow if a land seed listed promised `resources`.
-- **Privacy:** every table read here is public. Spatial subscriptions are not permission boundaries ([game brief, core work 1](GAME_BRIEF.md#core-work-the-game-needs-engine-independent)).
-- **Body size** is not a rule. The giants' houses and streets are built for 3× bodies that the rules still treat as adults.
-- **The libm switch** changed some generated values, which can shift a few tiles relative to the earlier native output. All `land::` and `settle::` tests still pass. FIRST_WORLD.md's measured tables come from before the switch.
 
 ## Connected client (2026-11-09)
 
@@ -314,3 +343,14 @@ Connected play costs about 1.5–3.5 ms more than look-dev with a similar crowd.
 - **Combat state per character for others:** health, what they are doing, attack and skill events with timings. Today only my own `vitals` are readable, and the HUD's skill bar shows "Not on the server yet".
 - **Gait speeds that match the clips.** The rules' walk is 2.6–2.7 m/s and their run 4.1. The walk clip was authored at 1.4 m/s, so walking plays it at about 1.9×. Either clips are authored for the rules' speeds, or the rules get a slower ambling gait.
 - **Masonry for newcomers**, if a newcomer should be able to wall anything: `build wall` is refused without the know-how, as designed.
+
+## Open risks
+
+- **Long paths:** `Map::path` keeps its 6,000-expansion budget. Across a 2 km island, a route around a lake or over a ford 400 m away can exhaust it, so a click-to-move to a far point fails ("no path there"). Hierarchical routing (road graph, then tiles) is needed before long travel.
+- **Module caches:** the map cache and the other caches rely on module instances being reused between transactions, which the docs call undefined behaviour. A fresh instance rebuilds the map from all 16,384 chunk rows (8.6 ms measured). The patch-and-revalidate scheme is correct for rollbacks in a single instance, but not if two instances ever run reducers concurrently.
+- **Generation in `init` grows with size:** 1.9 s at 2048 m. Island edits after creation are ordinary tile writes. A persistent game world updates the module in place and never regenerates (`--keep-data`), so a changed generator changes only new worlds. Its digests then differ from an old world's row, which is the intended signal.
+- **Gates are per tile:** shutting a gate means shutting every tile across it (109 gate tiles for the town's openings). A mind or player shutting "the gate" shuts one tile.
+- **Resources:** 68k nodes at the lab's per-area density (7.7 MB). Per-chunk reads are unchanged, but world creation's per-kind scans in `settlement_resources` would be slow if a land seed listed promised `resources`.
+- **Privacy:** every table read here is public. Spatial subscriptions are not permission boundaries ([game brief, core work 1](GAME_BRIEF.md#core-work-the-game-needs-engine-independent)).
+- **Body size** is not a rule. The giants' houses and streets are built for 3× bodies that the rules still treat as adults.
+- **The libm switch** changed some generated values, which can shift a few tiles relative to the earlier native output. All `land::` and `settle::` tests still pass. FIRST_WORLD.md's measured tables come from before the switch.

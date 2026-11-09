@@ -1,11 +1,12 @@
 //! Preview of the settlement planner (`living_rules::settle`): the island's road network, and a
 //! close-up of every settlement with its roads, plaza, wall and gates, lots coloured by kind
-//! with a mark on each front, gardens, fields and contours; plus a legend with counts, timings
-//! and checks.
+//! with a mark on each front, gardens, fields, contours and props (stairs orange, retaining
+//! walls dark brown, kerbs pale grey, the rest small marks by kind); plus a legend with counts,
+//! timings and checks.
 //!
 //! `cargo run --release -p living-rules --example town_preview --manifest-path living/Cargo.toml -- SEED SIZE_M OUT_DIR`
 //!
-//! Writes `roads-SEED.ppm`, `town-SEED-<n>-<kind>.ppm` (and a core close-up of the town) and
+//! Writes `roads-SEED.ppm`, `town-SEED-<n>-<site>.ppm` (and a core close-up of each town) and
 //! `towns-SEED.txt`.
 
 #[path = "common/img.rs"]
@@ -14,7 +15,7 @@ mod img;
 use img::Img;
 use living_rules::land::{self, Land, SiteKind};
 use living_rules::map::Terrain;
-use living_rules::settle::{LotKind, RoadClass, Settlement};
+use living_rules::settle::{LotKind, PropKind, RoadClass, Settlement};
 use std::fmt::Write as _;
 
 fn main() {
@@ -65,9 +66,10 @@ fn main() {
     for (i, s) in land.settlements.iter().enumerate() {
         let half = s.radius_m + land_style_outskirts(s) + 12.0 * s.scale.max(0.5);
         let px = (1300.0 / (2.0 * half)).clamp(1.0, 16.0);
-        close_up(&land, s, s.centre, half, px, &format!("{dir}/town-{seed}-{i}-{}.ppm", s.kind.id()));
+        let id = land.sites[s.site as usize].id();
+        close_up(&land, s, s.centre, half, px, &format!("{dir}/town-{seed}-{i}-{id}.ppm"));
         if s.kind == SiteKind::Town {
-            close_up(&land, s, s.centre, 75.0, 8.0, &format!("{dir}/town-{seed}-{i}-core.ppm"));
+            close_up(&land, s, s.centre, 75.0, 8.0, &format!("{dir}/town-{seed}-{i}-{id}-core.ppm"));
         }
     }
     let legend = legend(&land, gen_s, bare_s, town_ns, map_ns);
@@ -76,11 +78,22 @@ fn main() {
 }
 
 fn land_style_outskirts(s: &Settlement) -> f32 {
-    match s.kind {
-        SiteKind::Town => 110.0,
-        SiteKind::Giants => 90.0,
-        SiteKind::SmallFolk => 22.0,
-        _ => 70.0,
+    land::LandParams::default().settlements.style_for(s.kind, &s.style).map_or(70.0, |st| st.outskirts_m)
+}
+
+fn prop_colour(k: PropKind) -> [u8; 3] {
+    match k {
+        PropKind::Stairs => [255, 140, 20],
+        PropKind::RetainingWall => [74, 44, 26],
+        PropKind::Kerb => [205, 205, 210],
+        PropKind::Fence | PropKind::Gate => [110, 72, 40],
+        PropKind::Tree => [30, 110, 40],
+        PropKind::Bench => [150, 90, 200],
+        PropKind::Fountain | PropKind::MarketCross => [40, 220, 255],
+        PropKind::Banner | PropKind::Sign | PropKind::NeonSign => [255, 40, 120],
+        PropKind::Cable | PropKind::WashingLine => [250, 250, 250],
+        PropKind::FlowerBox | PropKind::Planter => [255, 120, 200],
+        _ => [255, 220, 0],
     }
 }
 
@@ -283,7 +296,7 @@ fn island(land: &Land, path: &str) {
     for (i, s) in land.sites.iter().enumerate() {
         let name = match s.kind {
             SiteKind::Cave => "CAVE".to_string(),
-            k => format!("{} {i}", k.id().replace('_', " ").to_uppercase()),
+            _ => format!("{} {i}", s.id().replace('_', " ").to_uppercase()),
         };
         let p = v.to_px((s.x, s.y));
         img.text(p.0 as i32 + 8, p.1 as i32 - 20, &name, 2, [255, 255, 255]);
@@ -354,6 +367,36 @@ fn close_up(land: &Land, s: &Settlement, c: (f32, f32), half: f32, px: f32, path
             img.text(p.0 as i32 - 20, p.1 as i32 - 4, l.kind.id(), 1, [255, 255, 255]);
         }
     }
+    // Props: ground ones under the overhead ones.
+    let idx = land.settlements.iter().position(|x| std::ptr::eq(x, s)).unwrap() as u16;
+    for pass in 0..2 {
+        for pr in land.props.iter().filter(|p| p.settlement == idx) {
+            let overhead = matches!(pr.kind, PropKind::Cable | PropKind::WashingLine);
+            if overhead != (pass == 1) {
+                continue;
+            }
+            let cs = pr.corners();
+            let col = prop_colour(pr.kind);
+            if overhead {
+                let a = ((cs[0].0 + cs[1].0) * 0.5, (cs[0].1 + cs[1].1) * 0.5);
+                let b = ((cs[2].0 + cs[3].0) * 0.5, (cs[2].1 + cs[3].1) * 0.5);
+                let (a, b) = if pr.kind == PropKind::Cable { (a, b) } else { (((cs[0].0 + cs[3].0) * 0.5, (cs[0].1 + cs[3].1) * 0.5), ((cs[1].0 + cs[2].0) * 0.5, (cs[1].1 + cs[2].1) * 0.5)) };
+                thick_line(&mut img, &v, a, b, 1.0, col);
+                continue;
+            }
+            fill_poly(&mut img, &v, &cs, col, 1.0);
+            if pr.kind == PropKind::Stairs {
+                // Treads across the flight, and a dark bar at its foot.
+                for t in 1..6 {
+                    let f = t as f32 / 6.0;
+                    let a = (cs[0].0 + (cs[3].0 - cs[0].0) * f, cs[0].1 + (cs[3].1 - cs[0].1) * f);
+                    let b = (cs[1].0 + (cs[2].0 - cs[1].0) * f, cs[1].1 + (cs[2].1 - cs[1].1) * f);
+                    thick_line(&mut img, &v, a, b, 1.0, [120, 60, 0]);
+                }
+                thick_line(&mut img, &v, cs[0], cs[1], 2.0, [60, 20, 0]);
+            }
+        }
+    }
     let sb = if half > 200.0 { 100.0 } else if half > 50.0 { 50.0 } else { 10.0 };
     let (bx, by) = (20, img.h as i32 - 40);
     for x in 0..(sb * px) as i32 {
@@ -362,7 +405,9 @@ fn close_up(land: &Land, s: &Settlement, c: (f32, f32), half: f32, px: f32, path
         }
     }
     img.text(bx, by - 20, &format!("{sb:.0} M"), 2, [255, 255, 255]);
-    let title = format!("SEED {} {} - CONTOURS {} M - {} LOTS", land.seed, s.kind.id().replace('_', " ").to_uppercase(), contour, s.lots.1 - s.lots.0);
+    let props = land.props.iter().filter(|p| p.settlement == idx).count();
+    let terr = if s.terrace_m > 0.0 { format!(" - TERRACES {} M", s.terrace_m) } else { String::new() };
+    let title = format!("SEED {} {} - CONTOURS {} M - {} LOTS - {} PROPS{}", land.seed, land.sites[s.site as usize].id().replace('_', " ").to_uppercase(), contour, s.lots.1 - s.lots.0, props, terr);
     img.text(20, 20, &title, 2, [255, 255, 255]);
     img.write(path);
 }
@@ -437,10 +482,15 @@ fn legend(land: &Land, gen_s: f32, bare_s: f32, town_ns: f64, map_ns: f64) -> St
                 worst = worst.max((land.height(p.0, p.1) - l.floor_m).abs());
             }
         }
+        let mut pc: std::collections::BTreeMap<&str, u32> = Default::default();
+        for pr in land.props.iter().filter(|p| p.settlement == i as u16) {
+            *pc.entry(pr.kind.id()).or_insert(0) += 1;
+        }
+        let pc: Vec<String> = pc.iter().map(|(k, n)| format!("{k} {n}")).collect();
         let _ = writeln!(
             o,
             "settlement {i} {} at ({:.0}, {:.0}) r {:.0} m, plaza {:.0} m floor, {} roads, wall {}, gates {}: {} | pads off level by at most {:.4} m\n  {named} lots name a model; homes: {} footprints (0.5 m), {corners} corner buildings; {}",
-            s.kind.id(),
+            land.sites[s.site as usize].id(),
             s.centre.0,
             s.centre.1,
             s.radius_m,
@@ -453,6 +503,7 @@ fn legend(land: &Land, gen_s: f32, bare_s: f32, town_ns: f64, map_ns: f64) -> St
             feet.len(),
             forms.join(", ")
         );
+        let _ = writeln!(o, "  props: {}{}", pc.join(", "), if s.terrace_m > 0.0 { format!("; terraced, {} m steps", s.terrace_m) } else { String::new() });
     }
     o
 }

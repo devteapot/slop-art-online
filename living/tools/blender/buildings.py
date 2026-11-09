@@ -25,6 +25,13 @@ Styles and kinds (KINDS and FORM_KINDS):
   well;
 - small: burrows, big mounds, mushroom and stump houses, a mushroom hall, tower, well for 0.6 m
   small folk.
+- street props (PROPS, PROP_STYLES), placed by the settlement planner's ornaments
+  (`living/rules/src/settle/ornament.rs`): barrel, crate, cart, bench, fountain, market_cross
+  (a clock pillar in steampunk, an info pylon in cyberpunk), fence (2, 3 and 4 m sections),
+  gate, planter, flower_box, sign (shop sign, signpost), banner, washing_line (between posts, or
+  spans of 3, 4.5 and 6 m to string between houses), tree (street, garden), kerb (4 m), stairs
+  (a flight rising 3 m over 5 m between terraces) and retaining_wall (4 m holding 1.5 or 3 m);
+  fantasy, steampunk and cyberpunk looks, and the fantasy look scaled for giants and small folk.
 
 Conventions (as nature.py): metres, origin at the floor centred on the footprint, +Z up in
 Blender (+Y in glTF), fronts face -Y in Blender (+Z in glTF, the asset view's "front"). Colour is
@@ -107,7 +114,11 @@ HEIGHTS = {
 
 # Foundation depth below the floor, in a person's metres (scaled with the inhabitants).
 FOUNDATION = {"lamp": 0.6, "market_stall": 0.5, "crate": 0.4, "pipe": 0.5, "neon_sign": 0.5, "billboard": 0.8, "kiosk": 0.4,
-              "food_stall": 0.4, "walkway": 0.6, "cable": 0.0}
+              "food_stall": 0.4, "walkway": 0.6, "cable": 0.0,
+              # Street props (settle/ornament.rs): shallow, except what holds ground.
+              "barrel": 0.15, "cart": 0.0, "bench": 0.3, "fountain": 0.6, "market_cross": 0.6, "fence": 0.0, "gate": 0.0,
+              "planter": 0.2, "flower_box": 0.1, "sign": 0.4, "banner": 0.4, "washing_line": 0.3, "tree": 0.3, "kerb": 0.0,
+              "stairs": 1.0, "retaining_wall": 1.2}
 FOUNDATION_DEFAULT = 1.8
 
 PALETTES = {
@@ -4317,6 +4328,590 @@ def well(k, H):
     gable_roof(k, (0, 0, H), X, r + 0.15, 0.75, top, 0.3, 0.2, roofc, course=0.35, th=0.07, sag=0.02, barge=timber)
 
 
+# ---------------------------------------------------------------------------------------------
+# Street props: ornaments and terracing the settlement planner places (settle/ornament.rs).
+# One generator per kind, in the fantasy look (also for giants and small folk, scaled to them),
+# with steampunk and cyberpunk equivalents. Low triangle counts: they are many and small.
+
+WATER = (0.24, 0.46, 0.62)
+LEAF = [(0.30, 0.52, 0.22), (0.38, 0.58, 0.24), (0.26, 0.46, 0.24), (0.44, 0.56, 0.20)]
+BLOOM = [(0.92, 0.30, 0.36), (0.96, 0.78, 0.22), (0.86, 0.50, 0.86), (0.98, 0.96, 0.92), (0.40, 0.56, 0.92)]
+
+
+def look(k):
+    """The prop's look: steampunk, cyberpunk or fantasy (giants and small folk too)."""
+    return {"steampunk": "steam", "cyberpunk": "cyber"}.get(k.style, "fantasy")
+
+
+def wood(k):
+    return k.pal.get("timber", (0.36, 0.24, 0.16))
+
+
+def flowers(k, x0, x1, y0, y1, z, n, r=0.09):
+    """A bed of leaves with a few blooms on top, between x0..x1 and y0..y1 at height z."""
+    rng = k.rng
+    for i in range(max(1, int(n * 0.6))):
+        c = (rng.uniform(x0, x1), rng.uniform(y0, y1), z)
+        k.add(sphere(c, r * rng.uniform(1.4, 2.0), 1, squash=0.7), k.choice(LEAF), soft=Vector(c))
+    for i in range(n):
+        c = (rng.uniform(x0, x1), rng.uniform(y0, y1), z + r * rng.uniform(0.6, 1.4))
+        k.add(sphere(c, r, 0), k.choice(BLOOM), ao=False)
+
+
+def crown(k, c, r, color, lobes=4, squash=0.85):
+    """A tree crown of a few soft lobes round c."""
+    rng = k.rng
+    k.add(sphere(c, r, 2, squash=squash), color, soft=Vector(c))
+    for i in range(lobes):
+        a = i / lobes * math.tau + rng.uniform(-0.3, 0.3)
+        lc = (c[0] + math.cos(a) * r * 0.6, c[1] + math.sin(a) * r * 0.6, c[2] + rng.uniform(-0.3, 0.25) * r)
+        k.add(sphere(lc, r * rng.uniform(0.55, 0.7), 1, squash=squash), mul(color, rng.uniform(0.9, 1.08)), soft=Vector(c))
+
+
+def prop_barrel(k):
+    """A barrel (single) or a group of two or three, one maybe on its side."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    n = 1 if k.form == "single" else rng.choice([2, 3])
+    spots = [(0.0, 0.0), (0.68, 0.08), (0.32, 0.6)][:n]
+    for i, (x, y) in enumerate(spots):
+        x -= 0.3 * (n > 1)
+        if lk == "fantasy":
+            barrel(k, (x, y, 0), 0.32, 0.86, mul(wood(k), rng.uniform(1.0, 1.25)))
+            k.add(cyl((x, y, 0.85), (x, y, 0.87), 0.28, 0.28, 10), mul(wood(k), 1.5), ao=False)
+        elif lk == "steam":
+            c = k.choice(pal["paint"]) if rng.random() < 0.6 else pal["steel"]
+            k.add(cyl((x, y, 0), (x, y, 0.9), 0.3, 0.3, 10), c)
+            for z in (0.08, 0.45, 0.82):
+                k.add(cyl((x, y, z), (x, y, z + 0.05), 0.315, 0.315, 10), pal["brass"], ao=False)
+            k.add(cyl((x + 0.12, y, 0.9), (x + 0.12, y, 0.95), 0.05, 0.05, 6), pal["brass"], ao=False)
+        else:
+            c = k.choice(pal["trim"])
+            k.add(cyl((x, y, 0), (x, y, 0.88), 0.29, 0.29, 10), stripes(c, 0.29, 0.72), ao=False)
+            k.add(cyl((x, y, 0.88), (x, y, 0.9), 0.26, 0.26, 10), mul(c, 0.6), ao=False)
+
+
+def prop_crate(k):
+    """A stack of plank crates and a sack or two."""
+    rng = k.rng
+    w = wood(k)
+    c = lerp(w, (0.78, 0.62, 0.42), 0.55)
+    for i, (x, z, s) in enumerate([(0.0, 0.0, 0.62), (0.68, 0.0, 0.55), (0.3, 0.62, 0.5)][:rng.choice([2, 3])]):
+        cc = jitter(c, rng, 0.08)
+        k.add(box((x - s / 2, -s / 2, z), (x + s / 2, s / 2, z + s), 0.02), lambda co, n, cc=cc, z=z, s=s: mul(cc, 0.82 if int((co.z - z) / (s / 3)) % 2 else 1.0))
+    if rng.random() < 0.6:
+        sc = (-0.6, 0.05, 0.28)
+        k.add(sphere(sc, 0.3, 1, squash=1.1), (0.80, 0.72, 0.55), soft=Vector(sc))
+
+
+def wheel(k, c, r, axis, color, rim, spokes=True):
+    """A cart wheel: a rim, a hub and (spoked) a few spokes, turning about `axis` (X or Y)."""
+    c = Vector(c)
+    a = axis * 0.06
+    k.add(cyl(c - a, c + a, r, r, 12), rim, ao=False)
+    k.add(cyl(c - a * 1.3, c + a * 1.3, r * 0.82, r * 0.82, 12), mul(color, 0.7) if spokes else color, ao=False)
+    k.add(cyl(c - a * 2.2, c + a * 2.2, r * 0.2, r * 0.2, 8), rim, ao=False)
+
+
+def prop_cart(k):
+    """A handcart or a wagon: wooden (fantasy), a coal truck or steam barrow (steampunk), a
+    delivery trike or hover cart (cyberpunk). Shafts or handles to the front (-Y)."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    big = k.form == "wagon"
+    L, W = (3.4, 1.7) if big else (2.0, 1.05)
+    if lk == "cyber":
+        body = k.choice(pal["plastic"])
+        z0 = 0.55 if big else 0.4
+        k.add(box((-W / 2, -L / 2 + 0.4, z0), (W / 2, L / 2, z0 + (1.1 if big else 0.8)), 0.04), body)
+        k.add(box((-W / 2 - 0.01, -L / 2 + 0.4, z0 + 0.25), (W / 2 + 0.01, L / 2 + 0.01, z0 + 0.32)), None, glow="cyan")
+        if big:
+            for x in (-W / 2 + 0.2, W / 2 - 0.2):
+                for y in (-L / 2 + 0.7, L / 2 - 0.3):
+                    k.add(cyl((x, y, 0.0), (x, y, z0), 0.12, 0.08, 6), pal["metal"])
+            k.add(box((-W / 2 + 0.1, -L / 2 + 0.6, z0 - 0.06), (W / 2 - 0.1, L / 2 - 0.2, z0 - 0.02)), None, glow="pink")
+        else:
+            for x in (-W / 2 - 0.1, W / 2 + 0.1):
+                wheel(k, (x, L / 2 - 0.35, 0.28), 0.28, X, pal["dark"], pal["metal"], spokes=False)
+            wheel(k, (0, -L / 2 + 0.25, 0.28), 0.28, X, pal["dark"], pal["metal"], spokes=False)
+            k.add(box((-0.06, -L / 2 + 0.2, 0.3), (0.06, -L / 2 + 0.45, 1.1)), pal["metal"])
+            k.add(box((-0.35, -L / 2 + 0.25, 1.05), (0.35, -L / 2 + 0.33, 1.12)), pal["dark"])
+        return
+    steam = lk == "steam"
+    wd = mul(pal["iron"], 1.6) if steam else mul(wood(k), 1.25)
+    rim = pal["brass"] if steam else pal["iron"]
+    r = 0.55 if big else 0.45
+    zb = r + 0.05
+    k.add(box((-W / 2, -L / 2 + 0.3, zb), (W / 2, L / 2, zb + 0.08)), wd)
+    for e in (-1, 1):
+        k.add(box((e * W / 2 - 0.05, -L / 2 + 0.3, zb), (e * W / 2 + 0.05, L / 2, zb + 0.42)), wd)
+    k.add(box((-W / 2, L / 2 - 0.08, zb), (W / 2, L / 2, zb + 0.42)), wd)
+    k.add(box((-W / 2, -L / 2 + 0.3, zb), (W / 2, -L / 2 + 0.38, zb + 0.42)), wd)
+    ys = [L * 0.2, -L * 0.25] if big else [L * 0.1]
+    for y in ys:
+        for e in (-1, 1):
+            wheel(k, (e * (W / 2 + 0.1), y, r), r, X, wd, rim)
+    if big and steam:
+        # A little boiler and stack at the front of a steam barrow.
+        k.add(cyl((0, -L / 2 + 0.75, zb + 0.08), (0, -L / 2 + 0.75, zb + 1.0), 0.38, 0.38, 10), k.choice(pal["copper"]))
+        k.add(cyl((0, -L / 2 + 0.75, zb + 1.0), (0, -L / 2 + 0.75, zb + 1.7), 0.1, 0.14, 8), pal["iron"])
+        k.add(cyl((0, -L / 2 + 0.75, zb + 1.7), (0, -L / 2 + 0.75, zb + 1.78), 0.2, 0.2, 8), pal["brass"], ao=False)
+    else:
+        # Shafts (a wagon) or handles (a handcart) to the front.
+        for e in (-1, 1):
+            x = e * (W / 2 - 0.1)
+            k.add(box((x - 0.04, -L / 2, zb + 0.05), (x + 0.04, -L / 2 + 0.6, zb + 0.13)), wd)
+    # A load: sacks, a barrel, coal.
+    if steam:
+        k.add(box((-W / 2 + 0.1, -L / 2 + 0.5 + (0.9 if big else 0), zb + 0.08), (W / 2 - 0.1, L / 2 - 0.1, zb + 0.32)), (0.12, 0.12, 0.13), ao=False)
+    else:
+        for i in range(rng.choice([1, 2, 3])):
+            sc = (rng.uniform(-W / 4, W / 4), rng.uniform(-L / 4, L / 3), zb + 0.3)
+            k.add(sphere(sc, 0.28, 1, squash=0.8), (0.80, 0.72, 0.55), soft=Vector(sc))
+
+
+def prop_bench(k):
+    """A bench to sit on, its seat facing the front (-Y)."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    L = rng.uniform(1.6, 2.0)
+    if lk == "cyber":
+        k.add(box((-L / 2, -0.25, 0), (L / 2, 0.25, 0.45), 0.03), k.choice(pal["concrete"]))
+        k.add(box((-L / 2 + 0.1, -0.26, 0.05), (L / 2 - 0.1, -0.25, 0.1)), None, glow=k.choice(["cyan", "pink"]))
+        k.add(box((-L / 2, 0.2, 0.45), (L / 2, 0.3, 0.95), 0.02), pal["metal"])
+        return
+    seat = k.choice(pal["paint"]) if lk == "steam" else mul(wood(k), 1.3)
+    leg = pal["iron"] if lk == "steam" else mul(wood(k), 1.0)
+    back = lk == "steam" or rng.random() < 0.6
+    for e in (-1, 1):
+        x = e * (L / 2 - 0.15)
+        if lk == "steam":
+            k.add(box((x - 0.04, -0.28, 0), (x + 0.04, 0.24, 0.45)), leg)
+            if back:
+                k.add(Face((x, 0, 0), Y, 1).obox(0.2, 0.7, 0.55, 0.06, -0.04, 0.04, 1.35), leg)
+        else:
+            k.add(box((x - 0.07, -0.22, 0), (x + 0.07, 0.22, 0.42)), leg)
+    slats = 3 if lk == "steam" else 2
+    for i in range(slats):
+        y = -0.24 + i * 0.48 / slats
+        k.add(box((-L / 2, y, 0.42), (L / 2, y + 0.48 / slats - 0.03, 0.47)), seat)
+    if back:
+        for z in (0.62, 0.8):
+            k.add(box((-L / 2, 0.24, z), (L / 2, 0.29, z + 0.1)), seat)
+        if lk != "steam":
+            for e in (-1, 1):
+                x = e * (L / 2 - 0.15)
+                k.add(box((x - 0.05, 0.22, 0.42), (x + 0.05, 0.3, 0.92)), leg)
+
+
+def rim(k, r_in, r_out, z0, z1, n, color, ao=True):
+    """A ring wall round the origin (a basin's rim) from n straight segments."""
+    def polar(q):
+        return Vector((q.y * math.cos(q.x), q.y * math.sin(q.x), q.z))
+    for i in range(n):
+        a0, a1 = i / n * math.tau, (i + 1.02) / n * math.tau
+        k.add(lbox(Vector((a0, r_in, z0)), Vector((a1, r_out, z1)), fn=polar), color, ao=ao)
+
+
+def prop_fountain(k):
+    """The plaza's fountain: a stone basin with a column and bowl (fantasy), an iron basin with
+    a column of gears and spouts (steampunk), a concrete basin with a lit ring and spire
+    (cyberpunk)."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    R = rng.uniform(2.0, 2.4)
+    stone = pal["stone"] if lk != "cyber" else k.choice(pal["concrete"])
+    sides = 8 if lk == "fantasy" else 16
+    # The basin: a low floor of water inside a rim with a coping.
+    k.add(cyl((0, 0, 0), (0, 0, 0.42), R - 0.25, R - 0.25, sides), WATER, ao=False, vary=0.0)
+    rim(k, R - 0.3, R, 0.0, 0.62, sides, stone if lk != "steam" else pal["iron"])
+    rim(k, R - 0.34, R + 0.08, 0.62, 0.72, sides, mul(stone, 1.12) if lk != "steam" else pal["brass"], ao=False)
+    if lk == "cyber":
+        # A lit band round the coping (a thin ring, so the water shows).
+        def polar(q):
+            return Vector((q.y * math.cos(q.x), q.y * math.sin(q.x), q.z))
+        for i in range(16):
+            a0, a1 = i / 16 * math.tau, (i + 1.02) / 16 * math.tau
+            k.add(lbox(Vector((a0, R + 0.08, 0.6)), Vector((a1, R + 0.1, 0.68)), fn=polar), None, glow="cyan")
+        k.add(cyl((0, 0, 0.5), (0, 0, 3.6), 0.28, 0.12, 6), pal["metal"])
+        k.add(cyl((0, 0, 1.2), (0, 0, 3.2), 0.18, 0.08, 6), None, glow=k.choice(["cyan", "pink"]))
+        k.add(sphere((0, 0, 3.75), 0.2, 1), None, glow="white")
+        return
+    if lk == "steam":
+        iron, brass = pal["iron"], pal["brass"]
+        k.add(cyl((0, 0, 0.5), (0, 0, 2.6), 0.3, 0.22, 10), iron)
+        for z, r in ((1.1, 0.55), (1.8, 0.42), (2.4, 0.32)):
+            gear(k, Vector((0, 0, z)), X, Y, r, 10, 0.08, brass)
+        for i in range(4):
+            a = i / 4 * math.tau
+            d = Vector((math.cos(a), math.sin(a), 0))
+            pipe_run(k, [Vector((0, 0, 1.5)) + d * 0.25, Vector((0, 0, 1.5)) + d * 0.8, Vector((0, 0, 1.15)) + d * 0.95], 0.06, k.choice(pal["copper"]))
+        k.add(sphere((0, 0, 2.75), 0.16, 1), brass, ao=False)
+        return
+    # Fantasy: a column with a bowl and a finial; jets as pale cones.
+    k.add(cyl((0, 0, 0.5), (0, 0, 1.6), 0.28, 0.22, 8), mul(stone, 0.95))
+    k.add(cyl((0, 0, 1.6), (0, 0, 1.8), 0.25, 0.95, 8), stone)
+    k.add(cyl((0, 0, 1.8), (0, 0, 1.83), 0.82, 0.82, 8), WATER, ao=False, vary=0.0)
+    rim(k, 0.82, 0.97, 1.8, 1.9, 8, mul(stone, 1.08))
+    k.add(cyl((0, 0, 1.85), (0, 0, 2.5), 0.14, 0.1, 8), stone)
+    k.add(sphere((0, 0, 2.62), 0.16, 1), mul(stone, 1.1))
+    for i in range(4):
+        a = i / 4 * math.tau + math.pi / 4
+        k.add(cyl((math.cos(a) * 0.9, math.sin(a) * 0.9, 1.75), (math.cos(a) * 1.5, math.sin(a) * 1.5, 0.55), 0.05, 0.02, 4), (0.78, 0.88, 0.95), ao=False)
+
+
+def prop_market_cross(k):
+    """A market cross on steps (fantasy), a clock pillar (steampunk), an info pylon with
+    screens (cyberpunk)."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    if lk == "cyber":
+        c = k.choice(pal["panel"])
+        k.add(box((-0.9, -0.9, 0), (0.9, 0.9, 0.3), 0.03), k.choice(pal["concrete"]))
+        k.add(box((-0.5, -0.25, 0.3), (0.5, 0.25, 4.6), 0.03), c)
+        for f in (Face((0, -0.25, 0), X, 1.0), flipped(Face((0, 0.25, 0), X, 1.0))):
+            cp_screen(k, f, 0.0, 1.6, 0.8, 2.2, k.choice(list(NEON)[:3]), k.choice(list(NEON)[:3]), out=0.04)
+        k.add(box((-0.52, -0.27, 4.4), (0.52, 0.27, 4.45)), None, glow="cyan")
+        k.add(sphere((0, 0, 4.8), 0.14, 1), None, glow="red")
+        k.add(cyl((0, 0, 4.6), (0, 0, 4.75), 0.03, 0.03, 4), pal["metal"])
+        return
+    stone = pal["stone"]
+    for i, r in enumerate((1.5, 1.15, 0.8)):
+        k.add(cyl((0, 0, i * 0.25), (0, 0, (i + 1) * 0.25), r, r, 8), mul(stone, 1.0 - 0.05 * i))
+    if lk == "steam":
+        iron, brass = pal["iron"], pal["brass"]
+        k.add(cyl((0, 0, 0.75), (0, 0, 3.3), 0.16, 0.13, 10), iron)
+        k.add(box((-0.42, -0.42, 3.3), (0.42, 0.42, 4.1), 0.03), iron)
+        for f in box_faces(0, 0, 0.42, 0.42).values():
+            clock_face(k, f, 0.0, 3.7, 0.28, brass)
+        k.add(cyl((0, 0, 4.1), (0, 0, 4.6), 0.5, 0.05, 8), k.choice(pal["copper"]))
+        k.add(sphere((0, 0, 4.65), 0.07, 1), brass, ao=False)
+        return
+    k.add(cyl((0, 0, 0.75), (0, 0, 4.2), 0.22, 0.16, 8), mul(stone, 1.05))
+    k.add(box((-0.32, -0.32, 4.2), (0.32, 0.32, 4.6), 0.02), stone)
+    k.add(box((-0.06, -0.06, 4.6), (0.06, 0.06, 5.4)), mul(stone, 1.1))
+    k.add(box((-0.3, -0.06, 5.0), (0.3, 0.06, 5.12)), mul(stone, 1.1))
+
+
+def prop_fence(k):
+    """A fence section exactly as long as its form (f2, f3, f4 m) along X: post and rail or
+    pickets (fantasy), iron railings on a brick plinth (steampunk), mesh panels (cyberpunk)."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    L = float(k.form[1:])
+    h = 1.1
+    if lk == "steam":
+        k.add(box((-L / 2, -0.14, 0), (L / 2, 0.14, 0.32)), k.choice(pal["brick"]))
+        k.add(box((-L / 2, -0.16, 0.32), (L / 2, 0.16, 0.38)), pal["stone"])
+        n = int(L / 0.16)
+        for i in range(n):
+            x = -L / 2 + (i + 0.5) * L / n
+            k.add(box((x - 0.012, -0.012, 0.38), (x + 0.012, 0.012, h + 0.2)), pal["iron"], ao=False, vary=0.0)
+            if i % 2 == 0:
+                k.add(cyl((x, 0, h + 0.2), (x, 0, h + 0.3), 0.03, 0.0, 4), pal["iron"], ao=False, vary=0.0)
+        k.add(box((-L / 2, -0.02, h + 0.08), (L / 2, 0.02, h + 0.13)), pal["iron"], ao=False)
+        k.add(box((-L / 2, -0.02, 0.5), (L / 2, 0.02, 0.55)), pal["iron"], ao=False)
+        return
+    if lk == "cyber":
+        posts = max(2, int(round(L / 2)) + 1)
+        for i in range(posts):
+            x = -L / 2 + 0.04 + i * (L - 0.08) / (posts - 1)
+            k.add(box((x - 0.04, -0.04, 0), (x + 0.04, 0.04, 1.6)), pal["metal"])
+        k.add(box((-L / 2, -0.01, 0.1), (L / 2, 0.01, 1.5)), lambda co, n: mul((0.30, 0.32, 0.36), 0.8 if int((co.x + co.z) / 0.1) % 2 else 1.0), ao=False)
+        k.add(box((-L / 2, -0.03, 1.5), (L / 2, 0.03, 1.56)), hazard((0.9, 0.75, 0.1), (0.1, 0.1, 0.1), 0.3), ao=False)
+        return
+    w = mul(wood(k), rng.uniform(1.1, 1.4))
+    posts = max(2, int(round(L)) + 1)
+    for i in range(posts):
+        x = -L / 2 + 0.05 + i * (L - 0.1) / (posts - 1)
+        k.add(box((x - 0.05, -0.05, 0), (x + 0.05, 0.05, h + 0.05)), mul(w, 0.85))
+    if rng.random() < 0.5:
+        for z in (0.35, 0.85):
+            k.add(box((-L / 2, -0.03, z), (L / 2, 0.03, z + 0.09)), w)
+    else:
+        k.add(box((-L / 2, -0.05, 0.25), (L / 2, -0.03, 0.33)), w)
+        k.add(box((-L / 2, -0.05, 0.75), (L / 2, -0.03, 0.83)), w)
+        n = int(L / 0.14)
+        for i in range(n):
+            x = -L / 2 + (i + 0.5) * L / n
+            k.add(box((x - 0.04, -0.03, 0.05), (x + 0.04, -0.01, h - 0.05)), mul(w, 1.08), vary=0.06)
+
+
+def prop_gate(k):
+    """A garden gate between two posts, 1.4 m across."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    L = 1.4
+    if lk == "cyber":
+        for e in (-1, 1):
+            k.add(box((e * L / 2 - 0.08, -0.08, 0), (e * L / 2 + 0.08, 0.08, 1.2)), pal["metal"])
+        k.add(box((-L / 2 + 0.08, -0.03, 0.85), (L / 2 - 0.08, 0.03, 0.95)), hazard((0.9, 0.75, 0.1), (0.1, 0.1, 0.1), 0.2), ao=False)
+        k.add(box((L / 2 - 0.1, -0.09, 1.2), (L / 2 + 0.1, 0.09, 1.28)), None, glow="red")
+        return
+    post = pal["stone"] if lk == "steam" else mul(wood(k), 0.85)
+    for e in (-1, 1):
+        k.add(box((e * L / 2 - 0.1, -0.1, 0), (e * L / 2 + 0.1, 0.1, 1.35)), post)
+        k.add(box((e * L / 2 - 0.13, -0.13, 1.35), (e * L / 2 + 0.13, 0.13, 1.42)), mul(post, 1.1))
+    if lk == "steam":
+        n = 7
+        for i in range(n):
+            x = -L / 2 + 0.15 + i * (L - 0.3) / (n - 1)
+            top = 1.0 + 0.22 * math.sin(math.pi * (i / (n - 1)))
+            k.add(box((x - 0.015, -0.015, 0.08), (x + 0.015, 0.015, top)), pal["iron"], ao=False, vary=0.0)
+        for z in (0.1, 0.55):
+            k.add(box((-L / 2 + 0.1, -0.02, z), (L / 2 - 0.1, 0.02, z + 0.05)), pal["iron"], ao=False)
+        k.add(sphere((0, 0, 1.25), 0.06, 0), pal["brass"], ao=False)
+        return
+    w = mul(wood(k), 1.3)
+    for z in (0.15, 0.75):
+        k.add(box((-L / 2 + 0.1, -0.03, z), (L / 2 - 0.1, 0.03, z + 0.1)), w)
+    k.add(Face((0, -0.03, 0), X, 1).obox(0.0, 0.5, math.hypot(L - 0.3, 0.6), 0.09, -0.03, 0.03, math.atan2(0.6, L - 0.3)), w)
+    for i in range(5):
+        x = -L / 2 + 0.2 + i * (L - 0.4) / 4
+        k.add(box((x - 0.04, -0.02, 0.1), (x + 0.04, 0.02, 1.0)), mul(w, 1.05))
+
+
+def prop_planter(k):
+    """A planted tub (fantasy), an iron urn on a pedestal (steampunk), a concrete box with a lit
+    edge (cyberpunk)."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    if lk == "steam":
+        k.add(cyl((0, 0, 0), (0, 0, 0.35), 0.28, 0.2, 8), pal["stone"])
+        k.add(cyl((0, 0, 0.35), (0, 0, 0.75), 0.2, 0.42, 8), pal["iron"])
+        k.add(cyl((0, 0, 0.75), (0, 0, 0.8), 0.46, 0.46, 8), pal["brass"], ao=False)
+        flowers(k, -0.3, 0.3, -0.3, 0.3, 0.85, 7)
+        return
+    if lk == "cyber":
+        L = rng.uniform(1.2, 1.8)
+        k.add(box((-L / 2, -0.4, 0), (L / 2, 0.4, 0.6), 0.03), k.choice(pal["concrete"]))
+        k.add(box((-L / 2 - 0.005, -0.405, 0.5), (L / 2 + 0.005, 0.405, 0.54)), None, glow=k.choice(["cyan", "pink", "amber"]))
+        flowers(k, -L / 2 + 0.2, L / 2 - 0.2, -0.25, 0.25, 0.62, 3, r=0.14)
+        return
+    w = mul(wood(k), 1.2)
+    k.add(cyl((0, 0, 0), (0, 0, 0.5), 0.36, 0.42, 10), w)
+    for z in (0.08, 0.4):
+        k.add(cyl((0, 0, z), (0, 0, z + 0.04), 0.4 + z * 0.12, 0.4 + z * 0.12, 10), pal["iron"], ao=False)
+    flowers(k, -0.3, 0.3, -0.3, 0.3, 0.55, 8)
+
+
+def prop_flower_box(k):
+    """A trough of flowers to stand under a window or beside a door, 1-1.4 m long."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    L = rng.uniform(1.0, 1.4)
+    if lk == "cyber":
+        c = k.choice(pal["plastic"])
+        k.add(box((-L / 2, -0.17, 0), (L / 2, 0.17, 0.4), 0.02), c)
+        k.add(box((-L / 2 + 0.05, -0.18, 0.3), (L / 2 - 0.05, -0.17, 0.33)), None, glow="pink")
+    elif lk == "steam":
+        k.add(box((-L / 2, -0.17, 0), (L / 2, 0.17, 0.42), 0.02), pal["iron"])
+        k.add(box((-L / 2 - 0.02, -0.19, 0.38), (L / 2 + 0.02, 0.19, 0.43)), pal["brass"], ao=False)
+    else:
+        k.add(box((-L / 2, -0.17, 0), (L / 2, 0.17, 0.4), 0.02), lambda co, n: mul(k.pal.get("timber", (0.4, 0.3, 0.2)), 1.25 if int(co.z / 0.13) % 2 else 1.1))
+    flowers(k, -L / 2 + 0.12, L / 2 - 0.12, -0.08, 0.08, 0.42, int(L * 6))
+
+
+def prop_sign(k):
+    """A shop sign hanging from a bracket on a post (shop), or a signpost with pointing arms
+    (post)."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    steam = lk == "steam"
+    post = pal["iron"] if steam else mul(wood(k), 0.9)
+    if k.form == "post":
+        k.add(box((-0.07, -0.07, 0), (0.07, 0.07, 2.7)), post)
+        for i in range(rng.choice([2, 3])):
+            z = 2.35 - i * 0.32
+            e = 1 if i % 2 == 0 else -1
+            c = k.choice(pal["paint"]) if steam else mul(wood(k), 1.6)
+            k.add(box((min(0, e * 0.95), -0.03, z), (max(0, e * 0.95), 0.03, z + 0.2)), c)
+            k.add(Face((0, 0, 0), X, 1).obox(e * 1.0, z + 0.1, 0.16, 0.16, -0.03, 0.03, math.pi / 4), c)
+        k.add(sphere((0, 0, 2.75), 0.08, 0), pal["brass"] if steam else post, ao=False)
+        return
+    k.add(box((-0.07, -0.07, 0), (0.07, 0.07, 3.1)), post)
+    k.add(box((-0.06, -0.62, 2.85), (0.06, 0.06, 2.92)), post)
+    k.add(Face((0, -0.04, 0), Y, 1).obox(-0.22, 2.62, 0.5, 0.05, -0.03, 0.03, 0.75), post)
+    c = k.choice(pal["paint"])
+    k.add(box((-0.03, -0.6, 2.1), (0.03, -0.12, 2.75)), c)
+    k.add(box((-0.035, -0.56, 2.16), (0.035, -0.16, 2.69)), pal["brass"] if steam else mul(c, 1.5), ao=False)
+    for y in (-0.52, -0.2):
+        k.add(box((-0.01, y - 0.01, 2.75), (0.01, y + 0.01, 2.85)), pal["iron"], ao=False, vary=0.0)
+
+
+def prop_banner(k):
+    """A banner on a pole: cloth with a pennant (fantasy), with a gas globe (steampunk), a lit
+    holo strip (cyberpunk)."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    H = 5.0
+    pole = pal["metal"] if lk == "cyber" else pal["iron"] if lk == "steam" else mul(wood(k), 0.9)
+    k.add(box((-0.25, -0.25, 0), (0.25, 0.25, 0.3)), pal["stone"])
+    k.add(cyl((0, 0, 0.3), (0, 0, H), 0.07, 0.05, 6), pole)
+    k.add(box((0.0, -0.03, H - 0.45), (0.85, 0.03, H - 0.4)), pole)
+    if lk == "cyber":
+        k.add(box((0.15, -0.03, H - 3.0), (0.75, 0.03, H - 0.5)), k.choice(pal["panel"]))
+        k.add(box((0.2, -0.04, H - 2.9), (0.7, -0.03, H - 0.6)), None, glow=k.choice(["pink", "cyan", "amber"]))
+        k.add(sphere((0, 0, H + 0.05), 0.08, 0), None, glow="red")
+        return
+    c = k.choice(pal["paint"])
+    trim = pal["brass"] if lk == "steam" else (0.95, 0.85, 0.45)
+    k.add(box((0.12, -0.02, H - 2.6), (0.78, 0.02, H - 0.45)), lambda co, n: c if co.z > H - 2.2 else mul(trim, 0.95))
+    k.add(prism([(0.12, H - 2.6), (0.45, H - 2.9), (0.78, H - 2.6)], -0.02, 0.02, lambda a, s, z: Vector((s, a, z))), c)
+    if lk == "steam":
+        k.add(sphere((0, 0, H + 0.2), 0.18, 1), None, glow=True)
+        k.add(cyl((0, 0, H), (0, 0, H + 0.05), 0.12, 0.12, 6), pal["brass"], ao=False)
+    else:
+        k.add(prism([(0.0, H), (0.6, H + 0.15), (0.0, H + 0.3)], -0.01, 0.01, lambda a, s, z: Vector((s, a, z))), k.choice(pal["paint"]))
+
+
+def prop_washing_line(k):
+    """A washing line with clothes pegged on it: between two posts in a garden (posts), or a
+    bare line to string between two houses about 3.2 m up (span3, span45, span6)."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    posts = k.form == "posts"
+    L = 4.0 if posts else {"span3": 3.0, "span45": 4.5, "span6": 6.0}[k.form]
+    z = 2.0 if posts else 3.3
+    if posts:
+        for e in (-1, 1):
+            k.add(box((e * L / 2 - 0.05, -0.05, 0), (e * L / 2 + 0.05, 0.05, z + 0.15)), mul(wood(k), 1.1))
+            k.add(box((e * L / 2 - 0.05, -0.25, z + 0.05), (e * L / 2 + 0.05, 0.25, z + 0.12)), mul(wood(k), 1.1))
+    sag_line(k, Vector((-L / 2, 0, z + 0.1)), Vector((L / 2, 0, z + 0.1)), 0.15, 0.012, (0.85, 0.82, 0.75), seg=6, sides=3)
+    cloth = [(0.95, 0.94, 0.90), (0.80, 0.86, 0.95), (0.92, 0.70, 0.66), (0.86, 0.80, 0.55), (0.62, 0.74, 0.62)]
+    if lk == "cyber":
+        cloth = pal["plastic"] + [(0.95, 0.95, 0.95)]
+    x = -L / 2 + 0.3
+    while x < L / 2 - 0.4:
+        w = rng.uniform(0.3, 0.7)
+        h = rng.uniform(0.35, 0.8)
+        sag = 0.15 * (1 - (2 * (x + w / 2) / L) ** 2)
+        top = z + 0.1 - sag
+        k.add(box((x, -0.015, top - h), (x + w, 0.015, top)), k.choice(cloth), ao=False)
+        x += w + rng.uniform(0.08, 0.35)
+
+
+def prop_tree(k):
+    """A tree for a garden (a fruit or shade tree) or a street (a trimmed crown over a stone
+    ring, an iron grate and guard, or a lit concrete ring)."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    street = k.form == "street"
+    bark = (0.40, 0.31, 0.24)
+    leaf = k.choice(LEAF)
+    trunk = rng.uniform(1.7, 2.3) if street else rng.uniform(1.1, 1.6)
+    r = rng.uniform(1.3, 1.7) if street else rng.uniform(1.5, 2.0)
+    lean = rng.uniform(-0.15, 0.15)
+    k.add(cyl((0, 0, 0), (lean, 0, trunk + r * 0.4), 0.17, 0.11, 7), bark)
+    for e in (-1, 1):
+        k.add(cyl((lean * 0.7, 0, trunk * 0.8), (lean + e * r * 0.4, rng.uniform(-0.2, 0.2), trunk + r * 0.5), 0.07, 0.04, 5), bark)
+    crown(k, (lean, 0, trunk + r * 0.85), r, leaf, lobes=rng.choice([3, 4, 5]))
+    if not street and rng.random() < 0.5:
+        fruit = k.choice([(0.85, 0.16, 0.12), (0.92, 0.62, 0.12), (0.6, 0.15, 0.4)])
+        for i in range(9):
+            a = rng.uniform(0, math.tau)
+            c = (lean + math.cos(a) * r * 0.85, math.sin(a) * r * 0.85, trunk + r * rng.uniform(0.5, 1.1))
+            k.add(sphere(c, 0.09, 0), fruit, ao=False)
+    if not street:
+        return
+    if lk == "cyber":
+        k.add(cyl((0, 0, 0), (0, 0, 0.45), 0.85, 0.85, 12), k.choice(pal["concrete"]))
+        k.add(cyl((0, 0, 0.45), (0, 0, 0.48), 0.86, 0.86, 12), None, glow="cyan")
+        k.add(cyl((0, 0, 0.4), (0, 0, 0.47), 0.7, 0.7, 12), (0.22, 0.18, 0.14), ao=False)
+    elif lk == "steam":
+        k.add(box((-0.6, -0.6, 0), (0.6, 0.6, 0.04)), lambda co, n: mul(pal["iron"], 0.7 if int((co.x + 2) / 0.12) % 2 else 1.0), ao=False)
+        for i in range(8):
+            a = i / 8 * math.tau
+            k.add(cyl((math.cos(a) * 0.35, math.sin(a) * 0.35, 0), (math.cos(a) * 0.4, math.sin(a) * 0.4, 1.4), 0.015, 0.015, 4), pal["iron"], ao=False, vary=0.0)
+        k.add(cyl((0, 0, 1.3), (0, 0, 1.36), 0.42, 0.42, 8), pal["iron"], ao=False)
+    else:
+        k.add(cyl((0, 0, 0), (0, 0, 0.3), 0.75, 0.8, 8), pal["stone"])
+        k.add(cyl((0, 0, 0.25), (0, 0, 0.31), 0.62, 0.62, 8), (0.30, 0.22, 0.15), ao=False)
+
+
+def prop_kerb(k):
+    """Four metres of kerb along a street's edge (X), the road on the front (-Y) side: dressed
+    stones (fantasy), granite with a drain grate (steampunk), painted concrete with lit studs
+    (cyberpunk)."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    L, w, h = 4.0, 0.3, 0.14
+    stone = k.choice(pal["concrete"]) if lk == "cyber" else pal["stone"]
+    n = 4 if lk == "cyber" else 6
+    for i in range(n):
+        x0 = -L / 2 + i * L / n
+        k.add(box((x0 + 0.01, -w / 2, 0), (x0 + L / n - 0.01, w / 2, h)), mul(stone, rng.uniform(0.92, 1.06)), ao=False)
+    if lk == "cyber":
+        k.add(box((-L / 2, -w / 2 - 0.005, h - 0.04), (L / 2, w / 2 + 0.005, h + 0.005)), hazard((0.9, 0.75, 0.1), (0.1, 0.1, 0.1), 0.4), ao=False)
+        for x in (-1.0, 1.0):
+            k.add(box((x - 0.05, -w / 2 - 0.01, 0.04), (x + 0.05, -w / 2, 0.09)), None, glow="amber")
+    elif lk == "steam":
+        # A darker granite top course.
+        k.add(box((-L / 2, -w / 2 - 0.005, h - 0.03), (L / 2, w / 2 + 0.005, h + 0.005)), pal["stone_dark"], ao=False)
+
+
+def prop_stairs(k):
+    """A flight of steps rising 3 m over 5 m from its front (-Y, at the floor) to its back,
+    between cheek walls with a parapet or railing; its sides stand on the lower terrace and
+    cut into the upper one."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    T, R, W, cw = 3.0, 5.0, 2.4, 0.3
+    n = 17
+    if lk == "cyber":
+        stone, tread = k.choice(pal["concrete"]), mul(k.choice(pal["concrete"]), 1.15)
+    elif lk == "steam":
+        stone, tread = pal["stone_dark"], pal["stone"]
+    else:
+        stone, tread = pal["stone"], mul(pal["stone"], 1.1)
+    for i in range(n):
+        y0 = -R / 2 + i * R / n
+        z1 = (i + 1) * T / n
+        k.add(box((-W / 2, y0, max(0.0, z1 - T / n - 0.25)), (W / 2, y0 + R / n + 0.02, z1)), tread if i % 2 else mul(tread, 0.94), ao=False, vary=0.0)
+    # Cheek walls: the slope plus a parapet, square at the top.
+    par = 0.9 if lk == "fantasy" else 0.12
+    for e in (-1, 1):
+        x0, x1 = (W / 2, W / 2 + cw) if e > 0 else (-W / 2 - cw, -W / 2)
+        prof = [(-R / 2, 0.0), (R / 2, 0.0), (R / 2 + 0.01, T + par), (R / 2 - 0.2, T + par), (-R / 2 + 0.2, par + 0.3), (-R / 2, par + 0.3)]
+        k.add(prism(prof, x0, x1, lambda a, s, z: Vector((a, s, z))), stone)
+        if lk == "fantasy":
+            k.add(prism([(-R / 2, par + 0.3), (-R / 2 + 0.2, par + 0.3), (R / 2 - 0.2, T + par), (R / 2 + 0.01, T + par), (R / 2 + 0.01, T + par + 0.08), (-R / 2, par + 0.38)], x0 - 0.04, x1 + 0.04, lambda a, s, z: Vector((a, s, z))), mul(stone, 1.12))
+        else:
+            # A railing on posts along the slope.
+            rail = pal["iron"] if lk == "steam" else pal["metal"]
+            xm = (x0 + x1) / 2
+            for j in range(5):
+                y = -R / 2 + 0.3 + j * (R - 0.6) / 4
+                z = 0.3 + par + (y + R / 2 - 0.2) / (R - 0.4) * (T - 0.3)
+                k.add(box((xm - 0.025, y - 0.025, z), (xm + 0.025, y + 0.025, z + 0.95)), rail, ao=False)
+            a = Vector((xm, -R / 2 + 0.3, 0.3 + par + 0.95 + 0.1 * (T - 0.3) / (R - 0.4)))
+            b = Vector((xm, R / 2 - 0.3, 0.3 + par + 0.95 + (R - 0.5) / (R - 0.4) * (T - 0.3)))
+            k.add(cyl(a, b, 0.035, 0.035, 6), pal["brass"] if lk == "steam" else rail, ao=False)
+            if lk == "cyber":
+                k.add(cyl(a - Vector((0, 0, 0.08)), b - Vector((0, 0, 0.08)), 0.02, 0.02, 4), None, glow="cyan")
+
+
+def prop_retaining_wall(k):
+    """Four metres of retaining wall along X holding the ground 1.5 m (low) or 3 m (high) above
+    its foot, the face to the front (-Y): battered stone with a coping (fantasy), brick with
+    pilasters and an iron railing (steampunk), concrete with a hazard band and a lit strip
+    (cyberpunk). The upper ground meets its back at the drop's height."""
+    rng, pal, lk = k.rng, k.pal, look(k)
+    L, D, t = 4.0, (1.5 if k.form == "low" else 3.0), 0.7
+    if lk == "cyber":
+        c = k.choice(pal["concrete"])
+        k.add(box((-L / 2, -t / 2, 0), (L / 2, t / 2, D + 0.9)), grime(c))
+        k.add(box((-L / 2, -t / 2 - 0.01, D * 0.12), (L / 2, -t / 2, D * 0.12 + 0.2)), hazard((0.9, 0.75, 0.1), (0.1, 0.1, 0.1), 0.45), ao=False)
+        k.add(box((-L / 2, -t / 2 - 0.02, D + 0.7), (L / 2, -t / 2, D + 0.75)), None, glow=k.choice(["cyan", "pink"]))
+        for x in (-L / 2 + 0.6, L / 2 - 0.6):
+            k.add(box((x - 0.06, -t / 2 - 0.03, D * 0.4), (x + 0.06, -t / 2, D * 0.4 + 0.12)), (0.2, 0.2, 0.22), ao=False)
+        return
+    if lk == "steam":
+        brick = k.choice(pal["brick"])
+        k.add(box((-L / 2, -t / 2, 0), (L / 2, t / 2, D + 0.15)), brick_fn(brick, k.rng))
+        for x in (-L / 2 + 0.2, L / 2 - 0.2):
+            k.add(box((x - 0.22, -t / 2 - 0.12, 0), (x + 0.22, -t / 2, D + 0.15)), mul(brick, 0.9))
+        k.add(box((-L / 2, -t / 2 - 0.1, D + 0.15), (L / 2, t / 2, D + 0.3)), pal["stone"])
+        for i in range(9):
+            x = -L / 2 + 0.2 + i * (L - 0.4) / 8
+            k.add(box((x - 0.015, -0.015, D + 0.3), (x + 0.015, 0.015, D + 1.25)), pal["iron"], ao=False, vary=0.0)
+        k.add(box((-L / 2, -0.025, D + 1.15), (L / 2, 0.025, D + 1.22)), pal["iron"], ao=False)
+        return
+    stone = pal["stone"]
+    # Battered: the face leans back a little; courses as colour bands.
+    prof = [(-t / 2, 0.0), (t / 2, 0.0), (t / 2, D + 0.75), (-t / 2 + 0.18, D + 0.75)]
+    k.add(prism(prof, -L / 2, L / 2, lambda a, s, z: Vector((a, s, z))), lambda co, n: mul(stone, (0.86 if int(co.z / 0.32) % 2 else 1.0) * (0.92 + 0.08 * math.sin(co.x * 3.1 + co.z * 7))))
+    k.add(box((-L / 2, -t / 2 + 0.1, D + 0.75), (L / 2, t / 2, D + 0.88)), mul(stone, 1.15))
+    # A weep hole or two.
+    for x in (-L / 4, L / 4):
+        k.add(box((x - 0.08, -t / 2 - 0.02, D * 0.25), (x + 0.08, -t / 2 + 0.05, D * 0.25 + 0.12)), (0.18, 0.17, 0.16), ao=False)
+
+
 KINDS = {
     ("fantasy", "tower"): fantasy_tower,
     ("fantasy", "wall"): fantasy_wall,
@@ -4370,6 +4965,38 @@ FORM_KINDS = {
     ("cyberpunk", "market"): (cyber_market, ["food_court"]),
     ("cyberpunk", "workshop"): (cyber_workshop, ["garage", "fab"]),
 }
+
+# Street props: kind -> (generator, forms), and which styles have which. Steampunk and
+# cyberpunk crates (and the cyberpunk neon signs, cables, kiosks...) are fixed kinds above.
+PROPS = {
+    "barrel": (prop_barrel, ["single", "group"]),
+    "crate": (prop_crate, ["stack"]),
+    "cart": (prop_cart, ["handcart", "wagon"]),
+    "bench": (prop_bench, ["bench"]),
+    "fountain": (prop_fountain, ["fountain"]),
+    "market_cross": (prop_market_cross, ["cross"]),
+    "fence": (prop_fence, ["f2", "f3", "f4"]),
+    "gate": (prop_gate, ["gate"]),
+    "planter": (prop_planter, ["planter"]),
+    "flower_box": (prop_flower_box, ["box"]),
+    "sign": (prop_sign, ["shop", "post"]),
+    "banner": (prop_banner, ["banner"]),
+    "washing_line": (prop_washing_line, ["posts", "span3", "span45", "span6"]),
+    "tree": (prop_tree, ["street", "garden"]),
+    "kerb": (prop_kerb, ["k4"]),
+    "stairs": (prop_stairs, ["flight"]),
+    "retaining_wall": (prop_retaining_wall, ["low", "high"]),
+}
+PROP_STYLES = {
+    "fantasy": list(PROPS),
+    "steampunk": [p for p in PROPS if p != "crate"],
+    "cyberpunk": [p for p in PROPS if p not in ("crate", "sign")],
+    "giant": ["barrel", "crate", "cart", "bench", "fence", "gate", "planter", "sign", "tree", "washing_line"],
+    "small": ["barrel", "crate", "bench", "fence", "gate", "planter", "flower_box", "tree"],
+}
+for _style, _kinds in PROP_STYLES.items():
+    for _kind in _kinds:
+        FORM_KINDS[(_style, _kind)] = PROPS[_kind]
 
 # Who lives there: generators work in metres for a 1.75 m person, and the result is scaled to
 # the inhabitants, so a giant's door is 5/1.75 times a person's and a small folk's 0.6/1.75.
@@ -4448,6 +5075,7 @@ def main():
         PROFILE = {} if a.profile else None
         k = Kit(rng, PALETTES[a.style], ao=1.2, pr=random.Random(f"detail-{a.seed}-{a.style}-{a.kind}-{form}-{i}"))
         k.form = form
+        k.style = a.style
         k.corner = (1 if i % 2 == 0 else -1) if "corner" in form else 0
         if key in FORM_KINDS:
             gen(k)

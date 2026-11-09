@@ -126,7 +126,9 @@ impl Island {
         for (li, lot) in land.lots.iter().enumerate().filter(|_| planned) {
             let st = &land.settlements[lot.settlement as usize];
             let Some(kind) = lot.kind.model() else { continue };
-            let env = st.kind.env();
+            // By style (a steampunk town is steampunk_city), and the kind folder its model is in.
+            let env = living_rules::settle::env_of(&st.style);
+            let kind = lot.model_file.as_deref().and_then(living_rules::settle::asset_kind).unwrap_or(kind);
             let files = crate::envs::assets_for(env, kind);
             if files.is_empty() {
                 continue;
@@ -148,8 +150,17 @@ impl Island {
                 person: None,
             });
         }
+        // Street props, stairs and retaining walls: derived from the layout on both sides, not
+        // stored by the authority, so connected mode places them too.
+        for (pi, pr) in land.props.iter().enumerate() {
+            let env = living_rules::settle::env_of(&land.settlements[pr.settlement as usize].style);
+            let files = crate::envs::assets_for(env, pr.kind.id());
+            let exact = pr.model_file.as_ref().map(|f| format!("envs/{f}")).filter(|f| files.contains(f));
+            let Some(file) = exact.or_else(|| (!files.is_empty()).then(|| pick(&files, pi, 17))) else { continue };
+            put(Item { kind: pr.kind.id().to_string(), file, at: Vec2::new(pr.centre.0, pr.centre.1), yaw: pr.yaw, height: pr.height_m, k: pi, floor: Some(pr.floor_m), native: true, ..default() });
+        }
         for (si, st) in land.settlements.iter().enumerate() {
-            let env = st.kind.env();
+            let env = living_rules::settle::env_of(&st.style);
             // Wall pieces along town walls.
             if let Some(wall) = &st.wall {
                 let files = crate::envs::assets_for(env, "wall");
@@ -202,7 +213,10 @@ impl Island {
     /// on the lot's floor, facing its yaw. Returns the entities to despawn with it.
     pub fn spawn_lot(&self, commands: &mut Commands, assets: &AssetServer, lot: &LotRow) -> Vec<Entity> {
         let Some(kind) = lot.kind.model() else { return Vec::new() };
-        let env = lot.site.env();
+        // The row's model names its folder (`steampunk_city/clocktower/...`): a town in its own
+        // style uses its own assets.
+        let env = lot.model.split('/').next().filter(|_| !lot.model.is_empty()).unwrap_or(lot.site.env());
+        let kind = living_rules::settle::asset_kind(&lot.model).unwrap_or(kind);
         let files = crate::envs::assets_for(env, kind);
         let exact = Some(format!("envs/{}", lot.model)).filter(|f| !lot.model.is_empty() && files.contains(f));
         if exact.is_none() && files.is_empty() {

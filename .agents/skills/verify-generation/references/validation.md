@@ -1,6 +1,13 @@
 # Validation record (generation)
 
 
+## 2026-11-09 island ornaments, terraces and styled towns (dev-box)
+
+`generation-orn-20261109-035123`, on `c5a2c00` plus the ornaments change (`docs/FIRST_WORLD.md`, "Ornaments, terraces and styled towns"). SpacetimeDB 2.14.1 ran in a scratch container of the run's own, `slop-orn-stdb` on port 3310. Port 3300 belonged to another agent's container, so the harness's port was patched locally and not committed. This change made the land check accept a styled town's site id, `<style>_<kind>` (`steampunk_town`), against the settlement row's `kind` and `style`.
+- **Result:** 19 of 20 results pass. The island passes 65 of 66: 8 settlements including both styled towns on their sites, 546 lots, and wall tiles under every blocking lot.
+- **An earlier run found a real defect:** the clock tower standing in its paved square did not block. It is fixed.
+- **Flake:** "Reedmoor memberships" failed again in the same way as Saltmere below: a seeded grandparent died of old age right after creation.
+
 ## 2026-11-09 island land worlds (dev-box)
 
 Host: the dev-box (Fedora, rootless podman, SELinux enforcing). SpacetimeDB 2.14.1 ran in scratch container `slop-game-stdb`, reached through a `docker` name shim; see `docs/ISLAND_AUTHORITY.md`, "Verification". This change added the `island` seed, the land checks (`check_land`) and the `land` map size to `generation.py`. Evidence is under `.local/living/verify/` in the dev-box worktree `~/dev/slop-game`.
