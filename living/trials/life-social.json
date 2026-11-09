@@ -37,7 +37,7 @@
   ]
  },
  "needs": [
-  "minds.only: the runner sets LIVING_ONLY=<subject>,woken (the mind service admits residents as they wake; `Minds::allowed`); the runner on trials-1 sets the subject only",
+  "minds.only: done; the runner passes LIVING_ONLY=<subject>,woken when a trial's `minds.only` names `woken`",
   "world_seeds: replicate k runs with world.overrides.seed = world_seeds[k] (the island seed's own `seed`, 7); the runner's --replicates reuses one world seed today",
   "variants: the default variant for this preset, so a plain run uses deepseek-flash for the subject; woken residents take the models file's `woken` route (the `people` mix) unless a variant's models patch sets `woken`"
  ],
