@@ -1,0 +1,9 @@
+# Fuel per step of staged land generation (docs/FLOORS.md, "Staged generation"). Standalone: not
+# a member of living/Cargo.toml. `run.sh SEED_JSON SIZE` builds both and prints one line per step.
+[workspace]
+resolver = "2"
+members = ["guest", "host"]
+
+# The authority's profile (living/Cargo.toml): opt-level 3, no LTO.
+[profile.release]
+opt-level = 3

@@ -8,6 +8,7 @@ mod acts;
 mod brain;
 mod codes;
 mod combat;
+mod floor;
 mod island;
 mod mind;
 mod motion;
@@ -73,10 +74,19 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     for kind in ["person", "deer", "wolf"] {
         living_rules::graph::parse(&seed::instinct(kind)).map_err(|e| format!("{kind} instinct: {e}"))?;
     }
-    seed::seed(ctx, now);
+    // A module built with a seed creates its world now (in steps when the land is too big for
+    // one call); a floor module waits for `create_floor` (floor.rs).
+    if !seed::VALLEY.is_empty() {
+        let s: seed::Seed = serde_json::from_str(seed::VALLEY).map_err(|e| format!("seed: {e}"))?;
+        floor::begin(ctx, &s, now);
+    }
+    Ok(())
+}
+
+/// The world's clocks: the 60 Hz tick and the 1 s housekeeping, once the world exists.
+pub(crate) fn start_ticking(ctx: &ReducerContext) {
     ctx.db.tick_timer().insert(TickTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_micros(16_667).into()) });
     ctx.db.slow_timer().insert(SlowTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_secs(1).into()) });
-    Ok(())
 }
 
 fn require_admin(ctx: &ReducerContext) -> Result<World, String> {

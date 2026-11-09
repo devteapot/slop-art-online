@@ -10,6 +10,12 @@ Started 2026-11-09 from the user's idea: a world of stacked floors, each a separ
 - **Measured.** Natively, as WASM under wasmtime, and inside the authority on scratch databases on the dev-box.
 - **Design only.** Everything in the authority, the mind service and `living/game` below, until the perception, town-life, damage-rule and assets work lands.
 - **Not touched.** The lab worlds and the paused reference worlds.
+- **Built on branch `megacity-1` (2026-11-09):**
+  - staged land generation in the rules (`living_rules::land::Gen`), with fuel per step measured by `living/tools/land_fuel`;
+  - the seed passed at runtime: a floor module (`LIVING_SEED=none`), `create_floor` and the scheduled `genesis_step` in the authority (`authority/src/floor.rs`), and `just living-floor`;
+  - a second, detailed pass of the city generator, and the city kit (`living/tools/blender/city.py`).
+
+  See [staged generation and the largest floor](#staged-generation-and-the-largest-floor) and [the megacity, second pass](#the-megacity-second-pass).
 
 **Key decisions proposed:**
 1. One SpacetimeDB database per floor, all from one module build. A floor is a seed plus a law overlay, not a fork.
@@ -51,7 +57,9 @@ Every floor runs the same `living-authority` build. What differs is data:
 - the law overlay (below);
 - the floor's id.
 
-**Gap: the seed is compiled into the module today.** `build.rs` copies `seeds/$LIVING_SEED.json` into the build, and `seed::seed` reads it with `include_str!` in `init` (`authority/src/seed.rs:13`). So each lab arm, and each floor, would be a different build. The seed's `rules` flags (`MINDS`, `YIELD_SHIELD`, `CRY_PROMPTS_CARERS`) are compile-time constants too (`build.rs:36-48`, `rules_flags.rs`).
+**Gap (closed on `megacity-1` for the seed; the `rules` flags remain compile-time).** A floor module is built with `LIVING_SEED=none`, and the admin's `create_floor(seed_json)` gives it its seed ([below](#staged-generation-and-the-largest-floor)). Before that change:
+
+**The seed was compiled into the module.** `build.rs` copies `seeds/$LIVING_SEED.json` into the build, and `seed::seed` reads it with `include_str!` in `init` (`authority/src/seed.rs:13`). So each lab arm, and each floor, would be a different build. The seed's `rules` flags (`MINDS`, `YIELD_SHIELD`, `CRY_PROMPTS_CARERS`) are compile-time constants too (`build.rs:36-48`, `rules_flags.rs`).
 
 **Proposal:**
 - `init` creates an empty, paused world.
@@ -375,6 +383,78 @@ The island's digests are unchanged by this work: tiles `c19cc98e8f1471f0`, heigh
   The worst frames are chunk loads, as on the island (ISLAND_AUTHORITY: 150–250 ms single frames there). The look-dev client ran from a private build with a 9-line change (below).
 - **Population density.** The 2048 m city holds 2,217 metro, 620 slum and 437 works lots. The authority's `structure` table gets 3,934 rows (a door per building and one per gate tile), and `resource_node` 20,218 (the wastes only: paved city tiles grow nothing).
 
+### Staged generation and the largest floor
+
+Built on `megacity-1`. Numbers are from the dev-box (AMD Ryzen AI Max+ 395, 32 threads, Radeon 8060S), with other agents keeping the load average at 5 to 15; the fuel numbers are machine-independent.
+
+**SpacetimeDB documentation and source checked (v2.14.1, as above):**
+
+| Question | Finding | Implication |
+|---|---|---|
+| The per-reducer budget | **[V]** `FunctionBudget::DEFAULT_BUDGET` is 120 × 10⁹ fuel, one unit per WASM instruction (`crates/client-api-messages/src/energy.rs:133-142`); standalone's `NullEnergyMonitor` always grants it (`crates/core/src/energy.rs:27-35`). | Every step of world creation must stay well under 120 × 10⁹ instructions. |
+| Scheduled reducers | **[V]** A `#[table(scheduled(reducer))]` row with `ScheduleAt::Time(ctx.timestamp)` runs its reducer once, as soon as possible ([schedule tables](https://spacetimedb.com/docs/tables/schedule-tables/), `docs/docs/00200-core-concepts/00300-tables/00500-schedule-tables.md`). Each call is its own transaction with its own budget. | One step per call; each step schedules the next. |
+| Module memory between calls | **[V]** "Global and Static Variables Are Undefined Behavior": instances may be fresh, replaced on publish, lost on restart, or replayed; global state is not rolled back with a transaction (`docs/docs/00200-core-concepts/00200-functions/00300-reducers/00300-reducers.md`). | Intermediate grids (hundreds of MB) cannot go through tables every step, so they stay in instance memory **as a cache only**: the durable `genesis` row says how far generation is, and a cache that is not this seed's, or not exactly as far, is thrown away and generation restarts from its first step. Generation is deterministic, so the restart rebuilds the same land; rows already written are the same rows and are kept. |
+| Linear memory | **[V]** wasm32 only, no limit below 4 GiB, and it never shrinks (above). | A floor keeps its generation peak for life. |
+
+**Design:**
+- **Rules.** `land::generate` is now `land::Gen` run to the end, so staged and one-shot generation are the same code and give the same digests. Steps:
+  1. the macro pass in two halves: relief, lakes and rivers; then water distances, moisture, regions and sites;
+  2. tile classification in bands of 4 M tiles (each band computes its own ground with a row of margin);
+  3. fords, cleared sites and the connectivity pass;
+  4. shore distances on land, then in the water;
+  5. the planner (`settle::Staged`): the city, island roads, streets, stairs, one step per ward's lots and one per band of a ward's back-fill (each band with its own random stream), the remaining towns' lots, painting, the walled connectivity pass, and ornaments one settlement per step.
+- **Authority** (`authority/src/floor.rs`):
+  - A module built with a seed (the island, labs) creates its world in `init` as before when the land is at most 2048 m (`INLINE_MAX_M`).
+  - A **floor module** (`LIVING_SEED=none`) starts empty. The admin's `create_floor(seed_json)` checks the seed, keeps it in the private `floor_seed` row, and creates the world.
+  - A larger land is created by `genesis_step`, scheduled only. Each call runs one generation step, or hosting, or a batch of 16,384 terrain chunks, 8,192 lots, or 1,024 tile rows of resources, then people, animals and the settlements' life. The public `genesis` row holds progress, the step count, restarts and `done`. Ticks start when it is done.
+  - Readers of the seed (species overrides, weather, ways, the newcomer kit, communities, habitats) read the active seed, loaded once per instance when the world row is first read.
+  - The seed's `rules` switches are still compiled in: `LIVING_RULES` sets them for a floor module, and `create_floor` refuses a seed whose `rules` differ.
+- **Tooling:**
+  - `just living-floor NAME DB` builds the floor module with the seed's switches, publishes it and calls `create_floor`.
+  - `living/tools/land_fuel/run.sh SEED [SIZE]` runs each step under wasmtime 39.0.1 configured as SpacetimeDB 2.14.1's reducer engine, with the budget refilled per step, and prints fuel, time and linear memory per step and the digests.
+
+**Fuel per step** (the second-pass megacity seed; the first column is the old generator for comparison):
+
+| | 4096 m, prototype generator | 4096 m | 8192 m |
+|---|---|---|---|
+| Generation steps | 13 as first split (one `init` would need all 333 × 10⁹) | 126 | 152 |
+| Total fuel, generation | 333 × 10⁹ (2.8 budgets) | 346 × 10⁹ (2.9 budgets) | 1,574 × 10⁹ (13.1 budgets) |
+| Worst step | 77.6 × 10⁹ (lots, before they were split per ward) | 40.0 × 10⁹, 33.3% (a band of tiles) | 50.9 × 10⁹, 42.4% (island roads; relief and rivers 42.3%) |
+| Hosting and digests (one step) | 8.8 × 10⁹ | 8.5 × 10⁹ | 35 × 10⁹ (prototype seed) |
+| Linear memory at the end | 207 MB | 213 MB | 847 MB |
+
+An 8192 m run first trapped on fuel in a slum ward's back-fill, which searched every street of the ward per grid point. That was fixed with a bucket lookup and back-fill bands before anything reached the authority; the harness exists to catch exactly that.
+
+**In the authority** (a private 2.14.1 container on the dev-box, the floor module, `create_floor` called once):
+
+| | 4096 m | 8192 m |
+|---|---|---|
+| Staged creation, `create_floor` to `done` | 20.2 s | 92 s |
+| Rows: `terrain_chunk`, `lot`, `structure`, `resource_node`, `settlement` | 65,536; 12,059; 11,405; 75,749; 54 | 262,144; 47,254; 42,918; 305,533; 54 |
+| Module linear memory (`spacetime_worker_wasm_memory_bytes`) | 212 MiB | 847 MiB |
+| Container RSS (service-wide, both floors loaded) | | 2.2 GB |
+| Digests against a native regeneration | identical (`1bfecfe677332f4a` `08e29adfdf9ee515` `5490b81d7ff1861d`) | `f69cc54c…` natively; the authority's row was the same in the fuel harness |
+| Tick at rest, 30 s (105-107 people, 48 animals) | p50 0.72, p99 1.62, max 2.12 ms; 42 ms of work a second | p50 0.75, p99 1.71, max 3.21 ms; 44 ms of work a second |
+
+Tick cost follows the population, not the land: the two floors tick alike. Before the second pass, the prototype generator had already been created at both sizes the same way (58 steps in 21.9 s, 92 steps in 120 s), with all 8 of its wolves placed (5 before: wolves now live where the seed's `animals.habitat` says, the megacity's wastes, and a lattice search finds scarce ground).
+
+**The client** (look-dev with `LIVING_GAME_SEED`, the private binary copies, headless 1600 × 900, uncapped, a 400 m run outward from the core along an arterial at 3.6 m/s):
+
+| | Land generated on the worker thread | Process peak RSS | Frames | p50 | p95 | p99 | Over 33 ms |
+|---|---|---|---|---|---|---|---|
+| 4096 m, prototype | 8.7 s | 2.07 GB | 28,448 / 28,452 | 3.90 / 3.83 ms | 5.09 / 5.12 | 5.66 / 5.75 | 0 |
+| 4096 m, second pass | 8.9 s | 1.63 GB | 28,304 / 28,427 | 3.91 / 3.85 ms | 5.14 / 5.17 | 5.71 / 5.91 | 0 |
+| 8192 m, second pass | 37-39 s | 1.89 GB | 32,708 | 3.10 ms | 4.74 | 5.20 | 0 |
+
+A first run of the second pass at 4096 m under a load average of 11 read p95 18.5 ms and 43 frames over 33 ms; the reruns at load 5 to 8 match the prototype, so that was load, not the city.
+
+**The largest floor: 8192 m.** It generates, hosts and streams within budgets here. What binds above it:
+1. **Per-step fuel.** At 12,288 m the relief-and-rivers step and the island-roads step would need about 114 × 10⁹ each, extrapolated by area (native: 88 s for the whole land), so they must be banded too. Both are whole-grid passes that can be split as the tiles were.
+2. **Module memory.** The generation peak is about 2.1 GB at 12,288 m (native heap) and would reach the 4 GiB wasm32 cap near 16,384 m; it stays for the floor's life, per floor. The biggest buffers are the connectivity passes' per-tile `u32` components, `u16` costs and `u8` directions, and the shore pass's `f32` distances: banded or compact encodings would cut it.
+3. **The client.** Joining an 8192 m floor regenerates its land for 37-39 s and about 0.8 GB on the client, and twice that at 12,288 m. A land cache keyed by the digests ([the client switching floors](#the-client-switching-floors)) is needed before floors grow further.
+
+Tick time and frame time do not bind: both depend on what is near, not on the land's size.
+
 ### The 4 GiB question
 
 **Is 4 GiB a hard cap in our stack? Yes, but only for what the module holds in its own heap.**
@@ -572,18 +652,85 @@ Headless look-dev captures of the 4096 m floor, in the same folder:
 ### Not done
 
 - **Look-dev captures** of a land seed: *done in `acbbda7`*. `LIVING_GAME_SEED=<seed.json>` makes look-dev draw that seed's land (its `seed`, `map.size` and `map.params`, as the authority builds it from that file; for example `living/seeds/floor-megacity.json`), generated on a worker thread; without it look-dev draws the environment's `world` on the default parameters. The log line names the seed, size and source file it drew. The captures above predate it: they used a private build with a 9-line `LIVING_GAME_LAND` change that was not committed.
-- **The 4096 m floor in the authority.** Staged generation, above.
+- **The 4096 m floor in the authority.** *Done on `megacity-1`*: [staged generation](#staged-generation-and-the-largest-floor), up to 8192 m.
 - **People.** The seed peoples six settlements with 96 residents and copies the island's `town_life` and `ways`: the core (`Spire Ward`), a dense ward, a works ward, a slum ward, an outpost and a salvage camp. The other 25 settlements stand empty. Peopling every ward means one seed entry each (`"site": "metro_town"`: the k-th entry takes the k-th ward), which a world preset would generate.
-- **Elevated highways, megatower and megablock models, slum shacks, port cranes.** Presentation and assets (above).
-- **The slums read sparse:** about 3,000 lots in two wards at 4096 m, mostly along their streets. A 26 × 18 m grid made them sparser (narrow stacks are 10–13 m deep), so it stays 34 × 30 m. Denser slums need shack models a few metres deep, and lots that fill blocks from the back as well as the front.
+- **Elevated highways, megatower and megablock models, slum shacks, port cranes.** *Done on `megacity-1`* ([second pass](#the-megacity-second-pass)); cranes are placed only where a works building's front looks over water, which is rare.
+- **The slums read sparse** (*addressed on `megacity-1`*: shanties a few metres deep, and blocks back-filled behind the frontages): about 3,000 lots in two wards at 4096 m, mostly along their streets. A 26 × 18 m grid made them sparser (narrow stacks are 10–13 m deep), so it stays 34 × 30 m. Denser slums need shack models a few metres deep, and lots that fill blocks from the back as well as the front.
 - **Gate tiles:** 1,030 gate tiles at 2048 m, each a `structure` row. Each 24 m arterial opening is gated tile by tile (ISLAND_AUTHORITY, risks: "gates are per tile").
+
+## The megacity, second pass
+
+Built on `megacity-1` (2026-11-09) from the user's brief: the megacity is the whole world, with the verticality and density, megabuildings, layered highways, neon and street life of the genre, in our own names, layout, brands and look.
+
+### The generator
+
+The city keeps the prototype's frame (centre, arterials, rings, wall, wards) and adds to it. Everything below is a field of `MetroParams`, `District`, `Style` or `Ornaments`; the megacity's values live in [`floor-megacity.json`](../living/seeds/floor-megacity.json) and in the district styles of `settle::default_styles`.
+
+- **More wards.** Four rings at 0.22, 0.42, 0.62 and 0.82 of the radius, and ten arterials: 41 wards.
+- **Districts with quotas.** Wards choose districts in an order drawn from the seed, and a district may cap its wards (`quota`), so the market and the old town are one ward each and land in different sectors per seed. A district that fits nothing falls back to the mid-rise fill.
+
+  | District (style) | Where | Character | Models (city kit) |
+  |---|---|---|---|
+  | corporate | the core; up to 3 rich wards of the inner band | megatowers set back on plazas, 120 × 100 m blocks, an arcology in the middle of the central square (the core's `landmark`) | arcology, megatower (blade, stepped, twin, needle), neon tower |
+  | neon | up to 3 wards of the inner bands | clubs and towers wrapped in screens, the neon dressing on every street, holograms | neon tower, block, food stalls |
+  | market | one ward | food courts and stalls on every street | market, old block, food stalls |
+  | oldtown | one poorer ward | small, irregular blocks of older brick and plaster | old block, workshop |
+  | megablock | the middle bands | residential megablocks: slab, courtyard and stacked forms | megablock, block |
+  | works | the sea's side, outer bands | warehouses, container stacks, cranes on the water | warehouse, container |
+  | slum | the outer band, poorer side, against the wall | shanties a few metres deep and stacked, container homes; blocks back-filled on a 9 m grid with 2.2 m alleys (`fill_m`, `fill_gap_m`) | shanty, container |
+  | metro | the rest | mid-rise blocks | block, market, workshop |
+  | outpost, salvage, ruin | the wastes | as before, from the city kit | container, shanty, ruin |
+
+- **Layered transport** (`MetroParams.highways`). Elevated highway pieces stand over every arterial and ring inside the wall, 24 m each: ring decks 22 m wide at 9 m, arterial decks 16 m wide at 17 m, so arterials pass over the rings. They are props over the roads (`PropKind::Highway`). The rules keep the roads at street level, as [verticality](#verticality) stages it.
+- **The wall's towers** (`MetroParams.wall_towers`) at its corners, clear of the gates.
+- **Street detail per block** (`Ornaments`):
+  - `street_kit`: dressing along every street and lane edge, drawn by weight per spot: vending machines, steam vents, rubbish, barriers and parked vehicles;
+  - `neon_streets`: the neon dressing (signs, kiosks, stalls, cables) on the N busiest streets, not just one;
+  - `holograms` round squares; `scaffold` on buildings of 20 m and more; `cranes` where a works building looks over water; `salvage` beside buildings in the wastes.
+
+  Whatever blocks (vending machines, containers, salvage) stands in a square or beside a building, as before; parked vehicles are scenery and do not block.
+- **Lit windows by time of day.** Each tower's windows are lit by storey and by run, so a night view shows occupied and empty floors. All glow scales with the hour in the client (`daylight.rs`); per-window switching over the evening is a client note ([game brief](GAME_BRIEF.md#the-megacity-kit-2026-11-09)).
+- **Rules seen by the rest of the engine.** Lot kinds are unchanged (the authority keys structures on them): each district style maps them to the kit's models. One `Frontage::Alley(road)` marks back-filled lots. Settlement styles map to the `cyberpunk_megacity` asset folder (`settle::env_of`), and `settle::road_surface` names each style's paving for clients.
+
+At 4096 m (seed 11): 54 settlements, 12,059 lots (642 of 50 m or more, the tallest 299 m), 15,500 props including 1,351 highway pieces and 69 wall towers.
+
+### Tests
+
+The megacity tests now assert:
+- the arcology in the central square and at least six corporate towers of 100 m at 2048 m;
+- a ward for every district of the seed, and the quota-1 districts once each;
+- back-filled lots facing their road;
+- highways and wall towers allowed over roads;
+- squares reachable at their edge when a building stands in their middle.
+
+`hosted_map` starts its walkable-area search from the first square's edge when its middle is built on. All 108 rules tests pass. The island's digests are unchanged (`d1b27361ae061547` `16412fd044a2b0b0` `b130838b553d95a5`).
+
+### Captures and a blind A/B
+
+Look-dev captures of the prototype (`origin/main`, 14f3a72, its own worktree and assets) and the second pass, at 4096 m, at night (22:00) and dusk (19:00), with the game camera (yaw from the spot, 32°, 26 m) and a vista (16°, 70 m). Spots come from `examples/city_preview.rs`, which picks the same kinds of place in any city layout: the core, a neon street, a megablock, the slums against the wall, a highway, the market, the port, the old town (second pass only), the wastes outside a gate and a salvage camp. The images stay on the dev-box (`~/megacity-out/cap-before`, `~/megacity-out/cap-after`); the repository commits none.
+
+A fresh agent judged 18 pairs (each spot at night with the game camera and at dusk in a vista), sides randomised, with only the images: **second pass 10, prototype 6, ties 2.**
+- The second pass won the market, port and salvage camp in every pair, the slums and the megablock at night, and the core and the highway in the vista.
+- It lost the neon street in both shots, the core at night, the megablock vista, the slums at dusk and the highway at night.
+- The judge's reasons for losing images: large empty squares and open ground, haze over everything beyond about 50 m, props in rows on open ground.
+- Its reasons against even the winners: a flat blue-violet palette with dim neon, little visible layering (one image with a highway), text mirrored on container homes, a highway piece floating in fog.
+
+Frame times (static spots at 22:00, mean of the last two reports, host load differing between arms): the core 7.5 → 6.2 ms, the wastes' edge 6.0 → 3.5 ms. The matched runs in [staged generation](#staged-generation-and-the-largest-floor) are the fair comparison: the same p50, p95 and p99 within noise.
+
+### Next
+
+- Fill the open ground: smaller squares and set-backs in the corporate core, denser street dressing (`street_kit_m`), lots on the plazas' edges.
+- Night haze and palette: a floor's own mood curve in the client, longer fog distances, brighter neon and more emissive screens (client notes).
+- Highways: ramps where decks end and pieces bent through curves; a lone piece by the core square reads as floating.
+- Signs seen from behind read mirrored on container homes: make them two-sided or face them to the street.
+- Peopling: the seed peoples six settlements; the other 48 stand empty.
 
 ## Phased plan
 
 | Phase | What | What it proves | Verification surface |
 |---|---|---|---|
 | 0 (this change) | The megacity generator at 2048/4096 m in the rules, the floor-law composition, the design | A city-scale floor can be generated deterministically on both sides; the size limits are known | `cargo test -p living-rules`; `verify-generation` with the new seed at 2048 m |
-| 1 | Staged generation in `create_floor`; the seed passed at runtime instead of compiled in; the client's land cache by digest (the client reading `map.params` in look-dev is done: `LIVING_GAME_SEED`) | One module build hosts any floor up to 4–8 km within the fuel budget; a client joins a 4096 m floor in seconds | `verify-generation` (a 4096 m floor), `verify-client` (land row, digests, cache) |
+| 1 | Staged generation in `create_floor`; the seed passed at runtime instead of compiled in (*both done on `megacity-1`*); the client's land cache by digest (the client reading `map.params` in look-dev is done: `LIVING_GAME_SEED`) | One module build hosts any floor up to 4–8 km within the fuel budget; a client joins a 4096 m floor in seconds | `verify-generation` (a 4096 m floor), `verify-client` (land row, digests, cache) |
 | 2 | Laws as data: the inventory above moved behind law functions with their cadence; `law_card`; `rates_key`; overlay composition with AST merge | One build, several floors with different laws; no per-arm builds for labs | `verify-core` (law scenes per floor), `verify-minds` (the mind reads the floor's laws) |
 | 3 | The tower database, soul ids, transit by IDC on one host; memory keyed by `(realm, soul)`; the client's floor switch | A character leaves floor A and arrives on floor B with exactly what should travel, and nothing duplicates or vanishes across crashes | New `verify-transit` skill (create with `create-verification-skill`): scripted tier (two scratch floors and a scratch tower; kill the server between each step and resume), and a player tier through `verify-player` |
 | 4 | The second and third floors (steampunk valley, sky archipelago) with their laws | Floors differ in generation, technology and physics without engine forks | `verify-generation`, `verify-core` |
