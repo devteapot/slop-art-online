@@ -324,6 +324,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     let _timer = common::span("housekeeping");
     crate::town::refresh_weather(ctx, now);
     crate::presence::housekeeping(ctx, now);
+    crate::town::guests_leave(ctx, now);
     crate::perception::expire(ctx, now);
     let hour = common::hour(&w, now) as u8;
     if hour != k.last_hour {

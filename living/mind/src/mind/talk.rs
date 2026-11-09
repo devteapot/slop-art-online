@@ -513,7 +513,7 @@ impl Minds {
         let thought = flat(&v["thought"]);
         // Deliberate acts decided in this turn (e.g. both choosing to start a family).
         let acts = acts_of(&v);
-        let other_name = self.name(other);
+        let other_name = self.known_as(c.id, other);
         let now = llm::now_ms();
         let (epoch, day_ms) = self.conn.db.world().id().find(&0).map(|w| (w.epoch_ms, w.day_ms)).unwrap_or((0, living_rules::DEFAULT_DAY_MS));
         let hour_ms = day_ms / 24;
@@ -656,7 +656,8 @@ impl Minds {
     /// are, the conversation so far and the line they are answering.
     async fn talk_prompt(&self, c: &Character, other: u32, lines: &[Line], heard: &Line, ctx: &TalkCtx<'_>) -> (String, String) {
         let me = c.id;
-        let other_name = self.name(other);
+        // As this character knows them: the name only where the authority gave it.
+        let other_name = self.known_as(me, other);
         let fmt = self.fmt_time();
         let persona = self.conn.db.persona().id().find(&me);
         let identity = match &persona {
@@ -728,8 +729,8 @@ impl Minds {
             .take(12)
             .rev()
             .map(|l| {
-                let who = if l.speaker == me { "You".to_string() } else { self.name(l.speaker) };
-                let to = if l.to != 0 && l.to != me && l.to != other { format!(" (to {})", self.name(l.to)) } else { String::new() };
+                let who = if l.speaker == me { "You".to_string() } else { self.known_as(me, l.speaker) };
+                let to = if l.to != 0 && l.to != me && l.to != other { format!(" (to {})", self.known_as(me, l.to)) } else { String::new() };
                 format!("{who}{to}: “{}”", l.text)
             })
             .collect();

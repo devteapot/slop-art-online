@@ -510,6 +510,10 @@ Presentation only: the authority decides what every resident does ([town life](T
   - A hidden sleeper still animates.
   - Clips are judged from stills, not in motion: `play` had one 41° jerk inside its loop (fixed below).
 
+### Residents who answer (town life layer 2, notes for the client)
+
+Not built in the client; what it would need ([layer 2](TOWN_LIFE.md#layer-2-residents-who-answer)). Residents someone engages get minds and answer through speech rows like anyone. One new act for players: **`host`**, taking someone in as one's household's guest until morning, sent as `human_act` `{"do": "host", "target": {"id": N}}` (refused without a house at the player's home door). A player who is taken in perceives it as an experience ("… takes you in as their guest until 07:00 …") and gains a `lodging` place in `my_places`; the `guest` table is private. No new public table or view.
+
 ## Client polish: first load, getting up, root motion, dawn and storm (2026-11-09)
 
 Client presentation and the clip tools only (`living/game`, `living/tools`).

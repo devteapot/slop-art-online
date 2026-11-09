@@ -69,6 +69,8 @@ pub mod genome_type;
 pub mod grant_items_reducer;
 pub mod grant_know_how_reducer;
 pub mod grant_repertoires_reducer;
+pub mod guest_table;
+pub mod guest_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
 pub mod human_move_reducer;
@@ -290,6 +292,8 @@ pub use genome_type::Genome;
 pub use grant_items_reducer::grant_items;
 pub use grant_know_how_reducer::grant_know_how;
 pub use grant_repertoires_reducer::grant_repertoires;
+pub use guest_table::*;
+pub use guest_type::Guest;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
 pub use human_move_reducer::human_move;
@@ -912,6 +916,7 @@ pub struct DbUpdate {
     genesis: __sdk::TableUpdate<Genesis>,
     genesis_timer: __sdk::TableUpdate<GenesisTimer>,
     genome: __sdk::TableUpdate<Genome>,
+    guest: __sdk::TableUpdate<Guest>,
     infant_cry: __sdk::TableUpdate<InfantCry>,
     inventory: __sdk::TableUpdate<Inventory>,
     join_request: __sdk::TableUpdate<JoinRequest>,
@@ -1061,6 +1066,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "genome" => db_update
                     .genome
                     .append(genome_table::parse_table_update(table_update)?),
+                "guest" => db_update
+                    .guest
+                    .append(guest_table::parse_table_update(table_update)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(infant_cry_table::parse_table_update(table_update)?),
@@ -1348,6 +1356,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.genome = cache
             .apply_diff_to_table::<Genome>("genome", &self.genome)
             .with_updates_by_pk(|row| &row.id);
+        diff.guest = cache
+            .apply_diff_to_table::<Guest>("guest", &self.guest)
+            .with_updates_by_pk(|row| &row.id);
         diff.infant_cry = cache
             .apply_diff_to_table::<InfantCry>("infant_cry", &self.infant_cry)
             .with_updates_by_pk(|row| &row.infant);
@@ -1610,6 +1621,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "genome" => db_update
                     .genome
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "guest" => db_update
+                    .guest
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
@@ -1885,6 +1899,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "genome" => db_update
                     .genome
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "guest" => db_update
+                    .guest
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2107,6 +2124,7 @@ pub struct AppliedDiff<'r> {
     genesis: __sdk::TableAppliedDiff<'r, Genesis>,
     genesis_timer: __sdk::TableAppliedDiff<'r, GenesisTimer>,
     genome: __sdk::TableAppliedDiff<'r, Genome>,
+    guest: __sdk::TableAppliedDiff<'r, Guest>,
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
@@ -2219,6 +2237,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Genome>("genome", &self.genome, event);
+        callbacks.invoke_table_row_callbacks::<Guest>("guest", &self.guest, event);
         callbacks.invoke_table_row_callbacks::<InfantCry>("infant_cry", &self.infant_cry, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
         callbacks.invoke_table_row_callbacks::<JoinRequest>(
@@ -3014,6 +3033,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         genesis_table::register_table(client_cache);
         genesis_timer_table::register_table(client_cache);
         genome_table::register_table(client_cache);
+        guest_table::register_table(client_cache);
         infant_cry_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
         join_request_table::register_table(client_cache);
@@ -3103,6 +3123,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "genesis",
         "genesis_timer",
         "genome",
+        "guest",
         "infant_cry",
         "inventory",
         "join_request",

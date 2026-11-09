@@ -147,6 +147,10 @@ async fn main() -> Result<()> {
                     "SELECT * FROM my_deliberations",
                     // Whether the people who play characters are there (private; the owner reads it).
                     "SELECT * FROM presence",
+                    // Residents woken into minds (private, one row each; docs/TOWN_LIFE.md).
+                    "SELECT * FROM woken",
+                    // Who told whom their name (private): prompts name people only when known.
+                    "SELECT * FROM acquaintance",
                 ].map(String::from)).collect::<Vec<String>>());
         })
         .on_disconnect(|_, e| {
@@ -185,6 +189,12 @@ async fn main() -> Result<()> {
                 let _ = tx.send(mind::Event::Pending(d.clone()));
             }
             let _ = tx.send(mind::Event::Deliberation(d.actor));
+        });
+    }
+    {
+        let tx = tx.clone();
+        conn.db.woken().on_insert(move |_, w| {
+            let _ = tx.send(mind::Event::Woken(w.id));
         });
     }
     if lod {

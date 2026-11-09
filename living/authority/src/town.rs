@@ -347,3 +347,79 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
         }
     }
 }
+
+// ---- hospitality ------------------------------------------------------------------------
+
+/// The house at a character's home door (its household's), if it has one.
+fn house_of(ctx: &ReducerContext, c: &Character) -> Option<Structure> {
+    if c.home_x == 0.0 && c.home_y == 0.0 {
+        return None;
+    }
+    let home = (c.home_x, c.home_y);
+    living_rules::map::chunks_around(home.0, home.1, 2.0)
+        .into_iter()
+        .flat_map(|k| ctx.db.structure().chunk().filter(k).collect::<Vec<_>>())
+        .filter(|s| s.kind == "house" && dist((s.x, s.y), home) <= 1.5)
+        .min_by(|a, b| dist((a.x, a.y), home).total_cmp(&dist((b.x, b.y), home)))
+}
+
+/// The `host` effect: the target person is the actor's household's guest until the next
+/// `until_hour` of the world's day. One stay per guest at a time (a new one replaces it).
+pub fn host(ctx: &ReducerContext, me: u32, a: &Activity, at: (f32, f32), until_hour: f32, now: u64) -> Result<String, String> {
+    if a.target.class != 3 {
+        return Err("no one to take in".into());
+    }
+    let guest = a.target.id as u32;
+    let host_c = ctx.db.character().id().find(me).ok_or("no host")?;
+    let house = house_of(ctx, &host_c).ok_or("you have no house to offer (none stands at your home door)")?;
+    let w = common::world(ctx);
+    let hour_ms = w.day_ms as f64 / 24.0;
+    let ahead = ((until_hour - common::hour(&w, now)).rem_euclid(24.0)) as f64;
+    let until_ms = now + (ahead * hour_ms) as u64;
+    for g in ctx.db.guest().guest().filter(guest).map(|g| g.id).collect::<Vec<_>>() {
+        ctx.db.guest().id().delete(g);
+    }
+    ctx.db.guest().insert(Guest { id: 0, guest, host: me, house: house.id, x: house.x, y: house.y, since_ms: now, until_ms });
+    // The guest knows where its bed is: a remembered place its graph can go to.
+    match ctx.db.place().actor().filter(guest).find(|p| p.name == "lodging") {
+        Some(mut p) => {
+            p.x = house.x;
+            p.y = house.y;
+            ctx.db.place().id().update(p);
+        }
+        None => {
+            ctx.db.place().insert(Place { id: 0, actor: guest, name: "lodging".into(), x: house.x, y: house.y });
+        }
+    }
+    let when = format!("{:02}:00", until_hour.floor() as u32);
+    if let Some(c) = ctx.db.character().id().find(guest) {
+        let dir = common::direction(at, (house.x, house.y));
+        let text = format!("{} takes you in as their guest until {when}: a bed in their house ({dir}, at [{:.0}, {:.0}]) and food from their household's store.", common::label_cap(ctx, &c, me), house.x, house.y);
+        crate::perceive::percept(ctx, &c, now, "host", me, guest, at, text, 0.85);
+    }
+    crate::perceive::witnessed(ctx, now, at, "host", me, guest, "{a} took {b} in as a guest", 0.4, &[me, guest]);
+    common::chronicle(ctx, now, "host", me, guest, at, format!("{} took {} in as a guest until {when}", common::display(ctx, me), common::display(ctx, guest)));
+    Ok(format!("took {} in as your guest until {when}", common::label_for(ctx, &host_c, guest)))
+}
+
+/// `who` is a guest now of `owner`'s household (its host, or someone sharing the host's home).
+pub fn guest_of(ctx: &ReducerContext, who: u32, owner: u32, now: u64) -> bool {
+    let home = |id: u32| ctx.db.character().id().find(id).map(|c| (c.home_x, c.home_y));
+    ctx.db.guest().guest().filter(who).any(|g| g.until_ms > now && (g.host == owner || (home(g.host).is_some() && home(g.host) == home(owner))))
+}
+
+/// Housekeeping: stays that ended (an index range of the due rows) go, with the guest's
+/// `lodging` place at that house.
+pub fn guests_leave(ctx: &ReducerContext, now: u64) {
+    for g in ctx.db.guest().until_ms().filter(..=now).collect::<Vec<_>>() {
+        ctx.db.guest().id().delete(g.id);
+        if let Some(p) = ctx.db.place().actor().filter(g.guest).find(|p| p.name == "lodging" && dist((p.x, p.y), (g.x, g.y)) < 0.5) {
+            ctx.db.place().id().delete(p.id);
+        }
+    }
+}
+
+/// A guest died: its stays go.
+pub fn forget_guest(ctx: &ReducerContext, id: u32) {
+    ctx.db.guest().guest().delete(id);
+}

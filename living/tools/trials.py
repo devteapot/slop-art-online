@@ -856,7 +856,10 @@ class Instance:
         budget = self.trial.get("budget", {})
         env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=URL, LIVING_DB=self.db, LIVING_RUN=self.db,
                    LIVING_SEED=self.shared["seed_rel"][self.trial["name"]], LIVING_MODELS=str(path),
-                   LIVING_ONLY=",".join(map(str, self.roles["subject"])), LIVING_TOKEN=self.shared["token"],
+                   # A trial whose `minds.only` names `woken` also lets the mind think for
+                   # residents as they wake (docs/TOWN_LIFE.md, "Layer 2").
+                   LIVING_ONLY=",".join([*map(str, self.roles["subject"]), *(["woken"] if "woken" in self.trial.get("minds", {}).get("only", []) else [])]),
+                   LIVING_TOKEN=self.shared["token"],
                    LIVING_NEO4J_URI=f"127.0.0.1:{NEO4J_PORT}", LIVING_NEO4J_PASSWORD=self.shared["neo4j_pw"],
                    # Off (0) unless a trial asks for a rate: trials measure, they do not cap.
                    LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 0)), LIVING_CONCURRENCY="4",
