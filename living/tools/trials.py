@@ -1211,11 +1211,15 @@ def summarize(d, trial, extra):
     s["places_named"] = [p["name"] for p in last.get("place", [])]
     # The journal: the actual model exchanges.
     j = []
-    for f in sorted((d / "journal").glob("*.jsonl")) if (d / "journal").exists() else []:
+    # The mind's live journal while it exists (a copy taken at a stop can be stale after a
+    # reopen), else the instance's copy.
+    live = ROOT / ".local/living/journal" / f"{PREFIX}{d.parent.name}-{d.name}"
+    jdir = live if live.exists() else d / "journal"
+    for f in sorted(jdir.glob("*.jsonl")) if jdir.exists() else []:
         for n, line in enumerate(f.read_text().splitlines(), 1):
             try:
                 r = json.loads(line)
-                r["_ref"] = f"{f.relative_to(d)}:{n}"
+                r["_ref"] = f"{d.name}/journal/{f.name}:{n}"
                 j.append(r)
             except ValueError:
                 pass
@@ -1496,7 +1500,8 @@ def graph_terms(g):
 
 def life_report(a):
     bdir = OUT / a.batch
-    for d in sorted(p.parent for p in bdir.glob("*/summary.json")):
+    meta = json.loads((bdir / "batch.json").read_text())
+    for d in sorted(p.parent for p in bdir.glob("*/samples.jsonl")):
         samples = jsonl(d / "samples.jsonl")
         if not samples:
             continue
@@ -1504,7 +1509,13 @@ def life_report(a):
         chron = jsonl(d / "chronicle.jsonl")
         graphs = jsonl(d / "graphs.jsonl")
         rows = jsonl(d / "mind_rows.jsonl")
-        summ = json.loads((d / "summary.json").read_text())
+        status = json.loads((d / "state.json").read_text()).get("status") if (d / "state.json").exists() else None
+        if (d / "summary.json").exists() and status not in ("running", "starting", "collecting"):
+            summ = json.loads((d / "summary.json").read_text())
+        else:
+            # Still running: probes from the evidence so far.
+            trial = max((t for t in meta["trials"] if d.name.startswith(t + "-")), key=len)
+            summ = summarize(d, load_trial(trial), extra={"stopped_by": "still running", "day_ms": 720000})
         snaps = sorted((d / "snapshots").glob("h*.json")) if (d / "snapshots").exists() else []
         setts = json.loads(snaps[0].read_text()).get("settlement", []) if snaps else []
         names = {}
