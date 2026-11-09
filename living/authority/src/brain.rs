@@ -27,6 +27,8 @@ thread_local! {
     /// When each person last checked for, and last felt, knowing something alone (kept here:
     /// evaluator marks are reset when a new plan is installed).
     static LEGACY: std::cell::RefCell<std::collections::HashMap<u32, (u64, u64)>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// When each person last felt the longing for a child (kept here for the same reason).
+    static LONGED: std::cell::RefCell<std::collections::HashMap<u32, u64>> = std::cell::RefCell::new(std::collections::HashMap::new());
 }
 /// Alert bits for ongoing situations (bits 1..8 are bodily alarms).
 const IN_CROWD: u32 = 1 << 8;
@@ -867,6 +869,15 @@ impl<'a> Ev<'a> {
         for (bit, on, text) in drives {
             let was = self.st.alerts & bit != 0;
             if on && !was {
+                // The longing for a child needs calm and daylight, so it went off and came
+                // back every morning and after every meal: felt again at most once a day.
+                if bit == 128 {
+                    let last = LONGED.with(|l| l.borrow().get(&self.me.id).copied());
+                    if last.is_some_and(|t| self.now.saturating_sub(t) < self.w.day_ms.max(1)) {
+                        continue;
+                    }
+                    LONGED.with(|l| l.borrow_mut().insert(self.me.id, self.now));
+                }
                 self.st.alerts |= bit;
                 percept(self.ctx, &self.me, self.now, "feeling", self.me.id, 0, self.at, text.clone(), 0.5);
                 self.deliberate(&format!("You feel something: {text}"));
