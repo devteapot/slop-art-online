@@ -105,6 +105,14 @@ async fn main() -> Result<()> {
             log::info!("connected as {identity}");
             let ready = ready.clone();
             let experiences = format!("SELECT * FROM experience WHERE controller = 0x{}", identity.to_hex());
+            // With player memory on: the experiences of characters people play (every other
+            // controller's; instinct-only characters have none), and where the settlements are.
+            let lived = format!("SELECT * FROM experience WHERE controller != 0x{}", identity.to_hex());
+            let mut queries = vec![experiences.clone()];
+            if mind::player_memory() {
+                queries.push(lived);
+                queries.push("SELECT * FROM settlement".into());
+            }
             c.subscription_builder()
                 .on_applied(move |_| {
                     if let Some(tx) = ready.lock().unwrap().take() {
@@ -112,8 +120,7 @@ async fn main() -> Result<()> {
                     }
                 })
                 .on_error(|_, e| log::error!("subscription error: {e:?}"))
-                .subscribe([
-                    experiences.as_str(),
+                .subscribe(queries.into_iter().chain([
                     "SELECT * FROM mind_cursor",
                     "SELECT * FROM world",
                     "SELECT * FROM character",
@@ -135,7 +142,7 @@ async fn main() -> Result<()> {
                     "SELECT * FROM bond_offer",
                     "SELECT * FROM trade_offer",
                     "SELECT * FROM my_deliberations",
-                ]);
+                ].map(String::from)).collect::<Vec<String>>());
         })
         .on_disconnect(|_, e| {
             log::error!("disconnected from the world: {e:?}");
@@ -147,6 +154,11 @@ async fn main() -> Result<()> {
     {
         let tx = tx.clone();
         conn.db.experience().on_insert(move |ctx, e| {
+            // Another controller's character (a person's): memory only, never a turn.
+            if e.controller != ctx.identity() {
+                let _ = tx.send(mind::Event::Lived(e.clone()));
+                return;
+            }
             // Level of detail: a human player in what a character experiences puts it on stage.
             if lod {
                 let me = ctx.identity();

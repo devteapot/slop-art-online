@@ -259,6 +259,13 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) 
     let to_name = if to != 0 { common::name_of(ctx, to) } else { String::new() };
     let line = if to != 0 { format!("{} to {}: “{}”", me.name, to_name, text) } else { format!("{}: “{}”", me.name, text) };
     common::chronicle(ctx, now, "speech", speaker, to, at, line);
+    // A human-controlled speaker perceives its own words (an AI's words are already in the
+    // reasoning episode that chose them), so what it said can be internalized as lived
+    // (docs/PLAYER_MEMORY.md).
+    if !me.ai {
+        let said = if to != 0 { format!("You said to {}: “{}”", common::label_for(ctx, &me, to), text) } else { format!("You said: “{}”", text) };
+        percept(ctx, &me, now, "said", speaker, to, at, said, 0.5);
+    }
     if let Some((ago_s, said)) = echo {
         let when = if ago_s < 5 { "just now".to_string() } else { format!("{ago_s} s ago") };
         percept(ctx, &me, now, "repeat", speaker, to, at, format!("You said almost the same thing {when}: “{said}”."), 0.3);

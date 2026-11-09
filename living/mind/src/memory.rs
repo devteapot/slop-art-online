@@ -34,6 +34,12 @@ pub struct Patch {
     pub edges: Vec<EdgeOp>,
     pub retract: Vec<(String, String, String)>,
     pub remember: Vec<MemoryOp>,
+    /// Under whose control what this patch records was lived (`"human"` for a character a
+    /// person plays; docs/PLAYER_MEMORY.md). Added to `lived_under` on every concept, memory
+    /// and belief the patch writes, so experiments can tell such memories apart. None (the
+    /// mind's own consolidation) leaves it as it was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lived_under: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -180,6 +186,24 @@ impl Store {
         Ok(())
     }
 
+    /// How far a human-played character's lived experience is internalized (experience ids
+    /// <= this; kept on `self`, since a player's experience rows stay in the authority's window
+    /// for the player and are not consumed by `mind_consolidated`).
+    pub async fn lived_upto(&self, actor: u32) -> Result<Option<u64>> {
+        let mut rows = self.g.execute(self.q("MATCH (s:Concept {run: $run, actor: $actor, key: 'self'}) RETURN s.lived_upto AS upto", actor)).await?;
+        Ok(match rows.next().await? {
+            Some(r) => r.get::<Option<i64>>("upto").ok().flatten().map(|x| x as u64),
+            None => None,
+        })
+    }
+
+    pub async fn set_lived_upto(&self, actor: u32, upto: u64, t: u64) -> Result<()> {
+        self.g
+            .run(self.q("MATCH (s:Concept {run: $run, actor: $actor, key: 'self'}) SET s.lived_upto = CASE WHEN coalesce(s.lived_upto, 0) > $upto THEN s.lived_upto ELSE $upto END, s.lived_t = $t, s.lived_under = [x IN coalesce(s.lived_under, []) WHERE x <> 'human'] + 'human'", actor).param("upto", upto as i64).param("t", t as i64))
+            .await?;
+        Ok(())
+    }
+
     /// Apply one reasoning episode's patch transactionally (given up after a minute rather
     /// than left to hold a connection forever).
     pub async fn apply(&self, actor: u32, patch: &Patch, thought: &str, t: u64) -> Result<()> {
@@ -239,6 +263,7 @@ impl Store {
                      MERGE (c:Concept {run: $run, actor: $actor, key: n.key})
                      ON CREATE SET c.created_t = $t
                      SET c += n.props, c.name = coalesce(n.name, c.name), c.updated_t = $t, c.thought = $thought
+                     SET c.lived_under = CASE WHEN $lived IS NULL THEN c.lived_under ELSE [x IN coalesce(c.lived_under, []) WHERE x <> $lived] + $lived END
                      WITH c, n, [l IN labels(c) WHERE NOT l IN $fixed] AS old
                      CALL (c, n, old) {
                        WITH c, n, old WHERE size(n.labels) > 0
@@ -250,7 +275,8 @@ impl Store {
                 .param("rows", p(Value::Array(rows)))
                 .param("fixed", FIXED_LABELS.iter().map(|s| s.to_string()).collect::<Vec<_>>())
                 .param("t", t as i64)
-                .param("thought", thought),
+                .param("thought", thought)
+                .param("lived", p(json!(patch.lived_under))),
             )
             .await?;
         }
@@ -264,6 +290,7 @@ impl Store {
                      MERGE (c:Concept {run: $run, actor: $actor, key: m.key})
                      SET c:Memory, c.exp = m.exp, c.t = m.t, c.gist = m.gist, c.name = m.gist, c.salience = m.salience, c.thought = $thought
                      SET c.childhood = CASE WHEN m.childhood THEN true ELSE c.childhood END
+                     SET c.lived_under = CASE WHEN $lived IS NULL THEN c.lived_under ELSE [x IN coalesce(c.lived_under, []) WHERE x <> $lived] + $lived END
                      WITH c, m
                      CALL (c, m) {
                        MATCH (:Concept {run: $run, actor: $actor})-[r {open: true}]->(b:Concept)
@@ -280,7 +307,8 @@ impl Store {
                 )
                 .param("rows", p(Value::Array(rows)))
                 .param("t", t as i64)
-                .param("thought", thought),
+                .param("thought", thought)
+                .param("lived", p(json!(patch.lived_under))),
             )
             .await?;
         }
@@ -304,6 +332,7 @@ impl Store {
                          r.firsthand = coalesce(r.firsthand, false) OR e.firsthand,
                          r.sources = [x IN coalesce(r.sources, []) WHERE NOT x IN e.sources] + e.sources
                      SET r.hearsay = NOT r.firsthand AND size(r.sources) = 1
+                     SET r.lived_under = CASE WHEN $lived IS NULL THEN r.lived_under ELSE [x IN coalesce(r.lived_under, []) WHERE x <> $lived] + $lived END
                      WITH b, e
                      CALL (b, e) {
                        UNWIND e.because AS x
@@ -316,7 +345,8 @@ impl Store {
                 )
                 .param("rows", p(Value::Array(rows)))
                 .param("t", t as i64)
-                .param("thought", thought),
+                .param("thought", thought)
+                .param("lived", p(json!(patch.lived_under))),
             )
             .await?;
         }

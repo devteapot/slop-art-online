@@ -1,6 +1,6 @@
 ---
 name: verify-minds
-description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations, consolidation, reconnect handling, LIVING_ONLY, or mind level of detail.
+description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations, consolidation, reconnect handling, LIVING_ONLY, mind level of detail, or player memory (LIVING_PLAYER_MEMORY).
 ---
 
 # Verify internal minds
@@ -31,6 +31,8 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 
 `--case` can repeat. Cases are `roundtrip`, `acts`, `conversation`, `consolidation`, `prune`, `reject`, `only`, `reconnect` and `lod`. Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
 
+
+Player memory (`LIVING_PLAYER_MEMORY=1`: the service integrates what human-played characters live) needs a scratch Neo4j, so its proof runs in `verify-knowledge`'s `player_memory.py`; [features/player-memory.md](features/player-memory.md) maps what it proves about this service (switch off, cadence, reconnect, batch mode).
 
 ## Evidence and cleanup
 

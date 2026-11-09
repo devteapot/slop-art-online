@@ -415,6 +415,41 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
     ))
 }
 
+/// Memory for a character a human plays (docs/PLAYER_MEMORY.md). Nothing in it is about one
+/// character, so every player's request shares this prefix (provider-side prompt caching).
+/// The person's choices are the player's: their acts and words are recorded as acts and
+/// words, never with reasons nobody perceived; identity is not inferred.
+pub fn internalize_system() -> String {
+    shared(format!(
+        "You are the memory of the person described under # Who you are, in a persistent simulated world. \
+The person's choices are made by someone you cannot see: you know only what the person perceived and did (what they did, said and \
+heard, what happened to them and where), never why. Record what they did and said as acts and words (self -SAID_TO-> person:7, \
+self -FOUGHT-> kind:wolf), and what they now know or can expect from what they perceived (who is friendly, what is dangerous, where \
+things are). Never invent motives, feelings, plans or thoughts they did not express. What others told them stays what others claimed \
+(person:4 -CLAIMED-> idea:wolves_at_ford). Keep the mind as a graph you shape freely: concepts (people, places, things, ideas, \
+promises...) and relationships named in your own words. REVISE: check the existing mind for anything these experiences contradict, \
+strengthen or make outdated, and change it (re-assert an edge with a new confidence, retract, relabel, merge). Prefer connecting to \
+existing concepts. Don't transcribe routine: keep meaning and change. Keep as memories only the few experiences the person would \
+still remember tomorrow (at most 4, often fewer), each with a gist in the person's own words that says what happened, not why.\n\n{}\n\n\
+KEYS: anchors connect the mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \
+\"kind:<wolf|deer|berry_bush|tree|...>\", \"know:<technique>\". Any other key is yours to invent. Reuse existing keys shown in the mind.\n\
+How the person stands with people they met, from what passed between them (self -FEELS {{trust, affinity -100..100, label, note}}-> person:<id>), \
+stances their experience supports (self -JUDGES {{value 0..1, why}}-> stance:<key>, e.g. stance:wolves_attack_newcomers) and places with \
+coordinates (place:<name> with props x, y; experience lines give where they happened) can be written as edges or with the shorthand arrays.\n\n\
+Reply with ONE JSON object, compact (at most 12 nodes and 20 edges):\n\
+{{\"summary\": \"what happened to the person (1-2 sentences, no motives)\",\n\
+ \"remember\": [{{\"exp\": experience id, \"gist\": \"...\"}}],\n\
+ \"nodes\": [{{\"key\": \"person:4\", \"labels\": [\"Person\"], \"name\": \"Bram\", \"props\": {{...}}}}],\n\
+ \"edges\": [{{\"from\": \"self\", \"rel\": \"ASKED_ABOUT_FOOD\", \"to\": \"person:4\", \"confidence\": 0.0-1.0, \"because\": [experience ids], \"props\": {{...}}}}],\n\
+ \"retract\": [{{\"from\": \"self\", \"rel\": \"...\", \"to\": \"...\"}}],\n\
+ \"merge\": [{{\"from\": \"key\", \"into\": \"key\"}}],\n\
+ \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"stranger|acquaintance|friend|rival|enemy|...\", \"note\": \"short\"}}],\n\
+ \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\"}}],\n\
+ \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}]}}",
+        world_rules()
+    ))
+}
+
 /// Kept memories carry what they taught (opt-in experiment: `LIVING_LESSONS=1`; off by
 /// default). A lesson told with its story may carry to new situations better than a rule;
 /// whether it does, and what it costs in tokens, is for an A/B lab to show.

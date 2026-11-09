@@ -119,7 +119,7 @@ impl Lane {
         match purpose {
             "talk" => Self::Interactive,
             "combat" | "alarm" | "attack" => Self::Urgent,
-            "consolidate" | "reorganize" | "identity" => Self::Background,
+            "consolidate" | "reorganize" | "identity" | "internalize" => Self::Background,
             _ => Self::Routine,
         }
     }
@@ -588,22 +588,7 @@ impl Llm {
     async fn chat_once(&self, profile: &str, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
         let p = self.models.profiles.get(profile).ok_or_else(|| anyhow!("no profile {profile}"))?;
         let key = self.keys.get(profile).ok_or_else(|| anyhow!("profile {profile} has no key"))?;
-        let mut body = json!({
-            "model": p.model,
-            "messages": messages.iter().map(|m| json!({"role": m.role, "content": m.content})).collect::<Vec<_>>(),
-        });
-        if let Some(m) = p.max_tokens {
-            body["max_tokens"] = json!(m);
-        }
-        if p.json_mode {
-            body["response_format"] = json!({"type": "json_object"});
-        }
-        if let Some(e) = p.reasoning_effort.get(purpose) {
-            body["reasoning_effort"] = json!(e);
-        }
-        if p.prompt_cache_key {
-            body["prompt_cache_key"] = json!(format!("sao:{}:{profile}:{purpose}", profile.len()));
-        }
+        let body = request_body(p, profile, purpose, messages);
         let cost = messages.iter().map(|m| (m.content.len() as u64).div_ceil(3) + 8).sum::<u64>() + u64::from(p.max_tokens.unwrap_or(8000));
         let host = p.base_url.clone();
         let queued = Instant::now();
@@ -687,6 +672,117 @@ impl Llm {
             let _ = f.write_all(line.as_bytes()).await;
             let _ = f.flush().await;
         }
+    }
+}
+
+/// The chat-completions body for a profile (the same for a direct call and a batch line).
+fn request_body(p: &Profile, profile: &str, purpose: &str, messages: &[Msg]) -> Value {
+    let mut body = json!({
+        "model": p.model,
+        "messages": messages.iter().map(|m| json!({"role": m.role, "content": m.content})).collect::<Vec<_>>(),
+    });
+    if let Some(m) = p.max_tokens {
+        body["max_tokens"] = json!(m);
+    }
+    if p.json_mode {
+        body["response_format"] = json!({"type": "json_object"});
+    }
+    if let Some(e) = p.reasoning_effort.get(purpose) {
+        body["reasoning_effort"] = json!(e);
+    }
+    if p.prompt_cache_key {
+        body["prompt_cache_key"] = json!(format!("sao:{}:{profile}:{purpose}", profile.len()));
+    }
+    body
+}
+
+/// One request of a batch job: an id that comes back with its answer, the character it is
+/// for (its journal file) and the messages.
+pub struct BatchItem {
+    pub id: String,
+    pub actor: String,
+    pub messages: Vec<Msg>,
+}
+
+impl Llm {
+    /// Send requests as one provider batch job (Mistral's batch API: inline `requests`,
+    /// `POST /v1/batch/jobs`, polled until done, output read from `GET /v1/files/{id}/content`;
+    /// half the price, no latency promise). Each answer is journaled like a direct exchange,
+    /// with the job id. Off the real-time path: nothing waits on it but memory.
+    pub async fn batch(&self, profile: &str, purpose: &str, items: Vec<BatchItem>, poll: Duration, give_up: Duration) -> Result<Vec<(String, Result<Reply>)>> {
+        let p = self.models.profiles.get(profile).ok_or_else(|| anyhow!("no profile {profile}"))?;
+        let key = self.keys.get(profile).ok_or_else(|| anyhow!("profile {profile} has no key"))?;
+        let base = p.base_url.trim_end_matches('/');
+        let bodies: HashMap<String, (String, Value)> = items.iter().map(|i| (i.id.clone(), (i.actor.clone(), request_body(p, profile, purpose, &i.messages)))).collect();
+        let requests: Vec<Value> = items.iter().map(|i| json!({"custom_id": i.id, "body": bodies[&i.id].1})).collect();
+        let started = Instant::now();
+        let job: Value = self
+            .http
+            .post(format!("{base}/batch/jobs"))
+            .bearer_auth(key)
+            .json(&json!({"model": p.model, "endpoint": "/v1/chat/completions", "requests": requests, "metadata": {"purpose": purpose}}))
+            .send()
+            .await
+            .context("batch create")?
+            .error_for_status()
+            .context("batch create")?
+            .json()
+            .await?;
+        let id = job["id"].as_str().ok_or_else(|| anyhow!("batch create: no job id in {job}"))?.to_string();
+        log::info!("batch job {id}: {} {purpose} requests to {}", items.len(), p.model);
+        let done = loop {
+            tokio::time::sleep(poll).await;
+            let j: Value = self.http.get(format!("{base}/batch/jobs/{id}")).bearer_auth(key).send().await?.error_for_status()?.json().await?;
+            match j["status"].as_str().unwrap_or_default() {
+                "SUCCESS" | "FAILED" | "TIMEOUT_EXCEEDED" | "CANCELLED" => break j,
+                _ if started.elapsed() > give_up => {
+                    let _ = self.http.post(format!("{base}/batch/jobs/{id}/cancel")).bearer_auth(key).send().await;
+                    return Err(anyhow!("batch job {id} not done after {:?}; cancelled", give_up));
+                }
+                _ => {}
+            }
+        };
+        let latency_ms = started.elapsed().as_millis() as u32;
+        let mut lines = Vec::new();
+        for file in [&done["output_file"], &done["error_file"]] {
+            if let Some(f) = file.as_str().filter(|f| !f.is_empty()) {
+                let text = self.http.get(format!("{base}/files/{f}/content")).bearer_auth(key).send().await?.error_for_status()?.text().await?;
+                lines.extend(text.lines().filter(|l| !l.trim().is_empty()).filter_map(|l| serde_json::from_str::<Value>(l).ok()));
+            }
+        }
+        let mut out = Vec::new();
+        for item in &items {
+            let line = lines.iter().find(|l| l["custom_id"].as_str() == Some(item.id.as_str()));
+            // An answer line carries the chat completion under `response.body` (or `response`).
+            let resp = line.map(|l| if l["response"]["body"].is_object() { &l["response"]["body"] } else { &l["response"] });
+            let result: Result<(String, u32, Value)> = match resp.filter(|r| r["choices"].is_array()) {
+                Some(r) => Ok((content_text(&r["choices"][0]["message"]["content"]), r["usage"]["total_tokens"].as_u64().unwrap_or(0) as u32, r["usage"].clone())),
+                None => Err(anyhow!("batch job {id} ({}): no answer for {}: {}", done["status"], item.id, line.map(|l| l.to_string()).unwrap_or_default().chars().take(400).collect::<String>())),
+            };
+            let (actor, body) = &bodies[&item.id];
+            let entry = json!({
+                "at_ms": now_ms(),
+                "actor": actor,
+                "purpose": purpose,
+                "profile": profile,
+                "model": p.model,
+                "mode": "batch",
+                "job": id,
+                "custom_id": item.id,
+                "latency_ms": latency_ms,
+                "prompt_tokens": result.as_ref().ok().and_then(|(_, _, u)| u["prompt_tokens"].as_u64()),
+                "completion_tokens": result.as_ref().ok().and_then(|(_, _, u)| u["completion_tokens"].as_u64()),
+                "cached_tokens": result.as_ref().ok().and_then(|(_, _, u)| u["prompt_tokens_details"]["cached_tokens"].as_u64()),
+                "request": body,
+                "reply": result.as_ref().map(|(c, _, _)| c.clone()).ok(),
+                "tokens": result.as_ref().map(|(_, t, _)| *t).ok(),
+                "error": result.as_ref().err().map(|e| format!("{e:#}")),
+            });
+            self.journal(actor, &entry).await;
+            out.push((item.id.clone(), result.map(|(content, tokens, _)| Reply { content, tokens, latency_ms, model: p.model.clone() })));
+        }
+        log::info!("batch job {id} {} in {:.0} s", done["status"], latency_ms as f64 / 1000.0);
+        Ok(out)
     }
 }
 

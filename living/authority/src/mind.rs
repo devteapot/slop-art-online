@@ -80,6 +80,21 @@ fn authorize(ctx: &ReducerContext, actor: u32) -> Result<Character, String> {
     Ok(c)
 }
 
+/// Projections of a mind: by the character's controller, or by the world's mind service
+/// (the admin) for a human-controlled character whose lived experience it internalizes
+/// (docs/PLAYER_MEMORY.md). The service never sets such a character's identity.
+fn authorize_projection(ctx: &ReducerContext, actor: u32, persona: bool) -> Result<Character, String> {
+    let c = ctx.db.character().id().find(actor).ok_or("no such character")?;
+    if c.controller == ctx.sender() {
+        return Ok(c);
+    }
+    let human = !c.ai && c.controller != ctx.database_identity();
+    if human && ctx.sender() == common::world(ctx).admin {
+        return if persona { Err("a human-controlled character's identity is not projected".into()) } else { Ok(c) };
+    }
+    Err("not your character".into())
+}
+
 fn clip(s: &str, n: usize) -> String {
     if s.len() <= n {
         return s.to_string();
@@ -428,7 +443,7 @@ pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<
 /// Project consolidated mind state: persona, relations, beliefs, judgments, places.
 #[spacetimedb::reducer]
 pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Result<(), String> {
-    authorize(ctx, actor)?;
+    authorize_projection(ctx, actor, update.persona.is_some())?;
     let now = common::now_ms(ctx);
     if update.replace {
         let keep: Vec<u32> = update.relations.iter().map(|r| r.other).collect();

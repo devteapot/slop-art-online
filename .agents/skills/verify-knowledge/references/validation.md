@@ -120,3 +120,16 @@ Each attempt's `cleanup.json` reports database deletion, container removal, jour
 The helper uses Python's standard library and is executable. The skill has `name: verify-knowledge` and a descriptive frontmatter field. Read-only path checks confirm `.agents/skills/verify-knowledge`, `.claude/skills/verify-knowledge` and `.cursor/skills/verify-knowledge` resolve to the shared skill. This covers source discovery paths for Codex, Claude, Cursor and Mistral Vibe. Actual invocation in each runtime was not tested.
 
 Fake replies prove memory plumbing and projection. They do not prove authentic model learning. Timestamp-based fading tests do not prove the real scheduler over six wall-clock hours. The proof does not cover permissions, observer controls, reconnect recovery, retrieval from remains, a new identity's inheritance, or scale. Use the neighbouring skills named in `SKILL.md` for those checks.
+
+## Player memory (2026-11-09, Mac, uncommitted working tree on a4d79c0)
+
+| Run | Result | Evidence and notes |
+| --- | --- | --- |
+| `knowledge-pmem-direct-130816` | Off and on phases passed; the restart check read a thought from before the restart. | Driver fixed to wait for a new thought (`before` count). |
+| `knowledge-pmem-direct-131204` | The world had no tree in sight: the gather failed, and a check keyed on "+1 wood" failed. | The fixture and checks now key on "gather"; a failed act is still lived experience. |
+| `knowledge-pmem-direct-131441`, `knowledge-pmem-batch-131746` | All four phases passed in direct and batch mode. | `results.json`: two requests (the off-phase backlog, then the session), identical system prompts, restart took ids 58 and 60 after `lived_upto` 57, recall 31–85 tokens. |
+| `knowledge-pmem-direct-133133`, `knowledge-pmem-batch-133519` | All four phases passed with two new checks: the admin's `mind_update` with a persona for the player is refused ("identity is not projected"), and a planted `person:1` (never perceived) is dropped and noted. | `actions.log` (refusal), `on-player-*`, `requests.jsonl` (`batch_job`), `journal/`. |
+| `knowledge-pmem-real-132240` (paid) | The driver read "internalized up to 0" as done and stopped the candidates early. DeepSeek and ministral direct answered; three batch jobs were left at the provider, and their status was read afterwards (SUCCESS in 24–30 s; GLM still running, then SUCCESS). | Driver fixed to wait for "lived experiences (". |
+| `knowledge-pmem-real-132616` (paid) | Six candidates (ministral-14b, GLM Flash, DeepSeek Flash; direct and batch) internalized the same 11 rows. | `report.md`, `fidelity.json`, `cost.json`, `cand-*-nodes.txt`, `cand-*-edges.txt`, `journal/`. GLM batch wrote the resident as `person:29`, which led to the `perceived_people_only` guard. Results in `docs/PLAYER_MEMORY.md`. |
+
+Every attempt's `cleanup.json` reports database deletion, scratch Neo4j removal and journal removal. `knowledge-pmem-direct-134341` added phase 5 (death: rows deleted by the authority, last words still integrated) and passed all five. Not covered: two players at once, the game-day cadence in real time, buffer overflow over 2,000 rows, and recall replayed on the real graphs.
