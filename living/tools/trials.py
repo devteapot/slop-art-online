@@ -814,7 +814,8 @@ class Instance:
                         continue
                     tok = r.get("tokens") or 0
                     key = (r.get("purpose"), r.get("model"))
-                    self.recent.append((time.time(), r.get("purpose"), (r.get("error") or "")[:100]))
+                    # The call's own time: a resumed runner re-reads the whole journal.
+                    self.recent.append(((r.get("at_ms") or 0) / 1000, r.get("purpose"), (r.get("error") or "")[:100]))
                     self.tokens[key] += tok
                     self.calls[key] += 1
                     if r.get("latency_ms"):
@@ -837,13 +838,14 @@ class Instance:
              f"SELECT * FROM chronicle WHERE id > {self.cursor['chronicle']}",
              f"SELECT * FROM know_how WHERE actor = {S}", f"SELECT * FROM relation WHERE actor = {S}",
              f"SELECT * FROM judgment WHERE actor = {S}", f"SELECT * FROM persona WHERE id = {S}",
-             f"SELECT * FROM structure WHERE owner = {S}", f"SELECT * FROM place WHERE actor = {S}"]
+             f"SELECT * FROM structure WHERE owner = {S}", f"SELECT * FROM place WHERE actor = {S}",
+             f"SELECT * FROM routine WHERE actor = {S}"]
         # 2.14.1 answers one statement per request ("Multiple SQL statements are not supported").
         # The mind's projections change slowly, so they are read every fifth sample.
         self.nsample = getattr(self, "nsample", 0) + 1
         slow = self.nsample % 5 == 1
         res = [self.rows(x) if i < 10 or slow else None for i, x in enumerate(q)]
-        (vit, act, inv, brain, chars, world, bodies, thoughts, exps, chron, know, rel, jud, persona, structs, places) = res
+        (vit, act, inv, brain, chars, world, bodies, thoughts, exps, chron, know, rel, jud, persona, structs, places, routines) = res
         now = self.now_ms()
         self.world = world[0]
         hour = hour_of(now, self.world)
@@ -873,7 +875,7 @@ class Instance:
             self.cursor["chronicle"] = max(self.cursor["chronicle"], r["id"])
             if r["a"] in mine or r["b"] in mine:
                 self.emit("chronicle", {"t": self.t(), **r})
-        for name, rows in (("know_how", know), ("relation", rel), ("judgment", jud), ("persona", persona), ("structure", structs), ("place", places)):
+        for name, rows in (("know_how", know), ("relation", rel), ("judgment", jud), ("persona", persona), ("structure", structs), ("place", places), ("routine", routines)):
             if rows is None:
                 continue
             sig = json.dumps(sorted(rows, key=lambda r: json.dumps(r, sort_keys=True)), sort_keys=True)
@@ -1474,6 +1476,10 @@ def graph_terms(g):
             for k, v in x.items():
                 if k == "skill" and isinstance(v, str):
                     out.add(v)
+                elif k == "want" and isinstance(v, str):
+                    out.add(f"want:{v}")
+                elif k == "routine" and isinstance(v, str):
+                    out.add(f"routine:{v}")
                 elif k == "do" and isinstance(v, str):
                     out.add(v)
                 elif k == "label" and isinstance(v, str):
@@ -1570,6 +1576,25 @@ def life_report(a):
             added, removed = sorted(terms - prev_terms), sorted(prev_terms - terms)
             revs.append((g["t"], g.get("source"), g.get("plan", "")[:120], added, removed))
             prev_terms = terms
+        rout, prev_r = [], {}
+        for r in rows:
+            if r["table"] != "routine":
+                continue
+            now_r = {}
+            for x in r["rows"]:
+                try:
+                    now_r[x["name"]] = (x["revision"], graph_terms(json.loads(x["graph"])))
+                except (ValueError, TypeError):
+                    now_r[x["name"]] = (x["revision"], set())
+            for name, (rev, terms) in now_r.items():
+                old = prev_r.get(name)
+                if old is None:
+                    rout.append((r["t"], name, "new", sorted(terms), []))
+                elif old[0] != rev:
+                    rout.append((r["t"], name, f"rev {rev}", sorted(terms - old[1]), sorted(old[1] - terms)))
+            for name in set(prev_r) - set(now_r):
+                rout.append((r["t"], name, "dropped", [], []))
+            prev_r = now_r
         # Stalls: at least 10 minutes in which the subject stays within 15 m and keeps its graph.
         stalls, i = [], 0
         rev_t = [g["t"] for g in graphs]
@@ -1593,6 +1618,7 @@ def life_report(a):
               ["", "## Where", ""] + [f"- {tm(t)}: {w}" for t, w in visits] + \
               ["", "## Learned", ""] + ([f"- {tm(t)}: {k} ({src})" for t, k, src in learned] or ["- nothing"]) + \
               ["", f"## Graph revisions ({len(revs)})", ""] + [f"- {tm(t)} [{src}] {plan} | +{', '.join(ad) or '–'} | -{', '.join(rm) or '–'}" for t, src, plan, ad, rm in revs] + \
+              ["", f"## Routine changes ({len(rout)}; sampled every 10 s, so quick successive edits merge)", ""] + ([f"- {tm(t)} {name} [{what}] | +{', '.join(ad) or '–'} | -{', '.join(rm) or '–'}" for t, name, what, ad, rm in rout] or ["- none recorded (runs before routine sampling)"]) + \
               ["", "## Stretches where nothing changed (10+ min, within 15 m, no new graph)", ""] + ([f"- {tm(t)} for {span / 60:.0f} min: {acts}" for t, span, acts in stalls] or ["- none"]) + \
               ["", "## Loops", "", f"- plans installed more than 3 times: {[(p, n) for p, n in plans.most_common(8) if n > 3] or 'none'}",
                f"- lines the subject repeated almost word for word (feedback percepts): {repeats}",
