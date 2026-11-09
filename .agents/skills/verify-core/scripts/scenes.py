@@ -205,12 +205,9 @@ def seize(s):
              "act.rs skill_ctx must fill target.yielded_ago for seize; skills.rhai seize_check needs it.", fatal=False)
     if not yielded:
         s.call("grant_items", a, "spear", 1)
-        s.graph(a, {"first": [{"do": {"skill": "attack", "target": {"id": b}, "item": "hurt"}}, {"wait": 1}]})
-        s.wait(lambda: s.told(a, "enough", "own"), seconds=65)
-        v = s.vitals(b)
-        if v["hp"] / v["max_hp"] >= 0.35:
-            s.graph(a, {"first": [{"do": {"skill": "attack", "target": {"id": b}, "item": "kill"}}, {"wait": 1}]})
-            s.wait(lambda: s.vitals(b)["hp"] / s.vitals(b)["max_hp"] < 0.3, seconds=10, every=0.1)
+        # Blows do their full damage: stop striking once b is badly hurt (below the seize line).
+        s.graph(a, {"first": [{"do": {"skill": "attack", "target": {"id": b}}}, {"wait": 1}]})
+        s.wait(lambda: s.vitals(b)["hp"] / s.vitals(b)["max_hp"] < 0.3, seconds=65, every=0.1)
         s.graph(a, {"wait": 120})
         s.wait(lambda: all(r["skill"] != "attack" for r in s.rows(f"SELECT skill FROM activity WHERE id = {a}")))
         s.vitals(b, "beaten")
@@ -227,10 +224,14 @@ def seize(s):
     s.graph(b, {"seq": [{"do": "yield", "target": {"id": a}}, {"wait": 120}]})
     s.wait(lambda: max(r["at_ms"] for r in s.story("yield", b)) > previous, seconds=30)
     s.call("grant_items", a, "spear", 1)
-    s.graph(a, {"first": [{"do": {"skill": "attack", "target": {"id": b}, "item": "kill"}}, {"wait": 1}]})
+    # No mode: an attack's blows go on to death, a yield does not hold them back, and striking
+    # the yielded is news.
+    s.graph(a, {"first": [{"do": {"skill": "attack", "target": {"id": b}}}, {"wait": 1}]})
     s.wait(lambda: not s.rows(f"SELECT alive FROM character WHERE id = {b}")[0]["alive"], seconds=90)
     dead = s.rows(f"SELECT * FROM character WHERE id = {b}", "killed")[0]
-    s.expect("kill intent can kill someone who yielded", "after yielding" in dead["cause"] and bool(s.story("killing", a, "killing")))
+    news = [r for r in s.story("attack", a, "struck-yielded") if "had yielded" in r["text"]]
+    s.expect("a blow can kill someone who yielded, and striking them is news",
+             "after yielding" in dead["cause"] and bool(s.story("killing", a, "killing")) and bool(news))
 
 
 def lifecycle(s):

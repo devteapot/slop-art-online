@@ -14,8 +14,15 @@
 //!   character id; folk and dress from the settlement round their home, `settlement.kind`,
 //!   `settlement.style`; children smaller by life stage), animals as the procedural creatures of
 //!   `bodies.rs`. Clips follow the displayed motion: idle, walk or run by speed (the authority's
-//!   walk is about 2.6 m/s and its run about 4.1), talk while speaking. Positions come from the
-//!   shared body tracks (`sync.rs`, filled by `bodies::update`).
+//!   walk is about 2.6 m/s and its run about 4.1), talk while speaking, and over a standing body
+//!   what it is seen doing (`town.rs`: work, gathering, eating, play, sitting, a wave or a nod).
+//!   Positions come from the shared body tracks (`sync.rs`, filled by `bodies::update`).
+//! - **Facing.** A moving body faces its travel; a standing one its own segment's heading,
+//!   turning on the spot at the rate the authority's turn carries (`turn` × `turn_s` at zero
+//!   speed: `face`, and the turn before a gesture), or toward what its activity is aimed at.
+//!   Drawn yaw eases toward that, so a stop or a new aim never snaps.
+//! - **Indoors.** A sleeper, or someone resting at their own door, is in the house: not drawn
+//!   (`town.rs`); they reappear at the door when they come out.
 //! - **You** join at the `land` row's arrival point (`join`); the camera, the island's
 //!   streaming and the atmosphere follow your displayed body. The cursor meets the island's
 //!   ground for facing and click-to-move.
@@ -61,7 +68,7 @@ impl Plugin for LivePlugin {
             .add_systems(Update, mirror.after(crate::net::pump).before(crate::bodies::update))
             .insert_resource(Roam { facing: Vec2::new(0.0, 1.0), ..default() })
             .add_systems(Startup, crate::lookdev::setup)
-            .add_systems(Update, (land, lots, bodies, me).chain().after(crate::controls::target).before(crate::demo::run))
+            .add_systems(Update, (land, lots, bodies, me).chain().after(crate::controls::target).after(crate::town::shows).before(crate::demo::run))
             .add_systems(
                 Update,
                 (crate::envs::hdr, crate::island::stream, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, clips, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, report)
@@ -113,7 +120,12 @@ struct Shown {
     last: Vec2,
     speed: f32,
     person: bool,
+    /// Drawn facing (sim angle), eased toward the wanted one.
+    yaw: f32,
 }
+
+/// How fast drawn yaw takes up a new facing (1/s): about 90% in 0.15 s.
+const YAW_RATE: f32 = 16.0;
 
 #[derive(Resource, Default)]
 pub struct Live {
@@ -267,6 +279,9 @@ fn yaw_of(d: Vec2) -> f32 {
     d.x.atan2(d.y)
 }
 
+/// What `bodies` reads and writes of a drawn body.
+type Drawn = (&'static mut Transform, Option<&'static Fitted>, Option<&'static mut Model>, Option<&'static crate::characters::Character>, &'static mut LiveBody, Option<&'static mut Visibility>);
+
 /// Draw the window's bodies: spawn, place on the island's ground, face, and pick clips.
 #[allow(clippy::too_many_arguments)]
 fn bodies(
@@ -280,8 +295,9 @@ fn bodies(
     style: Res<crate::style::Style>,
     input: Res<Input>,
     combat: Res<crate::combat::Combat>,
+    town: Res<crate::town::Town>,
     mut live: ResMut<Live>,
-    mut q: Query<(&mut Transform, Option<&Fitted>, Option<&mut Model>, Option<&crate::characters::Character>, &mut LiveBody)>,
+    mut q: Query<Drawn>,
     time: Res<Time>,
 ) {
     let (Some(island), Some(conn)) = (island, net.conn.as_ref()) else { return };
@@ -301,7 +317,7 @@ fn bodies(
         // Someone I saw die stays where they fell for a while, playing their death.
         if let Some(a) = combat.deaths.contains_key(&id).then(|| combat.actions.get(&id).copied()).flatten() {
             if let Some(s) = live.shown.get(&id) {
-                if let Ok((_, _, _, _, mut lb)) = q.get_mut(s.entity) {
+                if let Ok((_, _, _, _, mut lb, _)) = q.get_mut(s.entity) {
                     lb.action = Some(a);
                 }
             }
@@ -318,10 +334,21 @@ fn bodies(
         let mine = Some(id) == me;
         // My character turns toward where I look (shown locally; the authority has no look).
         let look = input.look.filter(|_| mine).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
-        // During a move a body faces where the move goes.
-        let action = combat.actions.get(&id).copied();
+        // During a move a body faces where the move goes; a gesture or settling down plays when
+        // no move does.
+        let show = town.shows.get(&id).copied().unwrap_or_default();
+        let action = combat.actions.get(&id).copied().or(show.once);
         let aimed = action.and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
-        let h = aimed.or(look).or(heading);
+        // Standing still, the body's own segment: its heading, turning on the spot by `turn` over
+        // `turn_s` (the display clock may trail the row's start: then the turn has not begun).
+        let row = conn.db.body().id().find(&id);
+        let standing = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| {
+            let into = ((scene.now_ms - b.t_ms as f64) / 1000.0).clamp(0.0, b.turn_s.max(0.0) as f64) as f32;
+            b.heading + if b.turn_s > 0.0 { b.turn * into } else { 0.0 }
+        });
+        let slow = live.shown.get(&id).is_none_or(|s| s.speed < MOVING);
+        let busy = show.face.filter(|_| slow).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
+        let h = aimed.or(look).or(busy).or(standing.filter(|_| slow)).or(heading);
         if !live.shown.contains_key(&id) {
             let Some(body) = conn.db.body().id().find(&id) else { continue };
             let character = conn.db.character().id().find(&id);
@@ -353,7 +380,7 @@ fn bodies(
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, yaw: h });
             live.heights.insert(id, height);
             continue;
         }
@@ -362,12 +389,23 @@ fn bodies(
         s.last = p;
         let v = if v.is_finite() && v < 20.0 { v } else { 0.0 };
         s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp());
-        let (speed, person) = (s.speed, s.person);
-        let Ok((mut tf, fitted, mut model, ch, mut lb)) = q.get_mut(s.entity) else { continue };
+        if let Some(h) = h {
+            s.yaw += living_rules::steer::wrap(h - s.yaw) * (1.0 - (-dt * YAW_RATE).exp());
+            s.yaw = living_rules::steer::wrap(s.yaw);
+        }
+        let (speed, person, yaw) = (s.speed, s.person, s.yaw);
+        let Ok((mut tf, fitted, mut model, ch, mut lb, vis)) = q.get_mut(s.entity) else { continue };
         tf.translation.x = p.x;
         tf.translation.z = p.y;
-        if let Some(h) = h {
-            tf.rotation = if person { Quat::from_rotation_y(yaw_of(Vec2::new(h.cos(), h.sin())) + PI) } else { Quat::from_rotation_y(-h) };
+        tf.rotation = if person { Quat::from_rotation_y(yaw_of(Vec2::new(yaw.cos(), yaw.sin())) + PI) } else { Quat::from_rotation_y(-yaw) };
+        // Indoors (asleep, or resting at the door): not drawn. Never my own character.
+        let want = if show.hidden && !mine { Visibility::Hidden } else { Visibility::Inherited };
+        match vis {
+            Some(mut v) if *v != want => *v = want,
+            None if want == Visibility::Hidden => {
+                commands.entity(s.entity).insert(want);
+            }
+            _ => {}
         }
         match (fitted, model.as_mut()) {
             (Some(fit), _) => tf.translation.y = ground + fit.y_off,
@@ -377,7 +415,7 @@ fn bodies(
         // The gait and its rate from the displayed speed, so feet don't slide (`gait.rs`).
         let stride = ch.map_or(1.0, |c| c.stride);
         let (clip, rate) = if speed < MOVING {
-            (if talking.contains(&id) { "talk" } else { "idle" }, 1.0)
+            (if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") }, 1.0)
         } else {
             let file = model.as_ref().map_or("", |m| m.file.as_str());
             crate::gait::of(file).pick(speed, stride, Some(lb.clip))
@@ -563,9 +601,12 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
             .sum()
     });
     info!(
-        "live: cache body {} character {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
+        "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
         conn.db.body().count(),
         conn.db.character().count(),
+        conn.db.doing().count(),
+        conn.db.act_card().count(),
+        conn.db.weather().iter().next().map_or("none", |w| if w.raining { "rain" } else { "dry" }),
         conn.db.lot().count(),
         conn.db.terrain_chunk().count(),
         edits,
@@ -592,6 +633,10 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `skill:NAME[:AIM]`: use a skill-bar skill through `use_skill` (`combat.rs`); AIM is
 ///   `nearest`, a creature kind (`wolf`) or `DX,DY` metres from me; `release:NAME` lets go of
 ///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
+/// - `gesture:wave|nod[:ID]`: greet through `human_act` as the G and B keys do (`town.rs`), at
+///   character ID, else whom the keys would pick;
+/// - `sync:NAME`: until `<dir>/NAME.go` exists (an outside driver sets the scene: the hour, the
+///   weather, where I stand), then delete it; a number in the file turns the view to that yaw;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
 ///   until a new character is mine;
 /// - `quit`.
@@ -626,6 +671,7 @@ fn script(
     mut cam: ResMut<Cam>,
     mut out: ResMut<crate::ui::model::Outbox>,
     mut skills: ResMut<crate::combat::Scripted>,
+    mut gestures: ResMut<crate::town::Scripted>,
     hud: Res<crate::ui::model::HudModel>,
     target: Option<Res<crate::capture::Target>>,
     time: Res<Time>,
@@ -696,6 +742,24 @@ fn script(
         "release" => {
             skills.release.push(arg.to_string());
             true
+        }
+        "gesture" => {
+            let (name, whom) = arg.split_once(':').unwrap_or((arg, ""));
+            gestures.press.push((name.to_string(), whom.to_string()));
+            true
+        }
+        "sync" => {
+            let go = s.dir.join(format!("{arg}.go"));
+            let there = go.exists();
+            if there {
+                if let Some(yaw) = std::fs::read_to_string(&go).ok().and_then(|t| t.trim().parse::<f32>().ok()) {
+                    cam.set_yaw(yaw);
+                }
+                let _ = std::fs::remove_file(&go);
+            } else if first {
+                info!("live script: waiting for {}", go.display());
+            }
+            there || s.since > 900.0
         }
         "dead" => hud.death.is_some() || s.since > 120.0,
         "rejoin" => {

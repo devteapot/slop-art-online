@@ -61,7 +61,7 @@ python3 "$C/scenes.py" infant --run "$I" > "$IE/infant.txt" 2>&1
 python3 "$V" cleanup --run "$I" > "$IE/cleanup.txt" 2>&1
 ```
 
-Record each exit status. Unexpected failures exit 1. Run the remaining independent checks, then report the failure. `seize` checks refusal from an unyielded healthy person, seizure from a yielded healthy person, exact transfer, witnesses and lethal intent. If the yielded seizure fails, it still drives the badly-hurt path and exits 1. A check marked known (`XFAIL`/`XPASS`) exits 1 when it starts passing, so the stale expectation gets reviewed.
+Record each exit status. Unexpected failures exit 1. Run the remaining independent checks, then report the failure. `seize` checks refusal from an unyielded healthy person, seizure from a yielded healthy person, exact transfer, witnesses, and that blows on someone who yielded land and kill. If the yielded seizure fails, it still drives the badly-hurt path and exits 1. A check marked known (`XFAIL`/`XPASS`) exits 1 when it starts passing, so the stale expectation gets reviewed.
 
 `infant` is part of this baseline. Its fixture keeps ordinary lifespans, a 12-minute day and production species/rules. Allow about 30 minutes: the first night arrives before hunger suppresses healing, so the scene waits for the second real night. It compares shelter warmth, the parent's perceived infant `looks`, anchored HP rates and actual health loss. Then a cloak and a bounded berry meal reset the cry episode; the scene waits until hunger returns above 55 and holds it as the sole cause for a 250-second window. One parent answers scripted requests; the other stays pending. At 60 seconds the answered parent receives an unrelated one-shot `think` request through the existing admin graph setup, then returns to rest. `infant-unrelated-pending.json` saves that row before the reminder. The scene checks that the due cry merges into the same request and preserves its unrelated reason. It also checks parent-only prompts, pending cry suppression, 120-second reminders, witness experiences and one nearest caring adult after the parents leave hearing. No mind service runs.
 
@@ -97,7 +97,7 @@ CORE_VERIFY_RUN="$S" LIVING_STDB="$PWD/$C/record_stdb.py" \
 python3 "$V" cleanup --run "$S"
 ```
 
-Expect 23 mechanics checks and five steering checks. Inspect every result and keep failures even when another fresh world passes. The driver has a recorded mechanics flake. Use the recognition and investigation steps in [mechanics.md](features/mechanics.md), and retain every failing result. Do not convert these intermittent failures into XFAIL or discard them after a passing retry. `docs/LIVING_CORE.md:414` retains the historical 14-check count.
+Expect 23 mechanics checks and five steering checks. Inspect every result and keep failures even when another fresh world passes. The driver has a recorded mechanics flake. Use the recognition and investigation steps in [mechanics.md](features/mechanics.md), and retain every failing result. Do not convert these intermittent failures into XFAIL or discard them after a passing retry. `docs/LIVING_CORE.md:425` retains the historical 14-check count.
 
 ## Drive life and wildlife
 

@@ -33,6 +33,7 @@ mod sight;
 mod sky;
 mod style;
 mod terrain;
+mod town;
 mod ui;
 mod vfx;
 mod view;
@@ -127,6 +128,9 @@ fn main() {
         app.add_plugins(live::LivePlugin);
         // Combat: skill input, perceived events, clips and effects (docs/COMBAT.md).
         app.add_plugins((combat::CombatPlugin, vfx::VfxPlugin));
+        // Town life: what residents are seen doing, my gestures, the authority's weather
+        // (docs/TOWN_LIFE.md).
+        app.add_plugins(town::TownPlugin);
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }

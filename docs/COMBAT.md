@@ -35,7 +35,7 @@ The six starter skills and the older force skills (`attack`, `shoot`, `throw`) s
 
 | Key | Skill | Kind | Requires | Reach | Windup | Recovery | Cooldown | Energy | Effect |
 |---|---|---|---|---|---|---|---|---|---|
-| LMB | `strike` | targeted blow | not young, not yielded, the predator rules (`dares`) | 1.6 + lunge 0.6 | 350 ms | 250 ms | 650 ms | 2 | 10 (15 with a spear) × strength × knack × armor; meant to hurt or kill like `attack` |
+| LMB | `strike` | targeted blow | not young, not yielded, the predator rules (`dares`) | 1.6 + lunge 0.6 | 350 ms | 250 ms | 650 ms | 2 | 10 (15 with a spear) × strength × knack × armor; the full blow lands, like `attack` (a blow that exceeds health kills) |
 | RMB | `bowshot` | skillshot missile | a bow and an arrow | 22 m at 30 m/s, radius 0.15 | 300 ms | 250 ms | 900 ms | 1.5 + 1 arrow | 14 × strength × knack × armor on the first body in its path |
 | Q | `firebolt` | skillshot missile | `fire_bolt` (needs `fire`) | 16 m at 16 m/s, radius 0.35 | 450 ms | 350 ms | 4 s | 12 | 24 × knack × armor |
 | E | `block` | held guard | a person | ±75° in front | raised at once, held up to 8 s | — | 400 ms | 1, then 12 a minute while held | three quarters off a blow from the front; nothing from behind |
@@ -91,7 +91,7 @@ Decided 2026-11-09, after the first pass: the authority's Rust had chosen which 
 
 **The rule.** A combat skill is whatever `living/scripts/skills.rhai` says it is. Each one declares its shape in `<skill>_combat()`, a map of traits (the list and their meanings are in the script, above the shapes): `aim` (`creature`, `self_or_ally`, `point`, `facing`, `dash`, `none`), and the flags `timed`, `rooted`, `hostile`, `reflex`, `real_time`, `melee`, `closes_in`, `menace`, `force` and `dares`, the guard numbers `hold_ms`, `arc` and `takes`, the `knack` gene it uses, and the bar's hints `needs` and `knows`. Whether it fires a missile follows from `<skill>_missile` existing; a `point` skill without one is refused when the script is installed, as is an unknown trait. `skill_bar()` lists the bar in order. `use_skill` accepts only skills on the bar.
 
-**The engine keeps generic primitives** and picks one by trait, never by name: a dash (`aim: "dash"`: the motion, its immunity, `<skill>_dist` and `<skill>_speed`), a held guard (`facing`: faces the aim, takes `takes` of a covered blow within `arc`, held up to `hold_ms`), a missile (`point` + `<skill>_missile`), a melee blow meant to hurt or kill (`melee`: the mode item, the miss out of `reach + lunge(kind)`), a menace (`menace`), and the combat timing (`timed`). The older force skills (`attack`, `shoot`, `throw`, `threaten`, `yield`) and `seize`/`tend` declare shapes too, so there is one classification. The rules test `combat_shapes_classify_the_existing_skills_as_before` asserts that the shapes reproduce every name list they replaced.
+**The engine keeps generic primitives** and picks one by trait, never by name: a dash (`aim: "dash"`: the motion, its immunity, `<skill>_dist` and `<skill>_speed`), a held guard (`facing`: faces the aim, takes `takes` of a covered blow within `arc`, held up to `hold_ms`), a missile (`point` + `<skill>_missile`), a melee blow (`melee`: the miss out of `reach + lunge(kind)`), a menace (`menace`), and the combat timing (`timed`). The older force skills (`attack`, `shoot`, `throw`, `threaten`, `yield`) and `seize`/`tend` declare shapes too, so there is one classification. The rules test `combat_shapes_classify_the_existing_skills_as_before` asserts that the shapes reproduce every name list they replaced.
 
 **Read once.** `Scripts::new` reads every `<skill>_combat()` and `skill_bar()` when the script compiles and keeps the result (`living_rules::combat::Shapes`) in the `Scripts` value the authority already caches per script revision. Lookups are a map lookup by name; no Rhai call was added to the tick or to a skill's use. The mind service reads the same shapes from the world's `script` row (`prompts::set_rules`) to tell real-time moves from acts.
 
@@ -113,7 +113,34 @@ Proof (`verify-codes-1`, `.local/living/verify/codes-1/codes_proof.txt`): instal
 - The client's look table by name (presentation, with the fallback above) and one plural, "No arrows".
 - The lab observer (`living/viewer`) still reads activity skill names; it is the developer client the game will replace.
 
-One behavior moved with it: graph normalization now keeps a hurt/kill mode word on any skill that takes no item (it was kept only for `attack` and `strike`, because normalization has no script). The authority gives the mode meaning only for a `melee` skill and drops it from any other at `begin`, so what a character does is unchanged; a graph's stored and described form now shows a mode a model wrote on, say, a bow shot.
+One behavior moved with it (superseded the same day by "One damage rule" below, which removed the mode): graph normalization now keeps a hurt/kill mode word on any skill that takes no item (it was kept only for `attack` and `strike`, because normalization has no script). The authority gives the mode meaning only for a `melee` skill and drops it from any other at `begin`, so what a character does is unchanged; a graph's stored and described form now shows a mode a model wrote on, say, a bow shot.
+
+## One damage rule (2026-11-09)
+
+The user decided on 2026-11-09: "A blow does its damage; if the damage is more than the HP, they die. No way to limit the strength of an attack for now. If someone wants to intimidate other people, they would just use a non-lethal attack."
+
+**Before.** A blow between people defaulted to a "hurt" mode (`attack_mode` in the script): `attack_check` refused once the target was below `hurt_enough` (40%) of full health or had yielded, and `attack_done` and `strike_done` held a blow short of `hurt_floor` (10%), unless the graph's item said "kill". So a player's LMB beat a resident but could not kill one. Bow shots and fire bolts ignored the mode (the authority always passed "kill" for missiles). A yield held back blows meant only to hurt, and the seed's `rules.yield_shield` could hand that to the minds' norms instead.
+
+**Now.** One rule for every blow, missile and effect, for players and graphs alike: it deals its damage (`act::damage`, after guards and dodges), and a creature at 0 health dies through `act::die`. Removed:
+- `skills.rhai`: `attack_mode`, `hurt_enough`, `hurt_floor`, `looks`, the hurt checks in `attack_check` (the yield shield and "you have hurt X enough") and the caps in `attack_done` and `strike_done`; `skill_io` for `attack` and `yield`; the `melee` trait's description.
+- `living/rules`: `SkillCtx.yield_shield` (and its Rhai field), `Scripts::text` (its only caller was `attack_mode`), the catalog help for `attack`, the `Shape::melee` description. `normalize::attack_mode` became `force_word`: a mode word (`item`, `mode` or `intent`: "hurt", "kill", "beat", "to kill"…) on a skill that takes no item is dropped and a warning says so ("a blow does its full damage and kills at 0 health (there is no hurt or kill mode); to frighten without harm, threaten"). Warnings go where every other normalization slip goes (a deliberation's thought `detail.pruned`).
+- `living/authority`: `act::attack_mode`; the mode argument of `act::damage` (and the missile's "kill"); the "to hurt"/"to kill" label; the note after a beating that had done enough; the `YIELD_SHIELD` build flag (`build.rs`) and the `yield_shield` entries of `aske-coast-dynamic.json` and `aske-coast-yieldnorm.json` (now meaningless); `"assault"` among the town's commotion kinds. `act::begin` still drops a force word left on a blow by a graph stored before this change.
+- `living/mind`: the FORCE paragraph and the yield line of the world rules.
+- `spawn_battle` and `spawn_skirmish`: the `"item": "kill"` on their attacks and strikes.
+
+**What the story says.** A first blow on a person, or by a person, is chronicled `attack`, "Siv attacked Grim" (it was `assault` "beat" or `attack` "tried to kill"); the victim feels "Siv attacked you (n damage)" and a mind is woken with "Siv is attacking you!". The first blow after a yield is "Siv struck Grim, though Grim had yielded" (witnessed at 0.95), and a death that follows is "killed by Siv, after yielding", as before.
+
+**Yield.** What it still does: for `yield_ms` (20 s) the yielder's own attacks, strikes, shots and throws are refused, and striking someone who has yielded is news to everyone in sight. Blows on the yielded land in full.
+
+**Intimidation** is `threaten` (`menace`), which does no harm. No new skill was added.
+
+**Now lethal where it was not.** No seed or instinct graph carried a mode word, so every person-against-person attack in them ran in hurt mode by default; all of these can now kill:
+- **Residents defending themselves.** The island's and the repertoire's `stay safe` routine answers a blow with `attack` on the attacker while not losing. A player who strikes a resident is struck back with full blows, and a resident can now kill the player (before, its blows stopped once the player was below 40%). The same routine yields once the resident is below 40% (no wolf near) and flees if struck again; a player who keeps striking a yielded resident can now kill them.
+- **A player's strike** can kill a resident (`verify-player` `combat.py` scene `kill`).
+- **Any fight between people on graphs** (labs, minds that write `attack` on a person, `spawn_battle`, the skirmish) goes on to a death unless someone breaks it off, flees or yields and is spared by the striker's own graph.
+- Unchanged: the person instinct (`instincts.json`) only flees and yields; animals always fought to kill; bow shots and fire bolts always did full damage.
+
+**SpacetimeDB.** No table, column, reducer, view or subscription changed, so a running world updates in place with no migration. The SpacetimeDB documentation was not consulted again for this change, because no SpacetimeDB feature is designed or changed; the pages consulted for combat are in the table at the top. The rows a blow writes are the same (`vitals`, `fighter`, `combat_seen`, `chronicle`, `experience`); a beating blow no longer re-runs the skill's check after landing.
 
 ## Measurements
 
@@ -197,10 +224,25 @@ On the Mac checkout (Apple Silicon, Docker Desktop, SpacetimeDB 2.14.1 in the sh
 
 p95 and p99 are the same within run-to-run spread; p50 is 0.1–0.3 ms higher in both change runs, about the size of the spread between the two base runs, so a small per-move cost from the trait lookups is possible but not established. (Base run 1 was lost to a `bench.py` bug, a log line stamped on the exact second; fixed.) These Mac numbers are not comparable to the dev-box table above (1.95 / 16.19 ms). This is still a one-minute 200-fighter battle, not the contract's workload.
 
+### The one damage rule, 2026-11-09
+
+On the Mac checkout (Apple Silicon, Docker Desktop, SpacetimeDB 2.14.1 in the shared `sao-living_spacetimedb_1`), code `b7cf7fb` plus this change, scratch `verify-*` databases only, no model calls. Evidence under the git-ignored `.local/living/verify/`.
+
+| Surface | What was driven | Result | Evidence |
+|---|---|---|---|
+| Project check | `set -o pipefail; just living-check` | exit 0; rules 87 passed (the graded-force test became `a_blow_does_its_damage_and_a_yield_holds_back_only_the_yielder`, the normalization test `force_words_on_a_blow_are_dropped_and_said`) | — |
+| Core | `cargo_checks.py` (rules 87, authority 10, mind 47, viewer sync 3); `tick`, `needs`, `seize` | all pass; seize's last check: a blow kills someone who yielded and is news ("Walker1 struck Walker2, though Walker2 had yielded"; "killed by Walker1, after yielding") | `core-fm-base/` |
+| Core | mechanics | 22 of 23, then 23 and 23 of 23 after a driver fix (the new yield check read health after the post-yield blow had landed; it now reads the damage the victim was told) | `core-fm-mechanics/`, `-2/`, `-3/` |
+| Core | `skirmish` (island), `town.py` (island), `codes.py` | 8 of 8, 21 of 21, 10 of 10 | `core-fm-skirmish/`, `core-fm-town/`, `core-fm-codes/` |
+| Player | `combat.py --fresh` (island), with the new `kill` scene | 25 of 25 twice: strikes kept landing below 40% and 10%, and the strike that exceeded health killed (4.5 health, 12.3 strike: "killed Nogar (12)", cause "killed by Tester", chronicle `killing`) | `player-fm-combat/`, `player-fm-kill2/` |
+| Client | `verify-client/scripts/run.py` | 17 PASS and the 2 known XFAILs (anonymous `experience` and `thought`) | `client-fm-20261109-121103/` |
+
+Not covered: a mind deliberating under the new prompts (no mind service ran), a resident's `stay safe` routine killing a player who attacked it (the routine was not driven against a player), and the game client.
+
 ## What is missing
 
 - **More skills, and learning them.** Six skills on a fixed bar; no skill choice, no skill-learning path beyond the seed's newcomer kit and know-how. Classes from combinations are not yet possible beyond what the six allow.
-- **Balance.** Numbers are a first pass, untuned against players. A person-vs-person strike follows the world's graded force (`attack_mode`: people mean to hurt people unless they say "kill"), so a player's LMB beats a resident but does not kill one; the client offers no way to choose "kill" yet.
+- **Balance.** Numbers are a first pass, untuned against players. Since "One damage rule" every blow does its full damage, so fights between people end in deaths unless someone breaks off; there is no way to limit a blow's strength yet.
 - **Battles at the contract's scale** are measured only as far as reported below; 2,000 characters with a 200-character local battle for 8 hours is not.
 - **Perception.** The feed is perception-scoped; the public `body`, `fighter`, `vitals` and `activity` tables are not (the existing gap, game brief core work 1).
 - **Prediction.** No client-side movement prediction; the dodge and every move are a round trip behind the press. Input-to-outcome latency (contract: ≤ 150 ms p95 at 80 ms RTT) is unmeasured.

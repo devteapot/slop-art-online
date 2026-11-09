@@ -112,11 +112,11 @@ fn relevant<'a>(model: &'a HudModel, project: impl Fn(Vec3) -> Option<Vec2>) -> 
     model
         .actors
         .iter()
-        .filter(|a| a.hovered || a.targeted || a.stance == Stance::Hostile)
+        .filter(|a| a.hovered || a.targeted || a.greeted || a.stance == Stance::Hostile)
         .filter_map(|a| {
             let p = project(a.head)?;
             let mut alpha = 1.0 - smoothstep(14.0, 32.0, a.distance);
-            if a.hovered || a.targeted {
+            if a.hovered || a.targeted || a.greeted {
                 alpha = alpha.max(0.9);
             }
             (alpha >= 0.02).then_some((p, alpha, a))

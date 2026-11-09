@@ -68,23 +68,6 @@ fn set_mark(ctx: &ReducerContext, id: u32, node: u16, now: u64) {
     }
 }
 
-/// What an attack is meant for ("hurt" or "kill"): the node's item, else the rules'
-/// `attack_mode` (people fight people to hurt, and animals to kill), which sees the kinds.
-fn attack_mode(ctx: &ReducerContext, id: u32, target: &Resolved, item: &str) -> String {
-    if item == "hurt" || item == "kill" {
-        return item.to_string();
-    }
-    let kind = ctx.db.character().id().find(id).map(|c| c.kind).unwrap_or_default();
-    let c = SkillCtx {
-        actor: ActorFacts { id, kind: kind.clone(), ..Default::default() },
-        target: TargetFacts { class: "creature".into(), id: target.id, kind: target.kind.clone(), ..Default::default() },
-        item: item.to_string(),
-        skill: "attack".into(),
-        ..Default::default()
-    };
-    common::scripts(ctx).text("attack_mode", &c).filter(|m| m == "hurt" || m == "kill").unwrap_or_else(|| if kind == "person" && target.kind == "person" { "hurt".into() } else { "kill".into() })
-}
-
 /// An animal's attack on a person refused by the rules goes into the story (at most once a
 /// minute per animal), so how often predators hold back can be counted.
 fn balked(ctx: &ReducerContext, id: u32, target: &Resolved, why: &str, now: u64) {
@@ -317,20 +300,17 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         roll,
         skill: a.skill.clone(),
         routine,
-        yield_shield: common::YIELD_SHIELD,
         raining: crate::town::raining(ctx),
     }
 }
 
-fn label(skill: &str, item: &str, melee: bool, t: &Resolved) -> String {
+fn label(skill: &str, item: &str, t: &Resolved) -> String {
     // Others see someone reworking their ways only as someone deep in thought.
     if skill == "rework" {
         return "sitting deep in thought".into();
     }
     let mut s = skill.to_string();
-    if melee && !item.is_empty() {
-        s = format!("{skill} to {item}");
-    } else if !item.is_empty() {
+    if !item.is_empty() {
         s.push(' ');
         s.push_str(item);
     }
@@ -406,17 +386,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     let shape = shape_of(&sc, skill);
     let aim = shape.map_or(Aim::None, |s| s.aim);
     let melee = shape.is_some_and(|s| s.melee);
-    // A melee blow always carries what it is meant for; any other skill that takes no item
-    // has no use for a mode a graph gave it.
-    let mode;
-    let item = if melee && target.class == 3 {
-        mode = attack_mode(ctx, id, &target, item);
-        mode.as_str()
-    } else if catalog::skill(skill).is_some_and(|k| !k.needs_item) && living_rules::normalize::attack_mode(item).is_some() {
-        ""
-    } else {
-        item
-    };
+    // A blow has no mode: a "hurt" or "kill" left on a skill that takes no item (a graph
+    // stored before normalization dropped the word) means nothing and is not carried.
+    let item = if catalog::skill(skill).is_some_and(|k| !k.needs_item) && living_rules::normalize::force_word(item) { "" } else { item };
     let cur = ctx.db.activity().id().find(id);
     if let Some(a) = &cur {
         // A new graph may continue what the character was already doing.
@@ -601,7 +573,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         qty,
         started_ms: now,
         ends_ms: IDLE,
-        label: label(skill, &item, melee, &target),
+        label: label(skill, &item, &target),
         // A rework carries a whole graph; other texts are a sign's or tablet's words.
         text: text.chars().take(if skill == "rework" { 32_000 } else { 400 }).collect(),
         topic: topic.to_string(),
@@ -1110,14 +1082,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                         }
                     }
                 }
-                let mode = if melee && a.item == "hurt" { "hurt" } else { "kill" };
-                notes.push(damage(ctx, me, victim, amount, mode, &a.skill, at, now));
-                // A beating that has done enough says so (the next blow would be held back).
-                if mode == "hurt" && ctx.db.character().id().find(victim).is_some_and(|c| c.alive) {
-                    if let Err(why) = common::scripts(ctx).check(&a.skill, &skill_ctx(ctx, me, a, now)) {
-                        notes.push(why);
-                    }
-                }
+                notes.push(damage(ctx, me, victim, amount, &a.skill, at, now));
             }
             Effect::Give { item, qty } => {
                 let to = a.target.id as u32;
@@ -1741,11 +1706,10 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
     common::forget_cached(id);
 }
 
-/// A blow lands, from `from` (the attacker, or behind a missile). `mode` is what it was meant
-/// for: "hurt" (a beating) or "kill"; `skill` is the move that dealt it. Returns what came of
-/// it, in words.
-#[allow(clippy::too_many_arguments)]
-pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, mode: &str, skill: &str, from: (f32, f32), now: u64) -> String {
+/// A blow lands, from `from` (the attacker, or behind a missile), and does its damage: at 0
+/// health the victim dies. `skill` is the move that dealt it. Returns what came of it, in
+/// words.
+pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, skill: &str, from: (f32, f32), now: u64) -> String {
     let Some(mut v) = ctx.db.vitals().id().find(victim) else { return "they are gone".into() };
     let Some(vc) = ctx.db.character().id().find(victim) else { return "they are gone".into() };
     if !vc.alive {
@@ -1805,8 +1769,8 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, mod
     } else {
         amount
     };
-    // Striking to kill someone who has given in: the first such blow is news to everyone.
-    let yielded = mode == "kill" && vc.kind == "person" && yielding(ctx, victim, &vc.kind, now);
+    // Striking someone who has given in: the first such blow is news to everyone.
+    let yielded = vc.kind == "person" && yielding(ctx, victim, &vc.kind, now);
     let struck_since_yield = yielded && yielded_ago(ctx, victim, now).is_some_and(|ago| v.hurt_ms >= now.saturating_sub(ago as u64) && v.hurt_by == attacker);
     let first_blow = now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != attacker;
     common::settle(&mut v, now);
@@ -1824,33 +1788,21 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, mod
     let by_person = ctx.db.character().id().find(attacker).map_or(false, |c| c.kind == "person");
     common::wake(ctx, victim);
     let label = common::label_for(ctx, &vc, attacker);
-    let felt = if mode == "hurt" { format!("{label} beat you ({amount:.0} damage)") } else if yielded { format!("{label} struck you to kill though you had yielded ({amount:.0} damage)") } else { format!("{label} attacked you to kill ({amount:.0} damage)") };
+    let felt = if yielded { format!("{label} struck you though you had yielded ({amount:.0} damage)") } else { format!("{label} attacked you ({amount:.0} damage)") };
     percept(ctx, &vc, now, "attacked", attacker, victim, at, felt, 1.0);
     if yielded && !struck_since_yield {
-        common::chronicle(ctx, now, "attack", attacker, victim, at, format!("{an} struck {vn} to kill, though {vn} had yielded"));
-        witnessed(ctx, now, at, "fight", attacker, victim, "{a} struck {b} to kill, though {b} had yielded", 0.95, &[attacker, victim]);
+        common::chronicle(ctx, now, "attack", attacker, victim, at, format!("{an} struck {vn}, though {vn} had yielded"));
+        witnessed(ctx, now, at, "fight", attacker, victim, "{a} struck {b}, though {b} had yielded", 0.95, &[attacker, victim]);
         if vc.ai {
-            perceive::request_deliberation(ctx, victim, &format!("{label} is attacking you to kill, though you yielded!"), now);
+            perceive::request_deliberation(ctx, victim, &format!("{label} is attacking you, though you yielded!"), now);
         }
     } else if first_blow {
-        // The story tells what force was meant: a beating (assault) or an attempt to kill.
         if vc.kind == "person" || by_person {
-            let (kind, text) = match (mode, vc.kind == "person") {
-                ("hurt", _) => ("assault", format!("{an} beat {vn}")),
-                (_, true) => ("attack", format!("{an} tried to kill {vn}")),
-                _ => ("attack", format!("{an} attacked {vn}")),
-            };
-            common::chronicle(ctx, now, kind, attacker, victim, at, text);
+            common::chronicle(ctx, now, "attack", attacker, victim, at, format!("{an} attacked {vn}"));
         }
-        let seen = match (mode, vc.kind == "person") {
-            ("hurt", _) => "{a} is beating {b}",
-            (_, true) => "{a} attacked {b} to kill",
-            _ => "{a} attacked {b}",
-        };
-        witnessed(ctx, now, at, "fight", attacker, victim, seen, 0.7, &[attacker, victim]);
+        witnessed(ctx, now, at, "fight", attacker, victim, "{a} attacked {b}", 0.7, &[attacker, victim]);
         if vc.ai {
-            let why = if mode == "hurt" { format!("{label} is attacking you, beating you!") } else { format!("{label} is attacking you, to kill!") };
-            perceive::request_deliberation(ctx, victim, &why, now);
+            perceive::request_deliberation(ctx, victim, &format!("{label} is attacking you!"), now);
         }
     } else if !dead {
         fight_report(ctx, victim, attacker, now);

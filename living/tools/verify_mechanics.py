@@ -5,7 +5,7 @@ Two scripted characters (installed behavior graphs, no LLM) exercise writing and
 tablet that teaches a technique, crafting with the learned technique, an atomic trade,
 planting, teaching and consensual conception, then the same kind of interactions as
 deliberate acts decided outside the graph (`mind_act`: a gift, conception chosen by both, a
-failure reported back), and graded force (a threat, a beating that stops short, a yield, a
+failure reported back), and force (a threat, a blow that kills, blows on the yielded as news, a
 wolf that does not dare). Each check reads the authority's tables.
 
 Usage: living/tools/verify_mechanics.py [--db living-verify] [--wasm NAME] [--out FILE]
@@ -13,6 +13,7 @@ Publishes the database fresh (deletes its data).
 """
 import argparse
 import json
+import re
 import os
 import subprocess
 import sys
@@ -259,7 +260,7 @@ def main():
     results["clearing forest yields wood"] = bool(wait_for(lambda: have(D, "wood") >= wood0 + 2, timeout=150))
     if not results["clearing forest yields wood"]:
         print("  clear:", [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {D}")][-6:])
-    # Graded force. F threatens G: G perceives it, and it counts as being threatened (G's own
+    # Force. F threatens G: G perceives it, and it counts as being threatened (G's own
     # graph yields to it).
     F, G, H, I, J = walkers[5:10]
     heard = lambda who, words: [r for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {who}") if words in r["text"]]
@@ -274,30 +275,32 @@ def main():
     results["force: a threat is perceived and counts as being threatened"] = bool(menaced) and bool(story("threat")) and bool(gave_in)
     if not results["force: a threat is perceived and counts as being threatened"]:
         print("  threat:", bool(menaced), story("threat"), [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {G}")][-5:])
-    # F beats H (who does not defend) with a spear: the beating stops once H is badly hurt,
-    # and H lives.
+    # F attacks H (who does not defend) with a spear: there is no beating that stops short;
+    # the blows go on and the one that exceeds H's health kills.
     call(db, "grant_items", str(F), "spear", "1")
     call(db, "place_near", str(H), str(F))
     call(db, "set_behavior", str(H), idle)
-    call(db, "set_behavior", str(F), json.dumps({"first": [{"do": {"skill": "attack", "target": {"id": H}, "item": "hurt"}}, {"wait": 1}]}))
-    enough = wait_for(lambda: heard(F, "enough"), timeout=40)
-    time.sleep(6)
-    mh, h = max_hp(H), hp(H)
-    results["force: a beating stops at the threshold without death"] = bool(enough) and alive(H) and 0.1 * mh - 0.5 <= h < 0.4 * mh + 1 and bool(story("assault"))
-    if not results["force: a beating stops at the threshold without death"]:
-        print("  beating:", bool(enough), alive(H), f"{h:.1f}/{mh:.0f}", story("assault"), [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {F}")][-5:])
+    call(db, "set_behavior", str(F), json.dumps({"first": [{"do": {"skill": "attack", "target": {"id": H}}}, {"wait": 1}]}))
+    died = wait_for(lambda: not alive(H), timeout=60)
+    cause = rows(db, f"SELECT id, cause FROM character WHERE id = {H}")[0]["cause"]
+    results["force: a blow does its damage, and the one that exceeds health kills"] = bool(died) and cause.startswith("killed by") and bool([r for r in story("killing") if int(r["a"]) == F and int(r["b"]) == H]) and not story("assault")
+    if not results["force: a blow does its damage, and the one that exceeds health kills"]:
+        print("  killing:", bool(died), cause, story("killing"), [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {F}")][-5:])
     call(db, "set_behavior", str(F), idle)
-    # I beats J, who yields when hurt: the beating stops at the yield.
+    # I attacks J, who yields when hurt: the yield does not hold I's blows back, and striking
+    # someone who gave in is news. I stops once it is told, so J lives for the next check.
     call(db, "place_near", str(I), str(J))
     call(db, "set_behavior", str(J), json.dumps({"first": [{"if": {"hurt_within": 10}, "then": {"do": "yield", "target": "attacker"}}, {"wait": 1}]}))
     call(db, "set_behavior", str(I), json.dumps({"first": [{"do": {"skill": "attack", "target": {"id": J}}}, {"wait": 1}]}))
     yielded = wait_for(lambda: [r for r in story("yield") if int(r["a"]) == J], timeout=30)
-    time.sleep(1.5)
-    h0 = hp(J)
-    time.sleep(6)
-    results["force: a yield stops a beating"] = bool(yielded) and hp(J) >= h0 - 0.5 and alive(J)
-    if not results["force: a yield stops a beating"]:
-        print("  yield:", bool(yielded), f"{h0:.1f} -> {hp(J):.1f}", rows(db, f"SELECT id, status FROM mind_state WHERE id = {I}"))
+    news = wait_for(lambda: [r for r in story("attack") if int(r["a"]) == I and int(r["b"]) == J and "had yielded" in r["text"]], timeout=15, every=0.3)
+    call(db, "set_behavior", str(I), idle)
+    # The blow after the yield landed: J felt its damage ("... though you had yielded (7 damage)").
+    told = heard(J, "though you had yielded")
+    dealt = [float(m.group(1)) for r in told for m in [re.search(r"\((\d+(?:\.\d+)?) damage\)", r["text"])] if m]
+    results["force: blows land on the yielded, and striking them is news"] = bool(yielded) and bool(news) and any(d > 0 for d in dealt)
+    if not results["force: blows land on the yielded, and striking them is news"]:
+        print("  yield:", bool(yielded), bool(news), [r["text"][:150] for r in told], rows(db, f"SELECT id, status FROM mind_state WHERE id = {I}"))
     call(db, "set_behavior", str(I), idle)
     # A wolf that is not desperate does not dare attack a healthy adult among others.
     call(db, "place_near", str(J), str(I))

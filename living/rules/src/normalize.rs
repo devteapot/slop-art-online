@@ -326,12 +326,13 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     })?;
     out.insert("skill".into(), json!(skill));
     let item = action.get("item").or_else(|| action.get("what")).or_else(|| action.get("object")).or_else(|| action.get("kind")).cloned();
-    // The item of a skill that takes none may say what its force is meant for: "hurt" or
-    // "kill" (the rules give it meaning for a melee blow, `<skill>_combat()`'s `melee`).
+    // A blow does its full damage; there is no hurt or kill mode. A model or an older graph
+    // that still says one is told the word was dropped.
     if !spec.needs_item {
-        let mode = action.get("mode").or_else(|| action.get("intent")).or(item.as_ref()).and_then(|m| m.as_str()).and_then(attack_mode);
-        if let Some(m) = mode {
-            out.insert("item".into(), json!(m));
+        for key in ["item", "mode", "intent"] {
+            if let Some(w) = action.get(key).and_then(|m| m.as_str()).filter(|w| force_word(w)) {
+                WARNINGS.with(|ws| ws.borrow_mut().push(format!("{path}.do.{key}: dropped `{w}`: a blow does its full damage and kills at 0 health (there is no hurt or kill mode); to frighten without harm, threaten")));
+            }
         }
     }
     if let Some(Value::String(i)) = item {
@@ -390,15 +391,12 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     Ok(json!({"do": out}))
 }
 
-/// What an attack is meant for, from the words a model uses ("hurt", "beat", "kill", "to kill"...).
-pub fn attack_mode(m: &str) -> Option<&'static str> {
+/// Whether a word says how hard a blow is meant to be ("hurt", "beat", "kill", "to kill"...).
+/// Blows have no such mode; normalization drops these words and says so.
+pub fn force_word(m: &str) -> bool {
     let m = m.trim().to_lowercase();
     let m = m.strip_prefix("to ").unwrap_or(&m);
-    match m {
-        "hurt" | "beat" | "wound" | "subdue" | "harm" | "injure" | "punish" | "defend" | "nonlethal" | "non-lethal" => Some("hurt"),
-        "kill" | "slay" | "death" | "lethal" | "murder" | "hunt" => Some("kill"),
-        _ => None,
-    }
+    matches!(m, "hurt" | "beat" | "wound" | "subdue" | "harm" | "injure" | "punish" | "defend" | "nonlethal" | "non-lethal" | "kill" | "slay" | "death" | "lethal" | "murder" | "hunt")
 }
 
 /// Map loose item names onto the catalog (`raw meat` → `meat`, `Cooked Fish` → `cooked_fish`).
@@ -753,19 +751,23 @@ mod tests {
     }
 
     #[test]
-    fn attacks_say_what_they_are_meant_for() {
-        let g = from_value(json!({"first": [
+    fn force_words_on_a_blow_are_dropped_and_said() {
+        let (v, warnings) = super::graph(json!({"first": [
             {"do": "attack", "target": "attacker", "item": "hurt"},
             {"do": "attack", "target": {"nearest": "wolf"}, "mode": "to kill"},
+            {"do": "strike", "target": "attacker", "item": "kill"},
             {"do": "attack", "target": "attacker", "item": "spear"},
             {"do": "threaten", "target": {"named": "Grim"}},
             {"do": "yield", "target": "attacker"},
             {"do": "yield"}
         ]}))
         .unwrap();
+        let g = from_value(v).unwrap();
         let o = outline(&g.root);
-        assert!(o.contains("attack hurt → attacker") && o.contains("attack kill → nearest wolf"), "{o}");
-        assert!(o.contains("  attack → attacker"), "an unknown mode is dropped: {o}");
+        assert!(!o.contains("hurt") && !o.contains("kill"), "no mode survives: {o}");
+        assert!(o.contains("  attack → attacker") && o.contains("attack → nearest wolf") && o.contains("strike → attacker"), "{o}");
+        assert_eq!(warnings.iter().filter(|w| w.contains("there is no hurt or kill mode")).count(), 3, "{warnings:?}");
+        assert!(warnings.iter().any(|w| w.contains("dropped `to kill`")), "{warnings:?}");
         assert!(o.contains("threaten → Grim") && o.contains("yield → attacker"), "{o}");
         let a = crate::acts::parse(json!({"do": "threaten", "target": {"id": 4}}), None, &Default::default()).unwrap();
         assert_eq!(a.skill, "threaten");

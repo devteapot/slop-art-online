@@ -7,6 +7,7 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 - An unknown skill is a reducer error ("not on the skill bar").
 - Refusals are recorded and told: a strike with no target, a strike out of reach (no walking into reach), a heal when unhurt, a second fire bolt inside its windup or cooldown.
 - A strike shows its windup (`fighter.act` equals the strike's `skill_card.code`), releases, deals damage, and the player perceives `RELEASE` and `HIT` with the amount; the target's band is public, its health is not.
+- A blow does its full damage (no hurt or kill mode since 2026-11-09, docs/COMBAT.md "One damage rule"): scene `kill` strikes a resident past 40% and 10% of its health, and the strike that exceeds its health kills it (use outcome `killed <name> (<n>)`, `HIT` with the amount, `character.alive = false` with cause `killed by <player>`, a `chronicle` `killing` row).
 - A bow shot launches a missile that strikes the first body on its path (`LAUNCH`, `IMPACT`, damage); the arrow is spent.
 - A fire bolt burns the creature it meets.
 - A guard facing the blow blocks it (`BLOCKED`, reduced); facing away, the blow lands in full; letting go ends it.
@@ -21,14 +22,15 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 V=.agents/skills/verify/scripts/verify.py; R=player-combat-$(date +%m%d-%H%M%S)
 $V launch --run $R --seed island && $V doctor --run $R
 $V player --run $R join Tester
-.agents/skills/verify-player/scripts/combat.py --run $R [--scene strike,bow] [--fresh]
+.agents/skills/verify-player/scripts/combat.py --run $R [--scene strike,kill,bow] [--fresh]
 $V cleanup --run $R
 ```
 
-`combat.py` drives the player's own identity and checks the player's views and public rows. It sets scenes with admin test reducers, named here because they are not player abilities: `place_at` (put a body somewhere), `set_behavior` (a resident stands still or strikes the player), `kill` (`--fresh`, or when an earlier run left the character too tired) and `join` again. Results go to `<run>/combat.json` and `<run>/actions.log`.
+`combat.py` drives the player's own identity and checks the player's views and public rows. It sets scenes with admin test reducers, named here because they are not player abilities: `place_at` (put a body somewhere), `set_behavior` (a resident stands still or strikes the player), the admin reducer `kill` (`--fresh`, or when an earlier run left the character too tired; not the `kill` scene) and `join` again. Results go to `<run>/combat.json` and `<run>/actions.log`.
 
 ## Gotchas
 
+- The `kill` scene takes about ten strikes at 2 energy each; with `--scene all`, use `--fresh` so later scenes are not refused "too tired". The dummy resident is set to a wait graph, so it neither flees nor strikes back.
 - Energy is a real requirement: a character worn out by earlier scenes is refused "too tired". Use `--fresh`.
 - Place a dummy before setting its graph: a teleport drops an approach its graph already started.
 - A missile strikes the first body on its line, which may be an earlier scene's dummy; aim off their lines.

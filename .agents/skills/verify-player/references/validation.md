@@ -69,6 +69,11 @@ Findings recorded during the run:
 - Admin `grant_items` accepts any item name without checking it (here `berry`). That is acceptable for an admin scene tool, and the gotcha is in the feature map.
 - Earlier reviewers thought `gather` used the graph branch. It does not: every skill outside `REAL_TIME` goes through `acts::submit`. The map now proves both branches explicitly.
 
+
+## 2026-11-09 one damage rule (Mac)
+
+Shared container (v2.14.1), Mac checkout at `b7cf7fb` plus the change removing the hurt/kill mode (docs/COMBAT.md "One damage rule"). `combat.py --fresh` on island worlds: `player-fm-combat` 25 of 25, with the new `kill` scene (a resident at 4.5 of 100 health took a 12.3 strike: outcome "killed Nogar (12)", cause "killed by Tester", chronicle "Tester killed Nogar"); after review fixes to the scene (40% of `max_hp`, a margin for settled health, only hits in the trail), `player-fm-kill2` 25 of 25 (1.8 health, an 11.5 strike). The attacker graph in the block and dodge scenes no longer carries `"item": "kill"`. Both worlds cleaned up.
+
 ## Not verified
 
 - A real player client; none exists in `living/` yet.
