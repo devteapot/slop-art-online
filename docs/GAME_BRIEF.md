@@ -385,7 +385,7 @@ Sharing the scenery materials alone took the Mac to 8.9, 7.05 and 3.7 ms. Crowds
 What remains at the hamlet on the Mac: characters about 1.0 ms, sun shadows 1.2 ms, prepasses and edge lines 0.5 ms, and small things 0.1 ms.
 
 Open:
-- `living/tools/merge_primitives.py` duplicates the shared vertex buffer for every merged primitive. Vivi's hair meshes hold 420k and 290k vertices for 6.7k and 3.7k triangles. This costs memory and load time, not frame time.
+- Fixed: `living/tools/merge_primitives.py` used to copy a shared vertex buffer once per merged primitive (Vivi's hair held about 420k vertices for 6.7k triangles). It now copies each distinct vertex set once, and the animated Vivi file shrank from 63 MB to 22 MB.
 - `LIVING_GAME_PERF=diag` reports what each view draws (meshes, materials, triangles, characters' share) and Bevy's per-pass CPU times. Metal reports no GPU times; Vulkan should.
 
 **Claude–Blender integration** (research of 2026-11-08):

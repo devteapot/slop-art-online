@@ -101,18 +101,24 @@ def merge(j, binary):
             attrs, fmt = {}, {}
             indices = array("I")
             offset = 0
+            # Primitives often share one vertex buffer (VRoid hair: the same accessors for every
+            # primitive): each distinct set of attribute accessors is appended once, and every
+            # primitive's indices are offset to its set's base.
+            base = {}
             for p in group:
-                count = j["accessors"][p["attributes"]["POSITION"]]["count"]
-                for name in names:
-                    vals, f = read_accessor(j, binary, p["attributes"][name])
-                    if name not in attrs:
-                        attrs[name], fmt[name] = vals, f
-                    else:
-                        assert fmt[name] == f, f"{name} formats differ in one material group"
-                        attrs[name].extend(vals)
+                key = tuple(p["attributes"][name] for name in names)
+                if key not in base:
+                    base[key] = offset
+                    for name in names:
+                        vals, f = read_accessor(j, binary, p["attributes"][name])
+                        if name not in attrs:
+                            attrs[name], fmt[name] = vals, f
+                        else:
+                            assert fmt[name] == f, f"{name} formats differ in one material group"
+                            attrs[name].extend(vals)
+                    offset += j["accessors"][p["attributes"]["POSITION"]]["count"]
                 idx, _ = read_accessor(j, binary, p["indices"])
-                indices.extend(v + offset for v in idx)
-                offset += count
+                indices.extend(v + base[key] for v in idx)
             new = {"attributes": {}, "material": material, "mode": mode}
             if material is None:
                 del new["material"]
