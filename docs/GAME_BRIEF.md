@@ -287,9 +287,11 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
 
   Each kind has one exact height that its slot uses, so the harness doesn't rescale it. Details are built for the inhabitant's height: giants' doors are about 6 m and their steps about 0.5 m high; small folk have 0.7 m doors.
 
-  `gen_buildings.sh` regenerates all 17 sets in about 2 s. Triangles: about 3.7k per house, 5.8k per townhouse, 8.2k per factory.
+  `gen_buildings.sh` regenerates all 20 sets in about 3.5 s. Triangles: about 3.7k per house, 5.8k per townhouse, 8.2k per factory.
 
   Fixed in the shader: reds and oranges take a quarter of the shadow hue shift, so red roofs deepen instead of turning magenta under violet shadow hues. Ring slots can face inward (`"face": "in"`).
+
+  **Foundations and footprints (2026-11-09):** the origin is now the floor, centred on the footprint. Below it every model has a stepped stone foundation under its ground outline: about 1.8 m for a person's buildings, 5.1 m for giants', 0.6 m for small folk's, and 0.4–0.6 m for lamps, stalls, crates and pipes. On a slope it reaches into the ground; on flat ground it is buried. Each kind's footprint envelope (roof overhangs and steps included) is `ENVELOPES` in `buildings.py`, measured over 32 seeds; a model that exceeds it prints `WARN`. `gen_buildings.sh` also writes [`living/rules/data/buildings.json`](../living/rules/data/buildings.json), which the settlement planner reads. A `well` kind joins the fantasy, giants' and small folk's sets. A foundation costs about 120 triangles. **The client must place models by their origin:** look-dev's fit still puts the bounding box's bottom on the ground and scales its whole height to the slot, so until it changes, buildings float by their foundation and shrink by about 18%.
 
   Open:
   - Windows sit on the walls rather than being cut in, and there are no interiors.

@@ -240,14 +240,18 @@ pub fn fit(
         if !any {
             continue;
         }
-        let height = (hi.y - lo.y).max(0.01);
+        let span = (hi.y - lo.y).max(0.01);
+        // Models built with a foundation below their floor (buildings.py) stand on their origin
+        // and are measured above it; everything else stands on its lowest point.
+        let founded = lo.y < -0.05 * span && hi.y > 0.0;
+        let (base, height) = if founded { (0.0, hi.y.max(0.01)) } else { (lo.y, span) };
         let k = if model.height > 0.0 { model.height / height } else { 1.0 };
         tf.scale = Vec3::splat(k);
-        tf.translation.y = model.ground_y - lo.y * k;
+        tf.translation.y = model.ground_y - base * k;
         *vis = Visibility::Inherited;
         debug!("look-dev: fitted {} ({height:.2} units) to {:.2} m (×{k:.2})", model.file, model.height);
-        let y_off = -lo.y * k;
-        let center = Vec3::new((lo.x + hi.x) * 0.5 * k, (hi.y - lo.y) * 0.5 * k, (lo.z + hi.z) * 0.5 * k);
+        let y_off = -base * k;
+        let center = Vec3::new((lo.x + hi.x) * 0.5 * k, (hi.y - base) * 0.5 * k, (lo.z + hi.z) * 0.5 * k);
         commands.entity(e).insert(Fitted { y_off, size: (hi - lo) * k, center });
     }
 }

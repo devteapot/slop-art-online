@@ -17,6 +17,7 @@ Started 2026-11-08. **This world is a placeholder to change later.** It gives th
   - every region kind and site at 2048 m;
   - a summit of 250–520 m, a river over 800 m long and a lake 100–450 m across;
   - finite, continuous height that follows the water.
+- **Settlements and roads:** [`living/rules/src/settle.rs`](../living/rules/src/settle.rs) runs at the end of generation; see [settlements](#settlements-and-roads-2026-11-09).
 - [`realm.rs`](../living/rules/src/realm.rs) is unchanged, because the lab's seeds depend on it.
 
 Why a new generator: `realm` sizes its features in tiles. At 2048 m (seed 7) it repeats its half-km patterns, its heights run only −1 to 71 m, rivers mostly vanish, and it always places 4 towns. `land` sizes features in metres: a larger world gets more regions of the same size, longer rivers and a second range.
@@ -78,8 +79,8 @@ Unlike [`height.rs`](../living/rules/src/height.rs), this height **does not foll
 | Site | Count | Radius (diameter) | Inhabitants | Placed |
 |---|---|---|---|---|
 | town | 1 | 150 m (300 m) | adults, 1.75 m | flat lowland, rivers allowed, no lake or sea inside, prefers a river or coast |
-| village | 2–3 (1.2 per km²) | 50 m (100 m) | adults | flat, within 160 m of water, at least 450 m apart |
-| giants | 1 | 130 m (260 m) | 3× adult, about 5.25 m | highland, mean ground at least 90 m, up to 70 m of relief before levelling |
+| village | 2–3 (1.2 per km²) | 50 m (100 m) | adults | flat, within 160 m of water, at least 450 m apart; out of wetland unless placement relaxes |
+| giants | 1 | 130 m (260 m) | 3× adult, about 5.25 m | highland, mean ground at least 90 m, up to 70 m of relief before levelling (85% levelled, so their lots fit) |
 | small folk | 1 | 28 m (56 m) | 0.35× adult, about 0.6 m | forest or hills, 20–220 m |
 | cave mouth | 2–4 (1.2 per km²) | 5 m | — | mountain flank (slope 0.45–1.6), moved to the foot of rock and facing downhill; caverns are separate spaces, not in this height map |
 
@@ -179,11 +180,76 @@ Second pass (2026-11-09, user feedback):
 - **Water placement:** water draws only on water tiles and their neighbours. Using the nearest water's level alone put a sheet of water over dry slopes.
 - **Camera:** see the camera notes in [game brief](GAME_BRIEF.md).
 
+Settlements in the client (2026-11-09):
+- **Lots:** `island.rs` places a building on every planner lot at its levelled floor, facing its street, in the model's own size. Look-dev's fit stands models with foundations on their origin.
+- **Walls:** wall pieces run along town walls.
+- **Roads:** roads and paved squares draw crisply in the ground, and no wild scatter lands on them.
+- **People:** each settlement gets recipe characters of its folk (adults, giants, small folk) at house fronts and in the square, capped at about a dozen for now. Each VRoid character is about 95 meshes; a cheaper far form is part of the performance work.
+- **Fog:** edge lines now end where the fog has mostly swallowed things.
+- **Frame time:** about 19–23 ms in the town square, headless.
+
 Measured headless at 1600×900 on the development Mac, running from the town into the forest:
 - frame time about 19 ms on average (52 fps), with chunk-build peaks of 26–30 ms;
 - 35–39 ground chunks, and up to about 1,600 models and 2,800 meshes loaded.
 
 Before this scales, static props need merging or instancing, and level of detail.
+
+## Settlements and roads (2026-11-09)
+
+The cities were the environment JSON's grid and ring slots round each site, which read as houses dropped in a square or a circle. [`settle.rs`](../living/rules/src/settle.rs) now lays out every settlement in the shared rules, so the authority can use the same layout later. It holds mechanics only: every width, spacing, chance and kind is a field of `SettleParams` (`LandParams::settlements`), and building footprints come from [`data/buildings.json`](../living/rules/data/buildings.json), which `buildings.py --table` writes.
+
+**Island roads.** Least-cost routes on a 4 m grid:
+- costs: grade (doubling at 7%, ten-fold above 28%), forest, sand, rock cuttings, the spirit grove, rivers (cheap at existing fords);
+- sea, lakes and wetland pools are closed; when nothing else reaches, a causeway may cross lake water;
+- settlements join nearest first, each road ending where it meets the network, so later roads branch off earlier ones in T-junctions;
+- a footpath (the small folk's, the cave mouths') may join any road, but a road never joins a footpath;
+- the town gets a road down to the sea shore if the coast is within 600 m;
+- paths are smoothed (a moving average over about three road widths, kept out of still water and cliffs);
+- every river crossing is a `Crossing`, a ford or (over 6 m) a bridge, and its tiles become road.
+
+**A settlement**, in order:
+1. A plaza: an irregular oval stretched along the arriving roads, on clean ground near the centre. The town's is a paved market square (62 × 38 m) with a well and two rows of stalls; villages have a green with a well.
+2. A landmark: the town's and giants' tower on the plaza edge away from the roads in; the small folk's tower in the middle of their green.
+3. The edge, per direction: out to the site radius, stopping short of water, rock or steep relief.
+4. For the town, a wall of straight curtains between corners round a lobed version of that edge, with gates where roads cross it, a tower beside each gate and at most corners, and a lane just inside it. The wall breaks where it would stand in water.
+5. Main streets: the arriving roads, bent gently between the edge and the plaza, plus radial streets out through the widest gaps (at least 4 for the town and giants, 2 for villages, 3 for small folk).
+6. Lanes branching off every street (and the wall lane, inward) that steer along contours on slopes and round the centre on flat ground, wander a little, and join the next street or end as dead ends. They keep a distance from parallel streets.
+7. Lots along both sides of every street and round the plaza, facing the street: townhouses in the core and along main streets, houses outside it, gardens behind them (burgage plots), and street lamps along main streets.
+8. Outskirts: houses along the roads out, thinning with distance, then fields (strips along the roads, some ploughed to dirt).
+
+Styles per site kind: villages are small and loose; the giants' settlement is built to their scale (12 m streets, 29 × 27 m house lots, 60 m lamp spacing, lanes along contours); the small folk's is tiny and organic (0.9–1.2 m paths that wander, 3 × 3.5 m burrow and mushroom-house lots round a green).
+
+**Ground.** `Land::height` now includes:
+- **Roads:** each road follows a profile: the ground along it, averaged over 4–28 m (by width), pinned to the plaza floor at plazas and to the other road at junctions and crossings. The surface has a cross-fall of the ground across it, limited to 3%, and blends into the terrain over a 2.5 m shoulder plus half the width. Each road is one surface (a soft minimum over its segments), so its centre line is its profile.
+- **Pads:** the ground under each house, townhouse, tower and well (and each plaza) is exactly its floor, with a smooth skirt (3 m; 7 m for giants, 1.2 m for small folk). Next to another pad a skirt gives way, so neighbouring pads stay level; neighbours whose floors differ are kept apart by 0.8 × the difference. A floor is the street level at the lot's front plus a small step. A lot is placed only where levelling cuts at most 2.6 m and fills at most 2.2 m (9 and 6 m for giants).
+- Shaping fades out at the water's edge, and never lowers a bank below its water.
+
+`height()` stays continuous: the tests step 0.02 m through the town and across a whole 1 km map.
+
+**Data for the client** (all public on `Land`):
+- `settlements`: kind, `buildings.py` style, centre, scale, radius, `plaza` (outline, floor, paved), `wall` (ring, corners, `runs`, `gates`, height, thickness; `Wall::pieces(len, centre)` spreads wall-segment models along the runs), the lot range and the landmark.
+- `lots`: settlement, `kind` (`LotKind::model()` names the `buildings.py` kind and asset folder; gardens and fields have no model), `centre`, `width_m` × `depth_m`, `front` (unit vector toward the street), `yaw` (`Quat::from_rotation_y(yaw)` turns a model's +Z front to `front`, with game x = land x and game z = land y), `floor_m` (where the model's origin goes) and `frontage`.
+- `roads`: class (trunk, street, lane, path), points with surface heights, width, cross-fall per segment, and what each end joins.
+- `crossings`: road, ford or bridge, position, direction and span.
+
+Tiles: roads and paved plazas become `Road`, the wall `Wall` (gates stay open, and the connectivity pass links any pocket a wall closes through water or rock, never through a wall), forest under lots becomes grass, and some fields become dirt.
+
+**Tests** (`cargo test -p living-rules settle::`, on seed 7 at 2048 m and seed 5 at 1024 m): every settlement is laid out with a landmark and the town has gates; lots overlap neither each other nor roads; lots stand on walkable, dry land; every lot faces its road, its plaza, its house (gardens) or stands on its wall (towers); the road graph joins every settlement; pads and plazas are level to 2 mm; trunk roads follow their profile to 2 cm; height is continuous through the town; the parameters round-trip as data. `settle::tests::settle_sweep` (ignored, release) repeats the layout checks for seeds 5, 7, 9, 11 and 23 at 1, 2 and 3 km.
+
+**Preview:** `cargo run --release -p living-rules --example town_preview --manifest-path living/Cargo.toml -- SEED SIZE_M OUT_DIR` draws the road network and a close-up of each settlement (lots coloured by kind with a white bar on each front, gardens, fields, wall, gates, contours) and writes a legend with counts, timings, grades and a pad check.
+
+**Measured** (release, Apple Silicon, single thread, seeds 7, 11 and 23 at 2048 m, three runs each):
+
+| | seed 7 | seed 11 | seed 23 |
+|---|---|---|---|
+| generation with settlements (without) | 0.64 s (0.55 s) | 0.65 s (0.53 s) | 0.64 s (0.53 s) |
+| `height()` inside settlements / over the map | 150–153 / 53–55 ns | 177–180 / 53–54 ns | 157–163 / 52–55 ns |
+| town lots (townhouses, houses, gardens, towers) | 184 (71, 29, 42, 10) | 194 (77, 39, 37, 13) | 171 (52, 33, 40, 9) |
+| giants' houses, small folk's houses | 9, 49 | 9, 52 | 9, 42 |
+| roads: count, trunk length | 51, 4.9 km | 56, 4.1 km | 43, 3.4 km |
+| steepest 10 m of trunk road | 53% | 44% | 50% |
+
+Settlement planning adds 0.09–0.12 s at 2048 m and 0.26 s at 3072 m. Each 2048 m world has about 350–410 lots.
 
 ## What the authority would need
 
@@ -218,6 +284,15 @@ Existing patterns that would not hold at this size, measured from source and not
 - **Main summit:** height varies by seed (303–430 m in these runs). Seed 7 at 3072 m stays near 300 m.
 - **1 km worlds** are cramped: one short river and one lake.
 - **Highland region:** it often covers a large share of the island and borrows `meadow` assets until it has an environment of its own.
+- **Settlements:**
+  - Mountain roads: the 4 m routing grid makes short switchbacks, and smoothing them steepens the climb, so trunk roads up to the giants reach 44–53% over 10 m and cave paths up to 63%. Streets and lanes stay under 18%. Fixing it needs routing that penalises turns, or a coarser grid with real switchbacks.
+  - On flat ground the main streets are the routed roads, nearly straight; their gentle bend helps but towns on flat land still read as a spider web round the plaza.
+  - Lanes sometimes branch twice from about the same point and form small teardrop loops, and on steep giants' ground they wriggle.
+  - The giants' settlement holds only 9 houses on its shelf in these seeds; a site on steep ground fits few 29 m lots.
+  - Block interiors in the town stay as gardens and open green; there are no back lanes, courtyards or yards.
+  - There are no halls, churches, inns or workshops yet, only the `buildings.py` kinds, so the town's landmark is a watchtower.
+  - A village in a cramped spot can end with only a few houses and no well.
+  - The client still dresses settlements from the environment JSON slots; the lots are not drawn yet.
 
 ## Open questions
 

@@ -16,11 +16,24 @@ fronts face -Y in Blender (+Z in glTF, the asset view's "front"). Colour is per-
 ("Color", exported as COLOR_0) on a white "Body" material so the game's toon material does
 the shading; lit windows and lamps use a "Glow" material with emission.
 
-Every model of a kind is scaled to exactly that kind's height (HEIGHTS), and the environment
-slots use the same height, so the harness never rescales a building: doors stay door-sized.
+Every model of a kind is scaled to exactly that kind's height (HEIGHTS) above its floor, and the
+environment slots use the same height, so the harness never rescales a building: doors stay
+door-sized.
+
+Foundations: the origin is the floor (where the building meets level ground). Below it every
+model has a stepped stone foundation under its whole ground outline, about 1.8 m deep for a
+person's house (FOUNDATION, scaled with the inhabitants: about 5 m for giants, 0.6 m for small
+folk), so on a slope it reaches down into the ground instead of floating; on flat ground it is
+hidden. The settlement planner (`living/rules/src/settle.rs`) levels each lot to the floor.
+
+Footprints: every model of a kind fits inside ENVELOPES (width along the front, depth front to
+back, roof overhangs and steps included); a model that does not prints WARN. `--table PATH`
+writes HEIGHTS, ENVELOPES and foundation depths as the JSON the planner reads
+(`living/rules/data/buildings.json`); `gen_buildings.sh` refreshes it.
 """
 
 import argparse
+import json
 import math
 import os
 import random
@@ -56,6 +69,39 @@ HEIGHTS = {
     ("giant", "lamp"): 3.6 * 5.0 / 1.75,
     ("small", "house"): 1.6,
     ("small", "tower"): 3.5,
+    ("fantasy", "well"): 3.4,
+    ("giant", "well"): 3.4 * 5.0 / 1.75,
+    ("small", "well"): 3.4 * 0.6 / 1.75,
+}
+
+# Foundation depth below the floor, in a person's metres (scaled with the inhabitants).
+FOUNDATION = {"lamp": 0.6, "market_stall": 0.5, "crate": 0.4, "pipe": 0.5}
+FOUNDATION_DEFAULT = 1.8
+
+# Footprint envelope (width along the front, depth front to back; metres, as built) of every model
+# of a kind: the maximum over 32 seeds, foundations included, plus a little. The planner sizes
+# lots by these, so changing a generator's proportions means re-measuring them.
+ENVELOPES = {
+    ("fantasy", "house"): (10.1, 9.5),
+    ("fantasy", "lamp"): (2.0, 0.7),
+    ("fantasy", "market_stall"): (4.2, 2.0),
+    ("fantasy", "tower"): (8.7, 8.7),
+    ("fantasy", "townhouse"): (10.4, 8.8),
+    ("fantasy", "wall"): (5.0, 3.8),
+    ("fantasy", "well"): (3.0, 2.4),
+    ("giant", "house"): (29.3, 27.1),
+    ("giant", "lamp"): (5.7, 1.8),
+    ("giant", "tower"): (21.2, 21.2),
+    ("giant", "well"): (8.4, 6.7),
+    ("small", "house"): (3.1, 3.5),
+    ("small", "tower"): (2.5, 2.5),
+    ("small", "well"): (1.0, 0.9),
+    ("steampunk", "chimney"): (7.1, 7.1),
+    ("steampunk", "crate"): (1.9, 1.4),
+    ("steampunk", "factory"): (17.0, 17.4),
+    ("steampunk", "house"): (9.1, 9.1),
+    ("steampunk", "lamp"): (1.7, 0.9),
+    ("steampunk", "pipe"): (7.2, 0.9),
 }
 
 PALETTES = {
@@ -152,11 +198,16 @@ class Builder:
         part.free()
 
     def finish(self, name, height):
-        """Scale uniformly to exactly `height`, base at z=0, then make the object."""
-        zs = [v.co.z for v in self.bm.verts]
-        lo, hi = min(zs), max(zs)
-        k = height / max(hi - lo, 1e-6)
-        m = Matrix.Scale(k, 4) @ Matrix.Translation((0, 0, -lo))
+        """Scale uniformly so the top is exactly `height` above the floor (z=0, kept as the
+        origin; the foundation reaches below it), centre the footprint on the origin, then make
+        the object."""
+        hi = max(v.co.z for v in self.bm.verts)
+        k = height / max(hi, 1e-6)
+        # Centred on its footprint, so a lot centred on the origin fits it snugly.
+        xs = [v.co.x for v in self.bm.verts]
+        ys = [v.co.y for v in self.bm.verts]
+        cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+        m = Matrix.Scale(k, 4) @ Matrix.Translation((-cx, -cy, 0))
         bmesh.ops.transform(self.bm, matrix=m, verts=self.bm.verts)
         self.centres = [m @ c for c in self.centres]
         mesh = bpy.data.meshes.new(name)
@@ -1691,6 +1742,83 @@ def small_tower(k, H):
         fantasy_tower(k, H)
 
 
+def convex_hull(pts):
+    pts = sorted(set((round(x, 4), round(y, 4)) for x, y in pts))
+    if len(pts) < 3:
+        return pts
+
+    def half(ps):
+        out = []
+        for p in ps:
+            while len(out) >= 2 and (out[-1][0] - out[-2][0]) * (p[1] - out[-2][1]) - (out[-1][1] - out[-2][1]) * (p[0] - out[-2][0]) <= 0:
+                out.pop()
+            out.append(p)
+        return out
+    lo, hi = half(pts), half(reversed(pts))
+    return lo[:-1] + hi[:-1]
+
+
+def foundation(k, depth):
+    """A stepped stone foundation under the model's ground outline (the convex hull of
+    everything touching the ground), from the floor down `depth`: courses widen a little
+    downward, like a footing, so a slope shows stonework rather than a gap."""
+    pts = [(v.co.x, v.co.y) for v in k.b.bm.verts if v.co.z <= 0.05]
+    hull = convex_hull(pts)
+    if len(hull) < 3:
+        return
+    cx = sum(p[0] for p in hull) / len(hull)
+    cy = sum(p[1] for p in hull) / len(hull)
+
+    def grown(d):
+        out = []
+        for x, y in hull:
+            dx, dy = x - cx, y - cy
+            l = max(math.hypot(dx, dy), 1e-6)
+            out.append((x + dx / l * d, y + dy / l * d))
+        return out
+    stone = k.pal.get("stone_dark", k.pal.get("stone", (0.55, 0.52, 0.48)))
+    courses = max(2, round(depth / 0.6))
+    for i in range(courses):
+        z1 = -0.01 - i * depth / courses
+        z0 = -0.01 - (i + 1) * depth / courses
+        ring = grown(0.05 + 0.06 * i)
+        bm = bmesh.new()
+        bot = [bm.verts.new((x, y, z0)) for x, y in ring]
+        top = [bm.verts.new((x, y, z1)) for x, y in ring]
+        bm.faces.new(bot[::-1])
+        bm.faces.new(top)
+        n = len(ring)
+        for a in range(n):
+            b = (a + 1) % n
+            bm.faces.new([bot[a], bot[b], top[b], top[a]])
+        shade = 0.92 - 0.06 * i + (0.04 if i % 2 else 0.0)
+        k.add(bm, mul(stone, shade), ao=False, vary=0.03)
+
+
+def well(k, H):
+    """A stone draw-well with a little gabled roof on two posts, a windlass and a bucket."""
+    rng, pal = k.rng, k.pal
+    stone, timber = pal["stone"], pal["timber"]
+    roofc = k.choice(pal["roof"])
+    r = rng.uniform(0.85, 1.0)
+    k.add(cyl((0, 0, 0), (0, 0, 0.85), r, r * 0.96, 14, bevel=0.04), stone, vary=0.03)
+    k.add(cyl((0, 0, 0.82), (0, 0, 0.95), r + 0.1, r + 0.08, 14), mul(stone, 0.88))
+    k.add(cyl((0, 0, 0.55), (0, 0, 0.62), r - 0.12, r - 0.12, 14), (0.10, 0.15, 0.20), ao=False)
+    top = H - 0.9
+    for e in (-1, 1):
+        x = e * (r + 0.02)
+        k.add(box((x - 0.09, -0.09, 0.0), (x + 0.09, 0.09, top)), timber)
+        k.add(box((x - 0.14, -0.14, 0.0), (x + 0.14, 0.14, 0.3)), mul(stone, 0.85))
+    wz = top - 0.75
+    k.add(cyl((-r - 0.1, 0, wz), (r + 0.1, 0, wz), 0.09, 0.09, 8), mul(timber, 1.2))
+    k.add(box((r + 0.1, -0.03, wz - 0.03), (r + 0.16, 0.03, wz + 0.35)), pal["iron"], ao=False)
+    k.add(box((r + 0.1, -0.03, wz + 0.3), (r + 0.4, 0.03, wz + 0.36)), pal["iron"], ao=False)
+    bz = wz - rng.uniform(0.7, 1.1)
+    k.add(cyl((0, 0, bz + 0.3), (0, 0, wz), 0.015, 0.015, 4), (0.75, 0.66, 0.48), ao=False)
+    barrel(k, (0, 0, bz), 0.16, 0.3, timber)
+    gable_roof(k, (0, 0, H), X, r + 0.15, 0.75, top, 0.3, 0.2, roofc, course=0.35, th=0.07, sag=0.02, barge=timber)
+
+
 KINDS = {
     ("fantasy", "house"): lambda k, H: fantasy_house(k, H),
     ("fantasy", "townhouse"): lambda k, H: fantasy_house(k, H, town=True),
@@ -1709,6 +1837,9 @@ KINDS = {
     ("giant", "lamp"): fantasy_lamp,
     ("small", "house"): small_house,
     ("small", "tower"): small_tower,
+    ("fantasy", "well"): well,
+    ("giant", "well"): well,
+    ("small", "well"): well,
 }
 
 # Who lives there: generators work in metres for a 1.75 m person, and the result is scaled to
@@ -1719,14 +1850,31 @@ STYLE_FOLK = {"fantasy": "human", "steampunk": "human", "giant": "giant", "small
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     ap = argparse.ArgumentParser()
-    ap.add_argument("--style", required=True, choices=sorted(PALETTES))
-    ap.add_argument("--kind", required=True)
+    ap.add_argument("--style", choices=sorted(PALETTES))
+    ap.add_argument("--kind")
+    ap.add_argument("--table", help="write the footprint table (JSON) the settlement planner reads, and exit")
     ap.add_argument("--count", type=int, default=8)
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out")
     ap.add_argument("--profile", action="store_true", help="print triangles per generator function")
     a = ap.parse_args(argv)
     global PROFILE
+    if a.table:
+        kinds = []
+        for (style, kind), H in sorted(HEIGHTS.items()):
+            scale = FOLK[STYLE_FOLK[style]] / FOLK["human"]
+            w, d = ENVELOPES[(style, kind)]
+            kinds.append({"style": style, "kind": kind, "width_m": w, "depth_m": d, "height_m": round(H, 3),
+                          "foundation_m": round(FOUNDATION.get(kind, FOUNDATION_DEFAULT) * scale, 3)})
+        with open(a.table, "w") as f:
+            json.dump({"note": "Written by living/tools/blender/buildings.py --table (gen_buildings.sh). Envelope of every "
+                       "model of a kind: width along the front, depth front to back, height above the floor; "
+                       "foundation depth below the floor.", "kinds": kinds}, f, indent=1)
+            f.write("\n")
+        print(f"TABLE {a.table} {len(kinds)} kinds")
+        return
+    if not (a.style and a.kind and a.out):
+        sys.exit("--style, --kind and --out are required unless --table is given")
     if (a.style, a.kind) not in KINDS:
         sys.exit(f"unknown kind {a.kind} for style {a.style}; known: {sorted(KINDS)}")
     os.makedirs(a.out, exist_ok=True)
@@ -1739,6 +1887,7 @@ def main():
         PROFILE = {} if a.profile else None
         k = Kit(rng, PALETTES[a.style], ao=1.2)
         KINDS[(a.style, a.kind)](k, Hd)
+        foundation(k, FOUNDATION.get(a.kind, FOUNDATION_DEFAULT))
         obj, s = k.b.finish(f"{a.kind}_{a.style}_{i:02d}", H)
         tris = sum(len(p.vertices) - 2 for p in obj.data.polygons)
         dims = obj.dimensions
@@ -1746,6 +1895,13 @@ def main():
         bpy.ops.object.select_all(action="SELECT")
         bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", export_vertex_color="ACTIVE", export_normals=True, export_yup=True, use_selection=False)
         print(f"GEN {path} tris={tris} size={dims.x:.2f}x{dims.y:.2f}x{dims.z:.2f} fit=x{s * Hd / H:.3f}")
+        # Lots are centred on the origin: the footprint is twice the farthest reach from it.
+        fw = 2 * max(abs(v.co.x) for v in obj.data.vertices)
+        fd = 2 * max(abs(v.co.y) for v in obj.data.vertices)
+        print(f"FOOT {a.style} {a.kind} {fw:.3f} {fd:.3f} below={-min(v.co.z for v in obj.data.vertices):.2f}")
+        env = ENVELOPES.get((a.style, a.kind))
+        if env and (fw > env[0] + 1e-3 or fd > env[1] + 1e-3):
+            print(f"WARN {path} footprint {fw:.2f}x{fd:.2f} exceeds the envelope {env[0]}x{env[1]}")
         if PROFILE:
             print("  " + " ".join(f"{n}={t}" for n, t in sorted(PROFILE.items(), key=lambda x: -x[1])))
 

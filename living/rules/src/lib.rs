@@ -6,6 +6,7 @@ pub mod catalog;
 pub mod graph;
 pub mod height;
 pub mod land;
+pub mod settle;
 pub mod map;
 pub mod city;
 pub mod genes;

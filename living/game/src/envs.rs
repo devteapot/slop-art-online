@@ -194,7 +194,9 @@ pub fn apply_mood(md: &Mood, style: &mut Style, look: &mut Lookdev, lights: &mut
         exposure: md.exposure,
         ambient: md.ambient,
         bloom: md.bloom,
-        line_fade: [md.fog_start * 0.6, md.fog_end * 0.8],
+        // Edge lines end where the fog has mostly swallowed things (as outlines do), so no bare
+        // line drawings show through the fog.
+        line_fade: [md.fog_start * 0.5, md.fog_start + (md.fog_end - md.fog_start) * 0.45],
         ..base
     };
 }

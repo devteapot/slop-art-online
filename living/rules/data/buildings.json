@@ -1,0 +1,165 @@
+{
+ "note": "Written by living/tools/blender/buildings.py --table (gen_buildings.sh). Envelope of every model of a kind: width along the front, depth front to back, height above the floor; foundation depth below the floor.",
+ "kinds": [
+  {
+   "style": "fantasy",
+   "kind": "house",
+   "width_m": 10.1,
+   "depth_m": 9.5,
+   "height_m": 8.0,
+   "foundation_m": 1.8
+  },
+  {
+   "style": "fantasy",
+   "kind": "lamp",
+   "width_m": 2.0,
+   "depth_m": 0.7,
+   "height_m": 3.6,
+   "foundation_m": 0.6
+  },
+  {
+   "style": "fantasy",
+   "kind": "market_stall",
+   "width_m": 4.2,
+   "depth_m": 2.0,
+   "height_m": 2.6,
+   "foundation_m": 0.5
+  },
+  {
+   "style": "fantasy",
+   "kind": "tower",
+   "width_m": 8.7,
+   "depth_m": 8.7,
+   "height_m": 24.0,
+   "foundation_m": 1.8
+  },
+  {
+   "style": "fantasy",
+   "kind": "townhouse",
+   "width_m": 10.4,
+   "depth_m": 8.8,
+   "height_m": 12.0,
+   "foundation_m": 1.8
+  },
+  {
+   "style": "fantasy",
+   "kind": "wall",
+   "width_m": 5.0,
+   "depth_m": 3.8,
+   "height_m": 5.5,
+   "foundation_m": 1.8
+  },
+  {
+   "style": "fantasy",
+   "kind": "well",
+   "width_m": 3.0,
+   "depth_m": 2.4,
+   "height_m": 3.4,
+   "foundation_m": 1.8
+  },
+  {
+   "style": "giant",
+   "kind": "house",
+   "width_m": 29.3,
+   "depth_m": 27.1,
+   "height_m": 22.857,
+   "foundation_m": 5.143
+  },
+  {
+   "style": "giant",
+   "kind": "lamp",
+   "width_m": 5.7,
+   "depth_m": 1.8,
+   "height_m": 10.286,
+   "foundation_m": 1.714
+  },
+  {
+   "style": "giant",
+   "kind": "tower",
+   "width_m": 21.2,
+   "depth_m": 21.2,
+   "height_m": 38.0,
+   "foundation_m": 5.143
+  },
+  {
+   "style": "giant",
+   "kind": "well",
+   "width_m": 8.4,
+   "depth_m": 6.7,
+   "height_m": 9.714,
+   "foundation_m": 5.143
+  },
+  {
+   "style": "small",
+   "kind": "house",
+   "width_m": 3.1,
+   "depth_m": 3.5,
+   "height_m": 1.6,
+   "foundation_m": 0.617
+  },
+  {
+   "style": "small",
+   "kind": "tower",
+   "width_m": 2.5,
+   "depth_m": 2.5,
+   "height_m": 3.5,
+   "foundation_m": 0.617
+  },
+  {
+   "style": "small",
+   "kind": "well",
+   "width_m": 1.0,
+   "depth_m": 0.9,
+   "height_m": 1.166,
+   "foundation_m": 0.617
+  },
+  {
+   "style": "steampunk",
+   "kind": "chimney",
+   "width_m": 7.1,
+   "depth_m": 7.1,
+   "height_m": 20.0,
+   "foundation_m": 1.8
+  },
+  {
+   "style": "steampunk",
+   "kind": "crate",
+   "width_m": 1.9,
+   "depth_m": 1.4,
+   "height_m": 1.0,
+   "foundation_m": 0.4
+  },
+  {
+   "style": "steampunk",
+   "kind": "factory",
+   "width_m": 17.0,
+   "depth_m": 17.4,
+   "height_m": 15.0,
+   "foundation_m": 1.8
+  },
+  {
+   "style": "steampunk",
+   "kind": "house",
+   "width_m": 9.1,
+   "depth_m": 9.1,
+   "height_m": 12.0,
+   "foundation_m": 1.8
+  },
+  {
+   "style": "steampunk",
+   "kind": "lamp",
+   "width_m": 1.7,
+   "depth_m": 0.9,
+   "height_m": 4.0,
+   "foundation_m": 0.6
+  },
+  {
+   "style": "steampunk",
+   "kind": "pipe",
+   "width_m": 7.2,
+   "depth_m": 0.9,
+   "height_m": 2.0,
+   "foundation_m": 0.5
+  }
+ ]
+}

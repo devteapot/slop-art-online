@@ -15,6 +15,7 @@
 //! mechanics only; every size, count and threshold is a field of [`LandParams`].
 
 use crate::map::{Map, Terrain, MAX_SIDE};
+use crate::settle::{self, Crossing, Lot, Road, SettleParams, Settlement};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, VecDeque};
@@ -127,6 +128,8 @@ pub struct LandParams {
     pub sites: Vec<SiteSpec>,
     /// Walkable pockets smaller than this many tiles are closed instead of linked.
     pub min_pocket_tiles: u32,
+    /// Roads, settlement layouts and building lots ([`crate::settle`]).
+    pub settlements: SettleParams,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -239,7 +242,7 @@ pub struct SiteSpec {
 
 impl Default for LandParams {
     fn default() -> Self {
-        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60 }
+        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60, settlements: SettleParams::default() }
     }
 }
 
@@ -320,7 +323,7 @@ fn default_sites() -> Vec<SiteSpec> {
     let spec = |kind, min, max, per_km2, radius_m, spacing_m, scale, flatten| SiteSpec { kind, min, max, per_km2, radius_m, spacing_m, scale, flatten };
     vec![
         spec(SiteKind::Town, 1, 1, 0.0, 150.0, 0.0, 1.0, 0.8),
-        spec(SiteKind::Giants, 1, 1, 0.0, 130.0, 0.0, 3.0, 0.65),
+        spec(SiteKind::Giants, 1, 1, 0.0, 130.0, 0.0, 3.0, 0.85),
         spec(SiteKind::SmallFolk, 1, 1, 0.0, 28.0, 0.0, 0.35, 0.6),
         spec(SiteKind::Village, 2, 3, 1.2, 50.0, 450.0, 1.0, 0.75),
         spec(SiteKind::Cave, 2, 4, 1.2, 5.0, 300.0, 1.0, 0.0),
@@ -434,6 +437,15 @@ pub struct Land {
     /// Blocked tiles opened by the connectivity pass, and small pockets it closed.
     pub opened_tiles: u32,
     pub closed_pockets: u32,
+    /// Laid-out towns, villages and the giants' and small folk's settlements.
+    pub settlements: Vec<Settlement>,
+    /// Building lots, gardens and fields of every settlement.
+    pub lots: Vec<Lot>,
+    /// Roads between settlements, and every settlement's streets and lanes.
+    pub roads: Vec<Road>,
+    /// Fords and bridges where roads cross rivers.
+    pub crossings: Vec<Crossing>,
+    pub(crate) mods: settle::Mods,
     n: usize,
     cell: f32,
     elev: Grid,
@@ -448,10 +460,24 @@ pub struct Land {
 
 impl Land {
     /// Height of the ground at a point (metres; x east, y south). Continuous and finite.
+    /// Building lots are level at their floor, and roads follow their graded profiles.
     pub fn height(&self, x: f32, y: f32) -> f32 {
+        let sd = self.sd_at(x, y);
+        let h = self.natural(x, y, sd);
+        let m = self.mods.apply(x, y, h, sd);
+        if m < h && sd < 6.5 {
+            // A graded road or a pad never lowers a bank below its water; the bound fades out
+            // where banks stop following the water.
+            let lb = self.surf.bilinear(x, y) - 50.0 * smoothstep(6.0, 6.5, sd);
+            return m.max(lb.min(h));
+        }
+        m
+    }
+
+    /// Ground before roads and lots: relief, levelled sites and water shaping.
+    fn natural(&self, x: f32, y: f32, sd: f32) -> f32 {
         const R: f32 = 6.0;
         let t = self.terrain(x, y);
-        let sd = self.sd_at(x, y);
         if sd >= 2.0 * R {
             return t;
         }
@@ -513,7 +539,8 @@ impl Land {
         t
     }
 
-    fn sd_at(&self, x: f32, y: f32) -> f32 {
+    /// Signed distance to the water's edge (metres, negative in water, within about 16 m).
+    pub(crate) fn sd_at(&self, x: f32, y: f32) -> f32 {
         let w = self.size as i32;
         let (gx, gy) = (x - 0.5, y - 0.5);
         let (x0, y0) = (gx.floor(), gy.floor());
@@ -521,6 +548,38 @@ impl Land {
         let (x0, y0) = (x0 as i32, y0 as i32);
         let at = |i: i32, j: i32| self.sd[(j.clamp(0, w - 1) * w + i.clamp(0, w - 1)) as usize] as f32 / 8.0;
         lerp(lerp(at(x0, y0), at(x0 + 1, y0), tx), lerp(at(x0, y0 + 1), at(x0 + 1, y0 + 1), tx), ty)
+    }
+
+    /// Recompute the signed water distance around tiles `lo..=hi` after they changed.
+    pub(crate) fn update_sd(&mut self, lo: (i32, i32), hi: (i32, i32)) {
+        let w = self.size as i32;
+        // Distances are clamped at 15.8 m, so a 17 m window decides every tile within 16 m.
+        let (x0, y0, x1, y1) = ((lo.0 - 33).max(0), (lo.1 - 33).max(0), (hi.0 + 33).min(w - 1), (hi.1 + 33).min(w - 1));
+        let (ww, wh) = ((x1 - x0 + 1) as usize, (y1 - y0 + 1) as usize);
+        let water = |i: usize, j: usize| self.map.tiles[(j + y0 as usize) * w as usize + i + x0 as usize] == Terrain::Water as u8;
+        let mut d = vec![0f32; ww * wh];
+        let mut out = vec![0i8; ww * wh];
+        for (pass, inside) in [(0, false), (1, true)] {
+            for j in 0..wh {
+                for i in 0..ww {
+                    d[j * ww + i] = if water(i, j) != inside { 0.0 } else { f32::INFINITY };
+                }
+            }
+            chamfer(ww, wh, 1.0, &mut d, None);
+            for j in 0..wh {
+                for i in 0..ww {
+                    if water(i, j) == inside {
+                        let v = (d[j * ww + i] - 0.5).min(15.8);
+                        out[j * ww + i] = ((if pass == 1 { -v } else { v }) * 8.0).round().clamp(-127.0, 127.0) as i8;
+                    }
+                }
+            }
+        }
+        for y in (lo.1 - 16).max(0)..=(hi.1 + 16).min(w - 1) {
+            for x in (lo.0 - 16).max(0)..=(hi.0 + 16).min(w - 1) {
+                self.sd[(y * w + x) as usize] = out[((y - y0) as usize) * ww + (x - x0) as usize];
+            }
+        }
     }
 }
 
@@ -535,7 +594,7 @@ fn mix(mut h: u64) -> u64 {
     h ^ (h >> 31)
 }
 
-fn hash(seed: u64, x: i32, y: i32) -> f32 {
+pub(crate) fn hash(seed: u64, x: i32, y: i32) -> f32 {
     let h = mix(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ mix(((x as u32 as u64) << 32) | y as u32 as u64));
     (h >> 40) as f32 / (1u64 << 24) as f32
 }
@@ -545,7 +604,7 @@ fn fade(t: f32) -> f32 {
 }
 
 /// Value noise in [-1, 1] with unit feature size.
-fn value(seed: u64, x: f32, y: f32) -> f32 {
+pub(crate) fn value(seed: u64, x: f32, y: f32) -> f32 {
     let (x0, y0) = (x.floor(), y.floor());
     let (fx, fy) = (fade(x - x0), fade(y - y0));
     let (i, j) = (x0 as i32, y0 as i32);
@@ -588,11 +647,11 @@ fn ridged(seed: u64, x: f32, y: f32, feature: f32, octaves: u32) -> f32 {
     sum / norm
 }
 
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
+pub(crate) fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
-fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
+pub(crate) fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
@@ -1277,6 +1336,11 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
         ranges,
         opened_tiles: 0,
         closed_pockets: 0,
+        settlements: Vec::new(),
+        lots: Vec::new(),
+        roads: Vec::new(),
+        crossings: Vec::new(),
+        mods: settle::Mods::default(),
         n,
         cell,
         elev: Grid::new(n, cell, elev),
@@ -1454,7 +1518,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
     let keep: Vec<usize> = sites.iter().map(|s| (s.y.max(0.0) as usize).min(w - 1) * w + (s.x.max(0.0) as usize).min(w - 1)).collect();
     land.sites = sites;
 
-    let (opened, closed_pockets) = connect(&mut tiles, w, p.min_pocket_tiles, &keep);
+    let (opened, closed_pockets) = connect(&mut tiles, w, p.min_pocket_tiles, &keep, false);
     land.opened_tiles = opened;
     land.closed_pockets = closed_pockets;
 
@@ -1478,6 +1542,7 @@ pub fn generate(seed: u64, size_m: u32, p: &LandParams) -> Land {
     }
     land.sd = sd;
     land.map = Map { w: size_m, h: size_m, tiles, blocked: Default::default() };
+    settle::plan(&mut land, &p.settlements);
     land
 }
 
@@ -1700,8 +1765,9 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
                         -rough - 0.03 * c.wd[k].min(600.0) + if c.wd[k] < r * 1.2 { 8.0 } else { 0.0 } + if c.sea_d[k] < r * 2.5 { 4.0 } else { 0.0 } + jitter * 3.0
                     }
                     SiteKind::Village => {
-                        let ok_kind = matches!(kind, K::Meadow | K::Forest | K::Beach | K::Wetland) || relax > 1.6;
-                        if !ok_kind || sv.still > 0.0 || sv.water > 0.1 * relax || rough > 10.0 * relax || sv.mean < 2.0 || sv.mean > 120.0 * relax || c.wd[k] > 160.0 * relax {
+                        // Wetland pools leave no room for houses until placement has to relax.
+                        let ok_kind = matches!(kind, K::Meadow | K::Forest | K::Beach) || relax > 1.6;
+                        if !ok_kind || sv.still > 0.0 || sv.wetland > 0.2 * (relax - 1.0) || sv.water > 0.1 * relax || rough > 10.0 * relax || sv.mean < 2.0 || sv.mean > 120.0 * relax || c.wd[k] > 160.0 * relax {
                             continue;
                         }
                         -rough - 0.02 * c.wd[k] + jitter * 3.0
@@ -1765,7 +1831,7 @@ fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
 /// Make every walkable tile reachable on foot: close pockets under `min_pocket` tiles, then cut
 /// the cheapest crossing (fewest blocked tiles, 3 m wide) from every other pocket to the
 /// largest. Water becomes sand (a ford), rock becomes dirt (a pass). Returns (opened, closed).
-fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize]) -> (u32, u32) {
+fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_hold: bool) -> (u32, u32) {
     let n = tiles.len();
     let walk = |t: u8| Terrain::from_u8(t).walkable();
     let nb4 = |k: usize| {
@@ -1832,6 +1898,9 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize]) -> (u32,
         let d = dist[k];
         for (dir, q) in nb4(k).into_iter().enumerate() {
             let Some(q) = q else { continue };
+            if walls_hold && tiles[q] == Terrain::Wall as u8 {
+                continue;
+            }
             let cost = (!walk(tiles[q])) as u16;
             let nd = d.saturating_add(cost);
             if nd < dist[q] {
@@ -1875,7 +1944,7 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize]) -> (u32,
                             continue;
                         }
                         let b = by as usize * w + bx as usize;
-                        if !walk(tiles[b]) {
+                        if !walk(tiles[b]) && !(walls_hold && tiles[b] == Terrain::Wall as u8) {
                             tiles[b] = if tiles[b] == Terrain::Water as u8 { Terrain::Sand as u8 } else { Terrain::Dirt as u8 };
                             opened += 1;
                         }
@@ -1885,6 +1954,11 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize]) -> (u32,
         }
     }
     (opened, closed)
+}
+
+/// Link pockets that walls cut off, through water or rock but never through a wall.
+pub(crate) fn connect_walled(tiles: &mut [u8], w: usize) -> (u32, u32) {
+    connect(tiles, w, 0, &[], true)
 }
 
 #[cfg(test)]

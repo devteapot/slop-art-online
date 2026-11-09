@@ -9,7 +9,9 @@
 //!   level (the sea at 0, lakes level, rivers sloping);
 //! - each region dressed with its environment's assets (`RegionKind::env`) at that environment's
 //!   scatter densities, small things only near you;
-//! - each settlement laid out with its environment's slots (`SiteKind::env`) round its centre.
+//! - each settlement from the rules' planner (`living_rules::settle`): a building on every lot at
+//!   its levelled floor, facing its street, wall pieces along town walls, and people (character
+//!   recipes for the settlement's folk) at house fronts and in the square.
 //!
 //! `LIVING_GAME_START=x,z` starts you at a point (metres) instead of the town.
 
@@ -43,16 +45,22 @@ pub struct WorldDef {
     pub size: u32,
 }
 
-/// One placed thing: an asset file (or none) of a kind at a point.
-#[derive(Clone)]
+/// One placed thing: an asset file of a kind at a point, or a person.
+#[derive(Clone, Default)]
 struct Item {
     kind: String,
     file: String,
     at: Vec2,
     yaw: f32,
+    /// Height for streaming tiers, occlusion and lights; the model keeps its own size if `native`.
     height: f32,
     glow: Option<[f32; 3]>,
     k: usize,
+    /// Where the model's origin stands (a lot's levelled floor), else the ground.
+    floor: Option<f32>,
+    native: bool,
+    /// A person: recipe seed and folk.
+    person: Option<(u64, &'static str)>,
 }
 
 #[derive(Resource)]
@@ -73,7 +81,7 @@ impl Island {
         let t0 = std::time::Instant::now();
         let land = Arc::new(living_rules::land::generate_default(world.seed, world.size));
         let envs: HashMap<String, EnvDef> = defs.iter().map(|d| (d.id.clone(), d.clone())).collect();
-        let town = land.sites.iter().find(|s| s.kind == SiteKind::Town).map(|s| Vec2::new(s.x, s.y));
+        let town = land.settlements.iter().find(|s| s.kind == SiteKind::Town).map(|s| Vec2::new(s.plaza.centre.0, s.plaza.centre.1)).or_else(|| land.sites.iter().find(|s| s.kind == SiteKind::Town).map(|s| Vec2::new(s.x, s.y)));
         let start = std::env::var("LIVING_GAME_START")
             .ok()
             .and_then(|s| {
@@ -83,28 +91,68 @@ impl Island {
             .or(town)
             .unwrap_or(Vec2::splat(world.size as f32 / 2.0));
         let mut site_items: HashMap<(i32, i32), Vec<Item>> = HashMap::new();
-        for (n, site) in land.sites.iter().enumerate() {
-            if site.kind == SiteKind::Cave {
+        let mut put = |it: Item| site_items.entry(chunk_of(it.at)).or_default().push(it);
+        let pick = |files: &[String], n: usize, salt: u32| files[(hash(n as u32, salt) * files.len() as f32) as usize % files.len()].clone();
+        // Buildings on the planner's lots.
+        for (li, lot) in land.lots.iter().enumerate() {
+            let st = &land.settlements[lot.settlement as usize];
+            let Some(kind) = lot.kind.model() else { continue };
+            let env = st.kind.env();
+            let files = crate::envs::assets_for(env, kind);
+            if files.is_empty() {
                 continue;
             }
-            let Some(def) = envs.get(site.kind.env()) else { continue };
-            let centre = Vec2::new(site.x, site.y);
-            let limit = site.radius_m.min(def.ground.radius).max(8.0);
-            let mut taken = vec![(Vec2::ZERO, 2.0)];
-            for (si, slot) in def.slots.iter().enumerate() {
-                let files = crate::envs::assets_for(&def.id, &slot.kind);
-                if files.is_empty() {
+            let slot = envs.get(env).and_then(|d| d.slots.iter().find(|s| s.kind == kind));
+            put(Item {
+                kind: kind.to_string(),
+                file: pick(&files, li, 11),
+                at: Vec2::new(lot.centre.0, lot.centre.1),
+                yaw: lot.yaw,
+                height: slot.map_or(6.0, |s| s.height[1]),
+                glow: slot.and_then(|s| s.glow),
+                k: li,
+                floor: Some(lot.floor_m),
+                native: true,
+                person: None,
+            });
+        }
+        for (si, st) in land.settlements.iter().enumerate() {
+            let env = st.kind.env();
+            // Wall pieces along town walls.
+            if let Some(wall) = &st.wall {
+                let files = crate::envs::assets_for(env, "wall");
+                if !files.is_empty() {
+                    for (k, piece) in wall.pieces(5.0, st.centre).iter().enumerate() {
+                        let at = Vec2::new(piece.centre.0, piece.centre.1);
+                        put(Item { kind: "wall".into(), file: pick(&files, k, 13 + si as u32), at, yaw: piece.yaw, height: wall.height_m, k, native: true, ..default() });
+                    }
+                }
+            }
+            // People: at every other house front, and a few in the square.
+            let folk = match st.kind {
+                SiteKind::Giants => "giant",
+                SiteKind::SmallFolk => "small",
+                SiteKind::Cave => continue,
+                _ => "adult",
+            };
+            let mut n = 0u32;
+            for li in st.lots.0..st.lots.1 {
+                let lot = &land.lots[li as usize];
+                // About a dozen per settlement for now: each VRoid character is ~95 meshes, until
+                // characters get a cheaper far form.
+                if !matches!(lot.kind.id(), "house" | "townhouse") || hash(li, 20) > 0.3 || n >= 8 {
                     continue;
                 }
-                for (k, pl) in crate::envs::place(slot, si + n * 31, &mut taken, limit).iter().enumerate() {
-                    let at = centre + pl.at;
-                    if !land.map.at(at.x, at.y).walkable() {
-                        continue;
-                    }
-                    let file = files[(hash(si as u32 * 31 + k as u32, 5 + n as u32) * files.len() as f32) as usize % files.len()].clone();
-                    let item = Item { kind: slot.kind.clone(), file, at, yaw: pl.yaw, height: pl.height, glow: slot.glow, k };
-                    site_items.entry(chunk_of(at)).or_default().push(item);
-                }
+                let (f, side) = (Vec2::new(lot.front.0, lot.front.1), Vec2::new(-lot.front.1, lot.front.0));
+                let at = Vec2::new(lot.centre.0, lot.centre.1) + f * (lot.depth_m * 0.5 + 1.2 * st.scale) + side * (hash(li, 21) - 0.5) * lot.width_m * 0.6;
+                put(Item { kind: "person".into(), at, yaw: hash(li, 22) * std::f32::consts::TAU, k: n as usize, person: Some((world.seed * 7919 + li as u64, folk)), ..default() });
+                n += 1;
+            }
+            let plaza = Vec2::new(st.plaza.centre.0, st.plaza.centre.1);
+            for k in 0..4u32 {
+                let a = hash(si as u32 * 97 + k, 31) * std::f32::consts::TAU;
+                let at = plaza + Vec2::new(a.cos(), a.sin()) * (2.0 + 6.0 * hash(si as u32 * 97 + k, 32)) * st.scale;
+                put(Item { kind: "person".into(), at, yaw: hash(k, 33) * std::f32::consts::TAU, k: k as usize, person: Some((world.seed * 104_729 + (si as u64) * 31 + k as u64, folk)), ..default() });
             }
         }
         info!(
@@ -164,7 +212,8 @@ impl Island {
                     let seed = (c.0 as u32).wrapping_mul(73_856_093) ^ (c.1 as u32).wrapping_mul(19_349_663) ^ ((ei * 131 + si) as u32) << 20;
                     let at = origin + Vec2::new(hash(seed, k * 3 + 1), hash(seed, k * 3 + 2)) * CHUNK as f32;
                     let kind = self.land.kind_at(at.x, at.y);
-                    if kind.env() != Some(*id) || !self.land.map.at(at.x, at.y).walkable() || self.in_site(at) {
+                    let tile = self.land.map.at(at.x, at.y);
+                    if kind.env() != Some(*id) || !tile.walkable() || tile == Terrain::Road || self.in_site(at) {
                         continue;
                     }
                     // Sparser where the region is not the environment's own kind.
@@ -184,7 +233,7 @@ impl Island {
                     }
                     let height = slot.height[0] + (slot.height[1] - slot.height[0]) * hash(seed ^ 0x51, k);
                     let file = files[(hash(seed ^ 0x77, k) * files.len() as f32) as usize % files.len()].clone();
-                    out.push(Item { kind: slot.kind.clone(), file, at, yaw: hash(seed ^ 0x33, k) * std::f32::consts::TAU, height, glow: slot.glow, k: k as usize });
+                    out.push(Item { kind: slot.kind.clone(), file, at, yaw: hash(seed ^ 0x33, k) * std::f32::consts::TAU, height, glow: slot.glow, k: k as usize, ..default() });
                 }
             }
         }
@@ -248,13 +297,22 @@ fn ground_colour(t: Terrain, kind: RegionKind, v: f32) -> [f32; 4] {
 /// Ground colour averaged over a few metres, so region borders and single tiles blend instead
 /// of switching along straight polygon edges.
 fn blended_colour(land: &Land, x: f32, z: f32, v: f32) -> [f32; 4] {
+    // Roads and paved squares stay crisp, and don't bleed into the blend around them.
+    let here = land.map.at(x + 0.01, z + 0.01);
+    if here == Terrain::Road {
+        return ground_colour(here, land.kind_at(x, z), v);
+    }
     const RING: [(f32, f32); 9] = [(0.0, 0.0), (6.0, 0.0), (-6.0, 0.0), (0.0, 6.0), (0.0, -6.0), (13.0, 9.0), (-13.0, -9.0), (9.0, -13.0), (-9.0, 13.0)];
     let mut acc = [0.0f32; 4];
     for (k, (dx, dz)) in RING.iter().enumerate() {
         // The centre sample counts most; the ring spreads the change over about 25 m.
         let w = if k == 0 { 3.0 } else { 1.0 };
         let (px, pz) = (x + dx, z + dz);
-        let c = ground_colour(land.map.at(px + 0.01, pz + 0.01), land.kind_at(px, pz), v);
+        let t = match land.map.at(px + 0.01, pz + 0.01) {
+            Terrain::Road => Terrain::Grass,
+            t => t,
+        };
+        let c = ground_colour(t, land.kind_at(px, pz), v);
         for i in 0..4 {
             acc[i] += c[i] * w;
         }
@@ -321,10 +379,16 @@ fn chunk_meshes(land: &Land, c: (i32, i32)) -> (Mesh, Option<Mesh>) {
 }
 
 fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &Item) -> Vec<Entity> {
-    let y = land.height(it.at.x, it.at.y);
+    let y = it.floor.unwrap_or_else(|| land.height(it.at.x, it.at.y));
     let at = Vec3::new(it.at.x, y, it.at.y);
+    if let Some((seed, folk)) = it.person {
+        let recipe = crate::characters::Recipe::random(seed, folk);
+        let e = crate::characters::spawn(commands, assets, &recipe, at, it.yaw);
+        commands.entity(e).insert(EnvPart);
+        return vec![e];
+    }
     let vrm = it.file.contains("vroid-");
-    let model = Model { vrm, file: it.file.clone(), height: it.height, ground_y: y, glow: it.glow };
+    let model = Model { vrm, file: it.file.clone(), height: if it.native { 0.0 } else { it.height }, ground_y: y, glow: it.glow };
     let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(it.file.clone()));
     let mut e = commands.spawn((EnvPart, model, WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(it.yaw)), Visibility::Hidden));
     if it.height >= 3.0 {
@@ -420,7 +484,7 @@ pub fn stream(
                 es.push(commands.spawn((EnvPart, Mesh3d(meshes.add(w)), MeshMaterial3d(palette.water.clone()), Transform::default())).id());
             }
             let items: Vec<Item> = island.site_items.get(&c).cloned().unwrap_or_default().into_iter().chain(island.wild_items(c)).collect();
-            for it in items.iter().filter(|it| it.height > SMALL) {
+            for it in items.iter().filter(|it| it.height > SMALL && it.person.is_none()) {
                 es.extend(spawn_item(&mut commands, &assets, &land, it));
             }
             island.ground.insert(c, es);
@@ -428,7 +492,7 @@ pub fn stream(
         }
         if d <= NEAR && !island.small.contains_key(&c) && island.ground.contains_key(&c) {
             let items: Vec<Item> = island.site_items.get(&c).cloned().unwrap_or_default().into_iter().chain(island.wild_items(c)).collect();
-            let es: Vec<Entity> = items.iter().filter(|it| it.height <= SMALL).flat_map(|it| spawn_item(&mut commands, &assets, &land, it)).collect();
+            let es: Vec<Entity> = items.iter().filter(|it| it.height <= SMALL || it.person.is_some()).flat_map(|it| spawn_item(&mut commands, &assets, &land, it)).collect();
             island.small.insert(c, es);
             built += 1;
         }
