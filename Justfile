@@ -79,8 +79,19 @@ living-test:
     cargo test --manifest-path living/Cargo.toml -p living-rules
 
 # Everything that must keep compiling after any change: authority (wasm), mind, the native
-# and browser observer, and the rules tests. Run before every commit.
+# and browser observer, the game client, and the rules tests. Run before every commit.
 living-check: living-build
-    cargo build --manifest-path living/Cargo.toml -p living-mind -p living-viewer
+    cargo build --manifest-path living/Cargo.toml -p living-mind -p living-viewer -p living-game
     cargo build --manifest-path living/viewer/Cargo.toml --target wasm32-unknown-unknown --profile wasm-dev --bin living-viewer
     cargo test --manifest-path living/Cargo.toml -p living-rules
+
+
+# The game client's generated assets (git-ignored; the scripts are the source), on any machine
+# with Blender: CC0 look-dev models, nature, buildings, then the animated characters. The
+# animation step needs the Kimodo cache in .local/kimodo/outputs/library/: make it with
+# living/tools/kimodo/spark.sh, or copy it from a machine that has it.
+living-game-assets:
+    living/tools/lookdev_assets.sh
+    living/tools/blender/gen_nature.sh
+    living/tools/blender/gen_buildings.sh
+    living/tools/blender/gen_anim.sh

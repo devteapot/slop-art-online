@@ -44,7 +44,8 @@ Measure reducer execution/queue time, subscription volume, table growth, WASM me
 Use the [Justfile](Justfile) and the [living core](docs/LIVING_CORE.md). The legacy runbooks ([M1 runbook](docs/M1_RUNBOOK.md), [Bevy browser client](docs/BEVY_BROWSER_CLIENT.md), [participant agents](docs/PARTICIPANT_AGENTS.md)) and [stack reference](STACK_REFERENCE.md) are retained as historical evidence for the removed line. Verify the selected server, database, CLI and output paths before publishing or launching a run.
 
 ```bash
-just living-check     # authority wasm + mind + both observers + rules tests; run before every commit
+just living-check     # authority wasm + mind + both observers + game client + rules tests; run before every commit
+just living-game-assets # regenerate the game client's git-ignored assets (needs Blender; Kimodo cache for clips)
 just living-test      # rules tests
 just living-up        # SpacetimeDB + Neo4j containers
 just living-reset     # fresh world from the seed (DELETES world data)
