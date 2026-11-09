@@ -454,9 +454,22 @@ class Run:
         self.processes.remove(self.mind_proc)
         self.state['pids'].pop('mind', None)
         self.save()
-        env = dict(self.mind_env, LIVING_REORGANIZE='night-batch', LIVING_NIGHT='0-24', LIVING_REORGANIZE_GAP_S='0', LIVING_REORGANIZE_MIN='1',
-                   LIVING_REORGANIZE_POLL_S='1', LIVING_BATCH_INLINE_LIMIT='2000')
-        before = max([r.get('sequence', 0) for r in entries(self.directory / 'requests.jsonl')] + [0])
+        # Its own fake provider, whose consolidation adds twelve links: a person's mind is
+        # reorganized only from 25 links (smaller minds only fade), and Oren's holds about 20.
+        edges = [{'from': 'self', 'rel': 'KNOWS', 'to': f'idea:sleep_detail_{i}', 'confidence': 0.9} for i in range(12)]
+        script = {'replies': {'consolidate': {'summary': 'Night proof consolidation.', 'nodes': [{'key': f'idea:sleep_detail_{i}', 'labels': ['Idea']} for i in range(12)], 'edges': edges, 'identity': None},
+                              'think': {'thought': 'I rest.', 'intend': ['wait'], 'say': None},
+                              'deliberate': {'thought': 'I will wait.', 'plan': 'knowledge proof wait', 'graph': {'wait': 120}, 'say': None, 'acts': []}}}
+        (self.directory / 'fake-sleep-script.json').write_text(json.dumps(script, indent=2))
+        self.process('fake-sleep', [sys.executable, FAKE, '--port', '0', '--log', self.directory / 'requests-sleep.jsonl', '--script', self.directory / 'fake-sleep-script.json'])
+        self.wait(lambda: 'READY ' in (self.directory / 'fake-sleep.log').read_text(), 'sleep fake readiness', 10)
+        port = int(re.search(r'READY http://127.0.0.1:(\d+)/v1', (self.directory / 'fake-sleep.log').read_text())[1])
+        models = json.loads((self.directory / 'models.json').read_text())
+        models['profiles']['fake']['base_url'] = f'http://127.0.0.1:{port}/v1'
+        (self.directory / 'models-sleep.json').write_text(json.dumps(models, indent=2))
+        env = dict(self.mind_env, LIVING_MODELS=str(self.directory / 'models-sleep.json'), LIVING_REORGANIZE='night-batch', LIVING_NIGHT='0-24', LIVING_REORGANIZE_GAP_S='0',
+                   LIVING_REORGANIZE_MIN='1', LIVING_REORGANIZE_POLL_S='1', LIVING_BATCH_INLINE_LIMIT='2000')
+        before = 0
         self.process('mind-sleep', [self.mind_binary], env)
         self.wait(lambda: 'world subscribed:' in (self.directory / 'mind-sleep.log').read_text(), 'second mind subscription')
         for message in ('The amber ford flooded again last night.', 'Teodor says the millstone is mended.'):
@@ -465,7 +478,7 @@ class Run:
         log = lambda: (self.directory / 'mind-sleep.log').read_text()
         self.wait(lambda: re.search(r'night \d+: 1 of 1 minds go to sleep \(1 in a batch', log()), 'a night batch round', 150)
         self.wait(lambda: 'slept on it (batch)' in log(), 'the batch answer applied', 120)
-        rows = entries(self.directory / 'requests.jsonl')
+        rows = entries(self.directory / 'requests-sleep.jsonl')
         uploads = [r for r in rows if r.get('upload')]
         sent = [r for r in rows if r.get('sequence', 0) > before and r.get('purpose') == 'reorganize' and r.get('batch_job')]
         assert uploads and uploads[-1]['lines'] >= 1, 'the job went up as a file'
@@ -473,7 +486,7 @@ class Run:
         thoughts = self.sql(f'SELECT * FROM thought WHERE actor = {self.oren}', 'sleep-thought')
         slept = [t for t in thoughts if t['kind'] == 'reorganize']
         assert slept and json.loads(slept[-1]['detail'])['how'] == 'batch'
-        self.pass_feature('night reorganization as an uploaded batch job', ['requests.jsonl', 'mind-sleep.log', 'sleep-thought.json'])
+        self.pass_feature('night reorganization as an uploaded batch job', ['requests-sleep.jsonl', 'mind-sleep.log', 'sleep-thought.json'])
 
     def cleanup(self):
         report = {'processes': [], 'db': self.db, 'container': self.state['container']}

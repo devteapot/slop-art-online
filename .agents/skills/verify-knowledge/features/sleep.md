@@ -12,8 +12,8 @@ Sources: `living/mind/src/mind/sleep.rs`, `living/mind/src/llm.rs` (`Llm::batch`
 
 ## Driving it
 
-The `sleep_batch` stage of `scripts/verify_knowledge.py run` (after consolidation and recall): it stops the first mind and starts another with `LIVING_REORGANIZE=night-batch`, `LIVING_NIGHT=0-24`, no gap and one integration due; two lines of speech give Oren the integration. It asserts the round (`night N: 1 of 1 minds go to sleep (1 in a batch`), the upload (`requests.jsonl` line with `upload`), the reorganize requests answered under a `batch_job`, `slept on it (batch)` in `mind-sleep.log` and the thought's `how`.
+The `sleep_batch` stage of `scripts/verify_knowledge.py run` (after consolidation and recall): it stops the first mind and starts another with `LIVING_REORGANIZE=night-batch`, `LIVING_NIGHT=0-24`, no gap and one integration due; two lines of speech give Oren the integration, answered by a second fake provider that adds twelve links. It asserts the round (`night N: 1 of 1 minds go to sleep (1 in a batch`), the upload (`requests-sleep.jsonl` line with `upload`), the reorganize requests answered under a `batch_job`, `slept on it (batch)` in `mind-sleep.log` and the thought's `how`.
 
 ## Gotchas
 
-- Oren's authored past gives his mind more than 25 links; a fresh resident's mind would only fade.
+- Oren's mind holds about 20 links after the earlier stages, under the 25 a reorganization needs; the stage's own fake provider answers his consolidation with twelve more, so his mind is big enough to send.
