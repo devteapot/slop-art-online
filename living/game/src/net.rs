@@ -196,6 +196,8 @@ impl Net {
                     format!("SELECT * FROM body WHERE id = {id}"),
                     format!("SELECT * FROM vitals WHERE id = {id}"),
                     format!("SELECT * FROM experience WHERE observer = {id}"),
+                    // My character's known places, for the compass (`place.actor` is indexed).
+                    format!("SELECT * FROM place WHERE actor = {id}"),
                 ];
                 self.mine = self.subscribe(q, vec![id]);
             }
@@ -231,6 +233,12 @@ impl Net {
             }
             self.region = self.region_next.take();
         }
+    }
+
+    /// Ask for a new character after my death (the death screen's "Arrive as a new stranger"):
+    /// the next `maintain` joins again.
+    pub fn rejoin(&mut self) {
+        self.join_sent = false;
     }
 
     pub fn map_size(&self) -> (u32, u32) {

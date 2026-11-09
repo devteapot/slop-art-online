@@ -113,15 +113,40 @@ The simulation logs its cost every 3 s. A 78-joint character costs about 9 µs o
 |---|---|
 | WASD, Shift | move relative to the camera, run (`human_move`) |
 | Right click | walk to that point (`human_act` with `goto`) |
-| Enter | say something; only characters within earshot hear it (`human_say`) |
-| Q / E | rotate 45° (when the preset allows it) |
+| Enter | say something; only characters within earshot hear it (`human_say`). Enter says it, Esc cancels |
 | Mouse cursor | where you face and aim (turning the view by pointing at screen sides is an F1 option, off by default) |
 | `R`, or a middle mouse tap | turn the view until the direction you face is straight ahead; the cursor moves with the ground meanwhile, so you keep facing the same spot |
 | `[` / `]` held, or middle mouse drag | rotate the view (90°/s for the keys); it stays where you leave it |
 | Alt + mouse | glance around; the view eases back on release |
-| F1 | camera and sight panels |
+| F1 | developer panels in egui (status, camera, look, sight, look-dev); hidden by default |
 
-The line from your character to the cursor shows where an aimed skill would go. There are no skills yet.
+The line from your character to the cursor shows where an aimed skill would go. There are no skills yet: the skill bar shows LMB, RMB, Q, E, R, F and Shift (docs/GAME_BRIEF.md, 2026-11-09), unavailable until combat is on the server. `R` still aligns the view; it will clash with the R skill once skills are wired.
+
+## Game UI
+
+The player's UI is Bevy UI (`src/ui/`); egui stays for the F1 panels. It is minimal: only health, energy and the skill bar are always on screen. Everything else appears when it matters:
+- the target frame (top centre) with a target under or near the cursor;
+- nameplates over hovered, targeted or hostile characters, fading with distance (a speaker's bubble carries their name);
+- speech bubbles that stack instead of overlapping, with leader lines, and that fade out;
+- status icons while an effect is active (hungry, tired, losing health, recovering, in combat);
+- an interaction hint near something usable;
+- the chat log when there is new speech or the input is open (only what you heard);
+- the death screen: the cause, who saw it, then "Arrive as a new stranger" (click or Enter);
+- a small compass at the top right, with north and nearby places.
+
+Widgets draw a view-model (`ui/model.rs`) filled by one source:
+- **Live** (`ui/live.rs`): health and energy from your `vitals` row, projected along its rates; status from needs and `hurt_ms`/`hurt_by`; names from `character`; bubbles and the log from your own `experience` speech rows; death from your `character` row; compass points from your `place` rows (subscribed with your character).
+- **Sample** (`ui/sample.rs`, look-dev only): representative values on the scene's own characters, for layout.
+
+Layout is designed at 1080p and scales with the window's height. Fonts are Nunito and Marcellus under the SIL Open Font License 1.1 (`assets/ui/fonts/`). Icons are procedural placeholders (`ui/icons.rs`) until real icon art exists.
+
+`LIVING_GAME_HUD` turns the sample UI on in look-dev (it is off by default, so look-dev photographs and frame-time runs stay clean): `1` for a typical moment, or a comma list of `hover`, `bubbles`, `chat`, `lowhp`, `cooldown`, `death` (`quiet` shows only what is always on screen):
+
+```bash
+LIVING_GAME_LOOKDEV=1 LIVING_GAME_TOUR=/tmp/hud LIVING_GAME_TOUR_ONLY=island LIVING_GAME_START=416,256 \
+  LIVING_GAME_TOUR_SHOTS=default LIVING_GAME_HUD=lowhp,cooldown \
+  cargo run --manifest-path living/Cargo.toml --release -p living-game
+```
 
 ## What it shows
 
@@ -142,11 +167,11 @@ The line from your character to the cursor shows where an aimed skill would go. 
 - **Occlusion:** trees between the camera and you, or close to you on the camera's side, are hidden, with a faded band around them.
 - **Region subscriptions:** `body`, `resource_node` and `structure` rows are subscribed for the chunks within 40 m.
 - **Motion:** the observer's display sync (`living/viewer/src/sync.rs`, included by path) smooths it.
-- **Perception:** the feed and speech bubbles come only from your character's own `experience` rows. Your own lines are echoed locally.
+- **Perception:** the chat log and speech bubbles come only from your character's own `experience` rows. Your own lines are echoed locally.
 - **Sight mock (F1, client-only):**
   - a sight radius, all round or in a forward cone;
   - seen ground stays dimmed, and never-seen ground stays dark;
-  - characters, names and bubbles outside sight are hidden, and trees outside sight are dimmed.
+  - characters, nameplates and bubbles outside sight are hidden, and trees outside sight are dimmed.
 
 ## Known limits
 
@@ -154,6 +179,5 @@ The line from your character to the cursor shows where an aimed skill would go. 
 - **No client-side prediction.** Your own movement waits for the authority's rows.
 - **Occlusion:** trees fade, but terrain and boulders don't; a hill between the camera and you can still block the view in zoom-tilt.
 - **Tile edits:** changed terrain rows (roads, walls) redraw only after a reconnect.
-- **Speech bubbles** overlap when speakers stand close together.
-- **Death:** when your character dies, the client quietly joins again as a new one. There is no death screen yet.
-- **Not checked on its own:** egui `TextEdit` focus combined with Enter. It is verified only through the scripted demo, which calls `say` directly.
+- **Death:** the authority doesn't say who saw a death, so the live death screen omits witnesses.
+- **The game UI's live source is not driven against a server yet;** its layout is checked through look-dev photographs (`LIVING_GAME_HUD`). Typing into the chat and the death screen's click are not driven by a script.

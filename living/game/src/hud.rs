@@ -1,10 +1,9 @@
-//! Spike HUD in egui: status, camera tuning (F1), what my character perceives, proximity
-//! chat, and names and speech over heads. The real game UI will not be egui.
+//! Developer panels in egui, behind F1 (hidden by default): connection status, camera tuning,
+//! the look, the sight mock and look-dev controls. The player's UI is Bevy UI (`ui/`).
 
 use crate::camera::Cam;
-use crate::controls::{self, Input, Target};
+use crate::controls::Input;
 use crate::net::{Net, Status};
-use crate::world::Scene;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use living_bindings::*;
@@ -26,20 +25,16 @@ pub struct Hud {
 
 impl Default for Hud {
     fn default() -> Self {
-        Self { tuning: true, fps: 60.0 }
+        Self { tuning: false, fps: 60.0 }
     }
 }
-
-/// How long a heard line stays over the speaker's head (ms of authority time).
-const BUBBLE_MS: f64 = 7_000.0;
 
 #[allow(clippy::too_many_arguments)]
 pub fn draw(
     mut contexts: EguiContexts,
     net: NonSend<Net>,
-    scene: NonSend<Scene>,
     mut cam: ResMut<Cam>,
-    mut input: ResMut<Input>,
+    input: Res<Input>,
     mut hud: ResMut<Hud>,
     mut wants: ResMut<UiWants>,
     mut sight: ResMut<crate::sight::Sight>,
@@ -48,8 +43,6 @@ pub fn draw(
     lookdev: Option<ResMut<crate::lookdev::Lookdev>>,
     envs: Option<ResMut<crate::envs::Envs>>,
     keys: Res<ButtonInput<KeyCode>>,
-    target: Res<Target>,
-    camq: Query<(&Camera, &Transform), With<Camera3d>>,
     time: Res<Time>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -58,13 +51,9 @@ pub fn draw(
         hud.tuning = !hud.tuning;
     }
     let names: HashMap<u32, String> = net.conn.as_ref().map(|c| c.db.character().iter().map(|ch| (ch.id, ch.name)).collect()).unwrap_or_default();
-    let mut experiences: Vec<Experience> = match (&net.conn, net.my_id) {
-        (Some(c), Some(me)) => c.db.experience().iter().filter(|e| e.observer == me).collect(),
-        _ => Vec::new(),
-    };
-    experiences.sort_by_key(|e| e.at_ms);
 
     // Status.
+    if hud.tuning {
     egui::Area::new(egui::Id::new("status")).anchor(egui::Align2::LEFT_TOP, [12.0, 10.0]).show(ctx, |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             let state = match net.status {
@@ -98,6 +87,8 @@ pub fn draw(
         });
     });
 
+    }
+
     // Camera tuning.
     if hud.tuning {
         egui::Window::new("Camera").anchor(egui::Align2::RIGHT_TOP, [-12.0, 10.0]).resizable(false).default_width(300.0).show(ctx, |ui| {
@@ -127,7 +118,7 @@ pub fn draw(
     }
 
     // Look-dev scene controls.
-    if let Some(mut look) = lookdev {
+    if let Some(mut look) = lookdev.filter(|_| hud.tuning) {
         egui::Window::new("Look dev").anchor(egui::Align2::CENTER_TOP, [0.0, 10.0]).resizable(false).show(ctx, |ui| {
             if let Some(mut envs) = envs {
                 let names: Vec<String> = std::iter::once("Character line-up".to_string()).chain(envs.defs.iter().map(|d| d.name.clone())).collect();
@@ -224,113 +215,7 @@ pub fn draw(
         });
     }
 
-    // Compass: where north is when the view turns.
-    {
-        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("compass")));
-        let c = egui::pos2(ctx.content_rect().center().x, 34.0);
-        painter.circle_filled(c, 20.0, egui::Color32::from_black_alpha(140));
-        let a = (-cam.shown_yaw).to_radians();
-        let n = egui::vec2(a.sin(), -a.cos());
-        painter.line_segment([c - n * 13.0, c + n * 13.0], egui::Stroke::new(1.5, egui::Color32::from_gray(160)));
-        painter.circle_filled(c + n * 13.0, 3.5, egui::Color32::from_rgb(230, 80, 70));
-        painter.text(c + n * 13.0 + n * 9.0, egui::Align2::CENTER_CENTER, "N", egui::FontId::proportional(11.0), egui::Color32::WHITE);
-    }
-
-    // What I perceive: my own experience rows, newest last.
-    egui::Area::new(egui::Id::new("feed")).anchor(egui::Align2::LEFT_BOTTOM, [12.0, -46.0]).show(ctx, |ui| {
-        ui.set_max_width(520.0);
-        egui::Frame::popup(ui.style()).show(ui, |ui| {
-            ui.label(egui::RichText::new("What you notice").small().strong());
-            let mut lines: Vec<(u64, egui::RichText)> = input
-                .said
-                .iter()
-                .map(|(t, text)| (*t, egui::RichText::new(format!("You: {text}")).color(egui::Color32::from_rgb(190, 220, 255))))
-                .collect();
-            for e in &experiences {
-                let text = if e.kind == "speech" {
-                    egui::RichText::new(&e.text).color(egui::Color32::from_rgb(250, 230, 160))
-                } else {
-                    egui::RichText::new(&e.text).small()
-                };
-                lines.push((e.at_ms, text));
-            }
-            lines.sort_by_key(|(t, _)| *t);
-            for (_, text) in lines.into_iter().rev().take(9).rev() {
-                ui.label(text);
-            }
-        });
-    });
-
-    // Chat input.
-    let mut send = None;
-    if input.chat_open {
-        egui::Area::new(egui::Id::new("chat")).anchor(egui::Align2::LEFT_BOTTOM, [12.0, -10.0]).show(ctx, |ui| {
-            let r = ui.add(egui::TextEdit::singleline(&mut input.chat).desired_width(520.0).hint_text("say something (only those within earshot hear you)"));
-            r.request_focus();
-            if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                send = Some(std::mem::take(&mut input.chat));
-                input.chat_open = false;
-            }
-            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                input.chat.clear();
-                input.chat_open = false;
-            }
-        });
-    } else if keys.just_pressed(KeyCode::Enter) && !ctx.egui_wants_keyboard_input() {
-        input.chat_open = true;
-    }
-    if let Some(text) = send {
-        if controls::say(&net, &text) {
-            input.said.push((scene.now_ms as u64, text.trim().to_string()));
-        }
-    }
-
-    // Names and what I heard, over heads.
-    if let Ok((camera, tf)) = camq.single() {
-        // This frame's camera placement (the camera has no parent, so its global transform is
-        // its transform; the propagated one still holds last frame's).
-        let gtf = &GlobalTransform::from(*tf);
-        let painter = ctx.layer_painter(egui::LayerId::background());
-        let heard: HashMap<u32, String> = experiences
-            .iter()
-            .filter(|e| e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < BUBBLE_MS)
-            .map(|e| (e.subject, quoted(&e.text).to_string()))
-            .chain(net.my_id.and_then(|me| input.said.last().filter(|(t, _)| scene.now_ms - (*t as f64) < BUBBLE_MS).map(|(_, l)| (me, l.clone()))))
-            .collect();
-        let me2 = target.0.map(|m| Vec2::new(m.x, m.z));
-        for (id, (p, _)) in &scene.shown {
-            // Names and speech only over those in sight (what is heard stays in the feed).
-            if Some(*id) != net.my_id && me2.is_some_and(|m| !sight.shows(m, *p)) {
-                continue;
-            }
-            let at = scene.at3(p.x, p.y);
-            if target.0.is_some_and(|me| me.distance(at) > 30.0) {
-                continue;
-            }
-            let lift = if Some(*id) == net.my_id { 2.05 * my_size.0 } else { 2.05 };
-            let Ok(screen) = camera.world_to_viewport(gtf, at + Vec3::Y * lift) else { continue };
-            let pos = egui::pos2(screen.x, screen.y);
-            if let Some(name) = names.get(id) {
-                painter.text(pos, egui::Align2::CENTER_BOTTOM, name, egui::FontId::proportional(12.0), egui::Color32::from_white_alpha(220));
-            }
-            if let Some(line) = heard.get(id) {
-                let galley = painter.layout(line.clone(), egui::FontId::proportional(13.0), egui::Color32::BLACK, 260.0);
-                let rect = egui::Rect::from_center_size(pos - egui::vec2(0.0, 16.0 + galley.size().y / 2.0), galley.size() + egui::vec2(12.0, 8.0));
-                painter.rect_filled(rect, 6.0, egui::Color32::from_rgba_unmultiplied(250, 245, 225, 235));
-                painter.galley(rect.min + egui::vec2(6.0, 4.0), galley, egui::Color32::BLACK);
-            }
-        }
-    }
-
     wants.pointer = ctx.egui_wants_pointer_input() || ctx.is_pointer_over_egui();
     wants.keyboard = ctx.egui_wants_keyboard_input() || input.chat_open;
     Ok(())
-}
-
-/// The spoken words of a percept such as `Helper said: “Welcome!”` (the whole text otherwise).
-fn quoted(text: &str) -> &str {
-    match (text.find('“'), text.rfind('”')) {
-        (Some(a), Some(b)) if b > a => &text[a + '“'.len_utf8()..b],
-        _ => text,
-    }
 }

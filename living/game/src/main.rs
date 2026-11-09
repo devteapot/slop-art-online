@@ -26,6 +26,7 @@ mod perf;
 mod post;
 mod sight;
 mod style;
+mod ui;
 mod view;
 mod world;
 
@@ -89,6 +90,8 @@ fn main() {
         app.run();
         return;
     }
+    // The player's UI (Bevy UI); egui stays for the F1 developer panels.
+    app.add_plugins(ui::UiPlugin);
     if !headless {
         app.add_systems(EguiPrimaryContextPass, hud::draw);
     }
