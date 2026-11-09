@@ -528,10 +528,6 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
             ctx.db.persona().insert(row);
         }
     }
-    if !update.relations.is_empty() || update.replace {
-        // Whom it has feelings about is whom it knows by name.
-        crate::perception::knowledge_changed(Some(actor));
-    }
     for r in update.relations.into_iter().take(32) {
         if r.other == actor || ctx.db.character().id().find(r.other).is_none() {
             continue;

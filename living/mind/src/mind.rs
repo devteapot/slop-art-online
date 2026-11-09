@@ -252,15 +252,14 @@ impl Minds {
 
     /// How `me` knows `other`: their name where the authority counts it known
     /// (`perception::knows_name`: itself, family, the other parent of its children, its
-    /// community, someone it has feelings about, someone who told it their name), else "a
-    /// stranger" (docs/PERCEPTION.md: names only when known). For prompts and for what goes
-    /// into a character's own memory; logs and developer records keep names.
+    /// community, someone who told it their name), else "a stranger" (docs/PERCEPTION.md: names
+    /// only when known). For prompts and for what goes into a character's own memory; logs and
+    /// developer records keep names.
     pub(super) fn known_as(&self, me: u32, other: u32) -> String {
         let Some(o) = self.conn.db.character().id().find(&other) else { return "someone".into() };
         let family = |a: &Character, b: &Character| a.parent_a == b.id || a.parent_b == b.id || b.parent_a == a.id || b.parent_b == a.id;
         let community = |id: u32| self.conn.db.membership().iter().find(|m| m.member == id).map(|m| m.community);
         let known = me == other
-            || self.conn.db.relation().iter().any(|r| r.actor == me && r.other == other)
             || self.conn.db.acquaintance().iter().any(|a| a.observer == me && a.known == other)
             || self.conn.db.character().id().find(&me).is_some_and(|m| family(&m, &o))
             || community(me).is_some_and(|k| community(other) == Some(k))
@@ -1288,7 +1287,7 @@ impl Minds {
             .map(|r| {
                 format!(
                     "{} (#{}): {}, trust {:.0}, affinity {:.0}{}",
-                    self.name(r.other),
+                    self.known_as(actor, r.other),
                     r.other,
                     r.label,
                     r.trust,
@@ -1726,7 +1725,7 @@ impl Minds {
                 m.childhood = true;
             }
         }
-        self.name_people(&mut patch);
+        self.name_people(actor, &mut patch);
         // Lived under the minds (a character's history shows both kinds: docs/PLAYER_MEMORY.md).
         patch.lived_under = Some("ai".into());
 
@@ -1786,12 +1785,12 @@ impl Minds {
 
     /// Name person anchors from what the character perceives, when the model did not, and
     /// give every person an edge mentions a node.
-    fn name_people(&self, patch: &mut memory::Patch) {
+    /// People in a patch are named as `actor` knows them (`known_as`): a stranger stays "a
+    /// stranger" in its memory, whatever name the model wrote, until it is told the name.
+    fn name_people(&self, actor: u32, patch: &mut memory::Patch) {
         for n in patch.nodes.iter_mut() {
-            if n.name.is_none() {
-                if let Some(id) = n.key.strip_prefix("person:").and_then(|s| s.parse::<u32>().ok()) {
-                    n.name = Some(self.name(id));
-                }
+            if let Some(id) = n.key.strip_prefix("person:").and_then(|s| s.parse::<u32>().ok()) {
+                n.name = Some(self.known_as(actor, id));
             }
         }
         let mut people: Vec<String> = patch.edges.iter().flat_map(|e| [e.from.clone(), e.to.clone()]).filter(|k| k.starts_with("person:") && !patch.nodes.iter().any(|n| &n.key == k)).collect();
@@ -1799,7 +1798,7 @@ impl Minds {
         people.dedup();
         for k in people {
             if let Some(id) = k.strip_prefix("person:").and_then(|s| s.parse::<u32>().ok()) {
-                patch.nodes.push(memory::NodeOp { key: k, labels: vec!["Person".into()], name: Some(self.name(id)), props: Default::default() });
+                patch.nodes.push(memory::NodeOp { key: k, labels: vec!["Person".into()], name: Some(self.known_as(actor, id)), props: Default::default() });
             }
         }
     }

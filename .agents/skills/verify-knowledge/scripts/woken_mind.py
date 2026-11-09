@@ -20,9 +20,10 @@ own identity (`human_say`); admin calls set the scene (`place_at`, `grant_items`
 4. **Acts:** the deliberation's acts give the player food, teach it a technique and take it
    in as a guest (`host`): an inventory row, a `know_how` row, a private `guest` row and the
    player's `lodging` place.
-5. **Names only when known:** the newcomer never says its name; nothing sent to any woken
-   resident's model names it (a ring integration writes no feelings toward someone it only saw,
-   and talk prompts and transcripts name people only where the authority does).
+5. **Names only when known:** the newcomer never says its name. The ring's feeling toward it is
+   kept (a feeling is not an introduction), its memory node is "a stranger", and nothing sent to
+   any woken resident's model names it (prompts, transcripts and memory name people as the
+   authority does).
 6. **Stage cap:** the player speaks to more residents of the same settlement until one more
    than the `woken_stage("cap")` law is woken and in contact with it: the cap binds, logged
    and journaled (`purpose: stage_cap`).
@@ -216,11 +217,12 @@ def drive(p):
     assert ASK not in user_text(ringreq[0]), 'the ring integration carried what came after waking'
     detail = json.loads(next(t for t in thoughts if t['kind'] == 'internalize')['detail'])
     assert detail['lived_under'] == 'instinct', detail
-    # A stranger stays a stranger: no feeling toward the newcomer from the ring, so the authority
-    # does not count its name as known (`knows_name`).
-    assert any('stranger stays a stranger' in n for n in detail['notes']), detail['notes']
-    assert not [x for x in p.sql(f'SELECT * FROM relation WHERE actor = {rid}', 'resident-relations') if x['other'] == me]
+    # A stranger stays a stranger: the ring's feeling toward the newcomer is kept (a feeling is not
+    # an introduction), its memory names it "a stranger", and nothing sent for it names it.
     newcomer = p.sql(f'SELECT name FROM character WHERE id = {me}', 'newcomer-name')[0]['name']
+    felt = p.wait(lambda: [x for x in p.sql(f'SELECT * FROM relation WHERE actor = {rid}', 'resident-relations') if x['other'] == me], 'the feeling from the ring', 30)
+    stranger = p.cypher(f"MATCH (n:Concept {{run: '{p.db}', actor: {rid}, key: 'person:{me}'}}) RETURN n.name AS name;", 'resident-newcomer-node').stdout
+    assert 'a stranger' in stranger and newcomer not in stranger, stranger
     sent = (p.journal / f"{r['name']}.jsonl").read_text()
     assert newcomer not in sent, f'{newcomer} reached what was sent for {r["name"]}, who was never told the name'
     awaken = json.loads(next(t for t in thoughts if t['kind'] == 'awaken')['detail'])
