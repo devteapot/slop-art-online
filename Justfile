@@ -59,6 +59,16 @@ living-reset: living-build
     {{living_stdb}} publish -s local -b /wasm/living_authority.wasm {{living_db}} --delete-data -y
     just living-token
 
+# A floor (docs/FLOORS.md): the floor module, built without a seed, on database `db`, given seed
+# `name` at runtime by `create_floor` (DELETES the database's data). A land larger than 2048 m is
+# created in steps after the call returns: watch `SELECT * FROM genesis` until `done`. The seed's
+# `rules` switches are compiled in (LIVING_RULES), so the module accepts that seed.
+living-floor name db=living_db:
+    LIVING_SEED=none LIVING_RULES="$(python3 -c 'import json; r = json.load(open("living/seeds/{{name}}.json")).get("rules", {}); print(",".join(f"{k}={str(v).lower()}" for k, v in r.items()))')" cargo build --manifest-path living/Cargo.toml -p living-authority --target wasm32-unknown-unknown --release
+    {{living_stdb}} publish -s local -b /wasm/living_authority.wasm {{db}} --delete-data -y
+    {{living_stdb}} call -s local {{db}} create_floor "$(python3 -c 'import json; print(json.dumps(open("living/seeds/{{name}}.json").read()))')"
+    just living-token
+
 living-sql query:
     {{living_stdb}} sql -s local {{living_db}} "{{query}}"
 
@@ -106,6 +116,7 @@ living-game-assets:
     just living-game-textures --set all
     living/tools/blender/gen_nature.sh
     living/tools/blender/gen_buildings.sh
+    living/tools/blender/gen_city.sh
     living/tools/blender/gen_anim.sh
 
 # The game's painted, tileable textures (git-ignored), from living/tools/textures/paint.py

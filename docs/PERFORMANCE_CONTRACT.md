@@ -112,7 +112,11 @@ remain correctness gates at every load.
 3. **Sustained product gate:** the complete 2,000-character workload meets this
    contract for 8 hours within the reference resource budget.
 
-None of these gates is currently accepted. The latest 216-character diagnostic
+None of these gates is currently accepted. The first measurement of the immediate
+gate on the living core ([gate 216](GATE_216.md), 2026-11-09: 216 human-driven
+clients at 80 ms RTT, a 100-player battle, 30 minutes) fails cadence, both
+latency lines and slow-system deadlines: one database thread saturates on
+per-sender perception views. Before it, the latest 216-character diagnostic
 is the [short baseline (25)](PERFORMANCE_BASELINE_25.md), which excludes long soaks
 and records failed latency, admission and combat-startup checks. The earlier run
 at a configured 33 ms interval delivered about 24.86 action-only transactions/s.

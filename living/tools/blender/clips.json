@@ -1,5 +1,5 @@
 {
-  "about": "Game animation library for the VRoid characters. Kimodo entries (with a prompt) are generated on the DGX Spark by living/tools/kimodo/spark.sh and made game-ready by animate.py --library; keyed entries are animate.py's hand-keyed CLIPS. See the header of animate.py for every field.",
+  "about": "Game animation library for the VRoid characters. Kimodo entries (with a prompt) are generated on the DGX Spark by living/tools/kimodo/spark.sh and made game-ready by animate.py --library; keyed entries are animate.py's hand-keyed CLIPS. See the header of animate.py for every field. layer: upper plays the clip on the spine, arms and head only while the body moves, over its gait (the game's anim.rs); without it, or standing, the whole body plays it.",
   "steps": 100,
   "cfg": [2.0, 2.0],
   "neutral": "stand#3@45",
@@ -7,7 +7,7 @@
     {"name": "stand", "prompt": "a person stands still in a relaxed neutral pose, arms hanging at the sides", "seconds": 3, "seeds": [0, 1, 2, 3], "kind": "pose"},
 
     {"name": "idle", "prompt": "a person stands idle, breathing calmly and shifting weight slightly", "seconds": 6, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "loop", "cycle": "whole", "pick": 2},
-    {"name": "idle_look", "prompt": "a person stands and looks around curiously", "seconds": 6, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "loop", "cycle": "whole", "pick": 1},
+    {"name": "idle_look", "layer": "upper", "prompt": "a person stands and looks around curiously", "seconds": 6, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "loop", "cycle": "whole", "pick": 1},
 
     {"name": "walk", "prompt": "a person walks forward casually", "seconds": 6, "seeds": [0, 1, 2, 3], "kind": "loop", "locomotion": "walk", "cycle": [0.8, 1.4], "skip": 1.5, "pick": 1},
     {"name": "walk_brisk", "prompt": "a person walks forward briskly", "seconds": 6, "seeds": [0, 1, 2, 3], "kind": "loop", "locomotion": "walk", "cycle": [0.7, 1.3], "skip": 1.5, "speed": "walk_brisk", "pick": 1},
@@ -18,10 +18,10 @@
     {"name": "talk", "prompt": "a person talks with hand gestures while standing", "seconds": 6, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "loop", "cycle": "whole", "pick": 1},
     {"name": "talk_explain", "prompt": "a person explains something enthusiastically, gesturing with both hands", "seconds": 6, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "loop", "cycle": "whole", "pick": 0},
     {"name": "listen", "prompt": "a person stands and listens attentively, nodding now and then", "seconds": 6, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "loop", "cycle": "whole", "pick": 1},
-    {"name": "wave", "prompt": "a person waves hello with the right hand", "seconds": 3, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "pick": 2},
-    {"name": "point", "prompt": "a person points forward with the right hand", "seconds": 2.5, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "pick": 3},
-    {"name": "nod", "overlay": {"seconds": 1.4, "Neck": {"pitch": [[0, 0], [0.12, 0], [0.3, 5], [0.46, 0], [0.62, 4], [0.8, 0], [1, 0]]}, "Head": {"pitch": [[0, 0], [0.14, -1], [0.32, 15], [0.48, 0], [0.64, 11], [0.82, 0], [1, 0]]}}, "kind": "once", "note": "hand-keyed on the neutral pose: every Kimodo nod (4 seeds) was a deep bow, head 32-60 degrees down"},
-    {"name": "shake_head", "overlay": {"seconds": 1.6, "Neck": {"yaw": [[0, 0], [0.12, 0], [0.26, 6], [0.42, -6], [0.58, 5], [0.74, -3], [0.9, 0], [1, 0]]}, "Head": {"yaw": [[0, 0], [0.13, 0], [0.28, 14], [0.44, -14], [0.6, 11], [0.76, -6], [0.92, 0], [1, 0]], "pitch": [[0, 0], [0.2, 3], [0.8, 3], [1, 0]]}}, "kind": "once", "note": "hand-keyed on the neutral pose: three of four Kimodo seeds barely turned the head, the fourth tipped it down"},
+    {"name": "wave", "layer": "upper", "prompt": "a person waves hello with the right hand", "seconds": 3, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "pick": 2},
+    {"name": "point", "layer": "upper", "prompt": "a person points forward with the right hand", "seconds": 2.5, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "pick": 3},
+    {"name": "nod", "layer": "upper", "overlay": {"seconds": 1.4, "Neck": {"pitch": [[0, 0], [0.12, 0], [0.3, 5], [0.46, 0], [0.62, 4], [0.8, 0], [1, 0]]}, "Head": {"pitch": [[0, 0], [0.14, -1], [0.32, 15], [0.48, 0], [0.64, 11], [0.82, 0], [1, 0]]}}, "kind": "once", "note": "hand-keyed on the neutral pose: every Kimodo nod (4 seeds) was a deep bow, head 32-60 degrees down"},
+    {"name": "shake_head", "layer": "upper", "overlay": {"seconds": 1.6, "Neck": {"yaw": [[0, 0], [0.12, 0], [0.26, 6], [0.42, -6], [0.58, 5], [0.74, -3], [0.9, 0], [1, 0]]}, "Head": {"yaw": [[0, 0], [0.13, 0], [0.28, 14], [0.44, -14], [0.6, 11], [0.76, -6], [0.92, 0], [1, 0]], "pitch": [[0, 0], [0.2, 3], [0.8, 3], [1, 0]]}}, "kind": "once", "note": "hand-keyed on the neutral pose: three of four Kimodo seeds barely turned the head, the fourth tipped it down"},
 
     {"name": "sit_down", "prompt": "a person sits down on a chair", "seconds": 3, "seeds": [0, 1, 2, 3], "start": "neutral", "kind": "once", "pick": 0},
     {"name": "sit_idle", "prompt": "a person sits on a chair, relaxed and idle", "seconds": 6, "seeds": [0, 1, 2, 3], "start": "sit_down#0@-1", "end": "sit_down#0@-1", "offset": [0.025, -0.406], "kind": "loop", "cycle": "whole", "pick": 0},
@@ -35,15 +35,15 @@
     {"name": "sit_ground", "prompt": "a person sits cross-legged on the ground, relaxed, looking around", "seconds": 6, "seeds": [0, 1, 2, 3], "start": "sit_ground_down#0@-1", "end": "sit_ground_down#0@-1", "offset": [-0.176, -0.276], "kind": "loop", "cycle": "whole", "pick": 0, "note": "town life; offset is sit_ground_down's end_offset_soma_xz"},
     {"name": "stand_up_ground", "prompt": "a person sitting cross-legged on the ground gets up and stands", "seconds": 2.5, "seeds": [0, 1, 2, 3, 4, 5], "start": "sit_ground_down#0@-1", "end": "neutral", "offset": [-0.176, -0.276], "end_offset": [0.176, 0.276], "kind": "once", "pick": 0, "note": "town life: a sitter gets up before walking; starts where sit_ground_down ends and stands up over the origin"},
 
-    {"name": "sword_slash", "prompt": "a person swings a one-handed sword in a fast diagonal slash from the right shoulder down to the left hip", "seconds": 2.5, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "grip": {"R": 70}, "pick": 1},
-    {"name": "sword_overhead", "prompt": "a person raises a one-handed sword high above the head and strikes down hard in front", "seconds": 2.5, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "grip": {"R": 70}, "pick": 0},
-    {"name": "sword_thrust", "prompt": "a person thrusts a sword forward with the right hand", "seconds": 2, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "grip": {"R": 70}, "pick": 1},
-    {"name": "block", "prompt": "a person quickly raises the left forearm in front of the face to block a blow, then lowers it", "seconds": 2, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "pick": 0},
+    {"name": "sword_slash", "layer": "upper", "prompt": "a person swings a one-handed sword in a fast diagonal slash from the right shoulder down to the left hip", "seconds": 2.5, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "grip": {"R": 70}, "pick": 1},
+    {"name": "sword_overhead", "layer": "upper", "prompt": "a person raises a one-handed sword high above the head and strikes down hard in front", "seconds": 2.5, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "grip": {"R": 70}, "pick": 0},
+    {"name": "sword_thrust", "layer": "upper", "prompt": "a person thrusts a sword forward with the right hand", "seconds": 2, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "grip": {"R": 70}, "pick": 1},
+    {"name": "block", "layer": "upper", "prompt": "a person quickly raises the left forearm in front of the face to block a blow, then lowers it", "seconds": 2, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "pick": 0},
     {"name": "dodge", "prompt": "a person dodges with a quick low dash forward, then recovers to standing", "seconds": 1.0, "seeds": [0, 1, 2, 3, 4, 5], "start": "neutral", "end": "neutral", "end_offset": [0, 2.72], "path": [[0, 0, 0], [0.5, 0, 2.72], [1.0, 0, 2.72]], "kind": "once", "travel": "path", "ease": [0.1, 0.2], "pick": 1, "note": "combat: the rules dash 2.6 m at 5.2 m/s (dodge_dist, dodge_speed); the hips follow that track (2.72 SOMA m is 2.6 game m at k_game 0.956), and travel: path takes exactly it out (planted feet pinned along it), so the body's own motion carries the dash"},
-    {"name": "hit", "prompt": "a person is hit in the chest and staggers back", "seconds": 1.5, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "pick": 3},
+    {"name": "hit", "layer": "upper", "prompt": "a person is hit in the chest and staggers back", "seconds": 1.5, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "pick": 3},
     {"name": "death", "prompt": "a person is struck, collapses where they stand and falls to the ground, dead", "seconds": 3.5, "seeds": [0, 1, 2, 3, 4, 5], "start": "neutral", "path": [[0, 0, 0], [3.5, 0, 0]], "kind": "once", "plant": false, "pick": 0, "note": "the hips stay over the origin (path), so the body falls where it stands"},
-    {"name": "cast", "prompt": "a person casts a spell, thrusting both hands forward", "seconds": 2.5, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "pick": 2},
-    {"name": "attack", "keyed": "attack", "note": "hand-keyed: an in-place guard, strike, guard loop for repeated swings; the Kimodo sword clips are one-shots from the neutral pose"},
-    {"name": "bow_shoot", "prompt": "a person draws a bow and shoots an arrow", "seconds": 3, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "grip": {"L": 65, "R": 35}, "pick": 3}
+    {"name": "cast", "layer": "upper", "prompt": "a person casts a spell, thrusting both hands forward", "seconds": 2.5, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "pick": 2},
+    {"name": "attack", "layer": "upper", "keyed": "attack", "note": "hand-keyed: an in-place guard, strike, guard loop for repeated swings; the Kimodo sword clips are one-shots from the neutral pose"},
+    {"name": "bow_shoot", "layer": "upper", "prompt": "a person draws a bow and shoots an arrow", "seconds": 3, "seeds": [0, 1, 2, 3], "start": "neutral", "end": "neutral", "kind": "once", "grip": {"L": 65, "R": 35}, "pick": 3}
   ]
 }

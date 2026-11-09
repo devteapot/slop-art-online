@@ -8,6 +8,7 @@ mod acts;
 mod brain;
 mod codes;
 mod combat;
+mod floor;
 mod island;
 mod mind;
 mod motion;
@@ -73,10 +74,19 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     for kind in ["person", "deer", "wolf"] {
         living_rules::graph::parse(&seed::instinct(kind)).map_err(|e| format!("{kind} instinct: {e}"))?;
     }
-    seed::seed(ctx, now);
+    // A module built with a seed creates its world now (in steps when the land is too big for
+    // one call); a floor module waits for `create_floor` (floor.rs).
+    if !seed::VALLEY.is_empty() {
+        let s: seed::Seed = serde_json::from_str(seed::VALLEY).map_err(|e| format!("seed: {e}"))?;
+        floor::begin(ctx, &s, now);
+    }
+    Ok(())
+}
+
+/// The world's clocks: the 60 Hz tick and the 1 s housekeeping, once the world exists.
+pub(crate) fn start_ticking(ctx: &ReducerContext) {
     ctx.db.tick_timer().insert(TickTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_micros(16_667).into()) });
     ctx.db.slow_timer().insert(SlowTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_secs(1).into()) });
-    Ok(())
 }
 
 fn require_admin(ctx: &ReducerContext) -> Result<World, String> {
@@ -437,6 +447,28 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     combat::invalidate_humans();
     // What the newcomer perceives is there from the first frame, not after a sweep.
     perception::sweep_now(ctx, id, ctx.sender(), now);
+    Ok(())
+}
+
+/// Test support (trials, docs/TRIALS.md): a newcomer as `join` makes one — the same arrival
+/// point and the seed's newcomer kit, the species' instinct graph — but thought for by the
+/// admin's minds (`ai`), so one mind-backed character can live among residents that have no
+/// minds (`rules.minds = false`). It has no background; a caller that wants the mind to write
+/// it an identity sets one (`set_background`), as the trial runner does.
+#[spacetimedb::reducer]
+pub fn spawn_newcomer(ctx: &ReducerContext, name: String) -> Result<(), String> {
+    let w = require_admin(ctx)?;
+    let name = name.trim().to_string();
+    if name.is_empty() || name.len() > 24 {
+        return Err("name must be 1..=24 bytes".into());
+    }
+    let now = common::now_ms(ctx);
+    let map = common::map(ctx);
+    let arrive = island::arrival(ctx);
+    let at = map.nearest_walkable(arrive.0, arrive.1).ok_or("no room")?;
+    let id = seed::spawn_creature(ctx, &name, "person", w.admin, true, at, now);
+    seed::newcomer_kit(ctx, id, now);
+    log::info!("newcomer {name} (#{id}) arrives, thought for by the admin's minds");
     Ok(())
 }
 

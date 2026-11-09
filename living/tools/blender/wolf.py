@@ -22,6 +22,10 @@ the rules' wolf `move_speed`), run (loop, gallop, 7.0), bite (a lunge and snap, 
 to 0.55 s, the rules' `attack_duration` for a wolf, then recovery), leap (a dodge, 0.5 s), hit
 (a flinch, 0.45 s, the client's HIT_MS) and death (1.6 s, ends lying on its side). The client
 notes are in docs (see the branch report): clip names, speeds and when each plays.
+
+The summary gives every clip's paw contact windows (`contacts`: per paw, normalised clip time,
+detected from paw height and world speed, `paw_markers`); the gaits all bring the left hind paw
+down at phase 0 (`sync: "hl"`), so the game blends them at one shared phase.
 """
 
 import argparse
@@ -706,6 +710,40 @@ def paw_slide(fn, speed, period):
     return worst
 
 
+def paw_markers(fn, seconds, speed, loop):
+    """Each paw's contact windows (normalised clip time), detected from the clip as baked: the paw
+    within 1 cm of its rest height and slower than 0.3 m/s in the world (the body moving at
+    `speed`). Loops' windows that cross the seam are split at 1. The gaits all bring the left hind
+    paw down at 0 (`gait`'s offsets), the phase the game syncs them on (`sync: "hl"`)."""
+    n = max(2, round(seconds * FPS))
+    frames = n if loop else n + 1
+    out = {}
+    for leg in LEGS:
+        name = f"{leg}.{'fpaw' if LEGS[leg][0] else 'hpaw'}"
+        rest_u = REST["fpaw" if LEGS[leg][0] else "hpaw"][1]
+        pts = []
+        for i in range(frames + 1):
+            f, _, u = fn((i % n) / n if loop else min(i, n) / n).pt[name]
+            pts.append((f + (speed or 0.0) * seconds * i / n, u))
+        down = []
+        for i in range(frames):
+            (f0, u0), (f1, _) = pts[i], pts[i + 1] if (loop or i + 1 < frames) else pts[i]
+            down.append(u0 - rest_u <= 0.01 and abs(f1 - f0) * FPS <= 0.3)
+        wins, i = [], 0
+        while i < frames:
+            if down[i]:
+                j = i
+                while j < frames and down[j]:
+                    j += 1
+                wins.append([i / n, min(j / n, 1.0)])
+                i = j
+            else:
+                i += 1
+        # A loop's window that runs to its end continues at 0: one contact, split at the seam.
+        out[leg] = [[round(a, 4), round(b, 4)] for a, b in wins]
+    return out
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     ap = argparse.ArgumentParser()
@@ -721,6 +759,9 @@ def main():
     for name, (seconds, loop, speed, fn) in CLIPS.items():
         frames = key_clip(arm, name, seconds, fn, loop)
         rec = {"name": name, "seconds": round(seconds, 3), "loop": loop, "frames": frames}
+        rec["contacts"] = paw_markers(fn, seconds, speed, loop)
+        if speed:
+            rec["sync"] = "hl"
         if speed:
             rec["speed"] = speed
             rec["paw_slide_m"] = round(paw_slide(fn, speed, seconds), 4)

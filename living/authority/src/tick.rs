@@ -119,7 +119,7 @@ thread_local! {
 thread_local! {
     /// Species kept from dying out by newcomers from beyond the map (`migrate` in species.json).
     static MIGRANTS: Vec<(String, living_rules::species::Migrate)> =
-        living_rules::species::parse(include_str!(concat!(env!("OUT_DIR"), "/species.json")))
+        living_rules::species::parse(&common::species_json())
             .map(|all| all.into_iter().filter_map(|(k, s)| s.migrate.map(|m| (k, m))).collect())
             .unwrap_or_default();
     /// The minute in which migration was last considered.

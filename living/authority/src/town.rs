@@ -53,7 +53,7 @@ struct ClimateOf {
 }
 
 thread_local! {
-    static CLIMATE: SeedWeather = serde_json::from_str::<ClimateOf>(crate::seed::VALLEY).map(|c| c.weather).unwrap_or_default();
+    static CLIMATE: SeedWeather = serde_json::from_str::<ClimateOf>(&crate::seed::active()).map(|c| c.weather).unwrap_or_default();
 }
 
 /// The seed's own weather at `now`: whether the current spell rains, and when it ends.
@@ -283,7 +283,7 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
     let mut find = |kinds: &[String], from: (f32, f32), spread: bool| -> Option<(f32, f32)> {
         for k in kinds {
             let mut spots: Vec<(f32, f32)> = match k.as_str() {
-                "plaza" => vec![near(s.centre)],
+                "plaza" => s.square.iter().map(|q| near(*q)).collect(),
                 // Fields and gardens are worked where they lie; buildings at their door.
                 lk if lots.iter().any(|l| l.0 == lk) => lots.iter().filter(|l| l.0 == lk).map(|l| if lk == "field" || lk == "garden" { near(l.1) } else { l.2 }).collect(),
                 other if living_rules::catalog::kind_class(other).is_some() => {

@@ -403,7 +403,11 @@ pub fn missiles(ctx: &ReducerContext, now: u64) {
     }
     let map = common::map(ctx);
     let sc = common::scripts(ctx);
-    for mut m in due {
+    for due_m in due {
+        // An earlier strike in this same sweep may have killed this missile's owner, and a death
+        // deletes the dead one's missiles (`died`): re-read it, so a gone missile is skipped
+        // rather than updated (which panicked and rolled the whole tick back).
+        let Some(mut m) = ctx.db.missile().id().find(due_m.id) else { continue };
         let step = (m.speed * now.saturating_sub(m.t_ms) as f32 / 1000.0).min(m.left);
         let a = (m.x, m.y);
         let b = (m.x + m.dx * step, m.y + m.dy * step);
