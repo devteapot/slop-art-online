@@ -63,12 +63,16 @@ pub enum Surface {
     /// Copper and brass.
     Copper,
     Concrete,
-    /// Awnings and blinds.
+    /// Awnings.
     Cloth,
     Glass,
+    /// Moulded plastic, painted trim, blinds and cables.
+    Plastic,
+    /// Packed earth (burrows and banks).
+    Earth,
 }
 
-pub const SURFACES: usize = 16;
+pub const SURFACES: usize = 18;
 
 /// How a surface's texture is laid on a model.
 #[derive(Clone, Copy)]
@@ -97,6 +101,8 @@ impl Surface {
         Self::Concrete,
         Self::Cloth,
         Self::Glass,
+        Self::Plastic,
+        Self::Earth,
     ];
 
     /// Its name in `material.txt` (surfaces.py).
@@ -118,6 +124,8 @@ impl Surface {
             Self::Concrete => "concrete",
             Self::Cloth => "cloth",
             Self::Glass => "glass",
+            Self::Plastic => "plastic",
+            Self::Earth => "earth",
         }
     }
 
@@ -143,6 +151,8 @@ impl Surface {
             Self::Concrete => (3.0, 1.0, Planar),
             Self::Cloth => (1.5, 1.0, Planar),
             Self::Glass => (1.5, 1.0, Planar),
+            Self::Plastic => (2.0, 1.0, Planar),
+            Self::Earth => (2.5, 1.0, Triplanar),
         }
     }
 }
