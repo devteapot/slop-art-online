@@ -4,31 +4,31 @@
 //! Subscriptions follow the SpacetimeDB subscription guidance (docs/ISLAND_AUTHORITY.md,
 //! "SpacetimeDB documentation consulted"): small static tables whole, everything else by a
 //! window of 16×16-tile chunks around the player, grouped by lifetime, and the next window
-//! subscribed before the previous one is dropped. Fog of war is NOT enforced: the authority
-//! still publishes these tables to anyone (docs/GAME_BRIEF.md).
+//! subscribed before the previous one is dropped. What my character perceives and its own
+//! state come from per-sender views on the authority, which enforces the perception boundary
+//! (docs/PERCEPTION.md): nothing of a creature beyond my sight or behind a wall reaches me.
 //!
 //! 1. On connect: `world`, `land` and `settlement` (1, 1 and about 6 rows).
-//! 2. Then by the world's kind ([`Mode`]):
-//!    - **land** (a `land` row exists; the island): my characters (`character.controller =
-//!      :sender`, indexed). Terrain comes from regenerating the land (`live.rs`), so
-//!      `terrain_chunk` is only subscribed in the window, for edits.
-//!    - **tiles** (the lab worlds): `terrain_chunk` and `character` whole, as before.
-//! 3. My rows: `body`, `vitals`, `experience`, `place`, `inventory` and `know_how` of my
-//!    character; for the connection, my combat feed and timing (`my_combat`, `my_readiness`:
-//!    per-sender views) and the skill bar's `skill_card` (docs/COMBAT.md); the visible skills'
-//!    `act_card` and the one `weather` row (docs/TOWN_LIFE.md), both small and nearly static.
-//! 4. Windows round me:
-//!    - land, near: `body` and the characters on those bodies (a join on `body.id`) within
-//!      [`BODY_CHUNKS`], and `terrain_chunk` within [`TERRAIN_CHUNKS`] (only edits since world
-//!      creation matter there), and the `fighter` and `doing` rows on those bodies (joins, as
-//!      for characters), re-centred when I walk [`RECENTRE`] chunks from its centre;
+//! 2. Then, for the connection's lifetime (so the death screen keeps its rows):
+//!    - what I perceive: `seen_bodies` (the narrow motion stream, mine included),
+//!      `seen_characters`, `seen_fighters` and `seen_doing`;
+//!    - my own state: `my_characters` (the dead included), `my_vitals`, `my_experience`,
+//!      `my_places`, `my_inventory`, `my_know_how`, my combat feed and timing (`my_combat`,
+//!      `my_readiness`) and the skill bar's `skill_card` (docs/COMBAT.md); the visible skills'
+//!      `act_card` and the one `weather` row (docs/TOWN_LIFE.md), both small and nearly static;
+//!    - by the world's kind ([`Mode`]): **land** (a `land` row exists; the island): terrain
+//!      comes from regenerating the land (`live.rs`), so `terrain_chunk` is only subscribed in
+//!      the window, for edits; **tiles** (the lab worlds): `terrain_chunk` whole.
+//! 3. Windows of static data round me:
+//!    - land, near: `terrain_chunk` within [`TERRAIN_CHUNKS`] (only edits since world creation
+//!      matter there), re-centred when I walk [`RECENTRE`] chunks from its centre;
 //!    - land, far: `lot` within [`LOT_CHUNKS`] (buildings show to the island's draw distance),
 //!      re-centred after [`LOT_RECENTRE`] chunks. Lots never change, so this window has its own,
 //!      longer lifetime: re-sending it with every near move cost about 130 kB a move.
 //!
 //!    Subscription SQL has no `IN`, so a window is one id range per row of chunks (`id = (cy <<
 //!    16) | cx`), joined by `OR`;
-//!    - tiles: `body`, `resource_node` and `structure` per chunk within [`REGION_R`].
+//!    - tiles: `resource_node` and `structure` per chunk within [`REGION_R`].
 
 use bevy::prelude::*;
 use living_bindings::*;
@@ -40,10 +40,8 @@ use std::sync::{Arc, Mutex};
 
 /// Half-size (tiles) of the square of chunks kept subscribed around the player (tile worlds).
 pub const REGION_R: f32 = 40.0;
-/// Land worlds: chunks each side of the window's centre for bodies, their characters and
-/// terrain edits (5 → an 11 × 11 square, ±88 m), and for lots (11 → 23 × 23, ±184 m, past the
-/// island's 170 m draw distance).
-pub const BODY_CHUNKS: i32 = 5;
+/// Land worlds: chunks each side of the window's centre for terrain edits (3 → a 7 × 7 square),
+/// and for lots (11 → 23 × 23, ±184 m, past the island's 170 m draw distance).
 pub const TERRAIN_CHUNKS: i32 = 3;
 pub const LOT_CHUNKS: i32 = 11;
 /// Re-centre a window once I am this many chunks from its centre (either axis).
@@ -51,6 +49,26 @@ pub const RECENTRE: i32 = 2;
 pub const LOT_RECENTRE: i32 = 5;
 
 const STATIC: &[&str] = &["SELECT * FROM world", "SELECT * FROM land", "SELECT * FROM settlement"];
+/// What my character perceives and its own state (per-sender views, docs/PERCEPTION.md), and
+/// the rules' cards, for the connection's lifetime.
+const PERCEIVED: &[&str] = &[
+    "SELECT * FROM seen_bodies",
+    "SELECT * FROM seen_characters",
+    "SELECT * FROM seen_fighters",
+    "SELECT * FROM seen_doing",
+    "SELECT * FROM my_characters",
+    "SELECT * FROM my_vitals",
+    "SELECT * FROM my_experience",
+    "SELECT * FROM my_places",
+    "SELECT * FROM my_inventory",
+    "SELECT * FROM my_know_how",
+    "SELECT * FROM my_combat",
+    "SELECT * FROM my_readiness",
+    "SELECT * FROM skill_card",
+    // What residents are seen doing is named by `act_card` (17 rows); `weather` is one row.
+    "SELECT * FROM act_card",
+    "SELECT * FROM weather",
+];
 
 enum Signal {
     Connection(Result<DbConnection, String>),
@@ -146,7 +164,6 @@ pub struct Net {
     retry_at: f64,
     join_sent: bool,
     base: Option<SubscriptionHandle>,
-    mine: Option<Sub>,
     near: Window,
     far: Window,
 }
@@ -173,7 +190,6 @@ impl Default for Net {
             retry_at: 0.0,
             join_sent: false,
             base: None,
-            mine: None,
             near: Window::default(),
             far: Window::default(),
         }
@@ -192,6 +208,39 @@ fn token_path(db: &str) -> PathBuf {
 /// `cy0..=cy1` (chunk ids are `(cy << 16) | cx`, so a row is contiguous).
 pub fn chunk_ranges(col: &str, (cx0, cx1): (u32, u32), (cy0, cy1): (u32, u32)) -> String {
     (cy0..=cy1).map(|cy| format!("({col} >= {} AND {col} <= {})", chunk_id(cx0, cy), chunk_id(cx1, cy))).collect::<Vec<_>>().join(" OR ")
+}
+
+/// A perceived body as the drawing code takes it: its motion row (`seen_bodies`, which carries
+/// no path, chunk or kind), with the creature's kind from its `seen_characters` row (both views
+/// hold the same creatures).
+pub fn body_of(conn: &DbConnection, m: Motion) -> Body {
+    let kind = conn.db.seen_characters().id().find(&m.id).map(|c| c.kind).unwrap_or_default();
+    Body {
+        id: m.id,
+        kind,
+        x: m.x,
+        y: m.y,
+        t_ms: m.t_ms,
+        vx: m.vx,
+        vy: m.vy,
+        path: Vec::new(),
+        speed: m.speed,
+        chunk: living_rules::map::chunk_of(m.x, m.y),
+        next_ms: m.next_ms,
+        heading: m.heading,
+        turn: m.turn,
+        turn_s: m.turn_s,
+    }
+}
+
+/// Every body my character perceives (mine included).
+pub fn bodies(conn: &DbConnection) -> impl Iterator<Item = Body> + '_ {
+    let rows: Vec<Motion> = conn.db.seen_bodies().iter().collect();
+    rows.into_iter().map(move |m| body_of(conn, m))
+}
+
+pub fn find_body(conn: &DbConnection, id: u32) -> Option<Body> {
+    conn.db.seen_bodies().id().find(&id).map(|m| body_of(conn, m))
 }
 
 impl Net {
@@ -228,7 +277,11 @@ impl Net {
             .with_token(token)
             .on_connect(move |conn, identity, token| {
                 applied.lock().unwrap().push(Signal::Identity(identity, token.to_string()));
-                conn.db.body().on_update(move |_, _, new| {
+                let t = body_t.clone();
+                conn.db.seen_bodies().on_insert(move |_, new| {
+                    t.fetch_max(new.t_ms, Ordering::Relaxed);
+                });
+                conn.db.seen_bodies().on_update(move |_, _, new| {
                     body_t.fetch_max(new.t_ms, Ordering::Relaxed);
                 });
                 let ok = applied.clone();
@@ -253,14 +306,10 @@ impl Net {
     fn subscribe_base(&mut self) {
         let Some(conn) = self.conn.as_ref() else { return };
         self.mode = if conn.db.land().count() > 0 { Mode::Land } else { Mode::Tiles };
-        let queries: &[&str] = match self.mode {
-            // My combat feed and timing (per-sender views: only my identity's rows) for the
-            // connection's lifetime, so the death screen keeps them after my character dies;
-            // the rules' numbers for the skill bar (`skill_card`, 6 rows; docs/COMBAT.md).
-            // What residents are seen doing is named by `act_card` (17 rows); `weather` is one row.
-            Mode::Land => &["SELECT * FROM character WHERE controller = :sender", "SELECT * FROM my_combat", "SELECT * FROM my_readiness", "SELECT * FROM skill_card", "SELECT * FROM act_card", "SELECT * FROM weather"],
-            _ => &["SELECT * FROM terrain_chunk", "SELECT * FROM character", "SELECT * FROM weather"],
-        };
+        let mut queries: Vec<&str> = PERCEIVED.to_vec();
+        if self.mode == Mode::Tiles {
+            queries.push("SELECT * FROM terrain_chunk");
+        }
         info!("world kind: {:?}", self.mode);
         let (ok, err) = (self.inbox.clone(), self.inbox.clone());
         self.base = Some(
@@ -281,14 +330,14 @@ impl Net {
         Some(Sub { key, handle })
     }
 
-    /// My character: alive, not AI-driven, controlled by my identity.
+    /// My character: alive, not AI-driven, controlled by my identity (`my_characters` holds
+    /// only mine).
     fn find_me(&self) -> Option<u32> {
-        let (conn, me) = (self.conn.as_ref()?, self.me?);
-        conn.db.character().iter().find(|c| c.controller == me && c.alive && !c.ai).map(|c| c.id)
+        self.conn.as_ref()?.db.my_characters().iter().find(|c| c.alive && !c.ai).map(|c| c.id)
     }
 
     pub fn my_body(&self) -> Option<Body> {
-        self.conn.as_ref()?.db.body().id().find(&self.my_id?)
+        find_body(self.conn.as_ref()?, self.my_id?)
     }
 
     /// The land world's row, if this is one.
@@ -312,22 +361,10 @@ impl Net {
         }
         if found != self.my_id {
             self.my_id = found;
-            self.mine = None;
             self.near = Window::default();
             self.far = Window::default();
             if let Some(id) = found {
                 info!("playing character #{id}");
-                let q = vec![
-                    format!("SELECT * FROM body WHERE id = {id}"),
-                    format!("SELECT * FROM vitals WHERE id = {id}"),
-                    format!("SELECT * FROM experience WHERE observer = {id}"),
-                    // My character's known places, for the compass (`place.actor` is indexed).
-                    format!("SELECT * FROM place WHERE actor = {id}"),
-                    // What my skills need: arrows and a bow, and know-how (both indexed).
-                    format!("SELECT * FROM inventory WHERE owner = {id}"),
-                    format!("SELECT * FROM know_how WHERE actor = {id}"),
-                ];
-                self.mine = self.subscribe(q, vec![id]);
             }
         }
         let Some(body) = self.my_body() else { return };
@@ -362,9 +399,8 @@ impl Net {
         if self.near.wanted() == Some(&chunks) {
             return None;
         }
-        let mut q = Vec::with_capacity(chunks.len() * 3);
+        let mut q = Vec::with_capacity(chunks.len() * 2);
         for c in &chunks {
-            q.push(format!("SELECT * FROM body WHERE chunk = {c}"));
             q.push(format!("SELECT * FROM resource_node WHERE chunk = {c}"));
             q.push(format!("SELECT * FROM structure WHERE chunk = {c}"));
         }
@@ -378,7 +414,7 @@ impl Net {
         let (nx, ny) = ((w / CHUNK) as i32, (h / CHUNK) as i32);
         let here = ((body.x / CHUNK as f32).floor() as i32, (body.y / CHUNK as f32).floor() as i32);
         let (window, recentre, r) = match which {
-            Which::Near => (&self.near, RECENTRE, BODY_CHUNKS),
+            Which::Near => (&self.near, RECENTRE, TERRAIN_CHUNKS),
             Which::Lots => (&self.far, LOT_RECENTRE, LOT_CHUNKS),
         };
         if let Some(key) = window.wanted() {
@@ -390,19 +426,8 @@ impl Net {
         let (cx, cy) = (here.0.clamp(0, nx - 1), here.1.clamp(0, ny - 1));
         let span = |c: i32, n: i32, r: i32| ((c - r).max(0) as u32, (c + r).min(n - 1) as u32);
         let (xs, ys) = (span(cx, nx, r), span(cy, ny, r));
-        let (tx, ty) = (span(cx, nx, TERRAIN_CHUNKS), span(cy, ny, TERRAIN_CHUNKS));
         let q = match which {
-            Which::Near => vec![
-                format!("SELECT * FROM body WHERE {}", chunk_ranges("chunk", xs, ys)),
-                // The characters standing in the window (names, kind, life stage, home), through
-                // their bodies: both join columns are primary keys.
-                format!("SELECT character.* FROM character JOIN body ON character.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
-                // How the fighters in the window look: health band and the move under way.
-                format!("SELECT fighter.* FROM fighter JOIN body ON fighter.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
-                // What they are visibly doing (town life): one small row per character at most.
-                format!("SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
-                format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", tx, ty)),
-            ],
+            Which::Near => vec![format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", xs, ys))],
             Which::Lots => vec![format!("SELECT * FROM lot WHERE {}", chunk_ranges("chunk", xs, ys))],
         };
         Some((vec![chunk_id(cx as u32, cy as u32)], q))
@@ -462,7 +487,6 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                     let _ = c.disconnect();
                 }
                 net.base = None;
-                net.mine = None;
                 net.near = Window::default();
                 net.far = Window::default();
                 net.my_id = None;

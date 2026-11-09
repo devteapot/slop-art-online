@@ -12,6 +12,8 @@ mod island;
 mod mind;
 mod motion;
 mod perceive;
+mod perception;
+mod presence;
 mod seed;
 mod tables;
 mod tick;
@@ -21,6 +23,7 @@ mod common;
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};
 use std::time::Duration;
 use tables::*;
+use tables::presence as _;
 
 #[spacetimedb::reducer(init)]
 pub fn init(ctx: &ReducerContext) -> Result<(), String> {
@@ -103,6 +106,8 @@ pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String
     k.scripts_rev = rev;
     ctx.db.clock().id().update(k);
     common::invalidate_scripts_rev();
+    // Takeovers already pending follow the new `takeover_s` law.
+    presence::reschedule(ctx, sc.laws().takeover_s);
     Ok(())
 }
 
@@ -399,7 +404,7 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     if name.is_empty() || name.len() > 24 {
         return Err("name must be 1..=24 bytes".into());
     }
-    if ctx.db.character().controller().filter(ctx.sender()).any(|c| c.alive && !c.ai) {
+    if ctx.db.character().controller().filter(ctx.sender()).any(|c| c.alive && !c.ai) || ctx.db.presence().player().filter(ctx.sender()).next().is_some() {
         return Err("you already have a living character".into());
     }
     let now = common::now_ms(ctx);
@@ -410,7 +415,10 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     mind::set_graph(ctx, id, r#"{"wait":30}"#, "waiting for you", "human", now)?;
     // What the world gives every newcomer (the seed's `newcomer`): nothing of anyone before.
     seed::newcomer_kit(ctx, id, now);
+    presence::start(ctx, id, ctx.sender(), now);
     combat::invalidate_humans();
+    // What the newcomer perceives is there from the first frame, not after a sweep.
+    perception::sweep_now(ctx, id, ctx.sender(), now);
     Ok(())
 }
 

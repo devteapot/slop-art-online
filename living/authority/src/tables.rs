@@ -1,9 +1,16 @@
 //! Typed tables grouped by access pattern. Hot rows (body, vitals, activity, mind_state)
 //! are small and written only when their state changes; cold rows (character, brain,
-//! persona) change rarely. Percepts and deliberations are private and delivered to
-//! their controller through per-sender views.
+//! persona) change rarely.
+//!
+//! Who may read what is set per table (docs/PERCEPTION.md): static world data is public;
+//! developer audit truth (minds' state, thoughts, beliefs, personas, the chronicle) is private,
+//! read by the database owner (the mind service and the lab observer); what a player perceives
+//! and its own state reach it through the per-sender views in `perception.rs` and
+//! `combat.rs`. The tables today's game client reads directly stay public while the build's
+//! `LIVING_PERCEPTION` is `open` (the default; `cfg(open_tables)`), and are private when it is
+//! `scoped`.
 
-use spacetimedb::{Identity, ScheduleAt, SpacetimeType};
+use spacetimedb::{ConnectionId, Identity, ScheduleAt, SpacetimeType};
 
 #[derive(Clone)]
 #[spacetimedb::table(accessor = world, public)]
@@ -48,7 +55,7 @@ pub struct Gate {
 /// A character's own named behavior (a routine), called from its graph by name and edited
 /// by its mind one at a time, so behavior compounds instead of being rewritten each time.
 /// Written only when a mind (or teaching) changes it.
-#[spacetimedb::table(accessor = routine, public)]
+#[spacetimedb::table(accessor = routine)]
 pub struct Routine {
     #[primary_key]
     #[auto_inc]
@@ -65,7 +72,7 @@ pub struct Routine {
 
 /// How a routine has gone in practice (updated as its actions finish; split from the
 /// routine row because it changes far more often).
-#[spacetimedb::table(accessor = routine_stat, public)]
+#[spacetimedb::table(accessor = routine_stat)]
 pub struct RoutineStat {
     #[primary_key]
     pub id: u64,
@@ -77,7 +84,7 @@ pub struct RoutineStat {
 
 /// Where a seeded character comes from (town, household, occupation, history) as JSON.
 /// World fact, not identity: the character's mind builds its identity from it.
-#[spacetimedb::table(accessor = background, public)]
+#[spacetimedb::table(accessor = background)]
 pub struct Background {
     #[primary_key]
     pub id: u32,
@@ -200,7 +207,8 @@ pub struct Lot {
     pub chunk: u32,
 }
 
-#[spacetimedb::table(accessor = character, public)]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = character, public))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = character))]
 pub struct Character {
     #[primary_key]
     #[auto_inc]
@@ -244,7 +252,8 @@ pub struct Waypoint {
 /// rad/s for the first `turn_s` seconds (a circular arc) and straight afterwards, until
 /// `next_ms`, when steering looks again (see `living_rules::steer::pose`). Clients
 /// extrapolate between writes; the row changes only at steering updates.
-#[spacetimedb::table(accessor = body, public)]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = body, public))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = body))]
 pub struct Body {
     #[primary_key]
     pub id: u32,
@@ -302,7 +311,8 @@ pub struct Steer {
 
 /// Needs anchored at `at_ms` with per-minute rates.
 #[derive(Clone, Debug, PartialEq)]
-#[spacetimedb::table(accessor = vitals, public)]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = vitals, public))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = vitals))]
 pub struct Vitals {
     #[primary_key]
     pub id: u32,
@@ -329,7 +339,7 @@ pub struct TargetRef {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[spacetimedb::table(accessor = activity, public)]
+#[spacetimedb::table(accessor = activity)]
 pub struct Activity {
     #[primary_key]
     pub id: u32,
@@ -361,8 +371,10 @@ pub struct Activity {
 }
 
 /// Items held by a creature (`owner = id`) or a structure (`owner = STRUCTURE_BIT | id`).
-#[spacetimedb::table(accessor = inventory, public,
-    index(accessor = by_owner_item, btree(columns = [owner, item])))]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = inventory, public,
+    index(accessor = by_owner_item, btree(columns = [owner, item]))))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = inventory,
+    index(accessor = by_owner_item, btree(columns = [owner, item]))))]
 pub struct Inventory {
     #[primary_key]
     #[auto_inc]
@@ -409,7 +421,7 @@ pub struct Structure {
 }
 
 /// Installed behavior graph (cold).
-#[spacetimedb::table(accessor = brain, public)]
+#[spacetimedb::table(accessor = brain)]
 pub struct Brain {
     #[primary_key]
     pub id: u32,
@@ -449,7 +461,7 @@ pub struct Seen {
 
 /// Behavior runtime state (warm). Evaluated in slot `id % 60` every second.
 #[derive(Clone, Debug, PartialEq)]
-#[spacetimedb::table(accessor = mind_state, public)]
+#[spacetimedb::table(accessor = mind_state)]
 pub struct MindState {
     #[primary_key]
     pub id: u32,
@@ -519,7 +531,8 @@ pub struct InfantCry {
 /// What reached a character's senses (sights, speech, what happened to them, their own
 /// results). Game state, not knowledge: written only by the authority, never edited, kept
 /// in a bounded per-character window. Minds read it and record how far they consolidated.
-#[spacetimedb::table(accessor = experience, public)]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = experience, public))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = experience))]
 pub struct Experience {
     #[primary_key]
     #[auto_inc]
@@ -540,8 +553,10 @@ pub struct Experience {
 
 /// Practical know-how: a technique this character can perform. World state (a capability),
 /// not belief; it dies with the character unless taught or written down first.
-#[spacetimedb::table(accessor = know_how, public,
-    index(accessor = by_actor_technique, btree(columns = [actor, technique])))]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = know_how, public,
+    index(accessor = by_actor_technique, btree(columns = [actor, technique]))))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = know_how,
+    index(accessor = by_actor_technique, btree(columns = [actor, technique]))))]
 pub struct KnowHow {
     #[primary_key]
     #[auto_inc]
@@ -556,7 +571,7 @@ pub struct KnowHow {
 
 /// A written thing in the world: a tablet (held by a creature or structure) or a sign
 /// (held by its `sign` structure). Its text is the author's, true or not.
-#[spacetimedb::table(accessor = artifact, public)]
+#[spacetimedb::table(accessor = artifact)]
 pub struct Artifact {
     #[primary_key]
     #[auto_inc]
@@ -597,7 +612,7 @@ pub const FAM_CREATURE: u64 = 2 << 40;
 pub const FAM_STRUCTURE: u64 = 3 << 40;
 
 /// How far a character's mind has integrated its experiences (ids <= `upto`).
-#[spacetimedb::table(accessor = mind_cursor, public)]
+#[spacetimedb::table(accessor = mind_cursor)]
 pub struct MindCursor {
     #[primary_key]
     pub actor: u32,
@@ -622,7 +637,7 @@ pub struct Deliberation {
 
 // ---- mind projections (observer and behavior inputs) ----------------------
 
-#[spacetimedb::table(accessor = persona, public)]
+#[spacetimedb::table(accessor = persona)]
 pub struct Persona {
     #[primary_key]
     pub id: u32,
@@ -636,7 +651,7 @@ pub struct Persona {
     pub updated_ms: u64,
 }
 
-#[spacetimedb::table(accessor = relation, public,
+#[spacetimedb::table(accessor = relation,
     index(accessor = by_pair, btree(columns = [actor, other])))]
 pub struct Relation {
     #[primary_key]
@@ -652,7 +667,7 @@ pub struct Relation {
     pub updated_ms: u64,
 }
 
-#[spacetimedb::table(accessor = belief, public)]
+#[spacetimedb::table(accessor = belief)]
 pub struct Belief {
     #[primary_key]
     #[auto_inc]
@@ -665,7 +680,7 @@ pub struct Belief {
     pub updated_ms: u64,
 }
 
-#[spacetimedb::table(accessor = judgment, public)]
+#[spacetimedb::table(accessor = judgment)]
 pub struct Judgment {
     #[primary_key]
     #[auto_inc]
@@ -678,7 +693,8 @@ pub struct Judgment {
     pub updated_ms: u64,
 }
 
-#[spacetimedb::table(accessor = place, public)]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = place, public))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = place))]
 pub struct Place {
     #[primary_key]
     #[auto_inc]
@@ -690,7 +706,7 @@ pub struct Place {
     pub y: f32,
 }
 
-#[spacetimedb::table(accessor = thought, public)]
+#[spacetimedb::table(accessor = thought)]
 pub struct Thought {
     #[primary_key]
     #[auto_inc]
@@ -709,7 +725,7 @@ pub struct Thought {
     pub reference: String,
 }
 
-#[spacetimedb::table(accessor = chronicle, public)]
+#[spacetimedb::table(accessor = chronicle)]
 pub struct Chronicle {
     #[primary_key]
     #[auto_inc]
@@ -725,7 +741,7 @@ pub struct Chronicle {
 }
 
 /// Rolling counters for load measurement (one row, updated by housekeeping).
-#[spacetimedb::table(accessor = stats, public)]
+#[spacetimedb::table(accessor = stats)]
 pub struct Stats {
     #[primary_key]
     pub id: u8,
@@ -754,7 +770,7 @@ pub struct Stats {
 }
 
 /// A standing wish to start a family with someone (expires after two minutes).
-#[spacetimedb::table(accessor = bond_offer, public)]
+#[spacetimedb::table(accessor = bond_offer)]
 pub struct BondOffer {
     #[primary_key]
     #[auto_inc]
@@ -768,7 +784,7 @@ pub struct BondOffer {
 
 /// A community: a named group with a home, founded and joined by consent. A social fact,
 /// not an assigned role: what it means is up to its members.
-#[spacetimedb::table(accessor = community, public)]
+#[spacetimedb::table(accessor = community)]
 pub struct Community {
     #[primary_key]
     #[auto_inc]
@@ -780,7 +796,7 @@ pub struct Community {
     pub home_y: f32,
 }
 
-#[spacetimedb::table(accessor = membership, public)]
+#[spacetimedb::table(accessor = membership)]
 pub struct Membership {
     #[primary_key]
     #[auto_inc]
@@ -793,7 +809,7 @@ pub struct Membership {
 }
 
 /// A request to join a community, granted when a member welcomes the asker.
-#[spacetimedb::table(accessor = join_request, public)]
+#[spacetimedb::table(accessor = join_request)]
 pub struct JoinRequest {
     #[primary_key]
     #[auto_inc]
@@ -805,7 +821,7 @@ pub struct JoinRequest {
 }
 
 /// A standing trade proposal (expires after three minutes).
-#[spacetimedb::table(accessor = trade_offer, public)]
+#[spacetimedb::table(accessor = trade_offer)]
 pub struct TradeOffer {
     #[primary_key]
     #[auto_inc]
@@ -821,7 +837,7 @@ pub struct TradeOffer {
 }
 
 /// A couple expecting a child, born at `due_ms`.
-#[spacetimedb::table(accessor = expecting, public)]
+#[spacetimedb::table(accessor = expecting)]
 pub struct Expecting {
     #[primary_key]
     #[auto_inc]
@@ -860,7 +876,7 @@ pub struct PlannedAct {
 
 /// Inborn genes (JSON: name → value; see `living_rules::genes`) and, for the young, the ways
 /// of life they grow into (a top level from a parent, varied). Written once at birth.
-#[spacetimedb::table(accessor = genome, public)]
+#[spacetimedb::table(accessor = genome)]
 pub struct Genome {
     #[primary_key]
     pub id: u32,
@@ -869,7 +885,7 @@ pub struct Genome {
 }
 
 /// Successful uses of a skill (practice makes one better at it).
-#[spacetimedb::table(accessor = practice, public,
+#[spacetimedb::table(accessor = practice,
     index(accessor = by_actor_skill, btree(columns = [actor, skill])))]
 pub struct Practice {
     #[primary_key]
@@ -940,7 +956,8 @@ pub struct SkillCard {
 /// changes; clients receive it through their body window (a join on `body.id`). It holds
 /// what anyone looking at the body would see, nothing more (no exact health, no cooldowns).
 #[derive(Clone, Debug, PartialEq)]
-#[spacetimedb::table(accessor = fighter, public)]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = fighter, public))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = fighter))]
 pub struct Fighter {
     #[primary_key]
     pub id: u32,
@@ -1121,7 +1138,8 @@ pub struct ActCard {
 /// it starts being performed, deleted when it ends. Clients receive it through their body
 /// window (a join on `body.id`), like `fighter`. It holds what anyone looking would see.
 #[derive(Clone, Debug, PartialEq)]
-#[spacetimedb::table(accessor = doing, public)]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = doing, public))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = doing))]
 pub struct Doing {
     #[primary_key]
     pub id: u32,
@@ -1133,6 +1151,134 @@ pub struct Doing {
     pub y: f32,
     pub since_ms: u64,
     pub until_ms: u64,
+    /// A rest taken at home: indoors, out of sight of the street.
+    #[default(false)]
+    pub indoors: bool,
+}
+
+// ---- perception (docs/PERCEPTION.md) -------------------------------------------------
+
+/// Who a human player's character perceives right now (private): one row per creature in its
+/// sight with a clear sight line, kept by the perception sweep (`perception.rs`, every 200 ms
+/// per player) and read by the `seen_*` views through the indexed `viewer`. Rows are written
+/// only when a creature comes into or goes out of sight, and go when the character dies.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = perceived)]
+pub struct Perceived {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub body: u32,
+    pub since_ms: u64,
+}
+
+/// What a human player perceives of each creature in its scene, its own character included
+/// (private): the `perceived_of` law's projection of the creature's record for this viewer.
+/// The perception sweep writes a row when a creature comes into sight and rewrites it only
+/// when the projection changes (whom the viewer knows, a reveal, a health band); it goes with
+/// the creature's `perceived` row. Kept apart from `perceived` so a projection change re-runs
+/// only the views that show it (`seen_characters`, `seen_fighters`), not `seen_bodies`.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = projected)]
+pub struct Projected {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    #[index(btree)]
+    pub body: u32,
+    /// The viewer's own character.
+    pub own: bool,
+    /// Its name when the viewer knows it, else empty.
+    pub name: String,
+    /// How the viewer refers to it: the name when known, else `a stranger`, `a child`, `a wolf`.
+    pub label: String,
+    pub kind: String,
+    pub stage: u8,
+    /// Its build and dress, from the settlement it lives in (`giants`, `small_folk` or empty;
+    /// the settlement's style), as anyone looking would see.
+    pub folk: String,
+    pub style: String,
+    /// `living_rules::combat::band` (4 unhurt … 0 barely standing), 255 when not perceived.
+    pub band: u8,
+    /// Exact health when the law grants it (oneself, or revealed), else -1.
+    pub hp: f32,
+    pub max_hp: f32,
+}
+
+/// What a skill use revealed to an observer about a target, until `until_ms` (private): the
+/// `perceived_of` law sees `what` among the target's `revealed` fields while it holds.
+#[spacetimedb::table(accessor = reveal)]
+pub struct Reveal {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub target: u32,
+    pub what: String,
+    #[index(btree)]
+    pub until_ms: u64,
+}
+
+/// Whose name a character has learned (private): someone told it their name. Family,
+/// community and the people a mind has feelings about are known without a row.
+#[spacetimedb::table(accessor = acquaintance, index(accessor = by_pair, btree(columns = [observer, known])))]
+pub struct Acquaintance {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub known: u32,
+    pub since_ms: u64,
+}
+
+// ---- presence (docs/PLAYER_MEMORY.md) --------------------------------------------------
+
+/// One open client connection (private), kept by the `client_connected` and
+/// `client_disconnected` lifecycle reducers. The host runs `client_disconnected` for every
+/// connection still recorded when it restarts, so a crash leaves no row behind.
+#[spacetimedb::table(accessor = connection)]
+pub struct Connection {
+    #[primary_key]
+    pub id: ConnectionId,
+    #[index(btree)]
+    pub identity: Identity,
+    pub since_ms: u64,
+}
+
+/// Whether the person who plays a character is there (private: the database owner reads it;
+/// no other client). One row per living character a person plays.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = presence)]
+pub struct Presence {
+    /// The character.
+    #[primary_key]
+    pub id: u32,
+    /// The person who plays it (its controller while they are in control).
+    #[index(btree)]
+    pub player: Identity,
+    /// The person's open connections now.
+    pub connections: u32,
+    /// At least one connection is open.
+    pub present: bool,
+    /// When `present` last changed.
+    pub changed_ms: u64,
+    /// The world's minds control the character (the person left, `takeover_s` ago or more).
+    pub ai: bool,
+    /// When control last passed (to the minds, or back to the person).
+    pub control_ms: u64,
+    /// When the minds take over if no connection opens (u64::MAX: not pending).
+    #[index(btree)]
+    pub takeover_ms: u64,
+    /// The behaviour the minds installed, kept while the person plays (it stays the
+    /// character's and is installed again at the next takeover).
+    pub ai_graph: String,
+    pub ai_plan: String,
 }
 
 // ---- schedules ---------------------------------------------------------------

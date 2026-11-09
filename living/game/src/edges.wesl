@@ -165,17 +165,21 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         color = mix(color, edges.bank_color.rgb, a);
     }
 
-    // Rain: three layers, near ones larger and faster; each stops at nearer things.
+    // Rain: four layers at set distances, near ones larger, faster and brighter, far ones finer
+    // and fainter (the falloff gives the air depth); each stops at nearer things. Heavy rain
+    // (a storm, above 1) brings the farther layers in more strongly.
     if (edges.rain.x > 0.005) {
         let p = in.position.xy;
         let d = d0;
+        let heavy = clamp(edges.rain.x - 0.85, 0.0, 0.5) * 2.0;
         var rain = 0.0;
-        rain = rain + rain_layer(p, 55.0, 2.2, 1.0) * step(3.0, d);
-        rain = rain + rain_layer(p + vec2<f32>(37.0, 11.0), 95.0, 3.2, 2.0) * step(7.0, d) * 0.75;
-        rain = rain + rain_layer(p + vec2<f32>(71.0, 53.0), 160.0, 4.4, 3.0) * step(15.0, d) * 0.55;
-        color = color + vec3<f32>(0.8, 0.86, 0.95) * rain * edges.rain.z * min(edges.rain.x, 1.0);
+        rain = rain + rain_layer(p, 45.0, 2.3, 1.0) * smoothstep(1.5, 3.0, d);
+        rain = rain + rain_layer(p + vec2<f32>(37.0, 11.0), 80.0, 3.3, 2.0) * smoothstep(5.0, 8.0, d) * 0.7;
+        rain = rain + rain_layer(p + vec2<f32>(71.0, 53.0), 140.0, 4.5, 3.0) * smoothstep(12.0, 18.0, d) * (0.42 + 0.15 * heavy);
+        rain = rain + rain_layer(p + vec2<f32>(13.0, 91.0), 230.0, 5.8, 4.0) * smoothstep(26.0, 36.0, d) * (0.18 + 0.2 * heavy);
+        color = color + vec3<f32>(0.78, 0.85, 0.96) * rain * edges.rain.z * min(edges.rain.x, 1.0);
         // The air greys a little.
-        color = mix(color, vec3<f32>(dot(color, vec3<f32>(0.3, 0.5, 0.2))), 0.12 * min(edges.rain.x, 1.0));
+        color = mix(color, vec3<f32>(dot(color, vec3<f32>(0.3, 0.5, 0.2))), 0.06 * min(edges.rain.x, 1.0));
     }
 
     // Film finish: a soft gradient from the top (screen blend).

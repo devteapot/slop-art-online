@@ -1,0 +1,13 @@
+[package]
+name = "perception-load"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Its own workspace, like the client probe: a measurement tool, not part of `just living-check`.
+[workspace]
+
+[dependencies]
+living-bindings = { path = "../../bindings" }
+spacetimedb-sdk = "=2.14.1"
+serde_json = "1"

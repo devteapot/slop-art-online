@@ -1,5 +1,5 @@
-//! Over heads: nameplates for characters that matter now (hovered, targeted, hostile), fading
-//! with distance, and speech bubbles that never overlap. A speaker's bubble carries their name,
+//! Over heads: nameplates for characters that matter now (hovered, targeted, hostile, or
+//! looked over: while an appraisal holds, a small `hp / max` under the bar), fading with distance, and speech bubbles that never overlap. A speaker's bubble carries their name,
 //! so speaking alone adds no nameplate.
 //!
 //! Bubbles stack: the nearest speaker's bubble sits on its head, and any bubble that would
@@ -30,6 +30,8 @@ pub struct PlateMarker(usize);
 pub struct PlateBar(usize);
 #[derive(Component)]
 pub struct PlateFill(usize);
+#[derive(Component)]
+pub struct PlateExact(usize);
 
 #[derive(Component)]
 pub struct BubbleRoot(usize);
@@ -66,6 +68,7 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>) {
                         });
                         p.spawn((PlateBar(i), Node { width: Val::Px(62.0), height: Val::Px(5.0), margin: UiRect::top(Val::Px(3.0)), border: UiRect::all(Val::Px(1.0)), border_radius: BorderRadius::all(Val::Px(3.0)), overflow: Overflow::clip(), ..default() }, BackgroundColor(theme::TRACK), BorderColor::all(Color::srgba(0.0, 0.0, 0.0, 0.5))))
                             .with_child((PlateFill(i), Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), ..default() }, BackgroundColor(theme::HP_HI)));
+                        p.spawn((PlateExact(i), Node { display: Display::None, margin: UiRect::top(Val::Px(1.0)), ..default() }, Text::new(""), f.body(11.5, 700), TextColor(theme::TEXT), theme::text_shadow()));
                     });
             }
             for i in 0..BUBBLES {
@@ -112,11 +115,11 @@ fn relevant<'a>(model: &'a HudModel, project: impl Fn(Vec3) -> Option<Vec2>) -> 
     model
         .actors
         .iter()
-        .filter(|a| a.hovered || a.targeted || a.greeted || a.stance == Stance::Hostile)
+        .filter(|a| a.hovered || a.targeted || a.greeted || a.exact.is_some() || a.stance == Stance::Hostile)
         .filter_map(|a| {
             let p = project(a.head)?;
             let mut alpha = 1.0 - smoothstep(14.0, 32.0, a.distance);
-            if a.hovered || a.targeted || a.greeted {
+            if a.hovered || a.targeted || a.greeted || a.exact.is_some() {
                 alpha = alpha.max(0.9);
             }
             (alpha >= 0.02).then_some((p, alpha, a))
@@ -144,6 +147,7 @@ pub fn plates(
     mut bars: Query<(&PlateBar, &mut Node), (Without<Plate>, Without<PlateMarker>, Without<PlateFill>)>,
     mut fills: Query<(&PlateFill, &mut Node), (Without<Plate>, Without<PlateMarker>, Without<PlateBar>)>,
     mut pills: Query<(&PlatePill, &mut BackgroundColor), Without<PlateMarker>>,
+    mut exacts: Query<(&PlateExact, &mut Node, &mut Text, &mut TextColor), (Without<Plate>, Without<PlateMarker>, Without<PlateBar>, Without<PlateFill>, Without<PlateName>)>,
 ) {
     let Ok((camera, tf)) = camq.single() else { return };
     let Some(view) = camera.logical_viewport_size() else { return };
@@ -188,6 +192,14 @@ pub fn plates(
     for (pf, mut n) in &mut fills {
         if let Some(hp) = shown(pf.0).and_then(|(_, _, a)| a.hp) {
             set_width(&mut n, Val::Percent(hp.clamp(0.0, 1.0) * 100.0));
+        }
+    }
+    for (pe, mut n, mut t, mut c) in &mut exacts {
+        let exact = shown(pe.0).and_then(|(_, alpha, a)| a.exact.map(|e| (e, alpha)));
+        show(&mut n, exact.is_some());
+        if let Some(((hp, max), alpha)) = exact {
+            set_text(&mut t, &format!("{:.0} / {:.0}", hp.ceil(), max));
+            set_color(&mut c, theme::with_alpha(theme::TEXT, 0.85 * alpha));
         }
     }
 }

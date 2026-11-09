@@ -1,6 +1,7 @@
 //! Living world observer: a top-down map of the valley with a story feed and an inspector
-//! for each character's identity, behavior graph, beliefs and model thoughts. Reads public
-//! tables only, anonymously; it never calls reducers (one per-character experience query).
+//! for each character's identity, behavior graph, beliefs and model thoughts. Reads the
+//! world's tables as the database owner (most are private audit truth; `clock::owner_token`);
+//! it never calls reducers (one per-character experience query).
 
 mod art;
 mod clock;

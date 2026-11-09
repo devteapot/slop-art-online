@@ -144,7 +144,7 @@
      0.6
     ],
     "fog": [
-     0.42,
+     0.4,
      0.38,
      0.54
     ],
@@ -161,45 +161,45 @@
     "glow": 2.2,
     "stars": 0.35,
     "fog_far": 0.85,
-    "banks": 1.3
+    "banks": 1.1
    },
    {
     "hour": 6.4,
     "light": [
      1.0,
-     0.84,
-     0.68
+     0.88,
+     0.77
     ],
-    "lux": 6600,
+    "lux": 7000,
     "zenith": [
-     0.36,
-     0.48,
-     0.74
+     0.38,
+     0.54,
+     0.83
     ],
     "horizon": [
-     1.0,
-     0.76,
-     0.6
+     0.97,
+     0.81,
+     0.74
     ],
     "fog": [
-     0.9,
-     0.76,
-     0.7
+     0.86,
+     0.8,
+     0.78
     ],
-    "shadow_hue": 0.73,
-    "lift": 0.06,
-    "saturation": 1.12,
+    "shadow_hue": 0.7,
+    "lift": 0.05,
+    "saturation": 1.08,
     "grade": [
      1.0,
-     0.8,
-     0.68
+     0.91,
+     0.84
     ],
-    "grade_strength": 0.16,
+    "grade_strength": 0.12,
     "bloom": 0.16,
     "glow": 1.3,
     "stars": 0.0,
-    "fog_far": 0.9,
-    "banks": 1.2
+    "fog_far": 1.0,
+    "banks": 0.6
    },
    {
     "hour": 7.6,
@@ -670,30 +670,30 @@
     "wind": 0.08
    },
    "storm": {
-    "lux": 0.3,
+    "lux": 0.4,
     "light": [
-     0.85,
-     0.9,
+     0.72,
+     0.82,
      1.0
     ],
     "sky": [
+     0.3,
      0.36,
-     0.4,
-     0.48
+     0.46
     ],
     "sky_mix": 0.85,
-    "sky_bright": 0.45,
-    "fog_far": 0.7,
-    "lift": 0.012,
-    "saturation": -0.2,
+    "sky_bright": 0.28,
+    "fog_far": 0.9,
+    "lift": 0.0,
+    "saturation": -0.14,
     "bloom": 0.04,
     "glow": 0.35,
     "grade": [
-     0.7,
-     0.78,
+     0.62,
+     0.74,
      0.92
     ],
-    "grade_mix": 0.7,
+    "grade_mix": 0.75,
     "grade_strength": -0.08,
     "stars": 0.0,
     "clouds": 1.0,

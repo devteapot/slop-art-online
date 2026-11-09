@@ -890,13 +890,19 @@ pub fn name_of(ctx: &ReducerContext, id: u32) -> String {
     ctx.db.character().id().find(id).map(|c| c.name).unwrap_or_else(|| format!("#{id}"))
 }
 
-/// How `observer` refers to `id`: people by name, their own kind by name, others by kind.
+/// How `observer` refers to `id`: by name when it knows it, otherwise as a stranger or by
+/// kind (`crate::perception::label`: the `perceived_of` law's projection).
 pub fn label_for(ctx: &ReducerContext, observer: &Character, id: u32) -> String {
-    match ctx.db.character().id().find(id) {
-        // People know each other's names; animals know only their own kind by name.
-        Some(c) if c.kind == observer.kind || (c.kind == "person" && observer.kind == "person") => c.name,
-        Some(c) => format!("a {}", c.kind),
-        None => "someone".into(),
+    crate::perception::label(ctx, observer, id, now_ms(ctx))
+}
+
+/// The same, to begin a sentence with.
+pub fn label_cap(ctx: &ReducerContext, observer: &Character, id: u32) -> String {
+    let l = label_for(ctx, observer, id);
+    let mut c = l.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().chain(c).collect(),
+        None => l,
     }
 }
 

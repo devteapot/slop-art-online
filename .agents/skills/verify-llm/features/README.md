@@ -11,6 +11,7 @@ Run `scripts/verify_llm.py` from the repository root as shown in [SKILL.md](../S
 | Outage gate and recovery | `outage` | [outage.md](outage.md) |
 | JSON repair and bounded deliberation retry | `repair`, `deliberation-retry`, `retry-exhausted` | [repair.md](repair.md) |
 | Real HTTP timeout | `timeout` | [timeout.md](timeout.md) |
+| Provider batch jobs | `verify-knowledge` `player_memory.py --mode batch` | [batch.md](batch.md) |
 | Existing model-client cargo tests | Every invocation | [cargo-tests.md](cargo-tests.md) |
 | Authorized provider access check | Opt-in only | [live.md](live.md) |
 

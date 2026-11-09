@@ -12,6 +12,7 @@
 | One-off acts, graph coexistence and feedback | Mechanics and Cargo | [acts.md](acts.md) |
 | Steering and `living/viewer/src/sync.rs` display-sync math | Five steering checks and three sync tests | [steering.md](steering.md) |
 | Town life: daily rhythm, places, weather, gestures, commotion, `act_card`/`doing` | `town.py` on an island run, and Cargo | [town.md](town.md) |
+| Sight for minds and graphs: a graph's `sees` and a witnessed fight follow the sight line (rock, walls, shut gates hide); names in percepts follow what the observer knows | `scenes.py sight` | [sight.md](sight.md) |
 
 Use [SKILL.md](../SKILL.md). Admin setup and `mind_act` do not establish player permissions or authentic model behavior. Read [the validation record](../references/validation.md) before treating a check as green.
 

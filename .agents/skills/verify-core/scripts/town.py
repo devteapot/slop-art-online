@@ -93,7 +93,7 @@ class Town:
         """Every living resident with where its body is now, what it does and where it knows."""
         now = self.now_ms()
         chars = {c["id"]: c for c in self.sql("SELECT id, name, kind, stage, alive, ai, home_x, home_y FROM character WHERE kind = 'person'") if c["alive"]}
-        players = {c["id"] for c in self.sql("SELECT id FROM character WHERE controller = :sender", "player")} if self.st.get("token") else set()
+        players = {c["id"] for c in self.sql("SELECT id FROM my_characters", "player")} if self.st.get("token") else set()
         bodies = {b["id"]: b for b in self.sql("SELECT id, x, y, t_ms, vx, vy, heading, turn, turn_s, next_ms FROM body")}
         acts = {a["id"]: a for a in self.sql("SELECT id, skill, phase, label FROM activity")}
         doing = {d["id"]: d for d in self.sql("SELECT * FROM doing")}
@@ -243,10 +243,10 @@ def ensure_player(t):
         j = json.loads(body)
         t.st["token"], t.st["identity"] = j["token"], j["identity"]
         V.save(t.st)
-    mine = [c for c in t.sql("SELECT id, alive FROM character WHERE controller = :sender", "player") if c["alive"]]
+    mine = [c for c in t.sql("SELECT id, alive FROM my_characters", "player") if c["alive"]]
     if not mine:
         t.call("join", ["Visitor"], "player")
-        mine = [c for c in t.sql("SELECT id, alive FROM character WHERE controller = :sender", "player") if c["alive"]]
+        mine = [c for c in t.sql("SELECT id, alive FROM my_characters", "player") if c["alive"]]
     return mine[0]["id"]
 
 

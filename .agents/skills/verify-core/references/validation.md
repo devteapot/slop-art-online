@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-09 minds' sight (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81b9dd8`/`dc5e41b` plus the uncommitted minds'-sight, projection and presence change (docs/PERCEPTION.md, "Second change"; docs/PLAYER_MEMORY.md, "Presence and the offline character"). Fake model only; every scratch database answered 404 after cleanup. `core-perc2`: `cargo_checks.py`, `tick`, `needs`, `seize`, `sight` (new: 6 of 6) pass; `core-perc2-skirmish` passes; `core-perc2-mechanics` and `-steering` pass. `core-perc2-town` 20 of 21: "a resident faces someone who comes up behind them" failed, and failed in three solo runs on one world; on a base (`972aefd`) world the scene passed once and failed on the next run, so it is the scene's known flakiness, not shown to be this change. The infant scene was not run.
+
 
 ## 2026-11-09 town life (dev-box)
 

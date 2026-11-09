@@ -45,4 +45,17 @@ fn main() {
         ),
     )
     .unwrap();
+    // What a player's client may read (docs/PERCEPTION.md). `scoped` (the default) keeps
+    // bodies, characters, fighters, `doing` and every character's vitals, experiences, places,
+    // inventory and know-how private, so a player receives only what the `seen_*` and `my_*`
+    // views return. `open` makes those nine public again, for the lab observer without a
+    // token and for diagnostics; it is not a perception boundary. Developer audit truth is
+    // private in both.
+    println!("cargo:rerun-if-env-changed=LIVING_PERCEPTION");
+    println!("cargo:rustc-check-cfg=cfg(open_tables)");
+    match std::env::var("LIVING_PERCEPTION").as_deref() {
+        Ok("scoped") | Err(_) => {}
+        Ok("open") => println!("cargo:rustc-cfg=open_tables"),
+        Ok(other) => panic!("LIVING_PERCEPTION must be `open` or `scoped`, not `{other}`"),
+    }
 }

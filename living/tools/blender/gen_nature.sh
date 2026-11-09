@@ -46,6 +46,12 @@ specs=(
   "glow_mushroom spirit shared/glow_mushroom 8"
   "crystal spirit shared/crystal 8"
   "rock spirit caverns/rock 8"
+  # Dry country (the arid environments wastes, scrubland and badlands share these kinds).
+  "dry_grass arid shared/dry_grass 8"
+  "scrub arid shared/scrub 8"
+  "dead_tree arid shared/dead_tree 8"
+  "dry_rock arid shared/dry_rock 8"
+  "rubble arid shared/rubble 8"
   "stalagmite spirit caverns/stalagmite 8"
 )
 # Drop generated files of kinds that no spec writes into that folder any more.

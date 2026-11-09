@@ -207,9 +207,10 @@ pub fn convert(
     assets: Res<AssetServer>,
     q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), Without<Converted>>,
     parents: Query<&ChildOf>,
-    models: Query<(&Model, Has<NoShadow>)>,
+    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>)>,
     detail: Option<Res<crate::style::DetailLayers>>,
-    mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), Handle<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, Handle<Toon>>)>,
+    palette: Res<Palette>,
+    mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), AssetId<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, AssetId<Toon>>)>,
 ) {
     for (e, mat, mesh, name) in &q {
         // Only meshes under a look-dev model.
@@ -222,9 +223,20 @@ pub fn convert(
                 break;
             }
         }
-        let Some((owner, no_shadow)) = owner else { continue };
+        let Some((owner, no_shadow, beast)) = owner else { continue };
         if no_shadow {
             commands.entity(e).insert(bevy::light::NotShadowCaster);
+        }
+        // A rigged creature (the wolf) is vertex-coloured on a white material: it wears the
+        // shared vertex-colour toon the box creatures wear, so a pack adds no material.
+        if beast {
+            if done.1.insert(mesh.0.id()) {
+                if let Some(mut m) = meshes.get_mut(&mesh.0) {
+                    let _ = m.generate_outline_normals(&Default::default());
+                }
+            }
+            commands.entity(e).remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(palette.vertex.clone()), Converted, outline(Outlined::Person, &style)));
+            continue;
         }
         // A slot's glow lights up models with no glow of their own (kits without emissive
         // materials); models that carry emissive materials keep exactly those.
@@ -255,10 +267,14 @@ pub fn convert(
         // surfaces its vertex colours' alpha names (style.rs `Surface`). It is one flag for all
         // of it, so scenery keeps sharing its few materials.
         let painted = detail.as_deref().filter(|_| !owner.vrm && kind == Kind::Plain && base.base_color_texture.is_none());
+        // The caches hold ids, not handles: a material lives while some mesh wears it (a
+        // town's outfit pieces go when its people do, and the first load's prewarm leaves none
+        // behind, `loading.rs`), and is made again when needed.
         let (by_source, _, by_content) = &mut *done;
-        let toon = by_source
-            .entry((mat.0.id(), glow_key))
-            .or_insert_with(|| {
+        let cached = by_source.get(&(mat.0.id(), glow_key)).and_then(|id| toons.get_strong_handle(*id));
+        let toon = match cached {
+            Some(h) => h,
+            None => {
                 let mut b = base.clone();
                 if owner.vrm && crate::perf::has("charopaque") && matches!(b.alpha_mode, AlphaMode::Mask(_)) {
                     b.alpha_mode = AlphaMode::Opaque;
@@ -271,19 +287,20 @@ pub fn convert(
                 // environment kits share 14 between about a thousand). One toon material per
                 // distinct content lets their meshes share bind groups and batches; each extra
                 // material costs every view and pass a batch set and its per-frame buffer writes.
-                by_content
-                    .entry(format!("{kind:?} {face_map:?} {} {b:?}", painted.is_some()))
-                    .or_insert_with(|| {
-                        let map = face_map.as_ref().map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
-                        let mut toon = style.kind(b, kind, map);
-                        if let Some(layers) = painted {
-                            crate::style::with_detail(&mut toon, layers);
-                        }
-                        toons.add(toon)
-                    })
-                    .clone()
-            })
-            .clone();
+                let content = format!("{kind:?} {face_map:?} {} {b:?}", painted.is_some());
+                let h = by_content.get(&content).and_then(|id| toons.get_strong_handle(*id)).unwrap_or_else(|| {
+                    let map = face_map.as_ref().map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
+                    let mut toon = style.kind(b, kind, map);
+                    if let Some(layers) = painted {
+                        crate::style::with_detail(&mut toon, layers);
+                    }
+                    toons.add(toon)
+                });
+                by_content.insert(content, h.id());
+                by_source.insert((mat.0.id(), glow_key), h.id());
+                h
+            }
+        };
         // Only meshes with an outline volume need outline normals. Scenery takes part only as a
         // stencil at zero offset, which never reads them; generating them anyway rewrote every
         // new scenery mesh (another attribute, so another upload in another vertex layout), and a

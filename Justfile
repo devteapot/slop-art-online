@@ -27,9 +27,12 @@ living-secrets:
 living-build:
     cargo build --manifest-path living/Cargo.toml -p living-authority --target wasm32-unknown-unknown --release
 
+# Private tables are included: the mind service and the lab observer read them as the database
+# owner (docs/PERCEPTION.md). The generated code is the same for `LIVING_PERCEPTION=open` and
+# `scoped`, which differ only in which tables are public.
 living-generate: living-build
     rm -rf .local/living/generated && mkdir -p .local/living/generated
-    {{living_compose}} run --rm --no-deps -T -v "$PWD/living/target/wasm32-unknown-unknown/release:/wasm:ro" --entrypoint sh spacetimedb -c 'spacetime generate -l rust -b /wasm/living_authority.wasm -o /tmp/gen -y >/dev/null 2>&1 && tar -C /tmp/gen -cf - .' | tar -C .local/living/generated -xf -
+    {{living_compose}} run --rm --no-deps -T -v "$PWD/living/target/wasm32-unknown-unknown/release:/wasm:ro" --entrypoint sh spacetimedb -c 'spacetime generate -l rust -b /wasm/living_authority.wasm -o /tmp/gen -y --include-private >/dev/null 2>&1 && tar -C /tmp/gen -cf - .' | tar -C .local/living/generated -xf -
     rm -rf living/bindings/src/generated && mv .local/living/generated living/bindings/src/generated
     rustfmt --edition 2021 living/bindings/src/generated/*.rs
 
@@ -70,8 +73,8 @@ living-viewer:
 living-web:
     cd living/viewer && env -u NO_COLOR trunk serve --cargo-profile wasm-dev --address 127.0.0.1 --port 8330
 
-# Optimized browser observer for the public tunnel (https://sos.carlid.dev); the
-# sao-observer-web user service serves .local/living/web on 127.0.0.1:8331.
+# Optimized browser observer bundle in .local/living/web. (The public tunnel that served it,
+# https://sos.carlid.dev, was retired on 2026-11-09; see docs/LIVING_CORE.md.)
 living-web-dist:
     cd living/viewer && CARGO_PROFILE_RELEASE_STRIP=true env -u NO_COLOR trunk build --release --dist ../../.local/living/web
 
@@ -94,13 +97,14 @@ living-check: living-build
 # living/tools/kimodo/spark.sh, or copy it from a machine that has it.
 living-game-assets:
     living/tools/lookdev_assets.sh
-    just living-game-textures
+    just living-game-textures --set all
     living/tools/blender/gen_nature.sh
     living/tools/blender/gen_buildings.sh
     living/tools/blender/gen_anim.sh
 
-# The game's painted, tileable textures (git-ignored): the ground's layers for terrain.rs, from
-# living/tools/textures/paint.py (numpy and Pillow through uv). `--set material` paints the
-# model kinds (bark, planks, plaster, stone, brick, shingles, metal, leaves), not used yet.
+# The game's painted, tileable textures (git-ignored), from living/tools/textures/paint.py
+# (numpy and Pillow through uv): `--set ground` (the default) the ground's layers for
+# terrain.rs, `--set material` the model surfaces (bark, planks, plaster, stone, brick,
+# shingles, metal, leaves) that style.rs binds on scenery, `--set all` both.
 living-game-textures *args:
     uv run living/tools/textures/paint.py {{args}}

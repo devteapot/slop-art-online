@@ -5,5 +5,8 @@
 | Player character: join, move, act, speak, refusals | [player-character.md](player-character.md) |
 | Combat skills: use, refusals, strike, killing a person, bow, fire bolt, block, dodge, heal, wolves, death and rejoin | [combat.md](combat.md) |
 | Gestures: wave, nod and face through `human_act`, answered by residents; refusals | [gestures.md](gestures.md) |
+| What a player perceives of others: names only when known, health as a band, `appraise` revealing exact health to the appraiser only, an introduction teaching a name | [perception.md](perception.md) |
 
-Baseline: `verify-<run>` published by `$V launch` and `$V doctor` passing. One identity per run; `join` succeeds once per identity while its character lives. For a second player, use a second run name, or mint another identity with `curl -X POST http://127.0.0.1:3300/v1/identity`.
+Baseline: `verify-<run>` published by `$V launch` and `$V doctor` passing. One identity per run; `join` succeeds once per identity while its character lives. For a second player, use a second run name, or mint another identity with `curl -X POST http://127.0.0.1:3300/v1/identity` (`appraise.py` keeps one as `token2` in the run's state).
+
+Every HTTP call is a connection: `$V player` calls connect and disconnect around each call, so after more than the `takeover_s` law (30 s) without a call the world's minds take the character over, and the next call hands it back before it runs ([verify-client presence](../../verify-client/features/presence.md)).

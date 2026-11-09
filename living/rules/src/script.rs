@@ -150,6 +150,51 @@ pub struct RoutineFacts {
     pub changed_s: f32,
 }
 
+/// What the `perceived_of` law is told about an observer looking at a target. It holds only
+/// what the law may decide on, so its value is the cache key for the law's answer.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct RegardIn {
+    pub observer_kind: String,
+    /// Techniques the observer knows how to do (sorted).
+    pub knows: Vec<String>,
+    pub target_kind: String,
+    /// The observer knows the target's name (itself, family, its community, someone it has
+    /// feelings about, or someone who told it their name).
+    pub known: bool,
+    /// Fields a skill use revealed to the observer and that still hold (sorted).
+    pub revealed: Vec<String>,
+    /// The observer is looking at itself.
+    pub own: bool,
+    pub night: bool,
+}
+
+/// How precisely a field is perceived.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Precision {
+    None,
+    #[default]
+    Band,
+    Exact,
+}
+
+/// The `perceived_of` law's answer: which fields of the target the observer gets.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Regard {
+    /// Its name; otherwise a label (`a stranger`, `a wolf`).
+    pub name: bool,
+    pub health: Precision,
+}
+
+impl Regard {
+    /// The rule without a `perceived_of` law: names when known (animals know their own kind's),
+    /// health as a band, exactly for oneself or while revealed.
+    pub fn default_for(p: &RegardIn) -> Self {
+        let name = p.own || p.known || (p.observer_kind != "person" && p.observer_kind == p.target_kind);
+        let health = if p.own || p.revealed.iter().any(|r| r == "health") { Precision::Exact } else { Precision::Band };
+        Self { name, health }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Effect {
     /// Add items to the actor.
@@ -207,6 +252,9 @@ pub enum Effect {
     Launch,
     /// The target creature is greeted: it sees the gesture made at it (`hailed`, `hailer`).
     Hail,
+    /// The actor perceives more of the target creature for `secs` seconds: `what` names the
+    /// field the `perceived_of` law then sees as revealed (e.g. `health`).
+    Reveal { what: String, secs: f32 },
 }
 
 /// World laws that parameterize the engine. Read once per script revision (the `laws()`
@@ -258,6 +306,9 @@ pub struct Laws {
     pub alone_within: f32,
     /// A body within this angle of facing something already faces it (radians).
     pub face_slack: f32,
+    /// How long a played character stands without any connection of its person before the
+    /// world's minds take it over (seconds; docs/PLAYER_MEMORY.md).
+    pub takeover_s: f32,
 }
 
 impl Laws {
@@ -299,6 +350,7 @@ impl Default for Laws {
             pasture_regen: 0.006,
             alone_within: 6.0,
             face_slack: 0.35,
+            takeover_s: 30.0,
         }
     }
 }
@@ -597,8 +649,41 @@ impl Scripts {
             pasture_regen: g("pasture_regen", l.pasture_regen).clamp(0.0, 1.0),
             alone_within: g("alone_within", l.alone_within).clamp(0.0, 40.0),
             face_slack: g("face_slack", l.face_slack).clamp(0.0, 3.0),
+            takeover_s: g("takeover_s", l.takeover_s).clamp(0.0, 3_600.0),
         };
         l
+    }
+
+    /// What an observer perceives of a target (`perceived_of(p)`, docs/PERCEPTION.md): which
+    /// fields it gets and how precisely. The answer depends only on [`RegardIn`], so callers
+    /// cache it by that value; without the law the defaults of [`Regard::default_for`] hold.
+    pub fn perceived_of(&self, p: &RegardIn) -> Regard {
+        if !self.has("perceived_of") {
+            return Regard::default_for(p);
+        }
+        let mut o = Map::new();
+        o.insert("kind".into(), p.observer_kind.clone().into());
+        o.insert("knows".into(), p.knows.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
+        let mut t = Map::new();
+        t.insert("kind".into(), p.target_kind.clone().into());
+        t.insert("known".into(), p.known.into());
+        t.insert("revealed".into(), p.revealed.iter().map(|k| Dynamic::from(k.clone())).collect::<Array>().into());
+        let mut m = Map::new();
+        m.insert("observer".into(), o.into());
+        m.insert("target".into(), t.into());
+        m.insert("self".into(), p.own.into());
+        m.insert("night".into(), p.night.into());
+        let Ok(r) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "perceived_of", (m,)) else { return Regard::default_for(p) };
+        let Some(r) = r.try_cast::<Map>() else { return Regard::default_for(p) };
+        let d = Regard::default_for(p);
+        let name = r.get("name").and_then(|v| v.as_bool().ok()).unwrap_or(d.name);
+        let health = match r.get("health").and_then(|v| v.clone().into_string().ok()).as_deref() {
+            Some("exact") => Precision::Exact,
+            Some("band") => Precision::Band,
+            Some("none") => Precision::None,
+            _ => d.health,
+        };
+        Regard { name, health }
     }
 
     /// Numeric function of one string argument, e.g. `max_hp("deer")`.
@@ -764,6 +849,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "leave" => Effect::Leave,
         "launch" => Effect::Launch,
         "hail" => Effect::Hail,
+        "reveal" => Effect::Reveal { what: s("what"), secs: (n("secs") as f32).clamp(0.0, 600.0) },
         other => return Err(format!("unknown effect op `{other}`")),
     })
 }
@@ -774,6 +860,40 @@ mod tests {
 
     fn scripts() -> Scripts {
         Scripts::new(include_str!("../../scripts/skills.rhai")).expect("skills compile")
+    }
+
+    #[test]
+    fn what_one_perceives_of_another_is_the_law_s() {
+        let sc = scripts();
+        let base = RegardIn { observer_kind: "person".into(), target_kind: "person".into(), ..Default::default() };
+        // A stranger: a label, and health only as a band.
+        assert_eq!(sc.perceived_of(&base), Regard { name: false, health: Precision::Band });
+        // Known by name; an appraisal shows exact health while it holds.
+        assert_eq!(sc.perceived_of(&RegardIn { known: true, ..base.clone() }), Regard { name: true, health: Precision::Band });
+        assert_eq!(sc.perceived_of(&RegardIn { revealed: vec!["health".into()], ..base.clone() }), Regard { name: false, health: Precision::Exact });
+        // Oneself: everything. Animals know their own kind by name, and not people's.
+        assert_eq!(sc.perceived_of(&RegardIn { own: true, ..base.clone() }), Regard { name: true, health: Precision::Exact });
+        let wolf = RegardIn { observer_kind: "wolf".into(), target_kind: "wolf".into(), ..Default::default() };
+        assert!(sc.perceived_of(&wolf).name);
+        assert!(!sc.perceived_of(&RegardIn { target_kind: "person".into(), ..wolf }).name);
+        // The script's law and the engine's default agree; a script may decide otherwise.
+        for p in [base.clone(), RegardIn { known: true, revealed: vec!["health".into()], ..base.clone() }] {
+            assert_eq!(sc.perceived_of(&p), Regard::default_for(&p));
+        }
+        let blind = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ name: true, health: \"none\" }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
+        assert_eq!(blind.perceived_of(&base), Regard { name: true, health: Precision::None });
+    }
+
+    #[test]
+    fn appraising_reveals_health_for_a_while() {
+        let sc = scripts();
+        let mut c = ctx();
+        c.target = TargetFacts { class: "creature".into(), id: 9, kind: "person".into(), alive: true, dist: 3.0, ..Default::default() };
+        assert_eq!(sc.check("appraise", &c), Ok(()));
+        assert_eq!(sc.done("appraise", &c).unwrap(), vec![Effect::Reveal { what: "health".into(), secs: 20.0 }]);
+        c.target.dist = 9.0;
+        assert!(sc.check("appraise", &c).is_err());
+        assert_eq!(sc.laws().takeover_s, 30.0);
     }
 
     fn ctx() -> SkillCtx {

@@ -1,6 +1,28 @@
 # Validation record (generation)
 
 
+## 2026-11-09 floors: the megacity land and native digests (dev-box)
+
+Own scratch container `slop-floors-stdb` (image `v2.14.1`, port 3330) through a `docker` name shim (`~/floors-shim`). The harness's hard-coded `127.0.0.1:3300` was patched to 3330 in the dev-box worktree only, not committed. Worktree `~/dev/slop-floors`, branch `floors-1` from `b7cf7fb`, uncommitted. The driver gained the derived seed `floor-megacity-2k` (`living/seeds/floor-megacity.json` at 2048 m, written into the run's directory and published through an absolute `--seed`), five city checks, and a native digest cross-check for every land seed (`floor_preview`).
+
+- **`generation-floors-20261109-130139`** (`--feature all`, before the final generator fixes): 21 of 22 results pass.
+  - The island passes 72 of 72, the megacity 67 of 67, and both land rows equal a native regeneration.
+  - The one failure is the known flake, "Saltmere memberships" on the second `realm`.
+- **`generation-floors-final-20261109-132017`** (`--feature all`, final code): 20 of 22 results pass.
+  - The island passes 71 of 72, failing "Reedmoor memberships".
+  - The megacity passes 66 of 67, failing "Saltline memberships": Corbasa, a seeded resident drawn at 502 days, died of old age 4.9 s after creation, and the death cleanup removed the membership. It is the same flake as Saltmere's and Reedmoor's; seed ages are drawn, not the city.
+  - Every other check passes:
+    - 25 wards, metro, slum and works styles, 105 core lots of 50 m or more, every other settlement outside the city, 1,030 gate tiles;
+    - digests `e182d4d6b67f0e3b`/`78040b114f6a6db6`/`50372111eee395a3` equal native;
+    - the island's `c19cc98e8f1471f0`/`16412fd044a2b0b0`/`d45f735150add4ba` equal native and are unchanged from `b7cf7fb`;
+    - repeatability (terrain, settlement sites and band sites equal), the five seed tests, the malformed-seed rejection (its label now `seed.rs:603`), all nine cleanups with SQL 404, and the original seeds unchanged.
+
+Maintenance pass on this skill, same day:
+- **Source wave:** one reader per feature file.
+- **Drift fixed:** stale source citations in all four feature files, the malformed seed's `known_issue` source (`seed.rs:444` → `:603`, also in `docs/LIVING_HANDOFF.md`), and the seed count. The new city checks and the digest cross-check are documented in `seeded-world.md` and `SKILL.md`.
+- **Live coverage:** both runs above drove every feature (worlds, repeatability, authored compilation, guards).
+- **Not covered:** the 4096 m megacity, whose `init` runs out of the reducer's fuel budget (docs/FLOORS.md).
+
 ## 2026-11-09 town life: places and starting ways (dev-box)
 
 Own scratch container `slop-townlife-stdb` (image `v2.14.1`) through a `docker` name shim; worktree `~/dev/slop-townlife`, branch `townlife-1` from `b12fa45` with the town-life change (docs/TOWN_LIFE.md) uncommitted. The seed format gained `ways` and `town_life`; `place` and `routine` joined the snapshot tables, and the land check gained four town-life checks (places known, workers placed, workplaces in or by their settlement and walkable, residents on the seed's own ways).

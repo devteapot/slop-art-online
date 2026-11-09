@@ -72,6 +72,7 @@ pub const SKILLS: &[SkillSpec] = &[
     SkillSpec { name: "signal", needs_target: false, needs_item: true, reach: 0.0, help: "make one of your species' signals (item: its name); others nearby hear it" },
     SkillSpec { name: "rework", needs_target: false, needs_item: true, reach: 0.0, help: "sit and rework one of your ways (item: a routine's name, or \"top level\" for your desires; graph: the new version, or \"retire\": true to drop a routine); takes a while, and the old way must have been lived with first" },
     SkillSpec { name: "wave", needs_target: true, needs_item: false, reach: 12.0, help: "wave to someone you can see (a greeting, a farewell or an answer to one); they see it and may answer" },
+    SkillSpec { name: "appraise", needs_target: true, needs_item: false, reach: 6.0, help: "look someone over closely (a person or an animal near you): for a while you see exactly how hurt they are" },
     SkillSpec { name: "nod", needs_target: true, needs_item: false, reach: 6.0, help: "nod to someone near you (a quiet greeting or a yes); they see it and may answer" },
     SkillSpec { name: "face", needs_target: true, needs_item: false, reach: 15.0, help: "turn where you stand to face someone or something you can see (a person who comes up to you or speaks, a fight, a sound)" },
     SkillSpec { name: "step_aside", needs_target: true, needs_item: false, reach: 3.0, help: "step a pace to the side to let someone coming toward you pass (in a narrow street or a doorway)" },

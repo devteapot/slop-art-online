@@ -1,6 +1,6 @@
 ---
 name: verify-llm
-description: Verify the living core mind service's OpenAI-compatible requests, model routing, overflow, retries, outage recovery, JSON repair and journals. Use after changes to living/mind/src/llm.rs, model configuration or model reply parsing.
+description: Verify the living core mind service's OpenAI-compatible requests, model routing, overflow, retries, outage recovery, JSON repair, provider batch jobs and journals. Use after changes to living/mind/src/llm.rs, model configuration or model reply parsing.
 ---
 
 # Verify model integration

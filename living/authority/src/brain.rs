@@ -184,7 +184,9 @@ impl<'a> Ev<'a> {
     fn scene(&mut self) -> &Scene {
         if self.scene.is_none() {
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
-            let creatures = common::creatures_near(self.ctx, self.at, r, self.now).into_iter().filter(|c| c.id != self.me.id).collect();
+            // What the body sees: within its sight and with a clear sight line (the rule every
+            // observer perceives by, `perception::in_sight`).
+            let creatures = crate::perception::visible(self.ctx, self.me.id, self.at, r, self.now);
             let resources = common::resources_near(self.ctx, self.at, r);
             let structures = common::structures_near(self.ctx, self.at, r);
             self.scene = Some(Scene { creatures, resources, structures });
@@ -1024,7 +1026,7 @@ impl<'a> Ev<'a> {
             if owner == self.me.id {
                 continue;
             }
-            let by = if owner != 0 && kind != "remains" { format!(" built by {}", common::name_of(self.ctx, owner)) } else if kind == "remains" { format!(" — the remains of {}", common::name_of(self.ctx, owner)) } else { String::new() };
+            let by = if owner != 0 && kind != "remains" { format!(" built by {}", common::label_for(self.ctx, &self.me, owner)) } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, owner)) } else { String::new() };
             let text = format!("You notice a {kind}{by}, {dist:.0} tiles {}.", direction(at, pos));
             percept(self.ctx, &self.me, now, "saw", owner, 0, pos, text, if kind == "remains" { 0.8 } else { 0.35 });
         }

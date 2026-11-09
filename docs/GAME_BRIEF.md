@@ -101,6 +101,7 @@ The user's idea: seeing only what is in front of you makes sense, and skills, pa
    - shared views by map region for the physical world (`body`, `structure`, `resource_node` and `terrain_chunk` are already indexed by 16×16-tile chunk);
    - per-player views keyed on the caller for private state;
    - mind tables made private, with a separate developer path for the observer.
+   - *Built 2026-11-09* ([perception](PERCEPTION.md)): the authority works out each player's perceived set (sight by day and night, a torch, a sight line through walls and rock), per-sender `seen_*` and `my_*` views deliver it with a narrow motion row, and minds' and audit tables are private, read by the mind service and the observer as the database owner. Region views were not needed: a per-sender view moves with the character on the authority. The game client reads only those views, and `scoped` is the default build since the client landed the same day ([what the client shows of others](#what-the-client-shows-of-others-2026-11-09)).
 2. **A typed player API.** `human_act` takes behavior-graph JSON. The game needs typed actions, aim directions and the projectile or area mechanics that skillshots require.
 3. **Controller handoff.** Move a character between the player and a mind on disconnect and reconnect. Today `mind_*` reducers authorize by `character.controller`.
 4. **A mind learned from play.** The player's own experiences and choices must be consolidated into the persona and routines the offline mind uses.
@@ -285,7 +286,7 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
 - **Animation library (2026-11-09):** 27 clips per VRoid character, listed with prompts, seeds and parameters in `living/tools/blender/clips.json`.
   - **Generation:** `living/tools/kimodo/spark.sh` generates the Kimodo takes on the Spark in one process: about 16 s to load, then 3–4 s per motion. `gen_anim.sh` (`animate.py --library`) makes them game-ready for both characters into `assets/lookdev/anim/` and writes `<character>.clips.json` with each clip's length, loop flag, speeds and source.
   - **Loops:** idle, idle_look, walk, walk_brisk, run, run_fast, sneak, talk, talk_explain, listen and sit_idle are cut where pose and foot contacts match, and their seams are spread.
-  - **One-shots:** wave, point, sit_down, stand_up, sword_slash, sword_overhead, sword_thrust, block, dodge_roll, hit, death, cast and bow_shoot. Kimodo keyframes them to a shared neutral standing pose at the ends that should blend with idle. sit_idle and stand_up continue from sit_down.
+  - **One-shots:** wave, point, sit_down, stand_up, stand_up_ground, sword_slash, sword_overhead, sword_thrust, block, dodge, hit, death, cast and bow_shoot. Kimodo keyframes them to a shared neutral standing pose at the ends that should blend with idle. sit_idle and stand_up continue from sit_down.
   - **Feet:** planted feet are pinned with the leg IK.
   - **Hand-keyed:** nod and shake_head are keyed on the neutral pose, because every Kimodo seed either bowed or barely moved its head. The keyed `attack` loop is kept for repeated swings. The keyed idle, walk, run and talk are replaced; their names now hold the Kimodo clips.
   - **Natural speeds** (Vivi / Shino): walk 1.44 / 1.48, walk_brisk 2.03 / 2.10, run 3.15 / 3.25, run_fast 3.50 / 3.61, sneak 0.75 / 0.77 m/s. walk and run are time-scaled to the look-dev's 1.4 and 3.6 m/s by default. The rules' 2.6 / 3.9 pair is one flag away (`--speed 2.6 --run-speed 3.9`, or `--target walk_brisk=2.6 --target run_fast=3.9`). It is best served by walk_brisk (×1.30) and run_fast (×1.10), because the casual walk can only be sped up ×1.4, to 2.0 m/s.
@@ -293,7 +294,7 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
     - The wide VRoid skirts are rigid, so legs and seated thighs pass through them, and hanging hands sink into Vivi's skirt.
     - The sit poses recline as if against a backrest.
     - The sword and bow clips have no props.
-    - dodge_roll travels 1.9 m and death ends about 1 m from where it started. The game has no root motion yet.
+    - Fixed in the client polish pass below: dodge_roll travelled 1.9 m and death ended about 1 m from where it started.
 
 - **Tree variety (2026-11-09; the user saw forests of identical trees):**
   - **Species:** nature.py now makes oak, birch, spruce, coppice, young trees, saplings and dead snags. The broadleaf tree picks one of five growth forms, and trees lean and curve by seed.
@@ -477,7 +478,7 @@ Open:
 
 Presentation only: the authority decides what every resident does ([town life](TOWN_LIFE.md)); the client draws it from public rows and sends my gestures through `human_act`. Code: `living/game/src/town.rs`, with `live.rs` (clips, facing, indoors), `net.rs` (subscriptions), `weather.rs`, `camera.rs` and the HUD.
 
-- **Data.** `act_card` (17 rows) and `weather` (one row) are subscribed once per connection; `doing` is joined to the near body window like `fighter` (`SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE <chunk ranges>`). No whole-world query. A connected client holds 21 live queries instead of 18.
+- **Data** (as first built; since the perception views the client reads `seen_doing` instead of the join, [below](#what-the-client-shows-of-others-2026-11-09)). `act_card` (17 rows) and `weather` (one row) are subscribed once per connection; `doing` is joined to the near body window like `fighter` (`SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE <chunk ranges>`). No whole-world query. A connected client holds 21 live queries instead of 18.
 - **What residents are seen doing** comes from `doing.code` through `act_card`: by skill name for the skills drawn for, else by the card's `look`, else nothing over locomotion, so a skill the rules add shows without a client change.
 
   | Skill (look) | Drawn as |
@@ -492,7 +493,7 @@ Presentation only: the authority decides what every resident does ([town life](T
   | `sleep` | not drawn (indoors) |
 
   A working body faces its spot (`doing.x/y`) or the one it is aimed at. Unknown codes and looks fall back to idle and locomotion, as combat's do.
-- **Indoors: hidden, not a lit window.** A sleeper, or someone resting within 3.5 m of their own door (sheltering at home, keeping warm), is not drawn, gets no nameplate and is not targeted; they reappear at the door when they come out. A lit window would need per-house window geometry that buildings don't expose, and the island's windows already glow at night.
+- **Indoors: hidden, not a lit window.** A sleeper, or someone resting within 3.5 m of their own door (sheltering at home, keeping warm; the authority now says so on the `doing` row, `indoors`), is not drawn, gets no nameplate and is not targeted; they reappear at the door when they come out. A lit window would need per-house window geometry that buildings don't expose, and the island's windows already glow at night.
 - **Turning on the spot.** A standing body takes its facing from its own segment, `heading` + `turn` × elapsed (up to `turn_s`), so the turn before a gesture and `face` turn the body in place instead of sliding. Drawn yaw eases toward the wanted facing (1/16 s), so stops and new aims never snap.
 - **Rain** follows the `weather` row in connected mode (rain or clear), eased over 6 s; joining mid-spell shows the sky as it is. Look-dev keeps its schedule and `LIVING_GAME_WEATHER`.
 - **My gestures: G waves, B nods** (clear of WASD, the skill bar and F). They go to the person under or nearest the cursor, else the nearest in reach ahead (12 m for a wave, 6 m for a nod). My clip is predicted at the press, and my character turns to whom I greet. The answer is the resident's own `doing` row (the nod) and my `experience` ("… answers your greeting (nod)."). It shows plainly: their nameplate for 3.5 s, and the camera's conversation framing takes in both of us. No text.
@@ -504,10 +505,81 @@ Presentation only: the authority decides what every resident does ([town life](T
 - **Still off:**
   - At the fixed 22 m view a fight or a nod is small; only a greeting brings the camera in.
   - The evening crowd stands and sits on one spot per place, overlapping: the authority sends everyone to the same point.
-  - Standing up from the ground is a 220 ms blend into the walk, with no `stand_up` clip yet.
+  - Standing up from the ground was a 220 ms blend into the walk (fixed below: `stand_up_ground`).
   - Gestures while walking slide (rare: the rules turn a standing body first).
   - A hidden sleeper still animates.
-  - Clips are judged from stills, not in motion: `play` has one 41° jerk inside its loop.
+  - Clips are judged from stills, not in motion: `play` had one 41° jerk inside its loop (fixed below).
+
+## Client polish: first load, getting up, root motion, dawn and storm (2026-11-09)
+
+Client presentation and the clip tools only (`living/game`, `living/tools`).
+
+**First load.**
+- **Cause.** Bevy 0.20 creates render pipelines synchronously on macOS (`bevy_render`'s `create_pipeline_task` blocks there). The frame that first draws a new material, mesh layout or pass composes its WESL, writes MSL and has Metal compile it: tens of ms when Metal's shader cache is warm, up to seconds when it is cold. That cache is per binary, so a new build starts cold. The first view needs about 90 pipelines. `LIVING_GAME_PERF=hitch` now also logs, per frame, the pipelines created (label and vertex layout) and the render set's time.
+- **The 800 ms frame** in look-dev was the land generating inside a frame (0.81–0.88 s). It now generates on a worker thread, as connected mode already did (`envs::switch`, `Island::generate`). `assets_for` lists each folder once per session.
+- **The cover** (`loading.rs`): the first load happens behind a plain cover in the sky's colour reading "Arriving…". It lifts once the island and your character are in, nothing waits to spawn, and no pipeline has been created for 0.75 s (30 s at most), then fades over 0.35 s. The tour, routes and the headless script's `ready` wait for it.
+- **Prewarm**: under the cover, throwaway characters at the arrival point wear every outfit piece between them (`Recipe::every_piece`, 6 characters). A piece with its own vertex layout used to compile 4 pipelines 2 km into `road:town>village3` (301 ms at (397, 1505) cold). Material caches now hold ids, not handles (`lookdev::convert`, the outfit `Wardrobe`), so a material lives while some mesh wears it. The prewarm leaves none behind: 41 toon materials at the town before and after.
+- **Numbers** (M4 Pro, uncapped, base `972aefd` against it plus this change, other agents' work loading the Mac): `road:town>village3@run`, route time:
+  - mean 4.58 / 4.55 ms;
+  - p99 13.4 / 6.9 ms;
+  - frames over 33 ms 753 / 295, over 50 ms 216 / 98;
+  - worst 155 / 151 ms;
+  - 1-minute load 5.7–19.8 / 5.2–13.1.
+
+  Neither arm creates pipelines at (397, 1505) any more; frames of 30–53 ms still come at the vista stop there, with nothing arriving. Before the route, look-dev's first frames: base 805–847 ms (the land), then up to 1142 ms of pipelines on a cold cache; this change's worst is 166–215 ms, behind the cover, which lifts after 2.1–2.2 s (91 pipelines). Connected: base 212 ms, this change 323 ms behind the cover, which lifts after 2.8 s. After it lifts, the worst frames are 83 ms while lots arrive.
+- **Counts:** materials per view and toon materials at the town, forest and hamlet are identical before and after: main 35/23/36, cascades 17/9–15/17, toon materials 41/68/42. 10:00, clear and storm. Frame means are within run-to-run noise: clear 5.29/4.39/5.69 against 5.25/4.70/5.35 ms; storm at the town 5.2–7.2 against 5.3–8.0 ms over 3–4 windows each.
+
+**Getting up and root motion** (Kimodo on the Spark; `clips.json`, `animate.py`, `batch.py`).
+- `batch.py` takes `"path": [[s, x, z], …]`: Kimodo's `Root2DConstraintSet` pins the hips' ground track on every frame. `animate.py` gets `travel: path`, which takes exactly that track out, and plants feet along it.
+- **`dodge`** (replaces `dodge_roll`): a low forward dash whose hips follow the rules' dodge, 2.6 m at 5.2 m/s, then a recovery; 0.97 s, played at rate 1. Travel 2.60 m for Vivi and 2.69 m for Shino; the hips stray at most 0.04 m from the body's track. One-shots are now timed on the display clock (they wait for `start_ms` and join part-way when seen late), and a dash's clip is not predicted, because the authority moves the body about a round trip after the press. On my character, 5 dodges each way, `LIVING_GAME_FEET` and `foot_slide.py` on the dodge frames: slide median 3.52 → 0.98 m/s (0.54 → 0.21 of the body's speed); drift per contact median 13.9 → 4.5 cm.
+- **`death`**: new takes with the hips pinned over the origin. The body falls where it stands: it ends 0.04 m away (was 1.04 m).
+- **`stand_up_ground`**: continues from `sit_ground_down`'s end and stands up over the origin (2.47 s, played ×1.6). When a sitter's rest ends, the drawn body holds its seat while the clip plays, then catches up with the authority's position at up to 1.2 m/s faster than the body (`live.rs`). The gait follows the drawn motion.
+- **`play`**: 8 seeds; seed 2 replaces seed 0, whose loop had a 41° hand snap. Its worst change in step is now 21° on a lower leg landing from a hop. `loop_jerk` reports the bone.
+
+**Dawn and storm** (`island.json` keys, `sky.wesl`, `edges.wesl`, `toon_light.wesl`, `post.rs`).
+- **Dawn (06:24 key):** a gold key light ([1, 0.88, 0.77]), a cooler zenith, a warm-neutral haze ([0.86, 0.80, 0.78]) instead of peach, a lighter grade (0.12) and thinner banks (0.6).
+- **Storm:** a cooler, darker key light that still casts, a darker sky (0.28) with less fog fill. Clouds have pale lit tops, dark cool undersides and darker dense cores. Wet surfaces catch the sky at grazing angles (`wet_sheen`); puddles are softer and darker and mirror more of the sky the flatter they are seen. Rain falls in four layers, finer and fainter with distance, the far ones stronger in a storm, and stays visible under a dark sky.
+- **Blind A/B** (a fresh judge each round, 12 pairs, sides randomised): storm 6/6 and 6/6. Dawn 3 wins and 3 losses in round 1 (cold lavender haze), then 3 wins, 1 loss and 2 ties in round 2.
+- **Still off:** the dawn haze still washes out the middle distance, and the town's terracotta paving reads orange at dawn in both versions. Storm shadows stay sharp under trees. Puddles on grass still read as patches.
+
+**Clippy:** the two `approx_constant` errors (TAU in `bodies.rs` and `world.rs`) are fixed. The remaining warnings are the same as at `da219a7`.
+
+## What the client shows of others (2026-11-09)
+
+The client receives only what its character perceives ([perception](PERCEPTION.md); `scoped` is the default build) and draws only that. Code: `living/game/src/net.rs` (the views), `live.rs`, `town.rs`, `ui/live.rs`, `ui/overhead.rs`.
+
+- **Who is drawn:** every body in `seen_bodies`, which holds the creatures within sight (11 tiles by day, 6 at night, more with a torch) with a clear sight line. Someone behind a wall, a fence, a stall or rock is not drawn, and nobody gets a nameplate there. Creatures appear within about 200 ms of coming into sight.
+- **Names:** a name only when my character knows it, otherwise the label the authority gives (`a stranger`, `a child`, `a wolf`). It shows on nameplates, speech bubbles, the log, the target panel and the death screen. Someone who says their own name is known from then on. The death screen names my killer and the witnesses as I last perceived them.
+- **Health:** others' health is a band on the nameplate's bar. While an appraisal holds (**V**, below), the bar is exact and a small `hp / max` figure sits under it; the plate stays up for those 20 s and the figure goes when the reveal ends. It has no label and no other new HUD element.
+- **Dress:** build and dress come from the projection's `folk` and `style`: the settlement the character lives in, since the home position is no longer sent.
+- **Indoors:** a resting resident is hidden when its `doing` row says `indoors` (the authority decides it from the home). A sleeper is hidden as before.
+- **V looks someone over** (`appraise`, through `human_act` like G and B). It goes to the creature under or nearest the cursor, else the nearest one within 6 m ahead, people or animals. My character glances (`idle_look`, 1.5 s). The answer is the projection's exact health for 20 s and my experience "You look a stranger over: 94 of 94 health." No text is shown on screen.
+- **Cost**, measured on the Mac (M4 Pro), headless and uncapped (`LIVING_GAME_PERF=diag`). Each arm is the real game client on a fresh scratch island, two runs per arm, 40 s windows at the same world hours: a village at 10:45–12:00 (calm, about 10 bodies within 40 m) and the walled town's square at 12:20–13:40 (busy, about 40). Bytes were counted by the perception bench's TCP proxy. Another session's database had a client connected throughout.
+
+  | | `acbbda7` client, `open` build | this client, `scoped` build |
+  |---|---|---|
+  | calm: bytes to the client | 2.37 / 1.73 kB/s | 0.23 / 0.48 kB/s |
+  | busy: bytes to the client | 2.78 / 3.48 kB/s | 1.22 / 0.66 kB/s |
+  | calm: frame mean (worst) | 5.18 (14.6) / 5.16 (8.4) ms | 4.79 (8.0) / 4.40 (9.5) ms |
+  | busy: frame mean (worst) | 6.29 (8.8) / 6.58 (10.6) ms | 5.14 (9.3) / 4.96 (8.4) ms |
+  | characters drawn, calm / busy | 17–20 / 55–58 | 3–6 / 10–13 |
+  | live queries | 21 | 20 |
+
+  The frame time drops because the client draws only those in sight, not every body within the ±5-chunk window. Bytes vary with what the people in sight do: one run per world, not a repeatability study.
+- **Still off:**
+  - My own `my_characters` row carries `cause` as the authority writes it ("killed by Rook the wolf"). The death screen no longer shows it, but the name reaches the client: the authority should project its own death cause too.
+  - A greeting from a resident frozen by a test graph gets no answer, so its nameplate does not show; ordinary residents answer.
+  - Rock tiles are drawn as flat stone ground, so a person hidden by rock is hidden by something the eye reads as ground.
+  - Labels don't tell strangers apart ("a stranger" twice in the log).
+
+## Wolves and arid lands (2026-11-09)
+
+Client presentation (`acbbda7`), recorded here after the fact.
+
+- **Wolves** are the rigged `wolf.glb` (`living/tools/blender/wolf.py`, run by `gen_anim.sh`; git-ignored), in the shared vertex-colour toon, so a pack adds no material. Gaits come from one family, walk, trot and run (1.3, 3.4 and 7.0 m/s natural), through `gait.rs`. A move plays the bite or the leap, chosen by the skill card's aim (`creature` or `dash`), never by the skill's name (`combat::animal_clip`). They also have a flinch and a death held on its last pose. A wolf is scaled by life stage. Deer are still the box creature.
+- **Two `live.rs` fixes:** a corpse no longer vanishes when the death's row arrives in the same update as the body leaves, and a body more than 6 m from where it is drawn (a teleport) snaps there.
+- **Arid lands:** a land whose rivers run dry (`water.dry_rivers`, the megacity floor's wastes) gets dry earth, cracked mud and gravel ground layers (16 in all) and its own dressing, `wastes`, `scrubland` and `badlands`. The megacity's wall line draws a 14 m cyberpunk wall. Look-dev draws any land seed with `LIVING_GAME_SEED=<seed.json>` ([floors](FLOORS.md)).
+- **Assets:** `just living-game-assets` now paints every texture set (`living-game-textures --set all`): the ground and the model surfaces that `style.rs` binds on scenery. Before, a fresh checkout got the ground only and no model detail.
 
 ## World look and camera research (2026-11-08)
 

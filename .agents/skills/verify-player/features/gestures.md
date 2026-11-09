@@ -4,12 +4,12 @@ A player's character greets, answers and turns through the same skills residents
 
 ## Sub-features
 
-- `human_act {"do": "wave", "target": {"id": N}}` is accepted, shown to others as a `doing` row with the wave's `act_card` code, and recorded in `skill_use` (source `act`, outcome `greeted <name>`).
-- The resident answers with a nod (within 5 tiles) or a wave from its own graph (source `graph`, outcome `answered <player>`); the player perceives "… answers your greeting (nod)." as an experience.
+- `human_act {"do": "wave", "target": {"id": N}}` is accepted, shown to others as a `doing` row with the wave's `act_card` code, and recorded in `skill_use` (source `act`, outcome `greeted <label>`: the resident as the player perceives it, `a stranger` until it knows the name; docs/PERCEPTION.md).
+- The resident answers with a nod (within 5 tiles) or a wave from its own graph (source `graph`, outcome `answered <label>`: `answered a stranger` until the resident is told the player's name); the player perceives "… answers your greeting (nod)." as an experience.
 - An answer closes the greeting: the resident gestures once, not back and forth.
 - A nod after the greeting closed greets anew and is answered.
 - `face` turns the player's standing body toward its target (body `heading` + `turn` × `turn_s`).
-- The game client sends the same `human_act` from its keys: **G** waves, **B** nods (`living/game/src/town.rs`), at the person under or nearest the cursor, else the nearest person within the gesture's reach (12 m for a wave, 6 m for a nod), ahead first. With nobody in reach it sends the gesture without a target and the rules refuse it. Its own clip is predicted at the press and dropped after 600 ms unless the player's `doing` row confirms it.
+- The game client sends the same `human_act` from its keys: **G** waves, **B** nods, **V** looks someone over (`appraise`, [perception](perception.md); any creature within 6 m) (`living/game/src/town.rs`, `MY_ACTS`), at the person under or nearest the cursor, else the nearest person within the gesture's reach (12 m for a wave, 6 m for a nod), ahead first. With nobody in reach it sends the gesture without a target and the rules refuse it. Its own clip is predicted at the press and dropped after 600 ms unless the player's `doing` row confirms it.
 - Refusals: waving at oneself is refused by the rules ("not to yourself", told back as an act experience); `use_skill("wave", …)` is refused because a gesture is not on the skill bar.
 
 ## How to get to it (user POV)

@@ -18,7 +18,7 @@ $V launch --run $R && $V doctor --run $R
 $V cleanup --run $R
 ```
 
-Every player action goes through `$V player`, which uses the run's own identity minted with `POST /v1/identity`. Refusals are proven with `$V call … --as-player --expect-refusal TEXT`, which keeps the token off the command line. Admin reducers set scenes only, through `$V call … --as-admin`: `place_near` to put the player beside someone, `grant_items` to give the player something to hand over, and for combat `place_at`, `set_behavior` and `kill` (see [features/combat.md](features/combat.md); `scripts/combat.py` drives them). Gestures on an island run: `scripts/gesture.py --run $R` ([features/gestures.md](features/gestures.md)), with `place_at`. Name them in the report, because they are not something a player can do.
+Every player action goes through `$V player`, which uses the run's own identity minted with `POST /v1/identity`. Refusals are proven with `$V call … --as-player --expect-refusal TEXT`, which keeps the token off the command line. Admin reducers set scenes only, through `$V call … --as-admin`: `place_near` to put the player beside someone, `grant_items` to give the player something to hand over, and for combat `place_at`, `set_behavior` and `kill` (see [features/combat.md](features/combat.md); `scripts/combat.py` drives them). Gestures on an island run: `scripts/gesture.py --run $R` ([features/gestures.md](features/gestures.md)), with `place_at`. What a player perceives of others (`appraise`, names, a bystander): `scripts/appraise.py --run $R` ([features/perception.md](features/perception.md)), with `place_at` and `set_behavior`. Name them in the report, because they are not something a player can do.
 
 ## Feature map
 

@@ -1,5 +1,13 @@
 # Internal mind validation
 
+## 2026-11-09 takeover on the scoped default (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `acbbda7` plus the uncommitted change that lands the perception client and makes `scoped` the default build (docs/PERCEPTION.md, "Third change"). Fake model only; private `CARGO_TARGET_DIR`s; every scratch database answered 404 after cleanup. `minds-sd-182208 --case takeover` with `CARGO_TARGET_DIR` private: pass (takeover after 30.0 s, the held graph kept and reinstalled, a reply in flight refused); the mind's cargo tests 49 passed. The driver now runs the binary it built in `CARGO_TARGET_DIR` (`source-hashes.json` names it); before, it ran `living/target/release/living-mind` whatever it had built.
+
+## 2026-11-09 minds' sight and the offline player's character (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81b9dd8`/`dc5e41b` plus the uncommitted minds'-sight, projection and presence change (docs/PERCEPTION.md, "Second change"; docs/PLAYER_MEMORY.md, "Presence and the offline character"). Fake model only; every scratch database answered 404 after cleanup. `minds-perc2`: `sight` (new), `roundtrip`, `acts`, `conversation` pass; `consolidation` its known XFAIL. `takeover` (new) passed on `minds-perc2c` after a driver fix (the minds' plan is a desires top level with a "current plan" routine, not a graph holding the wait) and an authority fix (a second takeover asked for a deliberation after reinstalling the held graph, inside `think_min_s`; the order is now request, then reinstall).
+
 ## 2026-11-09 `minds-20261109-110024` (DGX Spark, trial container) and trials
 
 The suite ran on the DGX Spark against the trial service (`VERIFY_STDB_CONTAINER=slop-trials-stdb VERIFY_STDB_PORT=3320`; the Spark's `sao-living_spacetimedb_1` belongs to other work), on `trials-1` before the town-life merge. Eight cases pass; `consolidation` stays XFAIL (the Neo4j-off known issue). Evidence: `.local/living/verify/minds-20261109-110024*/` in `~/dev/slop-trials` on the Spark.

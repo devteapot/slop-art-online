@@ -78,6 +78,17 @@ STYLES = {
         tree=dict(h=(10, 15), base=0.5, width=0.23, lobes=(0, 2), lean=0.14, forms=(3, 3, 3, 2, 1)),
         young_conifer=0.4,
         petals=[(0.9, 0.9, 0.95), (0.95, 0.75, 0.3)], glow=(0.4, 1.0, 0.9)),
+    # Dry country (the megacity floor's wastes; the client's Climate::Arid): dusty olive-grey
+    # leaves, grey and bleached wood, warm sandstone with dust where moss would grow, straw grass.
+    "arid": dict(
+        leaf=((0.045, 0.05, 0.03), (0.13, 0.14, 0.075), (0.29, 0.30, 0.16)),
+        tints=((0.30, 0.30, 0.12), (0.17, 0.21, 0.15), (0.32, 0.25, 0.11)),
+        bark=(0.12, 0.095, 0.07), snag_bark=(0.15, 0.12, 0.09), bare=(0.44, 0.39, 0.32),
+        rock=(0.27, 0.21, 0.155), moss=(0.33, 0.27, 0.18), concrete=(0.33, 0.32, 0.30),
+        grass=((0.15, 0.11, 0.045), (0.60, 0.48, 0.22)),
+        tree=dict(h=(4, 7), base=0.4, width=0.3, lobes=(0, 1), lean=0.15, forms=(3, 1, 2, 2, 1)),
+        young_conifer=0.0,
+        petals=[(0.85, 0.62, 0.2), (0.8, 0.3, 0.2)], glow=(0.4, 1.0, 0.9)),
     "spirit": dict(
         leaf=((0.01, 0.03, 0.07), (0.03, 0.12, 0.20), (0.10, 0.36, 0.45)),
         tints=((0.06, 0.3, 0.5), (0.2, 0.18, 0.5), (0.05, 0.4, 0.32)),
@@ -1692,9 +1703,136 @@ def stalagmite(rng, st):
     return b
 
 
+def scrub(rng, st):
+    """A dry-country shrub, 0.5-1.3 m: a tangle of grey woody twigs from one root crown, with a
+    few small dusty leaf clumps at the tips and some twigs bare, so the ground shows through."""
+    b = Builder()
+    wood, leaves = material("Tree"), material("Leaves")
+    h = rng.uniform(0.5, 1.3)
+    bark = jitter(st["bark"], rng, 0.08)
+    stops = leaf_stops(st, rng)
+    tips = []
+    for _ in range(rng.randint(6, 10)):
+        a, e = rng.uniform(0, math.tau), rng.uniform(0.35, 1.2)
+        d = Vector((math.cos(a) * math.cos(e), math.sin(a) * math.cos(e), math.sin(e)))
+        length = h * rng.uniform(0.7, 1.15)
+        base = Vector((rng.uniform(-0.05, 0.05), rng.uniform(-0.05, 0.05), -0.02))
+        mid = base + d * length * 0.5 + Vector((rng.uniform(-0.1, 0.1), rng.uniform(-0.1, 0.1), 0.05))
+        end = base + d * length
+        end.z = max(end.z, 0.15)
+        b.add(tube([base, mid, end], [0.03, 0.018, 0.006], 4, cap=False), wood, bark_colour(bark, rng, 0.7, h), smooth=True)
+        if rng.random() < 0.7:
+            e0 = mid + (d + heading(rng) * 0.6).normalized() * length * 0.35 + UP * 0.08
+            b.add(tube([mid, e0], [0.014, 0.004], 3, cap=False), wood, solid(bark, rng))
+            tips.append(e0)
+        tips.append(end)
+    centre = Vector((0, 0, h * 0.5))
+    for t in tips:
+        if rng.random() < 0.3:
+            continue
+        r = h * rng.uniform(0.12, 0.2)
+        c = t + UP * r * 0.2
+        b.add(blob(c, r, rng, subdiv=1, squash=0.7, roughness=0.3), leaves, crown_colour(st, rng, 0.0, h * 1.1, centre, h * 0.8, h * 0.6, top=0.8, stops=stops), c, flat=0.3)
+    return b
+
+
+def dead_tree(rng, st):
+    """A dead tree of the dry country, 3-7 m: a twisted trunk, bark flaking to bleached wood,
+    forking into a few bare limbs that fork again, ending in splinters; often leaning."""
+    b = Builder()
+    wood = material("Tree")
+    h = rng.uniform(3.0, 7.0)
+    r0 = h * rng.uniform(0.035, 0.05)
+    lean = heading(rng) * h * rng.uniform(0.0, 0.12)
+    pts = stem(h * rng.uniform(0.45, 0.6), rng, 5, lean=lean, lean_pow=1.4, bow=h * 0.03, wiggle=0.35)
+    radii = taper(r0, len(pts), top=0.6, flare=0.5)
+    bark = jitter(st.get("snag_bark", st["bark"]), rng, 0.08)
+    bare = jitter(st.get("bare", (0.42, 0.38, 0.32)), rng, 0.05)
+    off = Vector((rng.random() * 40, rng.random() * 40, 0))
+
+    def col(co, n):
+        # More bleached wood higher up, where the bark went first.
+        c = bare if noise.noise(Vector((co.x * 2.2, co.y * 2.2, co.z * 0.8)) + off) > 0.15 - 0.6 * co.z / h else bark
+        return jitter(c, rng, 0.05)
+    b.add(tube(pts, radii, 7), wood, col, per_face=True)
+    roots(b, wood, lambda co, n: jitter(bark, rng, 0.06), r0, rng.randint(3, 5), rng, reach=1.8)
+
+    def branch(start, d, length, r, depth):
+        end = start + d * length
+        mid = start.lerp(end, 0.5) + heading(rng) * length * 0.12
+        b.add(tube([start, mid, end], [r, r * 0.7, r * 0.2], 5 if depth == 0 else 4, cap=False), wood, solid(bare if depth else bark, rng), smooth=True)
+        if depth < 2:
+            for _ in range(rng.randint(1, 3)):
+                nd = (d + heading(rng) * rng.uniform(0.5, 0.9) + UP * rng.uniform(0.1, 0.5)).normalized()
+                branch(start.lerp(end, rng.uniform(0.6, 0.95)), nd, length * rng.uniform(0.45, 0.7), r * 0.55, depth + 1)
+    top, rt = pts[-1], radii[-1]
+    for _ in range(rng.randint(2, 4)):
+        d = (heading(rng) * rng.uniform(0.5, 1.0) + UP * rng.uniform(0.6, 1.2)).normalized()
+        branch(top - UP * rt * 0.3, d, h * rng.uniform(0.3, 0.45), rt * 0.85, 0)
+    return b
+
+
+def chunk(b, mat, rng, at, size, tilt, color_fn, surface):
+    """A broken block: the hull of a box's jittered corners and a few points inside its faces,
+    turned and tilted, sitting on `at` with its lowest part just under the ground."""
+    sx, sy, sz = size
+    rot = Matrix.Rotation(rng.uniform(0, math.tau), 3, "Z") @ Matrix.Rotation(rng.uniform(-tilt, tilt), 3, "X") @ Matrix.Rotation(rng.uniform(-tilt, tilt), 3, "Y")
+    bm = bmesh.new()
+    for i in range(8):
+        q = Vector((((i & 1) * 2 - 1) * sx, (((i >> 1) & 1) * 2 - 1) * sy, (((i >> 2) & 1) * 2 - 1) * sz)) * rng.uniform(0.75, 1.05)
+        bm.verts.new(rot @ q)
+    for _ in range(3):
+        bm.verts.new(rot @ Vector((rng.uniform(-sx, sx), rng.uniform(-sy, sy), rng.uniform(-sz, sz))))
+    bmesh.ops.convex_hull(bm, input=list(bm.verts))
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    bmesh.ops.bevel(bm, geom=list(bm.edges), offset=min(size) * 0.08, segments=1, affect="EDGES", clamp_overlap=True)
+    lo = min(v.co.z for v in bm.verts)
+    bmesh.ops.translate(bm, vec=at + Vector((0, 0, -lo - min(size) * 0.3)), verts=bm.verts)
+    b.add(bm, mat, color_fn, per_face=True, surface=surface)
+
+
+def rubble(rng, st):
+    """Rubble of the old city, 0.4-1.4 m: broken concrete slabs and blocks in a low heap, a few
+    bricks, and bent rusty rebar sticking out of the biggest pieces."""
+    b = Builder()
+    stone = material("Stone")
+    conc = st.get("concrete", (0.33, 0.32, 0.30))
+    dust = st["moss"]
+
+    def conc_col(co, n):
+        # Dust settles on what faces up; each facet its own shade.
+        return jitter(scale(lerp(conc, dust, 0.5 * max(0.0, n.z - 0.5)), 0.7 + 0.35 * max(0.0, n.z)), rng, 0.1)
+    big = []
+    for i in range(rng.randint(3, 6)):
+        a, d = rng.uniform(0, math.tau), rng.uniform(0.0, 0.8) * (i > 0)
+        at = Vector((math.cos(a) * d, math.sin(a) * d, 0))
+        k = 1.2 - 0.5 * d
+        slab = rng.random() < 0.5
+        size = (rng.uniform(0.35, 0.7) * k, rng.uniform(0.3, 0.55) * k, (rng.uniform(0.08, 0.14) if slab else rng.uniform(0.2, 0.4)) * k)
+        chunk(b, stone, rng, at, size, 0.5 if slab else 0.2, conc_col, "concrete")
+        big.append((at, size))
+    brick = jitter((0.36, 0.15, 0.09), rng, 0.08)
+    for _ in range(rng.randint(2, 6)):
+        a, d = rng.uniform(0, math.tau), rng.uniform(0.4, 1.3)
+        chunk(b, stone, rng, Vector((math.cos(a) * d, math.sin(a) * d, 0)), (0.11, 0.055, 0.04), 0.4, lambda co, n: jitter(scale(brick, 0.75 + 0.3 * max(0.0, n.z)), rng, 0.08), "brick")
+    rust = (0.22, 0.09, 0.04)
+    for at, size in big[:2]:
+        for _ in range(rng.randint(1, 3)):
+            s0 = at + Vector((rng.uniform(-size[0], size[0]) * 0.5, rng.uniform(-size[1], size[1]) * 0.5, size[2] * 0.6))
+            out = (heading(rng) * rng.uniform(0.2, 0.7) + UP).normalized()
+            length = rng.uniform(0.3, 0.8)
+            m = s0 + out * length * 0.6
+            e = m + (out + heading(rng) * 0.9).normalized() * length * 0.5
+            b.add(tube([s0, m, e], [0.012, 0.012, 0.01], 4, cap=False), stone, solid(rust, rng, 0.08), surface="metal")
+    return b
+
+
 KINDS = dict(tree=tree, oak=oak, birch=birch, pine=pine, spruce=spruce, coppice=coppice, young=young, sapling=sapling,
              snag=snag, giant=giant, bush=bush, rock=rock, flower=flower, grass=grass, glow_mushroom=glow_mushroom,
-             glow_plant=glow_plant, crystal=crystal, log=log, stalagmite=stalagmite)
+             glow_plant=glow_plant, crystal=crystal, log=log, stalagmite=stalagmite,
+             # Dry country (style arid): the same grass and rock gestures in its own palette, and
+             # its own shrubs, dead trees and the old city's rubble.
+             dry_grass=grass, dry_rock=rock, scrub=scrub, dead_tree=dead_tree, rubble=rubble)
 
 
 def main():

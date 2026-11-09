@@ -1,11 +1,11 @@
 ---
 name: verify-minds
-description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations, consolidation, reconnect handling, LIVING_ONLY, or mind level of detail.
+description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations, consolidation, reconnect handling, LIVING_ONLY, mind level of detail, or player memory (LIVING_PLAYER_MEMORY).
 ---
 
 # Verify internal minds
 
-Read the [`verify` entry point](../verify/SKILL.md) first. It owns scratch database launch, doctor, identities, SQL, observer and cleanup. This skill drives the real `living/target/release/living-mind` through its subscriptions and `mind_*` reducers.
+Read the [`verify` entry point](../verify/SKILL.md) first. It owns scratch database launch, doctor, identities, SQL, observer and cleanup. This skill drives the real `living-mind` it builds, `$CARGO_TARGET_DIR/release/living-mind` (else `living/target/release/living-mind`), through its subscriptions and `mind_*` reducers. Set a private `CARGO_TARGET_DIR`: other sessions overwrite `living/target`, and the driver runs the binary it built, from that directory.
 
 ## Run the free tier
 
@@ -29,8 +29,10 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case conversation
 ```
 
-`--case` can repeat. Cases are `roundtrip`, `acts`, `conversation`, `consolidation`, `prune`, `reject`, `only`, `reconnect` and `lod`. Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
+`--case` can repeat. Cases are `roundtrip`, `acts`, `conversation`, `consolidation`, `prune`, `reject`, `only`, `reconnect`, `lod`, `takeover` ([features/takeover.md](features/takeover.md)) and `sight` ([features/sight.md](features/sight.md)). Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
 
+
+Player memory (on by default; the service integrates what human-played characters live) needs a scratch Neo4j, so its proof runs in `verify-knowledge`'s `player_memory.py`; [features/player-memory.md](features/player-memory.md) maps what it proves about this service (switch off, cadence, reconnect, batch mode).
 
 ## Trials
 

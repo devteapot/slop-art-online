@@ -1,6 +1,6 @@
 ---
 name: verify-knowledge
-description: Verify living-core know-how, teaching, experimentation, tablets, signs, practice, death cleanup, truthful feedback, personal memory graphs, recall, projection and fading. Use when changing knowledge rules, artifacts, memory.rs, mind recall, authored pasts or mind projections.
+description: Verify living-core know-how, teaching, experimentation, tablets, signs, practice, death cleanup, truthful feedback, personal memory graphs, recall, projection and fading, and player memory (a human-played character internalizing what it lived). Use when changing knowledge rules, artifacts, memory.rs, mind recall, authored pasts, mind projections or mind/lived.rs.
 ---
 
 # Verify knowledge and memory
@@ -31,6 +31,17 @@ The helper calls shared `launch --seed authored-test` and `doctor`, starts its N
 The database is `verify-$R`. The container is `sao-verify-neo4j-$R`, labeled with the run, bound only to `127.0.0.1:7691` and created without a named volume. Each Cargo test and the real mind receive explicit `LIVING_NEO4J_URI` and `LIVING_NEO4J_PASSWORD`. The random password exists only in `knowledge-state.json`, mode 0600, and the container's auth environment. Cleanup removes it from the state.
 
 Never use Neo4j A on 7689 or Neo4j B on 7690. Never change the shared fake model server or runner. All model profiles in this proof point to the run's loopback fake endpoint.
+
+## Player memory
+
+What a human-played character lives, internalized into its own graph (player memory, on by default) ([feature](features/player-memory.md), design in `docs/PLAYER_MEMORY.md`), has its own runner on an island world, with the same scratch Neo4j, fake model and cleanup:
+
+```bash
+.agents/skills/verify-knowledge/scripts/player_memory.py run --run knowledge-pmem-$(date +%Y%m%d-%H%M%S) --mode direct
+.agents/skills/verify-knowledge/scripts/player_memory.py run --run knowledge-pmem-$(date +%Y%m%d-%H%M%S) --mode batch
+```
+
+Its paid tier, `scripts/player_memory_real.py --allow-live`, runs only after the user authorizes that run.
 
 ## Doctor
 

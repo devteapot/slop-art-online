@@ -223,6 +223,33 @@ mod tests {
         assert!(stranded.len() * 50 <= doors, "doors cut off: {stranded:?}");
     }
 
+    /// The megacity floor at 2048 m, hosted: buildings block, and every ward's square and
+    /// nearly every door is in the main walkable area.
+    #[test]
+    fn hosted_megacity_keeps_doors_reachable() {
+        let v: serde_json::Value = serde_json::from_str(include_str!("../../seeds/floor-megacity.json")).unwrap();
+        let p: LandParams = serde_json::from_value(v["map"]["params"].clone()).unwrap();
+        let l = land::generate(v["seed"].as_u64().unwrap(), 2048, &p);
+        let (map, h) = hosted_map(&l, &p);
+        let at = |pt: (f32, f32)| {
+            let q = map.nearest_walkable(pt.0, pt.1).expect("walkable near");
+            h.reachable[(q.1 as u32 * map.w + q.0 as u32) as usize]
+        };
+        for s in &l.settlements {
+            assert!(at(s.plaza.centre), "square of the {} settlement at {:?} reachable", s.style, s.plaza.centre);
+        }
+        let mut doors = 0;
+        let mut stranded = 0;
+        for lot in l.lots.iter().filter(|l| blocks(l.kind) && l.kind != LotKind::MarketStall && l.kind != LotKind::Well) {
+            doors += 1;
+            if !at(door(lot)) {
+                stranded += 1;
+            }
+        }
+        eprintln!("megacity 2048: blocked {} tiles, cut off {}, {doors} doors, {stranded} stranded", h.blocked_tiles, h.cut_off_tiles);
+        assert!(stranded * 50 <= doors, "{stranded} of {doors} doors cut off");
+    }
+
     /// Prints the digests of the first world (seed 7, 2048 m) for comparison with the WASM
     /// authority's `land` row: `cargo test --release -p living-rules host::tests::print_digests
     /// -- --ignored --nocapture`.

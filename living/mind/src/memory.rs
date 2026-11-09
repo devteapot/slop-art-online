@@ -21,6 +21,7 @@
 //! about, so a story comes to mind with its lesson and a lesson with its story. Beliefs
 //! also carry their provenance (`firsthand`, `sources`, `hearsay`; see [`attribute`]).
 
+use living_rules::normalize::reply_id;
 use anyhow::Result;
 use neo4rs::{query, BoltType, Graph};
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,12 @@ pub struct Patch {
     pub edges: Vec<EdgeOp>,
     pub retract: Vec<(String, String, String)>,
     pub remember: Vec<MemoryOp>,
+    /// Under whose control what this patch records was lived (`"human"` for a character a
+    /// person plays; docs/PLAYER_MEMORY.md). Added to `lived_under` on every concept, memory
+    /// and belief the patch writes, so experiments can tell such memories apart. None (the
+    /// mind's own consolidation) leaves it as it was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lived_under: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -180,6 +187,24 @@ impl Store {
         Ok(())
     }
 
+    /// How far a human-played character's lived experience is internalized (experience ids
+    /// <= this; kept on `self`, since a player's experience rows stay in the authority's window
+    /// for the player and are not consumed by `mind_consolidated`).
+    pub async fn lived_upto(&self, actor: u32) -> Result<Option<u64>> {
+        let mut rows = self.g.execute(self.q("MATCH (s:Concept {run: $run, actor: $actor, key: 'self'}) RETURN s.lived_upto AS upto", actor)).await?;
+        Ok(match rows.next().await? {
+            Some(r) => r.get::<Option<i64>>("upto").ok().flatten().map(|x| x as u64),
+            None => None,
+        })
+    }
+
+    pub async fn set_lived_upto(&self, actor: u32, upto: u64, t: u64) -> Result<()> {
+        self.g
+            .run(self.q("MATCH (s:Concept {run: $run, actor: $actor, key: 'self'}) SET s.lived_upto = CASE WHEN coalesce(s.lived_upto, 0) > $upto THEN s.lived_upto ELSE $upto END, s.lived_t = $t, s.lived_under = [x IN coalesce(s.lived_under, []) WHERE x <> 'human'] + 'human'", actor).param("upto", upto as i64).param("t", t as i64))
+            .await?;
+        Ok(())
+    }
+
     /// Apply one reasoning episode's patch transactionally (given up after a minute rather
     /// than left to hold a connection forever).
     pub async fn apply(&self, actor: u32, patch: &Patch, thought: &str, t: u64) -> Result<()> {
@@ -239,6 +264,7 @@ impl Store {
                      MERGE (c:Concept {run: $run, actor: $actor, key: n.key})
                      ON CREATE SET c.created_t = $t
                      SET c += n.props, c.name = coalesce(n.name, c.name), c.updated_t = $t, c.thought = $thought
+                     SET c.lived_under = CASE WHEN $lived IS NULL THEN c.lived_under ELSE [x IN coalesce(c.lived_under, []) WHERE x <> $lived] + $lived END
                      WITH c, n, [l IN labels(c) WHERE NOT l IN $fixed] AS old
                      CALL (c, n, old) {
                        WITH c, n, old WHERE size(n.labels) > 0
@@ -250,7 +276,8 @@ impl Store {
                 .param("rows", p(Value::Array(rows)))
                 .param("fixed", FIXED_LABELS.iter().map(|s| s.to_string()).collect::<Vec<_>>())
                 .param("t", t as i64)
-                .param("thought", thought),
+                .param("thought", thought)
+                .param("lived", p(json!(patch.lived_under))),
             )
             .await?;
         }
@@ -264,6 +291,7 @@ impl Store {
                      MERGE (c:Concept {run: $run, actor: $actor, key: m.key})
                      SET c:Memory, c.exp = m.exp, c.t = m.t, c.gist = m.gist, c.name = m.gist, c.salience = m.salience, c.thought = $thought
                      SET c.childhood = CASE WHEN m.childhood THEN true ELSE c.childhood END
+                     SET c.lived_under = CASE WHEN $lived IS NULL THEN c.lived_under ELSE [x IN coalesce(c.lived_under, []) WHERE x <> $lived] + $lived END
                      WITH c, m
                      CALL (c, m) {
                        MATCH (:Concept {run: $run, actor: $actor})-[r {open: true}]->(b:Concept)
@@ -280,7 +308,8 @@ impl Store {
                 )
                 .param("rows", p(Value::Array(rows)))
                 .param("t", t as i64)
-                .param("thought", thought),
+                .param("thought", thought)
+                .param("lived", p(json!(patch.lived_under))),
             )
             .await?;
         }
@@ -304,6 +333,7 @@ impl Store {
                          r.firsthand = coalesce(r.firsthand, false) OR e.firsthand,
                          r.sources = [x IN coalesce(r.sources, []) WHERE NOT x IN e.sources] + e.sources
                      SET r.hearsay = NOT r.firsthand AND size(r.sources) = 1
+                     SET r.lived_under = CASE WHEN $lived IS NULL THEN r.lived_under ELSE [x IN coalesce(r.lived_under, []) WHERE x <> $lived] + $lived END
                      WITH b, e
                      CALL (b, e) {
                        UNWIND e.because AS x
@@ -316,7 +346,8 @@ impl Store {
                 )
                 .param("rows", p(Value::Array(rows)))
                 .param("t", t as i64)
-                .param("thought", thought),
+                .param("thought", thought)
+                .param("lived", p(json!(patch.lived_under))),
             )
             .await?;
         }
@@ -1081,7 +1112,7 @@ impl Store {
 /// mind edits: FEELS edges, JUDGES edges to `stance:` concepts and `place:` concepts.
 pub fn sugar_into(v: &Value, patch: &mut Patch, because: &[u64]) {
     for r in v["relations"].as_array().cloned().unwrap_or_default().into_iter().take(12) {
-        let Some(id) = r["id"].as_u64() else { continue };
+        let Some(id) = reply_id(&r["id"]) else { continue };
         let mut props = serde_json::Map::new();
         for k in ["trust", "affinity"] {
             props.insert(k.into(), json!(r[k].as_f64().unwrap_or(0.0).clamp(-100.0, 100.0)));
@@ -1259,7 +1290,15 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
         if ["WAS", "INVOLVES", "GROUNDS"].contains(&rel.as_str()) {
             continue;
         }
-        let because: Vec<u64> = e["because"].as_array().map(|a| a.iter().filter_map(|x| x.as_u64()).filter(|x| known.contains(x)).collect()).unwrap_or_default();
+        // Ids as integers or numeric strings ("392903", as GLM writes them); anything else, or
+        // an id not among these experiences, is dropped and noted.
+        let mut because = Vec::new();
+        for x in e["because"].as_array().map(|a| a.as_slice()).unwrap_or_default() {
+            match reply_id(x).filter(|x| known.contains(x)) {
+                Some(id) => because.push(id),
+                None => notes.push(format!("because {x} of {a} -{rel}-> {b} dropped: not one of these experiences")),
+            }
+        }
         patch.edges.push(EdgeOp { from: a, rel, to: b, confidence: e["confidence"].as_f64().unwrap_or(0.6).clamp(0.0, 1.0), because, props: props(&e["props"]), firsthand: false, sources: Vec::new() });
     }
     for r in v["retract"].as_array().cloned().unwrap_or_default().into_iter().take(16) {
@@ -1268,7 +1307,10 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
         }
     }
     for m in v["remember"].as_array().cloned().unwrap_or_default().into_iter().take(12) {
-        let Some(exp) = m["exp"].as_u64().filter(|x| known.contains(x)) else { continue };
+        let Some(exp) = reply_id(&m["exp"]).filter(|x| known.contains(x)) else {
+            notes.push(format!("memory of exp {} dropped: not one of these experiences", m["exp"]));
+            continue;
+        };
         let Some((t, salience, involves)) = exp_time(exp) else { continue };
         let gist: String = m["gist"].as_str().unwrap_or_default().chars().take(300).collect();
         if gist.is_empty() {
@@ -1531,7 +1573,33 @@ mod tests {
         assert_eq!(p.edges[0].because, vec![7]);
         assert_eq!(p.retract, vec![("self".into(), "TRUSTS".into(), "person:4".into())]);
         assert_eq!(p.remember.len(), 1);
-        assert_eq!(notes.len(), 1);
+        // The skipped edge, and the invented id 99 in `because` and in a memory, are noted.
+        assert_eq!(notes.len(), 3, "{notes:?}");
+        assert!(notes.iter().filter(|n| n.contains("99")).count() == 2, "{notes:?}");
+    }
+
+    /// GLM Flash writes experience ids as strings (docs/MODEL_COST.md, Part 2: 76% of its
+    /// internalize memories, 86–98% of animal-memory evidence). They are ids like any other;
+    /// a range or a word is still dropped, and noted.
+    #[test]
+    fn experience_ids_written_as_strings_are_kept() {
+        let v = json!({
+            "summary": "I arrived and a wolf attacked me.",
+            "remember": [{"exp": "392903", "gist": "A wolf attacked me near the ford."},
+                         {"exp": "#392904", "gist": "I asked a stranger where to find food."},
+                         {"exp": "215713-216671", "gist": "A range is not an id."},
+                         {"exp": 392905, "gist": "An integer, as before."}],
+            "edges": [{"from": "kind:wolf", "rel": "ATTACKED", "to": "self", "confidence": 0.9, "because": ["392903", 392905, "the fight"]}],
+            "relations": [{"id": "29", "trust": 10, "affinity": 5, "label": "stranger"}]
+        });
+        let known = [392903, 392904, 392905];
+        let (mut p, notes) = patch_from(&v, &known, &|id| known.contains(&id).then(|| (1000, 0.8, Vec::new())));
+        let exps: Vec<u64> = p.remember.iter().map(|m| m.exp).collect();
+        assert_eq!(exps, vec![392903, 392904, 392905]);
+        assert_eq!(p.edges[0].because, vec![392903, 392905]);
+        assert!(notes.iter().any(|n| n.contains("215713-216671")) && notes.iter().any(|n| n.contains("the fight")), "{notes:?}");
+        sugar_into(&v, &mut p, &[]);
+        assert!(p.edges.iter().any(|e| e.rel == "FEELS" && e.to == "person:29"), "a relation's id written as a string");
     }
 
     #[test]

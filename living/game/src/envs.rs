@@ -34,7 +34,9 @@ use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
 use bevy_mod_outline::OutlineMeshExt;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::f32::consts::{PI, TAU};
+use std::sync::{Arc, Mutex};
 
 /// Everything spawned for the current environment (despawned on a switch).
 #[derive(Component)]
@@ -146,7 +148,12 @@ pub struct Envs {
     /// Ground shape of the current environment.
     pub ground: GroundShape,
     tour: Option<Tour>,
+    /// The island's land, generating on a worker thread (`Island::generate`).
+    land: Option<LandSlot>,
 }
+
+/// Where the worker thread leaves the generated land and its seconds.
+type LandSlot = Arc<Mutex<Option<crate::island::Generated>>>;
 
 /// The current environment's ground: gentle relief from value noise, flat when paved.
 #[derive(Clone, Copy, Default)]
@@ -254,12 +261,26 @@ pub fn setup(mut commands: Commands) {
     info!("environments: line-up + {} ({})", defs.len(), defs.iter().map(|d| d.id.as_str()).collect::<Vec<_>>().join(", "));
     let tour = std::env::var("LIVING_GAME_TOUR").ok().filter(|d| !d.is_empty()).map(|d| Tour::from_env(d, &defs));
     let want = std::env::var("LIVING_GAME_ENV").ok().and_then(|id| defs.iter().position(|d| d.id == id).map(|i| i + 1)).unwrap_or(0);
-    commands.insert_resource(Envs { defs, current: None, want, ground: GroundShape::default(), tour });
+    commands.insert_resource(Envs { defs, current: None, want, ground: GroundShape::default(), tour, land: None });
     commands.insert_resource(Roam { facing: Vec2::new(0.0, 1.0), ..default() });
 }
 
 /// Model files for a kind in this environment (its own folder, then the shared one).
 pub(crate) fn assets_for(env: &str, kind: &str) -> Vec<String> {
+    // Listed once per session: the island asks per lot, prop and streamed chunk.
+    type Listed = HashMap<(String, String), Vec<String>>;
+    static CACHE: std::sync::OnceLock<Mutex<Listed>> = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    let key = (env.to_string(), kind.to_string());
+    if let Some(v) = cache.lock().unwrap().get(&key) {
+        return v.clone();
+    }
+    let out = list_assets(env, kind);
+    cache.lock().unwrap().insert(key, out.clone());
+    out
+}
+
+fn list_assets(env: &str, kind: &str) -> Vec<String> {
     let root = std::path::Path::new(&crate::lookdev::asset_root()).to_path_buf();
     let mut out = Vec::new();
     for sub in [format!("envs/{env}/{kind}"), format!("envs/shared/{kind}")] {
@@ -484,9 +505,19 @@ pub fn switch(
     mut clear: ResMut<ClearColor>,
     ground_mat: Res<crate::terrain::GroundMat>,
 ) {
+    // The island's land arrives from its worker thread: place it and you.
     if envs.current == Some(envs.want) {
+        let done = envs.land.as_ref().and_then(|slot| slot.lock().unwrap().take());
+        if let Some(generated) = done {
+            envs.land = None;
+            let island = crate::island::Island::new(generated, &envs.defs);
+            roam.pos = island.start;
+            commands.insert_resource(island);
+            spawn_player(&mut commands, &mut meshes, &palette, &style, &look, &assets);
+        }
         return;
     }
+    envs.land = None;
     for e in &parts {
         commands.entity(e).despawn();
     }
@@ -516,12 +547,14 @@ pub fn switch(
     info!("environment: {} — {}", def.name, def.note);
     apply_mood(&def.mood, &mut *style, &mut *look, &mut lights, &mut cams, &mut *clear);
     if let Some(world) = def.world {
-        // The island streams itself in (island.rs); you start at its town.
-        let island = crate::island::Island::new(world, &envs.defs);
-        roam.pos = island.start;
+        // The island streams itself in (island.rs); you start at its town. Its land generates
+        // on a worker thread (most of a second), placed when it arrives (above).
+        let slot: LandSlot = Arc::default();
+        envs.land = Some(slot.clone());
+        std::thread::spawn(move || {
+            *slot.lock().unwrap() = Some(crate::island::Island::generate(world));
+        });
         envs.ground = GroundShape::default();
-        commands.insert_resource(island);
-        spawn_player(&mut commands, &mut meshes, &palette, &style, &look, &assets);
         return;
     }
     // Ground.
@@ -796,8 +829,14 @@ impl Tour {
 }
 
 /// Run the tour: switch environment, wait for it to load, then pose and photograph each shot.
-pub fn tour(mut commands: Commands, mut envs: ResMut<Envs>, mut cam: ResMut<Cam>, time: Res<Time>, target: Option<Res<crate::capture::Target>>, mut exit: MessageWriter<AppExit>) {
+pub fn tour(mut commands: Commands, mut envs: ResMut<Envs>, mut cam: ResMut<Cam>, time: Res<Time>, target: Option<Res<crate::capture::Target>>, loading: Option<Res<crate::loading::Loading>>, mut exit: MessageWriter<AppExit>) {
     let Some(mut t) = envs.tour.clone() else { return };
+    // Photographs wait for the first load's cover to lift (loading.rs).
+    if !crate::loading::Loading::clear(loading.as_deref()) && t.at.2 == 1 {
+        t.at.3 = time.elapsed_secs();
+        envs.tour = Some(t);
+        return;
+    }
     let now = time.elapsed_secs();
     let (e, k, stage, since) = t.at;
     let Some(&env) = t.envs.get(e) else {

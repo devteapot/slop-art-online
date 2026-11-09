@@ -113,9 +113,13 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let n2 = clouds_at(uv + normalize(key.xz + vec2<f32>(1e-4, 0.0)) * 0.07);
         let shaded = step(n + 0.015, n2);
         let storm = sky.sun.w;
-        let lit_c = mix(hor * 0.6 + light * 0.8, vec3<f32>(0.62, 0.64, 0.7) * (0.3 + 0.7 * length(light)), storm * 0.7);
-        let shade_c = mix(mix(zen, hor, 0.5) * 0.75 + light * 0.12, vec3<f32>(0.32, 0.34, 0.4) * (0.25 + 0.6 * length(light)), storm * 0.8);
+        // Rain clouds: pale lit tops over dark, cool undersides, darker still in their dense
+        // cores, so a storm sky has depth rather than one grey.
+        let lit_c = mix(hor * 0.6 + light * 0.8, vec3<f32>(0.6, 0.64, 0.72) * (0.3 + 0.7 * length(light)), storm * 0.75);
+        let shade_c = mix(mix(zen, hor, 0.5) * 0.75 + light * 0.12, vec3<f32>(0.2, 0.22, 0.29) * (0.25 + 0.6 * length(light)), storm * 0.85);
         cloud_c = mix(lit_c, shade_c, shaded);
+        let core = smoothstep(th + 0.1, th + 0.17, n) * storm;
+        cloud_c = cloud_c * (1.0 - 0.35 * core);
         // A bright rim on edges facing the low sun.
         let rim = (1.0 - smoothstep(th + 0.01, th + 0.05, n)) * low * toward;
         cloud_c = cloud_c + light * rim * 0.6;

@@ -9,7 +9,7 @@ A person outside the simulation joins the world as one character and controls it
 - `player-move`: `human_move` steers the body at a walk or a run, stops it, and sets the plan to `moving yourself` (`lib.rs:356-375`).
 - `player-act-deliberate`: `human_act` with a skill that is not real-time (give, offer, gather, teach, conceive…) goes through `acts::submit`, the path minds use (`lib.rs:337-349`, `living/authority/src/acts.rs:27`). The act runs, or fails with feedback in the player's `experience` rows.
 - `player-act-graph`: `human_act` with a real-time skill (`wander`, `follow`, `wait`, `attack`…; `Shapes::real_time` in `living/rules/src/combat.rs`: `MOVES` and each combat skill's `real_time` trait in `living/scripts/skills.rhai`) becomes the character's behavior, with plan `your command` and source `human`.
-- `player-say`: `human_say` writes a `speech` chronicle line, and people within earshot get a `speech` experience (`living/authority/src/perceive.rs:122-170`).
+- `player-say`: `human_say` writes a `speech` chronicle line, and people within earshot get a `speech` experience (`living/authority/src/perceive.rs`, `speak`). The player's own character perceives its words as a `said` experience ("You said to <name>: “…”", salience 0.5; since 2026-11-09, for player memory, docs/PLAYER_MEMORY.md); AI speakers get none.
 - `player-authority`: a player identity cannot call admin reducers (`admin only`), cannot use the `mind_*` reducers on someone else's character (`not your character`), and cannot join twice.
 
 ## How to get to it (user POV)
@@ -79,5 +79,5 @@ $V cleanup --run $R
 - `human_say` refuses lines less than 2 s apart (`speaking too fast`) for characters with a mind state. A line addressed to someone out of earshot gives the speaker a `silence` experience.
 - `join` places the character near (40, 60), in the north-west corner of the default map, far from the towns. Use admin `place_near` to bring the player to someone.
 - On a land world (`--seed island`), `join` places the character at the `land` row's `arrive_x`/`arrive_y`, outside the town's first gate. Residents there run without minds (`rules.minds = false`): they are `ai = false` and write no `experience` rows. Pick a neighbour with `kind = 'person' AND alive = true AND stage = 2 AND id != $ME` instead of `ai = true`, and prove speech by the `chronicle` line. A gift may fail because the resident walks away on its own routine.
-- `experience` rows are readable anonymously today. That is a known privacy issue tracked by `verify-client`. The recipes read them because the authority does, not because a client should.
+- `$V sql` reads as the database owner, so these recipes read `experience`, `brain`, `chronicle` and the rest as developer truth; that says nothing of what a client may read. A player reads its own through the views (`SELECT * FROM my_experience` with `--as-player`), and in a `LIVING_PERCEPTION=scoped` build the tables themselves refuse it (docs/PERCEPTION.md, `verify-client`).
 - The reducer argument JSON must match the signature exactly. A wrong arity returns HTTP 400 `invalid arguments`, which is not a permission refusal.

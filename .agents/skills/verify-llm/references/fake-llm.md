@@ -54,9 +54,24 @@ Each rule overlays `defaults`. Available response fields:
 | `usage` | Exact usage object. Default prompt 12, completion 5, total 17, cached 8. Omit individual fields to prove unknown values remain null. |
 | `headers` | Response header map, including Retry-After and optional provider rate-limit headers. |
 
+## Citing the request (`cite`)
+
+A rule with `"cite": true` fills placeholders in its `reply` from the experience lines the request carried (`- [id] time text {Name=#id}`), so a scripted memory patch can name real experience ids:
+
+| Placeholder | Becomes |
+| --- | --- |
+| `$EXP:<words>` | the id of the first line whose text contains `<words>` (case-insensitive; 0 if none) |
+| `$EXPS` | every line's id, as a list |
+| `$PERSON` | `person:<id>` of the first tagged person |
+| `$PERSON_ID` | that id, as a number |
+
+## Batch jobs
+
+`POST /v1/batch/jobs` with inline `requests` (`[{custom_id, body}]`, Mistral's shape) answers each request through the same script and log as a direct one (the log line gets `batch_job`) and returns `{"id": "job-N", "status": "QUEUED"}`. `GET /v1/batch/jobs/job-N` reports `QUEUED` on the first poll, `RUNNING` on the second and `SUCCESS` with `output_file: job-N-out` after. `GET /v1/files/job-N-out/content` returns one JSONL line per request: `{id, custom_id, response: {status_code: 200, body: <chat completion>}, error: null}`. `POST /v1/batch/jobs/job-N/cancel` answers `CANCELLATION_REQUESTED`.
+
 ## Purpose and valid replies
 
-Purpose is `reasoning_effort` when its value is `think`, `deliberate`, `consolidate` or `talk`. Otherwise the server recognizes the system prompt. The production body has no separate purpose field. The local runner sets the per-purpose effort map to these names. They are fake values, not recommended live provider effort levels.
+Purpose is `reasoning_effort` when its value is `think`, `deliberate`, `consolidate`, `talk` or `internalize`. An `internalize` system prompt (player memory) is recognized by "someone you cannot see". Otherwise the server recognizes the system prompt. The production body has no separate purpose field. The local runner sets the per-purpose effort map to these names. They are fake values, not recommended live provider effort levels.
 
 Defaults come from `prompts.rs` and the parsers in `mind.rs` and `mind/talk.rs`:
 

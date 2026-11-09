@@ -14,6 +14,7 @@ pub struct Doing {
     pub y: f32,
     pub since_ms: u64,
     pub until_ms: u64,
+    pub indoors: bool,
 }
 
 impl __sdk::InModule for Doing {
@@ -31,6 +32,7 @@ pub struct DoingCols {
     pub y: __sdk::__query_builder::Col<Doing, f32>,
     pub since_ms: __sdk::__query_builder::Col<Doing, u64>,
     pub until_ms: __sdk::__query_builder::Col<Doing, u64>,
+    pub indoors: __sdk::__query_builder::Col<Doing, bool>,
 }
 
 impl __sdk::__query_builder::HasCols for Doing {
@@ -44,6 +46,7 @@ impl __sdk::__query_builder::HasCols for Doing {
             y: __sdk::__query_builder::Col::new(table_name, "y"),
             since_ms: __sdk::__query_builder::Col::new(table_name, "since_ms"),
             until_ms: __sdk::__query_builder::Col::new(table_name, "until_ms"),
+            indoors: __sdk::__query_builder::Col::new(table_name, "indoors"),
         }
     }
 }

@@ -6,11 +6,13 @@
 //!   the body window), and my own timing (`my_readiness`);
 //! - maps the skill bar's keys to `use_skill` / `release_skill`, aiming skillshots at the
 //!   cursor's ground point and targeted skills at the creature under or nearest the cursor;
-//! - picks the clip each drawn character plays for its move, a hit or its death;
+//! - picks the clip each drawn character plays for its move, a hit or its death (an animal's
+//!   from its own clips by the move's aim, [`animal_clip`]);
 //! - predicts only my own move's clip at the moment I press (the authority's answer arrives a
 //!   round trip later): the prediction ends when the authority's `fighter` row confirms it,
 //!   when a `REFUSED` arrives, or after [`PREDICT_MS`] without either. Movement is never
-//!   predicted: the dodge's dash is the authority's.
+//!   predicted: the dodge's dash is the authority's, and so is its clip, which carries no
+//!   travel and plays as the body dashes.
 //! - draws the aim and range indicators while a skill key is held.
 //!
 //! Which skill is which comes from the authority's `skill_card` rows ([`Cards`]): the bar's
@@ -105,6 +107,9 @@ pub struct Combat {
     strikes: u32,
     /// Where a script aims an indicator (instead of the cursor).
     script_aim: Option<Vec2>,
+    /// Drawn bodies that are animals (not people), remembered past their body row so a
+    /// corpse keeps playing its own death.
+    animals: HashSet<u32>,
 }
 
 /// The rules' combat skills as the authority states them (`skill_card`), read each frame.
@@ -171,12 +176,13 @@ pub fn look(card: &SkillCard) -> Look {
         "firebolt" => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
         "heal" => l(&["cast"], 2.6, None, SkillIcon::Heal),
         "block" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
-        "dodge" => l(&["dodge_roll"], 3.3, None, SkillIcon::Dodge),
+        // The dash on the rules' track (2.6 m at 5.2 m/s): the clip carries no travel of its own.
+        "dodge" => l(&["dodge"], 1.0, None, SkillIcon::Dodge),
         _ => match card.aim.as_str() {
             "point" if card.radius >= BOLT_RADIUS => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
             "point" => l(&["bow_shoot"], 3.4, None, SkillIcon::Bow),
             "facing" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
-            "dash" => l(&["dodge_roll"], 3.3, None, SkillIcon::Dodge),
+            "dash" => l(&["dodge"], 1.0, None, SkillIcon::Dodge),
             "self_or_ally" => l(&["cast"], 2.6, None, SkillIcon::Heal),
             "creature" => Look { slash: true, ..l(&["sword_slash"], 2.0, None, SkillIcon::Sword) },
             _ => l(&[], 1.0, None, SkillIcon::Empty),
@@ -229,7 +235,7 @@ fn scripted_aim(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, spec: 
     let pick = scene
         .shown
         .iter()
-        .filter(|(id, _)| **id != me_id && kind.is_none_or(|k| conn.db.body().id().find(id).is_some_and(|b| b.kind == k)))
+        .filter(|(id, _)| **id != me_id && kind.is_none_or(|k| conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == k)))
         .min_by(|a, b| a.1 .0.distance(me).total_cmp(&b.1 .0.distance(me)))
         .map(|(id, (p, _))| (*p, *id));
     match pick {
@@ -269,7 +275,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
             seen::DEATH => {
                 c.deaths.insert(r.actor, now);
                 // My own death: who killed me; the witnesses arrive beside it.
-                if conn.db.character().id().find(&r.actor).is_some_and(|ch| ch.controller == net.me.unwrap_or_default()) {
+                if conn.db.my_characters().id().find(&r.actor).is_some() {
                     c.killer = (r.target != 0).then_some(r.target);
                     c.witnesses.clear();
                 }
@@ -471,7 +477,29 @@ fn nearest(scene: &Scene, me_id: u32, me: Vec2, toward: Vec2, within: f32) -> Op
 
 /// Whether a creature looks hostile to me: its move under way is aimed at me.
 pub fn hostile(conn: &DbConnection, id: u32, me: u32) -> bool {
-    conn.db.fighter().id().find(&id).is_some_and(|f| f.target == me && f.act != 0)
+    conn.db.seen_fighters().id().find(&id).is_some_and(|f| f.target == me && f.act != 0)
+}
+
+/// An animal's move: its own clip by how the rules aim the skill (`skill_card.aim`), never by
+/// the skill's name, so a skill the rules give animals shows without a client change. The
+/// wolf's bite (wolf.py) snaps at 0.55 s, the rules' 550 ms `attack_duration` for a wolf, so it
+/// plays at rate 1 from the move's start; its leap (0.5 s) plays faster, as a dash is short.
+pub fn animal_clip(card: &SkillCard) -> Option<(&'static str, f32, Option<f32>)> {
+    match card.aim.as_str() {
+        "creature" => Some(("bite", 1.0, None)),
+        "dash" => Some(("leap", 1.67, None)),
+        _ => None,
+    }
+}
+
+/// A death seen at `t` (display ms), held on its last pose: an animal's (wolf.py) ends lying on
+/// its side, a person's on the ground.
+pub fn death(animal: bool, t: f64) -> Action {
+    if animal {
+        Action { clip: "death", rate: 1.0, start_ms: t, hold: Some(0.995), face: None }
+    } else {
+        Action { clip: "death", rate: 1.1, start_ms: t, hold: Some(0.97), face: None }
+    }
 }
 
 /// The clip a move plays, at what rate, and whether it holds a pose.
@@ -488,19 +516,28 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
     let Some(conn) = net.conn.as_ref() else { return };
     let me = net.my_id;
     let mut out: HashMap<u32, Action> = HashMap::new();
-    for (&id, &t) in &c.deaths {
-        out.insert(id, Action { clip: "death", rate: 1.1, start_ms: t, hold: Some(0.97), face: None });
-    }
     let ids: Vec<u32> = scene.shown.keys().copied().collect();
+    for &id in &ids {
+        if !c.animals.contains(&id) && conn.db.seen_characters().id().find(&id).is_some_and(|c| c.kind != "person") {
+            c.animals.insert(id);
+        }
+    }
+    let Combat { animals, deaths, .. } = &mut *c;
+    animals.retain(|id| scene.shown.contains_key(id) || deaths.contains_key(id));
+    for (&id, &t) in &c.deaths {
+        out.insert(id, death(c.animals.contains(&id), t));
+    }
     for id in ids {
         if out.contains_key(&id) {
             continue;
         }
-        let f = conn.db.fighter().id().find(&id);
+        let f = conn.db.seen_fighters().id().find(&id);
         let live = f.as_ref().filter(|f| f.act != 0 && (now as u64) < f.until_ms.max(f.release_ms) + 120);
         let face = live.and_then(|f| (f.aim_x != 0.0 || f.aim_y != 0.0).then(|| Vec2::new(f.aim_x, f.aim_y)));
+        let animal = c.animals.contains(&id);
         if let Some(f) = live {
-            if let Some((clip, rate, hold)) = clip_of(cards.by_code(f.act), (f.act_ms / 7) as u32) {
+            let clip = if animal { cards.by_code(f.act).and_then(animal_clip) } else { clip_of(cards.by_code(f.act), (f.act_ms / 7) as u32) };
+            if let Some((clip, rate, hold)) = clip {
                 // A held guard stays up while the authority holds it.
                 out.insert(id, Action { clip, rate, start_ms: f.act_ms as f64, hold, face });
                 if Some(id) == me && c.predicted.as_ref().is_some_and(|(s, t)| cards.code(s) == f.act && (f.act_ms as f64) >= t - 400.0) {
@@ -510,7 +547,10 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
             }
         }
         if Some(id) == me {
-            if let Some((skill, t)) = c.predicted.clone() {
+            // A dash's clip is not predicted: the authority moves the body about a round trip
+            // after the press, and the clip carries no travel of its own, so it plays with the
+            // confirmed move (`live.rs` times one-shots on the display clock).
+            if let Some((skill, t)) = c.predicted.clone().filter(|(s, _)| cards.by_name(s).is_none_or(|k| k.aim != "dash")) {
                 if let Some((clip, rate, hold)) = clip_of(cards.by_name(&skill), c.strikes) {
                     out.insert(id, Action { clip, rate, start_ms: t, hold, face: input.look });
                     continue;
@@ -519,7 +559,8 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
         }
         // A hit reaction for a blow that landed on them just now.
         if let Some(e) = c.recent.iter().rev().find(|e| e.row.target == id && e.row.kind == seen::HIT && now - e.seen_ms < HIT_MS) {
-            out.insert(id, Action { clip: "hit", rate: 2.0, start_ms: e.seen_ms, hold: None, face: None });
+            // An animal's flinch is HIT_MS long at rate 1 (wolf.py); people's hit clip is twice that.
+            out.insert(id, Action { clip: "hit", rate: if animal { 1.0 } else { 2.0 }, start_ms: e.seen_ms, hold: None, face: None });
         }
     }
     c.actions = out;

@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Semaphore};
 
+mod lived;
 pub mod lod;
 mod recall;
 mod talk;
@@ -35,7 +36,11 @@ pub enum Event {
     PendingGone(Deliberation),
     /// With the level of detail on: a human player was part of what this character experienced.
     Contact(u32),
+    /// With `LIVING_PLAYER_MEMORY=1`: an experience of a character a person plays.
+    Lived(Experience),
 }
+
+pub use lived::enabled as player_memory;
 
 #[derive(Default)]
 struct ActorMind {
@@ -80,6 +85,9 @@ pub struct Minds {
     /// last logged for each character.
     groups: Mutex<HashMap<u32, Option<String>>>,
     routed: Mutex<HashMap<u32, String>>,
+    /// What human-played characters live, waiting to be internalized (see lived.rs).
+    lived_cfg: lived::Config,
+    lived: Mutex<lived::Lived>,
 }
 
 fn flatten<E: std::fmt::Debug>(r: Result<Result<(), String>, E>) -> Result<(), String> {
@@ -153,7 +161,7 @@ impl Minds {
     pub fn new(conn: DbConnection, llm: Llm, store: Option<Store>, seed: Value, concurrency: usize) -> Result<Arc<Self>> {
         let me = conn.try_identity().ok_or_else(|| anyhow!("not connected"))?;
         let species = living_rules::species::parse(&std::fs::read_to_string(crate::root().join("living/seeds/species.json"))?).map_err(|e| anyhow!(e))?;
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg: lived::Config::from_env(), lived: Mutex::new(lived::Lived::default()) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -402,7 +410,10 @@ impl Minds {
             if id != 0 && id != e.observer {
                 if let Some(c) = self.conn.db.character().id().find(&id) {
                     if c.kind == "person" && !who.iter().any(|w: &String| w.ends_with(&format!("#{id}"))) {
-                        who.push(format!("{}=#{id}", c.name));
+                        // A name only where the authority gave it (the character knows it):
+                        // otherwise the person stays as they were perceived, with an id to anchor.
+                        let label = if e.text.contains(&c.name) { c.name } else { "someone".into() };
+                        who.push(format!("{label}=#{id}"));
                     }
                 }
             }
@@ -585,7 +596,7 @@ impl Minds {
                 places.push(json!({"name": name, "x": at[0].as_f64().unwrap_or(0.0), "y": at[1].as_f64().unwrap_or(0.0)}));
             }
         }
-        let relations: Vec<Value> = v["relations"].as_array().cloned().unwrap_or_default().into_iter().filter(|r| r["id"].as_u64().map_or(false, |i| known.contains(&(i as u32)))).collect();
+        let relations: Vec<Value> = v["relations"].as_array().cloned().unwrap_or_default().into_iter().filter(|r| living_rules::normalize::reply_id(&r["id"]).map_or(false, |i| known.contains(&(i as u32)))).collect();
         if let Some(store) = &self.store {
             let mut patch = memory::Patch::default();
             for id in &known {
@@ -866,6 +877,12 @@ impl Minds {
             }
             self.clone().schedule(actor);
         }
+        if self.lived_cfg.on {
+            log::info!("player memory on: {:?}", self.lived_cfg);
+            for e in self.conn.db.experience().iter().filter(|e| e.controller != self.me) {
+                self.lived_add(e);
+            }
+        }
         self.refresh_rules();
         loop {
             tokio::select! {
@@ -894,11 +911,13 @@ impl Minds {
                             request.changed.notify_one();
                         }
                     }
+                    Some(Event::Lived(e)) => self.lived_add(e),
                     None => return Err(anyhow!("event channel closed")),
                 },
                 _ = tick.tick() => {
                     self.refresh_rules();
-                    self.clone().check_consolidation()
+                    self.clone().check_consolidation();
+                    self.clone().check_lived()
                 }
             }
         }
@@ -926,6 +945,12 @@ impl Minds {
         }
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(400)).await;
+            // A character the minds just took over thinks with its own past: what its person
+            // lived is internalized first (bounded by `LIVING_TAKEOVER_WAIT_S`).
+            let started = Instant::now();
+            while self.lived_waiting(actor) && started.elapsed() < self.lived_cfg.takeover_wait {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
             let mut seen = 0u64;
             loop {
                 let pending = if self.lod.on {
@@ -1046,8 +1071,10 @@ impl Minds {
     fn check_consolidation(self: Arc<Self>) {
         // One pass over the experience inbox for everyone (a scan per character would cost
         // characters × experiences every two seconds).
+        // Only what a character lived under this service's minds: rows its person lived while
+        // playing it are internalized as theirs (lived.rs).
         let mut inbox: HashMap<u32, Vec<Experience>> = HashMap::new();
-        for e in self.conn.db.experience().iter() {
+        for e in self.conn.db.experience().iter().filter(|e| e.controller == self.me) {
             inbox.entry(e.observer).or_default().push(e);
         }
         for c in self.mine() {
@@ -1304,7 +1331,7 @@ impl Minds {
                 if v["graph"].is_null() || v["graph"].as_str().map_or(false, |g| g.trim().eq_ignore_ascii_case("keep")) {
                     let (say, to) = match &v["say"] {
                         Value::String(s) => (s.clone(), 0),
-                        Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(|t| t.as_u64()).unwrap_or(0) as u32),
+                        Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(living_rules::normalize::reply_id).unwrap_or(0) as u32),
                         _ => (String::new(), 0),
                     };
                     let thought = v["thought"].as_str().unwrap_or_default().to_string();
@@ -1347,7 +1374,7 @@ impl Minds {
                     self.actors.lock().unwrap().entry(actor).or_default().pruned = pruned.clone();
                     let (say, to) = match &v["say"] {
                         Value::String(s) => (s.clone(), 0),
-                        Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(|t| t.as_u64()).unwrap_or(0) as u32),
+                        Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(living_rules::normalize::reply_id).unwrap_or(0) as u32),
                         _ => (String::new(), 0),
                     };
                     let plan = v["plan"].as_str().unwrap_or_default().to_string();
@@ -1514,7 +1541,7 @@ impl Minds {
         // A reply that ran too long failed: take fewer experiences at a time until it fits.
         let failures = self.actors.lock().unwrap().get(&actor).map_or(0, |m| m.failures);
         let take = (40 / (1 + failures as usize)).max(6);
-        let batch: Vec<Experience> = self.experiences(actor).into_iter().filter(|e| e.id > cursor).take(take).collect();
+        let batch: Vec<Experience> = self.experiences(actor).into_iter().filter(|e| e.id > cursor && e.controller == self.me).take(take).collect();
         let Some(upto) = batch.last().map(|e| e.id) else { return Ok(()) };
         // Only experiences that carry meaning go to the model; routine results are passed over.
         let meaningful: Vec<&Experience> = batch.iter().filter(|e| e.salience >= 0.2).collect();
@@ -1572,22 +1599,9 @@ impl Minds {
                 m.childhood = true;
             }
         }
-        // Name person anchors from what the character perceives, when the model did not.
-        for n in patch.nodes.iter_mut() {
-            if n.name.is_none() {
-                if let Some(id) = n.key.strip_prefix("person:").and_then(|s| s.parse::<u32>().ok()) {
-                    n.name = Some(self.name(id));
-                }
-            }
-        }
-        let mut people: Vec<String> = patch.edges.iter().flat_map(|e| [e.from.clone(), e.to.clone()]).filter(|k| k.starts_with("person:") && !patch.nodes.iter().any(|n| &n.key == k)).collect();
-        people.sort();
-        people.dedup();
-        for k in people {
-            if let Some(id) = k.strip_prefix("person:").and_then(|s| s.parse::<u32>().ok()) {
-                patch.nodes.push(memory::NodeOp { key: k, labels: vec!["Person".into()], name: Some(self.name(id)), props: Default::default() });
-            }
-        }
+        self.name_people(&mut patch);
+        // Lived under the minds (a character's history shows both kinds: docs/PLAYER_MEMORY.md).
+        patch.lived_under = Some("ai".into());
 
         // Identity shifts slowly: at most once per 8 minutes unless something momentous happened.
         let momentous = meaningful.iter().any(|e| e.salience >= 0.9);
@@ -1691,6 +1705,26 @@ impl Minds {
             reference: thought_ref,
         };
         self.project(actor, None, Some(thought)).await
+    }
+
+    /// Name person anchors from what the character perceives, when the model did not, and
+    /// give every person an edge mentions a node.
+    fn name_people(&self, patch: &mut memory::Patch) {
+        for n in patch.nodes.iter_mut() {
+            if n.name.is_none() {
+                if let Some(id) = n.key.strip_prefix("person:").and_then(|s| s.parse::<u32>().ok()) {
+                    n.name = Some(self.name(id));
+                }
+            }
+        }
+        let mut people: Vec<String> = patch.edges.iter().flat_map(|e| [e.from.clone(), e.to.clone()]).filter(|k| k.starts_with("person:") && !patch.nodes.iter().any(|n| &n.key == k)).collect();
+        people.sort();
+        people.dedup();
+        for k in people {
+            if let Some(id) = k.strip_prefix("person:").and_then(|s| s.parse::<u32>().ok()) {
+                patch.nodes.push(memory::NodeOp { key: k, labels: vec!["Person".into()], name: Some(self.name(id)), props: Default::default() });
+            }
+        }
     }
 
     /// `person:kael` → `person:7`: people are anchored by id so one person stays one concept.

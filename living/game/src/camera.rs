@@ -146,7 +146,7 @@ fn talk_partner(net: &Net, scene: &Scene, input: &Input, town: Option<&crate::to
     use spacetimedb_sdk::Table;
     let heard = conn
         .db
-        .experience()
+        .my_experience()
         .iter()
         .filter(|e| e.observer == me && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < 8_000.0 && near(e.subject, 8.0))
         .max_by_key(|e| e.at_ms)
@@ -154,7 +154,7 @@ fn talk_partner(net: &Net, scene: &Scene, input: &Input, town: Option<&crate::to
     let typing = (input.chat_open || input.said.last().is_some_and(|(t, _)| scene.now_ms - (*t as f64) < 6_000.0))
         .then(|| {
             conn.db
-                .body()
+                .seen_characters()
                 .iter()
                 .filter(|b| b.id != me && b.kind == "person")
                 .filter_map(|b| scene.shown.get(&b.id).map(|(p, _)| (b.id, p.distance(*mine))))

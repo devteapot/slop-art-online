@@ -64,13 +64,21 @@ pub fn minds_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64, exclud
         .collect()
 }
 
-/// Everyone who can see `at` receives a percept. `{a}` and `{b}` in `template` become how
-/// each observer refers to `subject` and `object` (names for people and their own kind).
+/// Everyone who can see `at` receives a percept: within their own sight, with a clear sight
+/// line (`perception::in_sight`, the rule players' perceived sets use). `{a}` and `{b}` in
+/// `template` become how each observer refers to `subject` and `object` (its projection's
+/// label: the name when it knows it).
 pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, subject: u32, object: u32, template: &str, salience: f32, exclude: &[u32]) {
     let w = common::world(ctx);
-    let r = common::sight(ctx, &w, now);
-    for (c, _) in minds_near(ctx, at, r, now, exclude) {
-        let text = template.replace("{a}", &common::label_for(ctx, &c, subject)).replace("{b}", &common::label_for(ctx, &c, object));
+    let map = common::map(ctx);
+    let r = crate::perception::widest_sight(ctx, &w, now);
+    for (c, d) in minds_near(ctx, at, r, now, exclude) {
+        let Some(eye) = ctx.db.body().id().find(c.id).map(|b| pos(&b, now)) else { continue };
+        if !crate::perception::in_sight(&map, eye, at, d, common::sight_for(ctx, c.id, &w, now)) {
+            continue;
+        }
+        let a = if template.starts_with("{a}") { common::label_cap(ctx, &c, subject) } else { common::label_for(ctx, &c, subject) };
+        let text = template.replacen("{a}", &a, 1).replace("{a}", &common::label_for(ctx, &c, subject)).replace("{b}", &common::label_for(ctx, &c, object));
         // Animals notice people's and other species' affairs less keenly than their own kind's.
         let sal = if &*c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
         percept(ctx, &c, now, kind, subject, object, at, text, sal);
@@ -200,7 +208,7 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
         for (c, _) in minds_near(ctx, at, range, now, &[baby.id]) {
             let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
             let text = if c.kind == "person" {
-                let visible = ctx.db.body().id().find(c.id).map(|b| dist(pos(&b, now), at) <= common::sight_for(ctx, c.id, &common::world(ctx), now)).unwrap_or(false);
+                let visible = ctx.db.body().id().find(c.id).is_some_and(|b| crate::perception::sees(ctx, c.id, pos(&b, now), at, &common::world(ctx), &common::map(ctx), now));
                 if visible { format!("{heard}, {dir}.") }
                 else { format!("You hear {} crying, {dir}.", baby.name) }
             } else { format!("You hear a baby crying, {dir}.") };
@@ -221,7 +229,7 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
         let pending = ctx.db.deliberation().actor().find(carer);
         let pending_cry = pending.as_ref().is_some_and(|d| pending_infant_cry(&d.reason, &baby.name));
         if cry_prompt_due(&cry, carer, now, pending_cry) {
-            let visible = ctx.db.body().id().find(carer).map(|b| dist(pos(&b, now), at) <= common::sight_for(ctx, carer, &common::world(ctx), now)).unwrap_or(false);
+            let visible = ctx.db.body().id().find(carer).is_some_and(|b| crate::perception::sees(ctx, carer, pos(&b, now), at, &common::world(ctx), &common::map(ctx), now));
             let reason = if visible { heard.clone() } else { format!("You hear {} crying.", baby.name) };
             if pending.as_ref().is_some_and(|d| d.reason.contains(&reason)) { continue; }
             let urgent = state.cold || state.starving || state.wound != living_rules::script::Wound::None;
@@ -259,6 +267,10 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) 
     let to_name = if to != 0 { common::name_of(ctx, to) } else { String::new() };
     let line = if to != 0 { format!("{} to {}: “{}”", me.name, to_name, text) } else { format!("{}: “{}”", me.name, text) };
     common::chronicle(ctx, now, "speech", speaker, to, at, line);
+    // Every speaker perceives its own words, whoever controls it: a person's become lived
+    // memory (docs/PLAYER_MEMORY.md), a mind's are in its experience like anyone's.
+    let said = if to != 0 { format!("You said to {}: “{}”", common::label_for(ctx, &me, to), text) } else { format!("You said: “{}”", text) };
+    percept(ctx, &me, now, "said", speaker, to, at, said, 0.5);
     if let Some((ago_s, said)) = echo {
         let when = if ago_s < 5 { "just now".to_string() } else { format!("{ago_s} s ago") };
         percept(ctx, &me, now, "repeat", speaker, to, at, format!("You said almost the same thing {when}: “{said}”."), 0.3);
@@ -275,14 +287,20 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) 
         percept(ctx, &me, now, "silence", to, speaker, at, format!("No answer from {who}; they don't seem to be within earshot."), 0.35);
     }
     let close = hearers.iter().filter(|(_, d)| *d <= 6.0).count();
+    // Saying one's own name tells it to everyone who hears (an introduction).
+    let introduces = mentions(&text, &me.name);
     for (c, d) in hearers {
+        if introduces {
+            crate::perception::introduce(ctx, c.id, speaker, now);
+        }
         let addressed = to == c.id || (to == 0 && (close == 1 && d <= 6.0 || mentions(&text, &c.name)));
+        let who = common::label_cap(ctx, &c, speaker);
         let heard = if to == c.id {
-            format!("{} said to you: “{}”", me.name, text)
+            format!("{who} said to you: “{}”", text)
         } else if to != 0 {
-            format!("{} said to {}: “{}”", me.name, to_name, text)
+            format!("{who} said to {}: “{}”", common::label_for(ctx, &c, to), text)
         } else {
-            format!("{} said: “{}”", me.name, text)
+            format!("{who} said: “{}”", text)
         };
         percept(ctx, &c, now, "speech", speaker, to, at, heard, if addressed { 0.9 } else { 0.45 });
         if let Some(mut st) = ctx.db.mind_state().id().find(c.id) {
@@ -456,14 +474,14 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let window = (common::laws(ctx).bond_window_s * 1000.0) as u64;
     let mut asked = Vec::new();
     for o in ctx.db.bond_offer().to().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
-        asked.push(json!({"from": o.from, "name": common::name_of(ctx, o.from), "asks": "to start a family with you (it happens if you also choose conceive toward them in time)", "when": ago(o.at_ms)}));
+        asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": "to start a family with you (it happens if you also choose conceive toward them in time)", "when": ago(o.at_ms)}));
     }
     for o in ctx.db.trade_offer().iter().filter(|o| o.to == id && now.saturating_sub(o.at_ms) <= 180_000) {
-        asked.push(json!({"from": o.from, "name": common::name_of(ctx, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange)", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
+        asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange)", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
     }
     if let Some(m) = ctx.db.membership().member().find(id) {
         for r in ctx.db.join_request().iter().filter(|r| r.community == m.community && now.saturating_sub(r.at_ms) <= 300_000) {
-            asked.push(json!({"from": r.asker, "name": common::name_of(ctx, r.asker), "asks": "to join your community (welcome them to let them in)", "when": ago(r.at_ms)}));
+            asked.push(json!({"from": r.asker, "name": common::label_for(ctx, &me, r.asker), "asks": "to join your community (welcome them to let them in)", "when": ago(r.at_ms)}));
         }
     }
     if !asked.is_empty() {
@@ -471,10 +489,10 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     let mut mine = Vec::new();
     for o in ctx.db.bond_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
-        mine.push(json!({"to": o.to, "name": common::name_of(ctx, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
+        mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
     }
     for o in ctx.db.trade_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= 180_000) {
-        mine.push(json!({"to": o.to, "name": common::name_of(ctx, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
+        mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
     }
     if !mine.is_empty() {
         you.insert("you are waiting on".into(), Value::Array(mine));
@@ -484,15 +502,17 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": living_rules::is_night(hour), "season": common::season(ctx, now), "sight": r});
 
     let mut creatures = Vec::new();
-    for c in common::creatures_near(ctx, at, r, now) {
-        if c.id == id {
-            continue;
-        }
+    // What the character sees (sight and a clear sight line), each as it perceives them (the
+    // `perceived_of` projection a player's view carries too).
+    for c in crate::perception::visible(ctx, id, at, r, now) {
         let Some(ch) = ctx.db.character().id().find(c.id) else { continue };
+        let seen = crate::perception::project(ctx, &me, &ch, now);
         let mut o = JMap::new();
         o.insert("id".into(), json!(c.id));
-        if ch.kind == "person" || ch.kind == me.kind {
-            o.insert("name".into(), json!(ch.name));
+        if !seen.name.is_empty() {
+            o.insert("name".into(), json!(seen.name));
+        } else if ch.kind == "person" {
+            o.insert("who".into(), json!(seen.label));
         }
         if my_community.is_some() && ctx.db.membership().member().find(c.id).map(|m| m.community) == my_community {
             o.insert("community".into(), json!("yours"));
@@ -527,10 +547,18 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
                 o.insert("yielded".into(), json!(format!("gave in {s:.0}s ago")));
             }
         }
+        if seen.hp >= 0.0 {
+            o.insert("health".into(), json!(format!("{:.0} of {:.0}", seen.hp, seen.max_hp)));
+        }
         if let Some(v) = ctx.db.vitals().id().find(c.id) {
             let n = common::needs(&v, now);
-            let f = n.hp / v.max_hp.max(1.0);
-            let wound = if f < 0.15 { "barely alive" } else if f < 0.35 { "badly wounded" } else if f < 0.6 { "hurt" } else { "" };
+            // The wound one can tell: the projection's band (none when the law hides health).
+            let wound = match seen.band {
+                0 => "barely alive",
+                1 => "badly wounded",
+                2 => "hurt",
+                _ => "",
+            };
             // Hunger shows too: anyone looks starved near the end, and a baby or child cries
             // and fusses when hungry.
             let hunger = if n.hunger >= 85.0 { "starving" } else if n.hunger >= 60.0 && ch.stage <= 1 { "hungry" } else { "" };
@@ -589,7 +617,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     for (s, d) in common::structures_near(ctx, at, r) {
         let mut o = json!({"id": s.id, "kind": s.kind, "at": [round(s.x), round(s.y)], "dist": round(d), "dir": direction(at, (s.x, s.y))});
         if s.owner != 0 {
-            o["by"] = json!(common::name_of(ctx, s.owner));
+            o["by"] = json!(common::label_for(ctx, &me, s.owner));
         }
         if s.kind == "campfire" {
             o["state"] = json!("burning");
@@ -609,7 +637,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             }
         }
         if s.kind == "house" && s.owner != 0 {
-            o["home_of"] = json!(common::name_of(ctx, s.owner));
+            o["home_of"] = json!(common::label_for(ctx, &me, s.owner));
         }
         if s.kind == "storage" || s.kind == "remains" {
             let inv: JMap<String, Value> = common::inv_list(ctx, STRUCTURE_BIT | s.id).into_iter().map(|(k, q)| (k, json!(q))).collect();

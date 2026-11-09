@@ -37,7 +37,7 @@ def admin():
     return ADMIN
 
 
-def sql(st, q, who=None):
+def sql(st, q, who="admin"):
     token = admin() if who == "admin" else st.get("token") if who == "player" else None
     code, body = V.http(f"/v1/database/{st['db']}/sql", q, token, raw=True)
     if code != 200:
@@ -60,7 +60,7 @@ def check(st, name, ok, detail):
 
 
 def me(st):
-    rows = sql(st, "SELECT id, name, alive, cause FROM character WHERE controller = :sender", "player")
+    rows = sql(st, "SELECT id, name, alive, cause FROM my_characters", "player")
     alive = [r for r in rows if r["alive"]]
     return alive[0]["id"] if alive else None
 

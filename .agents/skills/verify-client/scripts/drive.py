@@ -51,9 +51,27 @@ BASE_QUERIES = [
     'SELECT * FROM background',
     'SELECT * FROM gate',
 ]
+# Private in every build: the authority's bookkeeping and developer audit truth
+# (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
 PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
-           'combat_seen', 'missile', 'skill_use', 'readiness', 'skill_code']
+           'combat_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
+           'routine', 'routine_stat', 'background', 'brain', 'mind_state', 'mind_cursor',
+           'persona', 'relation', 'belief', 'judgment', 'thought', 'chronicle', 'stats',
+           'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
+           'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
+           'projected', 'reveal', 'acquaintance', 'connection', 'presence']
+# Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
+SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
+          'inventory', 'know_how']
+# The per-sender views: what a player perceives and its own state.
+VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_characters',
+         'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses']
+SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
+OWN = ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how']
+OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
+UNWALKABLE = {2, 4, 7}      # water, rock, wall
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
 # `my_combat`, so these calls succeed for any living character.
 PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block']}
@@ -171,6 +189,7 @@ class Run:
         if self.state.get('started_container'):
             raise ValueError('this task requires the shared container to be up before launch')
         self.directory = V.run_dir(name)
+        self.mode = self.state.get('perception', 'scoped')
         self.results = []
         self.matrix = []
         self.secrets = [self.state.get('token', '')]
@@ -219,13 +238,15 @@ class Run:
         V.log(self.state, f"client {label} {reducer}{json.dumps(args)} -> {code} {body.strip()}")
         return okay
 
-    def query(self, query, as_player, seconds, name):
+    def query(self, query, as_player, seconds, name, as_admin=False):
         if as_player and not self.state.get('token'):
             raise ValueError('no player yet: run verify.py player join NAME first')
+        if as_admin:
+            self.secrets.append(V.admin_token())
         path = self.directory / (name + '.jsonl')
         stderr_path = self.directory / (name + '-sdk.log')
         request = {'uri': V.URL, 'db': self.state['db'],
-                   'token': self.state.get('token') if as_player else None,
+                   'token': self.secrets[-1] if as_admin else self.state.get('token') if as_player else None,
                    'queries': [query], 'seconds': seconds, 'stream': True}
         final = None
         with path.open('x') as evidence, stderr_path.open('x') as sdk_log:
@@ -259,7 +280,7 @@ class Run:
         with (self.directory / 'adhoc-suite.log').open('x') as output:
             with subprocess.Popen([str(SKILL / 'scripts/drive.py'), '--run', self.state['run'],
                                    '--query', "SELECT * FROM chronicle WHERE kind = 'speech'",
-                                   '--seconds', '4', '--save', 'adhoc-suite'],
+                                   '--seconds', '4', '--save', 'adhoc-suite', '--as-admin'],
                                   stdout=output, stderr=subprocess.STDOUT) as process:
                 try:
                     deadline = time.monotonic() + 25
@@ -294,11 +315,21 @@ class Run:
         if exact != BASE_QUERIES:
             raise RuntimeError('viewer query set changed; update BASE_QUERIES and the feature map')
         tables = (ROOT / 'living/authority/src/tables.rs').read_text()
-        definitions = re.findall(r'#\[spacetimedb::table\((.*?)\)\]', tables, re.S)
-        private = [re.search(r'accessor\s*=\s*(\w+)', d)[1] for d in definitions
-                   if not re.search(r'\bpublic\b', d)]
+        accessor = lambda d: re.search(r'accessor\s*=\s*(\w+)', d)[1]
+        definitions = re.findall(r'^#\[spacetimedb::table\((.*?)\)\]', tables, re.S | re.M)
+        private = [accessor(d) for d in definitions if not re.search(r'\bpublic\b', d)]
         if set(private) != set(PRIVATE):
-            raise RuntimeError('private table inventory changed; update PRIVATE')
+            raise RuntimeError(f'private table inventory changed; update PRIVATE: {set(private) ^ set(PRIVATE)}')
+        opened = re.findall(r'^#\[cfg_attr\(open_tables, spacetimedb::table\((.*?)\)\)\]', tables, re.S | re.M)
+        closed = re.findall(r'^#\[cfg_attr\(not\(open_tables\), spacetimedb::table\((.*?)\)\)\]', tables, re.S | re.M)
+        scoped = [accessor(d) for d in opened if re.search(r'\bpublic\b', d)]
+        if set(scoped) != set(SCOPED) or {accessor(d) for d in closed if not re.search(r'\bpublic\b', d)} != set(SCOPED):
+            raise RuntimeError('scoped table inventory changed; update SCOPED')
+        views = set()
+        for path in (ROOT / 'living/authority/src').glob('*.rs'):
+            views |= set(re.findall(r'#\[spacetimedb::view\(accessor = (\w+), public', path.read_text()))
+        if views != set(VIEWS):
+            raise RuntimeError(f'view inventory changed: {views ^ set(VIEWS)}')
         reducers = {}
         for path in (ROOT / 'living/authority/src').glob('*.rs'):
             text = path.read_text()
@@ -308,25 +339,27 @@ class Run:
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         write(self.directory / 'source-inventory.json', {'base_queries': exact, 'private': private,
+              'scoped': scoped, 'views': sorted(views), 'perception': self.mode,
               'reducers': reducers, 'sdk': '2.14.1', 'server': '2.14.1'})
 
     def run(self):
         self.source_inventory()
-        for table in ['experience', 'thought']:
-            access = self.probe('privacy-access-' + table, ['SELECT * FROM ' + table])
-            if access['status'] == 'rejected' and 'private' in access['error'].lower():
-                self.check('KNOWN ISSUE anonymous ' + table + ' privacy', True,
-                           'privacy-access-' + table + '.json', 'now denied; review expected failure', known=True)
-        initial, anonymous_token = self.probe('anonymous-base', BASE_QUERIES, seconds=4,
-                                             capture_credential=True)
+        scoped = self.mode == 'scoped'
+        admin_token = V.admin_token()
+        self.secrets.append(admin_token)
+        # The observer reads developer audit truth as the database owner.
+        initial = self.probe('observer-base', BASE_QUERIES, admin_token, seconds=4)
         if initial['status'] != 'applied':
-            raise RuntimeError('viewer base subscription refused; see anonymous-base.json and privacy checks')
-        self.check('anonymous base initial rows', initial['status'] == 'applied' and
-                   initial['initial']['counts']['character'] > 0 and
-                   initial['initial']['counts']['world'] == 1, 'anonymous-base.json')
-        self.check('anonymous base live updates', initial['body_updates'] > 0 and
+            raise RuntimeError('observer base subscription refused; see observer-base.json')
+        self.check('observer base initial rows', initial['initial']['counts']['character'] > 0 and
+                   initial['initial']['counts']['world'] == 1, 'observer-base.json')
+        self.check('observer base live updates', initial['body_updates'] > 0 and
                    initial['stats_updates'] > 0 and initial['final']['ticks'] > initial['initial']['ticks'],
-                   'anonymous-base.json', f"body={initial['body_updates']}, stats={initial['stats_updates']}")
+                   'observer-base.json', f"body={initial['body_updates']}, stats={initial['stats_updates']}")
+        refused = self.probe('anonymous-base', BASE_QUERIES)
+        self.check('anonymous observer base refused', refused['status'] == 'rejected' and
+                   'private' in refused.get('error', '').lower(), 'anonymous-base.json', refused.get('error', '')[:120])
+        _, anonymous_token = self.probe('anonymous-connected', ['SELECT * FROM world'], capture_credential=True)
         ai = next(c for c in initial['final']['characters'] if c['ai'] and c['alive'] and c['stage'] >= 2 and c['kind'] == 'person')
         self.check('anonymous join', self.call('anonymous-connected', anonymous_token, 'join', ['ClientAnon']), 'reducers.json')
         self.call('anonymous-connected', anonymous_token, 'join', ['Again'], 'you already have a living character')
@@ -336,7 +369,7 @@ class Run:
         second = json.loads(second_body)
         self.secrets.append(second['token'])
         self.check('second player join', self.call('player-2', second['token'], 'join', ['ClientSecond']), 'reducers.json')
-        players = self.probe('players', ['SELECT * FROM character'])['final']['characters']
+        players = self.probe('players', ['SELECT * FROM character'], admin_token)['final']['characters']
         own_ids = {c['name']: c['id'] for c in players if c['name'] in {'ClientAnon', 'ClientPrimary', 'ClientSecond'}}
         identities = [('anonymous-connected', anonymous_token, own_ids['ClientAnon']),
                       ('player-1', self.state['token'], own_ids['ClientPrimary']),
@@ -372,7 +405,7 @@ class Run:
         self.call('anonymous-http-no-token', None, 'join', ['AnonHttp'])
         self.check('reducer permission matrix', all(row['pass'] for row in self.matrix), 'reducers.json',
                    f'{len(self.matrix)} calls, {sum(not row["pass"] for row in self.matrix)} mismatches')
-        effects = self.probe('reducer-effects', BASE_QUERIES + ['SELECT * FROM routine'])['final']
+        effects = self.probe('reducer-effects', BASE_QUERIES + ['SELECT * FROM routine'], admin_token)['final']
         self.check('own mind and player effects', all(
             any(t['actor'] == own and t['reference'].startswith(label) for t in effects['thoughts']) and
             any(r['actor'] == own and r['name'] == 'client probe' for r in effects['routines']) and
@@ -383,7 +416,7 @@ class Run:
         queries = [f'SELECT * FROM experience WHERE observer = {actor}',
                    f'SELECT * FROM routine WHERE actor = {actor}',
                    f'SELECT s.* FROM routine_stat s JOIN routine r ON s.id = r.id WHERE r.actor = {actor}']
-        inspected = self.probe('inspected-character', queries, seconds=2)
+        inspected = self.probe('inspected-character', queries, admin_token, seconds=2)
         end = inspected['final']
         routines = {r['id'] for r in end['routines']}
         self.check('per-character queries', inspected['status'] == 'applied' and
@@ -392,26 +425,44 @@ class Run:
                    all(r['actor'] == actor for r in end['routines']) and
                    len(end['routine_stats']) > 0 and all(r['id'] in routines for r in end['routine_stats']), 'inspected-character.json',
                    f'actor={actor}, experiences={len(end["experiences"])}, routines={len(routines)}')
+        # Every private table is refused to an anonymous client (WebSocket and HTTP SQL), and
+        # the scoped ones to a player too; the scoped ones are private only in a scoped build.
         visibility = []
-        for table in PRIVATE:
+        player_token = self.state['token']
+        for table in PRIVATE + (SCOPED if scoped else []):
             subscription = self.probe('private-' + table, ['SELECT * FROM ' + table])
             code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, raw=True)
             okay = subscription['status'] == 'rejected' and 'private' in subscription['error'].lower() and code != 200 and 'private' in error.lower()
-            visibility.append({'table': table, 'subscription': subscription, 'http_status': code, 'http_error': error, 'pass': okay})
+            row = {'table': table, 'subscription': subscription, 'http_status': code, 'http_error': error}
+            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence']:
+                as_player = self.probe('private-player-' + table, ['SELECT * FROM ' + table], player_token)
+                code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, player_token, raw=True)
+                okay = okay and as_player['status'] == 'rejected' and 'private' in as_player['error'].lower() and code != 200
+                row.update({'player_subscription': as_player, 'player_http_status': code})
+            visibility.append({**row, 'pass': okay})
         write(self.directory / 'visibility.json', visibility)
-        self.check('private table visibility', all(v['pass'] for v in visibility), 'visibility.json')
-        for table in ['experience', 'thought']:
-            leaked = self.probe('privacy-' + table, ['SELECT * FROM ' + table])
-            denied = leaked['status'] == 'rejected' and 'private' in leaked.get('error', '').lower()
-            observable = (len({e['observer'] for e in leaked['final']['experiences']}) > 1 if table == 'experience'
-                          else len({t['actor'] for t in leaked['final']['thoughts'] if t['detail'].startswith('VERIFY_CLIENT_RAW_')}) >= 3) if not denied else False
-            if not denied and not observable:
-                self.check(table + ' fixture coverage', False, 'privacy-' + table + '.json', 'no foreign fixture rows received')
-            self.check('KNOWN ISSUE anonymous ' + table + ' privacy', denied, 'privacy-' + table + '.json',
-                       'denied' if denied else 'anonymous subscription exposes foreign rows', known=True)
+        self.check('private table visibility', all(v['pass'] for v in visibility), 'visibility.json',
+                   f'{len(visibility)} tables ({self.mode} build)')
+        # The minds' thoughts, raw replies included, never reach a client without the owner's token.
+        leaked = self.probe('privacy-thought', ['SELECT * FROM thought'])
+        self.check('anonymous thought privacy', leaked['status'] == 'rejected' and 'private' in leaked.get('error', '').lower(),
+                   'privacy-thought.json')
+        owner_thoughts = self.probe('owner-thought', ['SELECT * FROM thought'], admin_token)['final']['thoughts']
+        if len({t['actor'] for t in owner_thoughts if t['detail'].startswith('VERIFY_CLIENT_RAW_')}) < 3:
+            self.check('thought fixture coverage', False, 'owner-thought.json', 'fewer than three scripted raw markers')
+        if scoped:
+            leaked = self.probe('privacy-experience', ['SELECT * FROM experience'])
+            self.check('anonymous experience privacy', leaked['status'] == 'rejected' and 'private' in leaked.get('error', '').lower(),
+                       'privacy-experience.json')
+        else:
+            # The open build (LIVING_PERCEPTION=open, diagnostics) makes these tables public (docs/PERCEPTION.md).
+            leaked = self.probe('privacy-experience', ['SELECT * FROM experience'])
+            observable = leaked['status'] == 'applied' and len({e['observer'] for e in leaked['final']['experiences']}) > 1
+            self.check('KNOWN ISSUE anonymous experience privacy (open build)', leaked['status'] == 'rejected', 'privacy-experience.json',
+                       'denied' if leaked['status'] == 'rejected' else 'exposes foreign rows' if observable else 'no foreign rows', known=True)
+            compat = self.probe('open-build-tables', ['SELECT * FROM ' + t for t in SCOPED])
+            self.check('open build: the game client tables are public', compat['status'] == 'applied', 'open-build-tables.json')
         views = {}
-        admin_token = V.admin_token()
-        self.secrets.append(admin_token)
         setup = subprocess.run([str(HARNESS), 'call', '--run', self.state['run'],
                                 'set_behavior', json.dumps([actor, '{"think":"verify-client view fixture"}']),
                                 '--as-admin'], capture_output=True, text=True, timeout=30)
@@ -459,16 +510,20 @@ class Run:
             for label, v in combat.items() if label != 'anonymous') and not combat['anonymous']['final']['skill_uses'], 'combat-*.json')
         # Town life (docs/TOWN_LIFE.md): what others see a character doing, the cards that
         # name its codes, and the weather are public; housekeeping writes the weather row.
-        town = self.probe('town-public', ['SELECT * FROM act_card', 'SELECT * FROM doing', 'SELECT * FROM weather'])
-        self.check('act_card, doing and weather are public', town['status'] == 'applied' and town['final']['counts']['act_card'] >= 5 and town['final']['counts']['weather'] == 1, 'town-public.json',
+        town = self.probe('town-public', ['SELECT * FROM act_card', 'SELECT * FROM weather'] + ([] if scoped else ['SELECT * FROM doing']))
+        self.check('act_card and weather are public' + ('' if scoped else ', and doing (open build)'), town['status'] == 'applied' and
+                   town['final']['counts']['act_card'] >= 5 and town['final']['counts']['weather'] == 1, 'town-public.json',
                    f"act_card {town['final']['counts']['act_card']}, doing {town['final']['counts']['doing']}, weather {town['final']['counts']['weather']}")
-        public = self.probe('combat-public', ['SELECT * FROM fighter', 'SELECT * FROM skill_card'])
-        self.check('fighter and skill_card are public', public['status'] == 'applied' and public['final']['counts']['skill_card'] >= 6, 'combat-public.json',
+        public = self.probe('combat-public', ['SELECT * FROM skill_card'] + ([] if scoped else ['SELECT * FROM fighter']))
+        self.check('skill_card is public' + ('' if scoped else ', and fighter (open build)'), public['status'] == 'applied' and
+                   public['final']['counts']['skill_card'] >= 6, 'combat-public.json',
                    f"fighter {public['final']['counts']['fighter']}, skill_card {public['final']['counts']['skill_card']}")
+        self.perception(identities, admin_token)
+        self.presence(identities, admin_token)
         drop_file = self.directory / 'drop-request'
         drop_file.unlink(missing_ok=True)
         with DropProxy(drop_file) as proxy:
-            reconnect = self.probe('reconnect', BASE_QUERIES + queries, seconds=4,
+            reconnect = self.probe('reconnect', BASE_QUERIES + queries, admin_token, seconds=4,
                                    uri=f'http://127.0.0.1:{proxy.port}', drop_file=drop_file)
             first, second_round = reconnect['rounds']
             self.check('connection drop and resubscribe', proxy.drops == 1 and proxy.accepted == 2 and
@@ -479,6 +534,189 @@ class Run:
                        'reconnect.json', f'drops={proxy.drops}, connections={proxy.accepted}')
         self.ad_hoc_check()
         self.save()
+
+    def terrain(self):
+        """The map's tiles from `terrain_chunk` (public)."""
+        world = self.sql_rows('SELECT width, height FROM world')[0]
+        w, h = world['width'], world['height']
+        tiles = bytearray(w * h)
+        for row in self.sql_rows('SELECT * FROM terrain_chunk'):
+            data = row['tiles']
+            data = bytes.fromhex(data.removeprefix('0x')) if isinstance(data, str) else bytes(data)
+            cx, cy = row['id'] & 0xFFFF, row['id'] >> 16
+            for k, t in enumerate(data):
+                x, y = cx * 16 + k % 16, cy * 16 + k // 16
+                if x < w and y < h:
+                    tiles[y * w + x] = t
+        return w, h, tiles
+
+    def sql_rows(self, query, token=None):
+        code, body = V.http(f"/v1/database/{self.state['db']}/sql", query, token, raw=True)
+        if code != 200:
+            raise RuntimeError(f'sql {query}: {code} {body[:300]}')
+        res = json.loads(body)[-1]
+        names = [e['name'].get('some', '?') for e in res['schema']['elements']]
+        return [dict(zip(names, r)) for r in res['rows']]
+
+    def sight_spots(self):
+        """Tile centres for the perception checks, found on this world's own map:
+        an open pair 3 tiles apart with nothing opaque between; a far point 20-30 tiles from
+        the first; and a pair at most 4 tiles apart on one axis with only rock or wall
+        between (within even night sight, 6 tiles, so only the wall hides)."""
+        w, h, tiles = self.terrain()
+        at = lambda x, y: tiles[y * w + x] if 0 <= x < w and 0 <= y < h else 4
+        walk = lambda x, y: at(x, y) not in UNWALKABLE
+        spots = {}
+        for y in range(2, h - 2):
+            for x in range(2, w - 32):
+                if 'open' not in spots and all(walk(x + i, y) for i in range(4)):
+                    far = next((x + d for d in range(20, 31) if walk(x + d, y)), None)
+                    if far is not None:
+                        spots['open'] = [(x + .5, y + .5), (x + 3.5, y + .5)]
+                        spots['far'] = (far + .5, y + .5)
+                if 'wall' not in spots:
+                    for dx, dy in [(1, 0), (0, 1)]:
+                        for gap in (1, 2, 3):
+                            bx, by = x + (gap + 1) * dx, y + (gap + 1) * dy
+                            if walk(x, y) and walk(bx, by) and all(at(x + i * dx, y + i * dy) in OPAQUE for i in range(1, gap + 1)):
+                                spots['wall'] = [(x + .5, y + .5), (bx + .5, by + .5)]
+                                spots['wall_tiles'] = [at(x + i * dx, y + i * dy) for i in range(1, gap + 1)]
+                                break
+                        if 'wall' in spots:
+                            break
+                if 'open' in spots and 'wall' in spots:
+                    return spots
+        raise RuntimeError(f'no sight-check geometry on this map: found {sorted(spots)}')
+
+    def perception(self, identities, admin_token):
+        """What a player receives is what its character perceives now, and its own state."""
+        # Own state: only this identity's characters' rows.
+        admin_identity = (lambda v: (v[0] if isinstance(v, list) else v).lower().removeprefix('0x'))(self.sql_admin('SELECT admin FROM world')[0]['admin'])
+        own = {}
+        for label, token, _ in identities:
+            own[label] = self.probe('own-' + label, ['SELECT * FROM ' + v for v in OWN], token, seconds=1)
+        own['anonymous'] = self.probe('own-anonymous', ['SELECT * FROM ' + v for v in OWN + SEEN])
+
+        def scoped_to_self(label, v):
+            p = v['final']['perception']
+            mine = {c['id'] for c in p['my_characters']}
+            return (v['status'] == 'applied' and mine and all(c['controller'] == v['identity'] and not c['ai'] for c in p['my_characters'])
+                    and p['my_vitals'] and set(p['my_vitals']) <= mine and {e['observer'] for e in p['my_experience']} <= mine
+                    # Lived by the person, or by the world's minds while the person was away.
+                    and all(e['controller'].lower().removeprefix('0x') in (v['identity'].lower().removeprefix('0x'), admin_identity) for e in p['my_experience'])
+                    and set(p['my_places']) <= mine and set(p['my_inventory']) <= mine and set(p['my_know_how']) <= mine)
+        anonymous = own['anonymous']['final']['perception']
+        self.check('own-state views return only my characters\' rows', all(scoped_to_self(l, v) for l, v in own.items() if l != 'anonymous') and
+                   own['anonymous']['status'] == 'applied' and not any(anonymous[k] for k in OWN + SEEN), 'own-*.json',
+                   ', '.join(f"{l}: {len(v['final']['perception']['my_experience'])} experiences, {len(v['final']['perception']['my_inventory'])} items"
+                             for l, v in own.items() if l != 'anonymous'))
+        # Spatial perception: two players placed by the admin on this world's own map.
+        spots = self.sight_spots()
+        (_, t1, me), (_, t2, other) = identities[1], identities[2]
+        steps = []
+
+        def scene(step, a, b):
+            for who, at in [(me, a), (other, b)]:
+                if not self.call('admin-place', admin_token, 'place_at', [who, at[0], at[1]]):
+                    raise RuntimeError(f'place_at #{who} failed; see reducers.json')
+            # Each player's perceived set is worked out every 200 ms.
+            time.sleep(1.0)
+            seen = {}
+            for who, token in [(me, t1), (other, t2)]:
+                v = self.probe(f'sight-{step}-{who}', ['SELECT * FROM ' + t for t in SEEN], token, seconds=0)
+                seen[who] = v['final']['perception']
+            steps.append({'step': step, 'positions': {me: a, other: b}, 'seen': seen})
+            write(self.directory / 'sight.json', {'spots': spots, 'steps': steps, 'players': [me, other]})
+            return seen
+
+        sees = lambda p, who: {t: who in p[t] for t in ['seen_bodies', 'seen_characters']}
+        near = scene('in-sight', *spots['open'])
+        self.check('in sight: both players receive each other\'s body and character', all(sees(near[me], other).values()) and
+                   all(sees(near[other], me).values()) and me in near[me]['seen_bodies'] and other in near[other]['seen_bodies'],
+                   'sight.json', f"3 tiles apart at {spots['open'][0]}")
+        # What a player perceives of another is the `perceived_of` projection: no controller,
+        # home, parents or cause of death, and a stranger's name only once it is known.
+        code, body = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM seen_characters', t1, raw=True)
+        res = json.loads(body)[-1] if code == 200 else {'schema': {'elements': []}, 'rows': []}
+        cols = [e['name'].get('some', '?') for e in res['schema']['elements']]
+        rows = [dict(zip(cols, r)) for r in res['rows']]
+        write(self.directory / 'seen-characters.json', {'columns': cols, 'rows': rows})
+        theirs = next((r for r in rows if r['id'] == other), None)
+        self.check('seen_characters is the projection: no controller, home or parents; a stranger by label',
+                   code == 200 and theirs and not {'controller', 'ai', 'home_x', 'home_y', 'parent_a', 'parent_b', 'cause'} & set(cols)
+                   and theirs['name'] == '' and theirs['label'] and theirs['hp'] < 0, 'seen-characters.json', f"columns {cols}; other {theirs and theirs['label']}")
+        far = scene('beyond-sight', spots['open'][0], spots['far'])
+        gone = lambda s, a, b: not any(b in s[a][t] for t in SEEN)
+        self.check('beyond sight: no body, character, fighter or doing row', gone(far, me, other) and gone(far, other, me), 'sight.json',
+                   f"{spots['far'][0] - spots['open'][0][0]:.0f} tiles apart")
+        hidden = scene('behind-wall', *spots['wall'])
+        self.check('behind a wall or rock: no body, character, fighter or doing row', gone(hidden, me, other) and gone(hidden, other, me), 'sight.json',
+                   f"{abs(spots['wall'][1][0] - spots['wall'][0][0]) + abs(spots['wall'][1][1] - spots['wall'][0][1]):.0f} tiles apart across tiles {spots['wall_tiles']}")
+
+    def sql_admin(self, q):
+        code, body = V.http(f"/v1/database/{self.state['db']}/sql", q, V.admin_token(), raw=True)
+        if code != 200:
+            raise RuntimeError(f'admin sql {q}: {code} {body}')
+        res = json.loads(body)[-1]
+        names = [e['name'].get('some', '?') for e in res['schema']['elements']]
+        return [dict(zip(names, r)) for r in res['rows']]
+
+    def presence(self, identities, admin_token):
+        """Presence follows the person's connections exactly (client_connected and
+        client_disconnected, several at once included); when the last one has been closed for
+        the `takeover_s` law the world's minds control the character, and a new connection
+        hands it back at once. Presence itself is private."""
+        _, token, me = identities[2]
+        row = lambda: self.sql_admin(f'SELECT * FROM presence WHERE id = {me}')[0]
+        who = lambda: self.sql_admin(f'SELECT ai, controller FROM character WHERE id = {me}')[0]
+        admin = self.sql_admin('SELECT admin FROM world')[0]['admin']
+        record = {'steps': []}
+
+        def step(name):
+            r, c = row(), who()
+            record['steps'].append({'step': name, 'at': time.time(), 'presence': r, 'character': c})
+            write(self.directory / 'presence.json', record)
+            return r, c
+
+        # Wait for any earlier HTTP call's connection to be gone.
+        time.sleep(1.0)
+        held = []
+
+        def hold(name, secs):
+            t = threading.Thread(target=lambda: held.append(self.probe(name, ['SELECT * FROM my_characters'], token, seconds=secs)), daemon=True)
+            t.start()
+            return t
+
+        one = hold('presence-one', 8)
+        time.sleep(3.0)
+        r1, _ = step('one connection')
+        two = hold('presence-two', 3)
+        time.sleep(2.0)
+        r2, _ = step('two connections')
+        two.join(timeout=20)
+        time.sleep(0.5)
+        r3, _ = step('one closed')
+        one.join(timeout=20)
+        time.sleep(0.5)
+        r4, c4 = step('both closed')
+        self.check('presence counts each open connection of the person', r1['present'] and r1['connections'] == 1 and r2['connections'] == 2 and r3['present'] and r3['connections'] == 1,
+                   'presence.json', f"{r1['connections']} → {r2['connections']} → {r3['connections']}")
+        self.check('presence ends when the last connection closes (a takeover is pending)', not r4['present'] and r4['connections'] == 0 and not r4['ai'] and r4['takeover_ms'] < 2**63 and not c4['ai'],
+                   'presence.json', f"present={r4['present']}, takeover in {(r4['takeover_ms'] - r4['changed_ms']) / 1000:.0f} s")
+        deadline = time.monotonic() + 45
+        while time.monotonic() < deadline and not row()['ai']:
+            time.sleep(1.0)
+        r5, c5 = step('taken over')
+        self.check('after takeover_s with no connection the world\'s minds control the character', r5['ai'] and c5['controller'] == admin,
+                   'presence.json', f"ai={c5['ai']}, controller is the admin: {c5['controller'] == admin}")
+        back = self.probe('presence-back', ['SELECT * FROM my_characters'], token, seconds=1)
+        mine = [c['id'] for c in back['final']['perception']['my_characters']] if back['status'] == 'applied' else []
+        hexid = lambda v: (v[0] if isinstance(v, list) else v).lower().removeprefix('0x')
+        r6, c6 = step('returned')
+        self.check('a new connection hands the character back at once (before the client subscribes)', not r6['ai'] and hexid(c6['controller']) == hexid(back['identity']) and not c6['ai'] and me in mine,
+                   'presence.json', f"my_characters {mine}")
+        refused = [self.probe('presence-player', ['SELECT * FROM presence'], token), self.probe('presence-anonymous', ['SELECT * FROM presence'])]
+        self.check('presence is private (not to the player, not to anonymous clients)', all(v['status'] == 'rejected' for v in refused), 'presence-player.json')
 
     def save(self):
         write(self.directory / 'results.json', self.results)
@@ -500,6 +738,7 @@ def main():
     parser.add_argument('--run', required=True)
     parser.add_argument('--query', help='stream a single SQL subscription instead of the fixed suite')
     parser.add_argument('--as-player', action='store_true', help='use the harness player for --query')
+    parser.add_argument('--as-admin', action='store_true', help='use the database owner for --query (private tables)')
     parser.add_argument('--seconds', type=int, default=10, help='live query duration, 0 to 300 seconds')
     parser.add_argument('--save', help='fresh evidence basename for --query, without an extension')
     args = parser.parse_args()
@@ -514,13 +753,13 @@ def main():
             parser.error('--save must contain only letters, digits or hyphens')
         print(f'evidence: {run.directory / (name + ".jsonl")}', file=sys.stderr, flush=True)
         try:
-            run.query(args.query, args.as_player, args.seconds, name)
+            run.query(args.query, args.as_player, args.seconds, name, args.as_admin)
         except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as error:
             print(str(error), file=sys.stderr)
             return 1
         return 0
-    if args.as_player or args.save or args.seconds != 10:
-        parser.error('--as-player, --save and --seconds require --query')
+    if args.as_player or args.as_admin or args.save or args.seconds != 10:
+        parser.error('--as-player, --as-admin, --save and --seconds require --query')
     try:
         run.run()
     except Exception as error:

@@ -80,6 +80,22 @@ fn authorize(ctx: &ReducerContext, actor: u32) -> Result<Character, String> {
     Ok(c)
 }
 
+/// Projections of a mind: by the character's controller, or by the world's mind service
+/// (the admin) for a character a person plays, whose lived experience it internalizes
+/// (docs/PLAYER_MEMORY.md): its relations, judgments, places and beliefs, and the identity
+/// the service infers from what it lived.
+fn authorize_projection(ctx: &ReducerContext, actor: u32) -> Result<Character, String> {
+    let c = ctx.db.character().id().find(actor).ok_or("no such character")?;
+    if c.controller == ctx.sender() {
+        return Ok(c);
+    }
+    let human = (!c.ai && c.controller != ctx.database_identity()) || crate::presence::played(ctx, actor);
+    if human && ctx.sender() == common::world(ctx).admin {
+        return Ok(c);
+    }
+    Err("not your character".into())
+}
+
 fn clip(s: &str, n: usize) -> String {
     if s.len() <= n {
         return s.to_string();
@@ -408,9 +424,13 @@ pub fn mind_skip(ctx: &ReducerContext, actor: u32, seen_ms: u64, thought: Though
 pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<(), String> {
     authorize(ctx, actor)?;
     let now = common::now_ms(ctx);
-    let done: Vec<u64> = ctx.db.experience().observer().filter(actor).filter(|e| e.id <= upto).map(|e| e.id).collect();
-    for id in done {
-        ctx.db.experience().id().delete(id);
+    // A character a person plays keeps its rows: the person sees what it lived while they
+    // were away (its window still holds only the last 400).
+    if !crate::presence::played(ctx, actor) {
+        let done: Vec<u64> = ctx.db.experience().observer().filter(actor).filter(|e| e.id <= upto).map(|e| e.id).collect();
+        for id in done {
+            ctx.db.experience().id().delete(id);
+        }
     }
     let row = MindCursor { actor, upto, updated_ms: now };
     match ctx.db.mind_cursor().actor().find(actor) {
@@ -428,7 +448,7 @@ pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<
 /// Project consolidated mind state: persona, relations, beliefs, judgments, places.
 #[spacetimedb::reducer]
 pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Result<(), String> {
-    authorize(ctx, actor)?;
+    authorize_projection(ctx, actor)?;
     let now = common::now_ms(ctx);
     if update.replace {
         let keep: Vec<u32> = update.relations.iter().map(|r| r.other).collect();
@@ -462,6 +482,10 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
         } else {
             ctx.db.persona().insert(row);
         }
+    }
+    if !update.relations.is_empty() || update.replace {
+        // Whom it has feelings about is whom it knows by name.
+        crate::perception::knowledge_changed(Some(actor));
     }
     for r in update.relations.into_iter().take(32) {
         if r.other == actor || ctx.db.character().id().find(r.other).is_none() {

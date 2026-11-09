@@ -10,7 +10,7 @@ The run `aske-coast-3` ended on schedule at 06:55 local on 2026-09-29. This note
   - **Neo4j A** on :7689 (`sao-living_neo4j_1`) holds the minds of every run up to `aske-coast-2`. It has reached Neo4j's limit of 65,535 relationship types, so do not use it for new runs.
   - **Neo4j B** on :7690 (`sao-living-neo4j-2`) is used by new runs, through `LIVING_NEO4J_URI` in `.env`.
   - **The Codex proxy** for GPT-6 Luna is at `~/dev/codex-cursor-proxy`, the systemd user service `codex-cursor-proxy` on 127.0.0.1:8787. It has a local, unpushed commit `167b91e`, and its unit sets `--dns-result-order=ipv4first`.
-  - **The public observer** is `sao-observer-web` and `sao-tunnel`. Rebuild it with `just living-web-dist`.
+  - **The public observer** (`sao-observer-web`, `sao-tunnel`, `https://sos.carlid.dev`) was retired on 2026-11-09: both services are stopped and disabled on the dev-box ([living core](LIVING_CORE.md#running)).
 - **Models.**
   - **Split by town:** `groups` in the models config sends Brandholm to Luna, and Saltreach and Oathstone to Mistral Small.
   - **Overflow:** Luna and Mistral overflow into each other.
@@ -94,7 +94,7 @@ The run `aske-coast-3` ended on schedule at 06:55 local on 2026-09-29. This note
   - a behavioral fault: people pace between two tasks;
   - people's hunting pressure on deer;
   - lifetime counters for practice now that the dead's rows are deleted;
-  - `experience` and `thought` are public tables (`living/authority/src/tables.rs`), so any anonymous client, including the public observer's tunnel, can read every character's perceptions and raw model replies. This contradicts the tables' own comment and the perception rules in `AGENTS.md`. Fixing it needs per-controller views for minds and a developer path for the observer's Experiences and Thoughts tabs. `verify-client` carries an expected-fail check for it (found 2026-10-04);
+  - `experience` and `thought` are public tables (`living/authority/src/tables.rs`), so any anonymous client, including the public observer's tunnel, can read every character's perceptions and raw model replies. This contradicts the tables' own comment and the perception rules in `AGENTS.md`. Fixing it needs per-controller views for minds and a developer path for the observer's Experiences and Thoughts tabs. `verify-client` carries an expected-fail check for it (found 2026-10-04). *Partly closed 2026-11-09* ([perception](PERCEPTION.md)): `thought` and the other minds' and audit tables are private in every build, read by the mind service and the observer as the database owner; `experience` is private in the default `scoped` build (since the game client took its patch, the same day) and public only in a `LIVING_PERCEPTION=open` diagnostic build, which is the one expected-fail check `verify-client` keeps for that build;
   - no test covers reducer authorization (admin, controller, player), and `just living-check` runs only the rules tests, not the authority, mind or viewer tests;
   - `verify_mechanics.py` is unreliable both ways. Unchanged code gave 23, 16, 21, 23, 16 and 23 of 23 across six runs on 2026-10-04. Likely contributors: random spawn placement (`lib.rs:123-124`); `place_near` putting bodies on tiles that may be blocked (`lib.rs:262`), next to the walls the script builds; nearby AI actors running instincts; and fixed waits. Three predicates can also pass without the outcome they name:
     - the gift check accepts any berries in the receiver's pack (`verify_mechanics.py:197`);
@@ -102,7 +102,7 @@ The run `aske-coast-3` ended on schedule at 06:55 local on 2026-09-29. This note
     - the conception check accepts any pregnancy, an animal's included (`:141`).
 
     Details are in `verify-core`'s validation record. The script needs isolated, controlled scenes and exact predicates before its results count as evidence;
-  - a seed missing a required field panics at `seed.rs:444`, so publish fails with a generic HTTP 500 instead of naming the field (`verify-generation`, 2026-10-04);
+  - a seed missing a required field panics at `seed.rs:603` (was 444 when recorded), so publish fails with a generic HTTP 500 instead of naming the field (`verify-generation`, 2026-10-04);
   - `LIVING_CORE.md` says `verify_mechanics.py` has 14 checks; it has 23;
   - minds run without Neo4j (`LIVING_NEO4J=off`) lose what they consolidate. `consolidate` parses the model's patch but applies it only inside the store branch (`mind.rs:1607`), and `project` (`mind.rs:825`) then sends no relations, beliefs, judgments or places. `mind_consolidated` still deletes the integrated experiences and advances the cursor, so those experiences are consumed with no effect beyond the persona (`verify-minds`, 2026-10-04);
   - the mind's `deliberation_lane` (`living/mind/src/mind.rs`) clones its whole cached `experience` table for every deliberation to decide whether a player caused it, because `experience` has no observer index. At 70 people that is about 28,000 row clones per deliberation; at the 216-character gate with full 400-row windows it is about 86,400. Replace it with a per-actor record of recent player contact, kept from the experience callback that level of detail already uses, before scaling up (estimate by the transport owner, 2026-10-04, not measured);

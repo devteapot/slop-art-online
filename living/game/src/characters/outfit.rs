@@ -74,6 +74,11 @@ fn catalog() -> &'static [PieceDef] {
         .pieces
 }
 
+/// Every piece in the catalogue.
+pub fn all() -> &'static [PieceDef] {
+    catalog()
+}
+
 /// A piece made for a base file (`lookdev/vroid-Vivi.glb`), if there is one.
 pub fn piece_for(base: &str, piece: &str) -> Option<&'static PieceDef> {
     let stem = std::path::Path::new(base).file_stem()?.to_str()?;
@@ -98,10 +103,10 @@ impl Piece {
 #[derive(Component)]
 pub struct Dressed;
 
-/// A loaded piece file, ready to put on: its mesh primitives (mesh, material name, toon material),
-/// its skin and the skin's joint names.
+/// A loaded piece file, ready to put on: its mesh primitives (mesh, material name, toon
+/// material's key and source), its skin and the skin's joint names.
 struct Ready {
-    prims: Vec<(Handle<Mesh>, String, Handle<Toon>)>,
+    prims: Vec<(Handle<Mesh>, String, String, StandardMaterial)>,
     bindposes: Handle<bevy::mesh::skinning::SkinnedMeshInverseBindposes>,
     joints: Vec<String>,
 }
@@ -110,8 +115,10 @@ struct Ready {
 pub struct Wardrobe {
     loading: HashMap<String, Handle<Gltf>>,
     ready: HashMap<String, Option<std::sync::Arc<Ready>>>,
-    /// Toon materials: per piece file for recoloured ones, by content for glowing ones.
-    toons: HashMap<String, Handle<Toon>>,
+    /// Toon materials: per piece file for recoloured ones, by content for glowing ones. Ids, not
+    /// handles: a material lives while someone wears it, and is made again for the next wearer
+    /// (the first load's prewarm leaves none behind, `loading.rs`).
+    toons: HashMap<String, AssetId<Toon>>,
 }
 
 #[derive(bevy::ecs::system::SystemParam)]
@@ -125,7 +132,17 @@ pub struct GltfAssets<'w> {
 
 impl Wardrobe {
     /// The piece file once it and everything in it has loaded; `Some(None)` if it can't be used.
-    fn get(&mut self, file: &str, assets: &AssetServer, g: &GltfAssets, toons: &mut Assets<Toon>, meshes: &mut Assets<Mesh>, style: &Style) -> Option<Option<std::sync::Arc<Ready>>> {
+    /// A piece's toon material, shared by everyone wearing it.
+    fn toon(&mut self, key: &str, base: &StandardMaterial, toons: &mut Assets<Toon>, style: &Style) -> Handle<Toon> {
+        if let Some(h) = self.toons.get(key).and_then(|id| toons.get_strong_handle(*id)) {
+            return h;
+        }
+        let h = toons.add(style.toon(base.clone()));
+        self.toons.insert(key.to_string(), h.id());
+        h
+    }
+
+    fn get(&mut self, file: &str, assets: &AssetServer, g: &GltfAssets, meshes: &mut Assets<Mesh>) -> Option<Option<std::sync::Arc<Ready>>> {
         if let Some(r) = self.ready.get(file) {
             return Some(r.clone());
         }
@@ -152,11 +169,10 @@ impl Wardrobe {
                 let name = p.material.as_ref().map(name_of).unwrap_or_default();
                 let base = bevy::pbr::gltf::standard_material_from_gltf_material(&gm);
                 let key = if name.starts_with("Glow") { format!("{base:?}") } else { format!("{file}#{name}") };
-                let toon = self.toons.entry(key).or_insert_with(|| toons.add(style.toon(base))).clone();
                 if let Some(mut m) = meshes.get_mut(&p.mesh) {
                     let _ = m.generate_outline_normals(&Default::default());
                 }
-                prims.push((p.mesh.clone(), name, toon));
+                prims.push((p.mesh.clone(), name, key, base));
             }
             Some(std::sync::Arc::new(Ready { prims, bindposes: skin.inverse_bind_matrices.clone(), joints }))
         })();
@@ -204,7 +220,7 @@ pub fn dress(
         let mut files = Vec::new();
         let mut waiting = false;
         for p in &pieces {
-            match wardrobe.get(&p.file, &assets, &g, &mut toons, &mut meshes, &style) {
+            match wardrobe.get(&p.file, &assets, &g, &mut meshes) {
                 None => waiting = true,
                 Some(Some(ready)) => files.push((*p, ready)),
                 Some(None) => {}
@@ -231,11 +247,12 @@ pub fn dress(
                 covered.extend(def.covers.iter().map(String::as_str));
             }
             let joints: Vec<Entity> = ready.joints.iter().map(|n| joint(n)).collect();
-            for (mesh, material, toon) in &ready.prims {
+            for (mesh, material, key, base) in &ready.prims {
+                let toon = wardrobe.toon(key, base, &mut toons, &style);
                 commands.spawn((
                     Name::new(format!("outfit {}", def.piece)),
                     Mesh3d(mesh.clone()),
-                    MeshMaterial3d(toon.clone()),
+                    MeshMaterial3d(toon),
                     SkinnedMesh { inverse_bindposes: ready.bindposes.clone(), joints: joints.clone() },
                     DynamicSkinnedMeshBounds,
                     Transform::IDENTITY,

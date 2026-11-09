@@ -581,7 +581,69 @@ def skirmish(s):
     s.expect("the dead leave no fighter or readiness rows", not [x for x in s.rows("SELECT id FROM fighter") + s.rows("SELECT id FROM readiness") if x["id"] in gone])
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival}
+def wall_geometry(s):
+    """Tile centres on this world's own map: an `eye` tile, a `hidden` one at most 4 tiles away
+    on one axis with only rock or wall between (within even night sight), and an `open` one
+    3 tiles the other way with open ground between."""
+    w = s.rows("SELECT width, height FROM world")[0]
+    W, H = w["width"], w["height"]
+    tiles = bytearray(W * H)
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    at = lambda x, y: tiles[y * W + x] if 0 <= x < W and 0 <= y < H else 4
+    walk = lambda x, y: at(x, y) not in (2, 4, 7)
+    for y in range(4, H - 4):
+        for x in range(4, W - 4):
+            if not walk(x, y):
+                continue
+            for dx, dy in [(1, 0), (0, 1)]:
+                for gap in (1, 2, 3):
+                    bx, by = x + (gap + 1) * dx, y + (gap + 1) * dy
+                    if walk(bx, by) and all(at(x + i * dx, y + i * dy) in (4, 7) for i in range(1, gap + 1)) \
+                            and all(walk(x - i * dx, y - i * dy) for i in range(1, 4)):
+                        return {"eye": (x + .5, y + .5), "hidden": (bx + .5, by + .5), "open": (x - 3 * dx + .5, y - 3 * dy + .5)}
+    raise RuntimeError("no wall geometry on this map")
+
+
+def sight(s):
+    """Minds and behaviour graphs see by the players' rule (docs/PERCEPTION.md, "Minds see what
+    their character sees"): sight and a clear sight line. A fight at one spot is watched by a
+    resident in the open and one behind rock or a wall, both within sight: the open one's
+    graph sees the attacker and waves at it, and it witnesses the fight; the hidden one does
+    neither. Admin `place_at` and `set_behavior` set the scene."""
+    spots = wall_geometry(s)
+    (s.out / f"{s.name}-spots.json").write_text(json.dumps(spots, indent=2) + "\n")
+    attacker, victim, open_eye, hidden_eye = s.people(4)
+    fight = spots["eye"]
+    s.call("place_at", attacker, fight[0], fight[1])
+    s.call("place_at", victim, fight[0] + 0.0, fight[1] + 0.0)
+    s.call("place_at", open_eye, *spots["open"])
+    s.call("place_at", hidden_eye, *spots["hidden"])
+    watch = lambda: {"first": {"label": "watch", "children": [
+        {"if": {"cond": {"sees": {"id": attacker}}, "then": {"do": {"skill": "wave", "target": {"id": attacker}}}}},
+        {"wait": 3}]}}
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.graph(open_eye, watch())
+    s.graph(hidden_eye, watch())
+    s.graph(attacker, {"do": {"skill": "attack", "target": {"id": victim}}})
+    time.sleep(8)
+    uses = [u for u in s.rows("SELECT * FROM skill_use", "uses") if u["at_ms"] >= t0 and u["skill"] == "wave"]
+    s.expect("a graph in the open sees the attacker (waves at it)", any(u["actor"] == open_eye and u["target"] == attacker for u in uses), uses)
+    s.expect("a graph behind rock or a wall does not see it", not any(u["actor"] == hidden_eye for u in uses), uses)
+    fights = {e: [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {e}", f"experience-{e}") if r["kind"] == "fight" and r["at_ms"] >= t0] for e in (open_eye, hidden_eye)}
+    s.expect("the resident in the open witnesses the fight", fights[open_eye], fights[open_eye][:2])
+    s.expect("the resident behind the wall does not", not fights[hidden_eye], fights[hidden_eye][:2])
+    attacked = s.rows(f"SELECT * FROM chronicle WHERE kind = 'attack' AND a = {attacker}", "attack-story")
+    s.expect("the fight happened (chronicle)", attacked, attacked[:1])
+
+
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight}
 
 
 def main():

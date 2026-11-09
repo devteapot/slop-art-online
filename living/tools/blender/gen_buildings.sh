@@ -60,6 +60,7 @@ specs=(
   "cyberpunk walkway cyberpunk_city/walkway"
   "cyberpunk lamp cyberpunk_city/lamp"
   "cyberpunk crate cyberpunk_city/crate"
+  "cyberpunk wall cyberpunk_city/wall"
   "giant house giants_city/house"
   "giant tower giants_city/tower"
   "giant lamp giants_city/lamp"
