@@ -9,7 +9,29 @@ Run headless:
 Writes the same character with named, looping clips at 30 fps: idle, walk, talk, run, attack.
 
 `--kimodo NAME=motion.npz` (repeatable) adds a clip retargeted from an NVIDIA Kimodo SOMA-RP
-output (see `retarget_kimodo`); `--clips ""` writes only those.
+output as generated (see `retarget_kimodo`); `--clips ""` writes only those.
+
+`--library living/tools/blender/clips.json` writes the game's clip library instead (gen_anim.sh
+does this; `--summary FILE` records each clip's length, loop, natural and baked speed, source).
+Kimodo entries come from the NPZs `living/tools/kimodo/spark.sh` generated (`--kimodo-dir`) and
+are made game-ready (`library_clip`):
+- `kind: loop`: the cycle whose ends match best by pose, joint velocity and foot contacts
+  (`cycle: [min_s, max_s]` after `skip` seconds, or `"whole"` for takes keyframed at both ends),
+  cut and closed by spreading the end-to-start difference over the loop. Locomotion
+  (`locomotion: walk|run|sneak`) is straightened, faced along its travel and put on a belt (travel
+  removed at constant speed); `--speed`, `--run-speed`, `--sneak-speed` and `--target KEY=M/S` set
+  the speed a clip's `speed` key (default: its locomotion) is time-scaled to, within
+  `--max-scale`; unset keys keep the natural speed.
+- `kind: once`: a one-shot (`trim: [a, b]` seconds). It eases from and into the library's
+  `neutral` pose at ends keyframed to it (`start`/`end: "neutral"`), so it blends with the idles.
+  Travel is kept (`travel: belt` takes it out at constant speed, as for a dodge roll);
+  `offset: [x, z]` places a clip that continues another (sitting after sit_down).
+- Planted feet (`plant`, default on): Kimodo's foot contacts, plus feet near the floor and still,
+  pin the heel or the ball of the foot in the game's world; between plants the correction blends;
+  `solve_leg` reaches the targets, lowering the hips smoothly where a leg can't.
+- `grip: {"R": deg, "L": deg}` curls a hand that holds something (Kimodo's fingers stay relaxed).
+Hand-keyed entries: `keyed: <CLIPS name>`, or `overlay` (eased key curves on central bones over
+the neutral pose, for head gestures).
 
 Pipeline:
 1. Blender's glTF importer reads the VRoid GLB (unknown VRM extensions are ignored). With the
@@ -499,7 +521,9 @@ def frame_q(direction, lateral):
     return Matrix((d, l, d.cross(l))).transposed()
 
 
-def solve_leg(sk, side, hip_pos, hips_rot, ankle, foot_rot, toe_rot, stats):
+def solve_leg(sk, side, hip_pos, hips_rot, ankle, foot_rot, toe_rot, stats, pole=None):
+    """Two-bone IK: thigh and shin rotations that put the ankle at `ankle`, the knee bending
+    toward `pole` (default: where the foot points, horizontally)."""
     L = sk.rest
     ul, ll, ft = (L[bone(side, n)] for n in ("UpperLeg", "LowerLeg", "Foot"))
     thigh0, shin0 = ll - ul, ft - ll
@@ -512,10 +536,11 @@ def solve_leg(sk, side, hip_pos, hips_rot, ankle, foot_rot, toe_rot, stats):
         dist = reach
     dist = max(dist, abs(l1 - l2) + 1e-4)
     dh = d.normalized()
-    # The knee points where the foot points (horizontally).
-    pole = foot_rot @ Vector((0, 0, -1))
-    pole.y = 0
-    pole.normalize()
+    if pole is None:
+        # The knee points where the foot points (horizontally).
+        pole = foot_rot @ Vector((0, 0, -1))
+        pole.y = 0
+    pole = pole.normalized()
     perp = pole - pole.dot(dh) * dh
     if perp.length < 1e-6:
         perp = Vector((0, 0, -1))
@@ -538,6 +563,28 @@ def solve_leg(sk, side, hip_pos, hips_rot, ankle, foot_rot, toe_rot, stats):
     }
 
 
+def finger_curl(sk, side, fn, curl):
+    """Local rotations of one finger's three joints curled by `curl` degrees (spread by
+    FINGER_GAIN and JOINT_GAIN)."""
+    out = {}
+    curl *= FINGER_GAIN[fn]
+    for j in range(3):
+        b = bone(side, f"{fn}{j + 1}")
+        child = bone(side, f"{fn}{j + 2}") if j < 2 else None
+        tip = sk.rest[child] if child in sk.rest else None
+        if tip is None:
+            # The last joint bends like the one before it.
+            prev = sk.rest[bone(side, f"{fn}{j}")]
+            direction = (sk.rest[b] - prev).normalized()
+        else:
+            direction = (tip - sk.rest[b]).normalized()
+        axis = direction.cross(Vector((0, -1, 0))).normalized()
+        if fn == "Thumb":  # the thumb folds toward the palm's centre, under the hand
+            axis = direction.cross(Vector((1.0 if side == "L" else -1.0, -1.0, 0.0))).normalized()
+        out[b] = Quaternion(axis, math.radians(curl * JOINT_GAIN[j]))
+    return out
+
+
 def evaluate(sk, name, clip, t, speeds, stats, drop=0.0):
     """Local rotations (glTF frame) for every animated bone, and the hips' translation offset."""
     bones = clip["bones"]
@@ -558,21 +605,7 @@ def evaluate(sk, name, clip, t, speeds, stats, drop=0.0):
         for fn in FINGER_NAMES:
             spec = merged(bones, side, "Thumb" if fn == "Thumb" else "Fingers")
             tt = ts if (side == "R" and shift and f"R.{'Thumb' if fn == 'Thumb' else 'Fingers'}" not in bones) else t
-            curl = curve(spec.get("curl", 0.0))(tt) * FINGER_GAIN[fn]
-            for j in range(3):
-                b = bone(side, f"{fn}{j + 1}")
-                child = bone(side, f"{fn}{j + 2}") if j < 2 else None
-                tip = sk.rest[child] if child in sk.rest else None
-                if tip is None:
-                    # The last joint bends like the one before it.
-                    prev = sk.rest[bone(side, f"{fn}{j}")]
-                    direction = (sk.rest[b] - prev).normalized()
-                else:
-                    direction = (tip - sk.rest[b]).normalized()
-                axis = direction.cross(Vector((0, -1, 0))).normalized()
-                if fn == "Thumb":  # the thumb folds toward the palm's centre, under the hand
-                    axis = direction.cross(Vector((1.0 if side == "L" else -1.0, -1.0, 0.0))).normalized()
-                out[b] = Quaternion(axis, math.radians(curl * JOINT_GAIN[j]))
+            out.update(finger_curl(sk, side, fn, curve(spec.get("curl", 0.0))(tt)))
     # Legs.
     hips_rot = out[bone("C", "Hips")]
     feet = clip["feet"]
@@ -626,12 +659,14 @@ def evaluate(sk, name, clip, t, speeds, stats, drop=0.0):
     return out, hips_off, dropped
 
 
-def smooth_drop(drops, r=3):
-    """Cyclic dilate-then-blur: a smooth curve that is never below the drops it covers."""
+def smooth_drop(drops, r=3, cyclic=True):
+    """Dilate-then-blur (cyclic for a loop): a smooth curve never below the drops it covers."""
     n = len(drops)
-    dil = [max(drops[(i + k) % n] for k in range(-r, r + 1)) for i in range(n)]
+    at = (lambda i: drops[i % n]) if cyclic else (lambda i: drops[min(max(i, 0), n - 1)])
+    dil = [max(at(i + k) for k in range(-r, r + 1)) for i in range(n)]
+    dat = (lambda i: dil[i % n]) if cyclic else (lambda i: dil[min(max(i, 0), n - 1)])
     w = [math.cos(k / (r + 1) * math.pi / 2) ** 2 for k in range(-r, r + 1)]
-    return [sum(dil[(i + k) % n] * w[k + r] for k in range(-r, r + 1)) / sum(w) for i in range(n)]
+    return [sum(dat(i + k) * w[k + r] for k in range(-r, r + 1)) / sum(w) for i in range(n)]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -740,47 +775,563 @@ SOMA_LIMB = {
 SOMA_HIPS_REST = 1.005  # SOMA's rest hips height above the soles, m
 
 
-def retarget_kimodo(sk, path):
-    """Frames from a Kimodo SOMA-RP NPZ. Both skeletons rest in a T-pose with identity rest
-    rotations (arms along ±X, Y up); SOMA faces +Z and VRoid −Z, so each joint's global rotation
-    is turned half round Y, and each J_Bip bone's local rotation is its mapped joint's global
-    rotation relative to its nearest mapped ancestor's (SOMA joints J_Bip lacks, like Neck2,
-    fold into the next bone). The hips keep their sway and bob but not their travel (the game
-    moves the character), scaled by the ratio of hips heights."""
-    import numpy as np
+SOMA_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", ".local", "kimodo", "outputs", "somaskel77_skeleton.json")
+TURN = Matrix.Diagonal((-1.0, 1.0, -1.0))  # SOMA faces +Z, VRoid −Z: half a turn round Y
+HIPS = bone("C", "Hips")
 
-    sk_json = json.load(open(os.path.join(os.path.dirname(path), "somaskel77_skeleton.json")))
-    index = {j["name"]: j["index"] for j in sk_json["joints"]}
-    d = np.load(path)
-    G, root, smooth = d["global_rot_mats"], d["root_positions"], d["smooth_root_pos"]
-    turn = Matrix.Diagonal((-1.0, 1.0, -1.0))
-    pairs = {bone("C", b): s for b, s in SOMA_CENTRAL.items()}
-    for side, prefix in (("L", "Left"), ("R", "Right")):
-        pairs.update({bone(side, b): prefix + s for b, s in SOMA_LIMB.items()})
-    pairs = {b: index[s] for b, s in pairs.items() if b in sk.parent and s in index}
 
-    def mapped_parent(b):
-        p = sk.parent.get(b)
-        while p is not None and p not in pairs:
-            p = sk.parent.get(p)
-        return p
+class Soma:
+    """The SOMA → J_Bip mapping for one character: which joint drives which bone, each bone's
+    nearest mapped ancestor, and the hips-height ratio that scales SOMA metres to file units."""
 
-    parents = {b: mapped_parent(b) for b in pairs}
-    hips_h = sk.rest[bone("C", "Hips")].y - sk.floor
-    k = hips_h / SOMA_HIPS_REST
-    frames = []
-    for t in range(G.shape[0]):
-        glob = {b: turn @ Matrix(G[t, j].tolist()) @ turn for b, j in pairs.items()}
+    def __init__(self, sk, skeleton_json):
+        js = json.load(open(skeleton_json))
+        self.index = {j["name"]: j["index"] for j in js["joints"]}
+        pairs = {bone("C", b): s for b, s in SOMA_CENTRAL.items()}
+        for side, prefix in (("L", "Left"), ("R", "Right")):
+            pairs.update({bone(side, b): prefix + s for b, s in SOMA_LIMB.items()})
+        self.pairs = {b: self.index[s] for b, s in pairs.items() if b in sk.parent and s in self.index}
+
+        def mapped_parent(b):
+            p = sk.parent.get(b)
+            while p is not None and p not in self.pairs:
+                p = sk.parent.get(p)
+            return p
+
+        self.parents = {b: mapped_parent(b) for b in self.pairs}
+        self.k = (sk.rest[HIPS].y - sk.floor) / SOMA_HIPS_REST  # file units per SOMA metre
+        self.k_game = self.k / sk.unit  # game metres per SOMA metre
+
+    def frame(self, G, root):
+        """One frame: J_Bip local rotations (glTF frame) from SOMA global rotations [77, 3, 3],
+        and the hips offset from SOMA hips position `root` (metres, travel already removed)."""
+        glob = {b: TURN @ Matrix(G[j].tolist()) @ TURN for b, j in self.pairs.items()}
         out = {}
-        for b in pairs:
-            p = parents[b]
+        for b in self.pairs:
+            p = self.parents[b]
             local = glob[b] if p is None else glob[p].transposed() @ glob[b]
             out[b] = local.to_quaternion().normalized()
-        dx, dz = float(root[t, 0] - smooth[t, 0]), float(root[t, 2] - smooth[t, 2])
-        off = Vector((-dx * k, (float(root[t, 1]) - SOMA_HIPS_REST) * k, -dz * k))
-        frames.append((out, off))
-    print(f"KIMODO {os.path.basename(path)}: {len(frames)} frames, {len(pairs)} bones mapped")
+        off = TURN @ Vector((float(root[0]), float(root[1]) - SOMA_HIPS_REST, float(root[2]))) * self.k
+        return out, off
+
+
+def retarget_kimodo(sk, path):
+    """Frames from a Kimodo SOMA-RP NPZ, as generated. Both skeletons rest in a T-pose with
+    identity rest rotations (arms along ±X, Y up); SOMA faces +Z and VRoid −Z, so each joint's
+    global rotation is turned half round Y, and each J_Bip bone's local rotation is its mapped
+    joint's global rotation relative to its nearest mapped ancestor's (SOMA joints J_Bip lacks,
+    like Neck2, fold into the next bone). The hips keep their sway and bob but not their travel
+    (the game moves the character), scaled by the ratio of hips heights."""
+    import numpy as np
+
+    soma = Soma(sk, os.path.join(os.path.dirname(path), "somaskel77_skeleton.json"))
+    d = np.load(path)
+    root = d["root_positions"].copy()
+    root[:, [0, 2]] -= d["smooth_root_pos"][:, [0, 2]]
+    frames = [soma.frame(d["global_rot_mats"][t], root[t]) for t in range(root.shape[0])]
+    print(f"KIMODO {os.path.basename(path)}: {len(frames)} frames, {len(soma.pairs)} bones mapped")
     return frames
+
+
+# ---------------------------------------------------------------------------------------------
+# Kimodo clips made game-ready (`--library`). Work in SOMA space (numpy) first: pick the frames,
+# face the clip forward, take the travel out; then retarget, close the loop or ease into the
+# neutral pose, time-scale, and finally plant the feet with the leg IK.
+
+SOMA_HIP_JOINTS = ("LeftLeg", "RightLeg")
+CONTACT = {"L": (0, 1, 2), "R": (3, 4, 5)}  # Kimodo foot_contacts: heel, toe, toe end per side
+
+
+def np_yaw(phi):
+    import numpy as np
+
+    c, s = math.cos(phi), math.sin(phi)
+    return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
+
+
+def soma_heading(soma, P):
+    """Kimodo's heading per frame from the hip joints: 0 faces +Z. P: [T, 77, 3]."""
+    import numpy as np
+
+    d = P[:, soma.index["RightLeg"]] - P[:, soma.index["LeftLeg"]]
+    return np.unwrap(np.arctan2(d[:, 2], -d[:, 0]))
+
+
+def find_cycle(soma, m, lo, hi, skip, loco):
+    """The loop [i, j) whose ends match best: pose (joint positions about the hips, facing
+    forward), joint velocities and foot contacts, with j − i in [lo, hi] frames."""
+    import numpy as np
+
+    P, root, C = m["P"], m["root"], m["contacts"]
+    T = P.shape[0]
+    h = soma_heading(soma, P)
+    joints = sorted(set(soma.pairs.values()))
+    F = np.stack([(P[t, joints] - root[t]) @ np_yaw(-h[t]).T for t in range(T)])  # [T, J, 3]
+    F = np.concatenate([F.reshape(T, -1), root[:, 1:2]], axis=1)
+    V = np.zeros_like(F)
+    V[1:-1] = (F[2:] - F[:-2]) * (FPS / 2)
+    best = None
+    for i in range(skip, T - lo - 1):
+        for j in range(i + lo, min(i + hi, T - 2) + 1):
+            cost = np.mean((F[i] - F[j]) ** 2) + 0.01 * np.mean((V[i] - V[j]) ** 2)
+            cost += 2e-4 * np.sum(C[i] != C[j])
+            if not loco:
+                cost += 1e-3 * (h[j] - h[i]) ** 2
+            if best is None or cost < best[0]:
+                best = (cost, i, j)
+    if best is None:
+        raise SystemExit(f"no cycle of {lo}..{hi} frames after frame {skip} in a {T}-frame clip")
+    return best[1], best[2], math.sqrt(best[0])
+
+
+# A foot joint counts as planted when Kimodo says so, or when it is this close to its flat-foot
+# height (m) and moving slower than SOMA_STILL m/s in the motion's own world. Kimodo's labels
+# are short for running feet.
+SOMA_FLAT = {"Foot": 0.071, "ToeBase": 0.020}
+SOMA_NEAR, SOMA_STILL = 0.015, 0.35
+
+
+def soma_contacts(soma, P, C):
+    import numpy as np
+
+    C = C.copy()
+    for side, prefix in (("L", "Left"), ("R", "Right")):
+        for col, joint in zip(CONTACT[side][:2], ("Foot", "ToeBase")):
+            p = P[:, soma.index[prefix + joint]]
+            v = np.zeros(len(p))
+            v[1:-1] = np.hypot(p[2:, 0] - p[:-2, 0], p[2:, 2] - p[:-2, 2]) * (FPS / 2)
+            v[0], v[-1] = v[1], v[-2]
+            C[:, col] |= (p[:, 1] < SOMA_FLAT[joint] + SOMA_NEAR) & (v < SOMA_STILL)
+    return C
+
+
+def soma_window(soma, m, spec, cyc):
+    """Cut [i, j] (inclusive) out of a Kimodo motion, face it forward and remove its travel.
+    Returns the SOMA arrays for the window and the belt travel over it (metres, SOMA frame)."""
+    import numpy as np
+
+    i, j = cyc
+    G, P, root, C = (m[k][i : j + 1].copy() for k in ("G", "P", "root", "contacts"))
+    n = j - i
+    h = soma_heading(soma, P)
+    loco = spec.get("locomotion")
+    if loco:
+        # Straighten a curving path: undo the heading drift over the loop, a little each frame,
+        # turning each frame's travel with it.
+        drift = h[-1] - h[0]
+        steps = root[1:] - root[:-1]
+        P = P - root[:, None, :]
+        newroot = [root[0].copy()]
+        for f in range(1, n + 1):
+            R = np_yaw(-drift * f / n)
+            G[f] = R @ G[f]
+            P[f] = P[f] @ R.T
+            newroot.append(newroot[-1] + R @ steps[f - 1])
+        root = np.stack(newroot)
+        P = P + root[:, None, :]
+        d = root[-1] - root[0]
+        face = math.atan2(d[0], d[2])  # travel direction → +Z
+    else:
+        face = float(h[0])
+    R = np_yaw(-face)
+    for f in range(n + 1):
+        G[f] = R @ G[f]
+    P = P @ R.T
+    root = root @ R.T
+    if not loco and abs(soma_heading(soma, P[:1])[0]) > 1e-3:
+        raise SystemExit("facing the clip forward went the wrong way")
+    C = soma_contacts(soma, P, C)
+    travel = spec.get("travel") or ("belt" if loco or spec["kind"] == "loop" else "keep")
+    start = root[0].copy()
+    belt = np.zeros(3)
+    if travel == "belt":
+        belt = root[-1] - start
+        belt[1] = 0.0
+    shift = np.stack([start + belt * f / n for f in range(n + 1)])
+    shift[:, 1] = 0.0
+    # Clips that continue another one's end (sitting after sit_down) sit where it ended.
+    ox, oz = spec.get("offset", (0.0, 0.0))
+    shift[:, 0] -= ox
+    shift[:, 2] -= oz
+    root = root - shift
+    P = P - shift[:, None, :]
+    return dict(G=G, P=P, root=root, contacts=C, belt=belt, n=n)
+
+
+def neutral_frame(sk, soma, ref, kdir):
+    """The library's neutral pose (`name#seed@frame`), facing forward with its hips over the
+    origin, as J_Bip local rotations and a hips offset."""
+    import numpy as np
+
+    name_seed, frame = ref.split("@")
+    name, seed = name_seed.split("#")
+    m = load_soma(os.path.join(kdir, f"{name}_s{int(seed)}.npz"))
+    f = int(frame) % m["P"].shape[0]
+    R = np_yaw(-float(soma_heading(soma, m["P"][f : f + 1])[0]))
+    root = m["root"][f].copy()
+    root[[0, 2]] = 0.0
+    return soma.frame(R @ m["G"][f], root)
+
+
+def load_soma(path):
+    import numpy as np
+
+    d = np.load(path)
+    return {"G": d["global_rot_mats"].astype(np.float64), "P": d["posed_joints"].astype(np.float64),
+            "root": d["root_positions"].astype(np.float64), "contacts": d["foot_contacts"].astype(bool)}
+
+
+def spread_seam(frames):
+    """Close a loop whose last frame should equal its first: spread the difference over the
+    loop, so frame f moves f/n of the way. Returns n + 1 frames, the last equal to the first."""
+    n = len(frames) - 1
+    q0, off0 = frames[0]
+    qn, offn = frames[n]
+    err = {b: q0[b] @ qn[b].inverted() for b in q0}
+    doff = off0 - offn
+    out = []
+    for f, (q, off) in enumerate(frames):
+        s = f / n
+        out.append(({b: Quaternion().slerp(err[b], s) @ q[b] for b in q}, off + doff * s))
+    out[-1] = ({b: v.copy() for b, v in q0.items()}, off0.copy())
+    return out, max(math.degrees(e.angle) for e in err.values()), doff.length
+
+
+def ease_to(frames, pose, n_in, n_out, cyclic=False):
+    """Blend the first n_in and last n_out frames toward `pose` (smoothstep), so a one-shot
+    starts and ends where the idles do. A loop eased both ways starts and ends at the pose."""
+    pq, poff = pose
+    n = len(frames) - 1
+    out = []
+    for f, (q, off) in enumerate(frames):
+        w = 0.0
+        if n_in and f < n_in:
+            w = max(w, 1 - smooth(f / n_in))
+        if n_out and f > n - n_out:
+            w = max(w, 1 - smooth((n - f) / n_out))
+        if w <= 0:
+            out.append((q, off))
+            continue
+        out.append(({b: q[b].slerp(pq.get(b, Quaternion()), w) for b in q}, off.lerp(poff, w)))
+    return out
+
+
+def resample(frames, contacts, m, cyclic):
+    """Frames re-timed to m intervals (m + 1 frames), interpolating rotations and offsets."""
+    n = len(frames) - 1
+    out, cs = [], []
+    for u in range(m + 1):
+        x = u * n / m
+        a = min(int(math.floor(x)), n)
+        b = min(a + 1, n)
+        s = x - a
+        qa, oa = frames[a]
+        qb, ob = frames[b]
+        out.append(({k: qa[k].slerp(qb[k], s) for k in qa}, oa.lerp(ob, s)))
+        cs.append(contacts[min(int(round(x)), n)])
+    return out, cs
+
+
+def fk_pose(sk, local, off, names):
+    """World rotations and positions (glTF, file units) of `names` and their ancestors."""
+    rot, pos = {}, {}
+
+    def visit(b):
+        if b in rot:
+            return
+        p = sk.parent.get(b)
+        q = local.get(b, Quaternion())
+        if p is None:
+            rot[b], pos[b] = q, sk.rest[b].copy()
+            return
+        visit(p)
+        rot[b] = rot[p] @ q
+        pos[b] = pos[p] + rot[p] @ (sk.rest[b] - sk.rest[p])
+        if b == HIPS:
+            pos[b] = pos[b] + off
+
+    for b in names:
+        visit(b)
+    return rot, pos
+
+
+def clean_contacts(c, cyclic, gap=2, short=1):
+    """Fill contact gaps of up to `gap` frames and drop contacts shorter than `short`."""
+    n = len(c)
+    c = list(c)
+    for val, run in ((True, gap), (False, short)):
+        # A run of `not val` no longer than `run`, bounded by `val` on both sides, flips.
+        i = 0
+        while i < n:
+            if c[i] != val:
+                j = i
+                while j < n and c[j] != val:
+                    j += 1
+                bounded = (i > 0 or cyclic) and (j < n or cyclic)
+                if j - i <= run and bounded and j - i < n:
+                    for k in range(i, j):
+                        c[k] = val
+                i = j
+            else:
+                i += 1
+    return c
+
+
+def plant_feet(sk, frames, contacts, belt_v, cyclic, stats):
+    """Lock planted feet to the floor in the game's world (the clip moves at `belt_v` file units
+    per clip), then solve the legs to reach them. A heel contact pins the heel, a toe-only contact
+    the ball of the foot; between contacts the correction blends from one plant to the next.
+    Returns the frames with new hips heights and leg rotations."""
+    n = len(frames) - 1
+    count = n if cyclic else n + 1  # a loop's last frame is its first
+    legs = {s: [bone(s, x) for x in LEG] for s in "LR"}
+    fk = [fk_pose(sk, q, off, legs["L"] + legs["R"]) for q, off in frames[:count]]
+    world = lambda p, k: p + belt_v * (k / n)
+    shift, planted = {}, {}
+    for side in "LR":
+        f_ = sk.feet[side]
+        ft, toe = bone(side, "Foot"), bone(side, "ToeBase")
+        floor = f_["sole"]
+        ball_rest = Vector((f_["toe"].x, f_["sole"], f_["toe"].z))
+
+        def pivot(k, kind):
+            rot, pos = fk[k % count]
+            ref = f_["heel"] if kind == "heel" else ball_rest
+            return world(pos[ft] + rot[ft] @ (ref - f_["ankle"]), k)
+
+        heel = clean_contacts([c[CONTACT[side][0]] for c in contacts[:count]], cyclic)
+        toes = clean_contacts([c[CONTACT[side][1]] or c[CONTACT[side][2]] for c in contacts[:count]], cyclic)
+        down = [h or t for h, t in zip(heel, toes)]
+        O = [None] * count
+        if any(down):
+            # Walk the frames from a lifted one (a loop is unrolled: index k is frame k % count,
+            # k / n clips of belt travel along).
+            start = next((k for k in range(count) if not down[k]), 0) if cyclic else 0
+            lock, kind = None, None
+            for k in range(start, start + count):
+                f = k % count
+                if not down[f]:
+                    lock = None
+                    continue
+                want = "heel" if heel[f] else "ball"
+                p = pivot(k, want)
+                if lock is None:
+                    lock, kind = p.copy(), want
+                    lock.y = floor
+                elif want != kind:
+                    prev = O[(k - 1) % count]
+                    lock, kind = p + prev, want
+                    lock.y = floor
+                O[f] = lock - p
+            # Between plants, blend the correction from one to the next.
+            idx = [k for k in range(count) if O[k] is not None]
+            for k in range(count):
+                if O[k] is not None:
+                    continue
+                if cyclic:
+                    a = max((x for x in idx if x < k), default=idx[-1])
+                    b = min((x for x in idx if x > k), default=idx[0])
+                    span = (b - a) % count
+                    s = ((k - a) % count) / span if span else 0.0
+                else:
+                    a = max((x for x in idx if x < k), default=None)
+                    b = min((x for x in idx if x > k), default=None)
+                    if a is None or b is None:
+                        O[k] = O[b if a is None else a].copy()
+                        continue
+                    s = (k - a) / (b - a)
+                O[k] = O[a].lerp(O[b], smooth(s))
+        else:
+            O = [Vector() for _ in range(count)]
+        shift[side] = O
+        planted[side] = [(down[k], "heel" if heel[k] else "ball") for k in range(count)]
+        stats[f"{side}_fix_m"] = max(o.length for o in O) / sk.unit
+    # Lower the hips (smoothly) where a leg can't reach its target: the hips move, the target
+    # doesn't, so repeat until both legs reach.
+    extra = [0.0] * count
+    for _ in range(4):
+        drops = []
+        for k in range(count):
+            q, off = frames[k]
+            rot, pos = fk_pose(sk, q, off - Vector((0, extra[k], 0)), legs["L"] + legs["R"])
+            target_rot, target_pos = fk[k]
+            worst = 0.0
+            for side in "LR":
+                hip = pos[bone(side, "UpperLeg")]
+                d = target_pos[bone(side, "Foot")] + shift[side][k] - hip
+                over = d.length - (sk.l1 + sk.l2) * 0.998
+                if over > 0:
+                    worst = max(worst, over * d.length / max(abs(d.y), 1e-3))
+            drops.append(worst)
+        if not any(drops):
+            break
+        more = smooth_drop(drops, cyclic=cyclic)
+        extra = [e + x for e, x in zip(extra, more)]
+    if any(extra):
+        stats["hip_lowered"] = max(extra) / sk.unit
+    out = []
+    for k in range(count):
+        q, off = frames[k]
+        off = off - Vector((0, extra[k], 0))
+        q = dict(q)
+        rot, pos = fk_pose(sk, q, off, legs["L"] + legs["R"])
+        hips_rot = rot[HIPS]
+        for side in "LR":
+            ft = bone(side, "Foot")
+            hip = pos[bone(side, "UpperLeg")]
+            target = fk[k][1][ft] + shift[side][k]  # where the foot was before the hips came down
+            # The knee bends the way the retargeted thigh faces (its rest forward, −Z): stable
+            # even when the leg is nearly straight and the knee's own offset says nothing.
+            pole = rot[bone(side, "UpperLeg")] @ Vector((0, 0, -1))
+            q.update(solve_leg(sk, side, hip, hips_rot, target, rot[ft], rot[bone(side, "ToeBase")], stats, pole=pole))
+        out.append((q, off))
+    # What a viewer sees: how far a planted pivot still slides (game world) and how far it is
+    # off the floor.
+    slide, height = 0.0, 0.0
+    after = [fk_pose(sk, q, off, legs["L"] + legs["R"]) for q, off in out]
+    for side in "LR":
+        f_ = sk.feet[side]
+        ft = bone(side, "Foot")
+        ball_rest = Vector((f_["toe"].x, f_["sole"], f_["toe"].z))
+        for k in range(count):
+            down, kind = planted[side][k]
+            if not down:
+                continue
+            ref = f_["heel"] if kind == "heel" else ball_rest
+            rot, pos = after[k]
+            p = world(pos[ft] + rot[ft] @ (ref - f_["ankle"]), k)
+            height = max(height, abs(p.y - f_["sole"]))
+            k2 = k + 1
+            if k2 < count and planted[side][k2] == (True, kind):
+                rot2, pos2 = after[k2]
+                p2 = world(pos2[ft] + rot2[ft] @ (ref - f_["ankle"]), k2)
+                slide = max(slide, (p2 - p).length * FPS)
+    stats["slide_mps"] = slide / sk.unit
+    stats["plant_off_floor_m"] = height / sk.unit
+    if cyclic:
+        out.append(({b: v.copy() for b, v in out[0][0].items()}, out[0][1].copy()))
+    return out
+
+
+def loop_jerk(frames):
+    """How much a loop pops at its seam: per bone, the change in angular step (degrees per
+    frame) across the seam, against the largest such change anywhere else in the loop."""
+    n = len(frames) - 1
+    worst_seam, worst_inside = 0.0, 0.0
+    for b in frames[0][0]:
+        q = [frames[f][0][b] for f in range(n)]
+        step = [math.degrees(q[f].rotation_difference(q[(f + 1) % n]).angle) for f in range(n)]
+        for f in range(n):
+            j = abs(step[f] - step[f - 1])
+            if f in (0, n - 1):
+                worst_seam = max(worst_seam, j)
+            else:
+                worst_inside = max(worst_inside, j)
+    return worst_seam, worst_inside
+
+
+def overlay_clip(sk, spec, neutral):
+    """A hand-keyed gesture on the neutral pose: central bones (Neck, Head, …) turn by eased key
+    curves over the clip, from rest and back to it (degrees: pitch + nods forward, yaw + turns to
+    the character's left, roll + tilts to its left), feet planted."""
+    o = spec["overlay"]
+    n = round(o["seconds"] * FPS)
+    curves = {}
+    for b, chans in o.items():
+        if b == "seconds":
+            continue
+        for ch, pts in chans.items():
+            curves[(b, ch)] = monotone([p[0] for p in pts], [p[1] for p in pts], cyclic=False)
+    pq, poff = neutral
+    frames = []
+    for f in range(n + 1):
+        t = f / n
+        q = {b: v.copy() for b, v in pq.items()}
+        for b in {b for b, _ in curves}:
+            c = lambda ch, b=b: curves[(b, ch)](t) if (b, ch) in curves else 0.0
+            q[bone("C", b)] = q[bone("C", b)] @ central_q(c)
+        frames.append((q, poff.copy()))
+    contacts = [(True,) * 6] * (n + 1)
+    stats = {}
+    frames = plant_feet(sk, frames, contacts, Vector(), False, stats)
+    info = {"source": "hand-keyed overlay on the neutral pose", "kind": "once", "loop": False, "frames": n,
+            "seconds": round(n / FPS, 3), "speed": 0.0}
+    return frames, info
+
+
+def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
+    """A Kimodo NPZ made game-ready by its library entry. Returns frames and a summary."""
+    m = load_soma(path)
+    T = m["P"].shape[0]
+    kind = spec["kind"]
+    loco = spec.get("locomotion")
+    info = {"source": f"kimodo {os.path.basename(path)}", "kind": kind}
+    if kind == "loop" and spec.get("cycle") == "whole":
+        # Keyframed at both ends to the same pose: the whole take is the loop.
+        i, j = 0, T - 1
+        info.update(cut=[i, j])
+    elif kind == "loop":
+        lo, hi = (round(x * FPS) for x in spec.get("cycle", (1.0, 3.0)))
+        skip = round(spec.get("skip", 0.0) * FPS)
+        i, j, err = find_cycle(soma, m, lo, min(hi, T - 2 - skip), skip, loco)
+        info.update(cut=[i, j], match=round(err, 4))
+    else:
+        a, b = spec.get("trim", (0.0, (T - 1) / FPS))
+        i, j = round(a * FPS), min(round(b * FPS), T - 1)
+        info.update(cut=[i, j])
+    w = soma_window(soma, m, spec, (i, j))
+    n = w["n"]
+    frames = [soma.frame(w["G"][f], w["root"][f]) for f in range(n + 1)]
+    # Kimodo's fingers hold one relaxed pose; a clip that holds something (a sword, a bow) closes
+    # that hand: "grip": {"R": degrees of curl, "L": …}.
+    for side, curl in spec.get("grip", {}).items():
+        fixed = {}
+        for fn in FINGER_NAMES:
+            fixed.update(finger_curl(sk, side, fn, curl * (0.5 if fn == "Thumb" else 1.0)))
+        for q, _ in frames:
+            q.update(fixed)
+    contacts = [tuple(c) for c in w["contacts"]]
+    moving = bool(loco) or spec.get("travel") == "belt"
+    belt_soma = float(math.hypot(w["belt"][0], w["belt"][2])) if moving else 0.0
+    natural = belt_soma * soma.k_game / (n / FPS)
+    if kind == "loop":
+        frames, rot_err, off_err = spread_seam(frames)
+        info.update(seam_deg=round(rot_err, 2), seam_m=round(off_err / sk.unit, 4))
+    # Ease into and out of the neutral pose only at ends keyframed to it (a death or a sit-down
+    # ends elsewhere; a stand-up starts elsewhere).
+    default = (0.25 if spec.get("start") == "neutral" else 0.0, 0.3 if spec.get("end") == "neutral" else 0.0)
+    ein, eout = (round(x * FPS) for x in spec.get("ease", default if kind == "once" else (0.0, 0.0)))
+    if neutral is not None and (ein or eout):
+        frames = ease_to(frames, neutral, ein, eout)
+    scale = 1.0
+    target = speeds.get(spec.get("speed", loco)) if loco else None
+    if target and natural > 0:
+        scale = min(max(target / natural, 1 / max_scale), max_scale)
+        m2 = max(2, round(n / scale))
+        frames, contacts = resample(frames, contacts, m2, kind == "loop")
+        scale = n / m2
+        n = m2
+    # Standing loops had their drift removed; their feet stay put, so they plant in place.
+    belt_v = TURN @ Vector((float(w["belt"][0]), 0.0, float(w["belt"][2]))) * soma.k if moving else Vector()
+    stats = {}
+    if spec.get("plant", True):
+        frames = plant_feet(sk, frames, contacts, belt_v, kind == "loop", stats)
+    if kind == "loop":
+        seam, inside = loop_jerk(frames)
+        info.update(seam_jerk_deg=round(seam, 2), max_jerk_inside_deg=round(inside, 2))
+    speed = belt_soma * soma.k_game / (n / FPS)
+    info.update(frames=n, seconds=round(n / FPS, 3), natural_speed=round(natural, 3), speed=round(speed, 3),
+                time_scale=round(scale, 3), loop=kind == "loop")
+    if target and abs(speed - target) > 0.05 * target:
+        info["speed_short_of_target"] = target
+    if kind == "once" and belt_soma > 0:
+        info["travel_m"] = round(belt_soma * soma.k_game, 3)
+    if kind == "once" and not moving:
+        d = w["root"][-1] - w["root"][0]
+        info["end_offset_m"] = round(float(math.hypot(d[0], d[2])) * soma.k_game, 3)
+        info["end_offset_soma_xz"] = [round(float(w["root"][-1][0]), 3), round(float(w["root"][-1][2]), 3)]
+    info.update({k: round(v, 4) if isinstance(v, float) else v for k, v in stats.items() if not isinstance(v, tuple)})
+    return frames, info
 
 
 def check_pose_basis(arm):
@@ -900,7 +1451,8 @@ def graft(src, exported, out, animated, translated, expected):
                 got = struct.unpack(f"<{a['count'] * 4}f", data)
                 for f, q in enumerate(expected[name][node][: a["count"]]):
                     g = Quaternion((got[4 * f + 3], got[4 * f], got[4 * f + 1], got[4 * f + 2]))
-                    worst = max(worst, q.rotation_difference(g).angle)
+                    ang = q.rotation_difference(g).angle
+                    worst = max(worst, min(ang, 2 * math.pi - ang))  # q and −q are one rotation
             samplers.append({"input": copy(s["input"]), "output": copy(s["output"]), "interpolation": s.get("interpolation", "LINEAR")})
             channels.append({"sampler": len(samplers) - 1, "target": {"node": onodes[node], "path": path}})
             have.add((node, path))
@@ -919,20 +1471,45 @@ def graft(src, exported, out, animated, translated, expected):
 # ---------------------------------------------------------------------------------------------
 
 
+REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
+
+
+def library_entries(lib, only, seeds):
+    """(clip name, entry, seed or None) for each clip the library run writes."""
+    for e in lib["clips"]:
+        if e.get("kind") == "pose" or (only and e["name"] not in only):
+            continue
+        if "keyed" in e or "overlay" in e:
+            yield e["name"], e, None
+        elif seeds == "all":
+            for s in e["seeds"]:
+                yield f"{e['name']}_s{s}", e, s
+        else:
+            yield e["name"], e, e["pick"]
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--in", dest="src", required=True, help="VRoid GLB (VRM 0.x)")
     ap.add_argument("--out", required=True, help="output GLB")
-    ap.add_argument("--clips", default=",".join(ORDER), help=f"comma-separated subset of {ORDER}")
+    ap.add_argument("--clips", default=None, help=f"comma-separated subset of {ORDER} (default: all of them, or none with --library)")
     ap.add_argument("--speed", type=float, default=1.4, help="walk speed, game m/s")
     ap.add_argument("--run-speed", type=float, default=3.6, help="run speed, game m/s")
+    ap.add_argument("--sneak-speed", type=float, default=None, help="sneak speed, game m/s (default: as generated)")
+    ap.add_argument("--target", action="append", default=[], metavar="KEY=M/S", help="target speed for library clips whose speed key is KEY (e.g. walk_brisk=2.6); unset keys keep the generated speed")
+    ap.add_argument("--max-scale", type=float, default=1.4, help="most a locomotion clip is sped up or slowed down to reach its speed")
     ap.add_argument("--height", type=float, default=1.75, help="height the game fits the character to, m")
-    ap.add_argument("--kimodo", action="append", default=[], metavar="NAME=NPZ", help="add a clip retargeted from a Kimodo SOMA-RP NPZ (repeatable)")
+    ap.add_argument("--kimodo", action="append", default=[], metavar="NAME=NPZ", help="add a clip retargeted from a Kimodo SOMA-RP NPZ as generated (repeatable)")
+    ap.add_argument("--library", help="clip library (clips.json): write its clips, made game-ready")
+    ap.add_argument("--kimodo-dir", default=os.path.join(REPO, ".local", "kimodo", "outputs", "library"), help="the library's generated NPZs")
+    ap.add_argument("--only", default="", help="comma-separated library entries")
+    ap.add_argument("--seeds", choices=["pick", "all"], default="pick", help="all: write every seed as <name>_s<seed>, for review")
+    ap.add_argument("--summary", help="write each clip's length, speed and source as JSON")
     ap.add_argument("--blend", help="also save the .blend with the NLA tracks")
     ap.add_argument("--keep-export", help="also keep Blender's own GLB export at this path")
     a = ap.parse_args(argv)
-    clips = [c.strip() for c in a.clips.split(",") if c.strip()]
+    clips = [c.strip() for c in (a.clips if a.clips is not None else ("" if a.library else ",".join(ORDER))).split(",") if c.strip()]
     unknown = [c for c in clips if c not in CLIPS]
     if unknown:
         raise SystemExit(f"unknown clips {unknown}")
@@ -942,18 +1519,46 @@ def main():
     print(f"SKELETON height {sk.height:.3f} units ({sk.unit:.3f}/m), legs {sk.l1:.3f}+{sk.l2:.3f}, "
           f"foot heel {sk.feet['L']['heel'].z - sk.feet['L']['ankle'].z:+.3f} tip {sk.feet['L']['tip'].z - sk.feet['L']['ankle'].z:+.3f} sole {sk.feet['L']['sole']:+.4f}")
     check_pose_basis(arm)
-    speeds = {"walk": a.speed, "run": a.run_speed}
-    expected = {}
+    speeds = {"walk": a.speed, "run": a.run_speed, "sneak": a.sneak_speed}
+    speeds.update({k: float(v) for k, v in (t.split("=", 1) for t in a.target)})
+    expected, summary = {}, {}
     animated, translated = set(), {bone("C", "Hips")}
+
+    def add(name, values):
+        expected[name] = {k: v for k, v in values.items() if not k.startswith("__")}
+        animated.update(expected[name])
+
+    def keyed(name, c):
+        add(name, key_clip(arm, sk, name, CLIPS[c], speeds))
+        spec = CLIPS[c]
+        gait = spec["feet"].get("gait")
+        summary[name] = {"source": f"hand-keyed {c}", "kind": "loop", "loop": True, "seconds": round(round(spec["seconds"] * FPS) / FPS, 3),
+                         "speed": speeds[gait["speed"]] if gait else 0.0}
+
     for c in clips:
-        values = key_clip(arm, sk, c, CLIPS[c], speeds)
-        expected[c] = {k: v for k, v in values.items() if not k.startswith("__")}
-        animated |= set(expected[c])
+        keyed(c, c)
     for spec in a.kimodo:
         name, path = spec.split("=", 1)
-        values = key_frames(arm, name, retarget_kimodo(sk, os.path.abspath(path)), {})
-        expected[name] = {k: v for k, v in values.items() if not k.startswith("__")}
-        animated |= set(expected[name])
+        add(name, key_frames(arm, name, retarget_kimodo(sk, os.path.abspath(path)), {}))
+    if a.library:
+        lib = json.load(open(a.library))
+        soma = Soma(sk, os.path.join(os.path.dirname(a.kimodo_dir.rstrip("/")), "somaskel77_skeleton.json"))
+        neutral = neutral_frame(sk, soma, lib["neutral"], a.kimodo_dir) if lib.get("neutral") else None
+        only = {x for x in a.only.split(",") if x}
+        for name, e, seed in library_entries(lib, only, a.seeds):
+            if "keyed" in e:
+                keyed(name, e["keyed"])
+                continue
+            if "overlay" in e:
+                frames, info = overlay_clip(sk, e, neutral)
+                add(name, key_frames(arm, name, frames, {}))
+                summary[name] = info
+                continue
+            path = os.path.join(a.kimodo_dir, f"{e['name']}_s{seed}.npz")
+            frames, info = library_clip(sk, soma, e, path, neutral, speeds, a.max_scale)
+            stats = {k: v for k, v in info.items() if k not in ("source", "kind", "loop")}
+            add(name, key_frames(arm, name, frames, stats))
+            summary[name] = info
     if a.blend:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a.blend))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
@@ -962,6 +1567,10 @@ def main():
     worst = graft(os.path.abspath(a.src), os.path.abspath(tmp), os.path.abspath(a.out), animated, translated, expected)
     if math.degrees(worst) > 0.05:
         raise SystemExit(f"exported rotations differ from the evaluated pose by {math.degrees(worst):.3f}°")
+    if a.summary:
+        with open(a.summary, "w") as f:
+            json.dump(summary, f, indent=1)
+        print(f"SUMMARY {a.summary}: {len(summary)} clips")
 
 
 if __name__ == "__main__":
