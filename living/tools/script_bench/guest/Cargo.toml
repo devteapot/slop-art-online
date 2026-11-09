@@ -1,0 +1,10 @@
+[package]
+name = "sb-guest"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# The laws written in Rust, compiled to wasm32-unknown-unknown and run by wasmi inside the
+# bench module. No dependencies: it decodes the facts the host encodes.
+[lib]
+crate-type = ["cdylib"]

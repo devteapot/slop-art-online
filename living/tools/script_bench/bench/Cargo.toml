@@ -1,0 +1,32 @@
+[package]
+name = "sb-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[features]
+default = []
+rhai = ["dep:rhai"]
+rune = ["dep:rune"]
+wasmi = ["dep:wasmi"]
+piccolo = ["dep:piccolo", "dep:getrandom02", "dep:getrandom03"]
+koto = ["dep:koto"]
+mlua = ["dep:mlua"]
+all = ["rhai", "rune", "wasmi", "piccolo", "koto"]
+
+[dependencies]
+# SkillCtx, Effect, Rates, genes and the Rhai runtime exactly as the authority embeds it.
+living-rules = { workspace = true }
+rhai = { workspace = true, optional = true }
+rune = { version = "=0.14.2", default-features = false, features = ["std"], optional = true }
+wasmi = { version = "=2.0.0", default-features = false, features = ["std", "validate", "stable", "auto-dispatch"], optional = true }
+piccolo = { version = "=0.3.3", optional = true }
+koto = { version = "=0.16.1", default-features = false, features = ["rc"], optional = true }
+mlua = { version = "=0.12.2", features = ["lua54", "vendored"], optional = true }
+
+# piccolo's rand 0.8 (getrandom 0.2) and ahash runtime-rng (getrandom 0.3) have no
+# wasm32-unknown-unknown backend: register custom ones (build with
+# RUSTFLAGS='--cfg getrandom_backend="custom"'). A real module would feed the authority's RNG.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom02 = { package = "getrandom", version = "0.2", features = ["custom"], optional = true }
+getrandom03 = { package = "getrandom", version = "0.3", optional = true }

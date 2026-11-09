@@ -1,0 +1,21 @@
+[package]
+name = "sb-host"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "sb-host"
+path = "src/main.rs"
+
+[[bin]]
+name = "sb-native"
+path = "src/native.rs"
+
+[dependencies]
+# SpacetimeDB 2.14.1's wasmtime: version "39" (Cargo.lock 39.0.1), same features
+# (SpacetimeDB-2.14.1/Cargo.toml [workspace.dependencies.wasmtime]).
+wasmtime = { version = "=39.0.1", default-features = false, features = ["addr2line", "async", "cache", "cranelift", "demangle", "parallel-compilation", "runtime", "std"] }
+sb-bench = { path = "../bench", features = ["all", "mlua"] }
+anyhow = "1"
+living-rules = { path = "../../../rules" }

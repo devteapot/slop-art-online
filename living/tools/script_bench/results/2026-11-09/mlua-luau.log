@@ -1,0 +1,60 @@
+     Locking 1 package to latest compatible version
+      Adding luau0-src v0.22.0+luau740
+ Downloading crates ...
+  Downloaded luau0-src v0.22.0+luau740
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Location.cpp:2:
+warning: mlua-sys@0.13.0: /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/Location.h:4:10: fatal error: 'climits' file not found
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Cst.cpp:2:
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/Ast.h:4:
+warning: mlua-sys@0.13.0: /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include/Luau/Common.h:4:10: fatal error: 'string.h' file not found
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/PrettyPrinter.cpp:2:
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/PrettyPrinter.h:4:
+warning: mlua-sys@0.13.0: /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/Location.h:4:10: fatal error: 'climits' file not found
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Allocator.cpp:3:
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/Allocator.h:4:
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/Ast.h:4:
+warning: mlua-sys@0.13.0: /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include/Luau/Common.h:4:10: fatal error: 'string.h' file not found
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Ast.cpp:2:
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/Ast.h:4:
+warning: mlua-sys@0.13.0: /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include/Luau/Common.h:4:10: fatal error: 'string.h' file not found
+warning: mlua-sys@0.13.0:     4 | #include <string.h>
+warning: mlua-sys@0.13.0:       |          ^~~~~~~~~~
+warning: mlua-sys@0.13.0:     4 | #include <string.h>
+warning: mlua-sys@0.13.0:       |          ^~~~~~~~~~
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Lexer.cpp:2:
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/Lexer.h:4:
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/Allocator.h:4:
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/Ast.h:4:
+warning: mlua-sys@0.13.0: /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include/Luau/Common.h:4:10: fatal error: 'string.h' file not found
+warning: mlua-sys@0.13.0:     4 | #include <string.h>
+warning: mlua-sys@0.13.0:       |          ^~~~~~~~~~
+warning: mlua-sys@0.13.0:     4 | #include <climits>
+warning: mlua-sys@0.13.0:       |          ^~~~~~~~~
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Parser.cpp:2:
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/Parser.h:4:
+warning: mlua-sys@0.13.0: In file included from /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include/Luau/Ast.h:4:
+warning: mlua-sys@0.13.0: /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include/Luau/Common.h:4:10: fatal error: 'string.h' file not found
+warning: mlua-sys@0.13.0:     4 | #include <string.h>
+warning: mlua-sys@0.13.0:       |          ^~~~~~~~~~
+warning: mlua-sys@0.13.0:     4 | #include <climits>
+warning: mlua-sys@0.13.0:       |          ^~~~~~~~~
+warning: mlua-sys@0.13.0:     4 | #include <string.h>
+warning: mlua-sys@0.13.0:       |          ^~~~~~~~~~
+warning: mlua-sys@0.13.0: /home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Confusables.cpp:4:10: fatal error: 'algorithm' file not found
+warning: mlua-sys@0.13.0:     4 | #include <algorithm>
+warning: mlua-sys@0.13.0:       |          ^~~~~~~~~~~
+warning: mlua-sys@0.13.0: 1 error generated.
+warning: mlua-sys@0.13.0: 1 error generated.
+warning: mlua-sys@0.13.0: ToolExecError: command did not execute successfully (status code exit status: 1): "clang++" "-O3" "-ffunction-sections" "-fdata-sections" "--target=wasm32-unknown-unknown" "-std=c++17" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include" "-w" "-fno-math-errno" "-DLUAI_MAXCSTACK=1000000" "-DLUA_VECTOR_SIZE=3" "-DLUA_API=extern \"C\"" "-o" "/home/carlid/scratch/sb-target-mlua/wasm32-unknown-unknown/release/build/mlua-sys-68613d4117badae4/out/luau-build/2231ff075a10511f-Location.o" "-c" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Location.cpp"
+warning: mlua-sys@0.13.0: ToolExecError: command did not execute successfully (status code exit status: 1): "clang++" "-O3" "-ffunction-sections" "-fdata-sections" "--target=wasm32-unknown-unknown" "-std=c++17" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include" "-w" "-fno-math-errno" "-DLUAI_MAXCSTACK=1000000" "-DLUA_VECTOR_SIZE=3" "-DLUA_API=extern \"C\"" "-o" "/home/carlid/scratch/sb-target-mlua/wasm32-unknown-unknown/release/build/mlua-sys-68613d4117badae4/out/luau-build/2231ff075a10511f-Confusables.o" "-c" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Confusables.cpp"
+warning: mlua-sys@0.13.0: 1 error generated.
+warning: mlua-sys@0.13.0: 1 error generated.
+warning: mlua-sys@0.13.0: ToolExecError: command did not execute successfully (status code exit status: 1): "clang++" "-O3" "-ffunction-sections" "-fdata-sections" "--target=wasm32-unknown-unknown" "-std=c++17" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include" "-w" "-fno-math-errno" "-DLUAI_MAXCSTACK=1000000" "-DLUA_VECTOR_SIZE=3" "-DLUA_API=extern \"C\"" "-o" "/home/carlid/scratch/sb-target-mlua/wasm32-unknown-unknown/release/build/mlua-sys-68613d4117badae4/out/luau-build/2231ff075a10511f-Cst.o" "-c" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Cst.cpp"
+warning: mlua-sys@0.13.0: ToolExecError: command did not execute successfully (status code exit status: 1): "clang++" "-O3" "-ffunction-sections" "-fdata-sections" "--target=wasm32-unknown-unknown" "-std=c++17" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include" "-w" "-fno-math-errno" "-DLUAI_MAXCSTACK=1000000" "-DLUA_VECTOR_SIZE=3" "-DLUA_API=extern \"C\"" "-o" "/home/carlid/scratch/sb-target-mlua/wasm32-unknown-unknown/release/build/mlua-sys-68613d4117badae4/out/luau-build/2231ff075a10511f-Allocator.o" "-c" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Allocator.cpp"
+warning: mlua-sys@0.13.0: 1 error generated.
+warning: mlua-sys@0.13.0: ToolExecError: command did not execute successfully (status code exit status: 1): "clang++" "-O3" "-ffunction-sections" "-fdata-sections" "--target=wasm32-unknown-unknown" "-std=c++17" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include" "-w" "-fno-math-errno" "-DLUAI_MAXCSTACK=1000000" "-DLUA_VECTOR_SIZE=3" "-DLUA_API=extern \"C\"" "-o" "/home/carlid/scratch/sb-target-mlua/wasm32-unknown-unknown/release/build/mlua-sys-68613d4117badae4/out/luau-build/2231ff075a10511f-Ast.o" "-c" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Ast.cpp"
+warning: mlua-sys@0.13.0: 1 error generated.
+warning: mlua-sys@0.13.0: ToolExecError: command did not execute successfully (status code exit status: 1): "clang++" "-O3" "-ffunction-sections" "-fdata-sections" "--target=wasm32-unknown-unknown" "-std=c++17" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include" "-w" "-fno-math-errno" "-DLUAI_MAXCSTACK=1000000" "-DLUA_VECTOR_SIZE=3" "-DLUA_API=extern \"C\"" "-o" "/home/carlid/scratch/sb-target-mlua/wasm32-unknown-unknown/release/build/mlua-sys-68613d4117badae4/out/luau-build/2231ff075a10511f-Lexer.o" "-c" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/Lexer.cpp"
+warning: mlua-sys@0.13.0: 1 error generated.
+warning: mlua-sys@0.13.0: ToolExecError: command did not execute successfully (status code exit status: 1): "clang++" "-O3" "-ffunction-sections" "-fdata-sections" "--target=wasm32-unknown-unknown" "-std=c++17" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Common/include" "-I" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/include" "-w" "-fno-math-errno" "-DLUAI_MAXCSTACK=1000000" "-DLUA_VECTOR_SIZE=3" "-DLUA_API=extern \"C\"" "-o" "/home/carlid/scratch/sb-target-mlua/wasm32-unknown-unknown/release/build/mlua-sys-68613d4117badae4/out/luau-build/2231ff075a10511f-PrettyPrinter.o" "-c" "/home/carlid/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/luau0-src-0.22.0+luau740/luau/Ast/src/PrettyPrinter.cpp"
+warning: mlua-sys@0.13.0: 1 error generated.
