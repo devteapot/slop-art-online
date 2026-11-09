@@ -169,6 +169,20 @@ def variants():
     return v
 
 
+def worlds_of(t):
+    """The worlds a trial runs on: one, or one per entry of `world_seeds` (replicate k runs on
+    the k-th, cycling), each the trial's world with its `seed` overridden."""
+    seeds = t.get("world_seeds")
+    if not seeds:
+        return {t["name"]: t["world"]}
+    return {f"{t['name']}#{n}": deep_merge(t["world"], {"overrides": {**t["world"].get("overrides", {}), "seed": n}}) for n in seeds}
+
+
+def world_key(t, rep):
+    seeds = t.get("world_seeds")
+    return f"{t['name']}#{seeds[(rep - 1) % len(seeds)]}" if seeds else t["name"]
+
+
 def world_seed(world):
     """A trial world is a seed plus overrides, written as a derived seed the module and the
     mind both read (LIVING_SEED is resolved under living/seeds/, so a relative path works)."""
@@ -261,8 +275,9 @@ def build(a):
     sh("cargo", "build", "--manifest-path", ROOT / "living/Cargo.toml", "-p", "living-mind", "--release", env=env, timeout=3600)
     seeds = {}
     for t in a.trials:
-        name, rel, _ = world_seed(load_trial(t)["world"])
-        seeds[name] = rel
+        for w in worlds_of(load_trial(t)).values():
+            name, rel, _ = world_seed(w)
+            seeds[name] = rel
     for name, rel in seeds.items():
         build_module(name, rel)
     print("built:", TARGET / "release/living-mind", *[OUT / "wasm" / f"{n}.wasm" for n in seeds])
@@ -488,7 +503,7 @@ class Instance:
 
     # -- the world
     def publish(self):
-        wasm = self.shared["wasm"][self.trial["name"]]
+        wasm = self.shared["wasm"][world_key(self.trial, self.rep)]
         # A variant may run a module built from another branch (an iteration's engine change):
         # the same world seed, built there and copied in as <module>-<wasm_tag>.wasm.
         tag = self.shared["variants"][self.variant].get("wasm_tag")
@@ -855,7 +870,7 @@ class Instance:
         path.write_text(json.dumps(self.models(), indent=1))
         budget = self.trial.get("budget", {})
         env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=URL, LIVING_DB=self.db, LIVING_RUN=self.db,
-                   LIVING_SEED=self.shared["seed_rel"][self.trial["name"]], LIVING_MODELS=str(path),
+                   LIVING_SEED=self.shared["seed_rel"][world_key(self.trial, self.rep)], LIVING_MODELS=str(path),
                    # A trial whose `minds.only` names `woken` also lets the mind think for
                    # residents as they wake (docs/TOWN_LIFE.md, "Layer 2").
                    LIVING_ONLY=",".join([*map(str, self.roles["subject"]), *(["woken"] if "woken" in self.trial.get("minds", {}).get("only", []) else [])]),
@@ -1026,7 +1041,7 @@ class Instance:
                         ("skill_use", f"SELECT * FROM skill_use WHERE actor = {S}"), ("deliberation", f"SELECT * FROM deliberation WHERE actor = {S}"),
                         ("structure", f"SELECT * FROM structure WHERE owner = {S}"), ("chronicle", "SELECT * FROM chronicle"),
                         ("character", "SELECT * FROM character WHERE " + " OR ".join(f"id = {i}" for ids in self.roles.values() for i in ids)),
-                        ("stats", "SELECT * FROM stats")):
+                        ("stats", "SELECT * FROM stats"), ("woken", "SELECT * FROM woken")):
             try:
                 snap[name] = self.rows(q)
             except RuntimeError as e:
@@ -1392,6 +1407,7 @@ def summarize(d, trial, extra):
         v.pop("latency_ms")
     s["by_model"] = dict(by_model)
     s["by_purpose_model"] = purpose_model(j, thoughts)
+    social(s, d, S, chron, exps, samples, j, extra)
     members = [x for x in samples if x.get("members")]
     if members:
         pack = len(members[0]["members"])
@@ -1425,6 +1441,39 @@ def summarize(d, trial, extra):
     s["exchanges"] = [{"ref": r["_ref"], "purpose": r.get("purpose"), "model": r.get("model"), "tokens": r.get("tokens"),
                        "reply": excerpt(r.get("reply"))} for r in j if r.get("purpose") in ("deliberate", "think", "talk")][:40]
     return s
+
+
+def social(s, d, S, chron, exps, samples, j, extra):
+    """Probes for residents who wake (town life layer 2): who woke and why, who answered the
+    subject, what was done for it (food, a lesson, lodging), where it slept, stage-cap binds,
+    and what the residents' minds cost per engaged resident-hour."""
+    final = json.loads((d / "final.json").read_text()) if (d / "final.json").exists() else {}
+    woken = final.get("woken") if isinstance(final.get("woken"), list) else []
+    s["residents_woken"] = len(woken)
+    s["woken_why"] = dict(Counter(w.get("why", "") for w in woken))
+    speech_to = [c for c in chron if c.get("kind") == "speech" and c.get("b") == S and c.get("a") != S]
+    s["answers_to_subject"] = len(speech_to)
+    s["answering_people"] = len({c["a"] for c in speech_to})
+    done_to = [e for e in exps if e.get("object") == S and e.get("subject") not in (S, 0) and e.get("kind") not in ("saw", "speech", "discovered", "repeat")]
+    s["acts_to_subject"] = dict(Counter(e.get("kind") for e in done_to))
+    s["taught"] = sorted({re.sub(r".* taught you ([a-z_ ]+).*", r"\1", e["text"]) for e in exps if " taught you " in e.get("text", "")})
+    s["lodging"] = any(p == "lodging" for p in s.get("places_named", []))
+    snaps = sorted((d / "snapshots").glob("h*.json")) if (d / "snapshots").exists() else []
+    setts = json.loads(snaps[0].read_text()).get("settlement", []) if snaps else []
+    sleeps = [x for x in samples if (x.get("activity") or [None])[0] == "sleep" and x.get("pos")]
+    inside = [x for x in sleeps if any(dist((t["x"], t["y"]), x["pos"]) <= t["radius_m"] for t in setts)] if setts else []
+    s["slept_inside_walls"] = f"{len(inside)}/{len(sleeps)} sleep samples" if sleeps else None
+    s["stage_cap_binds"] = sum(1 for r in j if r.get("purpose") == "stage_cap")
+    sub_name = (s.get("subject") or "").split("#")[0]
+    res = [r for r in j if not r.get("_ref", "").split("/journal/")[-1].startswith(sub_name + ".jsonl")]
+    if woken and samples:
+        end_ms = max((r.get("at_ms") or 0) for r in j) if j else 0
+        hours = sum(max(0, end_ms - w["woken_ms"]) for w in woken) / 3.6e6
+        tok = sum(r.get("tokens") or 0 for r in res)
+        s["residents_tokens"] = tok
+        s["residents_calls"] = len(res)
+        s["tokens_per_engaged_resident_hour"] = round(tok / hours) if hours > 0 else None
+        s["cost_per_engaged_resident_hour"] = round(sum((cost(r.get("model"), r.get("prompt_tokens") or 0, r.get("completion_tokens") or 0, r.get("cached_tokens") or 0) or 0) for r in res) / hours, 4) if hours > 0 else None
 
 
 def strictness(text):
@@ -1526,10 +1575,11 @@ def ledger():
 def shared_for(trials, a, bdir):
     shared = {"token": admin_token(), "neo4j_pw": neo4j_password(), "variants": variants(), "spent": 0, "wasm": {}, "seed_rel": {}}
     for t in trials:
-        name, rel, _ = world_seed(t["world"])
-        if not (OUT / "wasm" / f"{name}.wasm").exists():
-            sys.exit(f"module for {t['name']} ({name}) is not built: run `trials.py build {t['name']}`")
-        shared["wasm"][t["name"]], shared["seed_rel"][t["name"]] = name, rel
+        for key, w in worlds_of(t).items():
+            name, rel, _ = world_seed(w)
+            if not (OUT / "wasm" / f"{name}.wasm").exists():
+                sys.exit(f"module for {key} ({name}) is not built: run `trials.py build {t['name']}`")
+            shared["wasm"][key], shared["seed_rel"][key] = name, rel
     if not (TARGET / "release/living-mind").exists():
         sys.exit(f"no mind binary at {TARGET / 'release/living-mind'}: run `trials.py build`")
     if a.fake:
