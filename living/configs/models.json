@@ -8,24 +8,24 @@
       "overflow": "deepseek-flash",
       "reasoning_effort": {
         "think": "low",
-        "deliberate": "low",
-        "compile": "low",
+        "deliberate": "high",
         "talk": "high",
         "consolidate": "high",
-        "internalize": "high",
-        "remember": "high",
-        "reorganize": "high",
-        "identity": "high",
-        "birth": "high"
+        "internalize": "high"
       },
-      "prompt_cache_key": true
+      "prompt_cache_key": true,
+      "max_tokens": 24000
     },
     "deepseek-flash": {
       "base_url": "https://api.mistral.ai/v1",
       "model": "deepseek-v4-1-flash-1017",
       "key_env": "MISTRAL_API_KEY",
       "overflow": "glm-flash",
-      "prompt_cache_key": true
+      "prompt_cache_key": true,
+      "reasoning_effort": {
+        "think": "low",
+        "deliberate": "low"
+      }
     },
     "ministral-14b": {
       "base_url": "https://api.mistral.ai/v1",

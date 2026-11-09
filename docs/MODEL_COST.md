@@ -2,6 +2,8 @@
 
 Which model, at which reasoning effort, is the cheapest acceptable choice for each mind task? This was measured by replaying 84 real prompts from the mind journals on the Mistral platform, 2,520 paid calls in all, and judging the replies blind. The tool is [model_cost.py](../living/tools/model_cost.py). The evidence is under `.local/living/model-cost/20261109/`.
 
+[Part 2](#part-2-planning-sleep-reorganization-and-internalization-2026-11-09) revises item 2 below with four times as many planning prompts: compile (`deliberate`) needs `high`, not `low`. It also covers reorganization and internalization.
+
 ## Answer
 
 1. **GLM 5.3 Flash is set up wrong today, and that dominates everything else.** `models.json` sends GLM Flash without `reasoning_effort`. The platform then thinks as hard as at `max`.
@@ -398,7 +400,7 @@ Everything is under `.local/living/model-cost/20261109/` unless noted:
 
 | What | Where |
 | --- | --- |
-| tool | [living/tools/model_cost.py](../living/tools/model_cost.py) (`sample`, `rates`, `replay`, `validate`, `pairs`, `report`, `hourly`, `spend`) |
+| tool | [living/tools/model_cost.py](../living/tools/model_cost.py) (`sample`, `rates`, `replay`, `validate`, `pairs`, `report`, `hourly`, `spend`; Part 2 adds `sample2`, `chain`, `batch`, `judge`, `verdicts`, `patches`, `ids`, `planning`, `nights`) |
 | validator | `.local/living/model-cost/harness/` (Rust; `living-rules` path dependency) |
 | the 84 prompts, exact messages and original replies | `samples.jsonl` |
 | all 2,520 replays | `replays.jsonl`: config, run number, usage, first-token and first-text times, total time, reply text, thinking text, request parameters |
@@ -419,4 +421,394 @@ python3 living/tools/model_cost.py replay --concurrency 16
 python3 living/tools/model_cost.py replay --concurrency 16 --configs glm-flash@low+key glm-flash@high+key deepseek-flash+key ministral-3b+key ministral-8b+key ministral-14b+key
 python3 living/tools/model_cost.py validate && python3 living/tools/model_cost.py report && python3 living/tools/model_cost.py hourly && python3 living/tools/model_cost.py spend
 python3 living/tools/model_cost.py rates --runs aske-coast-1792435287 aske-coast-1792391919
+```
+
+## Part 2: planning, sleep reorganization and internalization (2026-11-09)
+
+The user's questions, the same afternoon:
+1. Is GLM Flash `low` good enough for planning (think and compile), or is DeepSeek Flash needed, perhaps only on stage?
+2. What should the sleep-like reorganization (`reorganize`) and player memory (`internalize`) run on? Can a settlement's night be sent as one batch job, and should reorganization follow the character's actual sleep?
+
+The evidence is under `.local/living/model-cost/20261109-part2/` (and `-part2-latency/`); the tool is the same [model_cost.py](../living/tools/model_cost.py).
+
+### Answer
+
+1. **GLM `low` is good enough for think, not for compile.**
+   - **Think** (24 prompts, blind 4-way): GLM `low` was acceptable 20/24 and GLM `high` 22/24, close to noise. GLM `high` was better in fights (8/8 against 6/8).
+   - **Compile** (24 prompts, two independent blind passes): GLM `low` was acceptable 5/24 and 8/24. With reasoning it was 13/23 and 13/23 on GLM `high`, and 18/24 and 16/24 on DeepSeek `low`, the best compiler.
+   - 98–100% of replies were valid in every config. The failures are in meaning: dropped or added intentions, speech written as a failing act, acts aimed at people out of sight, unconditional branches that block the rest.
+   - Part 1's "compile at `low`" rested on 6 prompts and is withdrawn.
+2. **Set `deliberate` to `high`.** It needs no new routing. It costs €0.157 per on-stage person-hour for planning, against €0.124 at `low`, and €0.025 against €0.020 off stage. It also raises animals' impulses and compiles to `high`, because they share `deliberate`; Part 1 judged animals at `high` 12/12 and 100% valid.
+3. **DeepSeek is worth it for compile quality, not for latency.**
+   - **Not faster this afternoon.** DeepSeek's first token took 7–11 s from 14:45 to 15:10, with or without `prompt_cache_key`, against 2–4.5 s in Part 1's morning pass. GLM `low` stayed at 1.4–2.9 s.
+   - **Thinking off** (DeepSeek's default), it compiled worst of all: 5/24 in both passes.
+   - **On stage only:** DeepSeek `low` for compile on stage costs about **€0.06 more per on-stage person-hour** than GLM `high` (€0.217 against €0.157 for planning). It saved 5.6 s per decision this afternoon (compile p50 18.4 s against 24.0 s).
+   - **Needs routing:** per-purpose, per-stage routing for people does not exist yet ([below](#which-recommendations-need-new-routing)).
+4. **Reorganization: GLM `high`, but the 8,000-token cap must rise.**
+   - **What runs today:** reorganization goes out with purpose `consolidate` (`mind.rs` `reorganize`), so it runs at consolidation's `high`. At the mind's `max_tokens` of 8,000, 35% of those replies are cut off and fail to parse.
+   - **With room:** given 24,000 tokens, GLM `high` finished 24/24 and was judged acceptable 22/24, the best of all configs.
+   - **Alternatives:** GLM `low` fits under 8,000 (98% usable) but was judged 13/23. DeepSeek with thinking off was judged 4/21: it merges different people and retracts family ties and core stances.
+   - **`max`, and DeepSeek `high`:** unusable. They write 18–23k tokens and still mostly run out at 24,000 (17–54% usable).
+5. **Internalize: DeepSeek Flash with thinking off, in batch.**
+   - **Judged:** acceptable 11/12, against 11/11 for DeepSeek `high` (one reply cut off) and 1/12 for GLM `high`.
+   - **Why GLM fails:** it writes experience ids as strings (`"392903"`, even `"215713-216671"`) in 76% of memories and 80% of `because` ids. `memory.rs` `patch_from` reads them with `as_u64` and drops them silently, so most of a player's memories are lost. Its judged replies also invented events in 4 of 12.
+   - **No new routing:** `LIVING_PLAYER_MEMORY_MODEL=deepseek-flash` selects DeepSeek today.
+6. **The string-id defect reaches beyond player memory.** GLM writes string ids in 86–98% of animal-memory `because` ids and in 9–12% of person-consolidation memories at `low` and `high`. DeepSeek does so in 10–19% of animal-memory `because` ids and never in people's memories or internalization. A lenient id parse in `patch_from` would fix it for every model ([proposals](#code-and-prompt-changes-proposed)).
+7. **Night batches work, but not inline.**
+   - **Inline limit:** Mistral's front proxy refuses an inline `requests` body above about 2.5 MiB (HTML 400 before the API). A night of 100–190 reorganizations is 2.5–4.7 MB, so the job needs an uploaded file (`POST /v1/files`, purpose `batch`, then `input_files`). `Llm::batch` sends inline today.
+   - **Turnaround, 200 reorganizations:** 150 s on GLM `low`, 219 s on GLM `high`, 949 s on DeepSeek. A game night lasts 300 real seconds.
+   - **Cost:** at batch price, a town of 200 reorganizing every other night costs about €1.1 per real hour, €0.005 per person-hour.
+8. **Reorganization is not sleep-aligned today, and it is rare because consolidation preempts it.**
+   - **Timing:** 40–60% of reorganizations fall in the game night, which is 42% of the day.
+   - **Who reorganizes:** only 28–46 of about 71 people reorganized at all in 4–6 h.
+   - **If aligned to sleep:** with the eligibility kept (≥2 integrations and ≥20 real minutes since the last), about half the town is due each night: about 100 of 200 on stage, about 70 off stage. That is 14–28 times today's rate.
+
+Spend: **€5.60** ($6.59) on Mistral for 1,693 calls, six batch jobs included. Probes cost under €0.01. The 19 blind judges were fresh Claude subagents, about 2.8M tokens on the Claude side.
+
+### Method
+
+- **Samples** (`sample2`): from all five aske-coast runs (2026-10-19/20, Mistral Small era), later half, first attempts, distinct characters, none of Part 1's prompts.
+  - **Think:** 24 person think prompts, 8 per situation. The situation comes from the first telling line of `# Why you are thinking now`:
+
+    | Situation | Reasons sampled |
+    | --- | --- |
+    | combat | "X is attacking you", "is threatening you", fight reports, a wolf attack |
+    | survival | a `Your body:` line: freezing, starving, very hungry, badly hurt |
+    | social | a baby crying, longing for a child, a trade offer |
+
+  - **Compile:** each think prompt brings the compile request that followed it, so there are 24 compile prompts on the original decision.
+  - **Reorganize:** 200 real requests (301 in the journals). The first 24 were replayed directly; all 200 went into the batch jobs.
+  - **Internalize:** 12 prompts. Eleven were built the way `lived.rs` builds them: today's `internalize_system()`, copied verbatim from the real request below, over real `consolidate_user` contexts. The twelfth is the one real internalize request (`knowledge-pmem-real-132616`, Wren).
+- **Replays:** the mind's request shape with `prompt_cache_key`, as `models.json` sends today. Concurrency 16, from the Mac.
+  - **Think and compile:** two calls each.
+  - **Chained compile** (`chain`, `person_compile_own`): each config compiled its own think reply, once.
+  - **Reorganize:** two calls each at the mind's 8,000 cap, plus one call each at 24,000 (`+24k`) for the `high` and `max` efforts.
+  - **Internalize:** one Mistral batch job per config.
+- **Validation:** `parse_json` and the rules' graph normalizer, as in Part 1. For reorganize and internalize, the harness now also runs a verbatim copy of `memory.rs` `patch_from`:
+  - **Ops kept:** merges, anchor merges refused, retracts, edges, memories kept with integer ids.
+  - **Effect** (`patches`): what the ops would actually change against the mind shown in the prompt. A merge whose `from` is absent and a retract of a missing link are no-ops.
+- **Blind judging** (`judge`, `verdicts`): fresh Claude subagents, one file each.
+  - **Format:** each prompt once, then every config's usable reply under a label shuffled per prompt (R1…Rn). Keys are in `keys/`, apart from what judges read.
+  - **Verdict:** each reply got a score of 1–5, acceptable or not, and a rank.
+  - **Compile was judged twice** with reshuffled labels by different judges. The two passes agree on "acceptable" for 78% of the 95 replies judged twice.
+
+### Planning results
+
+#### Person think (24 prompts × 2 calls)
+
+| Config | Prompt tok | Out (reasoning) | € per 1k, first call | p50 / p95 s | First text p50 | Usable | Judged acceptable | Ranked first | Combat / social / survival |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| glm-flash@low | 6,299 | 404 (96) | 0.97 | 5.6 / 12.0 | 2.8 | 100% | 20/24 | 3 | 6/8 · 7/8 · 7/8 |
+| glm-flash@high | 6,299 | 972 (570) | 1.21 | 9.7 / 24.2 | 6.8 | 100% | **22/24** | **13** | 8/8 · 7/8 · 7/8 |
+| deepseek-flash | 6,407 | 258 (0) | 1.53 | 11.3 / 22.2 | 9.8 | 100% | 18/24 | 0 | 5/8 · 6/8 · 7/8 |
+| deepseek-flash@low | 6,432 | 952 (638) | 2.26 | 11.3 / 40.8 | 10.2 | 100% | 20/24 | 8 | 6/8 · 7/8 · 7/8 |
+
+GLM `low`'s rejected decisions included the following:
+- ignoring that Ulf was beating him right now;
+- a night deer hunt at energy 12 with no spear;
+- relying on fish in an unseen storage and on cooking it did not know.
+
+#### Person compile (24 prompts × 2 calls; the original decision)
+
+| Config | Out (reasoning) | € per 1k, first call | p50 / p95 s | First text p50 | Usable (warnings per graph) | Acceptable, pass A / B | Ranked first, A+B | A: combat / social / survival |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| glm-flash@low | 778 (282) | 1.72 | 9.3 / 16.9 | 4.2 | 100% (0.48) | 5/24 · 8/24 | 5 | 2/8 · 3/8 · 0/8 |
+| glm-flash@high | 2,133 (1,616) | 2.34 | 24.0 / 52.8 | 17.5 | 98% (0.52) | 13/23 · 13/23 | 16 | 5/7 · 6/8 · 2/8 |
+| deepseek-flash | 444 (0) | 2.53 | 11.6 / 23.1 | 10.4 | 98% (0.37) | 5/24 · 5/24 | 4 | 2/8 · 1/8 · 2/8 |
+| deepseek-flash@low | 1,837 (1,304) | 3.67 | 18.4 / 40.9 | 16.5 | 100% (0.23) | **18/24 · 16/24** | **23** | 5/8 · 7/8 · 6/8 |
+
+Prompts averaged about 12.7k tokens. The judges' recurring reasons against GLM `low` and DeepSeek with thinking off:
+- `say` written as an act;
+- `rest` used as an act;
+- gifts and attacks aimed at people out of sight;
+- an intent that opens with a failing attack, so the walk to the fire never runs;
+- unconditional branches;
+- dropped intentions, such as a teaching step;
+- added speech.
+
+**Own decisions, compiled** (`person_compile_own`, 24 × 1): every config's compile of its own think was usable at 96–100%. Warnings per graph were 0.25 for GLM `low`, 0.14 for GLM `high`, 0.21 for DeepSeek and 0.04 for DeepSeek `low`. Those calls came seconds after the fixed-decision ones, so their 62–70% cache share is warmer than production.
+
+#### Latency: provider load, not the cache key
+
+During the planning replays, DeepSeek's first token took about 10 s. Part 1's key pass had shown the same, against 2–4.5 s without the key earlier in the day. An interleaved A/B at 15:10 (48 prompts, concurrency 16, nothing else running) separates the two:
+
+| Class | Config | p50 / p95 s | First token p50 / p95 s |
+| --- | --- | ---: | ---: |
+| think | glm-flash@low | 7.6 / 35.2 | 1.8 / 32.4 |
+| think | glm-flash@low + key | 8.0 / 12.1 | 1.4 / 5.7 |
+| think | deepseek-flash | 10.7 / 18.6 | 8.4 / 17.7 |
+| think | deepseek-flash + key | 8.6 / 23.0 | 7.1 / 21.5 |
+| compile | glm-flash@low | 10.4 / 18.5 | 2.9 / 11.6 |
+| compile | glm-flash@low + key | 10.0 / 18.8 | 2.0 / 6.7 |
+| compile | deepseek-flash | 10.9 / 25.3 | 9.7 / 22.4 |
+| compile | deepseek-flash + key | 13.7 / 21.1 | 11.0 / 18.9 |
+
+- The key does not slow DeepSeek; keep `prompt_cache_key` on both profiles.
+- DeepSeek generates fast (230–310 tokens/s against GLM's 90–100), but this afternoon it queued requests for 7–11 s before the first token. In Part 1's 13:21–13:29 pass the same model answered compile at p50 3.8 s.
+- One afternoon is not a latency profile. Choose DeepSeek for compile quality. Don't count on it for speed without measuring at the hours that matter.
+
+#### € per person-hour, planning only
+
+From `planning`: on-stage rates are think 0.74 and compile 0.79 per minute; off stage (LOD) both are 0.125. The costs are first calls with the cache key, retries included.
+
+| Think | Compile | On stage | Off stage | p50 think + compile |
+| --- | --- | ---: | ---: | ---: |
+| glm-flash@low | glm-flash@low | €0.124 | €0.020 | 14.9 s |
+| **glm-flash@low** | **glm-flash@high** | **€0.157** | **€0.025** | 29.6 s |
+| glm-flash@high | glm-flash@high | €0.167 | €0.027 | 33.7 s |
+| glm-flash@low | deepseek-flash | €0.165 | €0.027 | 17.2 s |
+| **glm-flash@low** | **deepseek-flash@low** | **€0.217** | €0.035 | 24.0 s |
+| deepseek-flash@low | deepseek-flash@low | €0.274 | €0.044 | 29.7 s |
+
+- **Compile on DeepSeek `low` on stage only:** +€0.060 per on-stage person-hour against the recommendation, and nothing extra off stage. With a share *s* of person-hours on stage, that is *s* × €0.06 overall. For example, it adds €0.012 per person-hour when one in five is on stage.
+- **Think on GLM `high` on stage:** +€0.011 per on-stage person-hour. It is defensible for fights (8/8 against 6/8), but n = 8.
+- **Effect on Part 1's person totals:** `deliberate: high` adds about €0.030 per on-stage person-hour and €0.005 off stage. The recommended person mix becomes about €0.23 on stage (labs rates) and €0.035 off stage.
+
+### Sleep reorganization (`reorganize`)
+
+#### Replays (24 prompts; at the mind's 8,000 cap unless marked 24k)
+
+The prompts averaged about 9.5k tokens: about 60 concepts and 90–120 links.
+
+| Config | Out (reasoning) | € per 1k, first call | p50 / p95 s | Usable (cut off at the cap) | Concepts → after | Links → after | Judged acceptable | Ranked first |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| glm-flash@low | 2,931 (370) | 2.48 | 21.5 / 35.2 | 98% (1/48) | 58 → 52 | 97 → 89 | 13/23 | 3 |
+| glm-flash@high (**today**, via `consolidate`) | 6,336 (4,053) | 3.88 | 43.2 / 76.3 | **65%** (17/48) | 57 → 51 | 86 → 79 | – | – |
+| **glm-flash@high, 24k** | 7,704 (4,595) | 4.46 | 57.4 / 131.0 | **100%** (0/24) | 58 → 54 | 97 → 89 | **22/24** | **9** |
+| glm-flash@max | 8,000 (8,000) | 4.60 | 66.2 / 94.9 | 0% (48/48) | – | – | – | – |
+| glm-flash@max, 24k | 20,483 (18,329) | 9.88 | 189 / 295 | 42% (14/24) | 58 → 51 | 84 → 78 | 6/10 | 3 |
+| deepseek-flash | 4,393 (0) | 6.22 | 20.8 / 41.6 | 88% (6/48) | 58 → 53 | 94 → 83 | **4/21** | 0 |
+| deepseek-flash@high | 7,989 (7,885) | 10.56 | 37.0 / 62.5 | 2% (47/48) | – | – | – | – |
+| deepseek-flash@high, 24k | 18,751 (16,632) | 21.26 | 70.7 / 126 | 54% (11/24) | 57 → 49 | 80 → 72 | 11/13 | 6 |
+| deepseek-flash@max | 8,000 (8,000) | 10.57 | 37.9 / 57.1 | 0% (48/48) | – | – | – | – |
+| deepseek-flash@max, 24k | 23,149 (22,357) | 25.35 | 81.7 / 198 | 17% (20/24) | 52 → 44 | 52 → 52 | 4/4 | 3 |
+| journal original (Mistral Small) | – | – | – | 91% | 55 → 55 | 84 → 84 | – | – |
+
+How to read it:
+- **Usable** is what the mind's code accepts: a reply that `parse_json` reads; every JSON object is applied.
+- **Concepts and links after** are averages over the accepted replies, against the mind each prompt shows. They are computed from the sanitized ops: effective merges, retracts that match a link, new edges and new concepts. GLM `high` output reached 15,935 tokens (p95 15,199), so 16,000 is too tight a cap; 24,000 is what was measured.
+- **Judged:** the judges asked whether a reply merges true duplicates only, generalizes sensibly, retracts what is stale without erasing what matters, and invents nothing. GLM `high` with room produced "collapses dozens of duplicate stances into clear patterns while keeping the FEELS ties, know-how and the Oath".
+- **GLM `low`'s errors:** merging "the oath must be read" into its opposite, two different people, or different campfires.
+- **DeepSeek with thinking off:** merges different people (Pim into Rafe; three relatives into one), retracts rivals, formative values and promises, re-asserts and then retracts nearly every edge, and copies the prompt's example (`kind:wolf -HUNTS_NEAR-> place:ford`) as if it were a fact.
+- **Mistral Small** (the journals) shrank nothing on net. It tried 4.1 anchor merges per reply, which the mind refuses.
+- **Evidence ids:** no reorganization keeps any. The prompt asks for `because` "experience ids from the edges you generalize", but the edge lines show no ids, and the mind passes only unintegrated inbox ids as `known`. So generalized patterns carry no evidence.
+
+#### When it runs, and how often it would run at night
+
+`model_cost.py nights` simulated the rules on all five aske-coast timelines. It reads 71–72 people, 20–30 game days per run, with the clock calibrated from the first think after each dawn (12.0 real minutes per game day, measured).
+
+| Rule (per person, once per game night) | Due per night, share of people | Off stage (LOD, ≤ 1 integration per 15 min) | Town of 200, on / off stage |
+| --- | ---: | ---: | ---: |
+| today (timer, preempted by consolidation) | 0.035 per game day | – | about 7 |
+| ≥ 2 integrations since the last | 0.93 | 0.35 | 186 / 70 |
+| ≥ 6 integrations | 0.91 | 0.10 | 182 / 20 |
+| **≥ 2 integrations and ≥ 20 real minutes** | **0.49** | **0.35** | **98 / 70** |
+
+- **Today:** reorganization runs when a person is "rested" and has nothing salient to integrate (`check_consolidation`, `Some(!wanted)`). In a busy town that is rare: 45–81 reorganizations per run, 7–18 integrations between them for a person, 17–37 minutes apart. Only 28–46 of the about 71 people reorganized at all. Night share is 0.40–0.60 against 0.42 for the night's part of the day, so the timer is not sleep-aligned.
+- **Aligning it:** the cleanest rule keeps today's eligibility (≥ 2 integrations, ≥ 20 minutes) and runs it at the character's first sleep after it becomes due, at most once a night. A tired mind then tidies while the body sleeps, instead of whenever the town goes quiet. Consolidation would no longer starve it.
+- **The mind cannot see sleep.** Sleep is `activity.skill = "sleep"`, and `activity` is not among `living-mind`'s subscriptions. There are two options:
+  - Use the world clock the mind already subscribes to (`world`) and treat 20:00–06:00 as night. It needs no new data path and matches town residents, who sleep at night ([TOWN_LIFE.md](TOWN_LIFE.md)).
+  - Subscribe to sleepers only (`activity` where `skill = 'sleep'`).
+
+  The [subscription docs](https://spacetimedb.com/docs/clients/subscriptions/) (read 2026-11-09, docs version 2.0.0) support filtered subscriptions and advise "keep subscriptions small". The [index docs](https://spacetimedb.com/docs/tables/indexes/) say unindexed filters scan, and `activity` has no `skill` index. Before building the second option, check it against the pinned 2.14.1 and measure its update volume. The clock is the smaller first step.
+
+#### Night batch: design and cost
+
+The measured jobs:
+
+| Job | Requests | Payload | Turnaround (create → output) | Usable | € per 1k (batch price) |
+| --- | ---: | --- | ---: | ---: | ---: |
+| reorganize, glm-flash@low | 200 | 5.07 MB, file | **150 s** | 100% (199 accepted) | 1.03 |
+| reorganize, glm-flash@high (8k cap) | 200 | 5.07 MB, file | 219 s | 80% | 1.66 |
+| reorganize, deepseek-flash | 200 | 5.07 MB, file | 949 s | 90% | 3.15 |
+| internalize, glm-flash@high | 12 | inline | 54 s | 100% (but string ids) | 0.79 |
+| internalize, deepseek-flash | 12 | inline | 43 s | 100% | 1.34 |
+| internalize, deepseek-flash@high | 12 | inline | 58 s | 92% | 2.74 |
+
+- Every job went QUEUED → RUNNING within 6–12 s. `timeout_hours` (default 24) is the only time control the [batch docs](https://docs.mistral.ai/capabilities/batch/) give.
+- The docs state a 50% discount but publish no per-model batch price, and billing was not checked. The batch costs here are list price × 0.5.
+- `reasoning_effort` and `prompt_cache_key` pass through in batch bodies. The `high` replies thought as they do directly.
+- Batch and direct replies of the same config validated alike: GLM `low` 100% against 98%, DeepSeek 90% against 88%.
+
+Design, for the mind:
+1. **Collect.** At dusk (20:00 game time, from `world`), take every person of the settlement who is due under the rule above. Mark them `consolidating`, so no integration interleaves, then fade and read each mind as `reorganize` does now.
+2. **Send** one batch job per profile. Above about 2.4 MB, upload the JSONL (`POST /v1/files`, purpose `batch`) and pass `input_files`; below that, send inline as `Llm::batch` does. Inline tops out at about 100 reorganizations.
+3. **Apply** each patch when the job returns and clear the flags. GLM finished 200 within one game night. A job that is not done by dawn plus one night is cancelled, and its people go direct the next night.
+4. **Keep the evidence:** journal each answer with the job id, as `Llm::batch` already does.
+
+Cost for a town of 200 at the recommended GLM `high` with a 24k cap, €4.46 per 1k direct and about €2.23 per 1k batch (assumed half):
+
+| Rule | Due per night | Per night, batch / direct | Per real hour (5 nights) | Per person-hour |
+| --- | ---: | ---: | ---: | ---: |
+| ≥ 2 and ≥ 20 min, on stage | 98 | €0.22 / €0.44 | €1.09 / €2.19 | €0.005 / €0.011 |
+| ≥ 2, on stage | 186 | €0.41 / €0.83 | €2.07 / €4.15 | €0.010 / €0.021 |
+| ≥ 2 and ≥ 20 min, off stage (LOD) | 70 | €0.16 / €0.31 | €0.78 / €1.56 | €0.004 / €0.008 |
+
+Sleep-aligned reorganization costs 2–7% of what planning costs. Batching halves a small number; its real use is that nobody waits on these calls and the service's concurrent slots stay free during the night.
+
+### Internalize (`internalize`, batch mode)
+
+| Config | Out (reasoning) | € per 1k (batch) | Job turnaround | Usable | Memories kept per reply | Judged acceptable | Ranked first |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| glm-flash@high | 1,579 (576) | 0.79 | 54 s | 100% | **0.9** of 3.8 written | 1/12 | 0 |
+| **deepseek-flash** | 1,173 (0) | 1.34 | 43 s | 100% | 3.4 | 11/12 | 4 |
+| deepseek-flash@high | 3,775 (2,340) | 2.74 | 58 s | 92% (1 cut off) | 4.0 | 11/11 | 8 |
+
+- The judges were told how the mind reads ids, so GLM's dropped memories counted against it.
+- Without that, GLM still invented in 4 of 12 replies: "Elin tended Mira", a plan to share news with Walker1, the claim that wolves there do not fear people, and a reversed yield.
+- DeepSeek's slips were smaller: one `you` anchor instead of `self`, one misattributed yield, invented coordinates.
+
+#### Experience ids as strings (`ids`)
+
+Share of ids that are not integers. `patch_from` reads each with `as_u64` and drops it.
+
+| Class | GLM Flash (`low` / `high` / none / `max`) | DeepSeek Flash | Ministral 3B / 8B / 14B |
+| --- | --- | --- | --- |
+| internalize memories | 76% (`high`) | 0% | – |
+| internalize `because` | 80% (`high`) | 0% | – |
+| person consolidation memories | 12% / 9% / 0% / 0% | 0% | 96% / 0% / 0% |
+| animal memory `because` | 98% / 98% / 86% / 95% | 10–19% | 100% / 100% / 100% |
+
+Animal memory comes from Part 1's replays (`ids-part1.md`); it is what GLM does for every animal since this morning's switch.
+
+### Recommended settings
+
+#### models.json proposal
+
+Proposed, not applied. Two lines change from the current file:
+- `deliberate` becomes `high`;
+- `max_tokens` becomes 24,000 so a `high` reorganization can finish.
+
+The keys that are never read (`compile`, `remember`, `reorganize`, `identity`, `birth`) are dropped. The mind sends only `think`, `deliberate`, `talk`, `consolidate` and `internalize`; reorganization, identity, birth identity and animal memory all go out as `consolidate`. DeepSeek gets explicit efforts for Brandholm and overflow.
+
+```json
+"glm-flash": {
+  "base_url": "https://api.mistral.ai/v1",
+  "model": "zai-glm-5-3-flash",
+  "key_env": "MISTRAL_API_KEY",
+  "overflow": "deepseek-flash",
+  "max_tokens": 24000,
+  "reasoning_effort": {
+    "think": "low",
+    "deliberate": "high",
+    "talk": "high",
+    "consolidate": "high",
+    "internalize": "high"
+  },
+  "prompt_cache_key": true
+},
+"deepseek-flash": {
+  "base_url": "https://api.mistral.ai/v1",
+  "model": "deepseek-v4-1-flash-1017",
+  "key_env": "MISTRAL_API_KEY",
+  "overflow": "glm-flash",
+  "reasoning_effort": {
+    "think": "low",
+    "deliberate": "low"
+  },
+  "prompt_cache_key": true
+},
+```
+
+With the mind's environment:
+
+```bash
+LIVING_PLAYER_MEMORY_MODEL=deepseek-flash   # internalize on DeepSeek, thinking off (its map leaves internalize unset = none)
+LIVING_PLAYER_MEMORY_MODE=batch
+```
+
+- **`deliberate: high`** covers person compile (13/23 on both passes against 5–8/24 at `low`) and animals' impulse and compile (Part 1: 12/12, 100% valid at `high`). The cost is +€0.033 per on-stage person-hour. Animals stay noise.
+- **`max_tokens: 24000`** applies to every glm-flash purpose; the profile has no per-purpose cap. Elsewhere GLM's p95 output is under 3.5k (talk 287, person consolidation 3,409). The cap is there to stop runaways, and a runaway at 24k costs €0.01.
+- **DeepSeek `think`/`deliberate` `low`** affects Brandholm (group-routed to deepseek-flash) and GLM overflow. Thinking off judged worst on both: think 18/24, compile 5/24. Talk and consolidation stay unset (`none`), as Part 1 judged them.
+- **Brandholm reorganizes on DeepSeek with thinking off,** judged 4/21, because it goes out as `consolidate` on the group's profile. Fixing that without moving Brandholm to glm-flash needs per-purpose routing.
+- **Before relying on it,** apply it in a lab and check reasoning share, cut-offs (`finish_reason`), latency by purpose and judged behavior with [llm_load.py](../living/tools/llm_load.py). Then run `verify-llm` and `verify-minds`. None of these were run here, since no code or config was changed.
+
+#### Which recommendations need new routing
+
+| Recommendation | Possible today? | What it needs |
+| --- | --- | --- |
+| compile at `high`, think at `low` | yes, `models.json` | – |
+| reorganization at GLM `high` that finishes | yes, `max_tokens: 24000` | – |
+| internalize on DeepSeek in batch | yes, environment | – |
+| compile on DeepSeek `low` **on stage only** | no | per-purpose and per-stage profile choice for people. `Llm` picks a person's profile once (`assign`, `rotate`, `groups`, `stages`, `default`); `lod.rs` knows who is on stage but does not choose models. A shape such as `"purposes": {"deliberate": {"on_stage": "deepseek-flash"}}` |
+| reorganization with its own model or effort | no | `mind.rs` `reorganize` to send purpose `reorganize` (`Lane::for_purpose` already treats it as background), then a `reorganize` key in the effort map or the routing above |
+| Brandholm reorganizing on GLM | no | the same per-purpose routing |
+| sleep-aligned night batches | no | mind changes (below) |
+
+#### Code and prompt changes proposed
+
+Not made here; they belong to the mind's owners.
+1. **`memory.rs` `patch_from`:** accept an integer written as a string (`"392903"`, `"#392903"`) for `remember[].exp` and `edges[].because`, and note what is still dropped. This restores most of GLM's player memories and its animal-memory evidence.
+2. **`mind.rs` reorganization:**
+   - make it due by the rule above and run it at night (world clock first);
+   - collect the due sleepers per settlement into one job;
+   - send purpose `reorganize`.
+3. **`llm.rs` `Llm::batch`:** upload a JSONL file and use `input_files` when the inline body would exceed about 2.4 MB.
+4. **The reorganize prompt (`prompts.rs`):**
+   - **Cap the ops**, as internalize does ("at most 12 nodes and 20 edges"), so replies fit a smaller cap.
+   - **Evidence:** either render each link's evidence ids or stop asking for `because`.
+   - **Example:** replace `kind:wolf -HUNTS_NEAR-> place:ford` with a visibly abstract placeholder; DeepSeek and GLM `low` copied it into minds as a fact.
+
+### Limitations
+
+- **Old prompts:** the planning and reorganization prompts are from the Mistral Small era (2026-10-19/20). The internalize prompts combine today's system prompt with old consolidation contexts. Their experience lines lack the `@[x, y] in <place>` suffix that `lived.rs` adds, and they are AI characters' lives, not players'.
+- **Compile inputs:** the compile prompts compile Mistral Small's decisions. The chained replays show each config's own decisions compile validly, but those were not judged.
+- **Judging:**
+  - One model family judged (Claude), blind to the model but not neutral.
+  - Think, reorganize and internalize had one pass each.
+  - Reorganize judged 4–24 replies per config, because cut-off replies were not judged. The `max` rows are small samples.
+- **Latency:** from the Mac, at concurrency 16, over 14:45–15:45. DeepSeek's latency swung threefold within hours.
+- **Batch:**
+  - Price assumed at half the list price; billing was not checked.
+  - GLM `high` was batched only at the 8k cap. The 24k batch cost is extrapolated from the direct call.
+  - Turnaround was measured on one account at one time of day, with other jobs sometimes running at once.
+- **Night counts:** simulated from aske-coast, a world without LOD whose integration rates stand in for "on stage". The off-stage column thins those same timelines to one integration per 15 minutes. The ≥ 25-link minimum for reorganization (5% of rests in the logs) is not applied.
+
+### Spend
+
+| What | Calls | € | $ |
+| --- | ---: | ---: | ---: |
+| Part 2 replays and batch jobs (`spend`) | 1,500 | 5.34 | 6.28 |
+| Cache-key latency A/B | 192 | 0.26 | 0.31 |
+| Probes: one 5-token batch job; seven size probes refused with 422 before inference | 1 | < 0.01 | < 0.01 |
+| **Total on Mistral** | **1,693** | **5.60** | **6.59** |
+
+By model: DeepSeek Flash €3.78 and GLM Flash €1.82. Most of DeepSeek's share is reorganization at `high`/`max`: 18–23k tokens per call at 24k.
+
+Claude side: 19 judge subagents and one documentation fetch, about 2.8M tokens, not billed to Mistral.
+
+### Evidence
+
+Everything is under `.local/living/model-cost/20261109-part2/` unless noted:
+
+| What | Where |
+| --- | --- |
+| samples (think, compile, chained compile, 200 reorganize, 12 internalize), exact messages | `samples.jsonl` |
+| direct replays (usage, first token and first text, total time, reply, thinking, request parameters) | `replays.jsonl`; logs `replay.log`, `replay-24k.log` |
+| batch answers and jobs (timeline, payload size, inline or file) | `batch-replays.jsonl`, `batches.jsonl`, `batch*.log` |
+| validation, patch effects, id types | `validated.jsonl`, `patches.json`, `patches.md`, `ids.md`, `ids-part1.md` |
+| tables | `report.md`, `report.json`, `planning.md`, `planning.json`, `nights.json`, `reorganize-timing.json`, `spend.txt` |
+| blind judging | `judge-person_think/`, `judge-person_compile/`, `judge-person_compile-b/`, `judge-reorganize/`, `judge-internalize/` (what judges saw, `*.verdicts.jsonl`); keys in `keys/`; `verdicts-*.md`; `judge-agreement-compile.txt` with `judge-agreement.py` |
+| cache-key latency A/B | `.local/living/model-cost/20261109-part2-latency/` (`samples.jsonl`, `replays.jsonl`, `report.md`, `spend.txt`) |
+| validator with `patch_from` | `.local/living/model-cost/harness/src/main.rs` |
+
+Reproduce:
+
+```bash
+set -a; . ./.env; set +a
+D=.local/living/model-cost/20261109-part2
+RUNS="aske-coast-1792352109 aske-coast-1792366782 aske-coast-1792391919 aske-coast-1792413603 aske-coast-1792435287"
+python3 living/tools/model_cost.py sample2 --dir $D --runs $RUNS
+python3 living/tools/model_cost.py replay --dir $D --concurrency 16 --classes person_think person_compile --configs glm-flash@low+key glm-flash@high+key deepseek-flash+key deepseek-flash@low+key
+python3 living/tools/model_cost.py chain --dir $D
+python3 living/tools/model_cost.py replay --dir $D --concurrency 16 --once --classes person_compile_own --configs glm-flash@low+key glm-flash@high+key deepseek-flash+key deepseek-flash@low+key
+python3 living/tools/model_cost.py replay --dir $D --concurrency 16 --classes reorganize --configs glm-flash@low+key glm-flash@high+key glm-flash@max+key deepseek-flash+key deepseek-flash@high+key deepseek-flash@max+key
+python3 living/tools/model_cost.py replay --dir $D --concurrency 16 --once --classes reorganize --configs glm-flash@high+key+24k glm-flash@max+key+24k deepseek-flash@high+key+24k deepseek-flash@max+key+24k
+python3 living/tools/model_cost.py batch --dir $D --cls internalize --configs glm-flash@high+key deepseek-flash+key deepseek-flash@high+key
+python3 living/tools/model_cost.py batch --dir $D --cls reorganize --pool --configs glm-flash@high+key deepseek-flash+key glm-flash@low+key
+python3 living/tools/model_cost.py validate --dir $D && python3 living/tools/model_cost.py report --dir $D && python3 living/tools/model_cost.py patches --dir $D
+python3 living/tools/model_cost.py planning --dir $D && python3 living/tools/model_cost.py ids --dir $D && python3 living/tools/model_cost.py spend --dir $D
+python3 living/tools/model_cost.py nights --dir $D --runs $RUNS
+python3 living/tools/model_cost.py judge --dir $D --cls person_compile --configs glm-flash@low+key glm-flash@high+key deepseek-flash+key deepseek-flash@low+key --chunk 8   # then judges write judge-*/…verdicts.jsonl
+python3 living/tools/model_cost.py verdicts --dir $D --tag person_compile
 ```
