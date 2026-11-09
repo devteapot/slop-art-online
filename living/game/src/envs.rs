@@ -654,6 +654,7 @@ pub fn walk(
     mut players: Query<(&Player, &mut Transform, Option<&Fitted>)>,
     island: Option<Res<crate::island::Island>>,
     time: Res<Time>,
+    route: Option<Res<crate::route::Steer>>,
 ) {
     let dt = time.delta_secs();
     let (up, right) = cam.control_axes();
@@ -670,15 +671,16 @@ pub fn walk(
     let auto = std::env::var("LIVING_GAME_AUTOWALK").ok();
     let d = match auto.as_deref().and_then(|a| a.trim_end_matches("run").trim().parse::<f32>().ok()) {
         Some(deg) => Vec2::new(deg.to_radians().sin(), -deg.to_radians().cos()),
-        None => d.normalize_or_zero(),
+        // A scripted route (route.rs) sets the direction and speed.
+        None => route.as_ref().and_then(|r| r.0).map_or(d.normalize_or_zero(), |r| r.0),
     };
-    let run = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) || auto.as_deref().is_some_and(|a| a.ends_with("run"));
+    let run = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) || auto.as_deref().is_some_and(|a| a.ends_with("run")) || route.as_ref().and_then(|r| r.0).is_some_and(|r| r.1);
     roam.moving = d != Vec2::ZERO;
     roam.running = run;
     input.moving = roam.moving;
     if roam.moving {
         // Walking and running at the speeds the authored clips were made for.
-        let speed = if run { crate::lookdev::RUN_CLIP_SPEED } else { crate::lookdev::WALK_CLIP_SPEED };
+        let speed = route.as_ref().and_then(|r| r.0).map_or(if run { crate::lookdev::RUN_CLIP_SPEED } else { crate::lookdev::WALK_CLIP_SPEED }, |r| r.2);
         roam.speed = speed;
         match &island {
             // On the island, water and rock stop you; slide along them.

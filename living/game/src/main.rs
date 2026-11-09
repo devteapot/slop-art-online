@@ -26,6 +26,7 @@ mod lookdev;
 mod net;
 mod perf;
 mod post;
+mod route;
 mod sight;
 mod sky;
 mod style;
@@ -101,6 +102,7 @@ fn main() {
     }
     // The player's UI (Bevy UI); egui stays for the F1 developer panels.
     app.add_plugins(ui::UiPlugin);
+    app.add_plugins(route::RoutePlugin);
     if !headless {
         app.add_systems(EguiPrimaryContextPass, hud::draw);
     }

@@ -124,7 +124,7 @@ Straight-line distance, flat ground, no detours. The rules currently walk at 2.6
 | 2.4 km | the long river at 3072 m | 29 min | 15 min | 10 min |
 | 2.9 km | corner to corner at 2048 m | 34 min | 19 min | 12 min |
 
-Real routes are longer: rivers have fords about 400 m apart, and the ranges are mostly rock with narrow 3 m passes. Climbing is not modelled, because the rules are flat.
+Real routes are longer: rivers have fords about 400 m apart, and the ranges are mostly rock with narrow 3 m passes. Climbing is not modelled, because the rules are flat. Measured routes in the game client are in [expedition](#expedition-2026-11-09): by road, 1.1–2.3 × these straight-line times.
 
 ## Density for 2,000 characters
 
@@ -348,6 +348,106 @@ Seed 7 at 2048 m has 1,302 props: 446 fence sections, 230 kerbs, 202 retaining w
 `town_preview` (above) now names each image by site id (`town-SEED-<n>-steampunk_town.ppm`), draws a core close-up of every town, and draws the props: stairs orange with treads, retaining walls dark brown, kerbs pale grey, cables and washing lines as white lines, the rest as small marks by kind. Its legend counts props per settlement and notes terraces.
 
 Measured on the dev-box while other builds ran (seed 7 at 2048 m, release; not an A/B against the earlier code): generation 1.55 s with settlements and 1.21 s without; `height()` 282 ns inside settlements and 135 ns over the map.
+
+## Expedition (2026-11-09)
+
+Timed, scripted walks across seed 7 at 2048 m in the look-dev game client. They measure the client's walking (water, rock and walls block it; slopes do not slow it), not the authority. [`living/game/src/route.rs`](../living/game/src/route.rs) makes your character follow a route, photographs it and measures it:
+
+- `LIVING_GAME_ROUTE=road:town>giants@run` follows `Land::roads`: the shortest path on the road graph between plazas. Places: `town`, `giants`, `small`, `village1`–`3`, `farvillage` and `shore`.
+- `points:x,z;…` follows straight segments.
+- `regions` loops off-road through one region centre of every land kind and the coast.
+- Speeds: `walk` 1.4 m/s, `run` 3.6, `rules-walk` 2.6, `rules-run` 3.9, or a number.
+- When the route makes no progress for 4 s, that place counts as a stuck point: it is photographed, and `Map::path` finds a detour back to the route.
+- Photographs every 150 m and at landmarks (plazas, lakes, foothills, the spirit grove, fords, the coast, stuck points, steep climbs): the game camera, then a vista.
+- `summary.json` holds times, distances, estimates, stuck points, slides, grades, frame times and the worst frames with their places.
+
+Headless runs ride on the tour (`LIVING_GAME_TOUR=<dir> LIVING_GAME_TOUR_ONLY=island LIVING_GAME_TOUR_SHOTS=default`); the module's header has the details.
+
+**Runs:** one run per route on the dev-box (Radeon 8060S, Vulkan, load average 4–9), plus the giants' road on the development Mac (M4 Pro, load average about 16 from other agents). All at 1600×900 headless, uncapped, at commit 977a14c. Route time excludes photograph stops, and frame statistics leave out the half second after each photograph. The journal (summaries, tracks, a map, 58 photographs and a contact sheet) is outside the repository, in the coordinating session's scratchpad (`expedition/`).
+
+### Travel
+
+| Route | Straight | By road | Speed | Time | Straight-line estimate | Ratio |
+|---|---|---|---|---|---|---|
+| town → village2 | 576 m | 631 m | run 3.6 | 2:54 | 2:39 | 1.09 |
+| town → village1 | 1,806 m | 2,918 m | run 3.6 | 13:28 | 8:21 | 1.61 |
+| village1 → village3 | 560 m | 628 m | run 3.6 | 2:52 | 2:35 | 1.11 |
+| village3 → small folk | 544 m | 610 m | run 3.6 | 2:47 | 2:31 | 1.11 |
+| town → small folk (the three legs above) | 1,814 m | 4,130 m walked | run 3.6 | 19:07 | 8:24 | 2.27 |
+| town → giants (up the trunk road) | 967 m | 1,997 m | run 3.6 | 9:05 | 4:28 | 2.03 |
+| giants → town (down) | 967 m | 1,997 m | rules walk 2.6 | 12:35 | 6:11 | 2.03 |
+| town → village3, the furthest village | 2,041 m | 3,522 m | walk 1.4 | 41:49 | 24:18 | 1.72 |
+| town → village3 | 2,041 m | 3,522 m | run 3.6 | 16:15 | 9:27 | 1.72 |
+| off-road loop: every land region kind and the coast | 4,407 m in straight legs | 8,445 m walked | run 3.6 | 40:56 | 20:24 | 2.01 |
+
+- **On roads, time is the road's length divided by the speed,** to within 1.5% (corners cut make the walk 0.2–1.7% shorter). No road had a stuck point or a slide at any of the three speeds, and the Mac and the dev-box took the same time to the second.
+- **The road network makes the island about twice as far across as it is.** The trunk roads form a tree round the west and south of the central range (see the journal's map). The small folk are reached only through village1 and village3, so they are 4.1 km by road for 1.8 km straight. The giants' road doubles back round the range's spur. The eastern massif, about a third of the land, has no road and no settlement.
+- **At these speeds:** the furthest village is 42 min away at the look-dev walk, 16 min running, and 22.6 min at the rules' walk (3,522 m at 2.6 m/s, computed from the measured road-time match). The small folk are about 49 min away at 1.4 m/s (computed).
+
+### Stuck points and slides
+
+None on roads. The off-road loop met 26 stuck points, each resolved by one detour of 15–965 m (5,244 m in all). No point needed a teleport.
+
+| Blocker | Count | Largest detours |
+|---|---|---|
+| Rock (highland, peaks, old forest, the spirit grove's edge) | 17 | (1168, 856) peaks, 965 m; (916, 467) highland, 658 m; (1045, 546) highland, 589 m; (1015, 470) highland, 148 m |
+| Water: lakes, wetland pools, rivers | 9 | (226, 842) wetland, 933 m; (256, 740) wetland, 197 m; (971, 1552) spirit grove, 143 m |
+| The town's edge: its wall, with a river along it | 4 | (495, 344), 509 m; (379, 370), 287 m; (423, 135), 135 m; (403, 139), 98 m |
+
+(Some points have two blockers nearby, so the counts overlap. One, (1081, 1487) in the spirit grove, was a small obstacle with a 14 m detour.)
+
+- **Slide-on-blocked walking never got round anything.** Every slide longer than 0.75 s was the 4 s before a stuck point: the walker slid a metre or two along the block and stopped. Against a straight block face, sliding only helps when the goal lies along the face.
+- **Rock does not read as rock.** In the photographs of the highland and peaks stuck points, the blocking rock is a smooth sand-coloured slope, the same as the walkable ground beside it. The walker stops against an invisible wall. The town wall reads clearly, but the river along its outside makes long detours to the gates.
+
+### Steep grades
+
+Grade is the climb over the last 10 m walked. The client moves at full speed on every grade.
+
+- **The giants' trunk road** (the only steep road): it climbs 176 m in 1,964 m. 305 m of it is steeper than 20%, and 114 m steeper than 30%. Its steepest 10 m are:
+
+  | Peak grade | Where | Stretch over 20% |
+  |---|---|---|
+  | 56% | (595, 1055) | 53 m from (582, 1034) |
+  | 48% | (681, 992) | 52 m from (687, 959) |
+  | 34% | (574, 943) | 25 m |
+  | 32% | (756, 985) | 74 m from (780, 964) |
+  | 32% | (576, 1011) | 25 m |
+  | 27% and 25% | (535, 962) and (545, 989) | 23 and 18 m |
+
+  The photographs show the road cut straight up the slope with sawtooth edges, the 4 m routing grid's steps.
+- **Other roads:** the steepest 10 m elsewhere is 20%, at (746, 453) on the trunk south. Village and small-folk roads stay under 9%.
+- **Off-road:** the walker climbed up to 113% over 10 m at (1010, 468), with stretches of 88% at (989, 533) and (1147, 777) and 86% at (966, 666). Wherever ground is not rock, it can be run up at 3.6 m/s, however steep.
+
+### Frame time
+
+Dev-box, per run: mean 3.9–5.9 ms, p95 5.7–10.0 ms, p99 7.7–15.7 ms, and worst 71–146 ms. Mac, giants' road: mean 4.3 ms, p95 5.1 ms, and worst 461 ms.
+
+- **The hitches are settlement arrivals.** The worst frames of every run are where a settlement's near chunks (people and small things, within 60 m) spawn:
+
+  | Settlement | Where | Worst frame |
+  |---|---|---|
+  | village2 | (838, 117) | 71 ms |
+  | giants | (660, 1093) | 72 ms on the dev-box, 461 ms on the Mac |
+  | village1 | (900, 1919) | 104–118 ms |
+  | village3 | (1480, 2003) | 85–113 ms |
+  | small folk | (1769, 1532) | 146 ms |
+
+  At village3, the 112.8 ms frame added 74 models and about 280 meshes. `BUILDS_PER_FRAME` limits chunks, not things, and a settlement chunk can hold 70 or more models. On the Mac, the last 200 m to the giants also ran at 1 s means of 20–60 ms for about 20 s, and the measured speed dipped to 3.1–3.3 m/s; its 461 ms frame exceeds Bevy's 250 ms time clamp, so that frame lost distance. Away from settlements and their outskirts, the worst frames stay under about 65 ms.
+- **Walking versus running** on the same road (town → village3): mean 3.9 against 4.1 ms, p95 5.7 against 5.8 ms, and worst 104 against 113 ms. Streaming at running speed costs little more. The running run's first 2.5 min (meadow, (528–690, 120–160)) ran at 15–21 ms means. In the same seconds, the per-character spring cost rose by 40–80%, and the walking run on the same road did not slow there, so this was load from other work on the machine, not the island.
+
+### What it implies
+
+1. **Size:** 2048 m is not too small. Even running, the road network makes the far settlements 16–19 min away, and walking at 1.4 m/s puts them 42–49 min away. That is long for a default pace. Before considering 3072 m, choose between:
+   - the rules' 2.6 / 3.9 m/s pair (the far village at 22.6 / 15 min);
+   - running as the travel pace;
+   - mounts, carts or boats.
+
+   A road across or round the east would cut town → small folk from 4.1 km to about 2 km (the straight line is 1.8 km) and open the unused third of the island.
+2. **Switchbacks:** the giants' trunk road needs real switchbacks at (575–600, 1000–1060) (56%), (680–690, 960–995) (48%), (750–780, 965–990) (32% for 74 m) and (535–585, 940–965) (27–34%). These are the stretches the 4 m grid and smoothing steepen (see [what still looks weak](#what-still-looks-weak)): the fixes to try are routing that penalises turns, or a coarser grid with real switchbacks.
+3. **Blocking must be visible:** rock should look like cliff or scree, distinct from walkable slopes. Alternatively, steep ground should become walkable but slow, which needs slope in the rules (open question 3). Either way the walker should not meet invisible walls.
+4. **Slope speed:** the client climbs 113% at full speed, so steep roads cost no time yet. If height becomes a rule, the giants' road is the first place it shows.
+5. **Settlement streaming:** spread a settlement's near-tier spawns across frames (a budget in things, not chunks), or load its people and models before you arrive. This should take the 70–146 ms arrival hitches (461 ms on a loaded Mac) under the 33 ms frame.
+6. **Vistas:** in a pulled-back vista, distant outlined trees float over fog-coloured void where the ground has faded (the spirit grove). Vista framing (option 2 under [landmark visibility](#landmark-visibility)) needs that fixed. Vista frame cost was not measured: the statistics exclude photograph frames.
 
 ## What the authority would need
 
