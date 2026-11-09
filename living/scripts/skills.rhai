@@ -892,6 +892,21 @@ fn accept_check(a) {
 fn accept_duration(a) { 1500 }
 fn accept_done(a) { [#{ op: "accept" }] }
 
+// ---- hospitality ----------------------------------------------------------------------
+// Taking someone in: a grown person offers another a bed in their household's house (the
+// house at their home door; the engine finds it, and refuses without one) until the morning
+// hour `host_done` names. The guest learns where it is (a place called "lodging"), may sleep
+// there, and taking from the household's store is no longer theft for them.
+
+fn host_check(a) {
+    if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to take in"; }
+    if a.target.id == a.actor.id { return "you cannot be your own guest"; }
+    if young(a) { return "only grown people take in guests"; }
+    ""
+}
+fn host_duration(a) { 2000 }
+fn host_done(a) { [#{ op: "host", until_hour: 7.0 }] }
+
 // ---- communities (meaning is up to members; the engine keeps membership) ------------------
 
 fn found_check(a) {
@@ -922,7 +937,7 @@ fn wakes(e) {
     let what = p[0];
     if ["speech", "hurt", "theft"].contains(what) { return 1; }
     // Kindness, dealings, lessons, asking to belong, and anything hostile.
-    if ["wave", "nod", "give", "offer", "accept", "teach", "tend", "heal", "join", "welcome"].contains(what) { return 1; }
+    if ["wave", "nod", "give", "offer", "accept", "teach", "tend", "heal", "join", "welcome", "host"].contains(what) { return 1; }
     if ["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 1; }
     0
 }
@@ -995,6 +1010,7 @@ fn skill_io(skill) {
         "sleep" => #{ takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" },
         "rest" => #{ takes: "8 seconds", gives: "a little energy" },
         "wait" => #{ takes: "time", gives: "nothing: time passes" },
+        "host" => #{ takes: "a person beside you, and a house of your household's (at your home door), 2 s", gives: "they are your guest until 7 in the morning: they know where your house is (their place \"lodging\"), may sleep there, and may take from your household's store" },
         "wave" => #{ takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them: a greeting, or an answer to theirs" },
         "nod" => #{ takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them: a greeting, or an answer to theirs" },
         "appraise" => #{ takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" },

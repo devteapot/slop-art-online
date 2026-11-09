@@ -1141,7 +1141,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                         (Some(p), Some(q)) => p.community == q.community,
                         _ => false,
                     };
-                    if s.owner != 0 && s.owner != me && !same_people(s.owner, me) {
+                    if s.owner != 0 && s.owner != me && !same_people(s.owner, me) && !crate::town::guest_of(ctx, me, s.owner, now) {
                         let owner_sees = ctx.db.body().id().find(s.owner).is_some_and(|b| crate::perception::sees(ctx, s.owner, pos(&b, now), at, &common::world(ctx), &common::map(ctx), now));
                         if owner_sees {
                             crate::woken::engage(ctx, s.owner, me, "theft", now);
@@ -1163,6 +1163,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
             }
             Effect::Yield => notes.push(give_in(ctx, me, a, at, now)),
             Effect::Hail => notes.push(crate::town::hail(ctx, me, a, at, now)?),
+            Effect::Host { until_hour } => notes.push(crate::town::host(ctx, me, a, at, until_hour, now)?),
             Effect::Reveal { what, secs } => {
                 if a.target.class != 3 {
                     return Err("no one to look over".into());
@@ -1717,6 +1718,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.mind_cursor().actor().delete(id);
     ctx.db.act_queue().actor().delete(id);
     crate::woken::forget_dead(ctx, id);
+    crate::town::forget_guest(ctx, id);
     for a in ctx.db.acquaintance().observer().filter(id).map(|a| a.id).collect::<Vec<_>>() {
         ctx.db.acquaintance().id().delete(a);
     }
