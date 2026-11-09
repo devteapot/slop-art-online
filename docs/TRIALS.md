@@ -165,6 +165,28 @@ What the rows show, arm by arm:
 7. **Wolf brains.** Minds did not change the outcome: kills 3.0 against 3.0 (all people at Brackenford), lifetimes 58–79 min against 64. A minded pack kept somewhat closer in two of three runs (mean distance 9.7 and 13.1 m against about 22 m for every instinct pack). Cost was low: 3.4–11.8 calls and 7k–29k tokens per wolf-hour, $0.05 for all three runs. Animals think only near people, so these numbers count the hours a pack spent near the town. Every pack died fighting the town's guards and residents. The runs stopped when the lead wolf died, with a member alive in 4 of 6 (fixed: a pack now lives while any member does, 56e3f35).
 8. **Human, then AI: continuity holds, and the past is not invented.** In the run that survived the road (`w4/life-takeover-default-r3`), the scripted player spoke to 16 residents and stated a plan, then left at 20.1 minutes. Player memory internalized the lived session four times while it was played (`journal/Arlen.jsonl:1,2,4,8`), naming the people greeted ("greeted six townsfolk by name at the gate") and the camp it claimed at the spot where it had tried to gather wood ("He claimed a campfire there as his camp"). Thirty-six seconds after the takeover, the mind's first line was to one of them: "Niada! Friend — I'm Arlen, who greeted you at the gate." Over the run it spoke to 8 of the 16 people the player met, among 17 in all. The internalized summaries stay within what the session did: the greetings, the failed wood gathering, the claim. One overreach: the first summary says the newcomer spent "the whole day … eating through their berries" when the session gathered and ate only a few. The AI then took berries from a resident's storage, announcing each time that it would repay in work. In the other two runs the road pack killed the player during the session (14.7 min) and the AI 7 minutes after the takeover.
 
+## Overnight 2026-11-09/10
+
+Two lanes share the trial service (about 40 worlds).
+
+- **Lane A:** about 15 long runs, 6 hours each, started 23:08–23:11 on `trials-1` f381b4a: main 47e82a3 (mind harness: model mixes, night reorganization in batches, cheaper animal minds, recall budget) plus the moved pack (addfe04). Arms, 3 replicates each: the control island on glm-flash (`la1` `life` × `default`); the `people` mix as default (`× people`); a recall budget of 600 (`× recall600`, `LIVING_RECALL_TOKENS=decide=600`; the default is 800); and every animal on the island with a mind (`la2` `animals-life`), with `LIVING_ANIMAL_MINDS=pack,salient,choose` against off. Night reorganization (`night-batch`, the default) is read from the people arms' journals.
+- **Lane B:** fast iterations, each a small change on its own branch from origin/main, run against a control at 15–40 minutes with 3 replicates.
+
+### How an iteration runs
+
+- A rules change in `skills.rhai`: the variant names the changed file (`"skills": ".local/living/trials/iter/iter-<n>.rhai"`), installed at publish in place of the tree's. The control installs the tree's file; nothing else differs.
+- A seed or instinct value: the trial's `prepare` step installs the changed graph with `set_behavior` (or the trial's world overrides the seed), so no module is rebuilt.
+- An engine change (a feedback message, a feeling's cadence): the branch's commit is cherry-picked onto the trials base, built for the same world seed and copied in as `<module>-<tag>.wasm`; the variant names it (`"wasm_tag"`). The control runs the trials base module.
+- Iteration variants live in an untracked file (`TRIALS_VARIANTS`), and iteration trials are named by path, so the tracked lists stay as they are.
+
+## Fast iterations
+
+| # | Hypothesis | Change (branch) | Runs | Result | Keep? |
+| --- | --- | --- | --- | --- | --- |
+| 1 | The bold pack attacks the town too eagerly: `wolf_bold` attacks any person within 10 tiles, hungry or not, and every bold pack fought Brackenford and died (w3). | `wolf_bold` attacks a person within 10 tiles only above hunger 50 (`iter-1`, 92b46f3, `instincts.json`). | `i1`: the moved pack, no mind, 30 min, control and change × 3 | running | – |
+| 2 | There is no way into reading: a failed read says only "you can't read", while every other missing technique names its ways in. | `read_check` adds `learn_how("writing")` (`iter-2`, c03a999, `skills.rhai`). | `i2`: the ladder preset, glm-flash, 40 min, control and change × 3 | running | – |
+| 3 | The longing for a child re-fires every morning and after every meal (it needs calm and daylight), driving 27–47 deliberations per 150-minute life with no partner anywhere. | Felt again at most once a game day (`iter-3`, 087ecbd, `brain.rs`). | `i3`: a lone newcomer, glm-flash, 40 min, control and change × 3 | running | – |
+
 ## What still special-cases trials (to remove later)
 
 No engine code knows about trials. The authority gained one generic admin-only scene reducer, `spawn_newcomer` (a player's `join`, thought for by the minds). Everything else a trial sets up uses existing admin scene reducers, `mind_say`/`mind_act` for admin-controlled characters, behaviour graphs with the existing skills (the ladder's scribe is a graph plus the ordinary `teach` act), the player reducers (the human session) and the real presence path (the takeover). What the runner itself still hard-codes:
