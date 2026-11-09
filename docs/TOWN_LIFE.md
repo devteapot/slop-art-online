@@ -174,7 +174,7 @@ Times in ms. Phases (ms of work per second, base → change): slot evaluations 3
 
 ## What the client must draw
 
-The game client is unchanged. To show town life it needs:
+The list below is what the game client needed; it draws all of it since 2026-11-09 ([game brief, "Town life in the client"](GAME_BRIEF.md#town-life-in-the-client-2026-11-09)). To show town life it needs:
 
 1. **Subscribe** `act_card` and `weather` once per connection (both small and static or nearly so), and join `doing` to its near body window as it joins `fighter`: `SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE <window>`.
 2. **Activities** from `doing.code` → `act_card.skill`, and by `act_card.look` for a skill it does not know: `work` (keeping a stall or a workshop door, gathering at a field bush or a fishing spot, cooking at a fire, storing, reading a sign, tending someone), `eat`, `sleep` (lying at the house door), `rest` (sitting), `play` (a child skipping or running about), `gesture`, `turn`, `step`. `doing.x/y` is where its target is (the bush, the fire, the person); `doing.target` the creature it is aimed at; `since_ms`/`until_ms` the timing.

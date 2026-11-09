@@ -10,7 +10,8 @@
 //! - **Align (on request only):** tap the middle button, and the view turns until
 //!   the direction you face is straight ahead. The mouse cursor moves with the ground meanwhile,
 //!   so you keep facing the same spot (a fixed cursor would make the view keep turning).
-//! - **Context:** conversations frame both speakers, until you rotate or the talk ends.
+//! - **Context:** conversations frame both speakers, until you rotate or the talk ends; so does
+//!   a greeting (`town.rs`: my wave or nod, and the answer), for a few seconds.
 //! - **Sight bound:** the view never pulls back further than about 2 × the sight radius, so
 //!   less sight (night) brings it in, along the same tilt toward the ground.
 
@@ -136,8 +137,9 @@ pub fn spawn(mut commands: Commands) {
 }
 
 /// Who I am talking with: the latest speaker I heard in the last 8 s within 8 m, else (while
-/// typing) the nearest person within 6 m.
-fn talk_partner(net: &Net, scene: &Scene, input: &Input) -> Option<u32> {
+/// typing) the nearest person within 6 m, else whom I just greeted or who just answered my
+/// greeting, within 8 m.
+fn talk_partner(net: &Net, scene: &Scene, input: &Input, town: Option<&crate::town::Town>) -> Option<u32> {
     let (conn, me) = (net.conn.as_ref()?, net.my_id?);
     let (mine, _) = scene.shown.get(&me)?;
     let near = |id: u32, r: f32| scene.shown.get(&id).is_some_and(|(p, _)| p.distance(*mine) < r);
@@ -161,7 +163,8 @@ fn talk_partner(net: &Net, scene: &Scene, input: &Input) -> Option<u32> {
                 .map(|(id, _)| id)
         })
         .flatten();
-    heard.or(typing)
+    let greeted = town.and_then(|t| t.answered.iter().map(|(id, at)| (*id, *at)).chain(t.greeting).filter(|(id, _)| near(*id, 8.0)).max_by(|a, b| a.1.total_cmp(&b.1)).map(|(id, _)| id));
+    heard.or(typing).or(greeted)
 }
 
 fn diff(want: f32, from: f32) -> f32 {
@@ -185,6 +188,7 @@ pub fn follow(
     mut q: Query<(&mut Transform, &mut Projection, &Camera, &GlobalTransform, &mut DistanceFog), With<Camera3d>>,
     mut windows: Query<&mut Window>,
     ui: Res<crate::hud::UiWants>,
+    town: Option<Res<crate::town::Town>>,
     time: Res<Time>,
 ) {
     let Ok((mut tf, mut proj, camera, gtf, mut fog)) = q.single_mut() else { return };
@@ -277,7 +281,7 @@ pub fn follow(
     cam.control_yaw = if input.moving { cam.control_yaw + diff(cam.shown_yaw, cam.control_yaw) * ease(2.0) } else { cam.shown_yaw };
 
     // Conversations: frame both speakers; rotating dismisses the framing until the talk ends.
-    let partner = if r.frame_talk { talk_partner(&net, &scene, &input) } else { None };
+    let partner = if r.frame_talk { talk_partner(&net, &scene, &input, town.as_deref()) } else { None };
     if partner != cam.talk_partner {
         cam.talk_partner = partner;
         if partner.is_none() {

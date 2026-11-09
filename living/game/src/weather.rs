@@ -7,6 +7,11 @@
 //!   authority's clock without any server state (the first spell is always clear). States ease
 //!   into each other over about a minute; wetness follows the rain more slowly.
 //! - `LIVING_GAME_WEATHER=clear|rain|fog|storm` holds one state from the start (no easing in).
+//! - **Connected** to a world with a `weather` row (the island; docs/TOWN_LIFE.md), the row
+//!   decides instead: rain while `raining`, else clear, eased over seconds (residents are under
+//!   a roof within about 40 s), so everyone sees the rain the residents shelter from. A rain
+//!   already falling when the row first arrives shows at once. Look-dev keeps its own schedule
+//!   and `LIVING_GAME_WEATHER`.
 //! - **Wind** sways plants in the toon shader by their mesh tag (bit 25; bits 26-27 grass,
 //!   bush or tree), set here from the kind folder of each model (`envs/<env>/<kind>/`). The shared
 //!   materials carry only the wind strength and wetness, changed in coarse steps, so there are no
@@ -26,6 +31,11 @@ const SPELL_HOURS: f64 = 5.0;
 pub struct Weather {
     /// A state held from the start (`LIVING_GAME_WEATHER`).
     pub forced: Option<usize>,
+    /// The authority's `weather` row when connected (`town.rs`): raining, and seconds since it
+    /// last changed.
+    pub authority: Option<(bool, f32)>,
+    /// Whether the authority's row has been taken in yet.
+    authority_seen: bool,
     /// How much of each state shows (eased; sums to 1).
     pub mix: [f32; 4],
     /// How wet surfaces are (0..1), and the lightning flash (0..1).
@@ -46,7 +56,7 @@ impl Default for Weather {
             }
             i
         });
-        Self { forced, mix: [1.0, 0.0, 0.0, 0.0], wet: 0.0, flash: 0.0, next_flash: 4.0, flash_t: 1.0, started: false }
+        Self { forced, authority: None, authority_seen: false, mix: [1.0, 0.0, 0.0, 0.0], wet: 0.0, flash: 0.0, next_flash: 4.0, flash_t: 1.0, started: false }
     }
 }
 
@@ -76,12 +86,30 @@ impl Weather {
     }
 }
 
-/// Move the weather toward its state: the schedule by the game's clock, or the forced state.
+/// Seconds over which a change of the authority's weather eases in (look-dev's take 45).
+const AUTHORITY_EASE_S: f32 = 6.0;
+
+/// Move the weather toward its state: the authority's row when connected, else the schedule by
+/// the game's clock, or the forced state.
 pub fn update(mut w: ResMut<Weather>, clock: Res<Clock>, atmo: Res<Atmo>, time: Res<Time>) {
     let dt = time.delta_secs();
-    let state = w.forced.unwrap_or_else(|| Weather::scheduled((clock.hours / SPELL_HOURS).floor() as i64));
+    let state = match w.authority {
+        Some((raining, _)) => raining as usize,
+        None => w.forced.unwrap_or_else(|| Weather::scheduled((clock.hours / SPELL_HOURS).floor() as i64)),
+    };
     let mut target = [0.0; 4];
     target[state] = 1.0;
+    if let Some((raining, age)) = w.authority.filter(|_| !w.authority_seen) {
+        w.authority_seen = true;
+        // Joining a world mid-spell shows the sky as it is, not easing in from clear.
+        if age > AUTHORITY_EASE_S * 3.0 {
+            w.mix = target;
+            w.wet = if raining { 1.0 } else { 0.0 };
+        }
+    }
+    if w.authority.is_none() {
+        w.authority_seen = false;
+    }
     if !w.started {
         w.started = true;
         if w.forced.is_some() {
@@ -90,7 +118,7 @@ pub fn update(mut w: ResMut<Weather>, clock: Res<Clock>, atmo: Res<Atmo>, time: 
             w.wet = if state == 1 || state == 3 { 1.0 } else { 0.0 };
         }
     }
-    let ease = 1.0 - (-dt / 45.0).exp();
+    let ease = 1.0 - (-dt / if w.authority.is_some() { AUTHORITY_EASE_S } else { 45.0 }).exp();
     for i in 0..4 {
         w.mix[i] += (target[i] - w.mix[i]) * ease;
     }
