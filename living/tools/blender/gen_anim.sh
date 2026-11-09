@@ -5,6 +5,7 @@
 # (each clip's length, loop, natural and baked speed, and source), then merges each file's
 # same-material primitives (living/tools/merge_primitives.py) to cut draw calls, and adds the anime
 # face data (living/tools/face_normals.py: flattened face normals and <name>.face.png).
+# Also makes the wolf (wolf.py: its own rig and keyed clips, no Kimodo).
 # Kimodo clips need their generated NPZs in .local/kimodo/outputs/library/ (living/tools/kimodo/spark.sh).
 # Usage: living/tools/blender/gen_anim.sh [extra animate.py args, e.g. --speed 2.6 --run-speed 3.9]
 #   Without the library (hand-keyed clips only): gen_anim.sh --library "" --clips idle,walk,talk,run,attack
@@ -34,3 +35,7 @@ for f in "$src"/vroid-*.glb; do
   python3 living/tools/face_normals.py "$src/anim/$name.glb" "$src/anim/$name.glb.tmp" --png "$src/anim/$name.face.png"
   mv "$src/anim/$name.glb.tmp" "$src/anim/$name.glb"
 done
+# The wolf: a procedural quadruped rig with keyed clips (living/tools/blender/wolf.py), with
+# wolf.clips.json beside it.
+"$blender" -b --python-exit-code 1 -P living/tools/blender/wolf.py -- \
+  --out "$src/anim/wolf.glb" --summary "$src/anim/wolf.clips.json" 2>&1 | grep -E "^(CLIP|WOLF)|Error|Traceback" || true

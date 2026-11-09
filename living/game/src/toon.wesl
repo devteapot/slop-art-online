@@ -41,7 +41,7 @@ var detail_sampler: sampler;
 // is (k + 0.5) / 32), or -1 for none (alpha 1).
 fn surface_of(a: f32) -> i32 {
     let k = i32(floor(a * 32.0));
-    return select(-1, k, k >= 0 && k < 16);
+    return select(-1, k, k >= 0 && k < 18);
 }
 
 // Painted detail of surface `k` at `p` (world), as factors round 1 (rgb) and a height (a, 0.5

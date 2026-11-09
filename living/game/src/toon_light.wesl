@@ -50,7 +50,7 @@ struct Toon {
     detail: vec4<f32>,
     // Per surface (style.rs `Surface`): x 1 / tile size (1/m), y strength, z mapping (0
     // triplanar, 1 planar per face).
-    layers: array<vec4<f32>, 16>,
+    layers: array<vec4<f32>, 18>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
