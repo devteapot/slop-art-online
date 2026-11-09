@@ -28,8 +28,10 @@ Sets:
 - `ground` (the terrain material, `living/game/src/terrain.rs`; layer order is the `Layer` enum
   there): grass, lush_grass, dry_grass, forest_floor, dirt, sand, rock, cobble, flagstone, mud,
   spirit_moss, pavers (a cyberpunk town's large square panels).
-- `material` (phase 2, models through the toon shader; not used yet): bark, planks, plaster,
-  stone, brick, shingles, metal, leaves.
+- `material` (scenery models through the toon shader, `living/game/src/style.rs`; layer order is
+  `surfaces.py`'s SURFACES, which the Blender generators tag each part with): bark, leaves, wood
+  (beams and posts), planks, plaster, stone (ashlar), boulder (natural rock), brick, shingles, tiles (clay barrel
+  tiles), thatch, metal, copper (and brass), concrete, cloth (awnings, blinds), glass.
 
 Each set is written as one vertical strip, `<set>.png` (layer k at rows k*size..), plus
 `<set>.txt` naming the layers in order. The game stacks the strip into a texture array and builds
@@ -48,7 +50,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 GROUND = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers"]
-MATERIAL = ["bark", "planks", "plaster", "stone", "brick", "shingles", "metal", "leaves"]
+from surfaces import SURFACES as MATERIAL
 
 # Typical vertex colours (sRGB), only for the preview sheet.
 TINT = {
@@ -57,6 +59,8 @@ TINT = {
     "flagstone": (176, 160, 128), "mud": (100, 104, 80), "spirit_moss": (52, 92, 100), "pavers": (60, 62, 72),
     "bark": (110, 84, 62), "planks": (150, 112, 74), "plaster": (220, 210, 190), "stone": (150, 144, 134),
     "brick": (160, 84, 62), "shingles": (120, 70, 60), "metal": (120, 126, 130), "leaves": (90, 140, 70),
+    "boulder": (128, 122, 116), "wood": (110, 76, 52), "tiles": (190, 92, 62), "thatch": (190, 160, 100), "copper": (90, 160, 140),
+    "concrete": (120, 122, 132), "cloth": (200, 70, 80), "glass": (50, 60, 80),
 }
 
 
@@ -507,26 +511,11 @@ def brick(p: Painter):
 
 
 def shingles(p: Painter):
-    n = p.n
-    rows, cols = 8, 6
-    img = np.zeros((n, n, 3), np.float32)
-    hgt = np.zeros((n, n), np.float32)
-    # Rows overlap from the top down: each tile a rounded-bottom shape, darker under the one above.
-    for j in range(rows):
-        for i in range(cols):
-            cx = (i + 0.5 * (j % 2) + 0.5) / cols
-            cy = (j + 1.0) / rows
-            dx = (p.u - cx + 0.5) % 1.0 - 0.5
-            dy = (p.v - cy + 0.5) % 1.0 - 0.5
-            w = 0.5 / cols
-            m = (np.abs(dx) < w * 0.96) & (dy < 0) & (dy > -1.0 / rows) | ((dx / w) ** 2 + (dy * rows * 3) ** 2 < 0.92) & (dy >= 0)
-            v = p.rng.uniform(0.85, 1.15)
-            shade = 1.0 - 0.25 * np.clip(-dy * rows, 0, 1)
-            img = np.where(m[..., None], v * shade[..., None] * 0.5, img)
-            hgt = np.where(m, 1 - np.clip(-dy * rows, 0, 1), hgt)
-    p.rgb = p.blur(img, 0.7) + 0.0
-    p.rgb = np.where(p.rgb < 0.05, 0.3, p.rgb)
-    p.h = hgt
+    """Slate or wood shingles on a roof whose courses are modelled: a broad watercolour mottle
+    only. Rows would fight the geometry, and streaks and flecks turned to grain at a distance
+    (blind A/B, 2026-11-09)."""
+    p.tone(0.88 + 0.24 * p.posterise(p.noise(3, 3, 0.55), 4, 4.0), hue=(1.0, 1.0, 1.03))
+    p.tone(0.95 + 0.1 * p.posterise(p.noise(6, 2), 3, 3.0), hue=(1.02, 1.0, 0.97))
 
 
 def metal(p: Painter):
@@ -546,14 +535,145 @@ def metal(p: Painter):
 
 
 def leaves(p: Painter):
+    """Crowns: big soft leaf masses lit from above (the image's top is up on a crown's side),
+    with a few loose dabs between them, so a crown reads as painted clumps, not speckle."""
     n = p.n
-    p.tone(0.8 + 0.3 * p.posterise(p.noise(3, 2), 3, 3.0))
-    for _ in range(int(n * n / 140)):
+    p.tone(0.86 + 0.24 * p.posterise(p.noise(2, 2), 3, 4.0))
+    for _ in range(int(n * n / 3500)):
         x, y = p.rng.random(2) * n
-        v = p.rng.uniform(0.38, 0.64)
-        warm = p.rng.random() * 0.3
-        r = n / 512 * p.rng.uniform(6, 12)
-        p.blob(x, y, r, c(v * (1 + warm * 0.3), v * 1.03, v * (1 - warm)), alpha=0.95, soft=0.25, squash=0.45, angle=p.rng.random() * 6.28, dome=0.3, height=v)
+        v = p.rng.uniform(0.42, 0.6)
+        warm = p.rng.random() * 0.25
+        p.blob(x, y, n / 512 * p.rng.uniform(26, 50), c(v * (1 + warm * 0.3), v * 1.02, v * (1 - warm * 0.6)), alpha=0.85, soft=0.3,
+               squash=p.rng.uniform(0.55, 0.85), angle=p.rng.normal(0, 0.3), dome=0.4, height=v)
+    for _ in range(int(n * n / 1100)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.uniform(0.4, 0.62)
+        p.blob(x, y, n / 512 * p.rng.uniform(7, 13), c(v, v * 1.03, v * 0.95), alpha=0.6, soft=0.3, squash=0.5, angle=p.rng.random() * 6.28, dome=0.3)
+
+def boulder(p: Painter):
+    """Boulders and cave rock: big facets, each a flat value with a painted gradient, soft cracks
+    and lichen; no strata (the ground's cliff bands smear across a boulder's tilted faces)."""
+    n = p.n
+    pts = p.rng.random((14, 2))
+    idx, d, edge = p.voronoi(pts)
+    vals = p.rng.uniform(0.86, 1.14, len(pts)).astype(np.float32)
+    ang = p.rng.uniform(0, 6.28, len(pts))
+    wx = (p.u - pts[idx, 0] + 0.5) % 1.0 - 0.5
+    wy = (p.v - pts[idx, 1] + 0.5) % 1.0 - 0.5
+    face = vals[idx] + 0.9 * (np.cos(ang)[idx] * wx + np.sin(ang)[idx] * wy)
+    p.tone(p.blur(face, 1.5), hue=(1.03, 1.0, 0.97))
+    p.tone(0.94 + 0.12 * p.posterise(p.noise(5, 2), 3, 2.0))
+    gap = np.clip(1.0 - edge * n / 2.5, 0, 1)
+    p.tone(1.0 - 0.2 * gap, hue=(0.96, 0.98, 1.06))
+    for _ in range(int(n * n / 2500)):
+        x, y = p.rng.random(2) * n
+        p.blob(x, y, n / 512 * p.rng.uniform(4, 11), c(0.55, 0.58, 0.48), alpha=0.45, soft=0.7, squash=0.7, angle=p.rng.random() * 6.28)
+    p.h = np.clip(0.3 + 0.7 * np.clip(edge * n / 10, 0, 1), 0, 1)
+
+
+def wood(p: Painter):
+    """Beams and posts: long grain down the tile, a few dark lines, no board seams."""
+    n = p.n
+    x = (p.u + 0.04 * (p.noise(3, 2) - 0.5)) % 1.0
+    grain = 0.5 + 0.5 * np.sin((x * 11 + p.noise(5, 2) * 0.7) * 2 * math.pi)
+    p.tone(0.92 + 0.16 * p.posterise(grain, 4, 1.2), hue=(1.04, 1.0, 0.94))
+    p.tone(0.9 + 0.2 * p.posterise(p.noise(2, 2), 3, 4.0))
+    for _ in range(int(n * n / 700)):
+        x0, y0 = p.rng.random(2) * n
+        L = n / 512 * p.rng.uniform(40, 90)
+        v = p.rng.uniform(0.42, 0.56)
+        p.dab(x0, y0, L, L * 0.05, math.pi / 2 + p.rng.normal(0, 0.03), c(v, v * 0.97, v * 0.92), alpha=0.3, bristle=0.6)
+    # Checks: a few short dark splits along the grain.
+    for _ in range(5):
+        x0, y0 = p.rng.random(2) * n
+        L = n / 512 * p.rng.uniform(40, 110)
+        p.dab(x0, y0, L, n / 512 * 2.2, math.pi / 2, c(0.3, 0.28, 0.27), alpha=0.6, bristle=0.0, taper=0.9)
+    p.h = 0.5 + 0.3 * (grain - 0.5)
+
+
+def tiles(p: Painter):
+    """Clay barrel tiles in columns: a lit crown and dark troughs, each course faintly shaded just
+    below the butt of the one above (v runs down the roof; the roof's courses are modelled)."""
+    cols, rows = 8, 6
+    cu = (p.u * cols) % 1.0
+    ci = np.floor(p.u * cols).astype(int) % cols
+    w = (p.v + 0.012 * np.sin(p.u * cols * 2 * math.pi)) % 1.0
+    rv = (w * rows) % 1.0
+    ri = np.floor(w * rows).astype(int) % rows
+    prof = np.clip(np.cos((cu - 0.5) * math.pi), 0, 1)
+    vals = p.rng.uniform(0.86, 1.14, (rows, cols)).astype(np.float32)[ri, ci]
+    hues = p.rng.normal(0, 0.035, (rows, cols, 3)).astype(np.float32)[ri, ci]
+    shade = (0.74 + 0.34 * prof ** 0.6) * (1 - 0.12 * np.clip((0.16 - rv) / 0.16, 0, 1)) * (1 + 0.05 * np.clip((rv - 0.9) / 0.1, 0, 1))
+    face = (vals * shade)[..., None] * (1 + hues)
+    p.rgb = p.blur(face * 0.5, 0.6)
+    p.tone(0.95 + 0.1 * p.posterise(p.noise(5, 2), 3, 2.5), hue=(1.0, 1.02, 1.04))
+    p.h = np.clip(prof * 0.8 + 0.2 * rv, 0, 1)
+
+
+def thatch(p: Painter):
+    """Straw (or turf) laid in courses: dense strokes down the roof, a shadow under each course."""
+    n = p.n
+    p.tone(0.9 + 0.2 * p.posterise(p.noise(3, 2), 3, 3.0))
+    for _ in range(int(n * n / 260)):
+        x0, y0 = p.rng.random(2) * n
+        L = n / 512 * p.rng.uniform(26, 56)
+        v = p.rng.uniform(0.4, 0.62)
+        p.dab(x0, y0, L, L * 0.08, math.pi / 2 + p.rng.normal(0, 0.1), c(v * 1.02, v, v * 0.92), alpha=0.5, bristle=0.6, height=v)
+    rows = 5
+    rv = ((p.v + 0.01 * (p.noise(4) - 0.5)) * rows) % 1.0
+    p.tone(1 - 0.2 * np.clip((0.14 - rv) / 0.14, 0, 1))
+
+
+def copper(p: Painter):
+    """Copper and brass sheet: hammered dents, standing seams, patina blotches and drips."""
+    n = p.n
+    p.tone(0.9 + 0.2 * p.posterise(p.noise(4, 3), 4, 2.5), hue=(0.93, 1.03, 1.05))
+    for _ in range(int(n * n / 900)):
+        x0, y0 = p.rng.random(2) * n
+        v = p.rng.uniform(0.46, 0.55)
+        p.blob(x0, y0, n / 512 * p.rng.uniform(6, 14), c(v, v, v), alpha=0.5, soft=0.8, dome=0.25)
+    su = np.abs(((p.u * 4) % 1.0) - 0.5) * 2
+    ridge = np.clip((su - 0.96) / 0.04, 0, 1)
+    p.tone(1 + 0.14 * ridge - 0.14 * np.clip((su - 0.9) / 0.05, 0, 1) * (1 - ridge))
+    drip = p.blur(p.rng.random((n, n)).astype(np.float32), 0.6)
+    drip = np.mean([np.roll(drip, k, axis=0) for k in range(0, 48, 3)], axis=0)
+    p.tone(1.0 + 0.3 * (drip - drip.mean()) / max(drip.std(), 1e-6) * 0.12, hue=(0.96, 1.02, 1.03))
+    p.h = 0.5 + 0.5 * ridge
+
+
+def concrete(p: Painter):
+    """Cast concrete: soft blotches, pits, formwork lines and rain streaks below them."""
+    n = p.n
+    p.tone(0.92 + 0.16 * p.posterise(p.noise(4, 3, 0.6), 4, 3.0), hue=(1.0, 1.0, 1.02))
+    for _ in range(int(n * n / 500)):
+        x0, y0 = p.rng.random(2) * n
+        p.blob(x0, y0, n / 512 * p.rng.uniform(0.8, 2.0), c(0.38, 0.38, 0.39), alpha=0.6, soft=0.5)
+    rows = 3
+    rv = (p.v * rows) % 1.0
+    line = np.clip(1 - np.minimum(rv, 1 - rv) * rows * n / 2.0, 0, 1)
+    p.tone(1 - 0.18 * line)
+    streak = p.blur(p.rng.random((n, n)).astype(np.float32), 0.8)
+    streak = np.mean([np.roll(streak, k, axis=0) for k in range(0, 60, 3)], axis=0)
+    below = np.clip(1 - rv * 2.5, 0, 1)
+    p.tone(1.0 - 0.06 * below * (streak - streak.mean()) / max(streak.std(), 1e-6), hue=(1.02, 1.0, 0.97))
+    p.h = 1 - line
+
+
+def cloth(p: Painter):
+    """Canvas and blinds: soft vertical folds and a little wear (no fine weave: it shimmers into
+    pinstripes at a distance)."""
+    folds = 0.5 + 0.5 * np.sin((p.u * 3 + p.noise(2, 2) * 0.6) * 2 * math.pi)
+    p.tone(0.92 + 0.14 * p.posterise(folds, 4, 3.0))
+    p.tone(0.95 + 0.1 * p.posterise(p.noise(5, 2), 3, 2.0), hue=(1.02, 1.0, 0.98))
+    p.h = folds
+
+
+def glass(p: Painter):
+    """Window panes: two painted diagonal glints and faint mottling (dark panes stay dark)."""
+    s = (p.u + p.v) % 1.0
+    glint = np.clip(1 - np.abs(s - 0.2) / 0.05, 0, 1) ** 0.7 + 0.6 * np.clip(1 - np.abs(s - 0.33) / 0.018, 0, 1)
+    p.tone(1 + 0.5 * p.blur(glint.astype(np.float32), 1.0), hue=(0.97, 1.0, 1.06))
+    p.tone(0.94 + 0.12 * p.posterise(p.noise(3, 2), 3, 4.0))
 
 
 PAINT = {
@@ -577,10 +697,19 @@ PAINT = {
     "shingles": shingles,
     "metal": metal,
     "leaves": leaves,
+    "boulder": boulder,
+    "wood": wood,
+    "tiles": tiles,
+    "thatch": thatch,
+    "copper": copper,
+    "concrete": concrete,
+    "cloth": cloth,
+    "glass": glass,
 }
 
 # How far each texture's luminance spreads (the narrow band), by kind.
-SPREAD = {"pavers": 0.06, "spirit_moss": 0.085, "sand": 0.045, "plaster": 0.05, "metal": 0.05, "mud": 0.07, "cobble": 0.09, "flagstone": 0.08, "rock": 0.09, "brick": 0.09, "shingles": 0.09}
+SPREAD = {"pavers": 0.06, "spirit_moss": 0.085, "sand": 0.045, "plaster": 0.05, "metal": 0.05, "mud": 0.07, "cobble": 0.09, "flagstone": 0.08, "rock": 0.09, "brick": 0.09, "shingles": 0.09,
+          "boulder": 0.08, "wood": 0.07, "tiles": 0.09, "thatch": 0.085, "copper": 0.065, "concrete": 0.06, "cloth": 0.05, "glass": 0.07}
 
 
 def paint(kind: str, size: int, seed: int) -> np.ndarray:

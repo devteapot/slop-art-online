@@ -43,6 +43,9 @@ import bmesh
 import bpy
 from mathutils import Matrix, Vector, noise
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "textures"))
+from surfaces import alpha as surface_alpha  # noqa: E402
+
 NITS = 1000.0 * float(os.environ.get("NATURE_GLOW", "1"))
 UP = Vector((0, 0, 1))
 
@@ -144,6 +147,11 @@ def srgb(c):
 
 FLAT, SMOOTH = 0, -1
 
+# The painted surface (living/tools/textures/surfaces.py) of each material's parts, which the
+# game multiplies into their vertex colours; it travels in the colours' alpha, so materials stay
+# shared. "Tree" holds bark and leaves alike: parts with a crown centre are foliage.
+SURFACE_OF = {"Bark": "bark", "Stone": "boulder", "Leaves": "leaves", "Tree": "bark"}
+
 
 class Builder:
     """Accumulates parts into one bmesh with a per-corner colour layer and material slots."""
@@ -162,15 +170,21 @@ class Builder:
             self.mats.append(mat)
         return self.mats.index(mat)
 
-    def add(self, bm_part, mat, color_fn, centre=None, flat=0.15, smooth=False, two_sided=False, per_face=False, pin=None):
+    def add(self, bm_part, mat, color_fn, centre=None, flat=0.15, smooth=False, two_sided=False, per_face=False, pin=None, surface=""):
         """Merge a part: color_fn(vertex_co, face_normal) -> rgb.
 
         centre: foliage normals point out from it (lerped `flat` towards the face normal).
         smooth: averaged vertex normals (trunks, stems). two_sided: add back faces too.
         per_face: one colour per face, from its centre (crisp bark marks).
         pin: {part vertex: normal} for vertices whose normal is set, not derived.
+        surface: the painted surface (default from the material, SURFACE_OF; None for none).
         """
         idx = self.slot(mat)
+        if surface == "":
+            surface = SURFACE_OF.get(mat.name)
+            if mat.name == "Tree" and centre is not None:
+                surface = "leaves"
+        a = surface_alpha(surface)
         if centre is not None:
             self.centres.append((Vector(centre), flat))
             shade = len(self.centres)
@@ -190,12 +204,12 @@ class Builder:
                 nf[self.shade_layer] = shade
                 nf.normal_update()
                 if per_face:
-                    c = (*srgb(color_fn(nf.calc_center_median(), nf.normal)), 1.0)
+                    c = (*srgb(color_fn(nf.calc_center_median(), nf.normal)), a)
                     for loop in nf.loops:
                         loop[self.col] = c
                     continue
                 for loop in nf.loops:
-                    loop[self.col] = (*srgb(color_fn(loop.vert.co, nf.normal)), 1.0)
+                    loop[self.col] = (*srgb(color_fn(loop.vert.co, nf.normal)), a)
         bm_part.free()
 
     def finish(self, name):

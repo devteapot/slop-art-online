@@ -14,10 +14,11 @@
 //! - **Calm at range:** the detail fades to the plain vertex colour between `FADE` metres, and a
 //!   macro layer of slow noise varies value and hue so neither the near nor the far ground tiles.
 //!
-//! Lighting mirrors `toon.wesl` for plain surfaces (bands, hue-shifted shadows, sky fill at night,
-//! rim, point lights, rain darkening and puddles), and its parameters are copied from the toon
-//! materials whenever the style changes (F2 sliders, the plain-look comparison, weather), so
-//! ground and scenery always agree. It is one material for every ground mesh, so the ground stays
+//! Lighting is the shared toon model (`toon_light.wesl`) for plain surfaces (bands, hue-shifted
+//! shadows, sky fill at night, rim, point lights, rain darkening and puddles, which here gather
+//! in the detail's hollows). Its parameters are copied from the toon materials whenever the
+//! style changes (F2 sliders, the plain-look comparison, weather), so ground and scenery always
+//! agree. It is one material for every ground mesh, so the ground stays
 //! one batch set per view.
 //!
 //! The extra vertex attributes exist only in the main pass. Prepass and shadow pipelines keep
@@ -55,6 +56,8 @@ pub enum Layer {
 }
 
 pub const LAYERS: usize = 12;
+/// The layers' names in `ground.txt` (paint.py `GROUND`), in [`Layer`] order.
+const NAMES: [&str; LAYERS] = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers"];
 
 /// Per layer: tile size (m) and detail strength (how far its factors depart from 1).
 const TILE: [(f32, f32); LAYERS] = [
@@ -211,15 +214,19 @@ impl Plugin for TerrainPlugin {
 }
 
 fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, mut mats: ResMut<Assets<Ground>>) {
-    let layers = images.add(load_layers());
+    let layers = images.add(load_array("textures/ground", &NAMES));
     let base = StandardMaterial { base_color: Color::WHITE, perceptual_roughness: 0.85, ..default() };
     let toon = crate::style::Style::default().toon(StandardMaterial::default()).extension.params;
     commands.insert_resource(GroundMat(mats.add(Ground { base, extension: GroundExt { toon, params: GroundParams::default(), layers } })));
 }
 
-/// `ground.png` as a texture array with mipmaps; flat (no detail) if it is missing.
-fn load_layers() -> Image {
-    let path = std::path::Path::new(&crate::lookdev::asset_root()).join("textures/ground.png");
+/// A painted strip (`<name>.png`, paint.py) as a texture array with mipmaps, if its layer list
+/// (`<name>.txt`) is `names`; flat mid-grey (no detail) if it is missing or painted for another
+/// order. The ground's layers, and the models' surfaces (`style::DetailLayers`).
+pub fn load_array(name: &str, names: &[&str]) -> Image {
+    let layers = names.len();
+    let root = std::path::Path::new(&crate::lookdev::asset_root()).join(name);
+    let path = root.with_extension("png");
     let sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
         address_mode_u: ImageAddressMode::Repeat,
         address_mode_v: ImageAddressMode::Repeat,
@@ -229,24 +236,32 @@ fn load_layers() -> Image {
         anisotropy_clamp: 4,
         ..default()
     });
-    let image = std::fs::read(&path).ok().and_then(|bytes| match Image::from_buffer(&bytes, ImageType::Extension("png"), CompressedImageFormats::NONE, false, sampler.clone(), RenderAssetUsages::RENDER_WORLD) {
-        Ok(i) => Some(i),
-        Err(e) => {
-            warn!("terrain: {} unreadable ({e}); the ground has no detail", path.display());
-            None
+    let listed: Vec<String> = std::fs::read_to_string(root.with_extension("txt")).unwrap_or_default().lines().map(str::to_string).collect();
+    let image = if listed != names {
+        warn!("textures: {} does not list the layers {names:?} (run `just living-game-textures --set all`); drawn without detail", root.with_extension("txt").display());
+        None
+    } else {
+        std::fs::read(&path).ok().and_then(|bytes| match Image::from_buffer(&bytes, ImageType::Extension("png"), CompressedImageFormats::NONE, false, sampler.clone(), RenderAssetUsages::RENDER_WORLD) {
+            Ok(i) => Some(i),
+            Err(e) => {
+                warn!("textures: {} unreadable ({e}); drawn without detail", path.display());
+                None
+            }
+        })
+    };
+    let Some(mut image) = image.filter(|i| i.height() == i.width() * layers as u32) else {
+        if listed == names {
+            warn!("textures: no {} with {layers} layers (run `just living-game-textures --set all`); drawn without detail", path.display());
         }
-    });
-    let Some(mut image) = image.filter(|i| i.height() == i.width() * LAYERS as u32) else {
-        warn!("terrain: no {} with {LAYERS} layers (run `just living-game-textures`); the ground has no detail", path.display());
-        let mut flat = Image::new_fill(Extent3d { width: 4, height: 4 * LAYERS as u32, depth_or_array_layers: 1 }, bevy::render::render_resource::TextureDimension::D2, &[128, 128, 128, 128], bevy::render::render_resource::TextureFormat::Rgba8Unorm, RenderAssetUsages::RENDER_WORLD);
+        let mut flat = Image::new_fill(Extent3d { width: 4, height: 4 * layers as u32, depth_or_array_layers: 1 }, bevy::render::render_resource::TextureDimension::D2, &[128, 128, 128, 128], bevy::render::render_resource::TextureFormat::Rgba8Unorm, RenderAssetUsages::RENDER_WORLD);
         flat.sampler = sampler;
-        let _ = flat.reinterpret_stacked_2d_as_array(LAYERS as u32);
+        let _ = flat.reinterpret_stacked_2d_as_array(layers as u32);
         return flat;
     };
     let size = image.width();
     let base = image.data.take().unwrap_or_default();
-    image.data = Some(with_mips(&base, size, LAYERS));
-    let _ = image.reinterpret_stacked_2d_as_array(LAYERS as u32);
+    image.data = Some(with_mips(&base, size, layers));
+    let _ = image.reinterpret_stacked_2d_as_array(layers as u32);
     image.texture_descriptor.mip_level_count = size.ilog2() + 1;
     image.data_order = TextureDataOrder::LayerMajor;
     image
@@ -289,7 +304,7 @@ fn with_mips(base: &[u8], size: u32, layers: usize) -> Vec<u8> {
 fn sync(style: Res<crate::style::Style>, palette: Res<crate::world::Palette>, toons: Res<Assets<Toon>>, ground: Option<Res<GroundMat>>, mut mats: ResMut<Assets<Ground>>) {
     let Some(ground) = ground else { return };
     let Some(src) = toons.get(&palette.vertex) else { return };
-    let key = |t: &ToonParams| [t.shadow, t.rim, t.band, t.extra, t.shade, t.recolor, t.recolor_from, t.atmo, t.face, t.hair];
+    let key = |t: &ToonParams| [t.shadow, t.rim, t.band, t.extra, t.shade, t.recolor, t.recolor_from, t.atmo, t.face, t.hair, t.detail];
     let on = if style.enabled { 1.0 } else { 0.0 };
     let Some(m) = mats.get(&ground.0) else { return };
     if key(&m.extension.toon) == key(&src.extension.params) && m.extension.params.fade.w == on {

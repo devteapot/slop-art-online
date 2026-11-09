@@ -12,6 +12,8 @@
 //! - `shadowmap=N`, `cascades=N`, `shadowfar=M`: the sun's shadow map size, cascade count and
 //!   reach;
 //! - `people=K`: K times the island's people per settlement;
+//! - `nodetail`: no painted detail on scenery models (style.rs); `detailonly=bark+leaves` keeps
+//!   it on only the surfaces named;
 //! - `diag`: every 2 s, Bevy's render diagnostics (per-pass CPU time; GPU time only where the
 //!   backend reports timestamps, so not on Metal) and what each view draws: meshes, distinct
 //!   meshes and materials, triangles, and the characters' share, for the camera and each

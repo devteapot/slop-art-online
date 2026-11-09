@@ -1,7 +1,7 @@
 // The toon material's prepass vertex shader (depth, normals and shadow maps): Bevy's prepass
 // vertex shader (bevy_pbr 0.20.1 prepass/prepass.wesl) with the same wind sway as
-// `toon_vertex.wesl`, so plants' depth, lines and shadows move with them. Motion vectors are
-// not used by this game and are left out of the sway.
+// `toon_vertex.wesl` (toon_light.wesl `sway`), so plants' depth, lines and shadows move with
+// them. Motion vectors are not used by this game and are left out of the sway.
 
 import bevy_pbr::{
     prepass::io::{Vertex, UncompressedVertex, VertexOutput, decompress_vertex},
@@ -14,51 +14,10 @@ import bevy_pbr::{
     },
 };
 import bevy_render::globals::Globals;
+import living_game::toon_light::sway;
 
 // In the prepass's view bind group the globals sit at binding 1 (bevy_pbr prepass/mod.rs).
 @group(0) @binding(1) var<uniform> prepass_globals: Globals;
-
-// Must match `Toon` in toon.wesl (only `atmo` and `shade` are read here).
-struct Toon {
-    shadow: vec4<f32>,
-    rim: vec4<f32>,
-    band: vec4<f32>,
-    extra: vec4<f32>,
-    shade: vec4<f32>,
-    recolor: vec4<f32>,
-    recolor_from: vec4<f32>,
-    atmo: vec4<f32>,
-    face: vec4<f32>,
-    hair: vec4<f32>,
-}
-
-@group(constants::MATERIAL_BIND_GROUP) @binding(100)
-var<uniform> toon: Toon;
-
-// Identical to `sway` in toon_vertex.wesl.
-fn sway(world: vec3<f32>, origin: vec3<f32>, tag: u32, t: f32) -> vec3<f32> {
-    let wind = toon.atmo.x;
-    if ((tag & (1u << 25u)) == 0u || wind <= 0.0) {
-        return world;
-    }
-    let kind = (tag >> 26u) & 3u;
-    let h = max(world.y - origin.y, 0.0);
-    var amp = h * h * 0.0016;
-    if (kind == 0u) {
-        amp = h * 0.16;
-    } else if (kind == 1u) {
-        amp = h * h * 0.02;
-    }
-    let phase = origin.x * 0.21 + origin.z * 0.17;
-    let gust = 0.55 + 0.45 * sin(t * 0.45 - origin.x * 0.035 - origin.z * 0.02);
-    let swing = sin(t * 1.6 + phase) * 0.7 + sin(t * 2.9 + phase * 1.7) * 0.3;
-    let flutter = sin(t * 7.0 + world.x * 1.3 + world.z * 1.1) * 0.12 * min(h, 3.0) / 3.0;
-    let dir = vec2<f32>(0.94, 0.34);
-    let side = vec2<f32>(-dir.y, dir.x);
-    let lean = amp * wind * (gust * 0.8 + swing * (0.35 + 0.25 * wind));
-    let off = dir * lean + side * amp * wind * (flutter + swing * 0.25);
-    return world + vec3<f32>(off.x, -abs(lean) * 0.15, off.y);
-}
 
 @if(MORPH_TARGETS)
 fn morph_vertex(vertex_in: UncompressedVertex, instance_index: u32) -> UncompressedVertex {

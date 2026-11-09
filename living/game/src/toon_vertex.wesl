@@ -1,6 +1,6 @@
 // The toon material's main-pass vertex shader: Bevy's mesh vertex shader (bevy_pbr 0.20.1
-// render/mesh.wesl) with wind sway for plants. `toon_prepass.wesl` sways them the same way in
-// the depth, normal and shadow passes; keep the two `sway` functions identical.
+// render/mesh.wesl) with wind sway for plants (toon_light.wesl `sway`, which
+// `toon_prepass.wesl` applies in the depth, normal and shadow passes too).
 
 import bevy_pbr::render::{
     mesh_bindings::mesh,
@@ -11,52 +11,7 @@ import bevy_pbr::render::{
     view_transformations::position_world_to_clip,
     mesh_view_bindings::globals,
 };
-
-// Must match `Toon` in toon.wesl (only `atmo` and `shade` are read here).
-struct Toon {
-    shadow: vec4<f32>,
-    rim: vec4<f32>,
-    band: vec4<f32>,
-    extra: vec4<f32>,
-    shade: vec4<f32>,
-    recolor: vec4<f32>,
-    recolor_from: vec4<f32>,
-    // x: wind strength, y: wetness.
-    atmo: vec4<f32>,
-    face: vec4<f32>,
-    hair: vec4<f32>,
-}
-
-@group(constants::MATERIAL_BIND_GROUP) @binding(100)
-var<uniform> toon: Toon;
-
-// Plants lean with the wind. The mesh tag says whether a mesh sways (bit 25) and how (bits 26-27:
-// 0 grass and flowers, 1 bushes, 2 trees); weather.rs sets it. Sway grows with height above the
-// instance's origin, so trunks stay planted and crowns move; each instance has its own phase.
-fn sway(world: vec3<f32>, origin: vec3<f32>, tag: u32, t: f32) -> vec3<f32> {
-    let wind = toon.atmo.x;
-    if ((tag & (1u << 25u)) == 0u || wind <= 0.0) {
-        return world;
-    }
-    let kind = (tag >> 26u) & 3u;
-    let h = max(world.y - origin.y, 0.0);
-    var amp = h * h * 0.0016;
-    if (kind == 0u) {
-        amp = h * 0.16;
-    } else if (kind == 1u) {
-        amp = h * h * 0.02;
-    }
-    let phase = origin.x * 0.21 + origin.z * 0.17;
-    // A slow gust that travels across the land, a sway, and a quick flutter near the tips.
-    let gust = 0.55 + 0.45 * sin(t * 0.45 - origin.x * 0.035 - origin.z * 0.02);
-    let swing = sin(t * 1.6 + phase) * 0.7 + sin(t * 2.9 + phase * 1.7) * 0.3;
-    let flutter = sin(t * 7.0 + world.x * 1.3 + world.z * 1.1) * 0.12 * min(h, 3.0) / 3.0;
-    let dir = vec2<f32>(0.94, 0.34);
-    let side = vec2<f32>(-dir.y, dir.x);
-    let lean = amp * wind * (gust * 0.8 + swing * (0.35 + 0.25 * wind));
-    let off = dir * lean + side * amp * wind * (flutter + swing * 0.25);
-    return world + vec3<f32>(off.x, -abs(lean) * 0.15, off.y);
-}
+import living_game::toon_light::{toon, sway};
 
 @if(MORPH_TARGETS)
 fn morph_vertex(vertex_in: UncompressedVertex, instance_index: u32) -> UncompressedVertex {

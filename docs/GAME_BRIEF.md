@@ -436,7 +436,16 @@ Open:
   - The pavers' grid reads a little mechanical.
   - Roads and paths keep their stair-stepped 1 m edges.
   - The ground's GPU cost should be checked on a GPU-bound machine.
-  - Model textures (phase 2) belong in the toon shader.
+  - Model textures (phase 2) belong in the toon shader (done below).
+
+**Textures, phase 2: scenery models (2026-11-09; client presentation only).**
+- **Shared lighting:** `toon_light.wesl` holds the toon parameters, sway, colour helpers and the lighting pieces; `toon.wesl` and `terrain.wesl` compose it, and the vertex and prepass shaders import from it, so the copies are gone. With detail off, the image matches the old shader within run-to-run noise.
+- **Surface tags, not materials:** the generators write each triangle's surface into the vertex colour's alpha (until now always 1). Nature maps it from material names, buildings from palette entries. Choosing the texture by material would have split the shared scenery material into about five, each a batch set in the camera and every cascade. The material carries one flag and a 16-entry table (tile size, strength, mapping), so material and batch counts are unchanged (41 toon materials).
+- **Set:** `paint.py --set material` paints 16 layers (bark, leaves, wood, planks, plaster, stone, boulder, brick, shingles, tiles, thatch, metal, copper, concrete, cloth, glass). Their order lives in `living/tools/textures/surfaces.py`, shared by `paint.py` and both generators. The game checks `material.txt` against it and draws no detail on a mismatch.
+- **Mapping:** in each model's own frame, so rotated and scaled models keep level courses and metre-sized tiles. Built surfaces and boulders are mapped flat from each face's normal; bark and leaves are triplanar. Detail fades from 20 to 55 m; characters get none. `LIVING_GAME_PERF=nodetail` or `detailonly=a+b` for A/B.
+- **Cost:** within 0.1 ms at the town, forest and hamlet on the Mac and the dev-box; main-pass GPU time on the Radeon 0.536 → 0.558 ms.
+- **Blind A/B:** detail won 28, lost 4, tied 12 in the final round. Trees, rocks, walls and props kept. Slate and clay roofs lost every round (grain at distance, then soot-like blotches) and are set to strength 0. Cyberpunk blinds read as pinstripes in vistas and are untagged.
+- **Open:** roofs; untagged parts (38% of cyberpunk triangles, 42% in the spirit forest, mostly glow plants); grass, flowers and petals; everything beyond 55 m. The relief option (painted height moving the shadow edge) is built but off and untested.
 
 **Claude–Blender integration** (research of 2026-11-08):
 - **Backbone: headless scripts** (`blender -b -P`), versioned in the repo. No socket or telemetry, reproducible, and N processes can run in parallel. The agent checks its work through rendered contact sheets and numeric checks (dimensions, triangle budget, silhouette against a reference, a re-import round trip), reviewed by a fresh-context subagent ([blender-game-skills](https://github.com/majidmanzarpour/blender-game-skills), [blender-kiln](https://github.com/elithril/blender-kiln)).

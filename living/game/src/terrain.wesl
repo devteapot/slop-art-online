@@ -1,34 +1,20 @@
 // The ground (terrain.rs): hand-painted detail layers multiplied into the vertex colours, lit by
-// the shared toon model. Main pass only; the prepass and shadows use Bevy's default shaders.
-//
-// The lighting is a copy of toon.wesl's path for plain surfaces (Kind::Plain): keep the two in
-// step. `toon` holds the same parameters as the toon materials (terrain.rs `sync`).
+// the shared toon model (toon_light.wesl, as plain surfaces). Main pass only; the prepass and
+// shadows use Bevy's default shaders. `toon` holds the same parameters as the toon materials
+// (terrain.rs `sync`).
 
 import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
     mesh_view_bindings as view_bindings,
-    shadows,
-    mesh_view_types,
-    clustered_forward,
     mesh_functions,
     view_transformations::position_world_to_clip,
     forward_io::{VertexOutput, FragmentOutput},
     pbr_functions::main_pass_post_lighting_processing,
 };
-
-// Must match `Toon` in toon.wesl (style.rs `ToonParams`).
-struct Toon {
-    shadow: vec4<f32>,
-    rim: vec4<f32>,
-    band: vec4<f32>,
-    extra: vec4<f32>,
-    shade: vec4<f32>,
-    recolor: vec4<f32>,
-    recolor_from: vec4<f32>,
-    atmo: vec4<f32>,
-    face: vec4<f32>,
-    hair: vec4<f32>,
-}
+import living_game::toon_light::{
+    toon, hash3, scene, wetted, view_depth, sun_shadow, sun_color, bands, banded, puddles, fresnel, rim_light,
+    point_lights, emission, has_sun, sun_direction,
+};
 
 // terrain.rs `GroundParams`.
 struct Ground {
@@ -43,8 +29,6 @@ struct Ground {
     blend: vec4<f32>,
 }
 
-@group(constants::MATERIAL_BIND_GROUP) @binding(100)
-var<uniform> toon: Toon;
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
 var<uniform> ground: Ground;
 @group(constants::MATERIAL_BIND_GROUP) @binding(102)
@@ -90,31 +74,6 @@ fn vertex(v: GroundVertex) -> GroundOut {
     return out;
 }
 
-fn hash3(p: vec3<f32>) -> f32 {
-    let q = fract(p * 0.1031);
-    let r = q + dot(q, q.yzx + 33.33);
-    return fract((r.x + r.y) * r.z);
-}
-
-fn noise3(p: vec3<f32>) -> f32 {
-    let i = floor(p);
-    let f = fract(p);
-    let u = f * f * (3.0 - 2.0 * f);
-    let n000 = hash3(i);
-    let n100 = hash3(i + vec3(1.0, 0.0, 0.0));
-    let n010 = hash3(i + vec3(0.0, 1.0, 0.0));
-    let n110 = hash3(i + vec3(1.0, 1.0, 0.0));
-    let n001 = hash3(i + vec3(0.0, 0.0, 1.0));
-    let n101 = hash3(i + vec3(1.0, 0.0, 1.0));
-    let n011 = hash3(i + vec3(0.0, 1.0, 1.0));
-    let n111 = hash3(i + vec3(1.0, 1.0, 1.0));
-    let x00 = mix(n000, n100, u.x);
-    let x10 = mix(n010, n110, u.x);
-    let x01 = mix(n001, n101, u.x);
-    let x11 = mix(n011, n111, u.x);
-    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
-}
-
 // 2D value noise for the macro layer.
 fn noise2(p: vec2<f32>) -> f32 {
     let i = floor(p);
@@ -125,43 +84,6 @@ fn noise2(p: vec2<f32>) -> f32 {
     let c = hash3(vec3<f32>(i + vec2(0.0, 1.0), 7.0));
     let d = hash3(vec3<f32>(i + vec2(1.0, 1.0), 7.0));
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-
-fn rgb_to_hsv(c: vec3<f32>) -> vec3<f32> {
-    let mx = max(c.r, max(c.g, c.b));
-    let mn = min(c.r, min(c.g, c.b));
-    let d = mx - mn;
-    var h = 0.0;
-    if (d > 1e-5) {
-        if (mx == c.r) {
-            h = (c.g - c.b) / d + select(0.0, 6.0, c.g < c.b);
-        } else if (mx == c.g) {
-            h = (c.b - c.r) / d + 2.0;
-        } else {
-            h = (c.r - c.g) / d + 4.0;
-        }
-        h = h / 6.0;
-    }
-    return vec3(h, select(0.0, d / mx, mx > 1e-5), mx);
-}
-
-fn hsv_to_rgb(c: vec3<f32>) -> vec3<f32> {
-    let k = vec3(1.0, 2.0 / 3.0, 1.0 / 3.0);
-    let p = abs(fract(vec3(c.x) + k) * 6.0 - 3.0);
-    return c.z * mix(vec3(1.0), clamp(p - 1.0, vec3(0.0), vec3(1.0)), c.y);
-}
-
-// toon.wesl `shadow_of` for plain surfaces.
-fn shadow_of(lit: vec3<f32>, value: f32, scene_hue: f32) -> vec3<f32> {
-    var hsv = rgb_to_hsv(lit);
-    let red = 1.0 - smoothstep(0.05, 0.12, abs(hsv.x - round(hsv.x)));
-    let shift = toon.shade.y * (1.0 - 0.75 * red);
-    var d = scene_hue - hsv.x;
-    d = d - round(d);
-    hsv.x = fract(hsv.x + d * shift);
-    hsv.y = clamp(hsv.y * toon.shade.z, 0.0, 1.0);
-    hsv.z = hsv.z * value;
-    return hsv_to_rgb(hsv);
 }
 
 fn layer_scale(k: u32) -> f32 {
@@ -293,71 +215,26 @@ fn fragment(g: GroundOut, @builtin(front_facing) is_front: bool) -> FragmentOutp
         }
     }
 
-    let amb = view_bindings::lights.ambient_color;
-    let atmo = amb.a > 0.0;
-    let fill = select(vec3<f32>(0.0), amb.rgb, atmo);
-    let fill_hsv = rgb_to_hsv(fill);
-    let scene_hue = select(toon.shade.x, fill_hsv.x, atmo && fill_hsv.y > 0.02);
-    let glow = select(1.0, amb.a, atmo);
-    // Rain darkens surfaces, upward ones most.
-    let wet = toon.atmo.y;
-    albedo = albedo * (1.0 - wet * (0.16 + 0.14 * clamp(N.y, 0.0, 1.0)));
+    let sc = scene();
+    albedo = wetted(albedo, N);
     let V = normalize(pbr_input.V);
-    let view_z = dot(vec4<f32>(
-        view_bindings::view.view_from_world[0].z,
-        view_bindings::view.view_from_world[1].z,
-        view_bindings::view.view_from_world[2].z,
-        view_bindings::view.view_from_world[3].z
-    ), p);
+    let view_z = view_depth(p);
 
-    if (view_bindings::lights.n_directional_lights > 0u) {
-        let light = &view_bindings::lights.directional_lights[0];
-        let L = (*light).direction_to_light;
-        var shadow = 1.0;
-        if (((*light).flags & mesh_view_types::DIRECTIONAL_LIGHT_FLAGS_SHADOWS_ENABLED_BIT) != 0u) {
-            shadow = shadows::fetch_directional_shadow(0u, p, pbr_input.world_normal, view_z, g.position.xy);
+    if (has_sun()) {
+        let L = sun_direction();
+        let shadow = sun_shadow(p, pbr_input.world_normal, view_z, g.position.xy);
+        let sun = sun_color();
+        let b = bands(dot(N, L), p.xyz);
+        let lit = b.x * shadow;
+        let away = mix(toon.extra.z, 1.0, b.y);
+        var color = banded(albedo, sun, lit, (1.0 - toon.shadow.a) * away, sc);
+        // Puddles gather in the detail's low places: gaps between stones, ruts.
+        if (toon.atmo.y > 0.05 && N.y > 0.97) {
+            color = puddles(color, p.xyz, (0.5 - height) * 0.15);
         }
-        let sun = (*light).color.rgb * view_bindings::view.exposure / 3.14159265 * toon.extra.w;
-        let ndl = dot(N, L);
-        let brush = (noise3(p.xyz * toon.extra.x) - 0.5) * toon.band.z;
-        let th = toon.band.x + brush;
-        let band = smoothstep(th - toon.band.y, th + toon.band.y, ndl);
-        let core = smoothstep(-0.35 + brush, -0.15 + brush, ndl);
-        let lit = band * shadow;
-        let away = mix(toon.extra.z, 1.0, core);
-        let lit_color = albedo * sun;
-        let shadow_color = shadow_of(lit_color, (1.0 - toon.shadow.a) * away, scene_hue) * toon.shadow.rgb + albedo * sun * toon.extra.y;
-        var color = mix(shadow_color, lit_color, lit);
-        color = color + albedo * fill * mix(1.0, 0.45, lit);
-        // Puddles (toon.wesl), gathering in the detail's low places: gaps between stones, ruts.
-        if (wet > 0.05 && N.y > 0.97) {
-            let n = noise3(vec3<f32>(p.x * 0.55, 0.0, p.z * 0.55)) * 0.65 + noise3(vec3<f32>(p.x * 1.7, 3.0, p.z * 1.7)) * 0.35 + (0.5 - height) * 0.15;
-            let pth = 0.77 - 0.05 * wet;
-            let puddle = smoothstep(pth, pth + 0.02, n) * smoothstep(0.05, 0.6, wet);
-            let prim = (smoothstep(pth - 0.015, pth, n) - smoothstep(pth + 0.01, pth + 0.025, n)) * smoothstep(0.05, 0.6, wet);
-@if(DISTANCE_FOG) {
-            let sky = view_bindings::fog.base_color.rgb;
-            color = mix(color, color * 0.62 + sky * 0.12, puddle);
-            color = color + sky * prim * 0.2;
-}
-        }
-        let fresnel = clamp(1.0 - max(dot(N, V), 0.0), 0.0, 1.0);
-        let rim = pow(fresnel, toon.band.w) * toon.rim.a * (0.35 + 0.65 * lit);
-        color = color + toon.rim.rgb * sun * rim;
-        let cluster = clustered_forward::view_fragment_cluster_index(pbr_input.frag_coord.xy, view_z, pbr_input.is_orthographic);
-        let ranges = clustered_forward::unpack_clusterable_object_index_ranges(cluster);
-        for (var i: u32 = ranges.first_point_light_index_offset; i < ranges.first_spot_light_index_offset; i = i + 1u) {
-            let id = clustered_forward::get_clusterable_object_id(i);
-            let l = &view_bindings::clustered_lights.data[id];
-            let to = (*l).position_radius.xyz - p.xyz;
-            let d2 = dot(to, to);
-            let f = d2 * (*l).color_inverse_square_range.w;
-            let window = clamp(1.0 - f * f, 0.0, 1.0);
-            let fall = window * window / max(d2, 0.0001);
-            let b = smoothstep(-0.05, 0.12, dot(N, normalize(to))) * 0.8 + 0.2;
-            color = color + albedo * (*l).color_inverse_square_range.rgb * fall * b * view_bindings::view.exposure / 3.14159265 * toon.extra.w;
-        }
-        color = color + pbr_input.material.emissive.rgb * view_bindings::view.exposure * glow;
+        color = color + rim_light(fresnel(N, V), lit, toon.rim.a) * sun;
+        color = color + point_lights(albedo, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
+        color = color + emission(pbr_input.material.emissive.rgb, sc);
         out.color = vec4<f32>(color, 1.0);
     } else {
         out.color = vec4<f32>(albedo * toon.extra.y, 1.0);

@@ -77,6 +77,9 @@ import bmesh
 import bpy
 from mathutils import Matrix, Vector, noise
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "textures"))
+from surfaces import alpha as surface_alpha  # noqa: E402
+
 PROFILE = None  # --profile: triangles per generator function
 
 X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
@@ -157,6 +160,57 @@ PALETTES["cyberpunk"] = dict(
     under=(0.16, 0.16, 0.18), glass=(0.08, 0.11, 0.17), paint=[(0.20, 0.22, 0.28), (0.72, 0.22, 0.28)],
     glow=(1.0, 0.86, 0.66), glow_tint=(1.0, 0.9, 0.75))
 
+
+class Surf(tuple):
+    """A palette colour that knows its painted surface (living/tools/textures/surfaces.py): the
+    detail layer the game multiplies into it. `mul`, `jitter` and `lerp` keep the tag, so parts
+    coloured from a palette entry carry it into their vertex colours' alpha (`Builder.add`)."""
+    surface = None
+
+
+def tagged(c, surface):
+    if surface is None:
+        return tuple(c)
+    t = Surf(c)
+    t.surface = surface
+    return t
+
+
+# Each palette entry's surface; styles may override (cyberpunk stone is cast). Entries not listed
+# stay plain: plastic, trim, glow, earth, and blinds (their folds read as pinstripes at a
+# distance).
+SURFACE_OF = {
+    "plaster": "plaster", "cream": "plaster", "cap": "plaster",
+    "timber": "wood", "under": "wood", "heart": "wood", "bark": "bark", "paint": "planks",
+    "stone": "stone", "stone_dark": "stone", "brick": "brick", "concrete": "concrete", "grime": "concrete",
+    "roof": "shingles", "grass": "thatch",
+    "glass": "glass", "iron": "metal", "steel": "metal", "metal": "metal", "dark": "metal", "panel": "metal",
+    "brass": "copper", "copper": "copper", "awning": "cloth",
+}
+SURFACE_STYLE = {"cyberpunk": {"stone": "concrete", "stone_dark": "concrete"}}
+
+
+def surface_for(style, key, c):
+    s = SURFACE_STYLE.get(style, {}).get(key, SURFACE_OF.get(key))
+    # Red and orange roofs are clay tiles; blue, grey, green and brown ones slate or wood shingles.
+    if s == "shingles" and c[0] > 0.6 and c[1] < 0.42:
+        s = "tiles"
+    return s
+
+
+def tag_palettes():
+    for style, pal in PALETTES.items():
+        for key, v in list(pal.items()):
+            if key.startswith("glow") or not isinstance(v, (tuple, list)):
+                continue
+            if isinstance(v, list):
+                pal[key] = [tagged(c, surface_for(style, key, c)) for c in v]
+            elif all(isinstance(x, (int, float)) for x in v):
+                pal[key] = tagged(v, surface_for(style, key, v))
+
+
+tag_palettes()
+
 # Neon colours (linear emission), each its own glow material ("GlowPink"...): saturated pink,
 # cyan and amber, plus red for aircraft warning lights and a cold white for strip lights.
 NEON = {"pink": (1.0, 0.08, 0.50), "cyan": (0.04, 0.80, 1.0), "amber": (1.0, 0.50, 0.04), "red": (1.0, 0.05, 0.03),
@@ -186,11 +240,11 @@ def material(name, color=(1, 1, 1), emission=None, strength=3.0):
 
 
 def lerp(a, b, t):
-    return tuple(x + (y - x) * t for x, y in zip(a, b))
+    return tagged(tuple(x + (y - x) * t for x, y in zip(a, b)), getattr(a if t < 0.5 else b, "surface", None))
 
 
 def mul(c, k):
-    return tuple(min(1.0, max(0.0, x * k)) for x in c)
+    return tagged(tuple(min(1.0, max(0.0, x * k)) for x in c), getattr(c, "surface", None))
 
 
 def jitter(c, rng, k=0.05):
@@ -226,8 +280,11 @@ class Builder:
             nf.material_index = idx
             nf[self.soft_layer] = soft_id
             nf.normal_update()
-            for loop in nf.loops:
-                loop[self.col] = (*color_fn(loop.vert.co, nf.normal), 1.0)
+            cols = [color_fn(loop.vert.co, nf.normal) for loop in nf.loops]
+            # One surface per face (the first corner's), so the tag never blends across it.
+            a = surface_alpha(getattr(cols[0], "surface", None))
+            for loop, c in zip(nf.loops, cols):
+                loop[self.col] = (*c, a)
         part.free()
 
     def finish(self, name, height=None, scale=1.0):

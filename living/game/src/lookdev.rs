@@ -202,6 +202,7 @@ pub fn convert(
     q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), Without<Converted>>,
     parents: Query<&ChildOf>,
     models: Query<(&Model, Has<NoShadow>)>,
+    detail: Option<Res<crate::style::DetailLayers>>,
     mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), Handle<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, Handle<Toon>>)>,
 ) {
     for (e, mat, mesh, name) in &q {
@@ -244,6 +245,10 @@ pub fn convert(
         if owner.vrm && name.is_some_and(|n| n.0.contains("_FACE") || n.0.contains("_EYE") || n.0.contains("Face")) {
             commands.entity(e).insert((bevy::light::NotShadowCaster, FacePart));
         }
+        // Generated scenery (untextured, vertex-coloured, not a character) takes the painted
+        // surfaces its vertex colours' alpha names (style.rs `Surface`). It is one flag for all
+        // of it, so scenery keeps sharing its few materials.
+        let painted = detail.as_deref().filter(|_| !owner.vrm && kind == Kind::Plain && base.base_color_texture.is_none());
         let (by_source, _, by_content) = &mut *done;
         let toon = by_source
             .entry((mat.0.id(), glow_key))
@@ -261,10 +266,14 @@ pub fn convert(
                 // distinct content lets their meshes share bind groups and batches; each extra
                 // material costs every view and pass a batch set and its per-frame buffer writes.
                 by_content
-                    .entry(format!("{kind:?} {face_map:?} {b:?}"))
+                    .entry(format!("{kind:?} {face_map:?} {} {b:?}", painted.is_some()))
                     .or_insert_with(|| {
                         let map = face_map.as_ref().map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
-                        toons.add(style.kind(b, kind, map))
+                        let mut toon = style.kind(b, kind, map);
+                        if let Some(layers) = painted {
+                            crate::style::with_detail(&mut toon, layers);
+                        }
+                        toons.add(toon)
                     })
                     .clone()
             })
