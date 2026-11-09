@@ -44,6 +44,12 @@ fn human(ctx: &ReducerContext, id: u32) -> Option<Identity> {
     })
 }
 
+/// The living characters people control, with their players' identities.
+pub fn humans(ctx: &ReducerContext) -> Vec<(u32, Identity)> {
+    human(ctx, 0);
+    HUMANS.with(|h| h.borrow().as_ref().map(|m| m.iter().map(|(id, who)| (*id, *who)).collect()).unwrap_or_default())
+}
+
 fn any_humans(ctx: &ReducerContext) -> bool {
     human(ctx, 0);
     HUMANS.with(|h| h.borrow().as_ref().is_some_and(|m| !m.is_empty()))
@@ -501,6 +507,9 @@ pub fn died(ctx: &ReducerContext, id: u32, killer: u32, at: (f32, f32), now: u64
     ctx.db.readiness().id().delete(id);
     for m in ctx.db.missile().iter().filter(|m| m.owner == id).map(|m| m.id).collect::<Vec<_>>() {
         ctx.db.missile().id().delete(m);
+    }
+    if let Some(viewer) = human(ctx, id) {
+        crate::perception::forget(ctx, viewer);
     }
     invalidate_humans();
 }

@@ -81,6 +81,10 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         }
     }
     drop(phase);
+    // What each player's character perceives (docs/PERCEPTION.md), each every 200 ms.
+    let phase = common::span("tick.perception");
+    crate::perception::sweep(ctx, now);
+    drop(phase);
     let phase = common::span("tick.slots");
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();
     for id in slot_ids {

@@ -18,6 +18,32 @@ pub fn now_ms() -> u64 {
     }
 }
 
+/// The database owner's token, which the observer needs: what it shows (minds, thoughts,
+/// beliefs, every body) is developer audit truth, private to the owner (docs/PERCEPTION.md).
+/// Natively `LIVING_TOKEN`, else `.local/living/token` in the checkout (`just living-token`, as
+/// the mind service reads it); on the web the page's `#token=…` fragment, which the browser
+/// never sends to a server. Without one the observer connects anonymously and its private
+/// subscriptions are refused.
+pub fn owner_token() -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    let t = web_sys::window()
+        .and_then(|w| w.location().hash().ok())
+        .and_then(|h| h.strip_prefix('#').and_then(|h| h.split('&').find_map(|kv| kv.strip_prefix("token=").map(str::to_string))));
+    #[cfg(not(target_arch = "wasm32"))]
+    let t = std::env::var("LIVING_TOKEN").ok().or_else(|| {
+        let mut p = std::env::current_dir().ok()?;
+        loop {
+            if p.join("living").join("Cargo.toml").exists() {
+                return std::fs::read_to_string(p.join(".local/living/token")).ok();
+            }
+            if !p.pop() {
+                return None;
+            }
+        }
+    });
+    t.map(|t| t.trim().to_string()).filter(|t| !t.is_empty())
+}
+
 /// Optional season preview (`?season=winter` on the web, `LIVING_SEASON` natively).
 pub fn season_override() -> Option<usize> {
     #[cfg(target_arch = "wasm32")]

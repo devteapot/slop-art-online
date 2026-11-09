@@ -101,10 +101,10 @@ def main():
         j = json.loads(body)
         p.st["token"], p.st["identity"] = j["token"], j["identity"]
         V.save(p.st)
-    mine = [c for c in p.sql("SELECT id, alive FROM character WHERE controller = :sender", "player") if c["alive"]]
+    mine = [c for c in p.sql("SELECT id, alive FROM my_characters", "player") if c["alive"]]
     if not mine:
         p.call("join", ["Visitor"])
-        mine = [c for c in p.sql("SELECT id, alive FROM character WHERE controller = :sender", "player") if c["alive"]]
+        mine = [c for c in p.sql("SELECT id, alive FROM my_characters", "player") if c["alive"]]
     me = mine[0]["id"]
     my_name = p.sql(f"SELECT name FROM character WHERE id = {me}")[0]["name"]
     r = wait_for(lambda: resident(p), 60)

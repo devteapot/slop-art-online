@@ -38,7 +38,9 @@ macro_rules! primary_tables {
             belief, judgment, place, thought, chronicle, stats, bond_offer, expecting,
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
             routine, routine_stat, script, community, membership, join_request, genome,
-            practice, land, settlement, lot, fighter, skill_card, act_card, doing, weather);
+            practice, land, settlement, lot, fighter, skill_card, act_card, doing, weather,
+            seen_bodies, seen_characters, seen_fighters, seen_doing, my_characters, my_vitals,
+            my_experience, my_places, my_inventory, my_know_how);
     };
 }
 
@@ -153,8 +155,32 @@ fn snapshot(c: &DbConnection) -> Value {
         weather,
         my_combat,
         my_readiness,
-        my_skill_uses
+        my_skill_uses,
+        seen_bodies,
+        seen_characters,
+        seen_fighters,
+        seen_doing,
+        my_characters,
+        my_vitals,
+        my_experience,
+        my_places,
+        my_inventory,
+        my_know_how
     );
+    // What the perception views returned to this identity (docs/PERCEPTION.md).
+    let ids = |v: Vec<u32>| { let mut v = v; v.sort_unstable(); v };
+    let perception = json!({
+        "seen_bodies": ids(c.db.seen_bodies().iter().map(|r| r.id).collect()),
+        "seen_characters": ids(c.db.seen_characters().iter().map(|r| r.id).collect()),
+        "seen_fighters": ids(c.db.seen_fighters().iter().map(|r| r.id).collect()),
+        "seen_doing": ids(c.db.seen_doing().iter().map(|r| r.id).collect()),
+        "my_characters": c.db.my_characters().iter().map(|r| json!({"id":r.id,"controller":r.controller.to_hex().to_string(),"alive":r.alive,"ai":r.ai})).collect::<Vec<_>>(),
+        "my_vitals": ids(c.db.my_vitals().iter().map(|r| r.id).collect()),
+        "my_experience": c.db.my_experience().iter().map(|r| json!({"observer":r.observer,"controller":r.controller.to_hex().to_string()})).collect::<Vec<_>>(),
+        "my_places": ids(c.db.my_places().iter().map(|r| r.actor).collect()),
+        "my_inventory": c.db.my_inventory().iter().map(|r| r.owner).collect::<Vec<_>>(),
+        "my_know_how": ids(c.db.my_know_how().iter().map(|r| r.actor).collect()),
+    });
     let characters: Vec<_> = c.db.character().iter().map(|r| json!({
         "id":r.id,"name":r.name,"kind":r.kind,"controller":r.controller.to_hex().to_string(),
         "ai":r.ai,"alive":r.alive,"stage":r.stage
@@ -224,7 +250,7 @@ fn snapshot(c: &DbConnection) -> Value {
     json!({"counts":counts,"ticks":c.db.stats().iter().next().map(|r|r.ticks),
         "characters":characters,"experiences":experiences,"thoughts":thoughts,
         "deliberations":deliberations,"combat":combat,"skill_uses":skill_uses,"routines":routines,"routine_stats":routine_stats,
-        "brains":brains,"bodies":bodies,"chronicle":chronicle,"cursors":cursors})
+        "brains":brains,"bodies":bodies,"chronicle":chronicle,"cursors":cursors,"perception":perception})
 }
 
 fn connect(r: &Request, signals: Arc<Mutex<Signals>>) -> Result<DbConnection, String> {

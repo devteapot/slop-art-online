@@ -7,7 +7,8 @@ use spacetimedb_sdk::{DbContext, SubscriptionHandle as _, Table, TableWithPrimar
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-/// Public tables the observer needs (all small at the current scale).
+/// Tables the observer needs (all small at the current scale). Most are private developer
+/// audit truth, read with the database owner's token (`clock::owner_token`).
 const QUERIES: &[&str] = &[
     "SELECT * FROM world",
     "SELECT * FROM terrain_chunk",
@@ -192,6 +193,7 @@ impl Net {
         let builder = DbConnection::builder()
             .with_uri(self.server.clone())
             .with_database_name(self.db.clone())
+            .with_token(crate::clock::owner_token())
             .on_connect(move |conn, _identity, _token| {
                 macro_rules! watch {
                     ($table:ident, $gen:ident) => {{
@@ -228,7 +230,8 @@ impl Net {
                 conn.subscription_builder()
                     .on_applied(move |_| inbox.lock().unwrap().push(Signal::Applied))
                     .on_error(move |_, e| {
-                        err.lock().unwrap().push(Signal::Disconnected(format!("subscription error: {e}")))
+                        let hint = if crate::clock::owner_token().is_none() { " (the observer reads private tables: give it the owner token, LIVING_TOKEN or .local/living/token, or #token=… on the web)" } else { "" };
+                        err.lock().unwrap().push(Signal::Disconnected(format!("subscription error: {e}{hint}")))
                     })
                     .subscribe(QUERIES);
             })

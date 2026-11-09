@@ -12,6 +12,7 @@ mod island;
 mod mind;
 mod motion;
 mod perceive;
+mod perception;
 mod seed;
 mod tables;
 mod tick;
@@ -411,6 +412,8 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     // What the world gives every newcomer (the seed's `newcomer`): nothing of anyone before.
     seed::newcomer_kit(ctx, id, now);
     combat::invalidate_humans();
+    // What the newcomer perceives is there from the first frame, not after a sweep.
+    perception::sweep_now(ctx, id, ctx.sender(), now);
     Ok(())
 }
 
