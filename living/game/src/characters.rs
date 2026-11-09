@@ -2,9 +2,17 @@
 //! `J_Bip_*`) and one animation set, with spring bones for hair, skirts and sleeves.
 //!
 //! **Recipes** (`assets/characters/recipes.json`): a base VRoid file, a height in metres,
-//! proportions and colours. [`Recipe::random`] draws a recipe for a folk (`adult`, `giant`,
-//! `small`) from the file's ranges and palettes; [`Recipe::for_height`] picks the folk by height.
+//! proportions, colours and an outfit (one piece per slot, [`outfit`]). [`Recipe::random_in`]
+//! draws a recipe for a folk (`adult`, `giant`, `small`) in a style from the file's ranges,
+//! palettes and style presets; [`Recipe::for_height_in`] picks the folk by height.
 //! [`spawn`] puts one in the world; callers add their own markers (`EnvPart`, `Occluder`).
+//!
+//! **Styles** are culture presets (`styles` in the file): the pieces each slot may hold and how
+//! likely, and palettes that replace the shared ones. `fantasy` is the bases' own clothes;
+//! `steampunk` and `cyberpunk` add their pieces. A random recipe's body doesn't depend on its
+//! style (the same seed is the same person, dressed differently). Callers choose the style from
+//! context: `LIVING_GAME_CROWD=N[:seed][:style]`, an island settlement's `style`, a look-dev
+//! environment's id ([`place_style`]).
 //!
 //! **Proportions** are scales on bones that keep clips working. Clips key rotations and the
 //! hips' translation, so:
@@ -34,6 +42,11 @@
 //! character. Level of detail: characters beyond `LIVING_GAME_SPRING_NEAR` metres (default 40,
 //! scaled by height) or past the nearest `LIVING_GAME_SPRING_BUDGET` (default 48) rest rigid;
 //! `LIVING_GAME_SPRINGS=0` turns the simulation off. Every few seconds it logs its cost.
+//!
+//! `LIVING_GAME_PERF=frames` logs frame times every 2 s outside the island (whose own
+//! `island perf` line does it), with the number of characters and outfit meshes.
+
+pub mod outfit;
 
 use crate::lookdev::{Converted, Fitted, Model};
 use crate::style::Toon;
@@ -41,7 +54,7 @@ use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::f32::consts::PI;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -82,6 +95,8 @@ pub struct Colors {
     pub bottom: Option<String>,
     pub shoes: Option<String>,
     pub accent: Option<String>,
+    /// Outfit pieces' colours by slot (a missing one keeps the piece's own).
+    pub outfit: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize, Clone, Debug, PartialEq)]
@@ -95,6 +110,9 @@ pub struct Recipe {
     pub proportions: Proportions,
     #[serde(default)]
     pub colors: Colors,
+    /// Outfit pieces by slot (`outfits.json` names: `"head": "top_hat"`).
+    #[serde(default)]
+    pub outfit: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -106,6 +124,18 @@ struct Palettes {
     outfit: Vec<String>,
 }
 
+/// A culture preset for random recipes.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct Preset {
+    /// Palettes that replace the shared ones (an empty list keeps the shared one).
+    palettes: Palettes,
+    /// Slot → piece → chance of wearing it (a slot's chances add up to at most 1).
+    pieces: BTreeMap<String, BTreeMap<String, f32>>,
+    /// Slot → colours for its piece (default: the `outfit` palette).
+    slot_palettes: BTreeMap<String, Vec<String>>,
+}
+
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct Book {
@@ -114,7 +144,13 @@ struct Book {
     /// Folk → proportion (and `height`) → [min, max].
     folks: HashMap<String, HashMap<String, [f32; 2]>>,
     palettes: Palettes,
+    styles: BTreeMap<String, Preset>,
+    /// Pieces that hide the base clothes they cover.
+    hides: Vec<String>,
 }
+
+/// The style random recipes take when none is given or the given one is unknown.
+pub const DEFAULT_STYLE: &str = "fantasy";
 
 fn book() -> &'static Book {
     static BOOK: OnceLock<Book> = OnceLock::new();
@@ -164,16 +200,23 @@ impl Recipe {
     /// The base's own look at 1.75 m: the file's recipe for that base with no changes, else a
     /// plain one.
     pub fn default_for(base: &str) -> Recipe {
-        let plain = Recipe { name: String::new(), base: base.to_string(), height: 1.75, proportions: Proportions::default(), colors: Colors::default() };
-        book().recipes.iter().find(|r| r.base == base && r.proportions == plain.proportions && r.colors == plain.colors).cloned().unwrap_or_else(|| Recipe {
+        let plain = Recipe { name: String::new(), base: base.to_string(), height: 1.75, proportions: Proportions::default(), colors: Colors::default(), outfit: BTreeMap::new() };
+        book().recipes.iter().find(|r| r.base == base && r.proportions == plain.proportions && r.colors == plain.colors && r.outfit.is_empty()).cloned().unwrap_or_else(|| Recipe {
             name: std::path::Path::new(base).file_stem().unwrap_or_default().to_string_lossy().to_string(),
             ..plain
         })
     }
 
-    /// A seeded random recipe for a folk (`adult`, `giant`, `small`) from the file's ranges.
+    /// A seeded random recipe for a folk (`adult`, `giant`, `small`) in the default style.
     pub fn random(seed: u64, folk: &str) -> Recipe {
+        Recipe::random_in(seed, folk, DEFAULT_STYLE)
+    }
+
+    /// A seeded random recipe for a folk (`adult`, `giant`, `small`) from the file's ranges, dressed
+    /// in a style preset (unknown styles fall back to [`DEFAULT_STYLE`]).
+    pub fn random_in(seed: u64, folk: &str, style: &str) -> Recipe {
         let b = book();
+        let (style, preset) = b.styles.get_key_value(style).or_else(|| b.styles.get_key_value(DEFAULT_STYLE)).map_or((DEFAULT_STYLE, None), |(k, p)| (k.as_str(), Some(p)));
         let mut r = Rng(seed.wrapping_mul(0x2545_F491_4F6C_DD1D) ^ folk.bytes().fold(0u64, |h, c| h.wrapping_mul(131).wrapping_add(c as u64)));
         let ranges = b.folks.get(folk).or_else(|| b.folks.get("adult"));
         // Each value at `t` in 0..1 of its range.
@@ -193,23 +236,43 @@ impl Recipe {
             hands: at("hands", mix(&mut r, heavy, 0.5)),
             feet: at("feet", r.f()),
         };
-        let p = &b.palettes;
-        let outfit = |r: &mut Rng| r.pick(&p.outfit).cloned();
-        let colors = Colors {
-            hair: r.pick(&p.hair).cloned(),
-            skin: r.pick(&p.skin).cloned(),
-            eyes: r.pick(&p.eyes).cloned(),
+        // The preset's palette where it has one, else the shared one.
+        let pal = |f: fn(&Palettes) -> &Vec<String>| preset.map(|p| f(&p.palettes)).filter(|l| !l.is_empty()).unwrap_or_else(|| f(&b.palettes));
+        let outfit_pal = pal(|p| &p.outfit);
+        let outfit = |r: &mut Rng| r.pick(outfit_pal).cloned();
+        let mut colors = Colors {
+            hair: r.pick(pal(|p| &p.hair)).cloned(),
+            skin: r.pick(pal(|p| &p.skin)).cloned(),
+            eyes: r.pick(pal(|p| &p.eyes)).cloned(),
             top: outfit(&mut r),
             bottom: outfit(&mut r),
             shoes: outfit(&mut r),
             accent: outfit(&mut r),
+            outfit: BTreeMap::new(),
         };
         let base = r.pick(&b.bases).cloned().unwrap_or_else(|| "lookdev/vroid-Vivi.glb".into());
-        Recipe { name: format!("{folk}-{seed}"), base, height: at("height", tall), proportions, colors }
+        // Pieces come last, so the body and its own clothes' colours don't depend on the style.
+        let mut pieces = BTreeMap::new();
+        for (slot, choices) in preset.map(|p| &p.pieces).into_iter().flatten() {
+            let u = r.f();
+            let mut acc = 0.0;
+            if let Some(piece) = choices.iter().find_map(|(piece, chance)| {
+                acc += chance;
+                (u < acc).then_some(piece)
+            }) {
+                let colours = preset.and_then(|p| p.slot_palettes.get(slot)).filter(|l| !l.is_empty()).unwrap_or(outfit_pal);
+                if let Some(c) = r.pick(colours) {
+                    colors.outfit.insert(slot.clone(), c.clone());
+                }
+                pieces.insert(slot.clone(), piece.clone());
+            }
+        }
+        let name = if style == DEFAULT_STYLE { format!("{folk}-{seed}") } else { format!("{folk}:{seed}:{style}") };
+        Recipe { name, base, height: at("height", tall), proportions, colors, outfit: pieces }
     }
 
-    /// A random recipe of exactly this height, its folk chosen by it.
-    pub fn for_height(seed: u64, height: f32) -> Recipe {
+    /// A random recipe of exactly this height, its folk chosen by it, in a style.
+    pub fn for_height_in(seed: u64, height: f32, style: &str) -> Recipe {
         let folk = if height < 1.1 {
             "small"
         } else if height > 3.0 {
@@ -217,16 +280,51 @@ impl Recipe {
         } else {
             "adult"
         };
-        Recipe { height, ..Recipe::random(seed, folk) }
+        Recipe { height, ..Recipe::random_in(seed, folk, style) }
     }
 
-    /// `name` from the file, or `<folk>:<seed>` / `<folk>-<seed>` for a random one.
+    /// `name` from the file, or `<folk>:<seed>[:<style>]` / `<folk>-<seed>` for a random one.
     pub fn parse(token: &str) -> Option<Recipe> {
         Recipe::named(token).or_else(|| {
-            let (folk, seed) = token.split_once(':').or_else(|| token.rsplit_once('-'))?;
-            Some(Recipe::random(seed.parse().ok()?, folk))
+            let mut parts = token.split(':');
+            let (folk, seed, style) = match (parts.next(), parts.next(), parts.next()) {
+                (Some(f), Some(s), style) => (f, s, style.unwrap_or(DEFAULT_STYLE)),
+                _ => {
+                    let (f, s) = token.rsplit_once('-')?;
+                    (f, s, DEFAULT_STYLE)
+                }
+            };
+            Some(Recipe::random_in(seed.parse().ok()?, folk, style))
         })
     }
+}
+
+/// The style preset for a place by its id (`steampunk_city` → `steampunk`), else the default.
+pub fn place_style(place: &str) -> &'static str {
+    book().styles.keys().find(|s| place.starts_with(s.as_str())).map_or(DEFAULT_STYLE, |s| s.as_str())
+}
+
+/// `LIVING_GAME_CROWD=N[:seed][:style]`: how many, the seed (default 1) and the style, if given.
+pub fn crowd_from_env() -> Option<(usize, u64, Option<String>)> {
+    let v = std::env::var("LIVING_GAME_CROWD").ok()?;
+    let mut parts = v.split(':');
+    let n = parts.next()?.trim().parse::<usize>().ok()?;
+    let (mut seed, mut style) = (1, None);
+    for p in parts {
+        match p.trim().parse::<u64>() {
+            Ok(s) => seed = s,
+            Err(_) => style = Some(p.trim().to_string()),
+        }
+    }
+    Some((n, seed, style))
+}
+
+/// The `LIVING_GAME_CROWD` crowd in a look-dev environment, at `centre` on its ground, in the
+/// crowd's style or else the place's. Empty without the variable.
+pub fn env_crowd(commands: &mut Commands, assets: &AssetServer, place: &str, centre: Vec3, ground: &dyn Fn(f32, f32) -> f32) -> Vec<Entity> {
+    let Some((n, seed, style)) = crowd_from_env() else { return vec![] };
+    let style = style.unwrap_or_else(|| place_style(place).to_string());
+    spawn_crowd(commands, assets, n, seed, &style, centre, ground)
 }
 
 /// A character built from a recipe (on the model root, beside [`Model`]).
@@ -244,15 +342,41 @@ pub fn spawn(commands: &mut Commands, assets: &AssetServer, recipe: &Recipe, at:
     let file = crate::lookdev::animated(&recipe.base);
     let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
     // VRM 0.x models face −Z.
-    let model = Model { vrm: true, file, height: recipe.height, ground_y: at.y, glow: None };
+    let model = Model { vrm: true, file: file.clone(), height: recipe.height, ground_y: at.y, glow: None };
     commands
-        .spawn((model, Character { recipe: recipe.clone(), stride: 1.0 }, crate::lookdev::CastsShadow::default(), WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw + PI)), Visibility::Hidden))
+        .spawn((
+            model,
+            Character { recipe: recipe.clone(), stride: 1.0 },
+            crate::lookdev::CastsShadow::default(),
+            WorldAssetRoot(handle),
+            FileHandle(assets.load(file)),
+            Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw + PI)),
+            Visibility::Hidden,
+        ))
         .id()
 }
 
-/// A crowd of `n` seeded random characters in rows north of `centre`, facing south: small folk
-/// in front, then adults, giants behind. Returns their roots.
-pub fn spawn_crowd(commands: &mut Commands, assets: &AssetServer, n: usize, seed: u64, centre: Vec3) -> Vec<Entity> {
+/// Holds a character file's root glTF from the start. A scene loaded by its label alone lets the
+/// root go once loaded; the clips' later load of the root (`lookdev::clips`) then read the whole
+/// file again, which replaced its scene asset and rebuilt every instance about 20 frames in, with
+/// new bone entities: proportions, outfits and springs set up on the old bones were lost.
+#[derive(Component)]
+pub struct FileHandle(#[allow(dead_code)] Handle<bevy::gltf::Gltf>);
+
+/// Warn if a shaped character's skeleton is replaced anyway (a scene asset changed): its
+/// proportions, outfit and springs stay on the old bones.
+fn rebuilt(chars: Query<(Entity, &Character, &Shaped)>, alive: Query<()>, mut seen: Local<std::collections::HashSet<Entity>>) {
+    for (e, c, sh) in &chars {
+        if sh.hips.is_some_and(|h| alive.get(h).is_err()) && seen.insert(e) {
+            warn!("characters: {}'s scene was rebuilt; its proportions and outfit are lost", c.recipe.name);
+        }
+    }
+}
+
+/// A crowd of `n` seeded random characters in a style, in rows north of `centre`, facing south:
+/// small folk in front, then adults, giants behind, standing on `ground(x, z)`. Returns their
+/// roots.
+pub fn spawn_crowd(commands: &mut Commands, assets: &AssetServer, n: usize, seed: u64, style: &str, centre: Vec3, ground: &dyn Fn(f32, f32) -> f32) -> Vec<Entity> {
     let giants = (n / 7).max(usize::from(n >= 3));
     let small = (n / 5).max(usize::from(n >= 2));
     let adults = n.saturating_sub(giants + small);
@@ -265,9 +389,10 @@ pub fn spawn_crowd(commands: &mut Commands, assets: &AssetServer, n: usize, seed
             let in_row = (count - row * per_row).min(per_row);
             let x = centre.x + (col as f32 - (in_row as f32 - 1.0) / 2.0) * gap + if row % 2 == 1 { gap * 0.5 } else { 0.0 };
             let s = seed.wrapping_mul(1000).wrapping_add(out.len() as u64);
-            let recipe = Recipe::random(s, folk);
+            let recipe = Recipe::random_in(s, folk, style);
             let yaw = ((s % 7) as f32 - 3.0) * 0.08;
-            out.push(spawn(commands, assets, &recipe, Vec3::new(x, centre.y, z - row as f32 * depth), yaw));
+            let z = z - row as f32 * depth;
+            out.push(spawn(commands, assets, &recipe, Vec3::new(x, ground(x, z), z), yaw));
         }
         z -= (count.saturating_sub(1) / per_row) as f32 * depth;
     }
@@ -281,7 +406,7 @@ impl Plugin for CharactersPlugin {
         app.insert_resource(SpringSettings::from_env())
             .init_resource::<SpringClock>()
             .init_resource::<SpringStats>()
-            .add_systems(Update, (shape, recolor, rig_springs))
+            .add_systems(Update, (shape, recolor, rig_springs, outfit::dress, rebuilt, frames))
             .add_systems(PostUpdate, (hips.after(bevy::app::AnimationSystems).before(TransformSystems::Propagate), springs.after(TransformSystems::Propagate)));
     }
 }
@@ -398,6 +523,8 @@ pub struct Shaped {
     /// The hips translation last written here (an animation's new value differs from it).
     written: Vec3,
     scales: HashMap<Entity, Vec3>,
+    /// Bone → the helper joint skins use in its place (bones scaled in their own frame).
+    helpers: HashMap<Entity, Entity>,
 }
 
 /// Apply a recipe's proportions and height once its model is loaded and measured.
@@ -419,7 +546,7 @@ pub fn shape(
             }
         }
         let Some(&hips) = by_name.get("J_Bip_C_Hips") else {
-            commands.entity(e).insert(Shaped { hips: None, hips_k: 1.0, written: Vec3::NAN, scales: HashMap::new() });
+            commands.entity(e).insert(Shaped { hips: None, hips_k: 1.0, written: Vec3::NAN, scales: HashMap::new(), helpers: HashMap::new() });
             continue;
         };
         let p = ch.recipe.proportions.clone();
@@ -503,7 +630,7 @@ pub fn shape(
         let base_hip = (hips0.y - lo) * 1.75 / (top0 - lo).max(0.01);
         ch.stride = ((hips_y - lo) * k / base_hip.max(0.01)).max(0.05);
         debug!("characters: {} {:.2} m (×{k:.3}), hips ×{hips_k:.3}, stride {:.2}", ch.recipe.name, ch.recipe.height, ch.stride);
-        commands.entity(e).insert(Shaped { hips: Some(hips), hips_k, written: Vec3::NAN, scales });
+        commands.entity(e).insert(Shaped { hips: Some(hips), hips_k, written: Vec3::NAN, scales, helpers });
     }
 }
 
@@ -578,7 +705,7 @@ fn tag_color(c: Srgba) -> u32 {
 fn mean_color(toon: &Toon, mesh: &Mesh, images: &Assets<Image>) -> Option<Vec3> {
     let base = toon.base.base_color.to_linear();
     let base = Vec3::new(base.red, base.green, base.blue);
-    let Some(tex) = toon.base.base_color_texture.as_ref() else { return Some(base) };
+    let Some(tex) = toon.base.base_color_texture.as_ref() else { return Some(vertex_mean(mesh).map_or(base, |v| v * base)) };
     let img = images.get(tex)?;
     let (w, h) = (img.width().max(1), img.height().max(1));
     let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) else { return Some(base) };
@@ -595,6 +722,27 @@ fn mean_color(toon: &Toon, mesh: &Mesh, images: &Assets<Image>) -> Option<Vec3> 
     (wsum > 0.0).then(|| sum / wsum * base)
 }
 
+/// A mesh's mean vertex colour (linear), weighted by area: the outfit pieces' colours are per
+/// vertex, and a brass button's many small triangles shouldn't outweigh a coat's panels.
+fn vertex_mean(mesh: &Mesh) -> Option<Vec3> {
+    use bevy::mesh::VertexAttributeValues as V;
+    let colours: Vec<Vec3> = match mesh.attribute(Mesh::ATTRIBUTE_COLOR)? {
+        V::Float32x4(c) => c.iter().map(|c| Vec3::new(c[0], c[1], c[2])).collect(),
+        V::Float32x3(c) => c.iter().map(|c| Vec3::from(*c)).collect(),
+        _ => return None,
+    };
+    let Some(V::Float32x3(pos)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else { return None };
+    let idx: Vec<usize> = mesh.indices().map_or_else(|| (0..pos.len()).collect(), |i| i.iter().collect());
+    let (mut sum, mut wsum) = (Vec3::ZERO, 0.0);
+    for t in idx.chunks_exact(3) {
+        let p = |k: usize| Vec3::from(pos[t[k]]);
+        let area = (p(1) - p(0)).cross(p(2) - p(0)).length();
+        sum += (colours[t[0]] + colours[t[1]] + colours[t[2]]) / 3.0 * area;
+        wsum += area;
+    }
+    (wsum > 0.0).then(|| sum / wsum)
+}
+
 /// Give each character's meshes their recipe's colours. Characters share their base file's toon
 /// materials, so their meshes batch: the material learns its texture's mean colour once
 /// (recolouring mode 3), and each mesh carries its recipe colour in its tag, which the shader
@@ -603,7 +751,7 @@ fn mean_color(toon: &Toon, mesh: &Mesh, images: &Assets<Image>) -> Option<Vec3> 
 #[allow(clippy::type_complexity)]
 pub fn recolor(
     mut commands: Commands,
-    q: Query<(Entity, &MeshMaterial3d<Toon>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), (With<Converted>, Without<Recolored>)>,
+    q: Query<(Entity, &MeshMaterial3d<Toon>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>, Option<&outfit::Piece>), (With<Converted>, Without<Recolored>)>,
     parents: Query<&ChildOf>,
     chars: Query<&Character>,
     mut toons: ResMut<Assets<Toon>>,
@@ -611,7 +759,7 @@ pub fn recolor(
     meshes: Res<Assets<Mesh>>,
     mut ready: Local<std::collections::HashSet<AssetId<Toon>>>,
 ) {
-    for (e, mat, mesh, name) in &q {
+    for (e, mat, mesh, name, piece) in &q {
         let mut cur = e;
         let mut owner = None;
         while let Ok(p) = parents.get(cur) {
@@ -621,7 +769,11 @@ pub fn recolor(
                 break;
             }
         }
-        let target = owner.zip(name).and_then(|(c, n)| slot(&n.0, &c.recipe.colors));
+        // Outfit pieces take their slot's colour; the body's meshes go by material name.
+        let target = owner.and_then(|c| match piece {
+            Some(p) => p.recolors().then(|| c.recipe.colors.outfit.get(&p.slot)).flatten(),
+            None => name.and_then(|n| slot(&n.0, &c.recipe.colors)),
+        });
         let Some(target) = target else {
             commands.entity(e).insert(Recolored);
             continue;
@@ -643,6 +795,23 @@ pub fn recolor(
         }
         commands.entity(e).insert((bevy::mesh::MeshTag::new(tag_color(srgb)), Recolored));
     }
+}
+
+/// `LIVING_GAME_PERF=frames`: frame times every 2 s outside the island, with the number of
+/// characters and outfit meshes.
+pub fn frames(time: Res<Time>, island: Option<Res<crate::island::Island>>, chars: Query<(), With<Character>>, pieces: Query<(), With<outfit::Piece>>, mut acc: Local<(f32, f32, u32)>) {
+    if island.is_some() || !crate::perf::has("frames") {
+        return;
+    }
+    let dt = time.delta_secs();
+    acc.0 += dt;
+    acc.1 = acc.1.max(dt);
+    acc.2 += 1;
+    if acc.0 < 2.0 {
+        return;
+    }
+    info!("people perf: mean {:.2} ms ({:.0} fps), worst {:.1} ms; {} characters, {} outfit meshes", acc.0 / acc.2 as f32 * 1000.0, acc.2 as f32 / acc.0, acc.1 * 1000.0, chars.iter().count(), pieces.iter().count());
+    *acc = (0.0, 0.0, 0);
 }
 
 // --- Spring bones -----------------------------------------------------------------------------

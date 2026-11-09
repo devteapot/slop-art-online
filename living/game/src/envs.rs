@@ -563,8 +563,8 @@ pub fn switch(
             let y = shape.height(pl.at.x, pl.at.y);
             let at = Vec3::new(pl.at.x, y, pl.at.y);
             if slot.kind == "person" && files.is_empty() && crate::characters::available() {
-                // People from seeded random recipes of the slot's height.
-                let recipe = crate::characters::Recipe::for_height(si as u64 * 1000 + k as u64, pl.height);
+                // People from seeded random recipes of the slot's height, in the place's style.
+                let recipe = crate::characters::Recipe::for_height_in(si as u64 * 1000 + k as u64, pl.height, crate::characters::place_style(&def.id));
                 let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, pl.yaw);
                 commands.entity(e).insert(EnvPart);
                 if pl.height >= 3.0 {
@@ -625,6 +625,10 @@ pub fn switch(
                 commands.spawn((EnvPart, l, Transform::from_translation(at + l_tf.translation)));
             }
         }
+    }
+    // `LIVING_GAME_CROWD`: a crowd in rows north of the centre too (measurement and photographs).
+    for e in crate::characters::env_crowd(&mut commands, &assets, &def.id, Vec3::new(0.0, 0.0, -4.0), &|x, z| shape.height(x, z)) {
+        commands.entity(e).insert(EnvPart);
     }
     info!("environment {}: {}", def.id, counts.join(", "));
     spawn_player(&mut commands, &mut meshes, &palette, &style, &look, &assets);

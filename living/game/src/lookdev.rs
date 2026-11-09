@@ -180,13 +180,11 @@ pub fn build_lineup(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette:
         let turn = Quat::from_rotation_y(if vrm { std::f32::consts::PI } else { 0.0 });
         commands.spawn((crate::envs::EnvPart, Model::character(file, vrm), WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
     }
-    // `LIVING_GAME_CROWD=N[:seed]`: N seeded random characters in rows south of the line-up, facing
-    // the default camera (shots from yaw 0 at about 35 m see them from the front).
-    if let Some((n, seed)) = std::env::var("LIVING_GAME_CROWD").ok().and_then(|v| {
-        let (n, s) = v.split_once(':').unwrap_or((&v, "1"));
-        Some((n.parse::<usize>().ok()?, s.parse::<u64>().unwrap_or(1)))
-    }) {
-        for e in crate::characters::spawn_crowd(commands, assets, n, seed, Vec3::new(0.0, 0.0, 22.0)) {
+    // `LIVING_GAME_CROWD=N[:seed][:style]`: N seeded random characters in rows south of the
+    // line-up, facing the default camera (shots from yaw 0 at about 35 m see them from the front).
+    if let Some((n, seed, look)) = crate::characters::crowd_from_env() {
+        let look = look.unwrap_or_else(|| crate::characters::DEFAULT_STYLE.into());
+        for e in crate::characters::spawn_crowd(commands, assets, n, seed, &look, Vec3::new(0.0, 0.0, 22.0), &|_, _| 0.0) {
             commands.entity(e).insert(crate::envs::EnvPart);
         }
     }

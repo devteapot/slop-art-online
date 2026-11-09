@@ -59,8 +59,8 @@ struct Item {
     /// Where the model's origin stands (a lot's levelled floor), else the ground.
     floor: Option<f32>,
     native: bool,
-    /// A person: recipe seed and folk.
-    person: Option<(u64, &'static str)>,
+    /// A person: recipe seed, folk and style preset (`characters::Recipe::random_in`).
+    person: Option<(u64, &'static str, String)>,
 }
 
 #[derive(Resource)]
@@ -152,14 +152,14 @@ impl Island {
                 }
                 let (f, side) = (Vec2::new(lot.front.0, lot.front.1), Vec2::new(-lot.front.1, lot.front.0));
                 let at = Vec2::new(lot.centre.0, lot.centre.1) + f * (lot.depth_m * 0.5 + 1.2 * st.scale) + side * (hash(li, 21) - 0.5) * lot.width_m * 0.6;
-                put(Item { kind: "person".into(), at, yaw: hash(li, 22) * std::f32::consts::TAU, k: n as usize, person: Some((world.seed * 7919 + li as u64, folk)), ..default() });
+                put(Item { kind: "person".into(), at, yaw: hash(li, 22) * std::f32::consts::TAU, k: n as usize, person: Some((world.seed * 7919 + li as u64, folk, st.style.clone())), ..default() });
                 n += 1;
             }
             let plaza = Vec2::new(st.plaza.centre.0, st.plaza.centre.1);
             for k in 0..(8.0 * crowd) as u32 {
                 let a = hash(si as u32 * 97 + k, 31) * std::f32::consts::TAU;
                 let at = plaza + Vec2::new(a.cos(), a.sin()) * (2.0 + 6.0 * hash(si as u32 * 97 + k, 32)) * st.scale;
-                put(Item { kind: "person".into(), at, yaw: hash(k, 33) * std::f32::consts::TAU, k: k as usize, person: Some((world.seed * 104_729 + (si as u64) * 31 + k as u64, folk)), ..default() });
+                put(Item { kind: "person".into(), at, yaw: hash(k, 33) * std::f32::consts::TAU, k: k as usize, person: Some((world.seed * 104_729 + (si as u64) * 31 + k as u64, folk, st.style.clone())), ..default() });
             }
         }
         info!(
@@ -388,8 +388,9 @@ fn chunk_meshes(land: &Land, c: (i32, i32)) -> (Mesh, Option<Mesh>) {
 fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &Item) -> Vec<Entity> {
     let y = it.floor.unwrap_or_else(|| land.height(it.at.x, it.at.y));
     let at = Vec3::new(it.at.x, y, it.at.y);
-    if let Some((seed, folk)) = it.person {
-        let recipe = crate::characters::Recipe::random(seed, folk);
+    if let Some((seed, folk, style)) = &it.person {
+        // Settlements dress their people in their style (fantasy where it has no preset).
+        let recipe = crate::characters::Recipe::random_in(*seed, folk, style);
         let e = crate::characters::spawn(commands, assets, &recipe, at, it.yaw);
         commands.entity(e).insert(EnvPart);
         return vec![e];

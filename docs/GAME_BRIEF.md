@@ -322,7 +322,7 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
 
     The pieces are git-ignored under `assets/lookdev/outfits/`.
   - **Not done yet:**
-    - **Outfit wiring:** the client has to bind each piece's joints to the character's own bones (or to the recipe's scaled helper joints) and optionally hide the parts it covers.
+    - **Outfit wiring:** done on 2026-11-09 in `characters/outfit.rs`. Pieces bind to the character's own bones, or to the recipe's helper scale joints, and hide the base parts they cover (boots hide shoes). Recipes gain `outfit` and per-slot outfit colours. The `fantasy`, `steampunk` and `cyberpunk` style presets dress random people by place: look-dev cities by their id, island settlements by their style, crowds through `LIVING_GAME_CROWD=N[:seed][:style]`. Fixed along the way: characters' scenes were reloaded about 20 frames after spawning, which silently dropped their proportions, springs and shadow rules; `spawn` now holds the file's root handle.
     - **Cyberpunk at night** reads too dark and hazy.
     - **The long coat** bulges at the shoulders.
 

@@ -1,5 +1,5 @@
 {
-  "note": "Character recipes (living/game/src/characters.rs). A recipe is a base VRoid file, a height in metres, proportions as multipliers (1 = the base's own) and colours (sRGB hex; a missing colour keeps the base's texture). Folks are ranges for the seeded crowd generator; palettes are what it picks colours from.",
+  "note": "Character recipes (living/game/src/characters.rs). A recipe is a base VRoid file, a height in metres, proportions as multipliers (1 = the base's own), colours (sRGB hex; a missing colour keeps the base's texture; colors.outfit colours outfit pieces by slot) and an outfit (slot -> piece, from assets/lookdev/outfits/outfits.json). Folks are ranges for the seeded crowd generator; palettes are what it picks colours from. Styles are culture presets for random recipes: per slot, each piece's chance (the rest wears nothing there), palettes replacing the shared ones, and per-slot piece palettes. hides: pieces that hide the base clothes they cover.",
   "bases": ["lookdev/vroid-Vivi.glb", "lookdev/vroid-Sendagaya_Shino.glb"],
   "recipes": [
     { "name": "vivi", "base": "lookdev/vroid-Vivi.glb", "height": 1.75 },
@@ -38,6 +38,28 @@
       "height": 0.62,
       "proportions": { "legs": 0.66, "arms": 0.85, "torso": 0.9, "neck": 0.65, "head": 1.4, "shoulders": 1.1, "hips": 1.15, "build": 1.35, "hands": 1.2, "feet": 1.3 },
       "colors": { "hair": "#c07a30", "skin": "#e8b896", "eyes": "#5a4020", "top": "#a04a30", "shoes": "#4a3020" }
+    },
+    {
+      "name": "engineer",
+      "base": "lookdev/vroid-Sendagaya_Shino.glb",
+      "height": 1.8,
+      "proportions": { "build": 1.1, "shoulders": 1.08 },
+      "colors": {
+        "hair": "#4a3020", "skin": "#d8a07a", "eyes": "#3a7040", "top": "#d8ccb0", "bottom": "#3a3430", "shoes": "#2a211c", "accent": "#6a2020",
+        "outfit": { "torso_outer": "#3a2a20", "torso_mid": "#6a2020", "head": "#1c1a1e", "feet": "#2a1c14" }
+      },
+      "outfit": { "torso_outer": "long_coat", "torso_mid": "waistcoat", "head": "top_hat", "forehead": "brass_goggles", "hands": "gloves", "feet": "boots" }
+    },
+    {
+      "name": "runner",
+      "base": "lookdev/vroid-Vivi.glb",
+      "height": 1.7,
+      "proportions": { "legs": 1.04, "build": 0.95 },
+      "colors": {
+        "hair": "#e040a0", "skin": "#f0cdb0", "eyes": "#2a5a6a", "top": "#1c1c22", "shoes": "#26262e", "accent": "#30c8e0",
+        "outfit": { "torso_outer": "#1c1c24", "neck": "#26262e", "belt": "#3a4030" }
+      },
+      "outfit": { "torso_outer": "cropped_jacket", "neck": "high_collar", "eyes": "visor", "trim": "glow_trim", "belt": "cargo_straps" }
     }
   ],
   "folks": {
@@ -59,5 +81,47 @@
     "skin": ["#f4d8c4", "#f0cdb0", "#e8b896", "#d8a07a", "#c08460", "#a8714f", "#8a5a3c", "#6a4430", "#4e3224"],
     "eyes": ["#4a3020", "#6a4a28", "#3a7040", "#5878a0", "#6a7a80", "#a07028", "#6a4a8a", "#2a5a6a"],
     "outfit": ["#6b4a2e", "#3a3430", "#2c3c6a", "#3c5a32", "#5a4630", "#7a2a2a", "#a04a30", "#c0a060", "#e0d8c8", "#4a5a6a", "#2a2a30", "#6a3a5a", "#3a6a6a", "#8a7a5a", "#b06a3a", "#5a7a3a"]
-  }
+  },
+  "styles": {
+    "fantasy": {},
+    "steampunk": {
+      "palettes": {
+        "outfit": ["#4a3020", "#6a2020", "#5a1a2a", "#2a4030", "#1e2a44", "#2a2a2e", "#8a6a48", "#a08030", "#5a5a5e", "#d8ccb0", "#4a2a40", "#8a4a2a"]
+      },
+      "pieces": {
+        "torso_outer": { "long_coat": 0.55 },
+        "torso_mid": { "waistcoat": 0.55 },
+        "head": { "top_hat": 0.28, "bowler": 0.3 },
+        "forehead": { "brass_goggles": 0.3 },
+        "hands": { "gloves": 0.35 },
+        "feet": { "boots": 0.8 }
+      },
+      "slot_palettes": {
+        "torso_outer": ["#3a2a20", "#4a3020", "#2a2a2e", "#1e2a44", "#2a4030", "#5a1a2a", "#5a5a5e", "#6a4a30"],
+        "torso_mid": ["#6a2020", "#a08030", "#2a4030", "#4a2a40", "#8a6a48", "#d8ccb0", "#1e2a44"],
+        "head": ["#1c1a1e", "#2a2a2e", "#3a2a20", "#5a4030", "#4a4448"],
+        "hands": ["#3a2a20", "#5a4030", "#2a211c", "#d8ccb0"],
+        "feet": ["#2a1c14", "#3a2a20", "#1c1a1e", "#5a3a24"]
+      }
+    },
+    "cyberpunk": {
+      "palettes": {
+        "hair": ["#1c1614", "#2b1c14", "#e8e8f0", "#e040a0", "#30c8e0", "#a050e0", "#50e070", "#d8d2c8", "#2c4a6a", "#c03050"],
+        "outfit": ["#141418", "#26262e", "#3a3e48", "#2a1a3e", "#142038", "#103a40", "#3a4030", "#d8dce4", "#c02870", "#d05a10", "#8a909a"]
+      },
+      "pieces": {
+        "torso_outer": { "cropped_jacket": 0.65 },
+        "neck": { "high_collar": 0.4 },
+        "eyes": { "visor": 0.35 },
+        "trim": { "glow_trim": 0.5 },
+        "belt": { "cargo_straps": 0.55 }
+      },
+      "slot_palettes": {
+        "torso_outer": ["#141418", "#1c1c24", "#26262e", "#2a1a3e", "#142038", "#103a40", "#d8dce4", "#5a1a3a"],
+        "neck": ["#141418", "#26262e", "#3a3e48", "#d8dce4"],
+        "belt": ["#3a4030", "#26262e", "#141418", "#4a3a2a"]
+      }
+    }
+  },
+  "hides": ["boots"]
 }
