@@ -7,14 +7,32 @@
 - Build roads, walls and gates; close and reopen a gate.
 - Craft and use a net, smoke fish, make bows, arrows and leather, and clear forest.
 - Install runtime laws and enforce their movement-input rate limit.
+- Refuse a script at install, naming the function, when a law or skill function fails on the install samples, returns the wrong shape, reads a context field the engine does not provide, or exceeds the engine's limits; a refused install changes nothing.
 
 ## How to get to it (user POV)
 
-Characters work through graph leaves and acts. `living/scripts/skills.rhai` provides checks, durations, effects and laws. The typed boundary is `living/rules/src/script.rs:481,495,509,563` (`check`, `duration_ms`, `done`, `laws`). The authority checks again at completion before applying effects.
+Characters work through graph leaves and acts. `living/scripts/skills.rhai` provides checks, durations, effects and laws. The typed boundary is `living/rules/src/script.rs:721,735,749,816` (`check`, `duration_ms`, `done`, `laws`). The authority checks again at completion before applying effects.
 
-## Driving it with verify_mechanics.py and Cargo
+Since 2026-11-09 (`rhai-1`, docs/SCRIPT_ENGINES.md "What changed"):
+
+- Each law is called with only the context fields it reads, found in its AST when the script compiles (`living/rules/src/script/fields.rs`, `context.rs`).
+- Numbers looked up by a name (`combat_cooldown`, `lunge`, `max_hp`, …) are read when the script compiles and served from a table (`script.rs:872`, `num_of`).
+- `install_script` (`living/authority/src/lib.rs:100`) and `init` run `Scripts::validate` (`script.rs:573`, `living/rules/src/script/check.rs:86`) before writing anything. It calls every law and skill function on sample states, the way the engine calls it, and logs the operations each took.
+- The engine limits are `LIMITS` (`script.rs:488`): 2,000 operations, call depth 8, expression depth 40, strings 2,048, arrays and maps 64. The source cap is 256 KiB.
+
+## Driving it with verify_mechanics.py, codes.py and Cargo
 
 Run the existing mechanics driver through the recorder using [SKILL.md](../SKILL.md). Keep its 23-check report, transcript and `stdb-actions.jsonl`. Cargo checks skill preconditions, missing techniques, costs, rates and typed effects. Steering changes `input_hz` and `input_burst` through `install_script` and observes movement refusals.
+
+Cargo also covers the install checks and the lean contexts:
+
+- `script::check::tests::the_rules_pass_their_install_checks` and `an_install_names_the_function_it_refuses`;
+- `lean_contexts_answer_as_the_whole_context_does`, which compares each law's answer with only its fields against the whole map over all samples;
+- `numbers_by_name_are_tables_read_once`.
+
+`cargo test -p living-rules --release measure_limits -- --ignored --nocapture` prints each function's operations, the least limits that pass, and each law's fields.
+
+Live, `scripts/codes.py RUN` checks the refusals on a launched run. After its code checks, it installs three broken scripts with `--expect-refusal`: a law reading `a.actor.hungr`, a skill whose effects divide by zero, and a law past the operation limit. Each refusal must name its function, and the script revision and the cards must stay as they were.
 
 ## Gotchas
 
@@ -23,6 +41,8 @@ Run the existing mechanics driver through the recorder using [SKILL.md](../SKILL
 - `docs/LIVING_CORE.md:425` retains the historical 14-check count. The driver has 23.
 - Admin setup does not prove player authority, personal learning or model reasoning.
 - Seize is absent from the existing driver. Use [combat.md](combat.md).
+- A script that a world installed before 2026-11-09 is not re-validated when the module is updated: the cached `Scripts` only compiles it. Its laws then run under the lower limits. A law that needs more than 2,000 operations fails each time it is asked, and the engine falls back to its default or refuses the action. Reinstall the script to see its refusal.
+- A skill is any one-parameter function named `<skill>_check`, `_duration`, `_done`, `_hit` or `_missile`. Helpers with those suffixes and more parameters (`gesture_check(a, reach)`) are not validated as skills.
 
 ### A fished-out spot
 

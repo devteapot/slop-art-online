@@ -107,11 +107,21 @@ fn body_state(a) {
               else if fraction < 0.6 || a.actor.hurt_ago < 5000 { "hurt" } else { "" } }
 }
 
+// Need rates per minute for a body's state. The engine asks this when the state changes and
+// keeps the answer for every body in the same state; it then finishes the rates for each body's
+// own hunger, energy and genes with the numbers given here (rules/src/script.rs `NeedLaw`):
+//   hunger, energy            the state's rates (energy before the tiring gene)
+//   starving_at, starving_hp  at or above this hunger, health changes by starving_hp
+//   fed_below, rested_above   otherwise, below this hunger and above this energy, health
+//   healing_hp                changes by healing_hp, times `healing` (age)
+//   spent_at, spent_hp        at or below this energy, health changes by spent_hp as well
+//   tiring_gene               a falling energy rate is divided by this gene
+//   healing_gene              a rising health rate is multiplied by this gene
+//   wet_energy, cold_hp       exposure, added last
 fn rates(a) {
     // A predator feeds big and rarely: a wolf lasts about an hour on a deer.
     let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 5.0 };
     let energy = -3.0;
-    let hp = 0.0;
     let act = a.actor.activity;
     if act == "sleep" {
         energy = if a.actor.near_shelter { 26.0 } else { 16.0 };
@@ -121,34 +131,28 @@ fn rates(a) {
     } else if act == "block" {
         energy = -12.0;
     }
-    if a.actor.hunger >= 100.0 {
-        hp -= 6.0;
-    } else if a.actor.hunger < 70.0 && a.actor.energy > 15.0 {
-        hp += 3.0;
-    }
-    if a.actor.energy <= 0.0 {
-        hp -= 2.0;
-    }
     // Elders heal slower and tire sooner; infants get hungry more slowly. (Death of old age
     // comes at each creature's own point late in its lifespan.)
+    let healing = 1.0;
     if a.actor.stage == "elder" {
-        if hp > 0.0 { hp *= 0.5; }
+        healing = 0.5;
         energy *= 1.3;
     }
     // A suckling animal lives mostly on its mother's milk (not modelled on the mother).
     if a.actor.stage == "infant" { hunger *= if a.actor.kind == "person" { 0.6 } else { 0.3 }; }
-    // Inborn endurance slows tiring; vitality speeds healing.
-    if energy < 0.0 { energy /= a.actor.endurance; }
-    if hp > 0.0 { hp *= a.actor.vitality; }
-    // Rain soaks people out from under a roof (a cloak keeps some of it off): it is tiring.
-    if wet(a) {
-        energy -= if inv(a, "cloak") > 0 { 1.0 } else { 2.5 };
+    #{
+        hunger: hunger, energy: energy,
+        // Starving hurts; fed and rested, a body heals; with no energy left, it suffers.
+        starving_at: 100.0, starving_hp: -6.0,
+        fed_below: 70.0, rested_above: 15.0, healing_hp: 3.0, healing: healing,
+        spent_at: 0.0, spent_hp: -2.0,
+        // Inborn endurance slows tiring; vitality speeds healing.
+        tiring_gene: "endurance", healing_gene: "vitality",
+        // Rain soaks people out from under a roof (a cloak keeps some of it off): it is tiring.
+        wet_energy: if wet(a) { if inv(a, "cloak") > 0 { -1.0 } else { -2.5 } } else { 0.0 },
+        // Cold nights hurt people without a fire, shelter or warm cloak; winter nights are worse.
+        cold_hp: if cold(a) { if a.season == "winter" { -5.0 } else { -2.0 } } else { 0.0 },
     }
-    // Cold nights hurt people without a fire, shelter or warm cloak; winter nights are worse.
-    if cold(a) {
-        hp -= if a.season == "winter" { 5.0 } else { 2.0 };
-    }
-    #{ hunger: hunger, energy: energy, hp: hp }
 }
 
 fn move_speed(a) {

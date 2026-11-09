@@ -60,6 +60,11 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         missed: 0,
     });
     let mut sc = living_rules::script::Scripts::new(seed::SKILLS)?;
+    let checked = {
+        let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.validate");
+        sc.validate()?
+    };
+    log::info!("skills script: {}", checked.summary());
     codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);
     town::cards(ctx, &sc);
@@ -90,11 +95,23 @@ pub fn set_paused(ctx: &ReducerContext, paused: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// Replace the skill rules at runtime (next action start/completion uses them).
+/// Replace the skill rules at runtime (next action start/completion uses them). The script is
+/// compiled and every law and skill function is run on sample inputs first
+/// (`Scripts::validate`); a script that fails, reads a field the engine does not provide or
+/// exceeds the engine's limits is refused, naming the function, before anything is written.
 #[spacetimedb::reducer]
 pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String> {
     require_admin(ctx)?;
-    let mut sc = living_rules::script::Scripts::new(&source)?;
+    let mut sc = {
+        let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.compile");
+        living_rules::script::Scripts::new(&source)?
+    };
+    // Installs are rare: always timed.
+    let checked = {
+        let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.validate");
+        sc.validate()?
+    };
+    log::info!("install_script: {}", checked.summary());
     codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);
     town::cards(ctx, &sc);

@@ -27,6 +27,12 @@ impl Engine for RhaiEmbed {
     fn cooldown(&mut self, skill: &str) -> f64 {
         self.s.num_of("combat_cooldown", skill, 0.0)
     }
+    fn rates_law(&mut self, c: &SkillCtx) -> Rates {
+        self.s.rates_unshared(c).expect("rates")
+    }
+    fn perceived(&mut self, p: &crate::RegardIn) -> crate::Regard {
+        self.s.perceived_of(p)
+    }
 }
 
 /// Diagnostic: the context map alone. `Scripts::call` builds `to_map(ctx, knack)` for every
@@ -153,9 +159,10 @@ fn lean_strike(c: &SkillCtx) -> Map {
 
 impl Engine for RhaiLean {
     fn rates(&mut self, c: &SkillCtx) -> Rates {
-        let m = self.call("rates", lean_rates(c)).expect("rates").try_cast::<Map>().expect("rates must return a map");
-        let g = |k: &str| m.get(k).map(num).unwrap_or(0.0) as f32;
-        Rates { hunger_per_min: g("hunger"), energy_per_min: g("energy"), hp_per_min: g("hp") }
+        // Since rates(a) returns parameters (rules/src/script.rs `NeedLaw`), decode them the
+        // authority's way.
+        let d = self.call("rates", lean_rates(c)).expect("rates");
+        living_rules::script::NeedLaw::from_dynamic(d).expect("rates").rates(&c.actor)
     }
     fn strike(&mut self, c: &SkillCtx) -> StrikeOut {
         let why = self.call("strike_check", lean_strike(c))?.into_string().map_err(|t| format!("strike_check returned {t}"))?;
