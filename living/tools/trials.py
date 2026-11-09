@@ -62,9 +62,11 @@ FAKE = ROOT / ".agents/skills/verify-llm/scripts/fake_llm.py"
 FOOD = {"berries", "meat", "fish", "cooked_meat", "cooked_fish", "smoked_meat", "smoked_fish", "bread"}
 SAMPLE_S = 2.0
 # Estimated USD per million prompt and completion tokens, for the report only (an assumption,
-# not an invoice). Mistral Small: third-party price lists of 2026-08 ($0.20 / $0.60); Mistral's
-# own page was not reachable. Models not listed (Luna on the carlid route) show no cost.
-PRICES = {"mistral-small-latest": (0.20, 0.60), "ministral-8b-latest": (0.10, 0.10), "mistral-medium-3-5": (0.40, 2.00)}
+# not an invoice), from third-party price lists of 2026-08 (Mistral's own page was not
+# reachable): Mistral Small $0.20 / $0.60 (batch b1-b3 only), Ministral 14B $0.20 / $0.20.
+# No price was found for GLM 5.3 Flash or DeepSeek 4.1 Flash on the Mistral platform: their
+# cost shows as unknown.
+PRICES = {"mistral-small-latest": (0.20, 0.60), "ministral-14b-latest": (0.20, 0.20), "ministral-8b-latest": (0.10, 0.10)}
 LEDGER = OUT / "ledger.json"
 _lock = threading.Lock()
 
@@ -454,7 +456,9 @@ class Instance:
         self.census_cache = self.census()
         taken = set()
         if "subject" not in self.roles:
-            self.roles["subject"] = self.pick(self.trial["subject"]["pick"], taken)[:1]
+            # A subject may be several characters (a wolf pack): the mind thinks for all of
+            # them (LIVING_ONLY); samples and probes follow the first.
+            self.roles["subject"] = self.pick(self.trial["subject"]["pick"], taken)
         taken |= set(self.roles["subject"])
         for role, spec in self.trial.get("cast", {}).items():
             self.roles[role] = self.pick(spec["pick"], taken)
@@ -704,8 +708,11 @@ class Instance:
             p = {"base_url": f"http://127.0.0.1:{self.shared['fake_port']}/v1", "model": "fake-trials", "key_env": "LIVING_VERIFY_FAKE_KEY",
                  "max_tokens": 512, "requests_per_minute": 6000, "reasoning_effort": {p: p for p in ("think", "deliberate", "consolidate", "talk")}}
             return {"default": "fake", "profiles": {"fake": p}, "assign": {}, "rotate": [], "groups": {}, "stages": {}, "species": {}}
-        m = json.loads((ROOT / "living/configs/models.json").read_text())
-        # The subject thinks with the variant's profile: no groups, assignments or rotation.
+        # A variant names a whole models file (`models_file`) or patches the repository's.
+        base = ROOT / v.get("models_file", "living/configs/models.json")
+        m = json.loads(base.read_text())
+        # People think with the variant's default profile: no groups, assignments, rotation
+        # or stage profiles. `species` routing (animals' think/remember/compile) is kept.
         m = {**m, "assign": {}, "rotate": [], "groups": {}, "stages": {}}
         return deep_merge(m, v.get("models", {}))
 
@@ -716,7 +723,7 @@ class Instance:
         budget = self.trial.get("budget", {})
         env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=URL, LIVING_DB=self.db, LIVING_RUN=self.db,
                    LIVING_SEED=self.shared["seed_rel"][self.trial["name"]], LIVING_MODELS=str(path),
-                   LIVING_ONLY=str(self.subject), LIVING_TOKEN=self.shared["token"],
+                   LIVING_ONLY=",".join(map(str, self.roles["subject"])), LIVING_TOKEN=self.shared["token"],
                    LIVING_NEO4J_URI=f"127.0.0.1:{NEO4J_PORT}", LIVING_NEO4J_PASSWORD=self.shared["neo4j_pw"],
                    # Off (0) unless a trial asks for a rate: trials measure, they do not cap.
                    LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 0)), LIVING_CONCURRENCY="4",
@@ -1224,6 +1231,7 @@ def summarize(d, trial, extra):
     for v in s["by_purpose"].values():
         v.pop("latency_ms")
     s["by_model"] = dict(by_model)
+    s["by_purpose_model"] = purpose_model(j, thoughts)
     s["talk_turns"] = by_purpose["talk"]["calls"] if "talk" in by_purpose else 0
     if extra.get("day_ms") and s["minutes_run"]:
         days = s["minutes_run"] * 60000 / extra["day_ms"]
@@ -1241,6 +1249,73 @@ def summarize(d, trial, extra):
     s["exchanges"] = [{"ref": r["_ref"], "purpose": r.get("purpose"), "model": r.get("model"), "tokens": r.get("tokens"),
                        "reply": excerpt(r.get("reply"))} for r in j if r.get("purpose") in ("deliberate", "think", "talk")][:40]
     return s
+
+
+def strictness(text):
+    """How a reply parses: `strict` JSON, `repaired` (the mind's lenient front end would be
+    needed: code fences, trailing commas, stray text), or `invalid`. The journal keeps the
+    raw reply; the mind's own repair happens after journaling, so this re-checks it."""
+    if not isinstance(text, str):
+        return "invalid" if text is None else "strict"
+    t = text.strip()
+    try:
+        json.loads(t)
+        return "strict"
+    except ValueError:
+        pass
+    m = re.search(r"\{.*\}", t, re.S)
+    if not m:
+        return "invalid"
+    body = re.sub(r",\s*([}\]])", r"\1", m.group(0))
+    try:
+        json.loads(body)
+        return "repaired"
+    except ValueError:
+        return "invalid"
+
+
+def purpose_model(j, thoughts):
+    """Per purpose x model: calls, tokens, latency p50/p95, failed calls, replies that needed
+    repair or could not be parsed, estimated cost; and for deliberations, retries and pruned
+    (normalized) graphs from the thought rows."""
+    out = defaultdict(lambda: {"calls": 0, "tokens": 0, "prompt": 0, "completion": 0, "lat": [], "errors": 0, "repaired": 0, "invalid": 0, "profiles": Counter()})
+    for r in j:
+        o = out[f"{r.get('purpose')} / {r.get('model')}"]
+        o["calls"] += 1
+        o["tokens"] += r.get("tokens") or 0
+        o["prompt"] += r.get("prompt_tokens") or 0
+        o["completion"] += r.get("completion_tokens") or 0
+        if r.get("latency_ms"):
+            o["lat"].append(r["latency_ms"])
+        if r.get("error"):
+            o["errors"] += 1
+        else:
+            k = strictness(r.get("reply"))
+            if k != "strict":
+                o[k] += 1
+        o["profiles"][r.get("profile")] += 1
+    res = {}
+    for k, o in out.items():
+        lat = sorted(o["lat"])
+        model = k.split(" / ", 1)[1]
+        pr = PRICES.get(model)
+        res[k] = {"calls": o["calls"], "tokens": o["tokens"], "prompt": o["prompt"], "completion": o["completion"],
+                  "latency_p50_ms": lat[len(lat) // 2] if lat else None, "latency_p95_ms": lat[min(len(lat) - 1, int(len(lat) * 0.95))] if lat else None,
+                  "errors": o["errors"], "repaired": o["repaired"], "invalid": o["invalid"], "profiles": dict(o["profiles"]),
+                  "cost_usd": round((o["prompt"] * pr[0] + o["completion"] * pr[1]) / 1e6, 4) if pr else None}
+    retries = pruned = rejected = 0
+    for t in thoughts:
+        if t.get("kind") == "error":
+            rejected += 1
+        try:
+            det = json.loads(t.get("detail") or "{}")
+        except ValueError:
+            continue
+        if isinstance(det, dict):
+            retries += max(0, (det.get("attempts") or 1) - 1)
+            pruned += 1 if det.get("pruned") else 0
+    res["deliberations"] = {"retried_attempts": retries, "pruned_graphs": pruned, "rejected": rejected}
+    return res
 
 
 def parse_reply(text):
@@ -1559,6 +1634,22 @@ def report(a):
         cost = f"{(v['prompt'] * pr[0] + v['completion'] * pr[1]) / 1e6:.2f}" if pr else "unknown"
         out.append(f"| {m} | {v['calls']} | {v['tokens']:,} | {v['prompt']:,} | {v['completion']:,} | {v['cached']:,} | {cost} |")
     out.append("")
+    pm = defaultdict(lambda: Counter())
+    lats = defaultdict(list)
+    for s_ in sums:
+        for k, v in (s_.get("by_purpose_model") or {}).items():
+            if k == "deliberations":
+                continue
+            for f in ("calls", "tokens", "errors", "repaired", "invalid"):
+                pm[k][f] += v[f]
+            if v.get("latency_p50_ms"):
+                lats[k].append((v["latency_p50_ms"], v["latency_p95_ms"]))
+    if pm:
+        out.append("| Purpose / model | Calls | Tokens | p50 ms (median of runs) | p95 ms (max of runs) | Failed | Repaired | Invalid |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+        for k, v in sorted(pm.items()):
+            l50 = sorted(x for x, _ in lats[k])
+            out.append(f"| {k} | {v['calls']} | {v['tokens']:,} | {l50[len(l50) // 2] if l50 else '–'} | {max((y for _, y in lats[k]), default='–')} | {v['errors']} | {v['repaired']} | {v['invalid']} |")
+        out.append("")
     for (trial, variant), ss in sorted(groups.items()):
         ss.sort(key=lambda s: s["replicate"])
         out.append(f"## {trial} / {variant}\n")

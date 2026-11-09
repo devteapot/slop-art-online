@@ -1,27 +1,56 @@
 {
  "default": {
-  "about": "The repository's model configuration as it stands: default profile mistral-small (overflow luna), level of detail off, lessons off.",
+  "about": "living/configs/models.json as it stands: people think with its default profile (glm-flash, zai-glm-5-3-flash; overflow deepseek-flash); animals by its species map (think ministral, remember and compile ministral-14b). Level of detail and lessons off.",
   "models": {},
   "env": {}
  },
- "luna": {
-  "about": "The subject thinks with GPT-6 Luna through the carlid endpoint (overflow mistral-small); otherwise as default.",
-  "models": {"default": "luna"},
+ "deepseek-flash": {
+  "about": "People think with deepseek-flash (deepseek-v4-1-flash-1017; overflow glm-flash); otherwise as default.",
+  "models": {
+   "default": "deepseek-flash"
+  },
+  "env": {}
+ },
+ "glm": {
+  "about": "People think with glm (zai-glm-5-3, no overflow).",
+  "models": {
+   "default": "glm"
+  },
+  "env": {}
+ },
+ "mistral-large": {
+  "about": "People think with mistral-large (mistral-large-4, no overflow).",
+  "models": {
+   "default": "mistral-large"
+  },
+  "env": {}
+ },
+ "ministral-14b": {
+  "about": "People think with ministral-14b (ministral-14b-latest).",
+  "models": {
+   "default": "ministral-14b"
+  },
   "env": {}
  },
  "lessons": {
-  "about": "Default profile with LIVING_LESSONS=1: consolidation keeps, with a memory, what it taught.",
+  "about": "Default with LIVING_LESSONS=1.",
   "models": {},
-  "env": {"LIVING_LESSONS": "1"}
+  "env": {
+   "LIVING_LESSONS": "1"
+  }
  },
  "grounds": {
-  "about": "Default profile with LIVING_GROUNDS=1: recall follows GROUNDS edges between stories and beliefs.",
+  "about": "Default with LIVING_GROUNDS=1.",
   "models": {},
-  "env": {"LIVING_GROUNDS": "1"}
+  "env": {
+   "LIVING_GROUNDS": "1"
+  }
  },
  "lod": {
-  "about": "Default profile with LIVING_LOD=1: no player is on stage, so deliberations wait LIVING_LOD_THINK_S unless urgent.",
+  "about": "Default with LIVING_LOD=1 (no player on stage).",
   "models": {},
-  "env": {"LIVING_LOD": "1"}
+  "env": {
+   "LIVING_LOD": "1"
+  }
  }
 }
