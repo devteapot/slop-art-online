@@ -7,22 +7,25 @@
       "key_env": "MISTRAL_API_KEY",
       "overflow": "deepseek-flash",
       "reasoning_effort": {
+        "think": "low",
         "deliberate": "low",
         "compile": "low",
-        "think": "low",
-        "talk": "low",
-        "consolidate": "low",
-        "reorganize": "low",
-        "identity": "low",
-        "remember": "low",
-        "birth": "low"
-      }
+        "talk": "high",
+        "consolidate": "high",
+        "internalize": "high",
+        "remember": "high",
+        "reorganize": "high",
+        "identity": "high",
+        "birth": "high"
+      },
+      "prompt_cache_key": true
     },
     "deepseek-flash": {
       "base_url": "https://api.mistral.ai/v1",
       "model": "deepseek-v4-1-flash-1017",
       "key_env": "MISTRAL_API_KEY",
-      "overflow": "glm-flash"
+      "overflow": "glm-flash",
+      "prompt_cache_key": true
     },
     "ministral-14b": {
       "base_url": "https://api.mistral.ai/v1",
@@ -44,14 +47,14 @@
   "rotate": [],
   "species": {
     "deer": {
-      "think": "ministral",
-      "remember": "ministral-14b",
-      "compile": "ministral-14b"
+      "think": "glm-flash",
+      "remember": "glm-flash",
+      "compile": "glm-flash"
     },
     "wolf": {
-      "think": "ministral",
-      "remember": "ministral-14b",
-      "compile": "ministral-14b"
+      "think": "glm-flash",
+      "remember": "glm-flash",
+      "compile": "glm-flash"
     }
   },
   "stages": {
