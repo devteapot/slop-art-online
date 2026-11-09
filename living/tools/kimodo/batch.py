@@ -17,6 +17,10 @@ frame (negative counts from the end) of an already generated entry, turned to fa
 hips over the origin. `"end_offset": [x, z]` (metres) moves the end keyframe's hips, for moves
 that travel. Entries are generated in file order, so a pose must come from an earlier entry.
 
+`"path": [[seconds, x, z], ...]` (metres) pins the hips' ground track on every frame between the
+first and last point, linearly between points (Kimodo's Root2DConstraintSet), so a move's travel
+follows a given profile: a dodge whose dash the authority performs at a set speed.
+
 Only the SOMA-RP model is used (NVIDIA Open Model License). Never point this at the SMPL-X model.
 """
 
@@ -31,7 +35,7 @@ import numpy as np
 import torch
 
 from kimodo import load_model
-from kimodo.constraints import FullBodyConstraintSet
+from kimodo.constraints import FullBodyConstraintSet, Root2DConstraintSet
 from kimodo.exports.motion_io import save_kimodo_npz
 from kimodo.geometry import matrix_to_axis_angle
 from kimodo.tools import seed_everything
@@ -74,14 +78,25 @@ def pose_ref(spec, neutral, out_dir):
     return local, float(root[1])
 
 
+def path_constraint(model, entry, frames, device):
+    pts = entry["path"]
+    ts = [p[0] for p in pts]
+    first, last = round(ts[0] * model.fps), min(round(ts[-1] * model.fps), frames - 1)
+    idx = list(range(first, last + 1))
+    xz = [[float(np.interp(f / model.fps, ts, [p[1] for p in pts])), float(np.interp(f / model.fps, ts, [p[2] for p in pts]))] for f in idx]
+    c = Root2DConstraintSet.from_dict(model.skeleton, {"frame_indices": idx, "smooth_root_2d": xz})
+    return c.to(device)
+
+
 def constraints(model, entry, frames, neutral, out_dir, device):
     keys = []
+    path = [path_constraint(model, entry, frames, device)] if entry.get("path") else []
     if entry.get("start"):
         keys.append((0, entry["start"], (0.0, 0.0)))
     if entry.get("end"):
         keys.append((frames - 1, entry["end"], tuple(entry.get("end_offset", (0.0, 0.0)))))
     if not keys:
-        return []
+        return path
     locs, roots, idx = [], [], []
     for f, spec, (ox, oz) in keys:
         local, y = pose_ref(spec, neutral, out_dir)
@@ -94,7 +109,7 @@ def constraints(model, entry, frames, neutral, out_dir, device):
         "local_joints_rot": aa.tolist(),
         "root_positions": roots,
     })
-    return [c.to(device)]
+    return [c.to(device)] + path
 
 
 def main():

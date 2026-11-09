@@ -24,7 +24,9 @@ are made game-ready (`library_clip`):
   `--max-scale`; unset keys keep the natural speed.
 - `kind: once`: a one-shot (`trim: [a, b]` seconds). It eases from and into the library's
   `neutral` pose at ends keyframed to it (`start`/`end: "neutral"`), so it blends with the idles.
-  Travel is kept (`travel: belt` takes it out at constant speed, as for a dodge roll);
+  Travel is kept (`travel: belt` takes it out at constant speed; `travel: path` takes out the
+  entry's `path` [[s, x, z], …] in SOMA metres, the track batch.py pinned the hips to and the
+  game's body moves along by itself, as for the authority's dodge dash);
   `offset: [x, z]` places a clip that continues another (sitting after sit_down).
 - Planted feet (`plant`, default on): Kimodo's foot contacts, plus feet near the floor and still,
   pin the heel or the ball of the foot in the game's world; between plants the correction blends;
@@ -950,6 +952,14 @@ def soma_window(soma, m, spec, cyc):
         belt = root[-1] - start
         belt[1] = 0.0
     shift = np.stack([start + belt * f / n for f in range(n + 1)])
+    if travel == "path":
+        # The travel the game's body performs itself (the entry's `path`, as batch.py pinned
+        # it): taken out exactly, so what remains is the clip's own motion about the body.
+        pts = spec["path"]
+        ts = [p[0] for p in pts]
+        at = lambda k: np.array([np.interp((i + f) / FPS, ts, [p[k] for p in pts]) for f in range(n + 1)])
+        shift = np.stack([start[0] + at(1), np.zeros(n + 1), start[2] + at(2)], axis=1)
+        belt = shift[-1] - shift[0]
     shift[:, 1] = 0.0
     # Clips that continue another one's end (sitting after sit_down) sit where it ended.
     ox, oz = spec.get("offset", (0.0, 0.0))
@@ -957,7 +967,9 @@ def soma_window(soma, m, spec, cyc):
     shift[:, 2] -= oz
     root = root - shift
     P = P - shift[:, None, :]
-    return dict(G=G, P=P, root=root, contacts=C, belt=belt, n=n)
+    residual = float(np.hypot(root[:, 0], root[:, 2]).max()) if travel == "path" else 0.0
+    track = (shift - shift[0]) if travel == "path" else None
+    return dict(G=G, P=P, root=root, contacts=C, belt=belt, n=n, residual=residual, track=track)
 
 
 def neutral_frame(sk, soma, ref, kdir):
@@ -1079,16 +1091,17 @@ def clean_contacts(c, cyclic, gap=2, short=1):
     return c
 
 
-def plant_feet(sk, frames, contacts, belt_v, cyclic, stats):
+def plant_feet(sk, frames, contacts, belt_v, cyclic, stats, track=None):
     """Lock planted feet to the floor in the game's world (the clip moves at `belt_v` file units
-    per clip), then solve the legs to reach them. A heel contact pins the heel, a toe-only contact
+    per clip, or along `track`: the body's offset at each frame, file units), then solve the legs
+    to reach them. A heel contact pins the heel, a toe-only contact
     the ball of the foot; between contacts the correction blends from one plant to the next.
     Returns the frames with new hips heights and leg rotations."""
     n = len(frames) - 1
     count = n if cyclic else n + 1  # a loop's last frame is its first
     legs = {s: [bone(s, x) for x in LEG] for s in "LR"}
     fk = [fk_pose(sk, q, off, legs["L"] + legs["R"]) for q, off in frames[:count]]
-    world = lambda p, k: p + belt_v * (k / n)
+    world = (lambda p, k: p + track[k % count]) if track is not None else (lambda p, k: p + belt_v * (k / n))
     shift, planted = {}, {}
     for side in "LR":
         f_ = sk.feet[side]
@@ -1217,9 +1230,10 @@ def plant_feet(sk, frames, contacts, belt_v, cyclic, stats):
 
 def loop_jerk(frames):
     """How much a loop pops at its seam: per bone, the change in angular step (degrees per
-    frame) across the seam, against the largest such change anywhere else in the loop."""
+    frame) across the seam, against the largest such change anywhere else in the loop (and the
+    bone it is on: a foot landing from a hop stops short by nature, a hand snapping does not)."""
     n = len(frames) - 1
-    worst_seam, worst_inside = 0.0, 0.0
+    worst_seam, worst_inside, worst_bone = 0.0, 0.0, ""
     for b in frames[0][0]:
         q = [frames[f][0][b] for f in range(n)]
         step = [math.degrees(q[f].rotation_difference(q[(f + 1) % n]).angle) for f in range(n)]
@@ -1227,9 +1241,9 @@ def loop_jerk(frames):
             j = abs(step[f] - step[f - 1])
             if f in (0, n - 1):
                 worst_seam = max(worst_seam, j)
-            else:
-                worst_inside = max(worst_inside, j)
-    return worst_seam, worst_inside
+            elif j > worst_inside:
+                worst_inside, worst_bone = j, b
+    return worst_seam, worst_inside, worst_bone
 
 
 def overlay_clip(sk, spec, neutral):
@@ -1293,7 +1307,7 @@ def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
         for q, _ in frames:
             q.update(fixed)
     contacts = [tuple(c) for c in w["contacts"]]
-    moving = bool(loco) or spec.get("travel") == "belt"
+    moving = bool(loco) or spec.get("travel") in ("belt", "path")
     belt_soma = float(math.hypot(w["belt"][0], w["belt"][2])) if moving else 0.0
     natural = belt_soma * soma.k_game / (n / FPS)
     if kind == "loop":
@@ -1316,11 +1330,13 @@ def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
     # Standing loops had their drift removed; their feet stay put, so they plant in place.
     belt_v = TURN @ Vector((float(w["belt"][0]), 0.0, float(w["belt"][2]))) * soma.k if moving else Vector()
     stats = {}
+    # A path's travel (the dodge's dash) is the body's own: planted feet stay put along it.
+    track = [TURN @ Vector((float(t[0]), 0.0, float(t[2]))) * soma.k for t in w["track"]] if w["track"] is not None and n == w["n"] else None
     if spec.get("plant", True):
-        frames = plant_feet(sk, frames, contacts, belt_v, kind == "loop", stats)
+        frames = plant_feet(sk, frames, contacts, belt_v, kind == "loop", stats, track)
     if kind == "loop":
-        seam, inside = loop_jerk(frames)
-        info.update(seam_jerk_deg=round(seam, 2), max_jerk_inside_deg=round(inside, 2))
+        seam, inside, bone_ = loop_jerk(frames)
+        info.update(seam_jerk_deg=round(seam, 2), max_jerk_inside_deg=round(inside, 2), max_jerk_bone=bone_)
     speed = belt_soma * soma.k_game / (n / FPS)
     info.update(frames=n, seconds=round(n / FPS, 3), natural_speed=round(natural, 3), speed=round(speed, 3),
                 time_scale=round(scale, 3), loop=kind == "loop")
@@ -1328,6 +1344,9 @@ def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
         info["speed_short_of_target"] = target
     if kind == "once" and belt_soma > 0:
         info["travel_m"] = round(belt_soma * soma.k_game, 3)
+    if spec.get("travel") == "path":
+        # How far the hips stray from the body's own track (game metres): the slide left.
+        info["path_residual_m"] = round(w["residual"] * soma.k_game, 3)
     if kind == "once" and not moving:
         d = w["root"][-1] - w["root"][0]
         info["end_offset_m"] = round(float(math.hypot(d[0], d[2])) * soma.k_game, 3)

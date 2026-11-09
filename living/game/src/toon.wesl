@@ -11,7 +11,7 @@ import bevy_pbr::render::{
 };
 import living_game::toon_light::{
     toon, is_kind, noise3, rgb_to_hsv, hsv_to_rgb, scene, wetted, view_depth, sun_shadow, sun_color,
-    bands, banded, puddles, fresnel, rim_light, point_lights, emission, has_sun, sun_direction, eye,
+    bands, banded, puddles, wet_sheen, fresnel, rim_light, point_lights, emission, has_sun, sun_direction, eye,
 };
 
 @if(PREPASS_PIPELINE)
@@ -273,6 +273,9 @@ fn fragment(
         var color = banded(albedo.rgb, sun, lit, (1.0 - depth) * select(away, 1.0, skin || part), sc);
         if (toon.atmo.y > 0.05 && N.y > 0.97 && (tag & (1u << 24u)) == 0u) {
             color = puddles(color, p.xyz, 0.0);
+        }
+        if (toon.atmo.y > 0.05 && !skin && !part) {
+            color = wet_sheen(color, N, V);
         }
         let fr = fresnel(N, V);
         let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part);

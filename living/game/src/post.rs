@@ -100,9 +100,9 @@ pub fn update(
         let fog_c = a.fog * 1.06 + a.fill * 0.5;
         e.bank = Vec4::new(a.banks, a.ground, 5.0, 150.0);
         e.bank_color = fog_c.extend(drift.x);
-        // Rain catches the light: brighter by day.
+        // Rain catches the light: brighter by day, and still seen under a storm's dark sky.
         let level = (a.lux / 9000.0).clamp(0.08, 1.0);
-        e.rain = Vec4::new(a.rain, 0.12 + 0.18 * a.wind, 0.22 * level + 0.03 + a.flash * 0.3, drift.y);
+        e.rain = Vec4::new(a.rain, 0.12 + 0.18 * a.wind, 0.16 * level + 0.1 + a.flash * 0.35, drift.y);
     }
     if let Some(mut b) = bloom {
         if b.intensity != s.bloom {

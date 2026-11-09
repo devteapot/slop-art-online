@@ -565,7 +565,7 @@ pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<S
             })
             .clone();
         let at = scene.at3(x, y);
-        let turn = Quat::from_rotation_y(hash(x.to_bits(), y.to_bits()) * 6.28);
+        let turn = Quat::from_rotation_y(hash(x.to_bits(), y.to_bits()) * std::f32::consts::TAU);
         let e = commands
             .spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at).with_rotation(turn).with_scale(Vec3::splat(fill)), crate::style::stencil()))
             .id();

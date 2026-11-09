@@ -12,7 +12,7 @@ import bevy_pbr::render::{
     pbr_functions::main_pass_post_lighting_processing,
 };
 import living_game::toon_light::{
-    toon, hash3, scene, wetted, view_depth, sun_shadow, sun_color, bands, banded, puddles, fresnel, rim_light,
+    toon, hash3, scene, wetted, view_depth, sun_shadow, sun_color, bands, banded, puddles, wet_sheen, fresnel, rim_light,
     point_lights, emission, has_sun, sun_direction,
 };
 
@@ -270,6 +270,9 @@ fn fragment(g: GroundOut, @builtin(front_facing) is_front: bool) -> FragmentOutp
         // Puddles gather in the detail's low places: gaps between stones, ruts.
         if (toon.atmo.y > 0.05 && N.y > 0.97) {
             color = puddles(color, p.xyz, (0.5 - height) * 0.15);
+        }
+        if (toon.atmo.y > 0.05) {
+            color = wet_sheen(color, N, V);
         }
         color = color + rim_light(fresnel(N, V), lit, toon.rim.a) * sun;
         color = color + point_lights(albedo, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);

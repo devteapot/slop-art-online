@@ -24,6 +24,7 @@ mod gait;
 mod hud;
 mod island;
 mod live;
+mod loading;
 mod lookdev;
 mod net;
 mod perf;
@@ -107,6 +108,8 @@ fn main() {
     }
     // The player's UI (Bevy UI); egui stays for the F1 developer panels.
     app.add_plugins(ui::UiPlugin);
+    // The first load happens behind a cover (pipelines compile synchronously on macOS).
+    app.add_plugins(loading::LoadingPlugin);
     app.add_plugins(route::RoutePlugin);
     if !headless {
         app.add_systems(EguiPrimaryContextPass, hud::draw);

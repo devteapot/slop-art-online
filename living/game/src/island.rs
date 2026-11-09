@@ -92,6 +92,8 @@ pub struct Island {
     /// The files of a loaded chunk's small things and people, held from its ground's build.
     prefetch: HashMap<(i32, i32), Vec<UntypedHandle>>,
     pub start: Vec2,
+    /// Every chunk in reach has its ground and things, and nothing waits to spawn.
+    settled: bool,
 }
 
 /// A thing waiting to spawn into a chunk's ground tier or its small tier.
@@ -104,10 +106,18 @@ struct Queued {
 }
 
 impl Island {
-    /// Look-dev: generate the land here and place the planner's buildings and people.
-    pub fn new(world: WorldDef, defs: &[EnvDef]) -> Self {
+    /// Look-dev: generate the land (seconds of work: run it off the main thread, as connected
+    /// mode does, so no frame waits for it).
+    pub fn generate(world: WorldDef) -> (Arc<Land>, f32) {
         let t0 = std::time::Instant::now();
         let land = Arc::new(living_rules::land::generate_default(world.seed, world.size));
+        (land, t0.elapsed().as_secs_f32())
+    }
+
+    /// Look-dev: place the planner's buildings and people on a generated land.
+    pub fn new(land: Arc<Land>, generated_s: f32, defs: &[EnvDef]) -> Self {
+        let t0 = std::time::Instant::now();
+        let world = WorldDef { seed: land.seed, size: land.size };
         let town = land.settlements.iter().find(|s| s.kind == SiteKind::Town).map(|s| Vec2::new(s.plaza.centre.0, s.plaza.centre.1)).or_else(|| land.sites.iter().find(|s| s.kind == SiteKind::Town).map(|s| Vec2::new(s.x, s.y)));
         let start = std::env::var("LIVING_GAME_START")
             .ok()
@@ -119,7 +129,7 @@ impl Island {
             .unwrap_or(Vec2::splat(world.size as f32 / 2.0));
         let island = Self::build(land, defs, start, true);
         info!(
-            "island: seed {} {} m in {:.2} s, {} regions, {} sites, start ({:.0}, {:.0})",
+            "island: seed {} {} m: land in {generated_s:.2} s (worker thread), placed in {:.3} s; {} regions, {} sites, start ({:.0}, {:.0})",
             world.seed,
             world.size,
             t0.elapsed().as_secs_f32(),
@@ -226,7 +236,7 @@ impl Island {
                 put(Item { kind: "person".into(), at, yaw: hash(k, 33) * std::f32::consts::TAU, k: k as usize, person: Some((world.seed * 104_729 + (si as u64) * 31 + k as u64, folk, st.style.clone())), ..default() });
             }
         }
-        Self { land, envs, site_items, ground: HashMap::new(), small: HashMap::new(), queue: Vec::new(), prefetch: HashMap::new(), start }
+        Self { land, envs, site_items, ground: HashMap::new(), small: HashMap::new(), queue: Vec::new(), prefetch: HashMap::new(), start, settled: false }
     }
 
     /// A building on an authority `lot` row (connected): the row's model file when it is on
@@ -251,6 +261,11 @@ impl Island {
         let file = exact.unwrap_or_else(|| files[(hash(lot.id, 11) * files.len() as f32) as usize % files.len()].clone());
         let it = Item { kind: kind.to_string(), file, at: lot.at, yaw: lot.yaw, height, glow: slot.and_then(|s| s.glow), k: lot.id as usize, floor: Some(lot.floor_m), native: true, person: None };
         spawn_item(commands, assets, &self.land, &it)
+    }
+
+    /// Whether everything in reach is in: ground and things, nothing queued (`loading.rs`).
+    pub fn settled(&self) -> bool {
+        self.settled
     }
 
     /// Height of the ground (game x, z).
@@ -696,6 +711,7 @@ pub fn stream(
         }
     }
     spawn_queued(&mut commands, &assets, &mut island, me);
+    island.settled = built == 0 && island.queue.is_empty();
 }
 
 /// Spawn queued things, nearest first, within [`SPAWN_BUDGET`]; drop those whose chunk went.

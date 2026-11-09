@@ -10,7 +10,8 @@
 //! - predicts only my own move's clip at the moment I press (the authority's answer arrives a
 //!   round trip later): the prediction ends when the authority's `fighter` row confirms it,
 //!   when a `REFUSED` arrives, or after [`PREDICT_MS`] without either. Movement is never
-//!   predicted: the dodge's dash is the authority's.
+//!   predicted: the dodge's dash is the authority's, and so is its clip, which carries no
+//!   travel and plays as the body dashes.
 //! - draws the aim and range indicators while a skill key is held.
 //!
 //! Which skill is which comes from the authority's `skill_card` rows ([`Cards`]): the bar's
@@ -171,12 +172,13 @@ pub fn look(card: &SkillCard) -> Look {
         "firebolt" => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
         "heal" => l(&["cast"], 2.6, None, SkillIcon::Heal),
         "block" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
-        "dodge" => l(&["dodge_roll"], 3.3, None, SkillIcon::Dodge),
+        // The dash on the rules' track (2.6 m at 5.2 m/s): the clip carries no travel of its own.
+        "dodge" => l(&["dodge"], 1.0, None, SkillIcon::Dodge),
         _ => match card.aim.as_str() {
             "point" if card.radius >= BOLT_RADIUS => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
             "point" => l(&["bow_shoot"], 3.4, None, SkillIcon::Bow),
             "facing" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
-            "dash" => l(&["dodge_roll"], 3.3, None, SkillIcon::Dodge),
+            "dash" => l(&["dodge"], 1.0, None, SkillIcon::Dodge),
             "self_or_ally" => l(&["cast"], 2.6, None, SkillIcon::Heal),
             "creature" => Look { slash: true, ..l(&["sword_slash"], 2.0, None, SkillIcon::Sword) },
             _ => l(&[], 1.0, None, SkillIcon::Empty),
@@ -510,7 +512,10 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
             }
         }
         if Some(id) == me {
-            if let Some((skill, t)) = c.predicted.clone() {
+            // A dash's clip is not predicted: the authority moves the body about a round trip
+            // after the press, and the clip carries no travel of its own, so it plays with the
+            // confirmed move (`live.rs` times one-shots on the display clock).
+            if let Some((skill, t)) = c.predicted.clone().filter(|(s, _)| cards.by_name(s).is_none_or(|k| k.aim != "dash")) {
                 if let Some((clip, rate, hold)) = clip_of(cards.by_name(&skill), c.strikes) {
                     out.insert(id, Action { clip, rate, start_ms: t, hold, face: input.look });
                     continue;

@@ -166,7 +166,7 @@ fn record(
             continue;
         };
         let (l, r, p) = (l.translation(), r.translation(), root.translation());
-        let clip = live.get(e).map(|b| b.clip).ok().or_else(|| lookdev.get(e).ok().and_then(|c| c.playing())).unwrap_or("");
+        let clip = live.get(e).map(|b| b.showing()).ok().or_else(|| lookdev.get(e).ok().and_then(|c| c.playing())).unwrap_or("");
         let line = serde_json::json!({
             "t": time.elapsed_secs_f64(),
             "root": [p.x, p.y, p.z],

@@ -286,7 +286,7 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
 - **Animation library (2026-11-09):** 27 clips per VRoid character, listed with prompts, seeds and parameters in `living/tools/blender/clips.json`.
   - **Generation:** `living/tools/kimodo/spark.sh` generates the Kimodo takes on the Spark in one process: about 16 s to load, then 3–4 s per motion. `gen_anim.sh` (`animate.py --library`) makes them game-ready for both characters into `assets/lookdev/anim/` and writes `<character>.clips.json` with each clip's length, loop flag, speeds and source.
   - **Loops:** idle, idle_look, walk, walk_brisk, run, run_fast, sneak, talk, talk_explain, listen and sit_idle are cut where pose and foot contacts match, and their seams are spread.
-  - **One-shots:** wave, point, sit_down, stand_up, sword_slash, sword_overhead, sword_thrust, block, dodge_roll, hit, death, cast and bow_shoot. Kimodo keyframes them to a shared neutral standing pose at the ends that should blend with idle. sit_idle and stand_up continue from sit_down.
+  - **One-shots:** wave, point, sit_down, stand_up, stand_up_ground, sword_slash, sword_overhead, sword_thrust, block, dodge, hit, death, cast and bow_shoot. Kimodo keyframes them to a shared neutral standing pose at the ends that should blend with idle. sit_idle and stand_up continue from sit_down.
   - **Feet:** planted feet are pinned with the leg IK.
   - **Hand-keyed:** nod and shake_head are keyed on the neutral pose, because every Kimodo seed either bowed or barely moved its head. The keyed `attack` loop is kept for repeated swings. The keyed idle, walk, run and talk are replaced; their names now hold the Kimodo clips.
   - **Natural speeds** (Vivi / Shino): walk 1.44 / 1.48, walk_brisk 2.03 / 2.10, run 3.15 / 3.25, run_fast 3.50 / 3.61, sneak 0.75 / 0.77 m/s. walk and run are time-scaled to the look-dev's 1.4 and 3.6 m/s by default. The rules' 2.6 / 3.9 pair is one flag away (`--speed 2.6 --run-speed 3.9`, or `--target walk_brisk=2.6 --target run_fast=3.9`). It is best served by walk_brisk (×1.30) and run_fast (×1.10), because the casual walk can only be sped up ×1.4, to 2.0 m/s.
@@ -294,7 +294,7 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
     - The wide VRoid skirts are rigid, so legs and seated thighs pass through them, and hanging hands sink into Vivi's skirt.
     - The sit poses recline as if against a backrest.
     - The sword and bow clips have no props.
-    - dodge_roll travels 1.9 m and death ends about 1 m from where it started. The game has no root motion yet.
+    - Fixed in the client polish pass below: dodge_roll travelled 1.9 m and death ended about 1 m from where it started.
 
 - **Tree variety (2026-11-09; the user saw forests of identical trees):**
   - **Species:** nature.py now makes oak, birch, spruce, coppice, young trees, saplings and dead snags. The broadleaf tree picks one of five growth forms, and trees lean and curve by seed.
@@ -505,10 +505,44 @@ Presentation only: the authority decides what every resident does ([town life](T
 - **Still off:**
   - At the fixed 22 m view a fight or a nod is small; only a greeting brings the camera in.
   - The evening crowd stands and sits on one spot per place, overlapping: the authority sends everyone to the same point.
-  - Standing up from the ground is a 220 ms blend into the walk, with no `stand_up` clip yet.
+  - Standing up from the ground was a 220 ms blend into the walk (fixed below: `stand_up_ground`).
   - Gestures while walking slide (rare: the rules turn a standing body first).
   - A hidden sleeper still animates.
-  - Clips are judged from stills, not in motion: `play` has one 41° jerk inside its loop.
+  - Clips are judged from stills, not in motion: `play` had one 41° jerk inside its loop (fixed below).
+
+## Client polish: first load, getting up, root motion, dawn and storm (2026-11-09)
+
+Client presentation and the clip tools only (`living/game`, `living/tools`).
+
+**First load.**
+- **Cause.** Bevy 0.20 creates render pipelines synchronously on macOS (`bevy_render`'s `create_pipeline_task` blocks there). The frame that first draws a new material, mesh layout or pass composes its WESL, writes MSL and has Metal compile it: tens of ms when Metal's shader cache is warm, up to seconds when it is cold. That cache is per binary, so a new build starts cold. The first view needs about 90 pipelines. `LIVING_GAME_PERF=hitch` now also logs, per frame, the pipelines created (label and vertex layout) and the render set's time.
+- **The 800 ms frame** in look-dev was the land generating inside a frame (0.81–0.88 s). It now generates on a worker thread, as connected mode already did (`envs::switch`, `Island::generate`). `assets_for` lists each folder once per session.
+- **The cover** (`loading.rs`): the first load happens behind a plain cover in the sky's colour reading "Arriving…". It lifts once the island and your character are in, nothing waits to spawn, and no pipeline has been created for 0.75 s (30 s at most), then fades over 0.35 s. The tour, routes and the headless script's `ready` wait for it.
+- **Prewarm**: under the cover, throwaway characters at the arrival point wear every outfit piece between them (`Recipe::every_piece`, 6 characters). A piece with its own vertex layout used to compile 4 pipelines 2 km into `road:town>village3` (301 ms at (397, 1505) cold). Material caches now hold ids, not handles (`lookdev::convert`, the outfit `Wardrobe`), so a material lives while some mesh wears it. The prewarm leaves none behind: 41 toon materials at the town before and after.
+- **Numbers** (M4 Pro, uncapped, base `972aefd` against it plus this change, other agents' work loading the Mac): `road:town>village3@run`, route time:
+  - mean 4.58 / 4.55 ms;
+  - p99 13.4 / 6.9 ms;
+  - frames over 33 ms 753 / 295, over 50 ms 216 / 98;
+  - worst 155 / 151 ms;
+  - 1-minute load 5.7–19.8 / 5.2–13.1.
+
+  Neither arm creates pipelines at (397, 1505) any more; frames of 30–53 ms still come at the vista stop there, with nothing arriving. Before the route, look-dev's first frames: base 805–847 ms (the land), then up to 1142 ms of pipelines on a cold cache; this change's worst is 166–215 ms, behind the cover, which lifts after 2.1–2.2 s (91 pipelines). Connected: base 212 ms, this change 323 ms behind the cover, which lifts after 2.8 s. After it lifts, the worst frames are 83 ms while lots arrive.
+- **Counts:** materials per view and toon materials at the town, forest and hamlet are identical before and after: main 35/23/36, cascades 17/9–15/17, toon materials 41/68/42. 10:00, clear and storm. Frame means are within run-to-run noise: clear 5.29/4.39/5.69 against 5.25/4.70/5.35 ms; storm at the town 5.2–7.2 against 5.3–8.0 ms over 3–4 windows each.
+
+**Getting up and root motion** (Kimodo on the Spark; `clips.json`, `animate.py`, `batch.py`).
+- `batch.py` takes `"path": [[s, x, z], …]`: Kimodo's `Root2DConstraintSet` pins the hips' ground track on every frame. `animate.py` gets `travel: path`, which takes exactly that track out, and plants feet along it.
+- **`dodge`** (replaces `dodge_roll`): a low forward dash whose hips follow the rules' dodge, 2.6 m at 5.2 m/s, then a recovery; 0.97 s, played at rate 1. Travel 2.60 m for Vivi and 2.69 m for Shino; the hips stray at most 0.04 m from the body's track. One-shots are now timed on the display clock (they wait for `start_ms` and join part-way when seen late), and a dash's clip is not predicted, because the authority moves the body about a round trip after the press. On my character, 5 dodges each way, `LIVING_GAME_FEET` and `foot_slide.py` on the dodge frames: slide median 3.52 → 0.98 m/s (0.54 → 0.21 of the body's speed); drift per contact median 13.9 → 4.5 cm.
+- **`death`**: new takes with the hips pinned over the origin. The body falls where it stands: it ends 0.04 m away (was 1.04 m).
+- **`stand_up_ground`**: continues from `sit_ground_down`'s end and stands up over the origin (2.47 s, played ×1.6). When a sitter's rest ends, the drawn body holds its seat while the clip plays, then catches up with the authority's position at up to 1.2 m/s faster than the body (`live.rs`). The gait follows the drawn motion.
+- **`play`**: 8 seeds; seed 2 replaces seed 0, whose loop had a 41° hand snap. Its worst change in step is now 21° on a lower leg landing from a hop. `loop_jerk` reports the bone.
+
+**Dawn and storm** (`island.json` keys, `sky.wesl`, `edges.wesl`, `toon_light.wesl`, `post.rs`).
+- **Dawn (06:24 key):** a gold key light ([1, 0.88, 0.77]), a cooler zenith, a warm-neutral haze ([0.86, 0.80, 0.78]) instead of peach, a lighter grade (0.12) and thinner banks (0.6).
+- **Storm:** a cooler, darker key light that still casts, a darker sky (0.28) with less fog fill. Clouds have pale lit tops, dark cool undersides and darker dense cores. Wet surfaces catch the sky at grazing angles (`wet_sheen`); puddles are softer and darker and mirror more of the sky the flatter they are seen. Rain falls in four layers, finer and fainter with distance, the far ones stronger in a storm, and stays visible under a dark sky.
+- **Blind A/B** (a fresh judge each round, 12 pairs, sides randomised): storm 6/6 and 6/6. Dawn 3 wins and 3 losses in round 1 (cold lavender haze), then 3 wins, 1 loss and 2 ties in round 2.
+- **Still off:** the dawn haze still washes out the middle distance, and the town's terracotta paving reads orange at dawn in both versions. Storm shadows stay sharp under trees. Puddles on grass still read as patches.
+
+**Clippy:** the two `approx_constant` errors (TAU in `bodies.rs` and `world.rs`) are fixed. The remaining warnings are the same as at `da219a7`.
 
 ## World look and camera research (2026-11-08)
 

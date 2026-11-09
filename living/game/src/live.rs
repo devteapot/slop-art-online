@@ -122,7 +122,20 @@ struct Shown {
     person: bool,
     /// Drawn facing (sim angle), eased toward the wanted one.
     yaw: f32,
+    /// Where the body is drawn (sim metres): the authority's position, except while a sitter
+    /// gets up and then catches up ([`STAND_UP`]).
+    drawn: Vec2,
+    /// Sitting on the ground last frame (`sit_ground`).
+    sitting: bool,
+    /// Getting up: since when (display ms) and where it sat.
+    rising: Option<(f64, Vec2)>,
 }
+
+/// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
+/// played at this rate). The authority moves the body at once, so the drawn body waits at its
+/// seat while the clip plays, then catches up at up to [`CATCH_UP`] m/s faster than the body.
+const STAND_UP: (&str, f32, f64) = ("stand_up_ground", 1.6, 2467.0 / 1.6);
+const CATCH_UP: f32 = 1.2;
 
 /// How fast drawn yaw takes up a new facing (1/s): about 90% in 0.15 s.
 const YAW_RATE: f32 = 16.0;
@@ -147,6 +160,14 @@ pub struct LiveBody {
     pub clip: &'static str,
     rate: f32,
     action: Option<crate::combat::Action>,
+}
+
+impl LiveBody {
+    /// What shows: the one-shot over locomotion when there is one (a dodge, getting up), else
+    /// the locomotion or standing clip.
+    pub fn showing(&self) -> &'static str {
+        self.action.map_or(self.clip, |a| a.clip)
+    }
 }
 
 /// Regenerate the land from the `land` row once, then put the island in place.
@@ -380,13 +401,34 @@ fn bodies(
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, yaw: h });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, yaw: h, drawn: p, sitting: false, rising: None });
             live.heights.insert(id, height);
             continue;
         }
         let s = live.shown.get_mut(&id).unwrap();
-        let v = (p - s.last).length() / dt;
+        // Getting up from the ground before walking off: hold the seat while the clip plays.
+        let sitting = show.idle == Some("sit_ground") && !show.hidden;
+        if s.sitting && !sitting && s.rising.is_none() && action.is_none() && !mine {
+            s.rising = Some((scene.now_ms, s.drawn));
+        }
+        s.sitting = sitting;
+        let auth_v = (p - s.last).length() / dt;
         s.last = p;
+        let held = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(_, at)| at);
+        let before = s.drawn;
+        match held {
+            Some(seat) => s.drawn = seat,
+            None => {
+                s.rising = None;
+                let gap = p - s.drawn;
+                let step = (auth_v.min(20.0) + CATCH_UP) * dt;
+                s.drawn = if gap.length() <= step { p } else { s.drawn + gap / gap.length() * step };
+            }
+        }
+        // The gait follows the drawn motion, so a catching-up body's feet match its steps.
+        let v = (s.drawn - before).length() / dt;
+        let p = s.drawn;
+        let ground = island.height(p.x, p.y);
         let v = if v.is_finite() && v < 20.0 { v } else { 0.0 };
         s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp());
         if let Some(h) = h {
@@ -394,6 +436,7 @@ fn bodies(
             s.yaw = living_rules::steer::wrap(s.yaw);
         }
         let (speed, person, yaw) = (s.speed, s.person, s.yaw);
+        let rising = held.map(|_| s.rising.map_or(0.0, |(t, _)| t));
         let Ok((mut tf, fitted, mut model, ch, mut lb, vis)) = q.get_mut(s.entity) else { continue };
         tf.translation.x = p.x;
         tf.translation.z = p.y;
@@ -422,7 +465,7 @@ fn bodies(
         };
         lb.clip = clip;
         lb.rate = rate;
-        lb.action = action;
+        lb.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None }));
     }
 }
 
@@ -473,6 +516,7 @@ fn clips(
     children: Query<&Children>,
     mut players: Query<(&mut AnimationPlayer, Option<&mut AnimationTransitions>)>,
     mut has_clips: Local<HashMap<String, bool>>,
+    scene: NonSend<Scene>,
 ) {
     for (e, model, file) in &new {
         let has = *has_clips.entry(model.file.clone()).or_insert_with(|| crate::lookdev::glb_json(&model.file).is_some_and(|j| j["animations"].as_array().is_some_and(|a| !a.is_empty())));
@@ -495,6 +539,12 @@ fn clips(
     for (e, mut c, lb) in &mut playing {
         // A move plays once over locomotion, until it is over (or holds its pose).
         let action = lb.action.filter(|a| c.nodes.contains_key(a.clip));
+        // A one-shot is timed on the display clock: its row arrives before the display shows
+        // its start (the display trails the authority), so it waits for that moment, and one
+        // seen late joins part-way. A dodge's clip then dashes as its body does. A move already
+        // showing in the same clip (my predicted one, now confirmed) carries on.
+        let current = c.playing.and_then(|(clip, o)| o.map(|_| clip));
+        let action = action.filter(|a| a.start_ms <= scene.now_ms || current == Some(a.clip));
         let (want, once) = match action {
             Some(a) => (a.clip, Some(a.start_ms as u64)),
             None => (if c.nodes.contains_key(lb.clip) { lb.clip } else { "idle" }, None),
@@ -504,6 +554,9 @@ fn clips(
             commands.entity(e).remove::<ClipSet>();
             continue;
         };
+        if once.is_some() && current == Some(want) {
+            c.playing = Some((want, once));
+        }
         if c.playing != Some((want, once)) {
             let blend = std::time::Duration::from_millis(if once.is_some() { 90 } else { 220 });
             match (transitions, once.is_some()) {
@@ -521,6 +574,12 @@ fn clips(
                 }
             };
             c.playing = Some((want, once));
+            if let (Some(a), Some(anim)) = (action, player.animation_mut(node)) {
+                let into = ((scene.now_ms - a.start_ms) / 1000.0) as f32 * a.rate;
+                if into > 0.02 && into < c.lens.get(want).copied().unwrap_or(0.0) {
+                    anim.seek_to(into);
+                }
+            }
         }
         let len = c.lens.get(want).copied().unwrap_or(1.0);
         if let Some(a) = player.animation_mut(node) {
@@ -625,7 +684,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 
 /// A headless script of player actions and photographs (`LIVING_GAME_LIVE=<dir>`), through the
 /// same paths as the keys and the UI. `LIVING_GAME_LIVE_PLAN` is `;`-separated steps:
-/// - `ready`: until the island is drawn, I have a body and the buildings round me are in;
+/// - `ready`: until the island is drawn, I have a body, the buildings round me are in and the
+///   first load's cover has lifted (`loading.rs`);
 /// - `wait:S`; `shot:NAME` (`<dir>/NAME.png`);
 /// - `walk:DEG:S[:run]`: hold a direction (0 = north, 90 = east) through `human_move`;
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
@@ -672,7 +732,7 @@ fn script(
     mut out: ResMut<crate::ui::model::Outbox>,
     mut skills: ResMut<crate::combat::Scripted>,
     mut gestures: ResMut<crate::town::Scripted>,
-    hud: Res<crate::ui::model::HudModel>,
+    (hud, loading): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>),
     target: Option<Res<crate::capture::Target>>,
     time: Res<Time>,
     mut exit: MessageWriter<AppExit>,
@@ -690,7 +750,7 @@ fn script(
     let done = match verb {
         "ready" => {
             let near_lots = live.lots.len();
-            island.is_some() && mine.is_some() && near_lots > 0 && fitted.iter().count() >= live.shown.values().filter(|v| v.person).count().min(1) && s.since > 2.0 || s.since > 240.0
+            island.is_some() && mine.is_some() && near_lots > 0 && fitted.iter().count() >= live.shown.values().filter(|v| v.person).count().min(1) && crate::loading::Loading::clear(loading.as_deref()) && s.since > 2.0 || s.since > 240.0
         }
         "wait" => s.since >= arg.parse::<f32>().unwrap_or(1.0),
         "shot" => {

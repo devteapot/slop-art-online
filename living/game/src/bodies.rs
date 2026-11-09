@@ -246,7 +246,7 @@ pub fn spawn(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &crate
     commands
         .spawn((
             Creature(id),
-            Gait { last: p, phase: hash(id, 9) * 6.28, speed: 0.0, stride: parts.stride },
+            Gait { last: p, phase: hash(id, 9) * std::f32::consts::TAU, speed: 0.0, stride: parts.stride },
             tf,
             Visibility::default(),
             outline(Outlined::Person, style),

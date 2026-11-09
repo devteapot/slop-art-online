@@ -231,19 +231,35 @@ fn banded(albedo: vec3<f32>, sun: vec3<f32>, lit: f32, value: f32, sc: Scene) ->
     return color + albedo * sc.fill * mix(1.0, 0.45, lit);
 }
 
-// Puddles: on wet flat ground, small dark patches that mirror the fog's sky colour, with a light
-// rim. `low` (> 0) gathers them in hollows.
+// Puddles: on wet flat ground, small dark patches that mirror the fog's sky colour, more of it
+// the flatter they are seen (a puddle across the street shines, one at your feet shows the
+// ground through it), with a light rim. `low` (> 0) gathers them in hollows.
 fn puddles(color: vec3<f32>, p: vec3<f32>, low: f32) -> vec3<f32> {
     var c = color;
     let wet = toon.atmo.y;
     let n = noise3(vec3<f32>(p.x * 0.55, 0.0, p.z * 0.55)) * 0.65 + noise3(vec3<f32>(p.x * 1.7, 3.0, p.z * 1.7)) * 0.35 + low;
     let th = 0.77 - 0.05 * wet;
-    let puddle = smoothstep(th, th + 0.02, n) * smoothstep(0.05, 0.6, wet);
-    let rim = (smoothstep(th - 0.015, th, n) - smoothstep(th + 0.01, th + 0.025, n)) * smoothstep(0.05, 0.6, wet);
+    let puddle = smoothstep(th, th + 0.06, n) * smoothstep(0.05, 0.6, wet);
+    let rim = (smoothstep(th - 0.01, th + 0.01, n) - smoothstep(th + 0.02, th + 0.045, n)) * smoothstep(0.05, 0.6, wet);
 @if(DISTANCE_FOG) {
     let sky = view_bindings::fog.base_color.rgb;
-    c = mix(c, c * 0.62 + sky * 0.12, puddle);
-    c = c + sky * rim * 0.2;
+    let up = clamp(normalize(eye() - p).y, 0.0, 1.0);
+    let grazing = pow(1.0 - up, 3.0);
+    c = mix(c, c * 0.48 + sky * (0.06 + 0.3 * grazing), puddle);
+    c = c + sky * rim * 0.12;
+}
+    return c;
+}
+
+// A wet surface's sheen: the sky's colour caught at grazing angles on what faces up (rain;
+// `toon.atmo.y`), so a soaked street brightens toward the distance while near ground darkens.
+fn wet_sheen(color: vec3<f32>, N: vec3<f32>, V: vec3<f32>) -> vec3<f32> {
+    var c = color;
+@if(DISTANCE_FOG) {
+    let wet = smoothstep(0.05, 0.8, toon.atmo.y);
+    let up = smoothstep(0.35, 0.95, N.y);
+    let fr = pow(clamp(1.0 - max(dot(N, V), 0.0), 0.0, 1.0), 4.0);
+    c = c + view_bindings::fog.base_color.rgb * fr * up * wet * 0.45;
 }
     return c;
 }

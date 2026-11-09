@@ -209,7 +209,7 @@ pub fn convert(
     parents: Query<&ChildOf>,
     models: Query<(&Model, Has<NoShadow>)>,
     detail: Option<Res<crate::style::DetailLayers>>,
-    mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), Handle<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, Handle<Toon>>)>,
+    mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), AssetId<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, AssetId<Toon>>)>,
 ) {
     for (e, mat, mesh, name) in &q {
         // Only meshes under a look-dev model.
@@ -255,10 +255,14 @@ pub fn convert(
         // surfaces its vertex colours' alpha names (style.rs `Surface`). It is one flag for all
         // of it, so scenery keeps sharing its few materials.
         let painted = detail.as_deref().filter(|_| !owner.vrm && kind == Kind::Plain && base.base_color_texture.is_none());
+        // The caches hold ids, not handles: a material lives while some mesh wears it (a
+        // town's outfit pieces go when its people do, and the first load's prewarm leaves none
+        // behind, `loading.rs`), and is made again when needed.
         let (by_source, _, by_content) = &mut *done;
-        let toon = by_source
-            .entry((mat.0.id(), glow_key))
-            .or_insert_with(|| {
+        let cached = by_source.get(&(mat.0.id(), glow_key)).and_then(|id| toons.get_strong_handle(*id));
+        let toon = match cached {
+            Some(h) => h,
+            None => {
                 let mut b = base.clone();
                 if owner.vrm && crate::perf::has("charopaque") && matches!(b.alpha_mode, AlphaMode::Mask(_)) {
                     b.alpha_mode = AlphaMode::Opaque;
@@ -271,19 +275,20 @@ pub fn convert(
                 // environment kits share 14 between about a thousand). One toon material per
                 // distinct content lets their meshes share bind groups and batches; each extra
                 // material costs every view and pass a batch set and its per-frame buffer writes.
-                by_content
-                    .entry(format!("{kind:?} {face_map:?} {} {b:?}", painted.is_some()))
-                    .or_insert_with(|| {
-                        let map = face_map.as_ref().map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
-                        let mut toon = style.kind(b, kind, map);
-                        if let Some(layers) = painted {
-                            crate::style::with_detail(&mut toon, layers);
-                        }
-                        toons.add(toon)
-                    })
-                    .clone()
-            })
-            .clone();
+                let content = format!("{kind:?} {face_map:?} {} {b:?}", painted.is_some());
+                let h = by_content.get(&content).and_then(|id| toons.get_strong_handle(*id)).unwrap_or_else(|| {
+                    let map = face_map.as_ref().map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
+                    let mut toon = style.kind(b, kind, map);
+                    if let Some(layers) = painted {
+                        crate::style::with_detail(&mut toon, layers);
+                    }
+                    toons.add(toon)
+                });
+                by_content.insert(content, h.id());
+                by_source.insert((mat.0.id(), glow_key), h.id());
+                h
+            }
+        };
         // Only meshes with an outline volume need outline normals. Scenery takes part only as a
         // stencil at zero offset, which never reads them; generating them anyway rewrote every
         // new scenery mesh (another attribute, so another upload in another vertex layout), and a

@@ -20,7 +20,10 @@
 //!   one frame (island.rs `SPAWN_BUDGET`);
 //! - `hitch=MS`: every frame slower than MS milliseconds (default 30) is logged with what entered
 //!   the world in it and the two frames before: entities, meshes, models and characters spawned
-//!   and meshes converted to toon materials;
+//!   and meshes converted to toon materials; in the render world, every frame that creates
+//!   pipelines logs how many, by label and vertex layout, and how long its render set took
+//!   (Bevy creates pipelines synchronously on macOS, inside that set: a new material, mesh
+//!   layout or pass stalls the frame that first draws it; `prewarm` in `island.rs`);
 //! - `diag`: every 2 s, Bevy's render diagnostics (per-pass CPU time; GPU time only where the
 //!   backend reports timestamps, so not on Metal) and what each view draws: meshes, distinct
 //!   meshes and materials, triangles, and the characters' share, for the camera and each
@@ -92,6 +95,10 @@ pub fn diagnostics(app: &mut App) {
     }
     if has("hitch") || value("hitch").is_some() {
         app.add_systems(Last, log_hitches);
+        if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
+            use bevy::render::{Render, RenderSystems};
+            render.add_systems(Render, (pipelines_start.before(RenderSystems::Render), log_pipelines.after(RenderSystems::Render)));
+        }
     }
     if !has("diag") {
         return;
@@ -132,6 +139,35 @@ fn log_hitches(
         info!("hitch: {ms:.1} ms at ({:.0}, {:.0}); this frame {now:?}; before {a:?}; two before {b:?}", roam.pos.x, roam.pos.y);
     }
     last.1 = [now, last.1[0], last.1[1]];
+}
+
+#[derive(Resource)]
+struct RenderSetStart(std::time::Instant);
+
+fn pipelines_start(mut commands: Commands) {
+    commands.insert_resource(RenderSetStart(std::time::Instant::now()));
+}
+
+/// `hitch`: pipelines created this frame (label, vertex buffers' attribute count), and the
+/// render set's time.
+fn log_pipelines(cache: Res<bevy::render::render_resource::PipelineCache>, start: Option<Res<RenderSetStart>>, mut seen: Local<usize>) {
+    use bevy::material::descriptor::PipelineDescriptor;
+    let n = cache.pipelines().count();
+    if n <= *seen {
+        return;
+    }
+    let mut by: std::collections::BTreeMap<String, usize> = Default::default();
+    for p in cache.pipelines().skip(*seen) {
+        let k = match &p.descriptor {
+            PipelineDescriptor::RenderPipelineDescriptor(d) => format!("{}/{}", d.label.as_deref().unwrap_or("?"), d.vertex.buffers.iter().map(|b| b.attributes.len()).sum::<usize>()),
+            PipelineDescriptor::ComputePipelineDescriptor(d) => d.label.as_deref().unwrap_or("compute").to_string(),
+            PipelineDescriptor::MeshPipelineDescriptor(_) => "mesh".into(),
+        };
+        *by.entry(k).or_default() += 1;
+    }
+    *seen = n;
+    let ms = start.map_or(0.0, |s| s.0.elapsed().as_secs_f64() * 1000.0);
+    info!("pipelines: +{} (now {n}) in a {ms:.0} ms render set: {}", by.values().sum::<usize>(), by.iter().map(|(k, v)| format!("{k} ×{v}")).collect::<Vec<_>>().join(", "));
 }
 
 impl std::fmt::Debug for Arrivals {

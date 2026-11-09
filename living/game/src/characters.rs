@@ -199,6 +199,28 @@ impl Recipe {
 
     /// The base's own look at 1.75 m: the file's recipe for that base with no changes, else a
     /// plain one.
+    /// Recipes that between them wear every outfit piece made for every base, once each (the
+    /// first load draws them under its cover, so their pipelines exist before anyone is seen in
+    /// them: `loading.rs`). Pieces of one slot go to different recipes.
+    pub fn every_piece() -> Vec<Recipe> {
+        let mut out = Vec::new();
+        for base in &book().bases {
+            let stem = std::path::Path::new(base).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            out.push(Recipe::default_for(base));
+            let mut by_slot: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+            for p in outfit::all().iter().filter(|p| p.base == stem) {
+                by_slot.entry(p.slot.as_str()).or_default().push(p.piece.as_str());
+            }
+            let n = by_slot.values().map(|v| v.len()).max().unwrap_or(0);
+            for i in 0..n {
+                let mut r = Recipe::default_for(base);
+                r.outfit = by_slot.iter().filter_map(|(slot, ps)| ps.get(i).map(|p| (slot.to_string(), p.to_string()))).collect();
+                out.push(r);
+            }
+        }
+        out
+    }
+
     pub fn default_for(base: &str) -> Recipe {
         let plain = Recipe { name: String::new(), base: base.to_string(), height: 1.75, proportions: Proportions::default(), colors: Colors::default(), outfit: BTreeMap::new() };
         book().recipes.iter().find(|r| r.base == base && r.proportions == plain.proportions && r.colors == plain.colors && r.outfit.is_empty()).cloned().unwrap_or_else(|| Recipe {
