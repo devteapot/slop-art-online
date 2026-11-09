@@ -6,6 +6,7 @@
 mod act;
 mod acts;
 mod brain;
+mod codes;
 mod combat;
 mod island;
 mod mind;
@@ -55,7 +56,8 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         blocked: 0,
         missed: 0,
     });
-    let sc = living_rules::script::Scripts::new(seed::SKILLS)?;
+    let mut sc = living_rules::script::Scripts::new(seed::SKILLS)?;
+    codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);
     town::cards(ctx, &sc);
     ctx.db.script().insert(Script { name: "skills".into(), source: seed::SKILLS.into(), revision: 1, updated_ms: now });
@@ -89,7 +91,8 @@ pub fn set_paused(ctx: &ReducerContext, paused: bool) -> Result<(), String> {
 #[spacetimedb::reducer]
 pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String> {
     require_admin(ctx)?;
-    let sc = living_rules::script::Scripts::new(&source)?;
+    let mut sc = living_rules::script::Scripts::new(&source)?;
+    codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);
     town::cards(ctx, &sc);
     let now = common::now_ms(ctx);

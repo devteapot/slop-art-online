@@ -10,6 +10,7 @@
 - Seize transfers an exact quantity from a badly hurt person and informs witnesses.
 - Kill intent can kill someone who yielded.
 - Starter skills under graphs (`scenes.py skirmish`, docs/COMBAT.md): two sides of 10 (`spawn_skirmish`) use strike, bow shot, block, dodge and heal; uses are recorded from acceptance with source `graph`; arrows strike bodies on their path; no actor's accepted uses of a skill come closer than its `skill_card` cooldown; fighters show a band; deaths go through the death rule and leave no `fighter` or `readiness` rows.
+- **Stable codes:** `scripts/codes.py RUN` on a fresh `verify-core-*` world installs scripts that add and remove a combat and a shown skill and checks that `skill_card`/`act_card` codes never change or get reused (the private `skill_code` table, `living/authority/src/codes.rs`). Passed 10/10 on 2026-11-09 (`verify-codes-1`).
 - The authority's own rules tests cover the geometry (`living_rules::combat`: sweeps, guard arcs, bands, codes), the starter skills' Rhai requirements and numbers (`script::tests::starter_combat_skills_follow_the_rules`), that the script's shapes classify the existing skills exactly as the name lists they replaced (`combat_shapes_classify_the_existing_skills_as_before`), and that a new skill works from the script alone (`a_new_skill_needs_only_the_script`).
 
 ## How to get to it (user POV)

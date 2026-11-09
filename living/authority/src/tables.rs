@@ -1086,6 +1086,19 @@ pub struct Weather {
     pub forced_until_ms: u64,
 }
 
+/// The presentation code each skill was given, per code space (`codes.rs`): kept across
+/// script installs and never reused, so `fighter.act`, `combat_seen.skill` and `doing.code`
+/// name the same skill before and after an install (private; clients read codes from
+/// `skill_card` and `act_card`).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = skill_code)]
+pub struct SkillCode {
+    /// `<space>:<skill>`, e.g. `combat:strike`, `shown:wave`.
+    #[primary_key]
+    pub key: String,
+    pub code: u8,
+}
+
 /// Each skill the rules say others can see (`<skill>_shows()` in the script), rewritten
 /// whenever a skill script is installed, so clients name the codes in `doing` and know how
 /// an unfamiliar skill looks (public, static).

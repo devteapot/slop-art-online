@@ -4,10 +4,10 @@ What a client receives of fights (docs/COMBAT.md). The fixed suite (`drive.py`) 
 
 ## Sub-features
 
-- `combat_seen`, `missile`, `skill_use` and `readiness` are private: subscriptions and HTTP SQL are refused (part of the private-table inventory, `visibility.json`).
+- `combat_seen`, `missile`, `skill_use`, `readiness` and `skill_code` (the stable presentation codes, docs/COMBAT.md) are private: subscriptions and HTTP SQL are refused (part of the private-table inventory, `visibility.json`). Clients read codes from `skill_card` and `act_card`.
 - `my_combat` (per-sender view): each player's refused strike (`use_skill("strike", 0, 0, 0)` in the reducer matrix) arrives as a `REFUSED` row in that player's view only; every row's `viewer` is the caller; anonymous receives none (`combat-*.json`).
 - `my_skill_uses` (per-sender view): only the caller's characters' uses, with the refused strike recorded (`accepted_ms` 0, outcome `refused: …`); anonymous receives none.
-- `fighter` and `skill_card` are public (`combat-public.json`). `skill_card` holds one row per combat skill the installed script declares (`<skill>_combat()`: 13 with `living/scripts/skills.rhai`, at least the six on the bar), each with its bar `slot` (255 off the bar), presentation `code`, `aim`, `reach`, missile `radius`, guard `arc` and the bar's `needs`/`knows` hints. Clients name `fighter.act` and `combat_seen.skill` by `skill_card.code`; codes follow skill-name order, so they are not fixed numbers.
+- `fighter` and `skill_card` are public (`combat-public.json`). `skill_card` holds one row per combat skill the installed script declares (`<skill>_combat()`: 13 with `living/scripts/skills.rhai`, at least the six on the bar), each with its bar `slot` (255 off the bar), presentation `code`, `aim`, `reach`, missile `radius`, guard `arc` and the bar's `needs`/`knows` hints. Clients name `fighter.act` and `combat_seen.skill` by `skill_card.code`; codes are stable across script installs (private `skill_code`), but they are the world's, not fixed numbers: read them from `skill_card`.
 - `use_skill` and `release_skill` succeed for any identity with a living character (refusals are data, not reducer errors) and are refused "you have no living character" without one (`reducers.json`).
 
 ## Gotchas

@@ -57,7 +57,8 @@ impl Aim {
 /// meant to hurt or kill) are chosen by these traits, never by the skill's name.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Shape {
-    /// Presentation code (`fighter.act`, `combat_seen.skill`, `skill_card.code`): the skill's
+    /// Presentation code (`fighter.act`, `combat_seen.skill`, `skill_card.code`), stable across
+    /// script installs on the authority (`Shapes::set_codes`); before that, the skill's
     /// place among the script's combat skills in name order, from 1; 0 is none.
     pub code: u8,
     pub aim: Aim,
@@ -102,12 +103,13 @@ pub struct Shape {
 /// belong in a graph, not in an act. Combat skills say so themselves (`Shape::real_time`).
 pub const MOVES: &[&str] = &["wander", "flee", "follow", "wait", "sleep", "rest", "graze"];
 
-/// The combat skills a script declares, by name (the order their codes follow), and its
-/// skill bar.
+/// The combat skills a script declares, by name, and its skill bar. Codes start in name order;
+/// the authority replaces them with the stable codes it keeps (`with_codes`), so a skill keeps
+/// its code across script installs (docs/COMBAT.md, "Presentation codes").
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Shapes {
     by_name: std::collections::BTreeMap<String, Shape>,
-    names: Vec<String>,
+    by_code: std::collections::BTreeMap<u8, String>,
     bar: Vec<String>,
 }
 
@@ -124,12 +126,25 @@ impl Shapes {
                 _ => {}
             }
         }
-        let mut by_name = shapes;
-        let names: Vec<String> = by_name.keys().cloned().collect();
-        for (i, sh) in by_name.values_mut().enumerate() {
-            sh.code = i as u8 + 1;
+        let mut s = Shapes { by_name: shapes, by_code: Default::default(), bar };
+        let order: std::collections::BTreeMap<String, u8> = s.by_name.keys().enumerate().map(|(i, k)| (k.clone(), i as u8 + 1)).collect();
+        s.set_codes(&order);
+        Ok(s)
+    }
+
+    /// Give each skill the code `codes` holds for it (0, none, for a skill it lacks).
+    pub fn set_codes(&mut self, codes: &std::collections::BTreeMap<String, u8>) {
+        self.by_code.clear();
+        for (name, sh) in self.by_name.iter_mut() {
+            sh.code = codes.get(name).copied().unwrap_or(0);
+            if sh.code != 0 {
+                self.by_code.insert(sh.code, name.clone());
+            }
         }
-        Ok(Shapes { by_name, names, bar })
+    }
+
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.by_name.keys().map(|k| k.as_str())
     }
 
     pub fn get(&self, skill: &str) -> Option<&Shape> {
@@ -160,7 +175,7 @@ impl Shapes {
 
     /// The skill a presentation code names ("" for none).
     pub fn name(&self, code: u8) -> &str {
-        code.checked_sub(1).and_then(|i| self.names.get(i as usize)).map_or("", |s| s.as_str())
+        self.by_code.get(&code).map_or("", |s| s.as_str())
     }
 
     /// Ongoing or real-time behavior: it belongs in a graph, not in a one-off act.
@@ -314,6 +329,9 @@ mod tests {
             assert_eq!(s.name(s.code(n)), n);
         }
         assert_eq!((s.code("gather"), s.name(0), s.name(9)), (0, "", ""));
+        let mut s2 = s.clone();
+        s2.set_codes(&[("strike".to_string(), 7u8), ("block".to_string(), 3)].into_iter().collect());
+        assert_eq!((s2.code("strike"), s2.code("block"), s2.code("attack"), s2.name(7), s2.name(1)), (7, 3, 0, "strike", ""));
         assert!(s.real_time("strike") && !s.real_time("attack") && s.real_time("wander") && !s.real_time("give"));
         assert_eq!(s.knack("strike"), "strike");
         let mut m = std::collections::BTreeMap::new();

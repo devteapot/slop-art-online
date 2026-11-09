@@ -459,6 +459,13 @@ impl Scripts {
         &self.shapes
     }
 
+    /// Replace the presentation codes with the authority's stable ones (combat skills, shown
+    /// skills).
+    pub fn set_codes(&mut self, combat: &std::collections::BTreeMap<String, u8>, shown: &std::collections::BTreeMap<String, u8>) {
+        self.shapes.set_codes(combat);
+        self.shows.set_codes(shown);
+    }
+
     /// A combat skill's shape (None for any other skill).
     pub fn combat(&self, skill: &str) -> Option<&crate::combat::Shape> {
         self.shapes.get(skill)

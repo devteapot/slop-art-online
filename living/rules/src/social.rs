@@ -19,8 +19,9 @@ pub const TRAITS: &[&str] = &["look", "faces", "turn", "aside", "record"];
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Show {
-    /// Its presentation code (`act_card.code`, `doing.code`): its place among the shown
-    /// skills in name order, from 1.
+    /// Its presentation code (`act_card.code`, `doing.code`): stable across script installs on
+    /// the authority (`Shows::set_codes`); before that, its place among the shown skills in name
+    /// order, from 1.
     pub code: u8,
     pub look: String,
     pub faces: bool,
@@ -35,11 +36,22 @@ pub struct Shows {
 }
 
 impl Shows {
-    pub fn new(mut by_name: BTreeMap<String, Show>) -> Self {
-        for (i, s) in by_name.values_mut().enumerate() {
-            s.code = (i + 1).min(255) as u8;
+    pub fn new(by_name: BTreeMap<String, Show>) -> Self {
+        let order: BTreeMap<String, u8> = by_name.keys().enumerate().map(|(i, k)| (k.clone(), (i + 1).min(255) as u8)).collect();
+        let mut s = Self { by_name };
+        s.set_codes(&order);
+        s
+    }
+
+    /// Give each shown skill the code `codes` holds for it (0, none, for a skill it lacks).
+    pub fn set_codes(&mut self, codes: &BTreeMap<String, u8>) {
+        for (name, s) in self.by_name.iter_mut() {
+            s.code = codes.get(name).copied().unwrap_or(0);
         }
-        Self { by_name }
+    }
+
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.by_name.keys().map(|k| k.as_str())
     }
 
     pub fn get(&self, skill: &str) -> Option<&Show> {

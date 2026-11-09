@@ -34,5 +34,5 @@ $V cleanup --run $R
 - A missile strikes the first body on its line, which may be an earlier scene's dummy; aim off their lines.
 - `my_combat` rows expire after 4 s; filter by `at_ms` per scene.
 - SQL returns `Ready` rows positionally: `[skill, from_ms, at_ms]`.
-- Presentation codes are `skill_card.code`, assigned in skill-name order when a script is installed; read them from `skill_card`, never hard-code a number.
+- Presentation codes are `skill_card.code`, kept stable across script installs by the authority's private `skill_code` table; they are the world's codes, so read them from `skill_card`, never hard-code a number.
 - How `use_skill` aims a skill comes from its script shape (`aim`: creature, self_or_ally, point, facing, dash), not its name; the refusal text "no one there to <skill>" names the skill.

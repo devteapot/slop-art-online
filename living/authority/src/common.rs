@@ -319,7 +319,9 @@ pub fn scripts(ctx: &ReducerContext) -> Rc<Scripts> {
             }
         }
         let src = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).unwrap_or_default();
-        let sc = Rc::new(Scripts::new(&src).expect("installed skills script compiles"));
+        let mut sc = Scripts::new(&src).expect("installed skills script compiles");
+        crate::codes::apply(ctx, &mut sc);
+        let sc = Rc::new(sc);
         *s.borrow_mut() = Some((rev, sc.clone()));
         sc
     })

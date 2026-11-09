@@ -53,7 +53,7 @@ BASE_QUERIES = [
 ]
 PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
-           'combat_seen', 'missile', 'skill_use', 'readiness']
+           'combat_seen', 'missile', 'skill_use', 'readiness', 'skill_code']
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
 # `my_combat`, so these calls succeed for any living character.
 PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block']}

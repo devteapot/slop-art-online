@@ -2,7 +2,7 @@
 
 ## Sub-features
 
-- `act_card`, `doing` and `weather` are public (`town-public.json`). `act_card` holds one row per skill the installed script shows (`<skill>_shows()` in `living/scripts/skills.rhai`: 17 with the shipped script), with its presentation `code`, `look`, `faces` and `aside`; codes follow skill-name order, so they are not fixed numbers. `doing` holds, per character performing a shown skill, its code, target, point and `since_ms`/`until_ms`; `weather` is one row written by housekeeping.
+- `act_card`, `doing` and `weather` are public (`town-public.json`). `act_card` holds one row per skill the installed script shows (`<skill>_shows()` in `living/scripts/skills.rhai`: 17 with the shipped script), with its presentation `code`, `look`, `faces` and `aside`; codes are stable across script installs (private `skill_code`), but they are the world's, not fixed numbers: read them from `act_card`. `doing` holds, per character performing a shown skill, its code, target, point and `since_ms`/`until_ms`; `weather` is one row written by housekeeping.
 - `set_weather` is admin-only, like the other scene reducers (`reducers.md`).
 - Like `fighter`, `doing` is joined to a body window by clients (`SELECT doing.* FROM doing JOIN body ON doing.id = body.id WHERE …`); the window is not a permission boundary. `place` rows (a resident's `work`, `square`, `inn`, `evening`) are public too, as before.
 
