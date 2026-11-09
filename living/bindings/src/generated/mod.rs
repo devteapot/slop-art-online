@@ -74,6 +74,9 @@ pub mod inventory_type;
 pub mod join_reducer;
 pub mod join_request_table;
 pub mod join_request_type;
+pub mod judged_in_type;
+pub mod judged_table;
+pub mod judged_type;
 pub mod judgment_in_type;
 pub mod judgment_table;
 pub mod judgment_type;
@@ -93,6 +96,7 @@ pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
 pub mod mind_cursor_type;
 pub mod mind_install_reducer;
+pub mod mind_judged_reducer;
 pub mod mind_routines_reducer;
 pub mod mind_say_reducer;
 pub mod mind_skip_reducer;
@@ -276,6 +280,9 @@ pub use inventory_type::Inventory;
 pub use join_reducer::join;
 pub use join_request_table::*;
 pub use join_request_type::JoinRequest;
+pub use judged_in_type::JudgedIn;
+pub use judged_table::*;
+pub use judged_type::Judged;
 pub use judgment_in_type::JudgmentIn;
 pub use judgment_table::*;
 pub use judgment_type::Judgment;
@@ -295,6 +302,7 @@ pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
 pub use mind_install_reducer::mind_install;
+pub use mind_judged_reducer::mind_judged;
 pub use mind_routines_reducer::mind_routines;
 pub use mind_say_reducer::mind_say;
 pub use mind_skip_reducer::mind_skip;
@@ -473,6 +481,10 @@ pub enum Reducer {
         seen_ms: u64,
         thought: ThoughtIn,
     },
+    MindJudged {
+        actor: u32,
+        items: Vec<JudgedIn>,
+    },
     MindRoutines {
         actor: u32,
         routines: Vec<RoutineIn>,
@@ -574,6 +586,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindAct { .. } => "mind_act",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindInstall { .. } => "mind_install",
+            Reducer::MindJudged { .. } => "mind_judged",
             Reducer::MindRoutines { .. } => "mind_routines",
             Reducer::MindSay { .. } => "mind_say",
             Reducer::MindSkip { .. } => "mind_skip",
@@ -686,6 +699,12 @@ impl __sdk::Reducer for Reducer {
                 seen_ms: seen_ms.clone(),
                 thought: thought.clone(),
             }),
+            Reducer::MindJudged { actor, items } => {
+                __sats::bsatn::to_vec(&mind_judged_reducer::MindJudgedArgs {
+                    actor: actor.clone(),
+                    items: items.clone(),
+                })
+            }
             Reducer::MindRoutines { actor, routines } => {
                 __sats::bsatn::to_vec(&mind_routines_reducer::MindRoutinesArgs {
                     actor: actor.clone(),
@@ -838,6 +857,7 @@ pub struct DbUpdate {
     infant_cry: __sdk::TableUpdate<InfantCry>,
     inventory: __sdk::TableUpdate<Inventory>,
     join_request: __sdk::TableUpdate<JoinRequest>,
+    judged: __sdk::TableUpdate<Judged>,
     judgment: __sdk::TableUpdate<Judgment>,
     know_how: __sdk::TableUpdate<KnowHow>,
     land: __sdk::TableUpdate<LandInfo>,
@@ -980,6 +1000,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "join_request" => db_update
                     .join_request
                     .append(join_request_table::parse_table_update(table_update)?),
+                "judged" => db_update
+                    .judged
+                    .append(judged_table::parse_table_update(table_update)?),
                 "judgment" => db_update
                     .judgment
                     .append(judgment_table::parse_table_update(table_update)?),
@@ -1246,6 +1269,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.join_request = cache
             .apply_diff_to_table::<JoinRequest>("join_request", &self.join_request)
             .with_updates_by_pk(|row| &row.id);
+        diff.judged = cache
+            .apply_diff_to_table::<Judged>("judged", &self.judged)
+            .with_updates_by_pk(|row| &row.id);
         diff.judgment = cache
             .apply_diff_to_table::<Judgment>("judgment", &self.judgment)
             .with_updates_by_pk(|row| &row.id);
@@ -1487,6 +1513,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "join_request" => db_update
                     .join_request
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "judged" => db_update
+                    .judged
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "judgment" => db_update
                     .judgment
@@ -1741,6 +1770,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "join_request" => db_update
                     .join_request
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "judged" => db_update
+                    .judged
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "judgment" => db_update
                     .judgment
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -1942,6 +1974,7 @@ pub struct AppliedDiff<'r> {
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
+    judged: __sdk::TableAppliedDiff<'r, Judged>,
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
     know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
     land: __sdk::TableAppliedDiff<'r, LandInfo>,
@@ -2047,6 +2080,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.join_request,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<Judged>("judged", &self.judged, event);
         callbacks.invoke_table_row_callbacks::<Judgment>("judgment", &self.judgment, event);
         callbacks.invoke_table_row_callbacks::<KnowHow>("know_how", &self.know_how, event);
         callbacks.invoke_table_row_callbacks::<LandInfo>("land", &self.land, event);
@@ -2831,6 +2865,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         infant_cry_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
         join_request_table::register_table(client_cache);
+        judged_table::register_table(client_cache);
         judgment_table::register_table(client_cache);
         know_how_table::register_table(client_cache);
         land_table::register_table(client_cache);
@@ -2913,6 +2948,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "infant_cry",
         "inventory",
         "join_request",
+        "judged",
         "judgment",
         "know_how",
         "land",

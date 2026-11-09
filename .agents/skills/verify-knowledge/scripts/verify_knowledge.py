@@ -370,7 +370,7 @@ class Run:
         login = subprocess.run([str(ROOT / 'living/tools/stdb'), 'login', 'show', '--token'], capture_output=True, text=True, check=True)
         tokens = re.findall(r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', login.stdout)
         assert len(tokens) == 1
-        env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER='http://127.0.0.1:3300', LIVING_DB=self.db,
+        env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/'), LIVING_DB=self.db,
                    LIVING_RUN=self.db, LIVING_SEED='authored-test', LIVING_MODELS=str(self.directory / 'models.json'),
                    LIVING_ONLY=str(oren), LIVING_TOKEN=tokens[0], LIVING_NEO4J='on',
                    LIVING_NEO4J_URI=self.state['uri'], LIVING_NEO4J_PASSWORD=self.state['password'],
@@ -380,7 +380,8 @@ class Run:
         hashes = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                   for p in [*sorted((ROOT / 'living/mind/src').rglob('*.rs')), binary]}
         (self.directory / 'source-hashes.json').write_text(json.dumps(hashes, indent=2))
-        self.process('mind', [binary], env)
+        self.mind_proc = self.process('mind', [binary], env)
+        self.mind_env, self.mind_binary, self.oren, self.witness = env, binary, oren, witness
         (self.directory / 'mind-environment.json').write_text(json.dumps({key: env[key] for key in (
             'LIVING_SERVER', 'LIVING_DB', 'LIVING_RUN', 'LIVING_SEED', 'LIVING_ONLY', 'LIVING_NEO4J',
             'LIVING_NEO4J_URI', 'LIVING_MODELS', 'LIVING_LOD')}, indent=2))
@@ -406,6 +407,9 @@ class Run:
         assert all(t in edges for t in ('KNOWS', 'FEELS', 'JUDGES', 'WAS', 'INVOLVES', 'CHILD_OF', 'PARENT_OF', 'MERGED_INTO', 'AGREED', 'WITH'))
         self.pass_feature('real consolidation and authority projection', ['requests.jsonl', 'graph-nodes.txt', 'graph-edges.txt', 'projection-relation.json', 'projection-judgment.json', 'projection-place.json', 'projection-persona.json', 'projection-belief.json', 'consolidation-thought.json'])
 
+        # The mind's own first decision may still be on its way; installing the probe graph
+        # while it lands would move the brain's revision twice and fail the install check.
+        self.wait(lambda: 'decided: knowledge proof wait' in (self.directory / 'mind.log').read_text(), 'the first decision', 90)
         sequence = max(r['sequence'] for r in entries(self.directory / 'requests.jsonl'))
         self.admin('set_behavior', oren, json.dumps({'think': 'knowledge_marker amber ford flood millstone'}))
         def recalled_prompt():
@@ -437,6 +441,39 @@ class Run:
         assert any('The flood took the lower field' in m for m in by_id['authored-flood']['memories'])
         assert not by_id['uncued']['facts']
         self.pass_feature('recall_replay and fact budgets', ['recall-cases.json', 'recall_replay.log'])
+
+    def sleep_batch(self):
+        """Night reorganization as one provider batch job (mind/sleep.rs): a fresh mind with
+        the night covering the whole day, no gap and one integration due, and an inline limit low
+        enough that the job's requests go up as a file. The reorganize request reaches the fake
+        provider through `POST /v1/files` and `input_files`, its answer is applied, and the
+        thought records it came by batch."""
+        self.mind_proc.terminate()
+        self.mind_proc.wait(timeout=15)
+        # Stopped on purpose: no longer an owned process whose exit fails a wait.
+        self.processes.remove(self.mind_proc)
+        self.state['pids'].pop('mind', None)
+        self.save()
+        env = dict(self.mind_env, LIVING_REORGANIZE='night-batch', LIVING_NIGHT='0-24', LIVING_REORGANIZE_GAP_S='0', LIVING_REORGANIZE_MIN='1',
+                   LIVING_REORGANIZE_POLL_S='1', LIVING_BATCH_INLINE_LIMIT='2000')
+        before = max([r.get('sequence', 0) for r in entries(self.directory / 'requests.jsonl')] + [0])
+        self.process('mind-sleep', [self.mind_binary], env)
+        self.wait(lambda: 'world subscribed:' in (self.directory / 'mind-sleep.log').read_text(), 'second mind subscription')
+        for message in ('The amber ford flooded again last night.', 'Teodor says the millstone is mended.'):
+            self.harness('player', 'say', message, '--to', str(self.oren))
+            time.sleep(2.1)
+        log = lambda: (self.directory / 'mind-sleep.log').read_text()
+        self.wait(lambda: re.search(r'night \d+: 1 of 1 minds go to sleep \(1 in a batch', log()), 'a night batch round', 150)
+        self.wait(lambda: 'slept on it (batch)' in log(), 'the batch answer applied', 120)
+        rows = entries(self.directory / 'requests.jsonl')
+        uploads = [r for r in rows if r.get('upload')]
+        sent = [r for r in rows if r.get('sequence', 0) > before and r.get('purpose') == 'reorganize' and r.get('batch_job')]
+        assert uploads and uploads[-1]['lines'] >= 1, 'the job went up as a file'
+        assert sent and all(r['body']['messages'][0]['content'].find('Tidy the person') >= 0 for r in sent)
+        thoughts = self.sql(f'SELECT * FROM thought WHERE actor = {self.oren}', 'sleep-thought')
+        slept = [t for t in thoughts if t['kind'] == 'reorganize']
+        assert slept and json.loads(slept[-1]['detail'])['how'] == 'batch'
+        self.pass_feature('night reorganization as an uploaded batch job', ['requests.jsonl', 'mind-sleep.log', 'sleep-thought.json'])
 
     def cleanup(self):
         report = {'processes': [], 'db': self.db, 'container': self.state['container']}
@@ -476,7 +513,7 @@ class Run:
                 self.harness('cleanup')
             except Exception as error:
                 failures.append(str(error))
-        request = urllib.request.Request(f'http://127.0.0.1:3300/v1/database/{self.db}/sql', b'SELECT * FROM world', {'Content-Type': 'text/plain'})
+        request = urllib.request.Request(os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/') + f'/v1/database/{self.db}/sql', b'SELECT * FROM world', {'Content-Type': 'text/plain'})
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
                 report['database_deleted'] = False
@@ -528,6 +565,7 @@ def main():
         run.graph_tests()
         run.authority()
         run.memory_integration()
+        run.sleep_batch()
     except BaseException as caught:
         error = caught
         (run.directory / 'failure.log').write_text(traceback.format_exc())

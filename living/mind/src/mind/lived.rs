@@ -312,7 +312,7 @@ impl Minds {
         }
         store.ensure_self(actor, &c.name).await?;
         let fmt = self.fmt_time();
-        let recalled = self.recall_for(actor, &self.experience_cues(actor, &meaningful), 32, 6).await;
+        let recalled = self.recall_for(actor, &self.experience_cues(actor, &meaningful), 32, 6, "consolidate").await;
         let persona = match self.conn.db.persona().id().find(&actor) {
             Some(_) => self.persona_text(actor),
             None => "(played by a person: who they are shows only in what they do)".into(),
@@ -443,7 +443,7 @@ impl Minds {
     async fn internalize_one(&self, actor: u32, reason: &'static str) -> Result<()> {
         let Some(prep) = self.lived_prepare(actor, reason).await? else { return Ok(()) };
         let _slow = self.slow.acquire().await?;
-        let reply = self.llm.chat_in_lane(&self.lived_profile(), "internalize", &prep.name, &prep.msgs, Lane::Background).await?;
+        let reply = self.llm.chat_in_lane(&self.lived_profile(), crate::llm::Attention::OnStage, "internalize", &prep.name, &prep.msgs, Lane::Background).await?;
         self.lived_finish(prep, reply, "direct").await
     }
 
@@ -463,7 +463,7 @@ impl Minds {
         }
         let items: Vec<BatchItem> = prepared.iter().map(|(k, p)| BatchItem { id: k.clone(), actor: p.name.clone(), messages: p.msgs.iter().map(|m| Msg { role: m.role, content: m.content.clone() }).collect() }).collect();
         let _slow = self.slow.acquire().await;
-        match self.llm.batch(&self.lived_profile(), "internalize", items, self.lived_cfg.poll, self.lived_cfg.give_up).await {
+        match self.llm.batch(&self.lived_profile(), crate::llm::Attention::OnStage, "internalize", items, self.lived_cfg.poll, self.lived_cfg.give_up).await {
             Ok(results) => {
                 for (k, r) in results {
                     let Some(p) = prepared.remove(&k) else { continue };

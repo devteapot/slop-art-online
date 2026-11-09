@@ -680,6 +680,27 @@ pub struct Belief {
     pub updated_ms: u64,
 }
 
+/// Typed judgments a character's mind refreshes in the background (Jev; docs/MIND_HARNESS.md,
+/// item 4), read by the graph's `judged` condition: never waited on, private to the module.
+/// At most `JUDGED_PER_ACTOR` per character; an expired one reads as absent.
+#[spacetimedb::table(accessor = judged)]
+pub struct Judged {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub q: String,
+    /// The yes probability, or a score's expected level, or the chosen option's probability.
+    pub value: f32,
+    /// The chosen option of a choice (empty otherwise).
+    pub choice: String,
+    pub expires_ms: u64,
+    pub updated_ms: u64,
+}
+
+pub const JUDGED_PER_ACTOR: usize = 8;
+
 #[spacetimedb::table(accessor = judgment)]
 pub struct Judgment {
     #[primary_key]

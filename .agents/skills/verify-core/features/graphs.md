@@ -7,6 +7,7 @@
 - Restrict skills to a body's species.
 - Parse and expand routines and desires; rework a routine.
 - Evaluate installed work sequences, threatened and hurt guards, and locomotion.
+- `judged`: read a cached typed judgment from the private `judged` table (written by the mind service's `mind_judged`), comparing its value (`above`, `below`) or choice (`is`); with none, or an expired one, the condition is its `else` (default false). It never waits on the mind (docs/MIND_HARNESS.md, item 4).
 
 ## How to get to it (user POV)
 
@@ -21,5 +22,5 @@ Run Cargo, mechanics and steering from [SKILL.md](../SKILL.md). Cargo names each
 - Keep pure-rule transcripts and actual-authority outcomes. Neither replaces the other.
 - `set_behavior` calls `graph::parse` through `living/authority/src/mind.rs:265`. `living/rules/src/graph.rs:385` calls `from_value_lenient` and discards warnings. Normalization can rewrite or prune the request before validation. Read back `brain.graph` after installation and `routine.graph` after rework whenever that can change a scene. The scene helper and recorder retain these rows. Do not infer the installed graph from reducer acceptance.
 - A replacement graph can adopt a compatible activity. Changing a 120-second wait to three seconds may retain its old timer. The tick fixture changes to rest first.
-- Not every condition, target selector or reflex interruption has an authority scene.
+- Not every condition, target selector or reflex interruption has an authority scene. `judged` has a rules test (`judged_reads_a_cached_value_or_its_fallback`) and an authority scene in verify-minds (`jev`: the cached 0.9 takes the flee branch).
 - Evaluator timer marks for root completion, failure and reflection use `0xFFFE`, `0xFFFD` and `0xFFFC`. `brain.rs` preserves those evaluator-owned marks while merging speech and signal marks written during evaluation. A graph replacement clears both graph-node marks and evaluator timers. Dropping these marks previously refreshed pending reflection requests about every two seconds after the reflection period elapsed. The infant verification work retains before/after authority evidence for this defect in its validation record.

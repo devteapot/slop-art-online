@@ -11,7 +11,8 @@
         "deliberate": "high",
         "talk": "high",
         "consolidate": "high",
-        "internalize": "high"
+        "internalize": "high",
+        "reorganize": "high"
       },
       "prompt_cache_key": true,
       "max_tokens": 24000
@@ -43,6 +44,23 @@
       "key_env": "MISTRAL_API_KEY"
     }
   },
+  "mixes": {
+    "people": {
+      "think": "glm-flash",
+      "deliberate": {
+        "on_stage": "deepseek-flash@low",
+        "off_stage": "glm-flash"
+      },
+      "talk": "deepseek-flash",
+      "consolidate": "glm-flash",
+      "reorganize": "glm-flash",
+      "*": "glm-flash"
+    },
+    "deepseek-people": {
+      "*": "deepseek-flash",
+      "reorganize": "glm-flash"
+    }
+  },
   "assign": {},
   "rotate": [],
   "species": {
@@ -61,7 +79,7 @@
     "child": "glm-flash"
   },
   "groups": {
-    "Brandholm": "deepseek-flash",
+    "Brandholm": "deepseek-people",
     "Saltreach": "glm-flash",
     "Oathstone": "glm-flash"
   }

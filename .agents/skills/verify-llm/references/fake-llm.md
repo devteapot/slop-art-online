@@ -69,9 +69,17 @@ A rule with `"cite": true` fills placeholders in its `reply` from the experience
 
 `POST /v1/batch/jobs` with inline `requests` (`[{custom_id, body}]`, Mistral's shape) answers each request through the same script and log as a direct one (the log line gets `batch_job`) and returns `{"id": "job-N", "status": "QUEUED"}`. `GET /v1/batch/jobs/job-N` reports `QUEUED` on the first poll, `RUNNING` on the second and `SUCCESS` with `output_file: job-N-out` after. `GET /v1/files/job-N-out/content` returns one JSONL line per request: `{id, custom_id, response: {status_code: 200, body: <chat completion>}, error: null}`. `POST /v1/batch/jobs/job-N/cancel` answers `CANCELLATION_REQUESTED`.
 
+## Uploaded batch files
+
+`POST /v1/files` (multipart with `purpose` and `file`) keeps the JSONL lines and answers `{"id": "file-N", "purpose": "batch", "bytes"}`; the log gets `{"upload": "file-N", "bytes", "lines"}`. A batch job whose body names it in `input_files` answers those lines as if they had been inline.
+
+## Jev (`POST /v1/systemone`)
+
+TypeSafe's judgment endpoint, shaped as its docs give it (docs.typesafe.ai, read 2026-11-09): `{"model", "state", "questions": {id: {"type": "noul"|"choice"|"score", "instructions", "criteria"}}}` → `{"model", "answers": {id: …}, "usage": {"input_tokens", "output_tokens"}}`. By default a noul's yes probability is how hurt `state.body` is (1 − health / max_health; 0.2 without a body), a choice takes its first criterion and a score is 0. A script rule with `"purpose": "judge"` may set `noul`, `status` or `delay_s`. Each request is logged with purpose `judge` and its `answers`.
+
 ## Purpose and valid replies
 
-Purpose is `reasoning_effort` when its value is `think`, `deliberate`, `consolidate`, `talk` or `internalize`. An `internalize` system prompt (player memory) is recognized by "someone you cannot see". Otherwise the server recognizes the system prompt. The production body has no separate purpose field. The local runner sets the per-purpose effort map to these names. They are fake values, not recommended live provider effort levels.
+An animal choosing ("pick one of the numbered", `LIVING_ANIMAL_MINDS=choose`) is `choose` and a sleep ("Tidy the person") is `reorganize` whatever the effort says, since they go out under `deliberate` and `consolidate` effort maps. Otherwise the purpose is `reasoning_effort` when its value is a purpose name (`think`, `deliberate`, `consolidate`, `talk`, `internalize`, `reorganize`, `judge`, `choose`), else the system prompt decides: "someone you cannot see" is `internalize`. The production body has no separate purpose field. The local runner sets the per-purpose effort map to these names. They are fake values, not recommended live provider effort levels.
 
 Defaults come from `prompts.rs` and the parsers in `mind.rs` and `mind/talk.rs`:
 
@@ -80,7 +88,7 @@ Defaults come from `prompts.rs` and the parsers in `mind.rs` and `mind/talk.rs`:
 - Consolidate returns a valid empty memory patch and identity fields for background bootstrap. It creates no invented causal memories. The local basic case also proves an actual experience-consolidation reply is accepted.
 - Talk returns one line, a settled outcome and `end: true`. Its target comes from the other person's numeric id in the system prompt. An explicit scripted reply overrides that inference.
 
-The think default also has `feeling` and `impulse` for animal prompt compatibility. This skill proves human-purpose parsing. It does not prove all animal flows or every memory patch operation.
+The think default also has `feeling` and `impulse` for animal prompt compatibility. `reorganize` returns an empty sleep patch with a summary. `choose` takes each numbered option in turn across requests (`pick` = request count mod options, strength cycling low/mid/high), so a run exercises every option an animal is offered. This skill proves human-purpose parsing. It does not prove all animal flows or every memory patch operation.
 
 ## Request evidence
 

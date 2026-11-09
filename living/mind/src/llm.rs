@@ -32,6 +32,10 @@ pub struct Profile {
     pub tokens_per_minute: Option<u64>,
     #[serde(default)]
     pub prompt_cache_key: bool,
+    /// Output caps for particular purposes, over `max_tokens` (for example a 24,000-token
+    /// `reorganize` on a profile whose other replies stay under 8,000).
+    #[serde(default)]
+    pub purpose_max_tokens: HashMap<String, u32>,
 }
 
 fn yes() -> bool {
@@ -40,6 +44,84 @@ fn yes() -> bool {
 
 fn max_tokens() -> Option<u32> {
     Some(8000)
+}
+
+/// The purpose whose settings a newer purpose inherits when a profile does not name it, so a
+/// profile written before `reorganize` existed does not send reorganization at the model's
+/// default effort (on GLM Flash that is `max`: see docs/MODEL_COST.md).
+fn parent_purpose(purpose: &str) -> Option<&'static str> {
+    match purpose {
+        "reorganize" => Some("consolidate"),
+        _ => None,
+    }
+}
+
+impl Profile {
+    /// The reasoning effort sent for a purpose: the profile's own entry, else its parent's.
+    pub fn effort(&self, purpose: &str) -> Option<&String> {
+        self.reasoning_effort.get(purpose).or_else(|| parent_purpose(purpose).and_then(|p| self.reasoning_effort.get(p)))
+    }
+
+    pub fn max_tokens_for(&self, purpose: &str) -> Option<u32> {
+        self.purpose_max_tokens.get(purpose).or_else(|| parent_purpose(purpose).and_then(|p| self.purpose_max_tokens.get(p))).copied().or(self.max_tokens)
+    }
+}
+
+/// Whether a person's mind is being watched: a human player is in their scene or was recently
+/// part of what they lived (see mind/lod.rs). Mixes may choose a model by it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Attention {
+    OnStage,
+    OffStage,
+}
+
+/// One purpose's model in a mix: a profile name, optionally with an effort that replaces the
+/// profile's own for this purpose (`"deepseek-flash@low"`), or one per stage of attention.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum Choice {
+    One(String),
+    Staged { on_stage: String, off_stage: String },
+}
+
+impl Choice {
+    fn pick(&self, at: Attention) -> &str {
+        match (self, at) {
+            (Self::One(s), _) => s,
+            (Self::Staged { on_stage, .. }, Attention::OnStage) => on_stage,
+            (Self::Staged { off_stage, .. }, Attention::OffStage) => off_stage,
+        }
+    }
+
+    fn specs(&self) -> Vec<&str> {
+        match self {
+            Self::One(s) => vec![s],
+            Self::Staged { on_stage, off_stage } => vec![on_stage, off_stage],
+        }
+    }
+}
+
+/// `profile@effort` → (`profile`, `Some(effort)`); a plain name has no override.
+pub fn split_spec(spec: &str) -> (&str, Option<&str>) {
+    match spec.split_once('@') {
+        Some((p, e)) if !e.is_empty() => (p, Some(e)),
+        Some((p, _)) => (p, None),
+        None => (spec, None),
+    }
+}
+
+/// The purposes the mind sends (see `Lane::for_purpose`); `*` in a mix covers the rest.
+pub const PURPOSES: [&str; 7] = ["think", "deliberate", "talk", "consolidate", "reorganize", "internalize", "judge"];
+
+/// What a call resolved to: the profile it goes to, the effort it sends, and the mix it came
+/// from (for the journal).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pick {
+    pub profile: String,
+    pub effort: Option<String>,
+    pub mix: Option<String>,
+    pub attention: Option<Attention>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -62,6 +144,70 @@ pub struct ModelsFile {
     /// communities of one world can think with different models.
     #[serde(default)]
     pub groups: HashMap<String, String>,
+    /// Named per-purpose model mixes (`{"talk": "deepseek-flash", "deliberate":
+    /// {"on_stage": "deepseek-flash@low", "off_stage": "glm-flash"}, "*": "glm-flash"}`). A mix
+    /// name is accepted wherever a profile name is: `default`, `assign`, `rotate`, `stages`,
+    /// `groups` and `species`.
+    #[serde(default)]
+    pub mixes: HashMap<String, HashMap<String, Choice>>,
+}
+
+impl ModelsFile {
+    /// Every name the file routes to must be a profile (`profile@effort` included) or a mix,
+    /// and a mix must name profiles, not other mixes.
+    pub fn check(&self) -> Result<()> {
+        let profile_spec = |spec: &str| {
+            let (p, e) = split_spec(spec);
+            self.profiles.contains_key(p) && e.is_none_or(|e| !e.trim().is_empty())
+        };
+        for (name, mix) in &self.mixes {
+            if self.profiles.contains_key(name) {
+                return Err(anyhow!("mix {name} has the name of a profile"));
+            }
+            if mix.is_empty() {
+                return Err(anyhow!("mix {name} is empty"));
+            }
+            if *name == self.default && !mix.contains_key("*") && !PURPOSES.iter().all(|p| mix.contains_key(*p) || parent_purpose(p).is_some_and(|q| mix.contains_key(q))) {
+                return Err(anyhow!("the default mix {name} must cover every purpose (give it a \"*\")"));
+            }
+            for (purpose, choice) in mix {
+                if purpose != "*" && !PURPOSES.contains(&purpose.as_str()) {
+                    return Err(anyhow!("mix {name}: unknown purpose {purpose} (one of {}, or *)", PURPOSES.join(", ")));
+                }
+                for spec in choice.specs() {
+                    if !profile_spec(spec) {
+                        return Err(anyhow!("mix {name}: {purpose} names {spec}, which is not a profile (mixes name profiles, optionally profile@effort)"));
+                    }
+                }
+            }
+        }
+        let route = |what: &str, spec: &str| -> Result<()> {
+            if profile_spec(spec) || self.mixes.contains_key(spec) {
+                Ok(())
+            } else {
+                Err(anyhow!("{what} names {spec}, which is neither a profile nor a mix"))
+            }
+        };
+        route("default", &self.default)?;
+        for (k, v) in self.assign.iter().chain(&self.stages).chain(&self.groups) {
+            route(k, v)?;
+        }
+        for v in &self.rotate {
+            route("rotate", v)?;
+        }
+        for (kind, roles) in &self.species {
+            for (role, v) in roles {
+                route(&format!("species {kind} {role}"), v)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether any mix chooses by stage of attention (then attention is tracked even with the
+    /// level of detail off).
+    pub fn staged(&self) -> bool {
+        self.mixes.values().flat_map(|m| m.values()).any(|c| matches!(c, Choice::Staged { .. }))
+    }
 }
 
 /// Generations searched for a group through parents (and a bound on cycles).
@@ -489,7 +635,18 @@ impl Llm {
                 _ => log::warn!("model profile `{name}` disabled: {} is not set", p.key_env),
             }
         }
-        if !keys.contains_key(&models.default) {
+        models.check()?;
+        for (name, mix) in &models.mixes {
+            let missing: Vec<&str> = mix.values().flat_map(|c| c.specs()).map(|s| split_spec(s).0).filter(|p| !keys.contains_key(*p)).collect();
+            if !missing.is_empty() {
+                log::warn!("model mix `{name}` disabled: profiles without a key: {}", missing.join(", "));
+            }
+        }
+        let usable = |name: &str| match models.mixes.get(name) {
+            Some(mix) => mix.values().flat_map(|c| c.specs()).all(|s| keys.contains_key(split_spec(s).0)),
+            None => keys.contains_key(split_spec(name).0),
+        };
+        if !usable(&models.default) {
             return Err(anyhow!("default model profile `{}` has no API key", models.default));
         }
         std::fs::create_dir_all(&journal)?;
@@ -514,16 +671,54 @@ impl Llm {
         self.models.default.clone()
     }
 
+    /// Whether a route (a profile, `profile@effort` or a mix) can be called: every profile it
+    /// names has a key.
+    pub fn usable(&self, name: &str) -> bool {
+        match self.models.mixes.get(name) {
+            Some(mix) => mix.values().flat_map(|c| c.specs()).all(|s| self.keys.contains_key(split_spec(s).0)),
+            None => self.keys.contains_key(split_spec(name).0),
+        }
+    }
+
+    /// Whether any mix chooses its model by stage of attention.
+    pub fn staged(&self) -> bool {
+        self.models.staged()
+    }
+
+    /// Where a call for `purpose` goes from a route (a profile, `profile@effort` or a mix)
+    /// at a stage of attention. A mix without an entry for the purpose (nor its parent, nor
+    /// `*`) sends it to the default; a choice whose profile has no key also falls to the
+    /// default.
+    pub fn pick(&self, route: &str, purpose: &str, at: Attention) -> Pick {
+        self.pick_in(route, purpose, at).unwrap_or_else(|| {
+            // The default is keyed (checked at start) and a default mix covers every purpose.
+            self.pick_in(&self.models.default, purpose, at).expect("the default route covers every purpose")
+        })
+    }
+
+    fn pick_in(&self, route: &str, purpose: &str, at: Attention) -> Option<Pick> {
+        let (spec, mix, attention) = match self.models.mixes.get(route) {
+            Some(mix) => {
+                let choice = mix.get(purpose).or_else(|| parent_purpose(purpose).and_then(|p| mix.get(p))).or_else(|| mix.get("*"))?;
+                (choice.pick(at), Some(route.to_string()), matches!(choice, Choice::Staged { .. }).then_some(at))
+            }
+            None => (route, None, None),
+        };
+        let (p, e) = split_spec(spec);
+        let profile = self.models.profiles.get(p).filter(|_| self.keys.contains_key(p))?;
+        Some(Pick { profile: p.into(), effort: e.map(String::from).or_else(|| profile.effort(purpose).cloned()), mix, attention })
+    }
+
     /// The profile for a life stage, if the configuration names one.
     pub fn stage_profile(&self, stage: &str) -> Option<String> {
-        self.models.stages.get(stage).filter(|p| self.keys.contains_key(*p)).cloned()
+        self.models.stages.get(stage).filter(|p| self.usable(p)).cloned()
     }
 
     /// A person's profile: their group's (unless assigned one by name), over the child
     /// stage's and rotation; without a group, as before: a child's stage profile, else the
     /// assignment, rotation or default. Profiles without a key are passed over.
     pub fn person_profile(&self, id: u32, name: &str, group: Option<&str>, child: bool) -> String {
-        let keyed = |p: Option<&String>| p.filter(|p| self.keys.contains_key(*p)).cloned();
+        let keyed = |p: Option<&String>| p.filter(|p| self.usable(p)).cloned();
         if let Some(g) = keyed(group.and_then(|g| self.models.groups.get(g))) {
             return keyed(self.models.assign.get(name)).unwrap_or(g);
         }
@@ -543,7 +738,7 @@ impl Llm {
             .cloned()
             .or_else(|| (!self.models.rotate.is_empty()).then(|| self.models.rotate[id as usize % self.models.rotate.len()].clone()))
             .unwrap_or_else(|| self.models.default.clone());
-        if self.keys.contains_key(&pick) {
+        if self.usable(&pick) {
             pick
         } else {
             self.models.default.clone()
@@ -552,44 +747,54 @@ impl Llm {
 
     /// Profile for a species role (`think`, `remember`, `compile`), when configured.
     pub fn species_profile(&self, kind: &str, role: &str) -> Option<String> {
-        self.models.species.get(kind).and_then(|m| m.get(role)).filter(|p| self.keys.contains_key(*p)).cloned()
+        self.models.species.get(kind).and_then(|m| m.get(role)).filter(|p| self.usable(p)).cloned()
     }
 
-    pub fn model_name(&self, profile: &str) -> String {
-        self.models.profiles.get(profile).map(|p| p.model.clone()).unwrap_or_default()
+    /// The model a route calls, for logs (`mix name` for a mix).
+    pub fn model_name(&self, route: &str) -> String {
+        if self.models.mixes.contains_key(route) {
+            return format!("mix {route}");
+        }
+        self.models.profiles.get(split_spec(route).0).map(|p| p.model.clone()).unwrap_or_default()
     }
 
-    pub async fn chat(&self, profile: &str, purpose: &str, actor: &str, messages: &[Msg]) -> Result<Reply> {
-        self.chat_in_lane(profile, purpose, actor, messages, Lane::for_purpose(purpose)).await
+    /// A call for a purpose on a route (a profile, `profile@effort` or a mix, resolved at the
+    /// given stage of attention).
+    pub async fn chat(&self, route: &str, at: Attention, purpose: &str, actor: &str, messages: &[Msg]) -> Result<Reply> {
+        self.chat_in_lane(route, at, purpose, actor, messages, Lane::for_purpose(purpose)).await
     }
 
-    pub async fn chat_in_lane(&self, profile: &str, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
-        let mut result = self.chat_once(profile, purpose, actor, messages, lane).await;
+    pub async fn chat_in_lane(&self, route: &str, at: Attention, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
+        let pick = self.pick(route, purpose, at);
+        let mut result = self.chat_once(&pick, purpose, actor, messages, lane).await;
         let limited = matches!(&result, Err(e) if format!("{e:#}").contains("HTTP 429"));
+        let default = self.pick(&self.models.default, purpose, at);
+        // The overflow profile is called with its own effort for the purpose.
         let alternate = self
             .models
             .profiles
-            .get(profile)
+            .get(&pick.profile)
             .and_then(|p| p.overflow.as_ref())
-            .filter(|p| p.as_str() != profile && self.keys.contains_key(*p))
-            .cloned()
-            .or_else(|| (profile != self.models.default).then(|| self.models.default.clone()));
+            .filter(|p| **p != pick.profile && self.keys.contains_key(*p))
+            .map(|p| Pick { profile: p.clone(), effort: self.models.profiles[p].effort(purpose).cloned(), mix: pick.mix.clone(), attention: pick.attention })
+            .or_else(|| (default.profile != pick.profile).then_some(default));
         if result.is_err() {
             if let Some(alternate) = alternate {
                 result = self.chat_once(&alternate, purpose, actor, messages, lane).await;
             } else if limited {
                 // One recovery attempt goes through the learned pacing and cooldown.
-                result = self.chat_once(profile, purpose, actor, messages, lane).await;
+                result = self.chat_once(&pick, purpose, actor, messages, lane).await;
             }
         }
         result
     }
 
-    async fn chat_once(&self, profile: &str, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
+    async fn chat_once(&self, pick: &Pick, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
+        let profile = pick.profile.as_str();
         let p = self.models.profiles.get(profile).ok_or_else(|| anyhow!("no profile {profile}"))?;
         let key = self.keys.get(profile).ok_or_else(|| anyhow!("profile {profile} has no key"))?;
-        let body = request_body(p, profile, purpose, messages);
-        let cost = messages.iter().map(|m| (m.content.len() as u64).div_ceil(3) + 8).sum::<u64>() + u64::from(p.max_tokens.unwrap_or(8000));
+        let body = request_body(p, profile, purpose, pick.effort.as_deref(), messages);
+        let cost = messages.iter().map(|m| (m.content.len() as u64).div_ceil(3) + 8).sum::<u64>() + u64::from(p.max_tokens_for(purpose).unwrap_or(8000));
         let host = p.base_url.clone();
         let queued = Instant::now();
         let permit = self.scheduler.admit(profile, lane, cost).await?;
@@ -628,6 +833,9 @@ impl Llm {
             "purpose": purpose,
             "profile": profile,
             "model": p.model,
+            "effort": pick.effort,
+            "mix": pick.mix,
+            "attention": pick.attention,
             "latency_ms": latency_ms,
             "lane": lane,
             "queue_wait_ms": queue_wait_ms,
@@ -664,6 +872,12 @@ impl Llm {
         self.scheduler.changed.notify_waiters();
     }
 
+    /// Journal an exchange made outside this client (a judgment provider) beside the actor's
+    /// model exchanges.
+    pub async fn journal_entry(&self, actor: &str, entry: &Value) {
+        self.journal(actor, entry).await
+    }
+
     async fn journal(&self, actor: &str, entry: &Value) {
         let path = self.journal.join(format!("{}.jsonl", actor.replace(|c: char| !c.is_alphanumeric(), "_")));
         if let Ok(mut f) = tokio::fs::OpenOptions::new().create(true).append(true).open(&path).await {
@@ -676,24 +890,33 @@ impl Llm {
 }
 
 /// The chat-completions body for a profile (the same for a direct call and a batch line).
-fn request_body(p: &Profile, profile: &str, purpose: &str, messages: &[Msg]) -> Value {
+fn request_body(p: &Profile, profile: &str, purpose: &str, effort: Option<&str>, messages: &[Msg]) -> Value {
     let mut body = json!({
         "model": p.model,
         "messages": messages.iter().map(|m| json!({"role": m.role, "content": m.content})).collect::<Vec<_>>(),
     });
-    if let Some(m) = p.max_tokens {
+    if let Some(m) = p.max_tokens_for(purpose) {
         body["max_tokens"] = json!(m);
     }
     if p.json_mode {
         body["response_format"] = json!({"type": "json_object"});
     }
-    if let Some(e) = p.reasoning_effort.get(purpose) {
+    if let Some(e) = effort {
         body["reasoning_effort"] = json!(e);
     }
     if p.prompt_cache_key {
         body["prompt_cache_key"] = json!(format!("sao:{}:{profile}:{purpose}", profile.len()));
     }
     body
+}
+
+/// Mistral's front proxy refuses an inline `requests` body above about 2.5 MiB (measured
+/// 2026-11-09: 2,609,266 bytes accepted, 2,624,891 refused; docs/MODEL_COST.md Part 2).
+/// `LIVING_BATCH_INLINE_LIMIT` lowers it (the fake provider's tests).
+pub const BATCH_INLINE_LIMIT: usize = 2_400_000;
+
+fn batch_inline_limit() -> usize {
+    std::env::var("LIVING_BATCH_INLINE_LIMIT").ok().and_then(|v| v.parse().ok()).unwrap_or(BATCH_INLINE_LIMIT)
 }
 
 /// One request of a batch job: an id that comes back with its answer, the character it is
@@ -709,27 +932,48 @@ impl Llm {
     /// `POST /v1/batch/jobs`, polled until done, output read from `GET /v1/files/{id}/content`;
     /// half the price, no latency promise). Each answer is journaled like a direct exchange,
     /// with the job id. Off the real-time path: nothing waits on it but memory.
-    pub async fn batch(&self, profile: &str, purpose: &str, items: Vec<BatchItem>, poll: Duration, give_up: Duration) -> Result<Vec<(String, Result<Reply>)>> {
+    /// A batch job's requests go inline up to [`BATCH_INLINE_LIMIT`] bytes, else as an uploaded
+    /// JSONL file (`POST /v1/files`, purpose `batch`, then `input_files`).
+    pub async fn batch(&self, route: &str, at: Attention, purpose: &str, items: Vec<BatchItem>, poll: Duration, give_up: Duration) -> Result<Vec<(String, Result<Reply>)>> {
+        let pick = self.pick(route, purpose, at);
+        let profile = pick.profile.as_str();
         let p = self.models.profiles.get(profile).ok_or_else(|| anyhow!("no profile {profile}"))?;
         let key = self.keys.get(profile).ok_or_else(|| anyhow!("profile {profile} has no key"))?;
         let base = p.base_url.trim_end_matches('/');
-        let bodies: HashMap<String, (String, Value)> = items.iter().map(|i| (i.id.clone(), (i.actor.clone(), request_body(p, profile, purpose, &i.messages)))).collect();
+        let bodies: HashMap<String, (String, Value)> = items.iter().map(|i| (i.id.clone(), (i.actor.clone(), request_body(p, profile, purpose, pick.effort.as_deref(), &i.messages)))).collect();
         let requests: Vec<Value> = items.iter().map(|i| json!({"custom_id": i.id, "body": bodies[&i.id].1})).collect();
         let started = Instant::now();
-        let job: Value = self
-            .http
-            .post(format!("{base}/batch/jobs"))
-            .bearer_auth(key)
-            .json(&json!({"model": p.model, "endpoint": "/v1/chat/completions", "requests": requests, "metadata": {"purpose": purpose}}))
-            .send()
-            .await
-            .context("batch create")?
-            .error_for_status()
-            .context("batch create")?
-            .json()
-            .await?;
+        let mut spec = json!({"model": p.model, "endpoint": "/v1/chat/completions", "metadata": {"purpose": purpose}});
+        let inline = serde_json::to_vec(&requests)?.len();
+        let via = if inline > batch_inline_limit() {
+            let jsonl: String = requests.iter().map(|r| format!("{r}\n")).collect();
+            let boundary = format!("----sao{}", now_ms());
+            let mut body = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\nbatch\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{purpose}.jsonl\"\r\nContent-Type: application/jsonl\r\n\r\n").into_bytes();
+            body.extend_from_slice(jsonl.as_bytes());
+            body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+            let file: Value = self
+                .http
+                .post(format!("{base}/files"))
+                .bearer_auth(key)
+                .header("content-type", format!("multipart/form-data; boundary={boundary}"))
+                .body(body)
+                .send()
+                .await
+                .context("batch file upload")?
+                .error_for_status()
+                .context("batch file upload")?
+                .json()
+                .await?;
+            let file = file["id"].as_str().ok_or_else(|| anyhow!("batch file upload: no file id in {file}"))?.to_string();
+            spec["input_files"] = json!([file]);
+            format!("file {file}, {} bytes", jsonl.len())
+        } else {
+            spec["requests"] = Value::Array(requests);
+            format!("inline, {inline} bytes")
+        };
+        let job: Value = self.http.post(format!("{base}/batch/jobs")).bearer_auth(key).json(&spec).send().await.context("batch create")?.error_for_status().context("batch create")?.json().await?;
         let id = job["id"].as_str().ok_or_else(|| anyhow!("batch create: no job id in {job}"))?.to_string();
-        log::info!("batch job {id}: {} {purpose} requests to {}", items.len(), p.model);
+        log::info!("batch job {id}: {} {purpose} requests to {} ({via})", items.len(), p.model);
         let done = loop {
             tokio::time::sleep(poll).await;
             let j: Value = self.http.get(format!("{base}/batch/jobs/{id}")).bearer_auth(key).send().await?.error_for_status()?.json().await?;
@@ -766,6 +1010,9 @@ impl Llm {
                 "purpose": purpose,
                 "profile": profile,
                 "model": p.model,
+                "effort": pick.effort,
+                "mix": pick.mix,
+                "attention": pick.attention,
                 "mode": "batch",
                 "job": id,
                 "custom_id": item.id,
@@ -1119,6 +1366,7 @@ mod tests {
             species: Default::default(),
             stages: Default::default(),
             groups: Default::default(),
+            mixes: Default::default(),
         };
         let scheduler = Scheduler::new(&models, 1, 0.0);
         let mut q = scheduler.queue.lock().unwrap();
@@ -1145,6 +1393,7 @@ mod tests {
             species: Default::default(),
             stages: Default::default(),
             groups: Default::default(),
+            mixes: Default::default(),
         };
         let scheduler = Scheduler::new(&models, 2, 30.0);
         let mut q = scheduler.queue.lock().unwrap();
@@ -1254,10 +1503,10 @@ mod tests {
         .unwrap();
         let llm = Llm::new(models, directory.join("journal")).unwrap();
         let messages = [Msg { role: "user", content: "hi".into() }];
-        let reply = llm.chat_in_lane("p", "think", "first", &messages, Lane::Interactive).await.unwrap();
+        let reply = llm.chat_in_lane("p", Attention::OnStage, "think", "first", &messages, Lane::Interactive).await.unwrap();
         assert_eq!(reply.tokens, 17);
-        llm.chat_in_lane("p", "think", "second", &messages, Lane::Interactive).await.unwrap();
-        llm.chat("p", "talk", "second", &messages).await.unwrap();
+        llm.chat_in_lane("p", Attention::OnStage, "think", "second", &messages, Lane::Interactive).await.unwrap();
+        llm.chat("p", Attention::OnStage, "talk", "second", &messages).await.unwrap();
         let entries: Vec<Value> = std::fs::read_to_string(directory.join("journal/first.jsonl")).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
         assert_eq!(entries.len(), 2);
         assert!(entries[0]["error"].as_str().unwrap().contains("HTTP 429"));
@@ -1270,7 +1519,7 @@ mod tests {
         let mut uncached = llm.models.clone();
         uncached.profiles.get_mut("p").unwrap().prompt_cache_key = false;
         let uncached = Llm::new(uncached, directory.join("uncached-journal")).unwrap();
-        uncached.chat("p", "consolidate", "uncached", &messages).await.unwrap();
+        uncached.chat("p", Attention::OnStage, "consolidate", "uncached", &messages).await.unwrap();
         let unknown: Value = serde_json::from_str(std::fs::read_to_string(directory.join("uncached-journal/uncached.jsonl")).unwrap().trim()).unwrap();
         assert!(unknown["prompt_tokens"].is_null() && unknown["completion_tokens"].is_null() && unknown["cached_tokens"].is_null());
         let requests: Vec<Value> = std::fs::read_to_string(log).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
@@ -1280,6 +1529,97 @@ mod tests {
         assert_eq!(requests[0]["body"]["prompt_cache_key"], requests[2]["body"]["prompt_cache_key"]);
         assert_ne!(requests[2]["body"]["prompt_cache_key"], requests[3]["body"]["prompt_cache_key"]);
         println!("fake transport evidence: {}", directory.display());
+    }
+
+    /// A batch whose inline body would pass the provider's limit is uploaded as a file and
+    /// referenced by `input_files`; a small one stays inline. Both carry the picked effort.
+    #[tokio::test]
+    async fn a_large_batch_is_uploaded_as_a_file() {
+        struct Fake(std::process::Child);
+        impl Drop for Fake {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let directory = std::env::temp_dir().join(format!("living-batch-{}", now_ms()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = socket.local_addr().unwrap().port();
+        drop(socket);
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let log = directory.join("requests.jsonl");
+        let fake = Fake(std::process::Command::new("python3").arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py")).args(["--port", &port.to_string(), "--log"]).arg(&log).stdout(std::process::Stdio::null()).spawn().unwrap());
+        let http = reqwest::Client::new();
+        for _ in 0..100 {
+            if http.get(format!("http://127.0.0.1:{port}/health")).send().await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        std::env::set_var("LIVING_TEST_BATCH_KEY", "dummy-only");
+        let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {"p": {
+            "base_url": format!("http://127.0.0.1:{port}/v1"), "model": "m", "key_env": "LIVING_TEST_BATCH_KEY",
+            "reasoning_effort": {"consolidate": "high"}, "purpose_max_tokens": {"reorganize": 24000}}},
+            "mixes": {"night": {"reorganize": "p@high", "*": "p"}}}))
+        .unwrap();
+        let llm = Llm::new(models, directory.join("journal")).unwrap();
+        let items = |n: usize, size: usize| -> Vec<BatchItem> {
+            (0..n).map(|i| BatchItem { id: format!("sleep-{i}"), actor: format!("a{i}"), messages: vec![Msg { role: "system", content: "Tidy the person's mind.".into() }, Msg { role: "user", content: "x".repeat(size) }] }).collect()
+        };
+        // Below the limit: inline. The default limit is far above these bodies.
+        let small = llm.batch("night", Attention::OffStage, "reorganize", items(3, 100), Duration::from_millis(50), Duration::from_secs(20)).await.unwrap();
+        assert!(small.iter().all(|(_, r)| r.is_ok()));
+        std::env::set_var("LIVING_BATCH_INLINE_LIMIT", "1000");
+        let large = llm.batch("night", Attention::OffStage, "reorganize", items(5, 400), Duration::from_millis(50), Duration::from_secs(20)).await.unwrap();
+        std::env::remove_var("LIVING_BATCH_INLINE_LIMIT");
+        assert_eq!(large.len(), 5);
+        assert!(large.iter().all(|(_, r)| r.is_ok()), "every answer comes back from the uploaded file's job");
+        let lines: Vec<Value> = std::fs::read_to_string(&log).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        let uploads: Vec<&Value> = lines.iter().filter(|l| l.get("upload").is_some()).collect();
+        assert_eq!(uploads.len(), 1, "one upload, for the large batch only");
+        assert_eq!(uploads[0]["lines"], 5);
+        let answered: Vec<&Value> = lines.iter().filter(|l| l.get("batch_job").is_some_and(|j| !j.is_null())).collect();
+        assert_eq!(answered.len(), 8);
+        assert!(answered.iter().all(|l| l["body"]["reasoning_effort"] == "high" && l["body"]["max_tokens"] == 24000 && l["purpose"] == "reorganize"));
+        let journal: Value = serde_json::from_str(std::fs::read_to_string(directory.join("journal/a4.jsonl")).unwrap().trim()).unwrap();
+        assert_eq!((journal["mode"].as_str(), journal["mix"].as_str(), journal["effort"].as_str(), journal["purpose"].as_str()), (Some("batch"), Some("night"), Some("high"), Some("reorganize")));
+        drop(fake);
+        println!("batch upload evidence: {}", directory.display());
+    }
+
+    /// A night of real reorganizations through this client's batch path (paid; ignored):
+    /// `LIVING_NIGHT_BATCH_SAMPLES` is a JSONL of `{"id", "actor", "messages"}` (or
+    /// model_cost.py samples with `cls: reorganize`), sent on `LIVING_NIGHT_BATCH_ROUTE`
+    /// (default the `people` mix of living/configs/models.json) as one job; prints the job's
+    /// turnaround, how it went up, usable replies and tokens. docs/MIND_HARNESS.md, item 2.
+    #[tokio::test]
+    #[ignore]
+    async fn night_batch_replay() {
+        let samples = std::env::var("LIVING_NIGHT_BATCH_SAMPLES").expect("LIVING_NIGHT_BATCH_SAMPLES");
+        let route = std::env::var("LIVING_NIGHT_BATCH_ROUTE").unwrap_or_else(|_| "people".into());
+        let models: ModelsFile = serde_json::from_str(&std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../configs/models.json")).unwrap()).unwrap();
+        let journal = PathBuf::from(std::env::var("LIVING_NIGHT_BATCH_JOURNAL").unwrap_or_else(|_| std::env::temp_dir().join(format!("living-night-{}", now_ms())).display().to_string()));
+        let llm = Llm::new(models, journal.clone()).unwrap();
+        let items: Vec<BatchItem> = std::fs::read_to_string(&samples)
+            .unwrap()
+            .lines()
+            .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+            .filter(|v| v.get("cls").map_or(true, |c| c == "reorganize"))
+            .map(|v| BatchItem {
+                id: v["id"].as_str().map(String::from).unwrap_or_else(|| v["id"].to_string()),
+                actor: v["actor"].as_str().unwrap_or("night").to_string(),
+                messages: v["messages"].as_array().unwrap().iter().map(|m| Msg { role: if m["role"] == "system" { "system" } else { "user" }, content: m["content"].as_str().unwrap().to_string() }).collect(),
+            })
+            .collect();
+        let n = items.len();
+        let started = Instant::now();
+        let out = llm.batch(&route, Attention::OffStage, "reorganize", items, Duration::from_secs(5), Duration::from_secs(3600)).await.unwrap();
+        let secs = started.elapsed().as_secs_f64();
+        let usable = out.iter().filter(|(_, r)| r.as_ref().is_ok_and(|r| parse_json(&r.content).is_ok())).count();
+        let entries: Vec<Value> = std::fs::read_dir(&journal).unwrap().flatten().flat_map(|f| std::fs::read_to_string(f.path()).unwrap().lines().map(|l| serde_json::from_str::<Value>(l).unwrap()).collect::<Vec<_>>()).collect();
+        let sum = |k: &str| entries.iter().filter_map(|e| e[k].as_u64()).sum::<u64>();
+        println!("{}", json!({"requests": n, "answers": out.len(), "usable": usable, "turnaround_s": secs, "prompt_tokens": sum("prompt_tokens"), "completion_tokens": sum("completion_tokens"), "cached_tokens": sum("cached_tokens"), "journal": journal, "job": entries.first().map(|e| e["job"].clone()), "effort": entries.first().map(|e| e["effort"].clone()), "max_tokens": entries.first().map(|e| e["request"]["max_tokens"].clone())}));
     }
 
     /// A provider that cannot be reached holds later calls until a probe gets through.
@@ -1295,10 +1635,10 @@ mod tests {
         let llm = Llm::new(models, dir.clone()).unwrap();
         let msg = [Msg { role: "user", content: "hi".into() }];
         let t = Instant::now();
-        assert!(llm.chat("dead", "think", "a", &msg).await.is_err());
+        assert!(llm.chat("dead", Attention::OnStage, "think", "a", &msg).await.is_err());
         assert!(t.elapsed() < Duration::from_millis(1500), "the first failure is immediate");
         let t = Instant::now();
-        assert!(llm.chat("dead", "think", "a", &msg).await.is_err());
+        assert!(llm.chat("dead", Attention::OnStage, "think", "a", &msg).await.is_err());
         assert!(t.elapsed() >= GATE_PAUSE_MIN, "the next call waits for the probe: {:?}", t.elapsed());
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -1349,6 +1689,99 @@ mod tests {
         assert_eq!(llm.person_profile(2, "Mara", None, false), "c");
         assert_eq!(llm.person_profile(2, "Tam", None, false), "a");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn mix_models() -> ModelsFile {
+        std::env::set_var("LIVING_TEST_MIX_KEY", "x");
+        let p = |m: &str, effort: Value| json!({"base_url": "http://127.0.0.1:9/v1", "model": m, "key_env": "LIVING_TEST_MIX_KEY", "reasoning_effort": effort});
+        serde_json::from_value(json!({
+            "default": "glm",
+            "profiles": {
+                "glm": p("glm-m", json!({"think": "low", "deliberate": "high", "consolidate": "high"})),
+                "ds": p("ds-m", json!({"deliberate": "low"})),
+                "nokey": {"base_url": "x", "model": "n", "key_env": "LIVING_TEST_UNSET_KEY"}
+            },
+            "mixes": {
+                "people": {
+                    "talk": "ds",
+                    "deliberate": {"on_stage": "ds@low", "off_stage": "glm"},
+                    "think": "glm",
+                    "consolidate": "glm",
+                    "reorganize": "glm@max"
+                },
+                "broken": {"talk": "nokey", "*": "glm"}
+            },
+            "groups": {"Brandholm": "people"},
+            "stages": {"child": "broken"}
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn mixes_route_each_purpose_and_stage_with_its_effort() {
+        let dir = std::env::temp_dir().join(format!("living-mix-{}", now_ms()));
+        let llm = Llm::new(mix_models(), dir.clone()).unwrap();
+        let pick = |route: &str, purpose: &str, at| {
+            let p = llm.pick(route, purpose, at);
+            (p.profile, p.effort, p.mix, p.attention)
+        };
+        let on = Attention::OnStage;
+        let off = Attention::OffStage;
+        let s = |x: &str| Some(x.to_string());
+        assert_eq!(pick("people", "talk", on), ("ds".into(), None, s("people"), None), "DeepSeek's map leaves talk unset (thinking off)");
+        assert_eq!(pick("people", "deliberate", on), ("ds".into(), s("low"), s("people"), Some(on)));
+        assert_eq!(pick("people", "deliberate", off), ("glm".into(), s("high"), s("people"), Some(off)), "off stage: the profile's own effort");
+        assert_eq!(pick("people", "think", off), ("glm".into(), s("low"), s("people"), None));
+        assert_eq!(pick("people", "reorganize", on), ("glm".into(), s("max"), s("people"), None), "an effort written in the mix wins");
+        assert_eq!(pick("people", "internalize", on), ("glm".into(), None, None, None), "a purpose the mix leaves out goes to the default");
+        assert_eq!(pick("glm", "reorganize", on).1, s("high"), "reorganize inherits consolidate's effort on a profile that does not name it");
+        assert_eq!(pick("ds@high", "talk", on), ("ds".into(), s("high"), None, None), "profile@effort works as a plain route too");
+        assert_eq!(pick("broken", "think", on).0, "glm", "a mix whose member has no key");
+        assert_eq!(llm.person_profile(1, "Tam", Some("Brandholm"), false), "people", "a mix is accepted for groups");
+        assert_eq!(llm.person_profile(1, "Tam", None, true), "glm", "and a stage naming an unusable mix is passed over");
+        assert!(llm.staged());
+        assert_eq!(llm.model_name("people"), "mix people");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_models_file_naming_what_does_not_exist_is_refused() {
+        let mut m = mix_models();
+        m.groups.insert("Saltreach".into(), "nobody".into());
+        assert!(m.check().unwrap_err().to_string().contains("neither a profile nor a mix"));
+        let mut m = mix_models();
+        m.mixes.get_mut("people").unwrap().insert("dream".into(), Choice::One("glm".into()));
+        assert!(m.check().unwrap_err().to_string().contains("unknown purpose"));
+        let mut m = mix_models();
+        m.mixes.get_mut("people").unwrap().insert("talk".into(), Choice::One("broken".into()));
+        assert!(m.check().unwrap_err().to_string().contains("not a profile"), "mixes do not nest");
+        let mut m = mix_models();
+        m.default = "people".into();
+        assert!(m.check().unwrap_err().to_string().contains("cover every purpose"));
+        m.mixes.get_mut("people").unwrap().insert("*".into(), Choice::One("glm".into()));
+        assert!(m.check().is_ok());
+        assert!(mix_models().check().is_ok());
+    }
+
+    #[test]
+    fn the_request_body_carries_the_picked_effort_and_the_purpose_cap() {
+        let mut p = test_profile();
+        p.reasoning_effort.insert("consolidate".into(), "high".into());
+        p.max_tokens = Some(8000);
+        p.purpose_max_tokens.insert("reorganize".into(), 24000);
+        let msgs = [Msg { role: "user", content: "x".into() }];
+        let b = request_body(&p, "p", "reorganize", p.effort("reorganize").map(|s| s.as_str()), &msgs);
+        assert_eq!((b["reasoning_effort"].as_str(), b["max_tokens"].as_u64()), (Some("high"), Some(24000)));
+        let b = request_body(&p, "p", "consolidate", Some("low"), &msgs);
+        assert_eq!((b["reasoning_effort"].as_str(), b["max_tokens"].as_u64()), (Some("low"), Some(8000)));
+        assert!(request_body(&p, "p", "talk", None, &msgs).get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn the_projects_models_file_is_valid() {
+        let text = std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../configs/models.json")).unwrap();
+        let m: ModelsFile = serde_json::from_str(&text).unwrap();
+        m.check().unwrap();
     }
 
     #[test]

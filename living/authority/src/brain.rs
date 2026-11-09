@@ -755,6 +755,11 @@ impl<'a> Ev<'a> {
                 .filter(self.me.id)
                 .find(|j| j.key.eq_ignore_ascii_case(&b.key))
                 .map_or(false, |j| j.value > b.above),
+            Cond::Judged(j) => {
+                let now = self.now;
+                let row = self.ctx.db.judged().actor().filter(self.me.id).find(|x| x.q.eq_ignore_ascii_case(&j.q) && x.expires_ms > now);
+                j.test(row.as_ref().map(|r| (r.value, r.choice.as_str())))
+            }
             Cond::Can(a) => {
                 let target = match &a.target {
                     Some(t) => match self.sensed(t) {

@@ -21,9 +21,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Semaphore};
 
+mod animal;
+mod judge;
 mod lived;
 pub mod lod;
 mod recall;
+mod sleep;
 mod talk;
 
 pub enum Event {
@@ -55,6 +58,10 @@ struct ActorMind {
     /// Integrations since the last reorganization ("sleep") of the mind.
     since_sleep: u32,
     last_sleep: Option<Instant>,
+    /// The night it last went to sleep on, and whether its last batch failed (the next sleep
+    /// is then a direct call); see sleep.rs.
+    slept_night: Option<u64>,
+    direct_next: bool,
     /// Level of detail (see lod.rs): when the last deliberation ended, until when the
     /// character is on stage, and when it last took a conversation turn.
     last_deliberated: Option<Instant>,
@@ -88,6 +95,20 @@ pub struct Minds {
     /// What human-played characters live, waiting to be internalized (see lived.rs).
     lived_cfg: lived::Config,
     lived: Mutex<lived::Lived>,
+    /// When minds reorganize (sleep.rs), and when the last night batch went out.
+    sleep_cfg: sleep::Config,
+    sleep_batch_at: Mutex<Option<Instant>>,
+    /// Cheaper animal minds (animal.rs): the switches, each animal's last salient signature
+    /// and the pack decisions shared with members.
+    animal_cfg: animal::Config,
+    animal_sigs: Mutex<HashMap<u32, animal::Signature>>,
+    packs: Mutex<HashMap<u32, animal::PackDecision>>,
+    /// Typed judgments refreshed in the background (judge.rs; `LIVING_JEV=1`).
+    jev: Option<judge::Jev>,
+    asked: Mutex<HashMap<u32, judge::Asked>>,
+    /// Each character's body as it last perceived it (its latest deliberation scene's `you`),
+    /// for judgments between thoughts.
+    felt: Mutex<HashMap<u32, (Instant, Value)>>,
 }
 
 fn flatten<E: std::fmt::Debug>(r: Result<Result<(), String>, E>) -> Result<(), String> {
@@ -161,7 +182,11 @@ impl Minds {
     pub fn new(conn: DbConnection, llm: Llm, store: Option<Store>, seed: Value, concurrency: usize) -> Result<Arc<Self>> {
         let me = conn.try_identity().ok_or_else(|| anyhow!("not connected"))?;
         let species = living_rules::species::parse(&std::fs::read_to_string(crate::root().join("living/seeds/species.json"))?).map_err(|e| anyhow!(e))?;
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg: lived::Config::from_env(), lived: Mutex::new(lived::Lived::default()) }))
+        let jev = judge::Jev::from_env(&crate::root())?;
+        if let Some(j) = &jev {
+            prompts::set_judgments(j.grammar());
+        }
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: std::env::var("LIVING_ONLY").ok().map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg: lived::Config::from_env(), lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -577,7 +602,7 @@ impl Minds {
         let user = prompts::identity_user(&c.name, c.id, &knows, &bg, born.as_ref());
         let reply = {
             let _slow = self.slow.acquire().await?;
-            self.llm.chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?
+            self.llm.chat(&profile, self.attention(c.id, None), "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?
         };
         let v = llm::parse_json(&reply.content)?;
         let thought = reference(c.id, "background");
@@ -761,7 +786,7 @@ impl Minds {
         let born = self.born_temperament(c.id);
         let user = prompts::birth_identity_user(&c.name, c.id, [(&an, c.parent_a, &ap), (&bn, c.parent_b, &bp)], born.as_ref());
         let _slow = self.slow.acquire().await?;
-        let reply = self.llm.chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?;
+        let reply = self.llm.chat(&profile, self.attention(c.id, None), "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?;
         let v = llm::parse_json(&reply.content)?;
         let thought = reference(c.id, "birth");
         let now = llm::now_ms();
@@ -877,6 +902,13 @@ impl Minds {
             }
             self.clone().schedule(actor);
         }
+        log::info!("reorganization: {:?}", self.sleep_cfg);
+        if self.animal_cfg.any() {
+            log::info!("animal minds: {:?}", self.animal_cfg);
+        }
+        if let Some(j) = &self.jev {
+            log::info!("judgments on: {} via {} ({})", j.file.judgments.keys().cloned().collect::<Vec<_>>().join(", "), j.file.provider.url, j.file.provider.model);
+        }
         if self.lived_cfg.on {
             log::info!("player memory on: {:?}", self.lived_cfg);
             for e in self.conn.db.experience().iter().filter(|e| e.controller != self.me) {
@@ -917,6 +949,8 @@ impl Minds {
                 _ = tick.tick() => {
                     self.refresh_rules();
                     self.clone().check_consolidation();
+                    self.clone().check_sleep();
+                    self.clone().check_judgments();
                     self.clone().check_lived()
                 }
             }
@@ -1026,9 +1060,22 @@ impl Minds {
     /// human player is in the scene of a pending request (`scene`) or was recently part of
     /// what they experienced.
     fn onstage(&self, actor: u32, scene: Option<&str>) -> bool {
-        if !self.lod.on {
-            return true;
+        !self.lod.on || self.watched(actor, scene)
+    }
+
+    /// The stage of attention a model mix chooses by (`llm::Choice::Staged`). It is tracked
+    /// whenever the level of detail is on or a mix is staged; otherwise everyone is on stage.
+    fn attention(&self, actor: u32, scene: Option<&str>) -> llm::Attention {
+        if !(self.lod.on || self.llm.staged()) || self.watched(actor, scene) {
+            llm::Attention::OnStage
+        } else {
+            llm::Attention::OffStage
         }
+    }
+
+    /// Whether a human player is in the scene (`scene`) or was recently part of what the
+    /// character lived (`onstage_until`, kept by `Event::Contact`).
+    fn watched(&self, actor: u32, scene: Option<&str>) -> bool {
         let now = Instant::now();
         if self.actors.lock().unwrap().get(&actor).and_then(|m| m.onstage_until).is_some_and(|t| t > now) {
             return true;
@@ -1095,7 +1142,10 @@ impl Minds {
                 // the same events every ~40 s and ratcheted stances toward absolutes.
                 let wanted = rested && (salience >= self.consolidation_threshold(c.id) || meaningful.len() >= 30 || (stale && meaningful.len() >= 4) || pending.len() >= 120);
                 let allowed = !m.consolidating && m.retry_after.map_or(true, |t| Instant::now() >= t);
-                let sleepy = rested && (m.since_sleep >= 6 || (m.since_sleep >= 2 && m.last_sleep.map_or(true, |t| t.elapsed() > Duration::from_secs(20 * 60))));
+                // Under the timer (`LIVING_REORGANIZE=timer`), a rested mind with nothing salient
+                // to integrate reorganizes; otherwise that happens at night (sleep.rs).
+                let timer = self.sleep_cfg.mode == sleep::Mode::Timer;
+                let sleepy = timer && rested && (m.since_sleep >= 6 || (m.since_sleep >= 2 && m.last_sleep.map_or(true, |t| t.elapsed() > Duration::from_secs(20 * 60))));
                 if allowed && (wanted || sleepy) {
                     m.consolidating = true;
                     Some(!wanted)
@@ -1107,16 +1157,13 @@ impl Minds {
             let this = self.clone();
             let actor = c.id;
             tokio::spawn(async move {
-                let r = if sleep { this.reorganize(actor).await } else { this.consolidate(actor).await };
+                if sleep {
+                    let r = this.reorganize(actor).await;
+                    return this.slept(actor, r, false);
+                }
+                let r = this.consolidate(actor).await;
                 if r.is_ok() {
-                    let mut a = this.actors.lock().unwrap();
-                    let m = a.entry(actor).or_default();
-                    if sleep {
-                        m.since_sleep = 0;
-                        m.last_sleep = Some(Instant::now());
-                    } else {
-                        m.since_sleep += 1;
-                    }
+                    this.actors.lock().unwrap().entry(actor).or_default().since_sleep += 1;
                 }
                 let mut a = this.actors.lock().unwrap();
                 let m = a.entry(actor).or_default();
@@ -1215,12 +1262,17 @@ impl Minds {
             }
         }
         if c.kind != "person" {
+            if self.animal_cfg.any() {
+                return self.deliberate_animal_cheap(d, &c, lane).await;
+            }
             return self.deliberate_animal(d, &c, lane).await;
         }
         let profile = self.profile(&c);
         let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
+        let at = self.attention(actor, Some(&d.scene));
+        self.felt.lock().unwrap().insert(actor, (Instant::now(), scene["you"].clone()));
         // What this moment brings to mind (see recall.rs).
-        let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 18, 5).await;
+        let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 18, 5, "decide").await;
         let (mind, memories) = (recalled.mind, recalled.memories);
         let brain = self.conn.db.brain().id().find(&actor);
         let outline = brain.as_ref().and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
@@ -1257,7 +1309,7 @@ impl Minds {
         let mut decision = Value::Null;
         let (mut think_latency, mut think_tokens) = (0u32, 0u32);
         for p in [profile.clone(), self.llm.default_profile()] {
-            if let Ok(r) = self.llm.chat_in_lane(&p, "think", &c.name, &think_msgs, lane).await {
+            if let Ok(r) = self.llm.chat_in_lane(&p, at, "think", &c.name, &think_msgs, lane).await {
                 think_latency += r.latency_ms;
                 think_tokens += r.tokens;
                 if let Ok(v) = llm::parse_json(&r.content) {
@@ -1296,7 +1348,7 @@ impl Minds {
         };
         let mut profile = profile;
         for attempt in 0..3 {
-            let reply = match self.llm.chat_in_lane(&profile, "deliberate", &c.name, &messages, lane).await {
+            let reply = match self.llm.chat_in_lane(&profile, at, "deliberate", &c.name, &messages, lane).await {
                 Ok(r) => r,
                 Err(e) => {
                     last_err = format!("model error: {e:#}");
@@ -1435,9 +1487,10 @@ impl Minds {
         let Some(sp) = self.species.get(&c.kind).cloned() else { return Ok(()) };
         let think = self.llm.species_profile(&c.kind, "think").unwrap_or_else(|| self.llm.profile_for(actor, &c.name));
         let compile = self.llm.species_profile(&c.kind, "compile").unwrap_or_else(|| self.llm.profile_for(actor, &c.name));
+        let at = self.attention(actor, Some(&d.scene));
         let fmt = self.fmt_time();
         let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
-        let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 10, 0).await;
+        let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 10, 0, "animal").await;
         let mut mind = recalled.mind;
         mind.extend(recalled.judgments.into_iter().filter(|j| !j.starts_with('(')).map(|j| format!("feels sure: {j}")));
         let experiences: Vec<String> = {
@@ -1449,7 +1502,7 @@ impl Minds {
         let thought_ref = reference(actor, "deliberate");
         let felt = self
             .llm
-            .chat_in_lane(&think, "deliberate", &c.name, &[
+            .chat_in_lane(&think, at, "deliberate", &c.name, &[
                 Msg { role: "system", content: prompts::animal_think_system(&c.kind, &sp.nature) },
                 Msg { role: "user", content: prompts::animal_think_user(&c.name, &c.kind, &temperament, &mind, &experiences, &d.scene, &d.reason) },
             ], lane)
@@ -1466,7 +1519,7 @@ impl Minds {
         let mut last_err = String::new();
         let (mut latency, mut tokens) = (felt.latency_ms, felt.tokens);
         for attempt in 0..3 {
-            let reply = self.llm.chat_in_lane(&compile, "deliberate", &c.name, &messages, lane).await?;
+            let reply = self.llm.chat_in_lane(&compile, at, "deliberate", &c.name, &messages, lane).await?;
             latency += reply.latency_ms;
             tokens += reply.tokens;
             // An impulse is weighed among the animal's desires, like a person's plan. Its
@@ -1551,7 +1604,7 @@ impl Minds {
         let profile = self.profile(&c);
         let fmt = self.fmt_time();
         // What these experiences bring to mind: what they may confirm, contradict or update.
-        let recalled = self.recall_for(actor, &self.experience_cues(actor, &meaningful), 32, 6).await;
+        let recalled = self.recall_for(actor, &self.experience_cues(actor, &meaningful), 32, 6, "consolidate").await;
         let (mind, memories) = (recalled.mind, recalled.memories);
         let ctx = prompts::Ctx {
             name: &c.name,
@@ -1571,16 +1624,17 @@ impl Minds {
         };
         let user = prompts::consolidate_user(&ctx);
         let remember = if animal { self.llm.species_profile(&c.kind, "remember").unwrap_or(profile.clone()) } else { profile.clone() };
+        let at = self.attention(actor, None);
         let _slow = self.slow.acquire().await?;
         let msgs = [Msg { role: "system", content: system }, Msg { role: "user", content: user }];
-        let mut reply = self.llm.chat(&remember, "consolidate", &c.name, &msgs).await?;
+        let mut reply = self.llm.chat(&remember, at, "consolidate", &c.name, &msgs).await?;
         let v = match llm::parse_json(&reply.content) {
             Ok(v) => v,
             // A small mind's unusable output is re-done by the competent model.
             Err(e) if animal => {
                 let compile = self.llm.species_profile(&c.kind, "compile").unwrap_or(profile.clone());
                 log::info!("{}'s memory reply was unusable ({e:#}); retrying with {compile}", c.name);
-                reply = self.llm.chat(&compile, "consolidate", &c.name, &msgs).await?;
+                reply = self.llm.chat(&compile, at, "consolidate", &c.name, &msgs).await?;
                 llm::parse_json(&reply.content)?
             }
             Err(e) => return Err(e),
@@ -1655,56 +1709,6 @@ impl Minds {
         };
         self.project(actor, persona, Some(thought)).await?;
         self.consolidated(actor, upto).await
-    }
-
-    /// Sleep-like reorganization: let weak unreinforced beliefs fade, then let the mind merge
-    /// duplicates, generalize repeated specifics, relabel and retract.
-    async fn reorganize(&self, actor: u32) -> Result<()> {
-        let Some(store) = &self.store else { return Ok(()) };
-        let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
-        let now = llm::now_ms();
-        let faded = store.fade(actor, 0.2, now).await?;
-        let (nodes, edges) = store.size(actor).await?;
-        if edges < 25 || c.kind != "person" {
-            log::info!("{} rested (mind small: {nodes} concepts, {edges} links; {faded} faded)", c.name);
-            return Ok(());
-        }
-        let fmt = self.fmt_time();
-        let concepts = store.concepts(actor, 60).await?;
-        let facts = store.around(actor, &[], 120).await?;
-        let lines: Vec<String> = facts.iter().map(|f| memory::render_keys(f, &fmt)).collect();
-        let profile = self.profile(&c);
-        let _slow = self.slow.acquire().await?;
-        let reply = self
-            .llm
-            .chat(&profile, "consolidate", &c.name, &[Msg { role: "system", content: prompts::reorganize_system() }, Msg { role: "user", content: prompts::reorganize_user(&c.name, &self.persona_text(actor), &concepts, &lines) }])
-            .await?;
-        let v = llm::parse_json(&reply.content)?;
-        let known: Vec<u64> = self.experiences(actor).iter().map(|e| e.id).collect();
-        let (mut patch, notes) = memory::patch_from(&v, &known, &|_| None);
-        memory::sugar_into(&json!({"judgments": v["judgments"]}), &mut patch, &[]);
-        self.canonical_people(&mut patch);
-        let thought_ref = reference(actor, "reorganize");
-        store.apply(actor, &patch, &thought_ref, now).await?;
-        let (nodes2, edges2) = store.size(actor).await?;
-        let summary = format!(
-            "{} (mind {nodes}→{nodes2} concepts, {edges}→{edges2} links; {} merged, {} retracted, {} generalized, {faded} faded)",
-            v["summary"].as_str().unwrap_or("I rested and my thoughts settled."),
-            patch.merges.len(),
-            patch.retract.len(),
-            patch.edges.len()
-        );
-        log::info!("{} slept on it: {summary}", c.name);
-        let thought = ThoughtIn {
-            kind: "reorganize".into(),
-            summary,
-            detail: json!({"reply": v, "patch": patch, "notes": notes, "faded": faded}).to_string(),
-            latency_ms: reply.latency_ms,
-            tokens: reply.tokens,
-            model: reply.model,
-            reference: thought_ref,
-        };
-        self.project(actor, None, Some(thought)).await
     }
 
     /// Name person anchors from what the character perceives, when the model did not, and

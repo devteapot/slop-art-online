@@ -1704,6 +1704,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.experience().observer().delete(id);
     ctx.db.place().actor().delete(id);
     ctx.db.judgment().actor().delete(id);
+    ctx.db.judged().actor().delete(id);
     ctx.db.mind_cursor().actor().delete(id);
     ctx.db.act_queue().actor().delete(id);
     for a in ctx.db.acquaintance().observer().filter(id).map(|a| a.id).collect::<Vec<_>>() {

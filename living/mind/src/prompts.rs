@@ -75,6 +75,16 @@ TIME: beyond staying alive, how you spend your days is yours to decide, from who
 OTHERS: people hear speech within ~9 tiles. You cannot read minds; what others say may be false. You only know what you perceived or were told.";
 
 static SETTING: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+/// The judgments a graph may read (`judged`), when they are refreshed (mind/judge.rs).
+static JUDGED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+pub fn set_judgments(grammar: String) {
+    let _ = JUDGED.set(grammar);
+}
+
+fn judged_line() -> String {
+    JUDGED.get().filter(|g| !g.is_empty()).map(|g| format!("\n  Judgments of your own, refreshed in the background while you fight (false while there is none, or add \"else\": true): {g}")).unwrap_or_default()
+}
 
 type SkillIoTable = HashMap<String, (String, String)>;
 /// What each skill takes and gives, from the world's rule script (revision, table).
@@ -186,6 +196,8 @@ Deliberate one-off interactions (starting a family, trading, giving, teaching, w
 {\"if\": {\"sees\": {\"nearest\": \"person\"}}, \"then\": {\"do\": \"flee\", \"target\": {\"nearest\": \"person\"}}}",
         )
     };
+    // Only people's graphs read judgments for now (the first one is a person's fight).
+    let judged = if speaks { judged_line() } else { String::new() };
     let g = format!(
         "\
 BEHAVIOR GRAPH (JSON) — it runs continuously (~1 check per second, instantly on events) while you think slowly, so encode how to react, not just one action.
@@ -201,7 +213,7 @@ Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"a
 Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100)
   {{\"has\": {{\"item\": \"berries\", \"at_least\": 2}}}} (item \"food\" = any food) {{\"sees\": T}} {{\"near\": {{\"target\": T, \"within\": 3}}}}
   {{\"count\": {{\"of\": \"wolf\" or {{\"kind\": \"person\", \"relation\": \"friend\"}}, \"within\": 8, \"at_least\": 3}}}} (or \"at_most\") how many are in sight; {{\"health_of\": {{\"target\": T, \"below\": 30}}}} how healthy a creature in sight is (% of full)
-  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}
+  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
 Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
@@ -607,6 +619,34 @@ pub fn animal_think_user(name: &str, kind: &str, temperament: &str, mind: &[Stri
     }
     out.push(Stability::Dynamic, format!("\n# Why you stir\n{reason}\n"));
     out.render()
+}
+
+/// An animal choosing among a few things it can do (`LIVING_ANIMAL_MINDS=choose`): one call in
+/// place of an impulse and a compiled graph.
+pub fn animal_choose_system(kind: &str, nature: &str) -> String {
+    shared(format!(
+        "You are the mind of the {kind} described under # Who you are. {nature}\n\
+Feel the moment as the animal does, then pick one of the numbered options under # What you can do now, and how strongly you mean it \
+(\"low\", \"mid\" or \"high\"). Your instincts keep working underneath whatever you pick. \
+Answer with ONE JSON object: {{\"feeling\": \"what you sense and feel, in plain simple words\", \"pick\": the option's number, \"strength\": \"low|mid|high\"}}"
+    ))
+}
+
+/// What an animal choosing is told: what it would be told to feel an impulse, its pack when
+/// it decides for them, and the options.
+pub fn animal_choose_user(think_user: String, pack: &[String], options: &[String]) -> String {
+    let mut out = think_user;
+    if !pack.is_empty() {
+        out.push_str("\n# Your pack (what you pick, they do too, each in its own way)\n");
+        for p in pack {
+            out.push_str(&format!("- {p}\n"));
+        }
+    }
+    out.push_str("\n# What you can do now\n");
+    for (i, o) in options.iter().enumerate() {
+        out.push_str(&format!("{i}. {o}\n"));
+    }
+    out
 }
 
 /// A scene without its smelled creatures, and those as the animal senses them
