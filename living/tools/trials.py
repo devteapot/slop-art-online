@@ -328,7 +328,7 @@ class Player:
         here = self.me()
         people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] != self.inst.subject]
         pos = self.inst.bodies([c["id"] for c in people])
-        near = sorted((dist(here, pos[c["id"]]), c) for c in people if c["id"] in pos and here)
+        near = sorted(((dist(here, pos[c["id"]]), c) for c in people if c["id"] in pos and here), key=lambda x: x[0])
         return [(d, c) for d, c in near if d <= within]
 
     def act(self, node):
