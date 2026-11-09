@@ -250,6 +250,30 @@ impl Minds {
         self.only.as_ref().map_or(true, |o| o.contains(&id) || (self.only_woken && self.is_woken(id)))
     }
 
+    /// How `me` knows `other`: their name where the authority counts it known
+    /// (`perception::knows_name`: itself, family, the other parent of its children, its
+    /// community, someone it has feelings about, someone who told it their name), else "a
+    /// stranger" (docs/PERCEPTION.md: names only when known). For prompts and for what goes
+    /// into a character's own memory; logs and developer records keep names.
+    pub(super) fn known_as(&self, me: u32, other: u32) -> String {
+        let Some(o) = self.conn.db.character().id().find(&other) else { return "someone".into() };
+        let family = |a: &Character, b: &Character| a.parent_a == b.id || a.parent_b == b.id || b.parent_a == a.id || b.parent_b == a.id;
+        let community = |id: u32| self.conn.db.membership().iter().find(|m| m.member == id).map(|m| m.community);
+        let known = me == other
+            || self.conn.db.relation().iter().any(|r| r.actor == me && r.other == other)
+            || self.conn.db.acquaintance().iter().any(|a| a.observer == me && a.known == other)
+            || self.conn.db.character().id().find(&me).is_some_and(|m| family(&m, &o))
+            || community(me).is_some_and(|k| community(other) == Some(k))
+            || self.conn.db.character().iter().any(|k| (k.parent_a == me && k.parent_b == other) || (k.parent_b == me && k.parent_a == other));
+        if known {
+            o.name
+        } else if o.kind != "person" {
+            format!("a {}", o.kind)
+        } else {
+            "a stranger".into()
+        }
+    }
+
     fn name(&self, id: u32) -> String {
         self.conn.db.character().id().find(&id).map(|c| c.name).unwrap_or_else(|| format!("#{id}"))
     }

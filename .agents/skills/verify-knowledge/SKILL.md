@@ -43,6 +43,14 @@ What a human-played character lives, internalized into its own graph (player mem
 
 Its paid tier, `scripts/player_memory_real.py --allow-live`, runs only after the user authorizes that run.
 
+Woken residents' minds (docs/TOWN_LIFE.md, "Layer 2") have their own runner on an island world, [features/woken-minds.md](features/woken-minds.md):
+
+```bash
+.agents/skills/verify-knowledge/scripts/woken_mind.py run --run knowledge-woken-$(date +%Y%m%d-%H%M%S)
+```
+
+Its paid tier, `scripts/woken_real.py --allow-live --run knowledge-woken-real-<name>`, runs only after the user authorizes that run (the models file as shipped; the key from the main checkout's `.env`, into the mind's environment only).
+
 ## Doctor
 
 The run records the shared doctor result in `actions.log`, confirms `RETURN 1` against its scratch graph, records the image and mounts in `neo4j-doctor.log`, and checks the fake's `/health`. It requires the real mind's subscription and scratch Neo4j connection log before checking memory effects.

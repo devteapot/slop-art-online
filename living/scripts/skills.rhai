@@ -928,12 +928,15 @@ fn leave_done(a) { [#{ op: "leave" }] }
 // resident can wake it into a mind, which it keeps. `e` is "<what>:<by>": what is `speech`
 // (spoken to), the name of a skill aimed at the resident as it starts (`wave`, `give`,
 // `teach`, `offer`, `attack`…), `hurt` (a blow or missile landed) or `theft` (taking from its
-// store as it watched); by is `player`, `mind` or `instinct`. 1 wakes, 0 does not. What an
-// instinct-only creature does (a neighbour's evening nod, a wolf's bite) stays at the level of
-// detail it happens at. Read once per script revision for each engagement.
+// store as it watched); by is `player`, `mind` (what a mind decided: its acts and words),
+// `habit` (what a minded character's behaviour graph did by itself) or `instinct`. 1 wakes, 0
+// does not. Habits and instincts stay at the level of detail they happen at: a neighbour's
+// evening nod or a wolf's bite wakes nobody, whether or not the neighbour has a mind (the first
+// paid run, before `habit`, had woken residents' routine nods wake 11 of 15 in 9 minutes).
+// Read once per script revision for each engagement.
 fn wakes(e) {
     let p = e.split(":");
-    if p.len() < 2 || p[1] == "instinct" { return 0; }
+    if p.len() < 2 || p[1] == "instinct" || p[1] == "habit" { return 0; }
     let what = p[0];
     if ["speech", "hurt", "theft"].contains(what) { return 1; }
     // Kindness, dealings, lessons, asking to belong, and anything hostile.

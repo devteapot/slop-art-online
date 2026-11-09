@@ -510,5 +510,5 @@ pub(crate) fn player_controls(ctx: &ReducerContext, id: u32, now: u64) -> Result
 #[spacetimedb::reducer]
 pub fn human_say(ctx: &ReducerContext, text: String, to: u32) -> Result<(), String> {
     let me = my_character(ctx)?;
-    perceive::speak(ctx, me.id, &text, to, common::now_ms(ctx))
+    perceive::speak(ctx, me.id, &text, to, true, common::now_ms(ctx))
 }

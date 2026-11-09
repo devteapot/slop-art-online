@@ -20,10 +20,13 @@ own identity (`human_say`); admin calls set the scene (`place_at`, `grant_items`
 4. **Acts:** the deliberation's acts give the player food, teach it a technique and take it
    in as a guest (`host`): an inventory row, a `know_how` row, a private `guest` row and the
    player's `lodging` place.
-5. **Stage cap:** the player speaks to more residents of the same settlement until one more
+5. **Names only when known:** the newcomer never says its name; nothing sent to any woken
+   resident's model names it (a ring integration writes no feelings toward someone it only saw,
+   and talk prompts and transcripts name people only where the authority does).
+6. **Stage cap:** the player speaks to more residents of the same settlement until one more
    than the `woken_stage("cap")` law is woken and in contact with it: the cap binds, logged
    and journaled (`purpose: stage_cap`).
-6. Every woken resident is still a mind at the end.
+7. Every woken resident is still a mind at the end.
 
     woken_mind.py run --run knowledge-woken-<name>
     woken_mind.py cleanup --run knowledge-woken-<name>
@@ -51,8 +54,11 @@ ROOT = K.ROOT
 RULES = (ROOT / 'living/scripts/skills.rhai').read_text()
 CAP = int(re.search(r'fn woken_stage\(k\)[^}]*"cap"\s*=>\s*(\d+)', RULES, re.S).group(1))
 HEARING = float(re.search(r'hearing:\s*([0-9.]+)', RULES).group(1))
+# What each technique needs known first (`requires(t)` in the rules).
+REQUIRES = {t: re.findall(r'"([a-z_]+)"', need) for t, need in re.findall(r'"([a-z_]+)"\s*=>\s*\[([^\]]*)\]', re.search(r'fn requires\(t\)\s*\{(.*?)\n', RULES).group(1))}
 
-OVERHEARD = 'verify woken: I am Wren, new here, and I am looking for work'
+# Without a name: the resident who overhears knows the newcomer only as a stranger.
+OVERHEARD = 'verify woken: I am new here, and I am looking for work'
 ASK = 'verify woken: could you spare some food, a bed for tonight, and teach me something?'
 WELCOME = 'verify woken: welcome, stranger. I can spare food, a bed and a lesson.'
 TALKED = 'verify woken talk: the inn is by the square.'
@@ -69,7 +75,10 @@ RING = {
     'summary': 'verify woken: what I perceived before.',
     'remember': [{'exp': '$EXP:said to', 'gist': 'A stranger at the market said they were new here and looking for work.'}],
     'nodes': [], 'edges': [{'from': 'self', 'rel': 'OVERHEARD', 'to': 'idea:newcomer_looking_for_work', 'confidence': 0.7, 'because': ['$EXP:said to']}],
-    'relations': [], 'places': [], 'identity': None,
+    # A feeling toward the stranger it only saw and overheard: dropped, so its name stays unknown.
+    # (the newcomer's id is filled in per run: `Proof.fake`).
+    'relations': [],
+    'places': [], 'identity': None,
 }
 
 
@@ -78,17 +87,20 @@ def dist(a, b):
 
 
 class Proof(K.Run):
-    def fake(self, acts):
+    def fake(self, acts, newcomer):
         script = {'replies': {'think': {'thought': 'A stranger asks for help.', 'intend': ['wait'], 'say': WELCOME},
                               'deliberate': {'graph': {'wait': 120}, 'weight': 1.5, 'plan': 'verify woken plan', 'acts': acts},
                               'talk': {'thought': 'They ask about the town.', 'say': TALKED, 'end': False}},
-                  'rules': [{'purpose': 'internalize', 'cite': True, 'reply': RING, 'times': -1},
+                  'rules': [{'purpose': 'internalize', 'cite': True, 'times': -1,
+                             'reply': dict(RING, relations=[{'id': newcomer, 'trust': 5, 'affinity': 10, 'label': 'stranger', 'note': 'new here, looking for work'}])},
                             {'purpose': 'consolidate', 'reply': IDENTITY_AND_CONSOLIDATION, 'times': -1}]}
         (self.directory / 'fake-script.json').write_text(json.dumps(script, indent=2))
         self.process('fake', [sys.executable, K.FAKE, '--port', '0', '--log', self.directory / 'requests.jsonl', '--script', self.directory / 'fake-script.json'])
         self.wait(lambda: 'READY ' in (self.directory / 'fake.log').read_text(), 'fake model readiness', 10)
         port = int(re.search(r'READY http://127.0.0.1:(\d+)/v1', (self.directory / 'fake.log').read_text())[1])
-        profile = lambda model: {'base_url': f'http://127.0.0.1:{port}/v1', 'model': model, 'key_env': 'LIVING_VERIFY_FAKE_KEY', 'max_tokens': 2048}
+        profile = lambda model: {'base_url': f'http://127.0.0.1:{port}/v1', 'model': model, 'key_env': 'LIVING_VERIFY_FAKE_KEY', 'max_tokens': 2048,
+                                 # The fake server tells purposes apart by the effort each is sent with.
+                                 'reasoning_effort': {x: x for x in ('think', 'deliberate', 'consolidate', 'talk', 'internalize')}}
         models = {'default': 'main', 'profiles': {'main': profile('woken-main'), 'talk': profile('woken-talk')},
                   'mixes': {'people': {'talk': 'talk', '*': 'main'}}, 'woken': 'people'}
         (self.directory / 'models.json').write_text(json.dumps(models, indent=2))
@@ -159,7 +171,7 @@ def drive(p):
         for c in cands:
             if not any(dist((h['x'], h['y']), (c['home_x'], c['home_y'])) <= 1.5 for h in houses):
                 continue
-            lesson = sorted({k['technique'] for k in p.knowledge(c['id'], 'resident-know-how')} - mine)
+            lesson = sorted(t for t in {k['technique'] for k in p.knowledge(c['id'], 'resident-know-how')} - mine if set(REQUIRES.get(t, [])) <= mine)
             near = [o for o in cands if o['id'] != c['id'] and 2.0 <= dist(bodies[o['id']], bodies[c['id']]) <= HEARING - 4]
             if lesson and near:
                 return c, near[0], lesson[0], bodies
@@ -170,7 +182,7 @@ def drive(p):
     acts = [{'do': 'give', 'target': {'id': me}, 'item': 'berries', 'qty': 1},
             {'do': 'teach', 'target': {'id': me}, 'item': lesson},
             {'do': 'host', 'target': {'id': me}}]
-    p.fake(acts)
+    p.fake(acts, me)
     # The player speaks to the neighbour, standing where the resident only overhears.
     fx, fy = bodies[fid]
     p.admin('place_at', me, fx + 1.2, fy)
@@ -204,6 +216,13 @@ def drive(p):
     assert ASK not in user_text(ringreq[0]), 'the ring integration carried what came after waking'
     detail = json.loads(next(t for t in thoughts if t['kind'] == 'internalize')['detail'])
     assert detail['lived_under'] == 'instinct', detail
+    # A stranger stays a stranger: no feeling toward the newcomer from the ring, so the authority
+    # does not count its name as known (`knows_name`).
+    assert any('stranger stays a stranger' in n for n in detail['notes']), detail['notes']
+    assert not [x for x in p.sql(f'SELECT * FROM relation WHERE actor = {rid}', 'resident-relations') if x['other'] == me]
+    newcomer = p.sql(f'SELECT name FROM character WHERE id = {me}', 'newcomer-name')[0]['name']
+    sent = (p.journal / f"{r['name']}.jsonl").read_text()
+    assert newcomer not in sent, f'{newcomer} reached what was sent for {r["name"]}, who was never told the name'
     awaken = json.loads(next(t for t in thoughts if t['kind'] == 'awaken')['detail'])
     assert 'narrative' in awaken['model_written'] and awaken['facts']['occupation'], awaken
     f = f"{{run: '{p.db}', actor: {rid}}}"
@@ -268,6 +287,12 @@ def drive(p):
     ids = list(p.woken('woken-end'))
     assert all(chars[i]['ai'] for i in ids if i in chars)
     p.pass_feature('woken residents stay minds', ['woken-end.json', 'people-end.json'], woken=len(ids))
+
+    # 7. Nothing any woken resident's model was sent named the newcomer: it never said its
+    # name, so it stays "a stranger" in talk prompts, transcripts and memory alike.
+    leaks = [f.name for f in p.journal.glob('*.jsonl') if newcomer in f.read_text()]
+    assert not leaks, f'{newcomer} reached what was sent for {leaks}'
+    p.pass_feature('a stranger stays a stranger in what woken minds are sent', ['journal/'], journals=len(list(p.journal.glob('*.jsonl'))))
 
 
 def main():

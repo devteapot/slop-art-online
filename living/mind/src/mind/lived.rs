@@ -393,6 +393,9 @@ impl Minds {
         notes.extend(self.perceived_people_only(actor, batch, &mut patch));
         let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
         memory::attribute(&mut patch, actor, &told);
+        if prep.source == Source::Ring {
+            notes.extend(self.strangers_stay_strangers(actor, batch, &mut patch));
+        }
         self.name_people(&mut patch);
         patch.lived_under = Some(prep.source.lived_under().into());
         store.apply(actor, &patch, &thought_ref, now).await?;
@@ -480,6 +483,37 @@ impl Minds {
         }
         log::info!("{}: dropped {} (no one this character perceived)", self.name(actor), dropped.join(", "));
         dropped.into_iter().map(|k| format!("{k} dropped: no one this character perceived")).collect()
+    }
+
+    /// A ring holds people as the resident perceived them: someone it only saw is "a stranger".
+    /// Feelings about them would make the authority treat their name as known (`knows_name`
+    /// counts a relation), so a ring integration writes none toward people the ring never names
+    /// and the resident has no relation with, and their memory nodes are named "a stranger"
+    /// rather than by their real name.
+    fn strangers_stay_strangers(&self, actor: u32, batch: &[Experience], patch: &mut memory::Patch) -> Vec<String> {
+        let mut named: std::collections::HashSet<u32> = self.conn.db.relation().iter().filter(|r| r.actor == actor).map(|r| r.other).collect();
+        for e in batch {
+            named.extend(self.named_people(&e.text));
+        }
+        named.insert(actor);
+        let unnamed = |k: &str| k.strip_prefix("person:").and_then(|x| x.parse::<u32>().ok()).is_some_and(|id| !named.contains(&id));
+        let before = patch.edges.len();
+        patch.edges.retain(|e| !(e.rel.eq_ignore_ascii_case("FEELS") && unnamed(&e.to)));
+        let dropped = before - patch.edges.len();
+        for n in patch.nodes.iter_mut().filter(|n| unnamed(&n.key)) {
+            n.name = Some("a stranger".into());
+        }
+        let mut people: Vec<String> = patch.edges.iter().flat_map(|e| [e.from.clone(), e.to.clone()]).filter(|k| unnamed(k) && !patch.nodes.iter().any(|n| &n.key == k)).collect();
+        people.sort();
+        people.dedup();
+        for k in people {
+            patch.nodes.push(memory::NodeOp { key: k, labels: vec!["Person".into()], name: Some("a stranger".into()), props: Default::default() });
+        }
+        if dropped > 0 {
+            vec![format!("{dropped} feeling(s) toward people the ring never names dropped: a stranger stays a stranger")]
+        } else {
+            Vec::new()
+        }
     }
 
     async fn internalize_one(&self, actor: u32, reason: &'static str) -> Result<()> {
