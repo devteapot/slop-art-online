@@ -39,6 +39,7 @@ use crate::envs::Roam;
 use crate::island::{Island, LotRow};
 use crate::lookdev::{Fitted, Model};
 use crate::net::{Mode, Net};
+use crate::anim::Motion;
 use crate::world::Scene;
 use bevy::prelude::*;
 use living_bindings::*;
@@ -54,9 +55,9 @@ const LOT_FAR: f32 = 190.0;
 const LOT_DROP: f32 = 220.0;
 /// Building spawns per frame, so a window move doesn't hitch.
 const LOTS_PER_FRAME: usize = 6;
-/// Speeds (m/s): below `MOVING` a body stands (idle or talk; above it `gait.rs` picks the clip),
-/// and above `RUNNING` you count as running (`Roam::running`).
-const MOVING: f32 = 0.3;
+/// Speeds (m/s): below `MOVING` a body stands (idle or talk; above it `anim.rs` blends its
+/// gaits), and above `RUNNING` you count as running (`Roam::running`).
+const MOVING: f32 = crate::anim::MOVING;
 const RUNNING: f32 = 3.3;
 /// A line counts as being spoken for this long (s).
 const TALKING_S: f64 = 4.0;
@@ -74,7 +75,7 @@ impl Plugin for LivePlugin {
             .add_systems(Update, (land, lots, bodies, me).chain().after(crate::controls::target).after(crate::town::shows).before(crate::demo::run))
             .add_systems(
                 Update,
-                (crate::envs::hdr, crate::island::stream, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, clips, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, report)
+                (crate::envs::hdr, crate::island::stream, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, report)
                     .chain()
                     .after(me)
                     .run_if(island),
@@ -160,23 +161,6 @@ pub struct Live {
     shown: HashMap<u32, Shown>,
     /// Height (m) of each drawn character, for nameplates and bubbles.
     pub heights: HashMap<u32, f32>,
-}
-
-/// A drawn authority body and the clip it should play: locomotion, and over it a combat move,
-/// a hit or its death (`combat.rs`), played once.
-#[derive(Component)]
-pub struct LiveBody {
-    pub clip: &'static str,
-    rate: f32,
-    action: Option<crate::combat::Action>,
-}
-
-impl LiveBody {
-    /// What shows: the one-shot over locomotion when there is one (a dodge, getting up), else
-    /// the locomotion or standing clip.
-    pub fn showing(&self) -> &'static str {
-        self.action.map_or(self.clip, |a| a.clip)
-    }
 }
 
 /// Regenerate the land from the `land` row once, then put the island in place.
@@ -296,7 +280,7 @@ fn yaw_of(d: Vec2) -> f32 {
 }
 
 /// What `bodies` reads and writes of a drawn body.
-type Drawn = (&'static mut Transform, Option<&'static Fitted>, Option<&'static mut Model>, Option<&'static crate::characters::Character>, &'static mut LiveBody, Option<&'static mut Visibility>);
+type Drawn = (&'static mut Transform, Option<&'static Fitted>, Option<&'static mut Model>, Option<&'static crate::characters::Character>, &'static mut Motion, Option<&'static mut Visibility>);
 
 /// A drawn wolf's height (m) for nameplates and bubbles, at adult size.
 const WOLF_TALL: f32 = 0.9;
@@ -344,8 +328,10 @@ fn bodies(
         };
         if let Some(a) = combat.deaths.contains_key(&id).then(|| combat.actions.get(&id).copied()).flatten().or_else(fresh) {
             if let Some(s) = live.shown.get(&id) {
-                if let Ok((_, _, _, _, mut lb, _)) = q.get_mut(s.entity) {
-                    lb.action = Some(a);
+                if let Ok((_, _, _, _, mut motion, _)) = q.get_mut(s.entity) {
+                    motion.action = Some(a);
+                    motion.speed = 0.0;
+                    motion.now_ms = scene.now_ms;
                 }
             }
             continue;
@@ -406,7 +392,7 @@ fn bodies(
                 let e = crate::bodies::spawn(&mut commands, &mut meshes, &palette, &style, &body.kind, id, false, tf, p);
                 (e, if body.kind == "wolf" { WOLF_TALL } else { 1.4 }, false, false)
             };
-            commands.entity(entity).insert(LiveBody { clip: "idle", rate: 1.0, action: None });
+            commands.entity(entity).insert(Motion::default());
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
@@ -446,7 +432,7 @@ fn bodies(
         }
         let (speed, person, beast, yaw) = (s.speed, s.person, s.beast, s.yaw);
         let rising = held.map(|_| s.rising.map_or(0.0, |(t, _)| t));
-        let Ok((mut tf, fitted, mut model, ch, mut lb, vis)) = q.get_mut(s.entity) else { continue };
+        let Ok((mut tf, fitted, mut model, ch, mut motion, vis)) = q.get_mut(s.entity) else { continue };
         tf.translation.x = p.x;
         tf.translation.z = p.y;
         let dir = Vec2::new(yaw.cos(), yaw.sin());
@@ -478,17 +464,13 @@ fn bodies(
             (None, Some(m)) => m.ground_y = ground,
             (None, None) => tf.translation.y = ground,
         }
-        // The gait and its rate from the displayed speed, so feet don't slide (`gait.rs`).
-        let stride = ch.map_or(size, |c| c.stride);
-        let (clip, rate) = if speed < MOVING {
-            (if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") }, 1.0)
-        } else {
-            let file = model.as_ref().map_or("", |m| m.file.as_str());
-            crate::gait::of(file).pick(speed, stride, Some(lb.clip))
-        };
-        lb.clip = clip;
-        lb.rate = rate;
-        lb.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None }));
+        // What the body does; `anim.rs` blends its gaits from the displayed speed (feet keep
+        // still), its standing loop and any one-shot over them.
+        motion.speed = speed;
+        motion.stride = ch.map_or(size, |c| c.stride);
+        motion.stand = if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") };
+        motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None }));
+        motion.now_ms = scene.now_ms;
     }
 }
 
@@ -509,113 +491,6 @@ fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, liv
             target.0 = Some(Vec3::new(p.x, island.height(p.x, p.y), p.y));
         }
         None => target.0 = None,
-    }
-}
-
-/// Clip sets of drawn characters, and which one plays (cross-faded).
-#[derive(Component)]
-struct ClipSet {
-    player: Entity,
-    nodes: HashMap<String, AnimationNodeIndex>,
-    /// Clip lengths (s), for holding a pose part-way.
-    lens: HashMap<String, f32>,
-    /// What plays: the clip and, for a one-shot move, when it started (display ms).
-    playing: Option<(&'static str, Option<u64>)>,
-}
-
-#[derive(Component)]
-struct ClipFile(Handle<Gltf>);
-
-/// Play each character's clip (`LiveBody`), as look-dev does for its line-up but per character.
-#[allow(clippy::too_many_arguments)]
-fn clips(
-    mut commands: Commands,
-    assets: Res<AssetServer>,
-    gltfs: Res<Assets<Gltf>>,
-    anims: Res<Assets<AnimationClip>>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
-    new: Query<(Entity, &Model, Option<&ClipFile>), (With<LiveBody>, Or<(With<crate::lookdev::Rig>, (With<crate::bodies::Beast>, With<Fitted>))>, Without<ClipSet>)>,
-    mut playing: Query<(Entity, &mut ClipSet, &LiveBody)>,
-    children: Query<&Children>,
-    mut players: Query<(&mut AnimationPlayer, Option<&mut AnimationTransitions>)>,
-    mut has_clips: Local<HashMap<String, bool>>,
-    scene: NonSend<Scene>,
-) {
-    for (e, model, file) in &new {
-        let has = *has_clips.entry(model.file.clone()).or_insert_with(|| crate::lookdev::glb_json(&model.file).is_some_and(|j| j["animations"].as_array().is_some_and(|a| !a.is_empty())));
-        if !has {
-            continue;
-        }
-        // Hold the file's handle: the load is dropped with its last handle.
-        let Some(file) = file else {
-            commands.entity(e).insert(ClipFile(assets.load::<Gltf>(model.file.clone())));
-            continue;
-        };
-        let Some(gltf) = gltfs.get(&file.0) else { continue };
-        let Some(p) = children.iter_descendants(e).find(|d| players.contains(*d)) else { continue };
-        let lens: HashMap<String, f32> = gltf.named_animations.iter().filter_map(|(n, h)| anims.get(h).map(|a| (n.to_string(), a.duration()))).collect();
-        let (names, handles): (Vec<String>, Vec<_>) = gltf.named_animations.iter().map(|(n, h)| (n.to_string(), h.clone())).unzip();
-        let (graph, idx) = AnimationGraph::from_clips(handles);
-        commands.entity(p).insert((AnimationGraphHandle(graphs.add(graph)), AnimationTransitions::new()));
-        commands.entity(e).insert(ClipSet { player: p, nodes: names.into_iter().zip(idx).collect(), lens, playing: None });
-    }
-    for (e, mut c, lb) in &mut playing {
-        // A move plays once over locomotion, until it is over (or holds its pose).
-        let action = lb.action.filter(|a| c.nodes.contains_key(a.clip));
-        // A one-shot is timed on the display clock: its row arrives before the display shows
-        // its start (the display trails the authority), so it waits for that moment, and one
-        // seen late joins part-way. A dodge's clip then dashes as its body does. A move already
-        // showing in the same clip (my predicted one, now confirmed) carries on.
-        let current = c.playing.and_then(|(clip, o)| o.map(|_| clip));
-        let action = action.filter(|a| a.start_ms <= scene.now_ms || current == Some(a.clip));
-        let (want, once) = match action {
-            Some(a) => (a.clip, Some(a.start_ms as u64)),
-            None => (if c.nodes.contains_key(lb.clip) { lb.clip } else { "idle" }, None),
-        };
-        let Some(&node) = c.nodes.get(want) else { continue };
-        let Ok((mut player, transitions)) = players.get_mut(c.player) else {
-            commands.entity(e).remove::<ClipSet>();
-            continue;
-        };
-        if once.is_some() && current == Some(want) {
-            c.playing = Some((want, once));
-        }
-        if c.playing != Some((want, once)) {
-            let blend = std::time::Duration::from_millis(if once.is_some() { 90 } else { 220 });
-            match (transitions, once.is_some()) {
-                (Some(mut t), true) => {
-                    t.play(&mut player, node, blend);
-                }
-                (Some(mut t), false) => {
-                    t.play(&mut player, node, blend).repeat();
-                }
-                (None, true) => {
-                    player.play(node);
-                }
-                (None, false) => {
-                    player.play(node).repeat();
-                }
-            };
-            c.playing = Some((want, once));
-            if let (Some(a), Some(anim)) = (action, player.animation_mut(node)) {
-                let into = ((scene.now_ms - a.start_ms) / 1000.0) as f32 * a.rate;
-                if into > 0.02 && into < c.lens.get(want).copied().unwrap_or(0.0) {
-                    anim.seek_to(into);
-                }
-            }
-        }
-        let len = c.lens.get(want).copied().unwrap_or(1.0);
-        if let Some(a) = player.animation_mut(node) {
-            let speed = match action {
-                Some(act) => match act.hold {
-                    Some(h) if a.seek_time() >= h * len => 0.0,
-                    _ => act.rate,
-                },
-                None if want == lb.clip => lb.rate,
-                None => 1.0,
-            };
-            a.set_speed(speed);
-        }
     }
 }
 
@@ -711,6 +586,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   first load's cover has lifted (`loading.rs`);
 /// - `wait:S`; `shot:NAME` (`<dir>/NAME.png`);
 /// - `walk:DEG:S[:run]`: hold a direction (0 = north, 90 = east) through `human_move`;
+///   `hold:DEG[:run]` holds it and goes straight on to the next step (a skill or a gesture
+///   while walking), until `stop`;
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
 ///   `view:PITCH:DISTANCE[:FOV]`: the game camera's pitch (deg), distance (m) and field of view
 ///   (photographing small things up close);
@@ -751,7 +628,7 @@ fn script(
     scene: NonSend<Scene>,
     island: Option<Res<Island>>,
     live: Res<Live>,
-    fitted: Query<(), (With<LiveBody>, With<Fitted>)>,
+    fitted: Query<(), (With<Motion>, With<Fitted>)>,
     mut input: ResMut<Input>,
     mut cam: ResMut<Cam>,
     mut out: ResMut<crate::ui::model::Outbox>,
@@ -797,6 +674,16 @@ fn script(
                 input.scripted = Some((d, run));
                 false
             }
+        }
+        "hold" => {
+            let a: Vec<&str> = arg.split(':').collect();
+            let deg: f32 = a.first().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+            input.scripted = Some((Vec2::new(deg.to_radians().sin(), -deg.to_radians().cos()), a.get(1).is_some_and(|v| *v == "run")));
+            true
+        }
+        "stop" => {
+            input.scripted = Some((Vec2::ZERO, false));
+            true
         }
         "goto" => {
             if let (Some(conn), Some((x, y))) = (net.conn.as_ref(), arg.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?)))) {

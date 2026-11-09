@@ -42,7 +42,7 @@ Use a fresh `LIVING_GAME_TOKEN` path for each run. A reused token is an identity
 - `playing character #N`;
 - every 10 s, `live: cache body … character … doing … act_card … weather dry|rain|none lot … terrain_chunk … (N tiles edited) …; drawn … characters, … lots; window moves …` (`act_card` 18 and `weather` `dry` or `rain` on the island seed). The `body`, `character` and `doing` counts are the views' rows (`seen_bodies`, `seen_characters`, `seen_doing`) and `experience` is `my_experience`: what is in sight, so `body` equals `character` and is small away from crowds (1 alone at the arrival, 13–18 in a town square).
 
-Script steps for town life: `gesture:wave|nod|appraise[:ID]` (the G, B and V keys' path) and `sync:NAME` (waits for `<dir>/NAME.go`, so an outside driver can set a scene with admin reducers first; a number in the file sets the view's yaw).
+Script steps for town life: `gesture:wave|nod|appraise[:ID]` (the G, B and V keys' path) and `sync:NAME` (waits for `<dir>/NAME.go`, so an outside driver can set a scene with admin reducers first; a number in the file sets the view's yaw). Since 2026-11-09 also `hold:DEG[:run]` (walk or run toward a heading until the next step) and `stop`, used by the animation probes.
 
 `island perf` lines report frame times every 2 s. They are capped at 60 Hz unless `LIVING_GAME_FPS_CAP=0`. They describe the machine and its load; they are not protocol evidence.
 

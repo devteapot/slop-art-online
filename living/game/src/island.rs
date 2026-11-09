@@ -139,6 +139,35 @@ pub struct Island {
     pub start: Vec2,
     /// Every chunk in reach has its ground and things, and nothing waits to spawn.
     settled: bool,
+    /// Flights of stairs, by 16 m cell, for where feet stand ([`Island::foot_height`]).
+    flights: HashMap<(i32, i32), Vec<Flight>>,
+}
+
+/// A flight of stairs as `buildings.py`'s `prop_stairs` makes it: [`TREADS`] treads rising
+/// [`RISE`] m over [`RUN`] m from its front (down the stairs, at the lower terrace's floor) to its
+/// back, [`TREAD_W`] m wide.
+#[derive(Clone, Copy)]
+struct Flight {
+    centre: Vec2,
+    down: Vec2,
+    floor: f32,
+}
+
+const TREADS: f32 = 17.0;
+const RISE: f32 = 3.0;
+const RUN: f32 = 5.0;
+const TREAD_W: f32 = 2.4;
+const FLIGHT_CELL: f32 = 16.0;
+
+impl Flight {
+    /// The tread top under a point, if it is on this flight.
+    fn tread(&self, p: Vec2) -> Option<f32> {
+        let d = p - self.centre;
+        let side = Vec2::new(-self.down.y, self.down.x);
+        // From the front edge (u = 0) up to the back (u = RUN).
+        let u = RUN * 0.5 - d.dot(self.down);
+        (d.dot(side).abs() <= TREAD_W * 0.5 && (0.0..RUN).contains(&u)).then(|| self.floor + ((u * TREADS / RUN).floor() + 1.0) * RISE / TREADS)
+    }
 }
 
 /// A thing waiting to spawn into a chunk's ground tier or its small tier.
@@ -295,7 +324,19 @@ impl Island {
                 put(Item { kind: "person".into(), at, yaw: hash(k, 33) * std::f32::consts::TAU, k: k as usize, person: Some((world.seed * 104_729 + (si as u64) * 31 + k as u64, folk, st.style.clone())), ..default() });
             }
         }
-        Self { land, climate, envs, site_items, ground: HashMap::new(), small: HashMap::new(), queue: Vec::new(), prefetch: HashMap::new(), start, settled: false }
+        let mut flights: HashMap<(i32, i32), Vec<Flight>> = HashMap::new();
+        for pr in land.props.iter().filter(|p| p.kind == living_rules::settle::PropKind::Stairs) {
+            let f = Flight { centre: Vec2::new(pr.centre.0, pr.centre.1), down: Vec2::new(pr.front.0, pr.front.1).normalize_or(Vec2::X), floor: pr.floor_m };
+            // Every cell the flight's footprint touches.
+            let r = RUN.max(TREAD_W) * 0.5 + 0.5;
+            let (lo, hi) = ((f.centre - r) / FLIGHT_CELL, (f.centre + r) / FLIGHT_CELL);
+            for cx in lo.x.floor() as i32..=hi.x.floor() as i32 {
+                for cz in lo.y.floor() as i32..=hi.y.floor() as i32 {
+                    flights.entry((cx, cz)).or_default().push(f);
+                }
+            }
+        }
+        Self { land, climate, envs, site_items, ground: HashMap::new(), small: HashMap::new(), queue: Vec::new(), prefetch: HashMap::new(), start, settled: false, flights }
     }
 
     /// A building on an authority `lot` row (connected): the row's model file when it is on
@@ -330,6 +371,14 @@ impl Island {
     /// Height of the ground (game x, z).
     pub fn height(&self, x: f32, z: f32) -> f32 {
         self.land.height(x, z)
+    }
+
+    /// Where a foot stands (game x, z): the ground, or on a flight of stairs the tread over it
+    /// (the ground there is the flight's ramp, which meets each tread only at its back edge).
+    pub fn foot_height(&self, x: f32, z: f32) -> f32 {
+        let cell = ((x / FLIGHT_CELL).floor() as i32, (z / FLIGHT_CELL).floor() as i32);
+        let p = Vec2::new(x, z);
+        self.flights.get(&cell).and_then(|fs| fs.iter().find_map(|f| f.tread(p))).unwrap_or_else(|| self.height(x, z))
     }
 
     /// Whether you can stand at a point.

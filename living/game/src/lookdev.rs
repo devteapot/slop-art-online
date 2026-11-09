@@ -505,92 +505,51 @@ fn face(rig: &Rig, look: &Lookdev, morphs: &mut Query<&mut MorphWeights>, t: f32
     }
 }
 
-/// A model's animation clips by name, on its animation player, and the one playing.
-#[derive(Component)]
-pub struct Clips {
-    player: Entity,
-    /// The file the clips come from (its gaits, `gait.rs`).
-    file: String,
-    nodes: HashMap<String, AnimationNodeIndex>,
-    playing: Option<String>,
-}
-
-impl Clips {
-    /// The clip playing now.
-    pub fn playing(&self) -> Option<&str> {
-        self.playing.as_deref()
-    }
-}
-
-/// The glTF file a model's clips come from.
-#[derive(Component)]
-pub struct ClipSource(Handle<Gltf>);
-
 /// Look-dev's walking and running speeds (m/s), the ones `animate.py` scales `walk` and `run` to
 /// by default. Clips and their rates come from the actual speed (`gait.rs`).
 pub const WALK_SPEED: f32 = 1.4;
 pub const RUN_SPEED: f32 = 3.6;
 
-/// Models whose files carry clips (`assets/lookdev/anim/`, from `living/tools/blender/animate.py`)
-/// play them: idle, walk or run for you by how you move; idle, walk or talk for the line-up.
-#[allow(clippy::too_many_arguments)]
+/// What models whose files carry clips (`assets/lookdev/anim/`, from
+/// `living/tools/blender/animate.py`) do (`anim.rs` plays it): you walk or run by how you move;
+/// the line-up and crowds stand, talk or walk in place at `walk_speed` (`LIVING_GAME_ACT`). Your
+/// character also plays the probe's one-shots (`LIVING_GAME_ONESHOT`, probe.rs).
+#[allow(clippy::type_complexity)]
 pub fn clips(
     mut commands: Commands,
     look: Res<Lookdev>,
     roam: Res<crate::envs::Roam>,
-    assets: Res<AssetServer>,
-    gltfs: Res<Assets<Gltf>>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
-    new: Query<(Entity, &Model, &Rig, Option<&ClipSource>), Without<Clips>>,
-    mut playing: Query<(Entity, &mut Clips, Has<crate::envs::Player>, Option<&crate::characters::Character>)>,
-    children: Query<&Children>,
-    mut players: Query<(&mut AnimationPlayer, Option<&mut AnimationTransitions>)>,
+    mut models: Query<(Entity, &Rig, Option<&mut crate::anim::Motion>, Has<crate::envs::Player>, Option<&crate::characters::Character>)>,
+    probe: Option<Res<crate::probe::Probe>>,
+    time: Res<Time>,
 ) {
-    for (e, model, rig, source) in &new {
+    let now = time.elapsed_secs();
+    for (e, rig, motion, is_player, ch) in &mut models {
         if !rig.clips {
             continue;
         }
-        // Hold the file's handle: the load is dropped with its last handle.
-        let Some(source) = source else {
-            commands.entity(e).insert(ClipSource(assets.load::<Gltf>(model.file.clone())));
-            continue;
-        };
-        let Some(gltf) = gltfs.get(&source.0) else { continue };
-        let Some(p) = children.iter_descendants(e).find(|d| players.contains(*d)) else { continue };
-        let (names, handles): (Vec<String>, Vec<_>) = gltf.named_animations.iter().map(|(n, h)| (n.to_string(), h.clone())).unzip();
-        let (graph, idx) = AnimationGraph::from_clips(handles);
-        commands.entity(p).insert((AnimationGraphHandle(graphs.add(graph)), AnimationTransitions::new()));
-        debug!("look-dev: {} plays clips {names:?} on {p}", model.file);
-        commands.entity(e).insert(Clips { player: p, file: model.file.clone(), nodes: names.into_iter().zip(idx).collect(), playing: None });
-    }
-    for (e, mut c, is_player, ch) in &mut playing {
-        // The gait and its rate from the speed; longer legs take longer steps (`gait.rs`).
-        let stride = ch.map_or(1.0, |c| c.stride);
-        let gaits = || crate::gait::of(&c.file);
-        let (want, speed) = if is_player && roam.moving {
-            gaits().pick(roam.speed, stride, c.playing.as_deref())
+        let mut m = crate::anim::Motion { stride: ch.map_or(1.0, |c| c.stride), now_ms: now as f64 * 1000.0, ..default() };
+        if is_player {
+            m.speed = if roam.moving { roam.speed } else { 0.0 };
+            m.action = probe.as_ref().and_then(|p| p.oneshot(now)).map(|(clip, rate, start)| crate::combat::Action {
+                clip: crate::anim::intern(clip),
+                rate,
+                start_ms: start as f64 * 1000.0,
+                hold: None,
+                face: None,
+            });
         } else {
             match look.act {
-                Act::Walk if !is_player => gaits().pick(look.walk_speed, stride, c.playing.as_deref()),
-                Act::Talk if !is_player => ("talk", 1.0),
-                _ => ("idle", 1.0),
+                Act::Walk => m.speed = look.walk_speed,
+                Act::Talk => m.stand = "talk",
+                _ => {}
             }
-        };
-        let Some(&node) = c.nodes.get(want).or_else(|| c.nodes.get("idle")) else { continue };
-        let Ok((mut player, transitions)) = players.get_mut(c.player) else {
-            // The scene's animation player went away (its instance was rebuilt): find it again.
-            commands.entity(e).remove::<Clips>();
-            continue;
-        };
-        if c.playing.as_deref() != Some(want) {
-            match transitions {
-                Some(mut t) => t.play(&mut player, node, std::time::Duration::from_millis(220)).repeat(),
-                None => player.play(node).repeat(),
-            };
-            c.playing = Some(want.to_string());
         }
-        if let Some(a) = player.animation_mut(node) {
-            a.set_speed(speed);
+        match motion {
+            Some(mut x) => *x = m,
+            None => {
+                commands.entity(e).insert(m);
+            }
         }
     }
 }
