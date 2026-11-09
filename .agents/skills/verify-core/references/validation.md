@@ -5,7 +5,7 @@
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
 
 - `cargo_checks.py` (`core-cargo-tl2`): rules 109, authority 10, mind 64, viewer sync 3.
-- `town.py` (`core-town-tl2`): 20 of 21; the step-aside scene's three approaches got no step (residents look once a second; layer 1's open risk).
+- `town.py`: `core-town-tl2b` on the final code 21 of 21; `core-town-tl2` before the name rule 20 of 21 (the step-aside scene's three approaches got no step; residents look once a second, layer 1's open risk).
 
 ## 2026-11-09 town life layer 2, phase 1 (Mac)
 

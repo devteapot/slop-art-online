@@ -425,7 +425,9 @@ Branch `townlife-2`, on main after the `harness-1` merge (`015707b`).
 
 A restart finds what is made (a persona; `woken_upto`) and does not repeat it.
 
-**Not built:** the trial runner's support for `life-social.json` (its `needs`), which lives on `trials-1`; batch mode for the ring (a resident's first answer waits for it, and batch jobs took 24–47 s); a cap on how many residents a mind may wake.
+**Trials:** [`life-social.json`](../living/trials/life-social.json) runs on the trial runner merged to main (`trials-1`): a trial whose `minds.only` names `woken` gets `LIVING_ONLY=<subject>,woken` (`trials.py`). Still open in its `needs`: one replicate per world seed, and a default variant per preset.
+
+**Not built:** batch mode for the ring (a resident's first answer waits for it, and batch jobs took 24–47 s); a cap on how many residents a mind may wake.
 
 ## Phase 2 verification
 
@@ -437,7 +439,7 @@ Free tiers on the Mac's shared container (2.14.1), scratch databases and a scrat
 | Player | `host.py` (new), `wake.py`, `gesture.py`, `appraise.py` (the name rule changed) on fresh island runs | host 11 of 11 (twice) (a resident's graph hosts the player; the player learns `lodging`; the stay ends at the rules' 07:00; onlookers see theft from the household's store before the stay and none during it; a player hosting itself is refused; `guest` private); wake 25 of 25 (one world, `player-tl2b-wake`, 22 of 25: no second resident stood within 8 m of the first; three fresh worlds since, 25 of 25); gestures 10 of 10; appraise 10 of 10 (`player-tl2f`; `player-tl2e` 9 of 10, the act's `skill_use` outcome read before it was written) |
 | Minds | `verify_minds.py`, all cases | `minds-tl2c-*` (final code): 14 pass (with `harness-1`'s animals, night and jev), consolidation its known XFAIL |
 | Knowledge, regressions | `verify_knowledge.py run`; `player_memory.py` (its integration path was refactored) | 18 of 18 (`knowledge-base-tl2`); 6 of 6 (`knowledge-pmem-tl2b`) |
-| Core | `cargo_checks.py`; `town.py` on an island run | rules 109, authority 10, mind 64, viewer sync 3; town 20 of 21 (`core-town-tl2`: the step-aside scene's three approaches got no step; residents look once a second, the gap recorded under layer 1's open risks) |
+| Core | `cargo_checks.py`; `town.py` on an island run | rules 109, authority 10, mind 64, viewer sync 3; town 21 of 21 on the final code (`core-town-tl2b`; an earlier run, `core-town-tl2`, 20 of 21: the step-aside scene's three approaches got no step, layer 1's open risk) |
 | Client | `verify-client/scripts/run.py` (`guest` in `PRIVATE`; also `harness-1`'s `judged` table and `mind_judged` reducer, which the inventory lacked on main and stopped the driver) | `client-tl2d` (final code): 30 of 30; 59 private tables refused (the new `guest` to the player too); permission matrix 194 calls, 0 mismatches |
 | Project | `set -o pipefail; just living-check` (private `CARGO_TARGET_DIR`) | exit 0 |
 | Bindings | regenerated from the module | `guest_table.rs`, `guest_type.rs`, `mod.rs` |
