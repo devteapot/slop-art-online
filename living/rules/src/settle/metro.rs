@@ -47,6 +47,11 @@ pub struct MetroParams {
     pub shore_m: f32,
     /// Lamps along both sides of the highways this far apart (0: none).
     pub lamp_m: f32,
+    /// Elevated highway pieces over the arterials and rings inside the wall (props, drawn above
+    /// the street; the rules keep the roads at street level).
+    pub highways: bool,
+    /// Towers on the wall's corners (props).
+    pub wall_towers: bool,
     pub districts: Vec<District>,
 }
 
@@ -85,6 +90,13 @@ pub struct District {
     pub plaza_m: [f32; 2],
     /// Open ground between the buildings is paved (`Road` tiles), else left as it is.
     pub paved: bool,
+    /// At most this many wards take the district (0: any number). Wards choose in an order
+    /// drawn from the seed, so a district with a quota lands in different sectors per seed.
+    pub quota: u32,
+    /// Fill the blocks behind the frontages too: interior lots on a grid this many metres apart
+    /// (0: frontages only), at least `fill_gap_m` from each other so alleys stay between them.
+    pub fill_m: f32,
+    pub fill_gap_m: f32,
 }
 
 impl Default for District {
@@ -109,6 +121,9 @@ impl Default for District {
             rich: Vec::new(),
             plaza_m: [40.0, 28.0],
             paved: true,
+            quota: 0,
+            fill_m: 0.0,
+            fill_gap_m: 2.2,
         }
     }
 }
@@ -130,6 +145,8 @@ impl Default for MetroParams {
             wall: Some(WallSpec { thickness_m: 4.0, height_m: 14.0, tower_m: 120.0, lane_offset_m: 8.0, gate_m: 4.0 }),
             shore_m: 70.0,
             lamp_m: 40.0,
+            highways: false,
+            wall_towers: false,
             districts: vec![
                 // The core: towers round the central plaza, the tallest on the rich side.
                 District {
@@ -206,6 +223,9 @@ pub(super) struct Ward {
     poly: Vec<V2>,
     district: usize,
     wealth: f32,
+    /// Its middle as a fraction of the radius, and the cosine of its bearing to the sea's.
+    mid: f32,
+    sea_cos: f32,
     /// Highways and arterials along its sides.
     border: Vec<u32>,
     /// Its own streets and lanes.
@@ -508,7 +528,7 @@ pub(super) fn lay_out(land: &Land, mp: &MetroParams) -> City {
             ray(t, f * edge_at(&e, t))
         }).collect();
         let border: Vec<u32> = (0..na as u32).chain((0..na as u32).map(|j| na as u32 + j)).collect();
-        wards.push(Ward { poly, district: pick_district(f * 0.5, 0.0, 0.5), wealth: 0.5, border, streets: Vec::new() });
+        wards.push(Ward { poly, district: 0, wealth: 0.5, mid: f * 0.5, sea_cos: 0.0, border, streets: Vec::new() });
     }
     for b in 1..bands.len() - 1 {
         let (f0, f1) = (bands[b], bands[b + 1]);
@@ -537,14 +557,33 @@ pub(super) fn lay_out(land: &Land, mp: &MetroParams) -> City {
                     border.push((na + k as usize * na + j) as u32);
                 }
             }
-            wards.push(Ward { poly, district: pick_district((f0 + f1) * 0.5, sea_cos, wealth), wealth, border, streets: Vec::new() });
+            wards.push(Ward { poly, district: 0, wealth, mid: (f0 + f1) * 0.5, sea_cos, border, streets: Vec::new() });
+        }
+    }
+    // Districts: the core first, then the other wards in an order drawn from the seed; each
+    // takes the first district that fits it and has room in its quota.
+    {
+        let mut taken = vec![0u32; mp.districts.len()];
+        let mut order: Vec<usize> = (1..wards.len()).collect();
+        let mut keys: Vec<f32> = (0..wards.len()).map(|_| rng.f()).collect();
+        keys[0] = -1.0;
+        order.insert(0, 0);
+        order.sort_by(|&a, &b| keys[a].total_cmp(&keys[b]));
+        for wi in order {
+            let (mid, sea_cos, wealth) = (wards[wi].mid, wards[wi].sea_cos, wards[wi].wealth);
+            let fits = |d: &District| (d.band[0]..=d.band[1]).contains(&mid) && (d.sea[0]..=d.sea[1]).contains(&sea_cos) && (d.wealth[0]..=d.wealth[1]).contains(&wealth);
+            let di = (0..mp.districts.len()).find(|&i| fits(&mp.districts[i]) && (mp.districts[i].quota == 0 || taken[i] < mp.districts[i].quota)).unwrap_or_else(|| pick_district(mid, sea_cos, wealth));
+            taken[di] += 1;
+            wards[wi].district = di;
         }
     }
     // Streets, squares and settlements, ward by ward.
     let mut settlements: Vec<Settlement> = Vec::new();
     let mut sites: Vec<Site> = Vec::new();
     let mut bounds = Vec::new();
-    let core_plaza: Vec<V2> = (0..16).map(|i| ray(i as f32 / 16.0 * tau + a0, mp.plaza_m)).collect();
+    // Enough sides that the arterials, which start on the circle, meet its outline.
+    let sides = ((mp.plaza_m / 3.0).ceil() as usize).max(16);
+    let core_plaza: Vec<V2> = (0..sides).map(|i| ray(i as f32 / sides as f32 * tau + a0, mp.plaza_m)).collect();
     for wi in 0..wards.len() {
         let w = wards[wi].clone();
         let d = &mp.districts[w.district];
@@ -645,7 +684,10 @@ pub(super) fn lay_out(land: &Land, mp: &MetroParams) -> City {
                     }
                     let end_of = |q: V2, on_edge: bool| -> (RoadEnd, V2) {
                         if poly_outside(&plaza, q) < 3.0 {
-                            return (RoadEnd::Plaza(idx), q);
+                            // On the square's edge exactly.
+                            let mut ring = plaza.clone();
+                            ring.push(plaza[0]);
+                            return (RoadEnd::Plaza(idx), nearest_on(&ring, q).3);
                         }
                         if on_edge {
                             let best = w.border.iter().map(|&rid| (rid, nearest_on(&roads[rid as usize].points, q))).min_by(|x, y| x.1 .0.total_cmp(&y.1 .0));
@@ -717,14 +759,23 @@ pub(super) fn lay_out(land: &Land, mp: &MetroParams) -> City {
 
 /// Lots of every ward, in ward order (each ward's lots are one range), with lamps along its
 /// highways. Runs on a planner whose roads have their profiles.
-pub(super) fn place_lots(pl: &mut Plan, city: &City, mp: &MetroParams) {
+impl City {
+    /// How many wards the city has.
+    pub(super) fn wards(&self) -> usize {
+        self.wards.len()
+    }
+}
+
+/// Lots of ward `wi`. Wards are planned one at a time, in order, each from its own random
+/// stream, so a staged plan gives the same city as one pass.
+pub(super) fn ward_lots(pl: &mut Plan, city: &City, mp: &MetroParams, wi: usize) {
     let land = pl.land;
-    for (wi, w) in city.wards.iter().enumerate() {
+    {
+        let w = &city.wards[wi];
         let d = &mp.districts[w.district];
         let idx = wi as u16;
         let style = pl.settlements[wi].style.clone();
         let mut rng = Rng(land.seed ^ 0x107E ^ (wi as u64) << 10);
-        let start = pl.lots.len() as u32;
         let check = Check { road_clear: 0.3, plaza_clear: 1.0, min_gap: 99.0, water: 2.0, cut: d.level_m, fill: d.level_m, level: true, on_wall: false, in_plaza: None, step: 1.5 };
         // Weights: the district's mix, blended toward its rich mix by the ward's wealth.
         let mut weights: Vec<(LotKind, f32)> = d.mix.iter().map(|&(k, v)| (k, v * if d.rich.is_empty() { 1.0 } else { 1.0 - w.wealth })).collect();
@@ -766,6 +817,22 @@ pub(super) fn place_lots(pl: &mut Plan, city: &City, mp: &MetroParams) {
                         let lot = Lot { settlement: idx, kind: LotKind::Lamp, centre: cpos, width_m: lw, depth_m: ld, front: mul(n, -1.0), yaw: 0.0, floor_m: 0.0, frontage: Frontage::Road(rid), landmark: false, model_file: None, height_m: 0.0 };
                         let lot = pl.dressed(lot, m);
                         let _ = pl.try_lot(lot, 0.3, &lamp);
+                    }
+                }
+            }
+        }
+        // The core's landmark (its style's: an arcology) in the middle of the central square.
+        if wi == 0 {
+            if let Some(lk) = pl.p.styles.iter().find(|st| st.buildings == style).and_then(|st| st.landmark) {
+                let pc = pl.settlements[wi].plaza.centre;
+                let front = city.roads.first().and_then(|r| r.points.first()).map_or((0.0, 1.0), |q| norm(sub(*q, pc)));
+                if let Some(mi) = pl.pick(&style, lk, &mut rng, 0, false, f32::MAX) {
+                    let (lw, ld) = pl.dims(&style, lk, Some(mi), 0.15);
+                    // It stands on the square's level ground (pads skip lots inside a plaza).
+                    let lot = Lot { settlement: idx, kind: lk, centre: pc, width_m: lw, depth_m: ld, front, yaw: 0.0, floor_m: pl.settlements[wi].plaza.floor_m, frontage: Frontage::Plaza(idx), landmark: true, model_file: None, height_m: 0.0 };
+                    let lot = pl.dressed(lot, Some(mi));
+                    if let Some(li) = pl.try_lot(lot, 0.5, &Check { in_plaza: Some(pc), level: true, cut: 40.0, fill: 40.0, water: 2.0, ..check }) {
+                        pl.settlements[wi].landmark = Some(li);
                     }
                 }
             }
@@ -812,16 +879,89 @@ pub(super) fn place_lots(pl: &mut Plan, city: &City, mp: &MetroParams) {
                 }
             }
         }
-        pl.settlements[wi].lots = (start, pl.lots.len() as u32);
-        // The ward's landmark: its tallest building nearest the square.
-        let pc = pl.settlements[wi].plaza.centre;
-        let best = (start..pl.lots.len() as u32).filter(|&i| pl.lots[i as usize].kind.padded()).max_by(|&a, &b| {
-            let score = |i: u32| pl.lots[i as usize].height_m - 0.05 * dist(pl.lots[i as usize].centre, pc);
-            score(a).total_cmp(&score(b))
-        });
-        if let Some(b) = best {
-            pl.lots[b as usize].landmark = true;
-            pl.settlements[wi].landmark = Some(b);
+    }
+}
+
+/// Rows of the fill grid per step: each step stays well inside a reducer's budget.
+const FILL_ROWS: usize = 12;
+
+/// The steps ward `wi`'s back-fill takes (0 without one).
+pub(super) fn fill_steps(city: &City, mp: &MetroParams, wi: usize) -> usize {
+    let w = &city.wards[wi];
+    let d = &mp.districts[w.district];
+    if d.fill_m <= 0.0 {
+        return 0;
+    }
+    let (lo, hi) = (w.poly.iter().map(|q| q.1).fold(f32::MAX, f32::min), w.poly.iter().map(|q| q.1).fold(f32::MIN, f32::max));
+    (((hi - lo) / d.fill_m).ceil() as usize).div_ceil(FILL_ROWS).max(1)
+}
+
+/// One step of ward `wi`'s back-fill: the blocks behind the frontages, small lots on a
+/// jittered grid (rows `step × FILL_ROWS` onward), each facing its nearest street and kept
+/// apart so alleys run between them. Each step draws from its own random stream, so the city
+/// is the same however its steps fall.
+pub(super) fn ward_fill(pl: &mut Plan, city: &City, mp: &MetroParams, wi: usize, step: usize) {
+    let land = pl.land;
+    let w = &city.wards[wi];
+    let d = &mp.districts[w.district];
+    let idx = wi as u16;
+    let style = pl.settlements[wi].style.clone();
+    let mut rng = Rng(land.seed ^ 0xF111 ^ (wi as u64) << 10 ^ (step as u64) << 32);
+    let check = Check { road_clear: 0.3, plaza_clear: 1.0, min_gap: d.fill_gap_m, water: 2.0, cut: d.level_m, fill: d.level_m, level: true, on_wall: false, in_plaza: None, step: 1.5 };
+    let total: f32 = d.mix.iter().map(|x| x.1).sum::<f32>().max(1e-6);
+    let (lo, hi) = (
+        (w.poly.iter().map(|q| q.0).fold(f32::MAX, f32::min), w.poly.iter().map(|q| q.1).fold(f32::MAX, f32::min)),
+        (w.poly.iter().map(|q| q.0).fold(f32::MIN, f32::max), w.poly.iter().map(|q| q.1).fold(f32::MIN, f32::max)),
+    );
+    let mut near = Vec::new();
+    for row in step * FILL_ROWS..(step + 1) * FILL_ROWS {
+        let y = lo.1 + d.fill_m * (row as f32 + 0.5);
+        if y >= hi.1 {
+            break;
         }
+        let mut x = lo.0 + d.fill_m * 0.5;
+        while x < hi.0 {
+            let q = (x + (rng.f() - 0.5) * d.fill_m * 0.5, y + (rng.f() - 0.5) * d.fill_m * 0.5);
+            x += d.fill_m;
+            if !poly_contains(&w.poly, q) || dist_to_poly_edge(&w.poly, q) < 8.0 {
+                continue;
+            }
+            // The nearest of the ward's own streets, from the road buckets near the point.
+            let r = d.fill_m * 3.0;
+            pl.road_b.query((q.0 - r, q.1 - r), (q.0 + r, q.1 + r), &mut near);
+            let Some((rid, (dd, _, _, np))) = near.iter().copied().filter(|&rid| pl.roads[rid as usize].settlement == Some(idx)).map(|rid| (rid, nearest_on(&pl.roads[rid as usize].points, q))).min_by(|a, b| a.1 .0.total_cmp(&b.1 .0)) else { continue };
+            if dd < 6.0 {
+                continue;
+            }
+            let mut t = rng.f() * total;
+            let kind = d.mix.iter().find(|&&(_, v)| {
+                let hit = t < v;
+                t -= v;
+                hit
+            }).map_or(LotKind::House, |x| x.0);
+            let m = pl.pick(&style, kind, &mut rng, 0, false, d.fill_m);
+            let (lw, ld) = pl.dims(&style, kind, m, 0.15);
+            let lot = Lot { settlement: idx, kind, centre: q, width_m: lw, depth_m: ld, front: norm(sub(np, q)), yaw: 0.0, floor_m: land.height(q.0, q.1), frontage: Frontage::Alley(rid), landmark: false, model_file: None, height_m: 0.0 };
+            let lot = pl.dressed(lot, m);
+            let _ = pl.try_lot(lot, d.fill_gap_m, &check);
+        }
+    }
+}
+
+/// Close ward `wi`'s lots (`start..`): its lot range, and its landmark, the tallest building
+/// nearest the square (unless it has one).
+pub(super) fn ward_close(pl: &mut Plan, wi: usize, start: u32) {
+    pl.settlements[wi].lots = (start, pl.lots.len() as u32);
+    if pl.settlements[wi].landmark.is_some() {
+        return;
+    }
+    let pc = pl.settlements[wi].plaza.centre;
+    let best = (start..pl.lots.len() as u32).filter(|&i| pl.lots[i as usize].kind.padded()).max_by(|&a, &b| {
+        let score = |i: u32| pl.lots[i as usize].height_m - 0.05 * dist(pl.lots[i as usize].centre, pc);
+        score(a).total_cmp(&score(b))
+    });
+    if let Some(b) = best {
+        pl.lots[b as usize].landmark = true;
+        pl.settlements[wi].landmark = Some(b);
     }
 }

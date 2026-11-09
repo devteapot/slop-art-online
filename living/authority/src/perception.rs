@@ -195,7 +195,9 @@ pub fn knows_name(ctx: &ReducerContext, observer: &Character, target: &Character
     if o == t || observer.parent_a == t || observer.parent_b == t || target.parent_a == o || target.parent_b == o {
         return true;
     }
-    if ctx.db.acquaintance().by_pair().filter((o, t)).next().is_some() || ctx.db.relation().by_pair().filter((o, t)).next().is_some() {
+    // Told their name (an introduction). Having feelings about someone is not knowing their
+    // name: a mind can feel for a stranger it only saw (docs/TOWN_LIFE.md, "Layer 2").
+    if ctx.db.acquaintance().by_pair().filter((o, t)).next().is_some() {
         return true;
     }
     if let (Some(a), Some(b)) = (ctx.db.membership().member().find(o), ctx.db.membership().member().find(t)) {

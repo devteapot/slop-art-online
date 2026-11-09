@@ -1,5 +1,12 @@
 # Client protocol validation
 
+## 2026-11-10 `guest`, and harness-1's `judged` and `mind_judged` (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
+
+- `run.py` stopped at the inventory on main as merged: `judged` (table) and `mind_judged` (reducer) from `harness-1` were missing from `PRIVATE` and `MIND`; added with `guest`.
+- `client-tl2d` on the final code: 30 of 30; private table visibility 59 tables (`guest` refused to the player too); permission matrix 194 calls, 0 mismatches.
+
 ## 2026-11-09 town life layer 2, phase 1 (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `14f3a72` plus the uncommitted town life layer 2 phase 1 change (docs/TOWN_LIFE.md, "Layer 2"): the `woken`, `prior` and `prior_head` tables, the `wakes` and `woken_ring` laws. Free tier only; no model calls.

@@ -12,7 +12,7 @@ The living core (`living/`, see `docs/LIVING_CORE.md`) is verified surface by su
 | Surface | Skill | What it proves | Free tier | Opt-in tier |
 | --- | --- | --- | --- | --- |
 | Core rules and loop | `verify-core` | 60 Hz tick, behavior graphs, skills and laws, needs, life course, wildlife, combat, deliberate acts | scripted scenes and cargo tests | – |
-| World generation | `verify-generation` | worlds built from seeds: map, settlements, people, animals, resources; authored-world compilation | publishes and compiles | model drafting of authored worlds |
+| World generation | `verify-generation` | worlds built from seeds, compiled in or given to a floor module at runtime (`create_floor`, staged `genesis`): map, settlements, people, animals, resources; authored-world compilation | publishes and compiles | model drafting of authored worlds |
 | Client protocol | `verify-client` | what a connecting client sees and may do: subscriptions, table and view visibility, reducer permissions per identity | WebSocket probe client | – |
 | Human player | `verify-player` | a person's character: join, move, act, speak, fight (the skill bar), refusals, death and rejoin | player identity over HTTP | – |
 | Internal agents (minds) | `verify-minds` | the mind service turns requests into installed behavior, speech and consolidated memory; trials (one mind in a scripted or open-ended world, `living/tools/trials.py`) | real mind service against a fake model server; `trials.py run --fake` | real models: a short smoke check, and trial batches |

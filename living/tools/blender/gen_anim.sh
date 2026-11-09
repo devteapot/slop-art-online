@@ -5,7 +5,8 @@
 # (each clip's length, loop, natural and baked speed, and source), then merges each file's
 # same-material primitives (living/tools/merge_primitives.py) to cut draw calls, and adds the anime
 # face data (living/tools/face_normals.py: flattened face normals and <name>.face.png).
-# Also makes the wolf (wolf.py: its own rig and keyed clips, no Kimodo).
+# Also makes the wolf and the deer (wolf.py, deer.py on quadruped.py: their own rigs and keyed
+# clips, no Kimodo).
 # Kimodo clips need their generated NPZs in .local/kimodo/outputs/library/ (living/tools/kimodo/spark.sh).
 # Usage: living/tools/blender/gen_anim.sh [extra animate.py args, e.g. --speed 2.6 --run-speed 3.9]
 #   Without the library (hand-keyed clips only): gen_anim.sh --library "" --clips idle,walk,talk,run,attack
@@ -39,3 +40,10 @@ done
 # wolf.clips.json beside it.
 "$blender" -b --python-exit-code 1 -P living/tools/blender/wolf.py -- \
   --out "$src/anim/wolf.glb" --summary "$src/anim/wolf.clips.json" 2>&1 | grep -E "^(CLIP|WOLF)|Error|Traceback" || true
+# The deer, on the same quadruped machinery, with deer.clips.json beside it.
+"$blender" -b --python-exit-code 1 -P living/tools/blender/deer.py -- \
+  --out "$src/anim/deer.glb" --summary "$src/anim/deer.clips.json" 2>&1 | grep -E "^(CLIP|DEER)|Error|Traceback" || true
+# Marker sanity (living/tools/marker_check.py): a summary per character and gait; warnings for
+# split, short or long contacts, unpaired feet, an unsynced phase 0, a clip longer or shorter than
+# its sidecar or planted feet that slide in the baked take. Fails only on missing markers.
+python3 living/tools/marker_check.py "$src"/anim/*.glb

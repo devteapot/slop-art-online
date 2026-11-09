@@ -101,6 +101,8 @@ pub fn world(ctx: &ReducerContext) -> World {
     }
     let w = ctx.db.world().id().find(0).expect("world initialized");
     WORLD.with(|c| *c.borrow_mut() = Some((t, w.clone())));
+    // A floor module's seed lives in a row; this instance takes it before anything reads it.
+    crate::seed::load(ctx);
     w
 }
 
@@ -917,7 +919,31 @@ pub fn display(ctx: &ReducerContext, id: u32) -> String {
 
 thread_local! {
     static SPECIES: std::collections::BTreeMap<String, living_rules::species::Species> =
-        living_rules::species::parse(include_str!(concat!(env!("OUT_DIR"), "/species.json"))).expect("species.json");
+        living_rules::species::parse(&species_json()).expect("species.json");
+}
+
+/// The species profiles: `seeds/species.json` with the seed's `species` entries merged over
+/// it. build.rs merges a compiled seed's; a runtime seed's are merged here, the same way.
+pub fn species_json() -> String {
+    if !crate::seed::is_runtime() {
+        return include_str!(concat!(env!("OUT_DIR"), "/species.json")).to_string();
+    }
+    fn merge(base: &mut serde_json::Value, over: &serde_json::Value) {
+        match (base, over) {
+            (serde_json::Value::Object(b), serde_json::Value::Object(o)) => {
+                for (k, v) in o {
+                    merge(b.entry(k.clone()).or_insert(serde_json::Value::Null), v);
+                }
+            }
+            (b, o) => *b = o.clone(),
+        }
+    }
+    let mut species: serde_json::Value = serde_json::from_str(include_str!("../../seeds/species.json")).expect("species.json");
+    let seed: serde_json::Value = serde_json::from_str(&crate::seed::active()).expect("seed json");
+    if let Some(over) = seed.get("species") {
+        merge(&mut species, over);
+    }
+    species.to_string()
 }
 
 pub fn species(kind: &str) -> Option<living_rules::species::Species> {

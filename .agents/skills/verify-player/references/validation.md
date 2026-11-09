@@ -1,5 +1,13 @@
 # Validation record (player)
 
+## 2026-11-10 hospitality and the name rule (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
+
+- `host.py` (new): 11 of 11 (`player-tl2-host`, `player-tl2b-host`, `player-tl2e-host`).
+- `wake.py`: 25 of 25 (`player-tl2-wake`, `-tl2c`, `-tl2d`, `-tl2e`); `player-tl2b-wake` 22 of 25 (no second resident within 8 m of the first: where they stood).
+- `gesture.py` 10 of 10; `appraise.py` 10 of 10 (`player-tl2f`; `player-tl2e` 9 of 10, the appraise `skill_use` outcome read before it was written, the reveal itself correct).
+
 ## 2026-11-09 town life layer 2, phase 1 (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `14f3a72` plus the uncommitted town life layer 2 phase 1 change (docs/TOWN_LIFE.md, "Layer 2"): the `woken`, `prior` and `prior_head` tables, the `wakes` and `woken_ring` laws. Free tier only; no model calls.
