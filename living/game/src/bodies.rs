@@ -3,9 +3,11 @@
 //! scale) with a body mesh and limbs on pivots that swing with the creature's actual speed.
 //! Models face local +X (the authority's heading 0 is east).
 //!
-//! Wolves are drawn from the rigged file instead when it is on disk ([`spawn_beast`]): the
-//! connected client (`live.rs`) plays its clips by speed (`gait.rs`) and by the rules' aim of
-//! a move (`combat.rs`). Deer are still the box creature below.
+//! Wolves and deer are drawn from their rigged files instead when they are on disk
+//! ([`spawn_beast`]): the connected client (`live.rs`) plays their clips by speed (`gait.rs`), by
+//! the rules' aim of a move (`combat.rs`) and, for a deer, a startle as it takes flight; on a slope
+//! their bodies lie on the ground under their paws ([`lie_on`]). The box
+//! creatures below are the fallback when a file is missing, and the tile worlds' bodies.
 
 use crate::net::Net;
 use crate::style::{outline, Outlined, Style};
@@ -164,6 +166,19 @@ fn parts(kind: &str, id: u32, mine: bool) -> Parts {
 /// `wolf.clips.json` beside it: idle, walk, trot, run, bite, leap, hit and death. It faces +Z
 /// and stands with its origin on the ground, at real size (0.86 m at the shoulder).
 pub const WOLF: &str = "lookdev/anim/wolf.glb";
+/// The rigged deer (`living/tools/blender/deer.py`, run by `gen_anim.sh`; git-ignored), with
+/// `deer.clips.json`: idle (grazing and looking up), graze, walk, trot, run (a bound), startle,
+/// hit and death. Same bones and conventions as the wolf (`quadruped.py`); 1.0 m at the
+/// shoulder.
+pub const DEER: &str = "lookdev/anim/deer.glb";
+
+/// A rigged creature's height (m) at adult size, for nameplates and bubbles.
+pub fn beast_height(kind: &str) -> f32 {
+    match kind {
+        "deer" => 1.55,
+        _ => 0.9,
+    }
+}
 
 /// A creature drawn from a rigged file ([`spawn_beast`]). Its meshes wear the shared
 /// vertex-colour material, as the box creatures do (`lookdev::convert`), so a pack adds no
@@ -171,16 +186,57 @@ pub const WOLF: &str = "lookdev/anim/wolf.glb";
 #[derive(Component)]
 pub struct Beast;
 
+/// Where a rigged animal's fore and hind paws stand, ahead of and behind its origin (m, adult).
+fn paws_at(kind: &str) -> (f32, f32) {
+    match kind {
+        "deer" => (0.25, 0.46),
+        _ => (0.26, 0.41),
+    }
+}
+
+/// How far an animal's body may tilt with the ground (radians), and how fast it takes up a new
+/// tilt (1/s).
+const TILT_MAX: f32 = 0.45;
+pub const TILT_RATE: f32 = 12.0;
+
+/// A rigged animal laid on the ground under its paws (the quadruped's foot placement): its clips
+/// are made on flat ground, so on a slope a planar fit through the ground under its fore paws,
+/// hind paws and either side tilts the whole body and sets its height, and every planted paw
+/// meets a planar slope. One rotation per animal and four ground samples, no bone writes. Facing
+/// `fwd` (sim direction) at `at`, `size` times its adult size. Returns the world tilt (to apply
+/// before the model's yaw) and the ground height under the origin on that plane.
+pub fn lie_on(kind: &str, ground: impl Fn(f32, f32) -> f32, at: Vec2, fwd: Vec2, size: f32) -> (Quat, f32) {
+    let (f, h) = paws_at(kind);
+    let (f, h, w) = (f * size, h * size, 0.09 * size);
+    let fwd = fwd.normalize_or(Vec2::Y);
+    let side = Vec2::new(-fwd.y, fwd.x);
+    let pt = |q: Vec2| Vec3::new(q.x, ground(q.x, q.y), q.y);
+    let (fore, hind, left, right) = (pt(at + fwd * f), pt(at - fwd * h), pt(at + side * w), pt(at - side * w));
+    let along = fore - hind;
+    let across = left - right;
+    let n = along.cross(across).normalize_or(Vec3::Y);
+    let n = if n.y < 0.0 { -n } else { n };
+    let (axis, angle) = Quat::from_rotation_arc(Vec3::Y, n).to_axis_angle();
+    let tilt = if angle.is_finite() && angle > 1e-5 { Quat::from_axis_angle(axis, angle.min(TILT_MAX)) } else { Quat::IDENTITY };
+    // The plane's height under the origin, between the paws.
+    let y = hind.y + (fore.y - hind.y) * h / (f + h).max(1e-3);
+    (tilt, y)
+}
+
+/// The rigged file of a creature kind, if it has one on disk.
+pub fn beast_file(kind: &str) -> Option<&'static str> {
+    let file = match kind {
+        "wolf" => WOLF,
+        "deer" => DEER,
+        _ => return None,
+    };
+    std::path::Path::new(&crate::lookdev::asset_root()).join(file).exists().then_some(file)
+}
+
 /// A creature of `kind` from its rigged file, if there is one on disk: at `at`, facing `yaw`
 /// (0 = +Z), `size` times its real size. None: draw the box creature ([`spawn`]).
 pub fn spawn_beast(commands: &mut Commands, assets: &AssetServer, kind: &str, at: Vec3, yaw: f32, size: f32) -> Option<Entity> {
-    let file = match kind {
-        "wolf" => WOLF,
-        _ => return None,
-    };
-    if !std::path::Path::new(&crate::lookdev::asset_root()).join(file).exists() {
-        return None;
-    }
+    let file = beast_file(kind)?;
     let scene = assets.load(bevy::gltf::GltfAssetLabel::Scene(0).from_asset(file));
     let model = crate::lookdev::Model { vrm: false, file: file.to_string(), height: 0.0, ground_y: at.y, glow: None };
     Some(

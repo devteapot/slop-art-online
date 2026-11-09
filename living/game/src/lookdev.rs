@@ -520,10 +520,21 @@ pub fn clips(
     look: Res<Lookdev>,
     roam: Res<crate::envs::Roam>,
     mut models: Query<(Entity, &Rig, Option<&mut crate::anim::Motion>, Has<crate::envs::Player>, Option<&crate::characters::Character>)>,
+    mut beasts: Query<(Entity, Option<&mut crate::anim::Motion>), (With<crate::bodies::Beast>, With<crate::envs::Player>, Without<Rig>)>,
     probe: Option<Res<crate::probe::Probe>>,
     time: Res<Time>,
 ) {
     let now = time.elapsed_secs();
+    // An animal you walk as (`LIVING_GAME_PLAYER=beast:<kind>`): its gaits by your speed.
+    for (e, motion) in &mut beasts {
+        let m = crate::anim::Motion { speed: if roam.moving { roam.speed } else { 0.0 }, now_ms: now as f64 * 1000.0, ..default() };
+        match motion {
+            Some(mut x) => *x = m,
+            None => {
+                commands.entity(e).insert(m);
+            }
+        }
+    }
     for (e, rig, motion, is_player, ch) in &mut models {
         if !rig.clips {
             continue;

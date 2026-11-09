@@ -106,14 +106,14 @@ pub fn draw(
             }
             ui.add(egui::Slider::new(&mut r.rotate_rate, 20.0..=240.0).text("[ ] rotate °/s"));
             ui.add(egui::Slider::new(&mut r.lead, 0.0..=8.0).text("cursor lean (m)"));
-            ui.checkbox(&mut r.frame_talk, "frame conversations");
+            ui.checkbox(&mut r.frame, "frame talk, greetings and fights");
             ui.checkbox(&mut r.sight_bound, "never show further than sight");
             if ui.small_button("reset camera").clicked() {
                 *r = crate::camera::Rig::default();
             }
             ui.separator();
             ui.add(egui::Slider::new(&mut my_size.0, 0.4..=3.0).text("my size (× adult)"));
-            ui.label(egui::RichText::new(format!("now: pitch {:.0}°, distance {:.1} m, fov {:.0}°{}", shown.pitch, shown.distance * my_size.0.max(0.4), shown.fov, if cam.talk_partner.is_some() { " · framing a conversation" } else { "" })).small().weak());
+            ui.label(egui::RichText::new(format!("now: pitch {:.0}°, distance {:.1} m, fov {:.0}°{}", shown.pitch, shown.distance * my_size.0.max(0.4), shown.fov, match cam.context { Some(crate::camera::Context::Fight) => " · framing a fight", Some(_) => " · framing a conversation", None => "" })).small().weak());
         });
     }
 
