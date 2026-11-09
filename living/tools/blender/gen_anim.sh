@@ -14,9 +14,17 @@ blender=${BLENDER:-blender}
 mkdir -p "$src/anim"
 for f in "$src"/vroid-*.glb; do
   name=$(basename "$f" .glb)
-  "$blender" -b --python-exit-code 1 -P living/tools/blender/animate.py -- \
+  log=$(mktemp)
+  # Fail on Blender's own status; the filter below only trims what is printed.
+  if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/animate.py -- \
     --in "$f" --out "$src/anim/$name.glb" --library living/tools/blender/clips.json \
-    --summary "$src/anim/$name.clips.json" "$@" | grep -E '^(SKELETON|ANIM|GRAFT|SUMMARY)' || true
+    --summary "$src/anim/$name.clips.json" "$@" > "$log" 2>&1; then
+    grep -v OpenColorIO "$log" | tail -30
+    rm -f "$log"
+    exit 1
+  fi
+  grep -E '^(SKELETON|ANIM|GRAFT|SUMMARY)' "$log" || true
+  rm -f "$log"
   # One draw per material per mesh (VRoid hair is dozens of primitives); clips are untouched.
   python3 living/tools/merge_primitives.py "$src/anim/$name.glb" "$src/anim/$name.glb.tmp"
   mv "$src/anim/$name.glb.tmp" "$src/anim/$name.glb"

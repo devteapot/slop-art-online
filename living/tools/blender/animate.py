@@ -775,7 +775,9 @@ SOMA_LIMB = {
 SOMA_HIPS_REST = 1.005  # SOMA's rest hips height above the soles, m
 
 
-SOMA_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", ".local", "kimodo", "outputs", "somaskel77_skeleton.json")
+# The SOMA skeleton (joint names, parents, rest pose): fixed data, kept in the repo so any machine
+# with the Kimodo NPZ cache can build the clips.
+SOMA_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "kimodo", "somaskel77_skeleton.json")
 TURN = Matrix.Diagonal((-1.0, 1.0, -1.0))  # SOMA faces +Z, VRoid −Z: half a turn round Y
 HIPS = bone("C", "Hips")
 
@@ -824,7 +826,7 @@ def retarget_kimodo(sk, path):
     (the game moves the character), scaled by the ratio of hips heights."""
     import numpy as np
 
-    soma = Soma(sk, os.path.join(os.path.dirname(path), "somaskel77_skeleton.json"))
+    soma = Soma(sk, SOMA_JSON)
     d = np.load(path)
     root = d["root_positions"].copy()
     root[:, [0, 2]] -= d["smooth_root_pos"][:, [0, 2]]
@@ -1542,7 +1544,7 @@ def main():
         add(name, key_frames(arm, name, retarget_kimodo(sk, os.path.abspath(path)), {}))
     if a.library:
         lib = json.load(open(a.library))
-        soma = Soma(sk, os.path.join(os.path.dirname(a.kimodo_dir.rstrip("/")), "somaskel77_skeleton.json"))
+        soma = Soma(sk, SOMA_JSON)
         neutral = neutral_frame(sk, soma, lib["neutral"], a.kimodo_dir) if lib.get("neutral") else None
         only = {x for x in a.only.split(",") if x}
         for name, e, seed in library_entries(lib, only, a.seeds):
