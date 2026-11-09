@@ -14,10 +14,11 @@
 //!   run ↔ run_fast) across the whole gap, and across families (walk_brisk ↔ run) only in a
 //!   band of ±[`CROSS_BAND`] round [`WALK_MAX`], so the rules' 2.6 m/s walk still walks and
 //!   their 3.9 m/s run runs.
-//! - **Animals** (the wolf: walk, trot, run at natural 1.3, 3.4 and 7.0 m/s) change footfall
-//!   pattern between gaits (lateral walk, diagonal trot, rotary gallop): halfway blends of two
-//!   patterns shuffle, so they blend only within ±10% round the geometric mean of two
-//!   neighbours.
+//! - **Animals** (the wolf: walk, trot, run at natural 1.3, 3.4 and 7.0 m/s; the deer: walk,
+//!   trot, bound at 1.3, 3.7 and 4.6) change footfall pattern between gaits (lateral walk,
+//!   diagonal trot, gallop or bound): halfway blends of two patterns shuffle, so they blend only
+//!   within ±10% round the geometric mean of two neighbours, or the sidecar's `band` (the deer's
+//!   ±4%, so the rules' deer trot at 3.7 m/s and flee at 4.26 each play one gait).
 //! - The phase advances at `speed / (stride × cycle)`, where `cycle` is the weighted mean of the
 //!   gaits' metres per cycle (baked speed × length). Each gait then moves its planted foot back at
 //!   its own share of the body's speed, and their blend at the body's speed: the stride rule of
@@ -29,8 +30,8 @@
 //! eased before it gets here (`live.rs`). Files without the sidecar use the walk and run at the
 //! look-dev's 1.4 and 3.6 m/s with their clips' own lengths.
 //!
-//! `LIVING_GAME_FEET=<file>` writes, every frame, where your character's toes and ankles are and
-//! the ground under them, the clip that shows most and, through `anim.rs`, the shared phase and
+//! `LIVING_GAME_FEET=<file>` writes, every frame, where your character's toes and ankles (an
+//! animal's paw tips: `LIVING_GAME_PLAYER=beast:wolf` in look-dev) are and the ground under them, the clip that shows most and, through `anim.rs`, the shared phase and
 //! each foot's marker contact (JSON lines), for measuring foot slide
 //! (`living/tools/foot_slide.py`) and checking markers.
 
@@ -43,7 +44,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 pub const WALK_MAX: f32 = 2.8;
 /// Half the width of the walk ↔ run blend round [`WALK_MAX`] (m/s).
 pub const CROSS_BAND: f32 = 0.2;
-/// Animals blend two gaits within this ratio either side of their geometric mean.
+/// Animals blend two gaits within this ratio either side of their geometric mean, unless their
+/// sidecar gives its own `band`.
 const ANIMAL_BAND: f32 = 1.1;
 
 /// Each foot's contact windows over a clip, in normalised clip time (0–1). People's feet are
@@ -171,6 +173,8 @@ pub struct Gaits {
     clips: Vec<Gait>,
     split: bool,
     info: HashMap<String, ClipInfo>,
+    /// An animal's blend band (ratio either side of the geometric mean).
+    band: f32,
 }
 
 /// The gaits playing at a speed: up to two (index into [`Gaits::gaits`], weight), weights
@@ -202,6 +206,7 @@ impl Gaits {
             ],
             split: true,
             info: HashMap::new(),
+            band: ANIMAL_BAND,
         }
     }
 
@@ -223,7 +228,8 @@ impl Gaits {
                     (speed > 0.1 && c["loop"].as_bool() != Some(false)).then_some(Gait { clip, speed, natural: speed, run: false, seconds: c["seconds"].as_f64().map(|s| s as f32) })
                 })
                 .collect();
-            return if clips.is_empty() { Self { info, ..Self::fallback() } } else { Self { clips, split: false, info } };
+            let band = json["band"].as_f64().map_or(ANIMAL_BAND, |b| (b as f32).clamp(1.001, 1.5));
+            return if clips.is_empty() { Self { info, ..Self::fallback() } } else { Self { clips, split: false, info, band } };
         }
         let info = json.as_object().map(|m| m.iter().filter(|(_, c)| c.is_object()).map(|(k, c)| (k.clone(), info_of(c, &PEOPLE_FEET))).collect()).unwrap_or_default();
         let mut clips = LOCOMOTION
@@ -238,7 +244,7 @@ impl Gaits {
         if clips.iter().any(|g| !g.run) && clips.iter().any(|g| g.run) {
             // Walks first, then runs, each by natural speed.
             clips.sort_by(|a, b| a.run.cmp(&b.run).then(a.natural.total_cmp(&b.natural)));
-            Self { clips, split: true, info }
+            Self { clips, split: true, info, band: ANIMAL_BAND }
         } else {
             Self { info, ..Self::fallback() }
         }
@@ -257,7 +263,7 @@ impl Gaits {
         let (a, b) = (&self.clips[i], &self.clips[i + 1]);
         if !self.split {
             let m = (a.natural * b.natural).sqrt();
-            (m / ANIMAL_BAND, m * ANIMAL_BAND)
+            (m / self.band, m * self.band)
         } else if a.run != b.run {
             (WALK_MAX - CROSS_BAND, WALK_MAX + CROSS_BAND)
         } else {
@@ -341,54 +347,88 @@ impl Plugin for GaitPlugin {
 #[derive(Resource)]
 struct FeetLog(std::io::BufWriter<std::fs::File>);
 
-/// One line a frame: time, the body's root, each toe and ankle with the ground under it, the clip
-/// that shows most, the phase, the gaits and the markers' foot contacts.
-#[allow(clippy::type_complexity)]
+/// What the recorder follows on a body: a person's toes and ankles, or an animal's paw tips
+/// (each paw bone's head moved its length along the bone: the bone ends at the paw).
+enum Tracked {
+    Person([Entity; 4]),
+    Paws([(Entity, f32); 4]),
+}
+
+/// An animal file's paw bones' lengths (`paw_len` in its sidecar, from `quadruped.py`; the wolf's
+/// own when an older sidecar lacks them), in [`ANIMAL_FEET`] order.
+fn paw_lengths(file: &str) -> [f32; 4] {
+    let path = std::path::Path::new(&crate::lookdev::asset_root()).join(file).with_extension("clips.json");
+    let json = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
+    let wolf = [0.1163, 0.1163, 0.1504, 0.1504];
+    ANIMAL_FEET.map(|f| json.as_ref().and_then(|j| j["paw_len"][f].as_f64()).map(|v| v as f32)).iter().zip(wolf).map(|(v, w)| v.unwrap_or(w)).collect::<Vec<_>>().try_into().unwrap_or(wolf)
+}
+
+/// One line a frame: time, the body's root, each toe and ankle (or each paw tip) with the ground
+/// under it, the clip that shows most, the phase, the gaits and the markers' foot contacts.
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn record(
     mut log: ResMut<FeetLog>,
     time: Res<Time>,
     island: Option<Res<crate::island::Island>>,
-    who: Query<(Entity, &GlobalTransform), Or<(With<Feet>, With<crate::envs::Player>)>>,
+    envs: Option<Res<crate::envs::Envs>>,
+    who: Query<(Entity, &GlobalTransform, Option<&crate::lookdev::Model>), Or<(With<Feet>, With<crate::envs::Player>)>>,
     children: Query<&Children>,
     bones: Query<(&Name, &GlobalTransform)>,
     anims: Query<&crate::anim::Anim>,
     roam: Res<crate::envs::Roam>,
-    mut feet: Local<HashMap<Entity, [Entity; 4]>>,
+    mut feet: Local<HashMap<Entity, Tracked>>,
 ) {
-    let ground = |x: f32, z: f32| island.as_ref().map_or(0.0, |i| i.height(x, z));
-    for (e, root) in &who {
+    // The island's ground, else the look-dev environment's.
+    let ground = |x: f32, z: f32| match (&island, &envs) {
+        (Some(i), _) => i.height(x, z),
+        (None, Some(e)) => e.ground.height(x, z),
+        _ => 0.0,
+    };
+    for (e, root, model) in &who {
         if !feet.contains_key(&e) {
             let find = |name: &str| children.iter_descendants(e).find(|d| bones.get(*d).is_ok_and(|(n, _)| n.as_str() == name));
             if let (Some(l), Some(r), Some(la), Some(ra)) = (find("J_Bip_L_ToeBase"), find("J_Bip_R_ToeBase"), find("J_Bip_L_Foot"), find("J_Bip_R_Foot")) {
-                feet.insert(e, [l, r, la, ra]);
+                feet.insert(e, Tracked::Person([l, r, la, ra]));
+            } else if let (Some(fl), Some(fr), Some(hl), Some(hr)) = (find("paw.fl"), find("paw.fr"), find("paw.hl"), find("paw.hr")) {
+                let len = paw_lengths(model.map_or("", |m| m.file.as_str()));
+                feet.insert(e, Tracked::Paws([(fl, len[0]), (fr, len[1]), (hl, len[2]), (hr, len[3])]));
             } else {
                 continue;
             }
         }
-        let at = feet[&e].map(|b| bones.get(b).map(|(_, g)| g.translation()));
-        let [Ok(l), Ok(r), Ok(la), Ok(ra)] = at else {
-            feet.remove(&e);
-            continue;
+        let pt = |v: Vec3| [v.x, v.y, v.z, ground(v.x, v.z)];
+        let mut line = match &feet[&e] {
+            Tracked::Person(b) => {
+                let [Ok(l), Ok(r), Ok(la), Ok(ra)] = b.map(|b| bones.get(b).map(|(_, g)| g.translation())) else {
+                    feet.remove(&e);
+                    continue;
+                };
+                serde_json::json!({"l": pt(l), "r": pt(r), "la": pt(la), "ra": pt(ra)})
+            }
+            Tracked::Paws(b) => {
+                let [Ok(fl), Ok(fr), Ok(hl), Ok(hr)] = b.map(|(b, len)| bones.get(b).map(|(_, g)| g.transform_point(Vec3::Y * len))) else {
+                    feet.remove(&e);
+                    continue;
+                };
+                serde_json::json!({"paws": {"fl": pt(fl), "fr": pt(fr), "hl": pt(hl), "hr": pt(hr)}})
+            }
         };
         let p = root.translation();
         let anim = anims.get(e).ok();
-        let clip = anim.map_or("", |a| a.showing());
-        let pt = |v: Vec3| [v.x, v.y, v.z, ground(v.x, v.z)];
-        let line = serde_json::json!({
+        let rest = serde_json::json!({
             "t": time.elapsed_secs_f64(),
             "root": [p.x, p.y, p.z],
-            "l": pt(l),
-            "r": pt(r),
-            "la": pt(la),
-            "ra": pt(ra),
             "speed": roam.speed,
-            "clip": clip,
+            "clip": anim.map_or("", |a| a.showing()),
             // The shared phase, the gaits and their weights, and each foot's marker contact.
             "phase": anim.map(|a| a.phase),
             "gaits": anim.map(|a| a.gaits()),
             "feet": anim.map(|a| a.feet),
             "ik": anim.map(|a| a.ik),
         });
+        if let (Some(m), Some(r)) = (line.as_object_mut(), rest.as_object()) {
+            m.extend(r.clone());
+        }
         let _ = writeln!(log.0, "{line}");
     }
 }
@@ -512,6 +552,25 @@ pub(crate) mod tests {
         // The walk's settle point has three paws down.
         let c = &g.info("walk").unwrap().contacts;
         assert_eq!(c.count(c.next_settle(0.3)), 3);
+    }
+
+    #[test]
+    fn the_deers_narrow_band_keeps_the_rules_trot_and_flee_pure() {
+        let g = Gaits::parse(&serde_json::json!({"model": "deer", "band": 1.04, "clips": [
+            {"name": "walk", "seconds": 1.0, "loop": true, "speed": 1.3},
+            {"name": "trot", "seconds": 0.5, "loop": true, "speed": 3.7},
+            {"name": "run", "seconds": 0.48, "loop": true, "speed": 4.6},
+        ]}));
+        let top = |s: f32| {
+            let b = g.blend(s, 1.0, |_| 1.0);
+            let &(i, w) = b.parts().iter().max_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
+            (g.clips[i].clip, w)
+        };
+        // The rules' deer move at 3.7 m/s and flee at 1.15 × that.
+        assert_eq!(top(3.7), ("trot", 1.0));
+        let (clip, w) = top(3.7 * 1.15);
+        assert!(clip == "run" && w > 0.9, "flee plays the bound, not {clip} at {w}");
+        assert_eq!(g.blend(4.125, 1.0, |_| 1.0).n, 2, "they still blend round the boundary");
     }
 
     #[test]
