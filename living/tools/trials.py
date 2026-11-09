@@ -489,6 +489,11 @@ class Instance:
     # -- the world
     def publish(self):
         wasm = self.shared["wasm"][self.trial["name"]]
+        # A variant may run a module built from another branch (an iteration's engine change):
+        # the same world seed, built there and copied in as <module>-<wasm_tag>.wasm.
+        tag = self.shared["variants"][self.variant].get("wasm_tag")
+        if tag:
+            wasm = f"{wasm}-{tag}"
         sh("docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}.wasm", self.db, "--delete-data", "-y", timeout=300)
         self.published = True
         self.save()
