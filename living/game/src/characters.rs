@@ -389,6 +389,14 @@ pub fn spawn(commands: &mut Commands, assets: &AssetServer, recipe: &Recipe, at:
 #[derive(Component)]
 pub struct FileHandle(#[allow(dead_code)] Handle<bevy::gltf::Gltf>);
 
+impl FileHandle {
+    /// A file's root glTF, held for the session ([`kept`]): for any model that plays the
+    /// file's clips (characters, the wolf).
+    pub fn kept(assets: &AssetServer, file: &str) -> Self {
+        Self(kept(assets, file))
+    }
+}
+
 /// A character file's root glTF, loaded once and held for the session (there are only a few
 /// bases).
 fn kept(assets: &AssetServer, file: &str) -> Handle<bevy::gltf::Gltf> {

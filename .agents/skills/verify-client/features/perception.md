@@ -10,7 +10,7 @@ What a player's client may read is what its character perceives now, plus its ow
 - Beyond sight: the same players 20-30 tiles apart receive no body, character, fighter or doing row of the other (step `beyond-sight`).
 - Behind a wall or rock: two players at most 4 tiles apart (within even night sight, 6 tiles), on one axis with only rock or wall tiles between, receive nothing of the other (step `behind-wall`).
 - `my_characters` (the dead included), `my_vitals`, `my_experience`, `my_places`, `my_inventory` and `my_know_how` hold only the caller's characters' rows; anonymous receives none of them and no `seen_*` rows (`own-*.json`).
-- In a `scoped` build the tables behind these views are private to anyone but the database owner, players included (`visibility.json`). In an `open` build they stay public for the game client of 2026-11-09, so the views are correct but are not the boundary yet.
+- In a `scoped` build the tables behind these views are private to anyone but the database owner, players included (`visibility.json`). In a `LIVING_PERCEPTION=open` build (diagnostics only; the default is `scoped`) they are public, so the views are correct but are not the boundary there.
 
 ## How to get to it (user POV)
 
@@ -29,7 +29,7 @@ LIVING_PERCEPTION=scoped .agents/skills/verify-client/scripts/run.py --run "$R"
 ## Gotchas
 
 - The geometry search assumes the realm map has a thin rock or wall run (gap 1-3 tiles) somewhere; on a map without one the check fails with "no sight-check geometry", which is a fixture failure, not a product one.
-- `drive.py` records which build it drives from the run's state (`perception`, set from `LIVING_PERCEPTION` at launch). Run the suite on both builds when a change touches visibility: `scoped` proves the boundary, `open` proves the compatibility path still serves today's game client.
+- `drive.py` records which build it drives from the run's state (`perception`, set from `LIVING_PERCEPTION` at launch). Run the suite on both builds when a change touches visibility: `scoped` (the default) proves the boundary, `open` proves the diagnostic build still makes those tables public and the views still answer there.
 - The sweep runs every 200 ms; a probe right after `place_at` can still see the old set. The driver waits 1 s.
 - Since 2026-11-09 the combat feed (`my_combat`) and minds' percepts see by the same rule (sight and a clear sight line): a blow behind a wall no longer reaches a player's feed. `verify-minds`'s `sight` case drives the minds' side.
 - `my_experience` rows of a character the world's minds controlled while its person was away carry the mind service's identity as `controller`; the own-state check accepts the caller's identity or the world admin's.

@@ -2,6 +2,10 @@
 //! about 1.1 m at the shoulder, wolves about 0.75 m. Each is a root entity (position, facing,
 //! scale) with a body mesh and limbs on pivots that swing with the creature's actual speed.
 //! Models face local +X (the authority's heading 0 is east).
+//!
+//! Wolves are drawn from the rigged file instead when it is on disk ([`spawn_beast`]): the
+//! connected client (`live.rs`) plays its clips by speed (`gait.rs`) and by the rules' aim of
+//! a move (`combat.rs`). Deer are still the box creature below.
 
 use crate::net::Net;
 use crate::style::{outline, Outlined, Style};
@@ -41,7 +45,7 @@ pub struct Limb {
     amp: f32,
 }
 
-fn stage_scale(stage: u8) -> f32 {
+pub fn stage_scale(stage: u8) -> f32 {
     match stage {
         0 => 0.42,
         1 => 0.72,
@@ -156,6 +160,43 @@ fn parts(kind: &str, id: u32, mine: bool) -> Parts {
     }
 }
 
+/// The rigged wolf (`living/tools/blender/wolf.py`, run by `gen_anim.sh`; git-ignored), with
+/// `wolf.clips.json` beside it: idle, walk, trot, run, bite, leap, hit and death. It faces +Z
+/// and stands with its origin on the ground, at real size (0.86 m at the shoulder).
+pub const WOLF: &str = "lookdev/anim/wolf.glb";
+
+/// A creature drawn from a rigged file ([`spawn_beast`]). Its meshes wear the shared
+/// vertex-colour material, as the box creatures do (`lookdev::convert`), so a pack adds no
+/// material; it plays its file's clips (`live.rs`).
+#[derive(Component)]
+pub struct Beast;
+
+/// A creature of `kind` from its rigged file, if there is one on disk: at `at`, facing `yaw`
+/// (0 = +Z), `size` times its real size. None: draw the box creature ([`spawn`]).
+pub fn spawn_beast(commands: &mut Commands, assets: &AssetServer, kind: &str, at: Vec3, yaw: f32, size: f32) -> Option<Entity> {
+    let file = match kind {
+        "wolf" => WOLF,
+        _ => return None,
+    };
+    if !std::path::Path::new(&crate::lookdev::asset_root()).join(file).exists() {
+        return None;
+    }
+    let scene = assets.load(bevy::gltf::GltfAssetLabel::Scene(0).from_asset(file));
+    let model = crate::lookdev::Model { vrm: false, file: file.to_string(), height: 0.0, ground_y: at.y, glow: None };
+    Some(
+        commands
+            .spawn((
+                model,
+                Beast,
+                bevy::world_serialization::WorldAssetRoot(scene),
+                crate::characters::FileHandle::kept(assets, file),
+                Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)).with_scale(Vec3::splat(size)),
+                Visibility::Hidden,
+            ))
+            .id(),
+    )
+}
+
 /// Mirror subscribed bodies as creatures: smoothed motion, facing, size, life stage and gait.
 #[allow(clippy::too_many_arguments)]
 pub fn update(
@@ -174,8 +215,8 @@ pub fn update(
     let Some(conn) = &net.conn else { return };
     let now = scene.clock.frame(net.body_t.swap(0, std::sync::atomic::Ordering::Relaxed));
     scene.now_ms = now;
-    let bodies: HashMap<u32, Body> = conn.db.body().iter().map(|b| (b.id, b)).collect();
-    let chars: HashMap<u32, Character> = conn.db.character().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
+    let bodies: HashMap<u32, Body> = crate::net::bodies(conn).map(|b| (b.id, b)).collect();
+    let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
     let scene = &mut *scene;
     let dt = time.delta_secs().max(1e-4);
     scene.tracks.retain(|id| bodies.contains_key(&id));
@@ -198,7 +239,8 @@ pub fn update(
     for (id, b) in &bodies {
         let Some((p, heading)) = scene.shown.get(id).copied() else { continue };
         let c = chars.get(id);
-        let alive = c.is_none_or(|c| c.alive);
+        // Only the living are in sight: a death takes the body out of `seen_bodies`.
+        let alive = true;
         let mine = Some(*id) == net.my_id;
         // My own character turns toward where I look (shown locally only: the authority has
         // no look direction yet).

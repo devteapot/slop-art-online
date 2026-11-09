@@ -207,8 +207,9 @@ pub fn convert(
     assets: Res<AssetServer>,
     q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), Without<Converted>>,
     parents: Query<&ChildOf>,
-    models: Query<(&Model, Has<NoShadow>)>,
+    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>)>,
     detail: Option<Res<crate::style::DetailLayers>>,
+    palette: Res<Palette>,
     mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), AssetId<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, AssetId<Toon>>)>,
 ) {
     for (e, mat, mesh, name) in &q {
@@ -222,9 +223,20 @@ pub fn convert(
                 break;
             }
         }
-        let Some((owner, no_shadow)) = owner else { continue };
+        let Some((owner, no_shadow, beast)) = owner else { continue };
         if no_shadow {
             commands.entity(e).insert(bevy::light::NotShadowCaster);
+        }
+        // A rigged creature (the wolf) is vertex-coloured on a white material: it wears the
+        // shared vertex-colour toon the box creatures wear, so a pack adds no material.
+        if beast {
+            if done.1.insert(mesh.0.id()) {
+                if let Some(mut m) = meshes.get_mut(&mesh.0) {
+                    let _ = m.generate_outline_normals(&Default::default());
+                }
+            }
+            commands.entity(e).remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(palette.vertex.clone()), Converted, outline(Outlined::Person, &style)));
+            continue;
         }
         // A slot's glow lights up models with no glow of their own (kits without emissive
         // materials); models that carry emissive materials keep exactly those.

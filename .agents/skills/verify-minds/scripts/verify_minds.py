@@ -472,7 +472,7 @@ def main():
             subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, check=True)
     paths = ['living/mind/src/main.rs', 'living/mind/src/mind.rs', 'living/mind/src/mind/talk.rs',
              'living/mind/src/mind/lod.rs', 'living/mind/src/prompts.rs', 'living/authority/src/mind.rs',
-             'living/rules/src/normalize.rs', 'living/target/release/living-mind',
+             'living/rules/src/normalize.rs', str(shared.MIND_BIN),
              '.agents/skills/verify-llm/scripts/fake_llm.py', '.agents/skills/verify-llm/scripts/verify_llm.py',
              '.agents/skills/verify-minds/scripts/verify_minds.py']
     (suite / 'source-hashes.json').write_text(json.dumps({p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in paths}, indent=2))

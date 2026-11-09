@@ -148,6 +148,7 @@ pub fn fill(
                 greeted: false,
                 stance: if is_hostile { Stance::Hostile } else { Stance::Neutral },
                 hp: if is_hostile { Some(0.62) } else { None },
+                exact: if is_hostile && s.lowhp { Some((31.0, 50.0)) } else { None },
             }
         })
         .collect();

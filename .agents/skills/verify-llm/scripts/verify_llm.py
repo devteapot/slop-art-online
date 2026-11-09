@@ -16,6 +16,9 @@ import urllib.request
 import urllib.error
 
 ROOT = Path(__file__).resolve().parents[4]
+# The mind binary the suite builds: in CARGO_TARGET_DIR when set (a private build directory),
+# else living/target. Running another path would test whatever binary another checkout left.
+MIND_BIN = Path(os.environ.get('CARGO_TARGET_DIR') or ROOT / 'living/target') / 'release/living-mind'
 SHARED = ROOT / '.agents/skills/verify/scripts/verify.py'
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 STDB_URL = os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/')
@@ -159,7 +162,7 @@ class Run:
         self.env = env
         self.launch_mind()
         source_paths = ('living/mind/src/llm.rs', 'living/mind/src/main.rs', 'living/mind/src/mind.rs',
-                        'living/mind/src/prompts.rs', 'living/mind/src/mind/talk.rs', 'living/target/release/living-mind')
+                        'living/mind/src/prompts.rs', 'living/mind/src/mind/talk.rs', str(MIND_BIN))
         (self.directory / 'source-hashes.json').write_text(json.dumps({p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest()
                                                                     for p in source_paths}, indent=2))
         (self.directory / 'processes.json').write_text(json.dumps({'mind_pid': self.mind.pid,
@@ -181,7 +184,7 @@ class Run:
     def launch_mind(self):
         stream = (self.directory / 'mind.log').open('a')
         self.streams.append(stream)
-        self.mind = subprocess.Popen([str(ROOT / 'living/target/release/living-mind')], cwd=ROOT,
+        self.mind = subprocess.Popen([str(MIND_BIN)], cwd=ROOT,
                                      env=self.env, stdout=stream, stderr=subprocess.STDOUT)
         self.processes.append(self.mind)
         (self.directory / 'processes.json').write_text(json.dumps({'mind_pid': self.mind.pid,

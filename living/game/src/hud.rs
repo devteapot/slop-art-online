@@ -50,7 +50,7 @@ pub fn draw(
     if keys.just_pressed(KeyCode::F1) {
         hud.tuning = !hud.tuning;
     }
-    let names: HashMap<u32, String> = net.conn.as_ref().map(|c| c.db.character().iter().map(|ch| (ch.id, ch.name)).collect()).unwrap_or_default();
+    let names: HashMap<u32, String> = net.conn.as_ref().map(|c| c.db.seen_characters().iter().map(|ch| (ch.id, ch.label)).chain(c.db.my_characters().iter().map(|ch| (ch.id, ch.name))).collect()).unwrap_or_default();
 
     // Status.
     if hud.tuning {
@@ -72,7 +72,7 @@ pub fn draw(
                 }
             }
             if let (Some(c), Some(id)) = (&net.conn, net.my_id) {
-                if let Some(v) = c.db.vitals().id().find(&id) {
+                if let Some(v) = c.db.my_vitals().id().find(&id) {
                     ui.label(format!("health {:.0}/{:.0} · hunger {:.0} · energy {:.0}", v.hp, v.max_hp, v.hunger, v.energy));
                 }
             }

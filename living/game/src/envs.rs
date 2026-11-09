@@ -153,7 +153,7 @@ pub struct Envs {
 }
 
 /// Where the worker thread leaves the generated land and its seconds.
-type LandSlot = Arc<Mutex<Option<(Arc<living_rules::land::Land>, f32)>>>;
+type LandSlot = Arc<Mutex<Option<crate::island::Generated>>>;
 
 /// The current environment's ground: gentle relief from value noise, flat when paved.
 #[derive(Clone, Copy, Default)]
@@ -508,9 +508,9 @@ pub fn switch(
     // The island's land arrives from its worker thread: place it and you.
     if envs.current == Some(envs.want) {
         let done = envs.land.as_ref().and_then(|slot| slot.lock().unwrap().take());
-        if let Some((land, secs)) = done {
+        if let Some(generated) = done {
             envs.land = None;
-            let island = crate::island::Island::new(land, secs, &envs.defs);
+            let island = crate::island::Island::new(generated, &envs.defs);
             roam.pos = island.start;
             commands.insert_resource(island);
             spawn_player(&mut commands, &mut meshes, &palette, &style, &look, &assets);

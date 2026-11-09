@@ -44,7 +44,7 @@ flowchart LR
   Authority -->|tables, as the owner| V[Bevy observer: living-viewer]
 ```
 
-**Who reads what** (since 2026-11-09, [perception](PERCEPTION.md)): static world data is public; minds' state, thoughts, beliefs, personas, routines, the chronicle and `stats` are private, read by the mind service and the observer with the database owner's token; a player receives what its character perceives and its own state through the per-sender `seen_*` and `my_*` views. The build switch `LIVING_PERCEPTION` (`open`, the default until the game client switches; or `scoped`) decides whether `body`, `character`, `fighter`, `doing`, `vitals`, `experience`, `place`, `inventory` and `know_how` stay public beside the views.
+**Who reads what** (since 2026-11-09, [perception](PERCEPTION.md)): static world data is public; minds' state, thoughts, beliefs, personas, routines, the chronicle and `stats` are private, read by the mind service and the observer with the database owner's token; a player receives what its character perceives and its own state through the per-sender `seen_*` and `my_*` views. The build switch `LIVING_PERCEPTION` decides whether `body`, `character`, `fighter`, `doing`, `vitals`, `experience`, `place`, `inventory` and `know_how` are private behind the views (`scoped`, the default since the game client reads only the views) or public beside them (`open`, for diagnostics).
 
 ### Authority tables (typed, split by access pattern)
 

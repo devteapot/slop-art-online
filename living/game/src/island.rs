@@ -13,13 +13,20 @@
 //! - ground meshes from the island's heights and terrain, vertex-coloured and painted with the
 //!   ground's detail layers (`terrain.rs`), with water surfaces at the water's level (the sea at
 //!   0, lakes level, rivers sloping);
-//! - each region dressed with its environment's assets (`RegionKind::env`) at that environment's
-//!   scatter densities, small things only near you;
+//! - each region dressed with its environment's assets at that environment's scatter
+//!   densities, small things only near you: `RegionKind::env` on a temperate land, and on an arid
+//!   one ([`Climate`]) the dry country's `wastes`, `scrubland` and `badlands`, with ground layers
+//!   of its own (dry earth, cracked mud, gravel, sand);
 //! - each settlement's wall pieces along town walls, and in look-dev a building on every lot at
 //!   its levelled floor, facing its street, and people (character recipes for the settlement's
 //!   folk) at house fronts and in the square.
 //!
 //! `LIVING_GAME_START=x,z` starts you at a point (metres) instead of the town (look-dev).
+//!
+//! `LIVING_GAME_SEED=<seed.json>` (look-dev) draws a seed's land instead of the environment's
+//! `world`: its `seed`, `map.size` and `map.params`, as the authority builds it from that file
+//! (`living/seeds/floor-megacity.json`, for example). Without it the island is the environment's
+//! seed and size on the default parameters.
 
 use crate::envs::{EnvDef, EnvPart, Occluder};
 use crate::lookdev::Model;
@@ -29,7 +36,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::world_serialization::{WorldAsset, WorldAssetRoot};
-use living_rules::land::{Land, RegionKind, SiteKind};
+use living_rules::land::{Land, LandParams, RegionKind, SiteKind};
 use living_rules::settle::LotKind;
 use living_rules::map::Terrain;
 use serde::Deserialize;
@@ -77,9 +84,47 @@ struct Item {
     person: Option<(u64, &'static str, String)>,
 }
 
+/// How a land's open country is drawn: the temperate island's meadows and forests, or dry
+/// country (dry earth, cracked mud, gravel and sand; dry grass, scrub, dead trees, rocks and
+/// rubble), each by the region kinds the generator emits.
+///
+/// Seeds don't name a look per region yet (`KindLook` has no environment field; that is the
+/// rules' data, see docs/FLOORS.md), so the client reads it from the land's parameters: a land
+/// whose rivers run dry (`water.dry_rivers`, the megacity floor's wastes) is arid.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Climate {
+    #[default]
+    Temperate,
+    Arid,
+}
+
+impl Climate {
+    pub fn of(params: &LandParams) -> Self {
+        if params.water.dry_rivers {
+            Self::Arid
+        } else {
+            Self::Temperate
+        }
+    }
+
+    /// The environment (`assets/envs/<id>.json`) whose scatter dresses a region kind.
+    pub fn env(self, kind: RegionKind) -> Option<&'static str> {
+        match self {
+            Self::Temperate => kind.env(),
+            Self::Arid => match kind {
+                RegionKind::Sea => None,
+                RegionKind::Meadow | RegionKind::Beach | RegionKind::Wetland => Some("wastes"),
+                RegionKind::Forest | RegionKind::OldForest | RegionKind::SpiritGrove => Some("scrubland"),
+                RegionKind::Highland | RegionKind::Peaks => Some("badlands"),
+            },
+        }
+    }
+}
+
 #[derive(Resource)]
 pub struct Island {
     pub land: Arc<Land>,
+    pub climate: Climate,
     /// Environments by id, for region and site dressing.
     envs: HashMap<String, EnvDef>,
     /// Settlement things, by chunk.
@@ -107,15 +152,27 @@ struct Queued {
 
 impl Island {
     /// Look-dev: generate the land (seconds of work: run it off the main thread, as connected
-    /// mode does, so no frame waits for it).
-    pub fn generate(world: WorldDef) -> (Arc<Land>, f32) {
+    /// mode does, so no frame waits for it): `LIVING_GAME_SEED`'s land if set and readable, else
+    /// the environment's `world` on the default parameters.
+    pub fn generate(world: WorldDef) -> Generated {
         let t0 = std::time::Instant::now();
-        let land = Arc::new(living_rules::land::generate_default(world.seed, world.size));
-        (land, t0.elapsed().as_secs_f32())
+        let (seed, size, params, from) = match std::env::var("LIVING_GAME_SEED").ok().filter(|p| !p.is_empty()) {
+            Some(path) => match seed_land(&path) {
+                Ok((seed, size, params)) => (seed, size, params, path),
+                Err(e) => {
+                    error!("island: LIVING_GAME_SEED={path}: {e}; drawing the environment's world instead");
+                    (world.seed, world.size, LandParams::default(), "the environment (default parameters)".into())
+                }
+            },
+            None => (world.seed, world.size, LandParams::default(), "the environment (default parameters)".into()),
+        };
+        let land = Arc::new(living_rules::land::generate(seed, size, &params));
+        Generated { land, secs: t0.elapsed().as_secs_f32(), params, from }
     }
 
     /// Look-dev: place the planner's buildings and people on a generated land.
-    pub fn new(land: Arc<Land>, generated_s: f32, defs: &[EnvDef]) -> Self {
+    pub fn new(generated: Generated, defs: &[EnvDef]) -> Self {
+        let Generated { land, secs: generated_s, params, from } = generated;
         let t0 = std::time::Instant::now();
         let world = WorldDef { seed: land.seed, size: land.size };
         let town = land.settlements.iter().find(|s| s.kind == SiteKind::Town).map(|s| Vec2::new(s.plaza.centre.0, s.plaza.centre.1)).or_else(|| land.sites.iter().find(|s| s.kind == SiteKind::Town).map(|s| Vec2::new(s.x, s.y)));
@@ -127,11 +184,12 @@ impl Island {
             })
             .or(town)
             .unwrap_or(Vec2::splat(world.size as f32 / 2.0));
-        let island = Self::build(land, defs, start, true);
+        let island = Self::build(land, defs, start, true, &params);
         info!(
-            "island: seed {} {} m: land in {generated_s:.2} s (worker thread), placed in {:.3} s; {} regions, {} sites, start ({:.0}, {:.0})",
+            "island: seed {} {} m from {from} ({:?}): land in {generated_s:.2} s (worker thread), placed in {:.3} s; {} regions, {} sites, start ({:.0}, {:.0})",
             world.seed,
             world.size,
+            island.climate,
             t0.elapsed().as_secs_f32(),
             island.land.regions.len(),
             island.land.sites.len(),
@@ -143,11 +201,12 @@ impl Island {
 
     /// Connected: the land the authority hosts, regenerated from its `land` row. Buildings come
     /// from `lot` rows ([`Island::spawn_lot`]) and people from bodies, so none are planned here.
-    pub fn hosted(land: Arc<Land>, defs: &[EnvDef], arrive: Vec2) -> Self {
-        Self::build(land, defs, arrive, false)
+    pub fn hosted(land: Arc<Land>, defs: &[EnvDef], arrive: Vec2, params: &LandParams) -> Self {
+        Self::build(land, defs, arrive, false, params)
     }
 
-    fn build(land: Arc<Land>, defs: &[EnvDef], start: Vec2, planned: bool) -> Self {
+    fn build(land: Arc<Land>, defs: &[EnvDef], start: Vec2, planned: bool, params: &LandParams) -> Self {
+        let climate = Climate::of(params);
         let world = WorldDef { seed: land.seed, size: land.size };
         let envs: HashMap<String, EnvDef> = defs.iter().map(|d| (d.id.clone(), d.clone())).collect();
         let mut site_items: HashMap<(i32, i32), Vec<Item>> = HashMap::new();
@@ -236,7 +295,7 @@ impl Island {
                 put(Item { kind: "person".into(), at, yaw: hash(k, 33) * std::f32::consts::TAU, k: k as usize, person: Some((world.seed * 104_729 + (si as u64) * 31 + k as u64, folk, st.style.clone())), ..default() });
             }
         }
-        Self { land, envs, site_items, ground: HashMap::new(), small: HashMap::new(), queue: Vec::new(), prefetch: HashMap::new(), start, settled: false }
+        Self { land, climate, envs, site_items, ground: HashMap::new(), small: HashMap::new(), queue: Vec::new(), prefetch: HashMap::new(), start, settled: false }
     }
 
     /// A building on an authority `lot` row (connected): the row's model file when it is on
@@ -290,7 +349,7 @@ impl Island {
         let mut out = Vec::new();
         let origin = Vec2::new((c.0 * CHUNK) as f32, (c.1 * CHUNK) as f32);
         let area = (CHUNK * CHUNK) as f32;
-        let mut ids: Vec<&str> = RegionKind::ALL.iter().filter_map(|k| k.env()).collect();
+        let mut ids: Vec<&str> = RegionKind::ALL.iter().filter_map(|k| self.climate.env(*k)).collect();
         ids.sort();
         ids.dedup();
         for (ei, id) in ids.iter().enumerate() {
@@ -313,7 +372,7 @@ impl Island {
                     let at = origin + Vec2::new(hash(seed, k * 3 + 1), hash(seed, k * 3 + 2)) * CHUNK as f32;
                     let kind = self.land.kind_at(at.x, at.y);
                     let tile = self.land.map.at(at.x, at.y);
-                    if kind.env() != Some(*id) || !tile.walkable() || tile == Terrain::Road || self.in_site(at) {
+                    if self.climate.env(kind) != Some(*id) || !tile.walkable() || tile == Terrain::Road || self.in_site(at) {
                         continue;
                     }
                     // Sparser where the region is not the environment's own kind.
@@ -339,6 +398,36 @@ impl Island {
         }
         out
     }
+}
+
+/// A look-dev land from its worker thread ([`Island::generate`]): the land, its seconds, the
+/// parameters it was made with and where they came from.
+pub struct Generated {
+    pub land: Arc<Land>,
+    pub secs: f32,
+    pub params: LandParams,
+    pub from: String,
+}
+
+/// A seed file's land: its `seed`, `map.size` and `map.params` (the authority reads the same
+/// fields; a seed without `map.params` uses the defaults).
+fn seed_land(path: &str) -> Result<(u64, u32, LandParams), String> {
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let map = &v["map"];
+    if map["kind"].as_str().is_some_and(|k| k != "land") {
+        return Err(format!("map.kind is {}, not land", map["kind"]));
+    }
+    let seed = v["seed"].as_u64().ok_or("no seed")?;
+    let size = map["size"].as_u64().ok_or("no map.size")? as u32;
+    if !(256..=8192).contains(&size) {
+        return Err(format!("map.size {size} m"));
+    }
+    let params = match map.get("params") {
+        Some(p) if !p.is_null() => serde_json::from_value(p.clone()).map_err(|e| format!("map.params: {e}"))?,
+        _ => LandParams::default(),
+    };
+    Ok((seed, size, params))
 }
 
 /// What the client draws of an authority `lot` row (connected mode).
@@ -389,7 +478,10 @@ fn chunk_distance(c: (i32, i32), p: Vec2) -> f32 {
 }
 
 /// Ground colour from the terrain class and the region.
-fn ground_colour(t: Terrain, kind: RegionKind, v: f32) -> [f32; 4] {
+fn ground_colour(t: Terrain, kind: RegionKind, v: f32, climate: Climate) -> [f32; 4] {
+    if climate == Climate::Arid {
+        return scale(arid_colour(t, kind), 0.94 + 0.12 * v);
+    }
     let base = match t {
         Terrain::Water => rgb(70, 92, 96),
         Terrain::Sand => rgb(214, 196, 146),
@@ -414,9 +506,61 @@ fn ground_colour(t: Terrain, kind: RegionKind, v: f32) -> [f32; 4] {
     scale(base, 0.94 + 0.12 * v)
 }
 
+/// Dry country's ground colours: straw and ochre plains, olive-brown scrub, warm stone, pale
+/// sand in the dry riverbeds and a salt-pale pan where the land would be wet.
+fn arid_colour(t: Terrain, kind: RegionKind) -> [f32; 4] {
+    match t {
+        Terrain::Water => rgb(70, 92, 96),
+        Terrain::Sand => rgb(212, 194, 152),
+        Terrain::Rock => rgb(148, 130, 114),
+        Terrain::Dirt => rgb(164, 140, 108),
+        Terrain::Road => rgb(168, 152, 124),
+        Terrain::Wall => rgb(110, 100, 90),
+        Terrain::Forest => rgb(130, 124, 92),
+        Terrain::Grass => match kind {
+            RegionKind::Forest | RegionKind::OldForest | RegionKind::SpiritGrove => rgb(156, 146, 108),
+            RegionKind::Highland => rgb(162, 142, 116),
+            RegionKind::Peaks => rgb(156, 138, 120),
+            RegionKind::Beach => rgb(204, 188, 148),
+            RegionKind::Wetland => rgb(196, 186, 162),
+            _ => rgb(178, 160, 120),
+        },
+    }
+}
+
+/// Dry country's painted detail by terrain class and region, mirroring [`arid_colour`].
+fn arid_layers(t: Terrain, kind: RegionKind) -> [(Layer, f32); 2] {
+    let one = |l: Layer| [(l, 1.0), (l, 0.0)];
+    match t {
+        // An oasis's bed is mud; the sea's floor and shallows are sand.
+        Terrain::Water => one(if matches!(kind, RegionKind::Sea | RegionKind::Beach) { Layer::Sand } else { Layer::Mud }),
+        Terrain::Sand => one(Layer::Sand),
+        Terrain::Rock | Terrain::Wall => one(Layer::Rock),
+        Terrain::Dirt => match kind {
+            RegionKind::Highland | RegionKind::Peaks => one(Layer::Gravel),
+            RegionKind::Wetland | RegionKind::Beach => one(Layer::CrackedMud),
+            _ => [(Layer::CrackedMud, 0.55), (Layer::DryEarth, 0.45)],
+        },
+        Terrain::Road => one(Layer::Gravel),
+        // Scrub thickets: dry grass over bare earth.
+        Terrain::Forest => [(Layer::DryGrass, 0.5), (Layer::DryEarth, 0.5)],
+        Terrain::Grass => match kind {
+            RegionKind::Forest | RegionKind::OldForest | RegionKind::SpiritGrove => [(Layer::DryGrass, 0.7), (Layer::DryEarth, 0.3)],
+            RegionKind::Highland => [(Layer::Gravel, 0.5), (Layer::DryEarth, 0.5)],
+            RegionKind::Peaks => [(Layer::Gravel, 0.6), (Layer::Rock, 0.4)],
+            RegionKind::Beach => [(Layer::Sand, 0.7), (Layer::DryEarth, 0.3)],
+            RegionKind::Wetland => [(Layer::CrackedMud, 0.7), (Layer::DryEarth, 0.3)],
+            _ => [(Layer::DryEarth, 0.55), (Layer::DryGrass, 0.45)],
+        },
+    }
+}
+
 /// The ground's painted detail (`terrain.rs`) by terrain class and region, mirroring
 /// [`ground_colour`]: up to two layers and their shares. Roads are [`road_layer`].
-fn ground_layers(t: Terrain, kind: RegionKind) -> [(Layer, f32); 2] {
+fn ground_layers(t: Terrain, kind: RegionKind, climate: Climate) -> [(Layer, f32); 2] {
+    if climate == Climate::Arid {
+        return arid_layers(t, kind);
+    }
     let one = |l: Layer| [(l, 1.0), (l, 0.0)];
     match t {
         // Lake and river beds are mud; the sea's floor and shallows are sand.
@@ -437,9 +581,12 @@ fn ground_layers(t: Terrain, kind: RegionKind) -> [(Layer, f32); 2] {
 }
 
 /// A road's surface, by the settlement's style (zones differ by their contents): a steampunk
-/// town is all setts, a cyberpunk town's streets and square are large panels, and elsewhere a
-/// paved square is flagstones and streets are cobbled. Between settlements, a packed earth track.
-fn road_layer(land: &Land, x: f32, z: f32) -> Layer {
+/// town is all setts, a cyberpunk town's and the megacity's paved wards' streets and squares
+/// are large panels, its slums' lanes earth, the wastes' camps, outposts and ruins gravel, and
+/// elsewhere a paved square is flagstones and streets are cobbled. Between settlements, a packed
+/// earth track (gravel in dry country).
+fn road_layer(land: &Land, x: f32, z: f32, climate: Climate) -> Layer {
+    let earth = if climate == Climate::Arid { Layer::DryEarth } else { Layer::Dirt };
     for st in &land.settlements {
         let (dx, dz) = (x - st.centre.0, z - st.centre.1);
         if dx * dx + dz * dz > (st.radius_m * 1.15).powi(2) {
@@ -447,21 +594,27 @@ fn road_layer(land: &Land, x: f32, z: f32) -> Layer {
         }
         return match st.style.as_str() {
             "steampunk" => Layer::Cobble,
-            "cyberpunk" => Layer::Pavers,
+            "cyberpunk" | "metro" | "works" => Layer::Pavers,
+            "slum" => earth,
+            "outpost" | "salvage" | "ruin" => Layer::Gravel,
             _ if st.plaza.paved && st.in_plaza((x, z)) => Layer::Flagstone,
             _ => Layer::Cobble,
         };
     }
-    Layer::Dirt
+    if climate == Climate::Arid {
+        Layer::Gravel
+    } else {
+        Layer::Dirt
+    }
 }
 
 /// Ground colour and detail layers averaged over a few metres, so region borders and single
 /// tiles blend instead of switching along straight polygon edges.
-fn blended_ground(land: &Land, x: f32, z: f32, v: f32) -> ([f32; 4], Blend) {
+fn blended_ground(land: &Land, x: f32, z: f32, v: f32, climate: Climate) -> ([f32; 4], Blend) {
     // Roads and paved squares stay crisp, and don't bleed into the blend around them.
     let here = land.map.at(x + 0.01, z + 0.01);
     if here == Terrain::Road {
-        return (ground_colour(here, land.kind_at(x, z), v), Blend::one(road_layer(land, x, z)));
+        return (ground_colour(here, land.kind_at(x, z), v, climate), Blend::one(road_layer(land, x, z, climate)));
     }
     const RING: [(f32, f32); 9] = [(0.0, 0.0), (6.0, 0.0), (-6.0, 0.0), (0.0, 6.0), (0.0, -6.0), (13.0, 9.0), (-13.0, -9.0), (9.0, -13.0), (-9.0, 13.0)];
     let mut acc = [0.0f32; 4];
@@ -475,11 +628,11 @@ fn blended_ground(land: &Land, x: f32, z: f32, v: f32) -> ([f32; 4], Blend) {
             t => t,
         };
         let kind = land.kind_at(px, pz);
-        let c = ground_colour(t, kind, v);
+        let c = ground_colour(t, kind, v, climate);
         for i in 0..4 {
             acc[i] += c[i] * w;
         }
-        for (layer, share) in ground_layers(t, kind) {
+        for (layer, share) in ground_layers(t, kind, climate) {
             blend.add(layer, share * w);
         }
     }
@@ -487,7 +640,7 @@ fn blended_ground(land: &Land, x: f32, z: f32, v: f32) -> ([f32; 4], Blend) {
 }
 
 /// A chunk's ground (indexed 1 m grid, smooth normals) and its water surface.
-fn chunk_meshes(land: &Land, c: (i32, i32)) -> (Mesh, Option<Mesh>) {
+fn chunk_meshes(land: &Land, c: (i32, i32), climate: Climate) -> (Mesh, Option<Mesh>) {
     let n = CHUNK as usize;
     let (x0, z0) = (c.0 * CHUNK, c.1 * CHUNK);
     let mut pos = Vec::with_capacity((n + 1) * (n + 1));
@@ -498,7 +651,7 @@ fn chunk_meshes(land: &Land, c: (i32, i32)) -> (Mesh, Option<Mesh>) {
             let (x, z) = ((x0 + i as i32) as f32, (z0 + j as i32) as f32);
             pos.push([x, land.height(x, z), z]);
             let v = hash((x0 + i as i32) as u32, (z0 + j as i32) as u32);
-            let (mut c, b) = blended_ground(land, x, z, v);
+            let (mut c, b) = blended_ground(land, x, z, v, climate);
             // The rules' blocking rock, crisp per tile (not blended): the share of the four tiles
             // round this vertex, for the shader's cliff (terrain.rs `BLOCKED_ALPHA`).
             let rock = [(-0.5, -0.5), (0.5, -0.5), (-0.5, 0.5), (0.5, 0.5)].iter().filter(|(dx, dz)| land.map.at(x + dx, z + dz) == Terrain::Rock).count();
@@ -673,7 +826,7 @@ pub fn stream(
             break;
         }
         if !island.ground.contains_key(&c) {
-            let (g, w) = chunk_meshes(&land, c);
+            let (g, w) = chunk_meshes(&land, c, island.climate);
             // The painted ground material (terrain.rs); `noterrain` for A/B with the plain toon.
             let mut ground = commands.spawn((EnvPart, Mesh3d(meshes.add(g)), Transform::default()));
             if crate::perf::has("noterrain") {

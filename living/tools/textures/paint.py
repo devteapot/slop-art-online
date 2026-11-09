@@ -27,8 +27,10 @@ The data is linear: load it with sRGB off.
 Sets:
 - `ground` (the terrain material, `living/game/src/terrain.rs`; layer order is the `Layer` enum
   there): grass, lush_grass, dry_grass, forest_floor, dirt, sand, rock, cobble, flagstone, mud,
-  spirit_moss, pavers (a cyberpunk town's large square panels), cliff (the rock that blocks walking:
-  bedded slabs with deep joints, darker and harder than the walkable slopes' rock).
+  spirit_moss, pavers (a cyberpunk town's large square panels), and for arid lands (the client's
+  `Climate::Arid`, `island.rs`) dry_earth (sun-baked crust and grit), cracked_mud (a dried pan's
+  curling plates) and gravel (packed stones and grit); then cliff (the rock that blocks walking:
+  bedded slabs with deep joints, darker and harder than the walkable slopes' rock), always last.
 - `material` (scenery models through the toon shader, `living/game/src/style.rs`; layer order is
   `surfaces.py`'s SURFACES, which the Blender generators tag each part with): bark, leaves, wood
   (beams and posts), planks, plaster, stone (ashlar), boulder (natural rock), brick, shingles, tiles (clay barrel
@@ -51,7 +53,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
-GROUND = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers", "cliff"]
+GROUND = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers", "dry_earth", "cracked_mud", "gravel", "cliff"]
 from surfaces import SURFACES as MATERIAL
 
 # Typical vertex colours (sRGB), only for the preview sheet.
@@ -59,6 +61,7 @@ TINT = {
     "grass": (112, 160, 74), "lush_grass": (96, 140, 70), "dry_grass": (150, 150, 96), "forest_floor": (80, 118, 62),
     "dirt": (132, 112, 80), "sand": (214, 196, 146), "rock": (128, 122, 116), "cobble": (178, 160, 120),
     "flagstone": (176, 160, 128), "mud": (100, 104, 80), "spirit_moss": (52, 92, 100), "pavers": (60, 62, 72), "cliff": (86, 80, 76),
+    "dry_earth": (176, 146, 104), "cracked_mud": (184, 162, 128), "gravel": (150, 138, 120),
     "bark": (110, 84, 62), "planks": (150, 112, 74), "plaster": (220, 210, 190), "stone": (150, 144, 134),
     "brick": (160, 84, 62), "shingles": (120, 70, 60), "metal": (120, 126, 130), "leaves": (90, 140, 70),
     "boulder": (128, 122, 116), "wood": (110, 76, 52), "tiles": (190, 92, 62), "thatch": (190, 160, 100), "copper": (90, 160, 140),
@@ -451,6 +454,76 @@ def mud(p: Painter):
     p.h = np.clip(0.2 + 0.8 * base, 0, 1)
 
 
+def dry_earth(p: Painter):
+    """Sun-baked bare ground: pale crust in broad flat patches, fine grit, a few pebbles and
+    hairline cracks, and wind-scoured streaks (all one way, as a prevailing wind leaves them)."""
+    n = p.n
+    p.tone(0.88 + 0.24 * p.posterise(p.noise(6, 2, 0.5), 4, 2.5), hue=(1.1, 1.0, 0.86))
+    # Crust: lighter flat plates where the noise is high.
+    crust = p.posterise(p.noise(10, 2, 0.5), 3, 1.5)
+    p.tone(1.0 + 0.09 * (crust > 0.6), hue=(1.04, 1.0, 0.94))
+    # Wind streaks.
+    for _ in range(int(n * n / 1400)):
+        x, y = p.rng.random(2) * n
+        L = n / 512 * p.rng.uniform(18, 40)
+        v = p.rng.uniform(0.46, 0.58)
+        p.dab(x, y, L, L * 0.12, 0.25 + p.rng.normal(0, 0.08), c(v * 1.03, v, v * 0.94), alpha=0.25, bristle=0.7, height=0.5)
+    # Grit, then a few pebbles.
+    for _ in range(int(n * n / 260)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.uniform(0.4, 0.62)
+        p.blob(x, y, n / 512 * p.rng.uniform(0.7, 1.6), c(v, v * 0.98, v * 0.95), alpha=0.55, soft=0.5, height=0.55 + 0.2 * (v - 0.4))
+    for _ in range(int(n * n / 5000)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.uniform(0.5, 0.66)
+        p.blob(x, y, n / 512 * p.rng.uniform(2.5, 5), c(v, v * 0.98, v * 0.96), alpha=0.85, soft=0.3, squash=p.rng.uniform(0.6, 0.9), angle=p.rng.random() * 6, dome=0.35, height=0.9)
+    crack = p.voronoi(p.rng.random((14, 2)))[2]
+    p.tone(1.0 - 0.14 * np.clip(1 - crack * n / 1.6, 0, 1) * (p.noise(7) > 0.5), hue=(1.0, 0.95, 0.9))
+    p.h = np.clip(p.h + 0.15 * (crust - 0.5), 0, 1)
+
+
+def cracked_mud(p: Painter):
+    """A dried mud pan: plates a hand or two across, each a little domed and curling up at its
+    edges, split by dark cracks of varying width, a few fine cracks inside the larger plates."""
+    n = p.n
+    idx, best, edge = p.voronoi(p.rng.random((70, 2)))
+    e = edge * n  # pixels to the nearest crack
+    width = 1.2 + 2.6 * p.noise(5)  # cracks widen and narrow
+    gap = np.clip((e - width) / 1.5, 0, 1)
+    # Each plate its own shade; lit along its curling rim.
+    vals = 0.92 + 0.16 * p.rng.random(int(idx.max()) + 1)
+    plate = vals[idx]
+    rim = np.clip(1 - (e - width) / 6.0, 0, 1) * gap
+    p.tone(plate * (1.0 + 0.10 * rim), hue=(1.06, 1.0, 0.9))
+    # Fine cracks inside the plates.
+    fine = p.voronoi(p.rng.random((220, 2)))[2] * n
+    p.tone(1.0 - 0.10 * np.clip(1 - fine / 0.9, 0, 1) * (p.noise(9) > 0.55))
+    # Into the cracks: dark, cool.
+    p.rgb = p.rgb * (0.3 + 0.7 * gap[..., None]) * np.where(gap[..., None] < 1, np.asarray((0.95, 0.97, 1.03), np.float32), 1.0)
+    p.h = np.clip(0.15 + 0.6 * gap + 0.25 * rim + 0.05 * (plate - 1), 0, 1)
+
+
+def gravel(p: Painter):
+    """Packed gravel: overlapping small stones of several sizes and greys over grit, with their
+    shadowed undersides (the height channel lets dirt or sand settle between them)."""
+    n = p.n
+    s = n / 512
+    p.tone(0.95 + 0.08 * p.posterise(p.noise(5, 2), 3, 2.0), hue=(1.04, 1.0, 0.95))
+    for _ in range(int(n * n / 140)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.uniform(0.38, 0.6)
+        p.blob(x, y, s * p.rng.uniform(0.8, 1.6), c(v, v, v * 0.98), alpha=0.6, soft=0.5, height=0.45)
+    for r0, r1, count in ((4.0, 7.0, 700), (7.0, 11.0, 260), (11.0, 16.0, 40)):
+        for _ in range(int(count * (n / 512) ** 2)):
+            x, y = p.rng.random(2) * n
+            r = s * p.rng.uniform(r0, r1)
+            v = p.rng.choice([0.36, 0.44, 0.52, 0.6, 0.68])
+            warm = p.rng.uniform(-0.04, 0.06)
+            # Its shadow just below, then the stone with a lit top.
+            p.blob(x + r * 0.25, y + r * 0.35, r * 1.05, c(0.24, 0.24, 0.26), alpha=0.55, soft=0.6, squash=0.8)
+            p.blob(x, y, r, c(v * (1 + warm), v, v * (1 - warm)), alpha=0.95, soft=0.25, squash=p.rng.uniform(0.6, 0.95), angle=p.rng.random() * 6.28, dome=0.35, height=0.7 + 0.3 * (r - r0 * s) / max((r1 - r0) * s, 1e-3))
+
+
 def spirit_moss(p: Painter):
     n = p.n
     p.tone(0.88 + 0.2 * p.posterise(p.noise(6, 2, 0.55), 3, 3.0), hue=(0.92, 1.03, 1.1))
@@ -764,6 +837,9 @@ PAINT = {
     "mud": mud,
     "spirit_moss": spirit_moss,
     "pavers": pavers,
+    "dry_earth": dry_earth,
+    "cracked_mud": cracked_mud,
+    "gravel": gravel,
     "cliff": cliff,
     "bark": bark,
     "planks": planks,
@@ -786,7 +862,7 @@ PAINT = {
 }
 
 # How far each texture's luminance spreads (the narrow band), by kind.
-SPREAD = {"cliff": 0.13, "pavers": 0.06, "spirit_moss": 0.085, "sand": 0.045, "plaster": 0.05, "metal": 0.05, "mud": 0.07, "cobble": 0.09, "flagstone": 0.08, "rock": 0.09, "brick": 0.09, "shingles": 0.09, "plastic": 0.035, "earth": 0.07,
+SPREAD = {"dry_earth": 0.07, "cracked_mud": 0.12, "gravel": 0.12, "cliff": 0.13, "pavers": 0.06, "spirit_moss": 0.085, "sand": 0.045, "plaster": 0.05, "metal": 0.05, "mud": 0.07, "cobble": 0.09, "flagstone": 0.08, "rock": 0.09, "brick": 0.09, "shingles": 0.09, "plastic": 0.035, "earth": 0.07,
           "boulder": 0.08, "wood": 0.07, "tiles": 0.09, "thatch": 0.085, "copper": 0.065, "concrete": 0.06, "cloth": 0.05, "glass": 0.07}
 
 

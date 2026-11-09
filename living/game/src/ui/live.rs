@@ -38,6 +38,10 @@ use std::collections::HashMap;
 pub struct Last {
     id: Option<u32>,
     dead: Option<u32>,
+    /// How I last perceived each creature (its label). A death takes my perceived rows away in
+    /// the same update as the death itself, so the death screen names my killer and the
+    /// witnesses from this, as my character saw them, not from the authority's cause text.
+    labels: HashMap<u32, String>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -63,11 +67,22 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         *model = HudModel { shown: true, now, ..default() };
         return;
     };
-    let chars: HashMap<u32, Character> = conn.db.character().iter().map(|c| (c.id, c)).collect();
+    // Who I perceive, as I perceive them (name or label, health as I can tell it), and my own
+    // characters (the dead one stays for the death screen).
+    let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().map(|c| (c.id, c)).collect();
+    let mine: HashMap<u32, Character> = conn.db.my_characters().iter().map(|c| (c.id, c)).collect();
+    if last.labels.len() > 4096 {
+        last.labels.clear();
+    }
+    for c in chars.values() {
+        if last.labels.get(&c.id) != Some(&c.label) {
+            last.labels.insert(c.id, c.label.clone());
+        }
+    }
 
     // Death: the character I played is no longer alive.
     if let Some(prev) = last.id {
-        if net.my_id.is_none() && chars.get(&prev).is_some_and(|c| !c.alive) {
+        if net.my_id.is_none() && mine.get(&prev).is_some_and(|c| !c.alive) {
             last.dead = Some(prev);
         }
     }
@@ -75,10 +90,11 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         last.id = net.my_id;
         last.dead = None;
     }
-    model.death = last.dead.and_then(|id| chars.get(&id)).map(death).map(|mut d| {
+    let perceived = |id: u32| chars.get(&id).map(|c| c.label.clone()).or_else(|| last.labels.get(&id).cloned());
+    model.death = last.dead.and_then(|id| mine.get(&id)).map(|c| death(c, combat.killer.and_then(perceived))).map(|mut d| {
         // Who saw it, as my character perceived (the authority's `WITNESS` rows).
         if !combat.witnesses.is_empty() {
-            d.witnesses = Some(combat.witnesses.iter().map(|w| chars.get(w).map_or_else(|| "someone".to_string(), |c| if c.kind == "person" { c.name.clone() } else { format!("a {}", c.kind) })).collect());
+            d.witnesses = Some(combat.witnesses.iter().map(|w| perceived(*w).unwrap_or_else(|| "someone".to_string())).collect());
         } else if combat.killer.is_some() {
             d.witnesses = Some(Vec::new());
         }
@@ -87,7 +103,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
 
     let me = net.my_id;
     let my_pos = target.0;
-    let vit = me.and_then(|id| conn.db.vitals().id().find(&id));
+    let vit = me.and_then(|id| conn.db.my_vitals().id().find(&id));
     model.me = me.zip(vit.as_ref()).map(|(id, v)| {
         let m = (now_ms - v.at_ms as f64).max(0.0) as f32 / 60_000.0;
         let hp = (v.hp + v.hp_rate * m).clamp(0.0, v.max_hp);
@@ -114,20 +130,24 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         } else if v.hp_rate > 0.0 && hp < v.max_hp {
             statuses.push(Status { kind: StatusKind::Recovering, tone: Tone::Good });
         }
-        let name = chars.get(&id).map_or(net.name.clone(), |c| c.name.clone());
+        let name = mine.get(&id).map_or(net.name.clone(), |c| c.name.clone());
         Me { name, hp, max_hp: v.max_hp, energy, max_energy: 100.0, statuses, hurt: if v.hurt_ms > 0 { (1.0 - since_hurt / 0.8).clamp(0.0, 1.0) } else { 0.0 } }
     });
     let hostile_id = vit.as_ref().filter(|v| v.hurt_by != 0 && (now_ms - v.hurt_ms as f64) < 15_000.0).map(|v| v.hurt_by);
     let hostile = |id: u32| hostile_id == Some(id) || me.is_some_and(|m| crate::combat::hostile(conn, id, m));
     // Others' health as anyone sees it: the band of their `fighter` row, if they have fought.
-    let band = |id: u32| conn.db.fighter().id().find(&id).map(|f| living_rules::combat::band_fraction(f.band));
-    let busy = |id: u32| conn.db.fighter().id().find(&id).is_some_and(|f| f.act != 0 && (now_ms as u64) < f.until_ms);
+    // Exact where I perceive it exactly (my look at them, an appraisal), else the band.
+    let band = |id: u32| match chars.get(&id).filter(|c| c.hp >= 0.0 && c.max_hp > 0.0) {
+        Some(c) => Some((c.hp / c.max_hp).clamp(0.0, 1.0)),
+        None => conn.db.seen_fighters().id().find(&id).filter(|f| f.band <= 4).map(|f| living_rules::combat::band_fraction(f.band)),
+    };
+    let busy = |id: u32| conn.db.seen_fighters().id().find(&id).is_some_and(|f| f.act != 0 && (now_ms as u64) < f.until_ms);
 
     // What I heard.
-    let mut heard: Vec<Experience> = me.map(|id| conn.db.experience().iter().filter(|e| e.observer == id && e.kind == "speech").collect()).unwrap_or_default();
+    let mut heard: Vec<Experience> = me.map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech").collect()).unwrap_or_default();
     heard.sort_by_key(|e| e.at_ms);
     let talking: Vec<u32> = heard.iter().filter(|e| now_ms - (e.at_ms as f64) < 8_000.0).map(|e| e.subject).collect();
-    let name_of = |id: u32| chars.get(&id).map_or_else(|| "Someone".to_string(), |c| c.name.clone());
+    let name_of = |id: u32| chars.get(&id).map_or_else(|| "Someone".to_string(), |c| c.label.clone());
     let mut log: Vec<LogLine> = heard
         .iter()
         .map(|e| LogLine { at: e.at_ms as f64 / 1000.0, who: name_of(e.subject), text: quoted(&e.text).to_string(), kind: if e.text.contains(" said to you:") { LogKind::ToMe } else { LogKind::Heard } })
@@ -164,7 +184,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         let hostile = hostile(*id);
         actors.push(Actor {
             id: *id as u64,
-            name: c.name.clone(),
+            name: c.label.clone(),
             head: head(*id, *p, &c.kind),
             distance,
             hovered: near_cursor < 1.2,
@@ -173,6 +193,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             greeted: town.answered.contains_key(id),
             stance: if hostile { Stance::Hostile } else { Stance::Neutral },
             hp: band(*id),
+            // The projection carries exact health for others only while an appraisal holds.
+            exact: (c.hp >= 0.0 && c.max_hp > 0.0).then_some((c.hp, c.max_hp)),
         });
     }
     // Targeted skills go to the creature under or nearest the cursor (`combat.rs` picks it).
@@ -190,7 +212,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         } else {
             None
         };
-        let name = if c.kind == "person" { c.name.clone() } else { format!("{} the {}", c.name, c.kind) };
+        let name = if c.kind != "person" && !c.name.is_empty() { format!("{} the {}", c.name, c.kind) } else { c.label.clone() };
         Some(TargetInfo { name, doing, hp: band(id), stance: a.stance, distance: a.distance })
     });
 
@@ -219,9 +241,9 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     // Skills: live cooldowns, held guard, and what the rules require (costs from `skill_card`).
     model.skills = match (me, model.me.as_ref()) {
         (Some(id), Some(m)) => {
-            let inv = |item: &str| conn.db.inventory().iter().filter(|r| r.owner == id as u64 && r.item == item).map(|r| r.qty).sum::<u32>();
-            let knows = |t: &str| conn.db.know_how().iter().any(|k| k.actor == id && k.technique == t);
-            let me_f = conn.db.fighter().id().find(&id);
+            let inv = |item: &str| conn.db.my_inventory().iter().filter(|r| r.owner == id as u64 && r.item == item).map(|r| r.qty).sum::<u32>();
+            let knows = |t: &str| conn.db.my_know_how().iter().any(|k| k.actor == id && k.technique == t);
+            let me_f = conn.db.seen_fighters().id().find(&id);
             let energy = m.energy;
             live_bar(&cards, |card| {
                 // A held guard: raised now (my fighter row says so) or my key is down.
@@ -270,7 +292,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         me: my_pos.map(|p| Vec2::new(p.x, p.z)),
         facing: input.look,
         yaw: cam.shown_yaw,
-        pois: me.map(|id| conn.db.place().iter().filter(|p| p.actor == id).map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect()).unwrap_or_default(),
+        pois: me.map(|id| conn.db.my_places().iter().filter(|p| p.actor == id).map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect()).unwrap_or_default(),
     };
 }
 
@@ -311,7 +333,9 @@ pub fn default_bar(state: impl Fn(Key) -> SkillState) -> Vec<Skill> {
     ]
 }
 
-fn death(c: &Character) -> Death {
+/// The death screen's words. A killer is named as I perceived them (`killer`: the label of
+/// the one my `DEATH` row names), never from `cause`, whose text carries the real name.
+fn death(c: &Character, killer: Option<String>) -> Death {
     let cause = c.cause.trim();
     let cause = if cause.is_empty() {
         "You died".to_string()
@@ -319,8 +343,8 @@ fn death(c: &Character) -> Death {
         "You starved".to_string()
     } else if cause == "old age" {
         "You died of old age".to_string()
-    } else if let Some(rest) = cause.strip_prefix("killed by ") {
-        format!("Killed by {rest}")
+    } else if cause.starts_with("killed by ") {
+        format!("Killed by {}", killer.unwrap_or_else(|| "someone".to_string()))
     } else {
         format!("You died of {cause}")
     };

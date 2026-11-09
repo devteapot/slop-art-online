@@ -7,7 +7,7 @@
 //!   `living/tools/textures/paint.py` (`ground.png`, git-ignored; `just living-game-textures`).
 //!   Each texel is a factor round mid-grey, so a layer adds brush strokes and shapes but no
 //!   colour of its own beyond a slight hue.
-//! - **Blend weights** per vertex ([`ATTRIBUTE_BLEND`]): three `Unorm8x4` attributes, one weight
+//! - **Blend weights** per vertex ([`ATTRIBUTE_BLEND`]): four `Unorm8x4` attributes, one weight
 //!   per layer, from the terrain class and region under the vertex (blended over about 25 m like
 //!   the colours, with crisp roads). The shader samples only the few layers with weight, blends
 //!   them by the textures' height channel, and samples cliffs from three sides (triplanar).
@@ -59,16 +59,22 @@ pub enum Layer {
     SpiritMoss,
     /// A cyberpunk town's large square panels.
     Pavers,
+    /// Arid lands (`island.rs` `Climate::Arid`): sun-baked bare earth, a dried mud pan's plates,
+    /// packed gravel.
+    DryEarth,
+    CrackedMud,
+    Gravel,
     /// Rock that blocks walking (the rules' `Terrain::Rock`), from the vertex colour's alpha
     /// ([`BLOCKED_ALPHA`]), not from the blend weights.
     Cliff,
 }
 
-pub const LAYERS: usize = 13;
+pub const LAYERS: usize = 16;
 /// The layers' names in `ground.txt` (paint.py `GROUND`), in [`Layer`] order.
-const NAMES: [&str; LAYERS] = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers", "cliff"];
-/// Weighted layers: three `Unorm8x4` attributes. [`Layer::Cliff`] is the vertex alpha instead.
-const WEIGHTED: usize = 12;
+const NAMES: [&str; LAYERS] = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers", "dry_earth", "cracked_mud", "gravel", "cliff"];
+/// Weighted layers: four `Unorm8x4` attributes (the last weight unused). [`Layer::Cliff`] is
+/// the vertex alpha instead.
+const WEIGHTED: usize = 15;
 // The cliff is the last layer, after every weighted one (`terrain.wesl` `CLIFF`).
 const _: () = assert!(Layer::Cliff as usize == WEIGHTED && WEIGHTED + 1 == LAYERS);
 
@@ -91,17 +97,21 @@ const TILE: [(f32, f32); LAYERS] = [
     (4.5, 0.9),  // mud
     (4.0, 1.0),  // spirit moss
     (6.0, 1.0),  // pavers
+    (4.5, 1.0),  // dry earth
+    (3.4, 1.0),  // cracked mud
+    (2.6, 1.0),  // gravel
     (6.5, 1.0),  // cliff
 ];
 
 /// Detail at full strength up to the first distance (m), gone by the second.
 const FADE: [f32; 2] = [30.0, 85.0];
 
-/// Blend weights for layers 0–3, 4–7 and 8–11, at shader locations 8, 9 and 10.
-pub const ATTRIBUTE_BLEND: [MeshVertexAttribute; 3] = [
+/// Blend weights for layers 0–3, 4–7, 8–11 and 12–14, at shader locations 8 to 11.
+pub const ATTRIBUTE_BLEND: [MeshVertexAttribute; 4] = [
     MeshVertexAttribute::new("Ground_Blend_A", 0x5a0_0001, VertexFormat::Unorm8x4),
     MeshVertexAttribute::new("Ground_Blend_B", 0x5a0_0002, VertexFormat::Unorm8x4),
     MeshVertexAttribute::new("Ground_Blend_C", 0x5a0_0003, VertexFormat::Unorm8x4),
+    MeshVertexAttribute::new("Ground_Blend_D", 0x5a0_0004, VertexFormat::Unorm8x4),
 ];
 
 /// Per-vertex layer weights, accumulated from samples and quantised for the mesh.
@@ -122,10 +132,10 @@ impl Blend {
         }
     }
 
-    /// Normalised and packed into the three attributes' bytes.
-    pub fn pack(&self) -> [[u8; 4]; 3] {
+    /// Normalised and packed into the four attributes' bytes.
+    pub fn pack(&self) -> [[u8; 4]; 4] {
         let sum: f32 = self.0.iter().sum::<f32>().max(1e-6);
-        let mut out = [[0u8; 4]; 3];
+        let mut out = [[0u8; 4]; 4];
         for (k, w) in self.0.iter().enumerate() {
             out[k / 4][k % 4] = ((w / sum) * 255.0 + 0.5) as u8;
         }
@@ -135,7 +145,7 @@ impl Blend {
 
 /// Add the blend attributes to a ground mesh, one [`Blend`] per vertex.
 pub fn insert_blend(mesh: &mut Mesh, blends: &[Blend]) {
-    let packed: Vec<[[u8; 4]; 3]> = blends.iter().map(Blend::pack).collect();
+    let packed: Vec<[[u8; 4]; 4]> = blends.iter().map(Blend::pack).collect();
     for (i, attr) in ATTRIBUTE_BLEND.iter().enumerate() {
         mesh.insert_attribute(attr.clone(), VertexAttributeValues::Unorm8x4(packed.iter().map(|p| p[i]).collect()));
     }
@@ -145,6 +155,9 @@ pub fn insert_blend(mesh: &mut Mesh, blends: &[Blend]) {
 pub fn disc_layer(env: &str, surface: &str) -> Layer {
     match (env, surface) {
         ("forest", _) => Layer::ForestFloor,
+        ("wastes", _) => Layer::DryEarth,
+        ("scrubland", _) => Layer::DryGrass,
+        ("badlands", _) => Layer::Gravel,
         ("spirit_forest", _) => Layer::SpiritMoss,
         ("caverns", _) | (_, "cave") => Layer::Rock,
         ("steampunk_city", _) => Layer::Cobble,
@@ -156,7 +169,7 @@ pub fn disc_layer(env: &str, surface: &str) -> Layer {
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct GroundParams {
-    /// Per layer, 1 / tile size (1/m): layers 0–3, 4–7, 8–11, 12.
+    /// Per layer, 1 / tile size (1/m): layers 0–3, 4–7, 8–11, 12–15.
     pub scale: [Vec4; 4],
     /// Per layer, detail strength.
     pub amount: [Vec4; 4],
@@ -216,6 +229,7 @@ impl MaterialExtension for GroundExt {
             ATTRIBUTE_BLEND[0].at_shader_location(8),
             ATTRIBUTE_BLEND[1].at_shader_location(9),
             ATTRIBUTE_BLEND[2].at_shader_location(10),
+            ATTRIBUTE_BLEND[3].at_shader_location(11),
         ])?;
         descriptor.vertex.buffers = vec![buffer];
         Ok(())

@@ -134,7 +134,7 @@ def launch(a):
         sys.exit(f"refusing to publish {st['db']}: verification databases start with {PREFIX}")
     st["seed"] = a.seed
     # Which tables players may read (docs/PERCEPTION.md): the build's LIVING_PERCEPTION.
-    st["perception"] = os.environ.get("LIVING_PERCEPTION", "open")
+    st["perception"] = os.environ.get("LIVING_PERCEPTION", "scoped")
     if not container_up() and CONTAINER != SHARED:
         sys.exit(f"container {CONTAINER} (LIVING_STDB_CONTAINER) is not running; start it yourself")
     if not container_up():
@@ -149,9 +149,12 @@ def launch(a):
         sys.exit(f"SpacetimeDB did not answer /v1/ping within 180 s (see `docker logs {CONTAINER}`)")
     env = dict(os.environ, LIVING_SEED=a.seed)
     # A non-default seed builds in its own target dir, as living/tools/lab.py does, so the
-    # active world's module is never rebuilt with a lab seed. --target-dir overrides it.
-    target = getattr(a, "target_dir", None) or (f"target/verify-{a.seed}" if a.seed != "world" else None)
-    tdir = ["--target-dir", str(Path(target).resolve()) if getattr(a, "target_dir", None) else target] if target else []
+    # active world's module is never rebuilt with a lab seed. --target-dir overrides it. On the
+    # default seed a CARGO_TARGET_DIR in the environment is used as the target dir, so the module
+    # published is the one just built, not whatever another checkout left in living/target.
+    explicit = getattr(a, "target_dir", None) or (os.environ.get("CARGO_TARGET_DIR") if a.seed == "world" else None)
+    target = explicit or (f"target/verify-{a.seed}" if a.seed != "world" else None)
+    tdir = ["--target-dir", str(Path(target).resolve()) if explicit else target] if target else []
     subprocess.run(["cargo", "build", "-p", "living-authority", "--target", "wasm32-unknown-unknown", "--release", *tdir], cwd=LIVING, env=env, check=True)
     wasm = "living_authority.wasm"
     base = (Path(tdir[1]) if Path(tdir[1]).is_absolute() else LIVING / tdir[1]) if tdir else LIVING / "target"
