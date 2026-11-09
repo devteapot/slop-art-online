@@ -15,7 +15,8 @@ use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-/// What an install measured: the most operations each function took over its samples.
+/// What an install measured: the most operations each function took over its samples, and
+/// the calls made (samples that give a law the same input are called once).
 #[derive(Clone, Debug, Default)]
 pub struct Report {
     pub ops: BTreeMap<String, u64>,
@@ -42,6 +43,9 @@ struct Probe<'a> {
     engine: rhai::Engine,
     count: Rc<Cell<u64>>,
     report: Report,
+    /// Answers by function and by the values of the fields it reads: a law is a function of
+    /// those alone, so a sample that agrees on them is the same call and is not repeated.
+    seen: std::collections::HashMap<(String, Vec<u8>), Dynamic>,
 }
 
 impl Probe<'_> {
@@ -56,8 +60,16 @@ impl Probe<'_> {
     }
 
     fn ctx(&mut self, f: &str, c: &SkillCtx) -> Result<Dynamic, String> {
-        let m = super::context::map(c, self.s.shapes.knack(&c.skill), &self.s.plan(f));
-        self.raw(f, (m,), &|| describe(c))
+        let (plan, knack) = (self.s.plan(f), self.s.shapes.knack(&c.skill));
+        let mut key = Vec::new();
+        super::context::key(c, knack, &plan, &mut key);
+        let key = (f.to_string(), key);
+        if let Some(d) = self.seen.get(&key) {
+            return Ok(d.clone());
+        }
+        let d = self.raw(f, (super::context::map(c, knack, &plan),), &|| describe(c))?;
+        self.seen.insert(key, d.clone());
+        Ok(d)
     }
 }
 
@@ -95,7 +107,7 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
         c2.set(n);
         None
     });
-    let mut p = Probe { s, engine, count, report: Report::default() };
+    let mut p = Probe { s, engine, count, report: Report::default(), seen: Default::default() };
     laws_and_tables(&mut p)?;
     needs(&mut p)?;
     skills(&mut p)?;
