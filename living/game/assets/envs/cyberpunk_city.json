@@ -1,7 +1,7 @@
 {
  "id": "cyberpunk_city",
  "name": "Cyberpunk city",
- "note": "Night, towers, neon: emissive signs and strong grading (zone mood, same shading).",
+ "note": "Night, neon and grime: a ring street of blocks between an inner ring and an outer one, cables across it, slender towers behind and a landmark over the plaza; emissive signs and strong grading (zone mood, same shading).",
  "mood": {
   "hour": 20.0,
   "sun": [
@@ -16,9 +16,9 @@
    0.1
   ],
   "fog": [
-   0.08,
-   0.05,
-   0.16
+   0.03,
+   0.025,
+   0.07
   ],
   "fog_start": 15,
   "fog_end": 80,
@@ -29,7 +29,7 @@
    0.3,
    1.0
   ],
-  "grade_strength": 0.25,
+  "grade_strength": 0.1,
   "exposure": 1.0,
   "bloom": 0.25,
   "ambient": 0.12
@@ -46,74 +46,240 @@
  },
  "slots": [
   {
-   "kind": "tower",
+   "kind": "landmark",
    "rule": "grid",
-   "rows": 4,
-   "cols": 4,
-   "spacing": 22,
-   "clear": 10,
+   "rows": 1,
+   "cols": 1,
+   "spacing": 20,
+   "clear": 0,
+   "offset": [
+    0,
+    13
+   ],
    "height": [
-    25,
-    60
+    100.0,
+    100.0
+   ]
+  },
+  {
+   "kind": "block",
+   "rule": "ring",
+   "face": "out",
+   "count": 8,
+   "radius": 36,
+   "height": [
+    18.0,
+    28.0
+   ]
+  },
+  {
+   "kind": "block",
+   "rule": "ring",
+   "face": "in",
+   "count": 16,
+   "radius": 60,
+   "height": [
+    22.0,
+    34.0
+   ]
+  },
+  {
+   "kind": "tower",
+   "rule": "ring",
+   "face": "in",
+   "count": 8,
+   "radius": 75,
+   "height": [
+    44.0,
+    58.0
+   ]
+  },
+  {
+   "kind": "cable",
+   "rule": "ring",
+   "count": 8,
+   "radius": 48,
+   "height": [
+    9.0,
+    9.0
+   ]
+  },
+  {
+   "kind": "market",
+   "rule": "grid",
+   "rows": 1,
+   "cols": 1,
+   "spacing": 20,
+   "clear": 0,
+   "offset": [
+    -12,
+    -10
+   ],
+   "height": [
+    7.5,
+    7.5
+   ]
+  },
+  {
+   "kind": "workshop",
+   "rule": "grid",
+   "rows": 1,
+   "cols": 1,
+   "spacing": 20,
+   "clear": 0,
+   "offset": [
+    14,
+    -12
+   ],
+   "height": [
+    10.0,
+    10.0
+   ]
+  },
+  {
+   "kind": "walkway",
+   "rule": "grid",
+   "rows": 1,
+   "cols": 1,
+   "spacing": 16,
+   "clear": 0,
+   "offset": [
+    17,
+    -44
+   ],
+   "height": [
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "kind": "billboard",
+   "rule": "scatter",
+   "count": 3,
+   "radius": 22,
+   "clear": 8,
+   "height": [
+    10.0,
+    10.0
    ]
   },
   {
    "kind": "neon_sign",
    "rule": "scatter",
-   "count": 40,
-   "radius": 55,
-   "clear": 6,
-   "height": [
-    1.5,
-    4.0
-   ],
+   "count": 16,
    "glow": [
     1.0,
     0.2,
     0.8
+   ],
+   "radius": 52,
+   "clear": 43,
+   "height": [
+    4.0,
+    4.0
    ]
   },
   {
    "kind": "neon_sign",
    "rule": "scatter",
-   "count": 30,
-   "radius": 55,
-   "clear": 6,
-   "height": [
-    1.0,
-    3.0
-   ],
+   "count": 12,
    "glow": [
     0.2,
     0.9,
     1.0
+   ],
+   "radius": 52,
+   "clear": 43,
+   "height": [
+    4.0,
+    4.0
+   ]
+  },
+  {
+   "kind": "kiosk",
+   "rule": "scatter",
+   "count": 8,
+   "radius": 52,
+   "clear": 43,
+   "height": [
+    2.8,
+    2.8
+   ]
+  },
+  {
+   "kind": "food_stall",
+   "rule": "scatter",
+   "count": 10,
+   "radius": 52,
+   "clear": 43,
+   "height": [
+    3.2,
+    3.2
    ]
   },
   {
    "kind": "lamp",
    "rule": "scatter",
-   "count": 24,
-   "radius": 60,
-   "clear": 5,
-   "height": [
-    4,
-    6
-   ],
+   "count": 14,
    "glow": [
     0.6,
     0.8,
     1.0
+   ],
+   "radius": 52,
+   "clear": 43,
+   "height": [
+    6.5,
+    6.5
+   ]
+  },
+  {
+   "kind": "lamp",
+   "rule": "scatter",
+   "count": 6,
+   "radius": 24,
+   "clear": 5,
+   "glow": [
+    0.6,
+    0.8,
+    1.0
+   ],
+   "height": [
+    6.5,
+    6.5
    ]
   },
   {
    "kind": "crate",
    "rule": "scatter",
-   "count": 30,
-   "radius": 50,
+   "count": 20,
+   "radius": 52,
+   "clear": 43,
+   "height": [
+    1.2,
+    1.2
+   ]
+  },
+  {
+   "kind": "crate",
+   "rule": "scatter",
+   "count": 8,
+   "radius": 24,
    "clear": 3,
    "height": [
-    0.6,
-    1.4
+    1.2,
+    1.2
+   ]
+  },
+  {
+   "kind": "person",
+   "rule": "scatter",
+   "count": 14,
+   "radius": 24,
+   "clear": 4,
+   "height": [
+    1.6,
+    1.85
    ]
   }
  ]

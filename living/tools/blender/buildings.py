@@ -8,8 +8,19 @@ Styles and kinds (KINDS and FORM_KINDS):
   corner), inn, guildhall, chapel, workshop (smithy, workshop), barn (barn, shed), tower, wall,
   market_stall, lamp, well: timber frame and plaster on stone, steep stepped-shingle roofs
   (gable, hip, half-hip, cross gables), jetties, dormers, lean-tos, chimneys, lit windows;
-- steampunk: house (narrow, wide), factory, chimney, pipe, crate, lamp: brick, riveted metal
+- steampunk: house (narrow, wide, corner with a domed turret), inn (pub), hall (exchange: portico,
+  pediment clock, copper dome), clocktower (the landmark), mast (an airship mooring mast, often
+  with a small airship moored), works (foundry, gearworks), arcade (iron and glass market
+  arcade), factory, chimney, pipe, crate, lamp (gas lamps and brass globes): brick, riveted metal
   bands, copper mansards and domes, pipes, gears, smokestacks;
+- cyberpunk: block (narrow, wide, corner: stacked mid-rise storeys with setbacks), tower
+  (slender), landmark (a megatower with a halo crown and spire), market (food court), workshop
+  (garage, fab), neon_sign, billboard (holo screens on legs), cable (a bundle strung between two
+  buildings, along Y, hanging from brackets at its height), kiosk (vending machines or a booth),
+  food_stall, walkway (a raised walkway with stairs and a canopy), lamp, crate: grimy concrete
+  storeys with slab bands and glazed bays, rolled shutters and lit shopfronts, neon blade signs
+  and boards of glowing characters, holo-billboards, rooftop tanks, antennas and dishes, AC
+  boxes, fire escapes and hanging cables; chunky, read from the game camera;
 - giant: houses and a longhall in the fantasy grammar for 5 m giants (doors ~6 m), tower, lamp,
   well;
 - small: burrows, big mounds, mushroom and stump houses, a mushroom hall, tower, well for 0.6 m
@@ -18,7 +29,9 @@ Styles and kinds (KINDS and FORM_KINDS):
 Conventions (as nature.py): metres, origin at the floor centred on the footprint, +Z up in
 Blender (+Y in glTF), fronts face -Y in Blender (+Z in glTF, the asset view's "front"). Colour is
 per-vertex ("Color", exported as COLOR_0) on a white "Body" material so the game's toon material
-does the shading; lit windows and lamps use a "Glow" material with emission. Generators work in
+does the shading; lit windows and lamps use a "Glow" material with emission, and neon a
+material per colour ("GlowPink", "GlowCyan", "GlowAmber", "GlowRed", "GlowWhite"), because the
+game takes a glowing part's emission from its material. Generators work in
 metres for a 1.75 m person, and the result is scaled by the inhabitants' height (FOLK), so doors
 stay door-sized.
 
@@ -82,10 +95,19 @@ HEIGHTS = {
     ("fantasy", "well"): 3.4,
     ("giant", "well"): 3.4 * 5.0 / 1.75,
     ("small", "well"): 3.4 * 0.6 / 1.75,
+    ("cyberpunk", "neon_sign"): 4.0,
+    ("cyberpunk", "billboard"): 10.0,
+    ("cyberpunk", "cable"): 9.0,
+    ("cyberpunk", "kiosk"): 2.8,
+    ("cyberpunk", "food_stall"): 3.2,
+    ("cyberpunk", "walkway"): 7.0,
+    ("cyberpunk", "lamp"): 6.5,
+    ("cyberpunk", "crate"): 1.2,
 }
 
 # Foundation depth below the floor, in a person's metres (scaled with the inhabitants).
-FOUNDATION = {"lamp": 0.6, "market_stall": 0.5, "crate": 0.4, "pipe": 0.5}
+FOUNDATION = {"lamp": 0.6, "market_stall": 0.5, "crate": 0.4, "pipe": 0.5, "neon_sign": 0.5, "billboard": 0.8, "kiosk": 0.4,
+              "food_stall": 0.4, "walkway": 0.6, "cable": 0.0}
 FOUNDATION_DEFAULT = 1.8
 
 PALETTES = {
@@ -102,7 +124,7 @@ PALETTES = {
         copper=[(0.30, 0.62, 0.55), (0.76, 0.44, 0.26), (0.36, 0.56, 0.50)], brass=(0.80, 0.62, 0.30),
         iron=(0.22, 0.22, 0.25), steel=(0.42, 0.42, 0.45), timber=(0.36, 0.24, 0.16),
         paint=[(0.20, 0.32, 0.30), (0.42, 0.18, 0.16), (0.18, 0.22, 0.32)],
-        glass=(0.18, 0.18, 0.22), under=(0.25, 0.20, 0.17), glow=(1.0, 0.62, 0.28)),
+        glass=(0.18, 0.18, 0.22), under=(0.25, 0.20, 0.17), glow=(1.0, 0.62, 0.28), lean_windows=True),
     "small": dict(
         earth=(0.46, 0.34, 0.22), grass=[(0.42, 0.62, 0.26), (0.36, 0.56, 0.24)], stone=(0.68, 0.64, 0.57),
         cream=(0.94, 0.88, 0.74), bark=(0.46, 0.39, 0.31), heart=(0.86, 0.72, 0.50), timber=(0.36, 0.24, 0.16),
@@ -113,6 +135,22 @@ PALETTES = {
         plaster=[(0.97, 0.92, 0.80), (0.96, 0.88, 0.74)], stone_dark=(0.55, 0.52, 0.48), under=(0.32, 0.23, 0.16)),
 }
 PALETTES["giant"] = PALETTES["fantasy"]
+PALETTES["cyberpunk"] = dict(
+    concrete=[(0.46, 0.47, 0.52), (0.40, 0.42, 0.49), (0.52, 0.49, 0.48), (0.34, 0.37, 0.45), (0.56, 0.54, 0.50)],
+    panel=[(0.20, 0.22, 0.28), (0.27, 0.24, 0.33), (0.17, 0.25, 0.30), (0.30, 0.29, 0.31)],
+    trim=[(0.86, 0.70, 0.16), (0.20, 0.58, 0.66), (0.72, 0.22, 0.28), (0.88, 0.46, 0.14), (0.62, 0.64, 0.68)],
+    plastic=[(0.18, 0.55, 0.85), (0.92, 0.30, 0.30), (0.95, 0.80, 0.20), (0.25, 0.70, 0.45), (0.92, 0.92, 0.90)],
+    awning=[(0.86, 0.22, 0.30), (0.18, 0.52, 0.78), (0.94, 0.64, 0.16), (0.30, 0.66, 0.42)],
+    metal=(0.40, 0.42, 0.46), dark=(0.09, 0.09, 0.11), grime=(0.16, 0.15, 0.15), blind=(0.70, 0.66, 0.58),
+    stone=(0.44, 0.44, 0.47), stone_dark=(0.30, 0.30, 0.33), iron=(0.15, 0.16, 0.18), timber=(0.30, 0.25, 0.22),
+    under=(0.16, 0.16, 0.18), glass=(0.08, 0.11, 0.17), paint=[(0.20, 0.22, 0.28), (0.72, 0.22, 0.28)],
+    glow=(1.0, 0.86, 0.66), glow_tint=(1.0, 0.9, 0.75))
+
+# Neon colours (linear emission), each its own glow material ("GlowPink"...): saturated pink,
+# cyan and amber, plus red for aircraft warning lights and a cold white for strip lights.
+NEON = {"pink": (1.0, 0.08, 0.50), "cyan": (0.04, 0.80, 1.0), "amber": (1.0, 0.50, 0.04), "red": (1.0, 0.05, 0.03),
+        "white": (0.80, 0.90, 1.0)}
+NEON_STRENGTH = 6.0
 
 
 # ---------------------------------------------------------------------------------------------
@@ -343,7 +381,15 @@ class Kit:
         self.pr = pr or random.Random(0)
         self.body = material("Body")
         self.glow_mat = material("Glow", (1, 1, 1), emission=pal["glow"], strength=2.6)
+        self.neons = {}
         self.ao = ao
+
+    def neon(self, name):
+        """The glow material of one neon colour (NEON): its own material, since the game takes
+        a glowing part's emission from its material, not its vertex colours."""
+        if name not in self.neons:
+            self.neons[name] = material("Glow" + name.title(), (1, 1, 1), emission=NEON[name], strength=NEON_STRENGTH)
+        return self.neons[name]
 
     def add(self, bm, color, glow=False, soft=None, closed=True, vary=0.04, ao=True, tint=None):
         """Add a part in `color` (jittered by `vary`, darkened near the ground unless `ao` is
@@ -355,6 +401,11 @@ class Kit:
         if color is None and not glow:
             # An unlit window pane.
             color, ao, vary = self.pal["glass"], False, 0.0
+        if isinstance(glow, str):
+            # A neon colour: saturated, a little paler in its vertex colour (the tube's hot core).
+            core = lerp(NEON[glow], (1.0, 1.0, 1.0), 0.3)
+            self.b.add(bm, self.neon(glow), lambda co, n: core, soft, closed)
+            return
         if glow:
             warm = self.pal.get("glow_tint", (1.0, 0.78, 0.45))
             self.b.add(bm, self.glow_mat, lambda co, n: warm, soft, closed)
@@ -1939,36 +1990,52 @@ def gear(k, c, U, V, r, teeth, thick, color):
 
 
 def rivets(k, f, a0, a1, z, w, step=0.35, color=(0.3, 0.3, 0.32)):
+    # Rivets closer than about 0.7 m merge at game distance: draw every other one.
+    step = max(step, 0.7)
     n = max(1, int((a1 - a0) / step))
     for i in range(n + 1):
         a = a0 + i * (a1 - a0) / n
-        k.add(f.box(a - 0.04, a + 0.04, z - 0.04, z + 0.04, w, w + 0.05), color, ao=False, vary=0)
+        k.add(f.box(a - 0.05, a + 0.05, z - 0.05, z + 0.05, w, w + 0.05, back=False), color, ao=False, vary=0)
 
 
 def arch_window(k, f, a, z0, w, h, frame, lit=None, bars=True):
-    """A tall window with a round head, a brick arch of voussoirs and a stone sill."""
+    """A tall window with a round head, a brick arch of voussoirs and a stone sill. Palettes
+    with `lean_windows` (steampunk, whose houses carry dozens) draw the pane as one face and
+    five voussoirs; others keep the slab pane and seven."""
     rng = k.rng
+    lean = k.pal.get("lean_windows", False)
     lit = rng.random() < 0.65 if lit is None else lit
     r = w / 2
     n = 8
     pts = [(a - r, z0), (a + r, z0)] + [(a + math.cos(math.pi * i / n) * r, z0 + h + math.sin(math.pi * i / n) * r) for i in range(n + 1)]
-    pane = f.poly(pts, -0.05, 0.02)
-    if lit:
-        k.add(pane, None, glow=True)
+    if lean:
+        pane = bmesh.new()
+        facing(pane, [f.p(pa, pz, 0.02) for pa, pz in pts[1:2] + pts[2:] + pts[:1]], f.n)
     else:
-        k.add(pane, k.pal["glass"], ao=False)
+        pane = f.poly(pts, -0.05, 0.02)
+    if lit:
+        k.add(pane, None, glow=True, closed=not lean)
+    else:
+        k.add(pane, k.pal["glass"], ao=False, closed=not lean)
     if bars:
         for e in (-1, 1):
             k.add(f.box(a + e * r / 3 - 0.03, a + e * r / 3 + 0.03, z0, z0 + h + r * 0.9, 0.0, 0.06), k.pal["iron"], ao=False)
         for zz in (z0 + h * 0.35, z0 + h * 0.7, z0 + h):
             k.add(f.box(a - r, a + r, zz - 0.03, zz + 0.03, 0.0, 0.06), k.pal["iron"], ao=False)
-    m = 7
+    m = 5 if lean else 7
+    # The lean arch still takes the draws seven voussoirs did (a shade and a colour jitter
+    # each), so the design stream, and with it every footprint, is the same either way.
+    shades = [rng.uniform(0.92, 1.0) for _ in range(6)] if lean else None
     for i in range(m):
         a0, a1 = math.pi * i / m, math.pi * (i + 1) / m
         ro = r + (0.32 if i == m // 2 else 0.24)
         q = [(a + math.cos(a0) * (r + 0.02), z0 + h + math.sin(a0) * (r + 0.02)), (a + math.cos(a0) * ro, z0 + h + math.sin(a0) * ro),
              (a + math.cos(a1) * ro, z0 + h + math.sin(a1) * ro), (a + math.cos(a1) * (r + 0.02), z0 + h + math.sin(a1) * (r + 0.02))]
-        k.add(f.poly(q, 0.0, 0.1 if i == m // 2 else 0.07), mul(frame, 1.08 if i == m // 2 else rng.uniform(0.92, 1.0)), vary=0)
+        shade = 1.08 if i == m // 2 else (shades[i] if lean else rng.uniform(0.92, 1.0))
+        k.add(f.poly(q, 0.0, 0.1 if i == m // 2 else 0.07), mul(frame, shade), vary=0)
+    if lean:
+        for _ in range(7 - m):
+            rng.random()
     k.add(f.box(a - r - 0.15, a + r + 0.15, z0 - 0.16, z0, 0.0, 0.16), frame)
 
 
@@ -1998,15 +2065,21 @@ def brick_fn(c, rng, band=None):
 
 
 def steampunk_house(k, H=None):
-    """A brick townhouse with a copper mansard: narrow (2-3 floors over the shop) or wide (1-2)."""
+    """A brick townhouse with a copper mansard: narrow (2-4 floors over the shop), wide (1-3),
+    corner (a round turret with a copper dome on the corner, a second shop window round the
+    side) or pub (a painted timber pub front, brass letters, a hanging sign, barrels)."""
     rng, pal = k.rng, k.pal
     brick = k.choice(pal["brick"])
     stone, copper, iron, brass = pal["stone"], k.choice(pal["copper"]), pal["iron"], pal["brass"]
     paint = k.choice(pal["paint"])
     if k.form == "wide":
-        W, D, ups = rng.uniform(8.4, 10.0), rng.uniform(6.4, 7.8), rng.choice([1, 2, 2])
+        W, D, ups = rng.uniform(8.4, 11.0), rng.uniform(6.4, 8.0), rng.choice([1, 2, 2, 3])
+    elif k.form == "corner":
+        W, D, ups = rng.uniform(7.2, 9.0), rng.uniform(7.2, 9.0), rng.choice([2, 3, 3])
+    elif k.form == "pub":
+        W, D, ups = rng.uniform(9.0, 12.0), rng.uniform(7.5, 9.0), rng.choice([1, 2, 2])
     else:
-        W, D, ups = rng.uniform(5.4, 6.6), rng.uniform(6.6, 8.0), rng.choice([2, 3, 3])
+        W, D, ups = rng.uniform(4.8, 6.6), rng.uniform(6.6, 8.4), rng.choice([2, 3, 3, 4])
     hx, hy = W / 2, D / 2
     plinth, g, s = 0.55, 3.4, 2.9
     zw = plinth + g + ups * s
@@ -2043,7 +2116,7 @@ def steampunk_house(k, H=None):
     k.add(front.box(sa - sw / 2 - 0.15, sa + sw / 2 + 0.15, plinth + 2.8, plinth + 3.15, 0.0, 0.2), paint)
     k.add(front.box(sa - sw / 2 - 0.15, sa + sw / 2 + 0.15, plinth + 0.4, plinth + 0.6, 0.0, 0.25), mul(stone, 0.9))
     # Upper floors: tall windows with stone heads, maybe an oriel bay on the front.
-    oriel = rng.random() < 0.55
+    oriel = rng.random() < 0.55 and k.form not in ("corner", "pub")
     for name, f in faces.items():
         L = f.length
         bays = max(2, round(L / 2.1))
@@ -2053,7 +2126,7 @@ def steampunk_house(k, H=None):
                 a = -L / 2 + (i + 0.5) * L / bays
                 if oriel and name == "front" and abs(a) < 1.3:
                     continue
-                if name == "front" or rng.random() < 0.7:
+                if name == "front" or rng.random() < (0.35 if name == "back" else 0.55):
                     arch_window(k, f, a, z0, 0.9, 1.35, stone, bars=False)
                     k.add(f.box(a - 0.06, a + 0.06, z0, z0 + 1.7, 0.0, 0.05), iron, ao=False)
         if name == "front" and not oriel:
@@ -2119,6 +2192,60 @@ def steampunk_house(k, H=None):
     lx = door_a + (0.95 if door_a < 0 else -0.95)
     k.add(front.box(lx - 0.04, lx + 0.04, plinth + 2.1, plinth + 2.5, 0.0, 0.35), iron)
     lantern(k, front.p(lx, plinth + 2.0, 0.35))
+    if k.form == "corner":
+        side = k.corner
+        sf = faces["right" if side > 0 else "left"]
+        # A shop window round the side (the side face runs front to back for side > 0).
+        a0, a1 = (-hy + 1.9, hy - 0.8) if side > 0 else (-hy + 0.8, hy - 1.9)
+        k.add(sf.box(a0, a1, plinth + 0.6, plinth + 2.8, -0.05, 0.04), None, glow=True)
+        for i in range(4):
+            a = a0 + i * (a1 - a0) / 3
+            k.add(sf.box(a - 0.06, a + 0.06, plinth + 0.6, plinth + 2.8, 0.0, 0.1), brass)
+        k.add(sf.box(a0 - 0.15, a1 + 0.15, plinth + 2.8, plinth + 3.15, 0.0, 0.2), paint)
+        # The corner turret: brick drum, stone bands, windows round it, a copper dome.
+        tx, ty, r = side * hx, -hy, rng.uniform(1.3, 1.6)
+        k.add(cyl((tx, ty, plinth + g - 0.2), (tx, ty, zw + 0.35), r, r, 12), brick_fn(brick, rng))
+        k.add(cyl((tx, ty, plinth + g - 1.0), (tx, ty, plinth + g - 0.2), r * 0.5, r, 12), stone)
+        for st in range(ups + 1):
+            zb = plinth + g + st * s - 0.1
+            k.add(cyl((tx, ty, zb), (tx, ty, zb + 0.22), r + 0.08, r + 0.08, 12), stone if st < ups else iron, ao=False)
+        for st in range(ups):
+            z0 = plinth + g + st * s + 0.75
+            for ang in (-math.pi / 2 - side * 0.5, -math.pi / 2 + side * 0.9, side * 0.25 if side > 0 else math.pi - 0.25):
+                fc = Face((tx + math.cos(ang) * r, ty + math.sin(ang) * r, 0), Vector((-math.sin(ang), math.cos(ang), 0)), 1.0)
+                fc.n = Vector((math.cos(ang), math.sin(ang), 0))
+                arch_window(k, fc, 0, z0, 0.7, 1.2, stone, bars=False)
+        zd = zw + 0.35
+        for i in range(5):
+            t0, t1 = i / 5, (i + 1) / 5
+            k.add(cyl((tx, ty, zd + r * 1.1 * math.sin(t0 * math.pi / 2)), (tx, ty, zd + r * 1.1 * math.sin(t1 * math.pi / 2)),
+                      (r + 0.15) * math.cos(t0 * math.pi / 2), max(0.15, (r + 0.15) * math.cos(t1 * math.pi / 2)), 12), copper_seams(copper, 0.4), ao=False)
+        k.add(cyl((tx, ty, zd + r * 1.1), (tx, ty, zd + r * 1.1 + 1.2), 0.12, 0.02, 6), brass, ao=False)
+        k.add(sphere((tx, ty, zd + r * 1.1 + 0.1), 0.2, 1), brass, ao=False)
+    if k.form == "pub":
+        # The pub front: painted timber over the ground floor, big lit windows, a fascia with
+        # brass letters, a hanging sign on a bracket and barrels by the door.
+        pc = k.choice([(0.12, 0.26, 0.18), (0.40, 0.10, 0.10), (0.10, 0.14, 0.24)])
+        k.add(front.box(-hx + 0.2, hx - 0.2, plinth + 2.75, plinth + 3.35, 0.0, 0.32), pc)
+        k.add(front.box(-hx + 0.1, hx - 0.1, plinth + 3.35, plinth + 3.5, 0.0, 0.42), mul(pc, 0.8))
+        n = int((W - 1.0) / 0.55)
+        for i in range(n):
+            if k.pr.random() < 0.82:
+                a = -hx + 0.6 + i * 0.55
+                k.add(front.box(a, a + 0.32, plinth + 2.88, plinth + 3.22, 0.32, 0.36, back=False), brass, ao=False)
+        for a in (-hx + 0.3, hx - 0.3, span0 - 0.1, span1 + 0.1):
+            k.add(front.box(a - 0.18, a + 0.18, plinth, plinth + 2.75, 0.0, 0.28), pc)
+            k.add(front.box(a - 0.22, a + 0.22, plinth + 2.55, plinth + 2.75, 0.0, 0.34), brass, ao=False)
+        k.add(front.box(sa - sw / 2, sa + sw / 2, plinth, plinth + 0.6, 0.0, 0.24), pc)
+        sa_ = -door_a * 0.9
+        k.add(front.box(sa_ - 0.05, sa_ + 0.05, plinth + 3.6, plinth + 3.7, 0.0, 1.5), iron, ao=False)
+        k.add(front.box(sa_ - 0.04, sa_ + 0.04, plinth + 2.5, plinth + 3.5, 0.5, 1.4), k.choice([(0.85, 0.7, 0.3), (0.6, 0.15, 0.12), (0.2, 0.3, 0.45)]))
+        k.add(front.box(sa_ - 0.06, sa_ + 0.06, plinth + 2.45, plinth + 2.55, 0.45, 1.45), brass, ao=False)
+        for w in (0.65, 1.25):
+            k.add(front.box(sa_ - 0.015, sa_ + 0.015, plinth + 3.5, plinth + 3.6, w - 0.015, w + 0.015), iron, ao=False)
+        gear(k, front.p(sa_ + 0.05, plinth + 3.0, 0.95), Y, Z, 0.3, 8, 0.03, brass)
+        for e in (-1, 1):
+            barrel(k, front.p(door_a + e * 1.2, 0.0, 0.7), 0.34, 0.85, pal["timber"])
 
 
 def steampunk_factory(k, H):
@@ -2351,8 +2478,30 @@ def steampunk_crate(k, H):
 
 
 def steampunk_lamp(k, H):
+    """A gas lamp (a fluted iron post, a ladder bar and a lantern, single or on a crossarm) or a
+    brass-globe lamp with a gear on its post."""
     rng, pal = k.rng, k.pal
     iron, brass = pal["iron"], pal["brass"]
+    if rng.random() < 0.6:
+        k.add(cyl((0, 0, 0), (0, 0, 0.5), 0.3, 0.22, 8), iron)
+        k.add(cyl((0, 0, 0.5), (0, 0, 0.75), 0.22, 0.12, 8), mul(iron, 1.15))
+        double = rng.random() < 0.4
+        top = H - (1.0 if double else 0.95)
+        k.add(cyl((0, 0, 0.75), (0, 0, top), 0.1, 0.07, 8), iron)
+        for z in (0.95, 1.9, top - 0.1):
+            k.add(cyl((0, 0, z), (0, 0, z + 0.1), 0.13, 0.13, 8), mul(iron, 1.3), ao=False)
+        # The lamplighter's ladder bar.
+        k.add(box((-0.42, -0.03, top - 0.55), (0.42, 0.03, top - 0.47)), iron, ao=False)
+        if double:
+            k.add(box((-0.75, -0.04, top), (0.75, 0.04, top + 0.08)), iron, ao=False)
+            for e in (-1, 1):
+                k.add(Face((0, 0, 0), X, 1).obox(e * 0.35, top - 0.2, 0.6, 0.04, -0.02, 0.02, -e * 0.6), iron)
+                lantern(k, (e * 0.75, 0, top + 0.08 + 0.24 * 1.3), 1.3)
+            k.add(sphere((0, 0, top + 0.2), 0.1, 1), brass, ao=False)
+        else:
+            lantern(k, (0, 0, top + 0.24 * 1.6), 1.6)
+            k.add(sphere((0, 0, top + 0.6 * 1.6), 0.07, 1), brass, ao=False)
+        return
     k.add(cyl((0, 0, 0), (0, 0, 0.35), 0.3, 0.24, 8), iron)
     k.add(cyl((0, 0, 0.35), (0, 0, 0.6), 0.16, 0.1, 8), iron)
     top = H - 0.75
@@ -2372,6 +2521,1490 @@ def steampunk_lamp(k, H):
             a = i / 4 * math.tau + math.pi / 4
             k.add(cyl((cx + math.cos(a) * 0.2, math.sin(a) * 0.2, gz + 0.1), (cx + math.cos(a) * 0.2, math.sin(a) * 0.2, gz + 0.55), 0.02, 0.02, 4), brass, ao=False)
         k.add(cyl((cx, 0, gz + 0.52), (cx, 0, H - (0.0 if e == arms[-1] else 0.02)), 0.26, 0.03, 8), mul(k.choice(pal["copper"]), 1.0), ao=False)
+
+
+def strut(k, a, b, r, color, sides=4):
+    k.add(cyl(a, b, r, r, sides), color, ao=False, vary=0.03)
+
+
+def copper_seams(c, every=0.45):
+    """Copper sheet with standing seams (stripes) and paler verdigris on what faces up."""
+    def fn(co, n):
+        stripe = 0.92 if int(math.floor((co.x + co.y) / every)) % 2 else 1.0
+        return mul(c, stripe * (1.1 if n.z > 0.6 else 1.0))
+    return fn
+
+
+def clock_face(k, f, a, zc, r, frame, w=0.0):
+    """A lit clock dial on a wall face: a brass bezel, twelve ticks and two hands."""
+    k.add(cyl(f.p(a, zc, w), f.p(a, zc, w + 0.14), r + 0.28, r + 0.28, 16), frame, ao=False)
+    k.add(cyl(f.p(a, zc, w + 0.14), f.p(a, zc, w + 0.18), r, r, 16), None, glow=True)
+    dark = (0.12, 0.10, 0.09)
+    for i in range(12):
+        t = i / 12 * math.tau
+        ln = 0.3 if i % 3 == 0 else 0.16
+        k.add(f.obox(a + math.cos(t) * (r - 0.08 - ln / 2), zc + math.sin(t) * (r - 0.08 - ln / 2), ln, 0.07, w + 0.18, w + 0.22, t), dark, ao=False, vary=0)
+    hour, minute = k.pr.uniform(0, math.tau), k.pr.uniform(0, math.tau)
+    for t, ln, th in ((hour, r * 0.55, 0.12), (minute, r * 0.85, 0.08)):
+        k.add(f.obox(a + math.cos(t) * ln / 2, zc + math.sin(t) * ln / 2, ln, th, w + 0.22, w + 0.27, t), dark, ao=False, vary=0)
+    k.add(cyl(f.p(a, zc, w + 0.18), f.p(a, zc, w + 0.3), 0.12, 0.12, 8), frame, ao=False)
+
+
+def sp_walls(k, x0, x1, y0, y1, z0, z1, brick, stone, pil=3.4, plinth=0.6):
+    """A brick block on a stone plinth, with brick pilasters every `pil` metres and a stone
+    cornice: the steampunk wall. Returns its faces."""
+    pal = k.pal
+    hx, hy = (x1 - x0) / 2, (y1 - y0) / 2
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    k.add(box((x0 - 0.15, y0 - 0.15, z0), (x1 + 0.15, y1 + 0.15, z0 + plinth), 0.05), pal["stone_dark"])
+    k.add(box((x0, y0, z0 + plinth - 0.05), (x1, y1, z1), 0.05), brick_fn(brick, k.rng))
+    faces = box_faces(cx, cy, hx, hy)
+    for f in faces.values():
+        L = f.length
+        n = max(1, round(L / pil))
+        for i in range(n + 1):
+            a = min(L / 2 - 0.3, max(-L / 2 + 0.3, -L / 2 + i * L / n))
+            k.add(f.box(a - 0.3, a + 0.3, z0 + plinth, z1 - 0.3, 0.0, 0.18, back=False), brick_fn(mul(brick, 0.9), k.rng), vary=0)
+        k.add(f.box(-L / 2 - 0.2, L / 2 + 0.2, z1 - 0.35, z1 + 0.15, 0.0, 0.32, bevel=0.04), stone)
+    return faces
+
+
+def steampunk_clocktower(k):
+    """The landmark: a stone base with an arched door, a brick shaft banded with riveted iron,
+    a stone clock stage with lit dials on all four faces and a gear on show, an open belfry
+    with a bell, and a copper spire with a brass finial."""
+    rng, pal = k.rng, k.pal
+    u = rng.uniform
+    brick, stone, iron, brass = k.choice(pal["brick"]), pal["stone"], pal["iron"], pal["brass"]
+    copper = k.choice(pal["copper"])
+    S = u(7.0, 8.2)
+    h = S / 2
+    zb = u(4.6, 5.4)
+    # The base: rusticated stone with corner buttresses and a big arched door.
+    k.add(box((-h - 0.2, -h - 0.2, 0), (h + 0.2, h + 0.2, 0.6), 0.05), pal["stone_dark"])
+    k.add(box((-h, -h, 0.55), (h, h, zb), 0.05), stone, vary=0.02)
+    for f in box_faces(0, 0, h, h).values():
+        z = 0.65
+        while z < zb - 0.4:
+            k.add(f.box(-h + 0.05, h - 0.05, z, z + 0.5, 0.0, 0.05, back=False), jitter(stone, rng, 0.05), vary=0)
+            z += 0.6
+    for dx in (-1, 1):
+        for dy in (-1, 1):
+            k.add(box((dx * h - 0.55, dy * h - 0.55, 0), (dx * h + 0.55, dy * h + 0.55, zb + 0.4), 0.05), mul(stone, 0.92))
+    front = Face((0, -h, 0), X, S)
+    door(k, front, 0, 0.6, 1.6, 2.6, k.choice(pal["paint"]), mul(stone, 0.85), arch=True)
+    for e in (-1, 1):
+        lantern(k, front.p(e * 1.5, 2.8, 0.3), 1.1)
+    k.add(box((-h - 0.3, -h - 0.3, zb), (h + 0.3, h + 0.3, zb + 0.35)), mul(stone, 1.05))
+    # The shaft.
+    s = h - 0.6
+    zs = zb + u(15.0, 19.0)
+    k.add(box((-s, -s, zb + 0.3), (s, s, zs), 0.05), brick_fn(brick, rng))
+    for dx in (-1, 1):
+        for dy in (-1, 1):
+            k.add(box((dx * s - 0.35, dy * s - 0.35, zb + 0.3), (dx * s + 0.35, dy * s + 0.35, zs)), stone)
+    z = zb + 4.2
+    while z < zs - 1.5:
+        for f in box_faces(0, 0, s, s).values():
+            k.add(f.box(-s, s, z, z + 0.28, 0.0, 0.1, back=False), iron, ao=False)
+            rivets(k, f, -s + 0.4, s - 0.4, z + 0.14, 0.1, 0.55, mul(iron, 1.5))
+        z += 4.5
+    for f in box_faces(0, 0, s, s).values():
+        for zz in (zb + 2.0, zb + 7.5, zb + 12.0):
+            if zz + 2.6 < zs - 0.5:
+                arch_window(k, f, 0, zz, 0.7, 1.7, stone, bars=False)
+    # The clock stage, wider, with a dial on each face.
+    c = h - 0.3
+    zc0, zc1 = zs, zs + u(5.0, 5.8)
+    k.add(box((-c - 0.2, -c - 0.2, zc0 - 0.1), (c + 0.2, c + 0.2, zc0 + 0.35)), mul(stone, 1.05))
+    k.add(box((-c, -c, zc0 + 0.3), (c, c, zc1)), stone, vary=0.02)
+    k.add(box((-c - 0.3, -c - 0.3, zc1 - 0.1), (c + 0.3, c + 0.3, zc1 + 0.4), 0.05), mul(stone, 0.95))
+    r = min(2.2, c - 0.8)
+    for name, f in box_faces(0, 0, c, c).items():
+        clock_face(k, f, 0, (zc0 + zc1) / 2 + 0.1, r, brass)
+    # A gear train on show beside one dial.
+    gf = Face((0, -c, 0), X, 2 * c)
+    gs = rng.choice([-1, 1])
+    gear(k, gf.p(gs * (c - 0.3), zc0 + 1.1, 0.05), X, Z, 0.9, 10, 0.12, mul(brass, 0.95))
+    # Corner pinnacles.
+    for dx in (-1, 1):
+        for dy in (-1, 1):
+            k.add(box((dx * c - 0.3, dy * c - 0.3, zc1 + 0.4), (dx * c + 0.3, dy * c + 0.3, zc1 + 1.6)), stone)
+            k.add(cyl((dx * c, dy * c, zc1 + 1.6), (dx * c, dy * c, zc1 + 2.8), 0.32, 0.02, 4), copper_seams(copper), ao=False)
+    # The belfry: four piers under a copper roof, a bell hanging inside.
+    b = c - 0.7
+    zf0, zf1 = zc1 + 0.4, zc1 + u(3.6, 4.2)
+    for dx in (-1, 1):
+        for dy in (-1, 1):
+            k.add(box((dx * b - 0.45 * dx - 0.45, dy * b - 0.45 * dy - 0.45, zf0), (dx * b - 0.45 * dx + 0.45, dy * b - 0.45 * dy + 0.45, zf1)), brick_fn(brick, rng))
+    k.add(box((-b, -b, zf0), (b, b, zf0 + 0.15)), mul(stone, 0.8))
+    for f in box_faces(0, 0, b, b).values():
+        k.add(f.box(-b, b, zf1 - 0.6, zf1, 0.0, 0.2, back=False), stone)
+    k.add(cyl((0, 0, zf1 - 1.9), (0, 0, zf1 - 0.7), b * 0.55, b * 0.3, 10), brass, ao=False)
+    k.add(box((-b, -0.08, zf1 - 0.75), (b, 0.08, zf1 - 0.6)), mul(iron, 1.4), ao=False)
+    k.add(box((-b - 0.4, -b - 0.4, zf1), (b + 0.4, b + 0.4, zf1 + 0.3)), mul(stone, 0.95))
+    # The spire: copper, eight-sided, a brass ball and a gear for a vane.
+    zt = zf1 + 0.3 + u(6.0, 8.0)
+    bm = cyl((0, 0, zf1 + 0.3), (0, 0, zt), b + 0.3, 0.06, 8)
+    bmesh.ops.rotate(bm, verts=bm.verts, cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 8, 3, "Z"))
+    k.add(bm, copper_seams(copper, 0.35), ao=False)
+    for e in (-1, 1):
+        # Little lucarnes on the spire.
+        zl = zf1 + 1.6
+        y = e * (b - 0.2)
+        k.add(box((-0.45, y - 0.35, zf1 + 0.3), (0.45, y + 0.35, zl + 0.6)), copper_seams(mul(copper, 0.9)), ao=False)
+        k.add(Face((0, y + e * 0.36, 0), -X * e, 0.9).box(-0.3, 0.3, zf1 + 0.7, zl + 0.3, 0.0, 0.03, back=False), None, glow=True)
+    k.add(sphere((0, 0, zt + 0.25), 0.35, 1), brass, ao=False)
+    k.add(cyl((0, 0, zt + 0.5), (0, 0, zt + 2.0), 0.05, 0.05, 6), iron, ao=False)
+    gear(k, Vector((0, 0.05, zt + 1.5)), X, Z, 0.45, 8, 0.06, brass)
+
+
+def steampunk_mast(k):
+    """An airship mooring mast: an iron lattice on a stone base with a winch house, a gallery
+    at the top, a turning mooring head with a beacon, and (often) a small airship moored to it."""
+    rng, pal = k.rng, k.pal
+    u = rng.uniform
+    iron, brass, stone = pal["iron"], pal["brass"], pal["stone"]
+    copper = k.choice(pal["copper"])
+    Hm = u(21.0, 25.0)
+    rb, rt = u(2.6, 3.0), u(1.1, 1.3)
+    k.add(box((-rb - 0.8, -rb - 0.8, 0), (rb + 0.8, rb + 0.8, 0.9), 0.06), pal["stone_dark"])
+    k.add(box((-rb - 0.6, -rb - 0.6, 0.85), (rb + 0.6, rb + 0.6, 1.05)), stone)
+    levels = 7
+    corners = [(-1, -1), (1, -1), (1, 1), (-1, 1)]
+
+    def leg(i, t):
+        r = rb + (rt - rb) * t
+        dx, dy = corners[i]
+        return Vector((dx * r, dy * r, 1.0 + (Hm - 1.0) * t))
+    for i in range(4):
+        k.add(box(leg(i, 0) - Vector((0.3, 0.3, 1.0)), leg(i, 0) + Vector((0.3, 0.3, 0.25))), mul(stone, 0.9))
+    for lv in range(levels):
+        t0, t1 = lv / levels, (lv + 1) / levels
+        for i in range(4):
+            j = (i + 1) % 4
+            strut(k, leg(i, t0), leg(i, t1), 0.16, iron)
+            strut(k, leg(i, t1), leg(j, t1), 0.08, iron)
+            strut(k, leg(i, t0), leg(j, t1), 0.06, mul(iron, 1.3))
+            strut(k, leg(j, t0), leg(i, t1), 0.06, mul(iron, 1.3))
+    # A lift cage up the middle, and a ladder.
+    k.add(box((-0.6, -0.6, 1.0), (0.6, 0.6, 1.1)), iron, ao=False)
+    for dx in (-1, 1):
+        for dy in (-1, 1):
+            strut(k, (dx * 0.6, dy * 0.6, 1.0), (dx * 0.6, dy * 0.6, Hm), 0.05, mul(iron, 1.4))
+    zc = u(0.3, 0.7) * Hm
+    k.add(box((-0.55, -0.55, zc), (0.55, 0.55, zc + 2.2)), lambda co, n: mul(brass, 0.9 if int(co.z / 0.3) % 2 else 1.0), ao=False)
+    # The winch house at the foot.
+    e = rng.choice([-1, 1])
+    wx = e * (rb + 2.6)
+    k.add(box((wx - 1.6, -1.8, 0), (wx + 1.6, 1.8, 3.0), 0.05), brick_fn(k.choice(pal["brick"]), rng))
+    k.add(prism([(-2.0, 3.0), (2.0, 3.0), (0.0, 4.3)], wx - 1.8, wx + 1.8, lambda a, s_, z: Vector((a, s_, z))), copper_seams(copper))
+    wf = Face((wx, -1.8, 0), X, 3.2)
+    door(k, wf, -0.5, 0.0, 1.0, 2.1, k.choice(pal["paint"]), iron)
+    arch_window(k, wf, 0.8, 1.0, 0.7, 0.9, stone, bars=True)
+    k.add(cyl((wx - e * 1.6, 0, 1.5), (wx - e * 2.2, 0, 1.5), 0.8, 0.8, 12), lambda co, n: mul(iron, 1.3), ao=False)
+    gear(k, Vector((wx, -1.85, 3.6)), X, Z, 0.5, 9, 0.08, brass)
+    # The winch cable up to the head.
+    k.add(cyl((wx - e * 2.2, 0, 2.3), (0, 0, Hm - 0.2), 0.03, 0.03, 4), (0.15, 0.13, 0.11), ao=False)
+    # The gallery and mooring head.
+    g = rt + 1.4
+    bm = cyl((0, 0, Hm), (0, 0, Hm + 0.25), g, g, 8)
+    k.add(bm, iron, ao=False)
+    for i in range(8):
+        t0, t1 = i / 8 * math.tau, (i + 1) / 8 * math.tau
+        p0 = Vector((math.cos(t0) * (g - 0.05), math.sin(t0) * (g - 0.05), Hm + 0.25))
+        p1 = Vector((math.cos(t1) * (g - 0.05), math.sin(t1) * (g - 0.05), Hm + 0.25))
+        strut(k, p0, p0 + Z * 1.05, 0.04, iron)
+        strut(k, p0 + Z * 1.05, p1 + Z * 1.05, 0.04, brass)
+    k.add(cyl((0, 0, Hm + 0.25), (0, 0, Hm + 2.6), 0.9, 0.6, 10), copper_seams(copper), ao=False)
+    k.add(cyl((0, 0, Hm + 2.6), (0, 0, Hm + 3.4), 0.75, 0.25, 10), brass, ao=False)
+    k.add(sphere((0, 0, Hm + 3.7), 0.32, 1), None, glow=True)
+    k.add(cyl((0, 0, Hm + 3.95), (0, 0, Hm + 4.3), 0.36, 0.05, 8), brass, ao=False)
+    arm = rng.choice([-1, 1])
+    k.add(box((-0.15, -0.15, Hm + 1.5), (arm * 2.4, 0.15, Hm + 1.8)), iron, ao=False)
+    k.add(cyl((arm * 2.4, 0, Hm + 1.65), (arm * 3.0, 0, Hm + 1.65), 0.35, 0.12, 8), brass, ao=False)
+    if rng.random() < 0.7:
+        # A small airship moored nose-on to the head, drifting off on its line.
+        L = u(13.0, 16.0)
+        R = u(2.3, 2.8)
+        cx = arm * (3.0 + L / 2 + 0.2)
+        cz = Hm + 1.65 + u(-0.3, 0.6)
+        canvas = k.choice([(0.82, 0.74, 0.58), (0.62, 0.24, 0.20), (0.70, 0.66, 0.60), (0.36, 0.42, 0.38)])
+        bm = bmesh.new()
+        bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.0)
+        for v in bm.verts:
+            x = v.co.x
+            v.co.x = cx + x * L / 2
+            # A blunter nose than tail.
+            taper = 1.0 - 0.18 * max(0.0, x * arm * -1)
+            v.co.y *= R * taper
+            v.co.z = cz + v.co.z * R * taper
+        k.add(bm, lambda co, n: mul(canvas, (0.9 if int(math.floor((co.x + 50) / 1.4)) % 2 else 1.0) * (1.05 if n.z > 0.3 else 0.92)), soft=Vector((cx, 0, cz)))
+        for t in (-0.3, 0.05, 0.4):
+            x = cx + t * L
+            rr = R * math.sqrt(max(0.05, 1 - (2 * t) ** 2)) * (1.0 - 0.18 * max(0.0, 2 * t * arm * -1)) + 0.04
+            k.add(cyl((x - 0.08, 0, cz), (x + 0.08, 0, cz), rr, rr, 14), brass, ao=False)
+        # Tail fins.
+        tx = cx - arm * L * 0.42
+        for ang in (0, math.pi / 2, math.pi, 3 * math.pi / 2):
+            d = Vector((0, math.cos(ang), math.sin(ang)))
+            p0 = Vector((tx, 0, cz)) + d * R * 0.45
+            k.add(prism([(0.0, 0.0), (arm * 2.6, 0.0), (arm * 0.4, 1.7)], -0.06, 0.06,
+                        lambda w, s_, z, p0=p0, d=d, ang=ang: p0 + Vector((-s_, 0, 0)) + d * z + Vector((0, -math.sin(ang), math.cos(ang))) * w), k.choice(pal["paint"]))
+        # The gondola, its lit windows and a propeller each side.
+        gz = cz - R - 0.9
+        k.add(box((cx - 2.6, -0.8, gz - 0.6), (cx + 2.0, 0.8, gz + 0.6), 0.1), k.choice(pal["paint"]))
+        for e2 in (-1, 1):
+            gf = Face((cx - 0.3, e2 * 0.8, 0), -X * e2, 4.6)
+            for a in (-1.4, -0.4, 0.6, 1.6):
+                k.add(gf.box(a - 0.3, a + 0.3, gz - 0.2, gz + 0.35, 0.0, 0.03, back=False), None, glow=True)
+            k.add(box((cx - 1.0, e2 * 0.8, gz + 0.2), (cx - 0.8, e2 * 1.6, gz + 0.35)), iron, ao=False)
+            gear(k, Vector((cx - 1.0 - arm * 0.2, e2 * 1.75, gz + 0.28)), Y, Z, 0.7, 4, 0.06, brass)
+        for xs in (-1.5, 1.0):
+            strut(k, (cx + xs, 0, gz + 0.6), (cx + xs, 0, cz - R * 0.9), 0.05, iron)
+        # The mooring line.
+        sag_line(k, (arm * 3.0, 0, Hm + 1.65), (cx - arm * L / 2, 0, cz), 0.25, 0.05, (0.2, 0.17, 0.13), seg=3)
+
+
+def sp_hall(k, W, D, zw, brick, stone, front_door=True):
+    """A brick works hall with arched windows between pilasters; returns its faces."""
+    faces = sp_walls(k, -W / 2, W / 2, -D / 2, D / 2, 0.0, zw, brick, stone)
+    for name, f in faces.items():
+        L = f.length
+        n = max(1, round(L / 3.4))
+        for i in range(n):
+            a = -L / 2 + (i + 0.5) * L / n
+            if name == "front" and abs(a) < 2.8:
+                continue
+            arch_window(k, f, a, 2.0, min(1.6, L / n - 1.1), zw - 4.2, stone, bars=True)
+    return faces
+
+
+def steampunk_works(k):
+    """A foundry (a furnace mouth glowing in its great arch, a lit clerestory, squat stacks, a
+    ladle on rails and a gantry crane) or a gear-works (a train of huge gears on the front, a
+    glazed lantern roof, steam pipes)."""
+    rng, pal, form = k.rng, k.pal, k.form
+    u = rng.uniform
+    brick, stone, iron, brass = k.choice(pal["brick"]), pal["stone"], pal["iron"], pal["brass"]
+    copper = k.choice(pal["copper"])
+    W, D = u(16.0, 20.0), u(11.0, 13.0)
+    zw = u(8.0, 9.0)
+    hx, hy = W / 2, D / 2
+    faces = sp_hall(k, W, D, zw, brick, stone)
+    front = faces["front"]
+    # A pitched slate roof with a raised clerestory along the ridge.
+    rise = D * 0.28
+    k.add(prism([(-hy - 0.5, zw), (hy + 0.5, zw), (hy + 0.5, zw + 0.25), (0.0, zw + rise + 0.25), (-hy - 0.5, zw + 0.25)], -hx - 0.4, hx + 0.4,
+                lambda a, s_, z: Vector((a, s_, z))), lambda co, n: mul((0.30, 0.32, 0.36), 0.92 if int(co.z / 0.5) % 2 else 1.0), ao=False)
+    for e in (-1, 1):
+        k.add(prism([(-hy, zw), (hy, zw), (0.0, zw + rise)], e * hx - 0.1, e * hx + 0.1, lambda a, s_, z: Vector((a, s_, z))), brick_fn(brick, rng))
+    cl = W * 0.7
+    k.add(box((-cl / 2, -1.6, zw + rise - 0.6), (cl / 2, 1.6, zw + rise + 1.4)), mul(iron, 1.2), ao=False)
+    for e in (-1, 1):
+        cf = Face((0, e * 1.6, 0), -X * e, cl)
+        for i in range(int(cl / 1.5)):
+            a = -cl / 2 + (i + 0.5) * cl / int(cl / 1.5)
+            k.add(cf.box(a - 0.55, a + 0.55, zw + rise - 0.3, zw + rise + 1.1, 0.0, 0.03, back=False), None, glow=form == "foundry" or rng.random() < 0.5)
+    k.add(prism([(-1.9, zw + rise + 1.4), (1.9, zw + rise + 1.4), (0.0, zw + rise + 2.3)], -cl / 2 - 0.2, cl / 2 + 0.2, lambda a, s_, z: Vector((a, s_, z))), copper_seams(copper))
+    if form == "foundry":
+        # The furnace arch: dark iron doors pushed back, the fire glowing deep inside.
+        aw, ah = 4.4, 4.8
+        n = 8
+        k.add(front.poly([(-aw / 2, 0.6), (aw / 2, 0.6)] + [(math.cos(math.pi * i / n) * aw / 2, 0.6 + ah - aw / 2 + math.sin(math.pi * i / n) * aw / 2) for i in range(n + 1)], -0.05, 0.03), None, glow="amber")
+        for i in range(n):
+            a0, a1 = math.pi * i / n, math.pi * (i + 1) / n
+            rr0, rr1 = aw / 2 + 0.05, aw / 2 + 0.6
+            zc = 0.6 + ah - aw / 2
+            q = [(math.cos(a0) * rr0, zc + math.sin(a0) * rr0), (math.cos(a0) * rr1, zc + math.sin(a0) * rr1), (math.cos(a1) * rr1, zc + math.sin(a1) * rr1), (math.cos(a1) * rr0, zc + math.sin(a1) * rr0)]
+            k.add(front.poly(q, 0.0, 0.25 if i == n // 2 else 0.18), mul(stone, 1.05 if i == n // 2 else u(0.88, 0.98)), vary=0)
+        for e in (-1, 1):
+            k.add(front.box(e * aw / 2 - 0.25, e * aw / 2 + 0.25, 0.6, zc, 0.0, 0.25), stone)
+            k.add(front.obox(e * (aw / 2 + 0.9), 0.6 + 1.9, 1.8, 3.8, 0.1, 0.25, e * 0.25), mul(iron, 1.2))
+        # Squat stacks with copper caps.
+        for i in range(rng.choice([2, 3])):
+            sx = -hx + 2.5 + i * (W - 5.0) / 2
+            sy = hy * 0.4
+            k.add(cyl((sx, sy, zw), (sx, sy, zw + rise + u(4.0, 6.0)), 0.9, 0.75, 10), brick_fn(mul(brick, 0.85), rng))
+            k.add(cyl((sx, sy, zw + rise + 4.0), (sx, sy, zw + rise + 4.5), 0.95, 0.95, 10), iron, ao=False)
+        # A ladle on rails out front, glowing, and ingots stacked by the wall.
+        lx = rng.choice([-1, 1]) * u(3.0, 4.5)
+        for e in (-1, 1):
+            k.add(box((lx - 2.0, -hy - 2.2 + e * 0.6 - 0.06, 0), (lx + 2.0, -hy - 2.2 + e * 0.6 + 0.06, 0.12)), mul(iron, 1.3), ao=False)
+        k.add(box((lx - 0.9, -hy - 3.0, 0.12), (lx + 0.9, -hy - 1.4, 0.6)), iron, ao=False)
+        k.add(cyl((lx, -hy - 2.2, 0.6), (lx, -hy - 2.2, 1.8), 0.7, 0.85, 12), mul(iron, 1.1), ao=False)
+        k.add(cyl((lx, -hy - 2.2, 1.78), (lx, -hy - 2.2, 1.82), 0.78, 0.78, 12), None, glow="amber")
+        ix = -lx
+        for r in range(3):
+            for i in range(4 - r):
+                k.add(box((ix - 1.0 + i * 0.5 + r * 0.25, -hy - 1.2, r * 0.18), (ix - 0.6 + i * 0.5 + r * 0.25, -hy - 0.4, r * 0.18 + 0.16)), brass, ao=False)
+        # A gantry crane over the yard.
+        for e in (-1, 1):
+            k.add(box((e * 3.2 - 0.15, -hy - 4.0, 0), (e * 3.2 + 0.15, -hy - 3.7, 6.0)), iron, ao=False)
+        k.add(box((-3.5, -hy - 4.05, 6.0), (3.5, -hy - 3.65, 6.4)), mul(iron, 1.2), ao=False)
+        k.add(box((-0.3, -hy - 4.1, 5.6), (0.3, -hy - 3.6, 6.0)), brass, ao=False)
+        k.add(cyl((0, -hy - 3.85, 5.6), (0, -hy - 3.85, 3.6), 0.02, 0.02, 4), (0.2, 0.18, 0.15), ao=False)
+        k.add(box((-0.15, -hy - 3.95, 3.3), (0.15, -hy - 3.75, 3.6)), iron, ao=False)
+    else:
+        # Big doors, and a gear train across the front above them.
+        dw = 3.2
+        k.add(front.box(-dw / 2, dw / 2, 0.6, 4.6, -0.02, 0.1), k.choice(pal["paint"]))
+        k.add(front.box(-dw / 2 - 0.2, dw / 2 + 0.2, 4.6, 4.9, 0.0, 0.25), iron)
+        for e in (-1, 1):
+            k.add(front.obox(0, 2.6, math.hypot(dw, 4.0), 0.14, 0.1, 0.16, math.atan2(4.0, dw) * e), iron)
+        gz = u(6.4, 7.2)
+        big = u(2.0, 2.4)
+        x = rng.choice([-1, 1]) * u(0.0, 1.0)
+        gear(k, front.p(x, gz, 0.35), X, Z, big, 16, 0.25, brass)
+        r2 = big * u(0.45, 0.6)
+        x2 = x + (big + r2) * 0.92
+        gear(k, front.p(x2, gz + 0.8, 0.35), X, Z, r2, 10, 0.22, mul(copper, 1.1))
+        r3 = big * u(0.5, 0.7)
+        x3 = x - (big + r3) * 0.92
+        gear(k, front.p(x3, gz - 0.6, 0.35), X, Z, r3, 12, 0.22, mul(brass, 0.85))
+        k.add(cyl(front.p(x, gz, 0.0), front.p(x, gz, 0.7), 0.25, 0.25, 8), iron, ao=False)
+        # A water tower on legs at a back corner, feeding the pipes.
+        tx, ty = rng.choice([-1, 1]) * (hx - 2.0), hy + 2.2
+        for dx in (-1, 1):
+            for dy in (-1, 1):
+                strut(k, (tx + dx * 1.2, ty + dy * 1.2, 0), (tx + dx * 0.9, ty + dy * 0.9, 9.0), 0.1, iron)
+        k.add(cyl((tx, ty, 9.0), (tx, ty, 11.4), 1.5, 1.5, 12), lambda co, n: mul((0.45, 0.32, 0.22), 0.9 if int(co.z / 0.4) % 2 else 1.0), ao=False)
+        k.add(cyl((tx, ty, 11.4), (tx, ty, 12.3), 1.65, 0.1, 12), copper_seams(copper), ao=False)
+        pipe_run(k, [(tx, ty - 1.4, 10.0), (tx, hy + 0.2, 10.0), (tx, hy + 0.2, zw - 1.0)], 0.2, copper)
+    for e in (-1, 1):
+        lantern(k, front.p(e * (2.8 if form != "foundry" else 3.4), 3.0, 0.4), 1.2)
+    pipe_run(k, [faces["right"].p(-hy * 0.5, 0.0, 0.3), faces["right"].p(-hy * 0.5, zw - 1.5, 0.3), faces["right"].p(hy * 0.5, zw - 1.5, 0.3)], 0.18, copper)
+
+
+def steampunk_hall(k):
+    """The exchange: a stone hall on a stepped podium, a portico of columns with a pediment and
+    a lit clock, arched windows, and a copper dome on a windowed drum with a lantern and a brass
+    gear finial."""
+    rng, pal = k.rng, k.pal
+    u = rng.uniform
+    stone, brass, iron = pal["stone"], pal["brass"], pal["iron"]
+    copper = k.choice(pal["copper"])
+    W, D = u(16.0, 19.0), u(13.0, 16.0)
+    hx, hy = W / 2, D / 2
+    pod = 1.2
+    zw = pod + u(8.5, 9.5)
+    steps = 6
+    k.add(box((-hx - 0.3, -hy - 0.3, 0), (hx + 0.3, hy + 0.3, pod), 0.05), pal["stone_dark"])
+    pw = W * 0.62
+    for i in range(steps):
+        z = pod - i * pod / steps
+        k.add(box((-pw / 2 - 0.3 * i, -hy - 3.4 - i * 0.35, 0), (pw / 2 + 0.3 * i, -hy - 3.4 - (i - 1) * 0.35, z), 0.03), mul(stone, 1.0 - 0.02 * i))
+    k.add(box((-pw / 2, -hy - 3.4, 0), (pw / 2, -hy, pod)), stone)
+    # The main block: rusticated base, smooth upper storey, cornice and balustrade.
+    k.add(box((-hx, -hy, pod), (hx, hy, zw)), stone, vary=0.02)
+    faces = box_faces(0, 0, hx, hy)
+    for name, f in faces.items():
+        L = f.length
+        z = pod + 0.1
+        while z < pod + 3.8:
+            k.add(f.box(-L / 2, L / 2, z, z + 0.5, 0.0, 0.05, back=False), jitter(stone, rng, 0.04), vary=0)
+            z += 0.6
+        k.add(f.box(-L / 2 - 0.1, L / 2 + 0.1, pod + 3.9, pod + 4.2, 0.0, 0.2), mul(stone, 1.05))
+        k.add(f.box(-L / 2 - 0.35, L / 2 + 0.35, zw - 0.45, zw, 0.0, 0.4, bevel=0.04), mul(stone, 1.05))
+        k.add(f.box(-L / 2 - 0.2, L / 2 + 0.2, zw, zw + 1.0, 0.0, 0.25), mul(stone, 0.95))
+        n = max(2, round(L / 3.0))
+        for i in range(n):
+            a = -L / 2 + (i + 0.5) * L / n
+            if name == "front" and abs(a) < pw / 2:
+                continue
+            arch_window(k, f, a, pod + 1.0, 1.1, 1.7, mul(stone, 0.85), bars=True)
+            arch_window(k, f, a, pod + 5.0, 1.1, 2.1, mul(stone, 0.85), bars=False)
+    # The portico.
+    py = -hy - 3.0
+    cols = rng.choice([4, 6]) if pw > 9.5 else 4
+    ch = zw - pod - 1.2
+    for i in range(cols):
+        x = -pw / 2 + 0.6 + i * (pw - 1.2) / (cols - 1)
+        k.add(box((x - 0.55, py - 0.55, pod), (x + 0.55, py + 0.55, pod + 0.4)), mul(stone, 1.05))
+        k.add(cyl((x, py, pod + 0.4), (x, py, pod + 0.4 + ch), 0.42, 0.36, 10), mul(stone, 1.08), ao=False)
+        k.add(box((x - 0.55, py - 0.55, pod + 0.4 + ch), (x + 0.55, py + 0.55, pod + 0.8 + ch)), brass)
+    ze = pod + 0.8 + ch
+    k.add(box((-pw / 2 - 0.2, py - 0.8, ze), (pw / 2 + 0.2, -hy, ze + 0.9)), mul(stone, 1.05))
+    rivets(k, Face((0, py - 0.8, 0), X, pw), -pw / 2 + 0.3, pw / 2 - 0.3, ze + 0.45, 0.0, 0.6, brass)
+    pr_ = 2.0
+    k.add(prism([(-pw / 2 - 0.4, ze + 0.9), (pw / 2 + 0.4, ze + 0.9), (0.0, ze + 0.9 + pr_)], py - 0.9, -hy, lambda w, s_, z: Vector((s_, w, z))), mul(stone, 1.02))
+    pf = Face((0, py - 0.9, 0), X, pw)
+    rake = math.atan2(pr_, pw / 2 + 0.4)
+    for e in (-1, 1):
+        k.add(pf.obox(e * (pw / 4 + 0.2), ze + 0.95 + pr_ / 2, math.hypot(pw / 2 + 0.8, pr_), 0.3, -0.1, 0.2, -e * rake), copper_seams(copper))
+    clock_face(k, Face((0, py - 1.0, 0), X, pw), 0.0, ze + 1.55, 0.7, brass)
+    door(k, Face((0, -hy, 0), X, W), 0.0, pod, 1.8, 3.2, k.choice(pal["paint"]), mul(stone, 0.85), arch=True)
+    for e in (-1, 1):
+        lantern(k, (e * 1.6, -hy - 0.3, pod + 2.7), 1.3)
+    # The dome on its drum.
+    dr = min(hx, hy) * u(0.48, 0.56)
+    zd = zw + 1.0
+    k.add(cyl((0, 0, zw), (0, 0, zd + 2.4), dr + 0.2, dr + 0.2, 16), mul(stone, 0.98))
+    for i in range(8):
+        t = i / 8 * math.tau
+        f = Face((math.cos(t) * (dr + 0.2), math.sin(t) * (dr + 0.2), 0), Vector((-math.sin(t), math.cos(t), 0)), 1.0)
+        f.n = Vector((math.cos(t), math.sin(t), 0))
+        k.add(f.box(-0.4, 0.4, zd + 0.3, zd + 1.9, 0.0, 0.05, back=False), None, glow=rng.random() < 0.6)
+    k.add(cyl((0, 0, zd + 2.4), (0, 0, zd + 2.7), dr + 0.45, dr + 0.45, 16), mul(stone, 1.05))
+    rings = 6
+    for i in range(rings):
+        t0, t1 = i / rings, (i + 1) / rings
+        r0, r1 = (dr + 0.3) * math.cos(t0 * math.pi / 2), (dr + 0.3) * math.cos(t1 * math.pi / 2)
+        z0, z1 = zd + 2.7 + (dr + 0.3) * 0.95 * math.sin(t0 * math.pi / 2), zd + 2.7 + (dr + 0.3) * 0.95 * math.sin(t1 * math.pi / 2)
+        k.add(cyl((0, 0, z0), (0, 0, z1), r0, max(0.5, r1), 16), copper_seams(copper, 0.5), ao=False)
+    zt = zd + 2.7 + (dr + 0.3) * 0.95
+    k.add(cyl((0, 0, zt - 0.1), (0, 0, zt + 1.4), 0.55, 0.55, 8), brass, ao=False)
+    k.add(cyl((0, 0, zt + 0.2), (0, 0, zt + 1.1), 0.58, 0.58, 8), None, glow=True)
+    k.add(cyl((0, 0, zt + 1.4), (0, 0, zt + 2.2), 0.7, 0.05, 8), copper_seams(copper), ao=False)
+    gear(k, Vector((0, 0.04, zt + 2.7)), X, Z, 0.55, 10, 0.06, brass)
+
+
+def steampunk_arcade(k):
+    """A market arcade: iron columns carrying a barrel vault of glass on iron ribs, lunettes of
+    radiating glazing bars at the ends, gas lamps hanging inside, and stalls under it."""
+    rng, pal = k.rng, k.pal
+    u = rng.uniform
+    iron, brass, stone = pal["iron"], pal["brass"], pal["stone"]
+    paint = k.choice(pal["paint"])
+    L, Wd = u(16.0, 24.0), u(8.0, 10.0)
+    hx, hy = L / 2, Wd / 2
+    zc = u(5.0, 5.6)
+    k.add(box((-hx - 0.3, -hy - 0.3, 0), (hx + 0.3, hy + 0.3, 0.2)), lambda co, n: mul(stone, 0.92 if (int(co.x + 50) + int(co.y + 50)) % 2 else 1.0), ao=False)
+    bays = max(4, round(L / 3.2))
+    xs = [-hx + i * L / bays for i in range(bays + 1)]
+    for x in xs:
+        for e in (-1, 1):
+            y = e * hy
+            k.add(box((x - 0.3, y - 0.3, 0.2), (x + 0.3, y + 0.3, 0.6)), stone)
+            k.add(cyl((x, y, 0.6), (x, y, zc), 0.16, 0.14, 8), paint, ao=False)
+            k.add(box((x - 0.28, y - 0.28, zc - 0.1), (x + 0.28, y + 0.28, zc + 0.15)), brass, ao=False)
+            # Curly brackets as a slanted strut.
+            strut(k, (x, y, zc - 1.0), (x, y - e * 0.8, zc + 0.1), 0.05, iron)
+    for e in (-1, 1):
+        k.add(box((-hx - 0.1, e * hy - 0.25, zc + 0.1), (hx + 0.1, e * hy + 0.25, zc + 0.6)), paint, ao=False)
+        rivets(k, Face((0, e * hy + 0.25 * e, 0), -X * e, L), -hx + 0.2, hx - 0.2, zc + 0.35, 0.0, 0.5, brass)
+    # The vault: glass panels between ribs.
+    n = 10
+    R = hy + 0.15
+    glassc = (0.48, 0.62, 0.66)
+    prof = [(math.cos(math.pi * i / n) * R, math.sin(math.pi * i / n) * R * 0.75) for i in range(n + 1)]
+    inner = [(x * 0.98, y * 0.98) for x, y in reversed(prof)]
+    k.add(prism(prof + inner, -hx, hx, lambda a, s_, z: Vector((a, s_, zc + 0.6 + z))), lambda co, nn: mul(glassc, 1.08 if nn.z > 0.7 else 0.95), ao=False)
+    for x in xs:
+        ring = [(math.cos(math.pi * j / n) * (R + 0.06), math.sin(math.pi * j / n) * (R * 0.75 + 0.06)) for j in range(n + 1)]
+        k.add(prism(ring + [(x2 * 0.95, y2 * 0.95) for x2, y2 in reversed(ring)], x - 0.08, x + 0.08, lambda a, s_, z: Vector((a, s_, zc + 0.6 + z))), iron, ao=False)
+    for j in range(1, n):
+        t = math.pi * j / n
+        y, z = math.cos(t) * (R + 0.04), math.sin(t) * (R * 0.75 + 0.04)
+        k.add(box((-hx, y - 0.04, zc + 0.6 + z - 0.04), (hx, y + 0.04, zc + 0.6 + z + 0.04)), iron, ao=False)
+    k.add(box((-hx - 0.2, -0.3, zc + 0.6 + R * 0.75), (hx + 0.2, 0.3, zc + 0.9 + R * 0.75)), brass, ao=False)
+    # End lunettes.
+    for e in (-1, 1):
+        lf = Face((e * hx, 0, 0), Y * e, Wd)
+        k.add(lf.poly([(math.cos(math.pi * i / n) * R * 0.97, zc + 0.6 + math.sin(math.pi * i / n) * R * 0.73) for i in range(n + 1)], -0.03, 0.0), None, glow=rng.random() < 0.5)
+        for i in range(1, n, 2):
+            t = math.pi * i / n
+            ex, ez = math.cos(t) * R * 0.95, math.sin(t) * R * 0.71
+            k.add(lf.obox(ex / 2, zc + 0.6 + ez / 2, math.hypot(ex, ez), 0.08, 0.0, 0.06, math.atan2(ez, ex)), iron, ao=False)
+        k.add(lf.box(-hy, hy, zc + 0.5, zc + 0.7, 0.0, 0.1, back=False), paint, ao=False)
+        k.add(lf.box(-1.4, 1.4, zc - 0.2, zc + 0.4, 0.05, 0.2, back=False), mul(paint, 0.7), ao=False)
+        for i in range(5):
+            k.add(lf.box(-1.2 + i * 0.55, -0.95 + i * 0.55, zc - 0.1, zc + 0.3, 0.2, 0.24, back=False), brass, ao=False)
+    # Hanging gas lamps down the middle.
+    for x in xs[1:-1:2]:
+        k.add(cyl((x, 0, zc + 0.6 + R * 0.75), (x, 0, zc - 0.4), 0.025, 0.025, 4), iron, ao=False)
+        lantern(k, (x, 0, zc - 0.7), 1.3)
+    # Stalls along both sides: counters, awnings and goods.
+    cloths = [(0.70, 0.22, 0.18), (0.20, 0.36, 0.30), (0.82, 0.62, 0.26), (0.30, 0.30, 0.48)]
+    for e in (-1, 1):
+        for i in range(bays):
+            if rng.random() < 0.25:
+                continue
+            x0, x1 = xs[i] + 0.35, xs[i + 1] - 0.35
+            y0 = e * (hy - 1.6)
+            y1 = e * (hy - 0.5)
+            k.add(box((x0, min(y0, y1), 0.2), (x1, max(y0, y1), 1.1)), mul(pal["timber"], 1.3))
+            c = k.choice(cloths)
+            k.add(prism([(e * (hy - 0.4), 2.7), (e * (hy - 2.2), 2.2), (e * (hy - 2.2), 2.28), (e * (hy - 0.4), 2.78)], x0, x1, lambda a, s_, z: Vector((a, s_, z))),
+                  lambda co, nn, c=c: c if int(math.floor(co.x / 0.5)) % 2 else (0.92, 0.88, 0.78), ao=False)
+            for j in range(3):
+                gx = x0 + (j + 0.5) * (x1 - x0) / 3
+                g = k.choice([(0.85, 0.3, 0.2), (0.9, 0.7, 0.25), (0.5, 0.65, 0.3), brass])
+                k.add(box((gx - 0.25, e * (hy - 1.3) - 0.2, 1.1), (gx + 0.25, e * (hy - 1.3) + 0.2, 1.35)), g, ao=False)
+            for x in (x0, x1):
+                k.add(box((x - 0.04, e * (hy - 0.5) - 0.04, 1.1), (x + 0.04, e * (hy - 0.5) + 0.04, 2.75)), pal["timber"], ao=False)
+
+
+# ---------------------------------------------------------------------------------------------
+# Cyberpunk: stacked concrete blocks and slender towers with setbacks, grimy shopfronts behind
+# shutters, neon blade signs, holo-billboards, rooftop tanks and antennas, hanging cables.
+# Chunky and readable from the game camera: few big masses, every storey a band, every sign a
+# glowing slab with glyphs, not text.
+
+# Glyph strokes in a unit cell (x0, x1, z0, z1): 2-3 of them make a sign character.
+STROKES = [(0, 1, 0.82, 1), (0, 1, 0.41, 0.59), (0, 1, 0, 0.18), (0, 0.18, 0, 1), (0.41, 0.59, 0, 1), (0.82, 1, 0, 1),
+           (0, 0.18, 0.5, 1), (0.82, 1, 0, 0.5), (0, 0.55, 0.41, 0.59), (0.45, 1, 0.82, 1), (0.41, 0.59, 0, 0.5)]
+
+
+def cp_colours(k):
+    """One building's colours: wall, panels, trim and its two neon colours."""
+    rng, pal = k.rng, k.pal
+    neons = rng.sample(["pink", "cyan", "amber"], 2)
+    return dict(wall=k.choice(pal["concrete"]), panel=k.choice(pal["panel"]), trim=k.choice(pal["trim"]), neon=neons,
+                metal=pal["metal"], dark=pal["dark"], awning=k.choice(pal["awning"]))
+
+
+def grime(c, dirty=6.0, floor=0.55):
+    """Concrete darkened towards the street, with faint vertical streaks of runoff."""
+    def fn(co, n):
+        t = min(1.0, max(0.0, co.z / dirty)) ** 0.7
+        streak = noise.noise(Vector((co.x * 0.8 + co.y * 0.8, 0.5, co.z * 0.05)))
+        return mul(c, (floor + (1 - floor) * t) * (0.93 + 0.09 * streak))
+    return fn
+
+
+def stripes(c, every=0.12, dark=0.78, axis=2):
+    """Corrugation (shutters, roof sheets) as alternating shades along one axis."""
+    def fn(co, n):
+        return mul(c, dark if int(math.floor(co[axis] / every)) % 2 else 1.0)
+    return fn
+
+
+def hazard(a, b, every=0.35):
+    def fn(co, n):
+        return a if int(math.floor((co.x + co.y + co.z) / every)) % 2 else b
+    return fn
+
+
+def flipped(f):
+    """The same wall face, seen from its other side (for both faces of a blade sign)."""
+    g = Face(f.o, f.u, f.length)
+    g.n = -f.n
+    return g
+
+
+def cp_glyphs(k, f, a0, z0, n, gw, gh, gap, w, color, vertical=False):
+    """n sign characters, each 2-3 glowing strokes, in a row (or a column down from z0)."""
+    t = 0.05
+    for i in range(n):
+        ga = a0 if vertical else a0 + i * (gw + gap)
+        gz = z0 - (i + 1) * gh - i * gap if vertical else z0
+        for x0, x1, s0, s1 in k.pr.sample(STROKES, k.pr.choice([2, 2, 3])):
+            # Flat strokes: the glow needs no thickness, and a sign is many of them.
+            k.add(f.quad(ga + x0 * gw, ga + x1 * gw, gz + s0 * gh, gz + s1 * gh, w + t), None, glow=color, closed=False)
+
+
+def cp_blade(k, f, a, ztop, h, out, color, frame, color2=None):
+    """A vertical blade sign standing out of a wall face at `a`: a dark slab with a glowing
+    border and a column of characters on both faces, on two brackets."""
+    t = 0.4
+    fb = Face(f.p(a, 0, 0), f.n, out)
+    z0 = ztop - h
+    k.add(fb.box(0.25, out, z0, ztop, -t / 2, t / 2), frame, ao=False)
+    for z in (z0 + 0.3, ztop - 0.3):
+        k.add(fb.box(0.0, 0.3, z - 0.1, z + 0.1, -0.08, 0.08), k.pal["metal"], ao=False)
+    gw = (out - 0.25) * 0.56
+    gh = gw * 0.9
+    n = max(1, int((h - 0.5) / (gh + 0.18)))
+    for side in (fb, flipped(fb)):
+        e = 0.06
+        for a0, a1, za, zb in ((0.3, out - 0.05, ztop - 0.13, ztop - 0.05), (0.3, out - 0.05, z0 + 0.05, z0 + 0.13),
+                               (0.3, 0.38, z0 + 0.05, ztop - 0.05), (out - 0.13, out - 0.05, z0 + 0.05, ztop - 0.05)):
+            k.add(side.box(a0, a1, za, zb, t / 2, t / 2 + e, back=False), None, glow=color2 or color)
+        cp_glyphs(k, side, 0.25 + (out - 0.25 - gw) / 2, ztop - 0.3, n, gw, gh, 0.18, t / 2, color, vertical=True)
+
+
+def cp_board(k, f, a0, a1, z0, z1, color, frame, w=0.0):
+    """A horizontal shop sign: a dark board with a row of glowing characters and a tube under it."""
+    k.add(f.box(a0, a1, z0, z1, w, w + 0.18, back=False), frame, ao=False)
+    h = z1 - z0
+    gh = h * 0.6
+    gw = gh * 0.85
+    n = max(1, int((a1 - a0 - 0.3) / (gw + 0.14)))
+    span = n * gw + (n - 1) * 0.14
+    cp_glyphs(k, f, (a0 + a1) / 2 - span / 2, z0 + h * 0.2, n, gw, gh, 0.14, w + 0.18, color)
+    k.add(f.box(a0 + 0.05, a1 - 0.05, z0 - 0.08, z0 - 0.02, w + 0.1, w + 0.16), None, glow=color)
+
+
+def cp_screen(k, f, a, z0, w, h, c1, c2, out=0.25):
+    """A holo-billboard: a thin frame holding a glowing picture (a field, a figure and a band in
+    a second colour), crossed by dark scan lines, off the wall on an emitter bar."""
+    dark, metal = k.pal["dark"], k.pal["metal"]
+    k.add(f.box(a - w / 2 - 0.12, a + w / 2 + 0.12, z0 - 0.35, z0 - 0.1, 0.0, out + 0.25), metal, ao=False)
+    k.add(f.box(a - w / 2 + 0.2, a + w / 2 - 0.2, z0 - 0.12, z0 - 0.04, out, out + 0.1), None, glow=c1)
+    k.add(f.box(a - w / 2, a + w / 2, z0, z0 + h, out, out + 0.06, back=False), None, glow=c1)
+    rng = k.pr
+    # The picture: a face-like disc or a product block, and a band.
+    if rng.random() < 0.5:
+        r = min(w, h) * rng.uniform(0.22, 0.32)
+        ca = a + rng.uniform(-0.25, 0.25) * w
+        k.add(cyl(f.p(ca, z0 + h * 0.55, out + 0.06), f.p(ca, z0 + h * 0.55, out + 0.1), r, r, 12), None, glow=c2)
+    else:
+        bw, bh = w * rng.uniform(0.2, 0.32), h * rng.uniform(0.45, 0.7)
+        ca = a + rng.choice([-1, 1]) * w * 0.25
+        k.add(f.box(ca - bw / 2, ca + bw / 2, z0 + h * 0.15, z0 + h * 0.15 + bh, out + 0.06, out + 0.1, back=False), None, glow=c2)
+    k.add(f.box(a - w / 2, a + w / 2, z0 + h * 0.08, z0 + h * 0.2, out + 0.06, out + 0.1, back=False), None, glow=c2)
+    for i in range(1, 5):
+        z = z0 + h * i / 5
+        k.add(f.box(a - w / 2, a + w / 2, z - 0.035, z + 0.035, out + 0.1, out + 0.13, back=False), dark, ao=False, vary=0)
+    for e in (-1, 1):
+        k.add(f.box(a + e * w / 2 - 0.05, a + e * w / 2 + 0.05, z0, z0 + h, out - 0.02, out + 0.12, back=False), dark, ao=False)
+
+
+def sag_line(k, p0, p1, sag, r, color, seg=6, sides=4):
+    """A cable hanging between two points (a parabola, close enough to a catenary)."""
+    p0, p1 = Vector(p0), Vector(p1)
+    pts = [p0.lerp(p1, i / seg) - Z * sag * 4 * (i / seg) * (1 - i / seg) for i in range(seg + 1)]
+    for a, b in zip(pts, pts[1:]):
+        k.add(cyl(a, b, r, r, sides), color, ao=False, vary=0.05)
+    return pts
+
+
+def cp_ac(k, f, a, z, metal):
+    """A wall air-conditioner: a box on a bracket with a dark fan disc."""
+    k.extra(f.box(a - 0.45, a + 0.45, z, z + 0.62, 0.0, 0.5, back=False), mul(metal, 1.25), ao=False)
+    k.add(f.quad(a - 0.2, a + 0.3, z + 0.08, z + 0.54, 0.51), k.pal["dark"], ao=False, closed=False, vary=0)
+
+
+def cp_storeys(k, P, x0, x1, y0, y1, z0, n, hs, wins, lit=0.55, bay=2.1, fins=True, clutter=True, glazing=None):
+    """Upper storeys from z0: a wall box per storey (grimy towards the street), a slab band at
+    each floor, and on each face in `wins` (face: chance of a lit window) a glazed bay between
+    fins. Windows are lit warm, tinted by a neon now and then, dark, or show pale blinds."""
+    rng, pal = k.rng, k.pal
+    wall, panel = P["wall"], P["panel"]
+    # Punched windows, or ribbon glazing between the fins with lit runs of offices.
+    ribbon = (glazing or P.setdefault("glazing", rng.choice(["punched", "ribbon", "ribbon"]))) == "ribbon"
+    for s in range(n):
+        za, zb = z0 + s * hs, z0 + (s + 1) * hs
+        k.add(box((x0, y0, za - 0.01), (x1, y1, zb)), grime(wall), ao=False, vary=0.02)
+        k.add(box((x0 - 0.12, y0 - 0.12, zb - 0.3), (x1 + 0.12, y1 + 0.12, zb)), grime(mul(panel, 1.2), 10.0, 0.7), ao=False, vary=0.0)
+    faces = box_faces((x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2)
+    for name, f in faces.items():
+        p = wins.get(name, 0.0)
+        if p <= 0:
+            continue
+        L = f.length
+        nb = max(1, round(L / bay))
+        bw = L / nb
+        p *= 0.65
+        for s in range(n):
+            za = z0 + s * hs
+            v = k.pr.random()
+            for i in range(nb):
+                a = -L / 2 + (i + 0.5) * bw
+                if ribbon:
+                    lo, hi = za + 0.7, za + hs - 0.45
+                    q = f.quad(a - bw / 2 + 0.1, a + bw / 2 - 0.1, lo, hi, 0.03)
+                    if k.pr.random() < 0.35:
+                        v = k.pr.random()
+                else:
+                    lo, hi = za + 0.95, za + hs - 0.65
+                    q = f.quad(a - bw / 2 + 0.3, a + bw / 2 - 0.3, lo, hi, 0.03)
+                    v = k.pr.random()
+                if v < p * 0.9:
+                    k.add(q, None, glow=True, closed=False)
+                elif v < p:
+                    k.add(q, None, glow=k.pr.choice(P["neon"]), closed=False)
+                elif v < p + (1 - p) * 0.3:
+                    k.add(q, pal["blind"], closed=False, ao=False, vary=0.08)
+                else:
+                    k.add(q, pal["glass"], closed=False, ao=False)
+                if not clutter:
+                    continue
+                c = k.pr.random()
+                if name == "back" or c > 0.22:
+                    continue
+                if c < 0.08 and name == "front":
+                    # A little balcony: a slab, a rail, laundry or plants.
+                    k.extra(f.box(a - bw / 2 + 0.15, a + bw / 2 - 0.15, za - 0.02, za + 0.12, 0.0, 0.9, back=False), mul(P["panel"], 1.3), ao=False)
+                    k.extra(f.box(a - bw / 2 + 0.15, a + bw / 2 - 0.15, za + 0.85, za + 0.95, 0.82, 0.9, back=False), k.pal["iron"], ao=False)
+                    k.extra(f.box(a - bw / 2 + 0.15, a + bw / 2 - 0.15, za + 0.12, za + 0.5, 0.84, 0.88, back=False), mul(k.pal["iron"], 1.4), ao=False)
+                    if k.pr.random() < 0.5:
+                        k.extra(f.box(a - 0.4, a + 0.3, za + 0.95, za + 1.6, 0.45, 0.5, back=False), k.pr.choice(pal["plastic"]), ao=False)
+                elif c < 0.17:
+                    cp_ac(k, f, a + k.pr.uniform(-0.2, 0.2), za + 0.2, P["metal"])
+                else:
+                    # A projecting lightbox sign.
+                    col = k.pr.choice(P["neon"])
+                    fb = Face(f.p(a + bw / 2 - 0.1, 0, 0), f.n, 0.9)
+                    k.extra(fb.box(0.0, 0.85, za + 0.8, za + 2.0, -0.15, 0.15), mul(pal["dark"], 1.6), ao=False)
+                    k.add(fb.box(0.08, 0.8, za + 0.88, za + 1.92, -0.18, 0.18), None, glow=col)
+        if fins:
+            for i in range(nb + 1):
+                a = min(L / 2 - 0.12, max(-L / 2 + 0.12, -L / 2 + i * bw))
+                k.add(f.box(a - 0.12, a + 0.12, z0, z0 + n * hs, 0.0, 0.16, back=False), grime(mul(panel, 1.1), 10.0), ao=False, vary=0)
+    return z0 + n * hs
+
+
+def cp_ground(k, P, x0, x1, y0, y1, hs, shops, door_face="front"):
+    """The street storey: a core set back RECESS behind a skin with openings cut through it.
+    `shops` maps a face to its shopfront count; each opening is a lit shop window, a grimy
+    rolled-down or half-open shutter, or a door; a sign board and maybe an awning over it."""
+    rng, pal = k.rng, k.pal
+    R = 0.35
+    wall, metal, dark = P["wall"], P["metal"], pal["dark"]
+    k.add(box((x0 + R, y0 + R, -0.01), (x1 - R, y1 - R, hs)), mul(dark, 1.5), ao=False, vary=0)
+    shops = dict({"back": 1}, **shops)
+    faces = box_faces((x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2)
+    for name, f in faces.items():
+        L = f.length
+        n = shops.get(name, 0)
+        holes = []
+        if n:
+            sw = (L - 0.6 * (n + 1)) / n
+            for i in range(n):
+                a0 = -L / 2 + 0.6 + i * (sw + 0.6)
+                holes.append((a0, a0 + sw, 0.0, hs - 1.15))
+        skin, rev = wall_skin(f, 0.0, hs, holes, R)
+        k.add(skin, grime(mul(wall, 0.85), hs + 2.0, 0.6), closed=False, ao=False, vary=0.02)
+        k.add(rev, mul(wall, 0.45), closed=False, ao=False)
+        for a0, a1, zb, zt in holes:
+            v = rng.random()
+            w = -R + 0.03
+            a = (a0 + a1) / 2
+            if name == "back":
+                v = 0.7 if v < 0.5 else 0.0
+            if name in (door_face, "back") and a0 == holes[0][0] and v < 0.3:
+                # A door: dark glass, a lit call panel and a strip light above.
+                k.add(f.quad(a0, a1, zb, zt, w), mul(dark, 1.3), closed=False, ao=False)
+                k.add(f.box(a - 0.6, a + 0.6, 0.0, zt - 0.3, w, w + 0.06, back=False), mul(metal, 0.7), ao=False)
+                k.add(f.box(a + 0.7, a + 0.85, 1.2, 1.5, w, w + 0.05, back=False), None, glow=P["neon"][0])
+            elif v < 0.62 and name != "back":
+                # A lit shop window with mullions.
+                k.add(f.quad(a0, a1, zb, zt, w), None, glow=True if rng.random() < 0.6 else P["neon"][1], closed=False)
+                for m in range(1, max(2, round((a1 - a0) / 1.4))):
+                    am = a0 + m * (a1 - a0) / max(2, round((a1 - a0) / 1.4))
+                    k.add(f.box(am - 0.05, am + 0.05, zb, zt, w, w + 0.08, back=False), metal, ao=False)
+                k.add(f.box(a0, a1, zb, zb + 0.5, w, w + 0.12, back=False), mul(metal, 0.6), ao=False)
+            else:
+                # A roller shutter, down or part way, grimy and corrugated, with its housing.
+                k.add(f.quad(a0, a1, zb, zt, w - 0.02), None, glow=True, closed=False)
+                down = zb + (zt - zb) * (0.0 if v < 0.85 else rng.uniform(0.45, 0.7))
+                k.add(f.box(a0, a1, down, zt, w, w + 0.06, back=False), lambda co, n, c=jitter(P["trim"] if rng.random() < 0.3 else metal, rng, 0.08): mul(stripes(c)(co, n), 0.55 + 0.45 * min(1.0, co.z / 3.0)), ao=False)
+                k.add(f.box(a0 - 0.05, a1 + 0.05, zt - 0.05, zt + 0.25, 0.0, 0.3), mul(metal, 0.8), ao=False)
+            # The sign over the opening.
+            if name != "back" and rng.random() < 0.85:
+                cp_board(k, f, a0 + 0.1, a1 - 0.1, zt + 0.2, hs - 0.15, rng.choice(P["neon"]), mul(dark, 1.4), w=0.0)
+            if rng.random() < 0.4:
+                # A slanted awning.
+                aw = P["awning"]
+                k.add(prism([(0.0, zt + 0.15), (0.0, zt + 0.25), (1.2, zt - 0.2), (1.2, zt - 0.3)], a0 - 0.1, a1 + 0.1,
+                            lambda aa, s_, z, f=f: f.p(aa, z, s_)), stripes(aw, 0.5, 0.82, 0), ao=False)
+    return faces
+
+
+def cp_parapet(k, P, x0, x1, y0, y1, z, h=0.9):
+    """A low parapet round a roof or terrace, with a lighter coping."""
+    c = grime(P["wall"], 30.0)
+    t = 0.25
+    for lo, hi in (((x0, y0, z), (x1, y0 + t, z + h)), ((x0, y1 - t, z), (x1, y1, z + h)),
+                   ((x0, y0 + t, z), (x0 + t, y1 - t, z + h)), ((x1 - t, y0 + t, z), (x1, y1 - t, z + h))):
+        k.add(box(lo, hi), c, ao=False, vary=0.02)
+    k.add(box((x0 - 0.06, y0 - 0.06, z + h), (x1 + 0.06, y1 + 0.06, z + h + 0.12)), mul(P["panel"], 1.4), ao=False)
+
+
+def cp_tank(k, P, x, y, z, r, h):
+    """A rooftop water tank on a steel stand, with a conical lid and hoops."""
+    metal = P["metal"]
+    for dx in (-1, 1):
+        for dy in (-1, 1):
+            k.add(box((x + dx * r * 0.7 - 0.08, y + dy * r * 0.7 - 0.08, z), (x + dx * r * 0.7 + 0.08, y + dy * r * 0.7 + 0.08, z + 1.2)), k.pal["iron"], ao=False)
+    k.add(box((x - r, y - r, z + 1.1), (x + r, y + r, z + 1.25)), k.pal["iron"], ao=False)
+    tc = k.choice([(0.45, 0.36, 0.30), mul(metal, 1.1), (0.26, 0.38, 0.40)])
+    k.add(cyl((x, y, z + 1.25), (x, y, z + 1.25 + h), r, r, 10), stripes(tc, 0.4, 0.88, 2), ao=False)
+    for zz in (0.25, 0.75):
+        k.add(cyl((x, y, z + 1.25 + h * zz), (x, y, z + 1.32 + h * zz), r + 0.04, r + 0.04, 10), k.pal["iron"], ao=False)
+    k.add(cyl((x, y, z + 1.25 + h), (x, y, z + 1.25 + h + r * 0.45), r + 0.08, 0.1, 10), mul(tc, 0.8), ao=False)
+
+
+def cp_antenna(k, x, y, z, h, metal):
+    """A lattice-free antenna mast: a thin pole with crossbars and a red warning light."""
+    k.add(cyl((x, y, z), (x, y, z + h), 0.09, 0.04, 6), metal, ao=False)
+    for i in range(k.rng.choice([1, 2, 3])):
+        zz = z + h * (0.45 + 0.17 * i)
+        w = 0.7 - 0.15 * i
+        k.add(box((x - w, y - 0.03, zz - 0.03), (x + w, y + 0.03, zz + 0.03)), metal, ao=False)
+    k.add(sphere((x, y, z + h + 0.05), 0.12, 1), None, glow="red")
+
+
+def cp_dish(k, x, y, z, r, metal, d):
+    """A satellite dish on a post, tilted towards `d`."""
+    k.add(cyl((x, y, z), (x, y, z + 0.9), 0.07, 0.07, 6), metal, ao=False)
+    c = Vector((x, y, z + 0.9 + r * 0.6))
+    axis = (Vector((d.x, d.y, 0.8))).normalized()
+    k.add(cyl(c - axis * 0.1, c + axis * r * 0.35, r * 0.25, r, 10), mul(metal, 1.35), ao=False)
+    k.add(cyl(c, c + axis * r * 0.9, 0.025, 0.025, 4), metal, ao=False)
+
+
+def cp_roof(k, P, x0, x1, y0, y1, z, busy=1.0):
+    """A flat roof: parapet, a tank, antennas, a dish, vents and AC boxes."""
+    rng = k.rng
+    metal = P["metal"]
+    k.add(box((x0 + 0.2, y0 + 0.2, z - 0.05), (x1 - 0.2, y1 - 0.2, z + 0.06)), mul(k.pal["dark"], 2.2), ao=False, vary=0)
+    cp_parapet(k, P, x0, x1, y0, y1, z)
+    W, D = x1 - x0, y1 - y0
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    if rng.random() < 0.8 * busy and min(W, D) > 4.0:
+        r = min(1.4, min(W, D) * 0.16)
+        tx = cx + rng.choice([-1, 1]) * (W / 2 - r - 0.8)
+        cp_tank(k, P, tx, cy + rng.uniform(-0.2, 0.3) * D, z, r, rng.uniform(1.6, 2.4))
+    for _ in range(rng.choice([1, 2, 2, 3]) if busy > 0.5 else 1):
+        cp_antenna(k, cx + rng.uniform(-0.35, 0.35) * W, cy + rng.uniform(-0.3, 0.35) * D, z, rng.uniform(3.0, 7.0), metal)
+    if rng.random() < 0.5 * busy:
+        cp_dish(k, cx + rng.uniform(-0.3, 0.3) * W, y0 + 1.2, z, rng.uniform(0.6, 1.0), metal, Vector((rng.uniform(-1, 1), -1, 0)))
+    for _ in range(rng.choice([1, 2, 3])):
+        vx, vy = cx + rng.uniform(-0.38, 0.38) * W, cy + rng.uniform(-0.38, 0.38) * D
+        if rng.random() < 0.5:
+            k.add(box((vx - 0.7, vy - 0.5, z), (vx + 0.7, vy + 0.5, z + 0.9)), mul(metal, 1.2), ao=False)
+            k.add(cyl((vx, vy, z + 0.9), (vx, vy, z + 0.95), 0.4, 0.4, 8), k.pal["dark"], ao=False)
+        else:
+            k.add(cyl((vx, vy, z), (vx, vy, z + 1.2), 0.25, 0.25, 8), metal, ao=False)
+            k.add(cyl((vx, vy, z + 1.2), (vx, vy, z + 1.45), 0.4, 0.1, 8), mul(metal, 0.8), ao=False)
+
+
+def cp_strip(k, f, a, z0, z1, color, w=0.0):
+    """A vertical neon tube up a wall or a corner."""
+    k.add(f.box(a - 0.07, a + 0.07, z0, z1, w, w + 0.1, back=False), None, glow=color)
+
+
+def cp_fire_escape(k, P, f, a0, a1, z0, n, hs):
+    """Grated landings with a rail on each storey, and stair flights zig-zagging between them."""
+    iron = k.pal["iron"]
+    for s in range(n):
+        z = z0 + s * hs
+        k.add(f.box(a0, a1, z - 0.08, z, 0.0, 1.1), iron, ao=False)
+        k.add(f.box(a0, a1, z + 0.95, z + 1.02, 1.02, 1.1), iron, ao=False)
+        for a in (a0, (a0 + a1) / 2, a1):
+            k.add(f.box(a - 0.03, a + 0.03, z, z + 1.0, 1.04, 1.1), iron, ao=False)
+        if s < n - 1:
+            e = 1 if s % 2 == 0 else -1
+            mid = (a0 + a1) / 2
+            ang = math.atan2(hs, (a1 - a0) * 0.8) * e
+            k.add(f.obox(mid, z + hs / 2, math.hypot(hs, (a1 - a0) * 0.8), 0.12, 0.25, 0.85, ang), iron)
+
+
+def cp_hang_cables(k, f, a0, a1, z, n=3, sag=0.8):
+    """Cables slung along a facade, between two brackets."""
+    for i in range(n):
+        dz = -0.15 * i
+        c = k.choice([(0.08, 0.08, 0.09), (0.12, 0.11, 0.1), (0.5, 0.4, 0.12)])
+        sag_line(k, f.p(a0, z + dz, 0.3 + 0.1 * i), f.p(a1, z + dz + k.pr.uniform(-0.2, 0.2), 0.3 + 0.1 * i), sag * (1 + 0.3 * i), 0.035, c, seg=5)
+
+
+def cp_signage(k, P, f, z0, z1, L, corner=None, blade=True):
+    """The neon on one street face above the shops: blade signs (one near a corner, maybe more
+    along the front), a sign strip across the first floor, and a tube up a corner."""
+    rng = k.rng
+    frame = mul(k.pal["dark"], 1.6)
+    if blade:
+        side = corner or rng.choice([-1, 1])
+        a = side * (L / 2 - rng.uniform(0.6, 1.2))
+        h = min(z1 - z0 - 0.6, rng.uniform(5.5, 10.0))
+        cp_blade(k, f, a, z0 + 0.3 + h, h, rng.uniform(1.5, 2.0), P["neon"][0], frame, P["neon"][1] if rng.random() < 0.5 else None)
+        if L > 8.0:
+            for _ in range(rng.choice([1, 1, 2])):
+                a2 = rng.uniform(-0.3, 0.3) * L
+                h2 = min(z1 - z0 - 1.0, rng.uniform(2.6, 4.5))
+                zt = z0 + 0.4 + h2 + rng.uniform(0.0, max(0.0, z1 - z0 - h2 - 1.2))
+                cp_blade(k, f, a2, zt, h2, rng.uniform(1.0, 1.4), rng.choice(P["neon"]), frame)
+    if rng.random() < 0.55:
+        cp_board(k, f, -L / 2 + 0.4, L / 2 - 0.4, z0 + 0.05, z0 + 0.85, rng.choice(P["neon"]), mul(frame, 0.9), w=0.16)
+    # Boards on upper floors (clinics, bars, hostels), part of the front's width.
+    for _ in range(rng.choice([0, 1, 1, 2])):
+        st = rng.randrange(1, max(2, int((z1 - z0) / 3.2)))
+        bw = L * rng.uniform(0.3, 0.55)
+        ba = rng.uniform(-0.5, 0.5) * (L - bw)
+        zb = z0 + st * 3.2 + 0.05
+        if zb + 0.8 < z1:
+            cp_board(k, f, ba - bw / 2, ba + bw / 2, zb, zb + 0.8, rng.choice(P["neon"]), mul(frame, 0.9), w=0.16)
+    if rng.random() < 0.6:
+        cp_strip(k, f, -rng.choice([-1, 1]) * (L / 2 - 0.06), z0, z1, P["neon"][1], w=0.02)
+
+
+def cp_roof_sign(k, P, x0, x1, y, z, color):
+    """A big sign frame on a roof edge facing the street: struts, a lattice and a board of
+    large glowing characters."""
+    iron = k.pal["iron"]
+    W = x1 - x0
+    h = min(3.2, max(1.8, W * 0.22))
+    for x in (x0 + 0.4, (x0 + x1) / 2, x1 - 0.4):
+        k.add(box((x - 0.07, y - 0.07, z), (x + 0.07, y + 0.07, z + h + 0.6)), iron, ao=False)
+        k.add(Face((x, y, 0), Y, 1).obox(0.8, z + h * 0.45, h * 1.1, 0.1, -0.05, 0.05, 1.0), iron, ao=False)
+    k.add(box((x0, y - 0.05, z + 0.6), (x1, y + 0.05, z + 0.7)), iron, ao=False)
+    f = Face(((x0 + x1) / 2, y - 0.1, 0), X, W)
+    cp_board(k, f, -W / 2 + 0.2, W / 2 - 0.2, z + 0.8, z + 0.8 + h, color, mul(k.pal["dark"], 1.5), w=0.0)
+
+
+def cyber_block(k):
+    """A mid-rise block by form: narrow (gable-end-free slab, 4-7 storeys), wide (5-6 storeys,
+    maybe a taller stack on one side) or corner (shops on two streets, a round corner bay)."""
+    rng, form = k.rng, k.form
+    u = rng.uniform
+    P = cp_colours(k)
+    hs0, hs = u(4.2, 4.8), 3.2
+    if form == "narrow":
+        W, D = u(6.5, 9.0), u(10.0, 13.0)
+        n = rng.choice([4, 5, 5, 6, 7])
+    elif form == "wide":
+        W, D = u(13.0, 18.0), u(10.0, 13.0)
+        n = rng.choice([4, 5, 5, 6])
+    else:
+        W, D = u(10.0, 13.0), u(10.0, 13.0)
+        n = rng.choice([5, 6, 6, 7, 8])
+    x0, x1, y0, y1 = -W / 2, W / 2, -D / 2, D / 2
+    side = k.corner if form == "corner" else 0
+    shops = {"front": max(1, round(W / 4.5))}
+    if side:
+        shops["right" if side > 0 else "left"] = max(1, round(D / 4.5))
+    cp_ground(k, P, x0, x1, y0, y1, hs0, shops)
+    wins = {"front": 0.6, "back": 0.4, "left": 0.35, "right": 0.35}
+    if side:
+        wins["right" if side > 0 else "left"] = 0.6
+    # Setbacks: the top storeys step back from the street, once or twice.
+    lower = n - (rng.choice([1, 2]) if n >= 5 and rng.random() < 0.7 else 0)
+    top = cp_storeys(k, P, x0, x1, y0, y1, hs0, lower, hs, wins)
+    segs = [(x0, x1, y0, y1, top)]
+    if form == "wide" and rng.random() < 0.6:
+        # A taller stack on one side, the rest a terrace.
+        e = rng.choice([-1, 1])
+        sw = W * u(0.4, 0.55)
+        sx0, sx1 = (x1 - sw, x1) if e > 0 else (x0, x0 + sw)
+        cp_roof(k, P, x0, x1, y0, y1, top, busy=0.4)
+        extra = rng.choice([2, 3, 4])
+        top2 = cp_storeys(k, P, sx0 + 0.6, sx1 - 0.6, y0 + 1.0, y1 - 0.6, top, extra, hs, wins)
+        segs.append((sx0 + 0.6, sx1 - 0.6, y0 + 1.0, y1 - 0.6, top2))
+    elif lower < n:
+        cp_parapet(k, P, x0, x1, y0, y1, top, h=1.0)
+        inset = u(1.4, 2.4)
+        top2 = cp_storeys(k, P, x0 + 0.5, x1 - 0.5, y0 + inset, y1 - 0.4, top, n - lower, hs, wins)
+        segs.append((x0 + 0.5, x1 - 0.5, y0 + inset, y1 - 0.4, top2))
+        # Terrace railing with planters and a strip light.
+        k.add(box((x0 + 0.6, y0 + 0.3, top), (x0 + 1.4, y0 + 0.9, top + 0.6)), (0.22, 0.36, 0.20), ao=False)
+    sx0, sx1, sy0, sy1, ztop = segs[-1]
+    cp_roof(k, P, sx0, sx1, sy0, sy1, ztop)
+    if rng.random() < 0.4:
+        cp_roof_sign(k, P, sx0 + 0.3, sx1 - 0.3, sy0 + 0.6, ztop, rng.choice(P["neon"]))
+    faces = box_faces(0, 0, W / 2, D / 2)
+    cp_signage(k, P, faces["front"], hs0, top, W, corner=-side or None)
+    if side:
+        sf = faces["right" if side > 0 else "left"]
+        cp_signage(k, P, sf, hs0, top, D, corner=-1 if side > 0 else 1, blade=False)
+        # The corner bay: a drum up the storeys, a lit window ring on each floor and a neon crown.
+        cxr, cyr = side * (W / 2), -D / 2
+        r = u(1.5, 1.9)
+        k.add(cyl((cxr, cyr, hs0 - 0.2), (cxr, cyr, top), r, r, 10), grime(P["wall"]), ao=False)
+        for s in range(lower):
+            z = hs0 + s * hs
+            k.add(cyl((cxr, cyr, z + 0.85), (cxr, cyr, z + hs - 0.5), r + 0.05, r + 0.05, 10), None, glow=True if rng.random() < 0.7 else P["neon"][1])
+            k.add(cyl((cxr, cyr, z + hs - 0.32), (cxr, cyr, z + hs), r + 0.15, r + 0.15, 10), mul(P["panel"], 1.2), ao=False)
+        k.add(cyl((cxr, cyr, top), (cxr, cyr, top + 0.5), r + 0.2, r + 0.2, 10), None, glow=P["neon"][0])
+        k.add(cyl((cxr, cyr, top + 0.5), (cxr, cyr, top + 0.8), r + 0.25, r + 0.1, 10), P["metal"], ao=False)
+    # Cables along the front, a downpipe and maybe a fire escape on a side wall.
+    f = faces["front"]
+    cp_hang_cables(k, f, -W / 2 + 0.3, W / 2 - 0.3, hs0 + rng.uniform(0.2, 0.8), n=rng.choice([2, 3]))
+    sfn = "left" if side > 0 else "right" if side < 0 else rng.choice(["left", "right"])
+    sf = faces[sfn]
+    pa = rng.uniform(-0.4, 0.4) * sf.length
+    pipe_run(k, [sf.p(pa, 0.0, 0.2), sf.p(pa, top - 0.4, 0.2)], 0.1, mul(P["metal"], 0.8), 3.2)
+    if form == "narrow" and rng.random() < 0.6 or form == "wide" and rng.random() < 0.3:
+        fa = rng.uniform(-0.3, 0.1) * sf.length
+        cp_fire_escape(k, P, sf, fa - 1.6, fa + 1.6, hs0 + hs, lower - 1, hs)
+    if form == "wide" and rng.random() < 0.6:
+        # A holo-billboard on the bare side wall.
+        bw = min(D - 2.0, u(5.0, 7.5))
+        cp_screen(k, sf, 0.0, hs0 + hs * 1.2, bw, bw * u(0.55, 0.75), P["neon"][1], P["neon"][0])
+
+
+def cyber_tower(k):
+    """A slender tower with setbacks (12-16 storeys over a shop podium) or the landmark: a wide
+    podium, a shaft stepping back twice, giant screens and a lit crown with a spire."""
+    rng, form = k.rng, k.form
+    u = rng.uniform
+    P = cp_colours(k)
+    hs0, hs = u(4.4, 5.0), 3.3
+    if form == "landmark":
+        W, D = u(19.0, 23.0), u(19.0, 23.0)
+        pod = 3
+        steps = [(u(13.0, 15.0), u(13.0, 15.0), rng.choice([12, 13, 14])), (u(10.0, 11.5), u(10.0, 11.5), rng.choice([6, 7, 8])), (u(7.0, 8.0), u(7.0, 8.0), 3)]
+    else:
+        W, D = u(10.0, 13.0), u(10.0, 13.0)
+        pod = rng.choice([1, 2])
+        steps = [(W - u(1.4, 2.4), D - u(1.4, 2.4), rng.choice([6, 7, 8])), (W - u(3.2, 4.4), D - u(3.2, 4.4), rng.choice([3, 4, 5]))]
+    x0, x1, y0, y1 = -W / 2, W / 2, -D / 2, D / 2
+    cp_ground(k, P, x0, x1, y0, y1, hs0, {"front": max(2, round(W / 4.8)), "left": 1 if W > 15 else 0, "right": 1 if W > 15 else 0})
+    z = cp_storeys(k, P, x0, x1, y0, y1, hs0, pod - 1, hs, {"front": 0.6, "back": 0.4, "left": 0.5, "right": 0.5}, bay=3.0) if pod > 1 else hs0
+    faces = box_faces(0, 0, W / 2, D / 2)
+    cp_signage(k, P, faces["front"], hs0, z, W)
+    prev = (x0, x1, y0, y1)
+    for i, (sw, sd, n) in enumerate(steps):
+        cp_parapet(k, P, *prev, z, h=1.0)
+        a0, a1, b0, b1 = -sw / 2, sw / 2, -sd / 2 + (0.6 if i == 0 and form != "landmark" else 0.0), sd / 2
+        z1 = cp_storeys(k, P, a0, a1, b0, b1, z, n, hs, {"front": 0.55, "back": 0.45, "left": 0.5, "right": 0.5}, bay=2.5 if form == "landmark" else 2.3,
+                        clutter=i == 0 and form != "landmark")
+        sf = box_faces((a0 + a1) / 2, (b0 + b1) / 2, sw / 2, (b1 - b0) / 2)
+        # Neon tubes up the shaft's corners.
+        for name, e in (("front", -1), ("front", 1)) if form != "landmark" or i == 2 else (("front", -1), ("front", 1), ("back", -1), ("back", 1)):
+            if form == "landmark" or rng.random() < 0.6:
+                cp_strip(k, sf[name], e * (sf[name].length / 2 - 0.06), z, z1, P["neon"][i % 2], w=0.02)
+        if i == 0:
+            # A screen on the shaft: the tower's face from the street.
+            fn = "front" if form == "landmark" or rng.random() < 0.5 else rng.choice(["left", "right"])
+            bw = sf[fn].length * u(0.55, 0.75)
+            bh = min((z1 - z) * 0.6, bw * (1.6 if form == "landmark" else 1.1))
+            cp_screen(k, sf[fn], 0.0, z + (z1 - z) * 0.3, bw, bh, P["neon"][0], P["neon"][1], out=0.35)
+            if form == "landmark":
+                bw2 = sf["left"].length * 0.6
+                cp_screen(k, sf["left"], 0.0, z + (z1 - z) * 0.45, bw2, bw2 * 0.8, P["neon"][1], P["neon"][0], out=0.35)
+            for _ in range(rng.choice([2, 3])):
+                f2 = sf[rng.choice(["left", "right", "back"])]
+                cp_ac(k, f2, rng.uniform(-0.35, 0.35) * f2.length, z + rng.randrange(n) * hs + 0.2, P["metal"])
+        prev = (a0, a1, b0, b1)
+        z = z1
+    a0, a1, b0, b1 = prev
+    cw, cd = a1 - a0, b1 - b0
+    # The crown: a glowing band, a cap and a spire, with antennas.
+    k.add(box((a0 - 0.3, b0 - 0.3, z), (a1 + 0.3, b1 + 0.3, z + 0.35)), P["metal"], ao=False)
+    k.add(box((a0 - 0.15, b0 - 0.15, z + 0.35), (a1 + 0.15, b1 + 0.15, z + 1.0)), None, glow=P["neon"][0])
+    k.add(box((a0 - 0.35, b0 - 0.35, z + 1.0), (a1 + 0.35, b1 + 0.35, z + 1.5)), mul(P["panel"], 1.2), ao=False)
+    if form == "landmark":
+        # A halo ring on struts above the crown, and a tall spire.
+        rr = max(cw, cd) * 0.75
+        zh = z + 4.0
+        for i in range(4):
+            ang = i * math.pi / 2 + math.pi / 4
+            k.add(cyl((math.cos(ang) * cw * 0.45, (b0 + b1) / 2 + math.sin(ang) * cd * 0.45, z + 1.5), (math.cos(ang) * rr, (b0 + b1) / 2 + math.sin(ang) * rr, zh), 0.12, 0.12, 6), P["metal"], ao=False)
+        ring = 16
+        for i in range(ring):
+            t0, t1 = i / ring * math.tau, (i + 1) / ring * math.tau
+            k.add(cyl((math.cos(t0) * rr, (b0 + b1) / 2 + math.sin(t0) * rr, zh), (math.cos(t1) * rr, (b0 + b1) / 2 + math.sin(t1) * rr, zh), 0.22, 0.22, 6), None, glow=P["neon"][1])
+        k.add(cyl((0, (b0 + b1) / 2, z + 1.5), (0, (b0 + b1) / 2, z + 6.0), 1.2, 0.6, 8), P["metal"], ao=False)
+        k.add(cyl((0, (b0 + b1) / 2, z + 6.0), (0, (b0 + b1) / 2, z + 18.0), 0.35, 0.06, 6), mul(P["metal"], 1.2), ao=False)
+        k.add(sphere((0, (b0 + b1) / 2, z + 18.1), 0.25, 1), None, glow="red")
+        k.add(sphere((0, (b0 + b1) / 2, z + 11.0), 0.2, 1), None, glow="red")
+    else:
+        zc = z + 1.5
+        cp_parapet(k, P, a0, a1, b0, b1, zc, h=0.7)
+        if rng.random() < 0.6:
+            cp_tank(k, P, a0 + cw * 0.3, (b0 + b1) / 2, zc, min(1.2, cw * 0.18), u(1.5, 2.2))
+        cp_antenna(k, a1 - cw * 0.3, (b0 + b1) / 2, zc, u(6.0, 10.0), P["metal"])
+        if rng.random() < 0.5:
+            cp_antenna(k, a0 + cw * 0.25, b1 - 1.0, zc, u(3.0, 5.0), P["metal"])
+    f = faces["front"]
+    cp_hang_cables(k, f, -W / 2 + 0.3, W / 2 - 0.3, hs0 + 0.5, n=2)
+
+
+def cyber_market(k):
+    """A street food court: a corrugated roof on steel columns over rows of food counters with
+    glowing menus, tables and stools, paper lanterns on cables, and a neon name on the fascia."""
+    rng = k.rng
+    u = rng.uniform
+    P = cp_colours(k)
+    pal = k.pal
+    W, D = u(16.0, 21.0), u(11.0, 14.0)
+    hx, hy = W / 2, D / 2
+    H = u(5.2, 6.0)
+    metal, dark = P["metal"], pal["dark"]
+    k.add(box((-hx, -hy, -0.01), (hx, hy, 0.15)), hazard(mul(P["wall"], 0.7), mul(P["wall"], 0.62), 1.0), ao=False)
+    nc = max(3, round(W / 5.5))
+    for i in range(nc + 1):
+        x = -hx + 0.3 + i * (W - 0.6) / nc
+        for y in (-hy + 0.3, hy - 0.3):
+            k.add(box((x - 0.2, y - 0.2, 0.15), (x + 0.2, y + 0.2, H)), mul(metal, 0.9), ao=False)
+        # Trusses across.
+        k.add(box((x - 0.12, -hy, H - 0.6), (x + 0.12, hy, H - 0.4)), k.pal["iron"], ao=False)
+    # The roof: a shallow corrugated butterfly with a glowing clerestory gap.
+    for e in (-1, 1):
+        y0, y1 = (0.3, hy + 0.8) if e > 0 else (-hy - 0.8, -0.3)
+        zin, zout = H - 0.1, H + 0.6
+        ya, yb = (y0, y1) if e > 0 else (y1, y0)
+        k.add(prism([(ya, zin), (yb, zout), (yb, zout + 0.15), (ya, zin + 0.15)], -hx - 0.6, hx + 0.6, lambda a, s_, z: Vector((a, s_, z))),
+              stripes(mul(P["panel"], 1.5), 0.35, 0.85, 0), ao=False)
+    k.add(box((-hx - 0.5, -0.3, H - 0.05), (hx + 0.5, 0.3, H + 0.05)), None, glow="white")
+    # The fascia on the front, with the court's name in neon and a tube along it.
+    f = Face((0, -hy - 0.8, 0), X, W + 1.2)
+    cp_board(k, f, -hx * 0.7, hx * 0.7, H + 0.75, H + 2.0, P["neon"][0], mul(dark, 1.4), w=0.0)
+    k.add(box((-hx * 0.7, -hy - 0.6, H + 0.6), (hx * 0.7, -hy - 0.3, H + 0.8)), metal, ao=False)
+    # Counters along the back with menus over them, and the cooks' gear.
+    m = max(3, int(W / 3.6))
+    cw = (W - 1.0) / m
+    for i in range(m):
+        x = -hx + 0.5 + (i + 0.5) * cw
+        c = k.choice(pal["awning"])
+        k.add(box((x - cw / 2 + 0.15, hy - 2.0, 0.15), (x + cw / 2 - 0.15, hy - 1.2, 1.15)), stripes(c, 0.5, 0.85, 0), ao=False)
+        k.add(box((x - cw / 2 + 0.1, hy - 2.1, 1.15), (x + cw / 2 - 0.1, hy - 1.1, 1.25)), mul(metal, 1.3), ao=False)
+        k.add(box((x - cw / 2 + 0.15, hy - 1.0, 0.15), (x + cw / 2 - 0.15, hy - 0.5, 2.6)), mul(dark, 1.6), ao=False)
+        k.add(box((x - cw / 2 + 0.3, hy - 1.06, 2.75), (x + cw / 2 - 0.3, hy - 0.96, 3.6)), None, glow=rng.choice(P["neon"] + [True]))
+        k.add(cyl((x - 0.4, hy - 1.6, 1.25), (x - 0.4, hy - 1.6, 1.6), 0.25, 0.25, 8), mul(metal, 1.2), ao=False)
+        k.add(cyl((x + 0.4, hy - 1.6, 1.25), (x + 0.4, hy - 1.6, 1.3), 0.22, 0.22, 8), None, glow="amber")
+        # A hood over the hob, and its flue up through the roof.
+        k.add(box((x - 0.7, hy - 1.9, 3.7), (x + 0.7, hy - 1.0, 4.0)), mul(metal, 1.1), ao=False)
+        k.add(cyl((x, hy - 1.45, 4.0), (x, hy - 1.45, H + 1.4), 0.15, 0.15, 6), metal, ao=False)
+    # Tables and stools.
+    for i in range(max(2, int(W / 4.5))):
+        tx = -hx + 2.2 + i * (W - 4.4) / max(1, int(W / 4.5) - 1)
+        for ty in (-hy + 2.6, -0.6):
+            tz = 0.15
+            k.add(cyl((tx, ty, tz), (tx, ty, tz + 0.72), 0.06, 0.06, 6), metal, ao=False)
+            k.add(cyl((tx, ty, tz + 0.72), (tx, ty, tz + 0.78), 0.55, 0.55, 10), k.choice(pal["plastic"]), ao=False)
+            for e in (-1, 1):
+                k.add(cyl((tx + e * 0.85, ty, tz), (tx + e * 0.85, ty, tz + 0.45), 0.2, 0.2, 8), k.choice(pal["plastic"]), ao=False)
+    # Lantern strings across, under the roof.
+    for j in range(3):
+        y = -hy + 1.0 + j * (D - 2.0) / 2
+        pts = sag_line(k, (-hx + 0.3, y, H - 0.7), (hx - 0.3, y, H - 0.7), 0.5, 0.025, (0.1, 0.1, 0.1), seg=6)
+        for p in pts[1:-1]:
+            k.add(sphere(p - Z * 0.25, 0.2, 1, squash=1.2), None, glow=rng.choice(["amber", "pink", True]))
+    # Neon at the corners, and vending machines at one end.
+    for e in (-1, 1):
+        k.add(box((e * hx - 0.08, -hy + 0.1, 0.4), (e * hx + 0.08, -hy + 0.5, H - 0.3)), None, glow=P["neon"][1])
+    e = rng.choice([-1, 1])
+    for i in range(2):
+        y = -hy + 2.0 + i * 1.1
+        x = e * (hx - 0.6)
+        k.add(box((x - 0.45, y - 0.5, 0.15), (x + 0.45, y + 0.5, 2.1)), k.choice(pal["plastic"]), ao=False)
+        k.add(Face((x - e * 0.45, y, 0), -Y * e, 1.0).box(-0.4, 0.4, 0.8, 1.95, 0.0, 0.04, back=False), None, glow=rng.choice(P["neon"]))
+
+
+def cyber_workshop(k):
+    """A garage (roller-shutter bays, one open on a lit interior, tyres and drums, a neon sign)
+    or a fab shop (a tall shed with a sawtooth roof of cyan clerestories, stacks, a loading
+    dock with hazard stripes)."""
+    rng, form = k.rng, k.form
+    u = rng.uniform
+    P = cp_colours(k)
+    pal = k.pal
+    metal, dark = P["metal"], pal["dark"]
+    if form == "garage":
+        W, D = u(10.0, 13.0), u(9.0, 11.0)
+        H1 = u(5.0, 5.6)
+        hx, hy = W / 2, D / 2
+        k.add(box((-hx, -hy, -0.01), (hx, hy, H1)), grime(mul(P["wall"], 0.9), 5.0, 0.5), ao=False)
+        f = Face((0, -hy, 0), X, W)
+        bays = 2 if W > 11.0 else 1
+        bw = min(4.2, (W - 3.0) / bays - 0.4)
+        for i in range(bays):
+            a = -hx + 1.0 + bw / 2 + i * (bw + 0.6)
+            k.add(f.box(a - bw / 2 - 0.2, a + bw / 2 + 0.2, 0.0, 3.9, 0.0, 0.12, back=False), hazard(P["trim"], mul(dark, 1.4), 0.4), ao=False)
+            if i == 0:
+                k.add(f.quad(a - bw / 2, a + bw / 2, 0.0, 3.6, 0.13), mul(dark, 1.2), closed=False, ao=False)
+                k.add(f.box(a - bw / 2 + 0.2, a + bw / 2 - 0.2, 3.3, 3.45, 0.13, 0.2, back=False), None, glow="white")
+                k.add(f.box(a - bw / 2, a + bw / 2, 3.0, 3.6, 0.13, 0.22, back=False), stripes(metal), ao=False)
+                # The front of a car on the lift, nose out.
+                k.add(box((a - 1.0, -hy - 1.3, 0.45), (a + 1.0, -hy + 0.1, 1.2), 0.15), k.choice(pal["plastic"]), ao=False)
+                k.add(box((a - 0.85, -hy - 0.6, 1.15), (a + 0.85, -hy + 0.1, 1.6), 0.12), mul(dark, 1.6), ao=False)
+                for e in (-1, 1):
+                    k.add(cyl((a + e * 0.9, -hy - 0.8, 0.38), (a + e * 1.06, -hy - 0.8, 0.38), 0.36, 0.36, 8), dark, ao=False)
+                    k.add(box((a + e * 0.65 - 0.25, -hy - 1.34, 0.9), (a + e * 0.65 + 0.25, -hy - 1.28, 1.05)), None, glow="white")
+            else:
+                k.add(f.box(a - bw / 2, a + bw / 2, 0.0, 3.6, 0.13, 0.2, back=False), lambda co, n, c=jitter(metal, rng): mul(stripes(c)(co, n), 0.6 + 0.4 * min(1.0, co.z / 3.0)), ao=False)
+            k.add(f.box(a - bw / 2 - 0.1, a + bw / 2 + 0.1, 3.6, 3.95, 0.0, 0.35), mul(metal, 0.8), ao=False)
+        # A person door with a lit panel, the sign over it all, a blade at the corner.
+        da = hx - 1.2
+        k.add(f.box(da - 0.5, da + 0.5, 0.0, 2.2, 0.0, 0.08, back=False), mul(metal, 0.7), ao=False)
+        k.add(f.box(da - 0.4, da + 0.4, 2.3, 2.45, 0.0, 0.1, back=False), None, glow="white")
+        cp_board(k, f, -hx + 0.6, hx - 0.6, 4.1, H1 - 0.2, P["neon"][0], mul(dark, 1.4), w=0.0)
+        cp_blade(k, f, -hx + 0.4, H1 + 1.5, 3.6, 1.1, P["neon"][1], mul(dark, 1.6))
+        z = H1
+        if rng.random() < 0.55:
+            # A flat over the shop.
+            z = cp_storeys(k, P, -hx, hx, -hy + 0.8, hy, H1, 1, 3.2, {"front": 0.6, "left": 0.4, "right": 0.4})
+            cp_parapet(k, P, -hx, hx, -hy, hy, H1, 0.8)
+        cp_roof(k, P, -hx, hx, -hy + (0.8 if z > H1 else 0.0), hy, z, busy=0.7)
+        # Tyres and drums by the wall.
+        e = rng.choice([-1, 1])
+        for i in range(rng.choice([3, 4, 5])):
+            k.add(cyl((e * (hx + 0.55), -hy + 1.0, i * 0.26), (e * (hx + 0.55), -hy + 1.0, i * 0.26 + 0.24), 0.42, 0.42, 10), (0.08, 0.08, 0.09), ao=False, vary=0)
+        for i in range(2):
+            k.add(cyl((e * (hx + 0.5), -hy + 2.2 + i * 0.7, 0), (e * (hx + 0.5), -hy + 2.2 + i * 0.7, 0.9), 0.3, 0.3, 8), stripes(k.choice(pal["trim"]), 0.3, 0.8), ao=False)
+        sf = Face((hx if e > 0 else -hx, 0, 0), Y if e > 0 else -Y, D)
+        cp_ac(k, sf, 1.0, 2.6, metal)
+        pipe_run(k, [sf.p(-1.5, 0.0, 0.2), sf.p(-1.5, z - 0.4, 0.2)], 0.1, metal, 3.0)
+    else:
+        W, D = u(12.0, 16.0), u(10.0, 12.0)
+        hx, hy = W / 2, D / 2
+        H1 = u(6.0, 7.0)
+        k.add(box((-hx, -hy, -0.01), (hx, hy, H1)), lambda co, n, c=mul(P["panel"], 1.5): mul(stripes(c, 0.6, 0.88, 0)(co, n) if abs(n.y) > 0.5 else stripes(c, 0.6, 0.88, 1)(co, n), 0.6 + 0.4 * min(1.0, co.z / 5.0)), ao=False)
+        k.add(box((-hx - 0.1, -hy - 0.1, -0.01), (hx + 0.1, hy + 0.1, 1.0)), grime(P["wall"], 2.0, 0.6), ao=False)
+        teeth = max(3, round(W / 4.0))
+        tw = W / teeth
+        for i in range(teeth):
+            xa = -hx + i * tw
+            zt = H1 + 2.2
+            k.add(prism([(xa, H1), (xa + tw, H1), (xa + tw, zt), (xa + tw - 0.2, zt)], -hy - 0.2, hy + 0.2, lambda a, s_, z: Vector((s_, a, z))), stripes(mul(metal, 1.1), 0.5, 0.86, 1), ao=False)
+            g = Face((xa + tw + 0.01, 0, 0), Y, D)
+            k.add(g.box(-hy + 0.2, hy - 0.2, H1 + 0.3, zt - 0.25, -0.03, 0.02), None, glow="cyan" if rng.random() < 0.7 else True)
+        f = Face((0, -hy, 0), X, W)
+        # The loading dock: a raised platform with hazard edges, a big shutter and a ramp.
+        da = rng.choice([-1, 1]) * (hx - 3.0)
+        k.add(f.box(da - 2.6, da + 2.6, 0.0, 1.1, 0.0, 2.0), mul(P["wall"], 0.7), ao=False)
+        k.add(f.box(da - 2.6, da + 2.6, 0.95, 1.12, 1.9, 2.1, back=False), hazard((0.95, 0.75, 0.1), (0.08, 0.08, 0.08), 0.35), ao=False)
+        k.add(f.box(da - 2.0, da + 2.0, 1.1, 5.0, 0.0, 0.1, back=False), lambda co, n, c=jitter(P["trim"], rng): mul(stripes(c)(co, n), 0.6 + 0.4 * min(1.0, co.z / 4.0)), ao=False)
+        k.add(f.box(da - 2.15, da + 2.15, 5.0, 5.35, 0.0, 0.35), mul(metal, 0.8), ao=False)
+        k.add(f.box(da - 0.6, da + 0.6, 5.5, 5.75, 0.0, 0.3), None, glow="amber")
+        # Stacks and ducts on the roof.
+        for i in range(rng.choice([1, 2, 3])):
+            sx = -da * 0.5 + (i - 1) * 2.0
+            k.add(cyl((sx, hy - 1.5, H1), (sx, hy - 1.5, H1 + u(4.0, 6.0)), 0.45, 0.4, 10), stripes(mul(metal, 0.9), 0.8, 0.85), ao=False)
+        pipe_run(k, [(-hx - 0.4, -hy + 2.0, 0.6), (-hx - 0.4, -hy + 2.0, H1 - 1.0), (-hx - 0.4, hy - 1.5, H1 - 1.0)], 0.22, mul(metal, 0.85), 2.5)
+        cp_board(k, f, -da * 0.9 - 2.4, -da * 0.9 + 2.4, H1 - 1.6, H1 - 0.4, P["neon"][0], mul(dark, 1.4), w=0.0)
+        fa = -da * 0.9
+        k.add(f.box(fa - 0.5, fa + 0.5, 0.0, 2.2, 0.0, 0.08, back=False), mul(metal, 0.7), ao=False)
+        k.add(f.box(fa - 0.4, fa + 0.4, 2.3, 2.42, 0.0, 0.1, back=False), None, glow="white")
+        for _ in range(3):
+            k.add(cyl((fa + u(-2.2, 2.2), -hy - 0.8, 0), (fa + u(-2.2, 2.2), -hy - 0.8, 0.9), 0.3, 0.3, 8), stripes(k.choice(pal["trim"]), 0.3, 0.8), ao=False)
+
+
+def cyber_neon_sign(k, H):
+    """A street sign on a post: a blade of characters, a round or arrow board, a lit base."""
+    rng, pal = k.rng, k.pal
+    metal, dark = pal["metal"], mul(pal["dark"], 1.6)
+    c1, c2 = rng.sample(["pink", "cyan", "amber"], 2)
+    k.add(box((-0.35, -0.35, 0), (0.35, 0.35, 0.4), 0.04), pal["stone"])
+    k.add(box((-0.1, -0.1, 0.4), (0.1, 0.1, H - 0.2)), metal, ao=False)
+    bh = rng.uniform(1.8, 2.4)
+    cp_blade(k, Face((0.0, 0.0, 0), -Y, 1), 0.0, H - 0.05, bh, 1.3, c1, dark, c2 if rng.random() < 0.5 else None)
+    if rng.random() < 0.6:
+        # A round board at the top, glowing ring and a dark face.
+        z = H - bh - 0.6
+        k.add(cyl((0, -0.14, z), (0, 0.14, z), 0.55, 0.55, 12), dark, ao=False)
+        k.add(cyl((0, -0.17, z), (0, 0.17, z), 0.42, 0.42, 12), None, glow=c2)
+        k.add(cyl((0, -0.19, z), (0, 0.19, z), 0.3, 0.3, 12), dark, ao=False)
+    k.add(box((-0.16, -0.16, 0.4), (0.16, 0.16, 0.55)), None, glow=c2)
+
+
+def cyber_billboard(k, H):
+    """A holo-billboard on two legs with a service catwalk: a screen both sides."""
+    rng, pal = k.rng, k.pal
+    metal, iron = pal["metal"], pal["iron"]
+    c1, c2 = rng.sample(["pink", "cyan", "amber"], 2)
+    w = rng.uniform(6.0, 8.0)
+    h = rng.uniform(3.4, 4.2)
+    z0 = H - h - 0.2
+    for e in (-1, 1):
+        x = e * w * 0.3
+        k.add(box((x - 0.4, -0.4, 0), (x + 0.4, 0.4, 0.5), 0.05), pal["stone"])
+        k.add(box((x - 0.18, -0.18, 0.5), (x + 0.18, 0.18, z0 - 0.3)), metal, ao=False)
+        for zz in (z0 * 0.35, z0 * 0.7):
+            k.add(box((x - 0.24, -0.24, zz), (x + 0.24, 0.24, zz + 0.15)), iron, ao=False)
+    k.add(box((-w * 0.3, -0.1, z0 * 0.55), (w * 0.3, 0.1, z0 * 0.55 + 0.2)), iron, ao=False)
+    # Catwalk under the screen.
+    k.add(box((-w / 2, -0.9, z0 - 0.45), (w / 2, 0.9, z0 - 0.35)), iron, ao=False)
+    for e in (-1, 1):
+        k.add(box((-w / 2, e * 0.9 - 0.03, z0 - 0.35), (w / 2, e * 0.9 + 0.03, z0 + 0.6)), iron, ao=False)
+    k.add(box((-w / 2 - 0.1, -0.15, z0 - 0.1), (w / 2 + 0.1, 0.15, H)), mul(pal["dark"], 1.5), ao=False)
+    for side in (Face((0, -0.15, 0), X, w), flipped(Face((0, 0.15, 0), X, w))):
+        cp_screen(k, side, 0.0, z0, w, h, c1, c2, out=0.0)
+
+
+def cyber_cable(k, H):
+    """A cable bundle to string between two buildings across a street: 4-7 cables of different
+    weights and sag between two wall brackets, along Y, with a junction box and a few hanging
+    lanterns and signs. Nothing touches the ground; the brackets are at the top."""
+    rng, pal = k.rng, k.pal
+    S = rng.uniform(10.0, 14.0)
+    metal = pal["metal"]
+    for e in (-1, 1):
+        y = e * S / 2
+        k.add(box((-0.45, y - 0.06 * e - 0.06, H - 0.9), (0.45, y + 0.06, H)), metal, ao=False)
+        k.add(box((-0.2, y - e * 0.35 - 0.1, H - 0.6), (0.2, y + 0.1, H - 0.3)), pal["iron"], ao=False)
+    n = rng.choice([4, 5, 6, 7])
+    lows = []
+    for i in range(n):
+        x = (i - (n - 1) / 2) * 0.12
+        z0, z1 = H - 0.35 - rng.uniform(0, 0.4), H - 0.35 - rng.uniform(0, 0.4)
+        sag = rng.uniform(1.0, 2.4)
+        r = rng.choice([0.03, 0.04, 0.05, 0.07])
+        c = k.choice([(0.07, 0.07, 0.08), (0.07, 0.07, 0.08), (0.12, 0.11, 0.10), (0.55, 0.42, 0.10), (0.45, 0.12, 0.10)])
+        pts = sag_line(k, (x, -S / 2 + 0.2, z0), (x, S / 2 - 0.2, z1), sag, r, c, seg=8)
+        lows.append(pts)
+    # Hanging things off the lowest cable.
+    low = min(lows, key=lambda ps: min(p.z for p in ps))
+    for j in rng.sample(range(2, 7), rng.choice([2, 3])):
+        p = low[j]
+        drop = rng.uniform(0.3, 0.8)
+        k.add(cyl(p, p - Z * drop, 0.012, 0.012, 4), (0.1, 0.1, 0.1), ao=False, vary=0)
+        if rng.random() < 0.55:
+            k.add(sphere(p - Z * (drop + 0.22), 0.22, 1, squash=1.25), None, glow=rng.choice(["amber", "pink", "cyan"]))
+        else:
+            q = p - Z * (drop + 0.4)
+            k.add(box(q - Vector((0.05, 0.35, 0.35)), q + Vector((0.05, 0.35, 0.35))), mul(pal["dark"], 1.5), ao=False)
+            k.add(box(q - Vector((0.08, 0.25, 0.25)), q + Vector((0.08, 0.25, 0.25))), None, glow=rng.choice(["pink", "cyan", "amber"]))
+    j = rng.choice([1, 7])
+    p = lows[0][j]
+    k.add(box(p - Vector((0.25, 0.2, 0.35)), p + Vector((0.25, 0.2, 0.1))), mul(metal, 0.9), ao=False)
+    # A small buried anchor below the floor: clients that fit a model by its bounding box treat
+    # what reaches below the floor as founded and stand it on its origin, so the bundle hangs
+    # at its height instead of lying on the ground. Place it by its origin.
+    k.add(box((-0.05, -0.05, -0.6), (0.05, 0.05, -0.5)), pal["dark"], ao=False, vary=0)
+
+
+def cyber_kiosk(k, H):
+    """A row of vending machines under a canopy, or a little booth with a half-open shutter."""
+    rng, pal = k.rng, k.pal
+    metal, dark = pal["metal"], pal["dark"]
+    c1, c2 = rng.sample(["pink", "cyan", "amber"], 2)
+    if rng.random() < 0.55:
+        n = rng.choice([2, 3, 4])
+        w = 0.95
+        W = n * w
+        k.add(box((-W / 2 - 0.1, -0.5, 0), (W / 2 + 0.1, 0.5, 0.12)), mul(metal, 0.8))
+        for i in range(n):
+            x = -W / 2 + (i + 0.5) * w
+            k.add(box((x - w / 2 + 0.03, -0.4, 0.12), (x + w / 2 - 0.03, 0.4, 2.0), 0.03), k.choice(pal["plastic"]), ao=False)
+            f = Face((x, -0.4, 0), X, w)
+            k.add(f.box(-0.38, 0.38, 0.75, 1.9, 0.0, 0.04, back=False), None, glow=rng.choice([c1, c2, True, True]))
+            for r in range(3):
+                k.add(f.box(-0.36, 0.36, 0.95 + r * 0.32, 1.0 + r * 0.32, 0.04, 0.07, back=False), mul(dark, 1.5), ao=False, vary=0)
+            k.add(f.box(-0.3, 0.3, 0.25, 0.5, 0.0, 0.08, back=False), mul(dark, 1.2), ao=False)
+        k.add(box((-W / 2 - 0.25, -0.75, H - 0.25), (W / 2 + 0.25, 0.55, H - 0.05)), mul(metal, 1.1), ao=False)
+        k.add(box((-W / 2 - 0.25, -0.8, H - 0.3), (W / 2 + 0.25, -0.72, H - 0.2)), None, glow=c1)
+        for e in (-1, 1):
+            k.add(box((e * (W / 2 + 0.15) - 0.05, 0.4, 0.12), (e * (W / 2 + 0.15) + 0.05, 0.5, H - 0.25)), metal, ao=False)
+    else:
+        W, D = rng.uniform(1.8, 2.4), rng.uniform(1.4, 1.8)
+        k.add(box((-W / 2, -D / 2, 0), (W / 2, D / 2, H - 0.45), 0.04), lambda co, n, c=k.choice(pal["trim"]): mul(c, 0.6 + 0.4 * min(1.0, co.z / 2.0)), ao=False)
+        f = Face((0, -D / 2, 0), X, W)
+        k.add(f.quad(-W / 2 + 0.2, W / 2 - 0.2, 1.0, 2.1, 0.01), None, glow=True, closed=False)
+        k.add(f.box(-W / 2 + 0.2, W / 2 - 0.2, 1.6, 2.1, 0.01, 0.06, back=False), stripes(metal), ao=False)
+        k.add(f.box(-W / 2 + 0.1, W / 2 - 0.1, 0.95, 1.05, 0.0, 0.4), mul(metal, 1.2), ao=False)
+        k.add(box((-W / 2 - 0.2, -D / 2 - 0.4, H - 0.45), (W / 2 + 0.2, D / 2 + 0.1, H - 0.3)), mul(metal, 0.9), ao=False)
+        cp_board(k, Face((0, -D / 2 - 0.4, 0), X, W), -W / 2, W / 2, H - 0.3, H, c1, mul(dark, 1.4))
+        for i in range(4):
+            k.add(box((-W / 2 + 0.25 + i * 0.4, -D / 2 + 0.05, 1.05), (-W / 2 + 0.5 + i * 0.4, -D / 2 + 0.35, 1.35)), k.choice(pal["plastic"]), ao=False)
+
+
+def cyber_food_stall(k, H):
+    """A street-food stall: a counter on a cart, a striped awning, paper lanterns, a steaming
+    pot on a glowing burner, a neon menu, stools and a gas bottle."""
+    rng, pal = k.rng, k.pal
+    metal, dark = pal["metal"], pal["dark"]
+    c1 = rng.choice(["pink", "cyan", "amber"])
+    w, d = rng.uniform(1.2, 1.6), 0.6
+    k.add(box((-w, -d, 0.25), (w, d, 1.0), 0.04), stripes(k.choice(pal["trim"]), 0.25, 0.85), ao=False)
+    k.add(box((-w - 0.1, -d - 0.25, 1.0), (w + 0.1, d + 0.05, 1.08)), mul(metal, 1.3), ao=False)
+    for e in (-1, 1):
+        k.add(cyl((e * (w - 0.3), -d - 0.02, 0.25), (e * (w - 0.3), d + 0.02, 0.25), 0.24, 0.24, 8), (0.08, 0.08, 0.09), ao=False)
+    front, back = H - 0.5, H - 0.05
+    for x in (-w, w):
+        k.add(box((x - 0.05, -d - 0.05, 1.0), (x + 0.05, -d + 0.05, front)), metal, ao=False)
+        k.add(box((x - 0.05, d - 0.05, 1.0), (x + 0.05, d + 0.05, back)), metal, ao=False)
+    aw = k.choice(pal["awning"])
+    k.add(prism([(d + 0.15, back), (-d - 0.8, front - 0.1), (-d - 0.8, front - 0.02), (d + 0.15, back + 0.08)], -w - 0.25, w + 0.25,
+                lambda a, s_, z: Vector((a, s_, z))), stripes(aw, 0.4, 0.75, 0), ao=False)
+    k.add(box((-w - 0.25, -d - 0.85, front - 0.4), (w + 0.25, -d - 0.78, front - 0.05)), aw, ao=False)
+    # Lanterns along the awning's edge.
+    for i in range(rng.choice([3, 4, 5])):
+        x = -w + i * 2 * w / max(1, rng.choice([3, 4, 5]) - 1)
+        x = max(-w, min(w, x))
+        k.add(cyl((x, -d - 0.7, front - 0.4), (x, -d - 0.7, front - 0.55), 0.01, 0.01, 4), (0.1, 0.1, 0.1), ao=False, vary=0)
+        k.add(sphere((x, -d - 0.7, front - 0.78), 0.2, 1, squash=1.3), None, glow=rng.choice(["amber", "amber", "pink", True]))
+    # The menu: a glowing board under the awning at the back.
+    k.add(box((-w + 0.1, d - 0.08, 1.5), (w - 0.1, d, back - 0.35)), mul(dark, 1.5), ao=False)
+    f = Face((0, d - 0.08, 0), X, 2 * w)
+    k.add(f.box(-w + 0.2, w - 0.2, 1.6, back - 0.45, 0.0, 0.03, back=False), None, glow=c1)
+    for r in range(3):
+        z = 1.75 + r * (back - 2.2) / 3
+        k.add(f.box(-w + 0.3, w * 0.4, z, z + 0.05, 0.03, 0.05, back=False), mul(dark, 1.5), ao=False, vary=0)
+    # Pot, burner, steam hood.
+    px = rng.uniform(-w * 0.4, w * 0.4)
+    k.add(cyl((px, 0.1, 1.08), (px, 0.1, 1.14), 0.3, 0.3, 10), None, glow="amber")
+    k.add(cyl((px, 0.1, 1.14), (px, 0.1, 1.5), 0.32, 0.3, 10), mul(metal, 1.3), ao=False)
+    k.add(cyl((px + 0.8 * (1 if px < 0 else -1), 0.1, 1.08), (px + 0.8 * (1 if px < 0 else -1), 0.1, 1.2), 0.3, 0.3, 10), mul(metal, 0.9), ao=False)
+    for e in (-1, 1):
+        k.add(cyl((e * w * 0.5, -d - 0.6, 0), (e * w * 0.5, -d - 0.6, 0.55), 0.18, 0.18, 8), k.choice(pal["plastic"]), ao=False)
+    k.add(cyl((w + 0.35, 0.2, 0), (w + 0.35, 0.2, 0.75), 0.18, 0.18, 8), (0.75, 0.2, 0.18), ao=False)
+
+
+def cyber_walkway(k, H):
+    """A raised walkway: a deck on pillars along X, glass-free railings with a glowing strip
+    under the handrail, a stair down at one end, and a canopy over the middle."""
+    rng, pal = k.rng, k.pal
+    metal, iron = pal["metal"], pal["iron"]
+    L = rng.uniform(12.0, 16.0)
+    zd = H - 2.6
+    wd = 1.3
+    c1 = rng.choice(["cyan", "amber", "pink"])
+    n = 3 if L > 14 else 2
+    for i in range(n):
+        x = -L / 2 + 1.5 + i * (L - 3.0) / (n - 1)
+        k.add(box((x - 0.45, -0.45, 0), (x + 0.45, 0.45, zd - 0.6)), grime(pal["concrete"][0], 4.0, 0.5), ao=False)
+        k.add(box((x - 0.5, -wd, zd - 0.7), (x + 0.5, wd, zd - 0.4)), mul(metal, 0.8), ao=False)
+    k.add(box((-L / 2, -wd, zd - 0.4), (L / 2, wd, zd)), mul(pal["concrete"][3], 0.9), ao=False)
+    k.add(box((-L / 2, -wd - 0.05, zd - 0.5), (L / 2, -wd + 0.05, zd - 0.42)), None, glow=c1)
+    for e in (-1, 1):
+        y = e * (wd - 0.05)
+        k.add(box((-L / 2, y - 0.04, zd + 1.0), (L / 2, y + 0.04, zd + 1.1)), metal, ao=False)
+        k.add(box((-L / 2, y - 0.03, zd + 0.9), (L / 2, y + 0.03, zd + 0.97)), None, glow=c1)
+        for j in range(int(L / 1.5) + 1):
+            x = -L / 2 + 0.1 + j * (L - 0.2) / int(L / 1.5)
+            k.add(box((x - 0.04, y - 0.04, zd), (x + 0.04, y + 0.04, zd + 1.0)), iron, ao=False)
+        k.add(box((-L / 2, y - 0.02, zd + 0.1), (L / 2, y + 0.02, zd + 0.5)), mul(metal, 0.7), ao=False)
+    # Stairs down at one end, along -Y.
+    e = rng.choice([-1, 1])
+    sx = e * (L / 2 - 0.8)
+    steps = int(zd / 0.25)
+    run = steps * 0.28
+    for i in range(steps):
+        z = zd - (i + 1) * zd / steps
+        y = -wd - (i + 1) * 0.28
+        k.add(box((sx - 0.7, y, z), (sx + 0.7, y + 0.3, z + 0.1)), mul(metal, 1.1), ao=False)
+    for s in (-1, 1):
+        k.add(Face((sx + s * 0.72, -wd, 0), -Y, 1).obox(run / 2, zd / 2, math.hypot(run, zd), 0.25, -0.05, 0.05, -math.atan2(zd, run)), iron, ao=False)
+    k.add(box((sx - 0.3, -wd - run - 0.3, 0), (sx + 0.3, -wd - run + 0.1, 0.2)), mul(metal, 0.8))
+    # The canopy.
+    cl = L * 0.55
+    for x in (-cl / 2, cl / 2):
+        for y in (-wd + 0.1, wd - 0.1):
+            k.add(box((x - 0.05, y - 0.05, zd), (x + 0.05, y + 0.05, H - 0.15)), metal, ao=False)
+    k.add(box((-cl / 2 - 0.3, -wd - 0.3, H - 0.18), (cl / 2 + 0.3, wd + 0.3, H)), stripes(mul(pal["panel"][0], 1.6), 0.5, 0.85, 0), ao=False)
+    k.add(box((-cl / 2, -0.15, H - 0.25), (cl / 2, 0.15, H - 0.18)), None, glow="white")
+    f = Face((0, -wd - 0.3, 0), X, cl)
+    cp_board(k, f, -cl * 0.35, cl * 0.35, H - 0.9, H - 0.2, rng.choice(["pink", "cyan", "amber"]), mul(pal["dark"], 1.4))
+
+
+def cyber_lamp(k, H):
+    """A street light: an angular pole, a long arm with a strip-lit head, maybe a hanging sign."""
+    rng, pal = k.rng, k.pal
+    metal = pal["metal"]
+    k.add(box((-0.3, -0.3, 0), (0.3, 0.3, 0.4), 0.04), pal["stone"])
+    k.add(box((-0.16, -0.16, 0.4), (0.16, 0.16, 1.4)), mul(metal, 0.8), ao=False)
+    k.add(box((-0.1, -0.1, 1.4), (0.1, 0.1, H - 0.1)), metal, ao=False)
+    head = rng.choice(["white", "white", "cyan", True])
+    arms = [1] if rng.random() < 0.6 else [-1, 1]
+    for e in arms:
+        L = rng.uniform(1.6, 2.2)
+        k.add(Face((0, 0, 0), X, 1).obox(e * 0.4, H - 0.45, 0.9, 0.12, -0.06, 0.06, e * 0.6), metal)
+        k.add(box((min(0, e * L), -0.12, H - 0.25), (max(0, e * L), 0.12, H)), metal, ao=False)
+        k.add(box((min(e * 0.6, e * L), -0.1, H - 0.3), (max(e * 0.6, e * L), 0.1, H - 0.25)), None, glow=head)
+    k.add(box((-0.12, -0.12, 0.9), (0.12, 0.12, 1.0)), None, glow=rng.choice(["pink", "cyan", "amber"]))
+    if rng.random() < 0.5:
+        cp_blade(k, Face((0, 0, 0), -Y if rng.random() < 0.5 else Y, 1), 0.0, H - 1.0, 1.6, 0.8, rng.choice(["pink", "cyan", "amber"]), mul(pal["dark"], 1.6))
+
+
+def cyber_crate(k, H):
+    """Street clutter: stacked plastic crates, drums and boxes, about H high."""
+    rng, pal = k.rng, k.pal
+    v = rng.random()
+    if v < 0.5:
+        for i in range(rng.choice([2, 3])):
+            for j in range(rng.choice([1, 2, 3])):
+                x = (i - 1) * 0.62 + rng.uniform(-0.03, 0.03)
+                z = j * 0.4
+                if z + 0.4 > H:
+                    break
+                c = k.choice(pal["plastic"])
+                k.add(box((x - 0.3, -0.22, z), (x + 0.3, 0.22, z + 0.38), 0.02), stripes(c, 0.1, 0.8), ao=False)
+    elif v < 0.8:
+        for i in range(rng.choice([2, 3])):
+            x = (i - 1) * 0.65
+            c = k.choice(pal["trim"])
+            k.add(cyl((x, 0, 0), (x, 0, H * 0.75), 0.3, 0.3, 10), stripes(c, 0.3, 0.75), ao=False)
+            k.add(cyl((x, 0, H * 0.75), (x, 0, H * 0.77), 0.27, 0.27, 10), mul(c, 0.7), ao=False)
+        k.add(box((0.4, -0.3, 0), (1.0, 0.3, H)), (0.55, 0.44, 0.30))
+    else:
+        k.add(box((-0.7, -0.5, 0), (0.7, 0.5, H * 0.6), 0.03), (0.55, 0.44, 0.30))
+        k.add(box((-0.5, -0.4, H * 0.6), (0.3, 0.3, H), 0.03), (0.60, 0.48, 0.33))
+        k.add(box((-0.71, -0.2, H * 0.3), (0.71, 0.2, H * 0.36)), (0.85, 0.75, 0.6), ao=False)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -2628,7 +4261,7 @@ def foundation(k, depth):
     downward, like a footing, so a slope shows stonework rather than a gap."""
     pts = [(v.co.x, v.co.y) for v in k.b.bm.verts if v.co.z <= 0.05]
     hull = convex_hull(pts)
-    if len(hull) < 3:
+    if len(hull) < 3 or depth <= 0:
         return
     cx = sum(p[0] for p in hull) / len(hull)
     cy = sum(p[1] for p in hull) / len(hull)
@@ -2700,6 +4333,14 @@ KINDS = {
     ("fantasy", "well"): well,
     ("giant", "well"): well,
     ("small", "well"): well,
+    ("cyberpunk", "neon_sign"): cyber_neon_sign,
+    ("cyberpunk", "billboard"): cyber_billboard,
+    ("cyberpunk", "cable"): cyber_cable,
+    ("cyberpunk", "kiosk"): cyber_kiosk,
+    ("cyberpunk", "food_stall"): cyber_food_stall,
+    ("cyberpunk", "walkway"): cyber_walkway,
+    ("cyberpunk", "lamp"): cyber_lamp,
+    ("cyberpunk", "crate"): cyber_crate,
 }
 
 # Kinds that come in forms: the generator reads k.form (and k.corner, the side of a corner
@@ -2716,12 +4357,23 @@ FORM_KINDS = {
     ("giant", "hall"): (giant_hall, ["longhall"]),
     ("small", "house"): (small_house, ["burrow", "mound", "mushroom", "stump"]),
     ("small", "hall"): (mushroom_hall, ["mushroom_hall"]),
-    ("steampunk", "house"): (steampunk_house, ["narrow", "wide"]),
+    ("steampunk", "house"): (steampunk_house, ["narrow", "wide", "corner"]),
+    ("steampunk", "inn"): (steampunk_house, ["pub"]),
+    ("steampunk", "hall"): (steampunk_hall, ["exchange"]),
+    ("steampunk", "clocktower"): (steampunk_clocktower, ["clocktower"]),
+    ("steampunk", "mast"): (steampunk_mast, ["mooring_mast"]),
+    ("steampunk", "works"): (steampunk_works, ["foundry", "gearworks"]),
+    ("steampunk", "arcade"): (steampunk_arcade, ["arcade"]),
+    ("cyberpunk", "block"): (cyber_block, ["narrow", "wide", "corner"]),
+    ("cyberpunk", "tower"): (cyber_tower, ["slender"]),
+    ("cyberpunk", "landmark"): (cyber_tower, ["landmark"]),
+    ("cyberpunk", "market"): (cyber_market, ["food_court"]),
+    ("cyberpunk", "workshop"): (cyber_workshop, ["garage", "fab"]),
 }
 
 # Who lives there: generators work in metres for a 1.75 m person, and the result is scaled to
 # the inhabitants, so a giant's door is 5/1.75 times a person's and a small folk's 0.6/1.75.
-STYLE_FOLK = {"fantasy": "human", "steampunk": "human", "giant": "giant", "small": "small"}
+STYLE_FOLK = {"fantasy": "human", "steampunk": "human", "cyberpunk": "human", "giant": "giant", "small": "small"}
 
 
 def up(x):
@@ -2815,7 +4467,7 @@ def main():
         # Lots are centred on the origin: the footprint is twice the farthest reach from it.
         vs = obj.data.vertices
         fw, fd = 2 * max(abs(v.co.x) for v in vs), 2 * max(abs(v.co.y) for v in vs)
-        top, below = max(v.co.z for v in vs), -min(v.co.z for v in vs)
+        top, below = max(v.co.z for v in vs), max(0.0, -min(v.co.z for v in vs))
         print(f"GEN {path} form={form} tris={tris} foot={fw:.2f}x{fd:.2f} h={top:.2f} below={below:.2f}")
         records.append(dict(file=name, form=form, width_m=up(fw), depth_m=up(fd), height_m=round(top, 2), foundation_m=round(below, 2), corner=k.corner, tris=tris))
         if PROFILE:

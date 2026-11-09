@@ -309,6 +309,23 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
   - **Buildings:** thick roofs that darken towards the eaves with sagging ridges, windows and doors set into the walls, leaning chimneys, and capped plinths. Footprints are unchanged, so the planner's table still matches.
   - **Blind A/B test** (46 pairs, order randomised, labels hidden): the new trees, rocks and props won; the buildings tied at game distance; the crystal base was reverted.
 
+- **City styles and outfits (2026-11-09):**
+  - **Cyberpunk** (`buildings.py`):
+    - narrow, wide and corner blocks; slender towers; a landmark megatower (about 110 m);
+    - a food court, garages and fabs;
+    - neon signs in Glow colour materials, holo-billboards, cables, kiosks, food stalls, walkways and lamps.
+  - **Steampunk:** narrow, wide and corner houses, a pub, an exchange hall, a clock tower, a mooring mast with an airship, a foundry and gearworks, an iron-and-glass arcade, and gas lamps.
+  - **Table:** `buildings.json` lists 46 kinds and 528 models, all within budget. The look-dev cyberpunk and steampunk cities use them.
+  - **Outfits:** `outfits.py` and `gen_outfits.sh` make 12 pieces per VRoid base, fitted from a body hull and skinned to J_Bip with the body's weights:
+    - cyberpunk: cropped jacket, high collar, visor, glow trim, cargo straps;
+    - steampunk: long coat, waistcoat, top hat, bowler, brass goggles, gloves, boots.
+
+    The pieces are git-ignored under `assets/lookdev/outfits/`.
+  - **Not done yet:**
+    - **Outfit wiring:** the client has to bind each piece's joints to the character's own bones (or to the recipe's scaled helper joints) and optionally hide the parts it covers.
+    - **Cyberpunk at night** reads too dark and hazy.
+    - **The long coat** bulges at the shoulders.
+
 - **Buildings (2026-11-08):** `living/tools/blender/buildings.py` generates:
   - **fantasy:** timber-frame houses, townhouses, watchtowers, wall segments, market stalls and lamps;
   - **steampunk:** brick townhouses with copper mansards, factories, smokestacks, pipes, crates and lamps;
