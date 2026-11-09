@@ -28,8 +28,7 @@ use crate::world::{hash, rgb, scale, Palette};
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
-use bevy::world_serialization::WorldAssetRoot;
-use bevy_mod_outline::OutlineStencil;
+use bevy::world_serialization::{WorldAsset, WorldAssetRoot};
 use living_rules::land::{Land, RegionKind, SiteKind};
 use living_rules::settle::LotKind;
 use living_rules::map::Terrain;
@@ -45,6 +44,13 @@ const NEAR: f32 = 60.0;
 const SMALL: f32 = 1.6;
 /// Chunk builds per frame, so walking doesn't hitch.
 const BUILDS_PER_FRAME: usize = 2;
+/// Things spawned per frame, in cost units: a model costs 1, a person [`PERSON_COST`]. A
+/// settlement chunk holds 70 or more models; spawned at once they made the expedition's worst
+/// frames (docs/FIRST_WORLD.md, "Expedition"). Queued things spawn nearest first, and only once
+/// their file has loaded: the files are fetched when the chunk's ground is built, 110 m before
+/// its small things are wanted, so the queue rarely waits.
+const SPAWN_BUDGET: f32 = 12.0;
+const PERSON_COST: f32 = 6.0;
 
 /// An environment's `world` section.
 #[derive(Deserialize, Clone, Copy, Debug)]
@@ -81,7 +87,20 @@ pub struct Island {
     /// Loaded chunks: ground (with water) and big things; small things separately.
     ground: HashMap<(i32, i32), Vec<Entity>>,
     small: HashMap<(i32, i32), Vec<Entity>>,
+    /// Things waiting to spawn, by chunk and tier ([`SPAWN_BUDGET`]).
+    queue: Vec<Queued>,
+    /// The files of a loaded chunk's small things and people, held from its ground's build.
+    prefetch: HashMap<(i32, i32), Vec<UntypedHandle>>,
     pub start: Vec2,
+}
+
+/// A thing waiting to spawn into a chunk's ground tier or its small tier.
+struct Queued {
+    chunk: (i32, i32),
+    small: bool,
+    item: Item,
+    /// Its scene file, which must have loaded first.
+    scene: Handle<WorldAsset>,
 }
 
 impl Island {
@@ -207,7 +226,7 @@ impl Island {
                 put(Item { kind: "person".into(), at, yaw: hash(k, 33) * std::f32::consts::TAU, k: k as usize, person: Some((world.seed * 104_729 + (si as u64) * 31 + k as u64, folk, st.style.clone())), ..default() });
             }
         }
-        Self { land, envs, site_items, ground: HashMap::new(), small: HashMap::new(), start }
+        Self { land, envs, site_items, ground: HashMap::new(), small: HashMap::new(), queue: Vec::new(), prefetch: HashMap::new(), start }
     }
 
     /// A building on an authority `lot` row (connected): the row's model file when it is on
@@ -464,7 +483,11 @@ fn chunk_meshes(land: &Land, c: (i32, i32)) -> (Mesh, Option<Mesh>) {
             let (x, z) = ((x0 + i as i32) as f32, (z0 + j as i32) as f32);
             pos.push([x, land.height(x, z), z]);
             let v = hash((x0 + i as i32) as u32, (z0 + j as i32) as u32);
-            let (c, b) = blended_ground(land, x, z, v);
+            let (mut c, b) = blended_ground(land, x, z, v);
+            // The rules' blocking rock, crisp per tile (not blended): the share of the four tiles
+            // round this vertex, for the shader's cliff (terrain.rs `BLOCKED_ALPHA`).
+            let rock = [(-0.5, -0.5), (0.5, -0.5), (-0.5, 0.5), (0.5, 0.5)].iter().filter(|(dx, dz)| land.map.at(x + dx, z + dz) == Terrain::Rock).count();
+            c[3] = 1.0 - (1.0 - crate::terrain::BLOCKED_ALPHA) * rock as f32 / 4.0;
             col.push(c);
             blends.push(b);
         }
@@ -512,6 +535,22 @@ fn chunk_meshes(land: &Land, c: (i32, i32)) -> (Mesh, Option<Mesh>) {
             .with_inserted_indices(Indices::U32(widx))
     });
     (ground, water)
+}
+
+/// The scene file a thing spawns from (a person's: its recipe's animated base).
+fn scene_of(assets: &AssetServer, it: &Item) -> Handle<WorldAsset> {
+    let file = match &it.person {
+        Some((seed, folk, style)) => crate::lookdev::animated(&crate::characters::Recipe::random_in(*seed, folk, style).base),
+        None => it.file.clone(),
+    };
+    assets.load(GltfAssetLabel::Scene(0).from_asset(file))
+}
+
+/// Whether a thing's scene can spawn now: loaded with its dependencies, or failed (it then spawns
+/// as it always did, and logs its error).
+fn ready(assets: &AssetServer, scene: &Handle<WorldAsset>) -> bool {
+    use bevy::asset::RecursiveDependencyLoadState as S;
+    matches!(assets.recursive_dependency_load_state(scene), S::Loaded | S::Failed(_))
 }
 
 fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &Item) -> Vec<Entity> {
@@ -629,14 +668,18 @@ pub fn stream(
             }
             let mut es = vec![ground.id()];
             if !crate::perf::has("nostencil") {
-                commands.entity(es[0]).insert(OutlineStencil::default());
+                commands.entity(es[0]).insert(crate::style::ground_stencil());
             }
             if let Some(w) = w {
                 es.push(commands.spawn((EnvPart, Mesh3d(meshes.add(w)), MeshMaterial3d(palette.water.clone()), Transform::default())).id());
             }
-            let items: Vec<Item> = island.site_items.get(&c).cloned().unwrap_or_default().into_iter().chain(island.wild_items(c)).collect();
-            for it in items.iter().filter(|it| it.height > SMALL && it.person.is_none()) {
-                es.extend(spawn_item(&mut commands, &assets, &land, it));
+            // Big things queue now; the small things' and people's files start loading.
+            let (big, small): (Vec<Item>, Vec<Item>) = island.site_items.get(&c).cloned().unwrap_or_default().into_iter().chain(island.wild_items(c)).partition(|it| it.height > SMALL && it.person.is_none());
+            let fetch = small.iter().map(|it| scene_of(&assets, it).untyped()).collect();
+            island.prefetch.insert(c, fetch);
+            for item in big {
+                let scene = scene_of(&assets, &item);
+                island.queue.push(Queued { chunk: c, small: false, item, scene });
             }
             island.ground.insert(c, es);
             built += 1;
@@ -644,9 +687,46 @@ pub fn stream(
         if d <= NEAR && !island.small.contains_key(&c) && island.ground.contains_key(&c) {
             let items: Vec<Item> = island.site_items.get(&c).cloned().unwrap_or_default().into_iter().chain(island.wild_items(c)).collect();
             let items: Vec<Item> = items.into_iter().filter(|it| !(crate::perf::has("nopeople") && it.person.is_some()) && !(crate::perf::has("nosmall") && it.person.is_none())).collect();
-            let es: Vec<Entity> = items.iter().filter(|it| it.height <= SMALL || it.person.is_some()).flat_map(|it| spawn_item(&mut commands, &assets, &land, it)).collect();
-            island.small.insert(c, es);
+            for item in items.into_iter().filter(|it| it.height <= SMALL || it.person.is_some()) {
+                let scene = scene_of(&assets, &item);
+                island.queue.push(Queued { chunk: c, small: true, item, scene });
+            }
+            island.small.insert(c, Vec::new());
             built += 1;
         }
     }
+    spawn_queued(&mut commands, &assets, &mut island, me);
+}
+
+/// Spawn queued things, nearest first, within [`SPAWN_BUDGET`]; drop those whose chunk went.
+fn spawn_queued(commands: &mut Commands, assets: &AssetServer, island: &mut Island, me: Vec2) {
+    let Island { queue, ground, small, prefetch, land, .. } = island;
+    prefetch.retain(|c, _| ground.contains_key(c));
+    queue.retain(|q| if q.small { small.contains_key(&q.chunk) } else { ground.contains_key(&q.chunk) });
+    if queue.is_empty() {
+        return;
+    }
+    // Farthest first in the list, so the nearest pop off its end.
+    queue.sort_by(|a, b| b.item.at.distance_squared(me).total_cmp(&a.item.at.distance_squared(me)));
+    let unlimited = crate::perf::has("nobudget");
+    let mut spent = 0.0;
+    let mut waiting = Vec::new();
+    while let Some(q) = queue.pop() {
+        let cost = if q.item.person.is_some() { PERSON_COST } else { 1.0 };
+        if !unlimited && spent > 0.0 && spent + cost > SPAWN_BUDGET {
+            queue.push(q);
+            break;
+        }
+        if !ready(assets, &q.scene) {
+            waiting.push(q);
+            continue;
+        }
+        let es = spawn_item(commands, assets, land, &q.item);
+        let list = if q.small { small.get_mut(&q.chunk) } else { ground.get_mut(&q.chunk) };
+        if let Some(list) = list {
+            list.extend(es);
+        }
+        spent += cost;
+    }
+    queue.extend(waiting);
 }

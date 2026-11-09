@@ -349,7 +349,7 @@ pub fn spawn(commands: &mut Commands, assets: &AssetServer, recipe: &Recipe, at:
             Character { recipe: recipe.clone(), stride: 1.0 },
             crate::lookdev::CastsShadow::default(),
             WorldAssetRoot(handle),
-            FileHandle(assets.load(file)),
+            FileHandle(kept(assets, &file)),
             Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw + PI)),
             Visibility::Hidden,
         ))
@@ -360,8 +360,19 @@ pub fn spawn(commands: &mut Commands, assets: &AssetServer, recipe: &Recipe, at:
 /// root go once loaded; the clips' later load of the root (`lookdev::clips`) then read the whole
 /// file again, which replaced its scene asset and rebuilt every instance about 20 frames in, with
 /// new bone entities: proportions, outfits and springs set up on the old bones were lost.
+///
+/// The root is also kept for the rest of the session ([`kept`]): when the last character of a
+/// base despawned (leaving a town drops its people), the next one to spawn read the whole file
+/// again and rebuilt every live instance of that base the same way, in a 100–160 ms frame.
 #[derive(Component)]
 pub struct FileHandle(#[allow(dead_code)] Handle<bevy::gltf::Gltf>);
+
+/// A character file's root glTF, loaded once and held for the session (there are only a few
+/// bases).
+fn kept(assets: &AssetServer, file: &str) -> Handle<bevy::gltf::Gltf> {
+    static KEPT: OnceLock<Mutex<HashMap<String, Handle<bevy::gltf::Gltf>>>> = OnceLock::new();
+    KEPT.get_or_init(Default::default).lock().unwrap().entry(file.to_string()).or_insert_with(|| assets.load(file.to_string())).clone()
+}
 
 /// Warn if a shaped character's skeleton is replaced anyway (a scene asset changed): its
 /// proportions, outfit and springs stay on the old bones.

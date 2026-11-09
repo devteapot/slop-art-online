@@ -11,7 +11,7 @@ use crate::world::{rgb, MeshBuf, Palette};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::world_serialization::WorldAssetRoot;
-use bevy_mod_outline::{OutlineMeshExt, OutlineStencil};
+use bevy_mod_outline::OutlineMeshExt;
 use std::collections::{HashMap, HashSet};
 
 pub fn enabled() -> bool {
@@ -34,6 +34,9 @@ pub struct Lookdev {
     /// Sun hour (6 = sunrise, 12 = noon, 18 = sunset).
     pub hour: f32,
     pub act: Act,
+    /// The speed the line-up and crowds walk at in place (m/s; `LIVING_GAME_ACT=walk@2.6`): it
+    /// picks their clip and cadence as it would for a body moving that fast (`gait.rs`).
+    pub walk_speed: f32,
     pub models: Vec<String>,
     demo: Option<(std::path::PathBuf, usize, f32)>,
     /// Where the camera looks instead of the player (scripted close-ups).
@@ -138,13 +141,16 @@ pub fn setup(mut commands: Commands) {
         let _ = std::fs::create_dir_all(&d);
         (std::path::PathBuf::from(d), 0usize, 0.0)
     });
-    // What the line-up does at the start (`LIVING_GAME_ACT=idle|walk|talk`; F1 → Look dev too).
-    let act = match std::env::var("LIVING_GAME_ACT").as_deref() {
-        Ok("walk") => Act::Walk,
-        Ok("talk") => Act::Talk,
+    // What the line-up does at the start (`LIVING_GAME_ACT=idle|walk[@<m/s>]|talk`; F1 → Look
+    // dev too).
+    let spec = std::env::var("LIVING_GAME_ACT").unwrap_or_default();
+    let (act, walk_speed) = spec.split_once('@').map_or((spec.as_str(), WALK_SPEED), |(a, v)| (a, v.parse().unwrap_or(WALK_SPEED)));
+    let act = match act {
+        "walk" => Act::Walk,
+        "talk" => Act::Talk,
         _ => Act::Idle,
     };
-    commands.insert_resource(Lookdev { hour: 15.0, act, models, demo, focus: None });
+    commands.insert_resource(Lookdev { hour: 15.0, act, walk_speed, models, demo, focus: None });
 }
 
 /// The character line-up: every look-dev model in an arc beside the reference figure.
@@ -156,7 +162,7 @@ pub fn build_lineup(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette:
         let (a0, a1) = (i as f32 / 64.0 * std::f32::consts::TAU, (i + 1) as f32 / 64.0 * std::f32::consts::TAU);
         g.tri([Vec3::ZERO, ring(30.0, a1), ring(30.0, a0)], rgb(112, 160, 74));
     }
-    commands.spawn((crate::envs::EnvPart, Mesh3d(meshes.add(g.build())), MeshMaterial3d(palette.vertex.clone()), Transform::default(), OutlineStencil::default()));
+    commands.spawn((crate::envs::EnvPart, Mesh3d(meshes.add(g.build())), MeshMaterial3d(palette.vertex.clone()), Transform::default(), crate::style::ground_stencil()));
     // The reference figure at the centre, facing the camera's side (+Z is south); it is the
     // character you walk around with here.
     let figure = crate::bodies::spawn(commands, meshes, palette, style, "person", 1, false, Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)), Vec2::ZERO);
@@ -278,7 +284,12 @@ pub fn convert(
                     .clone()
             })
             .clone();
-        if done.1.insert(mesh.0.id()) {
+        // Only meshes with an outline volume need outline normals. Scenery takes part only as a
+        // stencil at zero offset, which never reads them; generating them anyway rewrote every
+        // new scenery mesh (another attribute, so another upload in another vertex layout), and a
+        // first-seen model's meshes made a 150 ms frame on the development Mac.
+        let volume = owner.vrm || owner.file.starts_with("lookdev/") || owner.file.starts_with("view/");
+        if volume && done.1.insert(mesh.0.id()) {
             if let Some(mut m) = meshes.get_mut(&mesh.0) {
                 let _ = m.generate_outline_normals(&Default::default());
             }
@@ -296,7 +307,7 @@ pub fn convert(
         } else if owner.file.starts_with("lookdev/") || owner.file.starts_with("view/") {
             ec.insert(outline(Outlined::Thing, &style));
         } else if !crate::perf::has("nostencil") {
-            ec.insert(OutlineStencil::default());
+            ec.insert(crate::style::stencil());
         }
     }
 }
@@ -481,18 +492,27 @@ fn face(rig: &Rig, look: &Lookdev, morphs: &mut Query<&mut MorphWeights>, t: f32
 #[derive(Component)]
 pub struct Clips {
     player: Entity,
+    /// The file the clips come from (its gaits, `gait.rs`).
+    file: String,
     nodes: HashMap<String, AnimationNodeIndex>,
     playing: Option<String>,
+}
+
+impl Clips {
+    /// The clip playing now.
+    pub fn playing(&self) -> Option<&str> {
+        self.playing.as_deref()
+    }
 }
 
 /// The glTF file a model's clips come from.
 #[derive(Component)]
 pub struct ClipSource(Handle<Gltf>);
 
-/// Speeds the authored locomotion clips were made for (m/s; `animate.py --speed/--run-speed`);
-/// playback is scaled from these to the actual speed.
-pub const WALK_CLIP_SPEED: f32 = 1.4;
-pub const RUN_CLIP_SPEED: f32 = 3.6;
+/// Look-dev's walking and running speeds (m/s), the ones `animate.py` scales `walk` and `run` to
+/// by default. Clips and their rates come from the actual speed (`gait.rs`).
+pub const WALK_SPEED: f32 = 1.4;
+pub const RUN_SPEED: f32 = 3.6;
 
 /// Models whose files carry clips (`assets/lookdev/anim/`, from `living/tools/blender/animate.py`)
 /// play them: idle, walk or run for you by how you move; idle, walk or talk for the line-up.
@@ -524,16 +544,17 @@ pub fn clips(
         let (graph, idx) = AnimationGraph::from_clips(handles);
         commands.entity(p).insert((AnimationGraphHandle(graphs.add(graph)), AnimationTransitions::new()));
         debug!("look-dev: {} plays clips {names:?} on {p}", model.file);
-        commands.entity(e).insert(Clips { player: p, nodes: names.into_iter().zip(idx).collect(), playing: None });
+        commands.entity(e).insert(Clips { player: p, file: model.file.clone(), nodes: names.into_iter().zip(idx).collect(), playing: None });
     }
     for (e, mut c, is_player, ch) in &mut playing {
-        // Longer legs take longer steps: play slower for the same speed.
+        // The gait and its rate from the speed; longer legs take longer steps (`gait.rs`).
         let stride = ch.map_or(1.0, |c| c.stride);
+        let gaits = || crate::gait::of(&c.file);
         let (want, speed) = if is_player && roam.moving {
-            if roam.running { ("run", roam.speed / RUN_CLIP_SPEED / stride) } else { ("walk", roam.speed / WALK_CLIP_SPEED / stride) }
+            gaits().pick(roam.speed, stride, c.playing.as_deref())
         } else {
             match look.act {
-                Act::Walk if !is_player => ("walk", 1.0),
+                Act::Walk if !is_player => gaits().pick(look.walk_speed, stride, c.playing.as_deref()),
                 Act::Talk if !is_player => ("talk", 1.0),
                 _ => ("idle", 1.0),
             }

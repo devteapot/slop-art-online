@@ -44,7 +44,8 @@ const LOT_FAR: f32 = 190.0;
 const LOT_DROP: f32 = 220.0;
 /// Building spawns per frame, so a window move doesn't hitch.
 const LOTS_PER_FRAME: usize = 6;
-/// Speeds (m/s) between clips: below `MOVING` idle (or talk), below `RUNNING` walk, else run.
+/// Speeds (m/s): below `MOVING` a body stands (idle or talk; above it `gait.rs` picks the clip),
+/// and above `RUNNING` you count as running (`Roam::running`).
 const MOVING: f32 = 0.3;
 const RUNNING: f32 = 3.3;
 /// A line counts as being spoken for this long (s).
@@ -131,7 +132,7 @@ pub struct Live {
 /// a hit or its death (`combat.rs`), played once.
 #[derive(Component)]
 pub struct LiveBody {
-    clip: &'static str,
+    pub clip: &'static str,
     rate: f32,
     action: Option<crate::combat::Action>,
 }
@@ -349,6 +350,9 @@ fn bodies(
                 (e, if body.kind == "wolf" { 0.9 } else { 1.4 }, false)
             };
             commands.entity(entity).insert(LiveBody { clip: "idle", rate: 1.0, action: None });
+            if mine {
+                commands.entity(entity).insert(crate::gait::Feet);
+            }
             live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person });
             live.heights.insert(id, height);
             continue;
@@ -359,24 +363,24 @@ fn bodies(
         let v = if v.is_finite() && v < 20.0 { v } else { 0.0 };
         s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp());
         let (speed, person) = (s.speed, s.person);
-        let Ok((mut tf, fitted, model, ch, mut lb)) = q.get_mut(s.entity) else { continue };
+        let Ok((mut tf, fitted, mut model, ch, mut lb)) = q.get_mut(s.entity) else { continue };
         tf.translation.x = p.x;
         tf.translation.z = p.y;
         if let Some(h) = h {
             tf.rotation = if person { Quat::from_rotation_y(yaw_of(Vec2::new(h.cos(), h.sin())) + PI) } else { Quat::from_rotation_y(-h) };
         }
-        match (fitted, model) {
+        match (fitted, model.as_mut()) {
             (Some(fit), _) => tf.translation.y = ground + fit.y_off,
-            (None, Some(mut m)) => m.ground_y = ground,
+            (None, Some(m)) => m.ground_y = ground,
             (None, None) => tf.translation.y = ground,
         }
+        // The gait and its rate from the displayed speed, so feet don't slide (`gait.rs`).
         let stride = ch.map_or(1.0, |c| c.stride);
         let (clip, rate) = if speed < MOVING {
             (if talking.contains(&id) { "talk" } else { "idle" }, 1.0)
-        } else if speed < RUNNING {
-            ("walk", speed / crate::lookdev::WALK_CLIP_SPEED / stride)
         } else {
-            ("run", speed / crate::lookdev::RUN_CLIP_SPEED / stride)
+            let file = model.as_ref().map_or("", |m| m.file.as_str());
+            crate::gait::of(file).pick(speed, stride, Some(lb.clip))
         };
         lb.clip = clip;
         lb.rate = rate;

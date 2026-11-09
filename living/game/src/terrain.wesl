@@ -1,7 +1,7 @@
 // The ground (terrain.rs): hand-painted detail layers multiplied into the vertex colours, lit by
 // the shared toon model (toon_light.wesl, as plain surfaces). Main pass only; the prepass and
 // shadows use Bevy's default shaders. `toon` holds the same parameters as the toon materials
-// (terrain.rs `sync`).
+// (terrain.rs `sync`). Blocking rock comes from the vertex colour's alpha and reads as cliff.
 
 import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
@@ -19,9 +19,9 @@ import living_game::toon_light::{
 // terrain.rs `GroundParams`.
 struct Ground {
     // Per layer, 1 / tile size (1/m), four layers per vector.
-    scale: array<vec4<f32>, 3>,
+    scale: array<vec4<f32>, 4>,
     // Per layer, detail strength.
-    amount: array<vec4<f32>, 3>,
+    amount: array<vec4<f32>, 4>,
     // x: full detail until (m), y: none from (m), z: macro variation, w: 1 on, 0 plain look.
     fade: vec4<f32>,
     // x: height-blend depth, y: N.y below which slopes turn to rock, z: N.y of all rock,
@@ -37,6 +37,16 @@ var layers: texture_2d_array<f32>;
 var layer_sampler: sampler;
 
 const ROCK: u32 = 6u;
+// Blocking rock (terrain.rs `Layer::Cliff`): its weight is the vertex alpha, not a blend weight.
+const CLIFF: u32 = 12u;
+const LAYERS: u32 = 13u;
+// terrain.rs `BLOCKED_ALPHA`: the vertex alpha where every tile round a vertex blocks.
+const BLOCKED_ALPHA: f32 = 0.5;
+// Cliff stone (linear; sRGB about 92, 86, 82), its strata's bed height (m), and the rim's
+// darkening where it meets walkable ground.
+const CLIFF_STONE: vec3<f32> = vec3<f32>(0.107, 0.093, 0.084);
+const CLIFF_BED: f32 = 1.7;
+const CLIFF_RIM: f32 = 0.45;
 
 struct GroundVertex {
     @builtin(instance_index) instance_index: u32,
@@ -155,21 +165,50 @@ fn fragment(g: GroundOut, @builtin(front_facing) is_front: bool) -> FragmentOutp
     let mh = noise2(p.xz / 61.0 + 5.0) - 0.5;
     albedo = albedo * (1.0 + on * ground.fade.z * (m - 0.5) * 2.0) * (vec3<f32>(1.0) + on * ground.fade.z * mh * vec3<f32>(0.8, 0.1, -1.0));
 
+    // Blocking rock: the share of blocking tiles round the vertex, its edge pushed about by noise
+    // so it doesn't follow the 1 m tiles' steps, then sharpened into a hard boundary at 0.5.
+    let blocked = clamp((1.0 - g.color.a) / (1.0 - BLOCKED_ALPHA), 0.0, 1.0);
+    var edge = 0.0;
+    if (blocked > 0.0) {
+        edge = blocked + (noise2(p.xz * 0.9) - 0.5) * 0.5 + (noise2(p.xz * 2.7 + 11.0) - 0.5) * 0.25;
+    }
+    let cliff = smoothstep(0.42, 0.58, edge);
+    if (blocked > 0.0) {
+        // Bedded stone on steep faces: a dark seam at the foot of every bed, alternate beds a shade
+        // darker, beds of uneven thickness tilting gently across the face. Flat tops show none
+        // (seen from above, even beds read as a map's contour lines). Shown at every distance.
+        let yw = p.y + 0.55 * sin(p.y * 0.83 + noise2(p.xz / 23.0) * 4.0);
+        let sy = yw / CLIFF_BED + noise2(p.xz / 11.0) * 1.2;
+        let bedded = 1.0 - smoothstep(0.62, 0.9, N.y);
+        let strata = mix(1.0, mix(0.76, 1.0, smoothstep(0.0, 0.16, fract(sy))) * mix(1.0, 0.9, step(0.5, fract(sy * 0.5))), bedded);
+        albedo = mix(albedo, mix(CLIFF_STONE, albedo * 0.55, 0.25) * strata, cliff);
+        // A dark rim along the boundary, on both sides of it.
+        let rim = smoothstep(0.30, 0.42, edge) * (1.0 - smoothstep(0.50, 0.64, edge));
+        albedo = albedo * (1.0 - CLIFF_RIM * rim);
+    }
+
     // Detail: the strongest four layers here, blended by their height channel.
     var height = 0.5;
     if (fade > 0.0) {
-        var w = array<f32, 12>(g.blend_a.x, g.blend_a.y, g.blend_a.z, g.blend_a.w, g.blend_b.x, g.blend_b.y, g.blend_b.z, g.blend_b.w, g.blend_c.x, g.blend_c.y, g.blend_c.z, g.blend_c.w);
+        var w = array<f32, 13>(g.blend_a.x, g.blend_a.y, g.blend_a.z, g.blend_a.w, g.blend_b.x, g.blend_b.y, g.blend_b.z, g.blend_b.w, g.blend_c.x, g.blend_c.y, g.blend_c.z, g.blend_c.w, 0.0);
         // Steep slopes show rock, whatever grows on the flat.
         let steep = 1.0 - smoothstep(ground.blend.z, ground.blend.y, N.y);
         if (steep > 0.0) {
-            for (var k = 0u; k < 12u; k = k + 1u) {
+            for (var k = 0u; k < CLIFF; k = k + 1u) {
                 w[k] = w[k] * (1.0 - steep);
             }
             w[ROCK] = w[ROCK] + steep;
         }
+        // Blocking rock replaces everything else.
+        if (cliff > 0.0) {
+            for (var k = 0u; k < CLIFF; k = k + 1u) {
+                w[k] = w[k] * (1.0 - cliff);
+            }
+            w[CLIFF] = cliff;
+        }
         var ids = array<u32, 4>(0u, 0u, 0u, 0u);
         var ws = array<f32, 4>(0.0, 0.0, 0.0, 0.0);
-        for (var k = 0u; k < 12u; k = k + 1u) {
+        for (var k = 0u; k < LAYERS; k = k + 1u) {
             let x = w[k];
             if (x > 0.02) {
                 var lo = 0u;

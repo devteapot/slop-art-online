@@ -20,7 +20,7 @@ use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
-use bevy_mod_outline::{OutlineStencil, OutlineVolume};
+use bevy_mod_outline::{OutlineMode, OutlineStencil, OutlineVolume};
 
 pub type Toon = ExtendedMaterial<StandardMaterial, ToonExt>;
 
@@ -395,6 +395,24 @@ impl Style {
 pub enum Outlined {
     Person,
     Thing,
+}
+
+/// The stencil of a scenery model (buildings, walls, trees, fences, props): written at its real
+/// depth, so it hides exactly the parts of character outlines behind it. bevy_mod_outline's
+/// default (flat) mode writes a stencil at its model's origin instead, so a wall, a canopy or a
+/// house corner hid an outline only where the model's origin was nearer than the character's.
+/// Ground keeps the flat stencil ([`ground_stencil`]).
+pub fn stencil() -> (OutlineStencil, OutlineMode) {
+    (OutlineStencil::default(), OutlineMode::ExtrudeReal)
+}
+
+/// The ground's stencil: flat, as before. Character outlines are flat planes through their feet,
+/// so a ground stencil at its real depth would cut the line under every sole (the ground just in
+/// front of the feet is nearer than that plane), and the library's plane offset can't lead them
+/// toward the camera for a turned model. So the ground hides no outline; a hill between you and
+/// a character is rare at the game camera's distances.
+pub fn ground_stencil() -> OutlineStencil {
+    OutlineStencil::default()
 }
 
 pub fn outline(kind: Outlined, style: &Style) -> (Outlined, OutlineVolume, OutlineStencil) {

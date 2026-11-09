@@ -14,6 +14,13 @@
 //! - `people=K`: K times the island's people per settlement;
 //! - `nodetail`: no painted detail on scenery models (style.rs); `detailonly=bark+leaves` keeps
 //!   it on only the surfaces named;
+//! - `nocutaway`: tall things between the camera and you stay drawn (photographing your
+//!   character behind a wall or a tree, as other people are seen);
+//! - `nobudget`: the island spawns a chunk's things as soon as their files have loaded, all in
+//!   one frame (island.rs `SPAWN_BUDGET`);
+//! - `hitch=MS`: every frame slower than MS milliseconds (default 30) is logged with what entered
+//!   the world in it and the two frames before: entities, meshes, models and characters spawned
+//!   and meshes converted to toon materials;
 //! - `diag`: every 2 s, Bevy's render diagnostics (per-pass CPU time; GPU time only where the
 //!   backend reports timestamps, so not on Metal) and what each view draws: meshes, distinct
 //!   meshes and materials, triangles, and the characters' share, for the camera and each
@@ -83,10 +90,54 @@ pub fn diagnostics(app: &mut App) {
     if let Some(n) = value("shadowmap") {
         app.insert_resource(bevy::light::DirectionalLightShadowMap { size: n as usize });
     }
+    if has("hitch") || value("hitch").is_some() {
+        app.add_systems(Last, log_hitches);
+    }
     if !has("diag") {
         return;
     }
     app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin).add_systems(Last, (log_diagnostics, log_views));
+}
+
+/// What entered the world in one frame: entities (net), meshes, models, characters, conversions.
+#[derive(Default, Clone, Copy)]
+struct Arrivals {
+    entities: i64,
+    meshes: usize,
+    models: usize,
+    characters: usize,
+    converted: usize,
+}
+
+/// `hitch`: frames slower than the threshold, with the arrivals of that frame and the two before.
+/// A frame's own cost shows in the next frame's delta, so the delta logged belongs to the frame
+/// before the one it is read in.
+#[allow(clippy::too_many_arguments)]
+fn log_hitches(
+    time: Res<bevy::time::Time<bevy::time::Real>>,
+    all: Query<()>,
+    meshes: Query<(), Added<Mesh3d>>,
+    models: Query<(), Added<crate::lookdev::Model>>,
+    characters: Query<(), Added<crate::characters::Character>>,
+    converted: Query<(), Added<crate::lookdev::Converted>>,
+    roam: Res<crate::envs::Roam>,
+    mut last: Local<(i64, [Arrivals; 3])>,
+) {
+    let n = all.iter().count() as i64;
+    let now = Arrivals { entities: n - last.0, meshes: meshes.iter().count(), models: models.iter().count(), characters: characters.iter().count(), converted: converted.iter().count() };
+    last.0 = n;
+    let ms = time.delta_secs() * 1000.0;
+    if ms > value("hitch").unwrap_or(30.0) {
+        let [a, b, _] = last.1;
+        info!("hitch: {ms:.1} ms at ({:.0}, {:.0}); this frame {now:?}; before {a:?}; two before {b:?}", roam.pos.x, roam.pos.y);
+    }
+    last.1 = [now, last.1[0], last.1[1]];
+}
+
+impl std::fmt::Debug for Arrivals {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:+} entities, {} meshes, {} models, {} characters, {} converted", self.entities, self.meshes, self.models, self.characters, self.converted)
+    }
 }
 
 fn log_diagnostics(store: Res<bevy::diagnostic::DiagnosticsStore>, time: Res<Time>, mut since: Local<f32>) {

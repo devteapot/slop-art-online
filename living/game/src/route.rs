@@ -74,11 +74,11 @@ fn env_f(k: &str, d: f32) -> f32 {
 
 fn speed_of(s: &str) -> f32 {
     match s {
-        "run" => crate::lookdev::RUN_CLIP_SPEED,
+        "run" => crate::lookdev::RUN_SPEED,
         "rules-walk" => 2.6,
         "rules-run" => 3.9,
-        "walk" | "" => crate::lookdev::WALK_CLIP_SPEED,
-        n => n.parse().unwrap_or(crate::lookdev::WALK_CLIP_SPEED),
+        "walk" | "" => crate::lookdev::WALK_SPEED,
+        n => n.parse().unwrap_or(crate::lookdev::WALK_SPEED),
     }
 }
 

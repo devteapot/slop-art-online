@@ -36,7 +36,6 @@ use crate::world::{rgb, MeshBuf, Palette};
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
-use bevy_mod_outline::OutlineStencil;
 use std::path::{Path, PathBuf};
 
 pub fn enabled() -> bool {
@@ -256,7 +255,7 @@ pub fn setup(
             g.quad([Vec3::new(x, 0.0, z), Vec3::new(x, 0.0, z + 1.0), Vec3::new(x + 1.0, 0.0, z + 1.0), Vec3::new(x + 1.0, 0.0, z)], c);
         }
     }
-    commands.spawn((Mesh3d(meshes.add(g.build())), MeshMaterial3d(palette.vertex.clone()), Transform::default(), OutlineStencil::default()));
+    commands.spawn((Mesh3d(meshes.add(g.build())), MeshMaterial3d(palette.vertex.clone()), Transform::default(), crate::style::ground_stencil()));
     for (index, token) in files.iter().enumerate() {
         let recipe = token.strip_prefix("recipe:").map(|r| {
             crate::characters::Recipe::parse(r).unwrap_or_else(|| {

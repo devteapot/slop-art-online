@@ -20,6 +20,7 @@ mod controls;
 mod daylight;
 mod demo;
 mod envs;
+mod gait;
 mod hud;
 mod island;
 mod live;
@@ -76,6 +77,7 @@ fn main() {
         .add_plugins(style::StylePlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(characters::CharactersPlugin)
+        .add_plugins(gait::GaitPlugin)
         .add_plugins(daylight::DaylightPlugin)
         .add_plugins(terrain::TerrainPlugin)
         .add_systems(PostUpdate, post::update)

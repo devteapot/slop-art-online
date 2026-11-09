@@ -11,6 +11,12 @@
 //!   per layer, from the terrain class and region under the vertex (blended over about 25 m like
 //!   the colours, with crisp roads). The shader samples only the few layers with weight, blends
 //!   them by the textures' height channel, and samples cliffs from three sides (triplanar).
+//! - **Blocking rock** (the rules' `Terrain::Rock`, which walkers cannot cross) reads as cliff:
+//!   the vertex colour's alpha carries the share of blocking tiles round each vertex
+//!   ([`BLOCKED_ALPHA`]), and the shader turns it, sharpened and broken up by noise, into dark
+//!   bedded stone ([`Layer::Cliff`]) with strata by height and a dark rim where it meets walkable
+//!   ground. Colour, strata and rim show at every distance; only the texture fades. Walkable
+//!   steep slopes keep the lighter `rock` layer.
 //! - **Calm at range:** the detail fades to the plain vertex colour between `FADE` metres, and a
 //!   macro layer of slow noise varies value and hue so neither the near nor the far ground tiles.
 //!
@@ -53,11 +59,23 @@ pub enum Layer {
     SpiritMoss,
     /// A cyberpunk town's large square panels.
     Pavers,
+    /// Rock that blocks walking (the rules' `Terrain::Rock`), from the vertex colour's alpha
+    /// ([`BLOCKED_ALPHA`]), not from the blend weights.
+    Cliff,
 }
 
-pub const LAYERS: usize = 12;
+pub const LAYERS: usize = 13;
 /// The layers' names in `ground.txt` (paint.py `GROUND`), in [`Layer`] order.
-const NAMES: [&str; LAYERS] = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers"];
+const NAMES: [&str; LAYERS] = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers", "cliff"];
+/// Weighted layers: three `Unorm8x4` attributes. [`Layer::Cliff`] is the vertex alpha instead.
+const WEIGHTED: usize = 12;
+// The cliff is the last layer, after every weighted one (`terrain.wesl` `CLIFF`).
+const _: () = assert!(Layer::Cliff as usize == WEIGHTED && WEIGHTED + 1 == LAYERS);
+
+/// A ground vertex's colour alpha where every tile round it blocks walking; 1 where none does.
+/// It stays at or above 0.5, which the toon material reads as "no painted surface" (the
+/// `noterrain` comparison draws the same meshes with it).
+pub const BLOCKED_ALPHA: f32 = 0.5;
 
 /// Per layer: tile size (m) and detail strength (how far its factors depart from 1).
 const TILE: [(f32, f32); LAYERS] = [
@@ -73,6 +91,7 @@ const TILE: [(f32, f32); LAYERS] = [
     (4.5, 0.9),  // mud
     (4.0, 1.0),  // spirit moss
     (6.0, 1.0),  // pavers
+    (6.5, 1.0),  // cliff
 ];
 
 /// Detail at full strength up to the first distance (m), gone by the second.
@@ -87,17 +106,20 @@ pub const ATTRIBUTE_BLEND: [MeshVertexAttribute; 3] = [
 
 /// Per-vertex layer weights, accumulated from samples and quantised for the mesh.
 #[derive(Clone, Copy, Default, Debug)]
-pub struct Blend(pub [f32; LAYERS]);
+pub struct Blend(pub [f32; WEIGHTED]);
 
 impl Blend {
     pub fn one(layer: Layer) -> Self {
         let mut b = Self::default();
-        b.0[layer as usize] = 1.0;
+        b.add(layer, 1.0);
         b
     }
 
+    /// Cliff takes no weight: it comes from the blocking tiles (vertex alpha).
     pub fn add(&mut self, layer: Layer, w: f32) {
-        self.0[layer as usize] += w;
+        if let Some(x) = self.0.get_mut(layer as usize) {
+            *x += w;
+        }
     }
 
     /// Normalised and packed into the three attributes' bytes.
@@ -134,10 +156,10 @@ pub fn disc_layer(env: &str, surface: &str) -> Layer {
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct GroundParams {
-    /// Per layer, 1 / tile size (1/m): layers 0–3, 4–7, 8–11.
-    pub scale: [Vec4; 3],
+    /// Per layer, 1 / tile size (1/m): layers 0–3, 4–7, 8–11, 12.
+    pub scale: [Vec4; 4],
     /// Per layer, detail strength.
-    pub amount: [Vec4; 3],
+    pub amount: [Vec4; 4],
     /// x: full detail until (m), y: none from (m), z: macro variation strength, w: on (1) or
     /// the plain look (0, detail off).
     pub fade: Vec4,
@@ -148,8 +170,8 @@ pub struct GroundParams {
 
 impl Default for GroundParams {
     fn default() -> Self {
-        let mut scale = [Vec4::ZERO; 3];
-        let mut amount = [Vec4::ZERO; 3];
+        let mut scale = [Vec4::ZERO; 4];
+        let mut amount = [Vec4::ZERO; 4];
         for (k, (tile, a)) in TILE.iter().enumerate() {
             scale[k / 4][k % 4] = 1.0 / tile;
             amount[k / 4][k % 4] = *a;

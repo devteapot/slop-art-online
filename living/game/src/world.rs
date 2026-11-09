@@ -9,7 +9,7 @@
 
 use crate::net::Net;
 use crate::style::{outline, Outlined, Style, Toon};
-use bevy_mod_outline::{OutlineMeshExt, OutlineStencil};
+use bevy_mod_outline::OutlineMeshExt;
 use crate::sync::{ServerClock, Tracks};
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -432,7 +432,7 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
         }
     }
     // Ground, props and trees are outline stencils: they hide outlines behind them.
-    let mut entities = vec![commands.spawn((Mesh3d(meshes.add(mesh.build())), MeshMaterial3d(palette.terrain.clone()), Transform::default(), OutlineStencil::default())).id()];
+    let mut entities = vec![commands.spawn((Mesh3d(meshes.add(mesh.build())), MeshMaterial3d(palette.terrain.clone()), Transform::default(), crate::style::ground_stencil())).id()];
 
     let mut props = MeshBuf::default();
     let mut water = false;
@@ -451,7 +451,7 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
                     let size = 4.0 + 2.5 * hash(tx + 7, ty + 3);
                     let broad = hash(tx + 1, ty + 9) < 0.3;
                     let tf = Transform::from_translation(p).with_rotation(Quat::from_rotation_y(v * 37.0)).with_scale(Vec3::splat(size));
-                    entities.push(commands.spawn((Tree, Mesh3d(palette.trees[broad as usize].clone()), MeshMaterial3d(palette.tree.clone()), tf, OutlineStencil::default())).id());
+                    entities.push(commands.spawn((Tree, Mesh3d(palette.trees[broad as usize].clone()), MeshMaterial3d(palette.tree.clone()), tf, crate::style::stencil())).id());
                 }
                 Terrain::Forest if v < 0.45 => {
                     let r = 0.35 + 0.45 * hash(tx + 5, ty + 2);
@@ -478,7 +478,7 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
         }
     }
     if !props.is_empty() {
-        entities.push(commands.spawn((Mesh3d(meshes.add(props.build())), MeshMaterial3d(palette.terrain.clone()), Transform::default(), OutlineStencil::default())).id());
+        entities.push(commands.spawn((Mesh3d(meshes.add(props.build())), MeshMaterial3d(palette.terrain.clone()), Transform::default(), crate::style::stencil())).id());
     }
     if water {
         let (w, h) = (tiles_w as f32, tiles_h as f32);
@@ -567,7 +567,7 @@ pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<S
         let at = scene.at3(x, y);
         let turn = Quat::from_rotation_y(hash(x.to_bits(), y.to_bits()) * 6.28);
         let e = commands
-            .spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at).with_rotation(turn).with_scale(Vec3::splat(fill)), OutlineStencil::default()))
+            .spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at).with_rotation(turn).with_scale(Vec3::splat(fill)), crate::style::stencil()))
             .id();
         // Outlines on structures only; small resources stay unlined so the scene stays calm.
         if key.0 == 1 {

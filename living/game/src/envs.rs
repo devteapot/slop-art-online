@@ -32,7 +32,7 @@ use crate::style::{outline, Outlined, Style};
 use crate::world::{hash, rgb, scale, MeshBuf, Palette};
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
-use bevy_mod_outline::{OutlineMeshExt, OutlineStencil};
+use bevy_mod_outline::OutlineMeshExt;
 use serde::Deserialize;
 use std::f32::consts::{PI, TAU};
 
@@ -435,6 +435,9 @@ pub(crate) fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: us
 /// Hide tall things that stand between the camera and you, or close to you on the camera's side.
 pub fn cutaway(target: Res<crate::controls::Target>, cam: Query<&Transform, (With<Camera3d>, Without<Occluder>)>, mut q: Query<(&Transform, &Occluder, &mut Visibility, Option<&Model>, Option<&Fitted>)>) {
     let (Some(me), Ok(cam)) = (target.0, cam.single()) else { return };
+    if crate::perf::has("nocutaway") {
+        return;
+    }
     let head = me + Vec3::Y * 1.6;
     let (a, ab) = (cam.translation, head - cam.translation);
     let len2 = ab.length_squared().max(1e-4);
@@ -548,7 +551,7 @@ pub fn switch(
     let blend = crate::terrain::Blend::one(crate::terrain::disc_layer(&def.id, &g.surface));
     let count = disc.count_vertices();
     crate::terrain::insert_blend(&mut disc, &vec![blend; count]);
-    commands.spawn((EnvPart, Mesh3d(meshes.add(disc)), MeshMaterial3d(ground_mat.0.clone()), Transform::default(), OutlineStencil::default()));
+    commands.spawn((EnvPart, Mesh3d(meshes.add(disc)), MeshMaterial3d(ground_mat.0.clone()), Transform::default(), crate::style::ground_stencil()));
     // Slots: real models where the folders have them, placeholders otherwise.
     let mut taken: Vec<(Vec2, f32)> = vec![(Vec2::ZERO, 2.0)];
     let limit = r - 1.0;
@@ -612,7 +615,7 @@ pub fn switch(
                 })
                 .clone();
             let tf = Transform::from_translation(at).with_rotation(Quat::from_rotation_y(pl.yaw)).with_scale(Vec3::splat(pl.height));
-            let mut e = commands.spawn((EnvPart, Mesh3d(body), MeshMaterial3d(palette.vertex.clone()), tf, OutlineStencil::default()));
+            let mut e = commands.spawn((EnvPart, Mesh3d(body), MeshMaterial3d(palette.vertex.clone()), tf, crate::style::stencil()));
             if pl.height >= 3.0 {
                 e.insert(Occluder { height: pl.height });
             }
@@ -680,7 +683,7 @@ pub fn walk(
     input.moving = roam.moving;
     if roam.moving {
         // Walking and running at the speeds the authored clips were made for.
-        let speed = route.as_ref().and_then(|r| r.0).map_or(if run { crate::lookdev::RUN_CLIP_SPEED } else { crate::lookdev::WALK_CLIP_SPEED }, |r| r.2);
+        let speed = route.as_ref().and_then(|r| r.0).map_or(if run { crate::lookdev::RUN_SPEED } else { crate::lookdev::WALK_SPEED }, |r| r.2);
         roam.speed = speed;
         match &island {
             // On the island, water and rock stop you; slide along them.

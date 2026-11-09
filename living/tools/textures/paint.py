@@ -27,7 +27,8 @@ The data is linear: load it with sRGB off.
 Sets:
 - `ground` (the terrain material, `living/game/src/terrain.rs`; layer order is the `Layer` enum
   there): grass, lush_grass, dry_grass, forest_floor, dirt, sand, rock, cobble, flagstone, mud,
-  spirit_moss, pavers (a cyberpunk town's large square panels).
+  spirit_moss, pavers (a cyberpunk town's large square panels), cliff (the rock that blocks walking:
+  bedded slabs with deep joints, darker and harder than the walkable slopes' rock).
 - `material` (scenery models through the toon shader, `living/game/src/style.rs`; layer order is
   `surfaces.py`'s SURFACES, which the Blender generators tag each part with): bark, leaves, wood
   (beams and posts), planks, plaster, stone (ashlar), boulder (natural rock), brick, shingles, tiles (clay barrel
@@ -49,14 +50,14 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
-GROUND = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers"]
+GROUND = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers", "cliff"]
 from surfaces import SURFACES as MATERIAL
 
 # Typical vertex colours (sRGB), only for the preview sheet.
 TINT = {
     "grass": (112, 160, 74), "lush_grass": (96, 140, 70), "dry_grass": (150, 150, 96), "forest_floor": (80, 118, 62),
     "dirt": (132, 112, 80), "sand": (214, 196, 146), "rock": (128, 122, 116), "cobble": (178, 160, 120),
-    "flagstone": (176, 160, 128), "mud": (100, 104, 80), "spirit_moss": (52, 92, 100), "pavers": (60, 62, 72),
+    "flagstone": (176, 160, 128), "mud": (100, 104, 80), "spirit_moss": (52, 92, 100), "pavers": (60, 62, 72), "cliff": (86, 80, 76),
     "bark": (110, 84, 62), "planks": (150, 112, 74), "plaster": (220, 210, 190), "stone": (150, 144, 134),
     "brick": (160, 84, 62), "shingles": (120, 70, 60), "metal": (120, 126, 130), "leaves": (90, 140, 70),
     "boulder": (128, 122, 116), "wood": (110, 76, 52), "tiles": (190, 92, 62), "thatch": (190, 160, 100), "copper": (90, 160, 140),
@@ -318,6 +319,40 @@ def rock(p: Painter):
         x, y = p.rng.random(2) * n
         p.blob(x, y, n / 512 * p.rng.uniform(3, 8), c(0.56, 0.58, 0.5), alpha=0.4, soft=0.7)
     p.h = np.clip(0.3 + 0.7 * np.clip(edge * n / 10, 0, 1) + 0.15 * (face - 1), 0, 1)
+
+
+def cliff(p: Painter):
+    """Blocking rock (the terrain shader adds its dark colour, height strata and edge): broken
+    facets stretched along uneven bedding planes that run across the tile (horizontal in the
+    side projections), deep joints, a crack network and weathering streaks down the face."""
+    n = p.n
+    # Bedding: wavy seams of uneven spacing.
+    warp = 0.035 * np.sin(2 * math.pi * (p.u + 0.3 * p.noise(2))) + 0.03 * (p.noise(4, 2) - 0.5)
+    v = (p.v + warp) % 1.0
+    cuts = np.sort(p.rng.random(5))
+    dist = np.min([np.abs((v - c + 0.5) % 1.0 - 0.5) for c in cuts], axis=0)
+    seam = np.clip(1.0 - dist * n / 4.0, 0, 1)
+    lip = np.clip(1.0 - np.abs(dist * n - 6.0) / 3.0, 0, 1)
+    # Facets stretched along the beds.
+    pts = p.rng.random((34, 2))
+    idx, d, edge = p.voronoi(pts, aniso=(1.0, 2.6))
+    vals = p.rng.uniform(0.76, 1.24, len(pts)).astype(np.float32)
+    ang = p.rng.uniform(0, 6.28, len(pts))
+    wx = (p.u - pts[idx, 0] + 0.5) % 1.0 - 0.5
+    wy = (p.v - pts[idx, 1] + 0.5) % 1.0 - 0.5
+    face = vals[idx] + 1.1 * (np.cos(ang)[idx] * wx + np.sin(ang)[idx] * wy)
+    p.tone(p.blur(face, 1.0), hue=(1.03, 1.0, 0.96))
+    p.tone(1.0 - 0.42 * seam + 0.1 * lip, hue=(0.95, 0.97, 1.06))
+    joint = np.clip(1.0 - edge * n / 3.0, 0, 1)
+    p.tone(1.0 - 0.38 * joint, hue=(0.95, 0.97, 1.06))
+    _, _, fine = p.voronoi(p.rng.random((70, 2)))
+    crack = np.clip(1.0 - fine * n / 1.3, 0, 1) * np.clip((p.noise(5) - 0.4) * 6, 0, 1)
+    p.tone(1.0 - 0.28 * crack)
+    # Weathering streaks running down the face.
+    streak = p.blur(p.rng.random((n, n)).astype(np.float32), 1.5)
+    streak = np.mean([np.roll(streak, k, axis=0) for k in range(0, 64, 4)], axis=0)
+    p.tone(0.94 + 0.12 * p.posterise(streak, 3, 2.0))
+    p.h = np.clip(0.25 + 0.6 * np.clip(edge * n / 8, 0, 1) * (1 - seam) + 0.15 * (face - 1), 0, 1)
 
 
 def masonry(p: Painter, rows: int, widths: tuple[float, float], gap_px: float, round_px: float, bevel_px: float, var: float, mortar=(0.32, 0.31, 0.30), hue=(1.0, 1.0, 1.0), bond: float | None = None, wobble: float = 0.004, split: float = 0.0):
@@ -689,6 +724,7 @@ PAINT = {
     "mud": mud,
     "spirit_moss": spirit_moss,
     "pavers": pavers,
+    "cliff": cliff,
     "bark": bark,
     "planks": planks,
     "plaster": plaster,
@@ -708,7 +744,7 @@ PAINT = {
 }
 
 # How far each texture's luminance spreads (the narrow band), by kind.
-SPREAD = {"pavers": 0.06, "spirit_moss": 0.085, "sand": 0.045, "plaster": 0.05, "metal": 0.05, "mud": 0.07, "cobble": 0.09, "flagstone": 0.08, "rock": 0.09, "brick": 0.09, "shingles": 0.09,
+SPREAD = {"cliff": 0.13, "pavers": 0.06, "spirit_moss": 0.085, "sand": 0.045, "plaster": 0.05, "metal": 0.05, "mud": 0.07, "cobble": 0.09, "flagstone": 0.08, "rock": 0.09, "brick": 0.09, "shingles": 0.09,
           "boulder": 0.08, "wood": 0.07, "tiles": 0.09, "thatch": 0.085, "copper": 0.065, "concrete": 0.06, "cloth": 0.05, "glass": 0.07}
 
 
