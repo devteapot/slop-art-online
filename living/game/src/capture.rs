@@ -1,7 +1,7 @@
-//! Photographs for scripted runs (asset view batches, environment tours). Batch runs are headless
-//! by default: no window opens; the camera renders into an image of `LIVING_GAME_SIZE` (default
-//! 1600x900) and photographs are read back from it. `LIVING_GAME_WINDOW=1` shows the window
-//! instead.
+//! Photographs for scripted runs (asset view batches, environment tours, connected scripts in
+//! `live.rs`). Batch runs are headless by default: no window opens; the camera renders into an
+//! image of `LIVING_GAME_SIZE` (default 1600x900) and photographs are read back from it.
+//! `LIVING_GAME_WINDOW=1` shows the window instead.
 
 use bevy::camera::RenderTarget;
 use bevy::prelude::*;
@@ -12,7 +12,7 @@ use std::path::PathBuf;
 /// Whether this run is a script with no one watching (it writes photographs and quits).
 pub fn scripted() -> bool {
     let set = |k: &str| std::env::var(k).is_ok_and(|v| !v.is_empty());
-    (crate::view::enabled() && set("LIVING_GAME_VIEW_OUT")) || (crate::lookdev::enabled() && set("LIVING_GAME_TOUR"))
+    (crate::view::enabled() && set("LIVING_GAME_VIEW_OUT")) || (crate::lookdev::enabled() && set("LIVING_GAME_TOUR")) || crate::live::scripted()
 }
 
 pub fn headless() -> bool {

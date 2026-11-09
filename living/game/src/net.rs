@@ -1,28 +1,58 @@
 //! Player connection: a persistent identity (token kept on disk), the player's own rows and a
 //! moving window of world chunks around the player.
 //!
-//! Subscriptions follow the region-based design in the SpacetimeDB views/subscriptions docs:
-//! world rows are subscribed by 16×16-tile chunk (`body`, `resource_node` and `structure`
-//! are indexed by `chunk`), and the next window is subscribed before the previous one is
-//! dropped. Fog of war is NOT enforced: the authority still publishes these tables to anyone,
-//! and `character` and `terrain_chunk` are subscribed whole (see docs/GAME_BRIEF.md).
+//! Subscriptions follow the SpacetimeDB subscription guidance (docs/ISLAND_AUTHORITY.md,
+//! "SpacetimeDB documentation consulted"): small static tables whole, everything else by a
+//! window of 16×16-tile chunks around the player, grouped by lifetime, and the next window
+//! subscribed before the previous one is dropped. Fog of war is NOT enforced: the authority
+//! still publishes these tables to anyone (docs/GAME_BRIEF.md).
+//!
+//! 1. On connect: `world`, `land` and `settlement` (1, 1 and about 6 rows).
+//! 2. Then by the world's kind ([`Mode`]):
+//!    - **land** (a `land` row exists; the island): my characters (`character.controller =
+//!      :sender`, indexed). Terrain comes from regenerating the land (`live.rs`), so
+//!      `terrain_chunk` is only subscribed in the window, for edits.
+//!    - **tiles** (the lab worlds): `terrain_chunk` and `character` whole, as before.
+//! 3. My rows: `body`, `vitals`, `experience` and `place` of my character.
+//! 4. Windows round me:
+//!    - land, near: `body` and the characters on those bodies (a join on `body.id`) within
+//!      [`BODY_CHUNKS`], and `terrain_chunk` within [`TERRAIN_CHUNKS`] (only edits since world
+//!      creation matter there), re-centred when I walk [`RECENTRE`] chunks from its centre;
+//!    - land, far: `lot` within [`LOT_CHUNKS`] (buildings show to the island's draw distance),
+//!      re-centred after [`LOT_RECENTRE`] chunks. Lots never change, so this window has its own,
+//!      longer lifetime: re-sending it with every near move cost about 130 kB a move.
+//!
+//!    Subscription SQL has no `IN`, so a window is one id range per row of chunks (`id = (cy <<
+//!    16) | cx`), joined by `OR`;
+//!    - tiles: `body`, `resource_node` and `structure` per chunk within [`REGION_R`].
 
 use bevy::prelude::*;
 use living_bindings::*;
+use living_rules::map::{chunk_id, chunk_xy, CHUNK};
 use spacetimedb_sdk::{DbContext, Identity, SubscriptionHandle as _, Table, TableWithPrimaryKey};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-/// Half-size (tiles) of the square of chunks kept subscribed around the player.
+/// Half-size (tiles) of the square of chunks kept subscribed around the player (tile worlds).
 pub const REGION_R: f32 = 40.0;
+/// Land worlds: chunks each side of the window's centre for bodies, their characters and
+/// terrain edits (5 → an 11 × 11 square, ±88 m), and for lots (11 → 23 × 23, ±184 m, past the
+/// island's 170 m draw distance).
+pub const BODY_CHUNKS: i32 = 5;
+pub const TERRAIN_CHUNKS: i32 = 3;
+pub const LOT_CHUNKS: i32 = 11;
+/// Re-centre a window once I am this many chunks from its centre (either axis).
+pub const RECENTRE: i32 = 2;
+pub const LOT_RECENTRE: i32 = 5;
 
-const STATIC: &[&str] = &["SELECT * FROM world", "SELECT * FROM terrain_chunk", "SELECT * FROM character"];
+const STATIC: &[&str] = &["SELECT * FROM world", "SELECT * FROM land", "SELECT * FROM settlement"];
 
 enum Signal {
     Connection(Result<DbConnection, String>),
     Identity(Identity, String),
-    Applied,
+    Static,
+    Base,
     Disconnected(String),
     Error(String),
 }
@@ -35,9 +65,60 @@ pub enum Status {
     Offline,
 }
 
+/// The two windows of a land world.
+#[derive(Clone, Copy)]
+enum Which {
+    Near,
+    Lots,
+}
+
+/// What kind of world the server hosts, known once the static tables are in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Mode {
+    #[default]
+    Unknown,
+    /// A land world (`land` row): the island, drawn by `island.rs` and `live.rs`.
+    Land,
+    /// A tile world (lab seeds): drawn by `world.rs` and `bodies.rs`.
+    Tiles,
+}
+
 struct Sub {
     key: Vec<u32>,
     handle: SubscriptionHandle,
+}
+
+/// A moving window: the subscription in place and the one replacing it. The next is subscribed
+/// before the current is dropped (SpacetimeDB subscription guidance).
+#[derive(Default)]
+struct Window {
+    current: Option<Sub>,
+    next: Option<Sub>,
+}
+
+impl Window {
+    /// The window subscribed or being subscribed.
+    fn wanted(&self) -> Option<&Vec<u32>> {
+        self.next.as_ref().or(self.current.as_ref()).map(|s| &s.key)
+    }
+
+    /// A newer window replaces one still being applied.
+    fn replace(&mut self, next: Option<Sub>) {
+        if let Some(old) = self.next.take() {
+            let _ = old.handle.unsubscribe();
+        }
+        self.next = next;
+    }
+
+    /// Drop the previous window only once the next one is in.
+    fn settle(&mut self) {
+        if self.next.as_ref().is_some_and(|s| s.handle.is_active()) {
+            if let Some(old) = self.current.take() {
+                let _ = old.handle.unsubscribe();
+            }
+            self.current = self.next.take();
+        }
+    }
 }
 
 pub struct Net {
@@ -46,6 +127,7 @@ pub struct Net {
     pub name: String,
     pub conn: Option<DbConnection>,
     pub status: Status,
+    pub mode: Mode,
     pub detail: String,
     pub me: Option<Identity>,
     /// My living character, once the authority has one for my identity.
@@ -53,13 +135,16 @@ pub struct Net {
     pub errors: Arc<Mutex<Vec<String>>>,
     /// Latest `t_ms` among body rows updated since the display clock last looked.
     pub body_t: Arc<AtomicU64>,
+    /// Window moves (re-subscriptions) since connecting, for measurements.
+    pub window_moves: u32,
     inbox: Arc<Mutex<Vec<Signal>>>,
     connecting: bool,
     retry_at: f64,
     join_sent: bool,
+    base: Option<SubscriptionHandle>,
     mine: Option<Sub>,
-    region: Option<Sub>,
-    region_next: Option<Sub>,
+    near: Window,
+    far: Window,
 }
 
 impl Default for Net {
@@ -72,18 +157,21 @@ impl Default for Net {
             name,
             conn: None,
             status: Status::Connecting,
+            mode: Mode::Unknown,
             detail: String::new(),
             me: None,
             my_id: None,
             errors: Arc::default(),
             body_t: Arc::default(),
+            window_moves: 0,
             inbox: Arc::default(),
             connecting: false,
             retry_at: 0.0,
             join_sent: false,
+            base: None,
             mine: None,
-            region: None,
-            region_next: None,
+            near: Window::default(),
+            far: Window::default(),
         }
     }
 }
@@ -94,6 +182,12 @@ fn token_path(db: &str) -> PathBuf {
     std::env::var("LIVING_GAME_TOKEN")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(format!(".local/living/game/{db}.token")))
+}
+
+/// `(col >= a AND col <= b) OR …`: one id range per row of chunks of the square `cx0..=cx1` ×
+/// `cy0..=cy1` (chunk ids are `(cy << 16) | cx`, so a row is contiguous).
+pub fn chunk_ranges(col: &str, (cx0, cx1): (u32, u32), (cy0, cy1): (u32, u32)) -> String {
+    (cy0..=cy1).map(|cy| format!("({col} >= {} AND {col} <= {})", chunk_id(cx0, cy), chunk_id(cx1, cy))).collect::<Vec<_>>().join(" OR ")
 }
 
 impl Net {
@@ -136,7 +230,7 @@ impl Net {
                 let ok = applied.clone();
                 let err = applied.clone();
                 conn.subscription_builder()
-                    .on_applied(move |_| ok.lock().unwrap().push(Signal::Applied))
+                    .on_applied(move |_| ok.lock().unwrap().push(Signal::Static))
                     .on_error(move |_, e| err.lock().unwrap().push(Signal::Error(format!("subscription error: {e}"))))
                     .subscribe(STATIC);
             })
@@ -149,6 +243,24 @@ impl Net {
             let r = builder.build().map_err(|e| e.to_string());
             inbox.lock().unwrap().push(Signal::Connection(r));
         });
+    }
+
+    /// The static tables are in: pick the mode and subscribe what it needs before playing.
+    fn subscribe_base(&mut self) {
+        let Some(conn) = self.conn.as_ref() else { return };
+        self.mode = if conn.db.land().count() > 0 { Mode::Land } else { Mode::Tiles };
+        let queries: &[&str] = match self.mode {
+            Mode::Land => &["SELECT * FROM character WHERE controller = :sender"],
+            _ => &["SELECT * FROM terrain_chunk", "SELECT * FROM character"],
+        };
+        info!("world kind: {:?}", self.mode);
+        let (ok, err) = (self.inbox.clone(), self.inbox.clone());
+        self.base = Some(
+            conn.subscription_builder()
+                .on_applied(move |_| ok.lock().unwrap().push(Signal::Base))
+                .on_error(move |_, e| err.lock().unwrap().push(Signal::Error(format!("subscription error: {e}"))))
+                .subscribe(queries),
+        );
     }
 
     fn subscribe(&self, queries: Vec<String>, key: Vec<u32>) -> Option<Sub> {
@@ -171,6 +283,11 @@ impl Net {
         self.conn.as_ref()?.db.body().id().find(&self.my_id?)
     }
 
+    /// The land world's row, if this is one.
+    pub fn land(&self) -> Option<LandInfo> {
+        self.conn.as_ref()?.db.land().iter().next()
+    }
+
     /// Keep my own rows and the chunk window around me subscribed.
     fn maintain(&mut self) {
         if self.status != Status::Live {
@@ -188,8 +305,8 @@ impl Net {
         if found != self.my_id {
             self.my_id = found;
             self.mine = None;
-            self.region = None;
-            self.region_next = None;
+            self.near = Window::default();
+            self.far = Window::default();
             if let Some(id) = found {
                 info!("playing character #{id}");
                 let q = vec![
@@ -203,36 +320,77 @@ impl Net {
             }
         }
         let Some(body) = self.my_body() else { return };
+        let (near, far) = match self.mode {
+            Mode::Land => (self.land_window(&body, Which::Near), self.land_window(&body, Which::Lots)),
+            _ => (self.tile_window(&body), None),
+        };
+        if let Some((key, q)) = near {
+            self.window_moves += 1;
+            let sub = self.subscribe(q, key);
+            self.near.replace(sub);
+        }
+        if let Some((key, q)) = far {
+            let sub = self.subscribe(q, key);
+            self.far.replace(sub);
+        }
+        self.near.settle();
+        self.far.settle();
+    }
+
+    /// Tile worlds: one query per chunk and table, when the set of chunks changes.
+    fn tile_window(&self, body: &Body) -> Option<(Vec<u32>, Vec<String>)> {
         let (w, h) = self.map_size();
         let mut chunks: Vec<u32> = living_rules::map::chunks_around(body.x, body.y, REGION_R)
             .into_iter()
             .filter(|c| {
-                let (cx, cy) = living_rules::map::chunk_xy(*c);
-                cx * living_rules::map::CHUNK < w && cy * living_rules::map::CHUNK < h
+                let (cx, cy) = chunk_xy(*c);
+                cx * CHUNK < w && cy * CHUNK < h
             })
             .collect();
         chunks.sort_unstable();
-        let wanted = self.region_next.as_ref().or(self.region.as_ref()).map(|s| &s.key);
-        if wanted != Some(&chunks) {
-            let mut q = Vec::with_capacity(chunks.len() * 3);
-            for c in &chunks {
-                q.push(format!("SELECT * FROM body WHERE chunk = {c}"));
-                q.push(format!("SELECT * FROM resource_node WHERE chunk = {c}"));
-                q.push(format!("SELECT * FROM structure WHERE chunk = {c}"));
-            }
-            // A newer window replaces one still being applied.
-            if let Some(old) = self.region_next.take() {
-                let _ = old.handle.unsubscribe();
-            }
-            self.region_next = self.subscribe(q, chunks);
+        if self.near.wanted() == Some(&chunks) {
+            return None;
         }
-        // Drop the previous window only once the next one is in.
-        if self.region_next.as_ref().is_some_and(|s| s.handle.is_active()) {
-            if let Some(old) = self.region.take() {
-                let _ = old.handle.unsubscribe();
-            }
-            self.region = self.region_next.take();
+        let mut q = Vec::with_capacity(chunks.len() * 3);
+        for c in &chunks {
+            q.push(format!("SELECT * FROM body WHERE chunk = {c}"));
+            q.push(format!("SELECT * FROM resource_node WHERE chunk = {c}"));
+            q.push(format!("SELECT * FROM structure WHERE chunk = {c}"));
         }
+        Some((chunks, q))
+    }
+
+    /// Land worlds: a square window of chunk ranges around a centre chunk, kept until I am
+    /// far enough from it. The key is the centre chunk.
+    fn land_window(&self, body: &Body, which: Which) -> Option<(Vec<u32>, Vec<String>)> {
+        let (w, h) = self.map_size();
+        let (nx, ny) = ((w / CHUNK) as i32, (h / CHUNK) as i32);
+        let here = ((body.x / CHUNK as f32).floor() as i32, (body.y / CHUNK as f32).floor() as i32);
+        let (window, recentre, r) = match which {
+            Which::Near => (&self.near, RECENTRE, BODY_CHUNKS),
+            Which::Lots => (&self.far, LOT_RECENTRE, LOT_CHUNKS),
+        };
+        if let Some(key) = window.wanted() {
+            let (cx, cy) = chunk_xy(key[0]);
+            if (here.0 - cx as i32).abs() < recentre && (here.1 - cy as i32).abs() < recentre {
+                return None;
+            }
+        }
+        let (cx, cy) = (here.0.clamp(0, nx - 1), here.1.clamp(0, ny - 1));
+        let span = |c: i32, n: i32, r: i32| ((c - r).max(0) as u32, (c + r).min(n - 1) as u32);
+        let (xs, ys) = (span(cx, nx, r), span(cy, ny, r));
+        let (tx, ty) = (span(cx, nx, TERRAIN_CHUNKS), span(cy, ny, TERRAIN_CHUNKS));
+        let q = match which {
+            Which::Near => vec![
+                format!("SELECT * FROM body WHERE {}", chunk_ranges("chunk", xs, ys)),
+                // The characters standing in the window (names, kind, life stage, home), through
+                // their bodies: both join columns are primary keys.
+                format!("SELECT character.* FROM character JOIN body ON character.id = body.id WHERE {}", chunk_ranges("body.chunk", xs, ys)),
+                format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", tx, ty)),
+            ],
+            Which::Lots => vec![format!("SELECT * FROM lot WHERE {}", chunk_ranges("chunk", xs, ys))],
+        };
+        Some((vec![chunk_id(cx as u32, cy as u32)], q))
     }
 
     /// Ask for a new character after my death (the death screen's "Arrive as a new stranger"):
@@ -274,7 +432,8 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 }
                 info!("connected as {identity}");
             }
-            Signal::Applied => {
+            Signal::Static => net.subscribe_base(),
+            Signal::Base => {
                 info!("world subscribed after {now:.1} s");
                 net.status = Status::Live;
             }
@@ -287,9 +446,10 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 if let Some(c) = net.conn.take() {
                     let _ = c.disconnect();
                 }
+                net.base = None;
                 net.mine = None;
-                net.region = None;
-                net.region_next = None;
+                net.near = Window::default();
+                net.far = Window::default();
                 net.my_id = None;
                 net.join_sent = false;
                 net.connecting = false;

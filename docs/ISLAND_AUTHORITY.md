@@ -262,3 +262,55 @@ The game client (`living/game`) is not changed here. To connect to an island wor
 - **Privacy:** every table read here is public. Spatial subscriptions are not permission boundaries ([game brief, core work 1](GAME_BRIEF.md#core-work-the-game-needs-engine-independent)).
 - **Body size** is not a rule. The giants' houses and streets are built for 3× bodies that the rules still treat as adults.
 - **The libm switch** changed some generated values, which can shift a few tiles relative to the earlier native output. All `land::` and `settle::` tests still pass. FIRST_WORLD.md's measured tables come from before the switch.
+
+## Connected client (2026-11-09)
+
+`living/game` connects to a land world and draws it through the island renderer. The code is in `net.rs` (subscriptions) and `live.rs` (land, buildings, characters and the headless script), with `island.rs` drawing hosted lots and `ui/live.rs` placing nameplates and bubbles on the island's ground. Presentation only: the authority was not changed, and the client moves nothing itself.
+
+**Data paths:**
+
+| Path | Rows | Recipients | When |
+|---|---|---|---|
+| `world`, `land`, `settlement`, whole | 1 + 1 + 6 | this client | at connection |
+| `character WHERE controller = :sender` (indexed) | my characters, dead ones included (the death screen) | this client | at connection |
+| my `body`, `vitals`, `experience`, `place` by id | mine | this client | while my character lives |
+| near window: `body` ±5 chunks; `character` joined to those bodies (both primary keys); `terrain_chunk` ±3 chunks | about 70 bodies and characters, and 49 chunks at the town square | this client | re-centred after 2 chunks |
+| far window: `lot` ±11 chunks | about 200 lots | this client | re-centred after 5 chunks |
+
+A window is one id range per row of chunks joined by `OR`, since 2.14.1 has no `IN`. A new window is subscribed before the old one is dropped. `:sender` and the join with `OR`ed ranges on the joined table were checked against the 2.14.1 server before use. The [SQL reference](https://spacetimedb.com/docs/reference/sql) allows two-table joins that return one table, with indexes on both join columns. The [subscription guide](https://spacetimedb.com/docs/clients/subscriptions/) says to group subscriptions by lifetime and to subscribe before unsubscribing. That is why static lots have their own, longer-lived window: re-sending them with every near move cost about 130 kB a move.
+
+**Land:**
+- The client regenerates the `Land` from the row on a worker thread, in 1.4–1.5 s (release, dev-box), and computes the hosted map and the three digests. All of them matched the authority's in every run: tiles `9d1884118850c39c`, heights `f860069dd92e1341`, layout `f59dcf9649678035`.
+- On a mismatch the client warns and draws anyway. Movement never depends on the client's copy.
+- The `terrain_chunk` window is compared with the hosted tiles, and edits are counted in the log. Edits are not drawn yet.
+
+**Measured on the dev-box** (Radeon 8060S, Vulkan, 1600×900 headless, uncapped). Database `verify-client-live-1`: seed `island`, about 230 characters (residents without minds, 24 deer, 6 wolves, plus the test players), 60 Hz authority. One game client was connected and nothing else, with no observer and no mind service. Other agents' work kept the load average at 8–16, so the frame times are indicative.
+
+| | Frame time (2 s means) | Notes |
+|---|---|---|
+| Arrival, outside the walls | mean 8.4 ms, median 7.6 | 15–40 characters drawn |
+| In the town, walking the streets (146 s run) | mean 12.5 ms, median 12.3, highest 15.3 | 70–80 characters drawn; worst single frame 57 ms |
+| Standing in the square, two later runs | 10.8 and 12.6 ms | with and without the atmosphere: no difference beyond load noise |
+| Look-dev at the same spot, same hour | 6.6 ms with its 24 people, 9.0 ms with 66 | the client's own planner crowd |
+| Chunk streaming | single frames of 150–250 ms | when a new 64 m chunk's models load, as in look-dev |
+
+Connected play costs about 1.5–3.5 ms more than look-dev with a similar crowd. That is not attributed: the HUD only runs when connected, the crowds are not identical, and the load varied.
+
+| Subscription bytes (server metric, by kind) | |
+|---|---|
+| 146 s walk from arrival through the town | 296 kB subscribe, 230 kB unsubscribe, 1.59 MB updates (about 14.5 kB/s) |
+| `body` window at the square, 72 bodies | 9.7–10.4 kB/s, about 68 updates/s of about 150 B (the whole row with its path) |
+| character join | 33 B/s |
+| a near-window move | about 44 kB subscribe and 44 kB unsubscribe (with the ±5 terrain window) |
+| `spacetime_active_queries` | 12, flat through the walk |
+
+**Not drawn yet:** resource nodes and structures (berry bushes, hearths, stores), gates open or shut, and terrain edits. Animals are the procedural placeholder creatures, without limb motion. Speech from mindless residents does not exist (below).
+
+**What the server must provide next, for town life and combat:**
+- **Resident speech and reactions.** Residents with `rules.minds = false` never speak and write no `experience` rows, so they neither hear a player nor answer. The only speech in town is players'. Town life needs instinct-level talk: greetings, barks and answers from rules or skills, without model calls.
+- **A slimmer moving-body stream.** Every steering update sends the whole `body` row, path included, at about 150 B. That is about 10 kB/s for 72 bodies, and it scales with the crowd. At the town's update rate, 200 characters in view would be about 28 kB/s per client; a battle steers more often, so more. A narrower row or table for what clients draw (position, velocity, heading, segment time) would cut it.
+- **Perception-scoped subscriptions.** Every window table is public, and the windows are not permission boundaries. A view with arguments (2.13+) or per-sender filtering on the authority is needed before the client shows only what the character perceives.
+- **Body size as a rule.** Giants and small folk are drawn at their settlement's scale, but the rules move and collide them as adults.
+- **Combat state per character for others:** health, what they are doing, attack and skill events with timings. Today only my own `vitals` are readable, and the HUD's skill bar shows "Not on the server yet".
+- **Gait speeds that match the clips.** The rules' walk is 2.6–2.7 m/s and their run 4.1. The walk clip was authored at 1.4 m/s, so walking plays it at about 1.9×. Either clips are authored for the rules' speeds, or the rules get a slower ambling gait.
+- **Masonry for newcomers**, if a newcomer should be able to wall anything: `build wall` is refused without the know-how, as designed.

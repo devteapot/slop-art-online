@@ -313,7 +313,10 @@ pub fn follow(
         });
         // Look at about chest height.
         let mut want = me + lean + Vec3::Y * 1.2 * s;
-        if let Some(p) = cam.talk_partner.and_then(|id| scene.shown.get(&id)).map(|(p, _)| scene.at3(p.x, p.y)) {
+        // The partner on the tile ground; on a land world (`live.rs`, no tile ground) at my
+        // height, as they stand within a few metres.
+        let partner = cam.talk_partner.and_then(|id| scene.shown.get(&id)).map(|(p, _)| if scene.ready() { scene.at3(p.x, p.y) } else { Vec3::new(p.x, me.y, p.y) });
+        if let Some(p) = partner {
             want = want.lerp((me + p) * 0.5 + Vec3::Y * 1.3, cam.talk);
         }
         let snap = cam.focus.distance(want) > 40.0;

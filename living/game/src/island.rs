@@ -1,6 +1,11 @@
-//! The first world in the look-dev client: the generic km-scale island from
-//! `living_rules::land` (docs/FIRST_WORLD.md), walkable with the game camera. Client only; the
-//! authority does not host it yet.
+//! The first world: the generic km-scale island from `living_rules::land` (docs/FIRST_WORLD.md),
+//! walkable with the game camera. Two sources build it:
+//! - **look-dev** ([`Island::new`]): the client generates the land itself and places the
+//!   planner's buildings and people;
+//! - **connected** ([`Island::hosted`], `live.rs`): the authority hosts the land (docs/
+//!   ISLAND_AUTHORITY.md). The client regenerates the same `Land` from the `land` row for heights,
+//!   water, roads and walls, draws buildings from the authority's `lot` rows ([`Island::spawn_lot`])
+//!   and characters from its bodies; it places none of its own.
 //!
 //! An environment whose JSON has a `world` section (`assets/envs/island.json`) is the island:
 //! its mood lights it, and instead of a ground disc and slots, this module streams the island
@@ -9,11 +14,11 @@
 //!   level (the sea at 0, lakes level, rivers sloping);
 //! - each region dressed with its environment's assets (`RegionKind::env`) at that environment's
 //!   scatter densities, small things only near you;
-//! - each settlement from the rules' planner (`living_rules::settle`): a building on every lot at
-//!   its levelled floor, facing its street, wall pieces along town walls, and people (character
-//!   recipes for the settlement's folk) at house fronts and in the square.
+//! - each settlement's wall pieces along town walls, and in look-dev a building on every lot at
+//!   its levelled floor, facing its street, and people (character recipes for the settlement's
+//!   folk) at house fronts and in the square.
 //!
-//! `LIVING_GAME_START=x,z` starts you at a point (metres) instead of the town.
+//! `LIVING_GAME_START=x,z` starts you at a point (metres) instead of the town (look-dev).
 
 use crate::envs::{EnvDef, EnvPart, Occluder};
 use crate::lookdev::Model;
@@ -24,6 +29,7 @@ use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
 use bevy_mod_outline::OutlineStencil;
 use living_rules::land::{Land, RegionKind, SiteKind};
+use living_rules::settle::LotKind;
 use living_rules::map::Terrain;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -77,10 +83,10 @@ pub struct Island {
 }
 
 impl Island {
+    /// Look-dev: generate the land here and place the planner's buildings and people.
     pub fn new(world: WorldDef, defs: &[EnvDef]) -> Self {
         let t0 = std::time::Instant::now();
         let land = Arc::new(living_rules::land::generate_default(world.seed, world.size));
-        let envs: HashMap<String, EnvDef> = defs.iter().map(|d| (d.id.clone(), d.clone())).collect();
         let town = land.settlements.iter().find(|s| s.kind == SiteKind::Town).map(|s| Vec2::new(s.plaza.centre.0, s.plaza.centre.1)).or_else(|| land.sites.iter().find(|s| s.kind == SiteKind::Town).map(|s| Vec2::new(s.x, s.y)));
         let start = std::env::var("LIVING_GAME_START")
             .ok()
@@ -90,11 +96,34 @@ impl Island {
             })
             .or(town)
             .unwrap_or(Vec2::splat(world.size as f32 / 2.0));
+        let island = Self::build(land, defs, start, true);
+        info!(
+            "island: seed {} {} m in {:.2} s, {} regions, {} sites, start ({:.0}, {:.0})",
+            world.seed,
+            world.size,
+            t0.elapsed().as_secs_f32(),
+            island.land.regions.len(),
+            island.land.sites.len(),
+            start.x,
+            start.y
+        );
+        island
+    }
+
+    /// Connected: the land the authority hosts, regenerated from its `land` row. Buildings come
+    /// from `lot` rows ([`Island::spawn_lot`]) and people from bodies, so none are planned here.
+    pub fn hosted(land: Arc<Land>, defs: &[EnvDef], arrive: Vec2) -> Self {
+        Self::build(land, defs, arrive, false)
+    }
+
+    fn build(land: Arc<Land>, defs: &[EnvDef], start: Vec2, planned: bool) -> Self {
+        let world = WorldDef { seed: land.seed, size: land.size };
+        let envs: HashMap<String, EnvDef> = defs.iter().map(|d| (d.id.clone(), d.clone())).collect();
         let mut site_items: HashMap<(i32, i32), Vec<Item>> = HashMap::new();
         let mut put = |it: Item| site_items.entry(chunk_of(it.at)).or_default().push(it);
         let pick = |files: &[String], n: usize, salt: u32| files[(hash(n as u32, salt) * files.len() as f32) as usize % files.len()].clone();
         // Buildings on the planner's lots.
-        for (li, lot) in land.lots.iter().enumerate() {
+        for (li, lot) in land.lots.iter().enumerate().filter(|_| planned) {
             let st = &land.settlements[lot.settlement as usize];
             let Some(kind) = lot.kind.model() else { continue };
             let env = st.kind.env();
@@ -131,6 +160,9 @@ impl Island {
                     }
                 }
             }
+            if !planned {
+                continue;
+            }
             // People: at house fronts, and some in the square.
             let folk = match st.kind {
                 SiteKind::Giants => "giant",
@@ -162,17 +194,28 @@ impl Island {
                 put(Item { kind: "person".into(), at, yaw: hash(k, 33) * std::f32::consts::TAU, k: k as usize, person: Some((world.seed * 104_729 + (si as u64) * 31 + k as u64, folk, st.style.clone())), ..default() });
             }
         }
-        info!(
-            "island: seed {} {} m in {:.2} s, {} regions, {} sites, start ({:.0}, {:.0})",
-            world.seed,
-            world.size,
-            t0.elapsed().as_secs_f32(),
-            land.regions.len(),
-            land.sites.len(),
-            start.x,
-            start.y
-        );
         Self { land, envs, site_items, ground: HashMap::new(), small: HashMap::new(), start }
+    }
+
+    /// A building on an authority `lot` row (connected): the row's model file when it is on
+    /// disk, else one of its kind from the settlement's environment. The model's origin stands
+    /// on the lot's floor, facing its yaw. Returns the entities to despawn with it.
+    pub fn spawn_lot(&self, commands: &mut Commands, assets: &AssetServer, lot: &LotRow) -> Vec<Entity> {
+        let Some(kind) = lot.kind.model() else { return Vec::new() };
+        let env = lot.site.env();
+        let files = crate::envs::assets_for(env, kind);
+        let exact = Some(format!("envs/{}", lot.model)).filter(|f| !lot.model.is_empty() && files.contains(f));
+        if exact.is_none() && files.is_empty() {
+            return Vec::new();
+        }
+        if exact.is_none() && !lot.model.is_empty() {
+            warn!("lot {}: model {} is not on disk; using another {kind}", lot.id, lot.model);
+        }
+        let slot = self.envs.get(env).and_then(|d| d.slots.iter().find(|s| s.kind == kind));
+        let height = if exact.is_some() { lot.height_m } else { slot.map_or(6.0, |s| s.height[1]) };
+        let file = exact.unwrap_or_else(|| files[(hash(lot.id, 11) * files.len() as f32) as usize % files.len()].clone());
+        let it = Item { kind: kind.to_string(), file, at: lot.at, yaw: lot.yaw, height, glow: slot.and_then(|s| s.glow), k: lot.id as usize, floor: Some(lot.floor_m), native: true, person: None };
+        spawn_item(commands, assets, &self.land, &it)
     }
 
     /// Height of the ground (game x, z).
@@ -246,6 +289,26 @@ impl Island {
         }
         out
     }
+}
+
+/// What the client draws of an authority `lot` row (connected mode).
+#[derive(Clone, Debug)]
+pub struct LotRow {
+    pub id: u32,
+    /// The settlement's kind (its environment's assets).
+    pub site: SiteKind,
+    pub kind: LotKind,
+    pub at: Vec2,
+    pub yaw: f32,
+    pub floor_m: f32,
+    pub height_m: f32,
+    /// Path under `assets/envs/`, empty when the planner had no exact model.
+    pub model: String,
+}
+
+/// A settlement kind from its id (`settlement.kind`).
+pub fn site_kind(id: &str) -> Option<SiteKind> {
+    [SiteKind::Town, SiteKind::Village, SiteKind::Giants, SiteKind::SmallFolk, SiteKind::Cave].into_iter().find(|k| k.id() == id)
 }
 
 /// Smooth value noise in 0..1 over about `scale` metres.

@@ -1,5 +1,23 @@
 # Validation record (player)
 
+## 2026-11-09 island land world (dev-box)
+
+The dev-box (Fedora, rootless podman) ran its own scratch container `slop-live-stdb` (image `v2.14.1`) through a `docker` name shim. The worktree was `c5a2c00`, with uncommitted `living/game` changes (the connected game client); the authority and rules were unchanged. The recipe in `features/player-character.md` ran on `--seed island`, runs `player-island-live` and `player-island-live2`. Evidence is in the dev-box's `~/live-evidence/`.
+
+- **Passed:**
+  - `join` placed the newcomer at the `land` row's arrival point, (512.5, 174.5), not at (40, 60).
+  - A second `join` was refused.
+  - Run and walk speeds were 4.09 and 2.73; stopping set the plan to "moving yourself".
+  - `follow` gave plan "your command", source "human".
+  - Speech wrote the chronicle line "Verifier to Iseve: “Good morning.”".
+  - `set_paused` and `grant_items` were refused with "admin only", and `mind_skip` with "not your character".
+  - After an admin `kill`, the same identity joined again as a new character.
+- **Recipe gap on land worlds:** the neighbour query `kind = 'person' AND ai = true` returns nothing. Island residents run with `rules.minds = false`, so they are `ai = false`. The first run found no neighbour, and its act steps sent `"id":` with no value, which was refused as bad JSON. The second run picked an adult resident (`stage = 2 AND id != $ME`).
+- **Behaviour on land worlds, as designed:**
+  - Mindless residents write no `experience` rows, so the neighbour got no `speech` experience. The chronicle line is the proof of speech.
+  - The gift failed with feedback "they moved away": the resident kept to its own routine.
+- **The game client** joined, walked, spoke, died and rejoined through the same reducers. `verify-client/features/game-client.md` covers it.
+
 ## 2026-11-08 SpacetimeDB 2.14.1 upgrade (macOS)
 
 Run `player-1108-214`: default seed, image `v2.14.1`, bindings regenerated with 2.14.1. The recipe in `features/player-character.md` was run as written.

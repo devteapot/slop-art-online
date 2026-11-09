@@ -21,6 +21,7 @@ mod demo;
 mod envs;
 mod hud;
 mod island;
+mod live;
 mod lookdev;
 mod net;
 mod perf;
@@ -112,8 +113,10 @@ fn main() {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup))
             .add_systems(
                 Update,
-                (net::pump, bodies::update, world::things, controls::target, world::terrain, demo::run, controls::movement, camera::follow, world::fade_trees, sight::update, controls::gizmos).chain(),
+                (net::pump, bodies::update, world::things.run_if(live::tiles), controls::target, world::terrain.run_if(live::tiles), demo::run, controls::movement, camera::follow, world::fade_trees, sight::update, controls::gizmos).chain(),
             );
+        // Land worlds (the island the authority hosts) draw through the island renderer.
+        app.add_plugins(live::LivePlugin);
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }

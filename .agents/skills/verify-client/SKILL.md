@@ -64,6 +64,10 @@ Add `--as-player` to subscribe with the harness player's identity after joining.
 
 `drive.py` hides the probe's stdin request format. It passes URI, scratch database, identity token, SQL and duration in memory. No CLI token is needed. This mode uses one subscription, not the fixed suite's base query set. It supports tables and views present in the generated bindings. A keyless view reports changes as inserts and deletes. Rows leaving a query filter are client-cache deletes, even if the authority retained them.
 
+## The game client
+
+The suite above drives the observer's query set (`living/viewer/src/net.rs`). The game client (`living/game/src/net.rs`) subscribes differently on a land world. It subscribes static tables, its own characters by `:sender`, and chunk windows that include a join, and it moves those windows as it walks. [features/game-client.md](features/game-client.md) runs the real game client headless (`LIVING_GAME_LIVE`), sends each of its queries through `drive.py`, and measures bytes per query from the server's metrics.
+
 ## Checks and evidence
 
 [features/README.md](features/README.md) indexes every check. [references/validation.md](references/validation.md) records the real runs.

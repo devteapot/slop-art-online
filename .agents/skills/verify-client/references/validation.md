@@ -1,6 +1,28 @@
 # Client protocol validation
 
 
+## 2026-11-09 connected game client on the island (dev-box)
+
+The dev-box ran its own scratch container `slop-live-stdb` (image `v2.14.1`, own volume, `/wasm` from the worktree) through a `docker` name shim. The other worktrees' containers were not touched. The worktree was `c5a2c00`, with uncommitted `living/game` changes (the connected game client); the authority, rules and bindings were unchanged. Evidence was copied to the dev-box's `~/live-evidence/` before the worktree was removed.
+
+- **`client-live-suite`** (`run.py`, default seed) exited 0, with 13 PASS and the two known XFAILs. The base subscription received 685 body and 4 stats updates. The permission matrix made 164 calls with 0 mismatches. Reconnect recorded 1 drop and 2 connections.
+- **`client-live-1`** (`--seed island`) ran [game-client.md](../features/game-client.md):
+  - The real game client ran headless nine times. Every run logged `world kind: Land` and `digests match` (tiles `9d1884118850c39c`, heights `f860069dd92e1341`, layout `f59dcf9649678035`), with the land regenerated in 1.4 to 1.5 s.
+  - It joined at the arrival point (512.5, 174.5), walked into the town through `goto` and `human_move`, and spoke. It received a line from the harness player (heard bubble and chat log), and after an admin `kill` showed the death screen, rejoined and played a new character.
+  - Through the probe, `controller = :sender` returned only the player's character. The character ⋈ body join with `OR`ed chunk ranges returned 72 characters for 72 bodies.
+  - **Volume at the town square** (one probe at a time, 72 bodies):
+
+    | Query | Initial | Live |
+    |---|---|---|
+    | `body` window (±5 chunks) | 5.3 kB | 10.4 and 9.7 kB/s (2,055 and 1,836 events in 30 s) |
+    | character join | 7.1 kB | 33 B/s |
+    | `terrain_chunk` (±5 chunks) | 32 kB | none |
+    | `terrain_chunk` (±3, what the client now uses) | about 13 kB for 49 rows (estimated from the ±5 figure, not measured) | none |
+    | `lot` (±11 chunks) | 21.8 kB | none |
+  - **Whole walk** (146 s, arrival to square and streets, one client): 296 kB subscribe, 230 kB unsubscribe and 1.59 MB updates, about 14.5 kB/s in all. `spacetime_active_queries` stayed at 12.
+- **Harness defect:** `verify.py cleanup` decides whether other `verify-*` databases are live from `spacetime list`. On this 2.14.1 server that prints "No databases found" for the CLI identity, so cleanup of `live-1` stopped the container while `verify-client-live-1` was live. The container was restarted by hand, and no data was lost.
+
+
 ## 2026-11-09 island land worlds (dev-box)
 
 Host: the dev-box (Fedora, rootless podman, SELinux), scratch container `slop-game-stdb` (image `v2.14.1`) through a `docker` name shim (`docs/ISLAND_AUTHORITY.md`, "Verification"). `living/` had the uncommitted island change on `dc34fdf`.

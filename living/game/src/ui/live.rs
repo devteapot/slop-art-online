@@ -9,7 +9,8 @@
 //! - speech bubbles and the chat log from my own `experience` rows (`speech`): only what I
 //!   heard, since the authority decides earshot (`perceive::speak`); my own lines are echoed;
 //! - death from my `character` row (`alive`, `cause`, `born_ms`, `died_ms`);
-//! - my known places (`place` rows of my character) on the compass.
+//! - my known places (`place` rows of my character) on the compass;
+//! - on a land world (the island, `live.rs`), nameplates and bubbles over the drawn characters.
 //!
 //! Not on the server yet, so shown as unavailable or omitted: skills and cooldowns, others'
 //! health, what others are doing, interactions, and who saw a death.
@@ -32,7 +33,7 @@ pub struct Last {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, mut last: Local<Last>) {
+pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, mut last: Local<Last>) {
     let now_ms = scene.now_ms;
     let now = now_ms / 1000.0;
     model.shown = true;
@@ -118,9 +119,14 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     model.log = log.into_iter().skip(skip).collect();
 
     // Characters around me.
-    let head = |id: u32, p: Vec2, kind: &str| {
-        let lift = if Some(id) == me { 1.95 * size.0 } else if kind == "person" { 1.95 } else { 1.25 };
-        scene.at3(p.x, p.y) + Vec3::Y * lift
+    // On the island, over the drawn character (its recipe height) standing on the island's
+    // ground; on tile worlds, over the tile ground.
+    let head = |id: u32, p: Vec2, kind: &str| match &island {
+        Some(i) => Vec3::new(p.x, i.height(p.x, p.y), p.y) + Vec3::Y * (live.heights.get(&id).copied().unwrap_or(1.75) * 1.1),
+        None => {
+            let lift = if Some(id) == me { 1.95 * size.0 } else if kind == "person" { 1.95 } else { 1.25 };
+            scene.at3(p.x, p.y) + Vec3::Y * lift
+        }
     };
     let cursor = cam.cursor_ground.map(|c| Vec2::new(c.x, c.z));
     let mut actors = Vec::new();

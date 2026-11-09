@@ -1,0 +1,659 @@
+//! Connected play on a land world (the island the authority hosts; docs/ISLAND_AUTHORITY.md).
+//! Presentation only: the rules move every character, the player included, and decide what
+//! stands where. This module draws what the client receives (`net.rs`, [`net::Mode::Land`])
+//! through the island renderer (`island.rs`):
+//!
+//! - **Land.** The `land` row's seed, size and parameters regenerate the same `Land` here
+//!   (`living_rules::land` is deterministic across targets), on a worker thread. Its three
+//!   digests (hosted tiles, heights, layout) are compared with the row's before the island is
+//!   drawn; a mismatch is logged and the island is still drawn, while movement stays the
+//!   authority's tiles either way (the client predicts nothing).
+//! - **Buildings** from the `lot` rows in the window, by their model file
+//!   ([`Island::spawn_lot`]); none from the client's own planner.
+//! - **Characters** from the bodies in the window: people as recipe characters (seeded by
+//!   character id; folk and dress from the settlement round their home, `settlement.kind`,
+//!   `settlement.style`; children smaller by life stage), animals as the procedural creatures of
+//!   `bodies.rs`. Clips follow the displayed motion: idle, walk or run by speed (the authority's
+//!   walk is about 2.6 m/s and its run about 4.1), talk while speaking. Positions come from the
+//!   shared body tracks (`sync.rs`, filled by `bodies::update`).
+//! - **You** join at the `land` row's arrival point (`join`); the camera, the island's
+//!   streaming and the atmosphere follow your displayed body. The cursor meets the island's
+//!   ground for facing and click-to-move.
+//!
+//! `LIVING_GAME_LIVE=<dir>` runs a script headless and writes photographs there
+//! (`LIVING_GAME_LIVE_PLAN`, [`Script`]).
+
+use crate::camera::Cam;
+use crate::controls::{Input, Target};
+use crate::envs::Roam;
+use crate::island::{Island, LotRow};
+use crate::lookdev::{Fitted, Model};
+use crate::net::{Mode, Net};
+use crate::world::Scene;
+use bevy::prelude::*;
+use living_bindings::*;
+use living_rules::land::{Land, LandParams};
+use living_rules::map::{chunk_xy, Map, CHUNK};
+use spacetimedb_sdk::Table;
+use std::collections::{HashMap, HashSet};
+use std::f32::consts::PI;
+use std::sync::{Arc, Mutex};
+
+/// Lots are drawn within this distance (m) and dropped beyond `LOT_DROP`.
+const LOT_FAR: f32 = 190.0;
+const LOT_DROP: f32 = 220.0;
+/// Building spawns per frame, so a window move doesn't hitch.
+const LOTS_PER_FRAME: usize = 6;
+/// Speeds (m/s) between clips: below `MOVING` idle (or talk), below `RUNNING` walk, else run.
+const MOVING: f32 = 0.3;
+const RUNNING: f32 = 3.3;
+/// A line counts as being spoken for this long (s).
+const TALKING_S: f64 = 4.0;
+
+pub struct LivePlugin;
+
+impl Plugin for LivePlugin {
+    fn build(&self, app: &mut App) {
+        let island = resource_exists::<Island>;
+        app.init_resource::<Live>()
+            .init_resource::<LandWorld>()
+            .add_systems(Update, mirror.after(crate::net::pump).before(crate::bodies::update))
+            .insert_resource(Roam { facing: Vec2::new(0.0, 1.0), ..default() })
+            .add_systems(Startup, crate::lookdev::setup)
+            .add_systems(Update, (land, lots, bodies, me).chain().after(crate::controls::target).before(crate::demo::run))
+            .add_systems(
+                Update,
+                (crate::envs::hdr, crate::island::stream, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, clips, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, report)
+                    .chain()
+                    .after(me)
+                    .run_if(island),
+            )
+            .add_systems(Update, ground_cursor.after(crate::camera::follow).run_if(island));
+        if let Some(s) = Script::from_env() {
+            app.insert_resource(s).add_systems(Update, script.after(me).before(crate::controls::movement));
+        }
+    }
+}
+
+/// Whether the server hosts a land world, mirrored from `Net` (run conditions may run off the
+/// main thread, where `Net` cannot be read).
+#[derive(Resource, Default)]
+pub struct LandWorld(bool);
+
+fn mirror(net: NonSend<Net>, mut land: ResMut<LandWorld>) {
+    let on = net.mode == Mode::Land;
+    if land.0 != on {
+        land.0 = on;
+    }
+}
+
+/// Tile worlds draw with `world.rs`; land worlds with this module.
+pub fn tiles(land: Res<LandWorld>) -> bool {
+    !land.0
+}
+
+/// Whether a headless script runs (`LIVING_GAME_LIVE`).
+pub fn scripted() -> bool {
+    std::env::var("LIVING_GAME_LIVE").is_ok_and(|v| !v.is_empty())
+}
+
+/// The land regenerated from the `land` row, and how it compares.
+struct Built {
+    land: Arc<Land>,
+    hosted: Arc<Map>,
+    /// (digest, ours, the authority's)
+    digests: [(&'static str, u64, u64); 3],
+    secs: f32,
+}
+
+/// One drawn body.
+struct Shown {
+    entity: Entity,
+    last: Vec2,
+    speed: f32,
+    person: bool,
+}
+
+#[derive(Resource, Default)]
+pub struct Live {
+    building: Option<Arc<Mutex<Option<Result<Built, String>>>>>,
+    /// Whether all three digests matched (None until compared).
+    pub digests_ok: Option<bool>,
+    /// The tiles as the authority hosted them at world creation, to find later edits.
+    hosted: Option<Arc<Map>>,
+    lots: HashMap<u32, Vec<Entity>>,
+    shown: HashMap<u32, Shown>,
+    /// Height (m) of each drawn character, for nameplates and bubbles.
+    pub heights: HashMap<u32, f32>,
+}
+
+/// A drawn authority body and the clip it should play.
+#[derive(Component)]
+pub struct LiveBody {
+    clip: &'static str,
+    rate: f32,
+}
+
+/// Regenerate the land from the `land` row once, then put the island in place.
+#[allow(clippy::too_many_arguments)]
+fn land(
+    mut commands: Commands,
+    net: NonSend<Net>,
+    mut live: ResMut<Live>,
+    island: Option<Res<Island>>,
+    mut style: ResMut<crate::style::Style>,
+    mut look: ResMut<crate::lookdev::Lookdev>,
+    mut lights: Query<&mut DirectionalLight>,
+    mut cams: Query<&mut DistanceFog, With<Camera3d>>,
+    mut clear: ResMut<ClearColor>,
+    mut roam: ResMut<Roam>,
+) {
+    if island.is_some() || net.mode != Mode::Land {
+        return;
+    }
+    let Some(row) = net.land() else { return };
+    let Some(slot) = live.building.clone() else {
+        let slot: Arc<Mutex<Option<Result<Built, String>>>> = Arc::default();
+        live.building = Some(slot.clone());
+        info!("land: seed {} {} m, params {}; regenerating", row.seed, row.size, row.params);
+        std::thread::spawn(move || {
+            let r = regenerate(&row);
+            *slot.lock().unwrap() = Some(r);
+        });
+        return;
+    };
+    let Some(result) = slot.lock().unwrap().take() else { return };
+    live.building = None;
+    let built = match result {
+        Ok(b) => b,
+        Err(e) => {
+            error!("land: cannot regenerate the authority's land: {e}");
+            net.errors.lock().unwrap().push(format!("land: {e}"));
+            return;
+        }
+    };
+    let ok = built.digests.iter().all(|(_, a, b)| a == b);
+    live.digests_ok = Some(ok);
+    let list = built.digests.iter().map(|(n, a, b)| format!("{n} {a:016x}{}", if a == b { String::new() } else { format!(" (authority {b:016x})") })).collect::<Vec<_>>().join(", ");
+    if ok {
+        info!("land: regenerated in {:.2} s; digests match: {list}", built.secs);
+    } else {
+        warn!("land: regenerated in {:.2} s; DIGESTS DIFFER, heights and layout may not match the authority (movement still follows its tiles): {list}", built.secs);
+        net.errors.lock().unwrap().push("land digests differ from the authority's".into());
+    }
+    let defs = crate::envs::load_defs();
+    if let Some(def) = defs.iter().find(|d| d.world.is_some()) {
+        crate::envs::apply_mood(&def.mood, &mut style, &mut look, &mut lights, &mut cams, &mut clear);
+    }
+    live.hosted = Some(built.hosted);
+    let arrive = Vec2::new(row.arrive_x, row.arrive_y);
+    roam.pos = arrive;
+    commands.insert_resource(Island::hosted(built.land, &defs, arrive));
+}
+
+fn regenerate(row: &LandInfo) -> Result<Built, String> {
+    let t0 = std::time::Instant::now();
+    let params: LandParams = serde_json::from_str(if row.params.trim().is_empty() { "{}" } else { &row.params }).map_err(|e| format!("land.params: {e}"))?;
+    if !(256..=8192).contains(&row.size) {
+        return Err(format!("land size {} m", row.size));
+    }
+    let land = living_rules::land::generate(row.seed, row.size, &params);
+    let (hosted, _) = living_rules::host::hosted_map(&land, &params);
+    let d = living_rules::host::digests(&land, &hosted);
+    Ok(Built {
+        land: Arc::new(land),
+        hosted: Arc::new(hosted),
+        digests: [("tiles", d.tiles, row.tiles_digest), ("heights", d.heights, row.heights_digest), ("layout", d.layout, row.layout_digest)],
+        secs: t0.elapsed().as_secs_f32(),
+    })
+}
+
+/// Buildings from the `lot` rows in the window, near enough to see.
+fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, assets: Res<AssetServer>, mut live: ResMut<Live>, roam: Res<Roam>) {
+    let (Some(island), Some(conn)) = (island, net.conn.as_ref()) else { return };
+    let here = roam.pos;
+    let gone: Vec<u32> = live.lots.keys().copied().filter(|id| conn.db.lot().id().find(id).is_none_or(|l| Vec2::new(l.x, l.y).distance(here) > LOT_DROP)).collect();
+    for id in gone {
+        for e in live.lots.remove(&id).unwrap_or_default() {
+            commands.entity(e).despawn();
+        }
+    }
+    let mut todo: Vec<(f32, Lot)> = conn.db.lot().iter().filter(|l| !live.lots.contains_key(&l.id)).map(|l| (Vec2::new(l.x, l.y).distance(here), l)).filter(|(d, _)| *d < LOT_FAR).collect();
+    todo.sort_by(|a, b| a.0.total_cmp(&b.0));
+    for (_, l) in todo.into_iter().take(LOTS_PER_FRAME) {
+        let site = conn.db.settlement().id().find(&l.settlement).and_then(|s| crate::island::site_kind(&s.kind));
+        let (Some(site), Some(kind)) = (site, living_rules::settle::LotKind::from_id(&l.kind)) else {
+            live.lots.insert(l.id, Vec::new());
+            continue;
+        };
+        let row = LotRow { id: l.id, site, kind, at: Vec2::new(l.x, l.y), yaw: l.yaw, floor_m: l.floor_m, height_m: l.height_m, model: l.model.clone() };
+        let es = island.spawn_lot(&mut commands, &assets, &row);
+        live.lots.insert(l.id, es);
+    }
+}
+
+/// Size by life stage (as `bodies.rs`): infant, child, adult, elder.
+fn stage_scale(stage: u8) -> f32 {
+    match stage {
+        0 => 0.42,
+        1 => 0.72,
+        3 => 0.96,
+        _ => 1.0,
+    }
+}
+
+/// Folk and dress style from the settlement round a character's home.
+fn folk_of(conn: &DbConnection, c: &Character) -> (&'static str, Option<String>) {
+    let home = Vec2::new(c.home_x, c.home_y);
+    let s = conn.db.settlement().iter().filter(|s| Vec2::new(s.x, s.y).distance(home) <= s.radius_m * 1.15).min_by(|a, b| Vec2::new(a.x, a.y).distance(home).total_cmp(&Vec2::new(b.x, b.y).distance(home)));
+    match s {
+        Some(s) => (
+            match s.kind.as_str() {
+                "giants" => "giant",
+                "small_folk" => "small",
+                _ => "adult",
+            },
+            Some(s.style.clone()),
+        ),
+        None => ("adult", None),
+    }
+}
+
+/// Facing as a Bevy yaw for a character model (0 faces +Z) from a sim direction.
+fn yaw_of(d: Vec2) -> f32 {
+    d.x.atan2(d.y)
+}
+
+/// Draw the window's bodies: spawn, place on the island's ground, face, and pick clips.
+#[allow(clippy::too_many_arguments)]
+fn bodies(
+    mut commands: Commands,
+    net: NonSend<Net>,
+    scene: NonSend<Scene>,
+    island: Option<Res<Island>>,
+    assets: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    palette: Res<crate::world::Palette>,
+    style: Res<crate::style::Style>,
+    input: Res<Input>,
+    mut live: ResMut<Live>,
+    mut q: Query<(&mut Transform, Option<&Fitted>, Option<&mut Model>, Option<&crate::characters::Character>, &mut LiveBody)>,
+    time: Res<Time>,
+) {
+    let (Some(island), Some(conn)) = (island, net.conn.as_ref()) else { return };
+    let dt = time.delta_secs().max(1e-4);
+    let me = net.my_id;
+    // Who is speaking: lines I heard (the authority decides earshot), and my own last line.
+    let mut talking: HashSet<u32> = me
+        .map(|id| conn.db.experience().iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
+        .unwrap_or_default();
+    if let (Some(id), Some((t, _))) = (me, input.said.last()) {
+        if scene.now_ms - (*t as f64) < TALKING_S * 1000.0 {
+            talking.insert(id);
+        }
+    }
+    let gone: Vec<u32> = live.shown.keys().copied().filter(|id| !scene.shown.contains_key(id)).collect();
+    for id in gone {
+        if let Some(s) = live.shown.remove(&id) {
+            commands.entity(s.entity).despawn();
+        }
+        live.heights.remove(&id);
+    }
+    for (&id, &(p, heading)) in &scene.shown {
+        let ground = island.height(p.x, p.y);
+        let at = Vec3::new(p.x, ground, p.y);
+        let mine = Some(id) == me;
+        // My character turns toward where I look (shown locally; the authority has no look).
+        let look = input.look.filter(|_| mine).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
+        let h = look.or(heading);
+        if !live.shown.contains_key(&id) {
+            let Some(body) = conn.db.body().id().find(&id) else { continue };
+            let character = conn.db.character().id().find(&id);
+            // Wait for a person's character row (folk, stage) before drawing them.
+            if body.kind == "person" && character.is_none() {
+                continue;
+            }
+            let h = h.unwrap_or(body.heading);
+            let (entity, height, person) = if body.kind == "person" {
+                let c = character.as_ref().unwrap();
+                let seed = island.land.seed.wrapping_mul(0x9E37_79B9).wrapping_add(id as u64);
+                let mut recipe = if mine {
+                    std::env::var("LIVING_GAME_PLAYER").ok().and_then(|r| crate::characters::Recipe::parse(&r)).unwrap_or_else(|| crate::characters::Recipe::random(seed, "adult"))
+                } else {
+                    match folk_of(conn, c) {
+                        (folk, Some(style)) => crate::characters::Recipe::random_in(seed, folk, &style),
+                        (folk, None) => crate::characters::Recipe::random(seed, folk),
+                    }
+                };
+                recipe.height *= stage_scale(c.stage);
+                let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, yaw_of(Vec2::new(h.cos(), h.sin())));
+                (e, recipe.height, true)
+            } else {
+                let tf = Transform::from_translation(at).with_rotation(Quat::from_rotation_y(-h));
+                let e = crate::bodies::spawn(&mut commands, &mut meshes, &palette, &style, &body.kind, id, false, tf, p);
+                (e, if body.kind == "wolf" { 0.9 } else { 1.4 }, false)
+            };
+            commands.entity(entity).insert(LiveBody { clip: "idle", rate: 1.0 });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person });
+            live.heights.insert(id, height);
+            continue;
+        }
+        let s = live.shown.get_mut(&id).unwrap();
+        let v = (p - s.last).length() / dt;
+        s.last = p;
+        let v = if v.is_finite() && v < 20.0 { v } else { 0.0 };
+        s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp());
+        let (speed, person) = (s.speed, s.person);
+        let Ok((mut tf, fitted, model, ch, mut lb)) = q.get_mut(s.entity) else { continue };
+        tf.translation.x = p.x;
+        tf.translation.z = p.y;
+        if let Some(h) = h {
+            tf.rotation = if person { Quat::from_rotation_y(yaw_of(Vec2::new(h.cos(), h.sin())) + PI) } else { Quat::from_rotation_y(-h) };
+        }
+        match (fitted, model) {
+            (Some(fit), _) => tf.translation.y = ground + fit.y_off,
+            (None, Some(mut m)) => m.ground_y = ground,
+            (None, None) => tf.translation.y = ground,
+        }
+        let stride = ch.map_or(1.0, |c| c.stride);
+        let (clip, rate) = if speed < MOVING {
+            (if talking.contains(&id) { "talk" } else { "idle" }, 1.0)
+        } else if speed < RUNNING {
+            ("walk", speed / crate::lookdev::WALK_CLIP_SPEED / stride)
+        } else {
+            ("run", speed / crate::lookdev::RUN_CLIP_SPEED / stride)
+        };
+        lb.clip = clip;
+        lb.rate = rate;
+    }
+}
+
+/// Follow my displayed body: the camera's target, the island's streaming centre and the
+/// atmosphere's regions. Before I have a body, the island streams round the arrival point.
+fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, live: Res<Live>, mut target: ResMut<Target>, mut roam: ResMut<Roam>) {
+    let Some(island) = island else { return };
+    match net.my_id.and_then(|id| scene.shown.get(&id).map(|s| (id, s.0))) {
+        Some((id, p)) => {
+            let speed = live.shown.get(&id).map_or(0.0, |s| s.speed);
+            if p.distance(roam.pos) > 1e-3 {
+                roam.facing = (p - roam.pos).normalize_or(roam.facing);
+            }
+            roam.pos = p;
+            roam.moving = speed > MOVING;
+            roam.running = speed > RUNNING;
+            roam.speed = speed;
+            target.0 = Some(Vec3::new(p.x, island.height(p.x, p.y), p.y));
+        }
+        None => target.0 = None,
+    }
+}
+
+/// Clip sets of drawn characters, and which one plays (cross-faded).
+#[derive(Component)]
+struct ClipSet {
+    player: Entity,
+    nodes: HashMap<String, AnimationNodeIndex>,
+    playing: Option<&'static str>,
+}
+
+#[derive(Component)]
+struct ClipFile(Handle<Gltf>);
+
+/// Play each character's clip (`LiveBody`), as look-dev does for its line-up but per character.
+#[allow(clippy::too_many_arguments)]
+fn clips(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    gltfs: Res<Assets<Gltf>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+    new: Query<(Entity, &Model, Option<&ClipFile>), (With<LiveBody>, With<crate::lookdev::Rig>, Without<ClipSet>)>,
+    mut playing: Query<(Entity, &mut ClipSet, &LiveBody)>,
+    children: Query<&Children>,
+    mut players: Query<(&mut AnimationPlayer, Option<&mut AnimationTransitions>)>,
+    mut has_clips: Local<HashMap<String, bool>>,
+) {
+    for (e, model, file) in &new {
+        let has = *has_clips.entry(model.file.clone()).or_insert_with(|| crate::lookdev::glb_json(&model.file).is_some_and(|j| j["animations"].as_array().is_some_and(|a| !a.is_empty())));
+        if !has {
+            continue;
+        }
+        // Hold the file's handle: the load is dropped with its last handle.
+        let Some(file) = file else {
+            commands.entity(e).insert(ClipFile(assets.load::<Gltf>(model.file.clone())));
+            continue;
+        };
+        let Some(gltf) = gltfs.get(&file.0) else { continue };
+        let Some(p) = children.iter_descendants(e).find(|d| players.contains(*d)) else { continue };
+        let (names, handles): (Vec<String>, Vec<_>) = gltf.named_animations.iter().map(|(n, h)| (n.to_string(), h.clone())).unzip();
+        let (graph, idx) = AnimationGraph::from_clips(handles);
+        commands.entity(p).insert((AnimationGraphHandle(graphs.add(graph)), AnimationTransitions::new()));
+        commands.entity(e).insert(ClipSet { player: p, nodes: names.into_iter().zip(idx).collect(), playing: None });
+    }
+    for (e, mut c, lb) in &mut playing {
+        let want = if c.nodes.contains_key(lb.clip) { lb.clip } else { "idle" };
+        let Some(&node) = c.nodes.get(want) else { continue };
+        let Ok((mut player, transitions)) = players.get_mut(c.player) else {
+            commands.entity(e).remove::<ClipSet>();
+            continue;
+        };
+        if c.playing != Some(want) {
+            match transitions {
+                Some(mut t) => t.play(&mut player, node, std::time::Duration::from_millis(220)).repeat(),
+                None => player.play(node).repeat(),
+            };
+            c.playing = Some(want);
+        }
+        if let Some(a) = player.animation_mut(node) {
+            a.set_speed(if want == lb.clip { lb.rate } else { 1.0 });
+        }
+    }
+}
+
+/// Where the cursor meets the island's ground (the camera's own ray uses the tile ground), and
+/// keep the eye above the island's hills.
+fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, mut cams: Query<(&Camera, &mut Transform, &GlobalTransform), With<Camera3d>>, windows: Query<&Window>) {
+    let Some(island) = island else { return };
+    let Ok((camera, mut tf, gtf)) = cams.single_mut() else { return };
+    let floor = island.height(tf.translation.x, tf.translation.z) + 1.0;
+    if tf.translation.y < floor {
+        tf.translation.y = floor;
+    }
+    let Some(c) = windows.iter().next().and_then(|w| w.cursor_position()) else { return };
+    let Ok(ray) = camera.viewport_to_world(gtf, c) else { return };
+    let (o, d) = (ray.origin, *ray.direction);
+    let below = |p: Vec3| p.y <= island.height(p.x, p.z);
+    let mut prev = o;
+    let mut t = 0.0;
+    cam.cursor_ground = None;
+    while t < 400.0 {
+        t += 1.0;
+        let p = o + d * t;
+        if below(p) {
+            let (mut lo, mut hi) = (prev, p);
+            for _ in 0..12 {
+                let mid = (lo + hi) * 0.5;
+                if below(mid) {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            cam.cursor_ground = Some(hi);
+            return;
+        }
+        prev = p;
+    }
+}
+
+/// Every 10 s: what the client holds from the authority, for measurements.
+fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f32>) {
+    let t = time.elapsed_secs();
+    if t < *next {
+        return;
+    }
+    *next = t + 10.0;
+    let Some(conn) = net.conn.as_ref() else { return };
+    // Tiles in the terrain window that differ from the hosted land: roads, walls, clearings and
+    // bridges built since world creation (not drawn yet).
+    let edits: usize = live.hosted.as_ref().map_or(0, |m| {
+        conn.db
+            .terrain_chunk()
+            .iter()
+            .map(|c| {
+                let (cx, cy) = chunk_xy(c.id);
+                c.tiles
+                    .iter()
+                    .enumerate()
+                    .filter(|(k, t)| {
+                        let (x, y) = (cx * CHUNK + *k as u32 % CHUNK, cy * CHUNK + *k as u32 / CHUNK);
+                        x < m.w && y < m.h && m.tiles[(y * m.w + x) as usize] != **t
+                    })
+                    .count()
+            })
+            .sum()
+    });
+    info!(
+        "live: cache body {} character {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
+        conn.db.body().count(),
+        conn.db.character().count(),
+        conn.db.lot().count(),
+        conn.db.terrain_chunk().count(),
+        edits,
+        conn.db.settlement().count(),
+        conn.db.experience().count(),
+        live.shown.len(),
+        live.lots.values().filter(|e| !e.is_empty()).count(),
+        net.window_moves,
+        match live.digests_ok {
+            Some(true) => "match",
+            Some(false) => "DIFFER",
+            None => "pending",
+        }
+    );
+}
+
+/// A headless script of player actions and photographs (`LIVING_GAME_LIVE=<dir>`), through the
+/// same paths as the keys and the UI. `LIVING_GAME_LIVE_PLAN` is `;`-separated steps:
+/// - `ready`: until the island is drawn, I have a body and the buildings round me are in;
+/// - `wait:S`; `shot:NAME` (`<dir>/NAME.png`);
+/// - `walk:DEG:S[:run]`: hold a direction (0 = north, 90 = east) through `human_move`;
+/// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
+/// - `say:TEXT`: proximity chat (`human_say`);
+/// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
+///   until a new character is mine;
+/// - `quit`.
+#[derive(Resource)]
+pub struct Script {
+    dir: std::path::PathBuf,
+    steps: Vec<String>,
+    at: usize,
+    since: f32,
+    started: Option<u32>,
+}
+
+impl Script {
+    fn from_env() -> Option<Self> {
+        let dir = std::env::var("LIVING_GAME_LIVE").ok().filter(|d| !d.is_empty())?;
+        std::fs::create_dir_all(&dir).ok()?;
+        let plan = std::env::var("LIVING_GAME_LIVE_PLAN").unwrap_or_else(|_| "ready;wait:3;shot:join;walk:0:6;shot:street;say:Good morning!;wait:1;shot:say;wait:20;shot:later;quit".into());
+        Some(Self { dir: dir.into(), steps: plan.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(), at: 0, since: 0.0, started: None })
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn script(
+    mut commands: Commands,
+    mut s: ResMut<Script>,
+    net: NonSend<Net>,
+    scene: NonSend<Scene>,
+    island: Option<Res<Island>>,
+    live: Res<Live>,
+    fitted: Query<(), (With<LiveBody>, With<Fitted>)>,
+    mut input: ResMut<Input>,
+    mut cam: ResMut<Cam>,
+    mut out: ResMut<crate::ui::model::Outbox>,
+    hud: Res<crate::ui::model::HudModel>,
+    target: Option<Res<crate::capture::Target>>,
+    time: Res<Time>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    let dt = time.delta_secs();
+    let Some(step) = s.steps.get(s.at).cloned() else { return };
+    s.since += dt;
+    let mine = net.my_id.and_then(|id| scene.shown.get(&id).map(|p| (id, p.0)));
+    let mut parts = step.splitn(2, ':');
+    let (verb, arg) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+    let first = s.since <= dt;
+    if first {
+        info!("live script: {step} (me {:?} at {:?}, t {:.1} s)", net.my_id, mine.map(|m| m.1), time.elapsed_secs());
+    }
+    let done = match verb {
+        "ready" => {
+            let near_lots = live.lots.len();
+            island.is_some() && mine.is_some() && near_lots > 0 && fitted.iter().count() >= live.shown.values().filter(|v| v.person).count().min(1) && s.since > 2.0 || s.since > 240.0
+        }
+        "wait" => s.since >= arg.parse::<f32>().unwrap_or(1.0),
+        "shot" => {
+            let path = s.dir.join(format!("{arg}.png"));
+            info!("live script: photograph {}", path.display());
+            crate::capture::shot(&mut commands, target.as_deref(), path);
+            true
+        }
+        "walk" => {
+            let a: Vec<&str> = arg.split(':').collect();
+            let deg: f32 = a.first().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+            let secs: f32 = a.get(1).and_then(|v| v.parse().ok()).unwrap_or(3.0);
+            let run = a.get(2).is_some_and(|v| *v == "run");
+            let d = Vec2::new(deg.to_radians().sin(), -deg.to_radians().cos());
+            if s.since >= secs {
+                input.scripted = Some((Vec2::ZERO, false));
+                true
+            } else {
+                input.scripted = Some((d, run));
+                false
+            }
+        }
+        "goto" => {
+            if let (Some(conn), Some((x, y))) = (net.conn.as_ref(), arg.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?)))) {
+                let node = serde_json::json!({"do": {"skill": "goto", "target": {"at": [x, y]}}}).to_string();
+                let r = conn.reducers.human_act_then(node, net.on_reply("goto"));
+                net.report("goto", r);
+                input.scripted = None;
+            }
+            true
+        }
+        "yaw" => {
+            cam.set_yaw(arg.parse().unwrap_or(0.0));
+            true
+        }
+        "say" => {
+            out.say.push(arg.to_string());
+            true
+        }
+        "dead" => hud.death.is_some() || s.since > 120.0,
+        "rejoin" => {
+            s.started = net.my_id;
+            out.rejoin = true;
+            true
+        }
+        "joined" => net.my_id.is_some_and(|id| Some(id) != s.started) && mine.is_some() || s.since > 60.0,
+        // A second for the last photograph to be written.
+        "quit" => {
+            if s.since > 1.0 {
+                exit.write(AppExit::Success);
+            }
+            false
+        }
+        other => {
+            warn!("live script: unknown step {other}");
+            true
+        }
+    };
+    if done {
+        if verb == "ready" || verb == "dead" || verb == "joined" {
+            info!("live script: {verb} after {:.1} s (me {:?} at {:?})", s.since, net.my_id, mine.map(|m| m.1));
+        }
+        s.at += 1;
+        s.since = 0.0;
+    }
+}
