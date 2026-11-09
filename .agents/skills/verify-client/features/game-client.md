@@ -1,5 +1,7 @@
 # Game client on a land world
 
+**Perception (docs/PERCEPTION.md).** This file describes the client on main, which reads the tables a `LIVING_PERCEPTION=open` build keeps public. [docs/perception-client.patch](../../../../docs/perception-client.patch) switches it to the perception views: the `seen_*` and `my_*` views for the connection's lifetime, and only `terrain_chunk` and `lot` by chunk window. Once it lands, update the sub-features below, run the headless script on a `scoped` island build, and check the `live: cache body …` lines count the views. On 2026-11-09 the patched client was driven this way (`client-perc-game2`: digests match, the square with 8–9 perceived characters, speech).
+
 ## Sub-features
 
 - The game client (`living/game`) subscribes in stages (`living/game/src/net.rs`, module comment):

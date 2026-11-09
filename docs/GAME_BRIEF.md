@@ -101,6 +101,7 @@ The user's idea: seeing only what is in front of you makes sense, and skills, pa
    - shared views by map region for the physical world (`body`, `structure`, `resource_node` and `terrain_chunk` are already indexed by 16×16-tile chunk);
    - per-player views keyed on the caller for private state;
    - mind tables made private, with a separate developer path for the observer.
+   - *Built 2026-11-09* ([perception](PERCEPTION.md)): the authority works out each player's perceived set (sight by day and night, a torch, a sight line through walls and rock), per-sender `seen_*` and `my_*` views deliver it with a narrow motion row, and minds' and audit tables are private, read by the mind service and the observer as the database owner. Region views were not needed: a per-sender view moves with the character on the authority. The game client switches with [perception-client.patch](perception-client.patch); until then the default build keeps its tables public.
 2. **A typed player API.** `human_act` takes behavior-graph JSON. The game needs typed actions, aim directions and the projectile or area mechanics that skillshots require.
 3. **Controller handoff.** Move a character between the player and a mind on disconnect and reconnect. Today `mind_*` reducers authorize by `character.controller`.
 4. **A mind learned from play.** The player's own experiences and choices must be consolidated into the persona and routines the offline mind uses.

@@ -26,10 +26,11 @@ $V player --run $R join Tester
 $V cleanup --run $R
 ```
 
-`combat.py` drives the player's own identity and checks the player's views and public rows. It sets scenes with admin test reducers, named here because they are not player abilities: `place_at` (put a body somewhere), `set_behavior` (a resident stands still or strikes the player), the admin reducer `kill` (`--fresh`, or when an earlier run left the character too tired; not the `kill` scene) and `join` again. Results go to `<run>/combat.json` and `<run>/actions.log`.
+`combat.py` drives the player's own identity and checks the player's views (its characters through `my_characters`, its feed, uses and cooldowns) and, as the database owner, the world's rows (bodies, vitals, fighters, the chronicle), so it runs on both perception builds (docs/PERCEPTION.md). It sets scenes with admin test reducers, named here because they are not player abilities: `place_at` (put a body somewhere), `set_behavior` (a resident stands still or strikes the player), the admin reducer `kill` (`--fresh`, or when an earlier run left the character too tired; not the `kill` scene) and `join` again. Results go to `<run>/combat.json` and `<run>/actions.log`.
 
 ## Gotchas
 
+- The block, dodge and heal scenes give the attacker 4 s to land its blow. On 2026-11-09 one full run on a host also running the mind suite and a headless game client failed all three with no blow at all; two reruns (and the scenes run alone) passed. Rerun on a quieter host before calling it a regression.
 - The `kill` scene takes about ten strikes at 2 energy each; with `--scene all`, use `--fresh` so later scenes are not refused "too tired". The dummy resident is set to a wait graph, so it neither flees nor strikes back.
 - Energy is a real requirement: a character worn out by earlier scenes is refused "too tired". Use `--fresh`.
 - Place a dummy before setting its graph: a teleport drops an approach its graph already started.

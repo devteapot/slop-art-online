@@ -19,7 +19,11 @@ Over the window it reports:
   over 5 and 10 ms, the histogram's smallest buckets), beside the tick's own WASM time;
 - view calls per second by the reducer that triggered them, and each view's WASM time per
   second (`reducer_wasm_time_usec{reducer=<view>}`; materializing the rows is in the mean);
-- bytes sent to clients per second, in all and per player (`spacetime_num_bytes_sent_to_clients_total`);
+- bytes each player connection received per second on the wire, counted by a TCP proxy the
+  load connects through (mean, min, max over players); and the server's
+  `spacetime_num_bytes_sent_to_clients_total`, which 2.14.1 counts once per query update however
+  many clients share the query (`encode_v2_rows`: "We only encode once, then we clone for other
+  clients"), so it under-counts shared chunk-window queries but not per-sender views;
 - the server container's CPU (cgroup `cpu.stat`) and memory (`memory.current`), and the
   database's WASM memory and the server's jemalloc resident bytes.
 The server must serve no other active database during the window.
@@ -30,6 +34,7 @@ import json
 import math
 import os
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -101,6 +106,53 @@ def cgroup():
     return usage, mem
 
 
+class Proxy:
+    """Forwards each client connection to the server and counts the bytes sent to the client."""
+
+    def __init__(self, upstream):
+        host, port = upstream.removeprefix("http://").split(":")
+        self.upstream = (host, int(port))
+        self.down = {}
+        self.lock = threading.Lock()
+        self.server = socket.socket()
+        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.server.bind(("127.0.0.1", 0))
+        self.server.listen(256)
+        self.port = self.server.getsockname()[1]
+        threading.Thread(target=self.accept, daemon=True).start()
+
+    def accept(self):
+        n = 0
+        while True:
+            client, _ = self.server.accept()
+            n += 1
+            up = socket.create_connection(self.upstream)
+            with self.lock:
+                self.down[n] = 0
+            threading.Thread(target=self.pipe, args=(client, up, None), daemon=True).start()
+            threading.Thread(target=self.pipe, args=(up, client, n), daemon=True).start()
+
+    def pipe(self, src, dst, count):
+        try:
+            while data := src.recv(65536):
+                dst.sendall(data)
+                if count is not None:
+                    with self.lock:
+                        self.down[count] += len(data)
+        except OSError:
+            pass
+        finally:
+            for s_ in (src, dst):
+                try:
+                    s_.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+    def snapshot(self):
+        with self.lock:
+            return dict(self.down)
+
+
 def placements(db, token, n, how):
     settlements = sql(db, "SELECT * FROM settlement", token)
     if how == "square":
@@ -158,14 +210,15 @@ def main():
         if code != 200:
             sys.exit(f"place_at #{c['id']}: {code} {body}")
     time.sleep(a.settle)
+    proxy = Proxy(URL)
     load = subprocess.Popen([str(LOAD)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    load.stdin.write(json.dumps({"uri": URL, "db": a.db, "mode": a.mode, "seconds": a.seconds, "tokens": tokens, "walk": a.walk}))
+    load.stdin.write(json.dumps({"uri": f"http://127.0.0.1:{proxy.port}", "db": a.db, "mode": a.mode, "seconds": a.seconds, "tokens": tokens, "walk": a.walk}))
     load.stdin.close()
     ready = json.loads(load.stdout.readline() or "null")
     if not ready or ready.get("event") != "ready":
         sys.exit(f"load did not get ready: {ready} {load.stderr.read()[-3000:]}")
     # The window.
-    m0, c0, s0, t0 = metrics(), cgroup(), B.stats(a.db), time.time()
+    m0, c0, s0, t0, w0 = metrics(), cgroup(), B.stats(a.db), time.time(), proxy.snapshot()
     B.stdb("call", "-s", "local", a.db, "set_profile", "true")
     mem_peak = c0[1]
 
@@ -178,11 +231,12 @@ def main():
     threading.Thread(target=sample, daemon=True).start()
     done = json.loads(load.stdout.readline() or "null")
     B.stdb("call", "-s", "local", a.db, "set_profile", "false")
-    m1, c1, s1, t1 = metrics(), cgroup(), B.stats(a.db), time.time()
+    m1, c1, s1, t1, w1 = metrics(), cgroup(), B.stats(a.db), time.time(), proxy.snapshot()
     load.wait(timeout=60)
     if not done or done.get("event") != "done":
         sys.exit(f"load failed: {load.stderr.read()[-3000:]}")
     dt = t1 - t0
+    wire = sorted((w1[k] - w0.get(k, 0)) / dt for k in w1)
     w = sql(a.db, "SELECT * FROM world", admin)[0]
     hour = lambda t: ((int(t * 1000) - w["epoch_ms"] + w["day_ms"] * 7 // 24) % w["day_ms"]) / w["day_ms"] * 24
     logs = B.stdb("logs", "-s", "local", a.db, "-n", str(a.seconds * 60 * 10 + 4000))
@@ -232,6 +286,7 @@ def main():
         "view_wasm_ms_per_s": views,
         "view_wasm_us_per_call": round(sum(us for v, us in wasm_us.items() if v.startswith(("seen_", "my_"))) / max(sum(calls.values()), 1), 1),
         "bytes_per_s": {k: round(v) for k, v in sorted(sent.items())},
+        "wire_bytes_per_s_per_player": {"mean": round(sum(wire) / max(len(wire), 1)), "min": round(wire[0]) if wire else None, "max": round(wire[-1]) if wire else None, "connections": len(wire)},
         "bytes_per_s_per_player": round(sum(sent.values()) / max(n, 1)),
         "update_bytes_per_s_per_player": round(sent.get("Update", 0) / max(n, 1)),
         "server_cpu_cores": round((c1[0] - c0[0]) / 1e6 / dt, 3),
