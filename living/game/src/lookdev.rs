@@ -123,12 +123,29 @@ pub fn build_lineup(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette:
         let a = std::f32::consts::PI * (1.1 + 0.8 * (i as f32 + 0.5) / n);
         let r = 5.0 + 1.5 * (i % 2) as f32;
         let at = Vec3::new(r * a.cos(), 0.0, r * a.sin());
+        // VRoid characters come from recipes (their own look by default).
+        if name.starts_with("vroid-") {
+            let recipe = crate::characters::Recipe::default_for(&format!("{FOLDER}/{name}"));
+            let e = crate::characters::spawn(commands, assets, &recipe, at, 0.0);
+            commands.entity(e).insert(crate::envs::EnvPart);
+            continue;
+        }
         let file = animated(&format!("{FOLDER}/{name}"));
         let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
         // glTF models face +Z, toward the camera's default side (south); VRM models face −Z.
-        let vrm = name.starts_with("vroid-") || name.ends_with(".vrm");
+        let vrm = name.ends_with(".vrm");
         let turn = Quat::from_rotation_y(if vrm { std::f32::consts::PI } else { 0.0 });
         commands.spawn((crate::envs::EnvPart, Model::character(file, vrm), WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
+    }
+    // `LIVING_GAME_CROWD=N[:seed]`: N seeded random characters in rows south of the line-up, facing
+    // the default camera (shots from yaw 0 at about 35 m see them from the front).
+    if let Some((n, seed)) = std::env::var("LIVING_GAME_CROWD").ok().and_then(|v| {
+        let (n, s) = v.split_once(':').unwrap_or((&v, "1"));
+        Some((n.parse::<usize>().ok()?, s.parse::<u64>().unwrap_or(1)))
+    }) {
+        for e in crate::characters::spawn_crowd(commands, assets, n, seed, Vec3::new(0.0, 0.0, 22.0)) {
+            commands.entity(e).insert(crate::envs::EnvPart);
+        }
     }
 }
 
@@ -327,12 +344,18 @@ pub fn has_glow(file: &str) -> bool {
 
 /// The JSON chunk of a GLB file under the asset folder.
 pub fn glb_json(file: &str) -> Option<serde_json::Value> {
-    let bytes = std::fs::read(std::path::Path::new(&asset_root()).join(file)).ok()?;
-    if bytes.len() < 20 || &bytes[0..4] != b"glTF" {
+    use std::io::Read;
+    // Only the header and the JSON chunk: character files are tens of MB of buffers.
+    let mut f = std::fs::File::open(std::path::Path::new(&asset_root()).join(file)).ok()?;
+    let mut head = [0u8; 20];
+    f.read_exact(&mut head).ok()?;
+    if &head[0..4] != b"glTF" {
         return None;
     }
-    let len = u32::from_le_bytes(bytes[12..16].try_into().ok()?) as usize;
-    serde_json::from_slice(bytes.get(20..20 + len)?).ok()
+    let len = u32::from_le_bytes(head[12..16].try_into().ok()?) as usize;
+    let mut json = vec![0u8; len];
+    f.read_exact(&mut json).ok()?;
+    serde_json::from_slice(&json).ok()
 }
 
 /// Morph target names of the mesh on node `node`, from a GLB file's JSON (mesh or primitive extras).
@@ -388,7 +411,7 @@ pub fn clips(
     gltfs: Res<Assets<Gltf>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     new: Query<(Entity, &Model, &Rig, Option<&ClipSource>), Without<Clips>>,
-    mut playing: Query<(Entity, &mut Clips, Has<crate::envs::Player>)>,
+    mut playing: Query<(Entity, &mut Clips, Has<crate::envs::Player>, Option<&crate::characters::Character>)>,
     children: Query<&Children>,
     mut players: Query<(&mut AnimationPlayer, Option<&mut AnimationTransitions>)>,
 ) {
@@ -409,9 +432,11 @@ pub fn clips(
         debug!("look-dev: {} plays clips {names:?} on {p}", model.file);
         commands.entity(e).insert(Clips { player: p, nodes: names.into_iter().zip(idx).collect(), playing: None });
     }
-    for (e, mut c, is_player) in &mut playing {
+    for (e, mut c, is_player, ch) in &mut playing {
+        // Longer legs take longer steps: play slower for the same speed.
+        let stride = ch.map_or(1.0, |c| c.stride);
         let (want, speed) = if is_player && roam.moving {
-            if roam.running { ("run", roam.speed / RUN_CLIP_SPEED) } else { ("walk", roam.speed / WALK_CLIP_SPEED) }
+            if roam.running { ("run", roam.speed / RUN_CLIP_SPEED / stride) } else { ("walk", roam.speed / WALK_CLIP_SPEED / stride) }
         } else {
             match look.act {
                 Act::Walk if !is_player => ("walk", 1.0),

@@ -14,6 +14,7 @@ mod sync;
 mod bodies;
 mod camera;
 mod capture;
+mod characters;
 mod controls;
 mod demo;
 mod envs;
@@ -60,6 +61,7 @@ fn main() {
     app.insert_resource(ClearColor(camera::SKY))
         .add_plugins(style::StylePlugin)
         .add_plugins(post::PostPlugin)
+        .add_plugins(characters::CharactersPlugin)
         .add_systems(PostUpdate, post::update)
         .init_non_send::<net::Net>()
         .init_non_send::<world::Scene>()

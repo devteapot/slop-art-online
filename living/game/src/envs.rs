@@ -204,9 +204,10 @@ fn spawn_player(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pa
     let vroid = look.models.iter().find(|m| m.starts_with("vroid-")).cloned();
     match vroid {
         Some(name) => {
-            let file = crate::lookdev::animated(&format!("lookdev/{name}"));
-            let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
-            commands.spawn((EnvPart, Player::Model { vrm: true }, Model::character(file, true), WorldAssetRoot(handle), Transform::from_rotation(Quat::from_rotation_y(PI)), Visibility::Hidden));
+            // `LIVING_GAME_PLAYER=<recipe>` (a name or `<folk>:<seed>`); default: the base's own look.
+            let recipe = std::env::var("LIVING_GAME_PLAYER").ok().and_then(|r| crate::characters::Recipe::parse(&r)).unwrap_or_else(|| crate::characters::Recipe::default_for(&format!("lookdev/{name}")));
+            let e = crate::characters::spawn(commands, assets, &recipe, Vec3::ZERO, 0.0);
+            commands.entity(e).insert((EnvPart, Player::Model { vrm: true }));
         }
         None => {
             let e = crate::bodies::spawn(commands, meshes, palette, style, "person", 1, false, Transform::default(), Vec2::ZERO);
@@ -540,10 +541,27 @@ pub fn switch(
     for (si, slot) in def.slots.iter().enumerate() {
         let files = assets_for(&def.id, &slot.kind);
         let places = place(slot, si, &mut taken, limit);
-        counts.push(format!("{} {} ({})", places.len(), slot.kind, if files.is_empty() { "placeholder" } else { "assets" }));
+        let source = if !files.is_empty() {
+            "assets"
+        } else if slot.kind == "person" && crate::characters::available() {
+            "recipes"
+        } else {
+            "placeholder"
+        };
+        counts.push(format!("{} {} ({source})", places.len(), slot.kind));
         for (k, pl) in places.iter().enumerate() {
             let y = shape.height(pl.at.x, pl.at.y);
             let at = Vec3::new(pl.at.x, y, pl.at.y);
+            if slot.kind == "person" && files.is_empty() && crate::characters::available() {
+                // People from seeded random recipes of the slot's height.
+                let recipe = crate::characters::Recipe::for_height(si as u64 * 1000 + k as u64, pl.height);
+                let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, pl.yaw);
+                commands.entity(e).insert(EnvPart);
+                if pl.height >= 3.0 {
+                    commands.entity(e).insert(Occluder { height: pl.height });
+                }
+                continue;
+            }
             if slot.kind == "person" && files.is_empty() {
                 let tf = Transform::from_translation(at).with_rotation(Quat::from_rotation_y(pl.yaw)).with_scale(Vec3::splat(pl.height / 1.75));
                 let e = crate::bodies::spawn(&mut commands, &mut meshes, &palette, &style, "person", 100 + k as u32 + si as u32 * 100, false, tf, pl.at);

@@ -258,6 +258,18 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
     - The meadow's frame rate with about 1,150 models is unmeasured.
 
 - **Authored animation (2026-11-08):** `living/tools/blender/animate.py` keys looping `idle`, `walk`, `run`, `talk` and `attack` clips (30 fps) onto VRoid characters from short per-clip angle tables. Legs use two-bone IK so planted feet stay on the floor and roll heel to toe. Blender's exporter can't round-trip a VRoid file (it drops the VRM extension, some textures and the morph names), so the script grafts the exported animations into a copy of the original GLB by node name. `gen_anim.sh` writes `assets/lookdev/anim/` (git-ignored). Look-dev plays a model's clips when its file has them, with 0.22 s crossfades: idle, walk or run for you by how you move; idle, walk or talk for the line-up (`LIVING_GAME_ACT`). Blinking and the talking mouth stay procedural. Walking and running now move at the speeds the clips were made for (1.4 and 3.6 m/s, previously 2.6 and 3.9). Known gaps: skirts and hair don't move (no spring bones), there are no face clips, and the attack has no weapon.
+- **Character recipes and spring bones (2026-11-09):** `living/game/src/characters.rs` builds a character from a recipe in `assets/characters/recipes.json`:
+  - **Recipe:** a VRoid base, height, per-bone proportions (legs, torso, head, shoulders, build…) and colours (hair, eyes, skin, outfit). Folk ranges are adults 1.5–1.95 m, giants 4.5–5.5 m and small folk 0.55–0.7 m. Seeded random recipes fill crowds and `person` slots.
+  - **Proportions:** helper joints scale proportions without shearing children, and the hips' translation follows leg length, so feet stay planted and every clip still plays.
+  - **Colours:** the toon shader remaps each material group's mean texture colour to the recipe's colour, keeping the texture detail.
+  - **Springs:** hair and skirts simulate VRM 0.x springs and colliders from the file (UniVRM's logic) at a fixed 60 Hz. Only the nearest 48 characters within 40 m are simulated, at about 9–11 µs per character per step.
+  - **Controls:** `LIVING_GAME_CROWD`, `LIVING_GAME_PLAYER` and `LIVING_GAME_VIEW=recipe:…`.
+  - **Known gaps:**
+    - multi-colour garments collapse to shades of one colour;
+    - soft hair streams almost horizontally when running;
+    - each colour combination is its own material;
+    - only two base faces;
+    - size-dependent movement speeds are not in the rules yet.
 - **Text-to-motion (2026-11-08):** NVIDIA Kimodo SOMA-RP v1.2 runs on the DGX Spark (`~/kimodo-test`, venv, PyTorch 2.11 for CUDA 13 on aarch64; setup notes in `.local/kimodo/README.md`). A 4 s motion takes about 25 s per prompt, mostly loading the Llama 3 8B text encoder (gated: the user's Hugging Face account has access), and peaks at 15 GB of GPU memory. `animate.py --kimodo NAME=motion.npz` retargets a SOMA motion onto VRoid J_Bip: both rest in a T-pose with identity rest rotations, so each bone takes its mapped joint's global rotation turned half round Y, relative to its nearest mapped ancestor; the hips keep sway and bob but not travel. First prompts (walk, idle, talking with gestures, an overhead sword swing) read naturally on Vivi; the walk and the talk look more alive than the hand-keyed ones. Not yet done: looping (the clips are 4 s takes), foot-contact cleanup after removing travel, and prompts that start and end in a matching pose. Licences: Kimodo models under the NVIDIA Open Model License (commercial use; the notice must ship with distributed copies); the text encoder under the Llama 3 licence (attribution "Built with Meta Llama 3").
 
 - **Tree variety (2026-11-09; the user saw forests of identical trees):**

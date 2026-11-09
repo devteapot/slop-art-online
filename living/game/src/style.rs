@@ -24,6 +24,11 @@ pub struct ToonParams {
     pub band: Vec4,
     pub extra: Vec4,
     pub shade: Vec4,
+    /// Per-instance recolouring of the texture (characters.rs): x hue, y saturation, z value,
+    /// w mode (0 none, 1 shift the hue, 2 tint a grey texture).
+    pub recolor: Vec4,
+    /// x: the texture's mean hue, y: how much of the texture's hue variation stays (mode 1).
+    pub recolor_from: Vec4,
 }
 
 impl MaterialExtension for ToonExt {
@@ -133,6 +138,8 @@ impl Style {
             band: Vec4::new(self.threshold, self.softness.max(0.001), self.brush, self.rim_width),
             extra: Vec4::new(1.0 / self.brush_size.max(0.05), self.ambient, self.core, self.exposure),
             shade: Vec4::new(self.shadow_hue, self.hue_shift, self.shadow_saturation, 0.0),
+            recolor: Vec4::ZERO,
+            recolor_from: Vec4::ZERO,
         }
     }
 
@@ -202,13 +209,15 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         style.params()
     } else {
         // Plain look: no bands, no tint, no rim (for comparison).
-        ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0) }
+        ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0), recolor: Vec4::ZERO, recolor_from: Vec4::ZERO }
     };
     for (_, m) in toons.iter_mut() {
-        // Keep each material's own flags (skin).
-        let skin = m.extension.params.shade.w;
+        // Keep each material's own flags (skin) and recolouring.
+        let old = m.extension.params;
         m.extension.params = p;
-        m.extension.params.shade.w = skin;
+        m.extension.params.shade.w = old.shade.w;
+        m.extension.params.recolor = old.recolor;
+        m.extension.params.recolor_from = old.recolor_from;
     }
     let [r, g, b] = style.outline_color;
     for (kind, mut o) in &mut outlines {

@@ -1,0 +1,63 @@
+{
+  "note": "Character recipes (living/game/src/characters.rs). A recipe is a base VRoid file, a height in metres, proportions as multipliers (1 = the base's own) and colours (sRGB hex; a missing colour keeps the base's texture). Folks are ranges for the seeded crowd generator; palettes are what it picks colours from.",
+  "bases": ["lookdev/vroid-Vivi.glb", "lookdev/vroid-Sendagaya_Shino.glb"],
+  "recipes": [
+    { "name": "vivi", "base": "lookdev/vroid-Vivi.glb", "height": 1.75 },
+    { "name": "shino", "base": "lookdev/vroid-Sendagaya_Shino.glb", "height": 1.75 },
+    {
+      "name": "smith",
+      "base": "lookdev/vroid-Sendagaya_Shino.glb",
+      "height": 1.86,
+      "proportions": { "build": 1.3, "shoulders": 1.2, "arms": 1.04, "hands": 1.15, "neck": 0.85, "head": 0.95 },
+      "colors": { "hair": "#2b1c14", "skin": "#a8714f", "eyes": "#4a3020", "top": "#6b4a2e", "bottom": "#3a3430", "shoes": "#2a211c", "accent": "#b08a3a" }
+    },
+    {
+      "name": "scholar",
+      "base": "lookdev/vroid-Vivi.glb",
+      "height": 1.68,
+      "proportions": { "build": 0.92, "legs": 1.04, "neck": 1.08, "shoulders": 0.94 },
+      "colors": { "hair": "#d8d2c8", "skin": "#e8c4a8", "eyes": "#5878a0", "top": "#2c3c6a", "shoes": "#3a2a20" }
+    },
+    {
+      "name": "ranger",
+      "base": "lookdev/vroid-Sendagaya_Shino.glb",
+      "height": 1.78,
+      "proportions": { "legs": 1.05, "build": 1.05 },
+      "colors": { "hair": "#b0502a", "skin": "#f0cdb0", "eyes": "#3a7040", "top": "#3c5a32", "bottom": "#5a4630", "shoes": "#3a2c20", "accent": "#7a6a40" }
+    },
+    {
+      "name": "giant",
+      "base": "lookdev/vroid-Sendagaya_Shino.glb",
+      "height": 5.0,
+      "proportions": { "legs": 0.88, "arms": 1.08, "torso": 1.08, "neck": 0.9, "head": 0.86, "shoulders": 1.22, "hips": 1.15, "build": 1.42, "hands": 1.3, "feet": 1.2 },
+      "colors": { "hair": "#5a5048", "skin": "#9a8270", "eyes": "#6a7a80", "top": "#5a6a74", "bottom": "#4a4038", "shoes": "#3a3028", "accent": "#8a7a5a" }
+    },
+    {
+      "name": "small",
+      "base": "lookdev/vroid-Vivi.glb",
+      "height": 0.62,
+      "proportions": { "legs": 0.66, "arms": 0.85, "torso": 0.9, "neck": 0.65, "head": 1.4, "shoulders": 1.1, "hips": 1.15, "build": 1.35, "hands": 1.2, "feet": 1.3 },
+      "colors": { "hair": "#c07a30", "skin": "#e8b896", "eyes": "#5a4020", "top": "#a04a30", "shoes": "#4a3020" }
+    }
+  ],
+  "folks": {
+    "adult": {
+      "height": [1.5, 1.95], "legs": [0.94, 1.07], "arms": [0.96, 1.04], "torso": [0.95, 1.06], "neck": [0.88, 1.1],
+      "head": [0.93, 1.04], "shoulders": [0.92, 1.18], "hips": [0.92, 1.1], "build": [0.9, 1.28], "hands": [0.95, 1.1], "feet": [0.95, 1.1]
+    },
+    "giant": {
+      "height": [4.5, 5.5], "legs": [0.84, 0.94], "arms": [1.04, 1.12], "torso": [1.04, 1.12], "neck": [0.82, 0.95],
+      "head": [0.8, 0.9], "shoulders": [1.12, 1.3], "hips": [1.08, 1.22], "build": [1.3, 1.55], "hands": [1.2, 1.4], "feet": [1.12, 1.28]
+    },
+    "small": {
+      "height": [0.55, 0.7], "legs": [0.6, 0.72], "arms": [0.8, 0.9], "torso": [0.85, 0.95], "neck": [0.6, 0.72],
+      "head": [1.3, 1.5], "shoulders": [1.04, 1.2], "hips": [1.1, 1.25], "build": [1.25, 1.45], "hands": [1.12, 1.3], "feet": [1.2, 1.4]
+    }
+  },
+  "palettes": {
+    "hair": ["#1c1614", "#2b1c14", "#4a3020", "#6a4228", "#8a3a22", "#b0502a", "#c88a40", "#e0c070", "#e8dcc0", "#9a948c", "#d8d2c8", "#2c4a6a", "#5a3a7a", "#3a6a5a", "#a04a6a"],
+    "skin": ["#f4d8c4", "#f0cdb0", "#e8b896", "#d8a07a", "#c08460", "#a8714f", "#8a5a3c", "#6a4430", "#4e3224"],
+    "eyes": ["#4a3020", "#6a4a28", "#3a7040", "#5878a0", "#6a7a80", "#a07028", "#6a4a8a", "#2a5a6a"],
+    "outfit": ["#6b4a2e", "#3a3430", "#2c3c6a", "#3c5a32", "#5a4630", "#7a2a2a", "#a04a30", "#c0a060", "#e0d8c8", "#4a5a6a", "#2a2a30", "#6a3a5a", "#3a6a6a", "#8a7a5a", "#b06a3a", "#5a7a3a"]
+  }
+}

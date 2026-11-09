@@ -22,6 +22,9 @@
 //! - `LIVING_GAME_VIEW_CLIP=<name>[,<name>…]`: the clips to play and photograph (default: the
 //!   first four).
 //!
+//! - `recipe:<name>` or `recipe:<folk>:<seed>` in `LIVING_GAME_VIEW` shows a character recipe
+//!   (`assets/characters/recipes.json`; folks `adult`, `giant`, `small`) at its own height.
+//!
 //! Files outside the asset folder are copied into `assets/view/` (git-ignored) first, since the
 //! asset server reads only under its root.
 
@@ -143,6 +146,11 @@ fn requested() -> Vec<String> {
     let root = PathBuf::from(asset_root());
     let mut files = Vec::new();
     for part in std::env::var("LIVING_GAME_VIEW").unwrap_or_default().split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        // A character recipe (characters.rs): `recipe:<name>` or `recipe:<folk>:<seed>`.
+        if part.starts_with("recipe:") {
+            files.push(part.to_string());
+            continue;
+        }
         let p = PathBuf::from(part);
         let abs = if p.is_absolute() { p } else if root.join(&p).exists() { root.join(&p) } else { std::env::current_dir().unwrap_or_default().join(&p) };
         let mut found = Vec::new();
@@ -235,14 +243,21 @@ pub fn setup(
         }
     }
     commands.spawn((Mesh3d(meshes.add(g.build())), MeshMaterial3d(palette.vertex.clone()), Transform::default(), OutlineStencil::default()));
-    for (index, file) in files.iter().enumerate() {
+    for (index, token) in files.iter().enumerate() {
+        let recipe = token.strip_prefix("recipe:").map(|r| {
+            crate::characters::Recipe::parse(r).unwrap_or_else(|| {
+                warn!("view: no recipe {r}");
+                crate::characters::Recipe::random(0, "adult")
+            })
+        });
+        let file = &recipe.as_ref().map_or(token.clone(), |r| crate::lookdev::animated(&r.base));
         let json = glb_json(file);
         let clips = json.as_ref().map(clip_list).unwrap_or_default();
         let is_vrm = file.ends_with(".vrm") || file.contains("vroid-") || json.as_ref().is_some_and(|j| j["extensions"]["VRM"].is_object() || j["extensions"]["VRMC_vrm"].is_object());
         // VRM 0.x models face −Z; turn them to face the camera. Models with clips aren't given
         // the procedural rig (`vrm: false`), so their own animation plays.
         let turn = Quat::from_rotation_y(if is_vrm && !file.contains("VRMC") { std::f32::consts::PI } else { 0.0 });
-        let model = Model { vrm: is_vrm && clips.is_empty(), file: file.clone(), height, ground_y: 0.0, glow: None };
+        let model = Model { vrm: is_vrm && (clips.is_empty() || recipe.is_some()), file: file.clone(), height: recipe.as_ref().map_or(height, |r| r.height), ground_y: 0.0, glow: None };
         let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
         let wanted: Vec<String> = std::env::var("LIVING_GAME_VIEW_CLIP").unwrap_or_default().split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
         let shown: Vec<usize> = if wanted.is_empty() { (0..clips.len().min(4)).collect() } else { clips.iter().enumerate().filter(|(_, c)| wanted.contains(&c.0)).map(|(i, _)| i).collect() };
@@ -250,7 +265,11 @@ pub fn setup(
         let shots = parse_shots(&spec, &clips, &shown, file);
         let first_clip = shown.first().copied().unwrap_or(0);
         let graph = (!clips.is_empty()).then(|| (assets.load::<Gltf>(file.clone()), vec![], Entity::PLACEHOLDER));
-        commands.spawn((model, Item { index, clips, shots, first_clip, graph }, WorldAssetRoot(handle), Transform::from_rotation(turn), Visibility::Hidden));
+        let mut e = commands.spawn((model, Item { index, clips, shots, first_clip, graph }, WorldAssetRoot(handle), Transform::from_rotation(turn), Visibility::Hidden));
+        if let Some(r) = recipe {
+            // A recipe's character: rigged for its face, shaped, recoloured and sprung.
+            e.insert(crate::characters::Character { recipe: r, stride: 1.0 });
+        }
     }
     commands.insert_resource(ViewState {
         files,

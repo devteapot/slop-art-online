@@ -79,6 +79,34 @@ You walk around with WASD (Shift to run), as a VRoid character from the look-dev
 LIVING_GAME_LOOKDEV=1 LIVING_GAME_TOUR=/tmp/tour cargo run --manifest-path living/Cargo.toml --release -p living-game
 ```
 
+## Characters
+
+VRoid characters are built from recipes (`src/characters.rs`, `assets/characters/recipes.json`). They share one skeleton and one set of clips.
+
+A recipe gives:
+- a base VRoid file;
+- a height in metres;
+- proportions as multipliers: legs, arms, torso, neck, head, shoulders, hips, build, hands and feet;
+- colours for hair, skin, eyes, top, bottom, shoes and accent, as sRGB hex.
+
+The file also holds folk ranges (`adult`, `giant`, `small`) and palettes for seeded random recipes.
+- Lengths and girths scale each bone's own vertices through a helper skin joint, so rotating children aren't sheared. Head, hands and feet scale uniformly.
+- The hips' animated translation scales with the legs, so feet stay on the ground.
+- Colours are per-instance toon parameters: the hue and value are remapped from each material's mean texture colour, and grey textures are tinted.
+- Spring bones come from the file's VRM 0.x `secondaryAnimation`. They cover hair, skirts, sleeves and bust, and collide with the file's collider spheres. They run after the pose at a fixed 60 Hz, with at most three steps a frame.
+
+| Variable | Meaning |
+|---|---|
+| `LIVING_GAME_CROWD=N[:seed]` | the line-up gets N random characters in rows to its south: small folk in front, then adults, then giants. Photograph them with `LIVING_GAME_TOUR_SHOTS=0:10:36:40` |
+| `LIVING_GAME_PLAYER=<recipe>` | your character: a recipe name or `<folk>:<seed>` |
+| `LIVING_GAME_VIEW=recipe:<name>` or `recipe:<folk>:<seed>` | the asset view shows a recipe |
+| `LIVING_GAME_SPRINGS=0` | springs off |
+| `LIVING_GAME_SPRING_BUDGET` / `LIVING_GAME_SPRING_NEAR` | the most characters simulated in a frame (nearest first; default 48), and the distance limit in metres for a 1.75 m character (default 40, scaled by height) |
+
+Environment slots of kind `person` with no asset folder are filled with random recipes of the slot's height.
+
+The simulation logs its cost every 3 s. A 78-joint character costs about 9 µs of CPU per step on an M4 Pro.
+
 ## Controls
 
 | Input | Effect |

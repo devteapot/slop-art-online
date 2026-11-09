@@ -34,6 +34,12 @@ struct Toon {
     // Shadow colour by hue shift (Blue Protocol): x target hue (0..1), y how far toward it,
     // z saturation multiplier, w: 1 on skin (lighter, warmer shadows; see below).
     shade: vec4<f32>,
+    // Per-instance recolouring (characters.rs): x the target hue, y
+    // saturation and z value factors (>= 0 scales toward 0; < 0 scales the distance to 1 by
+    // -f), w mode: 0 none, 1 shift, 2 tint.
+    recolor: vec4<f32>,
+    // x: the texture's mean hue, y: how much of its hue variation stays (mode 1).
+    recolor_from: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -89,6 +95,32 @@ fn hsv_to_rgb(c: vec3<f32>) -> vec3<f32> {
     return c.z * mix(vec3(1.0), clamp(p - 1.0, vec3(0.0), vec3(1.0)), c.y);
 }
 
+fn remap(c: f32, f: f32) -> f32 {
+    return select(c * f, 1.0 - (1.0 - c) * (-f), f < 0.0);
+}
+
+// A character's own colours on a shared texture: the mean texture colour moves to the recipe's,
+// keeping the texture's detail.
+fn recolor(c: vec3<f32>) -> vec3<f32> {
+    let mode = toon.recolor.w;
+    if (mode < 0.5) {
+        return c;
+    }
+    var hsv = rgb_to_hsv(c);
+    if (mode < 1.5) {
+        // Hues gather round the target: a many-coloured garment becomes tones of one colour.
+        var d = hsv.x - toon.recolor_from.x;
+        d = d - round(d);
+        hsv.x = fract(toon.recolor.x + d * toon.recolor_from.y + 1.0);
+        hsv.y = clamp(remap(hsv.y, toon.recolor.y), 0.0, 1.0);
+    } else {
+        hsv.x = toon.recolor.x;
+        hsv.y = toon.recolor.y;
+    }
+    hsv.z = clamp(remap(hsv.z, toon.recolor.z), 0.0, 1.0);
+    return hsv_to_rgb(hsv);
+}
+
 // A shadow colour from a lit colour: the hue moved toward a target, saturation kept (or
 // raised), brightness lowered.
 fn shadow_of(lit: vec3<f32>, value: f32) -> vec3<f32> {
@@ -124,7 +156,7 @@ fn fragment(
 @if(PREPASS_PIPELINE) {
     out = deferred_output(in, pbr_input);
 } @else {
-    let albedo = pbr_input.material.base_color;
+    let albedo = vec4<f32>(recolor(pbr_input.material.base_color.rgb), pbr_input.material.base_color.a);
     let N = normalize(pbr_input.N);
     let V = normalize(pbr_input.V);
     let p = pbr_input.world_position;
