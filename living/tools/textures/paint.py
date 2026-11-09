@@ -32,7 +32,8 @@ Sets:
 - `material` (scenery models through the toon shader, `living/game/src/style.rs`; layer order is
   `surfaces.py`'s SURFACES, which the Blender generators tag each part with): bark, leaves, wood
   (beams and posts), planks, plaster, stone (ashlar), boulder (natural rock), brick, shingles, tiles (clay barrel
-  tiles), thatch, metal, copper (and brass), concrete, cloth (awnings, blinds), glass.
+  tiles), thatch, metal, copper (and brass), concrete, cloth (awnings), glass, plastic (moulded parts,
+  trim, blinds) and earth (burrows and banks).
 
 Each set is written as one vertical strip, `<set>.png` (layer k at rows k*size..), plus
 `<set>.txt` naming the layers in order. The game stacks the strip into a texture array and builds
@@ -62,6 +63,7 @@ TINT = {
     "brick": (160, 84, 62), "shingles": (120, 70, 60), "metal": (120, 126, 130), "leaves": (90, 140, 70),
     "boulder": (128, 122, 116), "wood": (110, 76, 52), "tiles": (190, 92, 62), "thatch": (190, 160, 100), "copper": (90, 160, 140),
     "concrete": (120, 122, 132), "cloth": (200, 70, 80), "glass": (50, 60, 80),
+    "plastic": (60, 140, 210), "earth": (118, 90, 62),
 }
 
 
@@ -548,9 +550,45 @@ def brick(p: Painter):
 def shingles(p: Painter):
     """Slate or wood shingles on a roof whose courses are modelled: a broad watercolour mottle
     only. Rows would fight the geometry, and streaks and flecks turned to grain at a distance
-    (blind A/B, 2026-11-09)."""
+    (blind A/B, 2026-11-09). The game draws it at strength 0. Painting only what runs down the
+    slope, so the modelled, sagging courses need no alignment, lost two more blind rounds
+    (assets-1, 2026-11-09: 1 win, 27 losses, 28 ties): slate joints, even with the courses
+    alternating between two layers half a slate apart, read as stripes and grain, and soft
+    per-slate shades as checkered blotches. Breaking courses into slates is a geometry job (it
+    adds about 60% to a house's triangles)."""
     p.tone(0.88 + 0.24 * p.posterise(p.noise(3, 3, 0.55), 4, 4.0), hue=(1.0, 1.0, 1.03))
     p.tone(0.95 + 0.1 * p.posterise(p.noise(6, 2), 3, 3.0), hue=(1.02, 1.0, 0.97))
+
+
+def plastic(p: Painter):
+    """Moulded plastic and painted trim: smooth, with a soft sheen, a little scuffing and dust
+    gathered low. No seams (a grid of them read as grain in vistas and as stray stripes on small
+    parts, blind A/B 2026-11-09): it is the smoothest surface in the set."""
+    n = p.n
+    p.tone(0.95 + 0.1 * p.posterise(p.noise(2, 2), 3, 6.0), hue=(1.0, 1.0, 1.01))
+    for _ in range(int(n * n / 9000)):
+        x, y = p.rng.random(2) * n
+        L = n / 512 * p.rng.uniform(8, 22)
+        p.dab(x, y, L, n / 512 * 1.6, p.rng.uniform(-0.5, 0.5), c(0.6, 0.6, 0.6), alpha=0.35, bristle=0.0, taper=0.8)
+    p.h = np.full((n, n), 0.5, np.float32)
+
+
+def earth(p: Painter):
+    """Packed earth (burrows and banks): soft blocked-in patches, a scatter of small stones and a
+    few dark root threads; no fine speckle."""
+    n = p.n
+    p.tone(0.88 + 0.24 * p.posterise(p.noise(4, 3, 0.55), 4, 3.0), hue=(1.03, 1.0, 0.95))
+    for _ in range(int(n * n / 4000)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.choice([0.4, 0.62]) * p.rng.uniform(0.92, 1.08)
+        p.blob(x, y, n / 512 * p.rng.uniform(6, 13), c(v * 1.02, v, v * 0.96), alpha=0.8, soft=0.45, squash=p.rng.uniform(0.6, 1.0),
+               angle=p.rng.random() * 6.28, dome=0.35, height=0.6 + 0.4 * v)
+    for _ in range(int(n * n / 26000)):
+        x, y = p.rng.random(2) * n
+        ang = p.rng.random() * 6.28
+        for j in range(4):
+            p.dab(x, y, n / 512 * 18, n / 512 * 1.8, ang, c(0.36, 0.32, 0.28), alpha=0.45, bristle=0.0, taper=0.4)
+            x, y, ang = x + math.cos(ang) * n / 512 * 15, y + math.sin(ang) * n / 512 * 15, ang + p.rng.normal(0, 0.6)
 
 
 def metal(p: Painter):
@@ -628,7 +666,9 @@ def wood(p: Painter):
 
 def tiles(p: Painter):
     """Clay barrel tiles in columns: a lit crown and dark troughs, each course faintly shaded just
-    below the butt of the one above (v runs down the roof; the roof's courses are modelled)."""
+    below the butt of the one above (v runs down the roof; the roof's courses are modelled). The
+    game draws it at strength 0: this and a version of soft barrel columns alone (assets-1) both
+    lost blind A/Bs, as ribbing and soot."""
     cols, rows = 8, 6
     cu = (p.u * cols) % 1.0
     ci = np.floor(p.u * cols).astype(int) % cols
@@ -731,6 +771,8 @@ PAINT = {
     "stone": ashlar,
     "brick": brick,
     "shingles": shingles,
+    "plastic": plastic,
+    "earth": earth,
     "metal": metal,
     "leaves": leaves,
     "boulder": boulder,
@@ -744,7 +786,7 @@ PAINT = {
 }
 
 # How far each texture's luminance spreads (the narrow band), by kind.
-SPREAD = {"cliff": 0.13, "pavers": 0.06, "spirit_moss": 0.085, "sand": 0.045, "plaster": 0.05, "metal": 0.05, "mud": 0.07, "cobble": 0.09, "flagstone": 0.08, "rock": 0.09, "brick": 0.09, "shingles": 0.09,
+SPREAD = {"cliff": 0.13, "pavers": 0.06, "spirit_moss": 0.085, "sand": 0.045, "plaster": 0.05, "metal": 0.05, "mud": 0.07, "cobble": 0.09, "flagstone": 0.08, "rock": 0.09, "brick": 0.09, "shingles": 0.09, "plastic": 0.035, "earth": 0.07,
           "boulder": 0.08, "wood": 0.07, "tiles": 0.09, "thatch": 0.085, "copper": 0.065, "concrete": 0.06, "cloth": 0.05, "glass": 0.07}
 
 

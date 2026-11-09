@@ -81,6 +81,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from surfaces import alpha as surface_alpha  # noqa: E402
 
 PROFILE = None  # --profile: triangles per generator function
+UNTAGGED = None  # --profile: untagged lit triangles (no painted surface) per generator function
 
 X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 
@@ -176,9 +177,10 @@ def tagged(c, surface):
     return t
 
 
-# Each palette entry's surface; styles may override (cyberpunk stone is cast). Entries not listed
-# stay plain: plastic, trim, glow, earth, and blinds (their folds read as pinstripes at a
-# distance).
+# Each palette entry's surface; styles may override (cyberpunk stone is cast). Only glow and the
+# window boxes' flowers stay plain here: glowing parts take glass in `Kit.add`, and blooms, fruit
+# and goods stay untextured like nature's petals. Blinds are plastic slats (the cloth's folds read
+# as pinstripes at a distance).
 SURFACE_OF = {
     "plaster": "plaster", "cream": "plaster", "cap": "plaster",
     "timber": "wood", "under": "wood", "heart": "wood", "bark": "bark", "paint": "planks",
@@ -186,6 +188,7 @@ SURFACE_OF = {
     "roof": "shingles", "grass": "thatch",
     "glass": "glass", "iron": "metal", "steel": "metal", "metal": "metal", "dark": "metal", "panel": "metal",
     "brass": "copper", "copper": "copper", "awning": "cloth",
+    "plastic": "plastic", "trim": "plastic", "blind": "plastic", "earth": "earth",
 }
 SURFACE_STYLE = {"cyberpunk": {"stone": "concrete", "stone_dark": "concrete"}}
 
@@ -283,6 +286,10 @@ class Builder:
             cols = [color_fn(loop.vert.co, nf.normal) for loop in nf.loops]
             # One surface per face (the first corner's), so the tag never blends across it.
             a = surface_alpha(getattr(cols[0], "surface", None))
+            if UNTAGGED is not None and a == 1.0 and not mat.name.startswith("Glow"):
+                import inspect
+                who = next(f"{f.function}:{f.lineno}" for f in inspect.stack()[1:] if f.function not in ("add", "extra", "fn"))
+                UNTAGGED[who] = UNTAGGED.get(who, 0) + len(nf.verts) - 2
             for loop, c in zip(nf.loops, cols):
                 loop[self.col] = (*c, a)
         part.free()
@@ -471,11 +478,11 @@ class Kit:
             color, ao, vary = self.pal["glass"], False, 0.0
         if isinstance(glow, str):
             # A neon colour: saturated, a little paler in its vertex colour (the tube's hot core).
-            core = lerp(NEON[glow], (1.0, 1.0, 1.0), 0.3)
+            core = tagged(lerp(NEON[glow], (1.0, 1.0, 1.0), 0.3), "glass")
             self.b.add(bm, self.neon(glow), lambda co, n: core, soft, closed)
             return
         if glow:
-            warm = self.pal.get("glow_tint", (1.0, 0.78, 0.45))
+            warm = tagged(self.pal.get("glow_tint", (1.0, 0.78, 0.45)), "glass")
             self.b.add(bm, self.glow_mat, lambda co, n: warm, soft, closed)
             return
         if callable(color):
@@ -509,6 +516,14 @@ class Kit:
 # Roofs
 
 
+def roof_color(k, color):
+    """A roof colour that knows its painted surface: palette roofs carry theirs; a raw colour
+    becomes slate or clay tiles by its hue (`surface_for`)."""
+    if getattr(color, "surface", None):
+        return color
+    return tagged(color, surface_for(k.style, "roof", color))
+
+
 def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, sides=(-1, 1), course=0.48,
                th=None, sag=0.1, barge=None, cap=True, clip=0.0, cut=(1.1, 2.8), deck=None):
     """A gable (or, with one side, lean-to) roof of stepped, slightly uneven shingle courses on a
@@ -524,6 +539,7 @@ def gable_roof(k, centre, axis, half_len, half_span, zw, oh_e, oh_g, color, side
     `th` is a course's thickness; by default 0.15 m on slopes pulled in so that the eave's outer
     edge stays where 0.1 m courses put it (the settlement table's footprints)."""
     rng = k.rng
+    color = roof_color(k, color)
     th, th_ref = (0.15, 0.1) if th is None else (th, th)
     deck = deck if deck is not None else min(0.3, max(0.12, th * 2))
     centre, A = Vector(centre), Vector(axis).normalized()
@@ -633,6 +649,7 @@ def slab(pts, up, down=None):
 def hip_roof(k, cx, cy, hx, hy, zw, zr, oh, color, course=0.55, lip=0.07, swap=False):
     """A hipped roof of stacked, stepped frustum courses (long axis X, or Y with swap)."""
     rng = k.rng
+    color = roof_color(k, color)
     if hx < hy:
         hx, hy, swap = hy, hx, not swap
     p = math.atan2(zr - zw, hy)
@@ -1038,7 +1055,7 @@ def shopfront(k, f, a, z0, w, P, recess=0.0):
         k.add(sphere(f.p(a - w / 2 + 0.25 + i * 0.45, zb + 0.12, 0.35), 0.13, 0), jitter(goods, rng, 0.1), ao=False)
     if rng.random() < 0.6:
         # A striped cloth awning.
-        cloth = k.choice([(0.82, 0.26, 0.22), (0.25, 0.46, 0.72), (0.28, 0.56, 0.36), (0.88, 0.66, 0.24)])
+        cloth = tagged(k.choice([(0.82, 0.26, 0.22), (0.25, 0.46, 0.72), (0.28, 0.56, 0.36), (0.88, 0.66, 0.24)]), "cloth")
         n = max(3, int(w / 0.5))
         for i in range(n):
             a0 = a - w / 2 - 0.1 + i * (w + 0.2) / n
@@ -1098,7 +1115,7 @@ def chimney(k, P, info, where="ridge", x=None):
         r = 0.17 if len(pots) == 1 else 0.14
         hh = pr.uniform(0.2, 0.28)
         part = lbox(q + Vector((-r, -r, 0)), q + Vector((r, r, hh)))
-        (k.add if i == 0 else k.extra)(part, (0.62, 0.36, 0.25), tint=lambda co, n, z=q.z + hh: 0.6 if co.z > z - 0.05 and n.z > 0.5 else 1.0)
+        (k.add if i == 0 else k.extra)(part, tagged((0.62, 0.36, 0.25), "brick"), tint=lambda co, n, z=q.z + hh: 0.6 if co.z > z - 0.05 and n.z > 0.5 else 1.0)
 
 
 def dormers(k, P, info, xs, w=1.5):
@@ -1146,7 +1163,7 @@ def lean_to(k, P, info, e, depth=None, length=None):
         for r in range(3):
             for i in range(4 - r):
                 a = -0.6 + (i + 0.5 * r) * 0.32
-                k.add(cyl(fr.p(a, 0.15 + r * 0.26, 0.05), fr.p(a, 0.15 + r * 0.26, 0.75), 0.14, 0.14, 6), (0.55, 0.40, 0.26), ao=False)
+                k.add(cyl(fr.p(a, 0.15 + r * 0.26, 0.05), fr.p(a, 0.15 + r * 0.26, 0.75), 0.14, 0.14, 6), tagged((0.55, 0.40, 0.26), "wood"), ao=False)
 
 
 def boards(c, w=0.32):
@@ -1573,7 +1590,7 @@ def fantasy_chapel(k):
         # Belfry: paired louvred openings.
         for e in (-0.6, 0.6):
             pts = [(e - 0.35, tz - 3.4), (e + 0.35, tz - 3.4)] + [(e + math.cos(math.pi * i / 6) * 0.35, tz - 1.8 + math.sin(math.pi * i / 6) * 0.35) for i in range(7)]
-            k.add(f.poly(pts, -0.05, 0.04), (0.12, 0.11, 0.12))
+            k.add(f.poly(pts, -0.05, 0.04), tagged((0.12, 0.11, 0.12), "wood"))
             for zz in (tz - 3.0, tz - 2.6, tz - 2.2):
                 k.add(f.box(e - 0.33, e + 0.33, zz, zz + 0.1, 0.0, 0.08), mul(P["timber"], 0.7), ao=False)
         k.add(f.box(-th - 0.1, th + 0.1, tz - 0.35, tz, 0.0, 0.2), mul(stone, 0.85))
@@ -1649,7 +1666,7 @@ def fantasy_workshop(k):
         for r in range(3):
             for i in range(5 - r):
                 y = -1.0 + (i + 0.5 * r) * 0.42
-                k.add(cyl(((yx0 + yx1) / 2 - 1.2, y, 0.2 + r * 0.36), ((yx0 + yx1) / 2 + 1.2, y, 0.2 + r * 0.36), 0.19, 0.19, 7), (0.58, 0.43, 0.28), ao=False)
+                k.add(cyl(((yx0 + yx1) / 2 - 1.2, y, 0.2 + r * 0.36), ((yx0 + yx1) / 2 + 1.2, y, 0.2 + r * 0.36), 0.19, 0.19, 7), tagged((0.58, 0.43, 0.28), "wood"), ao=False)
         for i in range(4):
             k.add(box((yx0 + 0.5, D / 2 - 1.6, i * 0.12), (yx1 - 0.5, D / 2 - 0.6, i * 0.12 + 0.1)), jitter((0.8, 0.66, 0.45), rng, 0.06), vary=0, ao=False)
         chimney(k, P, info, "ridge")
@@ -1734,7 +1751,7 @@ def fantasy_barn(k):
         for r in range(3):
             for i in range(4 - r):
                 a = -0.6 + (i + 0.5 * r) * 0.3
-                k.add(cyl((hx + 0.5, a, 0.15 + r * 0.25), (hx + 1.0, a, 0.15 + r * 0.25), 0.13, 0.13, 6), (0.55, 0.40, 0.26), ao=False)
+                k.add(cyl((hx + 0.5, a, 0.15 + r * 0.25), (hx + 1.0, a, 0.15 + r * 0.25), 0.13, 0.13, 6), tagged((0.55, 0.40, 0.26), "wood"), ao=False)
     lean(k)
 
 
@@ -1902,7 +1919,7 @@ def fantasy_tower(k, H):
 def fantasy_wall(k, H):
     """One town-wall segment (4.7 m along X, outer face -Y): battered base, walk, merlons."""
     rng, pal = k.rng, k.pal
-    stone, dark = (0.68, 0.66, 0.61), (0.52, 0.50, 0.47)
+    stone, dark = tagged((0.68, 0.66, 0.61), "stone"), tagged((0.52, 0.50, 0.47), "stone")
     moss = (0.40, 0.50, 0.28)
     L, T = 2.35, 1.0
     walk = H - 1.25
@@ -1949,8 +1966,8 @@ def fantasy_wall(k, H):
 def market_stall(k, H):
     rng, pal = k.rng, k.pal
     wood = jitter(pal["timber"], rng, 0.1)
-    cloth = k.choice([(0.82, 0.26, 0.22), (0.25, 0.46, 0.72), (0.28, 0.56, 0.36), (0.88, 0.66, 0.24), (0.56, 0.32, 0.62)])
-    cream = (0.96, 0.93, 0.84)
+    cloth = tagged(k.choice([(0.82, 0.26, 0.22), (0.25, 0.46, 0.72), (0.28, 0.56, 0.36), (0.88, 0.66, 0.24), (0.56, 0.32, 0.62)]), "cloth")
+    cream = tagged((0.96, 0.93, 0.84), "cloth")
     w, d = rng.uniform(1.1, 1.5), 0.55
     k.add(box((-w, -d, 0), (w, d, 0.95), 0.04), mul(wood, 1.25))
     for i in range(int(w * 2 / 0.3)):
@@ -2503,7 +2520,7 @@ def steampunk_pipe(k, H):
     n = 8
     for i in range(n):
         a0, a1 = i / n * math.tau, (i + 1) / n * math.tau
-        k.add(cyl((vx + math.cos(a0) * rw, math.sin(a0) * rw, wz), (vx + math.cos(a1) * rw, math.sin(a1) * rw, wz), 0.035, 0.035, 5), (0.7, 0.18, 0.15), ao=False)
+        k.add(cyl((vx + math.cos(a0) * rw, math.sin(a0) * rw, wz), (vx + math.cos(a1) * rw, math.sin(a1) * rw, wz), 0.035, 0.035, 5), tagged((0.7, 0.18, 0.15), "metal"), ao=False)
     for i in range(3):
         a = i / 3 * math.tau
         k.add(cyl((vx, 0, wz), (vx + math.cos(a) * rw, math.sin(a) * rw, wz), 0.025, 0.025, 4), (0.7, 0.18, 0.15), ao=False)
@@ -2607,7 +2624,7 @@ def clock_face(k, f, a, zc, r, frame, w=0.0):
     """A lit clock dial on a wall face: a brass bezel, twelve ticks and two hands."""
     k.add(cyl(f.p(a, zc, w), f.p(a, zc, w + 0.14), r + 0.28, r + 0.28, 16), frame, ao=False)
     k.add(cyl(f.p(a, zc, w + 0.14), f.p(a, zc, w + 0.18), r, r, 16), None, glow=True)
-    dark = (0.12, 0.10, 0.09)
+    dark = tagged((0.12, 0.10, 0.09), "metal")
     for i in range(12):
         t = i / 12 * math.tau
         ln = 0.3 if i % 3 == 0 else 0.16
@@ -2831,7 +2848,7 @@ def steampunk_mast(k):
         for xs in (-1.5, 1.0):
             strut(k, (cx + xs, 0, gz + 0.6), (cx + xs, 0, cz - R * 0.9), 0.05, iron)
         # The mooring line.
-        sag_line(k, (arm * 3.0, 0, Hm + 1.65), (cx - arm * L / 2, 0, cz), 0.25, 0.05, (0.2, 0.17, 0.13), seg=3)
+        sag_line(k, (arm * 3.0, 0, Hm + 1.65), (cx - arm * L / 2, 0, cz), 0.25, 0.05, (0.2, 0.17, 0.13), seg=3, surface="cloth")
 
 
 def sp_hall(k, W, D, zw, brick, stone, front_door=True):
@@ -3094,10 +3111,10 @@ def steampunk_arcade(k):
             k.add(box((x0, min(y0, y1), 0.2), (x1, max(y0, y1), 1.1)), mul(pal["timber"], 1.3))
             c = k.choice(cloths)
             k.add(prism([(e * (hy - 0.4), 2.7), (e * (hy - 2.2), 2.2), (e * (hy - 2.2), 2.28), (e * (hy - 0.4), 2.78)], x0, x1, lambda a, s_, z: Vector((a, s_, z))),
-                  lambda co, nn, c=c: c if int(math.floor(co.x / 0.5)) % 2 else (0.92, 0.88, 0.78), ao=False)
+                  lambda co, nn, c=c: c if int(math.floor(co.x / 0.5)) % 2 else tagged((0.92, 0.88, 0.78), getattr(c, "surface", None)), ao=False)
             for j in range(3):
                 gx = x0 + (j + 0.5) * (x1 - x0) / 3
-                g = k.choice([(0.85, 0.3, 0.2), (0.9, 0.7, 0.25), (0.5, 0.65, 0.3), brass])
+                g = tagged(k.choice([(0.85, 0.3, 0.2), (0.9, 0.7, 0.25), (0.5, 0.65, 0.3), brass]), "cloth")
                 k.add(box((gx - 0.25, e * (hy - 1.3) - 0.2, 1.1), (gx + 0.25, e * (hy - 1.3) + 0.2, 1.35)), g, ao=False)
             for x in (x0, x1):
                 k.add(box((x - 0.04, e * (hy - 0.5) - 0.04, 1.1), (x + 0.04, e * (hy - 0.5) + 0.04, 2.75)), pal["timber"], ao=False)
@@ -3219,12 +3236,12 @@ def cp_screen(k, f, a, z0, w, h, c1, c2, out=0.25):
         k.add(f.box(a + e * w / 2 - 0.05, a + e * w / 2 + 0.05, z0, z0 + h, out - 0.02, out + 0.12, back=False), dark, ao=False)
 
 
-def sag_line(k, p0, p1, sag, r, color, seg=6, sides=4):
+def sag_line(k, p0, p1, sag, r, color, seg=6, sides=4, surface="plastic"):
     """A cable hanging between two points (a parabola, close enough to a catenary)."""
     p0, p1 = Vector(p0), Vector(p1)
     pts = [p0.lerp(p1, i / seg) - Z * sag * 4 * (i / seg) * (1 - i / seg) for i in range(seg + 1)]
     for a, b in zip(pts, pts[1:]):
-        k.add(cyl(a, b, r, r, sides), color, ao=False, vary=0.05)
+        k.add(cyl(a, b, r, r, sides), color if getattr(color, "surface", None) else tagged(color, surface), ao=False, vary=0.05)
     return pts
 
 
@@ -3378,7 +3395,7 @@ def cp_tank(k, P, x, y, z, r, h):
         for dy in (-1, 1):
             k.add(box((x + dx * r * 0.7 - 0.08, y + dy * r * 0.7 - 0.08, z), (x + dx * r * 0.7 + 0.08, y + dy * r * 0.7 + 0.08, z + 1.2)), k.pal["iron"], ao=False)
     k.add(box((x - r, y - r, z + 1.1), (x + r, y + r, z + 1.25)), k.pal["iron"], ao=False)
-    tc = k.choice([(0.45, 0.36, 0.30), mul(metal, 1.1), (0.26, 0.38, 0.40)])
+    tc = tagged(k.choice([(0.45, 0.36, 0.30), mul(metal, 1.1), (0.26, 0.38, 0.40)]), "metal")
     k.add(cyl((x, y, z + 1.25), (x, y, z + 1.25 + h), r, r, 10), stripes(tc, 0.4, 0.88, 2), ao=False)
     for zz in (0.25, 0.75):
         k.add(cyl((x, y, z + 1.25 + h * zz), (x, y, z + 1.32 + h * zz), r + 0.04, r + 0.04, 10), k.pal["iron"], ao=False)
@@ -3781,7 +3798,7 @@ def cyber_workshop(k):
         # Tyres and drums by the wall.
         e = rng.choice([-1, 1])
         for i in range(rng.choice([3, 4, 5])):
-            k.add(cyl((e * (hx + 0.55), -hy + 1.0, i * 0.26), (e * (hx + 0.55), -hy + 1.0, i * 0.26 + 0.24), 0.42, 0.42, 10), (0.08, 0.08, 0.09), ao=False, vary=0)
+            k.add(cyl((e * (hx + 0.55), -hy + 1.0, i * 0.26), (e * (hx + 0.55), -hy + 1.0, i * 0.26 + 0.24), 0.42, 0.42, 10), tagged((0.08, 0.08, 0.09), "plastic"), ao=False, vary=0)
         for i in range(2):
             k.add(cyl((e * (hx + 0.5), -hy + 2.2 + i * 0.7, 0), (e * (hx + 0.5), -hy + 2.2 + i * 0.7, 0.9), 0.3, 0.3, 8), stripes(k.choice(pal["trim"]), 0.3, 0.8), ao=False)
         sf = Face((hx if e > 0 else -hx, 0, 0), Y if e > 0 else -Y, D)
@@ -4156,7 +4173,7 @@ def mushroom_cap(k, c, CR, ch, color, spots=(7, 11), droop=0.18):
         el = rng.uniform(0.2, 1.2)
         x, y = math.cos(a) * math.cos(el) * CR, math.sin(a) * math.cos(el) * CR
         z = math.sin(el) * ch - droop * (1 - math.sin(el)) * ch
-        k.add(sphere(c + Vector((x, y, z)), rng.uniform(0.22, 0.4) * CR / 2.4, 1, squash=0.45), (0.97, 0.95, 0.9), ao=False)
+        k.add(sphere(c + Vector((x, y, z)), rng.uniform(0.22, 0.4) * CR / 2.4, 1, squash=0.45), tagged((0.97, 0.95, 0.9), "plaster"), ao=False)
 
 
 def mushroom_house(k, H):
@@ -4391,6 +4408,8 @@ def well(k, H):
 # with steampunk and cyberpunk equivalents. Low triangle counts: they are many and small.
 
 WATER = (0.24, 0.46, 0.62)
+# Street trees' and planters' leaves stay plain: on their small round lobes the leaves texture read
+# as pitted, dirty blotches (blind A/B, 2026-11-09).
 LEAF = [(0.30, 0.52, 0.22), (0.38, 0.58, 0.24), (0.26, 0.46, 0.24), (0.44, 0.56, 0.20)]
 BLOOM = [(0.92, 0.30, 0.36), (0.96, 0.78, 0.22), (0.86, 0.50, 0.86), (0.98, 0.96, 0.92), (0.40, 0.56, 0.92)]
 
@@ -4451,7 +4470,7 @@ def prop_crate(k):
     """A stack of plank crates and a sack or two."""
     rng = k.rng
     w = wood(k)
-    c = lerp(w, (0.78, 0.62, 0.42), 0.55)
+    c = tagged(lerp(w, (0.78, 0.62, 0.42), 0.55), "planks")
     for i, (x, z, s) in enumerate([(0.0, 0.0, 0.62), (0.68, 0.0, 0.55), (0.3, 0.62, 0.5)][:rng.choice([2, 3])]):
         cc = jitter(c, rng, 0.08)
         k.add(box((x - s / 2, -s / 2, z), (x + s / 2, s / 2, z + s), 0.02), lambda co, n, cc=cc, z=z, s=s: mul(cc, 0.82 if int((co.z - z) / (s / 3)) % 2 else 1.0))
@@ -4522,7 +4541,7 @@ def prop_cart(k):
     else:
         for i in range(rng.choice([1, 2, 3])):
             sc = (rng.uniform(-W / 4, W / 4), rng.uniform(-L / 4, L / 3), zb + 0.3)
-            k.add(sphere(sc, 0.28, 1, squash=0.8), (0.80, 0.72, 0.55), soft=Vector(sc))
+            k.add(sphere(sc, 0.28, 1, squash=0.8), tagged((0.80, 0.72, 0.55), "cloth"), soft=Vector(sc))
 
 
 def prop_bench(k):
@@ -4646,15 +4665,19 @@ def prop_market_cross(k):
 
 
 def prop_fence(k):
-    """A fence section exactly as long as its form (f2, f3, f4 m) along X: post and rail or
-    pickets (fantasy), iron railings on a brick plinth (steampunk), mesh panels (cyberpunk)."""
+    """A fence section exactly as long as its form (f0.5 … f4 m, every 0.25 m: PROPS) along X: pickets
+    on two rails (fantasy, small folk), post and rail (giants), iron railings on a brick plinth
+    (steampunk), mesh panels (cyberpunk). The planner runs sections on from one another in equal
+    pieces and fills beside a gate with what is left, so lengths come every 0.25 m: with only 2,
+    3 and 4 m, sections fell up to a metre short of the next and gates stood in gaps. One design
+    per style (FENCE_VARIANTS), so neighbouring sections match."""
     rng, pal, lk = k.rng, k.pal, look(k)
     L = float(k.form[1:])
     h = 1.1
     if lk == "steam":
         k.add(box((-L / 2, -0.14, 0), (L / 2, 0.14, 0.32)), k.choice(pal["brick"]))
         k.add(box((-L / 2, -0.16, 0.32), (L / 2, 0.16, 0.38)), pal["stone"])
-        n = int(L / 0.16)
+        n = max(1, round(L / 0.16))
         for i in range(n):
             x = -L / 2 + (i + 0.5) * L / n
             k.add(box((x - 0.012, -0.012, 0.38), (x + 0.012, 0.012, h + 0.2)), pal["iron"], ao=False, vary=0.0)
@@ -4671,18 +4694,18 @@ def prop_fence(k):
         k.add(box((-L / 2, -0.01, 0.1), (L / 2, 0.01, 1.5)), lambda co, n: mul((0.30, 0.32, 0.36), 0.8 if int((co.x + co.z) / 0.1) % 2 else 1.0), ao=False)
         k.add(box((-L / 2, -0.03, 1.5), (L / 2, 0.03, 1.56)), hazard((0.9, 0.75, 0.1), (0.1, 0.1, 0.1), 0.3), ao=False)
         return
-    w = mul(wood(k), rng.uniform(1.1, 1.4))
+    w = mul(wood(k), 1.25)
     posts = max(2, int(round(L)) + 1)
     for i in range(posts):
         x = -L / 2 + 0.05 + i * (L - 0.1) / (posts - 1)
         k.add(box((x - 0.05, -0.05, 0), (x + 0.05, 0.05, h + 0.05)), mul(w, 0.85))
-    if rng.random() < 0.5:
+    if k.style == "giant":
         for z in (0.35, 0.85):
             k.add(box((-L / 2, -0.03, z), (L / 2, 0.03, z + 0.09)), w)
     else:
         k.add(box((-L / 2, -0.05, 0.25), (L / 2, -0.03, 0.33)), w)
         k.add(box((-L / 2, -0.05, 0.75), (L / 2, -0.03, 0.83)), w)
-        n = int(L / 0.14)
+        n = max(1, round(L / 0.14))
         for i in range(n):
             x = -L / 2 + (i + 0.5) * L / n
             k.add(box((x - 0.04, -0.03, 0.05), (x + 0.04, -0.01, h - 0.05)), mul(w, 1.08), vary=0.06)
@@ -4822,10 +4845,10 @@ def prop_washing_line(k):
         for e in (-1, 1):
             k.add(box((e * L / 2 - 0.05, -0.05, 0), (e * L / 2 + 0.05, 0.05, z + 0.15)), mul(wood(k), 1.1))
             k.add(box((e * L / 2 - 0.05, -0.25, z + 0.05), (e * L / 2 + 0.05, 0.25, z + 0.12)), mul(wood(k), 1.1))
-    sag_line(k, Vector((-L / 2, 0, z + 0.1)), Vector((L / 2, 0, z + 0.1)), 0.15, 0.012, (0.85, 0.82, 0.75), seg=6, sides=3)
-    cloth = [(0.95, 0.94, 0.90), (0.80, 0.86, 0.95), (0.92, 0.70, 0.66), (0.86, 0.80, 0.55), (0.62, 0.74, 0.62)]
+    sag_line(k, Vector((-L / 2, 0, z + 0.1)), Vector((L / 2, 0, z + 0.1)), 0.15, 0.012, (0.85, 0.82, 0.75), seg=6, sides=3, surface="cloth")
+    cloth = [tagged(c, "cloth") for c in [(0.95, 0.94, 0.90), (0.80, 0.86, 0.95), (0.92, 0.70, 0.66), (0.86, 0.80, 0.55), (0.62, 0.74, 0.62)]]
     if lk == "cyber":
-        cloth = pal["plastic"] + [(0.95, 0.95, 0.95)]
+        cloth = pal["plastic"] + [tagged((0.95, 0.95, 0.95), "plastic")]
     x = -L / 2 + 0.3
     while x < L / 2 - 0.4:
         w = rng.uniform(0.3, 0.7)
@@ -4933,6 +4956,24 @@ def prop_stairs(k):
                 k.add(cyl(a - Vector((0, 0, 0.08)), b - Vector((0, 0, 0.08)), 0.02, 0.02, 4), None, glow="cyan")
 
 
+def retaining_footing(k, L, D, t, lk):
+    """What joins a retaining wall to the ground. The drop it holds is the terrain's: a bank of
+    1 m tiles whose lower slope rose through the wall's face, and whose steps showed between
+    pieces and past their ends. So the wall stands on a sloped footing (a stone or cast toe
+    from a third of its height down to the lower ground, 0.5 m out) and turns back into the
+    bank at both ends (returns 0.35 m into the upper ground). Its length is unchanged, so pieces
+    still run on from one another."""
+    pal = k.pal
+    c = k.choice(pal["concrete"]) if lk == "cyber" else pal["stone_dark"] if lk == "steam" else mul(pal["stone"], 0.92)
+    h, out = min(1.1, D * 0.36), 0.5
+    toe = [(-t / 2 + 0.05, -0.5), (-t / 2 + 0.05, h), (-t / 2 - 0.06, h), (-t / 2 - out, 0.05), (-t / 2 - out, -0.5)]
+    k.add(prism(toe, -L / 2, L / 2, lambda a, s, z: Vector((a, s, z))), c)
+    top = D + (0.15 if lk == "steam" else 0.75 if lk == "fantasy" else 0.9)
+    for e in (-1, 1):
+        x0, x1 = (L / 2 - 0.28, L / 2) if e > 0 else (-L / 2, -L / 2 + 0.28)
+        k.add(box((x0, t / 2 - 0.05, -0.5), (x1, t / 2 + 0.35, top - 0.25)), c)
+
+
 def prop_retaining_wall(k):
     """Four metres of retaining wall along X holding the ground 1.5 m (low) or 3 m (high) above
     its foot, the face to the front (-Y): battered stone with a coping (fantasy), brick with
@@ -4940,6 +4981,7 @@ def prop_retaining_wall(k):
     (cyberpunk). The upper ground meets its back at the drop's height."""
     rng, pal, lk = k.rng, k.pal, look(k)
     L, D, t = 4.0, (1.5 if k.form == "low" else 3.0), 0.7
+    retaining_footing(k, L, D, t, lk)
     if lk == "cyber":
         c = k.choice(pal["concrete"])
         k.add(box((-L / 2, -t / 2, 0), (L / 2, t / 2, D + 0.9)), grime(c))
@@ -5032,7 +5074,7 @@ PROPS = {
     "bench": (prop_bench, ["bench"]),
     "fountain": (prop_fountain, ["fountain"]),
     "market_cross": (prop_market_cross, ["cross"]),
-    "fence": (prop_fence, ["f2", "f3", "f4"]),
+    "fence": (prop_fence, [f"f{0.5 + 0.25 * i:g}" for i in range(15)]),
     "gate": (prop_gate, ["gate"]),
     "planter": (prop_planter, ["planter"]),
     "flower_box": (prop_flower_box, ["box"]),
@@ -5044,6 +5086,9 @@ PROPS = {
     "stairs": (prop_stairs, ["flight"]),
     "retaining_wall": (prop_retaining_wall, ["low", "high"]),
 }
+# Fence sections per length: one, so every section of a style matches its neighbours.
+FENCE_VARIANTS = 1
+
 PROP_STYLES = {
     "fantasy": list(PROPS),
     "steampunk": [p for p in PROPS if p != "crate"],
@@ -5106,9 +5151,9 @@ def main():
     ap.add_argument("--count", type=int, default=8, help="models per form")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--out")
-    ap.add_argument("--profile", action="store_true", help="print triangles per generator function")
+    ap.add_argument("--profile", action="store_true", help="print triangles, and untagged lit triangles, per generator function")
     a = ap.parse_args(argv)
-    global PROFILE
+    global PROFILE, UNTAGGED
     if a.table:
         write_table(a.table, a.envs)
         return
@@ -5122,7 +5167,8 @@ def main():
     if key in FORM_KINDS:
         gen, forms = FORM_KINDS[key]
         forms = [f for f in forms if a.form in (None, f)]
-        jobs = [(form, i, random.Random(f"{a.seed}-{a.style}-{a.kind}-{form}-{i}")) for form in forms for i in range(a.count)]
+        count = min(a.count, FENCE_VARIANTS) if a.kind == "fence" else a.count
+        jobs = [(form, i, random.Random(f"{a.seed}-{a.style}-{a.kind}-{form}-{i}")) for form in forms for i in range(count)]
     else:
         H = HEIGHTS[key]
         jobs = [("std", i, random.Random(a.seed * 1000 + i)) for i in range(a.count)]
@@ -5130,6 +5176,7 @@ def main():
     for form, i, rng in jobs:
         reset()
         PROFILE = {} if a.profile else None
+        UNTAGGED = {} if a.profile else None
         k = Kit(rng, PALETTES[a.style], ao=1.2, pr=random.Random(f"detail-{a.seed}-{a.style}-{a.kind}-{form}-{i}"))
         k.form = form
         k.style = a.style
@@ -5157,6 +5204,8 @@ def main():
         records.append(dict(file=name, form=form, width_m=up(fw), depth_m=up(fd), height_m=round(top, 2), foundation_m=round(below, 2), corner=k.corner, tris=tris))
         if PROFILE:
             print("  " + " ".join(f"{n}={t}" for n, t in sorted(PROFILE.items(), key=lambda x: -x[1])))
+        if UNTAGGED:
+            print("  untagged " + " ".join(f"{n}={t}" for n, t in sorted(UNTAGGED.items(), key=lambda x: -x[1])))
     if a.form is None:
         with open(os.path.join(a.out, f"gen-{a.kind}-{a.style}.json"), "w") as f:
             json.dump(dict(style=a.style, kind=a.kind, models=records), f, indent=1)
