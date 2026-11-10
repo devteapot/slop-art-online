@@ -320,7 +320,7 @@ The two arms agree on 48% of triggers. The disagreements run one way: 313 trigge
 - **Jev's cost:** about $0.003 per real hour, under 6% of what the gate saves.
 - **The deaths are not the gate's.** All three were a wolf on the town road (Rook twice, Frost once) attacking from 5–10 tiles and killing in about 10 s. In the two Jev runs the attack went through as `urgent` within a second. The last holds before it were unrelated triggers ("no branch applies", "you feel something") 80–160 s earlier. The same wolf killed a b1 subject with no gate. A deliberation takes seconds and could not have changed those fights.
 - **Quality is not established.** Both gated arms gathered less food per game hour (0.15 against 0.25), and the Jev runs learned and built nothing (the off and GLM arms each had one run that learned 4 techniques and built 2 structures). With 3 runs per arm, 2 of them shortened by deaths, this is a possible cost, not an effect size. Asking loops were rare in these life runs in every arm; the replay, where they were common, is the better evidence for them.
-- **Evidence:** dev-box `~/dev/slop-rethink/.local/living/rethink/rlive/`, which holds each instance's journal (with every `rethink-gate` decision), `mind.log`, samples, experiences, `summary.json` and `rethink-report.json`.
+- **Evidence:** dev-box `~/dev/slop-rethink/.local/living/rethink/rlive/`, which holds each instance's journal (with every `rethink-gate` decision), `mind.log`, samples, experiences, `summary.json` and `rethink-report.json`. *(Removed by mistake on 2026-11-10 when the coordinator cleaned up the dev-box worktree; the raw journals are gone and the figures in this document are the remaining record.)*
 
 ### Answer: does Jev's speed and typedness matter?
 
