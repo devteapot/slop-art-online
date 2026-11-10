@@ -231,7 +231,7 @@ All of this is in `skills.rhai`. It is the same for players, minds and graphs: t
 **Agreements** (`offer_terms` → `accept`):
 
 - `offer_terms` (target, item × qty, want × want_qty, text) makes an `agreement` record with status `offered`, roles `from` and `to`, and both sides' homes in its terms. The other side is told the terms and asked to think about them. The proposal stands 4 world hours (`proposal_h`).
-- `accept` toward the proposer makes it `agreed`, due at dusk (`due_by_dark`). The proposer is told, and onlookers see "came to an agreement". Without terms standing, `accept` is the trade accept, as before.
+- `accept` toward the proposer makes it `agreed`, due at the first dusk at least `agreement_min_h` (12) game hours away (`due_by_dark`); both sides are told which ("by dusk today" or "by dusk tomorrow"). Until 2026-11-10 the minimum was 2 game hours, about a minute in a 12-minute day, and both agreements accepted in the social trials lapsed before anyone could deliver (docs/TRIALS.md, "Fast iterations"). The proposer is told, and onlookers see "came to an agreement". Without terms standing, `accept` is the trade accept, as before.
 - **Deliveries** are counted by hooks:
   - `give` to the other side (`on_give`);
   - `store` into a storage whose owner is the other side, or shares their home (their household's store, `on_store`);

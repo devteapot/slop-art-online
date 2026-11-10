@@ -896,8 +896,8 @@ fn accept_done(a) {
     if r == () { return [#{ op: "accept" }]; }
     let t = r.terms;
     [#{ op: "amend", id: r.id, status: "agreed", due_h: due_by_dark(a) },
-     #{ op: "tell", to: r.parties.from, salience: 0.8, text: `{actor} accepted your terms: ${terms_line(t, "from")}, by dusk.` },
-     #{ op: "tell", to: a.actor.id, text: `agreed with {target}: ${terms_line(t, "to")}, by dusk` },
+     #{ op: "tell", to: r.parties.from, salience: 0.8, text: `{actor} accepted your terms: ${terms_line(t, "from")}, ${due_words(a)}.` },
+     #{ op: "tell", to: a.actor.id, text: `agreed with {target}: ${terms_line(t, "to")}, ${due_words(a)}` },
      #{ op: "witness", text: "{a} and {b} came to an agreement." }]
 }
 
@@ -923,8 +923,14 @@ fn accept_done(a) {
 fn proposal_h(x) { 4.0 }
 fn demand_h(x) { 3.0 }
 fn kept_h(x) { 12.0 }
-// An agreement falls due at dusk (20:00), or the next one when dusk is under two hours away.
-fn due_by_dark(a) { let h = 20.0 - a.hour; if h < 2.0 { h += 24.0; } h }
+// An agreement falls due at dusk (20:00): the first dusk at least `agreement_min_h` game hours
+// after it is agreed, so both sides have time to gather, carry and come back. (Dusk two hours
+// off, the old minimum, was about a minute in a 12-minute day: both accepted agreements in the
+// social trials lapsed before anyone could deliver, docs/TRIALS.md, "Fast iterations".)
+fn agreement_min_h(x) { 12.0 }
+fn due_by_dark(a) { let h = 20.0 - a.hour; while h < agreement_min_h(0) { h += 24.0; } h }
+// Which dusk, said from the hour it is agreed.
+fn due_words(a) { if a.hour + due_by_dark(a) < 24.0 { "by dusk today" } else { "by dusk tomorrow" } }
 
 fn other_role(me) { if me == "from" { "to" } else { "from" } }
 fn qty_of(n) { if n < 1 { 1 } else { n } }
@@ -966,7 +972,7 @@ fn offer_terms_done(a) {
     if a.item == "lodging" { t.from_qty = 1; }
     if a.want == "lodging" { t.to_qty = 1; }
     [#{ op: "record", kind: "agreement", status: "offered", parties: #{ from: a.actor.id, to: a.target.id }, terms: t, due_h: proposal_h(0) },
-     #{ op: "tell", to: a.target.id, ask: true, salience: 0.85, text: `{actor} proposes an agreement: ${terms_line(t, "to")}${words(a.text)}, by dusk. If you accept (accept, toward them), the world counts what each of you hands over or stores for the other.` },
+     #{ op: "tell", to: a.target.id, ask: true, salience: 0.85, text: `{actor} proposes an agreement: ${terms_line(t, "to")}${words(a.text)}, due at the first dusk at least ${agreement_min_h(0).to_int()} hours after you accept. If you accept (accept, toward them), the world counts what each of you hands over or stores for the other.` },
      #{ op: "tell", to: a.actor.id, text: `proposed to {target}: ${terms_line(t, "from")}${words(a.text)}` }]
 }
 
@@ -1377,12 +1383,12 @@ fn offer_spec() {
 }
 fn accept_spec() {
     #{ target: true, reach: 3.0, talk: true,
-       about: "Accept what a person beside you just proposed to you: their terms (offer_terms: it becomes an agreement the world keeps count of), or else their swap (both sides change hands at once, if both still have the goods).",
+       about: "Accept what a person beside you just proposed to you: their terms (offer_terms: it becomes an agreement the world keeps count of; you then owe what they asked of you, and they owe what they offered you), or else their swap (both sides change hands at once, if both still have the goods).",
        takes: "a standing proposal from them to you", gives: "the swap done, or the agreement made" }
 }
 fn offer_terms_spec() {
     #{ target: true, item: true, items: ["lodging"], args: ["qty", "want", "want_qty", "text"], reach: 3.0, talk: true,
-       about: "Propose an agreement to a person beside you, kept over time: you will deliver item × qty, they will deliver want × want_qty, by dusk; text: the terms in your words (\"stack it at my store\"). A delivery is handing it to them or storing it in their household's store; \"lodging\" is delivered by taking them in (host). If they accept, the world keeps count and tells you both when it is kept, or broken or lapsed at dusk. For a swap of goods in hand now, offer.",
+       about: `Propose an agreement to a person beside you, kept over time. item × qty is what YOU will deliver to them; want × want_qty is what THEY will deliver to you. To be given a bed for your goods or work, put what you will bring in item and "lodging" in want; put "lodging" in item only if you have a house and will take them in. text: the terms in your words ("stack it at my store"). A delivery is handing it to them or storing it in their household's store; "lodging" is delivered by taking the guest in (host). It falls due at the first dusk at least ${agreement_min_h(0).to_int()} hours after they accept; the world keeps count and tells you both when it is kept, or broken or lapsed then. For a swap of goods in hand now, offer.`,
        takes: "a person beside you who accepts", gives: "an agreement both of you are told the outcome of" }
 }
 fn demand_spec() {
