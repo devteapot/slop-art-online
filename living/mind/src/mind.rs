@@ -1400,8 +1400,35 @@ impl Minds {
         self.conn.db.judgment().iter().filter(|j| j.actor == actor).map(|j| format!("{} = {:.2} ({})", j.key, j.value, j.why)).collect()
     }
 
+    /// The places one keeps, nearest first, each with how far and which way it lies from where
+    /// one stands and whether it is in sight (the authority's sight rule, from the scene).
     fn places(&self, actor: u32) -> Vec<String> {
-        self.conn.db.place().iter().filter(|p| p.actor == actor).map(|p| format!("\"{}\" at [{:.0}, {:.0}]", p.name, p.x, p.y)).collect()
+        // Where the last scene put them (the moment the prompt describes), else where the body is.
+        let you = self.felt.lock().unwrap().get(&actor).map(|(_, you)| you.clone()).unwrap_or_default();
+        let at = match (you["at"][0].as_f64(), you["at"][1].as_f64()) {
+            (Some(x), Some(y)) => Some((x as f32, y as f32)),
+            _ => self.conn.db.body().id().find(&actor).map(|b| (b.x, b.y)),
+        };
+        let seen: Vec<String> = you["places in sight"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
+        let mut ps: Vec<(f32, String)> = self
+            .conn
+            .db
+            .place()
+            .iter()
+            .filter(|p| p.actor == actor)
+            .map(|p| {
+                let Some(at) = at else { return (0.0, format!("\"{}\" at [{:.0}, {:.0}]", p.name, p.x, p.y)) };
+                let d = ((p.x - at.0).powi(2) + (p.y - at.1).powi(2)).sqrt();
+                let way = match living_rules::direction(at, (p.x, p.y)) {
+                    "here" => "where you stand".to_string(),
+                    dir => format!("{d:.0} tiles {dir}"),
+                };
+                let sight = if seen.contains(&p.name) { ", in sight" } else { ", out of sight" };
+                (d, format!("\"{}\" at [{:.0}, {:.0}]: {way}{sight}", p.name, p.x, p.y))
+            })
+            .collect();
+        ps.sort_by(|a, b| a.0.total_cmp(&b.0));
+        ps.into_iter().map(|(_, t)| t).collect()
     }
 
     // ---- deliberation ------------------------------------------------------------
