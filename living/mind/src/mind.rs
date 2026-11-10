@@ -157,6 +157,27 @@ pub(crate) fn acts_of(v: &Value) -> Vec<String> {
     list.into_iter().filter(|x| x.is_object()).take(living_rules::acts::MAX_QUEUED).map(|x| x.to_string()).collect()
 }
 
+/// The persona's line on one's community: how many others belong, and by name only those one
+/// has feelings about (a town of 77 listed every name: 11–20% of a think or consolidation
+/// prompt, growing with the town).
+fn belonging(community: &str, others: usize, known: &[String]) -> String {
+    const NAMED: usize = 12;
+    let mut line = format!("\nYou belong to {community}");
+    match others {
+        0 => line.push_str(" (no one else yet)"),
+        1 => line.push_str(" (with one other"),
+        n => line.push_str(&format!(" (with {n} others")),
+    }
+    if others > 0 {
+        if !known.is_empty() {
+            let more = known.len().saturating_sub(NAMED);
+            line.push_str(&format!(", among them {}{}", known[..known.len().min(NAMED)].join(", "), if more > 0 { format!(" and {more} more you know") } else { String::new() }));
+        }
+        line.push(')');
+    }
+    line
+}
+
 /// Speech is not an act: the authority refuses `{"do": "say"}` ("an act is a single {"do":
 /// skill, ...} node"). A compile that expressed the decision's words as one (15 of 434
 /// compiles on rules2-r2, by this count; reviewers counted 15, when the think step put them in `intend`) would have them never
@@ -1405,8 +1426,10 @@ impl Minds {
                 let belong = match self.conn.db.membership().member().find(&actor) {
                     Some(m) => {
                         let name = self.conn.db.community().id().find(&m.community).map(|c| c.name).unwrap_or_default();
-                        let others: Vec<String> = self.conn.db.membership().iter().filter(|x| x.community == m.community && x.member != actor).map(|x| self.name(x.member)).collect();
-                        format!("\nYou belong to {name}{}", if others.is_empty() { String::new() } else { format!(" (with {})", others.join(", ")) })
+                        let others: Vec<u32> = self.conn.db.membership().iter().filter(|x| x.community == m.community && x.member != actor).map(|x| x.member).collect();
+                        let felt: std::collections::HashSet<u32> = self.conn.db.relation().iter().filter(|r| r.actor == actor).map(|r| r.other).collect();
+                        let known: Vec<String> = others.iter().filter(|id| felt.contains(id)).map(|id| format!("{} (#{id})", self.known_as(actor, *id))).collect();
+                        belonging(&name, others.len(), &known)
                     }
                     None => "\nYou belong to no community.".into(),
                 };
@@ -2130,6 +2153,16 @@ mod tests {
     /// A compile that put the decision's words in a say act (a real rules2-r2 reply's shape)
     /// speaks them when the decision said nothing; when it did, its speech stands. Either way
     /// no say act reaches the authority.
+    #[test]
+    fn the_community_line_counts_members_and_names_only_those_one_feels_about() {
+        let named: Vec<String> = (1..=14).map(|i| format!("P{i} (#{i})")).collect();
+        assert_eq!(belonging("Saltreach", 76, &named[..2]), "\nYou belong to Saltreach (with 76 others, among them P1 (#1), P2 (#2))");
+        assert_eq!(belonging("Saltreach", 76, &[]), "\nYou belong to Saltreach (with 76 others)");
+        assert_eq!(belonging("Saltreach", 76, &named), format!("\nYou belong to Saltreach (with 76 others, among them {} and 2 more you know)", named[..12].join(", ")));
+        assert_eq!(belonging("Hollow band", 1, &named[..1]), "\nYou belong to Hollow band (with one other, among them P1 (#1))");
+        assert_eq!(belonging("Newtown", 0, &[]), "\nYou belong to Newtown (no one else yet)");
+    }
+
     #[test]
     fn a_compiled_say_act_becomes_the_speech_and_leaves_the_acts() {
         let compiled = || json!({"plan": "meet Marta", "say": null, "acts": [
