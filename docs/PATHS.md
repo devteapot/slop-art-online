@@ -92,7 +92,22 @@ A scratch island world (`verify-player-path2`, seed `island`, this branch, `scop
 
 **Short clicks** in the same run: one more identity made 40 clicks 30–60 m away in random directions around Brackenford's west side. 38 arrived on the clicked point. 8 of those walked round something on the way, at 1.4–5 times the straight distance (39 m straight and 198 m walked at most): these are the clicks the old 6,000-expansion search refused. The other 2 were refused with "destination unreachable": both were in the sea, 26 and 29 m from the shore (the 12 m rule, unchanged).
 
-TICK
+### The tick with many walkers
+
+Four arms, one after another, each a fresh island world (seed `island`, 277 people and 34 animals) on the worker's own container `path-stdb` (SpacetimeDB 2.14.1, Docker Desktop on the Mac's M4 Pro, 1-minute load average 3.7–4.5). There were no minds, no subscribers and no players. Each arm measured a 300 s window of [`bench.py`](../living/tools/bench.py), starting 40 s after publishing, so the route warm-up had finished. "150 walking": `walk_times.py --residents 150` gave 150 adult residents a graph of `goto`s to three settlements at least 600 m from home (admin `set_behavior`) 60 s before the window. The base is `origin/main` at `fe6ec66`, built from its own worktree.
+
+| Arm | Ticks/s | Steering updates/s | Tick p50 | p95 | p99 | Max | Over 16.7 ms | `tick.motion` p99 / max | `tick.motion` ms/s | `tick.slots` p99 / max | Walkers moving | Walked in 7 min |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| base, at rest | 60.0 | 82.7 | 0.83 | 1.55 | 3.02 | 7.23 | 0 of 15,022 | 0.28 / 0.66 | 2.6 | 0.91 / 3.37 | – | – |
+| this change, at rest | 60.0 | 84.6 | 0.87 | 1.56 | 1.94 | 3.25 | 0 of 13,694 | 0.31 / 1.87 | 2.6 | 0.96 / 1.94 | – | – |
+| **this change, 150 walking** | 60.0 | 149.9 | **0.56** | **1.26** | **1.64** | **3.42** | **0 of 14,689** | **0.85 / 2.11** | **5.5** | 0.70 / 1.26 | **150 of 150** at every sample | **165 km**, 65 settlements reached |
+| base, 150 told to walk | 59.9 | 42.1 | 0.67 | 2.95 | **5.00** | **33.4** | **4 of 16,213** | 0.24 / 1.67 | 1.9 | **4.56 / 30.7** | 15, then 0 | 5 m |
+
+Times are in ms. The sample counts are the tick spans the module logged in each window.
+
+- **150 walkers cost the tick little.** Every leg re-plan runs inside `tick.motion`. With 150 people walking cross-country without a break, that span's p99 rose from 0.31 to 0.85 ms (2.1 ms at most), and its work from 2.6 to 5.5 ms a second. The whole tick's p99 was 1.64 ms, under the rest arms'. The walkers' simple graphs replaced their town life, so evaluations cost less (`tick.slots`), which more than paid for the routes. `tick.routes` (the warm-up, done before the window) was 0.012 ms at most.
+- **The old search hurt the tick when it failed.** On the base, the same 150 walk orders moved nobody. Each resident's `goto` leaf was refused ("no path there") and tried again at its next evaluation, each time a 6,000-expansion search (about 19 M fuel, 1 ms). The evaluations' span reached 30.7 ms, and 4 ticks ran over 16.7 ms.
+- **Not measured:** 2,000 characters, players over WebSockets, subscribers. These arms establish only that routing does not hurt the tick at the island's population with half its adults walking.
 
 ## Data paths
 
