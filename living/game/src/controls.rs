@@ -37,6 +37,9 @@ pub struct Input {
     pub moved_at: Option<std::time::Instant>,
     /// Whether a movement direction is held (the camera keeps the keys' frame meanwhile).
     pub moving: bool,
+    /// When a direction was last held (`Time` seconds), so my body is carried on a moment
+    /// after the keys are let go (`bodies.rs`).
+    pub held_s: f64,
     /// The direction held (sim axes, unit or zero): a dodge goes this way.
     pub dir: Vec2,
     /// Face the cursor: you move with WASD and look where the mouse points.
@@ -116,6 +119,9 @@ pub fn movement(
         (d.normalize_or_zero(), keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight))
     };
     input.moving = dir != Vec2::ZERO;
+    if input.moving {
+        input.held_s = time.elapsed_secs_f64();
+    }
     input.dir = dir;
     let (qx, qy) = quantize(dir);
     let intent = (qx, qy, run && (qx, qy) != (0, 0));

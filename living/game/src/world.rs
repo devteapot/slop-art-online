@@ -104,10 +104,10 @@ pub struct Scene {
     /// Displayed position (sim metres) and heading of every subscribed body.
     pub shown: HashMap<u32, (Vec2, Option<f32>)>,
     pub now_ms: f64,
-    /// The authority time my own body is drawn at, and my body's segment then (`t_ms`,
-    /// `next_ms`), for the feet log (`gait.rs`).
+    /// The authority time my own body is drawn at, and my body's newest segment then (`t_ms`,
+    /// `next_ms`, speed in m/s), for the feet log (`gait.rs`).
     pub mine_ms: f64,
-    pub mine_seg: (u64, u64),
+    pub mine_seg: (u64, u64, f32),
     ground: Option<Arc<Ground>>,
     map_rows: usize,
     seed: u64,

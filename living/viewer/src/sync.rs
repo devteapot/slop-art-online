@@ -136,14 +136,19 @@ impl Seg {
         Self { x: b.x, y: b.y, t_ms: b.t_ms, vx: b.vx, vy: b.vy, heading: b.heading, turn: b.turn, turn_s: b.turn_s, next_ms: b.next_ms }
     }
 
-    /// Seconds into the segment at `now` (ms), held at `next_ms` until the next segment.
-    fn dt(&self, now: f64) -> f32 {
-        ((now.min(self.next_ms as f64) - self.t_ms as f64).max(0.0) / 1000.0) as f32
+    /// Seconds into the segment at `now` (ms), held at `next_ms` until the next segment, or
+    /// carried on up to `past` ms beyond it ([`Tracks::update_ahead`]).
+    fn dt(&self, now: f64, past: f64) -> f32 {
+        ((now.min(self.next_ms as f64 + past) - self.t_ms as f64).max(0.0) / 1000.0) as f32
     }
 
     /// Where the body is at `now` (see `living_rules::steer::pose`).
     pub fn pos(&self, now: f64) -> egui::Pos2 {
-        let dt = self.dt(now);
+        self.pos_past(now, 0.0)
+    }
+
+    fn pos_past(&self, now: f64, past: f64) -> egui::Pos2 {
+        let dt = self.dt(now, past);
         if self.turn == 0.0 || self.turn_s <= 0.0 {
             return egui::pos2(self.x + self.vx * dt, self.y + self.vy * dt);
         }
@@ -153,10 +158,14 @@ impl Seg {
 
     /// Direction of travel at `now`, when moving.
     pub fn heading(&self, now: f64) -> Option<f32> {
-        if (self.vx == 0.0 && self.vy == 0.0) || self.next_ms as f64 <= now {
+        self.heading_past(now, 0.0)
+    }
+
+    fn heading_past(&self, now: f64, past: f64) -> Option<f32> {
+        if (self.vx == 0.0 && self.vy == 0.0) || self.next_ms as f64 + past <= now {
             return None;
         }
-        Some(if self.turn == 0.0 { self.vy.atan2(self.vx) } else { self.heading + self.turn * self.dt(now).min(self.turn_s) })
+        Some(if self.turn == 0.0 { self.vy.atan2(self.vx) } else { self.heading + self.turn * self.dt(now, past).min(self.turn_s) })
     }
 }
 
@@ -183,10 +192,10 @@ impl Track {
     /// segments at `at` becomes a correction blended out over the next frames. `at` is the
     /// new segment's start when it was queued in time (so only a discontinuity in the
     /// authority's own motion is blended), or the display time for a row that came late.
-    fn switch(&mut self, seg: Seg, at: f64) {
-        let before = self.cur.pos(at) + self.corr;
+    fn switch(&mut self, seg: Seg, at: f64, past: f64) {
+        let before = self.cur.pos_past(at, past) + self.corr;
         self.cur = seg;
-        let c = before - seg.pos(at);
+        let c = before - seg.pos_past(at, past);
         self.corr = if c.length() > BLEND_MAX || !c.x.is_finite() || !c.y.is_finite() { egui::Vec2::ZERO } else { c };
     }
 }
@@ -200,7 +209,17 @@ pub struct Tracks {
 impl Tracks {
     /// Take in the current rows and return each body's displayed position and direction of
     /// travel at `now`; `dt` is the frame time (s).
-    pub fn update<'a>(&mut self, bodies: impl Iterator<Item = &'a Body>, now: f64, dt: f32, mut out: impl FnMut(u32, egui::Pos2, Option<f32>)) {
+    pub fn update<'a>(&mut self, bodies: impl Iterator<Item = &'a Body>, now: f64, dt: f32, out: impl FnMut(u32, egui::Pos2, Option<f32>)) {
+        self.update_ahead(bodies, now, dt, 0.0, out);
+    }
+
+    /// [`Tracks::update`], carrying a moving segment on for up to `past` ms beyond its end
+    /// (`next_ms`) instead of holding it there. A player's own body walking a held direction
+    /// uses it: the authority renews the segment at the first tick after `next_ms`, anchored at
+    /// `next_ms`, so the renewal always arrives after the body drawn on the lead has reached
+    /// that end. Carried on, the body keeps going, and the renewal's small difference is
+    /// blended as a late row's is.
+    pub fn update_ahead<'a>(&mut self, bodies: impl Iterator<Item = &'a Body>, now: f64, dt: f32, past: f64, mut out: impl FnMut(u32, egui::Pos2, Option<f32>)) {
         let decay = (-dt.max(0.0) / BLEND_TAU).exp();
         for b in bodies {
             let seg = Seg::of(b);
@@ -218,18 +237,18 @@ impl Tracks {
                     tr.queue.push_back(seg);
                 } else {
                     tr.queue.clear();
-                    tr.switch(seg, now);
+                    tr.switch(seg, now, past);
                 }
             }
             while let Some(q) = tr.queue.front().copied().filter(|q| q.t_ms as f64 <= now) {
                 tr.queue.pop_front();
-                tr.switch(q, q.t_ms as f64);
+                tr.switch(q, q.t_ms as f64, past);
             }
             tr.corr *= decay;
             if tr.corr.length_sq() < 1e-8 {
                 tr.corr = egui::Vec2::ZERO;
             }
-            out(b.id, tr.cur.pos(now) + tr.corr, tr.cur.heading(now));
+            out(b.id, tr.cur.pos_past(now, past) + tr.corr, tr.cur.heading_past(now, past));
         }
     }
 
@@ -287,6 +306,33 @@ mod tests {
         // A teleport is shown as one.
         let c = body(20.0, 1_700, 0.0, u64::MAX);
         assert_eq!(shown(&mut t, &c, 1_710.0, 0.008), 20.0);
+    }
+
+    #[test]
+    fn a_body_carried_past_its_segment_end_meets_the_renewal_without_a_stop() {
+        let a = body(0.0, 1_000, 2.0, 1_500);
+        // The renewal, anchored at the old end, arrives 12 ms after the display passed it.
+        let b = body(1.0, 1_500, 2.0, 3_500);
+        let run = |past: f64| {
+            let mut t = Tracks::default();
+            let mut xs = Vec::new();
+            let mut now = 1_400.0;
+            while now < 1_700.0 {
+                now += 4.0;
+                let row = if now >= 1_512.0 { &b } else { &a };
+                let mut x = 0.0;
+                t.update_ahead(std::iter::once(row), now, 0.004, past, |_, p, _| x = p.x);
+                xs.push(x);
+            }
+            // The least and most a 4 ms frame moved (m), against the 8 mm the body moves.
+            let steps: Vec<f32> = xs.windows(2).map(|w| w[1] - w[0]).collect();
+            (steps.iter().copied().fold(f32::MAX, f32::min), steps.iter().copied().fold(f32::MIN, f32::max))
+        };
+        let (held_min, held_max) = run(0.0);
+        assert!(held_min < 1e-6, "held at the end: {held_min}");
+        assert!(held_max > 0.0095, "then caught up: {held_max}");
+        let (min, max) = run(150.0);
+        assert!((min - 0.008).abs() < 2e-4 && (max - 0.008).abs() < 2e-4, "steady: {min}..{max}");
     }
 
     #[test]
