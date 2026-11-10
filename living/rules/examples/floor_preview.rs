@@ -105,6 +105,8 @@ fn main() {
     out.push_str(&steps);
     let _ = writeln!(out, "hosted_map {host_s:.2} s, digests {digest_s:.2} s, their peak {:.0} MB", mb(host_peak));
     let _ = writeln!(out, "digests tiles {:016x} heights {:016x} layout {:016x}", d.tiles, d.heights, d.layout);
+    let arrive = host::arrival(&land, &hosted);
+    let _ = writeln!(out, "arrival {:.2} {:.2}", arrive.0, arrive.1);
     let _ = writeln!(out, "blocked {} tiles, cut off {}", h.blocked_tiles, h.cut_off_tiles);
     let mut styles: BTreeMap<String, (usize, usize)> = BTreeMap::new();
     for s in &land.settlements {
