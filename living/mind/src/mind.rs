@@ -212,7 +212,13 @@ impl Minds {
         }
         let only_env = std::env::var("LIVING_ONLY").ok();
         let only_woken = only_env.as_deref().is_some_and(|v| v.split(',').any(|x| x.trim() == "woken"));
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), only_woken, wakes: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg: lived::Config::from_env(), lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
+        let lived_cfg = lived::Config::from_env();
+        if lived_cfg.on {
+            if let Some(route) = &lived_cfg.profile {
+                llm.warn_effort_gaps("LIVING_PLAYER_MEMORY_MODEL", route, &["internalize"]);
+            }
+        }
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), only_woken, wakes: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants

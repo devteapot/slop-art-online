@@ -34,7 +34,10 @@
       "prompt_cache_key": true,
       "reasoning_effort": {
         "think": "low",
-        "deliberate": "low"
+        "deliberate": "low",
+        "talk": null,
+        "consolidate": null,
+        "internalize": null
       },
       "max_tokens": 8000,
       "purpose_max_tokens": {

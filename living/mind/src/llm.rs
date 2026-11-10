@@ -14,8 +14,11 @@ pub struct Profile {
     pub base_url: String,
     pub model: String,
     pub key_env: String,
+    /// The effort sent per purpose. `null` says the profile deliberately sends none for that
+    /// purpose (DeepSeek's thinking off); a purpose the profile is used for and that has no
+    /// entry is warned about at start (see [`ModelsFile::effort_gaps`]).
     #[serde(default)]
-    pub reasoning_effort: HashMap<String, String>,
+    pub reasoning_effort: HashMap<String, Option<String>>,
     #[serde(default = "yes")]
     pub json_mode: bool,
     /// Output cap: a reply is a few thousand tokens at most; a runaway generation is cut off
@@ -59,6 +62,12 @@ fn parent_purpose(purpose: &str) -> Option<&'static str> {
 impl Profile {
     /// The reasoning effort sent for a purpose: the profile's own entry, else its parent's.
     pub fn effort(&self, purpose: &str) -> Option<&String> {
+        self.effort_entry(purpose).and_then(|e| e.as_ref())
+    }
+
+    /// The profile's entry for a purpose (or its parent's): `Some(None)` is an explicit
+    /// "send no effort", `None` no entry at all.
+    fn effort_entry(&self, purpose: &str) -> Option<&Option<String>> {
         self.reasoning_effort.get(purpose).or_else(|| parent_purpose(purpose).and_then(|p| self.reasoning_effort.get(p)))
     }
 
@@ -113,6 +122,10 @@ pub fn split_spec(spec: &str) -> (&str, Option<&str>) {
 
 /// The purposes the mind sends (see `Lane::for_purpose`); `*` in a mix covers the rest.
 pub const PURPOSES: [&str; 7] = ["think", "deliberate", "talk", "consolidate", "reorganize", "internalize", "judge"];
+
+/// The model purposes a person's route is used for (identity and birth go out as
+/// `consolidate`).
+pub const PERSON_PURPOSES: [&str; 6] = ["think", "deliberate", "talk", "consolidate", "internalize", "reorganize"];
 
 /// What a call resolved to: the profile it goes to, the effort it sends, and the mix it came
 /// from (for the journal).
@@ -209,6 +222,56 @@ impl ModelsFile {
             }
         }
         Ok(())
+    }
+
+    /// Every (profile, purpose) this file can send without saying what effort to use: a
+    /// route reaches the profile for the purpose, no `@effort` is written there, and the
+    /// profile's map has no entry for it (`null` is an entry). GLM Flash without an entry
+    /// thinks as at `max` and runs out of tokens (MODEL_COST Part 1: 69% of compiles came back
+    /// empty that way). An overflow profile is reached for the routine and interactive
+    /// purposes (background ones do not overflow).
+    pub fn effort_gaps(&self) -> Vec<String> {
+        let mut out = std::collections::BTreeSet::new();
+        self.gaps_for("default", &self.default, &PERSON_PURPOSES, &mut out);
+        if let Some(w) = &self.woken {
+            self.gaps_for("woken", w, &PERSON_PURPOSES, &mut out);
+        }
+        for (k, v) in self.assign.iter().chain(&self.stages).chain(&self.groups) {
+            self.gaps_for(k, v, &PERSON_PURPOSES, &mut out);
+        }
+        for v in &self.rotate {
+            self.gaps_for("rotate", v, &PERSON_PURPOSES, &mut out);
+        }
+        for (kind, roles) in &self.species {
+            for v in roles.values() {
+                self.gaps_for(&format!("species {kind}"), v, &["deliberate", "consolidate"], &mut out);
+            }
+        }
+        out.into_iter().collect()
+    }
+
+    /// The gaps of one route for the given purposes (see [`Self::effort_gaps`]).
+    pub fn gaps_for(&self, what: &str, route: &str, purposes: &[&str], out: &mut std::collections::BTreeSet<String>) {
+        for purpose in purposes {
+            let specs: Vec<&str> = match self.mixes.get(route) {
+                // A purpose the mix leaves out goes to the default, which is checked on its own.
+                Some(mix) => mix.get(*purpose).or_else(|| parent_purpose(purpose).and_then(|p| mix.get(p))).or_else(|| mix.get("*")).map(|c| c.specs()).unwrap_or_default(),
+                None => vec![route],
+            };
+            for spec in specs {
+                let (name, written) = split_spec(spec);
+                let Some(p) = self.profiles.get(name) else { continue };
+                if written.is_none() && p.effort_entry(purpose).is_none() {
+                    out.insert(format!("profile {name} has no reasoning_effort for {purpose} (reached by {what} → {route})"));
+                }
+                let overflows = Lane::for_purpose(purpose) != Lane::Background;
+                if let Some(o) = p.overflow.as_deref().filter(|o| overflows && *o != name).and_then(|o| self.profiles.get(o).map(|q| (o, q))) {
+                    if o.1.effort_entry(purpose).is_none() {
+                        out.insert(format!("profile {} has no reasoning_effort for {purpose} (the overflow of {name}, reached by {what} → {route})", o.0));
+                    }
+                }
+            }
+        }
     }
 
     /// Whether any mix chooses by stage of attention (then attention is tracked even with the
@@ -644,6 +707,9 @@ impl Llm {
             }
         }
         models.check()?;
+        for gap in models.effort_gaps() {
+            log::warn!("MODEL CONFIG: {gap}; it goes out at the model's default effort (give it an entry, null for none)");
+        }
         for (name, mix) in &models.mixes {
             let missing: Vec<&str> = mix.values().flat_map(|c| c.specs()).map(|s| split_spec(s).0).filter(|p| !keys.contains_key(*p)).collect();
             if !missing.is_empty() {
@@ -691,6 +757,16 @@ impl Llm {
     /// Whether any mix chooses its model by stage of attention.
     pub fn staged(&self) -> bool {
         self.models.staged()
+    }
+
+    /// Warn about a route chosen outside the models file (the player memory's model) that
+    /// would send a purpose with no effort entry (see [`ModelsFile::effort_gaps`]).
+    pub fn warn_effort_gaps(&self, what: &str, route: &str, purposes: &[&str]) {
+        let mut gaps = std::collections::BTreeSet::new();
+        self.models.gaps_for(what, route, purposes, &mut gaps);
+        for gap in gaps {
+            log::warn!("MODEL CONFIG: {gap}; it goes out at the model's default effort (give it an entry, null for none)");
+        }
     }
 
     /// Where a call for `purpose` goes from a route (a profile, `profile@effort` or a mix)
@@ -783,6 +859,16 @@ impl Llm {
         let pick = self.pick(route, purpose, at);
         let mut result = self.chat_once(&pick, purpose, actor, messages, lane).await;
         let limited = matches!(&result, Err(e) if format!("{e:#}").contains("HTTP 429"));
+        if lane == Lane::Background {
+            // Memory work is not waited on: it fails here and its caller tries again later with
+            // a backoff (consolidation's `retry_after`, a sleep's, an integration's next turn)
+            // on the model it chose. An overflow model would answer with its own settings for
+            // the purpose: DeepSeek with thinking off reorganized acceptably 4 times in 21.
+            if result.is_err() && limited {
+                result = self.chat_once(&pick, purpose, actor, messages, lane).await;
+            }
+            return result;
+        }
         let default = self.pick(&self.models.default, purpose, at);
         // The overflow profile is called with its own effort for the purpose.
         let alternate = self
@@ -1808,7 +1894,7 @@ mod tests {
     #[test]
     fn the_request_body_carries_the_picked_effort_and_the_purpose_cap() {
         let mut p = test_profile();
-        p.reasoning_effort.insert("consolidate".into(), "high".into());
+        p.reasoning_effort.insert("consolidate".into(), Some("high".into()));
         p.max_tokens = Some(8000);
         p.purpose_max_tokens.insert("reorganize".into(), 24000);
         let msgs = [Msg { role: "user", content: "x".into() }];
@@ -1824,6 +1910,61 @@ mod tests {
         let text = std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../configs/models.json")).unwrap();
         let m: ModelsFile = serde_json::from_str(&text).unwrap();
         m.check().unwrap();
+    }
+
+    /// Every purpose the project's routes send has an effort entry (`null` included), and a
+    /// purpose a profile is reached for without one is reported, through a mix and through an
+    /// overflow (for the purposes that overflow).
+    #[test]
+    fn purposes_sent_without_an_effort_entry_are_reported() {
+        let text = std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../configs/models.json")).unwrap();
+        let m: ModelsFile = serde_json::from_str(&text).unwrap();
+        assert_eq!(m.effort_gaps(), Vec::<String>::new(), "the project's models file");
+        let m: ModelsFile = serde_json::from_value(json!({
+            "default": "glm",
+            "profiles": {
+                "glm": {"base_url": "x", "model": "g", "key_env": "K", "overflow": "ds", "reasoning_effort": {"think": "low", "deliberate": "low", "talk": "high", "consolidate": "high", "internalize": "high"}},
+                "ds": {"base_url": "x", "model": "d", "key_env": "K", "reasoning_effort": {"think": "low", "talk": null}}
+            },
+            "mixes": {"m": {"internalize": "ds", "consolidate": "ds@low", "*": "glm"}},
+            "groups": {"Brandholm": "m"}
+        }))
+        .unwrap();
+        let gaps = m.effort_gaps();
+        let has = |s: &str| gaps.iter().any(|g| g.contains(s));
+        assert!(has("profile ds has no reasoning_effort for internalize (reached by Brandholm → m)"), "{gaps:?}");
+        assert!(has("profile ds has no reasoning_effort for deliberate (the overflow of glm"), "{gaps:?}");
+        assert!(!has("for talk"), "null is an entry: {gaps:?}");
+        assert!(!has("ds has no reasoning_effort for consolidate"), "an @effort in the mix is one, and background purposes do not overflow: {gaps:?}");
+        assert!(!has("glm has no reasoning_effort for reorganize"), "reorganize inherits consolidate: {gaps:?}");
+        // ds's compile as glm's overflow, by the default and by the mix, and its internalize.
+        assert_eq!(gaps.len(), 3, "{gaps:?}");
+    }
+
+    /// A failed background call (memory) is not sent to the overflow profile, which would
+    /// answer with its own settings for the purpose; a routine call still overflows.
+    #[tokio::test]
+    async fn background_calls_do_not_overflow() {
+        std::env::set_var("LIVING_TEST_BACKGROUND_KEY", "x");
+        let efforts = json!({"think": "low", "consolidate": "high", "reorganize": "high"});
+        let models: ModelsFile = serde_json::from_value(json!({"default": "a", "profiles": {
+            "a": {"base_url": "http://127.0.0.1:9/v1", "model": "a", "key_env": "LIVING_TEST_BACKGROUND_KEY", "overflow": "b", "reasoning_effort": efforts},
+            "b": {"base_url": "http://localhost:9/v1", "model": "b", "key_env": "LIVING_TEST_BACKGROUND_KEY", "reasoning_effort": efforts}}}))
+        .unwrap();
+        let dir = std::env::temp_dir().join(format!("living-background-{}", now_ms()));
+        let llm = Llm::new(models, dir.clone()).unwrap();
+        let msg = [Msg { role: "user", content: "hi".into() }];
+        for purpose in ["consolidate", "reorganize"] {
+            assert!(llm.chat("a", Attention::OnStage, purpose, purpose, &msg).await.is_err());
+        }
+        assert!(llm.chat("a", Attention::OnStage, "think", "think", &msg).await.is_err());
+        let profiles = |actor: &str| -> Vec<String> {
+            std::fs::read_to_string(dir.join(format!("{actor}.jsonl"))).unwrap().lines().map(|l| serde_json::from_str::<Value>(l).unwrap()["profile"].as_str().unwrap().to_string()).collect()
+        };
+        assert_eq!(profiles("consolidate"), ["a"]);
+        assert_eq!(profiles("reorganize"), ["a"]);
+        assert_eq!(profiles("think"), ["a", "b"], "a routine call overflows");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// A runaway generation stops near what the purpose needs (measured p99 output on
