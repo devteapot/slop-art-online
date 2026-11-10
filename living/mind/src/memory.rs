@@ -346,7 +346,7 @@ impl Store {
                      MERGE (a)-[r:$(e.type) {open: true, rel: e.rel}]->(b)
                      ON CREATE SET r.since = $t, r.because = []
                      SET r += e.props, r.confidence = e.confidence, r.t = $t, r.thought = $thought,
-                         r.because = [x IN r.because WHERE NOT x IN e.because] + e.because,
+                         r.because = ([x IN r.because WHERE NOT x IN e.because] + e.because)[-$cap..],
                          r.firsthand = coalesce(r.firsthand, false) OR e.firsthand,
                          r.sources = [x IN coalesce(r.sources, []) WHERE NOT x IN e.sources] + e.sources
                      SET r.hearsay = NOT r.firsthand AND size(r.sources) = 1
@@ -362,6 +362,7 @@ impl Store {
                     actor,
                 )
                 .param("rows", p(Value::Array(rows)))
+                .param("cap", BECAUSE_CAP as i64)
                 .param("t", t as i64)
                 .param("thought", thought)
                 .param("lived", p(json!(patch.lived_under))),
@@ -1180,9 +1181,33 @@ pub fn failed_at_thing(text: &str) -> Option<u64> {
     (why == format!("no #{id} in sight") || why.ends_with(" is depleted") || why == "it is gone").then_some(id)
 }
 
+/// Experiences one edge may cite: a reply's own `because`, and what a re-asserted belief keeps
+/// of what it cited before (the newest). Without a bound, a stance re-asserted at every
+/// integration cited every experience it was ever asserted beside.
+pub const BECAUSE_CAP: usize = 8;
+
+/// The experiences a shorthand entry cites itself (`"because": [ids]`, or one id), among
+/// `known`; at most [`BECAUSE_CAP`]. An entry that cites none grounds on nothing.
+fn cited(entry: &Value, known: &[u64]) -> Vec<u64> {
+    let ids: Vec<&Value> = match &entry["because"] {
+        Value::Array(a) => a.iter().collect(),
+        Value::Null => Vec::new(),
+        one => vec![one],
+    };
+    let mut out: Vec<u64> = Vec::new();
+    for id in ids.into_iter().filter_map(reply_id).filter(|x| known.contains(x)) {
+        if !out.contains(&id) && out.len() < BECAUSE_CAP {
+            out.push(id);
+        }
+    }
+    out
+}
+
 /// Convenience arrays a reply may carry (`relations`, `judgments`, `places`) become ordinary
-/// mind edits: FEELS edges, JUDGES edges to `stance:` concepts and `place:` concepts.
-pub fn sugar_into(v: &Value, patch: &mut Patch, because: &[u64]) {
+/// mind edits: FEELS edges, JUDGES edges to `stance:` concepts and `place:` concepts. A relation
+/// or stance cites the experiences it names in its own `because` (those among `known`), not
+/// every experience of the reply: each kept memory of a batch grounded every stance of it.
+pub fn sugar_into(v: &Value, patch: &mut Patch, known: &[u64]) {
     for r in v["relations"].as_array().cloned().unwrap_or_default().into_iter().take(12) {
         let Some(id) = reply_id(&r["id"]) else { continue };
         let mut props = serde_json::Map::new();
@@ -1191,7 +1216,7 @@ pub fn sugar_into(v: &Value, patch: &mut Patch, because: &[u64]) {
         }
         props.insert("label".into(), json!(r["label"].as_str().unwrap_or("acquaintance")));
         props.insert("note".into(), json!(r["note"].as_str().unwrap_or_default().chars().take(300).collect::<String>()));
-        patch.edges.push(EdgeOp { from: "self".into(), rel: "FEELS".into(), to: format!("person:{id}"), confidence: 1.0, because: because.to_vec(), props, firsthand: false, sources: Vec::new() });
+        patch.edges.push(EdgeOp { from: "self".into(), rel: "FEELS".into(), to: format!("person:{id}"), confidence: 1.0, because: cited(&r, known), props, firsthand: false, sources: Vec::new() });
     }
     for j in v["judgments"].as_array().cloned().unwrap_or_default().into_iter().take(12) {
         let Some(k) = j["key"].as_str().and_then(|k| key(k.trim_start_matches("stance:"))) else { continue };
@@ -1200,7 +1225,7 @@ pub fn sugar_into(v: &Value, patch: &mut Patch, because: &[u64]) {
         props.insert("why".into(), json!(j["why"].as_str().unwrap_or_default().chars().take(300).collect::<String>()));
         let k = k.replace(':', "_");
         patch.nodes.push(NodeOp { key: format!("stance:{k}"), labels: vec!["Stance".into()], name: Some(k.clone()), props: Default::default() });
-        patch.edges.push(EdgeOp { from: "self".into(), rel: "JUDGES".into(), to: format!("stance:{k}"), confidence: 1.0, because: because.to_vec(), props, firsthand: false, sources: Vec::new() });
+        patch.edges.push(EdgeOp { from: "self".into(), rel: "JUDGES".into(), to: format!("stance:{k}"), confidence: 1.0, because: cited(&j, known), props, firsthand: false, sources: Vec::new() });
     }
     for p in v["places"].as_array().cloned().unwrap_or_default().into_iter().take(8) {
         let (Some(name), Some(x), Some(y)) = (p["name"].as_str(), p["x"].as_f64(), p["y"].as_f64()) else { continue };
@@ -1472,6 +1497,8 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
         let mut because = Vec::new();
         for x in e["because"].as_array().map(|a| a.as_slice()).unwrap_or_default() {
             match reply_id(x).filter(|x| known.contains(x)) {
+                Some(id) if because.contains(&id) => {}
+                Some(_) if because.len() >= BECAUSE_CAP => notes.push(format!("because {x} of {a} -{rel}-> {b} dropped: an edge cites at most {BECAUSE_CAP} experiences")),
                 Some(id) => because.push(id),
                 None => notes.push(format!("because {x} of {a} -{rel}-> {b} dropped: not one of these experiences")),
             }
@@ -1940,6 +1967,26 @@ mod tests {
         assert_eq!(got, vec![(false, vec![4]), (false, vec![4, 6]), (true, vec![4]), (true, vec![]), (true, vec![])]);
     }
 
+    /// A shorthand relation or stance cites what it names itself, among the batch's
+    /// experiences and at most BECAUSE_CAP of them, never the whole batch.
+    #[test]
+    fn shorthand_entries_cite_their_own_experiences() {
+        let known: Vec<u64> = (1..=20).collect();
+        let mut p = Patch::default();
+        sugar_into(&json!({
+            "relations": [{"id": 7, "trust": 60, "affinity": 40, "label": "friend", "because": [3, "4", 99]}, {"id": 8, "trust": 10, "affinity": 0, "label": "stranger"}],
+            "judgments": [{"key": "keep_goats_inside", "value": 0.9, "why": "the night they were lost", "because": 11}, {"key": "rain_is_coming", "value": 0.6, "why": "clouds", "because": (1..=20).collect::<Vec<u64>>()}]
+        }), &mut p, &known);
+        let by = |to: &str| p.edges.iter().find(|e| e.to == to).map(|e| e.because.clone()).unwrap();
+        assert_eq!(by("person:7"), [3, 4], "ids as strings count; an id not in the batch does not");
+        assert_eq!(by("person:8"), Vec::<u64>::new(), "no because: grounded on nothing");
+        assert_eq!(by("stance:keep_goats_inside"), [11], "one id");
+        assert_eq!(by("stance:rain_is_coming").len(), BECAUSE_CAP);
+        let (patch, notes) = patch_from(&json!({"edges": [{"from": "self", "rel": "SAW", "to": "kind:wolf", "confidence": 0.9, "because": (1..=12).collect::<Vec<u64>>()}]}), &known, &|_| None);
+        assert_eq!(patch.edges[0].because.len(), BECAUSE_CAP);
+        assert!(notes.iter().any(|n| n.contains("cites at most")), "{notes:?}");
+    }
+
     #[tokio::test]
     #[ignore]
     async fn grounds_link_stories_and_lessons() {
@@ -1952,7 +1999,7 @@ mod tests {
         // The story and its lesson in one consolidation.
         let mut p = Patch::default();
         p.remember.push(mem(11, now, "Wolves took Bram's goats at the ford in the snow."));
-        sugar_into(&json!({"judgments": [{"key": "keep_goats_inside", "value": 0.9, "why": "the night they were lost"}]}), &mut p, &[11]);
+        sugar_into(&json!({"judgments": [{"key": "keep_goats_inside", "value": 0.9, "why": "the night they were lost", "because": [11]}]}), &mut p, &[11]);
         s.apply(1, &p, "consolidate-1", now).await.unwrap();
         // A belief written first (a conversation turn) and its memory kept afterwards.
         let mut p = Patch::default();
