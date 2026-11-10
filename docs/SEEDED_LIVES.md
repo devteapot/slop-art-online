@@ -187,7 +187,8 @@ Models: DeepSeek V4.1 Flash without thinking drafts (`deepseek-flash`, the faste
 - `SiteSpec` gains `dispersed` and `regions`. A dispersed site is placed after every other kind of site, so the towns, villages and caves stay exactly where they were (checked: same centres for seed 7). It may stand on any not-too-rough ground of its region kinds (default meadow, forest, old forest, highland, beach), spread over the island (the existing distance term) and over region kinds (each one already in a kind of region counts against the next).
 - The default island adds `hamlet` sites: 2–9, 3 per km², radius 26 m, 230 m apart. Seed 7 gets 9 (2 meadow, 2 forest, 2 old forest, 1 highland, 2 beach) with 2–5 houses each, 34 homes in all.
 - The `hamlet` settlement style is a small village from the fantasy kit: a green with a well, one street, barns and fields along its track (`settle.rs`).
-- Every hamlet is joined to the road network like any settlement. Trunk roads grow from 4.8 to 6.6 km. The planner already writes their lots, structures and roads, so the authority, the game client (which draws every lot) and clients deriving the land need no new code. Digests change with the layout, as they should (tiles `fbc8a222a13d130e`, heights `0d2f77752781845c`, layout `06af78dda449e794`; the authority, x86_64 native and `lives_sites` agree).
+- Every hamlet is joined to the road network like any settlement. Trunk roads grow from 4.8 to 6.6 km. The planner already writes their lots, structures and roads, so the authority, the game client (which draws every lot) and clients deriving the land need no new code. Digests change with the layout, as they should (tiles `9b403da95bba9407`, heights `0d2f77752781845c`, layout `408df4be210092eb`; the WASM authority, `floor_preview` and `lives_sites` natively on x86_64 agree).
+- A garden or field inside a terraced zone is no longer laid across a terrace step: the step's edge becomes a wall, and `verify-generation` found one Kettlebridge garden cut through once the hamlets' roads had shifted the town's layout.
 
 ### Choosing a site (authority)
 
@@ -243,7 +244,15 @@ All on scratch `verify-lives-*` databases in the dev-box's own container `lives-
 - 2,348 `relation` rows (853 pairs felt both ways) were written at creation;
 - every carrier knows its way as stages, and every outlaw has its watch on the stone road.
 
-The WASM authority's land digests equal the native generator's (tiles `fbc8a222a13d130e`, heights `0d2f77752781845c`, layout `06af78dda449e794`).
+The lab worlds ran before the terrace-garden fix (tiles `fbc8a222a13d130e`, layout `06af78dda449e794`; homes, roads and routes are the same after it). The final build's digests are tiles `9b403da95bba9407`, heights `0d2f77752781845c`, layout `408df4be210092eb`, and the WASM authority matches the native generator.
+
+`verify-generation` on the final build (`generation-lives-0256`):
+- the island passes all 968 checks, including the new ones: 9 of 9 hamlets peopled where the seed asks; 2,348 of 2,348 sheet relations as `relation` rows; 9 residents' authored places with 60 stages, the longest 130.6 m;
+- the island and Aske Coast compile offline to their committed seeds;
+- repeatability passes;
+- one unrelated failure, "Saltmere memberships" in the second drawn `realm` world: a resident died in the first seconds, which removes the membership but keeps the background. The first `realm` world passed the same check.
+
+The free-tier wake check passes 20 of 20 on the final build (`lives-0256w`), and the placement checks 12 of 12.
 
 ### Residents act on their seeded situations (rows, no minds, no player)
 

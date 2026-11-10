@@ -137,3 +137,12 @@ Consulted the official [documentation entry point](https://spacetimedb.com/docs/
 ## What remains unverified
 
 Fresh paid drafting and its second pass, complete publication-error readability, semantic privacy of authored prose, every numeric seed, repeated valley homestead placement, subscriptions, browser rendering, player actions, learning, later ecology and performance. Use the neighbouring verification skills and performance contract for those claims.
+
+## Seeded lives (2026-11-10, branch `lives-1`)
+
+`generation-lives-0256` on the dev-box, in a worker's own container (`LIVING_STDB_CONTAINER=lives-stdb`, `LIVING_STDB_URL=http://127.0.0.1:3412`, SpacetimeDB 2.14.1), from commit `2108cdc` plus the terrace-garden fix:
+
+- `island` passes 968 of 968 checks. The new checks: hamlets laid out and peopled where the seed's `site: hamlet_village` entries ask (9 of 9); authored sheet relations as `relation` rows (2,348 of 2,348); authored places and the stages of known ways (9 residents, 60 stages, the longest 130.6 m); workplaces an author gave a resident exempt from the in-or-by-settlement check. The `land` digests (tiles `9b403da95bba9407`, heights `0d2f77752781845c`, layout `408df4be210092eb`) equal `floor_preview`'s.
+- `authored island` compiles `living/seeds/worlds/island` offline (network blocked) to the committed `island.json`.
+- One failure outside this change: "Saltmere memberships" in the second `realm` child. Roborpe (id 21) died within seconds of creation; death removes the membership but keeps the background the check counts. The first `realm` child passed. The check should compare living residents only.
+- The previous run (`generation-lives-0247`) failed "open lots stay walkable" on a Kettlebridge garden laid across a terrace step. The planner now keeps gardens and fields off terrace steps (`settle.rs`, `try_lot`). It also failed "original seeds unchanged", because `island.json`'s setting text was edited during that run.
