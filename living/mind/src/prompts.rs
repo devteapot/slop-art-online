@@ -115,11 +115,14 @@ pub fn record_text(r: &living_rules::records::RecordFacts) -> Option<String> {
     compiled()?.record_text(r)
 }
 
+/// The acts a conversation turn's examples show (`talk_system`); every one must appear there as
+/// `"do": "<name>"`, or the turn neither shows nor lists it (test `talk_examples_show_every_shown_act`).
+const TALK_SHOWN: [&str; 6] = ["conceive", "accept", "give", "offer", "teach", "host"];
+
 /// The acts a conversation turn may carry that the rules mark for it (`talk` in a skill's
 /// spec) and the turn's examples do not show already, one line each.
 pub fn talk_acts() -> String {
-    const SHOWN: [&str; 6] = ["conceive", "accept", "give", "offer", "teach", "host"];
-    living_rules::catalog::skills().iter().filter(|s| s.talk && !SHOWN.contains(&s.name.as_str())).map(living_rules::catalog::skill_line).collect::<Vec<_>>().join("\n")
+    living_rules::catalog::skills().iter().filter(|s| s.talk && !TALK_SHOWN.contains(&s.name.as_str())).map(living_rules::catalog::skill_line).collect::<Vec<_>>().join("\n")
 }
 
 /// What each combat skill is under the world's rule script (`<skill>_combat()`): which skills
@@ -866,7 +869,8 @@ silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what yo
 \"say\": \"your words\" or null, \"to\": id of who you speak to, \
 \"acts\": [] or deliberate acts you carry out now, e.g. {{\"do\": \"conceive\", \"target\": {{\"id\": id of who you speak to}}}} once you both want a child together, \
 {{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}}} to take a trade they offered, {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
-{{\"do\": \"offer\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}}, {{\"do\": \"teach\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fire\"}} \
+{{\"do\": \"offer\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}}, {{\"do\": \"teach\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fire\"}}, \
+{{\"do\": \"host\", \"target\": {{\"id\": id of who you speak to}}}} to take them in as your household's guest until morning \
 (words change nothing in the world by themselves: what you agree to do now, do here; you will learn how it went), \
 \"settled\": null while the matter is still open, or what is now settled, in a few words (e.g. \"meet at the ford at dawn\", \"she will think about it\", \"I refused\", \"nothing more to say\"), \
 \"until\": null or when to take it up again (\"dawn\", \"morning\", \"noon\", \"evening\", \"night\", \"tomorrow\" or an hour 0-23), \
@@ -939,6 +943,16 @@ pub fn talk_user(t: &TalkUser) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn talk_examples_show_every_shown_act() {
+        // talk_acts() leaves these out as already shown; a name missing from the examples is an
+        // act a conversation turn never offers (host was, until fix-host-example).
+        let system = super::talk_system();
+        for name in super::TALK_SHOWN {
+            assert!(system.contains(&format!("\"do\": \"{name}\"")), "{name} is not shown in the talk turn's examples");
+        }
+    }
+
     #[test]
     fn the_body_is_felt_in_words() {
         use super::{felt_body, Body};

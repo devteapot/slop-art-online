@@ -236,6 +236,11 @@ def run_case(run, case):
             run.harness('player', 'say', line, '--to', str(actor))
             run.wait(lambda: any(e['purpose'] == 'talk' for e in shared.rows(run.directory / 'fake-requests.jsonl')),
                      'talk request')
+            # The turn offers every act the rules mark for conversation: host among the examples
+            # (prompts::TALK_SHOWN skips listing it), so a resident can take someone in while talking.
+            talk_sent = next(e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'talk')
+            talk_text = json.dumps(talk_sent, ensure_ascii=False).replace('\\"', '"')
+            assert '"do": "host"' in talk_text, 'the talk turn does not offer host'
             assert any(e['kind'] == 'speech' and e['subject'] == player for e in run.private(
                 f'SELECT * FROM experience WHERE observer = {actor}', 'heard-speech'))
             run.wait(lambda: any('verify minds goodbye' in c['text'] and c['b'] == player for c in run.sql(
