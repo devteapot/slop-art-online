@@ -1,5 +1,14 @@
 # Core validation record
 
+## 2026-11-10 island food: berries and store places, a food round (Mac)
+
+Branch `hunger-1` (main `7e5de53` merged in) in a worktree, the worker's own container `hunger-verify` (Docker Desktop, 2.14.1, port 3382) through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`: `town_life.places` gains `berries` and `store`, `town_life.spread` shares `berries` out like work, and the island's own "find food and eat" walks a round when nothing edible is in sight ([D2](../../../../docs/SOAK.md#d2-the-islands-residents-starve-in-the-first-hours)). Free tier only.
+
+- `cargo_checks.py` (`core-hunger-101946`): rules, authority, mind and viewer sync pass. `tick` 6 of 6, `needs`, `seize` and `sight` pass.
+- `town.py` (`core-hunger-101946-town`) 20 of 21: the step-aside scene's three approaches got no step (its recorded flake, above). Rerun of that scene alone (`core-hunger-101946-aside`) 1 of 1: made way on the second approach.
+- `lives.py --minutes 24` (`core-hunger-101946-lives`) 19 of 19.
+- The same checks on the seed before `spread` (`core-hunger-080229`, from `fe6ec66`): tick, needs, seize, sight pass; town 21 of 21; lives 19 of 19.
+
 ## 2026-11-10 walking routes (Mac)
 
 Branch `path-1` (from `fe6ec66`) in a worktree, the worker's own container `path-stdb` (Docker Desktop, 2.14.1, port 3391): walks planned leg by leg over regions and areas, acts walking to a place outlast `APPROACH_MS` (docs/PATHS.md). Free tier only.

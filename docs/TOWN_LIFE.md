@@ -33,11 +33,12 @@ Pinned: `spacetimedb = "=2.14.1"`, `spacetimedb-sdk = "=2.14.1"`, image `clockwo
 
 ### Places a resident knows
 
-A resident finds home, work, the square and an evening spot as remembered places: `place` rows (`actor`, `name`, `x`, `y`), the table minds already project their named places into and graphs already read through `{"place": NAME}` (indexed by `place.actor`). World creation writes them once per resident (`town::seat`, called from `island::settle`), from seed data:
+A resident finds home, work, the square, an evening spot, where berries grow and the store as remembered places: `place` rows (`actor`, `name`, `x`, `y`), the table minds already project their named places into and graphs already read through `{"place": NAME}` (indexed by `place.actor`). World creation writes them once per resident (`town::seat`, called from `island::settle`), from seed data:
 
 ```json
 "town_life": {
-  "places": {"square": ["plaza"], "inn": ["inn", "hall", "plaza"]},
+  "places": {"square": ["plaza"], "inn": ["inn", "hall", "plaza"], "berries": ["berry_bush", "field", "garden"], "store": ["storage"]},
+  "spread": ["berries"],
   "evening": ["inn", "square"],
   "work": {"farmer": ["field", "garden", "plaza"], "fisher": ["fishing_spot", "plaza"], "trader": ["market_stall", "plaza"], …}
 }
@@ -46,6 +47,7 @@ A resident finds home, work, the square and an evening spot as remembered places
 - A kind is a lot kind of the resident's own settlement (`lot.settlement`; fields and gardens at their centre, buildings at their door), a resource or structure kind within 1.5 × the settlement's radius (`fishing_spot`, `gate`), or `plaza` (the settlement's square). The first kind that has a spot wins.
 - Work is spread over the settlement's matching lots: the nearest of the least used. Only a spot a path reaches from home counts (`Map::path`, at most four candidates per kind); a fishing spot across a river or a walled yard is skipped.
 - `evening` alternates by household between the inn and the square.
+- A place named in `spread` is spread like work: each resident gets the nearest of the least used spots. On the island that is `berries`: a bush of one's own (else a field or garden), so a town does not strip the one bush nearest its houses. `store` is the nearest storage. The food routine walks to them when nothing edible is in sight ([below](#starting-ways)). Both were added on 2026-11-10 for [D2](SOAK.md#d2-the-islands-residents-starve-in-the-first-hours). The island's 277 residents get 277 different bushes, a median of 28 m from home (p90 57 m, at most 164 m). Each spot kind is now looked up once per settlement, so creation is no slower (`init` about 4.1 s, as before).
 - `home` needs no row: it is the household's door (`character.home_x/home_y`, set when the household claims the house at its door; `Target::Home` already falls back to it).
 - Cost at world creation: 158 ms for 262 residents in 8 settlements (`init.town.seat` spans); 942 place rows, never rewritten. Nothing per tick scans settlements, lots or households.
 
@@ -59,7 +61,7 @@ The island top level, in the order a resident weighs it (each is a routine of sk
 |---|---|---|---|
 | safety | 2.0 + threatened × 3 + hurt × 1.2 | stay safe | Hurt and losing near a wolf: flee; losing otherwise: yield; still struck: flee; hurt: attack the attacker; a wolf within 10 with two others near and in good health: attack it; a wolf within 12: flee. Fails at once when none applies. |
 | shelter | −0.2 + rain × 1.2 | get out of the rain | Under a roof (within 2.5 of home, an inn, a hall or any house door): rest. Far from home: the nearest inn, hall or house. Else home. |
-| food | −0.5 + hunger × 2 + starving × 1.5 | find food and eat | The repertoire's: eat what one carries, take food from a store in sight, gather. |
+| food | −0.5 + hunger × 2 + starving × 1.5 | find food and eat | The island's own (`ways.common`): eat what one carries, take food from a store in sight, gather berries or fish in sight; with nothing edible in sight, a round: the `store` place, the `berries` place, then eight strolls (`wander`), each step skipped if it cannot be walked. A sequence keeps its place, so the round goes on, and anything edible seen on the way comes first. |
 | sleep | −0.7 + tired × 1.3 + night × 0.6 + exhausted | sleep | At home: sleep; else go home and sleep. |
 | greet | hailed × 2.2 | answer a greeting | Nod back within 5 tiles, else wave back. |
 | look | commotion × 1.6 | watch what happens | Face the fight or death, then pause. |
