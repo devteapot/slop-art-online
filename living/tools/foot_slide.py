@@ -97,7 +97,11 @@ def main() -> None:
     ap.add_argument("--gap", default="", help="TOE:ANKLE floors (m above the ground, from a flat-ground run's --floors)")
     ap.add_argument("--floors", action="store_true")
     ap.add_argument("--stairs", default="", help="X,Z,DOWNX,DOWNZ,FLOOR: measure against that flight's treads (17 rising 3 m over 5 m, buildings.py prop_stairs)")
+    ap.add_argument("--paws", action="store_true", help="an animal's paw track (with --bins)")
+    ap.add_argument("--paw-floor", type=float, default=0.015)
     a = ap.parse_args()
+    if a.paws:
+        return paws(a)
     if a.floors or a.gap:
         return gaps(a)
     if a.bins > 0:
@@ -304,6 +308,89 @@ def by_speed(a) -> None:
     print(f"{'m/s':9s} {'secs':>5s} {'supp':>5s} {'slide med':>9s} {'mean':>6s} {'p90':>6s} {'/body':>6s} {'drift med':>9s} {'p90':>6s} {'n':>4s} {'steps/s':>7s} {'jitter':>6s}")
     for k, v in out.items():
         print(f"{k:9s} {v['seconds']:5.1f} {v['support_share']:5.0%} {v['slide_mps_median']:9.3f} {v['slide_mps_mean']:6.3f} {v['slide_mps_p90']:6.3f} {v['slide_of_body_median']:6.3f} {v['drift_cm_median'] or 0:9.1f} {v['drift_cm_p90'] or 0:6.1f} {v['contacts']:4d} {v['steps_per_s']:7.2f} {v['step_jitter_s'] or 0:6.3f}")
+    if a.json:
+        json.dump(out, open(a.json, "w"), indent=1)
+
+
+PAWS = ("fl", "fr", "hl", "hr")
+
+
+def paws(a) -> None:
+    """The ramp report for an animal: per band of body speed, planted paws' slide, drift and gap."""
+    rows = [json.loads(line) for line in open(a.track) if line.strip()]
+    rows = [r for r in rows if "paws" in r]
+    t0 = rows[0]["t"]
+    rows = [r for r in rows if r["t"] - t0 >= a.skip]
+    pairs = []
+    for prev, cur in zip(rows, rows[1:]):
+        dt = cur["t"] - prev["t"]
+        if 0 < dt <= 0.1:
+            bv = math.dist((prev["root"][0], prev["root"][2]), (cur["root"][0], cur["root"][2])) / dt
+            pairs.append((prev, cur, dt, bv))
+    moving = [p for p in pairs if p[3] > MOVING]
+    if len(moving) < 20:
+        sys.exit("too few moving frames")
+    up = lambda r, k: r["paws"][k][1] - r["paws"][k][3]
+    floor = {}
+    for k in PAWS:
+        h = sorted(up(c, k) for _, c, _, _ in moving)
+        floor[k] = h[max(0, int(len(h) * 0.02))]
+    lift = lambda r, k: up(r, k) - floor[k]
+    bins = a.bins or 1.0
+    band = lambda v: int(v / bins)
+    stats = defaultdict(lambda: {"secs": 0.0, "slide": [], "all": [], "drift": [], "gap": [], "support": 0.0})
+    run = {k: None for k in PAWS}  # (start xz, band, start t, last xz)
+    for prev, cur, dt, bv in pairs:
+        if bv <= MOVING:
+            for k in PAWS:
+                run[k] = None
+            continue
+        st = stats[band(bv)]
+        st["secs"] += dt
+        speeds = []
+        for k in PAWS:
+            planted = lift(prev, k) <= PLANT_M and lift(cur, k) <= PLANT_M
+            p0, p1 = (prev["paws"][k][0], prev["paws"][k][2]), (cur["paws"][k][0], cur["paws"][k][2])
+            if planted:
+                v = math.dist(p0, p1) / dt
+                speeds.append(v)
+                st["all"].append(v)
+                st["gap"].append(up(cur, k) - a.paw_floor)
+                if run[k] is None:
+                    run[k] = [p0, band(bv), prev["t"], p1]
+                run[k][3] = p1
+            elif run[k] is not None:
+                if cur["t"] - run[k][2] >= 0.1:
+                    stats[run[k][1]]["drift"].append(math.dist(run[k][0], run[k][3]))
+                run[k] = None
+        if speeds:
+            st["support"] += dt
+            st["slide"].append(min(speeds))
+    out = {}
+    for b in sorted(stats):
+        st = stats[b]
+        if st["secs"] < 0.5 or not st["slide"]:
+            continue
+        sl, al, dr, gp = sorted(st["slide"]), sorted(st["all"]), sorted(st["drift"]), st["gap"]
+        ag = sorted(abs(x) for x in gp)
+        out[f"{b * bins:.1f}-{(b + 1) * bins:.1f}"] = {
+            "seconds": round(st["secs"], 1),
+            "support_share": round(st["support"] / st["secs"], 3),
+            "slide_mps_median": round(statistics.median(sl), 3),
+            "slide_mps_mean": round(statistics.mean(sl), 3),
+            "slide_mps_p90": round(sl[int(len(sl) * 0.9)], 3),
+            "all_mps_median": round(statistics.median(al), 3),
+            "contacts": len(dr),
+            "drift_cm_median": round(100 * dr[len(dr) // 2], 1) if dr else None,
+            "drift_cm_p90": round(100 * dr[int(len(dr) * 0.9)], 1) if dr else None,
+            "gap_cm_median": round(100 * statistics.median(gp), 1),
+            "abs_gap_cm_p90": round(100 * ag[int(len(ag) * 0.9)], 1),
+            "into_ground_over_3cm": round(sum(x < -0.03 for x in gp) / len(gp), 3),
+            "floating_over_3cm": round(sum(x > 0.03 for x in gp) / len(gp), 3),
+        }
+    print(f"{'m/s':9s} {'secs':>5s} {'supp':>5s} {'slide med':>9s} {'mean':>6s} {'p90':>6s} {'all':>6s} {'drift med':>9s} {'p90':>6s} {'n':>4s} {'gap med':>7s} {'|p90|':>6s} {'in>3':>5s} {'up>3':>5s}")
+    for k, v in out.items():
+        print(f"{k:9s} {v['seconds']:5.1f} {v['support_share']:5.0%} {v['slide_mps_median']:9.3f} {v['slide_mps_mean']:6.3f} {v['slide_mps_p90']:6.3f} {v['all_mps_median']:6.3f} {v['drift_cm_median'] or 0:9.1f} {v['drift_cm_p90'] or 0:6.1f} {v['contacts']:4d} {v['gap_cm_median']:7.1f} {v['abs_gap_cm_p90']:6.1f} {v['into_ground_over_3cm']:5.0%} {v['floating_over_3cm']:5.0%}")
     if a.json:
         json.dump(out, open(a.json, "w"), indent=1)
 

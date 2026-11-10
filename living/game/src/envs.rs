@@ -214,8 +214,16 @@ pub fn apply_mood(md: &Mood, style: &mut Style, look: &mut Lookdev, lights: &mut
     };
 }
 
-/// You: a VRoid character from the look-dev folder if there is one, else the figure.
+/// You: a VRoid character from the look-dev folder if there is one, else the figure; or a rigged
+/// animal with `LIVING_GAME_PLAYER=beast:<kind>` (`wolf`, `deer`), for measuring its gaits.
 fn spawn_player(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Palette, style: &Style, look: &Lookdev, assets: &AssetServer) {
+    if let Some(kind) = std::env::var("LIVING_GAME_PLAYER").ok().and_then(|r| r.strip_prefix("beast:").map(str::to_string)) {
+        if let Some(e) = crate::bodies::spawn_beast(commands, assets, &kind, Vec3::ZERO, 0.0, 1.0) {
+            commands.entity(e).insert((EnvPart, Player::Model { vrm: false }, Visibility::Inherited));
+            return;
+        }
+        warn!("look-dev: no rigged {kind} on disk; you are the usual character");
+    }
     let vroid = look.models.iter().find(|m| m.starts_with("vroid-")).cloned();
     match vroid {
         Some(name) => {
@@ -687,11 +695,12 @@ pub fn walk(
     ui: Res<crate::hud::UiWants>,
     mut input: ResMut<crate::controls::Input>,
     mut target: ResMut<crate::controls::Target>,
-    mut players: Query<(&Player, &mut Transform, Option<&Fitted>)>,
+    mut players: Query<(&Player, &mut Transform, Option<&Fitted>, Option<&crate::lookdev::Model>, Has<crate::bodies::Beast>)>,
     island: Option<Res<crate::island::Island>>,
     time: Res<Time>,
     route: Option<Res<crate::route::Steer>>,
     probe: Option<Res<crate::probe::Probe>>,
+    mut tilt: Local<Quat>,
 ) {
     let dt = time.delta_secs();
     let (up, right) = cam.control_axes();
@@ -747,7 +756,7 @@ pub fn walk(
     }
     let y = island.as_ref().map_or_else(|| envs.ground.height(roam.pos.x, roam.pos.y), |i| i.height(roam.pos.x, roam.pos.y));
     let f = roam.facing;
-    for (p, mut tf, fitted) in &mut players {
+    for (p, mut tf, fitted, model, beast) in &mut players {
         tf.translation.x = roam.pos.x;
         tf.translation.z = roam.pos.y;
         tf.rotation = match p {
@@ -755,6 +764,16 @@ pub fn walk(
             Player::Figure => Quat::from_rotation_y(-f.y.atan2(f.x)),
             Player::Model { vrm } => Quat::from_rotation_y(f.x.atan2(f.y) + if *vrm { PI } else { 0.0 }),
         };
+        // An animal you walk as lies on the ground under its paws, as connected animals do.
+        let mut y = y;
+        if beast {
+            let kind = model.map_or("wolf", |m| if m.file.contains("deer") { "deer" } else { "wolf" });
+            let ground = |x: f32, z: f32| island.as_ref().map_or_else(|| envs.ground.height(x, z), |i| i.height(x, z));
+            let (want, at) = crate::bodies::lie_on(kind, ground, roam.pos, f, 1.0);
+            *tilt = tilt.slerp(want, 1.0 - (-dt * crate::bodies::TILT_RATE).exp());
+            tf.rotation = *tilt * tf.rotation;
+            y = at;
+        }
         match (p, fitted) {
             (Player::Figure, _) => tf.translation.y = y,
             (_, Some(fit)) => tf.translation.y = y + fit.y_off,

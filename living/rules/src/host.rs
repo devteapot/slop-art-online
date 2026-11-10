@@ -98,6 +98,13 @@ pub fn hosted_map(land: &Land, p: &LandParams) -> (Map, Hosted) {
         }
     }
     let start = land.settlements.first().map(|s| s.plaza.centre).or_else(|| land.sites.first().map(|s| (s.x, s.y))).unwrap_or((map.w as f32 / 2.0, map.h as f32 / 2.0));
+    // A building may stand in the middle of the first square (the megacity's arcology): start
+    // from its walkable edge then.
+    let start = if map.walkable(start.0 as i32, start.1 as i32) {
+        start
+    } else {
+        land.settlements.first().and_then(|s| s.plaza.points.iter().map(|q| ((q.0 + start.0) * 0.5 + (q.0 - start.0) * 0.4, (q.1 + start.1) * 0.5 + (q.1 - start.1) * 0.4)).find(|q| map.walkable(q.0 as i32, q.1 as i32))).unwrap_or(start)
+    };
     h.reachable = reach(&map, start);
     let walkable = map.tiles.iter().filter(|t| Terrain::from_u8(**t).walkable()).count() as u32;
     h.cut_off_tiles = walkable - h.reachable.iter().filter(|r| **r).count() as u32;
@@ -235,8 +242,15 @@ mod tests {
             let q = map.nearest_walkable(pt.0, pt.1).expect("walkable near");
             h.reachable[(q.1 as u32 * map.w + q.0 as u32) as usize]
         };
+        // A square is reachable at its middle, or round a building standing in it (the core's
+        // arcology) at the middle of its outline's edges.
         for s in &l.settlements {
-            assert!(at(s.plaza.centre), "square of the {} settlement at {:?} reachable", s.style, s.plaza.centre);
+            let n = s.plaza.points.len();
+            let edges = (0..n).map(|i| {
+                let (a, b) = (s.plaza.points[i], s.plaza.points[(i + 1) % n]);
+                ((a.0 + b.0) * 0.5 * 0.9 + s.plaza.centre.0 * 0.1, (a.1 + b.1) * 0.5 * 0.9 + s.plaza.centre.1 * 0.1)
+            });
+            assert!(std::iter::once(s.plaza.centre).chain(edges).any(|q| map.walkable(q.0 as i32, q.1 as i32) && at(q)), "square of the {} settlement at {:?} reachable", s.style, s.plaza.centre);
         }
         let mut doors = 0;
         let mut stranded = 0;

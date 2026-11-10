@@ -31,8 +31,22 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 
 `--case` can repeat. Cases are `roundtrip`, `acts`, `conversation`, `consolidation`, `prune`, `reject`, `only`, `reconnect`, `lod`, `takeover` ([features/takeover.md](features/takeover.md)), `sight` ([features/sight.md](features/sight.md)), `wake` ([features/wake.md](features/wake.md); an island world, built in `.local/living/target-wake-island`), `animals` ([features/animals.md](features/animals.md)), `night` ([features/sleep.md](features/sleep.md)) and `jev` ([features/judgments.md](features/judgments.md)). Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
 
+Seeded island residents (docs/SEEDED_LIVES.md) have their own driver, `scripts/lives_wake.py` ([features/lives-wake.md](features/lives-wake.md)): on an island run it wakes named residents by a player speaking to them, with a scratch Neo4j and the fake model (free) or `--real PROFILE` (paid, only when authorized), and checks that each knows its own past and people and no one else's secrets.
+
 
 Player memory (on by default; the service integrates what human-played characters live) needs a scratch Neo4j, so its proof runs in `verify-knowledge`'s `player_memory.py`; [features/player-memory.md](features/player-memory.md) maps what it proves about this service (switch off, cadence, reconnect, batch mode).
+
+## Trials
+
+`living/tools/trials.py` runs the real mind for one subject in scripted worlds (and open-ended life runs) on its own SpacetimeDB service; see [trials](features/trials.md) and `docs/TRIALS.md`. Its free tier is a `--fake` batch:
+
+```bash
+python3 living/tools/trials.py up && python3 living/tools/trials.py build wolves life
+python3 living/tools/trials.py run --batch dry1 wolves life --replicates 1 --minutes 6 --fake
+python3 living/tools/trials.py life --batch dry1 && python3 living/tools/trials.py clean --batch dry1
+```
+
+On a host whose `sao-living_spacetimedb_1` belongs to other work (the DGX Spark), run this skill's suite against the trial container: `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320 .agents/skills/verify-minds/scripts/verify_minds.py --run minds-…`.
 
 ## Evidence and cleanup
 

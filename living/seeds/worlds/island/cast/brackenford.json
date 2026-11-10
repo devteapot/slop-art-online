@@ -1,0 +1,1759 @@
+{
+ "households": [
+  {
+   "key": "marrow",
+   "members": [
+    {
+     "name": "Aldric Marrow",
+     "age": 63,
+     "sex": "m",
+     "occupation": "scribe",
+     "role": "Reeve of Brackenford; keeps the gate-due and the town ledger; took the Coldwell fields for the town store in the Lean Year; old, and has not named who comes after him",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "father of Tobin Marrow",
+      "rival of Mercy Abbot over the gate-due",
+      "holds Thornby's debt against Osric Dunn",
+      "outlawed Marta Hale and her household",
+      "the broken match shamed him before Josiah Crane"
+     ]
+    },
+    {
+     "name": "Cuth Marrow",
+     "age": 58,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "Aldric's wife; tends the sick of the town with the chapel sisters; keeps a quiet house",
+     "knows": [
+      "medicine",
+      "fire",
+      "cooking"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Aldric Marrow",
+      "mother of Tobin Marrow",
+      "works with Sister Elspeth"
+     ]
+    },
+    {
+     "name": "Maud Marrow",
+     "age": 34,
+     "sex": "f",
+     "occupation": "scribe",
+     "role": "Aldric's daughter; keeps the market rolls and the gate ledger under her father's eye",
+     "knows": [
+      "writing",
+      "fire"
+     ],
+     "parents": [
+      "Aldric Marrow",
+      "Cuth Marrow"
+     ],
+     "ties": [
+      "daughter of Aldric Marrow",
+      "sister of Tobin Marrow",
+      "SECRET: copies the ledger for Mercy Abbot when her father is asleep"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "marrow-young",
+   "members": [
+    {
+     "name": "Wenna Marrow",
+     "age": 25,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Tobin's wife, a weaver's daughter who farms the Marrow strip; expecting their first child",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Tobin Marrow",
+      "knows the town thinks she cost it the Kettlebridge peace"
+     ]
+    },
+    {
+     "name": "Tobin Marrow",
+     "age": 27,
+     "sex": "m",
+     "occupation": "guard",
+     "role": "captain of the gate guards and the Reeve's son; broke his promise to marry Hester Crane two years ago and married Wenna",
+     "knows": [
+      "fire"
+     ],
+     "parents": [
+      "Aldric Marrow"
+     ],
+     "ties": [
+      "husband of Wenna Marrow",
+      "once promised to Hester Crane",
+      "commands Wat Fenner at the gate",
+      "thinks the outlaws must be cleared from the stone road"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "abbot",
+   "members": [
+    {
+     "name": "Mercy Abbot",
+     "age": 48,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "head of the Market Guild; wants the gate-due dropped and trade with Kettlebridge back; holds the lease of the old Coldwell fields, which the Tolleys farm for the Guild",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "rival of Aldric Marrow",
+      "landlord of Hal Tolley",
+      "trades with Silas Pike and wants more of his stone",
+      "would like to be Reeve"
+     ]
+    },
+    {
+     "name": "Osric Abbot",
+     "age": 50,
+     "sex": "m",
+     "occupation": "carpenter",
+     "role": "Mercy's husband; makes the market stalls and the guildhall benches; no love for the Reeve",
+     "knows": [
+      "carpentry",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Mercy Abbot",
+      "works for the Market Guild",
+      "grumbles at the gate-due"
+     ]
+    },
+    {
+     "name": "Linnet Abbot",
+     "age": 16,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "Mercy's daughter; minds the Guild's stall in the square and learns the market terms",
+     "knows": [
+      "cooking",
+      "fire"
+     ],
+     "parents": [
+      "Mercy Abbot",
+      "Osric Abbot"
+     ],
+     "ties": [
+      "daughter of Mercy Abbot",
+      "helps at the Guild stall",
+      "friendly with Hester Crane's letters"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "fenner",
+   "members": [
+    {
+     "name": "Agnes Fenner",
+     "age": 33,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "cook at the inn; Marta Hale's younger sister; grew up at Coldwell",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Wat Fenner",
+      "younger sister of Marta Hale",
+      "aunt of Ned Hale's children",
+      "SECRET: carries food out to Coldwell by the south gate when Wat is not on watch; Marta knows, Wat does not"
+     ]
+    },
+    {
+     "name": "Wat Fenner",
+     "age": 35,
+     "sex": "m",
+     "occupation": "guard",
+     "role": "gate guard at the south gate on the stone road; collects the gate-due from carters",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Agnes Fenner",
+      "serves under Tobin Marrow",
+      "brother-in-law of Marta Hale, an outlaw",
+      "takes the due from Silas Pike"
+     ]
+    },
+    {
+     "name": "Bram Fenner",
+     "age": 9,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Wat and Agnes's son; plays at the gate and knows the guards' names",
+     "knows": [
+      "fire"
+     ],
+     "parents": [
+      "Wat Fenner",
+      "Agnes Fenner"
+     ],
+     "ties": [
+      "son of Wat Fenner",
+      "nephew of Marta Hale"
+     ]
+    },
+    {
+     "name": "Sissly Fenner",
+     "age": 6,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Wat and Agnes's daughter; follows her mother about the inn kitchen",
+     "knows": [],
+     "parents": [
+      "Wat Fenner",
+      "Agnes Fenner"
+     ],
+     "ties": [
+      "daughter of Agnes Fenner"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "chapel",
+   "members": [
+    {
+     "name": "Sister Elspeth",
+     "age": 57,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "eldest sister of the chapel; keeps the common fire and the calendar; heals anyone who comes, outlaws included",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "tended Marta Hale's son through a fever at Coldwell last winter",
+      "disapproves of the gate-due"
+     ]
+    },
+    {
+     "name": "Sister Alys",
+     "age": 29,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "younger sister of the chapel; keeps the herb garden and the chapel's store of salves",
+     "knows": [
+      "medicine",
+      "planting",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "serves under Sister Elspeth",
+      "tends the chapel garden",
+      "SECRET: doubts the Reeve's right to the Coldwell fields"
+     ]
+    },
+    {
+     "name": "Sister Perrin",
+     "age": 44,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "chapel sister; keeps the common fire lit and the calendar of feast days",
+     "knows": [
+      "medicine",
+      "fire",
+      "cooking"
+     ],
+     "parents": [],
+     "ties": [
+      "serves under Sister Elspeth",
+      "keeps the common fire"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "tolley",
+   "members": [
+    {
+     "name": "Marta Tolley",
+     "age": 36,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Hal's wife; works the Coldwell fields and keeps the house; wants a wall round the yard",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Hal Tolley",
+      "fears the outlaws"
+     ]
+    },
+    {
+     "name": "Tib Tolley",
+     "age": 12,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Hal and Marta's son; helps in the fields and keeps watch from the barn",
+     "knows": [
+      "planting"
+     ],
+     "parents": [
+      "Hal Tolley",
+      "Marta Tolley"
+     ],
+     "ties": [
+      "son of Hal Tolley"
+     ]
+    },
+    {
+     "name": "Nell Tolley",
+     "age": 8,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Hal and Marta's daughter; afraid of the woods and the people in them",
+     "knows": [],
+     "parents": [
+      "Hal Tolley",
+      "Marta Tolley"
+     ],
+     "ties": [
+      "daughter of Hal Tolley"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "ashby",
+   "members": [
+    {
+     "name": "Osbert Ashby",
+     "age": 52,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "farms the Ashby meadows outside the walls; sells grain to the town store and the Guild",
+     "knows": [
+      "planting",
+      "storage",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "sells grain to Aldric Marrow's store",
+      "neighbour of Hal Tolley"
+     ]
+    },
+    {
+     "name": "Edith Ashby",
+     "age": 49,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Osbert's wife; keeps the dairy and the hens",
+     "knows": [
+      "cooking",
+      "planting",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Osbert Ashby"
+     ]
+    },
+    {
+     "name": "Roland Ashby",
+     "age": 22,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "Osbert's son; ploughs and reaps and wants a strip of his own",
+     "knows": [
+      "planting",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [
+      "Osbert Ashby",
+      "Edith Ashby"
+     ],
+     "ties": [
+      "son of Osbert Ashby",
+      "courts Linnet Abbot"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "rowan",
+   "members": [
+    {
+     "name": "Godric Rowan",
+     "age": 45,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "farms the Rowan strip on the north field; sells grain to the town store and the Guild; proud of his land",
+     "knows": [
+      "planting",
+      "storage",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Elfgifu Rowan",
+      "sells grain to Aldric Marrow's store",
+      "neighbour of Osbert Ashby",
+      "wants his son to take the strip"
+     ]
+    },
+    {
+     "name": "Elfgifu Rowan",
+     "age": 42,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Godric's wife; keeps the dairy and the orchard; makes a little cider for the market",
+     "knows": [
+      "cooking",
+      "planting",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Godric Rowan",
+      "trades cider at the Guild stall"
+     ]
+    },
+    {
+     "name": "Wulf Rowan",
+     "age": 18,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "Godric and Elfgifu's son; ploughs the north field and wants to marry and take a strip of his own",
+     "knows": [
+      "planting",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [
+      "Godric Rowan",
+      "Elfgifu Rowan"
+     ],
+     "ties": [
+      "son of Godric Rowan",
+      "courts Hilda Marsh",
+      "works alongside his father"
+     ]
+    },
+    {
+     "name": "Leofric Rowan",
+     "age": 13,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Godric and Elfgifu's younger son; helps with the beasts and dreams of the gate guards",
+     "knows": [
+      "planting"
+     ],
+     "parents": [
+      "Godric Rowan",
+      "Elfgifu Rowan"
+     ],
+     "ties": [
+      "son of Godric Rowan",
+      "idolises Tobin Marrow"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "marsh",
+   "members": [
+    {
+     "name": "Edwin Marsh",
+     "age": 50,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "farms the Marsh acres by the east gate; keeps a few sheep and sells wool to the weavers",
+     "knows": [
+      "planting",
+      "tanning",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Sigrid Marsh",
+      "father of Hilda Marsh",
+      "sells wool to the weavers' wives",
+      "grumbles at the gate-due"
+     ]
+    },
+    {
+     "name": "Sigrid Marsh",
+     "age": 47,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Edwin's wife; cooks for the gate guards' mess and keeps the house; known for her barley broth",
+     "knows": [
+      "cooking",
+      "fire",
+      "smoking"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Edwin Marsh",
+      "cooks for the gate guards",
+      "mother of Hilda Marsh"
+     ]
+    },
+    {
+     "name": "Hilda Marsh",
+     "age": 19,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Edwin and Sigrid's daughter; works the sheep and the wool; being courted by Wulf Rowan",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire"
+     ],
+     "parents": [
+      "Edwin Marsh",
+      "Sigrid Marsh"
+     ],
+     "ties": [
+      "daughter of Edwin Marsh",
+      "courts Wulf Rowan",
+      "helps her mother cook for the guards"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "tanner",
+   "members": [
+    {
+     "name": "Aethelred Tanner",
+     "age": 54,
+     "sex": "m",
+     "occupation": "trader",
+     "role": "keeps the tannery by the west wall; buys hides from the farms and sells leather to the Guild; a hard bargainer",
+     "knows": [
+      "tanning",
+      "storage",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Mildred Tanner",
+      "sells leather to Mercy Abbot's Guild",
+      "buys hides from Osbert Ashby",
+      "rival of the Kettlebridge leather sellers"
+     ]
+    },
+    {
+     "name": "Mildred Tanner",
+     "age": 51,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Aethelred's wife; keeps the house and the tannery books; a sharp eye for a bad hide",
+     "knows": [
+      "cooking",
+      "writing",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Aethelred Tanner",
+      "keeps the tannery accounts"
+     ]
+    },
+    {
+     "name": "Cedric Tanner",
+     "age": 24,
+     "sex": "m",
+     "occupation": "carpenter",
+     "role": "Aethelred and Mildred's son; makes cart frames and barrels; wants to build houses but the town is short of stone",
+     "knows": [
+      "carpentry",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [
+      "Aethelred Tanner",
+      "Mildred Tanner"
+     ],
+     "ties": [
+      "son of Aethelred Tanner",
+      "works for Osric Abbot",
+      "wants to build in stone if he can get it"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "wade",
+   "members": [
+    {
+     "name": "Baldwin Wade",
+     "age": 61,
+     "sex": "m",
+     "occupation": "innkeeper",
+     "role": "keeps the Bell and Bush inn on the square; hears everything and says little; the inn is where the town argues",
+     "knows": [
+      "cooking",
+      "storage",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "employs Agnes Fenner as cook",
+      "hosts the Market Guild's meetings",
+      "owes Aldric Marrow a favour for the licence",
+      "old friend of Sister Elspeth"
+     ]
+    },
+    {
+     "name": "Petra Wade",
+     "age": 58,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Baldwin's wife; runs the inn kitchen and the girls who serve; famous for her pies",
+     "knows": [
+      "cooking",
+      "smoking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Baldwin Wade",
+      "works with Agnes Fenner",
+      "keeps the inn's store"
+     ]
+    },
+    {
+     "name": "Gareth Wade",
+     "age": 30,
+     "sex": "m",
+     "occupation": "guard",
+     "role": "Baldwin and Petra's son; a gate guard who would rather keep the inn; drinks too much of his father's ale",
+     "knows": [
+      "spear",
+      "archery",
+      "fire"
+     ],
+     "parents": [
+      "Baldwin Wade",
+      "Petra Wade"
+     ],
+     "ties": [
+      "son of Baldwin Wade",
+      "serves under Tobin Marrow",
+      "drinks at his father's inn",
+      "SECRET: owes money to a Kettlebridge carter and cannot pay"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "hobson",
+   "members": [
+    {
+     "name": "Reginald Hobson",
+     "age": 48,
+     "sex": "m",
+     "occupation": "mason",
+     "role": "the town's mason; repairs the walls and the chapel; forever short of good stone and cursing the Kettlebridge price",
+     "knows": [
+      "masonry",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "works for Aldric Marrow on the walls",
+      "buys stone from Silas Pike",
+      "thinks the gate-due is robbery on his trade",
+      "rival of Ezra Holt"
+     ]
+    },
+    {
+     "name": "Joan Hobson",
+     "age": 45,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "Reginald's wife; a midwife who works with the chapel sisters; has delivered half the town",
+     "knows": [
+      "medicine",
+      "planting",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Reginald Hobson",
+      "works with Sister Elspeth",
+      "midwife to Wenna Marrow"
+     ]
+    },
+    {
+     "name": "Stephen Hobson",
+     "age": 20,
+     "sex": "m",
+     "occupation": "mason",
+     "role": "Reginald and Joan's son; learns his father's trade and wants to build something grander than a wall",
+     "knows": [
+      "masonry",
+      "carpentry",
+      "fire"
+     ],
+     "parents": [
+      "Reginald Hobson",
+      "Joan Hobson"
+     ],
+     "ties": [
+      "son of Reginald Hobson",
+      "apprentice to his father",
+      "friendly with Cedric Tanner"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "fletcher",
+   "members": [
+    {
+     "name": "Aldous Fletcher",
+     "age": 39,
+     "sex": "m",
+     "occupation": "carpenter",
+     "role": "makes bows and arrows for the guards and the hunters; works from a shed by the north gate",
+     "knows": [
+      "carpentry",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Enid Fletcher",
+      "supplies Tobin Marrow's guards",
+      "sells arrows to the hunters",
+      "grudges the Kettlebridge carpenters"
+     ]
+    },
+    {
+     "name": "Enid Fletcher",
+     "age": 37,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "Aldous's wife; keeps a stall in the square selling odds and ends and the bows her husband makes",
+     "knows": [
+      "cooking",
+      "storage",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Aldous Fletcher",
+      "minds a stall in the square",
+      "trades with Mercy Abbot"
+     ]
+    },
+    {
+     "name": "Robin Fletcher",
+     "age": 11,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Aldous and Enid's son; helps in the shed and is a fair shot with a small bow",
+     "knows": [
+      "archery"
+     ],
+     "parents": [
+      "Aldous Fletcher",
+      "Enid Fletcher"
+     ],
+     "ties": [
+      "son of Aldous Fletcher",
+      "plays with Bram Fenner"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "carter",
+   "members": [
+    {
+     "name": "Herbert Carter",
+     "age": 44,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "farms the Carter fields south of the wall; keeps a cart and hires out to carry goods to the gate",
+     "knows": [
+      "planting",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Cecily Carter",
+      "hires his cart to the Guild",
+      "pays the gate-due on his own loads",
+      "neighbour of Godric Rowan"
+     ]
+    },
+    {
+     "name": "Cecily Carter",
+     "age": 41,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Herbert's wife; keeps the hens and the vegetable plot; sells eggs in the square",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Herbert Carter",
+      "sells eggs at the Guild stall"
+     ]
+    },
+    {
+     "name": "Alfred Carter",
+     "age": 16,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "Herbert and Cecily's son; drives the cart and wants to be a carter on the stone road",
+     "knows": [
+      "planting",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [
+      "Herbert Carter",
+      "Cecily Carter"
+     ],
+     "ties": [
+      "son of Herbert Carter",
+      "admires Silas Pike's trade",
+      "helps his father on the cart"
+     ]
+    },
+    {
+     "name": "Edith Carter",
+     "age": 9,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Herbert and Cecily's daughter; helps with the hens and the eggs",
+     "knows": [],
+     "parents": [
+      "Herbert Carter",
+      "Cecily Carter"
+     ],
+     "ties": [
+      "daughter of Herbert Carter"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "baker",
+   "members": [
+    {
+     "name": "Osgood Baker",
+     "age": 52,
+     "sex": "m",
+     "occupation": "cook",
+     "role": "keeps the town bakehouse; bakes the bread for the market and the guards; up before dawn every day",
+     "knows": [
+      "cooking",
+      "storage",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Amice Baker",
+      "supplies bread to the gate guards",
+      "buys grain from Osbert Ashby",
+      "owes Aldric Marrow for the bakehouse lease"
+     ]
+    },
+    {
+     "name": "Amice Baker",
+     "age": 49,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Osgood's wife; runs the bakehouse with him and keeps the accounts in her head",
+     "knows": [
+      "cooking",
+      "fire",
+      "writing"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Osgood Baker",
+      "keeps the bakehouse books"
+     ]
+    },
+    {
+     "name": "Godfrey Baker",
+     "age": 22,
+     "sex": "m",
+     "occupation": "cook",
+     "role": "Osgood and Amice's son; bakes the night batch and wants to take over the bakehouse one day",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage"
+     ],
+     "parents": [
+      "Osgood Baker",
+      "Amice Baker"
+     ],
+     "ties": [
+      "son of Osgood Baker",
+      "courts the innkeeper's daughter",
+      "bakes for the guards"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "weaver",
+   "members": [
+    {
+     "name": "Aldith Weaver",
+     "age": 50,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "a weaver; Wenna Marrow's mother; weaves cloth for the market and has not forgiven the town for its talk about her daughter",
+     "knows": [
+      "carpentry",
+      "storage",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "mother of Wenna Marrow",
+      "trades cloth at the Guild stall",
+      "resents the Reeve's family",
+      "SECRET: thinks Tobin Marrow ruined her daughter's name"
+     ]
+    },
+    {
+     "name": "Leofwine Weaver",
+     "age": 53,
+     "sex": "m",
+     "occupation": "carpenter",
+     "role": "Aldith's husband; makes looms and repairs the market stalls; a quiet man who keeps his opinions to himself",
+     "knows": [
+      "carpentry",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Aldith Weaver",
+      "father of Wenna Marrow",
+      "works for Osric Abbot"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "potter",
+   "members": [
+    {
+     "name": "Edwin Potter",
+     "age": 40,
+     "sex": "m",
+     "occupation": "trader",
+     "role": "makes and sells pots and jugs at the square; his clay comes from Kettlebridge and the gate-due eats his profit",
+     "knows": [
+      "toolmaking",
+      "storage",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Alice Potter",
+      "buys clay from Silas Pike",
+      "wants the gate-due dropped",
+      "supports Mercy Abbot"
+     ]
+    },
+    {
+     "name": "Alice Potter",
+     "age": 38,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Edwin's wife; keeps the house and helps at the stall; a good hand with a glaze",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Edwin Potter",
+      "helps at the pottery stall"
+     ]
+    },
+    {
+     "name": "Anselm Potter",
+     "age": 10,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Edwin and Alice's son; plays in the clay and breaks as many pots as he makes",
+     "knows": [],
+     "parents": [
+      "Edwin Potter",
+      "Alice Potter"
+     ],
+     "ties": [
+      "son of Edwin Potter"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "smith",
+   "members": [
+    {
+     "name": "Wilfred Smith",
+     "age": 55,
+     "sex": "m",
+     "occupation": "builder",
+     "role": "a builder who puts up houses and barns; works in timber because stone is dear; has a long memory for the Kettlebridge price",
+     "knows": [
+      "carpentry",
+      "masonry",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Hilda Smith",
+      "builds for the Guild",
+      "grudges the Kettlebridge masons",
+      "friendly with Reginald Hobson"
+     ]
+    },
+    {
+     "name": "Hilda Smith",
+     "age": 52,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "Wilfred's wife; a healer who sets bones and tends wounds; the guards come to her when they are hurt",
+     "knows": [
+      "medicine",
+      "planting",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Wilfred Smith",
+      "tends the gate guards' wounds",
+      "works with Sister Alys"
+     ]
+    },
+    {
+     "name": "Osbert Smith",
+     "age": 26,
+     "sex": "m",
+     "occupation": "builder",
+     "role": "Wilfred and Hilda's son; builds with his father and wants to learn stonework from the Kettlebridge masons",
+     "knows": [
+      "carpentry",
+      "masonry",
+      "fire"
+     ],
+     "parents": [
+      "Wilfred Smith",
+      "Hilda Smith"
+     ],
+     "ties": [
+      "son of Wilfred Smith",
+      "wants to learn stonework",
+      "friendly with Stephen Hobson"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "cooper",
+   "members": [
+    {
+     "name": "Benedict Cooper",
+     "age": 47,
+     "sex": "m",
+     "occupation": "carpenter",
+     "role": "the town cooper; makes barrels for the inn and the market; his barrels carry the town's ale and berries",
+     "knows": [
+      "carpentry",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Juliana Cooper",
+      "supplies barrels to Baldwin Wade",
+      "sells to the Guild",
+      "owes Aethelred Tanner for leather bindings"
+     ]
+    },
+    {
+     "name": "Juliana Cooper",
+     "age": 44,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "Benedict's wife; keeps a stall selling barrels, buckets and wooden wares",
+     "knows": [
+      "cooking",
+      "storage",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Benedict Cooper",
+      "minds the wooden-ware stall"
+     ]
+    },
+    {
+     "name": "Martin Cooper",
+     "age": 17,
+     "sex": "m",
+     "occupation": "carpenter",
+     "role": "Benedict and Juliana's son; a cooper's apprentice who wants to be a master",
+     "knows": [
+      "carpentry",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [
+      "Benedict Cooper",
+      "Juliana Cooper"
+     ],
+     "ties": [
+      "son of Benedict Cooper",
+      "apprentice to his father"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "miller",
+   "members": [
+    {
+     "name": "Godwin Miller",
+     "age": 59,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "keeps the mill by the river and grinds the town's grain; takes his toll in flour and is thought to take a little more",
+     "knows": [
+      "planting",
+      "storage",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Ethel Miller",
+      "grinds for the town store",
+      "suspected of taking too much toll",
+      "owes Aldric Marrow for the mill lease"
+     ]
+    },
+    {
+     "name": "Ethel Miller",
+     "age": 57,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Godwin's wife; bakes and sells flour cakes at the mill gate",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Godwin Miller",
+      "sells cakes at the mill"
+     ]
+    },
+    {
+     "name": "Hugh Miller",
+     "age": 31,
+     "sex": "m",
+     "occupation": "farmer",
+     "role": "Godwin and Ethel's son; runs the mill with his father and wants the mill to be his",
+     "knows": [
+      "planting",
+      "toolmaking",
+      "fire"
+     ],
+     "parents": [
+      "Godwin Miller",
+      "Ethel Miller"
+     ],
+     "ties": [
+      "son of Godwin Miller",
+      "works the mill",
+      "wants the mill for himself"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "beorn",
+   "members": [
+    {
+     "name": "Beorn Beornson",
+     "age": 33,
+     "sex": "m",
+     "occupation": "hunter",
+     "role": "a hunter who keeps the wolves off the town road and sells venison in the square; knows the woods better than anyone",
+     "knows": [
+      "archery",
+      "trapping",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Sigrun Beornson",
+      "hunts for the market",
+      "knows the Coldwell outlaws by sight",
+      "sells venison to Baldwin Wade"
+     ]
+    },
+    {
+     "name": "Sigrun Beornson",
+     "age": 31,
+     "sex": "f",
+     "occupation": "trader",
+     "role": "Beorn's wife; sells his venison and hides at the market stall; a sharp trader",
+     "knows": [
+      "cooking",
+      "tanning",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Beorn Beornson",
+      "sells venison at the Guild stall",
+      "trades with Aethelred Tanner"
+     ]
+    },
+    {
+     "name": "Ulf Beornson",
+     "age": 8,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Beorn and Sigrun's son; follows his father into the woods and is learning to set snares",
+     "knows": [
+      "trapping"
+     ],
+     "parents": [
+      "Beorn Beornson",
+      "Sigrun Beornson"
+     ],
+     "ties": [
+      "son of Beorn Beornson"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "grey",
+   "members": [
+    {
+     "name": "Edric Grey",
+     "age": 36,
+     "sex": "m",
+     "occupation": "guard",
+     "role": "a gate guard at the north gate; checks the loads and counts the due; a quiet man who does his duty",
+     "knows": [
+      "spear",
+      "archery",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "serves under Tobin Marrow",
+      "works the north gate",
+      "friendly with Wat Fenner",
+      "SECRET: lets a Kettlebridge carter through without the due for a bribe"
+     ]
+    },
+    {
+     "name": "Mildgyth Grey",
+     "age": 34,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Edric's wife; cooks for the gate guards' mess with Sigrid Marsh",
+     "knows": [
+      "cooking",
+      "fire",
+      "smoking"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Edric Grey",
+      "cooks for the guards",
+      "works with Sigrid Marsh"
+     ]
+    },
+    {
+     "name": "Aelfric Grey",
+     "age": 7,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Edric and Mildgyth's son; plays at the north gate and knows the guards' names",
+     "knows": [],
+     "parents": [
+      "Edric Grey",
+      "Mildgyth Grey"
+     ],
+     "ties": [
+      "son of Edric Grey"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "stanhope",
+   "members": [
+    {
+     "name": "Walter Stanhope",
+     "age": 42,
+     "sex": "m",
+     "occupation": "guard",
+     "role": "a gate guard at the south gate; collects the due alongside Wat Fenner; a big man with a short temper",
+     "knows": [
+      "spear",
+      "archery",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "serves under Tobin Marrow",
+      "works the south gate with Wat Fenner",
+      "grudges the Coldwell outlaws",
+      "drinks at the Bell and Bush"
+     ]
+    },
+    {
+     "name": "Edith Stanhope",
+     "age": 40,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Walter's wife; keeps the house and sells pies at the gate to travellers",
+     "knows": [
+      "cooking",
+      "fire",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Walter Stanhope",
+      "sells pies at the gate"
+     ]
+    },
+    {
+     "name": "Godiva Stanhope",
+     "age": 15,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Walter and Edith's daughter; helps her mother with the pies and wants to work at the inn",
+     "knows": [
+      "cooking",
+      "fire"
+     ],
+     "parents": [
+      "Walter Stanhope",
+      "Edith Stanhope"
+     ],
+     "ties": [
+      "daughter of Walter Stanhope",
+      "helps at the gate",
+      "wants to work at the inn"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "holm",
+   "members": [
+    {
+     "name": "Sweyn Holm",
+     "age": 28,
+     "sex": "m",
+     "occupation": "fisher",
+     "role": "fishes the river and the north shore; sells his catch in the square; a quiet man who keeps to his boat",
+     "knows": [
+      "fishing",
+      "smoking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Astrid Holm",
+      "sells fish at the market",
+      "owes the fishmonger's stall rent to the Guild",
+      "friendly with Beorn Beornson"
+     ]
+    },
+    {
+     "name": "Astrid Holm",
+     "age": 26,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Sweyn's wife; smokes and sells the fish; keeps the house by the river",
+     "knows": [
+      "cooking",
+      "smoking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Sweyn Holm",
+      "smokes the catch",
+      "sells fish at the Guild stall"
+     ]
+    },
+    {
+     "name": "Knut Holm",
+     "age": 4,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Sweyn and Astrid's son; plays by the river and is never far from the water",
+     "knows": [],
+     "parents": [
+      "Sweyn Holm",
+      "Astrid Holm"
+     ],
+     "ties": [
+      "son of Sweyn Holm"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "wren",
+   "members": [
+    {
+     "name": "Alwin Wren",
+     "age": 63,
+     "sex": "m",
+     "occupation": "healer",
+     "role": "an old healer who lives alone by the chapel; knows herbs and old charms; the sisters consult him and the Reeve does not",
+     "knows": [
+      "medicine",
+      "planting",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "old friend of Sister Elspeth",
+      "tends the poor for free",
+      "disapproves of the gate-due",
+      "SECRET: keeps a book of charms the chapel would call heathen"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "pip",
+   "members": [
+    {
+     "name": "Pernel Pip",
+     "age": 24,
+     "sex": "f",
+     "occupation": "scribe",
+     "role": "a young scribe who keeps the market tolls and writes letters for those who cannot; lodges with the chapel sisters",
+     "knows": [
+      "writing",
+      "fire",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "lodges with the chapel sisters",
+      "writes letters for the town",
+      "SECRET: in love with Gareth Wade, who does not know"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "hollis",
+   "members": [
+    {
+     "name": "Simon Hollis",
+     "age": 46,
+     "sex": "m",
+     "occupation": "trader",
+     "role": "a pedlar who walks the roads to Thornby and the hamlets, carrying Brackenford goods and bringing fish and news back",
+     "knows": [
+      "cooking",
+      "storage",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Avice Hollis",
+      "trades with Osric Dunn at Thornby",
+      "pays the gate-due on his loads",
+      "brings news of the outlaws to the Reeve"
+     ]
+    },
+    {
+     "name": "Avice Hollis",
+     "age": 43,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Simon's wife; keeps the house and a small stall of dried goods; worries when he is on the road",
+     "knows": [
+      "cooking",
+      "smoking",
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Simon Hollis",
+      "keeps a dried-goods stall",
+      "worries about the road"
+     ]
+    },
+    {
+     "name": "Nicholas Hollis",
+     "age": 14,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Simon and Avice's son; walks the road with his father and learns the trade",
+     "knows": [
+      "fire"
+     ],
+     "parents": [
+      "Simon Hollis",
+      "Avice Hollis"
+     ],
+     "ties": [
+      "son of Simon Hollis",
+      "walks the road with his father"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "gate-due-rivalry",
+   "kind": "feud",
+   "summary": "Mercy Abbot's Market Guild wants the gate-due dropped to bring Kettlebridge trade back; Reeve Aldric Marrow keeps it to pay the gate guards who keep the road clear of wolves and outlaws. The square is split between them.",
+   "secret": false,
+   "people": [
+    "Aldric Marrow",
+    "Mercy Abbot",
+    "Wat Fenner",
+    "Tobin Marrow"
+   ],
+   "sides": {
+    "Aldric Marrow": "The due pays the guards and keeps the road safe; Mercy would sell the town's safety for Kettlebridge coin.",
+    "Mercy Abbot": "The due drives carters away and makes enemies of Kettlebridge; the Guild's trade suffers and the town grows poorer.",
+    "Wat Fenner": "Collects the due at the south gate and knows the guards' pay depends on it; dislikes the sour looks from carters.",
+    "Tobin Marrow": "Supports his father's due; the guards answer to him and he will not see them unpaid."
+   }
+  },
+  {
+   "id": "coldwell-fields",
+   "kind": "feud",
+   "summary": "The old Coldwell fields, taken by the town store in the Lean Year and leased to the Market Guild, are farmed by Hal Tolley. Marta Hale's outlaws still live at Coldwell and want the fields back; the Tolleys fear them and the Reeve calls them thieves.",
+   "secret": false,
+   "people": [
+    "Marta Hale",
+    "Hal Tolley",
+    "Mercy Abbot",
+    "Aldric Marrow"
+   ],
+   "sides": {
+    "Marta Hale": "The fields were ours before the Lean Year; we were not paid for them and we will not be starved off them.",
+    "Hal Tolley": "I farm what the Guild leased me; the Hales had their chance to leave and chose outlawry.",
+    "Mercy Abbot": "Holds the lease and takes the rent; the fields are lawful Guild land now, whatever the Hales say.",
+    "Aldric Marrow": "Took the fields for the town store when the Hales could not pay; they were declared outlaws when they would not leave."
+   }
+  },
+  {
+   "id": "agnes-food",
+   "kind": "secret",
+   "summary": "Agnes Fenner carries food out to Coldwell by the south gate when Wat is not on watch; her sister Marta knows, her husband Wat does not.",
+   "secret": true,
+   "people": [
+    "Agnes Fenner",
+    "Marta Hale"
+   ],
+   "sides": {
+    "Agnes Fenner": "Marta is my sister and her boy was sick; I will not let them starve, but Wat must never know or he could lose his post.",
+    "Marta Hale": "Agnes brings what she can; I do not ask her to risk more, and I tell no one where it comes from."
+   }
+  },
+  {
+   "id": "broken-match",
+   "kind": "courtship",
+   "summary": "Two years ago Tobin Marrow broke his promise to Hester Crane and married Wenna, shaming Josiah Crane and setting Brackenford and Kettlebridge at odds. Wenna feels the town's blame; Tobin stands by his choice.",
+   "secret": false,
+   "people": [
+    "Tobin Marrow",
+    "Wenna Marrow",
+    "Hester Crane",
+    "Josiah Crane"
+   ],
+   "sides": {
+    "Tobin Marrow": "I broke the match because I would not marry where I did not love; Wenna is my wife and I will not hear her slighted.",
+    "Wenna Marrow": "The town thinks I cost it the Kettlebridge peace; I keep to the Marrow strip and say little.",
+    "Hester Crane": "Tobin shamed me before both towns; I keep the foundry books and will not forget it.",
+    "Josiah Crane": "Aldric's son insulted my house; Kettlebridge remembers, and stone goes south now as much as north."
+   }
+  },
+  {
+   "id": "thornby-debt",
+   "kind": "debt",
+   "summary": "Thornby owes Brackenford's town store forty baskets of grain from the Lean Year and pays slowly in fish. The ledger records it; Osric Dunn feels the weight of it.",
+   "secret": false,
+   "people": [
+    "Aldric Marrow",
+    "Osric Dunn"
+   ],
+   "sides": {
+    "Aldric Marrow": "The debt is in the ledger; Thornby pays in fish and the store waits, but it is not forgotten.",
+    "Osric Dunn": "Forty baskets is more than Thornby can spare; we pay in fish and the ledger still says we owe."
+   }
+  },
+  {
+   "id": "cairn-cutting",
+   "kind": "feud",
+   "summary": "Ezra Holt led the quarry cutting that broke into a giants' cairn; the giants' elder Hollbrenna closed the shelf to Kettlebridge. Ezra says he did not know; Orrum wants him to answer for it.",
+   "secret": false,
+   "people": [
+    "Ezra Holt",
+    "Hollbrenna",
+    "Orrum",
+    "Tavvik"
+   ],
+   "sides": {
+    "Ezra Holt": "I did not know the stones were a cairn; I would never have cut there had I known, and I am afraid of what the giants may do.",
+    "Hollbrenna": "My grandmother lies in that cairn; the shelf is closed to Kettlebridge until the cutting is answered for.",
+    "Orrum": "Ezra Holt cut into our dead; he must answer, and I will see that he does.",
+    "Tavvik": "The elder forbade trade, but Kettlebridge needs meat and I need timber; I carry on the track against her word."
+   }
+  },
+  {
+   "id": "lakemead-dispute",
+   "kind": "feud",
+   "summary": "The Lakemead was common grazing for Elmwick and Reedmoor; Nell Sedge let it to the Coombes for grain, and Hob Garrow says it was never Reedmoor's to let. Fences have been pulled down twice.",
+   "secret": false,
+   "people": [
+    "Hob Garrow",
+    "Nell Sedge",
+    "Jem Coombe",
+    "Thistle Mossfoot"
+   ],
+   "sides": {
+    "Hob Garrow": "The Lakemead was Elmwick's common and I grazed it as a boy; Nell Sedge had no right to let it.",
+    "Nell Sedge": "Reedmoor has let the meadow for years and the Coombes pay their rent in grain; Elmwick can quarrel with the deed.",
+    "Jem Coombe": "I farm the meadow and pay Nell Sedge; Elmwick folk have pulled down my fence twice and I want peace to farm.",
+    "Thistle Mossfoot": "I trade with both villages and am friendly with the Coombes; I wish they would settle it without me in the middle."
+   }
+  },
+  {
+   "id": "north-light-accusation",
+   "kind": "feud",
+   "summary": "Thornby says old Edda at the north light lit it wrong on purpose to wreck boats; Edda says she lights it every night. Osric Dunn's brother's boat was lost and he holds her to blame.",
+   "secret": false,
+   "people": [
+    "Edda Wray",
+    "Osric Dunn"
+   ],
+   "sides": {
+    "Edda Wray": "I light the lamp every night as I have for years; the sea took Osric's brother, not I.",
+    "Osric Dunn": "My brother's boat went on the rocks below her light; she lit it wrong and Thornby knows it."
+   }
+  },
+  {
+   "id": "courtship-hilda-wulf",
+   "kind": "courtship",
+   "summary": "Wulf Rowan and Hilda Marsh are courting; both families expect a match, but Godric Rowan wants his son to wait until the harvest and Edwin Marsh wants the wool secured first.",
+   "secret": false,
+   "people": [
+    "Wulf Rowan",
+    "Hilda Marsh",
+    "Godric Rowan",
+    "Edwin Marsh"
+   ],
+   "sides": {
+    "Wulf Rowan": "I want to marry Hilda now and take a strip of my own; my father says wait for the harvest.",
+    "Hilda Marsh": "I love Wulf and would marry him tomorrow, but my father wants the wool settled first and I will not cross him.",
+    "Godric Rowan": "The boy is young and the harvest uncertain; a wedding can wait until the grain is in.",
+    "Edwin Marsh": "Wulf is a good lad, but I want the wool clip secured before I lose my daughter's hands."
+   }
+  },
+  {
+   "id": "mill-toll-dispute",
+   "kind": "debt",
+   "summary": "Godwin Miller is suspected of taking more than his lawful toll from the town's grain; the Reeve has not called him to account, but the Guild has noticed and Mercy Abbot is asking questions.",
+   "secret": false,
+   "people": [
+    "Godwin Miller",
+    "Aldric Marrow",
+    "Mercy Abbot"
+   ],
+   "sides": {
+    "Godwin Miller": "I take only what is my due for the mill; the Guild counts flour and thinks every sack is short.",
+    "Aldric Marrow": "The mill is leased from the town and the toll is set; if Godwin is taking more, it is a matter for the ledger.",
+    "Mercy Abbot": "The Guild's grain comes back short from the mill and I want to know why; the Reeve will not look."
+   }
+  },
+  {
+   "id": "aldith-grudge",
+   "kind": "feud",
+   "summary": "Aldith Weaver, Wenna's mother, blames Tobin Marrow for the town's talk about her daughter; she will not sell cloth to the Marrow household and says so in the square.",
+   "secret": false,
+   "people": [
+    "Aldith Weaver",
+    "Tobin Marrow",
+    "Wenna Marrow"
+   ],
+   "sides": {
+    "Aldith Weaver": "Tobin broke his promise and my daughter wears the shame of it; I will not sell him so much as a rag.",
+    "Tobin Marrow": "My mother-in-law will not forgive me for the match, though Wenna is my wife and I keep her well.",
+    "Wenna Marrow": "My mother means well but her grudge makes the talk worse; I wish she would let it lie."
+   }
+  },
+  {
+   "id": "hobson-stone",
+   "kind": "debt",
+   "summary": "Reginald Hobson owes Silas Pike for the last load of stone and cannot pay until the Reeve settles the wall account; Silas is pressing him.",
+   "secret": false,
+   "people": [
+    "Reginald Hobson",
+    "Silas Pike",
+    "Aldric Marrow"
+   ],
+   "sides": {
+    "Reginald Hobson": "The stone is in the wall and the Reeve has not paid me for the work; Silas wants his marks and I have none.",
+    "Silas Pike": "I carried the stone and paid the due on it; Hobson owes me and I will not be put off again.",
+    "Aldric Marrow": "The wall account is in the ledger and will be settled when the store has the marks; the mason can wait."
+   }
+  }
+ ]
+}

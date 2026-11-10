@@ -1,0 +1,228 @@
+{
+ "extends": "life-ruin",
+ "title": "A newcomer's life: lean berries, a house with signs, and a scribe who teaches reading",
+ "about": "As `life-ruin` (berries at 40%; two signs in the empty house by the arrival point: fishing, smoking), and the scribe who put them up stays at the house. Residents have no minds, so the scribe's part is a fixed graph: stay at the house, eat from a large stock, sleep when tired. When the newcomer speaks to the scribe with teach, learn, read, writ, show or sign in the line, the scribe says one scripted line and teaches writing (the ordinary teach skill), at most three times. The ladder: ask the scribe -> writing -> read the signs -> fishing and smoking -> food that keeps.",
+ "gradient": "Talk to the scribe at the house of signs -> learn writing -> read the signs (fishing, smoking) -> fish, smoke fish over a fire -> food that keeps through winter.",
+ "timeline": [
+  {
+   "at": "prepare",
+   "do": "know",
+   "who": "scribe",
+   "techniques": [
+    "writing",
+    "fishing",
+    "smoking"
+   ]
+  },
+  {
+   "at": "prepare",
+   "do": "items",
+   "who": "scribe",
+   "items": {
+    "wood": 3
+   }
+  },
+  {
+   "at": "prepare",
+   "do": "place",
+   "who": "scribe",
+   "to": {
+    "structure": "house",
+    "owner": 0,
+    "near": {
+     "arrival": true
+    }
+   }
+  },
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "scribe",
+   "graph": {
+    "seq": [
+     {
+      "do": {
+       "skill": "write",
+       "item": "sign",
+       "topic": "fishing",
+       "text": "This house kept nets on the river. A net set at the bend took fish every morning."
+      }
+     },
+     {
+      "do": {
+       "skill": "write",
+       "item": "sign",
+       "topic": "smoking",
+       "text": "Fish hung over smoke for a day keep through the winter."
+      }
+     },
+     {
+      "wait": 120
+     }
+    ]
+   }
+  },
+  {
+   "at": "prepare",
+   "do": "items",
+   "who": "scribe",
+   "items": {
+    "berries": 80
+   }
+  },
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "scribe",
+   "graph": {
+    "first": [
+     {
+      "if": {
+       "cond": {
+        "hunger": {
+         "above": 50
+        }
+       },
+       "then": {
+        "do": {
+         "skill": "eat",
+         "item": "berries"
+        }
+       }
+      }
+     },
+     {
+      "if": {
+       "cond": {
+        "energy": {
+         "below": 20
+        }
+       },
+       "then": {
+        "do": {
+         "skill": "sleep"
+        }
+       }
+      }
+     },
+     {
+      "if": {
+       "cond": {
+        "not": {
+         "near": {
+          "target": {
+           "at": "$scribe_xy"
+          },
+          "within": 3
+         }
+        }
+       },
+       "then": {
+        "do": {
+         "skill": "goto",
+         "target": {
+          "at": "$scribe_xy"
+         }
+        }
+       }
+      }
+     },
+     {
+      "wait": 20
+     }
+    ]
+   },
+   "after": 40
+  },
+  {
+   "when": {
+    "said": {
+     "by": "subject",
+     "to": "scribe",
+     "words": [
+      "teach",
+      "learn",
+      "read",
+      "writ",
+      "show",
+      "sign",
+      "letter"
+     ]
+    }
+   },
+   "max": 3,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "scribe",
+     "graph": {
+      "seq": [
+       {
+        "say": {
+         "text": "Letters? Sit by me a while and I'll show you how they go.",
+         "to": {
+          "id": "$subject"
+         }
+        }
+       },
+       {
+        "do": {
+         "skill": "teach",
+         "target": {
+          "id": "$subject"
+         },
+         "item": "writing"
+        }
+       },
+       {
+        "wait": 20
+       }
+      ]
+     },
+     "after": 2
+    },
+    {
+     "do": "graph",
+     "who": "scribe",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "cond": {
+          "hunger": {
+           "above": 50
+          }
+         },
+         "then": {
+          "do": {
+           "skill": "eat",
+           "item": "berries"
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "energy": {
+           "below": 20
+          }
+         },
+         "then": {
+          "do": {
+           "skill": "sleep"
+          }
+         }
+        }
+       },
+       {
+        "wait": 20
+       }
+      ]
+     },
+     "after": 45
+    }
+   ]
+  }
+ ]
+}

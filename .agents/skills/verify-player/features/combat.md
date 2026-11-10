@@ -7,7 +7,7 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 - An unknown skill is a reducer error ("not on the skill bar").
 - Refusals are recorded and told: a strike with no target, a strike out of reach (no walking into reach), a heal when unhurt, a second fire bolt inside its windup or cooldown.
 - A strike shows its windup (`fighter.act` equals the strike's `skill_card.code`), releases, deals damage, and the player perceives `RELEASE` and `HIT` with the amount; the target's band is public, its health is not.
-- A blow does its full damage (no hurt or kill mode since 2026-11-09, docs/COMBAT.md "One damage rule"): scene `kill` strikes a resident past 40% and 10% of its health, and the strike that exceeds its health kills it (use outcome `killed <name> (<n>)`, `HIT` with the amount, `character.alive = false` with cause `killed by <player>`, a `chronicle` `killing` row).
+- A blow does its full damage (no hurt or kill mode since 2026-11-09, docs/COMBAT.md "One damage rule"): scene `kill` strikes a resident past 40% and 10% of its health, and the strike that exceeds its health kills it (use outcome `killed <name> (<n>)`, `HIT` with the amount, `character.alive = false` with cause `killed by <the player as the victim knew them>`: the player's name only with an `acquaintance` row (an introduction), else `killed by a stranger`; a `chronicle` `killing` row with real names).
 - A bow shot launches a missile that strikes the first body on its path (`LAUNCH`, `IMPACT`, damage); the arrow is spent.
 - A fire bolt burns the creature it meets.
 - A guard facing the blow blocks it (`BLOCKED`, reduced); facing away, the blow lands in full; letting go ends it.

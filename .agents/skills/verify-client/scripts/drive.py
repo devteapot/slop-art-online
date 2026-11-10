@@ -61,8 +61,8 @@ PRIVATE = ['clock', 'steer', 'wake', 'familiar', 'deliberation', 'rearing',
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
            'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
            'projected', 'reveal', 'acquaintance', 'connection', 'presence',
-           'woken', 'prior', 'prior_head', 'judged', 'motion_seen', 'fighter_seen',
-           'doing_seen', 'line_seen']
+           'woken', 'prior', 'prior_head', 'guest', 'judged', 'motion_seen',
+           'fighter_seen', 'doing_seen', 'line_seen']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
@@ -91,6 +91,7 @@ ADMIN = {
     'place_structure': [0, 'shelter'], 'set_behavior': [0, '{"wait":30}'],
     'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0],
     'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0], 'set_weather': [False, 0],
+    'spawn_newcomer': ['probe'],
 }
 
 
@@ -112,7 +113,7 @@ def mind_args(name, actor, marker):
         'mind_say': [actor, '', 0, 0, t],
         'mind_act': [actor, ['{"do":"signal","item":"client-probe"}'], 'probe'],
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
-        'mind_judged': [actor, [{'q': 'client probe', 'value': 0.5, 'choice': 'probe', 'ttl_ms': 1000}]],
+        'mind_judged': [actor, [{'q': 'client probe', 'value': 0.5, 'choice': '', 'ttl_ms': 1000}]],
         'mind_update': [actor, {'persona': {'some': {'narrative': marker, 'values': [],
                          'goals': [], 'traits': '{}', 'mood': 'probe'}},
                          'relations': [], 'beliefs': {'none': []}, 'judgments': [],
@@ -440,7 +441,7 @@ class Run:
             code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, raw=True)
             okay = subscription['status'] == 'rejected' and 'private' in subscription['error'].lower() and code != 200 and 'private' in error.lower()
             row = {'table': table, 'subscription': subscription, 'http_status': code, 'http_error': error}
-            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'woken', 'prior', 'prior_head']:
+            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'woken', 'prior', 'prior_head', 'guest']:
                 as_player = self.probe('private-player-' + table, ['SELECT * FROM ' + table], player_token)
                 code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, player_token, raw=True)
                 okay = okay and as_player['status'] == 'rejected' and 'private' in as_player['error'].lower() and code != 200

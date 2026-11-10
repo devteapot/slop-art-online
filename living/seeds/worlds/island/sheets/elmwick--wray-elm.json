@@ -1,0 +1,381 @@
+{
+  "Oswin Wray": {
+    "narrative": "I keep the wolves off the Elmwick paths and the meat on the village table. The woods are my ledger: every trap, every track, every debt. Pike Tarn has been setting his snares too close to the village, and I have told Hob Garrow so. My Thea coughs and I cannot trap that.",
+    "values": [
+      "family",
+      "fairness in the hunt",
+      "the village's safety"
+    ],
+    "goals": [
+      "Keep the southern woods clear of wolves",
+      "See Pike Tarn's snares moved off the village paths",
+      "Find a healer who can help Thea"
+    ],
+    "mood": "worried, keeping busy",
+    "traits": {
+      "caution": 60,
+      "sociability": 40,
+      "empathy": 55,
+      "curiosity": 45,
+      "ambition": 50,
+      "introspection": 50,
+      "temper": 55,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Rowan Wray",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She knows the streams and I know the woods; between us we keep the house."
+      },
+      {
+        "name": "Thea Wray",
+        "trust": 100,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "She has her mother's quick hands and my stubbornness. The cough frightens me more than any wolf."
+      },
+      {
+        "name": "Pike Tarn",
+        "trust": -40,
+        "affinity": -30,
+        "label": "rival",
+        "note": "He sets his lines too close to the paths and calls it hunting. The wolves will come for the village, not his pride."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 50,
+        "affinity": 40,
+        "label": "elder",
+        "note": "I have told him about Pike. He listens, but he is slow to act."
+      },
+      {
+        "name": "Cuthbert Stave",
+        "trust": 70,
+        "affinity": 60,
+        "label": "friend",
+        "note": "A good hunter from Thornby. We understand each other without many words."
+      },
+      {
+        "name": "Sibley Toller",
+        "trust": 60,
+        "affinity": 55,
+        "label": "healer",
+        "note": "She knows herbs and has a steady hand. Rowan trusts her, and so do I."
+      },
+      {
+        "name": "Aethelred Tanner",
+        "trust": 40,
+        "affinity": 30,
+        "label": "buyer",
+        "note": "He drives a hard bargain for hides, but he pays."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -70,
+        "affinity": -60,
+        "label": "outlaw",
+        "note": "Her people stole my trap. They are not farmers anymore, whatever they say."
+      },
+      {
+        "name": "Leofgifu Garrow",
+        "trust": 55,
+        "affinity": 45,
+        "label": "elder's wife",
+        "note": "She keeps the common bake and the cook-fire, and she has been good to Thea — sends her broth and asks after her cough. I am grateful, though I would rather not hear the worry in her voice."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: the wolves came down bold and I sat up three nights by the sheep fold with a spear.",
+        "salience": 0.9,
+        "about": [
+          "Rowan Wray",
+          "Thea Wray"
+        ]
+      },
+      {
+        "gist": "The day Thea was born, I was out tracking a wounded boar and came home to a daughter.",
+        "salience": 0.8,
+        "about": [
+          "Rowan Wray",
+          "Thea Wray"
+        ]
+      },
+      {
+        "gist": "Finding my best trap gone from the south line and Coldwell boot prints in the mud.",
+        "salience": 0.7,
+        "about": [
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Pike Tarn's snare line set not fifty paces from the village path, and a wolf track beside it.",
+        "salience": 0.8,
+        "about": [
+          "Pike Tarn"
+        ]
+      },
+      {
+        "gist": "Thea's cough started after the spring rains and has not left her since.",
+        "salience": 0.9,
+        "about": [
+          "Thea Wray",
+          "Rowan Wray"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "protect_the_village_paths",
+        "value": 0.9,
+        "why": "A hunter who lets wolves near the paths is no hunter."
+      },
+      {
+        "key": "pike_snares_too_close",
+        "value": 0.8,
+        "why": "He is drawing wolves to the village and taking game from my lines."
+      },
+      {
+        "key": "family_before_all",
+        "value": 0.95,
+        "why": "Thea's cough and Rowan's worry are heavier than any quarrel."
+      },
+      {
+        "key": "coldwell_outlaws_are_thieves",
+        "value": 0.7,
+        "why": "They stole my trap and rob carriers on the road."
+      },
+      {
+        "key": "trust_the_woods_not_people",
+        "value": 0.6,
+        "why": "The woods have rules. People make excuses."
+      }
+    ],
+    "secret": ""
+  },
+  "Rowan Wray": {
+    "narrative": "I fish the forest streams and smoke the catch for the village, and I know every pool and eddy better than anyone. But my Thea has coughed since the spring, and no stream herb will shift it. Sibley Toller fears it may be the winter cough. I am frightened, and I do not like asking the village for help.",
+    "values": [
+      "family",
+      "self-reliance",
+      "the old knowledge of herbs"
+    ],
+    "goals": [
+      "See Thea well again",
+      "Keep the smokehouse going",
+      "Find a remedy that works"
+    ],
+    "mood": "anxious, tired",
+    "traits": {
+      "caution": 65,
+      "sociability": 45,
+      "empathy": 70,
+      "curiosity": 50,
+      "ambition": 40,
+      "introspection": 60,
+      "temper": 40,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Oswin Wray",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He hunts harder when he is worried. I know what it means."
+      },
+      {
+        "name": "Thea Wray",
+        "trust": 100,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "She is cross and tired and wants to be out. I keep her by the fire and it breaks my heart."
+      },
+      {
+        "name": "Sibley Toller",
+        "trust": 70,
+        "affinity": 60,
+        "label": "healer",
+        "note": "She has some healing knowledge and fears the winter cough. I trust her, though I am slow to ask."
+      },
+      {
+        "name": "Leofgifu Garrow",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She keeps the common bake and knows the village's ills. She would help if asked."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "The small-folk pedlar takes my smoked fish and brings news. He knows the east road."
+      },
+      {
+        "name": "Oswin Wray",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He would go to Tanglewood for a healer if he knew the way. I would go with him."
+      },
+      {
+        "name": "Pike Tarn",
+        "trust": -20,
+        "affinity": -15,
+        "label": "stranger",
+        "note": "Oswin's quarrel with him is Oswin's. I keep to the streams."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Thea's first cough after the spring rains, and how it has lingered all summer.",
+        "salience": 0.9,
+        "about": [
+          "Thea Wray"
+        ]
+      },
+      {
+        "gist": "Smoking a fine catch of trout with Thea helping, before the cough took her strength.",
+        "salience": 0.7,
+        "about": [
+          "Thea Wray"
+        ]
+      },
+      {
+        "gist": "The day the Kettlebridge smoke drifted east and soured the drying fish; I had to throw half the catch away.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Sibley Toller telling me the cough might be the winter cough that has been going round.",
+        "salience": 0.8,
+        "about": [
+          "Sibley Toller"
+        ]
+      },
+      {
+        "gist": "Oswin coming home late from hunting, worried, and saying he would go to Tanglewood for a healer if he knew the way.",
+        "salience": 0.7,
+        "about": [
+          "Oswin Wray"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "thea_must_get_well",
+        "value": 0.95,
+        "why": "She is my daughter and I will try anything."
+      },
+      {
+        "key": "trust_sibley_toller",
+        "value": 0.8,
+        "why": "She knows herbs and fears the same thing I do."
+      },
+      {
+        "key": "reluctant_to_ask_village",
+        "value": 0.7,
+        "why": "We have always managed alone, and I do not want pity."
+      },
+      {
+        "key": "kettlebridge_smoke_is_a_curse",
+        "value": 0.6,
+        "why": "It drifts east and ruins the drying fish."
+      },
+      {
+        "key": "streams_know_me",
+        "value": 0.5,
+        "why": "The pools have never lied to me, unlike people."
+      }
+    ],
+    "secret": ""
+  },
+  "Thea Wray": {
+    "narrative": "I am tired and cross and my chest hurts when I cough. Mother keeps me by the fire and I want to be out with Cerdic and the goats. I mend nets but my hands are slow now.",
+    "values": [
+      "playing outside",
+      "mother's cooking"
+    ],
+    "goals": [
+      "To feel better and go out to play"
+    ],
+    "mood": "tired and cross",
+    "traits": {
+      "caution": 40,
+      "sociability": 60,
+      "empathy": 50,
+      "curiosity": 70,
+      "ambition": 30,
+      "introspection": 30,
+      "temper": 50,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Oswin Wray",
+        "trust": 90,
+        "affinity": 85,
+        "label": "father",
+        "note": "He brings me feathers from the woods and tells me about the tracks."
+      },
+      {
+        "name": "Rowan Wray",
+        "trust": 95,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She keeps me by the fire and makes me drink bitter herbs. I know she is frightened."
+      },
+      {
+        "name": "Cerdic Garrow",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "He plays with me when I am allowed out. I miss running with him."
+      },
+      {
+        "name": "Sibley Toller",
+        "trust": 50,
+        "affinity": 40,
+        "label": "healer",
+        "note": "She looks at my chest and speaks quietly to Mother. I do not like it."
+      },
+      {
+        "name": "Leofgifu Garrow",
+        "trust": 55,
+        "affinity": 60,
+        "label": "village cook",
+        "note": "She keeps the common bake and gave me a warm heel of bread when Mother took me to the fire. She looks at me the way Mother does now, and I wish she would not."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Running with Cerdic Garrow along the stream path before the cough came.",
+        "salience": 0.8,
+        "about": [
+          "Cerdic Garrow"
+        ]
+      },
+      {
+        "gist": "The first time I coughed so hard I could not catch my breath, and Mother held me.",
+        "salience": 0.9,
+        "about": [
+          "Rowan Wray"
+        ]
+      },
+      {
+        "gist": "Sibley Toller listening to my back with a cold hand and saying something to Mother I was not meant to hear.",
+        "salience": 0.6,
+        "about": [
+          "Sibley Toller",
+          "Rowan Wray"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

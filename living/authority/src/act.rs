@@ -709,7 +709,7 @@ fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), Stri
     // An act aimed at someone engages them as it starts (a lesson, a trade, a blow): an
     // instinct-only resident may wake into a mind (the `wakes` law).
     if act.target.class == 3 && act.target.id as u32 != id {
-        crate::woken::engage(ctx, act.target.id as u32, id, &act.skill, now);
+        crate::woken::engage(ctx, act.target.id as u32, id, &act.skill, act.node == ACT || act.node == PLAYER, now);
     }
     let shape = shape_of(&sc, &act.skill);
     if shape.is_some_and(|s| s.timed) {
@@ -1141,10 +1141,10 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
                         (Some(p), Some(q)) => p.community == q.community,
                         _ => false,
                     };
-                    if s.owner != 0 && s.owner != me && !same_people(s.owner, me) {
+                    if s.owner != 0 && s.owner != me && !same_people(s.owner, me) && !crate::town::guest_of(ctx, me, s.owner, now) {
                         let owner_sees = ctx.db.body().id().find(s.owner).is_some_and(|b| crate::perception::sees(ctx, s.owner, pos(&b, now), at, &common::world(ctx), &common::map(ctx), now));
                         if owner_sees {
-                            crate::woken::engage(ctx, s.owner, me, "theft", now);
+                            crate::woken::engage(ctx, s.owner, me, "theft", true, now);
                         }
                         witnessed(ctx, now, at, "took", me, s.owner, &format!("{{a}} took {qty} {item} from {{b}}'s {}", s.kind), 0.5, &[me]);
                         if let Some(owner) = ctx.db.character().id().find(s.owner) {
@@ -1163,6 +1163,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, effects: Vec<Effect>, now: u64) -> 
             }
             Effect::Yield => notes.push(give_in(ctx, me, a, at, now)),
             Effect::Hail => notes.push(crate::town::hail(ctx, me, a, at, now)?),
+            Effect::Host { until_hour } => notes.push(crate::town::host(ctx, me, a, at, until_hour, now)?),
             Effect::Reveal { what, secs } => {
                 if a.target.class != 3 {
                     return Err("no one to look over".into());
@@ -1717,6 +1718,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.mind_cursor().actor().delete(id);
     ctx.db.act_queue().actor().delete(id);
     crate::woken::forget_dead(ctx, id);
+    crate::town::forget_guest(ctx, id);
     for a in ctx.db.acquaintance().observer().filter(id).map(|a| a.id).collect::<Vec<_>>() {
         ctx.db.acquaintance().id().delete(a);
     }
@@ -1755,7 +1757,7 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
 /// health the victim dies. `skill` is the move that dealt it. Returns what came of it, in
 /// words.
 pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, skill: &str, from: (f32, f32), now: u64) -> String {
-    crate::woken::engage(ctx, victim, attacker, "hurt", now);
+    crate::woken::engage(ctx, victim, attacker, "hurt", true, now);
     let Some(mut v) = ctx.db.vitals().id().find(victim) else { return "they are gone".into() };
     let Some(vc) = ctx.db.character().id().find(victim) else { return "they are gone".into() };
     if !vc.alive {
@@ -1878,7 +1880,10 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         if by_person && vc.kind == "person" {
             common::chronicle(ctx, now, "killing", attacker, victim, at, if yielded { format!("{an} killed {vn}, who had yielded") } else { format!("{an} killed {vn}") });
         }
-        die(ctx, victim, &if yielded { format!("killed by {an}, after yielding") } else { format!("killed by {an}") }, now, attacker);
+        // The death record names the killer as the victim knew them (`perceived_of`): "killed
+        // by a stranger" unless the name was known. The chronicle above keeps the real names.
+        let by = common::label_for(ctx, &vc, attacker);
+        die(ctx, victim, &if yielded { format!("killed by {by}, after yielding") } else { format!("killed by {by}") }, now, attacker);
         return format!("killed {vn} ({amount:.0})");
     }
     if defense == Aim::Facing {

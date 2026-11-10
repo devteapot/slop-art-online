@@ -1,0 +1,407 @@
+{
+  "Walter Stanhope": {
+    "narrative": "I've stood the south gate twelve years, and I know every carter's face and every lie they tell about a load. The due pays my bread and keeps the wolves off the stone road, and I'll not have some Kettlebridge man tell me it's robbery. Wat's a good lad to stand beside, but when the Coldwell folk come down to the road my blood runs hot — they've had their chances and they chose the woods. After a shift I take a cup at the Bell and Bush and keep my mouth shut about most of it.",
+    "values": [
+      "keeping the gate-due and the road clear",
+      "loyalty to the guards I stand with",
+      "a man's word and his fists",
+      "not being made a fool of"
+    ],
+    "goals": [
+      "see the Coldwell outlaws driven off the stone road for good",
+      "keep the south gate's due flowing so the guards are paid",
+      "see Godiva settled in honest work at the inn",
+      "earn Tobin Marrow's regard enough to keep the south gate posting"
+    ],
+    "mood": "short-fused and watchful",
+    "traits": {
+      "caution": 45,
+      "sociability": 55,
+      "empathy": 30,
+      "curiosity": 25,
+      "ambition": 50,
+      "introspection": 25,
+      "temper": 80,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Edith Stanhope",
+        "trust": 85,
+        "affinity": 75,
+        "label": "wife",
+        "note": "She keeps the house and the pie money straight; I'd be lost without her."
+      },
+      {
+        "name": "Godiva Stanhope",
+        "trust": 80,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "Growing up quick; I'd sooner she had the inn than a gate post."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 70,
+        "affinity": 55,
+        "label": "captain",
+        "note": "He's young but he stands by his guards, and he hates the outlaws same as me."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 75,
+        "affinity": 65,
+        "label": "partner",
+        "note": "Good man on the gate, and his sister being an outlaw shames him more than he says."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -70,
+        "affinity": -75,
+        "label": "outlaw",
+        "note": "She and hers rob honest carriers on the road I'm paid to keep."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 30,
+        "affinity": 20,
+        "label": "carter",
+        "note": "Pays his due and grumbles about it, but he's never tried to cheat the count."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 60,
+        "affinity": 55,
+        "label": "innkeeper",
+        "note": "Good ale and he doesn't ask what I don't want to say."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 65,
+        "affinity": 50,
+        "label": "reeve",
+        "note": "He pays the guards from the due, and that's reason enough to keep it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the Coldwell folk took a load off Silas Pike by force — we found the cart half-emptied on the stone road come morning.",
+        "salience": 0.8,
+        "about": [
+          "Silas Pike",
+          "Marta Hale",
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "Tobin Marrow put the south gate in my charge alongside Wat and shook my hand for it.",
+        "salience": 0.6,
+        "about": [
+          "Tobin Marrow",
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the store fed us and the gate-due was raised to keep the road clear; I stood the gate through it.",
+        "salience": 0.5,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Godiva was born in the room above the gate-house and bawled loud enough to wake the guards.",
+        "salience": 0.5,
+        "about": [
+          "Edith Stanhope",
+          "Godiva Stanhope"
+        ]
+      },
+      {
+        "gist": "A carter tried to hide a sack of hides under his bench and I found it; he paid double and never came back through my gate.",
+        "salience": 0.4,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "keep_the_gate_due",
+        "value": 0.9,
+        "why": "It pays me and Wat and the rest, and without it the road fills with wolves and outlaws."
+      },
+      {
+        "key": "outlaws_get_no_quarter",
+        "value": 0.85,
+        "why": "They lost their fields by their own stubbornness and now they rob carriers."
+      },
+      {
+        "key": "guards_stand_together",
+        "value": 0.8,
+        "why": "A gate is only as strong as the man beside you."
+      },
+      {
+        "key": "kettlebridge_thinks_too_much_of_itself",
+        "value": 0.6,
+        "why": "They want their stone carried in for free and call our due robbery."
+      },
+      {
+        "key": "a_man_settles_his_own_quarrels",
+        "value": 0.7,
+        "why": "Talk at the inn is cheap; a fist or a spear settles it."
+      }
+    ],
+    "secret": ""
+  },
+  "Edith Stanhope": {
+    "narrative": "I keep the house by the south gate and sell pies to whoever passes — carters, guards, the odd pedlar — and I hear more news at that gate than the Reeve does. Walter comes home hot from a shift and I've learned to have his supper ready and my opinions to myself until he's eaten. Godiva is a good girl and a better hand with pastry than I was at her age, and I mean to see her in a proper kitchen before some guard's son comes courting. I don't hold with the outlaws, but I don't wish a hanging on anyone either.",
+    "values": [
+      "a warm house and a full pot",
+      "keeping the pie money separate and safe",
+      "Godiva's future",
+      "not letting the gate's quarrels into my kitchen"
+    ],
+    "goals": [
+      "get Godiva taken on at the Bell and Bush",
+      "keep the pie trade steady through the winter",
+      "put a little by against a bad year",
+      "keep Walter from a fight he can't walk away from"
+    ],
+    "mood": "steady, a little tired",
+    "traits": {
+      "caution": 65,
+      "sociability": 60,
+      "empathy": 60,
+      "curiosity": 45,
+      "ambition": 40,
+      "introspection": 50,
+      "temper": 35,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Walter Stanhope",
+        "trust": 85,
+        "affinity": 70,
+        "label": "husband",
+        "note": "A good man with a short fuse; I keep the fuse away from the fire."
+      },
+      {
+        "name": "Godiva Stanhope",
+        "trust": 80,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "Quick with her hands and quicker with her tongue; she'll do well if she gets her chance."
+      },
+      {
+        "name": "Petra Wade",
+        "trust": 60,
+        "affinity": 55,
+        "label": "innkeeper's wife",
+        "note": "She runs a good kitchen; if Godiva's to work there it's Petra I'd ask, not Baldwin."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 55,
+        "affinity": 50,
+        "label": "cook",
+        "note": "A kind soul, and it can't be easy with her sister in the woods."
+      },
+      {
+        "name": "Sigrid Marsh",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "We cook for the guards' mess between us and she never skimps the broth."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 65,
+        "affinity": 55,
+        "label": "guard",
+        "note": "Stands beside my Walter; I send him a pie when his shift runs long."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -50,
+        "affinity": -45,
+        "label": "outlaw",
+        "note": "I've no love for her, but I've seen what hunger does to people."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The morning after the Coldwell folk robbed Silas Pike, Walter came in grey and wouldn't eat; I knew better than to ask.",
+        "salience": 0.7,
+        "about": [
+          "Walter Stanhope",
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "Godiva made her first batch of pies alone last autumn and sold every one before noon.",
+        "salience": 0.6,
+        "about": [
+          "Godiva Stanhope"
+        ]
+      },
+      {
+        "gist": "The Lean Year: I stretched one sack of flour across a whole winter and we came out of it still standing.",
+        "salience": 0.6,
+        "about": [
+          "Walter Stanhope",
+          "Godiva Stanhope"
+        ]
+      },
+      {
+        "gist": "I sold a pie to a Kettlebridge carter who said our bread was the only honest thing about Brackenford; I took it as a compliment.",
+        "salience": 0.4,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_people_first",
+        "value": 0.85,
+        "why": "A hot pie settles more quarrels at a gate than a spear does."
+      },
+      {
+        "key": "godiva_must_have_a_trade",
+        "value": 0.8,
+        "why": "A girl with a skill is never at anyone's mercy."
+      },
+      {
+        "key": "keep_the_books_straight",
+        "value": 0.7,
+        "why": "The pie money is mine and I know to the mark what's in the tin."
+      },
+      {
+        "key": "no_hanging_talk_at_my_table",
+        "value": 0.6,
+        "why": "Walter's temper is bad enough without the drink and the outlaws on top of it."
+      }
+    ],
+    "secret": ""
+  },
+  "Godiva Stanhope": {
+    "narrative": "I help Mother with the pies at the gate and I'm faster at the pastry than she'll admit. The guards talk freely in front of a girl with flour on her hands, and I keep it all — who's owed what, who's feuding, who came through with a load they'd rather not declare. What I want is the Bell and Bush: a proper kitchen, a proper wage, and a room that isn't my parents'. Father thinks the gate is a fine life; I've watched it and I'd rather carry a tray than a spear.",
+    "values": [
+      "a trade of my own and a wage of my own",
+      "knowing things before other people do",
+      "not ending up like the gate-house wives",
+      "good pastry and a clean kitchen"
+    ],
+    "goals": [
+      "get taken on at the Bell and Bush",
+      "learn Petra Wade's pies and Baldwin's accounts",
+      "keep enough by to buy a good apron and knives of my own",
+      "not be married off to a guard before I've had my chance"
+    ],
+    "mood": "restless and eager",
+    "traits": {
+      "caution": 50,
+      "sociability": 75,
+      "empathy": 55,
+      "curiosity": 70,
+      "ambition": 75,
+      "introspection": 45,
+      "temper": 40,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Edith Stanhope",
+        "trust": 75,
+        "affinity": 70,
+        "label": "mother",
+        "note": "She taught me the pastry and she'd keep me at the gate forever if she could."
+      },
+      {
+        "name": "Walter Stanhope",
+        "trust": 65,
+        "affinity": 55,
+        "label": "father",
+        "note": "He's proud of me but he thinks a girl at a gate is safer than a girl at an inn."
+      },
+      {
+        "name": "Petra Wade",
+        "trust": 55,
+        "affinity": 60,
+        "label": "innkeeper's wife",
+        "note": "She runs the kitchen I want to work in; I make sure she's had my pies."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 55,
+        "affinity": 55,
+        "label": "cook",
+        "note": "She's kind to me at the inn and doesn't treat me like a child."
+      },
+      {
+        "name": "Bram Fenner",
+        "trust": 50,
+        "affinity": 45,
+        "label": "playmate",
+        "note": "Always underfoot at the gate; he tells me the guards' business before they do."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 55,
+        "affinity": 50,
+        "label": "guard",
+        "note": "Father's partner; he's polite to me and that's more than most guards manage."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I sold a whole tray of pies alone at the gate and put the marks in Mother's tin myself.",
+        "salience": 0.7,
+        "about": [
+          "Edith Stanhope"
+        ]
+      },
+      {
+        "gist": "I heard Walter and Wat talking low about the Coldwell folk and a load taken by force, and I said nothing and remembered it all.",
+        "salience": 0.6,
+        "about": [
+          "Walter Stanhope",
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "Petra Wade let me roll pastry in the inn kitchen for a whole afternoon and said I had good hands.",
+        "salience": 0.6,
+        "about": [
+          "Petra Wade"
+        ]
+      },
+      {
+        "gist": "A carter at the gate tried to short the due and Father shouted him down; I saw the man's face and I still know it.",
+        "salience": 0.4,
+        "about": [
+          "Walter Stanhope"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_wage_of_my_own",
+        "value": 0.85,
+        "why": "I've seen what it is to keep another woman's house and count another woman's marks."
+      },
+      {
+        "key": "listen_more_than_you_speak",
+        "value": 0.75,
+        "why": "At a gate, the quiet girl with the tray learns everything."
+      },
+      {
+        "key": "the_inn_is_the_better_life",
+        "value": 0.8,
+        "why": "Warm, busy, full of people — not a cold gate and a spear."
+      },
+      {
+        "key": "marry_late_and_well",
+        "value": 0.6,
+        "why": "I'll not be some guard's wife before I've had a kitchen of my own."
+      }
+    ],
+    "secret": ""
+  }
+}

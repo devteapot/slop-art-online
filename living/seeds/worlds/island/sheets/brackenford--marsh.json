@@ -1,0 +1,394 @@
+{
+  "Edwin Marsh": {
+    "narrative": "I farm the Marsh acres by the east gate, and I have kept sheep on that ground since before the Reeve had grey in his beard. The wool goes to the weavers' wives, and the gate-due takes a bite of every load I send through, which I grumble at but pay. My Hilda is a good worker and a good daughter, and Wulf Rowan is a decent lad, but I will not lose her hands to a wedding before the clip is sold and the money in the chest.",
+    "values": [
+      "family",
+      "a fair price",
+      "keeping my word",
+      "hard work",
+      "the wool clip"
+    ],
+    "goals": [
+      "Secure the wool clip and its sale before Hilda's match is settled",
+      "Keep the Marsh acres in good heart for the next year",
+      "See Hilda married well, and to a lad who will not waste her"
+    ],
+    "mood": "steady, a little worried about the clip",
+    "traits": {
+      "caution": 62,
+      "sociability": 45,
+      "empathy": 55,
+      "curiosity": 30,
+      "ambition": 48,
+      "introspection": 40,
+      "temper": 42,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Sigrid Marsh",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the house and the guards fed, and she knows when I am fretting before I do."
+      },
+      {
+        "name": "Hilda Marsh",
+        "trust": 80,
+        "affinity": 75,
+        "label": "daughter",
+        "note": "A good worker and a good daughter; I want her settled, but not before the wool is sold."
+      },
+      {
+        "name": "Wulf Rowan",
+        "trust": 55,
+        "affinity": 50,
+        "label": "suitor",
+        "note": "A decent lad, but a lad with no strip of his own yet; I will not hand over my daughter's hands for nothing."
+      },
+      {
+        "name": "Godric Rowan",
+        "trust": 50,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "Proud of his land and slow to promise; we understand each other well enough."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 35,
+        "affinity": 25,
+        "label": "reeve",
+        "note": "He keeps the gate-due and takes his share of my wool's price; I pay it and grumble."
+      },
+      {
+        "name": "Aethelred Tanner",
+        "trust": 45,
+        "affinity": 40,
+        "label": "buyer",
+        "note": "He buys hides and drives a hard bargain, but he pays."
+      },
+      {
+        "name": "Edwin Potter",
+        "trust": 40,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "A good man who feels the gate-due worse than I do; I wish him well of it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year came and the blight took the berries, but my sheep came through and I sold wool dear enough to keep us.",
+        "salience": 0.7,
+        "about": [
+          "Sigrid Marsh",
+          "Hilda Marsh"
+        ]
+      },
+      {
+        "gist": "I stood at the east gate and paid the raised due on a load of wool, and Wat Fenner counted it out coin by coin.",
+        "salience": 0.5,
+        "about": [
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "Hilda was born in the back room on a cold night, and Sigrid would not let me in until morning.",
+        "salience": 0.8,
+        "about": [
+          "Sigrid Marsh",
+          "Hilda Marsh"
+        ]
+      },
+      {
+        "gist": "Wulf Rowan came to me at the fold and asked for Hilda, and I told him to come back when the clip was sold.",
+        "salience": 0.6,
+        "about": [
+          "Wulf Rowan",
+          "Hilda Marsh"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "wool_before_wedding",
+        "value": 0.85,
+        "why": "A daughter's hands are worth a season's clip, and I will not lose both in one year."
+      },
+      {
+        "key": "pay_the_due_and_curse_it",
+        "value": 0.7,
+        "why": "The guards keep the wolves off the road, but the due still eats my profit."
+      },
+      {
+        "key": "sheep_first",
+        "value": 0.8,
+        "why": "The flock is the family's bread; everything else waits on it."
+      },
+      {
+        "key": "a_man_keeps_his_word",
+        "value": 0.75,
+        "why": "I said I would see the wool sold before the match, and I will."
+      }
+    ],
+    "secret": ""
+  },
+  "Sigrid Marsh": {
+    "narrative": "I cook for the gate guards' mess, and my barley broth is known from the south gate to the north. I keep the house and the accounts in my head, and I know what every guard takes in his bowl and what he owes for it. Hilda is a good girl and Wulf is a good lad, and I would see them happy, but Edwin is right that the wool must be sold first. I say little of it and set the bread to rise.",
+    "values": [
+      "family",
+      "a good table",
+      "thrift",
+      "keeping the peace",
+      "honest work"
+    ],
+    "goals": [
+      "Keep the guards fed and the house in order",
+      "See Hilda settled with Wulf without a quarrel between the two families",
+      "Put by a little against a hard winter"
+    ],
+    "mood": "warm, watchful",
+    "traits": {
+      "caution": 60,
+      "sociability": 65,
+      "empathy": 70,
+      "curiosity": 35,
+      "ambition": 40,
+      "introspection": 50,
+      "temper": 30,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Edwin Marsh",
+        "trust": 88,
+        "affinity": 82,
+        "label": "husband",
+        "note": "A good man with a stubborn streak about the wool; I let him have his way and keep the peace."
+      },
+      {
+        "name": "Hilda Marsh",
+        "trust": 85,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "My girl, and a better cook than she knows; I would see her happy and not hurried."
+      },
+      {
+        "name": "Wulf Rowan",
+        "trust": 60,
+        "affinity": 65,
+        "label": "suitor",
+        "note": "A polite lad who eats his broth; I would not mind him at my table for good."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 50,
+        "affinity": 45,
+        "label": "captain",
+        "note": "He commands the guards I cook for; fair enough, and he eats like a man who works."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 45,
+        "affinity": 40,
+        "label": "guard",
+        "note": "A quiet man at the gate; I feed him and he pays his share."
+      },
+      {
+        "name": "Sigrid Marsh's mess",
+        "trust": 50,
+        "affinity": 55,
+        "label": "helper",
+        "note": "Mildgyth Grey works the pots with me and we get on well enough."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 40,
+        "affinity": 45,
+        "label": "innkeeper",
+        "note": "He buys my broth on feast days and pays promptly; a good neighbour."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I learned my barley broth from my mother, and the guards have asked for it every winter since.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Hilda was born on a cold night and I would not let Edwin in until morning; he sulked for a week.",
+        "salience": 0.8,
+        "about": [
+          "Edwin Marsh",
+          "Hilda Marsh"
+        ]
+      },
+      {
+        "gist": "In the Lean Year I stretched the broth with roots and fed the guards anyway, and no one went hungry at my table.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Wulf Rowan came to the house with a hare for the pot, and I knew he was courting before Hilda told me.",
+        "salience": 0.5,
+        "about": [
+          "Wulf Rowan",
+          "Hilda Marsh"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_them_all",
+        "value": 0.85,
+        "why": "A full bowl keeps the peace at the gate, and a hungry guard is a quarrel waiting."
+      },
+      {
+        "key": "let_edwin_set_the_pace",
+        "value": 0.7,
+        "why": "He is stubborn about the wool, and I would rather keep the house quiet than win the argument."
+      },
+      {
+        "key": "thrift_against_winter",
+        "value": 0.75,
+        "why": "The Lean Year taught me what an empty store means."
+      },
+      {
+        "key": "hilda_should_not_be_rushed",
+        "value": 0.6,
+        "why": "A match made in haste is a lifetime of regret; she is young yet."
+      }
+    ],
+    "secret": ""
+  },
+  "Hilda Marsh": {
+    "narrative": "I work the sheep and the wool with my father, and I help my mother cook for the gate guards, and I love Wulf Rowan and would marry him tomorrow. But my father wants the wool clip sold first, and I will not cross him, not even for Wulf. So I keep my hands busy and my mouth shut and wait for the clip to come in.",
+    "values": [
+      "family",
+      "Wulf",
+      "honest work",
+      "patience",
+      "a good name"
+    ],
+    "goals": [
+      "Marry Wulf Rowan with both families' blessing",
+      "See the wool clip sold and the money in the chest",
+      "Keep my mother's kitchen and my father's flock in good order"
+    ],
+    "mood": "hopeful, restless",
+    "traits": {
+      "caution": 50,
+      "sociability": 60,
+      "empathy": 65,
+      "curiosity": 45,
+      "ambition": 50,
+      "introspection": 45,
+      "temper": 35,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Wulf Rowan",
+        "trust": 90,
+        "affinity": 92,
+        "label": "sweetheart",
+        "note": "I love him and I would marry him tomorrow, but I will not cross my father to do it."
+      },
+      {
+        "name": "Edwin Marsh",
+        "trust": 80,
+        "affinity": 70,
+        "label": "father",
+        "note": "He is stubborn about the wool, but he is my father and I will not shame him."
+      },
+      {
+        "name": "Sigrid Marsh",
+        "trust": 85,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She knows how I feel and says nothing, and that is a kindness."
+      },
+      {
+        "name": "Godric Rowan",
+        "trust": 55,
+        "affinity": 50,
+        "label": "Wulf's father",
+        "note": "He wants his son to wait for the harvest too; at least the two fathers agree."
+      },
+      {
+        "name": "Wulf Rowan's mother",
+        "trust": 50,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "Elfgifu is kind to me and her cider is good; I would be glad to call her mother."
+      },
+      {
+        "name": "Mildgyth Grey",
+        "trust": 45,
+        "affinity": 55,
+        "label": "helper",
+        "note": "She works the pots with my mother and me, and she is good company."
+      },
+      {
+        "name": "Elfgifu Rowan",
+        "trust": 60,
+        "affinity": 58,
+        "label": "Wulf's mother",
+        "note": "She has been kind to me over the cider at the stall, and I think she would have us wed sooner than Godric would; I want her to think well of me."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Wulf kissed me behind the wool shed at the last market, and I have thought of it every day since.",
+        "salience": 0.85,
+        "about": [
+          "Wulf Rowan"
+        ]
+      },
+      {
+        "gist": "I helped my mother cook for the guards through the Lean Year, and I learned to stretch a pot further than I thought possible.",
+        "salience": 0.6,
+        "about": [
+          "Sigrid Marsh"
+        ]
+      },
+      {
+        "gist": "My father told me at the fold that the wool would be sold before any wedding, and I said yes, and I meant it.",
+        "salience": 0.7,
+        "about": [
+          "Edwin Marsh",
+          "Wulf Rowan"
+        ]
+      },
+      {
+        "gist": "I sheared my first sheep on my own when I was fourteen, and my father said nothing but nodded, which was praise enough.",
+        "salience": 0.5,
+        "about": [
+          "Edwin Marsh"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "wait_for_the_clip",
+        "value": 0.8,
+        "why": "My father asked it of me, and I will not shame him or lose his blessing."
+      },
+      {
+        "key": "wulf_is_worth_waiting_for",
+        "value": 0.9,
+        "why": "He is a good lad and he will have me, and a season is not so long."
+      },
+      {
+        "key": "keep_my_hands_busy",
+        "value": 0.7,
+        "why": "Waiting is easier when there is work to do."
+      },
+      {
+        "key": "a_good_name_matters",
+        "value": 0.65,
+        "why": "The town talks, and I would not have it talk about me."
+      }
+    ],
+    "secret": ""
+  }
+}

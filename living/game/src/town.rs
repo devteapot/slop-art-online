@@ -8,7 +8,7 @@
 //!   (work, gathering, eating, play, sitting), a gesture played once over it (a wave, a nod,
 //!   settling down to sit), where a standing body faces (its activity's spot or the one it is
 //!   aimed at), and whether the body is indoors and not drawn (asleep, or resting at its own
-//!   door: the house is where it is);
+//!   door: the house is where it is; an animal has no house and stays drawn, standing);
 //! - sends my own gestures through `human_act` ([`WAVE`] waves, [`NOD`] nods, at the person under
 //!   or nearest the cursor, else the nearest one ahead), predicting only my clip; [`APPRAISE`]
 //!   looks a person or an animal over the same way (the rules' `appraise`: for a while the
@@ -107,6 +107,8 @@ pub fn look(card: &ActCard) -> Pose {
         "keep" | "cook" | "craft" | "store" => Pose::Loop("work"),
         "read" => Pose::Loop("idle_look"),
         "eat" => Pose::Loop("eat"),
+        // An animal's own (the deer's file has the loop; anything else stands idle).
+        "graze" => Pose::Loop("graze"),
         "play" => Pose::Loop("play"),
         "rest" => Pose::Rest,
         "sleep" => Pose::Indoors,
@@ -160,6 +162,8 @@ pub struct Town {
     pub greeting: Option<(u32, f64)>,
     /// Who answered my greeting, at display ms.
     pub answered: HashMap<u32, f64>,
+    /// Who made a gesture at me (a wave, a nod), at display ms (the camera frames us).
+    pub greeted_by: HashMap<u32, f64>,
     seen: HashSet<u64>,
 }
 
@@ -205,15 +209,18 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
     if let Some(me) = net.my_id {
         // "X answers your greeting (nod)." arrives with the resident's `doing` row; the subject is
         // the one who answered.
-        let fresh: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && !town.seen.contains(&e.id) && e.text.contains("answers your greeting")).collect();
+        // "X greets you (wave)." when someone greets me first.
+        let fresh: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && !town.seen.contains(&e.id) && (e.text.contains("answers your greeting") || e.text.contains("greets you"))).collect();
         for e in fresh {
             town.seen.insert(e.id);
             if now - (e.at_ms as f64) < ANSWERED_MS {
-                town.answered.insert(e.subject, now);
+                let to = if e.text.contains("greets you") { &mut town.greeted_by } else { &mut town.answered };
+                to.insert(e.subject, now);
             }
         }
     }
     town.answered.retain(|_, t| now - *t < ANSWERED_MS);
+    town.greeted_by.retain(|_, t| now - *t < ANSWERED_MS);
     town.greeting = town.greeting.filter(|(_, t)| now - *t < ANSWERED_MS);
     if town.seen.len() > 512 {
         let live: HashSet<u64> = conn.db.my_experience().iter().map(|e| e.id).collect();
@@ -241,7 +248,7 @@ fn whom(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, ahead: Vec2, p
 
 /// My gesture and appraise keys (and a script's), through `human_act`.
 #[allow(clippy::too_many_arguments)]
-fn input(
+pub fn input(
     net: NonSend<Net>,
     scene: NonSend<Scene>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -319,6 +326,9 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
         let mut show = Show::default();
         let row = conn.db.seen_doing().id().find(&id);
         let card = row.as_ref().and_then(|d| acts.by_code(d.code));
+        // Animals have no house: asleep or resting they stay where they are, drawn.
+        let animal = conn.db.seen_characters().id().find(&id).is_some_and(|c| c.kind != "person");
+        let card = card.filter(|c| !(animal && matches!(look(c), Pose::Rest | Pose::Indoors)));
         // Where its target is now: the one it is aimed at (as drawn), else the row's spot.
         let spot = row.as_ref().map(|d| scene.shown.get(&d.target).filter(|_| d.target != 0).map_or(Vec2::new(d.x, d.y), |s| s.0));
         let toward = spot.map(|s| s - p).filter(|d| d.length() >= FACE_MIN_M);

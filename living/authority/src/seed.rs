@@ -10,7 +10,42 @@ use spacetimedb::{Identity, ReducerContext, Table};
 
 /// The seed compiled into this module: `seeds/world.json` (the active world; `just living-seed
 /// <name>` copies one there) or, for lab scenarios, `seeds/$LIVING_SEED.json` (see build.rs).
+/// Empty in a floor module (`LIVING_SEED=none`), whose seed comes at runtime (`create_floor`).
 pub const VALLEY: &str = include_str!(concat!(env!("OUT_DIR"), "/seed.json"));
+
+thread_local! {
+    /// The runtime seed (a floor module's `floor_seed` row), once loaded into this instance.
+    /// It never changes after `create_floor`, so a lost instance just loads it again.
+    static ACTIVE: std::cell::RefCell<Option<std::rc::Rc<str>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The world's seed: the runtime seed once given (`create_floor`), else the compiled one. A
+/// floor module without a seed yet has none to give, and says so rather than guessing.
+pub fn active() -> std::rc::Rc<str> {
+    if let Some(s) = ACTIVE.with(|a| a.borrow().clone()) {
+        return s;
+    }
+    assert!(!VALLEY.is_empty(), "this floor module has no seed yet: call create_floor");
+    std::rc::Rc::from(VALLEY)
+}
+
+/// Whether the world's seed came at runtime rather than compiled in.
+pub fn is_runtime() -> bool {
+    ACTIVE.with(|a| a.borrow().is_some())
+}
+
+/// Load a floor module's runtime seed into this instance, once (`common::world` calls it).
+pub fn load(ctx: &ReducerContext) {
+    if ACTIVE.with(|a| a.borrow().is_none()) {
+        if let Some(row) = crate::floor::seed_row(ctx) {
+            set_active(&row.json);
+        }
+    }
+}
+
+pub fn set_active(json: &str) {
+    ACTIVE.with(|a| *a.borrow_mut() = Some(std::rc::Rc::from(json)));
+}
 pub const INSTINCTS: &str = include_str!("../../seeds/instincts.json");
 pub const REPERTOIRE: &str = include_str!("../../seeds/repertoire.json");
 
@@ -153,6 +188,13 @@ pub struct SeedTown {
     /// center with a sign giving the name; residents know them as places.
     #[serde(default)]
     pub buildings: Vec<SeedBuilding>,
+    /// On a land map, which site of its kind it takes when the seed cares (docs/SEEDED_LIVES.md):
+    /// the unused one nearest the named settlement, in one of `region`'s region kinds when any
+    /// is (`forest`, `meadow`, ...). Without either it takes the next site of its kind.
+    #[serde(default)]
+    pub near: String,
+    #[serde(default)]
+    pub region: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -195,6 +237,10 @@ pub struct SeedResident {
     /// stances, places, secret), passed to the mind with people resolved to ids.
     #[serde(default)]
     pub sheet: serde_json::Value,
+    /// Places this person knows beyond the seed's `town_life` ones, or in place of one of
+    /// them by name (`work`): see [`crate::town::SeedPlace`].
+    #[serde(default)]
+    pub places: Vec<crate::town::SeedPlace>,
 }
 
 fn thirty() -> f32 {
@@ -422,7 +468,7 @@ struct WaysOf {
 }
 
 thread_local! {
-    static WAYS: std::rc::Rc<WaysOf> = std::rc::Rc::new(serde_json::from_str::<WaysOf>(VALLEY).unwrap_or_default());
+    static WAYS: std::rc::Rc<WaysOf> = std::rc::Rc::new(serde_json::from_str::<WaysOf>(&active()).unwrap_or_default());
 }
 
 #[derive(Deserialize, Default)]
@@ -465,7 +511,7 @@ fn pack_far() -> f32 {
 
 /// A newcomer's starter kit (the seed's `newcomer`).
 pub fn newcomer_kit(ctx: &ReducerContext, id: u32, now: u64) {
-    let Ok(s) = serde_json::from_str::<Seed>(VALLEY) else { return };
+    let Ok(s) = serde_json::from_str::<Seed>(&active()) else { return };
     for (item, qty) in &s.newcomer.items {
         if living_rules::catalog::item(item).is_some() && *qty > 0 {
             common::inv_add(ctx, id as u64, item, *qty);
@@ -532,7 +578,7 @@ fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack],
 }
 
 pub fn communities(ctx: &ReducerContext, now: u64) {
-    let Ok(s) = serde_json::from_str::<Seed>(VALLEY) else { return };
+    let Ok(s) = serde_json::from_str::<Seed>(&active()) else { return };
     for sc in &s.communities {
         if ctx.db.community().iter().any(|c| c.name == sc.name) {
             continue;
@@ -587,6 +633,25 @@ pub struct SeedArtifact {
 pub struct SeedAnimals {
     pub deer: u32,
     pub wolf: u32,
+    /// Where each kind lives, when not its usual ground (wolves in forest, others on grass):
+    /// e.g. wolves on a city floor's open wastes.
+    #[serde(default)]
+    pub habitat: std::collections::BTreeMap<String, Habitat>,
+}
+
+/// The ground a kind of animal is placed on.
+#[derive(Deserialize, Clone, Default)]
+pub struct Habitat {
+    /// Terrain classes (`living_rules::map::Terrain::name`: grass, forest, sand, dirt...).
+    pub ground: Vec<String>,
+    /// Only outside every settlement's radius (wild country, not a city's open ground).
+    #[serde(default)]
+    pub wild: bool,
+}
+
+thread_local! {
+    /// The seed's habitats, with the settlements to keep wild animals out of (centre, radius).
+    static HABITATS: std::cell::RefCell<Option<(std::collections::BTreeMap<String, Habitat>, Vec<(f32, f32, f32)>)>> = const { std::cell::RefCell::new(None) };
 }
 
 pub fn young_instinct(kind: &str) -> String {
@@ -599,8 +664,10 @@ pub fn instinct(kind: &str) -> String {
     all.get(kind).or_else(|| all.get("person")).map(|v| v.to_string()).unwrap_or_default()
 }
 
+/// Create the world from its seed in this one call: terrain, resources, people and animals.
+/// A land too big for one reducer's budget is created in steps instead (`floor`).
 pub fn seed(ctx: &ReducerContext, now: u64) {
-    let s: Seed = serde_json::from_str(VALLEY).expect("seed json");
+    let s: Seed = serde_json::from_str(&active()).expect("seed json");
     let mut hosted: Option<crate::island::Hosted> = None;
     let (mut map, realm) = match &s.map {
         Some(m) if m.kind == "realm" => {
@@ -617,19 +684,6 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     };
     // Settlements are laid out first: their walls and roads are part of the terrain.
     let mut settlements: Vec<(&SeedTown, living_rules::city::Layout)> = Vec::new();
-    // A land world's settlements are already laid out; seeded ones get residents.
-    let seeded: Vec<Option<&SeedTown>> = hosted.as_ref().map(|h| crate::island::match_seed(h, &s.towns, &s.villages)).unwrap_or_default();
-    if let Some(h) = &hosted {
-        for (p, t) in h.settlements.iter().zip(&seeded) {
-            if let Some(t) = t {
-                settlements.push((t, crate::island::layout(p)));
-            }
-        }
-        let unplaced = s.towns.len() + s.villages.len() - seeded.iter().flatten().count();
-        if unplaced > 0 {
-            log::warn!("{unplaced} seeded settlements found no site of their kind on this land");
-        }
-    }
     if let Some(r) = &realm {
         for (t, site) in s.towns.iter().zip(r.towns.iter()).chain(s.villages.iter().zip(r.villages.iter())) {
             let n = t.households();
@@ -644,6 +698,17 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     for id in map.chunks().collect::<Vec<_>>() {
         ctx.db.terrain_chunk().insert(TerrainChunk { id, tiles: map.chunk_bytes(id) });
     }
+    world_row(ctx, &s, &map);
+    if let Some(h) = &hosted {
+        crate::island::build(ctx, h, now);
+    }
+    RESOURCE_SCALE.with(|r| *r.borrow_mut() = s.resource_scale.clone());
+    spawn_resources(ctx, &map, now);
+    populate(ctx, &s, &map, hosted.as_ref(), realm.as_ref(), settlements, now);
+}
+
+/// The world row's seed, run and map size, once the terrain is in.
+pub fn world_row(ctx: &ReducerContext, s: &Seed, map: &living_rules::map::Map) {
     if let Some(mut w) = ctx.db.world().id().find(0) {
         w.run = s.run.clone();
         w.seed = s.seed;
@@ -656,11 +721,24 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         common::invalidate_calendar();
     }
     common::invalidate_map();
-    if let Some(h) = &hosted {
-        crate::island::build(ctx, h, now);
+}
+
+/// Everything after the terrain and the wild resources: settlements' stores, people, their
+/// households and communities, structures, artifacts, bands and animals.
+pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::Map, hosted: Option<&crate::island::Hosted>, realm: Option<&living_rules::realm::Realm>, mut settlements: Vec<(&'a SeedTown, living_rules::city::Layout)>, now: u64) {
+    // A land world's settlements are already laid out; seeded ones get residents.
+    let seeded: Vec<Option<&SeedTown>> = hosted.map(|h| crate::island::match_seed(h, &s.towns, &s.villages)).unwrap_or_default();
+    if let Some(h) = hosted {
+        for (p, t) in h.settlements.iter().zip(&seeded) {
+            if let Some(t) = t {
+                settlements.push((t, crate::island::layout(p)));
+            }
+        }
+        let unplaced = s.towns.len() + s.villages.len() - seeded.iter().flatten().count();
+        if unplaced > 0 {
+            log::warn!("{unplaced} seeded settlements found no site of their kind on this land");
+        }
     }
-    RESOURCE_SCALE.with(|r| *r.borrow_mut() = s.resource_scale.clone());
-    spawn_resources(ctx, &map, now);
     for (t, layout) in &settlements {
         settlement_resources(ctx, &map, t, layout.center, now);
     }
@@ -693,8 +771,8 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
     for (t, layout) in &settlements {
         authored.extend(town(ctx, &map, t, layout, now));
     }
-    settle_authored(ctx, &s, &authored);
-    if let Some(h) = &hosted {
+    settle_authored(ctx, &s, &authored, now);
+    if let Some(h) = hosted {
         crate::island::settle(ctx, h, &seeded, &s.town_life);
     }
     // Townsfolk know where the other towns stand (they grew up hearing of them); what is
@@ -718,7 +796,7 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         if !s.bands.is_empty() {
             log::warn!("{} bands not placed: a land world has no wild sites yet", s.bands.len());
         }
-    } else if let Some(r) = &realm {
+    } else if let Some(r) = realm {
         for (i, b) in s.bands.iter().enumerate() {
             if let Some(site) = r.wilds.get(i) {
                 band(ctx, &map, b, *site, now);
@@ -735,6 +813,7 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         }
     }
     communities(ctx, now);
+    set_habitats(ctx, s);
     // Animals start in their species' groups (herds, packs), so a few wolves on a large map
     // are a pack that can breed rather than strangers who never meet.
     for (kind, count) in [("deer", s.animals.deer), ("wolf", s.animals.wolf)] {
@@ -760,9 +839,34 @@ fn animal_ground(map: &living_rules::map::Map, kind: &str, x: i32, y: i32) -> bo
         return false;
     }
     let t = map.get(x, y);
+    let seeded = HABITATS.with(|h| {
+        let h = h.borrow();
+        let (habitats, settlements) = h.as_ref()?;
+        let hab = habitats.get(kind)?;
+        let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+        Some(hab.ground.iter().any(|g| g == t.name()) && !(hab.wild && settlements.iter().any(|s| (px - s.0).hypot(py - s.1) < s.2)))
+    });
+    if let Some(ok) = seeded {
+        return ok;
+    }
     match kind {
         "wolf" => t == Terrain::Forest,
         _ => t == Terrain::Grass,
+    }
+}
+
+/// Take the seed's habitats (and the settlements wild animals keep out of) for placement.
+fn set_habitats(ctx: &ReducerContext, s: &Seed) {
+    let settlements = ctx.db.settlement().iter().map(|st| (st.x, st.y, st.radius_m)).collect();
+    HABITATS.with(|h| *h.borrow_mut() = Some((s.animals.habitat.clone(), settlements)));
+}
+
+/// The seed's habitats in this instance, for animals placed later (migrants at the edges).
+fn ensure_habitats(ctx: &ReducerContext) {
+    if HABITATS.with(|h| h.borrow().is_none()) {
+        if let Ok(s) = serde_json::from_str::<Seed>(&active()) {
+            set_habitats(ctx, &s);
+        }
     }
 }
 
@@ -791,6 +895,7 @@ pub fn spawn_young(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64, p
 /// edge on fitting ground (see `Migrate`), with a line in the chronicle. False when the map
 /// has no such ground.
 pub fn migrate(ctx: &ReducerContext, kind: &str, m: &living_rules::species::Migrate, now: u64) -> bool {
+    ensure_habitats(ctx);
     let map = common::map(ctx);
     let Some((at, dir)) = living_rules::species::edge_spot(map.w, map.h, |x, y| animal_ground(&map, kind, x, y), || ctx.rng().gen::<f32>()) else {
         log::warn!("no {kind} could come in: no fitting ground near the map's edges");
@@ -832,7 +937,16 @@ pub fn animal_spot(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &st
             return Some((x as f32 + 0.5, y as f32 + 0.5));
         }
     }
-    None
+    // Where its ground is scarce (a city floor's few patches), random draws miss: walk a coarse
+    // lattice from a random start instead, so a kind that has ground anywhere finds it.
+    let step = 7;
+    let (w, h) = ((map.w as i32 - 8) / step, (map.h as i32 - 8) / step);
+    let n = (w.max(1) * h.max(1)) as u32;
+    let start = ctx.rng().gen_range(0..n);
+    (0..n).map(|k| (start + k) % n).find_map(|c| {
+        let (x, y) = (4 + (c as i32 % w.max(1)) * step, 4 + (c as i32 / w.max(1)) * step);
+        animal_ground(map, kind, x, y).then_some((x as f32 + 0.5, y as f32 + 0.5))
+    })
 }
 
 /// A grown creature (a quarter of the way through life) with no known parents.
@@ -997,6 +1111,17 @@ fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &
 }
 
 fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64) {
+    spawn_resources_in(ctx, map, 0..map.h, now);
+}
+
+/// Resources in tile rows `rows` of a staged world: each band gets its share of every kind's
+/// cap, and spacing is kept within the band.
+pub fn spawn_resources_rows(ctx: &ReducerContext, map: &living_rules::map::Map, s: &Seed, rows: std::ops::Range<u32>, now: u64) {
+    RESOURCE_SCALE.with(|r| *r.borrow_mut() = s.resource_scale.clone());
+    spawn_resources_in(ctx, map, rows, now);
+}
+
+fn spawn_resources_in(ctx: &ReducerContext, map: &living_rules::map::Map, rows: std::ops::Range<u32>, now: u64) {
     let sc = common::scripts(ctx);
     let near = |x: i32, y: i32, t: Terrain, r: i32| {
         for dy in -r..=r {
@@ -1037,12 +1162,13 @@ fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64)
         });
         true
     };
-    let scale = ((map.w * map.h) as f32 / (96.0 * 96.0)).max(1.0);
+    let share = rows.len() as f32 / map.h as f32;
+    let scale = ((map.w * map.h) as f32 / (96.0 * 96.0)).max(1.0) * share;
     let abundance = |kind: &str| RESOURCE_SCALE.with(|r| r.borrow().get(kind).copied().unwrap_or(1.0));
     let cap = |n: u32| (n as f32 * scale) as u32;
     // Tile indices (`y * w + x`), shuffled with the same draws as before; 4 bytes a tile rather
     // than 8 (a 2048 m land has 4.2M tiles).
-    let mut rng_tiles: Vec<u32> = (0..map.w * map.h).collect();
+    let mut rng_tiles: Vec<u32> = (rows.start * map.w..rows.end * map.w).collect();
     // Deterministic shuffle from the reducer RNG.
     for i in (1..rng_tiles.len()).rev() {
         let j = ctx.rng().gen_range(0..=i);
@@ -1080,7 +1206,7 @@ fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64)
     // Sparse berry bushes in open grassland too.
     for _ in 0..(cap(25) as f32 * abundance("berry_bush")) as u32 {
         let x = ctx.rng().gen_range(4..map.w as i32 - 4);
-        let y = ctx.rng().gen_range(4..map.h as i32 - 4);
+        let y = ctx.rng().gen_range((rows.start as i32).max(4)..(rows.end as i32).min(map.h as i32 - 4).max((rows.start as i32).max(4) + 1));
         if map.get(x, y) == Terrain::Grass {
             place(ctx, "berry_bush", x, y, 5.0, 3.0, &mut placed);
         }
@@ -1464,7 +1590,7 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
 /// Once every settlement has its people: authored parents who live elsewhere are linked (a
 /// child whose parents were both born later takes its genes from them now), and each
 /// authored sheet goes into its person's background with the people it names resolved.
-fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)]) {
+fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], now: u64) {
     if authored.is_empty() {
         return;
     }
@@ -1521,6 +1647,33 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)]) {
         let (sheet, dropped) = resolve_sheet(&r.sheet, &lookup);
         for d in dropped {
             log::warn!("{}: sheet {d} names no one in the world; left out", r.name);
+        }
+        // How they feel about the people they know is a fact of the world from the start, for
+        // instinct and mind alike: the `relation` rows graphs read (`friend`, `enemy`, a label)
+        // and that a mind's projection later replaces (docs/SEEDED_LIVES.md). A feeling is not
+        // knowing a name, so an authored relation is also an introduction (`acquaintance`)
+        // unless the author says this person would not know the other by name
+        // (`knows_name: false`); one's own community is known by name already.
+        let community = |p: u32| ctx.db.membership().member().find(p).map(|m| m.community);
+        for rel in sheet["relations"].as_array().into_iter().flatten() {
+            let Some(other) = rel["id"].as_u64().map(|o| o as u32).filter(|o| *o != id) else { continue };
+            if rel["knows_name"].as_bool() != Some(false) && (community(id).is_none() || community(id) != community(other)) {
+                crate::perception::introduce(ctx, id, other, now);
+            }
+            if ctx.db.relation().by_pair().filter((id, other)).next().is_some() {
+                continue;
+            }
+            let num = |k: &str| rel[k].as_f64().unwrap_or(0.0).clamp(-100.0, 100.0) as f32;
+            ctx.db.relation().insert(Relation {
+                id: 0,
+                actor: id,
+                other,
+                trust: num("trust"),
+                affinity: num("affinity"),
+                label: rel["label"].as_str().unwrap_or_default().chars().take(32).collect(),
+                note: rel["note"].as_str().unwrap_or_default().chars().take(240).collect(),
+                updated_ms: now,
+            });
         }
         if let Some(mut bg) = ctx.db.background().id().find(id) {
             let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&bg.text) else { continue };

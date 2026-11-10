@@ -51,6 +51,14 @@ python3 "$V" launch --run "$T" --seed island > ".local/living/verify/$T/launch.t
 python3 "$C/town.py" --run "$T" > ".local/living/verify/$T/town.txt" 2>&1
 python3 "$V" cleanup --run "$T" > ".local/living/verify/$T/cleanup.txt" 2>&1
 
+# Seeded lives on an island world (about 25 min): placement, routes, the road, ties
+# (features/lives.md, docs/SEEDED_LIVES.md).
+L=$R-lives
+mkdir -p ".local/living/verify/$L"
+python3 "$V" launch --run "$L" --seed island > ".local/living/verify/$L/launch.txt" 2>&1
+python3 "$C/lives.py" --run "$L" --minutes 24 > ".local/living/verify/$L/lives.txt" 2>&1
+python3 "$V" cleanup --run "$L" > ".local/living/verify/$L/cleanup.txt" 2>&1
+
 # Infant assertions use their own small, long-lived family fixture.
 I=$R-infant
 IE=.local/living/verify/$I

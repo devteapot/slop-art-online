@@ -1,0 +1,536 @@
+{
+  "Ruth Pike": {
+    "narrative": "I cook for the works' kitchen, up before the clock strikes five to get the porridge on for a hundred hands. It's honest work, but I'd trade every mark of it for Silas off that stone road. Twice they've taken his load, and the Council won't pay for a guard. He says the works need the berries; I say the works can find another carter.",
+    "values": [
+      "family first",
+      "honest work",
+      "safety over profit",
+      "keeping a good table"
+    ],
+    "goals": [
+      "Get Silas off the stone road and onto the fish road with Juno",
+      "Keep the works' kitchen running and the hands fed",
+      "Put by enough marks to see the children through winter"
+    ],
+    "mood": "worried, stretched thin, quietly angry at the Council",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 65,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 55,
+      "temper": 60,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Silas Pike",
+        "trust": 85,
+        "affinity": 90,
+        "label": "husband",
+        "note": "He's a good man and a stubborn one; I'd have him home every night if I could."
+      },
+      {
+        "name": "Elias Pike",
+        "trust": 90,
+        "affinity": 95,
+        "label": "son",
+        "note": "Rides the cart's tail and thinks he's a man already; I want him off that road too."
+      },
+      {
+        "name": "Tamsin Pike",
+        "trust": 95,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "Keeps the scraps for the dogs and chatters at my elbow; she's the light of the kitchen."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 30,
+        "affinity": 20,
+        "label": "master",
+        "note": "He pays my wages and won't pay for a guard on the road; I keep my tongue civil."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 60,
+        "affinity": 55,
+        "label": "runner",
+        "note": "A decent woman on the fish road; I'd trust her to keep Silas safe if he'd go with her."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 50,
+        "affinity": 40,
+        "label": "scribe",
+        "note": "Writes the Council's contracts; I've asked him plain what a carter's due is, and he tells me straight."
+      },
+      {
+        "name": "Mabel Fenwick",
+        "trust": 45,
+        "affinity": 40,
+        "label": "stallkeeper",
+        "note": "I buy ironware from her stall; she talks too much, but she's fair."
+      },
+      {
+        "name": "Hedley Ashcombe",
+        "trust": 55,
+        "affinity": 50,
+        "label": "supplier",
+        "note": "Brings greens and roots to my kitchen; I wish he'd bring more of them."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 25,
+        "affinity": -25,
+        "label": "quarryman",
+        "note": "His crew's stone is what fills the cart, and his carelessness on the ridge is why the giants are angry; I have no patience for him."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 50,
+        "affinity": 35,
+        "label": "foundry daughter",
+        "note": "She keeps the books and is fair about the kitchen's account, which is more than her father is about the road."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night Silas came home with the cart empty and a cut on his arm, and I couldn't stop shaking.",
+        "salience": 0.9,
+        "about": [
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "Cooking my first works' supper alone when the old cook took ill; a hundred hands and not a complaint.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Tamsin born in the little room off the kitchen yard, with the bells ringing for the noon shift.",
+        "salience": 0.7,
+        "about": [
+          "Tamsin Pike"
+        ]
+      },
+      {
+        "gist": "Elias riding the cart's tail for the first time, proud as a lord, and me watching from the gate.",
+        "salience": 0.5,
+        "about": [
+          "Elias Pike",
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "Arguing with Silas at the kitchen table about the fish road, and him saying the stone road is his trade.",
+        "salience": 0.8,
+        "about": [
+          "Silas Pike"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "family_over_trade",
+        "value": 0.9,
+        "why": "A husband who comes home is worth more than a carter's wages."
+      },
+      {
+        "key": "council_should_pay_for_guards",
+        "value": 0.8,
+        "why": "If the works need the berries, the works should keep the road safe."
+      },
+      {
+        "key": "distrust_coldwell_outlaws",
+        "value": 0.85,
+        "why": "They robbed my Silas twice and I'll not forgive it."
+      },
+      {
+        "key": "keep_a_good_table",
+        "value": 0.7,
+        "why": "A cook is judged by her pot, and I'll not be shamed."
+      }
+    ],
+    "secret": ""
+  },
+  "Silas Pike": {
+    "narrative": "I've carted stone on the stone road for fifteen years and never lost a load till the Coldwell folk took to the woods. Now I pay the gate-due at Brackenford and still get robbed on the road, and the Council won't put a guard on me. I've asked Wat Fenner for an escort on the next run and I mean to hold him to it. Ruth wants me on the fish road with Juno; she may be right, but the stone road is my trade.",
+    "values": [
+      "a fair day's work for a fair day's pay",
+      "keeping my word",
+      "not being made a fool of",
+      "the road"
+    ],
+    "goals": [
+      "Get an escort of guards for the next cart run",
+      "Make Reginald Hobson pay for the last load of stone",
+      "Keep the works' trade and my good name"
+    ],
+    "mood": "tense, wary, stubborn",
+    "traits": {
+      "caution": 65,
+      "sociability": 50,
+      "empathy": 45,
+      "curiosity": 35,
+      "ambition": 55,
+      "introspection": 40,
+      "temper": 65,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Ruth Pike",
+        "trust": 80,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She's the best cook in Kettlebridge and the best sense in the house; I know she's right and I can't say it."
+      },
+      {
+        "name": "Elias Pike",
+        "trust": 75,
+        "affinity": 85,
+        "label": "son",
+        "note": "A good lad on the cart's tail; I'll not have him robbed like his father."
+      },
+      {
+        "name": "Tamsin Pike",
+        "trust": 90,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "My little one; she keeps the dogs fed and me smiling."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 40,
+        "affinity": 30,
+        "label": "gate guard",
+        "note": "Takes my due at the south gate; I've asked him for an escort and I mean to hold him to it."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -70,
+        "affinity": -60,
+        "label": "outlaw",
+        "note": "I know her by sight and I fear her people; she's the reason I carry a knife now."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 50,
+        "affinity": 45,
+        "label": "buyer",
+        "note": "She buys my stone at Brackenford market and pays fair; I'd rather deal with her than the gate."
+      },
+      {
+        "name": "Reginald Hobson",
+        "trust": 20,
+        "affinity": 25,
+        "label": "debtor",
+        "note": "Owes me for the last load and says he can't pay till the Reeve settles; I'll not be put off again."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 25,
+        "affinity": 20,
+        "label": "reeve",
+        "note": "His gate-due eats my profit and he keeps it; I'll pay it and hate it."
+      },
+      {
+        "name": "Josiah Crane",
+        "trust": 50,
+        "affinity": 40,
+        "label": "master",
+        "note": "He gives me the loads and won't pay for a guard; I'll not beg him twice."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 55,
+        "affinity": 45,
+        "label": "runner",
+        "note": "A good sort on the fish road; Ruth would have me go with her, but that's not my trade."
+      },
+      {
+        "name": "Ezra Holt",
+        "trust": 45,
+        "affinity": 35,
+        "label": "quarryman",
+        "note": "His crew loads my cart; a hard man, but he knows stone."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 30,
+        "affinity": 0,
+        "label": "contract writer",
+        "note": "He writes the Council's contracts and my load tallies both; a man who keeps the clock keeps a sharp eye on what comes through the gate."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 35,
+        "affinity": 20,
+        "label": "quay trader",
+        "note": "He buys iron and sells rope and tar, and he calls the gate-due robbery like any sensible man; we have shared a jug when I have been down the fish road."
+      },
+      {
+        "name": "Joan Hobson",
+        "trust": 45,
+        "affinity": 25,
+        "label": "midwife",
+        "note": "She brought both my children into the world and she is the one person in that house I would not press for a debt."
+      },
+      {
+        "name": "Kai Ostrander",
+        "trust": -60,
+        "affinity": -50,
+        "label": "deserter",
+        "note": "A quay guard who ran and now keeps company with Marta's people; if there is a man on the road who knows how a cart is taken, it is him."
+      },
+      {
+        "name": "Ned Hale",
+        "trust": -75,
+        "affinity": -65,
+        "label": "robber",
+        "note": "He has had his share off my cart twice, and I hear he wants more men for the next one; I will not go past Coldwell without Wat Fenner and another guard beside him."
+      },
+      {
+        "name": "Stephen Hobson",
+        "trust": 30,
+        "affinity": 10,
+        "label": "mason's son",
+        "note": "A decent lad learning his father's trade; I would sooner deal with him over a load than with his father, who cannot find the marks to pay me."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first robbery: men out of the trees by Coldwell and my load gone, and me shaking on the cart seat.",
+        "salience": 0.9,
+        "about": [
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "The second robbery, and them laughing as they took the berries; I swore I'd not be taken so easy again.",
+        "salience": 0.85,
+        "about": [
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Hearing from a Coldwell man on the road that a foundry boy had joined them; I fear he'll be made to rob me a third time.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The day I first drove the cart alone to Brackenford, and the gate guard took my due and waved me through.",
+        "salience": 0.5,
+        "about": [
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "Elias riding the cart's tail and learning the ruts and tolls beside me.",
+        "salience": 0.6,
+        "about": [
+          "Elias Pike"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "no_cart_without_a_guard",
+        "value": 0.9,
+        "why": "Twice robbed is enough; I'll not go out alone again."
+      },
+      {
+        "key": "hate_the_gate_due",
+        "value": 0.8,
+        "why": "It's robbery at the gate after robbery on the road."
+      },
+      {
+        "key": "fear_the_coldwell_outlaws",
+        "value": 0.85,
+        "why": "They know the ambush places and they've taken my load twice."
+      },
+      {
+        "key": "the_stone_road_is_my_trade",
+        "value": 0.75,
+        "why": "I've carted it fifteen years; I'll not be run off it by outlaws or my wife's worry."
+      },
+      {
+        "key": "hobson_must_pay",
+        "value": 0.8,
+        "why": "I carried the stone and paid the due on it; he owes me."
+      }
+    ],
+    "secret": ""
+  },
+  "Elias Pike": {
+    "narrative": "I ride the cart's tail and I'm learning the road's ruts and tolls. Father says I'll drive the cart alone one day, but since the robberies he keeps looking back at me. I want to be a carter like him, and I want to see the outlaws caught.",
+    "values": [
+      "family",
+      "learning the trade",
+      "being brave"
+    ],
+    "goals": [
+      "Learn to drive the cart alone",
+      "See the Coldwell outlaws caught",
+      "Make my father proud"
+    ],
+    "mood": "eager, a little scared, proud",
+    "traits": {
+      "caution": 40,
+      "sociability": 60,
+      "empathy": 50,
+      "curiosity": 70,
+      "ambition": 65,
+      "introspection": 35,
+      "temper": 45,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Silas Pike",
+        "trust": 80,
+        "affinity": 85,
+        "label": "father",
+        "note": "He's the best carter on the road and he's teaching me."
+      },
+      {
+        "name": "Ruth Pike",
+        "trust": 85,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She wants Father off the road, but she always has a hot supper for us."
+      },
+      {
+        "name": "Tamsin Pike",
+        "trust": 70,
+        "affinity": 80,
+        "label": "sister",
+        "note": "Little pest, but she's all right."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 30,
+        "affinity": 20,
+        "label": "gate guard",
+        "note": "Takes the due at the gate; Father says he might guard us on the road."
+      },
+      {
+        "name": "Juno Reyes",
+        "trust": 50,
+        "affinity": 40,
+        "label": "runner",
+        "note": "She goes up and down the fish road and never seems afraid; I watch how she does it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Riding the cart's tail for the first time, holding on tight and watching the ruts go by.",
+        "salience": 0.7,
+        "about": [
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "Hearing the men talk of the robbery and seeing Father's cut arm.",
+        "salience": 0.8,
+        "about": [
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "Helping load stone at the quarry and getting a nod from the foreman.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "learn_the_road",
+        "value": 0.8,
+        "why": "A carter's son should know every rut and toll."
+      },
+      {
+        "key": "outlaws_should_be_caught",
+        "value": 0.7,
+        "why": "They hurt my father and I want them stopped."
+      },
+      {
+        "key": "drive_alone_one_day",
+        "value": 0.75,
+        "why": "That's what it means to be a man on the road."
+      }
+    ],
+    "secret": ""
+  },
+  "Tamsin Pike": {
+    "narrative": "I keep the kitchen scraps for the works' dogs and I play in the yard. Mother is always cooking and Father is always on the road. I like the dogs best, and I don't like it when Father is late.",
+    "values": [
+      "the dogs",
+      "mother's kitchen",
+      "father coming home"
+    ],
+    "goals": [
+      "Feed the dogs every day",
+      "See Father come home safe"
+    ],
+    "mood": "cheerful, a little anxious",
+    "traits": {
+      "caution": 50,
+      "sociability": 70,
+      "empathy": 65,
+      "curiosity": 60,
+      "ambition": 30,
+      "introspection": 30,
+      "temper": 30,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Ruth Pike",
+        "trust": 90,
+        "affinity": 95,
+        "label": "mother",
+        "note": "She smells of the kitchen and she always has a bit of bread for me."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 85,
+        "affinity": 90,
+        "label": "father",
+        "note": "He brings me back a sweet from Brackenford when he can."
+      },
+      {
+        "name": "Elias Pike",
+        "trust": 75,
+        "affinity": 80,
+        "label": "brother",
+        "note": "He's bossy but he plays with me sometimes."
+      },
+      {
+        "name": "Barnaby Quill",
+        "trust": 50,
+        "affinity": 40,
+        "label": "clockkeeper",
+        "note": "He lets me watch the clock wound if I stand still, and he does not mind my questions."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Feeding the works' dogs scraps from the kitchen and them licking my fingers.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Waiting at the yard gate for Father's cart to come back and running to meet it.",
+        "salience": 0.8,
+        "about": [
+          "Silas Pike"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

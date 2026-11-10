@@ -1,6 +1,6 @@
 ---
 name: verify-generation
-description: Verify how the Slop Art Online living core generates worlds from compiled seeds. Use for changes to seed parsing, terrain, settlements, bands, authored sheets, resources, animals, or cached authored-world compilation.
+description: Verify how the Slop Art Online living core generates worlds from seeds, compiled in or given at runtime to a floor module (create_floor, staged genesis). Use for changes to seed parsing, terrain, land generation steps, cities, settlements, bands, authored sheets, resources, animals, or cached authored-world compilation.
 ---
 
 # Verify world generation
@@ -9,7 +9,7 @@ Read the [`verify` entry point](../verify/SKILL.md) first. It owns the shared la
 
 ## Run
 
-Preconditions: SpacetimeDB 2.14.1 must answer on `http://127.0.0.1:3300`. If it is down, run `docker start sao-living_spacetimedb_1`, then poll `curl -s http://127.0.0.1:3300/v1/ping` until it answers. The driver uses the existing container and leaves it running.
+Preconditions: SpacetimeDB 2.14.1 must answer on `http://127.0.0.1:3300`. If it is down, run `docker start sao-living_spacetimedb_1`, then poll `curl -s http://127.0.0.1:3300/v1/ping` until it answers. The driver uses the existing container and leaves it running. A worker with its own 2.14.1 container sets `LIVING_STDB_CONTAINER` and `LIVING_STDB_URL` (see the [`verify` entry point](../verify/SKILL.md)); its `/wasm` mount must be readable from the container (on SELinux hosts, mount it with `:z`).
 
 Run from the repository root:
 
@@ -21,7 +21,7 @@ Use a fresh run name. The driver calls the shared harness through its CLI for la
 
 Only cached compilation uses `.local/living/verify/<run>/source/living/`. That copy contains `author_world.py` and the Aske Coast bible, cast, template and cached sheets. The compiler derives its root from its script path and writes `living/seeds/aske-coast.json`; it has no output-path option. Copying those inputs keeps the tracked seed untouched. The malformed seed uses an absolute seed path under `.local` through `--seed`; `build.rs` accepts it without copying authority sources.
 
-Each database is `verify-<run>-<index>-<seed>`. The driver publishes `realm`, `valley`, `authored-test`, `aske-coast`, `stage3-village`, `island` (the km-scale land, see `docs/ISLAND_AUTHORITY.md`), `floor-megacity-2k` (the megacity floor of `docs/FLOORS.md` at 2048 m, derived into the run's directory from `living/seeds/floor-megacity.json`), a second `realm`, and one malformed seed. Every land child also compares the `land` row's digests with a native regeneration (`living/rules/examples/floor_preview.rs`). Doctor first proves the world ticks. An admin `set_paused(true)` then holds it still for generation snapshots. No mind or browser observer starts.
+Each database is `verify-<run>-<index>-<seed>`. The driver publishes `realm`, `valley`, `authored-test`, `aske-coast`, `stage3-village`, `island` (the km-scale land, see `docs/ISLAND_AUTHORITY.md`), `floor-megacity-2k` (the megacity floor of `docs/FLOORS.md` at 2048 m, derived into the run's directory from `living/seeds/floor-megacity.json`, created inside `init`), `floor-megacity-4k` (the same city at 4096 m as a floor: a module built with `--seed none`, given the seed by `create_floor` and created in scheduled steps; see [floors](features/floors.md)), a second `realm`, and one malformed seed. Every land child also compares the `land` row's digests with a native regeneration (`living/rules/examples/floor_preview.rs`). Doctor first proves the world ticks. An admin `set_paused(true)` then holds it still for generation snapshots. No mind or browser observer starts.
 
 For a focused rerun:
 
@@ -30,6 +30,8 @@ For a focused rerun:
 .agents/skills/verify-generation/scripts/generation.py --run generation-authored-$(date +%Y%m%d-%H%M%S) --feature authored
 .agents/skills/verify-generation/scripts/generation.py --run generation-guards-$(date +%Y%m%d-%H%M%S) --feature guards
 ```
+
+`--seeds a,b` limits the worlds to those seeds, for example `--feature worlds --seeds island,floor-megacity-2k,floor-megacity-4k` after a land or city change.
 
 `worlds` includes repeatability. `authored` executes the real `author_world.py aske-coast --compile-only` in the copied tree with network calls blocked and recorded. `guards` runs all five `seed::tests::` native tests and publishes a valid JSON seed missing `animals`. The malformed copy stays in `.local`.
 

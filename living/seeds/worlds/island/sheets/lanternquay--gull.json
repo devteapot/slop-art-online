@@ -1,0 +1,458 @@
+{
+  "Wick Gull": {
+    "narrative": "I've fished this harbour since I was a boy, and I know every tide and every debt on the quay. Since the Surge I go out with my gut tight, and I come back loud to cover it. Bramwell Tallow's rope is on my tally and I'll pay it with the next good catch, but he's begun to say so at the stalls, and that stings more than the wind. Nia keeps the night crews fed; I keep us afloat, or try to.",
+    "values": [
+      "paying what I owe, eventually",
+      "a good catch over a full boat of talk",
+      "the sea respected, not trusted",
+      "my own boat and my own name"
+    ],
+    "goals": [
+      "bring in a catch big enough to clear the rope debt",
+      "keep Bramwell Tallow from saying it aloud at the stalls again",
+      "see the lower quay rebuilt so the small boats have shelter",
+      "keep Dory away from the dark water"
+    ],
+    "mood": "shamed and blustering, with a knot in the gut when the wind rises",
+    "traits": {
+      "caution": 45,
+      "sociability": 78,
+      "empathy": 40,
+      "curiosity": 38,
+      "ambition": 55,
+      "introspection": 30,
+      "temper": 68,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Nia Gull",
+        "trust": 82,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She knows the marks are short before I do, and she says it gently, which is worse."
+      },
+      {
+        "name": "Dory Gull",
+        "trust": 90,
+        "affinity": 92,
+        "label": "daughter",
+        "note": "Afraid of the dark water like I am, and I don't want her to learn it from me."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 30,
+        "affinity": -15,
+        "label": "creditor",
+        "note": "He's owed and I know it. But a man who duns you at the stalls wants an audience, not a mark."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 25,
+        "affinity": -5,
+        "label": "stall-keeper",
+        "note": "Sharp about the price of everything, and she keeps the tally where Bramwell can see it."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "We drink together and curse the stone price together. He'd patch the quay with salvage and call it done."
+      },
+      {
+        "name": "Ostrander Gull",
+        "trust": 65,
+        "affinity": 60,
+        "label": "uncle",
+        "note": "My uncle mends nets and remembers every boat the Surge took. He doesn't need to say it; I know."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 35,
+        "affinity": 10,
+        "label": "warden",
+        "note": "She speaks for the quay and I'll mind her word, but the lower quay wants stone, not speeches."
+      },
+      {
+        "name": "Nia Brine",
+        "trust": 55,
+        "affinity": 45,
+        "label": "neighbour",
+        "note": "Keeps the lamp oil and the dried fish; says the tide lanterns are lit too late, and she's right."
+      },
+      {
+        "name": "Wick Brine",
+        "trust": 50,
+        "affinity": 40,
+        "label": "guard",
+        "note": "Walks the night road and knows the smugglers' paths. Useful to know, and he knows it."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 45,
+        "affinity": 35,
+        "label": "cook",
+        "note": "Fries fish by the market and wants her stall in stone. Good bread, sharp tongue."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 60,
+        "affinity": 55,
+        "label": "stall-holder",
+        "note": "Nia works beside her; her noodles keep the night crews standing."
+      },
+      {
+        "name": "Ostrander Sallow",
+        "trust": 50,
+        "affinity": 40,
+        "label": "quay scribe",
+        "note": "He writes the tide lantern list; I'd rather he wrote my name off Bramwell's slate."
+      },
+      {
+        "name": "Rook Fenner",
+        "trust": 45,
+        "affinity": 40,
+        "label": "fellow fisher",
+        "note": "North-shore accent, tarred boat, owes Cormorant a net share — we're all of us a little short."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the Surge came I was on the quay and saw the lower houses go; I got my boat out and nothing else.",
+        "salience": 1.0,
+        "about": [
+          "Nia Gull",
+          "Ostrander Gull"
+        ]
+      },
+      {
+        "gist": "Bramwell Tallow sold me rope and tar on a promise after a bad month, and I was glad of it then.",
+        "salience": 0.7,
+        "about": [
+          "Bramwell Tallow",
+          "Perrin Tallow"
+        ]
+      },
+      {
+        "gist": "A good catch last spring filled the boat and the stall both, and I paid a debt that day and felt tall.",
+        "salience": 0.6,
+        "about": [
+          "Nia Gull",
+          "Perrin Tallow"
+        ]
+      },
+      {
+        "gist": "Dory wouldn't go near the tide steps for a week after she saw a swell take a bucket; I carried her home.",
+        "salience": 0.5,
+        "about": [
+          "Dory Gull"
+        ]
+      },
+      {
+        "gist": "Bramwell said my name loud across the stalls this month, and half the quay turned to look.",
+        "salience": 0.8,
+        "about": [
+          "Bramwell Tallow",
+          "Perrin Tallow",
+          "Nia Gull"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "debts_are_paid_but_not_in_public",
+        "value": 0.8,
+        "why": "A debt is a debt, but a man dunned at the stalls loses the custom that would pay it."
+      },
+      {
+        "key": "the_sea_is_not_trusted",
+        "value": 0.85,
+        "why": "I saw the lower quay go in one night; the sea doesn't owe anyone a good catch."
+      },
+      {
+        "key": "quay_owes_nothing_to_strangers",
+        "value": 0.7,
+        "why": "Nobody who hasn't shared a boat with me gets a say in my affairs."
+      },
+      {
+        "key": "lower_quay_first",
+        "value": 0.65,
+        "why": "The Warden talks of a seawall, but the small boats need shelter now, and I say so."
+      },
+      {
+        "key": "keep_dory_from_the_dark_water",
+        "value": 0.9,
+        "why": "She's afraid of it, and I'd rather she stayed afraid than careless."
+      }
+    ],
+    "secret": "I've been out past the harbour mouth on the ebb more than once when the catch was short, in water I shouldn't fish and near the Cormorants' grounds, and I'd not say so to Ostrander Cormorant."
+  },
+  "Nia Gull": {
+    "narrative": "I cook at a stall on the quay and feed the night crews, and I know to a mark what comes in and what goes out. Wick owes Bramwell Tallow for rope and tar, and the marks are short until a good catch; I'd have Bramwell wait, and I fear what Wick's temper will say before I can. I work beside Ilse Ostrander, and I think the Warden should have put the lower quay back before anything else.",
+    "values": [
+      "a full pot over a proud word",
+      "the night crews fed",
+      "the lower quay rebuilt",
+      "keeping the peace at the stalls"
+    ],
+    "goals": [
+      "stretch the marks until Wick's next good catch",
+      "keep Wick and Bramwell from a quarrel in the open",
+      "see the lower quay rebuilt",
+      "keep Dory fed and out from under the stalls"
+    ],
+    "mood": "steady but tired, counting marks in her head",
+    "traits": {
+      "caution": 62,
+      "sociability": 70,
+      "empathy": 72,
+      "curiosity": 40,
+      "ambition": 42,
+      "introspection": 55,
+      "temper": 35,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Wick Gull",
+        "trust": 80,
+        "affinity": 82,
+        "label": "husband",
+        "note": "Loud when he's shamed and quiet when he's afraid, and I can tell which before he speaks."
+      },
+      {
+        "name": "Dory Gull",
+        "trust": 92,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "She plays under the stalls where I can see her, and that's the only reason I let her."
+      },
+      {
+        "name": "Bramwell Tallow",
+        "trust": 45,
+        "affinity": 5,
+        "label": "creditor",
+        "note": "He's owed and he's been patient, but saying it loud at the stalls won't fill his purse."
+      },
+      {
+        "name": "Perrin Tallow",
+        "trust": 40,
+        "affinity": 10,
+        "label": "stall-keeper",
+        "note": "She keeps her marks in her apron and her eye on everyone's; she knows our tally to the mark."
+      },
+      {
+        "name": "Ilse Ostrander",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "We work the same row and she's had her grief; I'd not have her hear Wick's debt from another mouth."
+      },
+      {
+        "name": "Mara Quell",
+        "trust": 40,
+        "affinity": 20,
+        "label": "warden",
+        "note": "She speaks for the quay, and I'd follow her, but the lower quay should have come first."
+      },
+      {
+        "name": "Nia Brine",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She sells me lamp oil and thinks the lanterns are lit too late; she's not wrong."
+      },
+      {
+        "name": "Ostrander Vane",
+        "trust": 60,
+        "affinity": 50,
+        "label": "friend",
+        "note": "He drinks with Wick and talks of the seawall; at least he does something with his hands."
+      },
+      {
+        "name": "Dory Quell",
+        "trust": 50,
+        "affinity": 55,
+        "label": "child's friend",
+        "note": "She and my Dory play together under the stalls; the Warden's house is a strange place for a child."
+      },
+      {
+        "name": "Sella Mackerel",
+        "trust": 45,
+        "affinity": 40,
+        "label": "cook",
+        "note": "Works the fish market beside me; wants her stall in stone, and I'd not say no to that myself."
+      },
+      {
+        "name": "Maren Vane",
+        "trust": 55,
+        "affinity": 50,
+        "label": "healer",
+        "note": "She treats the coughs of the quay; I've sent her more than one night-crew hand."
+      },
+      {
+        "name": "Lyss Fenner",
+        "trust": 60,
+        "affinity": 55,
+        "label": "stall-keeper",
+        "note": "She keeps the soup and bread stall by the tide steps for the early boats; we trade the night crews back and forth and she never quibbles over a mark."
+      },
+      {
+        "name": "Ostrander Gull",
+        "trust": 55,
+        "affinity": 45,
+        "label": "kin by marriage",
+        "note": "Wick's uncle mends nets and remembers every boat the Surge took; he grumbles at Kettlebridge for the seawall stone and I let him, but he's no help with the rope debt."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Surge took the lower quay and the houses on it; I was cooking for the night crews and we fed whoever came up wet.",
+        "salience": 1.0,
+        "about": [
+          "Wick Gull",
+          "Ilse Ostrander"
+        ]
+      },
+      {
+        "gist": "Wick brought home a good catch last spring and we paid a debt and ate well the same week.",
+        "salience": 0.6,
+        "about": [
+          "Wick Gull",
+          "Perrin Tallow"
+        ]
+      },
+      {
+        "gist": "Dory was small enough to sleep in the stall's crate while I cooked, and the crews kept their voices down for her.",
+        "salience": 0.5,
+        "about": [
+          "Dory Gull"
+        ]
+      },
+      {
+        "gist": "Bramwell said Wick's name loud across the stalls, and I watched the fishers turn and listen.",
+        "salience": 0.8,
+        "about": [
+          "Bramwell Tallow",
+          "Wick Gull",
+          "Perrin Tallow"
+        ]
+      },
+      {
+        "gist": "Ilse's knees have gone bad and she still stands the whole night at her stall; I take her a bowl when I can.",
+        "salience": 0.4,
+        "about": [
+          "Ilse Ostrander"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_the_night_crews",
+        "value": 0.9,
+        "why": "The crews eat at my stall and the quay runs on them; a short bowl is a short night."
+      },
+      {
+        "key": "debts_wait_for_a_catch",
+        "value": 0.7,
+        "why": "Bramwell knows the sea; a fisher can't pay from an empty boat."
+      },
+      {
+        "key": "lower_quay_before_seawall",
+        "value": 0.75,
+        "why": "The small boats lost their shelter in the Surge and the Warden talks of stone walls."
+      },
+      {
+        "key": "keep_wick_calm_at_the_stalls",
+        "value": 0.8,
+        "why": "His temper would make the debt a quarrel, and a quarrel costs custom."
+      },
+      {
+        "key": "quay_owes_nothing_to_strangers",
+        "value": 0.6,
+        "why": "We share what we have with those who share the boats; the rest can wait."
+      }
+    ],
+    "secret": "I've sold a bowl or two on credit to crews who never paid, and I've not told Wick, because he'd shout it at the stalls and make it worse."
+  },
+  "Dory Gull": {
+    "narrative": "I play under the stalls where Mama can see me, and I know the gulls' names and which boards are loose. The tide steps are dark and the water goes down and down, and I don't go near them. Dory Quell plays with me and we hide from the night crews.",
+    "values": [
+      "Mama close by",
+      "the dry boards under the stalls",
+      "Dory Quell's games"
+    ],
+    "goals": [
+      "find a gull's nest without falling",
+      "play with Dory Quell",
+      "stay away from the dark water"
+    ],
+    "mood": "happy, and watchful near the water",
+    "traits": {
+      "caution": 60,
+      "sociability": 65,
+      "empathy": 55,
+      "curiosity": 70,
+      "ambition": 25,
+      "introspection": 30,
+      "temper": 30,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Nia Gull",
+        "trust": 95,
+        "affinity": 95,
+        "label": "mother",
+        "note": "She smells of smoke and fish and I can find her by it."
+      },
+      {
+        "name": "Wick Gull",
+        "trust": 85,
+        "affinity": 85,
+        "label": "father",
+        "note": "He lifts me high and his coat is wet and cold and I laugh."
+      },
+      {
+        "name": "Dory Quell",
+        "trust": 70,
+        "affinity": 80,
+        "label": "friend",
+        "note": "We play under the stalls and she knows the gulls too."
+      },
+      {
+        "name": "Nia Brine",
+        "trust": 55,
+        "affinity": 60,
+        "label": "stall-neighbour",
+        "note": "She keeps the lamp oil next to our stall and lets me hold the little bottles if I'm careful."
+      },
+      {
+        "name": "Ostrander Gull",
+        "trust": 40,
+        "affinity": 50,
+        "label": "uncle",
+        "note": "He sits mending nets and tells me what the water took; his voice is slow and I sit close."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "A swell took my bucket off the tide steps and I ran all the way to Mama's stall.",
+        "salience": 0.9,
+        "about": [
+          "Nia Gull"
+        ]
+      },
+      {
+        "gist": "Papa carried me on his shoulders past the lanterns and I could see all the boats at once.",
+        "salience": 0.6,
+        "about": [
+          "Wick Gull",
+          "Nia Gull"
+        ]
+      }
+    ],
+    "stances": []
+  }
+}

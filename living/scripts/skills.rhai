@@ -892,6 +892,21 @@ fn accept_check(a) {
 fn accept_duration(a) { 1500 }
 fn accept_done(a) { [#{ op: "accept" }] }
 
+// ---- hospitality ----------------------------------------------------------------------
+// Taking someone in: a grown person offers another a bed in their household's house (the
+// house at their home door; the engine finds it, and refuses without one) until the morning
+// hour `host_done` names. The guest learns where it is (a place called "lodging"), may sleep
+// there, and taking from the household's store is no longer theft for them.
+
+fn host_check(a) {
+    if a.target.class != "creature" || a.target.kind != "person" || !a.target.alive { return "no one to take in"; }
+    if a.target.id == a.actor.id { return "you cannot be your own guest"; }
+    if young(a) { return "only grown people take in guests"; }
+    ""
+}
+fn host_duration(a) { 2000 }
+fn host_done(a) { [#{ op: "host", until_hour: 7.0 }] }
+
 // ---- communities (meaning is up to members; the engine keeps membership) ------------------
 
 fn found_check(a) {
@@ -913,16 +928,23 @@ fn leave_done(a) { [#{ op: "leave" }] }
 // resident can wake it into a mind, which it keeps. `e` is "<what>:<by>": what is `speech`
 // (spoken to), the name of a skill aimed at the resident as it starts (`wave`, `give`,
 // `teach`, `offer`, `attack`…), `hurt` (a blow or missile landed) or `theft` (taking from its
-// store as it watched); by is `player`, `mind` or `instinct`. 1 wakes, 0 does not. What an
-// instinct-only creature does (a neighbour's evening nod, a wolf's bite) stays at the level of
-// detail it happens at. Read once per script revision for each engagement.
+// store as it watched); by is `player`, `mind` (what a mind decided: its acts and words),
+// `woken` (what a woken resident's mind decided), `habit` (what a minded character's behaviour
+// graph did by itself) or `instinct`. 1 wakes, 0 does not. Habits and instincts stay at the level of detail they happen at: a neighbour's
+// evening nod or a wolf's bite wakes nobody, whether or not the neighbour has a mind (the first
+// paid run, before `habit`, had woken residents' routine nods wake 11 of 15 in 9 minutes).
+// Read once per script revision for each engagement.
 fn wakes(e) {
     let p = e.split(":");
-    if p.len() < 2 || p[1] == "instinct" { return 0; }
+    if p.len() < 2 || p[1] == "instinct" || p[1] == "habit" { return 0; }
     let what = p[0];
+    // A woken resident's words and gestures do not wake its neighbours; a blow or a theft does.
+    // Without this, woken residents talking to each other woke 41 of 48 in three social trials
+    // (docs/TRIALS.md, "Fast iterations", 6), the newcomer 7.
+    if p[1] == "woken" && !["hurt", "theft"].contains(what) && !["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 0; }
     if ["speech", "hurt", "theft"].contains(what) { return 1; }
     // Kindness, dealings, lessons, asking to belong, and anything hostile.
-    if ["wave", "nod", "give", "offer", "accept", "teach", "tend", "heal", "join", "welcome"].contains(what) { return 1; }
+    if ["wave", "nod", "give", "offer", "accept", "teach", "tend", "heal", "join", "welcome", "host"].contains(what) { return 1; }
     if ["attack", "strike", "shoot", "bowshot", "firebolt", "throw", "threaten", "seize"].contains(what) { return 1; }
     0
 }
@@ -933,6 +955,18 @@ fn wakes(e) {
 // overheard speech 0.45), the same perception again within `repeat_s` counted in its slot,
 // someone who came into view noted again only after `sighted_s`. Measured on the island
 // (docs/TOWN_LIFE.md): without the floor a fifth of the slots held answered greetings.
+// What a woken resident's mind gets, read by the mind service: at most `cap` woken residents of
+// one settlement are on stage (thinking and talking at the full rate) at once; beyond it the
+// least recently engaged is off stage (0: no cap). A woken resident's first thought waits at
+// most `wait_s` for its mind to be made (its identity from the world's facts, then its ring).
+fn woken_stage(k) {
+    switch k {
+        "cap" => 6,
+        "wait_s" => 60,
+        _ => 0,
+    }
+}
+
 fn woken_ring(k) {
     switch k {
         "slots" => 24,
@@ -995,6 +1029,7 @@ fn skill_io(skill) {
         "sleep" => #{ takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" },
         "rest" => #{ takes: "8 seconds", gives: "a little energy" },
         "wait" => #{ takes: "time", gives: "nothing: time passes" },
+        "host" => #{ takes: "a person beside you, and a house of your household's (at your home door), 2 s", gives: "they are your guest until 7 in the morning: they know where your house is (their place \"lodging\"), may sleep there, and may take from your household's store" },
         "wave" => #{ takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them: a greeting, or an answer to theirs" },
         "nod" => #{ takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them: a greeting, or an answer to theirs" },
         "appraise" => #{ takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" },

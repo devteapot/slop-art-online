@@ -1,0 +1,131 @@
+{
+ "households": [
+  {
+   "key": "tanglewood-cottage",
+   "members": [
+    {
+     "name": "Ysolde Fenwick",
+     "age": 61,
+     "sex": "f",
+     "occupation": "healer",
+     "role": "a chapel sister who left Brackenford's order years ago and keeps a healer's cottage in the old forest, where the sick of every settlement find their way to her",
+     "knows": [
+      "medicine",
+      "planting",
+      "fire",
+      "cooking",
+      "mending",
+      "shelter"
+     ],
+     "parents": [
+      "Sister Elspeth",
+      "Alwin Wren"
+     ],
+     "ties": [
+      "trades salves and herbs with Betony Mossfoot of Fernhollow",
+      "buys roots and barley from Marra Brine of the Saltings",
+      "tended Odile Vance's mother through her last winter in Kettlebridge",
+      "still writes to Sister Elspeth at the chapel, though she will not go back through the gate",
+      "grudges the Brackenford gate-due and says so to anyone who will listen",
+      "old friend of Alwin Wren, who taught her the charms the sisters would not"
+     ]
+    },
+    {
+     "name": "Orla Fenwick",
+     "age": 34,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Ysolde's daughter, born at the cottage; keeps the forest clearing's roots, barley and beehives and carries the surplus to Ferncross and the Fernhollow stall",
+     "knows": [
+      "planting",
+      "cooking",
+      "basketry",
+      "fire",
+      "storage",
+      "medicine"
+     ],
+     "parents": [
+      "Ysolde Fenwick"
+     ],
+     "ties": [
+      "daughter of Ysolde Fenwick",
+      "trades barley and honey with Vetch Quill's hives and the Ferncross woodcutters",
+      "courts Cael Tarn's nephew at the Sootwood pits, which her mother does not approve of",
+      "owes Alder Rush of Fernhollow a share of last autumn's honey",
+      "friendly with Rill Fenlake of the Lakemead, who punts the lake for fish",
+      "worries the wolves come closer to the clearing each winter"
+     ]
+    },
+    {
+     "name": "Hollis Fenwick",
+     "age": 9,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Orla's son; knows every path of the clearing and the names of his grandmother's herbs, and is being taught his letters from a chapel psalter",
+     "knows": [
+      "planting",
+      "mending"
+     ],
+     "parents": [
+      "Orla Fenwick"
+     ],
+     "ties": [
+      "son of Orla Fenwick",
+      "grandson of Ysolde Fenwick",
+      "plays with Fennel Underbank and Bracken Rush when the Fernhollow folk come up the path",
+      "afraid of the wolves and of the deep forest beyond the clearing",
+      "carries Ysolde's salve packets to the Ferncross market"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "the-gate-letter",
+   "kind": "secret",
+   "summary": "Sister Elspeth has written to Ysolde asking her to come back to Brackenford's chapel before the winter, and offering to speak to the Reeve about a pardon for her leaving; Ysolde has told no one, and the letter sits under her herb ledger.",
+   "secret": true,
+   "people": [
+    "Ysolde Fenwick",
+    "Sister Elspeth"
+   ],
+   "sides": {
+    "Ysolde Fenwick": "She has not answered. She left the chapel over the gate-due and the sisters' silence about it, and going back would mean kneeling to a town that outlaws her neighbours at Coldwell; but she is sixty-one, and the cottage is a long way from a surgeon's hands.",
+    "Sister Elspeth": "She writes as an old friend and not as an elder sister: she wants Ysolde's herbs and her steady hands back before the winter coughs come, and she believes the Reeve would grant the pardon quietly if Ysolde asked. She does not know Ysolde has told her daughter nothing."
+   }
+  },
+  {
+   "id": "the-suit-at-the-pits",
+   "kind": "courtship",
+   "summary": "Orla has been walking to the Sootwood charcoal pits to see Pell Tarn's cousin, a burner named Cael's nephew, and Ysolde has forbidden him the cottage path; Orla goes anyway when the loads are carried.",
+   "secret": false,
+   "people": [
+    "Orla Fenwick",
+    "Ysolde Fenwick",
+    "Hollis Fenwick"
+   ],
+   "sides": {
+    "Orla Fenwick": "She is fond of him and tired of her mother deciding who may come up the path; she thinks Ysolde's grudge against the smoke and the pits is an old woman's quarrel, and she will not give him up.",
+    "Ysolde Fenwick": "She does not trust charcoal burners near her herb beds, and she has heard the man drinks; she fears Orla will end up keeping a pit house with a baby on her hip and no one to heal her when the fever comes. She has not said the real reason: she does not want to lose her daughter to the wood road.",
+    "Hollis Fenwick": "He likes the man, who taught him to stack kindling, and he does not understand why his grandmother's face closes when his name is said."
+   }
+  },
+  {
+   "id": "the-winter-store",
+   "kind": "debt",
+   "summary": "Ysolde owes Alder Rush of Fernhollow for a load of fibre and two pots of salve base taken on credit in the spring, and the debt falls due at the first frost; Orla's honey was promised against it and the hives have been poor.",
+   "secret": false,
+   "people": [
+    "Ysolde Fenwick",
+    "Orla Fenwick",
+    "Alder Rush"
+   ],
+   "sides": {
+    "Ysolde Fenwick": "She took the fibre because her salve store was empty and the sick kept coming; she means to pay, but she will not ask the chapel for a mark and she is ashamed that a healer's credit is thin.",
+    "Orla Fenwick": "She promised the honey before she counted the hives, and now she is short; she has not told her mother how short, and she is thinking of selling her grandmother's silver spoon, which is the only thing of her father's house left.",
+    "Alder Rush": "He keeps the hollow's store and cannot carry a debt through the winter; he likes Ysolde and would take salves and herbs in place of marks, but he needs to know before the frost what he will get."
+   }
+  }
+ ]
+}

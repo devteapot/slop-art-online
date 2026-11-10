@@ -1424,6 +1424,24 @@ pub struct Prior {
     pub times: u16,
 }
 
+/// A guest of a household (private; the database owner reads it): `guest` may sleep in the
+/// `house` and take from its household's store until `until_ms` (the `host` skill).
+#[spacetimedb::table(accessor = guest)]
+pub struct Guest {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub guest: u32,
+    pub host: u32,
+    pub house: u64,
+    pub x: f32,
+    pub y: f32,
+    pub since_ms: u64,
+    #[index(btree)]
+    pub until_ms: u64,
+}
+
 /// How many perceptions a resident's ring has taken in (private; the next slot is
 /// `seq % woken_ring("slots")`).
 #[spacetimedb::table(accessor = prior_head)]

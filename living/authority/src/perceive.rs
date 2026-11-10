@@ -262,7 +262,8 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     Ok("made a baby crying".into())
 }
 
-pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) -> Result<(), String> {
+/// `decided`: the words were chosen (a player's line, a mind's line), not a graph's `say` leaf.
+pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, decided: bool, now: u64) -> Result<(), String> {
     let text = text.trim();
     if text.is_empty() {
         return Ok(());
@@ -313,7 +314,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) 
         let addressed = to == c.id || (to == 0 && (close == 1 && d <= 6.0 || mentions(&text, &c.name)));
         // Spoken to by someone with a mind: an instinct-only resident wakes before it hears it.
         let c = if addressed {
-            crate::woken::engage(ctx, c.id, speaker, "speech", now);
+            crate::woken::engage(ctx, c.id, speaker, "speech", decided, now);
             ctx.db.character().id().find(c.id).unwrap_or(c)
         } else {
             c

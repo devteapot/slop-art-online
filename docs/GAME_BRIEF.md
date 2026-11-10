@@ -25,7 +25,7 @@ Findings move from the lab to the game when a core version is released and the g
 - **The world continues offline.** When a player leaves, their character keeps living under an AI mind. That mind's behavior should come from how the player actually played, so the character stays recognizably theirs. A custom external mind supplied by the player is a later option.
 - **Running cost** of model calls is set aside for now.
 - **Decisions of 2026-11-09 (user):**
-  - **Controls:** WASD movement, and you face the cursor. Left and right mouse are basic attacks; Q/E/R are skills; Shift is the dodge; F interacts (talk, pick up; Genshin-style). The camera aligns on a middle-button tap only, so R is free for a skill. Skillshots fire toward the cursor; targeted skills hit the enemy under or nearest the cursor.
+  - **Controls:** WASD movement, and you face the cursor. Left and right mouse are basic attacks; Q/E/R are skills; Shift is the dodge; F interacts (talk, pick up; Genshin-style). The camera aligns on a middle-button tap only, so R is free for a skill. Skillshots fire toward the cursor; targeted skills hit the enemy under or nearest the cursor. F, and C, I and K beside it, are built as [verbs](#verbs-acting-on-the-world-2026-11-10) (2026-11-10).
   - **Starter skills:** the mixed six (sword strike, targeted; bow shot, skillshot; fire bolt, skillshot spell; block, held; dodge roll; heal, targeted on an ally or yourself), and more where possible. These are shared skills any character can learn; classes emerge from combinations.
   - **Death:** permanent, then you rejoin as a new identity. A development-only shortcut makes rejoining quick on scratch databases.
   - **Day length:** tune freely for testing. The server's effective clock stays as it is for now.
@@ -510,6 +510,10 @@ Presentation only: the authority decides what every resident does ([town life](T
   - A hidden sleeper still animates.
   - Clips are judged from stills, not in motion: `play` had one 41° jerk inside its loop (fixed below).
 
+### Residents who answer (town life layer 2, notes for the client)
+
+Not built in the client; what it would need ([layer 2](TOWN_LIFE.md#layer-2-residents-who-answer)). Residents someone engages get minds and answer through speech rows like anyone. One new act for players: **`host`**, taking someone in as one's household's guest until morning, sent as `human_act` `{"do": "host", "target": {"id": N}}` (refused without a house at the player's home door). A player who is taken in perceives it as an experience ("… takes you in as their guest until 07:00 …") and gains a `lodging` place in `my_places`; the `guest` table is private. No new public table or view.
+
 ## Client polish: first load, getting up, root motion, dawn and storm (2026-11-09)
 
 Client presentation and the clip tools only (`living/game`, `living/tools`).
@@ -576,7 +580,7 @@ The client receives only what its character perceives ([perception](PERCEPTION.m
 
 Client presentation (`acbbda7`), recorded here after the fact.
 
-- **Wolves** are the rigged `wolf.glb` (`living/tools/blender/wolf.py`, run by `gen_anim.sh`; git-ignored), in the shared vertex-colour toon, so a pack adds no material. Gaits come from one family, walk, trot and run (1.3, 3.4 and 7.0 m/s natural), through `gait.rs`. A move plays the bite or the leap, chosen by the skill card's aim (`creature` or `dash`), never by the skill's name (`combat::animal_clip`). They also have a flinch and a death held on its last pose. A wolf is scaled by life stage. Deer are still the box creature.
+- **Wolves** are the rigged `wolf.glb` (`living/tools/blender/wolf.py`, run by `gen_anim.sh`; git-ignored), in the shared vertex-colour toon, so a pack adds no material. Gaits come from one family, walk, trot and run (1.3, 3.4 and 7.0 m/s natural), through `gait.rs`. A move plays the bite or the leap, chosen by the skill card's aim (`creature` or `dash`), never by the skill's name (`combat::animal_clip`). They also have a flinch and a death held on its last pose. A wolf is scaled by life stage. Deer are rigged too since the pass below.
 - **Two `live.rs` fixes:** a corpse no longer vanishes when the death's row arrives in the same update as the body leaves, and a body more than 6 m from where it is drawn (a teleport) snaps there.
 - **Arid lands:** a land whose rivers run dry (`water.dry_rivers`, the megacity floor's wastes) gets dry earth, cracked mud and gravel ground layers (16 in all) and its own dressing, `wastes`, `scrubland` and `badlands`. The megacity's wall line draws a 14 m cyberpunk wall. Look-dev draws any land seed with `LIVING_GAME_SEED=<seed.json>` ([floors](FLOORS.md)).
 - **Assets:** `just living-game-assets` now paints every texture set (`living-game-textures --set all`): the ground and the model surfaces that `style.rs` binds on scenery. Before, a fresh checkout got the ground only and no model detail.
@@ -591,7 +595,118 @@ From Casey Muratori's animation-blending stream, checked against the client. Cli
 - **Masked upper-body layers.** Clips marked `layer: "upper"` in `clips.json` (13: strikes, bow, cast, block, heal, wave, nod, appraise…) play on the spine, arms and head while the body moves, and whole-body when standing; override with a mask, not additive (VRoid clips are T-pose-relative, so an additive strike turns the arms twice). Dodge, death, sitting, standing up and `play` stay whole-body.
 - **Foot IK** (`ik.rs`, people only). During contact windows planted feet go to the ground (and stair treads: `Island::foot_height`), held at the heel or ball where they came down; the hips lower to reach, rise up to 0.18 m; feet tilt to the slope within 26°. Full within 25 m of the camera, gone by 30 m. Supporting-foot gap on stairs: median 3.5 → 1.7 cm, inside the surface 41% → 11%. Corrections blend rest-relative (`rest_relative`).
 - **Cost.** Frame times unchanged at the town, forest and hamlet; material counts identical. Per character: Bevy's animation step 16.5 → 13.9 µs (one graph per file), plus 0.5 µs for `anim.rs` and 4.6 µs per IK-solved character: about +2.5 µs a character overall.
-- **Open.** Stairs p90 still 15 cm (toes over step edges); stopping far from double support still drags; the wolf's blends are unmeasured and it has no IK. `probe.rs` is the look-dev harness (speed ramps, one-shots while walking, frame sequences); `foot_slide.py` gains `--bins`, `--floors`/`--gap` and `--stairs`.
+- **Open.** Stairs p90 still 15 cm (toes over step edges); stopping far from double support still drags. The wolf's blends were measured in the pass below. `probe.rs` is the look-dev harness (speed ramps, one-shots while walking, frame sequences); `foot_slide.py` gains `--bins`, `--floors`/`--gap` and `--stairs`.
+
+## The megacity kit (2026-11-09)
+
+Built on `megacity-1` for the megacity floor's second pass ([floors](FLOORS.md#the-megacity-second-pass)). `living/tools/blender/city.py` builds on `buildings.py`'s helpers and conventions. `buildings.py` now runs its `main()` only as a script, so `city.py` can import it. `gen_city.sh` (in `just living-game-assets`) writes `envs/cyberpunk_megacity/<kind>/` and refreshes `living/rules/data/buildings.json`: 327 models in about 10 s.
+
+- **Buildings:**
+
+  | Kind | Forms | Height | Triangles, mean and max |
+  |---|---|---|---|
+  | megatower | blade, stepped, twin, needle | 170-326 m | 6.5k / 10.2k |
+  | arcology | arcology | 187-225 m | 13.9k / 14.5k |
+  | megablock | slab, court, stack | 61-111 m | 22.2k / 33.5k |
+  | neon_tower | neon | 51-57 m | 3.5k |
+  | old_block | narrow, wide | 19-31 m | 3.7k / 5.0k |
+  | block, market, workshop | as the cyberpunk kit, in the city's palette | | |
+  | shanty | shack, stack, lean | 3-13 m | 0.3k / 0.9k |
+  | container | stack2, stack3, home2, home3 | 5-9 m | 0.7k / 1.1k |
+  | warehouse | shed, sawtooth | 18-22 m | 0.8k / 1.0k |
+  | ruin | shell, stump | 4-14 m | 0.5k / 0.7k |
+  | wall_tower | tower | 33-38 m | 0.4k |
+
+- **Transport:** highway (ring: a 22 m deck at 9 m; arterial: 16 m at 17 m; 24 m long on a hammerhead pier, with barriers, a lit strip, lane marks, lamp masts and sometimes a sign gantry), about 0.5k triangles.
+- **Street dressing:** vending (banks of 2 or 3), vent (stack, grate), trash (bags, bins, heap), barrier (jersey, bollards, checkpoint), vehicle (car, van, bike, truck), hologram (pole, disc), scaffold, crane (port gantry, tower crane), salvage (heap, wreck), all under 1.1k triangles. The cyberpunk lamps, kiosks, food stalls, neon signs, billboards, cables, crates, walkway, wall and street props are made again in the same folder, so a ward finds every model in one environment.
+- **Our own text and marks.**
+  - A 14-segment neon font writes real words on signs: brands (KAIROS, HALCYON, VANTA, ORRERY, MERIDIAN, NOVA, TESSER, OKAPI) with their marks (ring, sun, chevron, orbit, bar, star, cube); trades (NOODLE, RAMEN, 24H, HOTEL, KARAOKE, REPAIR…); road signs (RING 1, PORT, CORE…).
+  - All names are invented here, and nothing comes from an existing game or franchise.
+  - The kit's other pseudo-glyph boards are `buildings.py`'s.
+- **Lit windows.** Megatowers and arcologies use curtain walls with lit runs per storey, so a few quads per storey stand for a whole floor of offices. Megablocks use punched windows lit per household. A share of floors stays dark.
+- **Materials and surfaces.** These are the shared ones: `Body`, `Glow`, and the neon colours `GlowPink`, `GlowCyan`, `GlowAmber`, `GlowRed` and `GlowWhite`. No building has materials of its own. Parts carry the existing surface tags in their vertex alpha: concrete, metal, glass, plastic, cloth, brick, plaster, planks, leaves and earth. Grime is a vertex-colour gradient and streaks; neon is the glow materials. No new texture layers were added. A metal-panel or grime layer would change `surfaces.py`, `paint.py` and the game's table (`style.rs`) together, and the game draws no detail when `material.txt` does not match its table, so that is a client change for later.
+- **Measured in the captures.** Near the core: 180-210 models and about 900 meshes in view. At the market and the overpass: 580-660 models and 2,100-2,600 meshes. Frame times are in [floors](FLOORS.md#staged-generation-and-the-largest-floor).
+
+### Client notes for the megacity floor
+
+Nothing in `living/game` was changed on `megacity-1`; its client patch landed on 2026-11-10.
+- **Drawn already.** The client draws the new lots and props through their model files and kind folders, and the folder's `cyberpunk` prefix dresses its people in the cyberpunk look (`characters::place_style`).
+- **The patch** (applied on 2026-11-10 with the verbs work, and deleted; it was `docs/patches/megacity-client.patch`) did two things; the captures used a private build with it applied:
+  - `island.rs` `road_layer` asks `living_rules::settle::road_surface(style)` for the paving, so the new district styles get pavers, setts, earth or gravel, and future styles need no client change. Without it, the corporate, neon, megablock and market wards draw cobbles.
+  - `assets/envs/cyberpunk_megacity.json` is a showcase environment whose `lamp` and `neon_sign` slots carry the glow that lights the floor's lamps at night. Without it, megacity lamps get no point lights, because the island takes a lamp's light from its environment's slot.
+
+**Further work, by priority:**
+1. **The world being made.** Subscribe to the public `genesis` row and show progress (`step`, `steps`, `label`) while a floor is created: 20 s at 4096 m and 90 s at 8192 m on the dev-box. Wait for `done` before drawing the land.
+2. **A land cache by digest.** At 8192 m the client regenerates the land for 37-39 s with about 0.8 GB, and look-dev's tour photographs before it is ready (its first shot waits a fixed 6 s). Cache the generated land under the `land` row's digests, and gate tours and arrival on the land being in.
+3. **The floor's own night.** The judge of the blind A/B found the haze beyond about 50 m and the flat blue-violet palette the main weaknesses. `island.json`'s mood curve applies to every land; a floor needs its own curve (longer fog distances at night, a warmer key, stronger bloom on neon), read from the seed or the environment.
+4. **Light from props.** Props get no point lights (`Item::glow` is unset for props). Holograms, neon signs and wall towers' floodlights could take the environment slot's glow as lots do, capped like lamps.
+5. **Windows through the evening.** Every glowing part scales together with the hour. A per-window hash against the hour, in `toon.wesl`'s glow path, would switch offices off one by one through the night without new materials.
+6. **Steam.** `vent` props are the places for rising steam: a small flipbook or particle effect at their position, more in rain.
+7. **Large models and the cutaway.** The arcology is about 100 m across. The cutaway's reach comes from a model's fitted size, so it works, but standing beside such a building hides it in vistas taken from the far side. Judge the cutaway by the camera's line, not only by nearness.
+8. **Two-sided signs.** Text on container homes reads mirrored from behind. The kit can make those signs two-sided; the client needs no change.
+
+## Deer, fight and greeting framing, wolf gaits, marker checks (2026-11-09)
+
+Client presentation and the clip pipeline only.
+
+- **One quadruped builder.** `living/tools/blender/quadruped.py` holds the rig, leg IK, gaits, keying, paw markers and export; `wolf.py` and the new `deer.py` give proportions, clips and bodies, with the same 21 bones. Refactored, the wolf came out byte-identical, before the fix below.
+- **The wolf's clips were 1.25 × too long.** Blender exported its 30 fps keys at its default 24 fps, so `walk` was 1.0 s in the file and 0.8 s in the sidecar. The game seeks gaits by the sidecar, so the wolf played 80% of each cycle and jumped back, and its bite snapped at 0.69 s instead of 0.55. The builder now sets the scene to 30 fps.
+- **Deer** (`deer.glb`, 910 triangles, 1.0 m at the shoulder): idle (grazing, then head up chewing and looking round; the rules show no `graze` act yet, so a standing deer grazes as its idle), graze, walk 1.3, trot 3.7 (the rules' deer speed), run (a bound, 4.6; the rules' flee is 4.26), startle, hit and death. The sidecar's `band: 1.04` narrows the animal blend (`gait.rs`), so trot and flee each play one gait. Long legs use cannons that turn with the leg, front hooves that fold back, and a fit that keeps each leg within its length (worst overreach 2.6–5.1 cm, against the wolf's 10–14 cm). Same shared vertex-colour material, no new one.
+- **Connected deer** (`live.rs`, `bodies.rs`): drawn from the file through `anim.rs`, like the wolf; scaled by life stage. A deer that sets off at 4 m/s or more after standing a second (fleeing; a wander tops out at 3.9) plays `startle` where it stood, held for 0.42 s, then catches up. Standing loops start at an offset per body, so a herd doesn't graze in unison. Animals asleep or resting are no longer hidden as if indoors.
+- **Body on the ground** (`bodies::lie_on`): wolves and deer tilt to the plane through the ground under their fore paws, hind paws and sides, and stand at its height. That is one rotation per animal and no bone IK. On the hilly meadow, planted paws' |gap| p90 went 7.0 → 1.4 cm, and the share more than 3 cm into or above the ground 35% → 1% (flat ground: 1.1 cm, 0%).
+- **Wolf paw slide** (look-dev wolf, `LIVING_GAME_PLAYER=beast:wolf`, flat ground, 0 → 8 → 0 m/s, 3 runs each; the slowest planted paw's median slide). f44b66a^: 0.29 m/s at 1–2 m/s, rising to 1.75 at 7–8, with 12–19 cm drift per contact. f44b66a with the phase sync: the same, because the clips' timing was off. Now: 0.002–0.36 m/s, 0.7–4.2 cm. `gait.rs` records paw tips; `foot_slide.py --paws`.
+- **Camera framing** (`camera.rs`, `Context`): the view frames you with your opponents in a fight you are in (any move or blow between you in the last 4 s; 10–18 m by their spread), with whoever you talk with (8 m), and with whoever you trade a wave or nod with (9–15 m), for the exchange plus 3.5 s. It never turns; it eases in over about 1.5 s and out over about 2.5 s, and a context outlasts its evidence by 1.2 s, so a wave and its answer are one framing. Turning the view yourself dismisses it until that context ends. Someone greeting you now counts too (`town.rs`, `greeted_by`).
+- **Marker check** (`living/tools/marker_check.py`, at the end of `gen_anim.sh`): per character and looping gait, it fails on missing markers and warns on split contacts, a contact share far from the gait's range, unpaired feet, a phase 0 that isn't the synced foot's touchdown, a baked clip whose length differs from its sidecar, and planted feet that slide more than 4 cm in the baked take (pure Python, read from the GLB). Today: the wolf and the deer are clean; the people's Kimodo takes slide 3–10 cm per contact (sneak the most).
+- **Open.** The rules don't show `graze`, so the client can't tell a grazing deer from a standing one. A flee from a place in this build ran toward it in scripted scenes (authority, `motion.rs` `GOAL_FLEE`; not investigated here). Deer have no antlers: the projection carries no sex. No paw IK beyond the body tilt, so steps and banks narrower than the body still gap.
+
+## Verbs: acting on the world (2026-11-10)
+
+A player could move, fight and greet, but not gather, eat, craft, build, give, trade, teach, sleep, read or write, or see their pack. Residents do all of it through the rules. The client now offers every one of those acts, and it does so **from the rules' own data, with nothing written per skill** ([`verbs.rs`](../living/game/src/verbs.rs), [`ui/verbs.rs`](../living/game/src/ui/verbs.rs)). A skill the rules add appears for players with no client change.
+
+**Where the acts come from:**
+- **Which skills exist:** the rules' catalog (`living_rules::catalog::SKILLS`: whether a skill takes a target or an item, and its help). The client also reads the world's installed skill script (the public `script` row, one subscription of about 70 kB, sent again only on an install) and compiles it with the same `living_rules::script` the authority runs. A skill the script defines (`<name>_check` and `<name>_done`) that this client's catalog lacks is listed as well; its check decides whether it takes a target.
+- **What applies to what:** the rules' own `<skill>_check`, run on what my character knows: my pack (`my_inventory`), my know-how (`my_know_how`), my needs (`my_vitals`), and the target as I perceive it (`seen_characters`, the resource or structure row). What a target holds is not perceived, so a check is run as if it holds what is asked of it. A gather is offered on a bush, not on a person; "eat wood" is never offered; "craft bow" is offered only once I know archery and carry the wood, fibre and stone.
+- **What each takes and gives:** the script's `skill_io`.
+- **The authority decides.** An option is a guess from my side of the world. Every act goes through `human_act`, the act path minds use (`acts::submit`); an ongoing skill such as sleep becomes my behaviour as before. The outcome comes back as my `act` experience rows ("You did what you had decided: …", "What you had decided did not work out: …: why") or as the reducer's error.
+
+**Generic rules, not per skill:**
+- Real-time skills (a combat shape with `real_time`) belong to the skill bar and are not listed.
+- A skill whose script has no check says nothing about what it applies to. It is offered only toward people of my kind (join, welcome, walk to, follow), never toward things, and listed after the checked ones.
+- Item choices come from my pack, my know-how and the item names the skill's help lists (`(item: spear|cloak|…)`), plus every item there is toward something that may hold things (taking from a store). A skill whose check refuses an empty text but takes some text needs words: the text box opens with the act's name (write, found).
+- A skill with more than two options becomes one row that opens its own list (`give ›`, `offer ›` and what to ask in return).
+- A skill whose arguments include a behaviour graph (`rework`) is left out: the client cannot write one.
+- A tap does the most likely act: the one I last chose for that kind of target, else on a thing the first the rules allow that needs no further choice and is no use of force (the combat shape's `hostile`, `force`, `menace`). A person has no default: a tap opens the list.
+- Things are named to the authority as acts name them, by kind (`{"nearest": "berry_bush"}`). When the one under the cursor is not the nearest of its kind, the act becomes a walk to it and then the act on the nearest (`{"seq": [goto, act]}`), which runs as my behaviour.
+
+**Controls and HUD** (only relevant information on screen; everything below is hidden until it matters):
+- **F** acts on what is under the cursor, else the nearest thing or creature within 3 m: a tap does the likely act, holding it (0.28 s) or a tap with no likely act opens the list. With nothing to aim at, F opens my own list. When something is in reach, a small hint over the bar names the likely act (`F gather`) or the target (`F a stranger ›`).
+- **C** opens the list of acts on myself (eat, sleep, rest, craft, build, write, drop, experiment, …), with what I carry ("eat berries ×4").
+- **The list** sits over the bar: 1–9 and 0 or a click picks, Esc goes back or closes, F or C closes it. The mouse picks from it rather than firing the bar while it is open.
+- **Notes** of what the authority said rise just over the hint for about 4.5 s: edged green when done, red when refused with the authority's reason ("You don't know how to make a bow (archery: learn it from someone who knows it or from writing, …)"), grey when an ongoing act began.
+- **I** toggles the pack: each item and how many, its worth as food (the rules' `nutrition`), and how much I carry against the rules' `carry_limit`. Clicking an item lists what I can do with it myself.
+- **K** toggles know-how: the techniques I know and how I came by each, then every skill in the rules (the catalog's and the script's own), with the selected one's help and what it takes and gives. Up/Down or a click selects.
+- **Requests to people:** give, offer a trade, accept one, teach what I know, join, welcome, host (the townlife-2 act appeared here when it merged, with no client change), tend, appraise, wave, nod, and asking to be taught a technique I lack (a line through `human_say` to them: "Would you teach me archery?").
+- Gestures stay on G, B and V (`town.rs`).
+
+**On a land world the client now draws resources and small structures** (`world::things`, which was tile worlds only): berry bushes, boulders, reeds, clay banks, fishing spots, stores, hearths, signs, traps and remains, from the `resource_node` and `structure` rows of the near window (±3 chunks, re-centred with the terrain edits). Buildings stay the island's lots, gates its walls, and trees its forest (35,699 tree rows on the island seed; an act names a tree by kind).
+
+**Evidence** (2026-11-10, scratch island world `verify-client-verbs-1110-003532`, the real game client headless, `.local/living/verify/<run>/game2` and `game3`): gather twice at a berry bush, eat berries, craft a spear, write a tablet ("Berries by the arrival road, east side."), give berries to a resident, sleep, and craft a bow refused with the rules' reason; each outcome is an `act` row in the character's experience, and the pack and know-how before and after match. Admin scene setup, named: the spear and writing techniques, 4 wood and 1 stone granted; one resident held still beside the player. Genericity: a scratch authority with a throwaway `polish` skill (a catalog line and three script functions, never committed) on `verify-client-verbs-gen-1110-004303`; the unchanged client binary (same SHA-1) listed `polish` in F's list on a boulder and in know-how with its takes and gives, and the authority performed it (+1 stone).
+
+**Cost** (Mac M4 Pro, 1600×900 headless, uncapped, load average 6–17 from other agents; arm A is `6de2bad`, arm B the same plus this change, both built from one commit's sources with the same assets):
+- **Look-dev at the usual spots, two runs per arm:** models, meshes, distinct meshes, materials and triangles identical; frame means within the runs' spread. Hamlet 5.87 / 5.67 against 5.73 / 5.93 ms, town 7.23 / 5.70 against 5.73 / 7.90 ms, forest 4.57 / 4.67 against 4.63 / 4.67 ms.
+- **Connected, at the island's arrival:**
+  - the drawn resources and stores add 100–150 meshes in view, 3 distinct meshes and 1 material; toon materials stay at 42;
+  - frame means 5.53 / 5.53 ms against 5.22 / 6.90 ms;
+  - the client checks the rules for what F aims at 4 times a second, and for a whole list only when one opens.
+
+**What is still off:**
+- **A skill in `skills.rhai` alone is not a skill yet for anyone.** The authority's graph parser accepts only catalog skills (`graph::check`, "unknown skill"), so a new skill needs a catalog line in `living_rules` too (as `host` had). The client already lists a script-only skill; the core would need to read a skill's spec from the script (`<name>_spec()`) for the script to be the only place.
+- What is offered is checked on what my character knows. The client fills what it does not know: the ground under me is grass, the season summer, the hour noon; a target holds what is asked of it. The authority's refusal covers the rest.
+- Quantities are one at a time (give, store, drop, trade 1 for 1).
+- Reading a sign: `read` takes no target in the catalog, so F does not offer it on a sign; from C it reads a tablet I carry.
+- Storage contents are not perceived, so "take ›" lists every item there is.
+- A list shows 16 rows; the first 10 have number keys, the rest are picked with the mouse.
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**

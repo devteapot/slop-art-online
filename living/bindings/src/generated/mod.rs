@@ -40,6 +40,7 @@ pub mod community_table;
 pub mod community_type;
 pub mod connection_table;
 pub mod connection_type;
+pub mod create_floor_reducer;
 pub mod cry_prompt_type;
 pub mod cursor_type;
 pub mod deliberation_table;
@@ -58,13 +59,22 @@ pub mod fighter_seen_table;
 pub mod fighter_seen_type;
 pub mod fighter_table;
 pub mod fighter_type;
+pub mod floor_seed_table;
+pub mod floor_seed_type;
 pub mod gate_table;
 pub mod gate_type;
+pub mod genesis_step_reducer;
+pub mod genesis_table;
+pub mod genesis_timer_table;
+pub mod genesis_timer_type;
+pub mod genesis_type;
 pub mod genome_table;
 pub mod genome_type;
 pub mod grant_items_reducer;
 pub mod grant_know_how_reducer;
 pub mod grant_repertoires_reducer;
+pub mod guest_table;
+pub mod guest_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
 pub mod human_move_reducer;
@@ -195,6 +205,7 @@ pub mod slow_timer_table;
 pub mod slow_timer_type;
 pub mod spawn_battle_reducer;
 pub mod spawn_crowd_reducer;
+pub mod spawn_newcomer_reducer;
 pub mod spawn_skirmish_reducer;
 pub mod stats_table;
 pub mod stats_type;
@@ -260,6 +271,7 @@ pub use community_table::*;
 pub use community_type::Community;
 pub use connection_table::*;
 pub use connection_type::Connection;
+pub use create_floor_reducer::create_floor;
 pub use cry_prompt_type::CryPrompt;
 pub use cursor_type::Cursor;
 pub use deliberation_table::*;
@@ -278,13 +290,22 @@ pub use fighter_seen_table::*;
 pub use fighter_seen_type::FighterSeen;
 pub use fighter_table::*;
 pub use fighter_type::Fighter;
+pub use floor_seed_table::*;
+pub use floor_seed_type::FloorSeed;
 pub use gate_table::*;
 pub use gate_type::Gate;
+pub use genesis_step_reducer::genesis_step;
+pub use genesis_table::*;
+pub use genesis_timer_table::*;
+pub use genesis_timer_type::GenesisTimer;
+pub use genesis_type::Genesis;
 pub use genome_table::*;
 pub use genome_type::Genome;
 pub use grant_items_reducer::grant_items;
 pub use grant_know_how_reducer::grant_know_how;
 pub use grant_repertoires_reducer::grant_repertoires;
+pub use guest_table::*;
+pub use guest_type::Guest;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
 pub use human_move_reducer::human_move;
@@ -415,6 +436,7 @@ pub use slow_timer_table::*;
 pub use slow_timer_type::SlowTimer;
 pub use spawn_battle_reducer::spawn_battle;
 pub use spawn_crowd_reducer::spawn_crowd;
+pub use spawn_newcomer_reducer::spawn_newcomer;
 pub use spawn_skirmish_reducer::spawn_skirmish;
 pub use stats_table::*;
 pub use stats_type::Stats;
@@ -456,6 +478,12 @@ pub use world_type::World;
 pub enum Reducer {
     ClientConnected,
     ClientDisconnected,
+    CreateFloor {
+        seed_json: String,
+    },
+    GenesisStep {
+        t: GenesisTimer,
+    },
     GrantItems {
         id: u32,
         item: String,
@@ -577,6 +605,9 @@ pub enum Reducer {
         n: u32,
         minded: bool,
     },
+    SpawnNewcomer {
+        name: String,
+    },
     SpawnSkirmish {
         n: u32,
         spacing: f32,
@@ -601,6 +632,8 @@ impl __sdk::Reducer for Reducer {
         match self {
             Reducer::ClientConnected => "client_connected",
             Reducer::ClientDisconnected => "client_disconnected",
+            Reducer::CreateFloor { .. } => "create_floor",
+            Reducer::GenesisStep { .. } => "genesis_step",
             Reducer::GrantItems { .. } => "grant_items",
             Reducer::GrantKnowHow { .. } => "grant_know_how",
             Reducer::GrantRepertoires => "grant_repertoires",
@@ -633,6 +666,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetWeather { .. } => "set_weather",
             Reducer::SpawnBattle { .. } => "spawn_battle",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
+            Reducer::SpawnNewcomer { .. } => "spawn_newcomer",
             Reducer::SpawnSkirmish { .. } => "spawn_skirmish",
             Reducer::Tick { .. } => "tick",
             Reducer::UseSkill { .. } => "use_skill",
@@ -647,6 +681,14 @@ impl __sdk::Reducer for Reducer {
             }
             Reducer::ClientDisconnected => {
                 __sats::bsatn::to_vec(&client_disconnected_reducer::ClientDisconnectedArgs {})
+            }
+            Reducer::CreateFloor { seed_json } => {
+                __sats::bsatn::to_vec(&create_floor_reducer::CreateFloorArgs {
+                    seed_json: seed_json.clone(),
+                })
+            }
+            Reducer::GenesisStep { t } => {
+                __sats::bsatn::to_vec(&genesis_step_reducer::GenesisStepArgs { t: t.clone() })
             }
             Reducer::GrantItems { id, item, qty } => {
                 __sats::bsatn::to_vec(&grant_items_reducer::GrantItemsArgs {
@@ -831,6 +873,11 @@ impl __sdk::Reducer for Reducer {
                     minded: minded.clone(),
                 })
             }
+            Reducer::SpawnNewcomer { name } => {
+                __sats::bsatn::to_vec(&spawn_newcomer_reducer::SpawnNewcomerArgs {
+                    name: name.clone(),
+                })
+            }
             Reducer::SpawnSkirmish { n, spacing } => {
                 __sats::bsatn::to_vec(&spawn_skirmish_reducer::SpawnSkirmishArgs {
                     n: n.clone(),
@@ -882,8 +929,12 @@ pub struct DbUpdate {
     familiar: __sdk::TableUpdate<Familiar>,
     fighter: __sdk::TableUpdate<Fighter>,
     fighter_seen: __sdk::TableUpdate<FighterSeen>,
+    floor_seed: __sdk::TableUpdate<FloorSeed>,
     gate: __sdk::TableUpdate<Gate>,
+    genesis: __sdk::TableUpdate<Genesis>,
+    genesis_timer: __sdk::TableUpdate<GenesisTimer>,
     genome: __sdk::TableUpdate<Genome>,
+    guest: __sdk::TableUpdate<Guest>,
     infant_cry: __sdk::TableUpdate<InfantCry>,
     inventory: __sdk::TableUpdate<Inventory>,
     join_request: __sdk::TableUpdate<JoinRequest>,
@@ -1026,12 +1077,24 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "fighter_seen" => db_update
                     .fighter_seen
                     .append(fighter_seen_table::parse_table_update(table_update)?),
+                "floor_seed" => db_update
+                    .floor_seed
+                    .append(floor_seed_table::parse_table_update(table_update)?),
                 "gate" => db_update
                     .gate
                     .append(gate_table::parse_table_update(table_update)?),
+                "genesis" => db_update
+                    .genesis
+                    .append(genesis_table::parse_table_update(table_update)?),
+                "genesis_timer" => db_update
+                    .genesis_timer
+                    .append(genesis_timer_table::parse_table_update(table_update)?),
                 "genome" => db_update
                     .genome
                     .append(genome_table::parse_table_update(table_update)?),
+                "guest" => db_update
+                    .guest
+                    .append(guest_table::parse_table_update(table_update)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(infant_cry_table::parse_table_update(table_update)?),
@@ -1316,11 +1379,23 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.fighter_seen = cache
             .apply_diff_to_table::<FighterSeen>("fighter_seen", &self.fighter_seen)
             .with_updates_by_pk(|row| &row.id);
+        diff.floor_seed = cache
+            .apply_diff_to_table::<FloorSeed>("floor_seed", &self.floor_seed)
+            .with_updates_by_pk(|row| &row.id);
         diff.gate = cache
             .apply_diff_to_table::<Gate>("gate", &self.gate)
             .with_updates_by_pk(|row| &row.id);
+        diff.genesis = cache
+            .apply_diff_to_table::<Genesis>("genesis", &self.genesis)
+            .with_updates_by_pk(|row| &row.id);
+        diff.genesis_timer = cache
+            .apply_diff_to_table::<GenesisTimer>("genesis_timer", &self.genesis_timer)
+            .with_updates_by_pk(|row| &row.scheduled_id);
         diff.genome = cache
             .apply_diff_to_table::<Genome>("genome", &self.genome)
+            .with_updates_by_pk(|row| &row.id);
+        diff.guest = cache
+            .apply_diff_to_table::<Guest>("guest", &self.guest)
             .with_updates_by_pk(|row| &row.id);
         diff.infant_cry = cache
             .apply_diff_to_table::<InfantCry>("infant_cry", &self.infant_cry)
@@ -1582,11 +1657,23 @@ impl __sdk::DbUpdate for DbUpdate {
                 "fighter_seen" => db_update
                     .fighter_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "floor_seed" => db_update
+                    .floor_seed
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "gate" => db_update
                     .gate
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "genesis" => db_update
+                    .genesis
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "genesis_timer" => db_update
+                    .genesis_timer
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "genome" => db_update
                     .genome
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "guest" => db_update
+                    .guest
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
@@ -1859,11 +1946,23 @@ impl __sdk::DbUpdate for DbUpdate {
                 "fighter_seen" => db_update
                     .fighter_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "floor_seed" => db_update
+                    .floor_seed
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "gate" => db_update
                     .gate
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "genesis" => db_update
+                    .genesis
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "genesis_timer" => db_update
+                    .genesis_timer
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "genome" => db_update
                     .genome
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "guest" => db_update
+                    .guest
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
@@ -2090,8 +2189,12 @@ pub struct AppliedDiff<'r> {
     familiar: __sdk::TableAppliedDiff<'r, Familiar>,
     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     fighter_seen: __sdk::TableAppliedDiff<'r, FighterSeen>,
+    floor_seed: __sdk::TableAppliedDiff<'r, FloorSeed>,
     gate: __sdk::TableAppliedDiff<'r, Gate>,
+    genesis: __sdk::TableAppliedDiff<'r, Genesis>,
+    genesis_timer: __sdk::TableAppliedDiff<'r, GenesisTimer>,
     genome: __sdk::TableAppliedDiff<'r, Genome>,
+    guest: __sdk::TableAppliedDiff<'r, Guest>,
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
@@ -2203,8 +2306,16 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.fighter_seen,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<FloorSeed>("floor_seed", &self.floor_seed, event);
         callbacks.invoke_table_row_callbacks::<Gate>("gate", &self.gate, event);
+        callbacks.invoke_table_row_callbacks::<Genesis>("genesis", &self.genesis, event);
+        callbacks.invoke_table_row_callbacks::<GenesisTimer>(
+            "genesis_timer",
+            &self.genesis_timer,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Genome>("genome", &self.genome, event);
+        callbacks.invoke_table_row_callbacks::<Guest>("guest", &self.guest, event);
         callbacks.invoke_table_row_callbacks::<InfantCry>("infant_cry", &self.infant_cry, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
         callbacks.invoke_table_row_callbacks::<JoinRequest>(
@@ -2999,8 +3110,12 @@ impl __sdk::SpacetimeModule for RemoteModule {
         familiar_table::register_table(client_cache);
         fighter_table::register_table(client_cache);
         fighter_seen_table::register_table(client_cache);
+        floor_seed_table::register_table(client_cache);
         gate_table::register_table(client_cache);
+        genesis_table::register_table(client_cache);
+        genesis_timer_table::register_table(client_cache);
         genome_table::register_table(client_cache);
+        guest_table::register_table(client_cache);
         infant_cry_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
         join_request_table::register_table(client_cache);
@@ -3089,8 +3204,12 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "familiar",
         "fighter",
         "fighter_seen",
+        "floor_seed",
         "gate",
+        "genesis",
+        "genesis_timer",
         "genome",
+        "guest",
         "infant_cry",
         "inventory",
         "join_request",

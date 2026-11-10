@@ -1,0 +1,364 @@
+{
+ "households": [
+  {
+   "key": "hollbrenna",
+   "members": [
+    {
+     "name": "Orrum",
+     "age": 44,
+     "sex": "m",
+     "occupation": "mason",
+     "role": "Hollbrenna's son, stonecutter; expected to be elder after her",
+     "knows": [
+      "fire"
+     ],
+     "parents": [
+      "Hollbrenna"
+     ],
+     "ties": [
+      "son of Hollbrenna",
+      "wants Ezra Holt to answer for the cairn"
+     ]
+    },
+    {
+     "name": "Hollbrenna",
+     "age": 66,
+     "sex": "f",
+     "occupation": "mason",
+     "role": "elder of Highshelf; closed the shelf to Kettlebridge after the cairn cutting; her grandmother lies in that cairn",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "mother of Orrum",
+      "forbade trade with Kettlebridge",
+      "remembers Pipwort Bramblecap's mother fondly"
+     ]
+    },
+    {
+     "name": "Gaudra",
+     "age": 39,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Orrum's wife; tends the shelf's small plots of roots and grain",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Orrum",
+      "grows what food the shelf can coax from the thin soil",
+      "trades seeds with Fernhollow small folk when they come",
+      "worries the shelf's store will not last the winter"
+     ]
+    },
+    {
+     "name": "Vellmund",
+     "age": 15,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Orrum and Gaudra's son; learning stonework from his father and grandmother",
+     "knows": [
+      "masonry",
+      "fire"
+     ],
+     "parents": [
+      "Orrum",
+      "Gaudra"
+     ],
+     "ties": [
+      "son of Orrum and Gaudra",
+      "grandson of Hollbrenna",
+      "carries water to the stonecutters",
+      "wants to see the cairn on the ridge but is forbidden"
+     ]
+    },
+    {
+     "name": "Hollvarr",
+     "age": 8,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Orrum and Gaudra's younger son; plays among the stone blocks",
+     "knows": [
+      "fire"
+     ],
+     "parents": [
+      "Orrum",
+      "Gaudra"
+     ],
+     "ties": [
+      "son of Orrum and Gaudra",
+      "follows his brother Vellmund",
+      "afraid of the deep caves in the range"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "tavvik",
+   "members": [
+    {
+     "name": "Tavvik",
+     "age": 31,
+     "sex": "m",
+     "occupation": "meat carrier",
+     "role": "a young hunter who carries meat down the giants' track to Kettlebridge and brings timber back up, against the elder's word",
+     "knows": [
+      "fire"
+     ],
+     "parents": [],
+     "ties": [
+      "defies Hollbrenna",
+      "Ezra Holt owes him for meat",
+      "SECRET: sweet on Prudence Vane of Kettlebridge, a cook who buys his meat"
+     ]
+    },
+    {
+     "name": "Harl",
+     "age": 27,
+     "sex": "m",
+     "occupation": "hunter",
+     "role": "Tavvik's brother; hunts the high pastures and keeps the shelf's meat store",
+     "knows": [
+      "archery",
+      "trapping",
+      "fire",
+      "tanning",
+      "smoking"
+     ],
+     "parents": [],
+     "ties": [
+      "brother of Tavvik",
+      "hunts with Tavvik",
+      "loyal to Hollbrenna and uneasy about Tavvik's trade",
+      "dries and smokes meat for the shelf's store"
+     ]
+    },
+    {
+     "name": "Sunniva",
+     "age": 24,
+     "sex": "f",
+     "occupation": "cook",
+     "role": "Harl's wife; cooks for the shelf's common table and keeps the meat store",
+     "knows": [
+      "cooking",
+      "fire",
+      "smoking",
+      "storage"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Harl",
+      "cooks for the shelf's common meals",
+      "trades smoked meat with Fernhollow pedlars",
+      "thinks Tavvik's defiance will bring trouble on them all"
+     ]
+    },
+    {
+     "name": "Grimhild",
+     "age": 5,
+     "sex": "f",
+     "occupation": "child",
+     "role": "Harl and Sunniva's daughter; plays at the edge of the shelf",
+     "knows": [
+      "fire"
+     ],
+     "parents": [
+      "Harl",
+      "Sunniva"
+     ],
+     "ties": [
+      "daughter of Harl and Sunniva",
+      "niece of Tavvik",
+      "afraid of the wolves that sometimes come up the track"
+     ]
+    }
+   ]
+  },
+  {
+   "key": "steinar",
+   "members": [
+    {
+     "name": "Steinar",
+     "age": 58,
+     "sex": "m",
+     "occupation": "builder",
+     "role": "the shelf's master builder; raises stone walls and keeps the cairns in repair",
+     "knows": [
+      "masonry",
+      "bridging",
+      "carpentry",
+      "fire",
+      "shelter"
+     ],
+     "parents": [],
+     "ties": [
+      "builds and repairs the shelf's walls and houses",
+      "keeps the cairns on the ridges in repair",
+      "old friend of Hollbrenna",
+      "grudges Kettlebridge for the cairn cutting",
+      "employs his son-in-law Eirik"
+     ]
+    },
+    {
+     "name": "Yrsa",
+     "age": 55,
+     "sex": "f",
+     "occupation": "farmer",
+     "role": "Steinar's wife; keeps the shelf's goats and the wool store",
+     "knows": [
+      "planting",
+      "cooking",
+      "fire",
+      "storage",
+      "mending"
+     ],
+     "parents": [],
+     "ties": [
+      "wife of Steinar",
+      "keeps the goats and the wool",
+      "mother of Liv",
+      "trades wool with Fernhollow for fibre"
+     ]
+    },
+    {
+     "name": "Liv",
+     "age": 30,
+     "sex": "f",
+     "occupation": "mason",
+     "role": "Steinar and Yrsa's daughter; cuts and dresses stone beside her father",
+     "knows": [
+      "masonry",
+      "toolmaking",
+      "fire",
+      "shelter"
+     ],
+     "parents": [
+      "Steinar",
+      "Yrsa"
+     ],
+     "ties": [
+      "daughter of Steinar and Yrsa",
+      "wife of Eirik",
+      "works stone with her father",
+      "wants to build a new storehouse before winter"
+     ]
+    },
+    {
+     "name": "Eirik",
+     "age": 33,
+     "sex": "m",
+     "occupation": "builder",
+     "role": "Liv's husband; raised the shelf's roofs and hauls stone from the range",
+     "knows": [
+      "carpentry",
+      "masonry",
+      "fire",
+      "shelter",
+      "bridging"
+     ],
+     "parents": [],
+     "ties": [
+      "husband of Liv",
+      "works for Steinar",
+      "carries stone from the range with a sledge",
+      "thinks the shelf should trade with Kettlebridge for timber"
+     ]
+    },
+    {
+     "name": "Steinarr",
+     "age": 6,
+     "sex": "m",
+     "occupation": "child",
+     "role": "Liv and Eirik's son; plays with the stone chips and the goats",
+     "knows": [
+      "fire"
+     ],
+     "parents": [
+      "Liv",
+      "Eirik"
+     ],
+     "ties": [
+      "son of Liv and Eirik",
+      "grandson of Steinar and Yrsa",
+      "plays with Grimhild"
+     ]
+    }
+   ]
+  }
+ ],
+ "situations": [
+  {
+   "id": "cairn-cutting",
+   "kind": "feud",
+   "summary": "Hollbrenna closed the shelf to Kettlebridge after quarrymen cut into the giants' cairn last year; Orrum wants Ezra Holt to answer for it, while Tavvik still carries meat down the track and brings timber back.",
+   "secret": false,
+   "people": [
+    "Hollbrenna",
+    "Orrum",
+    "Tavvik",
+    "Ezra Holt"
+   ],
+   "sides": {
+    "Hollbrenna": "The cairn holds her grandmother; she forbade all trade with Kettlebridge and will not relent until the shelf has spoken and the cairn is made right.",
+    "Orrum": "He wants Ezra Holt brought before the shelf to answer for the cutting; he thinks his mother's ban is just but fears it will not feed the shelf through winter.",
+    "Tavvik": "He defies the ban because the shelf needs timber and the meat will spoil; he owes Ezra Holt for meat and feels the debt complicates everything.",
+    "Ezra Holt": "He says he did not know the stones were a cairn; he is afraid of the giants and owes Tavvik for meat."
+   }
+  },
+  {
+   "id": "tavvik-secret",
+   "kind": "secret",
+   "summary": "Tavvik is sweet on Prudence Vane, a Kettlebridge cook who buys his meat, and has told no one on the shelf.",
+   "secret": true,
+   "people": [
+    "Tavvik",
+    "Prudence Vane"
+   ],
+   "sides": {
+    "Tavvik": "He keeps the courtship hidden because Hollbrenna would see it as another defiance; he feels torn between the shelf's law and his own heart.",
+    "Prudence Vane": "She buys his meat and returns his affection, but knows nothing of the shelf's politics and wonders why he is so careful."
+   }
+  },
+  {
+   "id": "winter-store",
+   "kind": "quarrel",
+   "summary": "Gaudra and Sunniva argue over the shelf's winter store: Gaudra says the plots will not yield enough and wants to trade with Fernhollow for grain, Sunniva says the smoked meat will see them through and the shelf should not beg.",
+   "secret": false,
+   "people": [
+    "Gaudra",
+    "Sunniva",
+    "Orrum",
+    "Harl"
+   ],
+   "sides": {
+    "Gaudra": "She fears the thin soil will fail and wants to send word to Fernhollow for grain before the passes close; she feels Sunniva is too proud to ask for help.",
+    "Sunniva": "She believes the meat store is enough and resents Gaudra's panic; she feels the shelf's dignity is worth more than a few baskets of grain.",
+    "Orrum": "He listens to both and leans toward Gaudra but will not overrule his mother's ban on outside trade lightly.",
+    "Harl": "He backs his wife but privately counts the meat barrels and is not sure either."
+   }
+  },
+  {
+   "id": "storehouse-plan",
+   "kind": "ambition",
+   "summary": "Liv wants to build a new stone storehouse before winter, but Steinar says the shelf's stone and labour are needed for the cairns and Eirik thinks they should trade with Kettlebridge for timber first.",
+   "secret": false,
+   "people": [
+    "Liv",
+    "Steinar",
+    "Eirik",
+    "Hollbrenna"
+   ],
+   "sides": {
+    "Liv": "She has drawn the plan in her head and wants it raised before the frost; she feels her father is too cautious and the cairns can wait a season.",
+    "Steinar": "He will not spare stone or hands from the cairns while the ridge still bears the cut; he feels Liv's ambition is good but mistimed.",
+    "Eirik": "He thinks the storehouse is needed but that timber must come from Kettlebridge, which means the ban must bend; he has not said so to Hollbrenna.",
+    "Hollbrenna": "She has heard the plan and says the cairns come first; she is not moved by talk of winter."
+   }
+  }
+ ]
+}

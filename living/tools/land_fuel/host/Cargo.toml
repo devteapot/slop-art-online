@@ -1,0 +1,11 @@
+[package]
+name = "lf-host"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# SpacetimeDB 2.14.1's wasmtime: version "39" (Cargo.lock 39.0.1), same features
+# (SpacetimeDB-2.14.1/Cargo.toml [workspace.dependencies.wasmtime]).
+wasmtime = { version = "=39.0.1", default-features = false, features = ["addr2line", "async", "cache", "cranelift", "demangle", "parallel-compilation", "runtime", "std"] }
+anyhow = "1"

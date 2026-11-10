@@ -1,5 +1,17 @@
 # Internal mind validation
 
+## 2026-11-10 mind feedback (Mac)
+
+On the Mac (Docker Desktop), branch `feedback-1` (ffb4280 on main 6de2bad) in a worktree, against its own server `feedback-verify-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3343`), private target: docs/MIND_FEEDBACK.md.
+
+- Full suite `minds-fb1-005416`: roundtrip (now also the body line in think and compile requests), conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night and jev pass; consolidation is its known XFAIL. `acts` failed on its new check's wait condition (it waited for `#id` in the outcome, which names the resolved kind: "gather → boulder (+1 stone)") and passed on `minds-fb1acts-011707` after the fix.
+
+## 2026-11-10 woken minds (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
+
+- Full suite `minds-tl2c-*` on the final code: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night and jev pass; consolidation is its known XFAIL. Earlier runs on this branch (`minds-tl2-220630`, `minds-tl2b-*`) the same.
+
 ## 2026-11-09 town life layer 2, phase 1 (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `14f3a72` plus the uncommitted town life layer 2 phase 1 change (docs/TOWN_LIFE.md, "Layer 2"): the `woken`, `prior` and `prior_head` tables, the `wakes` and `woken_ring` laws. Free tier only; no model calls.
@@ -20,6 +32,12 @@ On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `ac
 ## 2026-11-09 minds' sight and the offline player's character (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81b9dd8`/`dc5e41b` plus the uncommitted minds'-sight, projection and presence change (docs/PERCEPTION.md, "Second change"; docs/PLAYER_MEMORY.md, "Presence and the offline character"). Fake model only; every scratch database answered 404 after cleanup. `minds-perc2`: `sight` (new), `roundtrip`, `acts`, `conversation` pass; `consolidation` its known XFAIL. `takeover` (new) passed on `minds-perc2c` after a driver fix (the minds' plan is a desires top level with a "current plan" routine, not a graph holding the wait) and an authority fix (a second takeover asked for a deliberation after reinstalling the held graph, inside `think_min_s`; the order is now request, then reinstall).
+
+## 2026-11-09 `minds-20261109-110024` (DGX Spark, trial container) and trials
+
+The suite ran on the DGX Spark against the trial service (`VERIFY_STDB_CONTAINER=slop-trials-stdb VERIFY_STDB_PORT=3320`, since replaced by main's `LIVING_STDB_CONTAINER` and `LIVING_STDB_URL`; the Spark's `sao-living_spacetimedb_1` belongs to other work), on `trials-1` before the town-life merge. Eight cases pass; `consolidation` stays XFAIL (the Neo4j-off known issue). Evidence: `.local/living/verify/minds-20261109-110024*/` in `~/dev/slop-trials` on the Spark.
+
+Trials (`living/tools/trials.py`, [trials](../features/trials.md)) were driven by fake batches `dry1`–`dry8`: setup and timeline steps, sampling, journal copy, death stop, `resume` after the runner was killed (minds adopted by pid and start time, clocks kept), a killed mind restarted by a life run, the same model routing as the real file in fake mode (wolves: impulse `ministral-8b`, compile and consolidation `ministral-14b`; people: the variant's profile), a wolf pack as the subject, and `clean` (SQL 404, Neo4j nodes removed). `spawn_newcomer` was refused to an anonymous caller (`admin only`). Real batches `b1`–`b4` and life runs `l1`–`l3` are in `docs/TRIALS.md`.
 
 ## 2026-10-18 `minds-20261018-205441` (macOS, Docker Desktop)
 

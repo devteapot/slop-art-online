@@ -1,5 +1,29 @@
 # Validation record (generation)
 
+## 2026-11-09 floors: staged creation, a runtime seed, the second-pass megacity (dev-box)
+
+Own scratch container `megacity-stdb` (image `v2.14.1`, port 3394, `/wasm` mounted `:z`) through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`; worktree `~/dev/slop-megacity`, branch `megacity-1` from `14f3a72`. The driver gained the floor child `floor-megacity-4k` (`--seed none`, `create_floor`, `genesis` polled to `done`, four floor checks), `--seeds`, district styles read from the seed, membership checks of the living, and the `animals.habitat` map skipped in the animal counts.
+
+- **`generation-mc-20261109-223043`** (`--feature all`, before the driver fixes): realm, valley, authored-test, aske-coast, stage3-village, authored compilation and seed tests pass. The island failed "Fernhollow memberships" (Peya, an elder founder, died 5 s after creation: the old-age flake recorded below), and the driver crashed on the megacity seed's `animals.habitat` map (a count was expected).
+- **`generation-mc2/3`** (`--seeds island,floor-megacity-2k,floor-megacity-4k`): both megacity children failed town life: residents' square and workplaces were seated at the core square's middle, now inside its arcology. A product fix in `island::host`/`town::seat` (a square whose middle is built on offers walkable points round its edge) left 6 of 105 residents without, then none.
+- **`generation-mc4-20261109-224302`**: island 72/72, megacity 2048 m 67/67, megacity 4096 m floor 71/71 (created in 18 s, 138 steps, no restarts; a second `create_floor` refused; digests equal native).
+- **`generation-mcall-20261109-224617`** (`--feature all`, final code): every result passes. The five seed tests, authored compilation (no network), all ten worlds with their cleanups (SQL 404), repeatability, the malformed seed's rejection (`missing_field_diagnostic_visible` true: `seed: missing field \`animals\`` now reaches the publication output; `panic_reported` false), and the original seeds unchanged.
+
+Maintenance pass on this skill, same run:
+- **Source wave:** one reader per feature file (seeded world; guards and repeatability; authored worlds).
+- **Drift fixed:**
+  - stale line citations in all four files, now replaced by function names;
+  - the city's checks and description, written for the prototype generator (styles `metro`, `slum`, `works`; 40 core lots of 50 m), now read the seed's districts;
+  - the "seven seeds" count, and the gotcha that forbade a 4096 m megacity;
+  - the malformed seed's known issue (no longer a panic).
+- **Added:** `features/floors.md`.
+- **Harness gaps fixed:**
+  - the habitat map crash;
+  - memberships of dead founders (the old-age flake recorded below);
+  - `--seeds` for focused reruns.
+- **Product gap fixed outside the skill:** town life at a built-on square (above).
+- **Not covered:** the 8192 m floor (generated through the same path by hand: 92 s; docs/FLOORS.md), and fuel margins (measured by `living/tools/land_fuel`, not by this skill).
+
 
 ## 2026-11-09 the Rhai boundary, rhai-1 (dev-box)
 
@@ -137,3 +161,12 @@ Consulted the official [documentation entry point](https://spacetimedb.com/docs/
 ## What remains unverified
 
 Fresh paid drafting and its second pass, complete publication-error readability, semantic privacy of authored prose, every numeric seed, repeated valley homestead placement, subscriptions, browser rendering, player actions, learning, later ecology and performance. Use the neighbouring verification skills and performance contract for those claims.
+
+## Seeded lives (2026-11-10, branch `lives-1`)
+
+`generation-lives-0256` on the dev-box, in a worker's own container (`LIVING_STDB_CONTAINER=lives-stdb`, `LIVING_STDB_URL=http://127.0.0.1:3412`, SpacetimeDB 2.14.1), from commit `2108cdc` plus the terrace-garden fix:
+
+- `island` passes 968 of 968 checks. The new checks: hamlets laid out and peopled where the seed's `site: hamlet_village` entries ask (9 of 9); authored sheet relations as `relation` rows (2,348 of 2,348); authored places and the stages of known ways (9 residents, 60 stages, the longest 130.6 m); workplaces an author gave a resident exempt from the in-or-by-settlement check. The `land` digests (tiles `9b403da95bba9407`, heights `0d2f77752781845c`, layout `408df4be210092eb`) equal `floor_preview`'s.
+- `authored island` compiles `living/seeds/worlds/island` offline (network blocked) to the committed `island.json`.
+- One failure outside this change: "Saltmere memberships" in the second `realm` child. Roborpe (id 21) died within seconds of creation; death removes the membership but keeps the background the check counts. The first `realm` child passed. The check should compare living residents only.
+- The previous run (`generation-lives-0247`) failed "open lots stay walkable" on a Kettlebridge garden laid across a terrace step. The planner now keeps gardens and fields off terrace steps (`settle.rs`, `try_lot`). It also failed "original seeds unchanged", because `island.json`'s setting text was edited during that run.

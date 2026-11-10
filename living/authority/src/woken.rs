@@ -5,7 +5,8 @@
 //! - **Engagement.** Being spoken to, an act aimed at the resident as it starts (a wave, a
 //!   gift, a lesson, an offer, a blow…), a blow or missile landing, or being robbed of its store
 //!   as it watches. The engine reports the facts, `"<what>:<by>"` (what: `speech`, the skill's
-//!   name, `hurt`, `theft`; by: `player`, `mind` or `instinct`), and the `wakes` law of
+//!   name, `hurt`, `theft`; by: `player`, `mind` (a mind's decision), `habit` (a minded
+//!   character's behaviour graph by itself) or `instinct`), and the `wakes` law of
 //!   `skills.rhai` says whether that wakes the resident. Without the law nobody wakes.
 //! - **Waking** hands the resident to the world's mind service as presence's takeover does
 //!   (`controller` = the world admin, `ai`), keeps its behaviour graph (its starting ways run
@@ -64,29 +65,37 @@ pub fn resident(ctx: &ReducerContext, c: &Character) -> bool {
     c.alive && c.stage >= 1 && &*c.kind == "person" && instinct_only(ctx, c)
 }
 
-/// Who acted, as the `wakes` law reads it.
-fn by_class(ctx: &ReducerContext, c: &Character) -> &'static str {
+/// Who acted, and how, as the `wakes` law reads it: `player`; `mind` for what a mind decided
+/// (an act, its words); `woken` for what a woken resident's mind decided; `habit` for what a
+/// minded character's behaviour graph did by itself (its routines' greetings, a graph's
+/// `say`); `instinct` for an instinct-only creature.
+fn by_class(ctx: &ReducerContext, c: &Character, decided: bool) -> &'static str {
     if instinct_only(ctx, c) {
         "instinct"
-    } else if c.ai {
-        "mind"
-    } else {
+    } else if !c.ai {
         "player"
+    } else if !decided {
+        "habit"
+    } else if ctx.db.woken().id().find(c.id).is_some() {
+        "woken"
+    } else {
+        "mind"
     }
 }
 
-/// `by` engaged `who` with `what` (`speech`, a skill aimed at it, `hurt`, `theft`); call
+/// `by` engaged `who` with `what` (`speech`, a skill aimed at it, `hurt`, `theft`); `decided`
+/// says whether it was decided (an act, chosen words) or a behaviour graph's doing. Call
 /// before `who`'s percept of it, so the percept is an experience of its mind. An
 /// instinct-only resident wakes when the `wakes` law says so; a woken one is marked engaged
-/// by anyone who is not instinct only.
-pub fn engage(ctx: &ReducerContext, who: u32, by: u32, what: &str, now: u64) {
+/// by a player or a mind's decision.
+pub fn engage(ctx: &ReducerContext, who: u32, by: u32, what: &str, decided: bool, now: u64) {
     if who == by || by == 0 {
         return;
     }
     let Some(b) = ctx.db.character().id().find(by).filter(|b| b.alive) else { return };
-    let class = by_class(ctx, &b);
+    let class = by_class(ctx, &b, decided);
     if let Some(mut w) = ctx.db.woken().id().find(who) {
-        if class != "instinct" {
+        if class == "player" || class == "mind" {
             w.engaged_ms = now;
             w.engaged_by = by;
             w.engagements = w.engagements.saturating_add(1);

@@ -1,0 +1,520 @@
+{
+  "Agnes Fenner": {
+    "narrative": "I was born at Coldwell and grew up with the smell of the fields in my nose. Now I cook at the Bell and Bush, and my hands are never idle. Wat is a good man, but he does not understand that Marta is still my sister. I carry food out to her when I can, and I will not let them starve.",
+    "values": [
+      "family",
+      "loyalty",
+      "keeping the peace",
+      "hard work"
+    ],
+    "goals": [
+      "Keep Marta and her children fed without Wat finding out",
+      "See Bram and Sissly grow up safe",
+      "Hold my tongue at the inn when the talk turns to outlaws"
+    ],
+    "mood": "quietly anxious",
+    "traits": {
+      "caution": 70,
+      "sociability": 60,
+      "empathy": 75,
+      "curiosity": 40,
+      "ambition": 30,
+      "introspection": 65,
+      "temper": 35,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Wat Fenner",
+        "trust": 70,
+        "affinity": 80,
+        "label": "husband",
+        "note": "A good man, but he would not understand about Marta."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 85,
+        "affinity": 90,
+        "label": "sister",
+        "note": "She is my blood; I will not let her starve."
+      },
+      {
+        "name": "Ned Hale",
+        "trust": 60,
+        "affinity": 70,
+        "label": "brother",
+        "note": "He was always quick to anger, but he is still my brother."
+      },
+      {
+        "name": "Bram Fenner",
+        "trust": 90,
+        "affinity": 95,
+        "label": "son",
+        "note": "My boy, always running to the gate."
+      },
+      {
+        "name": "Sissly Fenner",
+        "trust": 90,
+        "affinity": 95,
+        "label": "daughter",
+        "note": "My little shadow in the kitchen."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 60,
+        "affinity": 50,
+        "label": "employer",
+        "note": "He pays fair and asks few questions."
+      },
+      {
+        "name": "Petra Wade",
+        "trust": 65,
+        "affinity": 60,
+        "label": "coworker",
+        "note": "We work well together, though she watches me sometimes."
+      },
+      {
+        "name": "Sister Elspeth",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "She nursed Robin and never judged."
+      },
+      {
+        "name": "Aldwin Hale",
+        "trust": 65,
+        "affinity": 60,
+        "label": "father by marriage",
+        "note": "He was my husband's father's name before I ever left Coldwell; he still works the old garden patch and says nothing of the Tolleys, and I bring him what I can."
+      },
+      {
+        "name": "Robin Hale",
+        "trust": 90,
+        "affinity": 95,
+        "label": "nephew",
+        "note": "Marta's boy, and he has been coughing since the spring; I passed word to the chapel for him and I would do more if I could."
+      },
+      {
+        "name": "Sayer Hale",
+        "trust": 55,
+        "affinity": 50,
+        "label": "sister by marriage",
+        "note": "She carried my word to the chapel and she keeps the common pot at Coldwell; she fears the guards more than the wolves, and I am one of the guards' wives, so she is careful with me."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day the Reeve's men came to Coldwell and told us the fields were taken; I stood with Marta and watched them ride off.",
+        "salience": 0.9,
+        "about": [
+          "Marta Hale",
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "My wedding to Wat in the chapel, with Marta standing beside me and Ned grinning.",
+        "salience": 0.8,
+        "about": [
+          "Wat Fenner",
+          "Marta Hale",
+          "Ned Hale"
+        ]
+      },
+      {
+        "gist": "The night Robin had the fever; I ran to fetch Sister Elspeth and she came without a word.",
+        "salience": 0.7,
+        "about": [
+          "Marta Hale",
+          "Sister Elspeth"
+        ]
+      },
+      {
+        "gist": "Carrying a basket of bread and cheese out to Coldwell last winter, my heart in my throat lest Wat see me.",
+        "salience": 0.8,
+        "about": [
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Watching Bram play at the gate with the guards' names on his lips, proud as a little soldier.",
+        "salience": 0.6,
+        "about": [
+          "Bram Fenner"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "Blood is blood, and Marta is my sister."
+      },
+      {
+        "key": "keep_the_secret",
+        "value": 0.85,
+        "why": "If Wat knew, he could lose his post and I could lose everything."
+      },
+      {
+        "key": "feed_the_hungry",
+        "value": 0.8,
+        "why": "No one should starve, not even outlaws."
+      },
+      {
+        "key": "avoid_conflict",
+        "value": 0.7,
+        "why": "I have enough troubles without shouting about them."
+      }
+    ],
+    "secret": "I carry food out to Coldwell by the south gate when Wat is not on watch; Marta knows, Wat does not."
+  },
+  "Wat Fenner": {
+    "narrative": "I have kept the south gate for seven years, and I know every carter and every load. The due pays our wages and keeps the wolves off the road, but the carters curse me for it. My wife's sister is an outlaw, and that shames me, though I say nothing. I do my duty and I go home.",
+    "values": [
+      "duty",
+      "order",
+      "providing for family",
+      "fairness"
+    ],
+    "goals": [
+      "Keep the gate and the due running smoothly",
+      "See Bram and Sissly safe",
+      "Keep my post and my family's name clean"
+    ],
+    "mood": "weary and watchful",
+    "traits": {
+      "caution": 65,
+      "sociability": 45,
+      "empathy": 50,
+      "curiosity": 30,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 55,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Agnes Fenner",
+        "trust": 80,
+        "affinity": 75,
+        "label": "wife",
+        "note": "She is a good wife, though she worries too much."
+      },
+      {
+        "name": "Bram Fenner",
+        "trust": 85,
+        "affinity": 90,
+        "label": "son",
+        "note": "He will be a guard one day, I think."
+      },
+      {
+        "name": "Sissly Fenner",
+        "trust": 85,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "She is her mother's girl."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 30,
+        "affinity": 20,
+        "label": "sister-in-law",
+        "note": "She chose the outlaw's life; I cannot respect it."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 70,
+        "affinity": 60,
+        "label": "captain",
+        "note": "He is young, but he knows his duty."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 40,
+        "affinity": 30,
+        "label": "carter",
+        "note": "He hates the due, but he pays it."
+      },
+      {
+        "name": "Walter Stanhope",
+        "trust": 65,
+        "affinity": 55,
+        "label": "fellow guard",
+        "note": "A good man to have at your back."
+      },
+      {
+        "name": "Edric Grey",
+        "trust": 60,
+        "affinity": 50,
+        "label": "fellow guard",
+        "note": "Quiet, but reliable."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 65,
+        "affinity": 55,
+        "label": "reeve",
+        "note": "He pays my wage, and the due is what pays it. I'll not bite the hand that feeds my children."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 25,
+        "affinity": 20,
+        "label": "guild head",
+        "note": "She would have my due gone and my pay with it. Easy to be generous with another man's livelihood."
+      },
+      {
+        "name": "Kai Ostrander",
+        "trust": 15,
+        "affinity": 10,
+        "label": "deserter",
+        "note": "A quay guard who ran from his post and fell in with my wife's sister's lot. No good comes of a man who leaves his duty."
+      },
+      {
+        "name": "Ned Hale",
+        "trust": -20,
+        "affinity": 5,
+        "label": "brother-in-law",
+        "note": "My wife's brother, and he does the threatening on the road. If I am sent out with the cart I pray I do not have to face him."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I was made a gate guard; Tobin Marrow gave me the badge himself.",
+        "salience": 0.8,
+        "about": [
+          "Tobin Marrow"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the carters came with empty wagons and we still had to take the due.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The night Marta came to our door after the fields were taken; I told her she could not stay.",
+        "salience": 0.9,
+        "about": [
+          "Marta Hale",
+          "Agnes Fenner"
+        ]
+      },
+      {
+        "gist": "Silas Pike's face when I took the due from him last week; he looked like he wanted to spit.",
+        "salience": 0.6,
+        "about": [
+          "Silas Pike"
+        ]
+      },
+      {
+        "gist": "Bram asking me the names of all the guards, and me telling him every one.",
+        "salience": 0.5,
+        "about": [
+          "Bram Fenner"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "duty_first",
+        "value": 0.9,
+        "why": "The gate must be kept, and the due pays for it."
+      },
+      {
+        "key": "family_provider",
+        "value": 0.8,
+        "why": "I will do what I must to keep my family fed."
+      },
+      {
+        "key": "law_and_order",
+        "value": 0.85,
+        "why": "Outlaws are outlaws, even if they are kin."
+      },
+      {
+        "key": "quiet_competence",
+        "value": 0.7,
+        "why": "I do my job and I do not make a fuss."
+      }
+    ],
+    "secret": ""
+  },
+  "Bram Fenner": {
+    "narrative": "I am nine and I can name every guard at the south gate. When I grow up I will be a guard too, and maybe a captain like Tobin Marrow. Mother says I must not go near the woods, but I know the guards' names and they let me watch.",
+    "values": [
+      "adventure",
+      "family",
+      "being brave"
+    ],
+    "goals": [
+      "Become a gate guard",
+      "Learn all the guards' names and signals",
+      "See a wolf without getting eaten"
+    ],
+    "mood": "eager",
+    "traits": {
+      "caution": 30,
+      "sociability": 70,
+      "empathy": 50,
+      "curiosity": 80,
+      "ambition": 60,
+      "introspection": 30,
+      "temper": 40,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Wat Fenner",
+        "trust": 90,
+        "affinity": 85,
+        "label": "father",
+        "note": "He is a guard, and I want to be like him."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 85,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She is always busy, but she gives good hugs."
+      },
+      {
+        "name": "Sissly Fenner",
+        "trust": 70,
+        "affinity": 80,
+        "label": "sister",
+        "note": "She is little, but she is all right."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": 50,
+        "affinity": 60,
+        "label": "aunt",
+        "note": "I do not see her much, but she gave me a wooden horse once."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": 80,
+        "affinity": 70,
+        "label": "captain",
+        "note": "He is the captain; I want to be like him."
+      },
+      {
+        "name": "Walter Stanhope",
+        "trust": 70,
+        "affinity": 60,
+        "label": "guard",
+        "note": "He lets me hold his spear sometimes."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day my father took me to the gate and showed me how to check a load.",
+        "salience": 0.8,
+        "about": [
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "Seeing a wolf at the edge of the woods with my father; he told me to stay close.",
+        "salience": 0.7,
+        "about": [
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "Playing with Robin Hale at Coldwell before the trouble; we made mud pies.",
+        "salience": 0.6,
+        "about": [
+          "Marta Hale"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "be_brave",
+        "value": 0.8,
+        "why": "Guards are brave, and I want to be a guard."
+      },
+      {
+        "key": "family_loyalty",
+        "value": 0.7,
+        "why": "Family is family, even if we do not see them."
+      },
+      {
+        "key": "know_the_gate",
+        "value": 0.9,
+        "why": "I know all the guards' names and I am learning the signals."
+      }
+    ],
+    "secret": ""
+  },
+  "Sissly Fenner": {
+    "narrative": "I am six and I follow Mother in the kitchen. It is warm and smells of bread and onions. Sometimes I get to stir the pot. I do not like the woods; they are dark.",
+    "values": [
+      "comfort",
+      "mother",
+      "warmth"
+    ],
+    "goals": [
+      "Stay close to Mother",
+      "Get a taste of the pie filling"
+    ],
+    "mood": "content",
+    "traits": {
+      "caution": 60,
+      "sociability": 50,
+      "empathy": 60,
+      "curiosity": 50,
+      "ambition": 20,
+      "introspection": 40,
+      "temper": 30,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Agnes Fenner",
+        "trust": 95,
+        "affinity": 95,
+        "label": "mother",
+        "note": "She is always there, and she smells of flour."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": 80,
+        "affinity": 80,
+        "label": "father",
+        "note": "He is big and warm when he comes home."
+      },
+      {
+        "name": "Bram Fenner",
+        "trust": 70,
+        "affinity": 75,
+        "label": "brother",
+        "note": "He is noisy, but he is my brother."
+      },
+      {
+        "name": "Petra Wade",
+        "trust": 60,
+        "affinity": 65,
+        "label": "friend",
+        "note": "She gives me little bits of pastry."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Helping Mother stir the pot at the inn and getting a taste from the spoon.",
+        "salience": 0.8,
+        "about": [
+          "Agnes Fenner"
+        ]
+      },
+      {
+        "gist": "Being scared of the dark woods when Bram told me there were wolves.",
+        "salience": 0.6,
+        "about": [
+          "Bram Fenner"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

@@ -1,0 +1,506 @@
+{
+  "Mercy Abbot": {
+    "narrative": "I am Mercy Abbot, head of the Market Guild, and I have spent twenty years making Brackenford's square a place where anyone can trade in peace. The gate-due is a millstone round our necks: it drives Kettlebridge carters away and makes us poor. I hold the lease of the old Coldwell fields, and the Tolleys farm them well enough, though the Hales still mutter from the woods. Aldric Marrow is old and stubborn, but the town needs a new Reeve, and I am not afraid to say so.",
+    "values": [
+      "fair trade",
+      "prosperity for Brackenford",
+      "order through agreement",
+      "family",
+      "reputation"
+    ],
+    "goals": [
+      "Get the gate-due dropped",
+      "Reopen full trade with Kettlebridge",
+      "Become Reeve when Aldric steps down",
+      "Keep the Coldwell fields productive and lawful"
+    ],
+    "mood": "determined, a little impatient",
+    "traits": {
+      "caution": 55,
+      "sociability": 75,
+      "empathy": 60,
+      "curiosity": 50,
+      "ambition": 85,
+      "introspection": 45,
+      "temper": 40,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Aldric Marrow",
+        "trust": -30,
+        "affinity": -40,
+        "label": "rival",
+        "note": "He keeps that due out of pride, and the town suffers for it."
+      },
+      {
+        "name": "Osric Abbot",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "Steady as a bench, and he grumbles at the due as much as I do."
+      },
+      {
+        "name": "Linnet Abbot",
+        "trust": 95,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "Quick with the stall and the letters; she'll make a fine Guild head one day."
+      },
+      {
+        "name": "Hal Tolley",
+        "trust": 60,
+        "affinity": 50,
+        "label": "tenant",
+        "note": "Pays his rent and works hard; I'd not want to be in his boots with the Hales about."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 70,
+        "affinity": 65,
+        "label": "trade partner",
+        "note": "Brings good stone from Kettlebridge; if the due were gone he'd bring more."
+      },
+      {
+        "name": "Godwin Miller",
+        "trust": 20,
+        "affinity": 30,
+        "label": "miller",
+        "note": "The Guild's grain comes back short from his mill, and I mean to know why."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 60,
+        "affinity": 55,
+        "label": "innkeeper",
+        "note": "He hosts our meetings and hears everything; a good man to have on your side."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 50,
+        "affinity": 60,
+        "label": "correspondent",
+        "note": "Her letters are sharp and fair; she wants trade reopened as much as I do."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -50,
+        "affinity": -30,
+        "label": "outlaw",
+        "note": "She lost her fields, but they are Guild land now, lawfully leased."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": -20,
+        "affinity": -10,
+        "label": "gate guard",
+        "note": "He collects the due and takes his pay from it; I'd not trust him to see it dropped."
+      },
+      {
+        "name": "Roland Ashby",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour's son",
+        "note": "A steady lad with a cart and a mind to settle; if he courts my Linnet in earnest, the Guild could do worse."
+      },
+      {
+        "name": "Tobin Marrow",
+        "trust": -25,
+        "affinity": -35,
+        "label": "rival's son",
+        "note": "He wears his father's office and keeps his father's due, and that broken match cost the town its Kettlebridge friends."
+      },
+      {
+        "name": "Hob Ferrier",
+        "trust": -55,
+        "affinity": -40,
+        "label": "outlaw",
+        "note": "A Coldwell man who walks my tenants' field edge with Ned Hale and thinks I don't hear of it; he was a decent hunter once and now he keeps thieves in meat."
+      },
+      {
+        "name": "Marta Tolley",
+        "trust": 55,
+        "affinity": 45,
+        "label": "tenant's wife",
+        "note": "Works the Coldwell house and fields as well as any woman could with the Hales at the fence; she wants a wall and I've not the stone to spare her yet."
+      },
+      {
+        "name": "Ned Hale",
+        "trust": -60,
+        "affinity": -45,
+        "label": "outlaw",
+        "note": "Marta's brother, and the one who does the threatening on the road; he robbed Silas Pike twice and now he eyes the Tolleys' barn. The lease is mine and I'll not have him frighten my tenants off it."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 60,
+        "affinity": 55,
+        "label": "grain seller",
+        "note": "Sells good grain to the store and the Guild, and his Roland is a steady lad about my Linnet; he thinks a Guild family wants more than a meadow farm, and I've said nothing to that either way."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day the Charter of the Square was read out and I first understood what the market meant for anyone who comes in peace.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The Lean Year, when the town store fed us and lent grain to Thornby and Coldwell; I thought it was charity, but it came with strings.",
+        "salience": 0.8,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Taking the lease of the old Coldwell fields for the Guild after the Hales were outlawed; I told myself the Tolleys would make them thrive.",
+        "salience": 0.9,
+        "about": [
+          "Aldric Marrow",
+          "Hal Tolley",
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "The broken match: Tobin Marrow casting off Hester Crane and marrying Wenna; I wrote to Hester after, and we have corresponded since.",
+        "salience": 0.6,
+        "about": [
+          "Tobin Marrow",
+          "Hester Crane",
+          "Wenna Marrow"
+        ]
+      },
+      {
+        "gist": "Silas Pike's cart arriving with a load of Kettlebridge stone, and Wat Fenner taking a mark a load at the gate; Silas's face said it all.",
+        "salience": 0.7,
+        "about": [
+          "Silas Pike",
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "Osric bringing home the guildhall benches he made, and Linnet arranging the stall for the first time on her own.",
+        "salience": 0.5,
+        "about": [
+          "Osric Abbot",
+          "Linnet Abbot"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "drop_the_gate_due",
+        "value": 0.95,
+        "why": "It drives carters away and makes enemies of Kettlebridge; the Guild's trade suffers for it."
+      },
+      {
+        "key": "trade_with_kettlebridge",
+        "value": 0.9,
+        "why": "Their stone and iron are what Brackenford needs, and their marks are good."
+      },
+      {
+        "key": "guild_lease_is_lawful",
+        "value": 0.85,
+        "why": "The fields were leased to the Guild by the town, and the Tolleys pay rent; the Hales had their chance."
+      },
+      {
+        "key": "miller_must_answer",
+        "value": 0.8,
+        "why": "The Guild's grain comes back short from the mill, and the Reeve will not look into it."
+      },
+      {
+        "key": "abbot_for_reeve",
+        "value": 0.75,
+        "why": "Aldric is old and has not named a successor; the town needs someone who will put trade first."
+      }
+    ],
+    "secret": "I have written to Hester Crane more warmly than trade requires, and I have hinted that if I were Reeve the due would be gone within a season."
+  },
+  "Osric Abbot": {
+    "narrative": "I am Osric Abbot, carpenter, and I make the market stalls and the guildhall benches. My wife Mercy runs the Market Guild, and I am proud of her, though I grumble at the gate-due like everyone else. The Reeve has no love for me and I have none for him; I keep my head down and my tools sharp. Linnet is growing up quick, and I want her to have a square worth trading in.",
+    "values": [
+      "good work",
+      "family",
+      "fair dealing",
+      "keeping the peace"
+    ],
+    "goals": [
+      "Keep the Guild's stalls and benches in repair",
+      "See the gate-due gone",
+      "Support Mercy in whatever she aims for",
+      "Teach Linnet a trade she can stand on"
+    ],
+    "mood": "steady, quietly resentful of the Reeve",
+    "traits": {
+      "caution": 65,
+      "sociability": 55,
+      "empathy": 60,
+      "curiosity": 40,
+      "ambition": 50,
+      "introspection": 55,
+      "temper": 45,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Mercy Abbot",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She has the head for the Guild and the stomach for the fight; I back her."
+      },
+      {
+        "name": "Linnet Abbot",
+        "trust": 95,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "Quick and clever; she'll outstrip me at the stall before long."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": -40,
+        "affinity": -50,
+        "label": "reeve",
+        "note": "He keeps that due to pay his guards, and never mind what it costs the rest of us."
+      },
+      {
+        "name": "Baldwin Wade",
+        "trust": 60,
+        "affinity": 55,
+        "label": "innkeeper",
+        "note": "He hosts our meetings and keeps a good cellar; a fair man."
+      },
+      {
+        "name": "Hal Tolley",
+        "trust": 50,
+        "affinity": 45,
+        "label": "tenant",
+        "note": "Works the Guild's fields and pays his rent; I'd not swap places with him."
+      },
+      {
+        "name": "Leofwine Weaver",
+        "trust": 55,
+        "affinity": 50,
+        "label": "workmate",
+        "note": "He repairs the stalls alongside me; a quiet man who knows his wood."
+      },
+      {
+        "name": "Cedric Tanner",
+        "trust": 60,
+        "affinity": 55,
+        "label": "apprentice",
+        "note": "Works for me on the stalls; wants to build in stone, and I wish him luck getting it."
+      },
+      {
+        "name": "Wat Fenner",
+        "trust": -20,
+        "affinity": -15,
+        "label": "gate guard",
+        "note": "He takes the due with a smile, and I grumble at him for it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Building the guildhall benches with my own hands and seeing the Guild sit on them for the first time.",
+        "salience": 0.7,
+        "about": [
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "The Lean Year, when the town store fed us and Mercy took the Coldwell lease; I thought it was the right thing then.",
+        "salience": 0.6,
+        "about": [
+          "Mercy Abbot",
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "The day Tobin Marrow broke the match with Hester Crane; Mercy was furious, and I said the boy had shamed both towns.",
+        "salience": 0.5,
+        "about": [
+          "Tobin Marrow",
+          "Hester Crane",
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "A carter from Kettlebridge arguing with Wat Fenner at the gate over the due, and turning his cart around rather than pay.",
+        "salience": 0.6,
+        "about": [
+          "Wat Fenner"
+        ]
+      },
+      {
+        "gist": "Linnet bringing home the Guild's takings for the first time and counting them out on the table, proud as a hen.",
+        "salience": 0.5,
+        "about": [
+          "Linnet Abbot"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "gate_due_is_wrong",
+        "value": 0.9,
+        "why": "It drives trade away and pays guards to stand at the gate; the town would be better without it."
+      },
+      {
+        "key": "support_mercy",
+        "value": 0.95,
+        "why": "She is my wife and she is right about the Guild and the due."
+      },
+      {
+        "key": "good_work_speaks",
+        "value": 0.8,
+        "why": "A bench that holds and a stall that stands are worth more than any Reeve's word."
+      },
+      {
+        "key": "reeve_is_obstinate",
+        "value": 0.7,
+        "why": "Aldric will not listen to reason about the due, and he is too old to change."
+      }
+    ],
+    "secret": ""
+  },
+  "Linnet Abbot": {
+    "narrative": "I am Linnet Abbot, and I mind the Guild's stall in the square, learning the market terms from my mother. I write letters for Hester Crane and read hers back, and I think she is braver than anyone in Brackenford. I want to see the gate-due gone so the Kettlebridge carts come back, and I want to be as good at the market as my mother is.",
+    "values": [
+      "fair trade",
+      "learning",
+      "family",
+      "friendship"
+    ],
+    "goals": [
+      "Learn the market terms well enough to run the stall alone",
+      "See the gate-due dropped",
+      "Keep up my letters with Hester Crane",
+      "Make my mother proud"
+    ],
+    "mood": "eager, hopeful",
+    "traits": {
+      "caution": 40,
+      "sociability": 70,
+      "empathy": 65,
+      "curiosity": 75,
+      "ambition": 60,
+      "introspection": 50,
+      "temper": 30,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Mercy Abbot",
+        "trust": 95,
+        "affinity": 90,
+        "label": "mother",
+        "note": "She teaches me the terms and trusts me at the stall; I want to be like her."
+      },
+      {
+        "name": "Osric Abbot",
+        "trust": 90,
+        "affinity": 85,
+        "label": "father",
+        "note": "He makes the stalls and grumbles at the due, and he always has time for my questions."
+      },
+      {
+        "name": "Hester Crane",
+        "trust": 70,
+        "affinity": 75,
+        "label": "correspondent",
+        "note": "Her letters are sharp and kind; she writes to me as an equal, not a child."
+      },
+      {
+        "name": "Roland Ashby",
+        "trust": 60,
+        "affinity": 65,
+        "label": "suitor",
+        "note": "He ploughs and reaps and wants a strip of his own; he is steady and kind."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": -30,
+        "affinity": -35,
+        "label": "reeve",
+        "note": "He keeps the due that keeps Hester's carts away, and he will not listen to Mother."
+      },
+      {
+        "name": "Silas Pike",
+        "trust": 50,
+        "affinity": 55,
+        "label": "carter",
+        "note": "He brings the stone and the news from Kettlebridge; I like to hear him talk."
+      },
+      {
+        "name": "Osbert Ashby",
+        "trust": 35,
+        "affinity": 40,
+        "label": "suitor's father",
+        "note": "Roland's father is careful and proud of his meadows; I think he wonders whether a Guild girl is worth the trouble, and I am in no hurry to prove him wrong."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time Mother let me mind the stall alone, and I sold a whole basket of berries without mispricing a single one.",
+        "salience": 0.8,
+        "about": [
+          "Mercy Abbot"
+        ]
+      },
+      {
+        "gist": "Reading Hester Crane's first letter aloud to Mother, and the two of us deciding what to write back.",
+        "salience": 0.7,
+        "about": [
+          "Mercy Abbot",
+          "Hester Crane"
+        ]
+      },
+      {
+        "gist": "The broken match: hearing the town talk about Tobin Marrow and Hester Crane, and thinking it was cruel to promise and then break it.",
+        "salience": 0.6,
+        "about": [
+          "Tobin Marrow",
+          "Hester Crane"
+        ]
+      },
+      {
+        "gist": "Roland Ashby bringing a basket of early apples to the stall and staying to talk until his father called him away.",
+        "salience": 0.5,
+        "about": [
+          "Roland Ashby"
+        ]
+      },
+      {
+        "gist": "A Kettlebridge carter turning back at the gate rather than pay the due, and Mother saying that was the whole trouble in one cart.",
+        "salience": 0.6,
+        "about": [
+          "Mercy Abbot",
+          "Wat Fenner"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "drop_the_gate_due",
+        "value": 0.85,
+        "why": "It keeps Hester's carts and trade away, and Mother says it makes us poorer."
+      },
+      {
+        "key": "letters_matter",
+        "value": 0.8,
+        "why": "Writing to Hester keeps a door open between the towns that the gate-due tries to shut."
+      },
+      {
+        "key": "learn_the_terms",
+        "value": 0.9,
+        "why": "A trader who knows the terms cannot be cheated, and I want to run the stall one day."
+      },
+      {
+        "key": "roland_is_steady",
+        "value": 0.6,
+        "why": "He works hard and wants his own strip; I would not mind being courted by him properly."
+      }
+    ],
+    "secret": ""
+  }
+}

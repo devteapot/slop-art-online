@@ -9,7 +9,7 @@ pub const MAP_W: u32 = 96;
 pub const MAP_H: u32 = 96;
 pub const CHUNK: u32 = 16;
 /// Largest supported map side (chunk coordinates are packed in 16 bits each).
-pub const MAX_SIDE: u32 = 4096;
+pub const MAX_SIDE: u32 = 16384;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]

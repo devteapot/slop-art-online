@@ -10,6 +10,7 @@ bevy_egui = { version = "=0.43.1", default-features = false, features = ["render
 bevy_mod_outline = "=0.14.0"
 spacetimedb-sdk = { workspace = true }
 living-bindings = { path = "../bindings" }
-living-rules = { path = "../rules", default-features = false }
+# `scripting`: the world's installed skill script, compiled to offer acts (verbs.rs).
+living-rules = { path = "../rules" }
 serde_json = { workspace = true }
 serde = { workspace = true }

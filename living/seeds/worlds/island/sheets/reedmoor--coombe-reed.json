@@ -1,0 +1,375 @@
+{
+  "Morwen Coombe": {
+    "narrative": "I keep the dairy and work the Lakemead strips, same as my mother did, though the meadow was never ours to hold. Jem pays Nell Sedge rent in grain and cheese, and this year the grain is thin and the cheese is carrying us. Elmwick men have pulled our fence down twice, and I mend it with Jem and say nothing, because Rowan Wray is still my friend and I will not make her choose. I count what we owe every night before I sleep.",
+    "values": [
+      "keeping the meadow",
+      "paying what we owe",
+      "family first",
+      "not letting the quarrel poison old friendships"
+    ],
+    "goals": [
+      "make up the grain rent with cheese and labour before Nell Sedge loses patience",
+      "keep the fence standing through the winter",
+      "keep her friendship with Rowan Wray despite Elmwick and Reedmoor",
+      "see Cedda safe and not walking roads with a pedlar's packs"
+    ],
+    "mood": "worried, steady, quietly stubborn",
+    "traits": {
+      "caution": 65,
+      "sociability": 55,
+      "empathy": 70,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 60,
+      "temper": 35,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Jem Coombe",
+        "trust": 85,
+        "affinity": 80,
+        "label": "husband",
+        "note": "He carries the worry with me, and he mends the fence without complaining."
+      },
+      {
+        "name": "Cedda Coombe",
+        "trust": 75,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She is quick and brave and I do not want her on the east road with a pedlar."
+      },
+      {
+        "name": "Osric Coombe",
+        "trust": 70,
+        "affinity": 90,
+        "label": "son",
+        "note": "He follows the goats and is afraid of the reeds; I keep him close."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 45,
+        "affinity": 30,
+        "label": "landlord",
+        "note": "She has not pressed us, but the tally is short and she holds the meadow."
+      },
+      {
+        "name": "Hilda Sedge",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "I carry cheese to her table and she does not ask too many questions."
+      },
+      {
+        "name": "Rowan Wray",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "Elmwick or not, she is my friend, and I will not let this quarrel take her."
+      },
+      {
+        "name": "Rill Fenlake",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "She has a right to be angry about her nets, but I miss the Elmwick fish."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 50,
+        "affinity": 45,
+        "label": "pedlar",
+        "note": "He brings fish and stories, and I am not ready to let Cedda go with him."
+      },
+      {
+        "name": "Tibbott Coombe",
+        "trust": 65,
+        "affinity": 60,
+        "label": "father-in-law",
+        "note": "He keeps the bees and the old tally, and he remembers when the meadow was common."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 25,
+        "affinity": 15,
+        "label": "quarrel",
+        "note": "His men pulled our fence down twice; I will not forget it."
+      },
+      {
+        "name": "Eadric Sedge",
+        "trust": 40,
+        "affinity": 35,
+        "label": "landlord's brother",
+        "note": "He fishes the reed beds for Nell and grumbles that we owe her grain; I keep my head down and my cheese ready when he comes by."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time Elmwick men pulled the fence down, Jem and I rebuilt it in the rain while Cedda held the posts.",
+        "salience": 0.8,
+        "about": [
+          "Jem Coombe",
+          "Cedda Coombe"
+        ]
+      },
+      {
+        "gist": "Rowan Wray and I traded cheese and smoked fish at the Ferncross market before the quarrel, and she laughed at my city ways.",
+        "salience": 0.6,
+        "about": [
+          "Rowan Wray"
+        ]
+      },
+      {
+        "gist": "The Lean Year came and the meadow grain was thin, and Nell Sedge said nothing about the rent, which was worse than shouting.",
+        "salience": 0.7,
+        "about": [
+          "Nell Sedge"
+        ]
+      },
+      {
+        "gist": "Osric was born in the dairy in a hard frost, and Hilda Sedge came with blankets and barley broth.",
+        "salience": 0.9,
+        "about": [
+          "Osric Coombe",
+          "Hilda Sedge"
+        ]
+      },
+      {
+        "gist": "The second fence-pulling, when the Elmwick men trampled Rill's nets and I found her crying by the lake.",
+        "salience": 0.75,
+        "about": [
+          "Rill Fenlake"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_what_we_owe",
+        "value": 0.9,
+        "why": "The tally is short and Nell has not pressed us; that is a kindness I will not abuse."
+      },
+      {
+        "key": "keep_the_meadow",
+        "value": 0.85,
+        "why": "It is our living and our dairy, and I will mend the fence as often as they pull it down."
+      },
+      {
+        "key": "friendship_over_quarrel",
+        "value": 0.7,
+        "why": "Rowan Wray is not her village's fence-pullers, and I will not lose her over Hob Garrow's temper."
+      },
+      {
+        "key": "hold_the_family_close",
+        "value": 0.8,
+        "why": "Cedda is too young for the east road, and Osric is afraid of the reeds; I keep them near."
+      },
+      {
+        "key": "sell_cheese_to_make_up",
+        "value": 0.75,
+        "why": "If the grain will not come, the cheese will, and Hilda Sedge pays fair."
+      }
+    ],
+    "secret": "She has been selling a little more cheese than Jem knows, and hiding the marks in the thatch against the day Nell takes the meadow back."
+  },
+  "Cedda Coombe": {
+    "narrative": "I help with the goats and the fence, and I am not afraid of the Elmwick men, only of what they do to the fence. Thistle Mossfoot comes through the meadow with his packs and tells me about Fernhollow and the giants' shelf, and I have already told Thea Wray I am going to see it. Mother says I am too young, but I am eleven and I can walk.",
+    "values": [
+      "seeing far places",
+      "helping at the meadow",
+      "keeping promises to friends"
+    ],
+    "goals": [
+      "walk a stretch of the east road with Thistle Mossfoot's packs",
+      "see Fernhollow and the giants' shelf",
+      "keep the goats from straying into the reeds"
+    ],
+    "mood": "eager, restless, a little defiant",
+    "traits": {
+      "caution": 30,
+      "sociability": 75,
+      "empathy": 55,
+      "curiosity": 85,
+      "ambition": 60,
+      "introspection": 35,
+      "temper": 40,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Morwen Coombe",
+        "trust": 60,
+        "affinity": 65,
+        "label": "mother",
+        "note": "She says I am too young for the road, but she has not forbidden it outright."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": 70,
+        "affinity": 75,
+        "label": "father",
+        "note": "He half-promised I could walk with Thistle when the packs are light."
+      },
+      {
+        "name": "Osric Coombe",
+        "trust": 50,
+        "affinity": 70,
+        "label": "brother",
+        "note": "He is afraid of the reeds; I hold his hand at the meadow edge."
+      },
+      {
+        "name": "Thea Wray",
+        "trust": 65,
+        "affinity": 75,
+        "label": "friend",
+        "note": "She is Elmwick, but she is my friend, and I told her I am going to Fernhollow."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 60,
+        "affinity": 70,
+        "label": "pedlar",
+        "note": "He tells the best stories of the hollow and the giants' shelf."
+      },
+      {
+        "name": "Merewyn Sedge",
+        "trust": 55,
+        "affinity": 60,
+        "label": "friend",
+        "note": "We play at the meadow edge and she is not afraid of the reeds like Osric."
+      },
+      {
+        "name": "Tibbott Coombe",
+        "trust": 65,
+        "affinity": 60,
+        "label": "grandfather",
+        "note": "He keeps the bees and the rent tally and tells me how the meadow was grazed by Elmwick and Reedmoor both, long before it was let; I sit with him when the fence wants mending."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Elmwick men came and pulled the fence down, and I hid behind the goat shed until they were gone.",
+        "salience": 0.85,
+        "about": [
+          "Jem Coombe"
+        ]
+      },
+      {
+        "gist": "Thistle Mossfoot opened his pack and showed me a fernhollow salve and a fish smoked in the east, and I decided I would go.",
+        "salience": 0.8,
+        "about": [
+          "Thistle Mossfoot"
+        ]
+      },
+      {
+        "gist": "I told Thea Wray I was going to see Fernhollow, and she said she would come if her father let her.",
+        "salience": 0.6,
+        "about": [
+          "Thea Wray"
+        ]
+      },
+      {
+        "gist": "Helping Jem mend the fence the second time, holding the posts straight while he hammered.",
+        "salience": 0.7,
+        "about": [
+          "Jem Coombe"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "see_the_hollow",
+        "value": 0.9,
+        "why": "Thistle's stories are better than anything in the meadow, and I am not a baby."
+      },
+      {
+        "key": "help_at_the_meadow",
+        "value": 0.7,
+        "why": "The goats and the fence are ours, and I am old enough to help."
+      },
+      {
+        "key": "keep_friends_across_the_quarrel",
+        "value": 0.65,
+        "why": "Thea Wray did not pull our fence down, and I will not stop being her friend."
+      }
+    ],
+    "secret": ""
+  },
+  "Osric Coombe": {
+    "narrative": "I play at the meadow edge and follow the goats, and I do not like the deep reeds where the water is dark. When the Elmwick men shouted, I hid in the house. I like it when Merewyn Sedge comes to play.",
+    "values": [
+      "feeling safe",
+      "the goats",
+      "playing with friends"
+    ],
+    "goals": [
+      "stay near the house and the goats",
+      "play with Merewyn Sedge"
+    ],
+    "mood": "timid, watchful, easily frightened",
+    "traits": {
+      "caution": 75,
+      "sociability": 50,
+      "empathy": 60,
+      "curiosity": 45,
+      "ambition": 20,
+      "introspection": 30,
+      "temper": 30,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Morwen Coombe",
+        "trust": 80,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She keeps me close and I like that."
+      },
+      {
+        "name": "Jem Coombe",
+        "trust": 75,
+        "affinity": 75,
+        "label": "father",
+        "note": "He carries me on his shoulders past the reeds."
+      },
+      {
+        "name": "Cedda Coombe",
+        "trust": 55,
+        "affinity": 65,
+        "label": "sister",
+        "note": "She holds my hand at the meadow edge and tells me not to be afraid."
+      },
+      {
+        "name": "Merewyn Sedge",
+        "trust": 60,
+        "affinity": 70,
+        "label": "friend",
+        "note": "She comes to play and is not afraid of the reeds like me."
+      },
+      {
+        "name": "Tibbott Coombe",
+        "trust": 70,
+        "affinity": 65,
+        "label": "grandfather",
+        "note": "He sits with the bees and lets me watch, and he smells of smoke and honey."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Elmwick men shouted and pulled the fence down, and I hid behind the house until Jem found me.",
+        "salience": 0.9,
+        "about": [
+          "Jem Coombe"
+        ]
+      },
+      {
+        "gist": "Merewyn Sedge and I played at the meadow edge with the goats until the sun went down.",
+        "salience": 0.7,
+        "about": [
+          "Merewyn Sedge"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

@@ -242,7 +242,7 @@ The items below were the list when layer 1 shipped; [layer 2](#layer-2-residents
 
 # Layer 2: residents who answer
 
-Started 2026-11-09. **Status:** phase 1 (the authority side and its verification) is implemented and verified on scratch databases on the Mac, uncommitted. Phase 2 (the mind service side, the stage cap, the `host` act and a small paid run) waits for the `harness-1` lab to merge, because it edits `living/mind` and `models.json`.
+Started 2026-11-09. **Status:** phase 1 (the authority side) is on main as `6f0d9d7`. Phase 2 (the mind service side, the stage cap, the `host` act, the free tier end to end and a small paid run) is on branch `townlife-2`, built on main after the `harness-1` merge (`015707b`); see [phase 2](#phase-2-what-was-built).
 
 **Why.** The island's life runs (TRIALS.md on `trials-1`, "Life runs" and "Architecture limits") had newcomers speak 100–182 lines to residents and get no answer; nobody taught, traded or offered shelter, and every survivor ended up a forager outside the walls. Instinct-only residents answer gestures only.
 
@@ -275,9 +275,9 @@ Pinned 2.14.1 (`living/Cargo.toml`, image `v2.14.1`); the live pages' selector s
 **What engages a resident.** The engine reports the facts of an engagement as `"<what>:<by>"` and the `wakes` law in [`skills.rhai`](../living/scripts/skills.rhai) decides (1 wakes, 0 does not; no law, nobody wakes):
 
 - *what:* `speech` (addressed: spoken to by name or id, or the only one close by, as for any listener), the name of a skill aimed at the resident **as it starts being performed** (`wave`, `nod`, `give`, `offer`, `accept`, `teach`, `tend`, `heal`, `join`, `welcome`, `attack`, `strike`, `shoot`, `threaten`, `seize`…), `hurt` (a blow or missile landed) or `theft` (taking from its household's store while it watches);
-- *by:* `player` (a person's character), `mind` (a character under the world's minds, a woken resident included) or `instinct`.
+- *by:* `player` (a person's character), `mind` (what a character under the world's minds decided: a deliberate act, words its mind chose; a woken resident included), `habit` (what such a character's behaviour graph did by itself: its routines' greetings, a graph's `say`) or `instinct`.
 
-The shipped law wakes on all of these when `by` is a player or a mind, and never when `by` is instinct only: a neighbour's evening nod, a wolf's bite or a guard's blow on an island wolf stays at the level of detail it happens at. An act wakes its target when it *starts*, not when its effect lands, so a 15 s lesson to someone walking past wakes them and lets their mind decide to stay (the first scene run, which woke at the effect, showed a resident walking off mid-lesson as an instinct-only body).
+The shipped law wakes on all of these when `by` is a player or a mind, and never for a habit or an instinct: a neighbour's evening nod, a wolf's bite or a guard's blow on an island wolf stays at the level of detail it happens at, whether or not the neighbour has a mind. `habit` was added after the first paid run, where woken residents' starting graphs kept nodding to neighbours each evening and woke 11 residents in 9 minutes ([below](#the-paid-runs)). Blows and thefts count as decided. An act wakes its target when it *starts*, not when its effect lands, so a 15 s lesson to someone walking past wakes them and lets their mind decide to stay (the first scene run, which woke at the effect, showed a resident walking off mid-lesson as an instinct-only body).
 
 **Where.** One function, `woken::engage` ([woken.rs](../living/authority/src/woken.rs)), called from `act::perform` (any skill with a creature target), `perceive::speak` (an addressed listener, before it hears the line), `act::damage` (`hurt`) and the store `take` effect (`theft`). Nothing else in the engine knows about waking.
 
@@ -287,7 +287,9 @@ The shipped law wakes on all of these when `by` is a player or a mind, and never
 
 **Places.** The places it knew (its `work`, `square`, `inn`, `evening`) are world facts its starting ways walk to. A mind's projection with a store replaces a character's place rows with the mind graph's set, which would drop them ("Minds keep their places" in the list above); `mind_update` now keeps the places on the `woken` row unless the mind names them itself.
 
-### Who the woken mind is (phase 2)
+### Who the woken mind is
+
+Since 2026-11-10 the island's residents are authored ([seeded lives](SEEDED_LIVES.md#the-seam-with-town-life-layer-2)): each has a sheet in its `background`, its relations as `relation` rows and its author's places as `place` rows before it wakes. Since `townlife-2` merged, a woken authored resident's mind is made in the same place in this order: its world facts (`world`), its sheet (`authored`, no model call), then its ring. Its seeded relations across communities are introductions made at world creation, because a feeling alone no longer makes a name known. The paid lab there found that the first consolidation can rewrite an authored persona with wrong facts unless it is given the resident's world facts.
 
 It starts from what the world holds about the resident, read at waking: its household and family (`parent_a/b`, `home_x/y`), its occupation and background (`background`, the authored sheet where the seed has one), its genome, its lot and settlement (`woken.settlement`), its community, its relations if any, its places, and its ring. The mind service seeds its Neo4j mind from these facts (the same bootstrap an authored resident's sheet gets), then **internalizes the ring in one batch** before the first deliberation, through player memory's internalize path (`lived.rs`, reused once `harness-1` lands): the ring's lines are first-person perceptions with positions and times, like a player's experience rows. Anything the model writes beyond those facts (a persona narrative, values, goals) is marked as the mind's own, `lived_under = ["ai"]` and an `inferred_from: woken` mark, so an experiment can tell world facts from what a model made up. No backstory is invented by the engine.
 
@@ -303,7 +305,7 @@ It starts from what the world holds about the resident, read at waking: its hous
 - Waking happens only on an engagement by a player or a mind (the `wakes` law).
 - Talk turns go to the talk purpose; phase 2 routes them to the fastest good talker (DeepSeek Flash without thinking: 12/12 judged, p50 1.8 s), through `harness-1`'s per-purpose mixes when they land.
 - Deliberation is held off stage by the level of detail (`LIVING_LOD`); a woken resident off stage thinks about every 10 minutes.
-- **A stage cap per settlement (phase 2):** how many woken residents of one settlement may be on stage at full rate at once, a law (`stage_cap`) the mind service reads from the rules it already subscribes to (`script`). Beyond it, the least recently engaged (`woken.engaged_ms`) are treated as off stage. When it binds the service logs it and writes a `stage_cap` journal entry (settlement, on stage, waiting); the run's report counts them. It is engineering, not a rule of behaviour: a capped resident still talks at the off-stage rate.
+- **A stage cap per settlement:** how many woken residents of one settlement may be on stage at full rate at once, the law `woken_stage("cap")` (shipped 6) that the mind service reads from the rules it already subscribes to (`script`). A resident who would go over it takes the stage from the least recently engaged (`woken.engaged_ms`) when it was engaged more recently, else stays off stage. When it binds the service logs it and writes a `stage_cap` entry in the resident's journal (settlement, cap, who is on stage, admitted, displaced). It is engineering, not a rule of behaviour: a capped resident still talks at the off-stage rate.
 
 **Estimates** (prices and rates from [model cost](MODEL_COST.md); not measured for woken residents yet):
 
@@ -324,9 +326,9 @@ The off-stage rate is the labs' (think and compile 0.125 a minute, talk 0.14, co
 
 Through the existing acts path (`mind_act` → `acts::submit` → the skill rules), shared by players and minds: `give`, `offer`/`accept` (trade), `teach`, `join`/`welcome` (a community), `found`/`leave`, `wave`/`nod`/`face`, `tend`/`heal`, `write`/`read`, `store`/`take`, `build`, `open`/`close` a gate, `appraise`, and refusing, which is not acting (a mind that declines an offer simply does not accept it; the asker perceives no answer, or the words the mind chose).
 
-**What a newcomer needs that does not exist: shelter.** Sleep near any house is already restful (`near_shelter` is distance only, with no owner), so a newcomer can sleep at a stranger's door, and nothing says whether they may; houses have owners (`structure.owner`) but no guests. Proposed shared skill, phase 2:
+**What a newcomer needs that does not exist: shelter.** Sleep near any house is already restful (`near_shelter` is distance only, with no owner), so a newcomer can sleep at a stranger's door, and nothing says whether they may; houses have owners (`structure.owner`) but no guests. The shared skill, built in phase 2 as designed here except that the stay's end is the rules' (`host_done` returns `#{ op: "host", until_hour: 7.0 }`) instead of a separate `host_s` law:
 
-- **`host`** (an act, aimed at a person): the actor's household house within sight; takes 2 s, an adult. `host_check` in `skills.rhai` refuses without a house of one's own household, for a child, or a guest already hosted. `host_done` returns `#{ op: "host" }`, whose engine primitive writes a `guest` row (`house`, `guest`, `host`, `until_ms`: the next dawn, a law `host_s`), gives the guest a `place` row `lodging` at the door (so a graph finds it as `{"place": "lodging"}`), and tells both ("X offers you a bed in their house until morning."). It is witnessed like a gift.
+- **`host`** (an act, aimed at a person within 3 tiles; 2 s): `host_check` in `skills.rhai` refuses no living person, oneself and a child. The engine primitive finds the house at the actor's home door (its household's) and refuses without one ("you have no house to offer"); it writes a private `guest` row (`guest`, `host`, `house`, `until_ms`: the next `until_hour` of the world's day), replacing any stay the guest had, gives the guest a `place` row `lodging` at the house (so a graph finds it as `{"place": "lodging"}`), and tells the guest ("X takes you in as their guest until 07:00: a bed in their house (…) and food from their household's store."). It is witnessed and chronicled. Housekeeping ends stays through the `guest.until_ms` index and removes the `lodging` place; a guest's death removes its rows.
 - **What it changes:** taking from the house's store is no longer `theft` for a guest; the house owner's household sees the guest as a guest (a stance minds can read). Sleep stays as restful anywhere near a house: the rules gain no new physical effect, only the consent.
 - **Players** get it through `human_act` like any act; the client needs one control. It belongs to `verify-player`, `verify-core` (the rule) and `verify-client` (the new table, private).
 
@@ -334,7 +336,7 @@ Through the existing acts path (`mind_act` → `acts::submit` → the skill rule
 
 A woken resident knows the newcomer only from what it perceived: its ring (perceptions worded through its own `perceived_of`), then its experience rows. A resident's ring holds only its own percepts (`wake.py` checks that a resident in earshot keeps an overheard line and that 40 residents out of earshot have none of it). Talking does not move memory: each mind records the same exchange from its side.
 
-## Phase 1: what was built (uncommitted)
+## Phase 1: what was built (main, `6f0d9d7`)
 
 | Part | Where |
 |---|---|
@@ -398,18 +400,78 @@ Not covered: generation (no seed or generation change); the paid tier; Neo4j, re
 
 The verification skills' maps were updated for what changed: verify-player (`waking.md`, `wake.py`), verify-minds (`wake.md`, the `wake` case; `verify_llm.py`'s `start` takes a seed), verify-core (`town.md`, `wake_many.py`), verify-client (`PRIVATE` and the player refusals in `drive.py`, `visibility.md`). Each was driven live. The other features' maps were not re-read from source.
 
-## Phase 2 (after `harness-1` merges)
+## Phase 2: what was built
 
-1. **Mind service:** take up woken residents (`woken` subscription); seed each mind from world facts at waking; internalize its ring in one batch through `lived.rs` before the first deliberation; mark what the model writes beyond the facts as its own.
-2. **Routing:** talk to the talk purpose's fastest good model (the `harness-1` mixes, else a talk profile); deliberation under `LIVING_LOD`.
-3. **The stage cap:** a `stage_cap` law, read by `lod.rs` with `woken.settlement` and `engaged_ms`; a journal entry and a log line when it binds.
-4. **`host`:** the shelter act above, as a skill in `skills.rhai` with one engine primitive and a private `guest` table; `verify-core`, `verify-player`, `verify-client`.
-5. **Trials:** [`life-social.json`](../living/trials/life-social.json) (a `life` preset with woken residents on the deepseek-flash variant, five world seeds as replicates); the runner needs the mind service to think for residents as they wake (its `needs` field).
-6. **A small paid run:** a scripted newcomer in Brackenford asks residents for food, shelter and a lesson; report rows, journal references and spend.
+Branch `townlife-2`, on main after the `harness-1` merge (`015707b`).
 
-## Open risks (layer 2, phase 1)
+| Part | Where |
+|---|---|
+| Making a woken resident's mind: identity from the world's facts, then its ring, before its first thought | [mind/woken.rs](../living/mind/src/mind/woken.rs); the wait in `Minds::schedule` |
+| The ring taken in through player memory's path (`Source::Ring`: its own system prompt, `lived_under = ["instinct"]`, `woken_upto` on the `self` node instead of `lived_upto`) | [mind/lived.rs](../living/mind/src/mind/lived.rs), `prompts::ring_system`, `Store::woken_upto` |
+| The identity's marks: `written_by` and `from_facts` on the identity version | `Store::set_identity` |
+| The stage cap, in the level of detail's `watched` and on contact | `Minds::admit` (woken.rs) |
+| The `woken` route: woken residents take the models file's `woken` route (shipped: the `people` mix, talk on DeepSeek Flash, on-stage deliberation on DeepSeek Flash `@low`, the rest on GLM Flash) | `ModelsFile::woken`, `Llm::woken_route`, [models.json](../living/configs/models.json) |
+| `LIVING_ONLY=woken` (also `12,woken`): this service thinks for residents as they wake, for labs and trials | `Minds::allowed` |
+| The `woken` subscription (one row per woken resident); the ring and the settlement's lots read once, at waking, through a subscription dropped after | `main.rs`, `Minds::read_once` |
+| Laws `woken_stage("cap" \| "wait_s")` | [skills.rhai](../living/scripts/skills.rhai) |
+| Decided against habitual engagements: the `wakes` law's `by` gains `habit` (a minded character's graph doing it by itself), which wakes nobody; speech and acts say whether they were decided | `woken::engage`, `perceive::speak(…, decided, …)`, `act::perform` (`ACT`/`PLAYER` nodes), skills.rhai |
+| Names only when known, in what minds are sent: a ring integration writes no feelings toward someone the ring never names (the authority would count the name known) and names them "a stranger" in memory; talk prompts, transcripts and agreements name people as the authority does (`knows_name`: self, family, community, a relation, an introduction) | `lived.rs` (`strangers_stay_strangers`), `Minds::known_as`, `talk.rs`; the `acquaintance` subscription (private) |
+| `host`: the skill (`host_check`, `host_duration`, `host_done`, its `skill_io`), the `host` effect, the private `guest` table, the `lodging` place, the theft exemption, the stay's end in housekeeping, death cleanup | skills.rhai, `catalog.rs`, `script.rs`, `town.rs`, `tables.rs`, `tick.rs`; minds learn it from the skill reference and the ACTS list (`prompts.rs`); `wakes` includes `host` |
 
-- **Cascades.** A woken resident is a mind, and a mind addressing an instinct-only resident wakes it (`wakes` with `by = mind`). A chatty mind could wake its street over hours. The stage cap bounds the cost on stage, not the number of minds; the law can stop `mind` wakes if trials show runaway waking.
+**Making the mind.** The first engagement wakes the resident (phase 1); this service then:
+
+1. reads its ring and its settlement's lots through one subscription, applied and dropped;
+2. without a persona, makes its identity: one `consolidate` call with the identity prompt whose background is the world's facts: its background row (town, occupation, household), stage, settlement, community, parents and children, places with the lot each stands at, relations, know-how and the genome's inborn temperament. The people and places in the facts go into its mind marked `world`; the feelings the model wrote about them `ai`; the identity version carries `written_by: model` and `from_facts`; the thought (`kind: awaken`) lists what the model wrote;
+3. takes in the ring as one integration (`internalize`, the resident's own route), citing ring lines by synthetic ids above any experience id, and sets `woken_upto`;
+4. lets its first deliberation go (a line spoken meanwhile is left to that deliberation, as for anyone deliberating, and answered by its first thought).
+
+A restart finds what is made (a persona; `woken_upto`) and does not repeat it.
+
+**Trials:** [`life-social.json`](../living/trials/life-social.json) runs on the trial runner merged to main (`trials-1`): a trial whose `minds.only` names `woken` gets `LIVING_ONLY=<subject>,woken` (`trials.py`). Still open in its `needs`: one replicate per world seed, and a default variant per preset.
+
+**Not built:** batch mode for the ring (a resident's first answer waits for it, and batch jobs took 24–47 s); a cap on how many residents a mind may wake.
+
+## Phase 2 verification
+
+Free tiers on the Mac's shared container (2.14.1), scratch databases and a scratch Neo4j, main `015707b` merged into `townlife-2`.
+
+| Surface | What was driven | Result |
+|---|---|---|
+| Knowledge | `verify-knowledge/scripts/woken_mind.py` (new): the whole flow with the real `living-mind`, the fake model and a scratch Neo4j, `LIVING_ONLY=woken`, level of detail on | `knowledge-woken-10` (final code): 7 of 7, the seventh that nothing sent to any woken resident's model names a newcomer who never said its name. `knowledge-woken-4` (before the name fixes): 6 of 6. A resident in earshot kept the overheard "I am Wren, new here…" and stayed instinct only; spoken to, it woke and its mind was made before its first deliberation (awaken, internalize, deliberate, in that order); the identity request carried the facts and no perception; the ring request carried the overheard line and nothing after waking; the graph marks `world`, `ai` and `instinct`; it answered, a later line took a talk turn on the woken route's talk model; its acts gave the newcomer berries, taught it cooking and took it in (`guest`, `lodging`); the seventh woken resident of Brackenford took the stage from the least recently engaged (cap 6, logged and journaled); all stayed minds |
+| Player | `host.py` (new), `wake.py`, `gesture.py`, `appraise.py` (the name rule changed) on fresh island runs | host 11 of 11 (twice) (a resident's graph hosts the player; the player learns `lodging`; the stay ends at the rules' 07:00; onlookers see theft from the household's store before the stay and none during it; a player hosting itself is refused; `guest` private); wake 25 of 25 (one world, `player-tl2b-wake`, 22 of 25: no second resident stood within 8 m of the first; three fresh worlds since, 25 of 25); gestures 10 of 10; appraise 10 of 10 (`player-tl2f`; `player-tl2e` 9 of 10, the act's `skill_use` outcome read before it was written) |
+| Minds | `verify_minds.py`, all cases | `minds-tl2c-*` (final code): 14 pass (with `harness-1`'s animals, night and jev), consolidation its known XFAIL |
+| Knowledge, regressions | `verify_knowledge.py run`; `player_memory.py` (its integration path was refactored) | 18 of 18 (`knowledge-base-tl2`); 6 of 6 (`knowledge-pmem-tl2b`) |
+| Core | `cargo_checks.py`; `town.py` on an island run | rules 109, authority 10, mind 64, viewer sync 3; town 21 of 21 on the final code (`core-town-tl2b`; an earlier run, `core-town-tl2`, 20 of 21: the step-aside scene's three approaches got no step, layer 1's open risk) |
+| Client | `verify-client/scripts/run.py` (`guest` in `PRIVATE`; also `harness-1`'s `judged` table and `mind_judged` reducer, which the inventory lacked on main and stopped the driver) | `client-tl2d` (final code): 30 of 30; 59 private tables refused (the new `guest` to the player too); permission matrix 194 calls, 0 mismatches |
+| Project | `set -o pipefail; just living-check` (private `CARGO_TARGET_DIR`) | exit 0 |
+| Bindings | regenerated from the module | `guest_table.rs`, `guest_type.rs`, `mod.rs` |
+
+What the free tier found on the way: verify-knowledge's `player_session.py` read `character` as the player, which the scoped default refuses (it now reads `my_characters`); a lesson the model chose had a prerequisite the newcomer lacked and was refused by the rules (correct; the driver now picks a lesson from the rules' `requires`); the newcomer's real name reached a woken resident's talk prompt though the resident was never told it (fixed: `Minds::known_as`, below).
+
+## The paid runs
+
+Four runs of `verify-knowledge/scripts/woken_real.py` (2026-11-09/10, lab work authorized, no token caps): a scratch island world and Neo4j; `living/configs/models.json` as shipped, so woken residents took the `people` mix (talk on DeepSeek Flash `deepseek-v4-1-flash-1017`, on-stage deliberation on DeepSeek Flash `@low`, think, consolidation and integration on GLM Flash `zai-glm-5-3-flash`); `LIVING_ONLY=woken`, level of detail on, player memory off. A scripted newcomer (a player identity, `human_say` and `human_act` only) stands in Brackenford's square a minute, then asks a resident at its post for food, another (with a house) for a bed, a third (with a technique it lacks) for a lesson, follows each answer up once, accepts trades offered, and waits 4 minutes. Prices: Mistral's list prices (USD per million tokens: GLM Flash 0.15 input, 0.03 cached, 0.5 output; DeepSeek Flash 0.3, 0.007, 1.2). Evidence under the worktree's `.local/living/verify/knowledge-woken-real-<n>/`: `report.md`, `rows.json` (lines said to the newcomer, acts toward it, woken rows, thoughts), `cost.json`, the copied `journal/`, `mind.log`.
+
+| Run | Code | Woken (by the newcomer / by minds) | Calls | Spend | What the newcomer got |
+|---|---|---:|---:|---:|---|
+| 1 | phase 2 as first built | 15 (3 / 12, 11 of them by routine nods) | 152 | $0.209 | berries from two residents (one "lent, not given"); a campfire for the night offered in words and a promise of work; fishing taught (`know_how`: "taught by Bribri"). By evening the town was talking about "Arlen" |
+| 2 | + `habit` | 3 (3 / 0) | 35 | $0.049 | berries; the campfire and fishing work at dawn offered; "writing or basketry" offered once the newcomer proves honest. A resident greeted it as "Arlen, was it?" though it never said its name |
+| 3 | + strangers in rings and talk prompts | 4 (3 / 1, by a resident's chosen words) | 45 | $0.069 | berries; work and spear-fishing offered; two residents grew suspicious that the newcomer's "empty" pack was full (it carries the seed's newcomer kit) and a third withheld a lesson until it proved honest. The name still reached all four through an ordinary consolidation's feeling toward the stranger |
+| 4 | + a feeling is not an introduction (final) | 6 (3 / 3, all by residents' words or a gift) | 87 | $0.146 | berries and directions to a store; a bed offered in the boathouse, the resident walked it there, found the way blocked and set about raising a shelter by the square with a neighbour; fishing offered at dawn. No journal of any woken resident contains the newcomer's name |
+
+Total spent: about **$0.47**.
+
+What it shows:
+
+- **Residents answer.** In every run each asked resident answered, 5–48 s after the question (the first answer is its first thought, which waits for its mind to be made; later lines are talk turns at p50 1.1–1.3 s on DeepSeek Flash), and the one asked for food gave it. Lessons were taught (run 1) or offered for later (runs 2–4).
+- **`host` was never chosen** (0 of 4 runs): every resident asked for a bed offered one in words (a campfire, a boathouse, a shelter to build) and none took the newcomer in through the act, though it was in the ACTS list and the skill reference. That is the minds' choice, not a rule; whether the act is described well enough, or whether a bed offered in words is what people do, is open.
+- **Cost:** run 4's six woken residents cost $0.146 over 8.3 minutes, about $0.18 per woken resident-hour at that rate, most of them on stage with a player in contact (deliberation on DeepSeek is 64% of it). That is close to the estimate above (€0.20–0.24 on stage).
+- **Two leaks found and fixed:** routine nods waking the town (`habit`), and a stranger's name spreading through feelings (rings, talk prompts, then the authority's `knows_name`).
+
+## Open risks (layer 2)
+
+- **Cascades.** A mind's decided engagement still wakes (`by = mind`): in the second paid run one resident proposed a family to a neighbour and would have woken it. Routines no longer do (`habit`, after the first paid run woke 11 residents through routine nods in 9 minutes). The stage cap bounds the cost on stage, not the number of minds; the law can stop `mind` wakes if trials show runaway waking.
+- **A relation still reveals a name.** The authority counts a name known when a mind has feelings about someone (`knows_name`, docs/PERCEPTION.md). A ring integration now writes no feelings toward someone it never heard named, and the mind service names people in talk prompts, transcripts and agreements only as the authority does (`Minds::known_as`). Ordinary consolidation of any mind can still write a feeling toward a stranger it met, after which the authority gives that mind their name. That rule predates this work; changing it is a perception decision, left open.
 - **Rings are reset by nothing but death.** A resident woken after years keeps only its last `slots` perceptions; that is the intent, but an hour of a resident's life is little.
 - **The sighting note comes from players' sweeps only.** A newcomer under a mind (a trial's spawned newcomer) is noted when it speaks, acts or is witnessed, not when it merely comes into view.
 - **Woken residents with no mind service** (a world without one running) hold a pending deliberation and write experiences (bounded at 400 rows each) on their starting ways; they act as before.

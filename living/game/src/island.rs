@@ -641,11 +641,13 @@ fn road_layer(land: &Land, x: f32, z: f32, climate: Climate) -> Layer {
         if dx * dx + dz * dz > (st.radius_m * 1.15).powi(2) {
             continue;
         }
-        return match st.style.as_str() {
-            "steampunk" => Layer::Cobble,
-            "cyberpunk" | "metro" | "works" => Layer::Pavers,
-            "slum" => earth,
-            "outpost" | "salvage" | "ruin" => Layer::Gravel,
+        // The rules name each style's paving (`settle::road_surface`), so new district styles
+        // need no change here.
+        return match living_rules::settle::road_surface(&st.style) {
+            Some("pavers") => Layer::Pavers,
+            Some("setts") => Layer::Cobble,
+            Some("earth") => earth,
+            Some("gravel") => Layer::Gravel,
             _ if st.plaza.paved && st.in_plaza((x, z)) => Layer::Flagstone,
             _ => Layer::Cobble,
         };

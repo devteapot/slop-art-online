@@ -6,7 +6,7 @@
 - Settlement names, coordinates and band camp sites match between publications.
 - Resource positions, character names, seeded ages, genes and animal positions are compared and hashed.
 
-`living/authority/src/seed.rs:607` and `:616` feed `seed.seed` to `realm::generate` or `map::generate` (a land seed goes through `island::generate` at `:611`). Town layout runs before chunk publication. `fresh_name` at line 1098, `drawn_households` at line 1287, and animal spawning from line 741 use `ctx.rng()`.
+`init` calls `floor::begin`, which runs `seed::seed` (`living/authority/src/seed.rs`) for a compiled seed. `seed::seed` feeds `seed.seed` to `realm::generate` or `map::generate`, or to `island::generate` for a land seed. Town layout runs before chunk publication. `fresh_name`, `drawn_households` and the animal placement in `populate` use `ctx.rng()`.
 
 ## How to get to it (user POV)
 
@@ -25,4 +25,4 @@ Build one seed and publish its module into two fresh databases. Inspect their in
 - Resource rows sort by kind and position. Differing paired rows count sorted-list differences, not matched entities moving.
 - Animal positions use `character.home_x` and `home_y`, which retain spawn positions, rather than moving `body` segments. The driver filters out people for this comparison.
 - Terrain and settlement sites are compared before either world runs long enough to reshape the map. This is evidence for `realm`, not every possible numeric seed.
-- Valley band homesteads (`homestead`, `living/authority/src/seed.rs:1134`) use resource availability. Resources use reducer RNG, so those camp sites are outside the realm-site repeatability guarantee. The repeated `realm` places its bands at `r.wilds` sites (`seed.rs:719-723`), which do repeat.
+- Valley band homesteads (`homestead` in `living/authority/src/seed.rs`) use resource availability. Resources use reducer RNG, so those camp sites are outside the realm-site repeatability guarantee. The repeated `realm` places its bands at `r.wilds` sites (the bands loop in `populate`), which do repeat.

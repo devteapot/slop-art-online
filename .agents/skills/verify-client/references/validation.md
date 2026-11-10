@@ -7,6 +7,12 @@ Own scratch container `scale-verify` (image `v2.14.1`, port 3427) named by `LIVI
 - `client-scale-scoped-011217` (`run.py`, scoped default): 30 of 30. Private table visibility: 62 tables. Reducer permission matrix: 194 calls, 0 mismatches.
 - `client-scale-open-011435` (`LIVING_PERCEPTION=open`): 30 PASS and the known XFAIL (anonymous `experience` in the open build).
 - The two runs before stopped at the driver's inventories: the four new private tables, and `judged` (table) and `mind_judged` (reducer) from the harness merge, which the driver did not list. Both inventories now name them; `mind_judged` is called with one judgment for the caller's own character and refused for others'.
+## 2026-11-10 `guest`, and harness-1's `judged` and `mind_judged` (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
+
+- `run.py` stopped at the inventory on main as merged: `judged` (table) and `mind_judged` (reducer) from `harness-1` were missing from `PRIVATE` and `MIND`; added with `guest`.
+- `client-tl2d` on the final code: 30 of 30; private table visibility 59 tables (`guest` refused to the player too); permission matrix 194 calls, 0 mismatches.
 
 ## 2026-11-09 town life layer 2, phase 1 (Mac)
 

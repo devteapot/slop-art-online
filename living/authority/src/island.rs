@@ -28,6 +28,8 @@ pub struct Hosted {
     pub info: LandInfo,
     pub settlements: Vec<Planned>,
     pub lots: Vec<PlannedLot>,
+    /// The roads as a graph, for the stages of a known way (`town::seat`); dropped with the rest.
+    pub ways: living_rules::ways::Ways,
 }
 
 pub struct Planned {
@@ -36,6 +38,8 @@ pub struct Planned {
     /// its own style (`living_rules::land::Site::id`).
     pub site_id: String,
     pub style: String,
+    /// The region kind it stands in (`meadow`, `forest`, ...), for seeds that choose a site.
+    pub region: String,
     pub centre: (f32, f32),
     pub radius_m: f32,
     pub scale: f32,
@@ -45,6 +49,9 @@ pub struct Planned {
     pub fields: Vec<(f32, f32)>,
     /// Door points of the homes, nearest the plaza first.
     pub homes: Vec<(f32, f32)>,
+    /// Where one stands on the square: its middle, or, when that is built on, walkable points
+    /// round its edge (each resident takes the nearest it can reach).
+    pub square: Vec<(f32, f32)>,
 }
 
 pub struct PlannedLot {
@@ -77,17 +84,30 @@ fn home(k: LotKind) -> bool {
     matches!(k, LotKind::House | LotKind::Townhouse)
 }
 
-/// Generate the land and plan what the world keeps of it.
-pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
+/// The land's side and parameters from a seed's `map`.
+pub fn params_of(m: &SeedMap) -> Result<(u32, LandParams), String> {
     let size = if m.size > 0 { m.size } else { m.w.max(m.h) };
     let params: LandParams = if m.params.is_null() { LandParams::default() } else { serde_json::from_value(m.params.clone()).map_err(|e| format!("map.params: {e}"))? };
+    Ok((size, params))
+}
+
+/// Generate the land in this call and plan what the world keeps of it.
+pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
+    let (size, params) = params_of(m)?;
     let land = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.land.generate");
         landgen::generate(seed, size, &params)
     };
     let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.land.host");
-    let (map, hosted) = host::hosted_map(&land, &params);
-    let d = host::digests(&land, &map);
+    Ok(host(seed, m, &land, &params))
+}
+
+/// Plan what the world keeps of a generated land: the hosted tiles, digests, settlements and
+/// lots.
+pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -> Hosted {
+    let size = land.size;
+    let (map, hosted) = host::hosted_map(land, params);
+    let d = host::digests(land, &map);
     log::info!(
         "land {seed} at {size} m: {} settlements, {} lots, {} roads, {} props (derived, not stored); buildings block {} tiles and cut off {}; digests tiles {:016x} heights {:016x} layout {:016x}",
         land.settlements.len(),
@@ -121,8 +141,14 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
                 }
             }
         }
-        // Hearth, sign and two stores on the plaza, clear of its well and stalls.
-        let c = s.plaza.centre;
+        // Hearth, sign and two stores on the plaza, clear of its well and stalls. A square whose
+        // middle is built on (the megacity core's arcology) has its heart on its walkable edge.
+        let square: Vec<(f32, f32)> = if map.walkable(s.plaza.centre.0 as i32, s.plaza.centre.1 as i32) {
+            vec![s.plaza.centre]
+        } else {
+            s.plaza.points.iter().step_by(2).map(|q| (q.0 * 0.9 + s.plaza.centre.0 * 0.1, q.1 * 0.9 + s.plaza.centre.1 * 0.1)).filter(|q| map.walkable(q.0 as i32, q.1 as i32)).collect()
+        };
+        let c = square.first().copied().unwrap_or(s.plaza.centre);
         let mut market: Vec<(f32, f32)> = Vec::new();
         for off in [(3.0, 2.0), (-3.0, 2.5), (4.0, -3.0), (-4.0, -3.0)] {
             let p = near((c.0 + off.0 * s.scale.max(0.5), c.1 + off.1 * s.scale.max(0.5)));
@@ -149,6 +175,7 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
             kind: s.kind,
             site_id: land.sites[s.site as usize].id(),
             style: s.style.clone(),
+            region: serde_json::to_value(land.sites[s.site as usize].region).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default(),
             centre: c,
             radius_m: s.radius_m,
             scale: s.scale,
@@ -156,6 +183,7 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
             market,
             fields,
             homes: homes.into_iter().map(|h| h.1).collect(),
+            square,
         });
     }
     let lots = land
@@ -193,28 +221,49 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
         arrive_x: arrive.0,
         arrive_y: arrive.1,
     };
-    Ok(Hosted { map, info, settlements, lots })
+    // Built by the planner's last step; a land made otherwise (none today) builds it here.
+    let ways = land.ways.clone().unwrap_or_else(|| living_rules::ways::Ways::of(land));
+    Hosted { map, info, settlements, lots, ways }
 }
 
-/// The seed's settlement entry for each planned settlement: the k-th entry of a site kind
-/// (`site`, or `town` for `towns` and `village` for `villages`) takes the k-th settlement of
-/// that kind. A town in its own style is its own kind (`steampunk_town`). Settlements without
-/// an entry stand empty.
+/// The seed's settlement entry for each planned settlement. An entry of a site kind (`site`, or
+/// `town` for `towns` and `village` for `villages`; a town in its own style is its own kind,
+/// `steampunk_town`) takes the next settlement of that kind, in order. An entry that chooses
+/// (`near`, `region`) goes after those and takes the unused one of its kind in one of its
+/// region kinds if any, nearest the settlement it names. Settlements without an entry stand
+/// empty.
 pub fn match_seed<'a>(h: &Hosted, towns: &'a [SeedTown], villages: &'a [SeedTown]) -> Vec<Option<&'a SeedTown>> {
     let entries: Vec<(&str, &SeedTown)> = towns
         .iter()
         .map(|t| (if t.site.is_empty() { "town" } else { t.site.as_str() }, t))
         .chain(villages.iter().map(|t| (if t.site.is_empty() { "village" } else { t.site.as_str() }, t)))
         .collect();
-    let mut used = vec![false; entries.len()];
-    h.settlements
-        .iter()
-        .map(|s| {
-            let i = entries.iter().enumerate().position(|(i, (k, _))| !used[i] && *k == s.site_id)?;
-            used[i] = true;
-            Some(entries[i].1)
-        })
-        .collect()
+    let chooses = |t: &SeedTown| !t.near.is_empty() || !t.region.is_empty();
+    let mut out: Vec<Option<&SeedTown>> = vec![None; h.settlements.len()];
+    for (k, t) in entries.iter().filter(|(_, t)| !chooses(t)) {
+        if let Some(i) = (0..out.len()).find(|&i| out[i].is_none() && h.settlements[i].site_id == *k) {
+            out[i] = Some(*t);
+        }
+    }
+    for (k, t) in entries.iter().filter(|(_, t)| chooses(t)) {
+        let anchor = (0..out.len()).find(|&j| out[j].is_some_and(|o| o.name == t.near)).map(|j| h.settlements[j].centre);
+        if anchor.is_none() && !t.near.is_empty() {
+            log::warn!("{}: near {:?}, which is not a settlement placed before it; nearness ignored", t.name, t.near);
+        }
+        let key = |i: usize| {
+            let s = &h.settlements[i];
+            let off_region = !t.region.is_empty() && !t.region.contains(&s.region);
+            (off_region, anchor.map_or(0.0, |a| (s.centre.0 - a.0).hypot(s.centre.1 - a.1)))
+        };
+        let best = (0..out.len()).filter(|&i| out[i].is_none() && h.settlements[i].site_id == *k).min_by(|&a, &b| {
+            let (ka, kb) = (key(a), key(b));
+            ka.0.cmp(&kb.0).then(ka.1.total_cmp(&kb.1))
+        });
+        if let Some(i) = best {
+            out[i] = Some(*t);
+        }
+    }
+    out
 }
 
 /// The layout `seed::town` builds a seeded settlement from.
@@ -222,10 +271,17 @@ pub fn layout(p: &Planned) -> Layout {
     Layout { center: p.centre, gates: p.gates.clone(), houses: p.homes.clone(), market: p.market.clone(), fields: p.fields.clone() }
 }
 
-/// Lot rows and the structures at their doors (owners are set as households move in).
+/// The `land` row, lot rows and the structures at their doors (owners are set as households
+/// move in).
 pub fn build(ctx: &ReducerContext, h: &Hosted, now: u64) {
     ctx.db.land().insert(h.info.clone());
-    for (i, l) in h.lots.iter().enumerate() {
+    build_lots(ctx, h, 0..h.lots.len(), now);
+}
+
+/// Lot rows `range` and the structures at their doors, in order (a staged world inserts them in
+/// batches; ids follow the order either way).
+pub fn build_lots(ctx: &ReducerContext, h: &Hosted, range: std::ops::Range<usize>, now: u64) {
+    for (i, l) in h.lots.iter().enumerate().skip(range.start).take(range.len()) {
         let structure = structure_kind(l.kind).map_or(0, |k| {
             common::invalidate_structures(ctx);
             ctx.db.structure().insert(Structure { id: 0, kind: k.into(), x: l.door.0, y: l.door.1, chunk: chunk_of(l.door.0, l.door.1), owner: 0, built_ms: now }).id
@@ -277,9 +333,10 @@ pub fn settle(ctx: &ReducerContext, h: &Hosted, seeded: &[Option<&SeedTown>], li
             bg.text = v.to_string();
             ctx.db.background().id().update(bg);
         }
-        // The places its residents know: home, work, the square, where they spend evenings.
+        // The places its residents know: home, work, the square, where they spend evenings, and
+        // what their authors gave them.
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.town.seat");
-        crate::town::seat(ctx, h, i, community, life);
+        crate::town::seat(ctx, h, i, community, life, seeded);
     }
 }
 

@@ -260,6 +260,9 @@ pub enum Effect {
     Join,
     Welcome,
     Leave,
+    /// The target person becomes the actor's household's guest until the next `until_hour`
+    /// of the world's day (a bed in its house, food from its store).
+    Host { until_hour: f32 },
     /// Loose the skill's missile (`<skill>_missile(a)`) toward the action's target point.
     Launch,
     /// The target creature is greeted: it sees the gesture made at it (`hailed`, `hailer`).
@@ -1036,6 +1039,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "join" => Effect::Join,
         "welcome" => Effect::Welcome,
         "leave" => Effect::Leave,
+        "host" => Effect::Host { until_hour: (n("until_hour") as f32).rem_euclid(24.0) },
         "launch" => Effect::Launch,
         "hail" => Effect::Hail,
         "reveal" => Effect::Reveal { what: s("what"), secs: (n("secs") as f32).clamp(0.0, 600.0) },

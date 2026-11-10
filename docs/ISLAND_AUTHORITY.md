@@ -165,6 +165,7 @@ The planner now dresses settlements with props, terraces sloping sites, and lays
 **Styled towns are settlements of kind `town`** whose `settlement.style` names their models (`steampunk`, `cyberpunk`).
 - Their site has its own id (`living_rules::land::Site::id`: `steampunk_town`, `cyberpunk_town`). `island::match_seed` matches seed entries by that id, so `"site": "steampunk_town"` in [`island.json`](../living/seeds/island.json) peoples Kettlebridge and `"cyberpunk_town"` peoples Lanternquay.
 - `SiteKind` gains no variant: client code matches it exhaustively. Newcomers still arrive at the first (walled) town.
+- Since 2026-11-10 a seed entry may also choose its site by `near` (a settlement placed before it) and `region` (region kinds); the island's hamlets (`hamlet_village`) are matched that way, and the authority keeps the land's roads as a graph (`living_rules::ways`) until creation ends, for the stages of residents' known ways ([seeded lives](SEEDED_LIVES.md)).
 
 ## Measurements
 

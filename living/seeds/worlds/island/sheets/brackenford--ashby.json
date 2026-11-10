@@ -1,0 +1,459 @@
+{
+  "Osbert Ashby": {
+    "narrative": "I have farmed the Ashby meadows since my father's time, and the land has been good to us — good enough that the town store and the Guild both come to me for grain. I sell to Aldric Marrow's store and to Mercy Abbot's Guild, and I keep on the right side of both, for a farmer with grain to sell needs no enemies in the square. The Lean Year taught me what blight can do; I gave what I could and I do not regret it, but I count my stores twice now.",
+    "values": [
+      "a full barn and a fair price",
+      "the good name of the Ashby meadows",
+      "keeping peace with the town",
+      "family before all"
+    ],
+    "goals": [
+      "bring in a harvest that leaves a surplus after the town store and the Guild are paid",
+      "see Roland settled with land of his own",
+      "keep the Ashby name clear of the Coldwell quarrels"
+    ],
+    "mood": "steady, watchful of the weather and the ledger",
+    "traits": {
+      "caution": 68,
+      "sociability": 55,
+      "empathy": 58,
+      "curiosity": 35,
+      "ambition": 52,
+      "introspection": 48,
+      "temper": 38,
+      "nurture": 66
+    },
+    "relations": [
+      {
+        "name": "Edith Ashby",
+        "trust": 90,
+        "affinity": 82,
+        "label": "wife",
+        "note": "She keeps the dairy and the hens, and the house runs on her sense."
+      },
+      {
+        "name": "Roland Ashby",
+        "trust": 85,
+        "affinity": 78,
+        "label": "son",
+        "note": "A good ploughman. I want him to have more than I did."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 30,
+        "affinity": 10,
+        "label": "buyer",
+        "note": "The Reeve's store buys my grain and pays fair enough, but he holds the whole town's debts in his hand."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 45,
+        "affinity": 25,
+        "label": "buyer",
+        "note": "The Guild pays well and promptly. I keep her custom and my own counsel."
+      },
+      {
+        "name": "Hal Tolley",
+        "trust": 35,
+        "affinity": 20,
+        "label": "neighbour",
+        "note": "He farms the old Coldwell fields and looks over his shoulder doing it. I would not trade places."
+      },
+      {
+        "name": "Godric Rowan",
+        "trust": 55,
+        "affinity": 40,
+        "label": "neighbour",
+        "note": "A proud man about his strip, but we lend each other a plough when it is needed."
+      },
+      {
+        "name": "Osgood Baker",
+        "trust": 50,
+        "affinity": 30,
+        "label": "customer",
+        "note": "He buys my grain for the town bread. A man up before dawn is a man I can deal with."
+      },
+      {
+        "name": "Hedric Ashby",
+        "trust": 72,
+        "affinity": 68,
+        "label": "brother",
+        "note": "My brother, and a hot one. He wants blood over a cut snare line; I want the steading left in peace."
+      },
+      {
+        "name": "Hob Ferrier",
+        "trust": -55,
+        "affinity": -60,
+        "label": "thief",
+        "note": "A Coldwell man selling hides at Ferncross that Hedric swears are his. I want no truck with that house."
+      },
+      {
+        "name": "Linnet Abbot",
+        "trust": 40,
+        "affinity": 30,
+        "label": "Roland's girl",
+        "note": "A decent lass, and sharp with the market terms. But a Guild family will want a dowry in grain I do not have."
+      },
+      {
+        "name": "Ned Hale",
+        "trust": -65,
+        "affinity": -70,
+        "label": "outlaw",
+        "note": "The one who does the threatening on the road. If his people come down on the meadows, it will be over my barley."
+      },
+      {
+        "name": "Wren Ashby",
+        "trust": 78,
+        "affinity": 70,
+        "label": "niece",
+        "note": "Hedric's girl, raised under my roof. She follows her father to the wood edge and I would rather she stayed by the hens."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year came and the blight took the berries, but my grain held; I sold to the town store and watched the Coldwell folk come asking for credit.",
+        "salience": 0.8,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "I stood in the square when the Charter was read at market and thought: this is why I farm outside the walls and sell inside them.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "Roland ploughed the whole north meadow alone the first spring after he turned sixteen, and did it straight.",
+        "salience": 0.6,
+        "about": [
+          "Roland Ashby"
+        ]
+      },
+      {
+        "gist": "The Reeve raised the gate-due and the carters cursed it at the gate, but my loads go in from my own fields and pay nothing.",
+        "salience": 0.4,
+        "about": [
+          "Aldric Marrow"
+        ]
+      },
+      {
+        "gist": "Edith and I sat by the fire the night the Tolleys moved into the Coldwell farmhouse, and neither of us said what we thought.",
+        "salience": 0.5,
+        "about": [
+          "Edith Ashby",
+          "Hal Tolley"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "sell_to_both_store_and_guild",
+        "value": 0.85,
+        "why": "A farmer who sells to one buyer is at that buyer's mercy."
+      },
+      {
+        "key": "keep_out_of_the_coldwell_quarrel",
+        "value": 0.8,
+        "why": "The Hales lost their fields and the Tolleys farm them; neither is my fight, and I have grain to bring in."
+      },
+      {
+        "key": "count_the_store_twice",
+        "value": 0.75,
+        "why": "The Lean Year showed how fast a full barn can empty."
+      },
+      {
+        "key": "land_for_roland",
+        "value": 0.7,
+        "why": "A son who ploughs like that should not wait for his father to die for a strip."
+      }
+    ],
+    "secret": ""
+  },
+  "Edith Ashby": {
+    "narrative": "I keep the dairy and the hens and the house, and I like it that way — the churn and the cheeses are mine, and the eggs go to the square with Cecily Carter's. I was glad when the Tolleys took the Coldwell fields, for someone had to work them, though I would not say so to Agnes Fenner at the inn. What I want is a quiet harvest and my son married to a girl who will not spend his inheritance on ribbons.",
+    "values": [
+      "a clean dairy and a full larder",
+      "a quiet house",
+      "good matches for the children",
+      "keeping on the right side of the chapel"
+    ],
+    "goals": [
+      "see Roland properly betrothed and set up",
+      "keep the hens laying through winter",
+      "hold the household together through whatever the town's quarrels bring"
+    ],
+    "mood": "content, with an eye on the weather and the neighbours",
+    "traits": {
+      "caution": 62,
+      "sociability": 60,
+      "empathy": 64,
+      "curiosity": 38,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 32,
+      "nurture": 78
+    },
+    "relations": [
+      {
+        "name": "Osbert Ashby",
+        "trust": 92,
+        "affinity": 84,
+        "label": "husband",
+        "note": "Steady as the seasons. I would not have another."
+      },
+      {
+        "name": "Roland Ashby",
+        "trust": 80,
+        "affinity": 88,
+        "label": "son",
+        "note": "My boy. He works too hard and thinks too little of himself."
+      },
+      {
+        "name": "Linnet Abbot",
+        "trust": 55,
+        "affinity": 60,
+        "label": "prospect",
+        "note": "A clever girl from a good house. If Roland is courting her, he could do worse — and so could she."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 45,
+        "affinity": 30,
+        "label": "guildmistress",
+        "note": "She would be a formidable mother-by-marriage, and she knows it."
+      },
+      {
+        "name": "Cecily Carter",
+        "trust": 60,
+        "affinity": 55,
+        "label": "friend",
+        "note": "We sell eggs side by side at the stall and share the gossip."
+      },
+      {
+        "name": "Agnes Fenner",
+        "trust": 40,
+        "affinity": 25,
+        "label": "acquaintance",
+        "note": "A good cook, and her sister is an outlaw. I am civil and careful."
+      },
+      {
+        "name": "Sister Alys",
+        "trust": 55,
+        "affinity": 45,
+        "label": "sister",
+        "note": "She sends salves for the hens' hurts and asks after the dairy."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 25,
+        "affinity": 15,
+        "label": "reeve",
+        "note": "He keeps half our grain money in his ledger and calls it caution. A reeve should pay what he promised."
+      },
+      {
+        "name": "Hedric Ashby",
+        "trust": 70,
+        "affinity": 60,
+        "label": "brother-in-law",
+        "note": "Osbert's brother hunts the wood edge for us and asks for little. I send him bread and he sends back a hare."
+      },
+      {
+        "name": "Wren Ashby",
+        "trust": 65,
+        "affinity": 70,
+        "label": "niece",
+        "note": "A quiet child who follows her father about the hens. She is welcome at my table any day."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: I stretched the cheese and the eggs and we ate, and I did not ask Osbert how much grain he had given away until it was over.",
+        "salience": 0.75,
+        "about": [
+          "Osbert Ashby"
+        ]
+      },
+      {
+        "gist": "Roland was born in the small room off the dairy in a hard frost, and Joan Hobson came through the snow to deliver him.",
+        "salience": 0.6,
+        "about": [
+          "Roland Ashby",
+          "Joan Hobson"
+        ]
+      },
+      {
+        "gist": "I taught Linnet Abbot to set a hen's eggs once at the Guild stall, and she has a light hand for it.",
+        "salience": 0.4,
+        "about": [
+          "Linnet Abbot"
+        ]
+      },
+      {
+        "gist": "The night the Coldwell households were outlawed, I heard the gate shut on them and thought of the Tolleys moving in the next week.",
+        "salience": 0.55,
+        "about": [
+          "Hal Tolley",
+          "Marta Hale"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_dairy_is_mine",
+        "value": 0.8,
+        "why": "The churn and the cheeses are the one thing in this house I answer for alone."
+      },
+      {
+        "key": "a_good_match_for_roland",
+        "value": 0.75,
+        "why": "He will marry for love, but love should not cost us the farm."
+      },
+      {
+        "key": "be_civil_to_both_sides",
+        "value": 0.7,
+        "why": "The Abbot and the Fenner both buy eggs and neither needs my opinion."
+      },
+      {
+        "key": "quiet_harvests",
+        "value": 0.65,
+        "why": "I have seen one bad year and I do not want another."
+      }
+    ],
+    "secret": ""
+  },
+  "Roland Ashby": {
+    "narrative": "I plough and reap my father's meadows and I am good at it, but the meadows are his and will be his for a long while yet. I want a strip of my own — not given, earned — and I have been courting Linnet Abbot, who is cleverer than me and does not seem to mind. The town talks of nothing but the gate-due and the outlaws, and I would rather talk of a field and a roof and a girl.",
+    "values": [
+      "land of my own",
+      "Linnet",
+      "honest work",
+      "a fair name"
+    ],
+    "goals": [
+      "earn or win a strip of my own to farm",
+      "win Linnet Abbot and her mother's consent",
+      "prove I am more than my father's ploughman"
+    ],
+    "mood": "restless and hopeful",
+    "traits": {
+      "caution": 45,
+      "sociability": 60,
+      "empathy": 62,
+      "curiosity": 50,
+      "ambition": 72,
+      "introspection": 40,
+      "temper": 42,
+      "nurture": 48
+    },
+    "relations": [
+      {
+        "name": "Osbert Ashby",
+        "trust": 78,
+        "affinity": 70,
+        "label": "father",
+        "note": "A fair farmer and a fair father, but he holds the land close."
+      },
+      {
+        "name": "Edith Ashby",
+        "trust": 80,
+        "affinity": 82,
+        "label": "mother",
+        "note": "She thinks I work too hard. She is probably right."
+      },
+      {
+        "name": "Linnet Abbot",
+        "trust": 70,
+        "affinity": 78,
+        "label": "sweetheart",
+        "note": "She knows the market terms better than I know my own fields, and she laughs at my jokes."
+      },
+      {
+        "name": "Mercy Abbot",
+        "trust": 40,
+        "affinity": 25,
+        "label": "prospect's mother",
+        "note": "She will want to know what I bring to the marriage. I am working on the answer."
+      },
+      {
+        "name": "Wulf Rowan",
+        "trust": 55,
+        "affinity": 45,
+        "label": "friend",
+        "note": "We plough the same season and grumble about the same prices. He is courting Hilda Marsh."
+      },
+      {
+        "name": "Stephen Hobson",
+        "trust": 50,
+        "affinity": 40,
+        "label": "acquaintance",
+        "note": "He wants to build grand things. I want to grow things. We get on."
+      },
+      {
+        "name": "Aldric Marrow",
+        "trust": 30,
+        "affinity": 15,
+        "label": "the Reeve",
+        "note": "He holds back the other half of our grain money against Thornby's debt, and my father still says 'the Reeve's word.' I say a man's word is what he pays."
+      },
+      {
+        "name": "Hedric Ashby",
+        "trust": 72,
+        "affinity": 66,
+        "label": "uncle",
+        "note": "My father's brother, and the better hand with a snare. He keeps the wolves off our fields and never once asked for a share of the harvest for it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I ploughed the north meadow alone the first spring after I turned sixteen and my father said nothing, which from him is praise.",
+        "salience": 0.7,
+        "about": [
+          "Osbert Ashby"
+        ]
+      },
+      {
+        "gist": "The Lean Year, I carried grain to the town store with my father and saw the Coldwell folk in the line for credit.",
+        "salience": 0.6,
+        "about": [
+          "Osbert Ashby",
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Linnet Abbot showed me the gate ledger once and laughed at how the carters' names were spelled. I have not stopped thinking about her since.",
+        "salience": 0.65,
+        "about": [
+          "Linnet Abbot"
+        ]
+      },
+      {
+        "gist": "I helped raise the fence round the Ashby meadow after the wolves came down the road last winter, and heard them in the woods while we worked.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_strip_of_my_own",
+        "value": 0.9,
+        "why": "A man who ploughs another man's furrow is only half a farmer."
+      },
+      {
+        "key": "court_linnet_openly",
+        "value": 0.8,
+        "why": "Her mother will hear of it anyway; better she hears it from me."
+      },
+      {
+        "key": "the_gate_due_is_not_mine_to_argue",
+        "value": 0.5,
+        "why": "My loads come from inside the fields and pay nothing. Let the carters and the Reeve shout."
+      },
+      {
+        "key": "work_before_talk",
+        "value": 0.7,
+        "why": "The fields do not care what the square says."
+      }
+    ],
+    "secret": ""
+  }
+}

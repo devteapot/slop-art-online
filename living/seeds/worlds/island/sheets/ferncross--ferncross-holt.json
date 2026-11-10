@@ -1,0 +1,423 @@
+{
+  "Bramwell Ashdown": {
+    "narrative": "I am Master woodcutter at the Ferncross, and the oak and ash of this crossing have paid my house's way for twenty years. I fell for Elmwick and Reedmoor both, and keep the charcoal pits on the side when the burn runs slow and the orders run fast. I owe Alder Rush a share of charcoal from last winter's burn and have not carried it up the road yet; the Elmwick timber paid marks in hand, and Alder can wait a little longer without the world ending. I count Orvin Hollis at Sootwood a friend, and I have not forgotten the men from Coldwell who walked off with my tools.",
+    "values": [
+      "a fair price for honest work",
+      "the crossing fed before anyone else",
+      "debts paid, though not always first",
+      "keeping my word to my neighbours"
+    ],
+    "goals": [
+      "carry Alder Rush his charcoal share before he has to ask twice",
+      "keep the Ferncross timber trade with both Elmwick and Reedmoor",
+      "see my daughter Corliss learn the axe and the pits without hurting herself",
+      "get back the tools the Coldwell men took"
+    ],
+    "mood": "steady, a little pressed, keeping his worries behind his teeth",
+    "traits": {
+      "caution": 58,
+      "sociability": 55,
+      "empathy": 52,
+      "curiosity": 40,
+      "ambition": 55,
+      "introspection": 45,
+      "temper": 50,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Nesta Ashdown",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps the pot and the tally both; I would be lost at the crossing without her."
+      },
+      {
+        "name": "Corliss Ashdown",
+        "trust": 85,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "Quick with kindling and quicker with questions; I want her to have the axe and the sense to use it."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 55,
+        "affinity": 40,
+        "label": "creditor",
+        "note": "He lent grain last winter and I owe him charcoal; he is patient but he counts."
+      },
+      {
+        "name": "Odelia Harrow",
+        "trust": 65,
+        "affinity": 50,
+        "label": "fellow woodcutter",
+        "note": "She sold Elmwick timber for the Lakemead fence and says a sale is a sale; I say it is, but Reedmoor may not."
+      },
+      {
+        "name": "Roderick Harrow",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "His barley came in light and the kitchen needs it; I would rather buy than beg."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 45,
+        "affinity": 30,
+        "label": "customer",
+        "note": "She buys our timber and now she is cool with the crossing over a fence; I want that to blow over."
+      },
+      {
+        "name": "Hob Garrow",
+        "trust": 50,
+        "affinity": 40,
+        "label": "customer",
+        "note": "Elmwick pays on time and asks few questions; I would not want to lose his orders."
+      },
+      {
+        "name": "Orvin Hollis",
+        "trust": 75,
+        "affinity": 70,
+        "label": "friend",
+        "note": "A good man with an axe and a bad word for the quay's stone price; we understand each other."
+      },
+      {
+        "name": "Marta Hale",
+        "trust": -60,
+        "affinity": -50,
+        "label": "grudge",
+        "note": "Her people took my tools off the wood road; I have not had a good word for Coldwell since."
+      },
+      {
+        "name": "Sorrel Bramblecap",
+        "trust": 50,
+        "affinity": 35,
+        "label": "trade neighbour",
+        "note": "He works the hollow's grain and berry rows and grumbles about the giants' track taking timber; I sell him nothing and buy nothing, but the east road keeps us honest with each other."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year came and the berry crop failed; I felled and burned all through it and still the crossing went hungry, and Alder Rush's grain kept us.",
+        "salience": 0.8,
+        "about": [
+          "Alder Rush",
+          "Nesta Ashdown"
+        ]
+      },
+      {
+        "gist": "Two men from Coldwell stopped me on the wood road and took my tools and a load of charcoal; I walked home with empty hands.",
+        "salience": 0.7,
+        "about": [
+          "Marta Hale"
+        ]
+      },
+      {
+        "gist": "Corliss stacked her first charcoal pit with me and never once let the fire go out.",
+        "salience": 0.6,
+        "about": [
+          "Corliss Ashdown"
+        ]
+      },
+      {
+        "gist": "Odelia Harrow sold a load of Elmwick timber for the Lakemead fence, and Nell Sedge heard of it and came down cold on the crossing.",
+        "salience": 0.6,
+        "about": [
+          "Odelia Harrow",
+          "Nell Sedge"
+        ]
+      },
+      {
+        "gist": "I sat with Orvin Hollis at the Ferncross market and we agreed the seawall will never be built and the quay will pay dear for it.",
+        "salience": 0.4,
+        "about": [
+          "Orvin Hollis"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "pay_debts_though_not_always_first",
+        "value": 0.7,
+        "why": "A man who owes and does not pay cannot ask for credit when the burn goes bad."
+      },
+      {
+        "key": "the_crossing_comes_first",
+        "value": 0.85,
+        "why": "Nesta's pot feeds the woodcutters; whatever the orders, the crossing eats before the marks go out."
+      },
+      {
+        "key": "a_sale_is_a_sale",
+        "value": 0.6,
+        "why": "Odelia Harrow sold Elmwick timber and that was her trade to make; I will not call it treason."
+      },
+      {
+        "key": "keep_the_peace_with_reedmoor",
+        "value": 0.65,
+        "why": "Nell Sedge buys our timber and Reedmoor's fish comes up the road; a fence quarrel must not cost us that."
+      },
+      {
+        "key": "coldwell_men_are_thieves",
+        "value": 0.7,
+        "why": "They took my tools on the wood road and I have not seen them since."
+      }
+    ],
+    "secret": "The Elmwick order came first because it paid marks in hand, and I told Alder Rush the pits burned slow. I would not say that to his face."
+  },
+  "Nesta Ashdown": {
+    "narrative": "I keep the Ferncross kitchen and the common pot, and there are more woodcutters at my table this winter than the plot can carry. Roderick Harrow's barley came in light and I am feeding his men as well as my own, so I am watching the store and the weather both. I trade bread and broth for fish and fibre, and I would rather owe a neighbour a kindness than see a man go hungry at my fire. The crossing holds together because somebody keeps the pot on.",
+    "values": [
+      "nobody goes hungry at the crossing",
+      "a fair trade for bread and broth",
+      "neighbours before marks",
+      "keeping the common pot honest"
+    ],
+    "goals": [
+      "get Roderick Harrow to sell me barley on credit before the store runs out",
+      "keep the woodcutters fed through the winter",
+      "trade bread for fish with Tansy Sedge and Thistle Mossfoot when their packs come",
+      "see Corliss safe and warm through the cold"
+    ],
+    "mood": "worried and busy, with a calm face for the table",
+    "traits": {
+      "caution": 62,
+      "sociability": 70,
+      "empathy": 78,
+      "curiosity": 45,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 35,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Bramwell Ashdown",
+        "trust": 88,
+        "affinity": 82,
+        "label": "husband",
+        "note": "He fells and I feed; he worries at the debts and I worry at the pot, and between us it works."
+      },
+      {
+        "name": "Corliss Ashdown",
+        "trust": 85,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "She stacks kindling and asks about the quay; I want her to see it one day, and to come home."
+      },
+      {
+        "name": "Roderick Harrow",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "His barley came in light and I need it on credit; I hope he sees the kitchen is feeding his men too."
+      },
+      {
+        "name": "Odelia Harrow",
+        "trust": 62,
+        "affinity": 58,
+        "label": "neighbour",
+        "note": "She works the south side and keeps the tally; we share what the two houses have and watch the sky."
+      },
+      {
+        "name": "Maren Hollis",
+        "trust": 78,
+        "affinity": 72,
+        "label": "friend",
+        "note": "We met at the Ferncross market and have traded ever since; she knows what a thin store means."
+      },
+      {
+        "name": "Tansy Sedge",
+        "trust": 65,
+        "affinity": 60,
+        "label": "trade partner",
+        "note": "Her bread and my broth go back and forth along the east road; she is fair with the fish."
+      },
+      {
+        "name": "Thistle Mossfoot",
+        "trust": 60,
+        "affinity": 55,
+        "label": "trade partner",
+        "note": "His packs bring fish and fibre and take my bread; a small folk pedlar who pays what he says."
+      },
+      {
+        "name": "Alder Rush",
+        "trust": 50,
+        "affinity": 40,
+        "label": "creditor",
+        "note": "Bramwell owes him charcoal and he has not pressed us; I do not forget that."
+      },
+      {
+        "name": "Nell Sedge",
+        "trust": 45,
+        "affinity": 35,
+        "label": "customer",
+        "note": "She buys timber and now she is cool with the crossing; I would rather mend it over a bowl than argue."
+      },
+      {
+        "name": "Mallow Bramblecap",
+        "trust": 55,
+        "affinity": 50,
+        "label": "trade partner",
+        "note": "She feeds a hollow's common table and I feed a crossing's, so she knows what a thin store means; her people's bread and honey come up the path to me when there is any to spare."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The Lean Year: I stretched the pot with roots and nettles and fed the woodcutters through, and I have never let the store get that low again without counting it.",
+        "salience": 0.8,
+        "about": [
+          "Bramwell Ashdown"
+        ]
+      },
+      {
+        "gist": "Corliss was small and burned her hand on the pot hook; I salved it and she has been careful at the fire since.",
+        "salience": 0.6,
+        "about": [
+          "Corliss Ashdown"
+        ]
+      },
+      {
+        "gist": "Maren Hollis came down the wood road with roots and charcoal and we traded half a day's bread for it at the Ferncross market.",
+        "salience": 0.5,
+        "about": [
+          "Maren Hollis"
+        ]
+      },
+      {
+        "gist": "Roderick Harrow told me his barley came in light, and I looked at my store and knew we would be sharing thin bread before the thaw.",
+        "salience": 0.7,
+        "about": [
+          "Roderick Harrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "feed_whoever_comes",
+        "value": 0.9,
+        "why": "The common pot is the crossing's hearth; a woodcutter who eats here works here, and no one is turned away hungry."
+      },
+      {
+        "key": "ask_credit_of_neighbours",
+        "value": 0.7,
+        "why": "Roderick's barley is in his barn and my store is thin; a neighbour's credit is cheaper than a hungry winter."
+      },
+      {
+        "key": "watch_the_weather_and_the_store",
+        "value": 0.8,
+        "why": "The plot will not carry more woodcutters than it has before, and the cold comes early down the wood road."
+      },
+      {
+        "key": "trade_bread_for_fish",
+        "value": 0.6,
+        "why": "Fish and fibre come up the east road and my bread goes down it; that trade keeps the pot from being only roots."
+      },
+      {
+        "key": "keep_the_lakemead_quarrel_out_of_the_kitchen",
+        "value": 0.55,
+        "why": "Reedmoor and Elmwick can quarrel over a meadow; I will not have it at my table when both bring fish."
+      }
+    ],
+    "secret": "I have been putting a little less in each bowl so the store lasts longer, and I have not told Bramwell how thin it truly is."
+  },
+  "Corliss Ashdown": {
+    "narrative": "I stack the kindling and learn the axe and the charcoal burn beside my father, and I am quicker at the stacks than he thinks. When the Fernhollow folk come up the path I play with Fennel Underbank, and I want more than anything to see the quay at Lanternquay and the boats. The wolves come down the wood road in winter and I do not like the sound of them at night.",
+    "values": [
+      "learning the axe and the burn",
+      "the quay and the boats",
+      "playing with Fennel"
+    ],
+    "goals": [
+      "learn to stack a pit that does not smoke",
+      "see the quay at Lanternquay one day",
+      "keep the wolves away from the kindling stacks"
+    ],
+    "mood": "curious and restless, brave by day and fearful at night",
+    "traits": {
+      "caution": 45,
+      "sociability": 65,
+      "empathy": 55,
+      "curiosity": 78,
+      "ambition": 60,
+      "introspection": 40,
+      "temper": 45,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Bramwell Ashdown",
+        "trust": 85,
+        "affinity": 85,
+        "label": "father",
+        "note": "He lets me stack the kindling and says I am quicker than he was; I want him to teach me the axe proper."
+      },
+      {
+        "name": "Nesta Ashdown",
+        "trust": 85,
+        "affinity": 88,
+        "label": "mother",
+        "note": "She keeps the pot and never lets me go cold; she says the quay is a long way and I say it is not so far."
+      },
+      {
+        "name": "Fennel Underbank",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "He comes up the path with the Fernhollow folk and we play among the stacks; he knows every flower."
+      },
+      {
+        "name": "Tamsin Harrow",
+        "trust": 65,
+        "affinity": 65,
+        "label": "friend",
+        "note": "She helps with the goats and the garden and we play at the crossing when the work is done."
+      },
+      {
+        "name": "Tace Hollis",
+        "trust": 50,
+        "affinity": 50,
+        "label": "stranger",
+        "note": "She stacks pits at Sootwood and knows a quay knot; I want to learn it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I stacked my first charcoal pit with my father and never once let the fire go out, and he said I had the hand for it.",
+        "salience": 0.8,
+        "about": [
+          "Bramwell Ashdown"
+        ]
+      },
+      {
+        "gist": "I burned my hand on the pot hook when I was small and my mother salved it; I have been careful at the fire since.",
+        "salience": 0.6,
+        "about": [
+          "Nesta Ashdown"
+        ]
+      },
+      {
+        "gist": "Wolves came down the wood road in the night and I heard them from my bed; I do not go far from the stacks after dark.",
+        "salience": 0.7,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "learn_the_burn",
+        "value": 0.8,
+        "why": "My father says the pits are the crossing's living and I want to be good at them."
+      },
+      {
+        "key": "see_the_quay",
+        "value": 0.7,
+        "why": "The quay folk come up the wood road with fish and talk of boats; I want to see it with my own eyes."
+      },
+      {
+        "key": "stay_near_the_stacks_at_night",
+        "value": 0.75,
+        "why": "The wolves come down the wood road and I have heard them."
+      }
+    ],
+    "secret": ""
+  }
+}
