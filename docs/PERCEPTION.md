@@ -442,7 +442,7 @@ On the dev-box, scratch `verify-*` databases in my own container `scale-verify` 
 
 | Surface | What was driven | Result | Evidence |
 |---|---|---|---|
-| Build | `set -o pipefail; just living-check` on the branch's code | exit 0; rules 109 passed; authority (wasm, island and default seed), mind, native and browser observer, game (release) built. The game also built with `docs/scale-client.patch` applied (then reverted) | `.local/scale/check-final.log` |
+| Build | `set -o pipefail; just living-check` on the branch's code | exit 0; rules 109 passed; authority (wasm, island and default seed), mind, native and browser observer, game (release) built. | `.local/scale/check-final.log` |
 | Client, scoped (default) | `verify-client` `run.py` | 30 PASS, no XFAIL. Two earlier runs stopped at the driver's inventories: the new private tables, and `judged` and `mind_judged` from the harness merge, which the driver did not know (fixed) | `client-scale-scoped-011217/` (`-010009`, `-011131` the stopped runs) |
 | Client, open | the same with `LIVING_PERCEPTION=open` | 30 PASS and the known XFAIL (anonymous `experience` in the open build) | `client-scale-open-011435/` |
 | Player | `verify-player` on an island world: `gesture.py`, `appraise.py`, `combat.py --fresh --scene all` | gestures 10 of 10, appraise 10 of 10, combat 21 of 25: block front and back, dodge and heal saw no blow from the graph attacker within their 4 s, with the full gate and three verification suites on the host (the flake [combat](COMBAT.md) recorded before this change). The three scenes alone on a fresh world: 5 of 5 | `player-scale-011445/`, `player-scale-def-014943/` |
@@ -458,7 +458,7 @@ Not covered: the game client against the frames build (its views and their shape
 
 No subscription changes: the views keep their names and row types, so `living/game/src/net.rs` and `live.rs` need no edit. Two behaviours change for the client:
 - Others' motion, moves and visible acts arrive at the player's frame (every 33–100 ms; less often when a step's budget is spent) instead of in the transaction that wrote them. The client already extrapolates motion segments between rows.
-- `my_experience` holds only the newest 64 lines of the current character. The chat log (`ui/live.rs`) rebuilds itself from those rows each frame, so in a long fight older speech would leave the log. `docs/scale-client.patch` (a dozen lines) keeps the speech lines the client has received, up to 200; it is not applied on this branch because the game client is being edited elsewhere.
+- `my_experience` holds only the newest 64 lines of the current character. The chat log (`ui/live.rs`) rebuilds itself from those rows each frame, so in a long fight older speech would leave the log. The game now keeps the speech lines it has received, up to 200 (`ui/live.rs`, `Last::heard`; applied after merging main `0812ada`, on top of the player verbs' client change).
 
 ## Decisions per current-perception table
 

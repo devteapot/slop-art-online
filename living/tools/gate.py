@@ -424,7 +424,7 @@ def _run(a, procs):
         "skills_rhai_sha256": sha256(ROOT / "living/scripts/skills.rhai"),
         "seed": "island", "network": {"one_way_ms": ONE_WAY_MS, "rtt_ms": 2 * ONE_WAY_MS, "jitter": 0, "loss": 0, "how": "pasta user+net namespace per client process, tc netem on the namespace's lo"},
         "workload": {"battle_players": a.battle, "walkers": a.walkers, "active_total": a.battle + a.walkers, "warmup_s": a.warmup, "window_s": a.seconds, "calm_s": a.calm,
-                     "fight_period_ms": a.fight_ms, "walk_period_ms": a.walk_ms, "rejoin_s": 3, "battle_radius_m": a.radius, "game_client": not a.no_game, "observer": True, "minds": "fake model server"},
+                     "client": a.client, "fight_period_ms": a.fight_ms, "walk_period_ms": a.walk_ms, "rejoin_s": 3, "battle_radius_m": a.radius, "game_client": not a.no_game, "observer": True, "minds": "fake model server"},
     }
     r.save("manifest.json", manifest)
     stdb("publish", "-s", "local", "-b", "/wasm/living_authority.wasm", db, "--delete-data", "-y")
@@ -461,7 +461,7 @@ def _run(a, procs):
     watch.expect("ready", 60)
     load = Proc(r, "players", shaped(f"{LOAD} players"))
     behaviour = {"fight_period_ms": a.fight_ms, "walk_period_ms": a.walk_ms, "rejoin_s": 3, "grace_s": 5}
-    load.send(json.dumps({"uri": f"http://127.0.0.1:{SHAPED_PORT}", "db": db, "events": str(r.dir / "events.jsonl"), "battle": list(center), "behaviour": behaviour, "players": players}))
+    load.send(json.dumps({"uri": f"http://127.0.0.1:{SHAPED_PORT}", "db": db, "events": str(r.dir / "events.jsonl"), "battle": list(center), "behaviour": behaviour, "players": players, "client": a.client}))
     joined = load.expect("joined", 600)
     r.log(f"{len(joined['players'])} players joined in {joined['after_s']:.1f} s")
     ids = {p["p"]: p["id"] for p in joined["players"]}
@@ -1019,6 +1019,8 @@ def main():
     r.add_argument("--no-game", action="store_true")
     r.add_argument("--no-minds", action="store_true")
     r.add_argument("--keep", dest="delete", action="store_false", help="keep the database afterwards")
+    r.add_argument("--client", choices=["gate", "game"], default="gate",
+                   help="what the players stand for: gate (confirmed reads and the gate's subscriptions, as first measured) or game (unconfirmed reads, the script row and resource/structure windows, as living/game reads since the player verbs)")
     r.add_argument("--smoke", action="store_true", help="a short run: 6 battle, 4 walkers, 20 s warm-up, 90 s window")
     an = sub.add_parser("analyze")
     an.add_argument("dir")

@@ -224,15 +224,56 @@ fn chunk_ranges(col: &str, (cx0, cx1): (u32, u32), (cy0, cy1): (u32, u32)) -> St
     (cy0..=cy1).map(|cy| format!("({col} >= {} AND {col} <= {})", (cy << 16) | cx0, (cy << 16) | cx1)).collect::<Vec<_>>().join(" OR ")
 }
 
+/// Which client the players stand for (`client` in the request). `Gate`: what the gate measured
+/// first (confirmed reads, the SDK default, and the subscriptions below). `Game`: the game client
+/// as of the player verbs (living/game/src/net.rs): unconfirmed reads, the `skills` script row,
+/// and `resource_node` and `structure` in the near window.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Client {
+    Gate,
+    Game,
+}
+
+impl Client {
+    fn from(v: &Value) -> Self {
+        match v.as_str() {
+            None | Some("gate") => Client::Gate,
+            Some("game") => Client::Game,
+            Some(c) => panic!("client {c:?}: gate or game"),
+        }
+    }
+
+    fn confirmed(self) -> Option<bool> {
+        match self {
+            Client::Gate => None,
+            Client::Game => Some(false),
+        }
+    }
+
+    fn base(self) -> Vec<String> {
+        let mut q: Vec<String> = BASE.iter().map(|t| format!("SELECT * FROM {t}")).collect();
+        if self == Client::Game {
+            q.push("SELECT * FROM script WHERE name = 'skills'".into());
+        }
+        q
+    }
+}
+
 /// The static windows the game client keeps round where it stands (living/game/src/net.rs).
-fn windows(x: f32, y: f32, size: u32) -> Vec<String> {
+fn windows(x: f32, y: f32, size: u32, client: Client) -> Vec<String> {
     let n = (size as f32 / CHUNK) as i32;
     let (cx, cy) = (((x / CHUNK).floor() as i32).clamp(0, n - 1), ((y / CHUNK).floor() as i32).clamp(0, n - 1));
     let span = |c: i32, r: i32| ((c - r).max(0) as u32, (c + r).min(n - 1) as u32);
-    vec![
-        format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", span(cx, TERRAIN_CHUNKS), span(cy, TERRAIN_CHUNKS))),
+    let (xs, ys) = (span(cx, TERRAIN_CHUNKS), span(cy, TERRAIN_CHUNKS));
+    let mut q = vec![
+        format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", xs, ys)),
         format!("SELECT * FROM lot WHERE {}", chunk_ranges("chunk", span(cx, LOT_CHUNKS), span(cy, LOT_CHUNKS))),
-    ]
+    ];
+    if client == Client::Game {
+        q.push(format!("SELECT * FROM resource_node WHERE {}", chunk_ranges("chunk", xs, ys)));
+        q.push(format!("SELECT * FROM structure WHERE {}", chunk_ranges("chunk", xs, ys)));
+    }
+    q
 }
 
 /// What the game client subscribes once per connection, plus `my_skill_uses` (the correlation).
@@ -579,6 +620,7 @@ fn players_mode() {
     let (log, writer) = Log::open(req["events"].as_str().expect("events path"));
     let cfg = req["behaviour"].clone();
     let center = (req["battle"][0].as_f64().unwrap() as f32, req["battle"][1].as_f64().unwrap() as f32);
+    let client = Client::from(&req["client"]);
     let started = Instant::now();
     let mut players = Vec::new();
     for (idx, p) in req["players"].as_array().unwrap().iter().enumerate() {
@@ -588,11 +630,11 @@ fn players_mode() {
             r => panic!("role {r:?}"),
         };
         let t = unix_us();
-        let (conn, identity) = connect(&uri, &db, p["token"].as_str().unwrap(), None);
+        let (conn, identity) = connect(&uri, &db, p["token"].as_str().unwrap(), client.confirmed());
         log.put(json!({"k": "conn", "p": idx, "role": format!("{role:?}"), "identity": identity.to_hex().to_string(), "ts": t, "connected": unix_us()}));
         let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default() };
         hook(&pl, &log);
-        subscribe(&pl, BASE.iter().map(|t| format!("SELECT * FROM {t}")).collect());
+        subscribe(&pl, client.base());
         players.push(pl);
     }
     wait_applied(&players, 1, "base", Duration::from_secs(120));
@@ -622,7 +664,7 @@ fn players_mode() {
             assert!(t.elapsed() < Duration::from_secs(60), "no body for player {}", p.idx);
             std::thread::sleep(Duration::from_millis(10));
         };
-        subscribe(p, windows(at.0, at.1, size));
+        subscribe(p, windows(at.0, at.1, size, client));
     }
     wait_applied(&players, 2, "windows", Duration::from_secs(180));
     let cards: HashMap<String, Card> = players[0].conn.db.skill_card().iter().map(|c| (c.skill.clone(), Card { cost: c.cost, reach: c.reach, hold_ms: (c.windup_ms + c.recover_ms) as u64 })).collect();

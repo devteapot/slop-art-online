@@ -375,7 +375,7 @@ At 100 fighters the database thread is still saturated, now by the tick's own wo
 ### What this does not establish
 
 - 60 Hz with 100 humans fighting in one place: not reached.
-- The game client's change for `my_experience` (a 64-line window): its log keeps only what the window holds until `docs/scale-client.patch` is applied; not applied here because the client is being edited elsewhere.
+- The game client against the 64-line `my_experience` window was built and its log change applied (`ui/live.rs`, after the merge with main `0812ada`), but not played through a long fight.
 - The 200-character battle and 2,000 characters of the contract.
 - Onlookers' feed rows now live 300 ms: a client stalled longer than that misses an onlooker's effect. Not measured with the game client under a stall.
 
