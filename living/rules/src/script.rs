@@ -576,6 +576,7 @@ fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
         add(f, &kinds);
     }
     add("spoil_rate", &items);
+    add("nutrition", &items);
     add("regrow", &resources);
     for f in ["trap_every_s", "trap_holds"] {
         add(f, &["meat".to_string()]);

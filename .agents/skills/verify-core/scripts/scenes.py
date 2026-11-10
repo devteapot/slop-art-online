@@ -707,6 +707,31 @@ def flee(s):
     s.expect("the flight ends about flee_clear farther than it began", track and track[-1] >= start + 7.0, {"start": start, "end": track[-1] if track else None})
 
 
+def food(s):
+    """\"food\" is anything the rules give nutrition: a person carrying only smoked fish has
+    food, and eats and gives it as \"food\" (before 2026-11-10 `best_food` listed five foods and
+    missed smoked ones, so `has food` held while eat/give/store/take of food failed)."""
+    a, b = s.people(2)
+    s.call("place_near", b, a)
+    s.call("grant_items", a, "smoked_fish", 2)
+    before = s.needs(a, "before")["hunger"]
+    s.act(a, {"do": "eat", "item": "food"})
+    s.wait(lambda: s.inventory(a).get("smoked_fish", 0) == 1, seconds=15)
+    s.expect("eat food eats the smoked fish and feeds", s.needs(a, "after-eat")["hunger"] <= max(0, before - 10), s.inventory(a, "after-eat"))
+    s.act(a, {"do": "give", "item": "food", "target": {"id": b}})
+    s.wait(lambda: s.inventory(b).get("smoked_fish", 0) == 1, seconds=20)
+    s.expect("give food hands over the smoked fish", s.inventory(a, "giver-after").get("smoked_fish", 0) == 0 and s.inventory(b, "taker-after").get("smoked_fish") == 1)
+    # The most nourishing first: cooked meat (42) over smoked fish (24) over berries (12).
+    s.call("grant_items", a, "smoked_fish", 1)
+    s.call("grant_items", a, "cooked_meat", 1)
+    held = s.inventory(a, "before-best")
+    s.act(a, {"do": "eat", "item": "food"})
+    s.wait(lambda: s.inventory(a).get("cooked_meat", 0) == 0, seconds=15)
+    after = s.inventory(a, "after-best")
+    s.expect("eat food picks the most nourishing food held", after.get("smoked_fish") == held.get("smoked_fish")
+             and after.get("berries", 0) == held.get("berries", 0), {"before": held, "after": after})
+
+
 # Rules with short hours for the dealings scene, composed as a floor composes its laws
 # (living_rules::floors::compose): each replaced base function keeps its body as base_NAME.
 SHORT_HOURS = {
@@ -822,7 +847,7 @@ def dealings(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee}
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food}
 
 
 def main():

@@ -5,6 +5,7 @@
 - Idle hunger rises and energy falls.
 - Rest recovers energy over time.
 - Eating consumes food and lowers hunger.
+- "food" is whatever the rules give nutrition (`nutrition(item)` in `skills.rhai`): `has food`, and eat, give, store and take of `food`, all read it. `eat food` takes the most nourishing food held.
 - Night exposure reduces healing; a cloak removes the cold penalty.
 - Visible infants look warm or cold, fed, hungry or starving, and hurt when injured. The cold predicate in `skills.rhai` is shared by `rates` and `body_state`.
 - Shelter warmth reaches 2.5 tiles and campfire warmth 3.5 by default. A nearby caregiver adds no thermal protection. Carrying infants is not implemented.
@@ -17,6 +18,8 @@ Characters need food, rest and warmth. Rates live in `living/scripts/skills.rhai
 ## Driving it with scenes.py
 
 Run `needs` and the dedicated `infant` fixture from [SKILL.md](../SKILL.md). `needs` captures eight seconds idle and eight resting, consumes one granted cooked meat, then waits for a real night. The exposed and cloaked `hp_rate` values must differ by 2, within 0.1.
+
+`food` gives a fresh person (who carries berries) two smoked fish: `eat food` eats one and feeds, `give food` hands the other to a neighbour, and with smoked fish and cooked meat added `eat food` eats the cooked meat. Before 2026-11-10 `best_food` listed five foods and missed smoked ones, so `has food` held while eat, give, store and take of food failed.
 
 `infant` uses four adult family members and their infant, plus a caring witness and a remote shelter anchor. It waits for the second real night with infant hunger at least 70, which suppresses positive healing without modifying vitals, rules, species or the clock. A parent sees `warm, hungry` inside shelter range with HP rate 0, and another parent sees `cold, hungry` outside shelter range with HP rate -2. Eight seconds of exposure must lower derived HP by more than 0.15.
 
