@@ -375,6 +375,7 @@ fn record(
     children: Query<&Children>,
     bones: Query<(&Name, &GlobalTransform)>,
     anims: Query<&crate::anim::Anim>,
+    motions: Query<&crate::anim::Motion>,
     roam: Res<crate::envs::Roam>,
     scene: Option<NonSend<crate::world::Scene>>,
     mut feet: Local<HashMap<Entity, Tracked>>,
@@ -420,9 +421,11 @@ fn record(
             "t": time.elapsed_secs_f64(),
             "root": [p.x, p.y, p.z],
             "speed": roam.speed,
+            // The one-shot asked of the body this frame (a skill's clip, a gesture), and when.
+            "action": motions.get(e).ok().and_then(|m| m.action.map(|a| (a.clip, a.start_ms))),
             // Connected play: the authority time my body is drawn at, and its segment then.
             "mine_ms": scene.as_ref().map(|s| s.mine_ms),
-            "seg": scene.as_ref().map(|s| [s.mine_seg.0, s.mine_seg.1]),
+            "seg": scene.as_ref().map(|s| [s.mine_seg.0 as f64, s.mine_seg.1 as f64, s.mine_seg.2 as f64]),
             "clip": anim.map_or("", |a| a.showing()),
             // The shared phase, the gaits and their weights, and each foot's marker contact.
             "phase": anim.map(|a| a.phase),

@@ -684,7 +684,7 @@ fn script(
     let (verb, arg) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
     let first = s.since <= dt;
     if first {
-        info!("live script: {step} (me {:?} at {:?}, t {:.1} s)", net.my_id, mine.map(|m| m.1), time.elapsed_secs());
+        info!("live script: {step} (me {:?} at {:?}, t {:.3} s)", net.my_id, mine.map(|m| m.1), time.elapsed_secs());
     }
     let done = match verb {
         "ready" => {
