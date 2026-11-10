@@ -21,6 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import trials  # noqa: E402  (prices: trials.cost)
+from journal_io import restore  # noqa: E402
 
 OUT = Path(__file__).resolve().parents[2] / ".local/living/trials"
 ASK = {
@@ -83,7 +84,7 @@ def run(d):
     for f in sorted((d / "journal").glob("*.jsonl")):
         if f.stem == s["subject"].split("#")[0]:
             continue
-        rows = jl(f)
+        rows = [restore(r, f.parent) for r in jl(f)]
         text = ""
         for r in rows:
             if r.get("purpose") == "talk":

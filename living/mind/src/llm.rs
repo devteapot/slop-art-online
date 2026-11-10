@@ -302,7 +302,12 @@ pub struct Llm {
     keys: HashMap<String, String>,
     journal: PathBuf,
     scheduler: Scheduler,
+    /// System prompts already stored beside the journal (`system_by_ref`).
+    systems: std::sync::Mutex<std::collections::HashSet<String>>,
 }
+
+/// Where the journal keeps each distinct system prompt once.
+pub const SYSTEM_DIR: &str = "system";
 
 /// Reachability of a provider (by base URL). When a request cannot connect to it (DNS, no
 /// route, refused), calls to it wait instead of failing at once; one probe at a time goes
@@ -736,7 +741,7 @@ impl Llm {
         }
         let concurrency = std::env::var("LIVING_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(64).max(1);
         let scheduler = Scheduler::new(&models, concurrency, per_min);
-        Ok(Self { http, models, keys, journal, scheduler })
+        Ok(Self { http, models, keys, journal, scheduler, systems: Default::default() })
     }
 
     /// Profile for a character: explicit assignment, then rotation, then default.
@@ -925,7 +930,7 @@ impl Llm {
             let content = content_text(&v["choices"][0]["message"]["content"]);
             let tokens = v["usage"]["total_tokens"].as_u64().unwrap_or(0) as u32;
             self.scheduler.feedback(profile, permit.id, false, &reqwest::header::HeaderMap::new(), v["usage"]["total_tokens"].as_u64());
-            Ok((content, tokens, v["usage"].clone()))
+            Ok((content, tokens, v["usage"].clone(), v["choices"][0]["finish_reason"].clone()))
         }
         .await;
         self.gate_leave(&host, unreachable);
@@ -943,16 +948,19 @@ impl Llm {
             "latency_ms": latency_ms,
             "lane": lane,
             "queue_wait_ms": queue_wait_ms,
-            "prompt_tokens": result.as_ref().ok().and_then(|(_, _, u)| u["prompt_tokens"].as_u64()),
-            "completion_tokens": result.as_ref().ok().and_then(|(_, _, u)| u["completion_tokens"].as_u64()),
-            "cached_tokens": result.as_ref().ok().and_then(|(_, _, u)| u["prompt_tokens_details"]["cached_tokens"].as_u64()),
+            "prompt_tokens": result.as_ref().ok().and_then(|(_, _, u, _)| u["prompt_tokens"].as_u64()),
+            "completion_tokens": result.as_ref().ok().and_then(|(_, _, u, _)| u["completion_tokens"].as_u64()),
+            "cached_tokens": result.as_ref().ok().and_then(|(_, _, u, _)| u["prompt_tokens_details"]["cached_tokens"].as_u64()),
+            "reasoning_tokens": result.as_ref().ok().and_then(|(_, _, u, _)| u["completion_tokens_details"]["reasoning_tokens"].as_u64()),
+            // `length`: the reply was cut off at the purpose's cap.
+            "finish_reason": result.as_ref().ok().and_then(|(_, _, _, f)| f.as_str()),
             "request": body,
-            "reply": result.as_ref().map(|(c, _, _)| c.clone()).ok(),
-            "tokens": result.as_ref().map(|(_, t, _)| *t).ok(),
+            "reply": result.as_ref().map(|(c, ..)| c.clone()).ok(),
+            "tokens": result.as_ref().map(|(_, t, ..)| *t).ok(),
             "error": result.as_ref().err().map(|e| format!("{e:#}")),
         });
         self.journal(actor, &entry).await;
-        let (content, tokens, _) = result?;
+        let (content, tokens, ..) = result?;
         Ok(Reply { content, tokens, latency_ms, model: p.model.clone() })
     }
 
@@ -976,6 +984,29 @@ impl Llm {
         self.scheduler.changed.notify_waiters();
     }
 
+    /// An entry's system prompts are stored once per distinct text, beside the journal files
+    /// (`system/<hash>.txt`), and the entry names the file (`{"role": "system", "content_ref":
+    /// "system/<hash>.txt"}`): the same system prompt in every entry was 57% of a trial's
+    /// journal bytes (5.4 MB per mind). A prompt that cannot be stored stays inline.
+    /// `living/tools/journal_io.py` puts them back for readers.
+    async fn system_by_ref(&self, entry: &mut Value) {
+        let Some(msgs) = entry.get_mut("request").and_then(|r| r.get_mut("messages")).and_then(|m| m.as_array_mut()) else { return };
+        for m in msgs.iter_mut().filter(|m| m["role"] == "system") {
+            let Some(text) = m["content"].as_str() else { continue };
+            let rel = format!("{SYSTEM_DIR}/{}.txt", &blake3::hash(text.as_bytes()).to_hex()[..32]);
+            let stored = self.systems.lock().unwrap().contains(&rel);
+            if !stored {
+                let path = self.journal.join(&rel);
+                let written = tokio::fs::metadata(&path).await.is_ok() || (tokio::fs::create_dir_all(self.journal.join(SYSTEM_DIR)).await.is_ok() && tokio::fs::write(&path, text).await.is_ok());
+                if !written {
+                    continue;
+                }
+                self.systems.lock().unwrap().insert(rel.clone());
+            }
+            *m = json!({"role": "system", "content_ref": rel});
+        }
+    }
+
     /// Journal an exchange made outside this client (a judgment provider) beside the actor's
     /// model exchanges.
     pub async fn journal_entry(&self, actor: &str, entry: &Value) {
@@ -983,6 +1014,8 @@ impl Llm {
     }
 
     async fn journal(&self, actor: &str, entry: &Value) {
+        let mut entry = entry.clone();
+        self.system_by_ref(&mut entry).await;
         let path = self.journal.join(format!("{}.jsonl", actor.replace(|c: char| !c.is_alphanumeric(), "_")));
         if let Ok(mut f) = tokio::fs::OpenOptions::new().create(true).append(true).open(&path).await {
             let mut line = entry.to_string();
@@ -1818,6 +1851,13 @@ mod tests {
         assert!(answered.iter().all(|l| l["body"]["reasoning_effort"] == "high" && l["body"]["max_tokens"] == 24000 && l["purpose"] == "reorganize"));
         let journal: Value = serde_json::from_str(std::fs::read_to_string(directory.join("journal/a4.jsonl")).unwrap().trim()).unwrap();
         assert_eq!((journal["mode"].as_str(), journal["mix"].as_str(), journal["effort"].as_str(), journal["purpose"].as_str()), (Some("batch"), Some("night"), Some("high"), Some("reorganize")));
+        // The system prompt is journaled once, by reference; the user message stays inline.
+        let system = &journal["request"]["messages"][0];
+        let rel = system["content_ref"].as_str().expect("a system prompt by reference");
+        assert!(system.get("content").is_none() && rel.starts_with("system/"));
+        assert_eq!(std::fs::read_to_string(directory.join("journal").join(rel)).unwrap(), "Tidy the person's mind.");
+        assert_eq!(std::fs::read_dir(directory.join("journal/system")).unwrap().count(), 1, "eight entries, one stored prompt");
+        assert_eq!(journal["request"]["messages"][1]["content"].as_str().map(str::len), Some(400));
         drop(fake);
         println!("batch upload evidence: {}", directory.display());
     }
