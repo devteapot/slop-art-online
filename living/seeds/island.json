@@ -667,7 +667,8 @@
                 "trust": 20,
                 "affinity": -15,
                 "label": "the other woman",
-                "note": "I have never met her and I think of her more than I should."
+                "note": "I have never met her and I think of her more than I should.",
+                "knows_name": false
               },
               {
                 "name": "Agnes Fenner",
@@ -681,7 +682,8 @@
                 "trust": 10,
                 "affinity": -30,
                 "label": "the wronged father",
-                "note": "He thinks my marriage was an insult to his house; I have never spoken to him, and I doubt he has ever said my name."
+                "note": "He thinks my marriage was an insult to his house; I have never spoken to him, and I doubt he has ever said my name.",
+                "knows_name": false
               }
             ],
             "memories": [
@@ -2417,7 +2419,8 @@
                 "trust": 40,
                 "affinity": 45,
                 "label": "stranger",
-                "note": "I know her only from Elspeth's talk and the letters; she frightens me a little and I could not say why."
+                "note": "I know her only from Elspeth's talk and the letters; she frightens me a little and I could not say why.",
+                "knows_name": false
               },
               {
                 "name": "Aldric Marrow",
@@ -2431,7 +2434,8 @@
                 "trust": 35,
                 "affinity": 45,
                 "label": "outlaw",
-                "note": "I have never met her; I only know that Elspeth went out to her boy and came back changed."
+                "note": "I have never met her; I only know that Elspeth went out to her boy and came back changed.",
+                "knows_name": false
               },
               {
                 "name": "Joan Hobson",
@@ -3708,7 +3712,8 @@
                 "trust": 45,
                 "affinity": 40,
                 "label": "Elmwick wife",
-                "note": "Keeps her dairy and her plot and her tongue, from what I hear. I have not sat at her table, and she has not sat at mine."
+                "note": "Keeps her dairy and her plot and her tongue, from what I hear. I have not sat at her table, and she has not sat at mine.",
+                "knows_name": false
               }
             ],
             "memories": [
@@ -9935,7 +9940,8 @@
                 "trust": 20,
                 "affinity": 30,
                 "label": "stranger",
-                "note": "I saw him once at the market. Father says not to go near the Coldwell people."
+                "note": "I saw him once at the market. Father says not to go near the Coldwell people.",
+                "knows_name": false
               }
             ],
             "memories": [
@@ -30828,7 +30834,8 @@
                 "trust": 30,
                 "affinity": 20,
                 "label": "stranger",
-                "note": "Thornby's headman; I know him by name only."
+                "note": "Thornby's headman; I know him by name only.",
+                "knows_name": false
               },
               {
                 "name": "Mallow Bramblecap",
@@ -30870,7 +30877,8 @@
                 "trust": 40,
                 "affinity": 35,
                 "label": "stranger",
-                "note": "A Ferncross woodcutter; she trades timber with our builders, but I know her only by her loads."
+                "note": "A Ferncross woodcutter; she trades timber with our builders, but I know her only by her loads.",
+                "knows_name": false
               },
               {
                 "name": "Thistle Mossfoot",
@@ -31625,7 +31633,8 @@
                 "trust": -20,
                 "affinity": -15,
                 "label": "stranger",
-                "note": "Oswin's quarrel with him is Oswin's. I keep to the streams."
+                "note": "Oswin's quarrel with him is Oswin's. I keep to the streams.",
+                "knows_name": false
               }
             ],
             "memories": [
@@ -32587,14 +32596,16 @@
                 "trust": 20,
                 "affinity": 30,
                 "label": "tenant",
-                "note": "I have never spoken to him, but he farms the meadow that should be ours."
+                "note": "I have never spoken to him, but he farms the meadow that should be ours.",
+                "knows_name": false
               },
               {
                 "name": "Nell Sedge",
                 "trust": -10,
                 "affinity": 15,
                 "label": "headwoman over the meadow",
-                "note": "She let the Lakemead to the Coombes as if it were hers to give; I have never met her, but I would like to ask her by what right."
+                "note": "She let the Lakemead to the Coombes as if it were hers to give; I have never met her, but I would like to ask her by what right.",
+                "knows_name": false
               }
             ],
             "memories": [
@@ -34024,7 +34035,8 @@
                 "trust": -30,
                 "affinity": -25,
                 "label": "stranger",
-                "note": "She keeps the north light and I am afraid of it."
+                "note": "She keeps the north light and I am afraid of it.",
+                "knows_name": false
               }
             ],
             "memories": [
@@ -40335,7 +40347,8 @@
                 "trust": 10,
                 "affinity": 5,
                 "label": "stranger",
-                "note": "A quay builder who took offence at talk of the seawall; that is Sena's affair, not mine."
+                "note": "A quay builder who took offence at talk of the seawall; that is Sena's affair, not mine.",
+                "knows_name": false
               }
             ],
             "memories": [
@@ -40813,7 +40826,8 @@
                 "trust": -20,
                 "affinity": -10,
                 "label": "stranger",
-                "note": "An Elmwick woman who wants to farm the Lakemead if it is won back; I keep my distance."
+                "note": "An Elmwick woman who wants to farm the Lakemead if it is won back; I keep my distance.",
+                "knows_name": false
               },
               {
                 "name": "Edric Toller",
@@ -43609,7 +43623,8 @@
                 "trust": 50,
                 "affinity": 50,
                 "label": "stranger",
-                "note": "She stacks pits at Sootwood and knows a quay knot; I want to learn it."
+                "note": "She stacks pits at Sootwood and knows a quay knot; I want to learn it.",
+                "knows_name": false
               }
             ],
             "memories": [
@@ -43914,7 +43929,8 @@
                 "trust": 35,
                 "affinity": 30,
                 "label": "stranger",
-                "note": "Headwoman of Reedmoor, and her quarrel with Elmwick has followed us up the road."
+                "note": "Headwoman of Reedmoor, and her quarrel with Elmwick has followed us up the road.",
+                "knows_name": false
               }
             ],
             "memories": [

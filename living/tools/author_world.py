@@ -422,6 +422,28 @@ def situations_text(sits, names):
     return "\n".join(lines)
 
 
+NAMES_SYSTEM = """You decide, for people of a simulated world at the moment it begins, which other people they know by name: would they recognise the person on meeting them and know what to call them? Relatives, neighbours, trade partners, creditors and debtors, people they have dealt with, quarrelled with or been introduced to: yes. Someone they know only by reputation or from others' talk and have never met, someone they have only glimpsed, a stranger: no. Someone they know by sight and whose name everyone uses (a well-known leader, an outlaw they have faced): yes.
+
+Reply with ONE JSON object: {"pairs": [{"person": "...", "other": "...", "knows_name": true}]} with one entry for each pair asked."""
+
+
+def names_settlement(s, cast, sheets, home, profile, effort):
+    """Which of a settlement's people know by name the people outside their community they have
+    feelings about. Since names spread only as the world projects them (a feeling is not an
+    introduction), each authored relation becomes an introduction unless this says no."""
+    lines = []
+    for h in cast["households"]:
+        for m in h["members"]:
+            sh = sheets.get(m["name"])
+            for r in (sh or {}).get("relations", []):
+                if home.get(r["name"]) not in (None, s["name"]):
+                    lines.append(f"- {m['name']} ({m['role']}) -> {r['name']} of {home[r['name']]}: {r['label']}. \"{r['note']}\"")
+    if not lines:
+        return {}
+    v = logged_call(profile, NAMES_SYSTEM, f"# People of {s['name']} and the people elsewhere they feel something about\n" + "\n".join(lines), effort, f"names:{s['name']}")
+    return {f"{x['person']}|{x['other']}": bool(x.get("knows_name", True)) for x in v.get("pairs", []) if isinstance(x, dict) and x.get("person") and x.get("other")}
+
+
 REVIEW_SYSTEM = """You check the character sheets of a simulated world for contradictions before the world starts. Situations are the agreed facts. Compare each situation with the sheets of the people in it, and the people's sheets with each other.
 
 A contradiction is: two sheets disagree on a fact (who owes whom, how much, who is courting whom, who is whose parent or spouse, who did what in a remembered event); a sheet contradicts a situation it is in; a person knows a secret they are not in; a relation's feeling flatly contradicts the situation (lovers who are strangers; a creditor who does not know the debt). Different opinions about the same fact are NOT contradictions. Missing detail is not a contradiction.
@@ -651,6 +673,20 @@ Write one sheet for each of: {', '.join(m['name'] for m in h['members'])}."""
                 print(f"redrafted {len(flagged)} households", flush=True)
                 sheets = load_sheets()
 
+    # 4b. Who knows whose name, for relations across communities (cached per settlement).
+    home = {m["name"]: s["name"] for s in world["settlements"] if s["name"] in casts for h in casts[s["name"]]["households"] for m in h["members"]}
+    (wd / "names").mkdir(exist_ok=True)
+    known_names = {}
+    for s in world["settlements"]:
+        f = wd / "names" / f"{slug(s['name'])}.json"
+        if not f.exists() and not a.compile_only and s in ready:
+            try:
+                f.write_text(json.dumps(names_settlement(s, casts[s["name"]], sheets, home, a.profile, a.effort), indent=1, ensure_ascii=False) + "\n")
+            except RuntimeError as e:
+                notes.append(str(e))
+        if f.exists():
+            known_names.update(json.loads(f.read_text()))
+
     # 5. Checks that need no model, then the compile.
     occupations_with_ways = set(json.loads((ROOT / "living/seeds/repertoire.json").read_text())["occupations"]) | set(ways.get("occupations", {})) | {r["occupation"] for r in world.get("routes", [])}
     seed_path = ROOT / "living/seeds" / f"{world['into']}.json"
@@ -713,7 +749,13 @@ Write one sheet for each of: {', '.join(m['name'] for m in h['members'])}."""
             for m in h["members"]:
                 if m["name"] not in sheets:
                     continue
-                r = {"name": m["name"], "age": m["age"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", []), "sheet": sheets[m["name"]]}
+                sheet = json.loads(json.dumps(sheets[m["name"]]))
+                for rel in sheet["relations"]:
+                    # A relation is an introduction unless the names pass says this person would
+                    # not know the other by name (docs/SEEDED_LIVES.md).
+                    if known_names.get(f"{m['name']}|{rel['name']}") is False:
+                        rel["knows_name"] = False
+                r = {"name": m["name"], "age": m["age"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", []), "sheet": sheet}
                 inv = dict(ways.get("kit", {}).get(m["occupation"], {"berries": 4}))
                 if m["occupation"] in route_of:
                     ro = route_of[m["occupation"]]

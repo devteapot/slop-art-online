@@ -326,3 +326,20 @@
 {"at": "2026-11-10T00:17:40", "purpose": "fill", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 24313, "cached": 23680, "completion": 64, "seconds": 2.2}
 {"at": "2026-11-10T00:17:40", "purpose": "fill", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 24875, "cached": 23680, "completion": 96, "seconds": 1.5}
 {"at": "2026-11-10T00:17:42", "purpose": "fill", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 24488, "cached": 23680, "completion": 67, "seconds": 4.7}
+{"at": "2026-11-10T03:58:03", "purpose": "names:Brackenford", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 6423, "cached": 0, "completion": 2303, "seconds": 4.9}
+{"at": "2026-11-10T03:58:06", "purpose": "names:Kettlebridge", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 3422, "cached": 0, "completion": 1306, "seconds": 3.1}
+{"at": "2026-11-10T03:58:08", "purpose": "names:Lanternquay", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 2705, "cached": 0, "completion": 960, "seconds": 2.2}
+{"at": "2026-11-10T03:58:10", "purpose": "names:Highshelf", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 1358, "cached": 0, "completion": 475, "seconds": 1.9}
+{"at": "2026-11-10T03:58:13", "purpose": "names:Fernhollow", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 2486, "cached": 0, "completion": 971, "seconds": 2.7}
+{"at": "2026-11-10T03:58:15", "purpose": "names:Thornby", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 2603, "cached": 0, "completion": 789, "seconds": 1.9}
+{"at": "2026-11-10T03:58:17", "purpose": "names:Elmwick", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 2086, "cached": 0, "completion": 876, "seconds": 2.6}
+{"at": "2026-11-10T03:58:19", "purpose": "names:Reedmoor", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 2367, "cached": 0, "completion": 1128, "seconds": 2.3}
+{"at": "2026-11-10T03:58:22", "purpose": "names:Coldwell", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 2693, "cached": 0, "completion": 1077, "seconds": 2.6}
+{"at": "2026-11-10T03:58:23", "purpose": "names:Ashby", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 1195, "cached": 0, "completion": 502, "seconds": 1.5}
+{"at": "2026-11-10T03:58:25", "purpose": "names:Highfold", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 1489, "cached": 0, "completion": 664, "seconds": 1.8}
+{"at": "2026-11-10T03:58:26", "purpose": "names:Sootwood", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 1381, "cached": 0, "completion": 490, "seconds": 1.2}
+{"at": "2026-11-10T03:58:31", "purpose": "names:Lakemead", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 1616, "cached": 0, "completion": 543, "seconds": 4.2}
+{"at": "2026-11-10T03:58:33", "purpose": "names:Saltings", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 882, "cached": 0, "completion": 402, "seconds": 2.0}
+{"at": "2026-11-10T03:58:34", "purpose": "names:the North Light", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 810, "cached": 0, "completion": 286, "seconds": 1.0}
+{"at": "2026-11-10T03:58:35", "purpose": "names:Tanglewood", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 1393, "cached": 0, "completion": 476, "seconds": 1.7}
+{"at": "2026-11-10T03:58:37", "purpose": "names:Ferncross", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 1616, "cached": 0, "completion": 545, "seconds": 1.7}
