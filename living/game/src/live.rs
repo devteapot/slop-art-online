@@ -542,15 +542,11 @@ fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, liv
     }
 }
 
-/// Where the cursor meets the island's ground (the camera's own ray uses the tile ground), and
-/// keep the eye above the island's hills.
-fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, mut cams: Query<(&Camera, &mut Transform, &GlobalTransform), With<Camera3d>>, windows: Query<&Window>) {
+/// Where the cursor meets the island's ground (the camera's own ray uses the tile ground). The
+/// eye's height over the island's hills is the camera's own (`camera::follow`).
+fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, windows: Query<&Window>) {
     let Some(island) = island else { return };
-    let Ok((camera, mut tf, gtf)) = cams.single_mut() else { return };
-    let floor = island.height(tf.translation.x, tf.translation.z) + 1.0;
-    if tf.translation.y < floor {
-        tf.translation.y = floor;
-    }
+    let Ok((camera, gtf)) = cams.single() else { return };
     let Some(c) = windows.iter().next().and_then(|w| w.cursor_position()) else { return };
     let Ok(ray) = camera.viewport_to_world(gtf, c) else { return };
     let (o, d) = (ray.origin, *ray.direction);
