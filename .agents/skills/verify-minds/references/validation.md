@@ -154,3 +154,7 @@ Frontmatter, Python syntax, relative links, executable scripts and existing Clau
 ## 2026-11-09, branch harness-1 (animals, night, jev)
 
 Private container `harness-stdb`. New cases: `night` and `jev` passed in `minds-h1-204530`; `animals` passed in `minds-h2-210016` after two fixes to the case (dawn reasons, since installing a graph counts as having just thought; the herd gathered in the open) and one to the fake server (a distinctive prompt wins over a purpose-named effort). The earlier cases were not rerun on this branch; the mind changes they touch (model routing through mixes, the `reorganize` purpose) are covered by verify-llm.
+
+## 2026-11-10, branch fix-host-example
+
+Shared container `sao-living_spacetimedb_1`, laptop. `conversation` passed in `minds-host-20261110-201010` with the new check: the recorded talk request contains `"do": "host"`. The unit test `talk_examples_show_every_shown_act` fails with "host is not shown in the talk turn's examples" when the example line is removed (main before this branch), and passes with it.

@@ -260,3 +260,7 @@ Shared container `sao-living_spacetimedb_1` (v2.14.1), Mac checkout at `b7cf7fb`
 - Mechanics: `core-fm-mechanics` 22 of 23. The new check "blows land on the yielded, and striking them is news" failed in the driver, not the rule: the yield, the news and J's "though you had yielded" percept were all present, but J's health was read after the post-yield blow had landed. The check now reads the damage J was told. With that: `core-fm-mechanics-2` and `-3` 23 of 23.
 - `core-fm-skirmish` (island) 8/8; `core-fm-town` (island) 21/21; `core-fm-codes` 10/10.
 - Every database was deleted by cleanup and absent from `stdb list` afterwards.
+
+## 2026-11-10, branch fix-agreement-terms
+
+Shared container, laptop, island seed. `dealings` passed all 15 checks in `core-terms-202051-dealings` (the scene composes its own short `due_by_dark`, so it covers the hooks, not the new minimum). Cargo `agreements_and_demands_are_rules_on_records` checks the new deadline: accepted at 7:00, due in 13 h, told "by dusk today"; at 14:00, due in 30 h, "by dusk tomorrow". The description change was replayed against glm-flash on the two real backwards `offer_terms` decisions (docs/TRIALS.md, "Fast iterations").
