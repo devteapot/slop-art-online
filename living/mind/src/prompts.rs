@@ -351,14 +351,55 @@ staying safe, your work) unless you decide otherwise, so decide what this moment
 When one of your habits keeps failing you (see how each has gone), you may decide to sit down and rework it. \
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, as well as practical matters; you may also stay silent. \
 Refer to people by the ids you see. Do not assume facts you have not perceived.\n\n{}\n\n\
+WHAT A PERSON CAN DO (every skill and act there is, with what each takes and gives; your habits are made of these, and nothing else can be done):\n{}\n\n\
 Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 sentences)\", \
 \"intend\": [\"each thing you mean to do, in plain words, in order (e.g. ask Borno (#5) to start a family with me; give Galy (#8) 2 berries; \
 meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be empty), \
 \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances), \
 \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering)}}",
-        world_rules()
+        world_rules(),
+        think_verbs()
     ))
+}
+
+/// Words without a graph argument's form: a parenthesis that shows one (`target {"at": …}`) is
+/// dropped.
+fn plain(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(a) = rest.find('(') {
+        let Some(b) = rest[a..].find(')').map(|b| a + b) else { break };
+        out.push_str(&rest[..a]);
+        if !rest[a..=b].contains('{') {
+            out.push_str(&rest[a..=b]);
+        }
+        rest = &rest[b + 1..];
+    }
+    out.push_str(rest);
+    out.replace("  ", " ").replace(" ;", ";").replace(" ,", ",").replace(" :", ":").trim().to_string()
+}
+
+/// The skills and acts a person has, as plain verbs: what each is (its first sentence), and
+/// what it takes and gives, without the graph's argument grammar.
+pub fn think_verbs() -> String {
+    living_rules::catalog::skills()
+        .iter()
+        .filter(|s| s.listed)
+        .map(|s| {
+            let about = s.about.replace("e.g. ", "e.g.\u{0}").replace("i.e. ", "i.e.\u{0}");
+            let about = about.split_inclusive(". ").next().unwrap_or(&about).replace('\u{0}', " ");
+            let mut line = format!("- {}: {}", s.name, plain(about.trim().trim_end_matches('.')));
+            if !s.takes.is_empty() {
+                line.push_str(&format!("; takes {}", plain(s.takes.trim_end_matches('.'))));
+            }
+            if !s.gives.is_empty() {
+                line.push_str(&format!("; gives {}", plain(s.gives.trim_end_matches('.'))));
+            }
+            line
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str) -> String {
@@ -1020,6 +1061,19 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn think_lists_every_skill_as_a_plain_verb() {
+        let _ = fixture("think", "Aria", "person");
+        let system = think_system();
+        let verbs = think_verbs();
+        for s in living_rules::catalog::skills().iter().filter(|s| s.listed) {
+            assert!(verbs.lines().any(|l| l.starts_with(&format!("- {}: ", s.name))), "{} missing", s.name);
+        }
+        assert!(system.contains(&verbs));
+        // Plain words, not the graph's argument grammar.
+        eprintln!("think verbs: {} lines, {} chars\n{verbs}", verbs.lines().count(), verbs.len());
     }
 
     #[test]
