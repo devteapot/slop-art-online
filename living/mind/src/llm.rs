@@ -241,8 +241,8 @@ pub struct Llm {
     scheduler: Scheduler,
 }
 
-/// Reachability of a provider (by base URL). When a request cannot reach it (DNS, no route,
-/// refused, timed out), calls to it wait instead of failing at once; one probe at a time goes
+/// Reachability of a provider (by base URL). When a request cannot connect to it (DNS, no
+/// route, refused), calls to it wait instead of failing at once; one probe at a time goes
 /// out, with a pause that doubles from 2 s to a minute, until the provider answers again. An
 /// outage then costs a paused mind, not hundreds of failed calls a minute.
 #[derive(Default)]
@@ -821,7 +821,10 @@ impl Llm {
             let resp = match self.http.post(&url).bearer_auth(key).json(&body).send().await {
                 Ok(r) => r,
                 Err(e) => {
-                    unreachable = e.is_connect() || e.is_timeout() || e.is_request();
+                    // Only a connection that could not be made gates the host. A timeout is one
+                    // slow reply (a runaway generation, a loaded model): the host answers other
+                    // calls, often for other profiles on the same base URL.
+                    unreachable = e.is_connect();
                     return Err(anyhow::Error::new(e).context("request"));
                 }
             };
@@ -1821,6 +1824,27 @@ mod tests {
         let text = std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../configs/models.json")).unwrap();
         let m: ModelsFile = serde_json::from_str(&text).unwrap();
         m.check().unwrap();
+    }
+
+    /// A runaway generation stops near what the purpose needs (measured p99 output on
+    /// rules2-r2: think 465, compile 1,008, consolidate 2,388) instead of at 24,000 tokens:
+    /// every profile caps every purpose the mind sends, and only `reorganize` goes past 6,000.
+    #[test]
+    fn every_profile_caps_each_purpose_near_its_need() {
+        let text = std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../configs/models.json")).unwrap();
+        let m: ModelsFile = serde_json::from_str(&text).unwrap();
+        for (name, p) in &m.profiles {
+            for purpose in ["think", "deliberate", "talk", "consolidate", "internalize", "reorganize", "rethink"] {
+                let cap = p.max_tokens_for(purpose).unwrap_or(u32::MAX);
+                assert!(p.purpose_max_tokens.contains_key(purpose), "{name} has no cap of its own for {purpose}");
+                if purpose == "reorganize" {
+                    assert!(cap >= 24000, "{name}: reorganize at GLM high needs 24,000 (MODEL_COST Part 2)");
+                } else {
+                    assert!(cap <= 6000, "{name}: {purpose} capped at {cap}");
+                }
+            }
+            assert!(p.max_tokens_for("think").unwrap() <= 2000 && p.max_tokens_for("talk").unwrap() <= 1000, "{name}");
+        }
     }
 
     #[test]
