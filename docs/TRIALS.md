@@ -181,6 +181,27 @@ Lane B's base: iterations launched before 00:28 ran on the trials module of f381
 - An engine change (a feedback message, a feeling's cadence): the branch's commit is cherry-picked onto the trials base, built for the same world seed and copied in as `<module>-<tag>.wasm`; the variant names it (`"wasm_tag"`). The control runs the trials base module.
 - Iteration variants live in an untracked file (`TRIALS_VARIANTS`), and iteration trials are named by path, so the tracked lists stay as they are.
 
+### The social preset (`ls1`, `ls2`, 2026-11-10 00:29–03:22)
+
+`life-social` (residents wake into minds when engaged; town life layer 2, main 6de2bad) on `trials-1` f39f92c with the moved pack, island seeds 7, 11 and 13 (one per replicate, `world_seeds`), 150 minutes, `LIVING_ONLY=<subject>,woken`. `ls1`: people on glm-flash (default); `ls2`: on deepseek-flash. Woken residents think on the models file's `woken` route (the `people` mix) in both.
+
+| Run (seed) | Residents woken (by the newcomer) | Stage-cap binds | Lines said to the newcomer (by how many) | Talk turns | Food, lesson, lodging given to it | Slept inside a settlement | Tokens | Cost | Cost per engaged resident-hour |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| glm-flash r1 (7) | 17 (0) | 438 | 5 (2) | 69 | none | 208 of 334 sleep samples | 24.1M | $4.51 | $0.19 |
+| glm-flash r2 (11) | 27 (3) | 287 | 30 (5) | 69 | none | 338 of 338 | 21.4M | $4.00 | $0.11 |
+| glm-flash r3 (13) | 0 | 0 | 0 | 0 | none | 0 of 515 | 2.0M | $0.31 | – |
+| deepseek-flash r1 (7) | 22 (3) | 206 | 24 (3) | 44 | none | 205 of 303 | 22.6M | $4.31 | $0.12 |
+| deepseek-flash r2 (11) | 25 (2) | 171 | 10 (2) | 52 | 2 berries (one gift) | 158 of 307 | 20.3M | $3.94 | $0.12 |
+| deepseek-flash r3 (13) | 0 | 0 | 0 | 0 | none | 0 of 299 | 1.9M | $0.43 | – |
+
+Six runs: $17.50 and 92M tokens; the newcomers themselves are about 2M tokens per run (the rest is residents). The newcomer survived in all six.
+
+- **Waking cascades.** 91 of 91 wakes in the four engaged worlds were mostly not the newcomer's: it woke 0–3 per world, and woken residents speaking to neighbours woke the rest (17–27 per world). The stage cap (6 per settlement) then bound 171–438 times. Iteration 6 tested stopping this (a woken resident's words do not wake): 80% fewer woken and 58% fewer tokens, with the newcomer answered at least as often.
+- **Answers, but not help.** Where it engaged anyone, the newcomer was answered (5–30 lines from 2–5 people). Across the six runs it received one gift (2 berries), no lesson and no lodging; `host` was never used (as in TOWN_LIFE.md's paid runs). It fed itself by gathering. What it learned (writing, torch, archery, toolmaking, storage, trapping in the glm runs) it worked out by experimenting.
+- **It slept inside a settlement** in the engaged worlds (47–100% of its sleep samples within a settlement's radius), against none on seed 13, where it engaged no one. Inside, not lodged: no lodging place in any run.
+- **Seed 13:** in both models the newcomer engaged no resident in 150 minutes and nobody woke. The arrival point of that world is the variable; not investigated.
+- **Models.** glm-flash and deepseek-flash for the newcomer cost alike here because residents dominate; DeepSeek's newcomer got slightly more lines in seed 7 (24 against 5) and fewer in seed 11 (10 against 30). Two worlds each; no ranking.
+
 ## Fast iterations
 
 | # | Hypothesis | Change (branch) | Runs | Result | Keep? |
