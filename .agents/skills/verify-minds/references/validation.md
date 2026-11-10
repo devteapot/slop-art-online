@@ -1,5 +1,17 @@
 # Internal mind validation
 
+## 2026-11-09 the rethink gate, rethink-1 (dev-box)
+
+- **Setup:** private container `rethink-stdb` (2.14.1) on 3397, private `CARGO_TARGET_DIR`, fake model and fake Jev; no paid calls.
+- **New cases `rethink` and `rethink-llm`:** they failed four times, each on a harness fault:
+  - the fake's Jev endpoint read `health` as a number, while the gate sends words, so it crashed (the mind's fallback path held);
+  - a poll on the pending row raced the fake mind (the case now waits on the `rethink-gate` journal);
+  - `max_hold_s` 25 released the request mid-case (now 90);
+  - an assertion ran before the mind's start-up line (now a wait).
+- **Passes:** `minds-rethink-230515` passed both cases.
+- **Full suite `minds-full-232622`:** all 17 cases pass (roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night, jev, rethink, rethink-llm); consolidation is its known XFAIL.
+- **SELinux:** on this Fedora host the container's `/wasm` bind mount needs the `z` label, or `spacetime publish` fails with "Permission denied".
+
 ## 2026-11-09 town life layer 2, phase 1 (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `14f3a72` plus the uncommitted town life layer 2 phase 1 change (docs/TOWN_LIFE.md, "Layer 2"): the `woken`, `prior` and `prior_head` tables, the `wakes` and `woken_ring` laws. Free tier only; no model calls.
