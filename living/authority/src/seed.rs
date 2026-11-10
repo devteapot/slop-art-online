@@ -5,7 +5,8 @@ use crate::tables::*;
 use crate::common;
 use living_rules::map::{chunk_of, Terrain};
 use serde::Deserialize;
-use spacetimedb::rand::Rng;
+use spacetimedb::rand::rngs::StdRng;
+use spacetimedb::rand::{Rng, RngCore, SeedableRng};
 use spacetimedb::{Identity, ReducerContext, Table};
 
 /// The seed compiled into this module: `seeds/world.json` (the active world; `just living-seed
@@ -14,10 +15,61 @@ use spacetimedb::{Identity, ReducerContext, Table};
 pub const VALLEY: &str = include_str!(concat!(env!("OUT_DIR"), "/seed.json"));
 
 thread_local! {
+    /// The draws of the world creation step under way (see [`rng`]).
+    static DRAWS: std::cell::RefCell<Option<StdRng>> = const { std::cell::RefCell::new(None) };
     /// The runtime seed (a floor module's `floor_seed` row), once loaded into this instance.
     /// It never changes after `create_floor`, so a lost instance just loads it again.
     static ACTIVE: std::cell::RefCell<Option<std::rc::Rc<str>>> = const { std::cell::RefCell::new(None) };
 }
+
+/// Where this file's random draws come from: while a step of world creation runs
+/// ([`Creating`]), a generator seeded from the world seed and the step, so two publishes of one
+/// seed place the same resources, animals and packs and give the same ages and names; at any
+/// other time (a birth, a migration, a crowd an admin spawns) the reducer's own RNG, which
+/// SpacetimeDB seeds from the call's timestamp.
+pub struct Draw<'a>(&'a ReducerContext);
+
+pub fn rng(ctx: &ReducerContext) -> Draw<'_> {
+    Draw(ctx)
+}
+
+impl RngCore for Draw<'_> {
+    fn next_u32(&mut self) -> u32 {
+        DRAWS.with(|d| d.borrow_mut().as_mut().map(|r| r.next_u32())).unwrap_or_else(|| RngCore::next_u32(&mut self.0.rng()))
+    }
+    fn next_u64(&mut self) -> u64 {
+        DRAWS.with(|d| d.borrow_mut().as_mut().map(|r| r.next_u64())).unwrap_or_else(|| RngCore::next_u64(&mut self.0.rng()))
+    }
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        if DRAWS.with(|d| d.borrow_mut().as_mut().map(|r| r.fill_bytes(dest)).is_none()) {
+            RngCore::fill_bytes(&mut self.0.rng(), dest);
+        }
+    }
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), spacetimedb::rand::Error> {
+        self.fill_bytes(dest);
+        Ok(())
+    }
+}
+
+/// A step of world creation under way: its draws come from `seed` and `step` until it ends.
+pub struct Creating;
+
+impl Creating {
+    pub fn start(seed: u64, step: u64) -> Self {
+        DRAWS.with(|d| *d.borrow_mut() = Some(StdRng::seed_from_u64(seed ^ step.wrapping_mul(0x9E37_79B9_7F4A_7C15))));
+        Creating
+    }
+}
+
+impl Drop for Creating {
+    fn drop(&mut self) {
+        DRAWS.with(|d| *d.borrow_mut() = None);
+    }
+}
+
+/// The steps' tags: resources (with their first tile row) and the rest of the population.
+const STEP_RESOURCES: u64 = 1 << 32;
+const STEP_POPULATE: u64 = 2 << 32;
 
 /// The world's seed: the runtime seed once given (`create_floor`), else the compiled one. A
 /// floor module without a seed yet has none to give, and says so rather than guessing.
@@ -99,16 +151,16 @@ pub fn inherit_ways(ctx: &ReducerContext, child: u32, a: u32, b: u32, now: u64) 
     }
     let mut routines = Vec::new();
     for name in names {
-        let first = if ctx.rng().gen::<bool>() { [a, b] } else { [b, a] };
+        let first = if rng(ctx).gen::<bool>() { [a, b] } else { [b, a] };
         if let Some(r) = first.iter().find_map(|p| ctx.db.routine().actor().filter(*p).find(|r| r.name.eq_ignore_ascii_case(&name))) {
             routines.push(crate::mind::RoutineIn { name: r.name, graph: r.graph });
         }
     }
     let _ = crate::mind::set_routines(ctx, child, &routines, "from my parents", now);
-    let first = if ctx.rng().gen::<bool>() { [a, b] } else { [b, a] };
+    let first = if rng(ctx).gen::<bool>() { [a, b] } else { [b, a] };
     let ways = first.iter().find_map(|p| {
         let top = ctx.db.brain().id().find(*p).and_then(|br| living_rules::graph::parse(&br.graph).ok())?;
-        let mut u = || ctx.rng().gen::<f32>();
+        let mut u = || rng(ctx).gen::<f32>();
         living_rules::genes::vary_ways(&top.root, &mut u)
     });
     if let (Some(ways), Some(mut g)) = (ways, ctx.db.genome().id().find(child)) {
@@ -538,8 +590,8 @@ fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack],
         };
         let outside = |q: (f32, f32)| settlements.iter().all(|s| common::dist(q, (s.x, s.y)) > s.radius_m + 15.0);
         let centre = (0..400).find_map(|_| {
-            let ang: f32 = ctx.rng().gen_range(0.0..std::f32::consts::TAU);
-            let d: f32 = ctx.rng().gen_range(p.from_m..p.to_m.max(p.from_m + 1.0));
+            let ang: f32 = rng(ctx).gen_range(0.0..std::f32::consts::TAU);
+            let d: f32 = rng(ctx).gen_range(p.from_m..p.to_m.max(p.from_m + 1.0));
             let q = (r.0 + ang.cos() * d, r.1 + ang.sin() * d);
             (map.free(q.0, q.1) && outside(q)).then_some(q)
         });
@@ -550,9 +602,9 @@ fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack],
         let w = common::world(ctx);
         let (admin, minded) = common::mind_controller(ctx);
         for _ in 0..p.count {
-            let at = (0..30).map(|_| (centre.0 + ctx.rng().gen_range(-4.0f32..4.0), centre.1 + ctx.rng().gen_range(-4.0f32..4.0))).find(|q| map.free(q.0, q.1)).unwrap_or(centre);
+            let at = (0..30).map(|_| (centre.0 + rng(ctx).gen_range(-4.0f32..4.0), centre.1 + rng(ctx).gen_range(-4.0f32..4.0))).find(|q| map.free(q.0, q.1)).unwrap_or(centre);
             let name = animal_name(ctx, &p.kind);
-            let age = common::life_of(&p.kind).age_at(0.3 + 0.3 * ctx.rng().gen::<f32>(), common::pace(&w));
+            let age = common::life_of(&p.kind).age_at(0.3 + 0.3 * rng(ctx).gen::<f32>(), common::pace(&w));
             let id = spawn_with(ctx, &name, &p.kind, admin, minded, at, now, age, (0, 0));
             let text = serde_json::json!({ "pack": if p.name.is_empty() { format!("the {}s near {}", p.kind, p.near) } else { p.name.clone() }, "bold": p.bold }).to_string();
             match ctx.db.background().id().find(id) {
@@ -706,7 +758,10 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
         crate::island::build(ctx, h, now);
     }
     RESOURCE_SCALE.with(|r| *r.borrow_mut() = s.resource_scale.clone());
-    spawn_resources(ctx, &map, now);
+    {
+        let _draws = Creating::start(s.seed, STEP_RESOURCES);
+        spawn_resources(ctx, &map, now);
+    }
     populate(ctx, &s, &map, hosted.as_ref(), realm.as_ref(), settlements, now);
 }
 
@@ -729,6 +784,7 @@ pub fn world_row(ctx: &ReducerContext, s: &Seed, map: &living_rules::map::Map) {
 /// Everything after the terrain and the wild resources: settlements' stores, people, their
 /// households and communities, structures, artifacts, bands and animals.
 pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::Map, hosted: Option<&crate::island::Hosted>, realm: Option<&living_rules::realm::Realm>, mut settlements: Vec<(&'a SeedTown, living_rules::city::Layout)>, now: u64) {
+    let _draws = Creating::start(s.seed, STEP_POPULATE);
     // A land world's settlements are already laid out; seeded ones get residents.
     let seeded: Vec<Option<&SeedTown>> = hosted.map(|h| crate::island::match_seed(h, &s.towns, &s.villages)).unwrap_or_default();
     if let Some(h) = hosted {
@@ -827,7 +883,7 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
             let Some(at) = animal_spot(ctx, &map, kind) else { break };
             for _ in 0..group.min(left) {
                 let spot = (0..20)
-                    .map(|_| (at.0 + ctx.rng().gen_range(-3.0f32..3.0), at.1 + ctx.rng().gen_range(-3.0f32..3.0)))
+                    .map(|_| (at.0 + rng(ctx).gen_range(-3.0f32..3.0), at.1 + rng(ctx).gen_range(-3.0f32..3.0)))
                     .find(|p| animal_ground(&map, kind, p.0 as i32, p.1 as i32))
                     .unwrap_or(at);
                 spawn_animal(ctx, kind, spot, now);
@@ -882,7 +938,7 @@ pub fn spawn_animal(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64) 
     // Seeded wildlife spans all ages (fractions of the lifespan).
     let w = common::world(ctx);
     // A living population has more young than old: ages skew young.
-    let u: f32 = ctx.rng().gen_range(0.0f32..1.0);
+    let u: f32 = rng(ctx).gen_range(0.0f32..1.0);
     let f = 0.05 + 0.75 * u * u;
     let age = common::life_of(kind).age_at(f, common::pace(&w));
     spawn_with(ctx, &name, kind, admin, minded, at, now, age, (0, 0))
@@ -901,7 +957,7 @@ pub fn spawn_young(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64, p
 pub fn migrate(ctx: &ReducerContext, kind: &str, m: &living_rules::species::Migrate, now: u64) -> bool {
     ensure_habitats(ctx);
     let map = common::map(ctx);
-    let Some((at, dir)) = living_rules::species::edge_spot(map.w, map.h, |x, y| animal_ground(&map, kind, x, y), || ctx.rng().gen::<f32>()) else {
+    let Some((at, dir)) = living_rules::species::edge_spot(map.w, map.h, |x, y| animal_ground(&map, kind, x, y), || rng(ctx).gen::<f32>()) else {
         log::warn!("no {kind} could come in: no fitting ground near the map's edges");
         return false;
     };
@@ -910,11 +966,11 @@ pub fn migrate(ctx: &ReducerContext, kind: &str, m: &living_rules::species::Migr
     let life = common::life_of(kind);
     for _ in 0..m.group.max(1) {
         let spot = (0..20)
-            .map(|_| (at.0 + ctx.rng().gen_range(-3.0f32..3.0), at.1 + ctx.rng().gen_range(-3.0f32..3.0)))
+            .map(|_| (at.0 + rng(ctx).gen_range(-3.0f32..3.0), at.1 + rng(ctx).gen_range(-3.0f32..3.0)))
             .find(|p| animal_ground(&map, kind, p.0 as i32, p.1 as i32))
             .unwrap_or(at);
         // Grown, and young enough to breed for a while.
-        let f = ctx.rng().gen_range(life.child + 0.01..(life.child + life.elder) / 2.0);
+        let f = rng(ctx).gen_range(life.child + 0.01..(life.child + life.elder) / 2.0);
         let name = animal_name(ctx, kind);
         spawn_with(ctx, &name, kind, admin, minded, spot, now, life.age_at(f, common::pace(&w)), (0, 0));
     }
@@ -935,8 +991,8 @@ fn animal_name(ctx: &ReducerContext, kind: &str) -> String {
 
 pub fn animal_spot(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str) -> Option<(f32, f32)> {
     for _ in 0..200 {
-        let x = ctx.rng().gen_range(4..map.w as i32 - 4);
-        let y = ctx.rng().gen_range(4..map.h as i32 - 4);
+        let x = rng(ctx).gen_range(4..map.w as i32 - 4);
+        let y = rng(ctx).gen_range(4..map.h as i32 - 4);
         if animal_ground(map, kind, x, y) {
             return Some((x as f32 + 0.5, y as f32 + 0.5));
         }
@@ -946,7 +1002,7 @@ pub fn animal_spot(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &st
     let step = 7;
     let (w, h) = ((map.w as i32 - 8) / step, (map.h as i32 - 8) / step);
     let n = (w.max(1) * h.max(1)) as u32;
-    let start = ctx.rng().gen_range(0..n);
+    let start = rng(ctx).gen_range(0..n);
     (0..n).map(|k| (start + k) % n).find_map(|c| {
         let (x, y) = (4 + (c as i32 % w.max(1)) * step, 4 + (c as i32 / w.max(1)) * step);
         animal_ground(map, kind, x, y).then_some((x as f32 + 0.5, y as f32 + 0.5))
@@ -986,7 +1042,7 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
     motion::spawn_body(ctx, id, kind, at, now);
     // Genes: a founder's are drawn for its species, a child's come from its parents.
     let genes = {
-        let mut u = || ctx.rng().gen::<f32>();
+        let mut u = || rng(ctx).gen::<f32>();
         if parents.0 != 0 && parents.1 != 0 {
             living_rules::genes::inherit(&common::genes_of(ctx, parents.0), &common::genes_of(ctx, parents.1), &mut u)
         } else {
@@ -1122,6 +1178,7 @@ fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64)
 /// cap, and spacing is kept within the band.
 pub fn spawn_resources_rows(ctx: &ReducerContext, map: &living_rules::map::Map, s: &Seed, rows: std::ops::Range<u32>, now: u64) {
     RESOURCE_SCALE.with(|r| *r.borrow_mut() = s.resource_scale.clone());
+    let _draws = Creating::start(s.seed, STEP_RESOURCES | rows.start as u64);
     spawn_resources_in(ctx, map, rows, now);
 }
 
@@ -1173,9 +1230,11 @@ fn spawn_resources_in(ctx: &ReducerContext, map: &living_rules::map::Map, rows: 
     // Tile indices (`y * w + x`), shuffled with the same draws as before; 4 bytes a tile rather
     // than 8 (a 2048 m land has 4.2M tiles).
     let mut rng_tiles: Vec<u32> = (rows.start * map.w..rows.end * map.w).collect();
-    // Deterministic shuffle from the reducer RNG.
+    // Shuffled by a generator drawn once from this step's draws (a million draws each through
+    // `rng` cost a lookup apiece).
+    let mut shuffle = StdRng::seed_from_u64(rng(ctx).next_u64());
     for i in (1..rng_tiles.len()).rev() {
-        let j = ctx.rng().gen_range(0..=i);
+        let j = shuffle.gen_range(0..=i);
         rng_tiles.swap(i, j);
     }
     let mut counts = std::collections::HashMap::<&str, u32>::new();
@@ -1209,8 +1268,8 @@ fn spawn_resources_in(ctx: &ReducerContext, map: &living_rules::map::Map, rows: 
     }
     // Sparse berry bushes in open grassland too.
     for _ in 0..(cap(25) as f32 * abundance("berry_bush")) as u32 {
-        let x = ctx.rng().gen_range(4..map.w as i32 - 4);
-        let y = ctx.rng().gen_range((rows.start as i32).max(4)..(rows.end as i32).min(map.h as i32 - 4).max((rows.start as i32).max(4) + 1));
+        let x = rng(ctx).gen_range(4..map.w as i32 - 4);
+        let y = rng(ctx).gen_range((rows.start as i32).max(4)..(rows.end as i32).min(map.h as i32 - 4).max((rows.start as i32).max(4) + 1));
         if map.get(x, y) == Terrain::Grass {
             place(ctx, "berry_bush", x, y, 5.0, 3.0, &mut placed);
         }
@@ -1228,10 +1287,10 @@ const SYLLABLES: [&str; 40] = [
 fn fresh_name(ctx: &ReducerContext) -> String {
     let used: std::collections::HashSet<String> = ctx.db.character().kind().filter("person").map(|c| c.name).collect();
     loop {
-        let n = ctx.rng().gen_range(2..=3);
+        let n = rng(ctx).gen_range(2..=3);
         let mut name = String::new();
         for _ in 0..n {
-            name.push_str(SYLLABLES[ctx.rng().gen_range(0..SYLLABLES.len())]);
+            name.push_str(SYLLABLES[rng(ctx).gen_range(0..SYLLABLES.len())]);
         }
         let mut c = name.chars();
         let name = c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default();
@@ -1419,12 +1478,12 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
     let center = layout.center;
     let mut roles: Vec<String> = t.occupations.iter().flat_map(|(o, n)| std::iter::repeat(o.clone()).take(*n as usize)).collect();
     for i in (1..roles.len()).rev() {
-        let j = ctx.rng().gen_range(0..=i);
+        let j = rng(ctx).gen_range(0..=i);
         roles.swap(i, j);
     }
     let mut households: Vec<Vec<String>> = Vec::new();
     while !roles.is_empty() {
-        let n = ctx.rng().gen_range(2..=4).min(roles.len());
+        let n = rng(ctx).gen_range(2..=4).min(roles.len());
         households.push(roles.drain(..n).collect());
     }
     let mut ids = Vec::new();
@@ -1436,7 +1495,7 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
         for (k, occ) in members.iter().enumerate() {
             let at = (home.0 + (k as f32 - 1.0) * 0.5, home.1 + 0.6);
             // Working adults of all ages; sometimes a grandparent who still keeps a trade.
-            let f = if k >= 2 && ctx.rng().gen_range(0.0f32..1.0) < 0.4 { ctx.rng().gen_range(0.76f32..0.9) } else { ctx.rng().gen_range(0.18f32..0.6) };
+            let f = if k >= 2 && rng(ctx).gen_range(0.0f32..1.0) < 0.4 { rng(ctx).gen_range(0.76f32..0.9) } else { rng(ctx).gen_range(0.18f32..0.6) };
             let id = spawn_with(ctx, &names[k], "person", admin, minded, walkable_near(map, at), now, life.age_at(f, pace), (0, 0));
             common::inv_add(ctx, id as u64, "berries", 4);
             common::learn(ctx, id, "fire", "seed", now);
@@ -1455,11 +1514,11 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
         if household_ids.len() >= 2 {
             let (pa, pb) = (household_ids[0].0, household_ids[1].0);
             let mut young = Vec::new();
-            if ctx.rng().gen_range(0.0f32..1.0) < 0.55 {
-                young.push(ctx.rng().gen_range(life.infant * 1.5..life.child * 0.9));
+            if rng(ctx).gen_range(0.0f32..1.0) < 0.55 {
+                young.push(rng(ctx).gen_range(life.infant * 1.5..life.child * 0.9));
             }
-            if ctx.rng().gen_range(0.0f32..1.0) < 0.2 {
-                young.push(ctx.rng().gen_range(0.0..life.infant * 0.7));
+            if rng(ctx).gen_range(0.0f32..1.0) < 0.2 {
+                young.push(rng(ctx).gen_range(0.0..life.infant * 0.7));
             }
             for f in young {
                 let name = fresh_name(ctx);
@@ -1626,7 +1685,7 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], n
                 (ch.parent_a, ch.parent_b) = want;
                 ctx.db.character().id().update(ch);
                 if late {
-                    let mut u = || ctx.rng().gen::<f32>();
+                    let mut u = || rng(ctx).gen::<f32>();
                     let genes = living_rules::genes::inherit(&common::genes_of(ctx, want.0), &common::genes_of(ctx, want.1), &mut u);
                     if let Some(mut g) = ctx.db.genome().id().find(id) {
                         g.genes = serde_json::to_string(&genes).unwrap_or_default();
@@ -1700,10 +1759,10 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
         for (k, m) in b.family.iter().enumerate() {
             let p = walkable_near(map, (at.0 + (k % 4) as f32 * 0.8, at.1 + (k / 4) as f32 * 0.8));
             let f = match m.stage.as_str() {
-                "elder" => ctx.rng().gen_range(life.elder + 0.01..life.old_age),
-                "child" => ctx.rng().gen_range(life.infant * 1.5..life.child * 0.9),
-                "infant" => ctx.rng().gen_range(0.0..life.infant * 0.6),
-                _ => ctx.rng().gen_range(life.child + 0.02..0.55),
+                "elder" => rng(ctx).gen_range(life.elder + 0.01..life.old_age),
+                "child" => rng(ctx).gen_range(life.infant * 1.5..life.child * 0.9),
+                "infant" => rng(ctx).gen_range(0.0..life.infant * 0.6),
+                _ => rng(ctx).gen_range(life.child + 0.02..0.55),
             };
             let young = matches!(m.stage.as_str(), "child" | "infant");
             let parents = if young && adults.len() >= 2 { (adults[0], adults[1]) } else { (0, 0) };
@@ -1756,9 +1815,9 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
             let p = walkable_near(map, (at.0 + k as f32 * 0.8, at.1 + (k % 2) as f32));
             let id = if b.size >= 4 && k as u32 == b.size - 1 && ids.len() >= 2 {
                 // Larger bands carry a child of the first two.
-                spawn_with(ctx, name, "person", admin, minded, p, now, life.age_at(ctx.rng().gen_range(life.infant * 2.0..life.child * 0.8), pace), (ids[0], ids[1]))
+                spawn_with(ctx, name, "person", admin, minded, p, now, life.age_at(rng(ctx).gen_range(life.infant * 2.0..life.child * 0.8), pace), (ids[0], ids[1]))
             } else {
-                spawn_with(ctx, name, "person", admin, minded, p, now, life.age_at(ctx.rng().gen_range(0.18f32..0.7), pace), (0, 0))
+                spawn_with(ctx, name, "person", admin, minded, p, now, life.age_at(rng(ctx).gen_range(0.18f32..0.7), pace), (0, 0))
             };
             common::inv_add(ctx, id as u64, "berries", 3);
             let stage = ctx.db.character().id().find(id).map(|c| c.stage).unwrap_or(2);

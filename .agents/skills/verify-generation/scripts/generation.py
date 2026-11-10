@@ -463,10 +463,12 @@ def repeatability(first, second):
         "terrain": ("terrain_chunk", ("id", "tiles")),
         "settlement sites": ("community", ("name", "home_x", "home_y")),
         "resource positions": ("resource_node", ("kind", "x", "y")),
-        "names": ("character", ("id", "name")),
-        "ages": ("character", ("id", "birth_age_days")),
-        "genes": ("genome", ("id", "genes")),
-        "animal spawn positions": ("character", ("id", "home_x", "home_y")),
+        # Without ids: two publications can number rows differently (an auto_inc sequence can
+        # jump between them) while creating the same rows.
+        "names": ("character", ("name",)),
+        "ages": ("character", ("name", "birth_age_days")),
+        "genes": ("genome", ("genes",)),
+        "animal spawn positions": ("character", ("kind", "home_x", "home_y")),
     }
     report = {}
     for name, (table, keys) in comparisons.items():
@@ -476,7 +478,9 @@ def repeatability(first, second):
         return sorted({(bg["band"], *bg["camp"]) for row in rows["background"] if (bg := json.loads(row["text"])).get("origin") == "band"})
     a, b = band_sites(first), band_sites(second)
     report["band sites"] = {"equal": a == b, "first": a, "second": b}
-    report["pass"] = all(report[k]["equal"] for k in ("terrain", "settlement sites", "band sites"))
+    # Since 2026-11-10 world creation draws from the world seed and the step (seed.rs `rng`),
+    # so what it places at random repeats too.
+    report["pass"] = all(report[k]["equal"] for k in ("terrain", "settlement sites", "band sites", "resource positions", "names", "ages", "genes", "animal spawn positions"))
     return report
 
 
