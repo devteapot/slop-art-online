@@ -613,9 +613,12 @@ mod tests {
         assert!((a.phase - mid).abs() < 0.02, "starts at the right mid-stance, not {}", a.phase);
         // One cycle covers the blend's metres: at 1.4 m/s the phase advances 1.4 / cycle a second.
         let p = a.phase;
-        step(&mut a, &s, &m, 0.1);
-        assert!((a.phase - p - 0.1 * 1.4 / a.blend.cycle_m).abs() < 1e-5);
+        step(&mut a, &s, &m, 0.05);
+        assert!((a.phase - p - 0.05 * 1.4 / a.blend.cycle_m).abs() < 1e-5);
         assert!(a.moving > 0.0 && a.moving < 1.0, "the gait fades in");
+        // From standing it is in within MOVE_IN_REST: the authority starts a body at full speed.
+        step(&mut a, &s, &m, MOVE_IN_REST - 0.05 + 1e-4);
+        assert_eq!(a.moving, 1.0, "in after {MOVE_IN_REST} s from standing");
     }
 
     #[test]
