@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-10 client feel (Mac): failures on `origin/main`'s authority
+
+Branch `fix-client-feel`, whose `living/authority`, `living/rules` and `living/scripts` equal `origin/main` (`6c8d1002`); shared container (2.14.1), island seed, `scoped`, run `player-feel-1110-231835`. `combat.py --scene all`: 20 of 25. Failed: the fire bolt struck a wall; both block scenes recorded no events (`[]`); the dodge moved 1.95 m with no events; heal refused "you are not hurt" (health 98). `gesture.py`: 7 of 10. Failed: no player `skill_use` row for the accepted wave and nod (the residents' answers and the `doing` rows are there), and waving at oneself was not refused. Not triaged in this change (no authority code changed); the last full passes recorded below predate the merges since `rhai-1`.
+
 ## 2026-11-10 dealings and a skill only the script declares (Mac)
 
 Branch `rules-2` (`eaee6b0`) in a worktree, own container `sao-rules2-stdb` (2.14.1, port 3342), default seed, `scoped`. `deal.py` (new): 13 of 13 (`player-rules2-deal2/`; the first attempt failed one check on the driver, which looked for "proposed to" in lowercase, `-deal1/`). `new_skill.py` (new): 6 of 6 (the first attempt assumed the player's wood count). Not run: `combat.py`, `gesture.py`, `host.py`, `appraise.py`, `wake.py`, the game client binary.
