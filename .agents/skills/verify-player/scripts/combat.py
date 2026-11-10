@@ -224,6 +224,11 @@ def scene_kill(st):
             break
     dead = sql(st, f"SELECT alive, cause FROM character WHERE id = {d}")
     mine = sql(st, f"SELECT name FROM character WHERE id = {cid}")[0]["name"]
+    # The death record names the killer as the victim knew them (perceived_of): the player's
+    # name only if it told the victim (an acquaintance row), else "a stranger". The chronicle's
+    # killing row keeps real names.
+    knew = sql(st, f"SELECT * FROM acquaintance WHERE observer = {d} AND known = {cid}")
+    as_known = mine if knew else "a stranger"
     hits = [e for e in seen(st) if e["kind"] == 2 and e["actor"] == cid and e["target"] == d]
     killing = sql(st, f"SELECT kind, a, b, text FROM chronicle WHERE kind = 'killing' AND a = {cid} AND b = {d}")
     mh = sql(st, f"SELECT max_hp FROM vitals WHERE id = {d}")
@@ -234,8 +239,8 @@ def scene_kill(st):
     # Health was read before the strike's wait; vitals settle to the blow's instant, so allow a
     # small drift.
     check(st, "a strike that exceeds health kills a person",
-          final is not None and hits and hits[-1]["amount"] >= final[0] - 1.0 and dead and not dead[0]["alive"] and dead[0]["cause"] == f"killed by {mine}" and killing,
-          {"hp_before_last": final and round(final[0], 2), "last_hit": hits and round(hits[-1]["amount"], 2), "outcome": final and final[1]["outcome"], "character": dead, "chronicle": killing})
+          final is not None and hits and hits[-1]["amount"] >= final[0] - 1.0 and dead and not dead[0]["alive"] and dead[0]["cause"] == f"killed by {as_known}" and killing and mine in killing[0]["text"],
+          {"as_known": as_known, "hp_before_last": final and round(final[0], 2), "last_hit": hits and round(hits[-1]["amount"], 2), "outcome": final and final[1]["outcome"], "character": dead, "chronicle": killing})
 
 
 def scene_bow(st):

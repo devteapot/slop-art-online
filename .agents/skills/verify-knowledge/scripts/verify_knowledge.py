@@ -25,7 +25,7 @@ BUILD = ROOT / '.local/living/verify/build-knowledge'
 TESTS = ('minds_revise_merge_and_fade', 'recall_by_cues_and_forgetting',
          'formative_past_outlasts_ordinary_beliefs', 'authored_memories_are_recalled',
          'grounds_link_stories_and_lessons', 'hearsay_fades_faster_until_corroborated',
-         'childhood_memories_last_longer')
+         'childhood_memories_last_longer', 'missed_things_weaken')
 STRUCTURE_BIT = 1 << 40
 
 
