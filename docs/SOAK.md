@@ -19,7 +19,7 @@
 
 **What a playtest would hit (not crashes, but they would spoil the evening)**
 1. **Click-to-move cannot reach another town** ([D1](#d1-click-to-move-to-another-town-is-refused-no-path-there)). Every click on another town (all of them 400–2,200 m from the arrival point) was refused with "no path there": 165 of 165. The path search stops at 6,000 expansions, and those routes need 96,000–768,000. Even clicks about 55 m ahead were refused 404 times out of 643. Friends would have to hold a key for kilometres.
-2. **The island starves** ([D2](#d2-the-islands-residents-starve-in-the-first-hours)). From about 30 minutes into a fresh world, residents die of hunger.
+2. **The island starves** ([D2](#d2-the-islands-residents-starve-in-the-first-hours)). From about 30 minutes into a fresh world, residents die of hunger. *Found and fixed on `hunger-1`: the starting food routine never left home. People's deaths from hunger and cold fell from about 58 to 4 an hour, all in the first winter.*
    - In this run, 123 residents starved and 22 died of cold in 4¼ h. The world's bodies fell from 307 to 175.
    - A control island with no players and no minds lost 76 of 261 people to starvation in 75 minutes, so the players do not cause it.
    - The towns would visibly empty over an evening.
@@ -222,7 +222,32 @@ Headless `living-game` at its default 60 Hz cap, Metal, 733,001 frames.
   - In the soak world (`final-characters.json`), 123 residents starved, 22 died of cold and exposure, 2 of exhaustion and 2 of old age in 4¼ h. 20 wolves starved. 125 people were alive at the end. The world's bodies fell from 307 to 175 (`body` rows above).
   - The deaths start about 30 minutes in. In the first hour, 16 infants, 4 children and 14 adults starved, and none of them had been woken.
   - Control `control-20261110/summary.json`: the same module and seed in its own container, no players, no minds, `rules.minds = false`, run alongside the soak. Starvation of people begins at minute 25–30: 16 by minute 35, 50 by 50, 76 by 75. Alive people went from 261 to 182.
-- **Cause:** not investigated. It is in the world's rules or the island's instinct graphs: food supply, hunger rate, spoilage, or foraging. The players make no difference, because the control is worse.
+- **Cause (found 2026-11-10, branch `hunger-1`): the starting food routine never left home.** "Find food and eat" acts only on food in sight (11 tiles by day, 6 at night): eat what one carries, take from a store in sight, gather a bush or fish in sight. With nothing in sight it went home if more than 12 tiles away, else took two short strolls (`wander`, 3–9 tiles). A stroll always starts, so the food desire never failed. Work and the evening out, which take residents past fields and the square's stores, never got a turn. A resident who got hungry at home with no bush in sight walked circles round the house until it starved.
+  - Reproduction: scratch island worlds in the worker's own container, no minds, no players, the rows sampled once a minute (`.local/living/soak/hunger-20261110/` on the Mac: one directory per world, the sampler and analysis scripts in `tools/`). On `fe6ec66` 86 of 277 people starved in 90 minutes, 2 died of old age and 1 of cold. 68 of the starved were last wandering, at a median of 9 tiles from home (p90 12, the tether). The nearest bush was a median 16 tiles away and the nearest store 36. None had food in its pack.
+  - Not supply: all 18,272 bushes still held berries at minute 25, and the bush regrowth within each settlement's radius is 3–20 times its residents' need. Not full stores: only 1 of 33 was ever full. Stores did empty: 26 of 33 held no food by minute 60. Not `rates`: 5 hunger a minute (3 for infants) before and after the Rhai hardening. Not hamlets: villages and hamlets lost 1 of 103 residents. The four towns and the giants' settlement lost 46–67%: walled and built-up, with their bushes outside. Most homes (157–194 of about 270 in every world) have no bush within sight.
+  - Not a regression. It is as old as the island: on the island before town life (`af43946`) 37 starved in 59 minutes, at `f2a19f2` 51 in 66, at `c0ff89d` (before seeded lives) 50 in 65. The first hosting ran 30 minutes, which is when it starts.
+  - Not the walking routes ([D1](#d1-click-to-move-to-another-town-is-refused-no-path-there)): on `7e5de53` (path-1 merged) 70 starved in 90 minutes, with the same signature (57 last wandering, a median of 9 tiles from home, the nearest bush 21 away). The starving never asked for a long walk.
+  - Infants: on worlds from before seeded lives, every infant starved (11–16 per world). A baby cries, and only a mind answers a cry; no starting way feeds one. The authored island has no infants, and no person was born in any run, because instinct-only residents never start families. So this does not arise on `main` today. It would for a baby born to woken residents.
+  - Winter: bushes do not regrow in winter (minutes 68.5–92.5 of a fresh world, then every 96 minutes), and winter nights cost 5 health a minute without fire or shelter. The second wave of every run comes then. In main, 42 starved in minutes 80–90.
+- **Fix (seed data plus one generic place option):**
+  - `town_life.places` gains `berries` (a berry bush, else a field or garden) and `store` (the nearest storage). The new `town_life.spread` shares `berries` out like workplaces: each resident gets the nearest of the least used bushes, 277 residents on 275 distinct bushes, a median of 28 m from home.
+  - The island's own "find food and eat" (`ways.common`) keeps the first four steps. With nothing in sight it makes a round: the store, its bush, then eight strolls, each step skipped if it cannot be walked. A sequence keeps its place, so the round goes on, and anything edible seen on the way comes first.
+  - Rejected on the way: places used as "if not near X, go to X" kept residents in a ring 2–5 tiles round a stripped bush (16 died). The nearest-field `berries` left all 14 giants on one spot with a single bush in sight.
+- **After (2 hours, 277 people, no minds, no players):**
+
+  | World | Base | People dead | Starvation | Cold | Old age | Killed |
+  |---|---|---:|---:|---:|---:|---:|
+  | reproduction | `fe6ec66` | 89 in 90 min | 86 | 1 | 2 | 0 |
+  | reproduction | `7e5de53` | 73 in 90 min | 70 | 1 | 2 | 0 |
+  | the round, nearest-field `berries` | `fe6ec66` | 22 in 130 min | 12 | 5 (+2 exhaustion) | 3 | 0 |
+  | the round, nearest-field `berries` | `7e5de53` | 8 in 124 min | 1 | 2 (+1 exhaustion) | 3 | 1 |
+  | **the fix: the round and a bush each** | `7e5de53` | **13 in 120 min** | **7** | **1** | **3** | **2** |
+
+  - With the fix nobody starved in the first 80 minutes, against 32 in the first hour before.
+  - Hunger and cold deaths fell from about 58 an hour to 4 an hour, all of them in the first winter (minutes 80–99), mostly in the cyberpunk town and among the giants, walking between an empty store and a stripped bush.
+  - The two `7e5de53` rounds differ by one variant and one world each; resource placement differs per publish, so their winter counts (4 against 8) do not rank the two.
+- **Old age:** the 3 deaths fall exactly where the rule puts them (0.99, 1.13 and 1.50 h: a creature dies at its own fraction of a 112-hour life, between 0.87 and 1.0, set by its id). The seed's 15 elders give 3 deaths in the first 2 hours and 6 in 4. A stationary population of 277 at this pace would lose about 2.6 an hour to old age.
+- **Still open:** winter (stores empty and nothing regrows for 24 minutes). The towns would need stores stocked before it, or residents ranging further. Infants need someone to feed them without a mind. The island's wolves starve at about 60 minutes in every run (10 of 10 in the fix's world), a separate wildlife balance.
 - **Owner:** needs, food and life course (`verify-core`), and the island seed (`verify-generation`).
 
 ### D3. Players starve too

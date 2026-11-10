@@ -44673,6 +44673,94 @@
             }
           ]
         }
+      },
+      "find food and eat": {
+        "first": [
+          {
+            "if": {
+              "has": {
+                "item": "food"
+              }
+            },
+            "then": {
+              "do": "eat",
+              "item": "food"
+            }
+          },
+          {
+            "do": "take",
+            "target": {
+              "nearest": "storage"
+            },
+            "item": "food"
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "berry_bush"
+            }
+          },
+          {
+            "do": "gather",
+            "target": {
+              "nearest": "fishing_spot"
+            }
+          },
+          {
+            "seq": [
+              {
+                "first": [
+                  {
+                    "do": "goto",
+                    "target": {
+                      "place": "store"
+                    }
+                  },
+                  {
+                    "wait": 1
+                  }
+                ]
+              },
+              {
+                "first": [
+                  {
+                    "do": "goto",
+                    "target": {
+                      "place": "berries"
+                    }
+                  },
+                  {
+                    "wait": 1
+                  }
+                ]
+              },
+              {
+                "do": "wander"
+              },
+              {
+                "do": "wander"
+              },
+              {
+                "do": "wander"
+              },
+              {
+                "do": "wander"
+              },
+              {
+                "do": "wander"
+              },
+              {
+                "do": "wander"
+              },
+              {
+                "do": "wander"
+              },
+              {
+                "do": "wander"
+              }
+            ]
+          }
+        ]
       }
     },
     "occupations": {
@@ -47694,6 +47782,14 @@
         "inn",
         "hall",
         "plaza"
+      ],
+      "berries": [
+        "berry_bush",
+        "field",
+        "garden"
+      ],
+      "store": [
+        "storage"
       ]
     },
     "evening": [
@@ -47781,6 +47877,9 @@
       "pedlar": [
         "plaza"
       ]
-    }
+    },
+    "spread": [
+      "berries"
+    ]
   }
 }
